@@ -573,14 +573,20 @@
       <div class="vs-head p1">Proposal 1: ends are rows</div>
       <pre><code>chart(titanic)
   .flow(
-    derive(unpivot({ on: ["class", "sex", "survived"],
-                     variable: "axis", value: "category", id: "path" })),
+    derive(
+      unpivot({
+        on: ["class", "sex", "survived"],
+        variable: "axis",
+        value: "category",
+        id: "path",
+      })
+    ),
     spread({ by: "axis", dir: "x", spacing: 120 }),
     spread({ by: field("category").sort(), dir: "y", spacing: 12 }),
-    stack({ by: field("rank").sort(), dir: "y" })   // end order
+    stack({ by: field("rank").sort(), dir: "y" }) // end order
   )
   .mark(rect({ w: 12, h: "count", fill: "class" }))
-  .layer(ribbon({ by: "path", opacity: 0.6 }))</code></pre>
+  .layer(ribbon({ by: "path", opacity: 0.6 }));</code></pre>
       <figure>
         <div class="plate">
           <img src="img/parallel-sets.png" alt="Parallel sets, proposal 1" />
@@ -594,13 +600,14 @@
       <div class="vs-head p2">Proposal 2: syntax follows the data</div>
       <pre><code>const axes = cols(["class", "sex", "survived"]);
 chart(titanic)
-  .mark(spread({ dir: "x", spacing: 120 }, [
-    chart()
-      .flow(spread({ by: axes, dir: "y", spacing: 12 }),
-            stack({ dir: "y" }))                  // end order
-      .mark(rect({ w: 12, h: "count", fill: "class" })),
-  ]))
-  .layer(ribbon({ opacity: 0.6 }))</code></pre>
+  .mark(
+    spread({ dir: "x", spacing: 120 }, [
+      chart()
+        .flow(spread({ by: axes, dir: "y", spacing: 12 }), stack({ dir: "y" })) // end order
+        .mark(rect({ w: 12, h: "count", fill: "class" })),
+    ])
+  )
+  .layer(ribbon({ opacity: 0.6 }));</code></pre>
       <figure>
         <div class="plate">
           <img
@@ -629,10 +636,10 @@ chart(titanic)
   .flow(
     derive(unpivot({ on: DIMS, variable: "dim", value: "v", id: "row" })),
     spread({ by: "dim", dir: "x", spacing: 120 }),
-    scatter({ y: "v" })             // v mixes mm and g
+    scatter({ y: "v" }) // v mixes mm and g
   )
   .mark(circle({ r: 1.5, fill: "Species" }))
-  .layer(line({ by: "row", opacity: 0.3 }))</code></pre>
+  .layer(line({ by: "row", opacity: 0.3 }));</code></pre>
       <figure>
         <div class="plate">
           <img
@@ -650,14 +657,21 @@ chart(titanic)
     </div>
     <div>
       <div class="vs-head p2">Proposal 2: syntax follows the data</div>
-      <pre><code>const dims = cols(["Beak Length (mm)", "Beak Depth (mm)",
-                   "Flipper Length (mm)", "Body Mass (g)"]);
+      <pre><code>const dims = cols([
+  "Beak Length (mm)",
+  "Beak Depth (mm)",
+  "Flipper Length (mm)",
+  "Body Mass (g)",
+]);
 chart(penguins)
-  .mark(spread({ dir: "x", spacing: 120 }, [
-    chart().flow(scatter({ y: dims }))
-      .mark(circle({ r: 1.5, fill: "Species" })),
-  ]))
-  .layer(line({ opacity: 0.3 }))</code></pre>
+  .mark(
+    spread({ dir: "x", spacing: 120 }, [
+      chart()
+        .flow(scatter({ y: dims }))
+        .mark(circle({ r: 1.5, fill: "Species" })),
+    ])
+  )
+  .layer(line({ opacity: 0.3 }));</code></pre>
       <figure>
         <div class="plate">
           <img
@@ -683,15 +697,25 @@ chart(penguins)
       <div class="vs-head p1">Proposal 1: ends are rows</div>
       <pre><code>chart(links)
   .flow(
-    derive(unpivot({ on: ["source", "target"],
-                     variable: "side", value: "node", id: "link" })),
+    derive(
+      unpivot({
+        on: ["source", "target"],
+        variable: "side",
+        value: "node",
+        id: "link",
+      })
+    ),
     spread({ by: field("depth").sort(), dir: "x", spacing: 100 }),
     spread({ by: field("node").sort(order), dir: "y", spacing: 10 }),
-    spread({ by: field("side").sort(["target", "source"]), dir: "x", spacing: 0 }),
-    stack({ by: field("key").sort(), dir: "y" })   // far node's rank
+    spread({
+      by: field("side").sort(["target", "source"]),
+      dir: "x",
+      spacing: 0,
+    }),
+    stack({ by: field("key").sort(), dir: "y" }) // far node's rank
   )
   .mark(rect({ w: 6, h: "value" }))
-  .layer(ribbon({ by: "link", opacity: 0.4, fill: "source" }))</code></pre>
+  .layer(ribbon({ by: "link", opacity: 0.4, fill: "source" }));</code></pre>
       <figure>
         <div class="plate">
           <img src="img/energy-sankey.png" alt="Energy sankey, proposal 1" />
@@ -703,16 +727,22 @@ chart(penguins)
     </div>
     <div>
       <div class="vs-head p2">Proposal 2: syntax follows the data</div>
-      <pre><code>chart(nodes)   // nestJoin: each node gets in / out link lists
+      <pre><code>chart(nodes) // nestJoin: each node gets in / out link lists
   .flow(
     spread({ by: field("depth").sort(), dir: "x", spacing: 100 }),
     spread({ by: field("name").sort(order), dir: "y", spacing: 10 })
   )
-  .mark(spread({ dir: "x", spacing: 0 }, [
-    chart(field("in")).flow(stack({ dir: "y" })).mark(rect({ w: 6, h: "value" })),
-    chart(field("out")).flow(stack({ dir: "y" })).mark(rect({ w: 6, h: "value" })),
-  ]))
-  .layer(ribbon({ opacity: 0.4, fill: "source" }))</code></pre>
+  .mark(
+    spread({ dir: "x", spacing: 0 }, [
+      chart(field("in"))
+        .flow(stack({ dir: "y" }))
+        .mark(rect({ w: 6, h: "value" })),
+      chart(field("out"))
+        .flow(stack({ dir: "y" }))
+        .mark(rect({ w: 6, h: "value" })),
+    ])
+  )
+  .layer(ribbon({ opacity: 0.4, fill: "source" }));</code></pre>
       <figure>
         <div class="plate">
           <img
@@ -740,7 +770,7 @@ chart(penguins)
       <div class="vs-head p1">Proposal 1: ends are rows</div>
       <pre><code>chart(titanic)
   .flow(
-    derive(treeEnds(["class", "sex", "survived"], { id: "path" })),  // decision 8
+    derive(treeEnds(["class", "sex", "survived"], { id: "path" })), // decision 8
     spread({ by: "depth", dir: "x", spacing: 64, alignment: "middle" }),
     spread({ by: "class", dir: "y", spacing: 8 }),
     spread({ by: field("sub").sort(), dir: "y", spacing: 4 }),
@@ -748,7 +778,7 @@ chart(penguins)
     stack({ by: field("rank").sort(), dir: "y" })
   )
   .mark(rect({ w: 40, h: "count", fill: "class" }))
-  .layer(ribbon({ by: "path", opacity: 0.6 }))</code></pre>
+  .layer(ribbon({ by: "path", opacity: 0.6 }));</code></pre>
       <figure>
         <div class="plate">
           <img src="img/sankey-tree-rows.png" alt="Sankey tree, proposal 1" />
@@ -765,13 +795,15 @@ chart(penguins)
 const node = (gap, child) =&gt;
   spread({ dir: "x", spacing: 64, alignment: "middle" }, [
     box,
-    chart(field("children")).flow(spread({ dir: "y", spacing: gap })).mark(child),
+    chart(field("children"))
+      .flow(spread({ dir: "y", spacing: gap }))
+      .mark(child),
   ]);
 
-chart(tree)   // nestTree(titanic, ["class", "sex", "survived"], "count")
+chart(tree) // nestTree(titanic, ["class", "sex", "survived"], "count")
   .flow(spread({ by: "class", dir: "y", spacing: 8 }))
   .mark(node(4, node(2, box)))
-  .layer(ribbon({ opacity: 0.6, fill: "class" }))</code></pre>
+  .layer(ribbon({ opacity: 0.6, fill: "class" }));</code></pre>
       <figure>
         <div class="plate">
           <img
@@ -798,24 +830,40 @@ chart(tree)   // nestTree(titanic, ["class", "sex", "survived"], "count")
     <div>
       <div class="vs-head p1">Proposal 1: ends are rows</div>
       <pre><code>layer({ coord: Coord.clock() }, [
-  chart(cells)   // { group, other, value, chord, color }: one row per cell
+  chart(cells) // { group, other, value, chord, color }: one row per cell
     .flow(
-      spread({ by: field("group").sort(names), dir: "x", spacing: 0.04, y: 160, h: 16 }),
+      spread({
+        by: field("group").sort(names),
+        dir: "x",
+        spacing: 0.04,
+        y: 160,
+        h: 16,
+      }),
       stack({ by: field("other").sort(names), dir: "x" })
     )
     .mark(rect({ w: "value", fill: "group" }))
     .layer(ribbon({ by: "chord", at: "bottom", fill: "color", opacity: 0.67 })),
-])</code></pre>
+]);</code></pre>
     </div>
     <div>
       <div class="vs-head p2">Proposal 2: syntax follows the data</div>
-      <pre><code>const cells = cols(names);   // the matrix is wide: { name, black, blonde, brown, red }
+      <pre><code>const cells = cols(names); // the matrix is wide: { name, black, blonde, brown, red }
 layer({ coord: Coord.clock() }, [
   chart(matrix)
-    .flow(spread({ by: field("name").sort(names), dir: "x", spacing: 0.04, y: 160, h: 16 }))
+    .flow(
+      spread({
+        by: field("name").sort(names),
+        dir: "x",
+        spacing: 0.04,
+        y: 160,
+        h: 16,
+      })
+    )
     .mark(stack({ dir: "x" }, [rect({ w: cells, fill: "name" })]))
-    .layer(ribbon({ by: chordPair, at: "bottom", fill: "color", opacity: 0.67 })),
-])</code></pre>
+    .layer(
+      ribbon({ by: chordPair, at: "bottom", fill: "color", opacity: 0.67 })
+    ),
+]);</code></pre>
     </div>
   </div>
   <figure style="max-width: 520px; margin-top: 14px">
@@ -874,34 +922,50 @@ layer({ coord: Coord.clock() }, [
   <div class="vs">
     <div>
       <div class="vs-head p1">Proposal 1: ends are rows</div>
-      <pre><code>const ends = concat(years,
-  unpivot({ on: ["bar", "country"], variable: "side", value: "node", id: "link" })(links));
+      <pre><code>const ends = concat(
+  years,
+  unpivot({
+    on: ["bar", "country"],
+    variable: "side",
+    value: "node",
+    id: "link",
+  })(links)
+);
 chart(ends)
   .flow(
     spread({ by: "part", dir: "x", spacing: 150 }),
     spread({ by: field("year").sort(), dir: "x", spacing: 22 }),
     spread({ by: "node", dir: "y", spacing: 6 }),
-    stack({ by: field("rank").sort(), dir: "y" })  // bar: decision|country; country: decision
+    stack({ by: field("rank").sort(), dir: "y" }) // bar: decision|country; country: decision
   )
   .mark(rect({ w: (d) =&gt; (d.side ? 14 : 0), h: "value", fill: "decision" }))
-  .layer(ribbon({ by: "band", fill: "decision" }))                // the stacked area
-  .layer(ribbon({ by: "link", fill: "decision", opacity: 0.55 })) // the sankey</code></pre>
+  .layer(ribbon({ by: "band", fill: "decision" })) // the stacked area
+  .layer(ribbon({ by: "link", fill: "decision", opacity: 0.55 })); // the sankey</code></pre>
     </div>
     <div>
       <div class="vs-head p2">Proposal 2: syntax follows the data</div>
       <pre><code>spread({ dir: "x", spacing: 150 }, [
   spread({ dir: "x", spacing: 0 }, [
-    chart(years)                                   // the stacked area
-      .flow(spread({ by: "year", dir: "x", spacing: 22 }), stack({ by: "decision", dir: "y" }))
+    chart(years) // the stacked area
+      .flow(
+        spread({ by: "year", dir: "x", spacing: 22 }),
+        stack({ by: "decision", dir: "y" })
+      )
       .mark(ribbon({ h: "value", fill: "decision" })),
-    chart(links)                                   // the 2017 bar: decision first
-      .flow(stack({ by: "decision", dir: "y" }), stack({ by: "country", dir: "y" }))
+    chart(links) // the 2017 bar: decision first
+      .flow(
+        stack({ by: "decision", dir: "y" }),
+        stack({ by: "country", dir: "y" })
+      )
       .mark(rect({ w: 14, h: "value", fill: "decision" })),
   ]),
-  chart(links)                                     // the countries: country first
-    .flow(spread({ by: "country", dir: "y", spacing: 6 }), stack({ by: "decision", dir: "y" }))
+  chart(links) // the countries: country first
+    .flow(
+      spread({ by: "country", dir: "y", spacing: 6 }),
+      stack({ by: "decision", dir: "y" })
+    )
     .mark(rect({ w: 14, h: "value", fill: "decision" })),
-]).layer(ribbon({ fill: "decision", opacity: 0.55 }))</code></pre>
+]).layer(ribbon({ fill: "decision", opacity: 0.55 }));</code></pre>
     </div>
   </div>
   <p class="verdict-line">
@@ -942,28 +1006,49 @@ chart(ends)
   <div class="vs">
     <div>
       <div class="vs-head p1">Proposal 1: ends are rows</div>
-      <pre><code>chart(links)   // { day, emotion, count }
+      <pre><code>chart(links) // { day, emotion, count }
   .flow(
-    derive(unpivot({ on: ["day", "emotion"], variable: "side", value: "node", id: "link" })),
-    spread({ by: field("side").sort(["day", "emotion"]), dir: "y", spacing: 220 }),
-    spread({ by: field("node").sort([...DAYS, ...EMOTIONS]), dir: "x", spacing: 36 }),
+    derive(
+      unpivot({
+        on: ["day", "emotion"],
+        variable: "side",
+        value: "node",
+        id: "link",
+      })
+    ),
+    spread({
+      by: field("side").sort(["day", "emotion"]),
+      dir: "y",
+      spacing: 220,
+    }),
+    spread({
+      by: field("node").sort([...DAYS, ...EMOTIONS]),
+      dir: "x",
+      spacing: 36,
+    }),
     stack({ by: field("rank").sort(), dir: "x" })
   )
-  .mark(rect({ w: "count", h: (d) =&gt; (d.side === "day" ? 4 : 90), fill: "emotion" }))
-  .layer(ribbon({ by: "link", dir: "y", opacity: 0.6 }))</code></pre>
+  .mark(
+    rect({ w: "count", h: (d) =&gt; (d.side === "day" ? 4 : 90), fill: "emotion" })
+  )
+  .layer(ribbon({ by: "link", dir: "y", opacity: 0.6 }));</code></pre>
     </div>
     <div>
       <div class="vs-head p2">Proposal 2: syntax follows the data</div>
       <pre><code>spread({ dir: "y", spacing: 200 }, [
-  chart(links)   // the days: each a stack of its emotions
-    .flow(spread({ by: field("day").sort(DAYS), dir: "x", spacing: 60 }),
-          stack({ by: field("emotion").sort(EMOTIONS), dir: "x" }))
+  chart(links) // the days: each a stack of its emotions
+    .flow(
+      spread({ by: field("day").sort(DAYS), dir: "x", spacing: 60 }),
+      stack({ by: field("emotion").sort(EMOTIONS), dir: "x" })
+    )
     .mark(rect({ w: "count", h: 4, fill: "emotion" })),
-  chart(links)   // the glasses: each a stack of its days
-    .flow(spread({ by: field("emotion").sort(EMOTIONS), dir: "x", spacing: 50 }),
-          stack({ by: field("day").sort(DAYS), dir: "x" }))
+  chart(links) // the glasses: each a stack of its days
+    .flow(
+      spread({ by: field("emotion").sort(EMOTIONS), dir: "x", spacing: 50 }),
+      stack({ by: field("day").sort(DAYS), dir: "x" })
+    )
     .mark(rect({ w: "count", h: 90, fill: "emotion" })),
-]).layer(ribbon({ dir: "y", opacity: 0.6 }))</code></pre>
+]).layer(ribbon({ dir: "y", opacity: 0.6 }));</code></pre>
     </div>
   </div>
   <p class="verdict-line">
@@ -998,15 +1083,26 @@ chart(ends)
   <div class="vs">
     <div>
       <div class="vs-head p1">Proposal 1: ends are rows</div>
-      <pre><code>chart(credits)   // { song, writer }: one row per credit
+      <pre><code>chart(credits) // { song, writer }: one row per credit
   .flow(
-    derive(unpivot({ on: ["song", "writer"], variable: "side", value: "node", id: "credit" })),
-    spread({ by: field("side").sort(["song", "writer"]), dir: "y", spacing: 260 }),
-    spread({ by: "node", dir: "x", spacing: 12 }),   // songs need 18, heads 90
+    derive(
+      unpivot({
+        on: ["song", "writer"],
+        variable: "side",
+        value: "node",
+        id: "credit",
+      })
+    ),
+    spread({
+      by: field("side").sort(["song", "writer"]),
+      dir: "y",
+      spacing: 260,
+    }),
+    spread({ by: "node", dir: "x", spacing: 12 }), // songs need 18, heads 90
     spread({ by: field("rank").sort(), dir: "x", spacing: 3 })
   )
   .mark(rect({ w: (d) =&gt; (d.side === "song" ? 0 : 1), h: 3, fill: "writer" }))
-  .layer(line({ by: "credit", dir: "y", curve: Curve.bezier() }))</code></pre>
+  .layer(line({ by: "credit", dir: "y", curve: Curve.bezier() }));</code></pre>
       <figure>
         <div class="plate">
           <img
@@ -1023,14 +1119,16 @@ chart(ends)
     <div>
       <div class="vs-head p2">Proposal 2: syntax follows the data</div>
       <pre><code>spread({ dir: "y", spacing: 260 }, [
-  chart(credits)   // the songs
+  chart(credits) // the songs
     .flow(spread({ by: "song", dir: "x", spacing: 18 }), stack({ dir: "x" }))
     .mark(rect({ w: 0, h: 3 })),
-  chart(credits)   // the heads: each spreads its songs evenly
-    .flow(spread({ by: "writer", dir: "x", spacing: 90 }),
-          spread({ by: "song", dir: "x", spacing: 3 }))
+  chart(credits) // the heads: each spreads its songs evenly
+    .flow(
+      spread({ by: "writer", dir: "x", spacing: 90 }),
+      spread({ by: "song", dir: "x", spacing: 3 })
+    )
     .mark(rect({ w: 1, h: 3, fill: "writer" })),
-]).layer(line({ stroke: "writer", dir: "y", curve: Curve.bezier() }))</code></pre>
+]).layer(line({ stroke: "writer", dir: "y", curve: Curve.bezier() }));</code></pre>
     </div>
   </div>
   <p class="verdict-line">
@@ -1071,28 +1169,42 @@ chart(ends)
     <div>
       <div class="vs-head p1">Proposal 1: ends are rows</div>
       <pre><code>layer({ coord: Coord.clock() }, [
-  chart(cells)   // one row per (from, to) cell: already the ends
+  chart(cells) // one row per (from, to) cell: already the ends
     .flow(
-      spread({ by: field("region").sort(REGIONS), dir: "x", spacing: 0.03, y: 200, h: 12 }),
+      spread({
+        by: field("region").sort(REGIONS),
+        dir: "x",
+        spacing: 0.03,
+        y: 200,
+        h: 12,
+      }),
       spread({ by: field("from").sort(order), dir: "x", spacing: 0.005 }),
       stack({ by: field("offset").sort(), dir: "x" })
     )
     .mark(rect({ w: "value", fill: "region" }))
     .layer(ribbon({ by: "chord", at: "bottom", fill: "color", opacity: 0.55 })),
-])</code></pre>
+]);</code></pre>
     </div>
     <div>
       <div class="vs-head p2">Proposal 2: syntax follows the data</div>
-      <pre><code>const partners = cols(countries);   // the wide matrix's columns
+      <pre><code>const partners = cols(countries); // the wide matrix's columns
 layer({ coord: Coord.clock() }, [
   chart(matrix)
     .flow(
-      spread({ by: field("region").sort(REGIONS), dir: "x", spacing: 0.03, y: 200, h: 12 }),
+      spread({
+        by: field("region").sort(REGIONS),
+        dir: "x",
+        spacing: 0.03,
+        y: 200,
+        h: 12,
+      }),
       spread({ by: field("country").sort(order), dir: "x", spacing: 0.005 })
     )
     .mark(stack({ dir: "x" }, [rect({ w: partners, fill: "region" })]))
-    .layer(ribbon({ by: chordPair, at: "bottom", fill: "color", opacity: 0.55 })),
-])</code></pre>
+    .layer(
+      ribbon({ by: chordPair, at: "bottom", fill: "color", opacity: 0.55 })
+    ),
+]);</code></pre>
     </div>
   </div>
   <p class="verdict-line">
@@ -1253,8 +1365,12 @@ layer({ coord: Coord.clock() }, [
           </tbody>
         </table>
       </div>
-      <pre><code>unpivot({ on: ["source", "target"],
-          variable: "side", value: "node", id: "link" })</code></pre>
+      <pre><code>unpivot({
+  on: ["source", "target"],
+  variable: "side",
+  value: "node",
+  id: "link",
+});</code></pre>
     </div>
     <div>
       <div class="code-label">Output: one row per end</div>
@@ -1437,8 +1553,12 @@ layer({ coord: Coord.clock() }, [
           </tbody>
         </table>
       </div>
-      <pre><code>unpivot({ on: ["class", "sex", "survived"],
-          variable: "axis", value: "category", id: "path" })</code></pre>
+      <pre><code>unpivot({
+  on: ["class", "sex", "survived"],
+  variable: "axis",
+  value: "category",
+  id: "path",
+});</code></pre>
     </div>
     <div>
       <div class="code-label">Output: one row per (cohort, axis)</div>
@@ -1622,8 +1742,7 @@ layer({ coord: Coord.clock() }, [
         One layout computes columns, node y, and each link's
         <code>y0</code>/<code>y1</code> on both edges.
       </p>
-      <pre><code>d3.sankey().nodeAlign(d3.sankeyJustify)
-  .nodePadding(10).linkSort(null)</code></pre>
+      <pre><code>d3.sankey().nodeAlign(d3.sankeyJustify).nodePadding(10).linkSort(null);</code></pre>
     </div>
     <div class="card">
       <div class="plate">
@@ -1685,8 +1804,8 @@ d3.chord().padAngle(.05).sortSubgroups(..)</code></pre>
         No end concept: every link leaves its node's middle, so widths pile up
         instead of tiling the edge.
       </p>
-      <pre><code>sourceAnchor: ["right", "middle"]
-encode(link, "strokeWidth", "value")</code></pre>
+      <pre><code>sourceAnchor: ["right", "middle"];
+encode(link, "strokeWidth", "value");</code></pre>
     </div>
   </div>
   <p class="small" style="margin-top: 16px">
@@ -1724,29 +1843,46 @@ layer([
       spread({ by: field("rank").sort(), dir: "y", spacing: 0, axes: false })
     )
     .mark(rect({ w: 12, h: "value", fill: "class" }).name("ends")),
-  chart(selectAll("ends")).flow(group({ by: "path" }))
+  chart(selectAll("ends"))
+    .flow(group({ by: "path" }))
     .mark(ribbon({ opacity: 0.6, fill: "class" })),
-])</code></pre>
+]);</code></pre>
       <div class="code-label">Proposed</div>
       <pre><code>chart(titanic)
   .flow(
-    derive(unpivot({ on: ["class", "sex", "survived"],
-                     variable: "axis", value: "category", id: "path" })),
+    derive(
+      unpivot({
+        on: ["class", "sex", "survived"],
+        variable: "axis",
+        value: "category",
+        id: "path",
+      })
+    ),
     spread({ by: "axis", dir: "x", spacing: 120 }),
     spread({ by: field("category").sort(), dir: "y", spacing: 12 }),
-    stack({ by: field("rank").sort(), dir: "y" })   // end order: decision 4
+    stack({ by: field("rank").sort(), dir: "y" }) // end order: decision 4
   )
   .mark(rect({ w: 12, h: "count", fill: "class" }))
-  .layer(ribbon({ by: "path", opacity: 0.6 }))</code></pre>
+  .layer(ribbon({ by: "path", opacity: 0.6 }));</code></pre>
       <div class="code-label">Python</div>
-      <pre><code>(chart(titanic)
-    .flow(derive(unpivot(on=["class", "sex", "survived"],
-                         variable="axis", value="category", id="path")),
-          spread(by="axis", dir="x", spacing=120),
-          spread(by=field("category").sort(), dir="y", spacing=12),
-          stack(by=field("rank").sort(), dir="y"))
+      <pre><code>(
+    chart(titanic)
+    .flow(
+        derive(
+            unpivot(
+                on=["class", "sex", "survived"],
+                variable="axis",
+                value="category",
+                id="path",
+            )
+        ),
+        spread(by="axis", dir="x", spacing=120),
+        spread(by=field("category").sort(), dir="y", spacing=12),
+        stack(by=field("rank").sort(), dir="y"),
+    )
     .mark(rect(w=12, h="count", fill="class"))
-    .layer(ribbon(by="path", opacity=0.6)))</code></pre>
+    .layer(ribbon(by="path", opacity=0.6))
+)</code></pre>
     </div>
     <div>
       <figure>
@@ -1782,18 +1918,27 @@ layer([
   <div class="ex">
     <div>
       <div class="code-label">Proposed</div>
-      <pre><code>chart(links)   // { source, target, value } + precomputed depth and order
+      <pre><code>chart(links) // { source, target, value } + precomputed depth and order
   .flow(
-    derive(unpivot({ on: ["source", "target"],
-                     variable: "side", value: "node", id: "link" })),
+    derive(
+      unpivot({
+        on: ["source", "target"],
+        variable: "side",
+        value: "node",
+        id: "link",
+      })
+    ),
     spread({ by: field("depth").sort(), dir: "x", spacing: 100 }),
     spread({ by: field("node").sort(order), dir: "y", spacing: 10 }),
-    spread({ by: field("side").sort(["target", "source"]),
-             dir: "x", spacing: 0 }),          // in-ends left, out-ends right
+    spread({
+      by: field("side").sort(["target", "source"]),
+      dir: "x",
+      spacing: 0,
+    }), // in-ends left, out-ends right
     stack({ by: field("key").sort(), dir: "y" }) // far node's rank
   )
   .mark(rect({ w: 6, h: "value", fill: "#555" }))
-  .layer(ribbon({ by: "link", opacity: 0.4, fill: "source" }))</code></pre>
+  .layer(ribbon({ by: "link", opacity: 0.4, fill: "source" }));</code></pre>
       <p class="small">
         A node is its two end stacks side by side, so its height is the larger
         of its in-sum and out-sum. The side spread's
@@ -1822,7 +1967,7 @@ layer([
   <h3>Sankey tree: titanic tree</h3>
   <div class="ex">
     <div>
-      <pre><code>chart(treeEnds)  // one row per (leaf, depth), blank keys for missing levels
+      <pre><code>chart(treeEnds) // one row per (leaf, depth), blank keys for missing levels
   .flow(
     spread({ by: "depth", dir: "x", spacing: 64, alignment: "middle" }),
     spread({ by: "class", dir: "y", spacing: 8 }),
@@ -1831,7 +1976,7 @@ layer([
     stack({ by: field("rank").sort(), dir: "y" })
   )
   .mark(rect({ w: 40, h: "value", fill: "class" }))
-  .layer(ribbon({ by: "path", opacity: 0.6, curve: Curve.bezier() }))</code></pre>
+  .layer(ribbon({ by: "path", opacity: 0.6, curve: Curve.bezier() }));</code></pre>
       <p class="small">
         About 35 lines against 137 today. Nested gaps are nested
         <code>spread</code>s because each end row carries its ancestors' keys.
@@ -1868,22 +2013,33 @@ layer([
     <div>
       <div class="code-label">Proposed</div>
       <pre><code>layer({ coord: Coord.clock() }, [
-  chart(cells)  // { group, other, value, chord: sorted pair, color }
+  chart(cells) // { group, other, value, chord: sorted pair, color }
     .flow(
-      spread({ by: field("group").sort(names), dir: "x", spacing: 0.04, y: 160, h: 16 }),
+      spread({
+        by: field("group").sort(names),
+        dir: "x",
+        spacing: 0.04,
+        y: 160,
+        h: 16,
+      }),
       stack({ by: field("other").sort(names), dir: "x" })
     )
     .mark(rect({ w: "value", fill: "group" }))
     .layer(ribbon({ by: "chord", at: "bottom", fill: "color", opacity: 0.67 })),
-])</code></pre>
+]);</code></pre>
       <div class="code-label">Python</div>
-      <pre><code>layer([
-    chart(cells)
-        .flow(spread(by=field("group").sort(names), dir="x", spacing=0.04, y=160, h=16),
-              stack(by=field("other").sort(names), dir="x"))
+      <pre><code>layer(
+    [
+        chart(cells)
+        .flow(
+            spread(by=field("group").sort(names), dir="x", spacing=0.04, y=160, h=16),
+            stack(by=field("other").sort(names), dir="x"),
+        )
         .mark(rect(w="value", fill="group"))
         .layer(ribbon(by="chord", at="bottom", fill="color", opacity=0.67)),
-], coord=Coord.clock())</code></pre>
+    ],
+    coord=Coord.clock(),
+)</code></pre>
       <p class="small">
         Each matrix cell is already an end. <code>at: "bottom"</code> attaches
         both ends to their inner arc. The band leaves each end along that part's
@@ -1990,20 +2146,30 @@ layer([
     <div>
       <pre><code>layer([
   chart(nodes)
-    .flow(spread({ by: "depth", dir: "x", spacing: 100 }),
-          spread({ by: "name", dir: "y", spacing: 10 }))
+    .flow(
+      spread({ by: "depth", dir: "x", spacing: 100 }),
+      spread({ by: "name", dir: "y", spacing: 10 })
+    )
     .mark(rect({ w: 12, h: "value" }).name("nodes")),
   chart(links)
     .flow(resolve(["source", "target"], { from: selectAll("nodes") }))
-    .mark(ribbon({ from: "source", to: "target", size: "value", opacity: 0.5 })),
-])</code></pre>
-      <pre><code>layer([
-    chart(nodes).flow(spread(by="depth", dir="x", spacing=100),
-                      spread(by="name", dir="y", spacing=10))
+    .mark(
+      ribbon({ from: "source", to: "target", size: "value", opacity: 0.5 })
+    ),
+]);</code></pre>
+      <pre><code>layer(
+    [
+        chart(nodes)
+        .flow(
+            spread(by="depth", dir="x", spacing=100),
+            spread(by="name", dir="y", spacing=10),
+        )
         .mark(rect(w=12, h="value").name("nodes")),
-    chart(links).flow(resolve(["source", "target"], from_=select_all("nodes")))
+        chart(links)
+        .flow(resolve(["source", "target"], from_=select_all("nodes")))
         .mark(ribbon(from_="source", to="target", size="value", opacity=0.5)),
-])</code></pre>
+    ]
+)</code></pre>
       <p class="small">
         <strong>Desugars into</strong> a fresh stack of ends per (node, part),
         placed with <code>relate()</code> and
@@ -2084,11 +2250,12 @@ layer([
       <pre><code>// sankey
 chart(links)
   .flow(resolve(["source", "target"], { from: selectAll("nodes") }))
-  .mark(ribbon({ from: "source", to: "target" }).stack({ size: "value" }))
+  .mark(ribbon({ from: "source", to: "target" }).stack({ size: "value" }));
 
 // and stacked area would gain a second spelling
-chart(rows).flow(scatter({ by: "year", x: "year" }))
-  .mark(ribbon({ h: "value" }).stack({ by: "series" }))</code></pre>
+chart(rows)
+  .flow(scatter({ by: "year", x: "year" }))
+  .mark(ribbon({ h: "value" }).stack({ by: "series" }));</code></pre>
     </div>
     <div class="prose">
       <p>
@@ -2158,21 +2325,42 @@ chart(rows).flow(scatter({ by: "year", x: "year" }))
   <div class="ex">
     <div>
       <div class="code-label">Target spelling</div>
-      <pre><code>chart(titanic).mark(
-  spread({ dir: "x", spacing: 120 }, ["class", "sex", "survived"].map((axis) =>
-    chart().flow(spread({ by: axis, dir: "y", spacing: 12 }), stack({ dir: "y" }))
-      .mark(rect({ w: 12, h: "count", fill: "class" }))))
-).layer(ribbon({ opacity: 0.6 }))</code></pre>
+      <pre><code>chart(titanic)
+  .mark(
+    spread(
+      { dir: "x", spacing: 120 },
+      ["class", "sex", "survived"].map((axis) =&gt;
+        chart()
+          .flow(
+            spread({ by: axis, dir: "y", spacing: 12 }),
+            stack({ dir: "y" })
+          )
+          .mark(rect({ w: 12, h: "count", fill: "class" }))
+      )
+    )
+  )
+  .layer(ribbon({ opacity: 0.6 }));</code></pre>
       <div class="code-label">Closest that works today</div>
-      <pre><code>chart(titanicR)   // rows carry a per-axis end order, rank_&lt;axis&gt;
-  .mark(spread({ dir: "x", spacing: 120 }, AXES.map((axis) => (d) =>
-    chart(d)
-      .flow(spread({ by: axis, dir: "y", spacing: 12 }),
-            spread({ by: field(`rank_${axis}`).sort(), dir: "y", spacing: 0 }))
-      .mark(rect({ w: 12, h: "count", fill: "class" }).name("ends")))))
-  .layer(chart(selectAll("ends"))
-    .flow(group({ by: (r) =&gt; r.datum[0] }))      // same row = same ribbon
-    .mark(ribbon({ opacity: 0.6, fill: "class" })))</code></pre>
+      <pre><code>chart(titanicR) // rows carry a per-axis end order, rank_&lt;axis&gt;
+  .mark(
+    spread(
+      { dir: "x", spacing: 120 },
+      AXES.map(
+        (axis) =&gt; (d) =&gt;
+          chart(d)
+            .flow(
+              spread({ by: axis, dir: "y", spacing: 12 }),
+              spread({ by: field(`rank_${axis}`).sort(), dir: "y", spacing: 0 })
+            )
+            .mark(rect({ w: 12, h: "count", fill: "class" }).name("ends"))
+      )
+    )
+  )
+  .layer(
+    chart(selectAll("ends"))
+      .flow(group({ by: (r) =&gt; r.datum[0] })) // same row = same ribbon
+      .mark(ribbon({ opacity: 0.6, fill: "class" }))
+  );</code></pre>
       <p class="small">
         Three changes from the target: <code>(d) =&gt; chart(d)</code> because a
         <code>chart()</code> child of <code>spread</code> does not inherit its
@@ -2199,12 +2387,23 @@ chart(rows).flow(scatter({ by: "year", x: "year" }))
   <h3>Parallel coordinates (penguins, four measurements)</h3>
   <div class="ex">
     <div>
-      <pre><code>chart(penguins).mark(
-  spread({ dir: "x", spacing: 120 }, DIMS.map((dim) => (d) =>
-    chart(d).flow(scatter({ y: dim })).mark(circle({ r: 1.5, fill: "Species" }).name("pts"))))
-).layer(chart(selectAll("pts"))
-  .flow(group({ by: (r) =&gt; r.datum[0] }))
-  .mark(line({ stroke: "Species", opacity: 0.3 })))</code></pre>
+      <pre><code>chart(penguins)
+  .mark(
+    spread(
+      { dir: "x", spacing: 120 },
+      DIMS.map(
+        (dim) =&gt; (d) =&gt;
+          chart(d)
+            .flow(scatter({ y: dim }))
+            .mark(circle({ r: 1.5, fill: "Species" }).name("pts"))
+      )
+    )
+  )
+  .layer(
+    chart(selectAll("pts"))
+      .flow(group({ by: (r) =&gt; r.datum[0] }))
+      .mark(line({ stroke: "Species", opacity: 0.3 }))
+  );</code></pre>
       <p class="small">
         The lines join correctly, but all four axes share one y scale (0 to 6500
         g), so the three mm axes lie flat. No syntax asks for an independent
@@ -2247,15 +2446,25 @@ chart(rows).flow(scatter({ by: "year", x: "year" }))
     <div>
       <div class="code-label">Works today (callback reads the node)</div>
       <pre><code>chart(nodes)
-  .flow(spread({ by: field("depth").sort(), dir: "x", spacing: 100 }),
-        spread({ by: field("name").sort(order), dir: "y", spacing: 10 }))
-  .mark((node) =&gt; spread({ dir: "x", spacing: 0 }, [
-    chart(node[0].in).flow(spread({ dir: "y", spacing: 0 })).mark(rect({ w: 6, h: "value" }).name("ends")),
-    chart(node[0].out).flow(spread({ dir: "y", spacing: 0 })).mark(rect({ w: 6, h: "value" }).name("ends")),
-  ]))
-  .layer(chart(selectAll("ends"))
-    .flow(group({ by: (r) =&gt; r.datum[0] }))      // a link's two ends share its object
-    .mark(ribbon({ opacity: 0.4, fill: "source" })))</code></pre>
+  .flow(
+    spread({ by: field("depth").sort(), dir: "x", spacing: 100 }),
+    spread({ by: field("name").sort(order), dir: "y", spacing: 10 })
+  )
+  .mark((node) =&gt;
+    spread({ dir: "x", spacing: 0 }, [
+      chart(node[0].in)
+        .flow(spread({ dir: "y", spacing: 0 }))
+        .mark(rect({ w: 6, h: "value" }).name("ends")),
+      chart(node[0].out)
+        .flow(spread({ dir: "y", spacing: 0 }))
+        .mark(rect({ w: 6, h: "value" }).name("ends")),
+    ])
+  )
+  .layer(
+    chart(selectAll("ends"))
+      .flow(group({ by: (r) =&gt; r.datum[0] })) // a link's two ends share its object
+      .mark(ribbon({ opacity: 0.4, fill: "source" }))
+  );</code></pre>
       <p class="small">
         Starts from the d3 inputs (nodes and links), with no unpivot and no ends
         table. <code>nodes</code> gets <code>in</code>/<code>out</code> list
@@ -2291,10 +2500,15 @@ chart(rows).flow(scatter({ by: "year", x: "year" }))
     <div>
       <div class="code-label">1. Over columns: expression expansion</div>
       <pre><code>const axes = cols(["class", "sex", "survived"]);
-chart(titanic).mark(spread({ dir: "x", spacing: 120 }, [
-  chart().flow(spread({ by: axes, dir: "y", spacing: 12 }), stack({ dir: "y" }))
-    .mark(rect({ w: 12, h: "count", fill: "class" })),
-])).layer(ribbon({ opacity: 0.6 }))</code></pre>
+chart(titanic)
+  .mark(
+    spread({ dir: "x", spacing: 120 }, [
+      chart()
+        .flow(spread({ by: axes, dir: "y", spacing: 12 }), stack({ dir: "y" }))
+        .mark(rect({ w: 12, h: "count", fill: "class" })),
+    ])
+  )
+  .layer(ribbon({ opacity: 0.6 }));</code></pre>
       <p class="small">
         A child that mentions a multi-column value stands for one child per
         column, the way polars expands
@@ -2307,14 +2521,22 @@ chart(titanic).mark(spread({ dir: "x", spacing: 120 }, [
     </div>
     <div>
       <div class="code-label">2. Over a parent's sub-list: nested data</div>
-      <pre><code>chart(nodes)   // { name, depth, in: [links], out: [links] }
-  .flow(spread({ by: "depth", dir: "x", spacing: 100 }),
-        spread({ by: "name", dir: "y", spacing: 10 }))
-  .mark(spread({ dir: "x", spacing: 0 }, [
-    chart(field("in")).flow(stack({ dir: "y" })).mark(rect({ w: 6, h: "value" })),
-    chart(field("out")).flow(stack({ dir: "y" })).mark(rect({ w: 6, h: "value" })),
-  ]))
-  .layer(ribbon({ opacity: 0.4 }))</code></pre>
+      <pre><code>chart(nodes) // { name, depth, in: [links], out: [links] }
+  .flow(
+    spread({ by: "depth", dir: "x", spacing: 100 }),
+    spread({ by: "name", dir: "y", spacing: 10 })
+  )
+  .mark(
+    spread({ dir: "x", spacing: 0 }, [
+      chart(field("in"))
+        .flow(stack({ dir: "y" }))
+        .mark(rect({ w: 6, h: "value" })),
+      chart(field("out"))
+        .flow(stack({ dir: "y" }))
+        .mark(rect({ w: 6, h: "value" })),
+    ])
+  )
+  .layer(ribbon({ opacity: 0.4 }));</code></pre>
       <p class="small">
         A child's data is a list field of the parent row, as in d3's nested
         selections (<code>selection.data(d =&gt; d.children)</code>). The
@@ -2339,13 +2561,21 @@ chart(titanic).mark(spread({ dir: "x", spacing: 120 }, [
     <div>
       <pre><code>// nestJoin(nodes, links): each node gets in / out lists of the SAME link objects
 chart(nodes)
-  .flow(spread({ by: field("depth").sort(), dir: "x", spacing: 100 }),
-        spread({ by: field("name").sort(order), dir: "y", spacing: 10 }))
-  .mark(spread({ dir: "x", spacing: 0 }, [
-    chart(field("in")).flow(stack({ dir: "y" })).mark(rect({ w: 6, h: "value" })),
-    chart(field("out")).flow(stack({ dir: "y" })).mark(rect({ w: 6, h: "value" })),
-  ]))
-  .layer(ribbon({ opacity: 0.4, fill: "source" }))</code></pre>
+  .flow(
+    spread({ by: field("depth").sort(), dir: "x", spacing: 100 }),
+    spread({ by: field("name").sort(order), dir: "y", spacing: 10 })
+  )
+  .mark(
+    spread({ dir: "x", spacing: 0 }, [
+      chart(field("in"))
+        .flow(stack({ dir: "y" }))
+        .mark(rect({ w: 6, h: "value" })),
+      chart(field("out"))
+        .flow(stack({ dir: "y" }))
+        .mark(rect({ w: 6, h: "value" })),
+    ])
+  )
+  .layer(ribbon({ opacity: 0.4, fill: "source" }));</code></pre>
       <p class="small">
         The spec reads like the data: a list of nodes (flow), each a pair
         (direct style), each side a list of links (flow). A link appears once in
@@ -2358,15 +2588,30 @@ chart(nodes)
       <details>
         <summary class="small">Working today</summary>
         <pre><code>chart(eNested, { axes: false })
-  .flow(spread({ by: field("depth").sort(), dir: "x", spacing: 100, alignment: "start" }),
-        spread({ by: field("name").sort(eOrder), dir: "y", spacing: 10 }))
-  .mark((node) =&gt; spread({ dir: "x", spacing: 0, alignment: "start" }, [
-    chart(node[0].in).flow(spread({ dir: "y", spacing: 0 })).mark(rect({ w: 6, h: "value", fill: "#555" }).name("ends")),
-    chart(node[0].out).flow(spread({ dir: "y", spacing: 0 })).mark(rect({ w: 6, h: "value", fill: "#555" }).name("ends")),
-  ]))
-  .layer(chart(selectAll("ends"))
-    .flow(group({ by: (r) =&gt; r.datum[0] }))
-    .mark(ribbon({ opacity: 0.4, fill: "source", curve: Curve.bezier() })))</code></pre>
+  .flow(
+    spread({
+      by: field("depth").sort(),
+      dir: "x",
+      spacing: 100,
+      alignment: "start",
+    }),
+    spread({ by: field("name").sort(eOrder), dir: "y", spacing: 10 })
+  )
+  .mark((node) =&gt;
+    spread({ dir: "x", spacing: 0, alignment: "start" }, [
+      chart(node[0].in)
+        .flow(spread({ dir: "y", spacing: 0 }))
+        .mark(rect({ w: 6, h: "value", fill: "#555" }).name("ends")),
+      chart(node[0].out)
+        .flow(spread({ dir: "y", spacing: 0 }))
+        .mark(rect({ w: 6, h: "value", fill: "#555" }).name("ends")),
+    ])
+  )
+  .layer(
+    chart(selectAll("ends"))
+      .flow(group({ by: (r) =&gt; r.datum[0] }))
+      .mark(ribbon({ opacity: 0.4, fill: "source", curve: Curve.bezier() }))
+  );</code></pre>
       </details>
     </div>
     <figure>
@@ -2392,13 +2637,15 @@ const box = rect({ w: 40, h: "count", fill: "class" });
 const node = (gap, child) =&gt;
   spread({ dir: "x", spacing: 64, alignment: "middle" }, [
     box,
-    chart(field("children")).flow(spread({ dir: "y", spacing: gap })).mark(child),
+    chart(field("children"))
+      .flow(spread({ dir: "y", spacing: gap }))
+      .mark(child),
   ]);
 
 chart(tree)
   .flow(spread({ by: "class", dir: "y", spacing: 8 }))
   .mark(node(4, node(2, box)))
-  .layer(ribbon({ opacity: 0.6, fill: "class" }))</code></pre>
+  .layer(ribbon({ opacity: 0.6, fill: "class" }));</code></pre>
       <p class="small">
         Each level is the same record (a box, then a column of children), nested
         once per depth. The gaps narrow with depth (8, 4, 2), so
@@ -2414,21 +2661,45 @@ chart(tree)
       <details>
         <summary class="small">Working today</summary>
         <pre><code>const GAPS = [8, 4, 2];
-const box = (n) =&gt; chart([n]).mark(rect({ w: 40, h: "count", fill: "class" }).name("box"));
-const ends = (n) =&gt; chart(asEnds(n.children)).flow(spread({ dir: "y", spacing: 0 }))
-  .mark(rect({ w: 0, h: "count" }).name("box"));
+const box = (n) =&gt;
+  chart([n]).mark(rect({ w: 40, h: "count", fill: "class" }).name("box"));
+const ends = (n) =&gt;
+  chart(asEnds(n.children))
+    .flow(spread({ dir: "y", spacing: 0 }))
+    .mark(rect({ w: 0, h: "count" }).name("box"));
 const level = (nodes, depth) =&gt;
-  chart(nodes).flow(spread({ dir: "y", spacing: GAPS[depth] }))
-    .mark(([n]) =&gt; n.children.length === 0 ? box(n)
-      : spread({ dir: "x", spacing: 64, alignment: "middle" }, [
-          spread({ dir: "x", spacing: 0, alignment: "start" }, [box(n), ends(n)]),
-          level(n.children, depth + 1),
-        ]));
+  chart(nodes)
+    .flow(spread({ dir: "y", spacing: GAPS[depth] }))
+    .mark(([n]) =&gt;
+      n.children.length === 0
+        ? box(n)
+        : spread({ dir: "x", spacing: 64, alignment: "middle" }, [
+            spread({ dir: "x", spacing: 0, alignment: "start" }, [
+              box(n),
+              ends(n),
+            ]),
+            level(n.children, depth + 1),
+          ])
+    );
 level(tree, 0)
-  .layer(chart(selectAll("box")).flow(filter((r) =&gt; project(r, "depth") === 1), endsFirst, group({ by: "key" }))
-    .mark(ribbon({ opacity: 0.6, fill: "class", curve: Curve.bezier() })))
-  .layer(chart(selectAll("box")).flow(filter((r) =&gt; project(r, "depth") === 2), endsFirst, group({ by: "key" }))
-    .mark(ribbon({ opacity: 0.6, fill: "survived", curve: Curve.bezier() })))</code></pre>
+  .layer(
+    chart(selectAll("box"))
+      .flow(
+        filter((r) =&gt; project(r, "depth") === 1),
+        endsFirst,
+        group({ by: "key" })
+      )
+      .mark(ribbon({ opacity: 0.6, fill: "class", curve: Curve.bezier() }))
+  )
+  .layer(
+    chart(selectAll("box"))
+      .flow(
+        filter((r) =&gt; project(r, "depth") === 2),
+        endsFirst,
+        group({ by: "key" })
+      )
+      .mark(ribbon({ opacity: 0.6, fill: "survived", curve: Curve.bezier() }))
+  );</code></pre>
       </details>
     </div>
     <div class="ex" style="margin-top: 0; grid-template-columns: 1fr 1fr">
@@ -2465,12 +2736,15 @@ level(tree, 0)
       <pre><code>const node = (self) =&gt;
   spread({ dir: "x", spacing: 64, alignment: "middle" }, [
     box,
-    chart(field("children")).flow(spread({ dir: "y", spacing: 4 })).mark(self),
+    chart(field("children"))
+      .flow(spread({ dir: "y", spacing: 4 }))
+      .mark(self),
   ]);
 
-chart(tree).flow(spread({ by: "class", dir: "y", spacing: 8 }))
-  .mark(fix(node))          // node refers to itself; stops at empty children
-  .layer(ribbon({ opacity: 0.6, fill: "class" }))</code></pre>
+chart(tree)
+  .flow(spread({ by: "class", dir: "y", spacing: 8 }))
+  .mark(fix(node)) // node refers to itself; stops at empty children
+  .layer(ribbon({ opacity: 0.6, fill: "class" }));</code></pre>
       <p class="small">
         For any depth. <code>fix</code> is the textbook fixed point (<code
           >fix(f) = f(fix(f))</code
