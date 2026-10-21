@@ -771,8 +771,8 @@ await PICCL.show(
   <div class="vs" style="margin-top: 12px">
     <div>
       <div class="vs-head p2">
-        PiCCL: the original spec, with <code>.mapValue</code> as
-        <code>field(...)</code>
+        PiCCL: the original, reduced to the parts that match (your edit), with
+        <code>.mapValue</code> as <code>field(...)</code>
       </div>
       <pre><code>const palette = [
   "rgb(235,207,79)",
@@ -781,21 +781,6 @@ await PICCL.show(
   "rgb(121,178,86)",
   "rgb(159,205,213)",
 ];
-const creatBarChart = () =&gt; {
-  const waterDrop = new PICCL.Picture({
-    url: "water_drop.svg",
-    height: 15,
-    color: field("emotion", { palette }),
-  });
-  const row = PICCL.repeat(waterDrop, "count").stackLayout("x", 2);
-  const label = new PICCL.Text({ textAnchor: "end", content: field("day") });
-  const rowWithLabel = PICCL.union([row, label]).pointSnap(label, row, {
-    anchor: [0, 0.5],
-    offset: [-10, -4],
-  });
-  const chart = PICCL.replicate(rowWithLabel, "day").stackLayout("y", 10);
-  return chart;
-};
 const dayRect = new PICCL.Rect({
   fill: "white",
   height: 30,
@@ -815,8 +800,9 @@ const daysCollection = PICCL.replicate(glyphDay, "name").stackLayout("x", 120);
 const waterCup = new PICCL.Picture({
   url: "cup_of_water.png",
   width: 90,
+  colorMode: "hue",
   linkId: field("emotion"),
-  color: field("emotion"),
+  color: field("emotion", { palette }),
 });
 const emotionLabel = new PICCL.Text({
   fill: "white",
@@ -825,14 +811,11 @@ const emotionLabel = new PICCL.Text({
   fontFamily: "Impact ",
   content: field("emotion"),
 });
-const barChart = creatBarChart();
-const glyphEmotion = PICCL.union([waterCup, emotionLabel, barChart])
-  .pointSnap(emotionLabel, waterCup, { anchor: [0.5, 0.3] })
-  .pointSnap(barChart, waterCup, {
-    sourceAnchor: [0.5, 1],
-    targetAnchor: [0.5, 0],
-    offset: [0, -20],
-  });
+const glyphEmotion = PICCL.union([waterCup, emotionLabel]).pointSnap(
+  emotionLabel,
+  waterCup,
+  { anchor: [0.5, 0.3] }
+);
 const emotionsCollection = PICCL.replicate(glyphEmotion, "emotion").stackLayout(
   "x",
   140
@@ -852,76 +835,11 @@ const link = PICCL.link(composite, {
   linkWidth: field("count"),
   fill: field("target_id"),
 });
-const drop2 = new PICCL.Picture({
-  url: "drop3.png",
-  height: 70,
-  x: -200,
-  y: 500,
-  color: field("emotion"),
-});
-const dropAnchor = new PICCL.Rect({
-  height: 50,
-  width: 0,
-  linkId: field("emotion"),
-});
-const dl = new PICCL.Text({
-  fill: "white",
-  textAnchor: "middle",
-  fontSize: 24,
-  content: field("emotion"),
-});
-const dg = PICCL.union([drop2, dropAnchor, dl])
-  .pointSnap(drop2, dropAnchor)
-  .pointSnap(dl, drop2, { offset: [20, -10] });
-const dropCollection = PICCL.replicate(dg, "emotion").stackLayout("-y", 70);
-const rectForLink = new PICCL.Rect({
-  width: 50,
-  height: 0,
-  x: -440,
-  y: 580,
-  fill: field("emotion"),
-  linkId: field("emotion"),
-});
-const rectCollection = PICCL.replicate(rectForLink, "emotion").stackLayout(
-  "-x",
-  -20
-);
-const left = PICCL.union([rectCollection, dropCollection]).pointSnap(
-  dropCollection,
-  rectCollection,
-  { sourceAnchor: [0, 1], targetAnchor: [1, 0], offset: [100, -100] }
-);
-const link2 = PICCL.link(left, {
-  srcDirection: "bottom",
-  dstDirection: "left",
-  opacity: 0.4,
-  shape: "bezier",
-  curveness: 150,
-});
-const t1 = new PICCL.Text({
-  content: "2010",
-  fontSize: 200,
-  fontWeight: "600",
-  fill: "#ddd",
-  x: -600,
-  y: 650,
-});
-const t2 = new PICCL.Text({
-  content: "7 EMOTIONAL SCHOOL DAYS",
-  fontSize: 32,
-  fontWeight: "600",
-  fill: "#6a473b",
-  x: -600,
-  y: 600,
-});
 await PICCL.show(
   [
     [daysCollection, data["days.csv"]],
     [emotionsCollection, data["emotions.csv"]],
     [link, data["links.csv"]],
-    [link2, data["emotions.csv"]],
-    t1,
-    t2,
   ],
   container,
   { pictures }
@@ -941,10 +859,14 @@ await PICCL.show(
     </div>
     <figure>
       <div class="plate">
-        <img src="img/ref/piccl-school-days.png" alt="PiCCL rendering" />
+        <img
+          src="img/ref/piccl-school-days-reduced.png"
+          alt="PiCCL rendering"
+        />
       </div>
       <figcaption>
-        <span class="tag">PiCCL</span>PiCCL's own rendering.
+        <span class="tag">PiCCL</span>PiCCL's rendering, cropped to the days and
+        glasses that the reduced spec keeps.
       </figcaption>
     </figure>
   </div>
@@ -952,22 +874,60 @@ await PICCL.show(
   <h3>FrankenSankey: a two-tier flow on one side</h3>
   <div class="ex">
     <div>
-      <pre><code>chart(links) // one bar over all the 2017 links
-  .mark(
-    rect({ w: 14, h: "value" })
-      .anchor({
-        name: "out",
-        position: "x-max",
-        slots: data().flow(
-          stack({ by: field("decision").sort(DECISIONS) }),
-          stack({ by: "country", size: "value" })
-        ),
-      })
-      .name("bar")
-  );
-// each country: .anchor({ name: "in", position: "x-min",
-//   slots: data().flow(stack({ by: "decision", size: "value" })) }).name("countries")
-// ribbons: chart(links).mark(ribbon({ from: "bar.out", to: "countries.in", fill: "decision", opacity: 0.55 }))</code></pre>
+      <pre><code>// years: { year, decision, value }   links (2017): { country, decision, value }
+layer([
+  spread({ dir: "x", spacing: 150, alignment: "end" }, [
+    spread({ dir: "x", spacing: 0, alignment: "end" }, [
+      // the stacked area: one column per year, accepted on rejected
+      chart(years)
+        .flow(
+          spread({ by: "year", dir: "x", spacing: 22 }),
+          stack({ by: "decision", dir: "y" })
+        )
+        .mark(rect({ w: 0, h: "value", fill: "decision" }).name("area")),
+      // the 2017 bar: one rect over all the 2017 links, its ends decision first, then country
+      chart(links).mark(
+        rect({ w: 14, h: "value" })
+          .anchor({
+            name: "out",
+            position: "x-max",
+            slots: data().flow(
+              stack({ by: field("decision").sort(DECISIONS) }),
+              stack({ by: "country", size: "value" })
+            ),
+          })
+          .name("bar")
+      ),
+    ]),
+    // the countries: one rect per country, its ends by decision
+    chart(links)
+      .flow(spread({ by: "country", dir: "y", spacing: 6 }))
+      .mark(
+        rect({ w: 14, h: "value" })
+          .anchor({
+            name: "in",
+            position: "x-min",
+            slots: data().flow(
+              stack({ by: field("decision").sort(DECISIONS), size: "value" })
+            ),
+          })
+          .name("countries")
+      ),
+  ]),
+  // the stacked area's bands
+  chart(selectAll("area"))
+    .flow(group({ by: "decision" }))
+    .mark(ribbon({ fill: "decision" })),
+  // the sankey: each link from its slot on the bar to its slot at its country
+  chart(links).mark(
+    ribbon({
+      from: "bar.out",
+      to: "countries.in",
+      fill: "decision",
+      opacity: 0.55,
+    })
+  ),
+]);</code></pre>
       <p class="small">
         Decision first, then country, is just the flow. The size sits on the
         inner stack; the decision groups take their contents' length, as nested
