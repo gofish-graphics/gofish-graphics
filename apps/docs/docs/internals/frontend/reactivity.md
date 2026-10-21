@@ -63,13 +63,13 @@ themselves on read.
 `resolveContext.ts` holds a single module-level variable (the current
 `AmbientRegistrar`). The **render terminal** (`renderTerminal.ts`,
 `renderWithInteraction`) wraps resolution in `withInteractiveResolve(runtime,
-fn)`, which sets the variable for the duration of the resolve and restores it
+fn)`, which sets the variable for the duration of the resolve and clears it
 after. Every library input's accessor, when read, runs the `track` half of one
 of the input's **dependencies** (`dependency(input)` in `inputs.ts`):
 
 ```ts
 const reg = ambientRegistrar();
-if (!reg) return; // read outside a resolve — just a plain read
+if (!reg) return; // read outside a resolve, or in paint: just a plain read
 reg.registerInput(input); // wire this input into event dispatch (idempotent)
 if (!inLiveEval()) readers.add(reg); // a spec read → pipeline dependency
 ```
@@ -100,16 +100,29 @@ tick of the value. If nothing registers during a resolve, the runtime reports
 `hasWork() === false` and the chart renders down the static path untouched — no
 `data-gf-id`, output identical to a non-interactive build.
 
-> **Concurrency caveat.** The ambient context is a module variable, so two
-> charts resolving _concurrently_ (interleaving at `await` points — e.g. a Python
-> `derive` RPC) could cross-register. Registration sites are synchronous
-> spec-evaluation code in practice; a scoped-storage mechanism can replace the
-> module var if async marks ever make the race real. Paint is the exception
-> that showed up: a live slot re-runs on a clock tick, and the tick can land
-> while another chart's resolve is suspended at an `await`. So every slot
-> `setLiveSlots` stores reads under `runInLiveEval`, and a paint read never
-> becomes a pipeline dependency of whatever chart is resolving. (It can still
-> register the input with that chart's runtime, which only wires events.)
+**One resolve at a time (#1191).** A module variable is only correct if no
+other chart's resolve runs while it is set, and a resolve suspends at every
+`await`. The browser has no way to carry a value across an `await` (TC39's
+AsyncContext is not shipped), so the render terminal makes the variable safe
+the other way: every interactive render on the page goes through one queue,
+`renderExclusive`, and waits for the render before it to finish, resolve and
+paint. Two charts started at once (a gallery page, a notebook with several
+widgets) therefore resolve one after the other, and a read registers with the
+chart whose resolve made it. The other code that can run while a resolve waits
+is paint: a live slot that re-runs on a clock tick or a pointer move. A read
+made inside a reactive computation (`getListener() !== null`) is never handed
+the registrar, because it belongs to the chart that painted it, whose resolve
+already registered the input; a resolve itself runs untracked. Before the
+queue, a chart that read no input could pick up another chart's clock and
+re-render on its ticks (the Build-in prototype gallery's chart 3e did).
+
+> **Declared shortcut.** The queue is page-wide. A resolve that waits on
+> something slow, such as a Python callback during a kernel round trip, makes
+> every other chart's render wait too, and a read made by plain (non-reactive)
+> code in a macrotask during that wait, such as a widget's event handler,
+> still registers with the waiting chart. The right fix is AsyncContext,
+> which scopes the registrar to the resolve's own continuation, once browsers
+> ship it.
 
 ## One terminal, three callers — including components
 

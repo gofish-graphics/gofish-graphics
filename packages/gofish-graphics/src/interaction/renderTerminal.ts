@@ -20,7 +20,10 @@
  *      whole resolve → render into the SAME container;
  *   5. tell each resolve which render it is for (a {@link RenderPass}): the
  *      first, or a re-render of the chart already on screen; and before a
- *      re-render, stop what the previous render started (its build clock).
+ *      re-render, stop what the previous render started (its build clock);
+ *   6. run each render (resolve and paint) in the page-wide render queue
+ *      (`renderExclusive`), so two charts' resolves never interleave and an
+ *      input registers with the chart whose resolve read it (#1191).
  *
  * Three callers share it: `ChartBuilder.render` and `LayerBuilder.render` (the
  * fluent chart pipeline) and the low-level `gofish()` terminal when handed a
@@ -36,7 +39,7 @@
  * coupling is the `.render(container, options)` call, kept as a type-only import.
  */
 import { InteractionRuntime } from "./runtime";
-import { withInteractiveResolve } from "./resolveContext";
+import { renderExclusive, withInteractiveResolve } from "./resolveContext";
 import type { GoFishNode } from "../ast/_node";
 import type { View } from "../ast/gofish";
 
@@ -59,27 +62,30 @@ export async function renderWithInteraction<O extends Record<string, unknown>>(
   const runtime = new InteractionRuntime();
   let rerender = false;
   let cleanups: (() => void)[] = [];
-  const doRender = async (): Promise<View | undefined> => {
-    for (const fn of cleanups) fn();
-    cleanups = [];
-    const pass: RenderPass = {
-      rerender,
-      onCleanup: (fn) => void cleanups.push(fn),
-    };
-    rerender = true;
-    // Reset per-resolve dependency flags before reads re-register inputs.
-    runtime.beginResolve();
-    const { node, options } = await withInteractiveResolve(runtime, () =>
-      resolveForRender(pass)
-    );
-    // A re-render that was still resolving when its chart was unmounted must
-    // not mount the chart again.
-    if (runtime.isDisposed()) return undefined;
-    if (runtime.hasWork()) {
-      (options as Record<string, unknown>).interaction = runtime;
-    }
-    return node.render(container, options);
-  };
+  const doRender = (): Promise<View | undefined> =>
+    renderExclusive(async () => {
+      for (const fn of cleanups) fn();
+      cleanups = [];
+      const pass: RenderPass = {
+        rerender,
+        onCleanup: (fn) => void cleanups.push(fn),
+      };
+      rerender = true;
+      // Reset per-resolve dependency flags before reads re-register inputs.
+      runtime.beginResolve();
+      const { node, options } = await withInteractiveResolve(runtime, () =>
+        resolveForRender(pass)
+      );
+      // A re-render that was still resolving when its chart was unmounted must
+      // not mount the chart again.
+      if (runtime.isDisposed()) return undefined;
+      if (runtime.hasWork()) {
+        (options as Record<string, unknown>).interaction = runtime;
+      }
+      // The paint runs in the queue too, with no registrar: its reads are
+      // paint (see resolveContext.ts), and no other resolve is in progress.
+      return node.render(container, options);
+    });
   runtime.setRerender(doRender);
   // The first render always mounts: only unmounting a chart disposes its
   // runtime, and no chart holds this runtime until this render returns.

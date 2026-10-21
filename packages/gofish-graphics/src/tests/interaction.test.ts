@@ -1983,6 +1983,59 @@ async function main() {
     ok("the button pauses again", day.isPlaying() === false);
   }
 
+  /* ------------- concurrent resolves register with their own chart (#1191) ------------- */
+  console.log("\nconcurrent resolves (#1191)");
+  {
+    // Chart A reads a signal in a `derive` AFTER awaiting, so its resolve is
+    // suspended while chart B's resolve starts. With a module-level registrar
+    // and no queue, A's read landed in B's runtime: B grew `data-gf-id`
+    // hooks and re-rendered on A's signal.
+    const cut = signal(2);
+    let aRuns = 0;
+    let bRuns = 0;
+    const a = makeContainer();
+    const b = makeContainer();
+    const pA = chart(data)
+      .flow(
+        derive(async (rows: any[]) => {
+          aRuns++;
+          await nextTick();
+          return rows.filter((r) => r.count > cut());
+        }),
+        spread({ by: "cat", dir: "x" })
+      )
+      .mark(rect({ h: "count" }))
+      .render(a, { w: 200, h: 100 });
+    const pB = chart(data)
+      .flow(
+        derive(async (rows: any[]) => {
+          bRuns++;
+          await nextTick();
+          await nextTick();
+          await nextTick();
+          return rows;
+        }),
+        spread({ by: "cat", dir: "x" })
+      )
+      .mark(rect({ h: "count" }))
+      .render(b, { w: 200, h: 100 });
+    await Promise.all([pA, pB]);
+    await settle();
+    ok(
+      "the chart that reads no input stays static",
+      b.querySelectorAll("[data-gf-id]").length === 0
+    );
+    const before = { a: aRuns, b: bRuns };
+    cut.set(4);
+    await settle();
+    ok("the reading chart re-renders on its signal", aRuns === before.a + 1);
+    ok("the other chart does not re-render", bRuns === before.b, String(bRuns));
+    ok(
+      "the reading chart dropped the bars at or below the cut",
+      a.querySelectorAll("rect").length < b.querySelectorAll("rect").length
+    );
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }
