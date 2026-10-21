@@ -727,10 +727,13 @@ pie gets no cartesian title. It titles its own axes (the radial title, see
 The title ring (`axisTitles`) centers each title on the axis shape it
 describes, not on the plot:
 
-- The anchor is the axis line when the axis has one (continuous or
-  difference). `AxisElaboration` carries it as `anchor`. An ordinal axis is a
-  row of labels with no spanning line, so its title centers on the owner's
-  content box instead.
+- The anchor is the axis's own span, which `AxisElaboration` carries as
+  `anchor`: the axis line of a continuous or difference axis, and for an
+  ordinal axis an `axisSpan` from its first slot's start to its last slot's
+  end, which draws nothing. So a category axis's title centers on the plot,
+  not on the owner's content box, which holds the other axis's gutter when
+  the other axis is drawn by a node inside it. Only an ordinal axis with no
+  slots falls back to the content box.
 - The anchor is referenced with a `ref(anchorNode)` stand-in, the same
   direct-node `ref` form `elaborateOrdinalAxis` uses. The anchor sits in a ring
   inside the title ring, so it is placed by the time the constraints read the
