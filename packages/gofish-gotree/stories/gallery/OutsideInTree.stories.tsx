@@ -167,7 +167,7 @@ const marks = wedges
 export const OutsideInTree: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    frame({ coord: Coord.polar() as any }, [layer(marks)]).render(container, {
+    frame({ coord: Coord.clock() as any }, [layer(marks)]).render(container, {
       w: 540,
       h: 540,
     });

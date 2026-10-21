@@ -133,7 +133,7 @@ export const Sunburst: StoryObj = {
           // r: siblings share the same ring.
           y: { kind: "align", alignment: "middle" },
         }),
-        coord: Coord.polar(),
+        coord: Coord.clock(),
       },
       deepBalancedTree
     ).render(container, { w: 540, h: 540 });

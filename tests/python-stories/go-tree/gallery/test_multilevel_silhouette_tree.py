@@ -187,4 +187,4 @@ MARKS = [
 
 
 def story_multilevel_silhouette_tree():
-    return layer([layer(MARKS)], coord=Coord.polar()), {"w": 660, "h": 660}
+    return layer([layer(MARKS)], coord=Coord.clock()), {"w": 660, "h": 660}

@@ -250,7 +250,7 @@ def story_sunburst():
             parent_child=distribute(dir="y", spacing=0, alignment="middle"),
             # Siblings packed along theta, on one radial band.
             sibling=distribute(dir="x", spacing=0, alignment="middle"),
-            coord=Coord.polar(),
+            coord=Coord.clock(),
         ),
         {"w": 540, "h": 540},
     )
@@ -322,7 +322,7 @@ def story_nested_pietree():
             link="none",
             parent_child=nest(x=NPT_X_PAD, y=32),
             sibling=distribute(dir="x", spacing=NPT_SIB, alignment="middle"),
-            coord=Coord.polar(),
+            coord=Coord.clock(),
         ),
         {"w": 540, "h": 540},
     )
@@ -348,7 +348,7 @@ def story_radial_nodes():
             sibling=distribute(
                 dir="x", spacing=(2 * math.pi) / 3, anchor="middle", alignment="middle"
             ),
-            coord=Coord.polar(),
+            coord=Coord.clock(),
         ),
         {"w": 480, "h": 480},
     )

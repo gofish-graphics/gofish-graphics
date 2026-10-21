@@ -170,7 +170,7 @@ export const RadialTree: StoryObj = {
     // Inside a coord, paint order = array order (coord's flattenLayout ignores
     // zOrder — resolved by the ROOT bake, and coord is a bake boundary). Links
     // go FIRST to draw under the nodes; the root node is last within `nodes`.
-    frame({ coord: Coord.polar() as any }, [
+    frame({ coord: Coord.clock() as any }, [
       layer([...links, ...nodes]),
     ]).render(container, { w: 560, h: 560 });
     return container;

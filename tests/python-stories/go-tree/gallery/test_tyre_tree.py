@@ -59,7 +59,7 @@ def story_tyre_tree():
                 x={"kind": "distribute", "spacing": 0},
                 y={"kind": "align", "alignment": "start"},
             ),
-            coord=Coord.polar(inner_radius=0.25),
+            coord=Coord.clock(inner_radius=0.25),
         ),
         {"w": 560, "h": 560},
     )

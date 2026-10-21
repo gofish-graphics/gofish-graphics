@@ -68,7 +68,7 @@ def story_sector_tree():
                 x={"kind": "distribute", "spacing": 0, "anchor": "edge"},
                 y={"kind": "align", "alignment": "middle"},
             ),
-            coord=Coord.polar(),
+            coord=Coord.clock(),
         ),
         {"w": 560, "h": 560},
     )

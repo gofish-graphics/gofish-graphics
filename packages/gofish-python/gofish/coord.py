@@ -17,13 +17,13 @@ __all__ = ["polar", "clock", "wavy", "geo"]
 
 
 def polar(*, inner_radius: Optional[float] = None, central_angle: Optional[float] = None, start_angle: Optional[float] = None, direction: Optional[float] = None, center: Optional[tuple] = None) -> Dict[str, Any]:
-    """Maps (θ, r) → screen. θ is axis 0 (x, or the declared name theta), r is axis 1 (y, or r); `dims` and `dir` inside it may use theta/r.
+    """Maps (θ, r) → screen in the math convention: θ=0 at 3 o'clock, increasing counter-clockwise. θ is axis 0 (x, or the declared name theta), r is axis 1 (y, or r); `dims` and `dir` inside it may use theta/r.
 
     Args:
         inner_radius: Donut hole as a fraction [0,1) of the outer radius. Default 0.
         central_angle: Total angular sweep in radians. Default 6.283185307179586.
-        start_angle: Angle (radians) of θ=0. Default 1.5707963267948966.
-        direction: +1 counter-clockwise, -1 clockwise (numeric ±1). Default -1.
+        start_angle: Angle (radians) of θ=0, measured counter-clockwise from 3 o'clock. Default 0.
+        direction: +1 counter-clockwise, -1 clockwise (numeric ±1). Default 1.
         center: Screen-space center offset. Default [0,0].
     """
     if inner_radius is not None:
@@ -76,12 +76,12 @@ def polar(*, inner_radius: Optional[float] = None, central_angle: Optional[float
 
 
 def clock(*, inner_radius: Optional[float] = None, central_angle: Optional[float] = None, start_angle: Optional[float] = None, direction: Optional[float] = None, center: Optional[tuple] = None) -> Dict[str, Any]:
-    """A `Coord.polar()` preset (0° at 12 o'clock, clockwise — already polar's defaults) kept as a distinct type tag for bbox sampling and user intent.
+    """The polar transform in the clock convention: θ=0 at 12 o'clock, increasing clockwise. It differs from `Coord.polar()` only in the `startAngle` and `direction` defaults.
 
     Args:
         inner_radius: Donut hole as a fraction [0,1) of the outer radius. Default 0.
         central_angle: Total angular sweep in radians. Default 6.283185307179586.
-        start_angle: Angle (radians) of θ=0. Default 1.5707963267948966.
+        start_angle: Angle (radians) of θ=0, measured counter-clockwise from 3 o'clock. Default 1.5707963267948966.
         direction: +1 counter-clockwise, -1 clockwise (numeric ±1). Default -1.
         center: Screen-space center offset. Default [0,0].
     """

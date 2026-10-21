@@ -2187,43 +2187,48 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
 
 // The field names are the camelCase wire keys; Python's Coord.polar()/clock() spell
 // them in snake_case (inner_radius, ...) like every other generated kwarg (see
-// `pyKwarg`).
-const polarFields: FieldGroup = group({
-  innerRadius: {
-    type: t.number,
-    default: 0,
-    doc: "Donut hole as a fraction [0,1) of the outer radius.",
-  },
-  centralAngle: {
-    type: t.number,
-    default: 2 * Math.PI,
-    doc: "Total angular sweep in radians.",
-  },
-  startAngle: {
-    type: t.number,
-    default: Math.PI / 2,
-    doc: "Angle (radians) of θ=0.",
-  },
-  direction: {
-    type: t.number,
-    default: -1,
-    doc: "+1 counter-clockwise, -1 clockwise (numeric ±1).",
-  },
-  center: {
-    type: t.tuple(t.number, t.number),
-    default: [0, 0],
-    doc: "Screen-space center offset.",
-  },
-});
+// `pyKwarg`). `polar` and `clock` share these fields and differ only in the
+// `startAngle` / `direction` defaults (the angular convention).
+const polarFields = (defaults: {
+  startAngle: number;
+  direction: number;
+}): FieldGroup =>
+  group({
+    innerRadius: {
+      type: t.number,
+      default: 0,
+      doc: "Donut hole as a fraction [0,1) of the outer radius.",
+    },
+    centralAngle: {
+      type: t.number,
+      default: 2 * Math.PI,
+      doc: "Total angular sweep in radians.",
+    },
+    startAngle: {
+      type: t.number,
+      default: defaults.startAngle,
+      doc: "Angle (radians) of θ=0, measured counter-clockwise from 3 o'clock.",
+    },
+    direction: {
+      type: t.number,
+      default: defaults.direction,
+      doc: "+1 counter-clockwise, -1 clockwise (numeric ±1).",
+    },
+    center: {
+      type: t.tuple(t.number, t.number),
+      default: [0, 0],
+      doc: "Screen-space center offset.",
+    },
+  });
 
 export const COORDS: Record<string, ConstructDescriptor> = {
   polar: coordTransform("polar", {
-    doc: "Maps (θ, r) → screen. θ is axis 0 (x, or the declared name theta), r is axis 1 (y, or r); `dims` and `dir` inside it may use theta/r.",
-    fields: polarFields,
+    doc: "Maps (θ, r) → screen in the math convention: θ=0 at 3 o'clock, increasing counter-clockwise. θ is axis 0 (x, or the declared name theta), r is axis 1 (y, or r); `dims` and `dir` inside it may use theta/r.",
+    fields: polarFields({ startAngle: 0, direction: 1 }),
   }),
   clock: coordTransform("clock", {
-    doc: "A `Coord.polar()` preset (0° at 12 o'clock, clockwise — already polar's defaults) kept as a distinct type tag for bbox sampling and user intent.",
-    fields: polarFields,
+    doc: "The polar transform in the clock convention: θ=0 at 12 o'clock, increasing clockwise. It differs from `Coord.polar()` only in the `startAngle` and `direction` defaults.",
+    fields: polarFields({ startAngle: Math.PI / 2, direction: -1 }),
   }),
   wavy: coordTransform("wavy", {
     doc: "A sinusoidal warp of the plane. No options.",

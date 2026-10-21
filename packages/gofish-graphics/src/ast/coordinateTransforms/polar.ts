@@ -5,46 +5,60 @@ export type PolarOptions = {
   innerRadius?: number;
   /** Total angular sweep in radians. Default 2π (full circle). */
   centralAngle?: number;
-  /** Angle (radians) of θ=0. Default π/2 — 12 o'clock. */
+  /**
+   * Angle (radians) of θ=0, measured counter-clockwise from 3 o'clock.
+   * Default 0 for `polar()` (3 o'clock) and π/2 for `clock()` (12 o'clock).
+   */
   startAngle?: number;
-  /** +1 counter-clockwise, -1 clockwise. Default -1 (clockwise, the pie default). */
+  /**
+   * +1 counter-clockwise, -1 clockwise. Default +1 for `polar()` and -1 for
+   * `clock()`.
+   */
   direction?: 1 | -1;
   /** Screen-space center offset. Default [0,0]. */
   center?: [number, number];
 };
 
 /**
- * Polar coordinate transform: maps (θ, r) → screen. θ is axis 0 (`x`, or the
- * declared name `theta`), r is axis 1 (`y`, or `r`). See `dims` in dims.ts.
- *
- * Defaults reproduce the historical `polar()` exactly: θ=0 at 12 o'clock,
- * increasing clockwise, filled disc, full 2π sweep, centered at the origin
- * (`cos(-θ+π/2)` ≡ `cos(π/2 + (-1)·θ)`). The options expose GoTree's
- * `StartAngle` / `CentralAngle` / `Direction` / `InnerRadius` / `PolarCenter`.
+ * The polar family: one transform, (θ, r) → plane, whose presets differ only
+ * in the angular convention they default to (`startAngle`, `direction`).
+ * θ is axis 0 (`x`, or the declared name `theta`), r is axis 1 (`y`, or `r`).
+ * See `dims` in dims.ts. The plane is y-up, so a positive `direction` turns
+ * counter-clockwise on screen. The options expose GoTree's `StartAngle` /
+ * `CentralAngle` / `Direction` / `InnerRadius` / `PolarCenter`.
  */
-export const polar = (opts: PolarOptions = {}): CoordinateTransform => {
-  const {
-    innerRadius = 0,
-    centralAngle = 2 * Math.PI,
-    startAngle = Math.PI / 2,
-    direction = -1,
-    center = [0, 0],
-  } = opts;
-  return {
-    type: "polar",
-    transform: ([theta, r]: [number, number]) => [
-      center[0] + r * Math.cos(startAngle + direction * theta),
-      center[1] + r * Math.sin(startAngle + direction * theta),
-    ],
-    aliases: { x: "theta", y: "r" },
-    innerRadius,
-    // domain[0] is the angular budget (CentralAngle); coord.layout reads its
-    // `size` as the θ space children are allotted, replacing the old 2π literal.
-    // domain[1].max (radius) is still a placeholder used only by the debug grid;
-    // axis ticks read the resolved underlying space, not this.
-    domain: [
-      { min: 0, max: centralAngle, size: centralAngle },
-      { min: 0, max: 100, size: 100 },
-    ],
+export const polarPreset =
+  (type: string, defaults: { startAngle: number; direction: 1 | -1 }) =>
+  (opts: PolarOptions = {}): CoordinateTransform => {
+    const {
+      innerRadius = 0,
+      centralAngle = 2 * Math.PI,
+      startAngle = defaults.startAngle,
+      direction = defaults.direction,
+      center = [0, 0],
+    } = opts;
+    return {
+      type,
+      transform: ([theta, r]: [number, number]) => [
+        center[0] + r * Math.cos(startAngle + direction * theta),
+        center[1] + r * Math.sin(startAngle + direction * theta),
+      ],
+      aliases: { x: "theta", y: "r" },
+      innerRadius,
+      // domain[0] is the angular budget (CentralAngle); coord.layout reads its
+      // `size` as the θ space children are allotted, replacing the old 2π literal.
+      // domain[1].max (radius) is still a placeholder used only by the debug grid;
+      // axis ticks read the resolved underlying space, not this.
+      domain: [
+        { min: 0, max: centralAngle, size: centralAngle },
+        { min: 0, max: 100, size: 100 },
+      ],
+    };
   };
-};
+
+/**
+ * Polar coordinates in the math convention: θ=0 at 3 o'clock (+x), increasing
+ * counter-clockwise. For θ=0 at 12 o'clock increasing clockwise, use
+ * `clock()`.
+ */
+export const polar = polarPreset("polar", { startAngle: 0, direction: 1 });

@@ -364,7 +364,10 @@ or a mark (§ Modularity), from the spec without its `type`. An options-object
 factory takes the options whole (`Coord.polar(opts)`), so a parameterized
 polar/clock (donut hole, partial fan, start angle) round-trips without
 per-option plumbing, and the descriptor's `positional` field goes first
-(`Coord.geo(opts.projection, rest)`). An unknown `type` throws.
+(`Coord.geo(opts.projection, rest)`). An unknown `type` throws. `polar` and
+`clock` share one field group and differ only in its `startAngle` /
+`direction` defaults, so the `type` tag is what keeps the angular convention
+across the wire when those options are left out.
 
 Channel values (`h`, `w`, `fill`, …) accept bare primitives (the
 shorthand path) or one of three explicit tagged objects:

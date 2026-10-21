@@ -75,7 +75,7 @@ export const FlowerTree: StoryObj = {
           // r: siblings share a radius band.
           y: { kind: "align", alignment: "middle" },
         }),
-        coord: Coord.polar(),
+        coord: Coord.clock(),
       },
       { w: 520, h: 520 },
       sampleTree

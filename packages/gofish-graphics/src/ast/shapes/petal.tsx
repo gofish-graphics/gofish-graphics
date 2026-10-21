@@ -99,19 +99,24 @@ export const Petal = ({
           },
         };
       },
-      // IR lowering. Petal is polar-only; `toPixel` is the coord content map
-      // set by coord.lower and `coordinateTransform` is the polar transform in
-      // pixels (`inPixels`: it takes the interior's pixel y, the negated
-      // radius, and returns y-down points). The both-aesthetic branch is a
-      // point rect; otherwise the petal path is built from polar-transformed
-      // points and rotated by its angular center, baked into each point before
+      // IR lowering. Petal is polar-family-only (`polar()` or `clock()`);
+      // `toPixel` is the coord content map set by coord.lower and
+      // `coordinateTransform` is the polar transform in pixels (`inPixels`: it
+      // takes the interior's pixel y, the negated radius, and returns y-down
+      // points). The both-aesthetic branch is a point rect; otherwise the
+      // petal path is built pointing along +x and turned to the screen
+      // direction of its angular center, baked into each point before
       // `toPixel`.
       lower: (
         { intrinsicDims, transform, coordinateTransform, toPixel },
         _children,
         node
       ): DisplayList.DisplayItem[] => {
-        if (!coordinateTransform || coordinateTransform.type !== "polar") {
+        if (
+          !coordinateTransform ||
+          (coordinateTransform.type !== "polar" &&
+            coordinateTransform.type !== "clock")
+        ) {
           return [];
         }
         const space = coordinateTransform;
@@ -152,28 +157,32 @@ export const Petal = ({
           ];
         }
 
-        // Petal shape — same points as render, rotated by the angular center
-        // (radians) and mapped to pixels.
+        // Petal shape: built pointing along +x in y-down pixels, half its
+        // angular width on each side, then turned to the screen direction of
+        // its angular center and mapped to pixels.
         const halfRadius = (displayDims[1].size ?? 0) / 2;
-        // The interior's pixel y of radius `halfRadius` is `-halfRadius`.
-        const s = space.transform([
-          -displayDims[0].size / 2 + Math.PI / 2,
-          -halfRadius,
-        ]);
-        const e = space.transform([
-          displayDims[0].size / 2 + Math.PI / 2,
-          -halfRadius,
-        ]);
+        const halfAngle = (displayDims[0].size ?? 0) / 2;
+        const s: [number, number] = [
+          halfRadius * Math.cos(halfAngle),
+          -halfRadius * Math.sin(halfAngle),
+        ];
+        const e: [number, number] = [
+          halfRadius * Math.cos(halfAngle),
+          halfRadius * Math.sin(halfAngle),
+        ];
         const r = displayDims[1].size ?? 0;
         const m: [number, number] = [halfRadius + r / 2, 0];
         const c1: [number, number] = [halfRadius + r / 4, s[1]];
         const c2: [number, number] = [halfRadius + r / 4, e[1]];
 
-        // Turn by the angular center (radians, counter-clockwise on screen,
-        // as polar measures angles), in y-down pixels.
+        // The screen direction of θ = the angular center, read off the coord
+        // so the preset's start angle and direction apply. `space` is in
+        // y-down pixels, where radius r sits at pixel y = -r.
         const center = displayDims[0].center ?? 0;
-        const cos = Math.cos(center);
-        const sin = Math.sin(center);
+        const [ox, oy] = space.transform([center, 0]);
+        const [ux, uy] = space.transform([center, -1]);
+        const cos = ux - ox;
+        const sin = -(uy - oy);
         const petalToPixel = ([x, y]: [number, number]): [number, number] =>
           toPixel([x * cos + y * sin, -x * sin + y * cos]);
         const p = (pt: [number, number]) => petalToPixel(pt).join(",");

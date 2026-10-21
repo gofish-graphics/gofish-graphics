@@ -73,7 +73,7 @@ export const OrthogonalGridEmbedding: StoryObj = {
           // r: siblings share a radius.
           y: { kind: "align", alignment: "middle" },
         }),
-        coord: Coord.polar(),
+        coord: Coord.clock(),
       },
       { w: 480, h: 480 }
     ),

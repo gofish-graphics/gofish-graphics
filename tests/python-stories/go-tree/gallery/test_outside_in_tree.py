@@ -94,4 +94,4 @@ MARKS = [
 
 
 def story_outside_in_tree():
-    return layer([layer(MARKS)], coord=Coord.polar()), {"w": 540, "h": 540}
+    return layer([layer(MARKS)], coord=Coord.clock()), {"w": 540, "h": 540}

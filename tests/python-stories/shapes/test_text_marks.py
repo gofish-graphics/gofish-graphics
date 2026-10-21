@@ -6,7 +6,7 @@ array-map sugar and becomes a list comprehension. The JS stories pass
 `textAnchor: "start"`, which is now a real IR field (it positions the
 rotation pivot/local origin at the text's first character, center, or last
 character) — ported here too, even though "start" is also the default.
-PolarText places a text under `Coord.polar()`, where x is the angle theta
+PolarText places a text under `Coord.clock()`, where x is the angle theta
 and y is the radius r.
 """
 
@@ -88,7 +88,7 @@ def story_polar_text():
                     text_anchor="middle",
                 )
             ],
-            coord=Coord.polar(),
+            coord=Coord.clock(),
         ),
         {"w": 320, "h": 320},
     )

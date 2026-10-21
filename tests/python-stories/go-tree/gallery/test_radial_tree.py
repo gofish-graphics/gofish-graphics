@@ -113,6 +113,6 @@ LINKS = [link_mark(p) for p in PLACED if p["parent_path"] is not None]
 def story_radial_tree():
     # Inside a coord, paint order is list order: links first, under the nodes.
     return (
-        layer([layer([*LINKS, *NODES])], coord=Coord.polar()),
+        layer([layer([*LINKS, *NODES])], coord=Coord.clock()),
         {"w": 560, "h": 560},
     )

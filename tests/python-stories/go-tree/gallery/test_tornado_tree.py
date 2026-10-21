@@ -44,7 +44,7 @@ def story_tornado_tree():
                 x={"kind": "distribute", "spacing": 0.42, "anchor": "middle"},
                 y={"kind": "distribute", "spacing": 44, "anchor": "middle"},
             ),
-            coord=Coord.polar(),
+            coord=Coord.clock(),
         ),
         {"w": 480, "h": 480},
     )

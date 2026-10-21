@@ -94,7 +94,7 @@ export const OakTreeVis: StoryObj = {
           // r: stagger siblings radially — the spiral/oak stagger (dsl flatten).
           y: { kind: "distribute", spacing: 61, anchor: "middle" },
         }),
-        coord: Coord.polar(),
+        coord: Coord.clock(),
       },
       { w: 520, h: 520 }
     ),

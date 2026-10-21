@@ -14,7 +14,7 @@ import { layer } from "../ast/graphicalOperators/layer";
 import { ref } from "../ast/shapes/ref";
 import { coord } from "../ast/coordinateTransforms/coord";
 import { polar_DEPRECATED } from "../ast/coordinateTransforms/polar_DEPRECATED";
-import { polar } from "../ast/coordinateTransforms/polar";
+import { clock } from "../ast/coordinateTransforms/clock";
 import { stackX } from "../ast/graphicalOperators/stackX";
 import { stackY } from "../ast/graphicalOperators/stackY";
 import { ribbon } from "../lib";
@@ -31,7 +31,7 @@ const colorScale = {
 
 /* TODO: I need to redo the coordinate system so that it start from the bottom left corner... */
 export const testFishPolarRibbonChart = () =>
-  frame({ coord: polar() }, [
+  frame({ coord: clock() }, [
     stackX(
       {
         y: 50,

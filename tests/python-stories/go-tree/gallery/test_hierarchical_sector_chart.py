@@ -65,7 +65,7 @@ def story_hierarchical_sector_chart():
                 x={"kind": "distribute", "spacing": 0, "anchor": "edge"},
                 y={"kind": "align", "alignment": "middle"},
             ),
-            coord=Coord.polar(),
+            coord=Coord.clock(),
         ),
         {"w": 560, "h": 560},
     )

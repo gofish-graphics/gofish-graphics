@@ -67,7 +67,7 @@ export const SideTree: StoryObj = {
           x: { kind: "align", alignment: "middle" },
           y: { kind: "distribute", spacing: 109, anchor: "middle" },
         }),
-        coord: Coord.polar(),
+        coord: Coord.clock(),
       },
       { w: 560, h: 560 }
     ),

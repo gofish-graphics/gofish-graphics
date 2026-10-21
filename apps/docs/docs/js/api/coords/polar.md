@@ -4,7 +4,7 @@ order: 10
 
 # Coord.polar
 
-Transforms Cartesian coordinates into a polar coordinate system. The x-axis maps to angle (theta) and the y-axis maps to radius.
+Transforms Cartesian coordinates into a polar coordinate system. The x-axis maps to angle (theta) and the y-axis maps to radius. Angles follow the math convention: θ = 0 points right (3 o'clock) and angles increase counter-clockwise.
 
 ::: gofish
 
@@ -27,16 +27,17 @@ gf.chart(seafood, { coord: gf.Coord.polar() })
 Coord.polar(options?: {
   innerRadius?: number; // donut hole, fraction [0,1) of outer radius. Default 0
   centralAngle?: number; // total sweep in radians. Default 2π
-  startAngle?: number; // angle (radians) of θ=0. Default π/2 (12 o'clock)
-  direction?: 1 | -1; // +1 CCW, -1 CW. Default -1 (clockwise)
+  startAngle?: number; // angle (radians) of θ=0, from 3 o'clock. Default 0
+  direction?: 1 | -1; // +1 CCW, -1 CW. Default 1 (counter-clockwise)
   center?: [number, number]; // screen-space center offset. Default [0, 0]
 });
 ```
 
 ## Parameters
 
-All optional; the defaults reproduce a centered, full-circle disc starting at 12
-o'clock and going clockwise.
+All optional; the defaults give a centered, full-circle disc starting at 3
+o'clock and going counter-clockwise. [`Coord.clock()`](/js/api/coords/clock) is
+the same transform with 0 at 12 o'clock, going clockwise.
 
 ::: gofish-ref polar
 :::
@@ -104,10 +105,10 @@ chart(data, { coord: Coord.polar() })
 
 ## Coordinate Mapping
 
-| Cartesian | Polar                  |
-| --------- | ---------------------- |
-| x         | angle (theta), 0 to 2π |
-| y         | radius from center     |
+| Cartesian | Polar                                                 |
+| --------- | ----------------------------------------------------- |
+| x         | angle (theta), 0 to 2π, 0 at right, counter-clockwise |
+| y         | radius from center                                    |
 
 ## Examples
 
@@ -135,4 +136,4 @@ chart(data, { coord: Coord.polar({ centralAngle: (3 * Math.PI) / 2 }) })
 
 ## See Also
 
-- [clock](/js/api/coords/clock) — Similar to polar but with 0° at 12 o'clock
+- [clock](/js/api/coords/clock) — The same transform with 0° at 12 o'clock, going clockwise

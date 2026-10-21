@@ -81,7 +81,7 @@ export const ViolinTree: StoryObj = {
           x: { kind: "distribute", spacing: LEAF_THETA, anchor: "middle" },
           y: { kind: "distribute", spacing: 0, anchor: "middle" },
         }),
-        coord: Coord.polar(),
+        coord: Coord.clock(),
       },
       { w: 520, h: 520 }
     ),

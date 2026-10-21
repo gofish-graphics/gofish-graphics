@@ -200,7 +200,7 @@ export const RadialTreeIncline: StoryObj = {
     // zOrder — that's resolved by the ROOT bake, and coord is a bake boundary).
     // So links go FIRST in the array to draw under the nodes, and the root node
     // is last within `nodes` so its dark disc caps the spoke convergence.
-    frame({ coord: Coord.polar() as any }, [
+    frame({ coord: Coord.clock() as any }, [
       layer([...links, ...nodes]),
     ]).render(container, { w: 520, h: 520 });
     return container;

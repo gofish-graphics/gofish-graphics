@@ -52,7 +52,7 @@ def story_clock_tree_with_link():
                 x={"kind": "distribute", "spacing": 0, "anchor": "edge"},
                 y={"kind": "align", "alignment": "middle"},
             ),
-            coord=Coord.polar(inner_radius=0.79),
+            coord=Coord.clock(inner_radius=0.79),
         ),
         {"w": 520, "h": 520},
     )

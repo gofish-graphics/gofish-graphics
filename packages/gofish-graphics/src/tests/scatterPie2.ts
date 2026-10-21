@@ -14,7 +14,7 @@ import { layer } from "../ast/graphicalOperators/layer";
 import { petal } from "../ast/shapes/petal";
 import _ from "lodash";
 import { mix } from "spectral.js";
-import { polar } from "../ast/coordinateTransforms/polar";
+import { clock } from "../ast/coordinateTransforms/clock";
 import { stackX } from "../ast/graphicalOperators/stackX";
 import { seafood, catchLocations } from "../data/catch";
 import { frame } from "../ast/graphicalOperators/frame";
@@ -40,7 +40,7 @@ export const testScatterPie2 = () =>
         {
           x: sample.x,
           y: sample.y,
-          coord: polar(),
+          coord: clock(),
         },
         [
           stackX(

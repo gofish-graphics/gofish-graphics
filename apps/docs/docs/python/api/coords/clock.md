@@ -36,9 +36,10 @@ Coord.clock(
 ::: gofish-ref clock
 :::
 
-`Coord.clock()` is a [`Coord.polar()`](/python/api/coords/polar) preset and accepts the same
-options — `inner_radius`, `central_angle`, `start_angle`, `direction`, `center` —
-but with clock-face defaults (0° at 12 o'clock, clockwise). See
+`Coord.clock()` is the [`Coord.polar()`](/python/api/coords/polar) transform and accepts the same
+options — `inner_radius`, `central_angle`, `start_angle`, `direction`, `center`.
+Only the `start_angle` and `direction` defaults differ: 0° at 12 o'clock,
+clockwise. See
 [polar's Parameters](/python/api/coords/polar#parameters).
 
 ## Usage
@@ -83,4 +84,4 @@ chart(data, coord=Coord.clock()) \
 
 ## See Also
 
-- [polar](/python/api/coords/polar) — Standard polar coordinates with 0° at right
+- [polar](/python/api/coords/polar) — The same transform with 0° at right, going counter-clockwise

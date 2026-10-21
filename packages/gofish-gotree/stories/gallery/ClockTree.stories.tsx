@@ -123,7 +123,7 @@ export const ClockTree: StoryObj = {
         }),
         // InnerRadius:0.72 — the hollow clock rim (nodes live in the outer band,
         // the disc is empty from the center out to 0.72·R). Now expressible.
-        coord: Coord.polar({ innerRadius: 0.72 }),
+        coord: Coord.clock({ innerRadius: 0.72 }),
       },
       { w: 540, h: 540 },
       clockTree

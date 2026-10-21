@@ -144,7 +144,7 @@ export const HierarchicalSectorChart: StoryObj = {
           // r: siblings share the same ring.
           y: { kind: "align", alignment: "middle" },
         }),
-        coord: Coord.polar(),
+        coord: Coord.clock(),
       },
       sectorTree
     ).render(container, { w: 560, h: 560 });

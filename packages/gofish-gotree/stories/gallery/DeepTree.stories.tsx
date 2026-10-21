@@ -96,7 +96,7 @@ export const DeepTree: StoryObj = {
           // r: all siblings share a radius (same ring).
           y: { kind: "align", alignment: "middle" },
         }),
-        coord: Coord.polar(),
+        coord: Coord.clock(),
       },
       { w: 560, h: 560 },
       deepTree

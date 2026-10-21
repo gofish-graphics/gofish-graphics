@@ -133,7 +133,7 @@ export const PolarText: StoryObj<Args> = {
 
     container.innerHTML = "";
     // In polar, x is the angle θ and y is the radius r.
-    layer({ coord: Coord.polar() }, [
+    layer({ coord: Coord.clock() }, [
       text({
         text: "Polar Text",
         x: Math.PI / 4,
