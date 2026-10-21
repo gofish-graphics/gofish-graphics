@@ -294,8 +294,8 @@ export function sequence(opts: SequenceOptions) {
         duration: opts.duration ?? 5000,
         loop: opts.loop ?? true,
         playing: opts.playing ?? true,
+        ...(opts.at !== undefined ? { at: opts.at } : {}),
       });
-      if (opts.at !== undefined) clock.set(opts.at);
     }
     return clock;
   };

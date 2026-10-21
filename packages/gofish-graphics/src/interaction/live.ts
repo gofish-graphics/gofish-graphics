@@ -33,6 +33,7 @@ import {
   type Setter,
 } from "solid-js";
 import { runInLiveEval } from "./resolveContext";
+import { isPaintExpr } from "../ast/exprTier";
 
 const LIVE_BRAND = Symbol.for("gofish.liveValue");
 
@@ -124,7 +125,10 @@ export function sharedDecision<T>(read: () => T): () => T {
  *
  * This is the one place that asks "which of these channels are live?". A mark
  * factory needs the answer at construction time, before any datum exists, so it
- * is separate from evaluating them.
+ * is separate from evaluating them. A channel is live when its value is a
+ * `live(fn)`, or an expression whose tier is paint (`tierOf` in
+ * `ast/exprTier.ts`): an expression is a function of the datum, so it is
+ * read at paint exactly as a `live(fn)` is.
  */
 export const liveChannelsOf = (
   opts: Record<string, unknown>
@@ -132,7 +136,8 @@ export const liveChannelsOf = (
   let live: Record<string, LiveValue> | undefined;
   for (const channel of Object.keys(opts)) {
     const value = opts[channel];
-    if (isLive(value)) (live ??= {})[channel] = value;
+    if (isLive(value) || isPaintExpr(channel, value))
+      (live ??= {})[channel] = value as LiveValue;
   }
   return live;
 };

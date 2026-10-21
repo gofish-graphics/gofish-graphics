@@ -17,9 +17,7 @@ export function pausedClock(
   duration: number,
   at: number
 ) {
-  const clock = timer({ domain, duration, playing: false, loop: false });
-  clock.set(at);
-  return clock;
+  return timer({ domain, duration, playing: false, loop: false, at });
 }
 
 /** Every item of a display list, flattened, in document order. */

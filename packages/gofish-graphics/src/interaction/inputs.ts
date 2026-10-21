@@ -25,6 +25,56 @@ import type {
 import type { InteractionRuntime } from "./runtime";
 import { ambientRegistrar, inLiveEval } from "./resolveContext";
 import { clamp } from "../util";
+import {
+  SOURCE,
+  withExprMethods,
+  type ExprMethods,
+  type Source,
+  type SourceProtocol,
+} from "../ast/expr";
+
+/**
+ * Every input is a SOURCE (`src/ast/expr.ts`): it carries its kind, the
+ * declaration it was made from (its frontend-IR form), and how to read it.
+ * An input of one value (a clock, a signal, a wheel) is an expression of that
+ * value.
+ */
+function asSource<T extends object>(
+  target: T,
+  kind: string,
+  declaration: SourceProtocol["declaration"],
+  read: SourceProtocol["read"]
+): T & Source {
+  return Object.assign(target, { [SOURCE]: { kind, declaration, read } });
+}
+
+/** The declaration of a source made from `options`, or the reason it has
+ *  none: an option that is a JS function has no IR form. */
+export function declarationOf(
+  kind: string,
+  options: object
+): SourceProtocol["declaration"] {
+  const fns = Object.entries(options).filter(
+    ([, v]) => typeof v === "function"
+  );
+  if (fns.length > 0)
+    return {
+      noWire: `${kind}({ ${fns.map(([k]) => k).join(", ")} }) takes a JS function`,
+    };
+  return { ...options };
+}
+
+/** The read of a source of one value: it has no named reads. */
+const ownValue =
+  (kind: string, value: () => unknown): SourceProtocol["read"] =>
+  (read) => {
+    if (read !== undefined)
+      throw new Error(
+        `[gofish] ${kind}(): no read ${JSON.stringify(read)}; a ${kind} is ` +
+          `read as its own value.`
+      );
+    return value();
+  };
 
 /**
  * One READABLE of an input — a piece of its state that changes on its own
@@ -401,7 +451,7 @@ export function click(options: ClickOptions = {}): Click {
   };
   const { track, invalidate } = dependency(input);
 
-  return {
+  const acc: Click = {
     count() {
       track();
       return count();
@@ -412,6 +462,13 @@ export function click(options: ClickOptions = {}): Click {
     },
     ...frameBoxReader(track, () => runtime),
   };
+  return asSource(acc, "click", declarationOf("click", options), (read) => {
+    if (read === "count") return acc.count();
+    if (read === "armed") return acc.isArmed();
+    throw new Error(
+      `[gofish] click(): no read ${JSON.stringify(read)}. A click reads count, armed.`
+    );
+  });
 }
 
 /* -------------------------------- wheel --------------------------------- */
@@ -429,7 +486,7 @@ export interface WheelOptions {
   sensitivity?: number;
 }
 
-export interface Wheel {
+export interface Wheel extends ExprMethods {
   (): number;
   set(v: number): void;
 }
@@ -488,7 +545,14 @@ export function wheel(options: WheelOptions): Wheel {
       invalidate();
     }
   };
-  return acc;
+  return withExprMethods(
+    asSource(
+      acc,
+      "wheel",
+      declarationOf("wheel", options),
+      ownValue("wheel", acc)
+    )
+  );
 }
 
 /* -------------------------------- timer --------------------------------- */
@@ -525,12 +589,17 @@ export interface TimerOptions<T = number> {
   /** Wrap elapsed at `duration` (default true). When false the clock clamps at
    *  the end of the domain and pauses itself. */
   loop?: boolean;
-  /** Start playing (default true). `false` starts paused at the domain's start
-   *  until `.play()` runs (a read does not start a paused clock). */
+  /** Start playing (default true). `false` starts paused at `at` (or the
+   *  domain's start) until `.play()` runs (a read does not start a paused
+   *  clock). */
   playing?: boolean;
+  /** Where the clock starts, in DOMAIN units (default the domain's start).
+   *  With `playing: false` it is a clock held still at `at`: one declaration
+   *  for a paused frame. */
+  at?: T;
 }
 
-export interface Timer<T = number> {
+export interface Timer<T = number> extends ExprMethods {
   /** The domain value at the current elapsed time — `invert(elapsed)`, not
    *  milliseconds (unless the domain IS milliseconds). Lazy-starts the clock on
    *  first read unless `playing: false` was passed. */
@@ -644,7 +713,7 @@ export function timer<T = number>(options: TimerOptions<T> = {}): Timer<T> {
   // the performance.now() reading when the clock last started running.
   const now = (): number =>
     typeof performance !== "undefined" ? performance.now() : Date.now();
-  let base = 0;
+  let base = options.at !== undefined ? scale(options.at) : 0;
   let since = 0;
 
   // "Is the clock running" is ONE piece of state: the `playing` signal (below).
@@ -677,7 +746,7 @@ export function timer<T = number>(options: TimerOptions<T> = {}): Timer<T> {
   // The SIGNAL holds the emitted DOMAIN VALUE, not elapsed: a tick that doesn't
   // change the value writes nothing, so a 365-day year over 10s costs one
   // pipeline re-run per day rather than one per frame.
-  const [value, setValue] = createSignal<T>(invert(0));
+  const [value, setValue] = createSignal<T>(invert(base));
   const [playing, setPlaying] = createSignal(false);
 
   let handle: ReturnType<typeof setInterval> | undefined;
@@ -806,12 +875,19 @@ export function timer<T = number>(options: TimerOptions<T> = {}): Timer<T> {
   (acc as { domain: Timer<T>["domain"] }).domain = values ?? [lo, hi];
   (acc as { step: number | undefined }).step = step;
   (acc as { duration: number }).duration = duration;
-  return acc;
+  return withExprMethods(
+    asSource(
+      acc,
+      "timer",
+      declarationOf("timer", options),
+      ownValue("timer", acc)
+    )
+  );
 }
 
 /* ------------------------------- signal --------------------------------- */
 
-export interface Signal<T> {
+export interface Signal<T> extends ExprMethods {
   (): T;
   set(v: T): void;
 }
@@ -836,5 +912,14 @@ export function signal<T>(init: T): Signal<T> {
     setValue(() => v);
     invalidate();
   };
-  return acc;
+  return withExprMethods(
+    asSource(
+      acc,
+      "signal",
+      typeof init === "function"
+        ? { noWire: "signal(init) holds a JS function" }
+        : { init },
+      ownValue("signal", acc)
+    )
+  );
 }

@@ -36,6 +36,12 @@ export type {
   FieldPredicate,
   FieldPredicateWire,
 } from "./ast/fieldExpr";
+// Expressions (polars vocabulary): `when(c).then(x).otherwise(y)`,
+// `concatStr(...)`, and the methods every `field(...)` and every source of
+// one value has (`.gt`, `.add`, `.clip`, `.fillNull`, `.floor`, ...). An
+// expression is a valid accessor wherever a function is.
+export { when, concatStr } from "./ast/expr";
+export type { Expr, ExprInput, ExprMethods, Then } from "./ast/expr";
 export { map } from "./ast/iterators/map";
 
 // Strategy families (#1013): an option whose value is one choice from a set
