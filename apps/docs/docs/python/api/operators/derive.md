@@ -88,12 +88,25 @@ chart(seafood).flow(
 ).mark(rect(h="count"))
 ```
 
+`fn` may read a source of one value (a `timer`, a `signal` or a `wheel`) by
+calling it. The engine sends the source's current value with the call, and
+re-runs the step when a source it read changes. See
+[Sources in the kernel](/python/api/expressions#sources-in-the-kernel).
+
+```python
+bins = wheel(range=[3, 40], initial=12, round=True)
+derive(lambda rows: bin_rows(rows, bins()))
+```
+
 ## Utility functions
 
 GoFish ships small helpers that pair well with `derive`:
 
 - `normalize(data, field)` — scale `field` so the values sum to 1.
 - `repeat(row, field)` — repeat a row `row[field]` times.
+- `interpolate(rows, along=, key=, at=, method=None)` — one row per `key`,
+  with its numeric fields read at `at` along `along` (the data-space reading
+  of a `time.transition`), as JS `interpolate` computes it.
 
 ```python
 from gofish import derive, normalize

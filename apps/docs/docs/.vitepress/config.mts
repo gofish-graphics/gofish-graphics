@@ -725,6 +725,11 @@ export default defineConfig({
               items: [{ text: "time", link: "/python/api/time" }],
             },
             {
+              text: "Expressions",
+              collapsed: true,
+              items: [{ text: "Expressions", link: "/python/api/expressions" }],
+            },
+            {
               text: "GoTree",
               collapsed: true,
               items: [{ text: "tree", link: "/python/gotree" }],

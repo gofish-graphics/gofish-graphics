@@ -17,7 +17,7 @@ chart(seafood, axes=True).flow(spread(by="lake", dir="x")).mark(
 ## Signature
 
 ```python
-ChartBuilder.render(w=800, h=600, axes=None, legend=None, padding=None, debug=False)
+ChartBuilder.render(w=800, h=600, axes=None, legend=None, padding=None, playing=None, at=None, debug=False)
 ```
 
 `layer([...])` (a mark), `.layer(...)` chains (`LayerBuilder`) and bare marks take the
@@ -33,6 +33,8 @@ case.
 | `axes`    | `bool \| dict \| None` | `None`  | Auto-generate axes, labels, and legends; same shape as `chart(axes=...)`. Overrides the outermost chart's `axes` only. Unset, the chart's own `axes` option decides. |
 | `legend`  | `bool \| None`         | `None`  | Whether to draw the color-scale legend. Unset, the default (`True`) applies. A `chart()` option of the same name wins over this one.                                 |
 | `padding` | `float \| None`        | `None`  | Extra pixels between the drawing and the SVG edge. Unset, the chart's own `padding` option (or the default) applies.                                                 |
+| `playing` | `bool \| None`         | `None`  | Play the chart's build-in (its marks' `.transition(enter=...)`). `False` holds it at `at`. Unset, it plays.                                                          |
+| `at`      | `float \| None`        | `None`  | Where the build-in clock starts, in milliseconds. Unset, at 0.                                                                                                       |
 | `debug`   | `bool`                 | `False` | Whether to enable debug rendering                                                                                                                                    |
 
 Returns a `GoFishChartWidget`.

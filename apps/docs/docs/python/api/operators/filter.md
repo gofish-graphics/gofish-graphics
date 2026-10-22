@@ -25,7 +25,8 @@ filter(predicate) -> Operator
 
 ## Parameters
 
-`predicate` is a field predicate or a Python function of one row.
+`predicate` is a field predicate, an expression, or a Python function of one
+row.
 
 A field predicate comes from
 [`field(name).between(lo, hi, closed=None)`](/python/api/operators/spread#field-expression-pipeline).
@@ -36,6 +37,10 @@ as these fields:
 
 ::: gofish-ref filter
 :::
+
+An [expression](/python/api/expressions) is a predicate too: a row stays when
+it is `True` (`filter(field("day") == day)`, where `day` is a `timer(...)`). It
+is data, so it crosses to JavaScript as `ExprIR` and runs in the browser.
 
 A function, such as `lambda row: row["year"] == 2020`, runs in your kernel. The
 filter is then a [`derive`](/python/api/operators/derive), so the chart calls
