@@ -1098,6 +1098,6 @@ export function renderIR(
   // register (hit-testing, paint patches, re-runs), and with none it renders
   // down the static path unchanged.
   return typeof root === "function"
-    ? gofish(container, options, root)
+    ? gofish(container, options, root as () => any)
     : root.render(container, options);
 }
