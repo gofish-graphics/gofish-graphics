@@ -573,7 +573,12 @@ adjustment on the registry's books and `GOFISH_DUMP_SCOPES` records the final σ
 (After the scope dump, `GOFISH_DUMP_SHARING` prints each layer's sharing sets,
 see [Underlying Space](/internals/core/underlying-space). It only reads the tree.)
 It is type equality, not a knob, and a single-coordinate-space coupling
-— it does not reach sizes solved in separate nested operator scopes. After layout it
+— it does not reach sizes solved in separate nested operator scopes. A chart
+with a literal `w` and `h` (`chart(data, { w, h })`) is a sized node that solves
+its own scopes in the claim walk, so it applies the same equality there
+(`ScopeRegistry.equalizeFixed`): both axes take the smaller σ, and the chart
+claims its content at that σ, narrower than its size on the other axis.
+After layout it
 reads the chart's _final_ extent back off the root via `child.dims[i].size`, so an
 unsized axis still yields a concrete SVG size (e.g. a no-width bar chart gets
 default-width bars and a width of `n·barWidth + spacing`). A user-supplied

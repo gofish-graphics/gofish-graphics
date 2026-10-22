@@ -450,7 +450,12 @@ export function solveLayerScales(
         );
         return (
           solution &&
-          nicedClaim && { key: undefined, solution, claim: nicedClaim }
+          nicedClaim && {
+            key: undefined,
+            solution,
+            claim: nicedClaim,
+            space,
+          }
         );
       };
       const s = fixed[axis] ?? solve();

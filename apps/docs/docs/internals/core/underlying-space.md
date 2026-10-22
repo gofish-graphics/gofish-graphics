@@ -1425,7 +1425,10 @@ The registry is the sole producer of every slope. A coord boundary hands down
 the one σ its scope solves, which its map shares, and the #582 equal-measure
 recentering (equating x and y when they share a declared unit) is a named
 `recenterEqualMeasure` operation _on_ the registry, so the dump records the
-FINAL σ.
+FINAL σ. A chart with a literal size on both axes solves its two scopes in the
+claim walk (`solveFixed`) and equates them there (`equalizeFixed`) before
+either claim is read: both take the smaller σ, and on the other axis the
+chart claims its content at that σ, so it is narrower than its size there.
 
 ### Nicing is a keyed-domain operation, applied on demand
 

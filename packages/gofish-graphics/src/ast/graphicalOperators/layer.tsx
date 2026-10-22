@@ -764,19 +764,32 @@ export const layer = createNodeOperatorSequential(
           // sits where its content's does. Content that maps no domain
           // (`mapsDomain`) is laid out in the box, which claims its pixels
           // from its start edge (#493: fixed-size nodes report their size).
+          // A literal size on both axes over one declared unit keeps one
+          // data unit the same length on x and y (#582): both scopes take
+          // the binding σ (`equalizeFixed`), so both are solved before
+          // either claim is read.
           const session = node.tryGetRenderSession();
           const keyed: KeyedDomains | undefined = session?.keyedDomains;
-          const fixedClaim = (axis: 0 | 1, px: number): Extent | undefined => {
-            const claim = resolved[axis];
-            if (!mapsDomain(t.resolved[axis], claim))
-              return Extent(Monotonic.linear(0, px));
+          const scopes = getScopeRegistry(session);
+          const fixedPx = ([0, 1] as const).map((axis) => {
+            const size = dims[axis].size;
+            return typeof size === "number"
+              ? size + chartChrome(node, axis, size)
+              : undefined;
+          });
+          const solvesDomain = (axis: 0 | 1) =>
+            fixedPx[axis] !== undefined &&
+            mapsDomain(t.resolved[axis], resolved[axis]);
+          for (const axis of [0, 1] as const) {
+            const px = fixedPx[axis];
+            if (px === undefined || !solvesDomain(axis)) continue;
             const [space, wide] = keyed?.scope(
               node,
               axis,
               t.resolved[axis],
-              claim
-            ) ?? [t.resolved[axis], claim];
-            const solved = getScopeRegistry(session).solveFixed(
+              resolved[axis]!
+            ) ?? [t.resolved[axis], resolved[axis]];
+            scopes.solveFixed(
               node,
               keyed?.axisKey(node, axis, t.resolved[axis]),
               { kind: "sized", rootKey: node.key ?? node.type, axis },
@@ -784,10 +797,17 @@ export const layer = createNodeOperatorSequential(
               wide,
               px
             );
-            if (solved === undefined || wide === undefined) return claim;
+          }
+          if (solvesDomain(0) && solvesDomain(1))
+            scopes.equalizeFixed(node, node.key ?? node.type);
+          const fixedClaim = (axis: 0 | 1, px: number): Extent | undefined => {
+            if (!solvesDomain(axis)) return Extent(Monotonic.linear(0, px));
+            const solved = scopes.fixedSolve(node, axis);
+            if (solved === undefined) return resolved[axis];
+            const { claim, solution } = solved;
             return Extent(
-              Monotonic.linear(0, wide.ascent.run(solved.sigma)),
-              Monotonic.linear(0, wide.descent.run(solved.sigma))
+              Monotonic.linear(0, claim.ascent.run(solution.sigma)),
+              Monotonic.linear(0, claim.descent.run(solution.sigma))
             );
           };
           // A literal start places the layer that many pixels from its
@@ -805,11 +825,8 @@ export const layer = createNodeOperatorSequential(
           const claims = ([0, 1] as const).map((axis) => {
             const size = dims[axis].size;
             if (isValue(size)) return impliedExtent(spaces[axis]);
-            if (typeof size === "number")
-              return at(
-                axis,
-                fixedClaim(axis, size + chartChrome(node, axis, size))
-              );
+            const px = fixedPx[axis];
+            if (px !== undefined) return at(axis, fixedClaim(axis, px));
             return at(axis, resolved[axis]);
           }) as [Extent | undefined, Extent | undefined];
           // A node with a size of its own is a part of its parent's plot,

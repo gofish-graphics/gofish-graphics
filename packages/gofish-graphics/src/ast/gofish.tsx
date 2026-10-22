@@ -22,7 +22,6 @@ import { paintSVG } from "./displayList/paintSVG";
 import type { InteractionRuntime } from "../interaction/runtime";
 import { renderWithInteraction } from "../interaction/renderTerminal";
 import { resolveMarkResult } from "./marks/markResult";
-import { resolveUnit, sameUnitVar } from "./measure";
 import type { Size } from "./dims";
 import {
   continuousInterval,
@@ -76,6 +75,7 @@ import {
   getScopeRegistry,
   scopeFrame,
   seatInScope,
+  sharesDeclaredMeasure,
   type EqualMeasureAxis,
   type ScopeSolution,
 } from "./solver/scopes";
@@ -688,21 +688,10 @@ export async function layout(
   // adjustment, so every slope stays registry-sourced and the dump shows the
   // FINAL σ). Silently skipped when an axis has no solved scope to equate.
   //
-  // Only a DECLARED unit counts: two unknowns that unify through overlays
-  // are one domain, not a claim that a data unit is the same length on x
-  // and y.
-  const unitX = isCONTINUOUS(niceUnderlyingSpaceX)
-    ? niceUnderlyingSpaceX.measure?.unit
-    : undefined;
-  const unitY = isCONTINUOUS(niceUnderlyingSpaceY)
-    ? niceUnderlyingSpaceY.measure?.unit
-    : undefined;
-  if (
-    unitX !== undefined &&
-    unitY !== undefined &&
-    resolveUnit(unitX).kind === "declared" &&
-    sameUnitVar(unitX, unitY)
-  ) {
+  // Only a DECLARED unit counts (`sharesDeclaredMeasure`). A chart with a
+  // size of its own recenters its own scopes the same way
+  // (`ScopeRegistry.equalizeFixed`).
+  if (sharesDeclaredMeasure(niceUnderlyingSpaceX, niceUnderlyingSpaceY)) {
     const axisInfo = ([0, 1] as const).map(
       (axis): EqualMeasureAxis | undefined => {
         const space = rootSpaces[axis];
