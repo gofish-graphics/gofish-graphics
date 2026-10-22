@@ -18,14 +18,11 @@ const meta: Meta = {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },
     },
-    h: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
   },
 };
 export default meta;
 
-type Args = { w: number; h: number };
+type Args = { w: number };
 
 const monthNames = [
   "Jan",
@@ -83,8 +80,14 @@ const ridgelineData = monthNames.flatMap((month) =>
 // zero-count line; the rule), so the two chains solve to identical lines.
 const rowPitch = 24;
 
+// Each month's section is a fixed height: the tallest ridge (the largest
+// count) is this many px, whatever the width, the pitch or the number of
+// months. The ridges overlap because it is far more than `rowPitch`, and the
+// chart's height follows from the sections, so the chart sets no `h`.
+const ridgeHeight = 140;
+
 export const Default: StoryObj<Args> = {
-  args: { w: 500, h: 380 },
+  args: { w: 500 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -100,7 +103,6 @@ export const Default: StoryObj<Args> = {
       axes: { x: true, y: false },
       schema: { temp_max: Schema.quantity("Max temperature").unit("°C") },
       w: args.w,
-      h: args.h,
     })
       .flow(
         spread({
@@ -109,7 +111,7 @@ export const Default: StoryObj<Args> = {
           anchor: "baseline",
           spacing: rowPitch,
         }),
-        scatter({ x: "temp_max" })
+        scatter({ x: "temp_max", h: ridgeHeight })
       )
       .mark(
         ribbon({

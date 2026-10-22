@@ -44,6 +44,12 @@ RIDGELINE_DATA = [
 # zero-count line; the rule), so the two chains solve to identical lines.
 ROW_PITCH = 24
 
+# Each month's section is a fixed height: the tallest ridge (the largest
+# count) is this many px, whatever the width, the pitch or the number of
+# months. The ridges overlap because it is far more than ROW_PITCH, and the
+# chart's height follows from the sections, so the chart sets no `h`.
+RIDGE_HEIGHT = 140
+
 
 def story_default():
     return (
@@ -52,7 +58,6 @@ def story_default():
             axes={"x": True, "y": False},
             schema={"temp_max": Schema.quantity("Max temperature").unit("°C")},
             w=500,
-            h=380,
         )
         .flow(
             spread(
@@ -61,7 +66,7 @@ def story_default():
                 anchor="baseline",
                 spacing=ROW_PITCH,
             ),
-            scatter(x="temp_max"),
+            scatter(x="temp_max", h=RIDGE_HEIGHT),
         )
         .mark(
             ribbon(
