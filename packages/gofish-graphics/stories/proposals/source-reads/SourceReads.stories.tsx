@@ -24,6 +24,8 @@ import { initializeContainer } from "../../helper";
 import { seafood, catchLocationsArray } from "../../../src/data/catch";
 import { penguins } from "../../../src/data/penguins";
 import { birds } from "../../../src/data/birds";
+import { titanic } from "../../../src/data/titanic";
+import { color6, gray } from "../../../src/color";
 import { world110m } from "../../../src/data/world110m";
 import {
   Color,
@@ -42,6 +44,7 @@ import {
   scatter,
   selectAll,
   spread,
+  stack,
   sumBy,
   text,
   when,
@@ -614,6 +617,139 @@ export const GraphHover: StoryObj = {
               )
           )
           .render(sub(box), { w: 260, h: 220 });
+      }
+    ),
+};
+
+/* ===================== Round 3: channel conditionals ==================== */
+// Real conditionals from the corpus, written in the explicit expression form
+// that runs today (polars' `when(c).then(v)...otherwise(d)`). Every candidate
+// spelling in round 3 (`when(c, v)`, `cases([c, v], ...)`) builds this same
+// IR `when` node, so one render serves all of them.
+
+const CLASS_COLOR: Record<string, string> = {
+  First: color6[0],
+  Second: color6[1],
+  Third: color6[2],
+  Crew: color6[3],
+};
+
+/** `stories/lowlevel/NestedMosaicChart.stories.tsx`, with its closure
+ *  `d.survived === "No" ? gray : classColor[d.class]` written as an
+ *  expression (left) beside the original closure (right). */
+export const TitanicCases: StoryObj = {
+  render: () =>
+    strip(
+      ["as an expression", "as the closure (the story today)"] as const,
+      (v) => v,
+      (box, v) => {
+        const fill =
+          v === "as an expression"
+            ? when(field("survived").eq("No"))
+                .then(gray)
+                .when(field("class").eq("First"))
+                .then(color6[0])
+                .when(field("class").eq("Second"))
+                .then(color6[1])
+                .when(field("class").eq("Third"))
+                .then(color6[2])
+                .otherwise(color6[3])
+            : (d: any) =>
+                one(d, "survived") === "No"
+                  ? gray
+                  : CLASS_COLOR[one(d, "class")];
+        chart(titanic)
+          .flow(
+            stack({ by: "class", dir: "y", size: field("count").normalize() }),
+            stack({ by: "sex", dir: "x", size: field("count").normalize() }),
+            stack({
+              by: "survived",
+              dir: "y",
+              size: field("count").normalize(),
+            })
+          )
+          .mark(rect({ fill: fill as any, stroke: "white", strokeWidth: 1 }))
+          .render(sub(box), { w: 300, h: 300 });
+      }
+    ),
+};
+
+/** `stories/forwardsyntax/Bar/BarNegative.stories.tsx` "UnroundedMin", with
+ *  an added three-case diverging fill by sign and size. */
+export const SignedFill: StoryObj = {
+  render: () =>
+    strip(
+      [
+        "three cases on value: < -25, < 0, otherwise",
+        "one arm (< 0), no otherwise: null elsewhere",
+      ] as const,
+      (v) => v,
+      (box, v) => {
+        const fill =
+          v === "one arm (< 0), no otherwise: null elsewhere"
+            ? when(field("value").lt(0)).then("#ef8a62")
+            : when(field("value").lt(-25))
+                .then("#b2182b")
+                .when(field("value").lt(0))
+                .then("#ef8a62")
+                .otherwise("#4393c3");
+        chart([
+          { category: "A", value: 30 },
+          { category: "B", value: -20 },
+          { category: "C", value: 45 },
+          { category: "D", value: -35 },
+          { category: "E", value: 10 },
+          { category: "F", value: -5 },
+        ])
+          .flow(spread({ by: "category", dir: "x" }))
+          .mark(
+            rect({ h: "value", fill })
+          )
+          .render(sub(box), { w: 320, h: 240 });
+      }
+    ),
+};
+
+/** A size conditional (pipeline tier): the brushed penguins drawn larger. The
+ *  brush is held fixed; its test is an expression over the row. FINDING: an
+ *  expression on `r` is read as a data accessor, so its branch values are
+ *  data values sent through the size scale, not pixels (right panel). */
+const BRUSH_HELD = { x0: 185, x: 200, y0: 3200, y: 4200 };
+export const BrushRadius: StoryObj = {
+  render: () =>
+    strip(
+      ["r: 2.5 (a literal), fill conditional", "r: when(...) 4.5 / 2"] as const,
+      (v) => v,
+      (box, v) => {
+        const b = BRUSH_HELD;
+        const inBrush = field(FLIP)
+          .gtEq(b.x0)
+          .and(field(FLIP).ltEq(b.x))
+          .and(field(MASS).gtEq(b.y0))
+          .and(field(MASS).ltEq(b.y));
+        chart(peng, { axes: true })
+          .flow(scatter({ x: FLIP, y: MASS }))
+          .mark(
+            circle({
+              r:
+                v === "r: 2.5 (a literal), fill conditional"
+                  ? 2.5
+                  : when(inBrush).then(4.5).otherwise(2),
+              fill: when(inBrush).then(RED).otherwise("#bbb"),
+            } as any)
+          )
+          .layer(
+            rect({
+              x: datum(b.x0),
+              y: datum(b.y0),
+              w: datum(b.x - b.x0),
+              h: datum(b.y - b.y0),
+              fill: "#4c78a8",
+              opacity: 0.15,
+              stroke: "#4c78a8",
+            } as any)
+          )
+          .render(sub(box), { w: 300, h: 260 });
       }
     ),
 };

@@ -1,18 +1,846 @@
-# Reading interaction sources: a hover is a selection (round 2)
+# Reading interaction sources: a hover is a selection (round 3)
 
 **Summary.**
 
-1. "The shapes under the pointer" is still a GoFish selection, a list of refs, as in round 1. New in round 2: an input with no scope that tests a mark's own shapes picks among **that mark's shapes**, so the single-chart hover needs no `.name()` and no `selectAll`. This is a rewrite: `when(pointer())` on mark M means `when(pointer().pick(selectAll(n)))` with M named `n`.
-2. Styling for a state is declared once, after the mark, as a **state block**: `rect({ fill: BLUE }).when(hover, { fill: RED, front: true, rest: { opacity: 0.3 } })`. A state block is sugar: it rewrites into one `when(...).then(...).otherwise(base)` chain per channel, plus a z-order constraint for `front`.
-3. Two parts of a state block have no explicit form in the language today, so the explicit layer needs them added first: a z-order constraint whose operands are selections (for `front`), and a whole-mark `.any()` (for `rest`, when the condition is a key test). Everything else desugars into what exists.
+1. "The shapes under the pointer" is a GoFish selection, a list of refs (round 1). An input with no scope that tests a mark's own shapes picks among that mark's shapes, defined by a rewrite to a named pick (round 2).
+2. Styling for a state is declared once, after the mark, as a **state block**, `rect({ fill: BLUE }).when(hover, { fill: RED, front: true, rest: { opacity: 0.3 } })` (round 2, approved). Round 3 defines a block without any cascade: it is a **conditional record update** (options in, options out), and a chain of blocks is **function composition**, so the later block wins because it is the outer function. Its rewrite is one first-match conditional per channel.
+3. Round 3 splits what round 2 called one idea into two that are related by a rewrite: **choosing a value** (a first-match conditional, like a `switch`, SQL `CASE` or Lisp `cond`) and **updating a record** (a state block, like `{ ...o, ...p }`). The value form gets a flat spelling with every case at one level: `cases([c1, v1], [c2, v2]).otherwise(d)`. The word `when` is kept for the update.
 
-**Recommendation.** Round 1's Approach C (inputs pick refs), with two conveniences that are both defined by rewrites: the **default target** rule and **state blocks spelled `.when(cond, { ...overrides, rest, front })`** on a mark. Runner-up for the state spelling: per-state methods (`.hover({...})`, `.selected({...})`), which are shorter for one chart but add a name per input. They could be added later as a second layer of sugar over `.when`.
+**Recommendation.** Round 1's Approach C (inputs pick refs), the default target, and state blocks `.when(cond, { ... })`, as in round 2. New in round 3: spell the channel conditional as a flat switch, **`cases([c, v], ...).otherwise(d)`** (Python `cases((c, v), ...).otherwise(d)`), replacing polars' `when(c).then(v)` chain on this branch. Runner-up: pair per call, `when(c, v).when(c2, v2).otherwise(d)`, which is shortest for two cases but has the same shape as the state-block chain with the opposite precedence.
 
-**Scope.** This answers how a spec reads pointer, drag, brush and click-select inside the browser-evaluated expressions of the approved proposal `proposals/python-animation-interaction/proposal.md` (Approach B there: sources plus polars-style `when/then/otherwise`). Wheel, timer and signal reads are unchanged from that proposal.
+**Scope.** This answers how a spec reads pointer, drag, brush and click-select inside the browser-evaluated expressions of the approved proposal `proposals/python-animation-interaction/proposal.md` (Approach B there: sources plus polars-style `when/then/otherwise`), and, in round 3, how a conditional value is spelled. Wheel, timer and signal reads are unchanged from that proposal.
 
-**Prototype.** `packages/gofish-graphics/stories/proposals/source-reads/SourceReads.stories.tsx` (Storybook: "Proposals/Source Reads"). Throwaway, exempt from parity. The capture harness cannot send pointer events (#672, scripted interaction states for captures), so every picture fixes the value the input would produce and draws it with today's JS. Round 2 adds `desugarStates`, a prototype of the state-block rewrite: it turns state blocks into today's per-channel `when` chains. **All code labeled "proposed" does not run yet,** in either language.
+**Prototype.** `packages/gofish-graphics/stories/proposals/source-reads/SourceReads.stories.tsx` (Storybook: "Proposals/Source Reads"). Throwaway, exempt from parity. The capture harness cannot send pointer events (#672, scripted interaction states for captures), so every picture fixes the value the input would produce. Round 2 added `desugarStates`, a prototype of the state-block rewrite. Round 3 adds `TitanicCases`, `SignedFill` and `BrushRadius`, which draw real conditionals in today's expression form. **All code labeled "proposed" does not run yet,** in either language.
 
-**Sugar and rewrite render the same.** `StatePrecedence` draws two state blocks through `desugarStates`, and `StatePrecedenceExplicit` draws the same chart with the per-channel `when` chains written by hand. Their captured DOM and PNG are byte-identical (`cmp` of `tests/tmp/iterate/proposals/source-reads--state-precedence{,-explicit}.{html,png}`).
+**Sugar and rewrite render the same.** `StatePrecedence` (through `desugarStates`) and `StatePrecedenceExplicit` (hand-written) have byte-identical DOM and PNG (round 2). In round 3, the Titanic mosaic drawn with its closure and with the five-case expression have byte-identical SVG.
+
+---
+
+## What changed in round 3
+
+Josh's feedback on round 2, verbatim:
+
+> my reservation is that when().then().when().then() puts when and then at the same level of indentation whereas if () then {} etc don't do this... same with ternaries. well I guess else if allows that kind of chaining as sugar? switch statements feel like they put them on slightly more consistent ground?
+
+> in general I'm a bit skeptical of CSS cascading rules b/c I can't easily map them to functional principles. I tend to like looking at what typst has done to get similar functionality or things like that, but my opinion is definitely not fully formed
+
+> I want to see a comparison between when(hover, RED) and when(hover).then(RED) in some realistic examples
+
+> look up Typst's semantics rather than relying on memory
+
+Already decided, and not reopened here: S1 state blocks `.when(cond, { ...overrides, rest, front })` after the mark; `.emphasize` as a preset over `.when`; every convenience desugars (and ideally decompiles) into explicit forms the language can express.
+
+| Round 2                                                                                      | Round 3                                                                                                                                                                                                                                                                                                                                             |
+| -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Channel conditional: polars' `when(c).then(v).when(c2).then(v2).otherwise(d)`.               | Compared three spellings on eight real examples, formatted by prettier and black. Recommended: `cases([c, v], ...).otherwise(d)`, a flat switch with every case at one level. Same IR.                                                                                                                                                              |
+| "`when` already means a conditional; `.when` is the same conditional at the size of a mark." | Two ideas, related by an exact rewrite: a channel conditional **chooses** a value (first match wins); a state block **updates** a record (later block wins). Different precedence, so different words: `cases` and `.when`.                                                                                                                         |
+| Precedence of blocks: "the CSS cascade by source order, with no specificity."                | No cascade. A block is a function from options to options; a chain is composition; "later wins" is "the outer function wins". Commutes when the blocks touch disjoint channels or their conditions never hold together. Compared against Typst (looked up and tested with Typst 0.14.2), spread and `dict \|`, lenses, Nix `//`, SwiftUI modifiers. |
+| (none)                                                                                       | **Finding:** with Python's `&`, `field("count").sum() > cut & flag` silently builds `count > (cut & flag)` and draws a wrong picture. Proposed fix: typed boolean operators, loud at construction or at first render. Proposed named combinators `allOf(...)` / `anyOf(...)` for several predicates without parentheses.                            |
+| (none)                                                                                       | **Finding:** a conditional with no `otherwise` gives null, and a null `fill` draws **black** today, not the mark's default. Proposed: null on a channel means "unset".                                                                                                                                                                              |
+| (none)                                                                                       | **Finding:** an expression on `r` is read as a data value and sent through the size scale, so `r: when(c).then(4.5).otherwise(2)` draws nearly invisible dots, while the literal `r: 2.5` is pixels. The spelling does not cause this, but every size conditional meets it.                                                                         |
+
+Kept from rounds 1 and 2: everything below the line, including the default target, `pick`, `front`, `rest`, `.any()`, the IR and the tiers.
+
+## Terms (round 3)
+
+- **Conditional value** (also **switch**, **multi-way conditional**). An expression that picks one value from a list of cases: each **case** (or **arm**) is a condition and a value; the first case whose condition holds gives the value; if none holds, the **default** (`otherwise`, `else`) does. This is SQL's `CASE`, Lisp's `cond`, Kotlin's `when { }`.
+- **First match.** The rule that the first true case wins. Every conditional value in the survey below uses it.
+- **Record update.** Making a new record from an old one with some fields replaced: JS `{ ...o, ...p }`, Python `o | p`, Nix `o // p`, Elm `{ o | fill = red }`. The fields of the right-hand record win.
+- **Conditional record update.** A record update that applies only where a condition holds: `o => c ? { ...o, ...p } : o`. Round 3's definition of a state block.
+- **Composition.** Applying one function to the result of another, `(g ∘ f)(x) = g(f(x))`. In a chain `x.f().g()`, `g` is the outer function.
+- **Commute.** Two updates commute when applying them in either order gives the same result.
+- **Cascade.** CSS's rule for choosing among several matching rules: origin and importance, then **specificity** (a score computed from the selector), then source order. Round 3 uses no cascade.
+- **Variadic.** A function that takes any number of arguments (`f(*args)` in Python, `f(...args)` in JS).
+
+## Part 3: spelling a conditional value
+
+### The candidates
+
+All three build the same IR node, the one this branch already has (`packages/gofish-ir/src/frontend/schema.ts`): `{ "type": "when", "branches": [[cond, value], ...], "otherwise": value }`. The IR does not change for any of them; only the builder a user calls does.
+
+- **(A) polars chain** (on this branch now): `when(c).then(v).when(c2).then(v2).otherwise(d)`. A case is two calls.
+- **(B) pair per call:** `when(c, v).when(c2, v2).otherwise(d)`. A case is one call, the same shape as the approved mark-level `.when(c, { ... })`.
+- **(C) flat switch:** `cases([c, v], [c2, v2]).otherwise(d)` in JS, `cases((c, v), (c2, v2)).otherwise(d)` in Python. Every case is one argument of one call.
+- **(D) default first, updates after** (included because it is the per-channel form of a state block): `value(d).when(c, v).when(c2, v2)`, where the **later** case wins. Covered briefly at the end of this part; not recommended.
+
+Variants of C considered: the default as an option (`cases([c, v], { default: d })`, Python `default=d`, as in numpy's `select` and Ibis' `else_=`) or as a final positional argument. A positional default is ambiguous in JS, because a case value can itself be an array (a `strokeDasharray`). The option form formats badly with prettier when there is one case: `fill: cases([field("count").sum().gt(cut), "#d62728"], {` breaks the `{ default: "#6b9bd1" }` object onto three lines of its own. `.otherwise(d)` keeps the word this branch already uses and formats on one line, so C uses it in both languages.
+
+### The examples, side by side
+
+Each example is real: it is in a story on this branch, or it is a closure from the corpus converted to an expression. The code is exactly what prettier 3.6.2 (the repo's `.prettierrc`) and black 26.10 print, so the line breaks are the ones a user would see. A, B and C build the same IR, so each example has one render.
+
+#### 1. Draggable threshold (one case and a default)
+
+`stories/interaction/DraggableThreshold.stories.tsx`.
+
+<table>
+<tr><th>(A) <code>when(c).then(v)</code></th><th>(B) <code>when(c, v)</code></th><th>(C) <code>cases([c, v])</code></th></tr>
+<tr><td>
+
+```ts
+fill: when(field("count").sum().gt(cut)).then("#d62728").otherwise("#6b9bd1"),
+```
+
+```python
+fill=when(field("count").sum() > cut).then("#d62728").otherwise("#6b9bd1"),
+```
+
+</td><td>
+
+```ts
+fill: when(field("count").sum().gt(cut), "#d62728").otherwise("#6b9bd1"),
+```
+
+```python
+fill=when(field("count").sum() > cut, "#d62728").otherwise("#6b9bd1")
+```
+
+</td><td>
+
+```ts
+fill: cases([field("count").sum().gt(cut), "#d62728"]).otherwise("#6b9bd1"),
+```
+
+```python
+fill=cases((field("count").sum() > cut, "#d62728")).otherwise("#6b9bd1")
+```
+
+</td></tr>
+</table>
+
+![threshold at three drag positions](img/threshold.png)
+
+_Rendered (`Threshold`): the drag held at y = 35, 60 and 85._
+
+All three fit on one line. B is the shortest. C pays two brackets for its one case. With state blocks approved, this example can also be written as an update on the mark, `rect({ h: "count", fill: BLUE }).when(field("count").sum().gt(cut), { fill: RED })`, which is how most one-case conditionals will be written.
+
+#### 2. Selected and hovered (the state-block rewrite)
+
+The explicit form of round 2's two state blocks (`StatePrecedenceExplicit`). The `opacity` channel has three outcomes.
+
+<table>
+<tr><th>(A)</th><th>(B)</th><th>(C)</th></tr>
+<tr><td>
+
+```ts
+fill: when(picked).then(RED).otherwise(BLUE),
+opacity: when(hover)
+  .then(1)
+  .when(picked.not().and(picked.isEmpty().not()))
+  .then(0.3)
+  .otherwise(1),
+strokeWidth: when(hover).then(3).otherwise(0),
+```
+
+</td><td>
+
+```ts
+fill: when(picked, RED).otherwise(BLUE),
+opacity: when(hover, 1)
+  .when(picked.not().and(picked.isEmpty().not()), 0.3)
+  .otherwise(1),
+strokeWidth: when(hover, 3).otherwise(0),
+```
+
+</td><td>
+
+```ts
+fill: cases([picked, RED]).otherwise(BLUE),
+opacity: cases(
+  [hover, 1],
+  [picked.not().and(picked.isEmpty().not()), 0.3]
+).otherwise(1),
+strokeWidth: cases([hover, 3]).otherwise(0),
+```
+
+</td></tr>
+<tr><td>
+
+```python
+fill=when(picked).then(RED).otherwise(BLUE),
+opacity=when(hover)
+.then(1)
+.when(~picked & ~picked.is_empty())
+.then(0.3)
+.otherwise(1),
+stroke_width=when(hover).then(3).otherwise(0),
+```
+
+</td><td>
+
+```python
+fill=when(picked, RED).otherwise(BLUE),
+opacity=when(hover, 1).when(~picked & ~picked.is_empty(), 0.3).otherwise(1),
+stroke_width=when(hover, 3).otherwise(0),
+```
+
+</td><td>
+
+```python
+fill=cases((picked, RED)).otherwise(BLUE),
+opacity=cases((hover, 1), (~picked & ~picked.is_empty(), 0.3)).otherwise(1),
+stroke_width=cases((hover, 3)).otherwise(0),
+```
+
+</td></tr>
+</table>
+
+![two states: selected and hovered](img/state-precedence.png)
+
+_Rendered (`StatePrecedence` / `StatePrecedenceExplicit`): Lake B and Lake D selected; hover on nothing, on Lake C, on Lake D._
+
+Black puts a broken method chain at the same indentation as the keyword argument (`opacity=when(hover)` then `.then(1)` flush under `opacity`), so in A the conditions and the values alternate down one column: Josh's indentation point, made worse. B and C keep each case on one line.
+
+#### 3. Titanic mosaic: five cases (a closure from the corpus)
+
+`stories/lowlevel/NestedMosaicChart.stories.tsx` colors each cell with `(d) => (d.survived === "No" ? gray : classColor[d.class])`, a closure (so it cannot cross to Python and is treated as a pipeline read). As an expression it is five cases.
+
+<table>
+<tr><th>(A)</th><th>(B)</th><th>(C)</th></tr>
+<tr><td>
+
+```ts
+fill: when(field("survived").eq("No"))
+  .then(gray)
+  .when(field("class").eq("First"))
+  .then(color6[0])
+  .when(field("class").eq("Second"))
+  .then(color6[1])
+  .when(field("class").eq("Third"))
+  .then(color6[2])
+  .otherwise(color6[3]),
+```
+
+</td><td>
+
+```ts
+fill: when(field("survived").eq("No"), gray)
+  .when(field("class").eq("First"), color6[0])
+  .when(field("class").eq("Second"), color6[1])
+  .when(field("class").eq("Third"), color6[2])
+  .otherwise(color6[3]),
+```
+
+</td><td>
+
+```ts
+fill: cases(
+  [field("survived").eq("No"), gray],
+  [field("class").eq("First"), color6[0]],
+  [field("class").eq("Second"), color6[1]],
+  [field("class").eq("Third"), color6[2]]
+).otherwise(color6[3]),
+```
+
+</td></tr>
+<tr><td>
+
+```python
+fill=when(field("survived") == "No")
+.then(gray)
+.when(field("class") == "First")
+.then(color6[0])
+.when(field("class") == "Second")
+.then(color6[1])
+.when(field("class") == "Third")
+.then(color6[2])
+.otherwise(color6[3]),
+```
+
+</td><td>
+
+```python
+fill=when(field("survived") == "No", gray)
+.when(field("class") == "First", color6[0])
+.when(field("class") == "Second", color6[1])
+.when(field("class") == "Third", color6[2])
+.otherwise(color6[3]),
+```
+
+</td><td>
+
+```python
+fill=cases(
+    (field("survived") == "No", gray),
+    (field("class") == "First", color6[0]),
+    (field("class") == "Second", color6[1]),
+    (field("class") == "Third", color6[2]),
+).otherwise(color6[3]),
+```
+
+</td></tr>
+</table>
+
+![Titanic mosaic: the five-case expression and the original closure](img/titanic-cases.png)
+
+_Rendered (`TitanicCases`): left, the five-case expression; right, the story's closure. The two SVGs are byte-identical._
+
+This is the example that separates the candidates. In A, the nine lines alternate condition, value, condition, value. In B, the first case sits on the `fill:` line and the other three hang under it one level deeper, so the first case is at a different level from its siblings. In C, the four cases are at one level, as in a `switch`, and the default closes the call, as `} else {` does. (A lookup such as `classColor[class]` is better as a color scale, `fill: "class"`; the expression is needed here only because one case, "did not survive", overrides the lookup.)
+
+#### 4. Signed bars: three cases on a value
+
+`stories/forwardsyntax/Bar/BarNegative.stories.tsx` ("UnroundedMin"), with an added diverging fill by sign and size.
+
+<table>
+<tr><th>(A)</th><th>(B)</th><th>(C)</th></tr>
+<tr><td>
+
+```ts
+fill: when(field("value").lt(-25))
+  .then("#b2182b")
+  .when(field("value").lt(0))
+  .then("#ef8a62")
+  .otherwise("#4393c3"),
+```
+
+```python
+fill=when(field("value") < -25)
+.then("#b2182b")
+.when(field("value") < 0)
+.then("#ef8a62")
+.otherwise("#4393c3"),
+```
+
+</td><td>
+
+```ts
+fill: when(field("value").lt(-25), "#b2182b")
+  .when(field("value").lt(0), "#ef8a62")
+  .otherwise("#4393c3"),
+```
+
+```python
+fill=when(field("value") < -25, "#b2182b")
+.when(field("value") < 0, "#ef8a62")
+.otherwise("#4393c3"),
+```
+
+</td><td>
+
+```ts
+fill: cases(
+  [field("value").lt(-25), "#b2182b"],
+  [field("value").lt(0), "#ef8a62"]
+).otherwise("#4393c3"),
+```
+
+```python
+fill=cases(
+    (field("value") < -25, "#b2182b"),
+    (field("value") < 0, "#ef8a62"),
+).otherwise("#4393c3"),
+```
+
+</td></tr>
+</table>
+
+![signed bars with a three-case fill, and the one-case form with no otherwise](img/signed-fill.png)
+
+_Rendered (`SignedFill`): left, the three cases; right, the one case `< 0` with no `otherwise`, which shows the null finding below: the other bars draw black._
+
+Thresholds read best when every case is at one level, because the order is the logic: `< -25` must come before `< 0`. Excel's `IFS` and dplyr's `case_when` are used for exactly this.
+
+#### 5. Bird migration: width, opacity with the rest, and the readout
+
+The state-block rewrite of `stories/animated-vega-lite/BirdMigration.stories.tsx` panel B (round 2), plus a readout that says what to do when nothing is hovered.
+
+<table>
+<tr><th>(A)</th><th>(B)</th><th>(C)</th></tr>
+<tr><td>
+
+```ts
+strokeWidth: when(hover).then(5).otherwise(1.5),
+opacity: when(hover)
+  .then(1)
+  .when(hover.isEmpty().not())
+  .then(0.15)
+  .otherwise(0.7),
+// the readout
+text: when(hover.isEmpty())
+  .then("Hover a path")
+  .otherwise(hover.field("species")),
+```
+
+</td><td>
+
+```ts
+strokeWidth: when(hover, 5).otherwise(1.5),
+opacity: when(hover, 1).when(hover.isEmpty().not(), 0.15).otherwise(0.7),
+// the readout
+text: when(hover.isEmpty(), "Hover a path").otherwise(hover.field("species")),
+```
+
+</td><td>
+
+```ts
+strokeWidth: cases([hover, 5]).otherwise(1.5),
+opacity: cases([hover, 1], [hover.isEmpty().not(), 0.15]).otherwise(0.7),
+// the readout
+text: cases([hover.isEmpty(), "Hover a path"]).otherwise(
+  hover.field("species")
+),
+```
+
+</td></tr>
+<tr><td>
+
+```python
+stroke_width=when(hover).then(5).otherwise(1.5),
+opacity=when(hover).then(1).when(~hover.is_empty()).then(0.15).otherwise(0.7),
+text=when(hover.is_empty()).then("Hover a path").otherwise(hover.field("species"))
+```
+
+</td><td>
+
+```python
+stroke_width=when(hover, 5).otherwise(1.5),
+opacity=when(hover, 1).when(~hover.is_empty(), 0.15).otherwise(0.7),
+text=when(hover.is_empty(), "Hover a path").otherwise(hover.field("species"))
+```
+
+</td><td>
+
+```python
+stroke_width=cases((hover, 5)).otherwise(1.5),
+opacity=cases((hover, 1), (~hover.is_empty(), 0.15)).otherwise(0.7),
+text=cases((hover.is_empty(), "Hover a path")).otherwise(hover.field("species"))
+```
+
+</td></tr>
+</table>
+
+![bird migration: per-channel conditions versus a state block with raise and rest](img/bird-states.png)
+
+_Rendered (`BirdStates`, round 2): the Black-and-white Warbler held as hovered._
+
+In practice a user writes this as one state block (`.when(hover, { strokeWidth: 5, opacity: 1, front: true, rest: { opacity: 0.15 } })`), and these per-channel forms are what it rewrites to. The readout is the case a state block cannot cover, because the text mark is not hovered: it is a value read, so a conditional value is the only spelling.
+
+#### 6. A size conditional
+
+The brush on the penguins, with brushed points drawn larger (pipeline tier, because the layout reads `r`).
+
+<table>
+<tr><th>(A)</th><th>(B)</th><th>(C)</th></tr>
+<tr><td>
+
+```ts
+r: when(brushed).then(4.5).otherwise(2),
+fill: when(brushed).then(RED).otherwise("#bbb"),
+```
+
+</td><td>
+
+```ts
+r: when(brushed, 4.5).otherwise(2),
+fill: when(brushed, RED).otherwise("#bbb"),
+```
+
+</td><td>
+
+```ts
+r: cases([brushed, 4.5]).otherwise(2),
+fill: cases([brushed, RED]).otherwise("#bbb"),
+```
+
+</td></tr>
+</table>
+
+![brush with a literal radius, and with a conditional radius](img/brush-radius.png)
+
+_Rendered (`BrushRadius`): left, `r: 2.5` and a conditional fill; right, `r` as a conditional, where the dots almost vanish._
+
+**Finding: a conditional size is read as data.** A literal `r: 2.5` is pixels, but an expression on `r` is a function accessor, and the channel reads a function's result as a data value and sends it through the size scale. So `4.5` and `2` become radii of about 0.3 and 0.13 pixels. Every spelling meets this; it is a question about what a literal inside an expression means (pixels or data), which is the parked question of pixel offsets (#1053, #1054: what a pixel offset means inside data space; deferred). Until then, a size conditional is written as a state block over a literal base, or with `datum(...)` / pixel values made explicit. Noted, not designed here.
+
+#### 7. A nested case
+
+The Titanic fill again, written as "did not survive, else by class", the way a reader would say it.
+
+<table>
+<tr><th>(A)</th><th>(B)</th><th>(C)</th></tr>
+<tr><td>
+
+```ts
+fill: when(field("survived").eq("No"))
+  .then(gray)
+  .otherwise(
+    when(field("class").eq("First"))
+      .then(color6[0])
+      .when(field("class").eq("Second"))
+      .then(color6[1])
+      .otherwise(color6[3])
+  ),
+```
+
+</td><td>
+
+```ts
+fill: when(field("survived").eq("No"), gray).otherwise(
+  when(field("class").eq("First"), color6[0])
+    .when(field("class").eq("Second"), color6[1])
+    .otherwise(color6[3])
+),
+```
+
+</td><td>
+
+```ts
+fill: cases([field("survived").eq("No"), gray]).otherwise(
+  cases(
+    [field("class").eq("First"), color6[0]],
+    [field("class").eq("Second"), color6[1]]
+  ).otherwise(color6[3])
+),
+```
+
+</td></tr>
+</table>
+
+Nesting in the default position is the same in all three, and in all three it flattens by one law: `cases(P).otherwise(cases(Q).otherwise(d))` is `cases(P, Q).otherwise(d)`. A decompiler can print either. Nesting in a **value** position (`cases([c, cases(...)])`) does not flatten and reads as a nested `switch`; it is rare in the corpus (none found).
+
+#### 8. One case, no default
+
+<table>
+<tr><th>(A)</th><th>(B)</th><th>(C)</th></tr>
+<tr><td>
+
+```ts
+fill: when(hover).then(RED);
+```
+
+</td><td>
+
+```ts
+fill: when(hover, RED);
+```
+
+</td><td>
+
+```ts
+fill: cases([hover, RED]);
+```
+
+</td></tr>
+</table>
+
+**What a missing `otherwise` means.** In every candidate, and in polars, PySpark, SQL and Ibis, a conditional with no default is null where no case holds. **Finding: a null `fill` draws black today.** The right panel of `SignedFill` above has no `otherwise`, and the bars with value 0 or more are black (the SVG default for an absent `fill` attribute), not the mark's default color. That is a silently wrong picture. Proposed: a null channel value means "unset", so the mark draws what it draws with the channel left out. Then `fill: cases([hover, RED])` means "red when hovered, the default color otherwise", which is also exactly what the one-block state `.when(hover, { fill: RED })` gives when the mark has no base `fill`. The alternative is to require `otherwise` on a channel and error without it.
+
+### Several predicates in one case
+
+#### How other systems combine predicates
+
+| System                       | AND                                                                  | OR                                                                          | Source                                                                                                                                                                                    |
+| ---------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| polars                       | `pl.when(c1, c2)` (variadic, "implicitly combined with `&`"), or `&` | `(c1) \| (c2)`, or `pl.any_horizontal(c1, c2)` ("logical OR horizontally")  | `polars.when` docstring (polars 1.42.1, read from the installed package); [`any_horizontal`](https://docs.pola.rs/api/python/stable/reference/expressions/api/polars.any_horizontal.html) |
+| Altair 5.4+                  | `alt.when(p1, p2)` ("restricted to types supporting `&`")            | `\|` and `~` on predicates, e.g. `alt.when(brush, (a >= 30) \| (b >= 130))` | [`altair.when`](https://altair-viz.github.io/user_guide/generated/api/altair.when.html)                                                                                                   |
+| PySpark, pandas, numpy, Ibis | `(c1) & (c2)`                                                        | `(c1) \| (c2)`                                                              | [PySpark `when(condition, value)`](https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.functions.when.html) takes one condition                         |
+| SQLAlchemy                   | `and_(c1, c2)`                                                       | `or_(c1, c2)`                                                               | [`case`](https://docs.sqlalchemy.org/en/20/core/sqlelement.html#sqlalchemy.sql.expression.case)                                                                                           |
+| SQL                          | `c1 AND c2`                                                          | `c1 OR c2`                                                                  | keywords, so no precedence trap                                                                                                                                                           |
+| dplyr                        | `c1 & c2` (R's `&` binds looser than comparisons)                    | `c1 \| c2`                                                                  | [`case_when`](https://dplyr.tidyverse.org/reference/case-and-replace-when.html)                                                                                                           |
+| Vega-Lite                    | `{"and": [p1, p2]}`                                                  | `{"or": [p1, p2]}`, `{"not": p}`                                            | [predicate composition](https://vega.github.io/vega-lite/docs/predicate.html)                                                                                                             |
+| Excel                        | `AND(c1, c2)`                                                        | `OR(c1, c2)`                                                                | functions                                                                                                                                                                                 |
+| Kotlin, Rust, Swift, JS      | `c1 && c2`                                                           | `c1 \|\| c2`                                                                | language operators                                                                                                                                                                        |
+| Typst selectors              | `heading.where(level: 1).and(...)`                                   | `.or(...)`                                                                  | [selector](https://typst.app/docs/reference/foundations/selector/): "Selects all elements that match this and all of the other selectors"                                                 |
+| GoFish JS (this branch)      | `c1.and(c2)`                                                         | `c1.or(c2)`                                                                 | methods, so no precedence trap                                                                                                                                                            |
+| GoFish Python (this branch)  | `(c1) & (c2)`                                                        | `(c1) \| (c2)`                                                              | `packages/gofish-python/gofish/expr.py`                                                                                                                                                   |
+
+Nearly every system combines predicates into **one boolean before the conditional**. polars and Altair 5.4+ are the exceptions with a variadic `when(*predicates)`, and the variadic form is **AND only**: OR still needs `|` with parentheses, or polars' `pl.any_horizontal`. So the variadic form solves half of the precedence problem.
+
+**Why Python needs help at all.** `and`, `or` and `not` cannot be overloaded in Python (PEP 335, which proposed it, was [rejected](https://peps.python.org/pep-0335/)), so expression libraries overload `&`, `|` and `~`. Those bind **tighter** than comparisons ([operator precedence](https://docs.python.org/3/reference/expressions.html#operator-precedence)), so `a > 1 & b < 2` parses as `a > (1 & b) < 2`.
+
+#### Finding: one misparse is silent today
+
+Tested on this branch (`packages/gofish-python`, Python 3.13):
+
+| What the user meant                   | What they typed                                        | What happens today                                                                                                                                                                                       |
+| ------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `(a > 1) & (b < 2)`                   | `field("a") > 1 & field("b") < 2`                      | **Loud.** It is a chained comparison, which calls `bool()` on an expression, and `ExprMethods.__bool__` raises "an expression has no truth value in Python".                                             |
+| `(field("count").sum() > cut) & flag` | `field("count").sum() > cut & (field("flag") == True)` | **Silent.** Builds `gt(count, and(cut, flag))`. In JS, `and` returns a boolean, and `gt` compares a number with it (`count > true`), so the bars color by a meaningless test. A wrong picture, no error. |
+| `(field("a") == "x") & hovered`       | `field("a") == "x" & hovered`                          | Silent at build (`eq(a, and("x", hovered))`); at render `and` treats the string as truthy.                                                                                                               |
+
+This is independent of the spelling: A, B and C all accept the same condition expressions. api-design.md says a silently wrong picture is not acceptable ("loud errors over broken pictures"), so the expression layer should make every such misparse loud. **Proposed fix**, in two layers:
+
+1. **At construction (both languages).** Each operation has a result type: comparisons, `and`, `or`, `not`, `isIn` give booleans; arithmetic, `clip`, `floor`, `round` give numbers; a `field` or a source read is unknown (or the reader's declared type). Then `and` / `or` / `not` with an operand of known non-boolean type (a number or string literal, an arithmetic result) is an error, and `gt` / `lt` / `gtEq` / `ltEq` with a boolean operand is an error. Every `&` misparse puts either a boolean under an ordering comparison (`a > (b & c)`) or a non-boolean into `&` (`1 & b`), so the error fires at the line that wrote it whenever one side's type is known.
+2. **At evaluation (JS).** `and` / `or` / `not` throw on a non-boolean, non-null operand, and ordering comparisons throw on a boolean. This catches what construction cannot see (two fields).
+
+#### Several predicates under each candidate
+
+The brush test (four comparisons) from example 6, written inline:
+
+<table>
+<tr><th>(A)</th><th>(B)</th><th>(C)</th></tr>
+<tr><td>
+
+```python
+fill=when(
+    (field(FLIP) >= 185)
+    & (field(FLIP) <= 200)
+    & (field(MASS) >= 3200)
+    & (field(MASS) <= 4200)
+)
+.then(RED)
+.otherwise("#bbb")
+```
+
+</td><td>
+
+```python
+fill=when(
+    (field(FLIP) >= 185)
+    & (field(FLIP) <= 200)
+    & (field(MASS) >= 3200)
+    & (field(MASS) <= 4200),
+    RED,
+).otherwise("#bbb")
+```
+
+</td><td>
+
+```python
+fill=cases(
+    (
+        (field(FLIP) >= 185)
+        & (field(FLIP) <= 200)
+        & (field(MASS) >= 3200)
+        & (field(MASS) <= 4200),
+        RED,
+    ),
+).otherwise("#bbb")
+```
+
+</td></tr>
+</table>
+
+Only A could also take polars' variadic form, `when(c1, c2, c3, c4).then(RED)`. B and C cannot, because the second positional argument is the value. Three ways to give B and C the same convenience:
+
+| Option                                  | Example (proposed)                                                         | Verdict                                                                                                                                                                                                                                                                                                       |
+| --------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Parenthesized `&` / `\|`                | `((field(FLIP) >= 185) & (field(FLIP) <= 200), RED)`                       | Works today. The parentheses are what users forget; with the fix above, forgetting them is a loud error, not a wrong picture.                                                                                                                                                                                 |
+| **Named combinators `allOf` / `anyOf`** | `cases([allOf(c1, c2, c3, c4), RED])`; Python `all_of(...)`, `any_of(...)` | **Recommended.** No parentheses for AND **or** OR, nest freely (`anyOf(allOf(a, b), c)`), same shape in JS and Python. Precedent: polars `all_horizontal` / `any_horizontal`, SQLAlchemy `and_` / `or_`, Vega-Lite `{"and": [...]}` / `{"or": [...]}`, Excel `AND()` / `OR()`, JSON Schema `allOf` / `anyOf`. |
+| A list as the condition                 | `when([c1, c2], RED)`                                                      | Rejected. AND only, like the variadic form; and in C a case is already a list or tuple, so `[[c1, c2], RED]` is easy to misread.                                                                                                                                                                              |
+
+Why not polars' own names? `all_horizontal` names a dataframe idea (across columns, as opposed to down a column) that a mark's options do not have. Why not `and_` / `or_`? Python needs the trailing underscore (`and` is a keyword) and JS would not, so the two languages would differ. `allOf` / `anyOf` also keep apart from round 2's `.any()`, the whole-mark aggregate, the same way polars keeps `pl.any_horizontal` (across predicates) apart from `Expr.any()` (down a column). JS already has `c1.and(c2)` and needs the combinators less, but they cost nothing there and keep the languages the same.
+
+The brush test with the combinator:
+
+```ts
+// proposed
+fill: cases([
+  allOf(
+    field(FLIP).gtEq(185),
+    field(FLIP).ltEq(200),
+    field(MASS).gtEq(3200),
+    field(MASS).ltEq(4200)
+  ),
+  RED,
+]).otherwise("#bbb"),
+```
+
+```python
+# proposed
+fill=cases(
+    (
+        all_of(
+            field(FLIP) >= 185,
+            field(FLIP) <= 200,
+            field(MASS) >= 3200,
+            field(MASS) <= 4200,
+        ),
+        RED,
+    ),
+).otherwise("#bbb")
+```
+
+(For a brush, the user would not write the four comparisons at all: `drag().pick(selectAll("dots"))` is the brushed set, round 1.)
+
+### Precedent: condition and value as one unit, or split
+
+| Form                            | System                   | Spelling                                                                                              | Source                                                                                                                                                                                                       |
+| ------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Split** (a case is two calls) | polars                   | `pl.when(*predicates, **constraints).then(v).when(...).then(...).otherwise(d)`                        | `polars.when` docstring; variadic added by [polars#12603](https://github.com/pola-rs/polars/pull/12603) (Nov 2023)                                                                                           |
+|                                 | Altair 5.4+              | `alt.when(predicate, *more_predicates, empty=, **constraints).then(v).otherwise(d)`                   | [`altair.when`](https://altair-viz.github.io/user_guide/generated/api/altair.when.html); added by [altair#3427](https://github.com/vega/altair/pull/3427) (5.4.0, Aug 2024), which cites polars as its model |
+|                                 | SQL                      | `CASE WHEN c THEN v ... ELSE d END`                                                                   | keyword syntax: `WHEN c THEN v` is written as one unit on one line                                                                                                                                           |
+| **Pair per call** (B)           | PySpark                  | `F.when(condition, value).when(c2, v2).otherwise(d)`                                                  | [`pyspark.sql.functions.when(condition, value)`](https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.functions.when.html)                                                  |
+|                                 | Ibis before 10           | `ibis.case().when(c, v).else_(d).end()`                                                               | soft-deprecated by [ibis#9096](https://github.com/ibis-project/ibis/pull/9096) (10.0): "I want there to be ONE endorsed way"                                                                                 |
+| **Flat list of pairs** (C)      | Ibis 10+                 | `ibis.cases((c, v), (c2, v2), else_=d)`                                                               | [`ibis.cases`](https://ibis-project.org/reference/expression-generic#ibis.cases): "Create a multi-branch if-else expression. Equivalent to a SQL CASE statement."                                            |
+|                                 | SQLAlchemy               | `case((c, v), (c2, v2), else_=d)`                                                                     | [`case`](https://docs.sqlalchemy.org/en/20/core/sqlelement.html#sqlalchemy.sql.expression.case): `*whens` are "2-tuples of `(<sql expression>, <value>)`"                                                    |
+|                                 | pandas 2.2+              | `s.case_when([(c, v), (c2, v2)])`; the Series `s` is the default                                      | `Series.case_when` docstring (pandas 2.3.3): "A list of tuples of conditions and expected replacements"                                                                                                      |
+|                                 | dplyr                    | `case_when(c ~ v, c2 ~ v2, .default = d)`; `replace_when(x, c ~ v)` keeps `x` where nothing matches   | [`case_when` / `replace_when`](https://dplyr.tidyverse.org/reference/case-and-replace-when.html)                                                                                                             |
+|                                 | Excel                    | `IFS(c1, v1, c2, v2, ...)`                                                                            | [IFS](https://support.microsoft.com/en-us/office/ifs-function-36329a26-37b2-467c-972b-4a39bd951d45): `=IFS(A2>89,"A",A2>79,"B",A2>69,"C",A2>59,"D",TRUE,"F")`                                                |
+|                                 | Vega-Lite                | `"condition": [{"test": ..., "value": ...}, ...], "value": d`                                         | [condition](https://vega.github.io/vega-lite/docs/condition.html): "one or more conditional datum or value definitions"                                                                                      |
+|                                 | Kotlin                   | `when { c -> v; c2 -> v2; else -> d }`                                                                | [control flow](https://kotlinlang.org/docs/control-flow.html): "you can use `when` with or without a subject"                                                                                                |
+|                                 | Lisp, Scheme             | `(cond (c v) (c2 v2) (else d))`                                                                       | language form                                                                                                                                                                                                |
+|                                 | Haskell                  | guards `\| c = v \| c2 = v2 \| otherwise = d`, where `otherwise` is defined as `True`                 | [Haskell 2010 Prelude](https://www.haskell.org/onlinereport/haskell2010/haskellch9.html) (the origin of the word `otherwise`)                                                                                |
+|                                 | Rust, Scala, Swift       | `match x { _ if c => v, _ => d }`; `x match { case _ if c => v }`; `switch x { case _ where c: ... }` | language forms                                                                                                                                                                                               |
+|                                 | Mathematica              | `Piecewise[{{v, c}, {v2, c2}}, d]` (value first)                                                      | language form; the math notation it prints is a brace of cases                                                                                                                                               |
+| **Separate lists**              | numpy                    | `np.select(condlist, choicelist, default=0)`; two cases: `np.where(c, x, y)`                          | [`numpy.select`](https://numpy.org/doc/stable/reference/generated/numpy.select.html): "When multiple conditions are satisfied, the first one encountered in condlist is used."                               |
+| **Ternary** (two outcomes only) | Altair before 5.4        | `alt.condition(predicate, if_true, if_false)`                                                         | [`altair.condition`](https://altair-viz.github.io/user_guide/generated/api/altair.condition.html)                                                                                                            |
+|                                 | dplyr, Excel, JS, Python | `if_else(c, t, f)`; `IF(c, a, b)`; `c ? a : b`; `a if c else b`                                       | language forms                                                                                                                                                                                               |
+|                                 | Typst                    | `if c {..} else if c2 {..} else {..}`, an expression; Typst has no `switch` or `match`                | [scripting: conditionals](https://typst.app/docs/reference/scripting/#conditionals): "Typst supports if, else if and else expressions"                                                                       |
+
+What this shows:
+
+- **Every multi-way form outside the polars family puts a condition and its value in one unit**, and the long forms list the units side by side (Ibis 10, SQLAlchemy, pandas, dplyr, IFS, Vega-Lite, Kotlin, `cond`, guards, `match`). Josh's reading is right: a `switch` puts all cases on the same footing.
+- **The split is polars' and its copies'.** SQL's `WHEN ... THEN` is keyword syntax, written as one unit per line; polars turned the keywords into method calls, and Altair 5.4 copied polars ("Throughout this PR I frequently reference `polars.when`", altair#3427).
+- **Why polars split.** polars' `when(*predicates, **constraints)` cannot take the value as its second positional argument, because every positional argument is another predicate (ANDed) and every keyword is an equality test (`pl.when(x=40)`). But the split **predates** the variadic form: polars#12603 (Nov 2023) "Preserves existing behaviour of `when`" while adding the multi-predicate syntax. So the variadic form is a use the split enabled, not its origin. Altair's motivating issue, [altair#2759](https://github.com/vega/altair/issues/2759) "Improve the syntax for conditions with multiple predicates", was mostly about **more than two outcomes** (`alt.condition` had only `if_true` and `if_false`), which any multi-case form fixes.
+- **What GoFish loses without the split:** only the variadic AND (`when(c1, c2)`) and the keyword equality shortcut (`when(species="Adelie")`). The first is `allOf(c1, c2)`; the second is `field("species").eq("Adelie")`, which is clearer about which field and which comparison.
+- **One library moved from a builder to a flat list.** Ibis had the pair-per-call builder `ibis.case().when(c, v).else_(d).end()` and, in 10.0, made the flat `ibis.cases((c, v), ..., else_=d)` the one endorsed spelling (ibis#9096).
+
+### Evaluation
+
+| Criterion                                                         | (A) `when(c).then(v)`                                  | (B) `when(c, v)`                                                                                                                      | (C) `cases([c, v])`                                                                          |
+| ----------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Condition and value at the right level (Josh's indentation point) | No: they alternate down one column (worst under black) | Each case one line, but the first case sits on the `fill:` line and the rest hang one level deeper                                    | **Yes: every case at one level, the default closes the call** (examples 3, 4)                |
+| Two outcomes (`hover`: red, else blue)                            | `when(hover).then(RED).otherwise(BLUE)`                | **Shortest**: `when(hover, RED).otherwise(BLUE)`                                                                                      | `cases([hover, RED]).otherwise(BLUE)`: two brackets more                                     |
+| Five outcomes (Titanic)                                           | 9 lines, alternating                                   | 5 lines, first case offset                                                                                                            | **5 lines, aligned**, plus the closing line                                                  |
+| Consistency with the approved mark-level `.when(c, {...})`        | Different shape                                        | **Same shape, opposite precedence**: `when(a, x).when(b, y)` picks `x` when both hold; `.when(a, {...}).when(b, {...})` applies `b`'s | Different word and shape for a different rule; the rewrite between them is one line (Part 4) |
+| Several predicates (Python)                                       | Variadic `when(c1, c2)` (AND only)                     | `allOf(...)` or parenthesized `&`                                                                                                     | `allOf(...)` or parenthesized `&`                                                            |
+| Matches the IR node                                               | Builds half-pairs                                      | Folds pairs one at a time                                                                                                             | **Is the node**: a list of pairs and a default. The decompiler prints it directly            |
+| Precedent                                                         | polars, Altair 5.4+                                    | PySpark, old Ibis                                                                                                                     | Ibis 10, SQLAlchemy, pandas, dplyr, IFS, Vega-Lite, Kotlin, `cond`, guards                   |
+| Familiar to the Python audience                                   | polars and Altair users                                | PySpark users                                                                                                                         | pandas 2.2, Ibis, SQLAlchemy and dplyr users                                                 |
+| Migration on this branch                                          | None                                                   | Small (below)                                                                                                                         | Small (below)                                                                                |
+
+**Which is the explicit form.** A, B and C are three builders for one IR node, so none is sugar over another in the IR. At the surface, C is the explicit form: its arguments are the node's fields, one to one, and it is what Python prints a `when` node back as. B is a fold that builds the same list one case at a time, and A builds each case in two halves. If B were also offered (for two outcomes), it would be sugar defined by `when(c, v)` = `cases([c, v])` and `x.when(c, v)` = `cases(...x.cases, [c, v])`.
+
+**Migration on this branch.** The IR, the evaluator (`evalExpr`), the tier rule and the serializer do not change. What changes is the builder (about 40 lines in `src/ast/expr.ts`, 60 in `gofish/expr.py`), the export in `lib.ts`, and the call sites: of the 41 animation and interaction stories ported to Python, five use `when` (`HoverHighlight`, `ComponentPointer`, `DraggableThreshold`, `TimerPulse`, `BirdMigration` with two), so six JS and six Python call sites; about seven test call sites (`expr.test.ts`, `irRoundTrip.test.ts`, `interaction.test.ts`, `test_sources_expr.py`); and four docs pages (`js/api/expressions.md`, `python/api/expressions.md`, `internals/frontend/reactivity.md`, and the example in `internals/design/api-design.md`), plus docstrings in `readers.ts`, `readers.py` and `sources.py`. A clean break, no alias (api-design.md: clean breaks over shims).
+
+### (D) Default first, updates after
+
+`value(BLUE).when(hover, RED).when(picked, GREEN)`: start from the default and apply conditional updates, later wins. It reads like a state block and has its precedence, and thresholds read well in ascending order (`value("F").when(A > 59, "D").when(A > 69, "C")`). But it is exactly a state block cut down to one channel, so it is the same idea twice, with a new wrapper name (`value`, polars' `lit`) for the default; and it reverses the first-match rule every multi-way conditional in the survey uses. Not recommended. The state block already is this form, at the size where it helps.
+
+## Part 4: state blocks as updates, without a cascade
+
+### The definition
+
+A mark's options are a record, `o`. A state block `.when(c, p)` is a **conditional record update**, a function from options to options:
+
+```
+when(c, p)  =  o  ↦  { k: cases([c, p[k]]).otherwise(o[k])  for k in p }  ∪  o
+```
+
+In words: every channel the block sets becomes "the block's value where `c` holds, else what it was"; every other channel is unchanged. With `rest`, the block sets two cases per channel:
+
+```
+when(c, { ...p, rest: r })  =  o  ↦  { k: cases([c, p[k]], [c.not().and(c.any()), r[k]]).otherwise(o[k]) }  ∪  o
+```
+
+(a case is left out when its part does not set `k`). A chain is composition, applied to the mark's own options as the base:
+
+```
+rect(base).when(c1, p1).when(c2, p2)   means   (when(c2, p2) ∘ when(c1, p1))(base)
+```
+
+Applying the definition twice and flattening the nested `otherwise` (the law in example 7) gives, per channel:
+
+```ts
+// the rewrite of two blocks, proposed spelling
+k: cases(
+  [c2, p2[k]],
+  [c2.not().and(c2.any()), r2[k]],
+  [c1, p1[k]],
+  [c1.not().and(c1.any()), r1[k]]
+).otherwise(base[k]);
+```
+
+This is round 2's rewrite, now derived instead of stated: "later blocks first" is what composition does, because the outer function's case is checked first. `front: true` is not a channel update; it adds one z constraint to a set (round 2), and adding to a set commutes, so `front` has no order.
+
+### What order means, and when it does not matter
+
+- **Later wins** means: the outer function's value is the one you see where both conditions hold. It is the same rule as JS `{ ...o, ...p }`, Python `o | p` ([PEP 584](https://peps.python.org/pep-0584/): "the last-seen value (i.e. that from the right-hand operand) wins"), Nix `o // p` and Elm `{ o | fill = red }`: the record on the right replaces fields of the one on the left.
+- **Two blocks commute** (either order draws the same picture) when, for every channel both set, no shape has both conditions true with different values. Two easy sufficient cases: they set **disjoint channels** (selected sets `fill`, hovered sets `strokeWidth`), or their conditions are **mutually exclusive** (hovered and not-hovered). Count `rest` as its own condition `c.not().and(c.any())`: `.when(picked, { fill: RED, rest: { opacity: 0.3 } }).when(hover, { opacity: 1 })` does not commute, because a hovered, unpicked bar is in the first block's rest and in the second block's condition, and both set `opacity`. That is the `StatePrecedence` example: the hover block comes later, so hovering Lake C lifts its opacity back to 1.
+- **No special rule remains.** There is no specificity (a key test does not beat an identity test because it is "more specific"), no `!important`, no inheritance between marks. The mark's own options are the innermost value, and each block wraps the previous result. A reader who sees two blocks setting one channel needs only their order.
+
+### Compared against
+
+| System                                     | What wins when two rules set one property                                                                                                                                                                                                                                                                                                                                                     | Fits GoFish's blocks?                                                                                                                                                                                     |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **CSS cascade** (the foil)                 | Origin and `!important` (among other steps), then specificity (a score from the selector: ids beat classes beat tags), then source order. A rule earlier in the file can beat a later one because its selector is longer.                                                                                                                                                                     | No. Specificity is a hidden score the reader must compute (api-design.md, "no rule a user has to model in their head"), and it has no reading as a function. GoFish blocks have no score.                 |
+| **Typst show-set rules** (looked up below) | The later rule wins, whatever its selector: a later `show heading: set ...` beats an earlier `show heading.where(level: 1): set ...`. Rules nearer the element beat ambient `set` rules. Explicit call arguments beat every rule.                                                                                                                                                             | **Yes, for order**: later wins, no specificity. The difference (explicit arguments win in Typst) comes from what a rule is: a Typst rule sets defaults under the call, a GoFish block overrides the call. |
+| **Typst show-function rules**              | Several `show heading: it => ...` rules wrap the element one after another; the **earlier** rule ends up innermost, so its `set` wins (tested below).                                                                                                                                                                                                                                         | A warning, not a model: a rule that wraps reverses the order. GoFish blocks are record updates, not wrappers, so they keep show-set's order.                                                              |
+| **JS spread, Python `\|`, Nix `//`, Elm**  | The right-hand record wins, field by field.                                                                                                                                                                                                                                                                                                                                                   | **Yes**: a block is a guarded spread.                                                                                                                                                                     |
+| **Lenses** (Haskell `lens`, Monocle)       | `o & fill .~ red & fill .~ blue` gives blue: updates compose left to right, the last setter wins.                                                                                                                                                                                                                                                                                             | **Yes**: each block is a guarded set through a lens per channel.                                                                                                                                          |
+| **dplyr `replace_when`**                   | `replace_when(x, c ~ v)` "retains the original values from x" where no case matches: a conditional update of a column.                                                                                                                                                                                                                                                                        | **Yes**, at the size of one channel. dplyr keeps it apart from the choosing `case_when`, which "falls through to a `.default`": the same split as `.when` versus `cases`.                                 |
+| **SwiftUI modifiers**                      | Each modifier wraps the view. For layout modifiers order changes the result (`.padding().background()` versus `.background().padding()`, [Swift by Sundell](https://swiftbysundell.com/questions/swiftui-modifier-order)). For environment values, the setting **closest to the view** wins ([Hacking with Swift](https://www.hackingwithswift.com/books/ios-swiftui/environment-modifiers)). | Partly. SwiftUI's "closest wins" is the wrapper order (like Typst's show-function rules). GoFish blocks are not wrappers, so later wins.                                                                  |
+
+## Typst's styling semantics, looked up
+
+Sources: the [Styling reference](https://typst.app/docs/reference/styling/), the [Context reference](https://typst.app/docs/reference/context/), the [State reference](https://typst.app/docs/reference/introspection/state/), the [Selector reference](https://typst.app/docs/reference/foundations/selector/), the [Formatting tutorial](https://typst.app/docs/tutorial/formatting/), [typst#4591](https://github.com/typst/typst/issues/4591) (Laurenz Mädje, a Typst maintainer, on show-set versus show-function), and a test file compiled with **Typst 0.14.2** for every ordering claim the docs leave unstated.
+
+**Set rules are defaults, scoped by blocks.**
+
+- "With set rules, you can customize the appearance of elements. They are written as a function call to an element function preceded by the `set` keyword." (Styling)
+- "Set rules can be conceptualized as setting default values for some of the parameters of a function for all future uses of that function." (Formatting tutorial)
+- "A top level set rule stays in effect until the end of the file. When nested inside of a code or content block, it is only in effect until the end of that block." (Styling)
+- Conditional: "Sometimes, you'll want to apply a set rule conditionally. For this, you can use a set-if rule." Example: `set text(red) if critical`. (Styling) The condition is an ordinary value in scope, not a per-element test.
+
+**Show rules select elements.**
+
+- "The most basic form of show rule is a show-set rule. Such a rule is written as the `show` keyword followed by a selector, a colon and then a set rule. ... This lets the set rule only apply to the selected element." (Styling)
+- "For maximum flexibility, you can instead write a transformational show rule that defines how to format an element from scratch. ... This function receives the element in question and can return arbitrary content." (Styling)
+- Selectors: everything (`show: rest => ..`), text, regex, "Function with fields: `show heading.where(level: 1): ..` Transform only elements that have the specified fields", and labels (Styling). Selectors combine with `.and()` and `.or()` (Selector). `.where` tests field equality; an arbitrary predicate on an element needs a show-function rule with an `if` inside.
+- "Like set rules, show rules are in effect until the end of the current block or file." (Styling)
+
+**Ordering: later show-set rules override earlier ones; show-function rules do not compose that way.**
+
+- The docs say why to prefer show-set: separate show-set rules "can still be overridden by later show-set rules in the document, keeping styling composable. In contrast, set rules within a transformational show rule would not be overridable anymore." (Styling)
+- Laurenz Mädje, typst#4591: "when there are multiple show rules of the latter kind [functions], they need to be evaluated in some order. This means the table goes through various stages of styling and there isn't one canonical representation of it. ... In contrast, with show-set Typst can statically resolve all rules at once when 'preparing' the table." Before Typst 0.11 both behaved the same, and "it was impossible to overwrite show-set rules with subsequent ones" (footnote, citing [typst#3311](https://github.com/typst/typst/pull/3311)).
+- The docs do not state which rule wins in every case, so I compiled each case with Typst 0.14.2 and read the fills (or, for heading fields, `typst query`):
+
+| Case                                                                             | Winner                                                    |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Two show-set rules, same selector                                                | **The later one**                                         |
+| Earlier `show heading.where(level: 1): set ...`, later `show heading: set ...`   | **The later, general one** (no specificity)               |
+| Earlier `show heading: set ...`, later `show heading.where(level: 1): set ...`   | The later, specific one                                   |
+| Two show-set rules setting different properties                                  | Both apply                                                |
+| Earlier `show heading: set text(..)`, later plain `set text(..)`                 | **The show-set rule** (it applies at the heading, nearer) |
+| Plain `set text(..)`, later `show heading: set text(..)`                         | The show-set rule                                         |
+| Two show-function rules, `it => { set text(c); it }`                             | **The earlier one** (it ends up innermost)                |
+| `set text(fill: a)` then `text(fill: b)[..]`                                     | **The explicit argument**                                 |
+| `show heading: set heading(numbering: "I.")` then `heading(numbering: "1.")[..]` | The explicit argument (`"1."`, read with `typst query`)   |
+| `set text(..) if c` with `c` false                                               | Not applied                                               |
+
+**Context and state.** "A context expression is reactive to the different environments it is placed into" (Context), and set values are read inside it as fields (`context text.lang`). `state` "is always updated in layout order, not in evaluation order", and `update` takes a value or "a function [that] receives the previous state and has to return the new state" (State). A state update is "an invisible piece of content" placed in the document: time in Typst is position in the document.
+
+### What Typst implies for GoFish
+
+1. **Typst has the same two ideas, with two spellings.** `if c {..} else if c2 {..} else {..}` is an expression that chooses a value (first match); `set` and `show ... : set` are updates to a record of defaults (later wins). That is the split round 3 proposes: `cases` chooses, `.when` updates.
+2. **Typst's update order is "later wins, no specificity"**, the order GoFish blocks have. A more specific `.where` selector does not beat a later general rule. So the cascade Josh distrusts is not what Typst does; Typst's rule is the record-update rule.
+3. **Wrappers reverse the order.** Typst's show-function rules (and SwiftUI's environment) make the earlier rule innermost and so the winner, and Typst's maintainers call show-function a last resort for that reason. GoFish blocks stay record updates (no function bodies), so they keep one order. A `createMark` component that wraps a mark is the GoFish analog of a show-function rule; its precedence is lexical (the wrapped mark's blocks are inside), which is not a state-block question.
+4. **Explicit arguments: the one difference.** In Typst the call's own arguments beat every rule, because rules set defaults beneath the call. In GoFish a block is applied **after** the call, to the mark it is chained on, so it overrides the call's options; the call's options are the base. Read in Typst terms (pseudo-Typst: `rect(if c)` is not a real selector), `rect({ fill: BLUE }).when(c, { fill: RED })` is `{ set rect(fill: blue); show rect(if c): set rect(fill: red); rect() }`: the base is the first rule, and the block is a later show-set rule. Typst cannot write `show rect(if c)` for a per-element data condition (`.where` tests equality only), which is what GoFish's expression conditions add.
+5. **Scoping.** Typst rules end with their block; a GoFish block is scoped to the one mark it is chained on, which is the same idea at the size of a mark. A theme-wide default (Typst's top-level `set`) would be a separate GoFish feature, not a state block.
+
+## Recommendation (round 3)
+
+**Channel conditional: (C) `cases([c, v], ...).otherwise(d)`**, Python `cases((c, v), ...).otherwise(d)`, replacing `when(c).then(v)` on this branch, with `allOf` / `anyOf` (Python `all_of` / `any_of`) for several predicates, typed boolean operators so a Python `&` misparse is loud, and a null channel value meaning "unset".
+
+- **Every case at one level** (examples 3 and 4), as Josh asked: the switch form. The default closes the call, as `else` does.
+- **Two words for two rules.** `cases` chooses (first match); `.when` updates (later wins). The rewrite from one to the other is one line (Part 4). Spelling the channel form as `when(c, v).when(...)` (B) would give the two rules the same shape and opposite precedence, which is the kind of overlap api-design.md asks us to avoid ("one concept is one operator"; two concepts should not look like one).
+- **It is the IR node.** Its arguments are the node's fields, so it is the explicit form and the decompiler's output, and the IR does not change.
+- **Precedent** outside the polars family: Ibis 10 (which moved to this form from a builder), SQLAlchemy, pandas 2.2, dplyr, Excel `IFS`, Vega-Lite's condition arrays, Kotlin `when { }`, `cond`, Haskell guards, Typst's `if / else if`.
+- **Same shape in JS and Python**: a list of pairs and `.otherwise`.
+- **Its cost** is the two-outcome case, two brackets longer than B. Most two-outcome conditionals on marks are states and are written as blocks (`.when(hover, { fill: RED })`), so the channel form is used mostly for value logic with three or more cases, where it reads best.
+
+**Runner-up: (B) `when(c, v).when(c2, v2).otherwise(d)`.** Shortest for two outcomes, one case per call, and PySpark's spelling. What would change the pick: if Josh reads `when(c, v)` and `.when(c, {...})` as one idea and is happy to remember that the channel chain is first-match while the block chain is later-wins. B could also be added later as sugar for two outcomes, `when(c, v)` = `cases([c, v])`, without changing anything else.
+
+## Decisions for Josh (round 3)
+
+1. **Channel spelling.** `cases([c, v], ...).otherwise(d)` (C), `when(c, v)...otherwise(d)` (B), or keep polars' `when(c).then(v)` (A)?
+2. **Its name.** `cases` (Ibis), `caseWhen` (dplyr, pandas, SQL), `cond` (Lisp), or `piecewise` (Mathematica, numpy)?
+3. **The default.** `.otherwise(d)` in both languages, or an option (`{ default: d }` in JS, `default=d` in Python, as numpy and Ibis do)?
+4. **Two words.** Keep `when` only for the mark-level update and `cases` for choosing, or also offer `when(c, v)` as two-outcome sugar over `cases`?
+5. **Missing `otherwise`.** A null channel value means "unset, draw the mark's default" (proposed), or a channel conditional must have `otherwise`?
+6. **Several predicates.** Add `allOf(...)` / `anyOf(...)` (Python `all_of` / `any_of`)?
+7. **Loud misparse.** Type the boolean operators (construction-time where types are known, evaluation-time otherwise) so a Python `&` precedence slip is an error?
+8. **Block order, stated as composition.** Confirm: a state block is a conditional record update, a chain is composition, later wins, no specificity.
+
+Still open from round 2 (not reopened by round 3): the default target (an unscoped input in an identity test picks among its own mark's shapes); z constraints over selections as the explicit form of `front`, and its name; the rest's guard (`c.any()` or "selection non-empty"); adding `.any()`; where the state-block rewrite runs; animated states through `.transition({ update })` (#914). Decided and not re-asked: S1 state blocks; `emphasize` as a preset over `.when`.
+
+## Syntax changes to review (round 3)
+
+- Changed (proposed): `when(c).then(v).when(c2).then(v2).otherwise(d)` becomes `cases([c, v], [c2, v2]).otherwise(d)`; Python `cases((c, v), (c2, v2)).otherwise(d)`. The IR `when` node is unchanged.
+- New (proposed): `allOf(...)`, `anyOf(...)`; Python `all_of(...)`, `any_of(...)`.
+- New errors (proposed): `and` / `or` / `not` with a non-boolean operand, and an ordering comparison with a boolean operand (at construction when the type is known, else at evaluation).
+- Changed behavior (proposed): a null channel value is "unset" (today a null `fill` draws black).
+- Unchanged: `.when(cond, { ...overrides, rest, front })` on marks.
 
 ---
 
@@ -31,7 +859,7 @@ Josh's feedback on round 1: the single chart was "weirdly awkward and circular" 
 
 Kept from round 1: selections as data (`chart(sel)`), the identity test `when(sel)`, the key test `field(k).isIn(sel)` for linked views and graph edges, the readout `sel.field(k)`, the IR pick node, and all of round 1's precedent and research (below).
 
-## Terms
+## Terms (rounds 1 and 2)
 
 - **Source.** Anything whose value changes after the chart is drawn: a clock, a piece of state, or an input (`pointer`, `drag`, `click`, `wheel`). Decided in the parent proposal.
 - **Input.** A source driven by the user's pointer or keys.
@@ -951,7 +1779,7 @@ It keeps all the reads above. It reads well as a query, but it puts a spatial te
 
 Awkward in S1: the readout still forces a named scope; `.any()` is a new kind of expression (an aggregate across shapes, not across one shape's rows); and `front` waits on z constraints over selections. Cost to extend: a new state is a new condition, not a new name; a new pick shape (lasso) is one more input shape; a custom condition is an expression or, in JS only, a function (#1101).
 
-## Recommendation
+## Recommendation (round 2)
 
 **Approach C, with the default target and S1 state blocks.**
 
@@ -965,7 +1793,7 @@ Awkward in S1: the readout still forces a named scope; `.any()` is a new kind of
 
 **Runner-up: S3, per-state methods.** Shortest for the one-chart hover and familiar from CSS. What would change the pick: if users mostly write single-chart hovers and never value logic, `.hover({...})` would earn its place, and it can be added later as sugar over S1 with no change to anything else.
 
-## Decisions for Josh
+## Decisions for Josh (round 2; 2 and 9 since decided)
 
 1. **Default target.** An unscoped input in an identity test picks among the shapes of the mark it sits on, defined by the rewrite to `.pick(selectAll(n))` with a fresh token when the mark has no name; value reads of an unscoped input are a loud error. Approve?
 2. **State spelling.** S1 `.when(cond, { ...overrides, rest, front })`, S2 `.emphasize`, S3 `.hover` / `.selected`, or S4 a `states` option?
@@ -979,7 +1807,7 @@ Awkward in S1: the readout still forces a named scope; `.any()` is a new kind of
 
 Still open from round 1, unchanged: a pointer picks only the topmost shape, and the default `radius` is 0; `drag().pick` uses the rectangle from start to current; `.toggle()` is a method, and a click on empty space clears the set.
 
-## Syntax changes to review
+## Syntax changes to review (round 2)
 
 - New (proposed): `.when(cond, { ...overrides, rest: {...}, front: true })` on marks (Python: `.when(cond, **overrides, rest=dict(...), front=True)`); unscoped `pointer()`, `drag()`, `click().toggle()` as identity tests; `pointer({ radius })`.
 - New explicit forms (proposed): `Constraint.zAbove` / `zBelow` with selection operands; `selectAll(n).where(cond)` (#517); `expr.any()` over a mark's shapes.
@@ -991,10 +1819,13 @@ Still open from round 1, unchanged: a pointer picks only the topmost shape, and 
 
 All in `img/`, rendered with `pnpm capture-one "Proposals/Source Reads/<Story>"` from fixed input states (the harness cannot dispatch pointer events, #672):
 
+- `titanic-cases.png` (round 3): the Titanic mosaic colored by the five-case expression and by the story's closure; byte-identical SVG.
+- `signed-fill.png` (round 3): signed bars with a three-case fill, and the one-case form with no `otherwise`, whose other bars draw black (the null finding).
+- `brush-radius.png` (round 3): a held brush with a literal radius and with a conditional radius, whose dots nearly vanish (the size finding).
 - `hover-bars.png`: hover highlight with no pointer, on Lake B, on Lake E.
-- `bird-states.png` (new): the Black-and-white Warbler held as hovered: round 1's per-channel conditions (buried), a state block with `front` (on top), and with `rest` (others faded).
-- `click-rest.png` (new): click multi-select with the rest faded only once something is picked.
-- `state-precedence.png` (new): selected and hovered together; the later block wins on `opacity`. Sugar and hand-written rewrite render identically.
+- `bird-states.png` (round 2): the Black-and-white Warbler held as hovered: round 1's per-channel conditions (buried), a state block with `front` (on top), and with `rest` (others faded).
+- `click-rest.png` (round 2): click multi-select with the rest faded only once something is picked.
+- `state-precedence.png` (round 2): selected and hovered together; the later block wins on `opacity`. Sugar and hand-written rewrite render identically.
 - `graph-hover.png` (updated): node b, then node c, hovered; incident edges red and thicker, the rest faded.
 - `linked-lakes.png`: Lake D, then Lake F, hovered in the bar chart, highlighted in both charts.
 - `brush-scatter.png`: penguins with no brush and two brush rectangles.
