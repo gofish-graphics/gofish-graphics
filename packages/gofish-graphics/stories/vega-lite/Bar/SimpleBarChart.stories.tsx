@@ -30,7 +30,9 @@ export default meta;
 type Args = { h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { h: 300 },
+  // Vega-Lite's size: a continuous y is 200 px tall. Its x is a 20 px step per
+  // bar; the width is left to the rect default here (see below).
+  args: { h: 200 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -41,11 +43,11 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(values)
+    chart(values, { h: args.h })
       .flow(spread({ by: "a",  dir: "x" }))
       .mark(rect({ h: "b" }))
       // Intentionally omit width to cover the rect default-width fallback path.
-      .render(container, { h: args.h });
+      .render(container);
 
     return container;
   },

@@ -1246,11 +1246,11 @@ rows_b64)`, which decodes the ref sentinels in the rows, calls the
   (`to_arrow_table`, `buildArrowTable`), naming the column, never a silent
   coercion.
 - **Render options.** These are the JS `.render(container, options)` options:
-  `w`, `h`, `axes`, `legend`, `padding`, `debug`. The widget reads them from
-  its traits, which the Python `.render(...)` call sets; the harness reads
-  the story's render-options dict. `axes` and `padding` stay unset unless the
-  caller passed them, so a chart's own `axes` option (or a layer chain's root
-  tier's) decides, and the default padding applies.
+  `w`, `h`, `axes`, `legend`, `debug`. The widget reads them from its traits,
+  which the Python `.render(...)` call sets; the harness reads the story's
+  render-options dict. `axes` and `legend` stay unset unless the caller
+  passed them, so a chart's own option (or a layer chain's root tier's)
+  decides.
 
 The root has no cases of its own: a `layer-chain` rebuilds the real
 `LayerBuilder` wherever it sits, and a `layer([...])` of charts is the JS
@@ -1259,7 +1259,7 @@ whose `relate` clauses are rebuilt once and handed to `.relate(...)`. A
 child named with `chart(...).name(n)` carries `name` on its `ChartIR`,
 which `chartFromIR` applies with `ChartBuilder.name`, so the clauses can
 refer to it. Python's `layer([...], **options)` is always that combinator
-mark and takes exactly JS `layer`'s options; `padding` is a render option in
+mark and takes exactly JS `layer`'s options; `legend` is a render option in
 both languages.
 
 ## Prior art

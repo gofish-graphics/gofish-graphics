@@ -17,7 +17,7 @@ def story_default():
     movies_raw = read_json("movies.json").astype({"Title": str})
 
     return (
-        chart(movies_raw, axes=False)
+        chart(movies_raw, axes=False, w=700, h=420)
         .flow(
             treemap(
                 by=field("Major Genre").drop_nulls(),
@@ -37,5 +37,5 @@ def story_default():
                 ry=2,
             ).label("Major Genre", position="center", color="white", font_size=12)
         ),
-        {"w": 700, "h": 420},
+        {},
     )

@@ -460,12 +460,12 @@ async function main() {
   );
   {
     // One row: each position axis has a one-value domain, so no σ fits it to
-    // the box. Its value maps to the middle of the box (as d3 and Vega-Lite
+    // the box. Its value maps to the middle of the plot (as d3 and Vega-Lite
     // map a zero-width linear domain), and its axis has one tick there. With
-    // a padding wider than the axis gutters, the 300 x 300 box starts at the
-    // padding, so its middle is at PAD + 150 on each axis.
-    const PAD = 60;
-    const mid = (n: number) => PAD + n / 2;
+    // no axes the plot is the whole 300 x 300 canvas, so its middle is at 150
+    // on each axis. With axes the plot is what the axes leave (#1032), and
+    // each axis's one tick sits at the point.
+    const mid = (n: number) => n / 2;
     const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
     const labels = (all: any[], label: string) =>
       all.filter((it) => it.kind === "text" && it.text === label);
@@ -474,28 +474,31 @@ async function main() {
       all.filter((it) => it.kind === "rect" && it.w === 1 && it.h === 4);
     const yTicks = (all: any[]) =>
       all.filter((it) => it.kind === "rect" && it.w === 4 && it.h === 1);
+    const ellipses = (all: any[]) =>
+      all.filter((it) => it.kind === "ellipse");
+    const onePointChart = (axes: boolean) =>
+      chart([{ id: 0, a: 1, b: 2 }], { axes })
+        .flow(scatter({ by: "id", x: "a", y: "b" }))
+        .mark(circle({ r: 3 }))
+        .toDisplayList(SIZE);
     let onePoint: any[] = [];
     const onePointErr = await errorOf(async () => {
-      onePoint = items(
-        await chart([{ id: 0, a: 1, b: 2 }])
-          .flow(scatter({ by: "id", x: "a", y: "b" }))
-          .mark(circle({ r: 3 }))
-          .toDisplayList({ ...SIZE, padding: PAD })
-      );
+      onePoint = items(await onePointChart(true));
     });
     check(
       "a one-point chart renders with axes",
       onePointErr === "",
       onePointErr
     );
-    const dot = onePoint.filter((it) => it.kind === "ellipse");
+    const bare = ellipses(items(await onePointChart(false)));
     check(
       "the one point is at the middle of the box",
-      dot.length === 1 &&
-        near(dot[0].cx, mid(SIZE.w)) &&
-        near(dot[0].cy, mid(SIZE.h)),
-      JSON.stringify(dot)
+      bare.length === 1 &&
+        near(bare[0].cx, mid(SIZE.w)) &&
+        near(bare[0].cy, mid(SIZE.h)),
+      JSON.stringify(bare)
     );
+    const [dot] = ellipses(onePoint);
     const [xTick] = xTicks(onePoint);
     const [yTick] = yTicks(onePoint);
     check(
@@ -504,35 +507,40 @@ async function main() {
         labels(onePoint, "2").length === 1 &&
         xTicks(onePoint).length === 1 &&
         yTicks(onePoint).length === 1 &&
-        near(xTick.x + 0.5, mid(SIZE.w)) &&
-        near(yTick.y + 0.5, mid(SIZE.h)),
-      JSON.stringify({ xTick, yTick })
+        near(xTick.x + 0.5, dot?.cx) &&
+        near(yTick.y + 0.5, dot?.cy),
+      JSON.stringify({ dot, xTick, yTick })
     );
 
     // A constant datum position across several rows.
-    let constant: any[] = [];
-    const constErr = await errorOf(async () => {
-      constant = items(
-        await chart([
+    const constantChart = (axes: boolean) =>
+      chart(
+        [
           { k: "a", v: 1 },
           { k: "b", v: 2 },
-        ])
-          .flow(scatter({ by: "k", x: datum(5), y: "v" }))
-          .mark(circle({ r: 3 }))
-          .toDisplayList({ ...SIZE, padding: PAD })
-      );
+        ],
+        { axes }
+      )
+        .flow(scatter({ by: "k", x: datum(5), y: "v" }))
+        .mark(circle({ r: 3 }))
+        .toDisplayList(SIZE);
+    let constant: any[] = [];
+    const constErr = await errorOf(async () => {
+      constant = items(await constantChart(true));
     });
     check("a constant datum x renders with axes", constErr === "", constErr);
-    const dots = constant.filter((it) => it.kind === "ellipse");
+    const bareDots = ellipses(items(await constantChart(false)));
+    const dots = ellipses(constant);
     const fives = xTicks(constant);
     check(
       "the constant x is at the middle of the box, with one tick there",
-      dots.length === 2 &&
-        dots.every((d) => near(d.cx, mid(SIZE.w))) &&
+      bareDots.length === 2 &&
+        bareDots.every((d) => near(d.cx, mid(SIZE.w))) &&
+        dots.length === 2 &&
         labels(constant, "5").length === 1 &&
         fives.length === 1 &&
-        near(fives[0].x + 0.5, mid(SIZE.w)),
-      JSON.stringify({ dots, fives })
+        dots.every((d) => near(d.cx, fives[0].x + 0.5)),
+      JSON.stringify({ bareDots, dots, fives })
     );
 
     // No rows at all.

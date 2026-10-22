@@ -32,18 +32,16 @@ const agedPassengers = titanicPassengers
 const meta: Meta = {
   title: "atom/UnitHistogram",
   argTypes: {
-    w: { control: { type: "number", min: 200, max: 1200, step: 10 } },
-    h: { control: { type: "number", min: 200, max: 900, step: 10 } },
     width: { control: { type: "number", min: 1, max: 6, step: 1 } },
   },
 };
 
 export default meta;
 
-type Args = { w: number; h: number; width: number };
+type Args = { width: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 900, h: 560, width: 3 },
+  args: { width: 3 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -81,7 +79,7 @@ export const Default: StoryObj<Args> = {
           )
           .mark(circle({ r: 3, fill: "survived" }))
       )
-      .render(container, { w: args.w, h: args.h });
+      .render(container, {});
 
     return container;
   },

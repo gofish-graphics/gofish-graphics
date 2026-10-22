@@ -148,12 +148,13 @@ function nodeAnchorOffset(
   anchor: RelationAnchor,
   axis: Axis,
   strongSizes: Map<NodeId, number>,
-  targets: Map<string, Placeable>
+  targets: Map<string, Placeable>,
+  plot = false
 ): number | undefined {
   const strong = strongSizes.get(node);
   if (strong !== undefined) return strongAnchorOffset(strong, anchor);
   const target = targets.get(node);
-  return target && anchorOffset(target, axis, anchor);
+  return target && anchorOffset(target, axis, anchor, plot);
 }
 
 /** The offset from its `min` of the point `fraction` of the way from a stack
@@ -175,7 +176,8 @@ function reduceToAxisProblem(
   axis: Axis,
   facts: AnchorFact[],
   strongSizes: Map<NodeId, number>,
-  targets: Map<string, Placeable>
+  targets: Map<string, Placeable>,
+  apart?: Set<string>
 ): AxisProblem {
   const relations: AxisProblem["relations"] = [];
   const pins: PlacementPinClaim[] = [];
@@ -183,8 +185,9 @@ function reduceToAxisProblem(
   const participants = new Set<NodeId>();
   const chainAnchors = new Map<NodeId, number>();
 
-  const resolveOffset = (node: NodeId, anchor: RelationAnchor) =>
-    nodeAnchorOffset(node, anchor, axis, strongSizes, targets);
+  // A chain lays its parts by their plots (`anchorOffset`'s `plot`).
+  const resolveOffset = (node: NodeId, anchor: RelationAnchor, plot = false) =>
+    nodeAnchorOffset(node, anchor, axis, strongSizes, targets, plot);
 
   for (const fact of facts) {
     // A size-pin only feeds `closeSizes`'s box closure (above) — it has no
@@ -205,8 +208,14 @@ function reduceToAxisProblem(
       continue;
     }
     if (fact.type === "anchor-relation") {
-      const fromOffset = resolveOffset(fact.from.node, fact.from.anchor);
-      const toOffset = resolveOffset(fact.to.node, fact.to.anchor);
+      // A chain edge between two parts of the plot lays them by their
+      // plots; one to dressing or chrome places it past the whole box.
+      const chain =
+        fact.chain !== undefined &&
+        apart?.has(fact.from.node) !== true &&
+        apart?.has(fact.to.node) !== true;
+      const fromOffset = resolveOffset(fact.from.node, fact.from.anchor, chain);
+      const toOffset = resolveOffset(fact.to.node, fact.to.anchor, chain);
       if (fromOffset === undefined || toOffset === undefined) continue;
       participants.add(fact.from.node);
       participants.add(fact.to.node);
@@ -246,14 +255,15 @@ function solveRank2Axis(
   axis: Axis,
   facts: AnchorFact[],
   targets: Map<string, Placeable>,
-  freeOrigin: number | undefined
+  freeOrigin: number | undefined,
+  apart?: Set<string>
 ): {
   cells: Map<NodeId, SolvedCell>;
   sizeOnly: Map<NodeId, { size: number; owner: string }>;
   conflicts: PlacementConflict[];
 } {
   const { sizes, owners, conflicts: sizeConflicts } = closeSizes(axis, facts);
-  const problem = reduceToAxisProblem(axis, facts, sizes, targets);
+  const problem = reduceToAxisProblem(axis, facts, sizes, targets, apart);
   const idx = axisIndex(axis);
   // The participants that carry a baseline the free origin may seat, and each
   // one's baseline offset from its `min` (#773). A free participant (a
@@ -326,7 +336,13 @@ function solveRank2Axis(
  *  child that contains it: `operand.min = container.min + gap` per axis. */
 export type RigidAttachment = { container: string; gap: [number, number] };
 
-export function solvePlacementConstraints(
+/**
+ * Solve the placement of `targets` under `constraints` into a box per (node,
+ * axis), without writing it back: the solve {@link solvePlacementConstraints}
+ * writes back, which the claim walk also reads to learn where a layer's
+ * constraints place its children (`claimPlacement.ts`).
+ */
+export function solvePlacementCells(
   constraints: PlacementConstraint[],
   targets: Map<string, Placeable>,
   sizes: [number, number],
@@ -334,8 +350,14 @@ export function solvePlacementConstraints(
   gridTracks?: [TrackLayout, TrackLayout],
   dataPositioned?: [Set<string>, Set<string>],
   rigid?: Map<string, RigidAttachment>,
-  freeOrigin?: FreeOrigin
-): PlacementConflict[] {
+  freeOrigin?: FreeOrigin,
+  // Per axis, the targets that are no part of the plot (dressing, chrome):
+  // a chain edge between two others lays them by their plots.
+  apart?: [Set<string>, Set<string>]
+): readonly [
+  ReturnType<typeof solveRank2Axis>,
+  ReturnType<typeof solveRank2Axis>,
+] {
   const lowered = lowerPlacementConstraints(
     constraints,
     targets,
@@ -368,20 +390,46 @@ export function solvePlacementConstraints(
     });
   }
 
-  const solved = [
+  return [
     solveRank2Axis(
       "x",
       lowered.anchorProgram.axes[0],
       targets,
-      freeOrigin?.[0]
+      freeOrigin?.[0],
+      apart?.[0]
     ),
     solveRank2Axis(
       "y",
       lowered.anchorProgram.axes[1],
       targets,
-      freeOrigin?.[1]
+      freeOrigin?.[1],
+      apart?.[1]
     ),
   ] as const;
+}
+
+export function solvePlacementConstraints(
+  constraints: PlacementConstraint[],
+  targets: Map<string, Placeable>,
+  sizes: [number, number],
+  posScales?: ConstraintPosScales,
+  gridTracks?: [TrackLayout, TrackLayout],
+  dataPositioned?: [Set<string>, Set<string>],
+  rigid?: Map<string, RigidAttachment>,
+  freeOrigin?: FreeOrigin,
+  apart?: [Set<string>, Set<string>]
+): PlacementConflict[] {
+  const solved = solvePlacementCells(
+    constraints,
+    targets,
+    sizes,
+    posScales,
+    gridTracks,
+    dataPositioned,
+    rigid,
+    freeOrigin,
+    apart
+  );
   const conflicts = solved.flatMap((result) => result.conflicts);
   if (conflicts.length > 0) {
     const conflict = conflicts[0];

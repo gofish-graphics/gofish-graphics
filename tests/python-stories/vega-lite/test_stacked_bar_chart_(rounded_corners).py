@@ -36,6 +36,8 @@ def story_default():
                 "rain": "#1f77b4",
                 "snow": "#9467bd",
             }),
+            w=12 * 20,
+            h=200,
         )
         .flow(
             derive(_with_month),
@@ -43,5 +45,5 @@ def story_default():
             stack(by="weather", dir="y"),
         )
         .mark(rect(h=field("date").count(), fill="weather", rx=3, ry=3)),
-        {"w": 600, "h": 300},
+        {},
     )

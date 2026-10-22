@@ -59,5 +59,5 @@ def story_sector_tree2():
             ),
             coord=Coord.clock(),
         ),
-        {"w": 540, "h": 540},
+        {},
     )

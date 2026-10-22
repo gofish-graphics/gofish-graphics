@@ -140,19 +140,19 @@ async function main() {
     ]);
     const dl = await node.toDisplayList({ w: 200, h: 200 });
     const [outlined, boxed] = dl.items as any[];
-    // 50px per unit on x from the left gutter (40px); y grows upward over
-    // the 200px between 40 and 240.
+    // 50px per unit on x from the left edge; y grows upward over the 200px
+    // canvas.
     ok(
       "a region with an outline draws it as a path, through both scales",
       outlined?.kind === "path" &&
-        outlined.d === "M90,240 L140,140 L90,40 L40,140 L90,240",
+        outlined.d === "M50,200 L100,100 L50,0 L0,100 L50,200",
       JSON.stringify(outlined)
     );
     ok(
       "a region with no outline draws its box",
       boxed?.kind === "rect" &&
-        boxed.x === 140 &&
-        boxed.y === 40 &&
+        boxed.x === 100 &&
+        boxed.y === 0 &&
         boxed.w === 100 &&
         boxed.h === 200,
       JSON.stringify(boxed)

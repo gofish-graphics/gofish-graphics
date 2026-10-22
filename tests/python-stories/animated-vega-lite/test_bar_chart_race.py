@@ -2,7 +2,8 @@
 
 Ports the static story, Frame2000. The animated and paused stories hold a
 `timer()` clock, which cannot cross the bridge; they are exempt per
-`tests/.python-sync-exempt`.
+`tests/.python-sync-exempt`. So are the JS file's race helpers
+(`BAR_SPACING`, `clipToTopTen`), which only those stories read.
 """
 
 from gofish import chart, field, filter, rect, spread

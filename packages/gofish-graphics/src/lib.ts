@@ -71,6 +71,7 @@ export type {
   GoFishExportOptions,
   View,
 } from "./ast/gofish";
+export type { LayoutWarning } from "./ast/layoutWarnings";
 
 // Display-list (render-IR) export
 export { toDisplayList } from "./ast/displayList/toDisplayList";

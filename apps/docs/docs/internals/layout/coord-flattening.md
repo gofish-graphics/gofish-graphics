@@ -249,33 +249,68 @@ claims overlaid, or a declared window's width) against the budget, so the
 children fill the ring, and, for a pinned axis, the map onto the budget that
 its children share. A free child is seated at the scope's `originPx`.
 
-The polar family's angular axis (θ = x) departs from the root in one place: its
-scope seats data 0 at its start, `originPx` 0, so data 0 sits at θ = 0 of the
-transform, which is the `baselineAngle`. The root instead puts the claim's low
-edge at the box's low edge (`originPx = claim.descent(σ)`), which on θ would rotate any
-range that does not start at 0 back to start at the baseline angle, and a stack
-centered on 0 (a diverging schema) would lose its centering. The rule holds for
-every polar coord, full circle or partial arc. σ is unchanged: it still fits the
-whole claim, `[min, max]`, to the angular budget, so a full circle stays exactly
-full whatever the range, and only where the range sits on it changes. On a
-partial arc a range below 0 therefore runs back past the baseline angle, out of
-the `[0, centralAngle]` sweep. The θ tick ring already assumed data 0 at θ = 0,
-so ticks and content now agree. A range that starts at 0, like a pie's, does not
-move. The rule is a property of the scope, so every reader of it agrees (the
-children's frame, the solver shadow check, the scope dump): the transform
-declares the axes whose data 0 is the start of their budget (`polarPreset`
-stamps `dataZeroAtStart: [true, false]`), `fitAxis` passes that to
-`solveScope` as the scope's `dataZero: "start"`, and `solveScope` seats data 0
-at the box's low edge. A space without it (`linear`, `wavy`, a fitted `geo`)
-seats data 0 by the claim, as the root does. The transform also declares that
-it belongs to the polar family, `polar: true`, which petals and the arc
-sampling of a warped box (`coordUtils.ts`) read.
+The fit departs from the root only where the coordinate space's domain has
+structure that layout must keep. The transform declares it per axis as
+`axisClasses`, a record keyed by class name in the style of a column type
+(`ColumnType` in `schema.ts`, whose `HasZero` and `HasCycle` these anticipate;
+whether columns get them too is #1195). Each class is an independent fact, and
+`fitAxis` reads nothing else. An axis with no classes (both axes of `linear`,
+`wavy` and a fitted `geo`) may shift and scale, so it fits as the root does: the
+claim's low edge sits at the box's low edge (`originPx = claim.descent(σ)`), and
+a pixel offset inside it is taken up. `polarPreset` declares θ
+`{ HasCycle: { period: 2π } }` and r `{ HasZero: {} }`. It also declares that
+the transform belongs to the polar family, `polar: true`, which petals and the
+arc sampling of a warped box (`coordUtils.ts`) read; the fit does not.
+
+**`HasCycle`: data 0 at the baseline angle.** A periodic axis (one period is one
+full turn) has its 0 at a fixed angle, θ = 0 of the transform, which is the
+`baselineAngle`. Its scope seats data 0 at its start, `originPx` 0. The root's
+seating would rotate any range that does not start at 0 back to start at the
+baseline angle, and a stack centered on 0 (a diverging schema) would lose its
+centering. The rule holds for every polar coord, full circle or partial arc. σ
+is unchanged: it still fits the whole claim, `[min, max]`, to the angular
+budget, so a full circle stays exactly full whatever the range, and only where
+the range sits on it changes. On a partial arc a range below 0 therefore runs
+back past the baseline angle, out of the `[0, centralAngle]` sweep. The θ tick
+ring already assumed data 0 at θ = 0, so ticks and content agree. A range that
+starts at 0, like a pie's, does not move. The rule is a property of the scope,
+so every reader of it agrees (the children's frame, the solver shadow check,
+the scope dump): `fitAxis` passes it to `solveScope` as the scope's
+`dataZero: "start"`, and `solveScope` seats data 0 at the box's low edge.
+
+**`HasZero`: literal offsets are distances from 0.** On an axis whose 0 is a
+fixed point (the polar center), the content's data starts at 0, whatever
+value it starts at: a radius of 30 to 90 runs from the center, with no hole the author
+did not ask for, as on an axis with no classes. A literal pixel offset, though,
+stays a distance from 0 instead of being taken up, so a ring moved out with
+`.translate({ y: 50 })` keeps a 50 px gap to the center. The claim alone cannot
+tell the two apart, because a pixel offset moves the claim (`offsetExtent` in
+`positionNode.tsx`) and the root seats by the claim's low edge. The type can:
+a pixel offset moves no data, so the type's low end is where the data starts.
+`fitAxis` fits the hull of the claim and the point at that data start
+(`hullExtent`), and seats by the hull's low edge as the root does. An offset
+outward leaves the data start as the hull's low edge, so the gap is inside the
+budget and σ fits the rest. An offset inward, or a mark's own pixel box below
+its datum, reaches past the data start; the hull's low edge is then the
+claim's, so the content is moved out until it starts at the center, as on an
+axis with no classes, since nothing can reach below 0.
 
 The
 coord's type is its children's overlay, kept for its own scope; upward it
 reports nothing on either axis, like every σ-scope root: to its parent it is a
 pixel box, and an explicit `w`/`h` sizes that box as it sizes a layer's (a
-`Frame` with a `coord` forwards its dims, #535). So its axes are its own to draw, and so are their titles: the
+`Frame` with a `coord` forwards its dims, #535). The box holds the outlines
+drawn inside it: a stroke is in pixels while the interior is laid out in the
+space's coordinates, so the box it measures from its content is widened by
+the largest outline inside it (`outline`; see
+[Overview](/internals/layout/passes)). The content box it widens must be exact
+for that to hold: the box is measured by sampling the warped edges of the
+content's coordinate box (`computeTransformedBoundingBox`), and samples fall
+between a curved edge's extremes (a disc sampled every 7.2° misses its leftmost
+point by 0.2% of its radius, enough to clip half of a 1.5 px outline there), so
+each edge's extreme on each axis is then found exactly from its best sample by
+a golden-section search. A space that frames its own window
+clips them with the rest of what the window leaves out. So its axes are its own to draw, and so are their titles: the
 radial axis is drawn along the θ = 0 ray, and its title continues the ray
 past its outer end (past the last tick), reading along the ray, so it never
 sits on top of the data. The title is the `axes` option's `y` title,

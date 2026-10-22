@@ -18,7 +18,9 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 500, h: 400 },
+  // Vega-Lite's size: a 20 px step per variety (10 of them), and a
+  // continuous x is 200 px wide.
+  args: { w: 200, h: 10 * 20 },
   loaders: [async () => ({ barley: await data["barley.json"]() })],
   tags: ["gallery"],
   parameters: {
@@ -30,10 +32,14 @@ export const Default: StoryObj<Args> = {
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 
-    chart(context.loaded.barley as any[], { color: Color.palette("tableau10") })
+    chart(context.loaded.barley as any[], {
+      color: Color.palette("tableau10"),
+      w: args.w,
+      h: args.h,
+    })
       .flow(spread({ by: "variety",  dir: "y" }), stack({ by: "site",  dir: "x" }))
       .mark(rect({ w: "yield", fill: "site" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },

@@ -119,19 +119,19 @@ export const StackedArea: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(quarterlySales, { schema: { date: Schema.time() } })
+    chart(quarterlySales, { schema: { date: Schema.time() }, w: args.w, h: args.h })
       .flow(
         scatter({ by: "date", x: "date" }),
         stack({ by: "category", dir: "y" })
       )
       .mark(ribbon({ h: "sales", fill: "category", curve: Curve.linear() }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
 
 export const CircleTimeline: StoryObj<Args> = {
-  args: { w: 440, h: 240 },
+  args: { w: 440 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -150,7 +150,7 @@ export const CircleTimeline: StoryObj<Args> = {
     }));
     // A data-driven `r` would be a size in data units, scaled with the axes,
     // so each circle gets a literal pixel `r`.
-    chart(rows, { schema: { date: Schema.time() } })
+    chart(rows, { schema: { date: Schema.time() }, w: args.w })
       .flow(
         spread({ by: "category", dir: "y", spacing: 60 }),
         scatter({ by: "date", x: "date", alignment: "middle" })
@@ -158,7 +158,7 @@ export const CircleTimeline: StoryObj<Args> = {
       .mark((d: any) =>
         circle({ r: d[0].radius, fill: "category", opacity: 0.8 })(d)
       )
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -200,6 +200,8 @@ export const SurplusDeficitLine: StoryObj<Args> = {
     chart(area, {
       schema,
       color: Color.palette({ Surplus: "#2a9d8f", Deficit: "#e76f51" }),
+      w: args.w,
+      h: args.h,
     })
       .flow(group({ by: "side" }), scatter({ by: "date", x: "date" }))
       .mark(ribbon({ h: "balance", fill: "side", curve: Curve.linear() }))
@@ -211,7 +213,7 @@ export const SurplusDeficitLine: StoryObj<Args> = {
           .mark(blank())
       )
       .layer(line({ stroke: "#222", strokeWidth: 1.5, curve: Curve.linear() }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };

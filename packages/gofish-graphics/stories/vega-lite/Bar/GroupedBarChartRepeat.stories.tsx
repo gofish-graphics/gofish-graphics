@@ -18,7 +18,9 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 600, h: 300 },
+  // Vega-Lite's size: a 20 px step per offset bar, two per genre over 13
+  // genres (null included), and a continuous y is 200 px tall.
+  args: { w: 13 * 2 * 20, h: 200 },
   loaders: [async () => ({ movies: await data["movies.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
@@ -26,6 +28,8 @@ export const Default: StoryObj<Args> = {
     chart(context.loaded.movies as any[], {
       // TODO(#1017): remove once label angle "auto" is the default.
       axes: { x: { label: { angle: "auto" } }, y: { title: "Total Gross" } },
+      w: args.w,
+      h: args.h,
     })
       .flow(spread({ by: "Major Genre",  dir: "x" }))
       .mark(
@@ -35,7 +39,7 @@ export const Default: StoryObj<Args> = {
           rect({ h: "US Gross", fill: v("US Gross") }),
         ])
       )
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },

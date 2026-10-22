@@ -10,7 +10,7 @@ import {
 import { weather } from "./data";
 
 export default (container: HTMLElement, clock?: BuildClockOptions) =>
-  chart(weather)
+  chart(weather, { w: 560, h: 220 })
     .flow(
       spread({ by: "month", dir: "x" }).transition({
         enter: time.stagger({ lag: 300 }),
@@ -24,4 +24,4 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
         enter: Animation.grow({ duration: 400 }),
       })
     )
-    .render(container, { w: 560, h: 220, ...clock });
+    .render(container, { ...clock });

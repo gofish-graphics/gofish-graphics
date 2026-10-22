@@ -375,7 +375,8 @@ export function applyConstraints(
   gridTracks?: [TrackLayout, TrackLayout],
   dataPositioned?: [Set<string>, Set<string>],
   rigid?: Map<string, RigidAttachment>,
-  freeOrigin?: FreeOrigin
+  freeOrigin?: FreeOrigin,
+  apart?: [Set<string>, Set<string>]
 ): void {
   const placement = constraints.filter(
     (
@@ -412,7 +413,8 @@ export function applyConstraints(
     gridTracks,
     dataPositioned,
     rigid,
-    freeOrigin
+    freeOrigin,
+    apart
   );
 
   // An overlap constraint is not a difference constraint: it reads where the

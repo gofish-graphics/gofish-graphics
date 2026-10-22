@@ -9,18 +9,16 @@ const meta: Meta = {
   title: "Vega-Lite/1D Strip Plot",
   argTypes: {
     w: { control: { type: "number", min: 100, max: 1000, step: 10 } },
-    h: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
   },
 };
 
 export default meta;
 
-type Args = { w: number; h: number };
+type Args = { w: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 300, h: 50 },
+  // Vega-Lite's size: a continuous x with no width is 200 px wide.
+  args: { w: 200 },
   loaders: [async () => ({ weather: await data["seattle-weather.csv"]() })],
   tags: ["gallery"],
   parameters: {
@@ -32,13 +30,13 @@ export const Default: StoryObj<Args> = {
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 
-    chart(context.loaded.weather as any[], { axes: { x: true, y: false } })
+    chart(context.loaded.weather as any[], { axes: { x: true, y: false }, w: args.w })
       .flow(scatter({ by: "date",  x: "precipitation" }))
       .mark(rect({ w: 1, h: 10, fill: "rgb(31, 119, 180)",
         opacity: 0.7,
       }))
 
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },

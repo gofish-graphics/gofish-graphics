@@ -52,7 +52,7 @@ export const PlanetsBox: StoryObj = {
           )
         ),
       ]
-    ).render(container, { w: 410, h: 116 });
+    ).render(container);
     return container;
   },
 };
@@ -94,7 +94,7 @@ export const MunkresFigure: StoryObj = {
           [a, c]
         ),
       ])
-      .render(container, { w: 400, h: 150 });
+      .render(container);
     return container;
   },
 };
@@ -123,7 +123,7 @@ export const RefHull: StoryObj = {
           [ref("p"), ref("q"), ref("s")]
         ),
       ])
-      .render(container, { w: 260, h: 150 });
+      .render(container);
     return container;
   },
 };
@@ -134,9 +134,13 @@ const beaks = penguins.filter(
   (d) => d["Beak Length (mm)"] != null && d["Beak Depth (mm)"] != null
 );
 
-/** The penguins' beaks with one outline per species. */
-const penguinShapes = (shape: Shape.Shape) =>
-  chart(beaks, { axes: true })
+/** The penguins' beaks with one outline per species, in a `w` × `h` plot. */
+const penguinShapes = (shape: Shape.Shape, w: number, h: number) =>
+  chart(beaks, {
+    axes: true,
+    w,
+    h,
+  })
     .flow(scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
     .mark(circle({ r: 2.5, fill: "Species" }).name("points"))
     .layer(
@@ -157,7 +161,7 @@ const penguinShapes = (shape: Shape.Shape) =>
 const penguinStory = (shape: Shape.Shape): StoryObj => ({
   render: () => {
     const container = initializeContainer();
-    penguinShapes(shape).render(container, { w: 420, h: 320 });
+    penguinShapes(shape, 420, 320).render(container);
     return container;
   },
 });
@@ -195,7 +199,7 @@ export const PenguinsFourShapes: StoryObj = {
       heading.style.font = "600 13px sans-serif";
       cell.append(heading);
       container.append(cell);
-      penguinShapes(shape).render(cell, { w: 360, h: 270 });
+      penguinShapes(shape, 360, 270).render(cell);
     }
     return container;
   },
@@ -227,6 +231,8 @@ export const ChartAccentSubSaharanAfrica: StoryObj = {
     const container = initializeContainer();
     chart(gapminderCountries, {
       axes: true,
+      w: 520,
+      h: 320,
       color: Color.palette(REGION_COLORS),
     })
       .flow(scatter({ x: "FertilityRate", y: "LifeExpectancy" }))
@@ -249,7 +255,7 @@ export const ChartAccentSubSaharanAfrica: StoryObj = {
             })
           )
       )
-      .render(container, { w: 520, h: 320 });
+      .render(container);
     return container;
   },
 };
@@ -319,7 +325,7 @@ const uBlob = (holes: boolean) =>
 export const HolesFilled: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    uBlob(false).render(container, { w: 240, h: 190 });
+    uBlob(false).render(container);
     return container;
   },
 };
@@ -328,7 +334,7 @@ export const HolesFilled: StoryObj = {
 export const HolesKept: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    uBlob(true).render(container, { w: 240, h: 190 });
+    uBlob(true).render(container);
     return container;
   },
 };
@@ -421,7 +427,7 @@ export const Hyperedges: StoryObj = {
           )
         )
       )
-      .render(container, { w: 360, h: 230 });
+      .render(container);
     return container;
   },
 };

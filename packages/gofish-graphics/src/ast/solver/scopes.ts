@@ -34,6 +34,7 @@ import type { Extent } from "../extent";
 import type { AxisMap } from "../domain";
 import { envFlag } from "../../util";
 import type { RenderSession } from "../_node";
+import { resolveUnit, sameUnitVar } from "../measure";
 
 export type ScopeKind = "root" | "sized" | "coord" | "grid" | "recenter";
 
@@ -119,7 +120,7 @@ export interface ScopeMeta {
    * claim puts it, `claim.descent(σ)` above the box's low edge, as the root
    * does; "start" at the box's low edge, whatever the claim, so data 0 is
    * the start of the budget (the angular axis of the polar family, whose
-   * data 0 is its baseline angle; see `CoordinateTransform.dataZeroAtStart`).
+   * data 0 is its baseline angle; see `AxisClasses.HasCycle`).
    */
   dataZero?: "claim" | "start";
 }
@@ -134,34 +135,48 @@ interface ScopeEntry extends ScopeMeta {
 }
 
 /** A scope a node with a literal size solved in the claim walk: the keyed
- *  domain it maps, the solution, and the widened, niced claim it solved. */
+ *  domain it maps, the solution, and the type and widened, niced claim it
+ *  solved. */
 export type FixedSolve = {
   key: string | undefined;
   solution: ScopeSolution;
   claim: Extent;
+  space: UnderlyingSpace | undefined;
 };
+
+/**
+ * Whether x and y carry the same DECLARED unit of measure (#582), so one
+ * data unit must be the same pixel length on both. Two unknown units that
+ * unify through overlays are one domain, not a claim that a data unit is
+ * the same length on x and y, so they do not count.
+ */
+export function sharesDeclaredMeasure(
+  x: UnderlyingSpace | undefined,
+  y: UnderlyingSpace | undefined
+): boolean {
+  const unitX = x && isCONTINUOUS(x) ? x.measure?.unit : undefined;
+  const unitY = y && isCONTINUOUS(y) ? y.measure?.unit : undefined;
+  return (
+    unitX !== undefined &&
+    unitY !== undefined &&
+    resolveUnit(unitX).kind === "declared" &&
+    sameUnitVar(unitX, unitY)
+  );
+}
 
 /** Whether the scope dump is on. Off (and near-zero-cost) in prod. */
 const DUMP_SCOPES = envFlag("GOFISH_DUMP_SCOPES");
 
 /**
  * Per-render record of every σ-scope solved. Lives on the {@link RenderSession}
- * (one per render, so no cross-render leakage), and is reset at the start of a
- * layout pass so it reflects the last pass if layout re-runs.
+ * (one per render, so no cross-render leakage); a render lays its tree out
+ * once.
  */
 export class ScopeRegistry {
   private entries: ScopeEntry[] = [];
   /** The scope each node with a literal size solves on each axis, from the
    *  claim walk ({@link solveFixed}), with the keyed domain it maps. */
   private fixed = new Map<object, [FixedSolve?, FixedSolve?]>();
-
-  /** Clear the scope dump and the literal sizes' solves — called before the
-   *  root's claim walk, which solves them again, so a second layout pass
-   *  reads no stale solve, and a node dropped from the tree leaves none. */
-  reset(): void {
-    this.entries = [];
-    this.fixed.clear();
-  }
 
   /**
    * Solve the scope of a node with a literal size on one axis (#1114): its
@@ -186,8 +201,37 @@ export class ScopeRegistry {
     solves[meta.axis] =
       solution === undefined || claim === undefined
         ? undefined
-        : { key, solution, claim };
+        : { key, solution, claim, space };
     return solution;
+  }
+
+  /**
+   * Shared-measure scale equality (#582) at a node with a literal size on
+   * both axes, as {@link recenterEqualMeasure} does at the root: when the
+   * two scopes it solved in the claim walk share a declared unit, both take
+   * the binding (smaller) σ, so one data unit is the same length on x and
+   * y. The other axis's content then does not fill its size: its claim is
+   * its content at that σ, as a layer's box is its content's, so the chart
+   * is narrower than its size there. Call it after both axes'
+   * {@link solveFixed}; a no-op otherwise.
+   */
+  equalizeFixed(node: object, rootKey: string): void {
+    const solves = this.fixed.get(node);
+    const [sx, sy] = solves ?? [];
+    if (
+      solves === undefined ||
+      sx === undefined ||
+      sy === undefined ||
+      !sharesDeclaredMeasure(sx.space, sy.space)
+    )
+      return;
+    const shared = Math.min(sx.solution.sigma, sy.solution.sigma);
+    for (const axis of [0, 1] as const) {
+      const s = solves[axis]!;
+      const meta = { kind: "recenter", rootKey, axis } as const;
+      const solution = this.scopeAt(meta, s.space, s.claim, shared);
+      if (solution !== undefined) solves[axis] = { ...s, solution };
+    }
   }
 
   /** The scope a node with a literal size solved on `axis` in the claim walk

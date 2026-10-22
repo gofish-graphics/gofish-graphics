@@ -52,13 +52,12 @@ export const Default: StoryObj<Args> = {
 
     chart(heatmapData, {
       color: Color.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]),
+      w: args.w,
+      h: args.h,
     })
       .flow(table({ by: { x: "hour", y: "day" },  spacing: 4 }))
       .mark(rect({ fill: "value" }))
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },

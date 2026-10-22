@@ -1,6 +1,6 @@
 import { resolveColorChannel } from "../../color";
 import { posFn } from "../domain";
-import { GoFishNode } from "../_node";
+import { GoFishNode, outlineOverhang } from "../_node";
 import { orientDims } from "../axisDirection";
 import { getValue, isValue, MaybeValue } from "../data";
 import {
@@ -13,6 +13,7 @@ import {
   Transform,
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
+import { boxExtent } from "../extent";
 import { FALLBACK_FONT_FAMILY } from "./fontUtils";
 import { createMark } from "../withGoFish";
 import { MARK_CHANNELS } from "../markChannels.generated";
@@ -212,6 +213,38 @@ export const Text = ({
 
   const dominantBaseline = "auto";
 
+  const finalText = (): string => {
+    const t = isValue(textContent) ? getValue(textContent) : textContent;
+    return t == null ? "" : String(t);
+  };
+  // The glyphs' box about the text's origin, in pixels, measured once (the
+  // claim walk and layout read the same box): in x about the `textAnchor`
+  // point, in y from the box's start edge. When rotated, its footprint is
+  // the rotated box.
+  let measured: { layout: TextLayout; rel: RelBBox } | undefined;
+  const measure = () => {
+    if (measured !== undefined) return measured;
+    const layout = resolveTextLayout(
+      finalText(),
+      fontSize,
+      fontFamily,
+      textAnchor,
+      dominantBaseline,
+      fontStyle,
+      fontWeight
+    );
+    const relRaw: RelBBox = {
+      minX: layout.bbox.minX - layout.anchor.x,
+      maxX: layout.bbox.maxX - layout.anchor.x,
+      minY: layout.bbox.minY - layout.anchor.y,
+      maxY: layout.bbox.maxY - layout.anchor.y,
+    };
+    return (measured = {
+      layout,
+      rel: rotate ? rotateRelBBox(relRaw, rotate) : relRaw,
+    });
+  };
+
   const node = new GoFishNode(
     {
       key,
@@ -233,41 +266,42 @@ export const Text = ({
         dims,
       },
       color: fill,
+      strokeOverhang: outlineOverhang(stroke ?? "none", strokeWidth),
       resolveUnderlyingSpace: () => {
         const xPos = dims[0].center ?? dims[0].min;
         const yPos = dims[1].center ?? dims[1].min;
 
         return [glyphAxis(xPos, dims[0].size), glyphAxis(yPos, dims[1].size)];
       },
+      // A text has a size of its own, measured here, when the claims are
+      // resolved, so whatever composes it leaves it room (#493). In x it
+      // reaches from its anchor point; in y from its box's start edge, or
+      // about its middle when placed by its center.
+      resolveExtent: (_ce, _cs, spaces) => {
+        const { minX, maxX, minY, maxY } = measure().rel;
+        const height = maxY - minY;
+        // A literal position places the text in its parent's pixels.
+        const literal = (axis: 0 | 1) => {
+          const d = dims[axis];
+          const at = d.center ?? d.min;
+          return typeof at === "number" ? at : 0;
+        };
+        const yStart =
+          literal(1) - (dims[1].center !== undefined ? height / 2 : 0);
+        return [
+          boxExtent(spaces[0], -(literal(0) + minX), literal(0) + maxX),
+          boxExtent(spaces[1], -yStart, yStart + height),
+        ];
+      },
       layout: (size, scales, children, node) => {
-        const finalText = isValue(textContent)
-          ? getValue(textContent)
-          : textContent;
-        const layout = resolveTextLayout(
-          finalText == null ? "" : String(finalText),
-          fontSize,
-          fontFamily,
-          textAnchor,
-          dominantBaseline,
-          fontStyle,
-          fontWeight
-        );
-
         // Anchor-relative pixel bbox. When the text is rotated, its layout
         // footprint is the rotated box (e.g. rotate:-90 turns a wide label
         // into a tall strip left of the anchor — a y-title gutter), so we
         // measure the axis-aligned extent of the rotated corners. rotate:0 is
         // the identity here, but we skip the matrix so unrotated text is
         // bit-for-bit unchanged.
-        const relRaw: RelBBox = {
-          minX: layout.bbox.minX - layout.anchor.x,
-          maxX: layout.bbox.maxX - layout.anchor.x,
-          minY: layout.bbox.minY - layout.anchor.y,
-          maxY: layout.bbox.maxY - layout.anchor.y,
-        };
-        const { minX, maxX, minY, maxY } = rotate
-          ? rotateRelBBox(relRaw, rotate)
-          : relRaw;
+        const { layout, rel } = measure();
+        const { minX, maxX, minY, maxY } = rel;
         // A text is a box, placed exactly like a rect of the same size: its
         // origin (local 0, the point parents seat it by and the `baseline`
         // anchor) is the box's START edge in its own axis order — the top in
@@ -358,10 +392,12 @@ export const Text = ({
           if (Number.isFinite(relRot.minX) && Number.isFinite(relRot.minY)) {
             items.push(
               rectItemFromBox(
-                anchorX + relRot.minX,
-                anchorX + relRot.maxX,
-                anchorY + glyphDy + relRot.minY,
-                anchorY + glyphDy + relRot.maxY,
+                // Inset by half the 1 px stroke, so the overlay stays
+                // inside the box it marks and is never clipped at an edge.
+                anchorX + relRot.minX + 0.5,
+                anchorX + relRot.maxX - 0.5,
+                anchorY + glyphDy + relRot.minY + 0.5,
+                anchorY + glyphDy + relRot.maxY - 0.5,
                 toPixel,
                 {
                   role: "overlay",

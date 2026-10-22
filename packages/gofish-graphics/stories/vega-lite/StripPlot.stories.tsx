@@ -20,7 +20,9 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 400, h: 300 },
+  // Vega-Lite's size: a continuous x is 200 px wide, and an ordinal y takes a
+  // 20 px step per value, here five cylinder counts.
+  args: { w: 200, h: 5 * 20 },
   loaders: [async () => ({ cars: await data["cars.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
@@ -33,7 +35,7 @@ export const Default: StoryObj<Args> = {
         cylinders: Math.round(d.Cylinders),
       }));
 
-    chart(cars, { axes: { x: { side: "end" }, y: true } })
+    chart(cars, { axes: { x: { side: "end" }, y: true }, w: args.w, h: args.h })
       .flow(
         // Ascending so cylinders read 3 at the top → 8 at the bottom in y-down.
         derive((d) => [...d].sort((a, b) => a.cylinders - b.cylinders)),
@@ -48,7 +50,7 @@ export const Default: StoryObj<Args> = {
           opacity: 0.7,
         })
       )
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },

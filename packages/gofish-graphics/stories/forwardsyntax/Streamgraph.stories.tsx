@@ -7,9 +7,6 @@ import { ribbon } from "../../src/lib";
 const meta: Meta = {
   title: "Forward Syntax/Streamgraph",
   argTypes: {
-    w: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
     h: {
       control: { type: "number", min: 100, max: 1000, step: 10 },
     },
@@ -17,10 +14,10 @@ const meta: Meta = {
 };
 export default meta;
 
-type Args = { w: number; h: number };
+type Args = { h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 400, h: 400 },
+  args: { h: 400 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -32,16 +29,13 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood)
+    chart(seafood, { h: args.h })
       .flow(
         spread({ by: "lake", dir: "x", spacing: 64, alignment: "middle" }),
         stack({ by: "species", dir: "y" })
       )
       .mark(ribbon({ h: "count", fill: "species", opacity: 0.8 }))
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },

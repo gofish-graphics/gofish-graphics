@@ -85,17 +85,17 @@ const clockTree = {
   ],
 };
 
-const bandUnit = 26; // radial thickness unit; node height = (rdepth+1)*bandUnit
-
 // Wedge node: `w` (the θ extent) is a unit angular WEIGHT (every node an equal slot). The
 // coord is the single σ-scale-root: it sums the weights (N·σ) and fits them to
 // the angular budget, propagating one σ down through the nested distributes — so
 // the ring closes exactly with NO hand-set 2π/N. emX/emY make θ sweep an arc and
 // r a radial band. RootHeight:rdepth → height grows with d.height: root tallest.
+// The height is a radial WEIGHT too, so the coord fits the tallest node to the
+// band between the inner radius and the rim.
 const node = (d: any) =>
   rect({
     w: datum(1),
-    h: (d.height + 1) * bandUnit,
+    h: datum(d.height + 1),
     emX: true,
     emY: true,
     fill: byDepth()(d),

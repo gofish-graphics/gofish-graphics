@@ -15,13 +15,13 @@ export const FieldBetween: StoryObj = {
   render: () => {
     const container = initializeContainer();
 
-    chart(penguins)
+    chart(penguins, { w: 400, h: 300 })
       .flow(
         filter(field("Body Mass (g)").between(3500, 4500, { closed: "left" })),
         scatter({ x: "Flipper Length (mm)", y: "Beak Length (mm)" })
       )
       .mark(circle({ r: 3, fill: "Species" }))
-      .render(container, { w: 400, h: 300 });
+      .render(container);
 
     return container;
   },

@@ -84,9 +84,13 @@ const dot = () =>
   circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 });
 
 /** The keyframes every picture here plays through: one per year, placed by
- *  miles and gas, with `between` in the flow after the sequence. */
-const years = (clock: Clock, ...between: Operator<any, any>[]) =>
-  chart(drivingShifts).flow(
+ *  miles and gas, in a plot of `size`, with `between` in the flow after the
+ *  sequence. */
+const years = (clock: Clock, size: Args, ...between: Operator<any, any>[]) =>
+  chart(drivingShifts, {
+    w: size.w,
+    h: size.h,
+  }).flow(
     time.sequence({ by: "year", on: clock }),
     ...between,
     scatter({ x: "miles", y: "gas" })
@@ -94,8 +98,10 @@ const years = (clock: Clock, ...between: Operator<any, any>[]) =>
 
 /** The port: the line alone, drawn in up to the playhead. Every year stays,
  *  so the line is drawn over everything the playhead has reached. */
-const port = (clock: Clock) =>
-  years(clock, time.history()).mark(line({ along: "year", curve: Curve.linear() }));
+const port = (clock: Clock, size: Args) =>
+  years(clock, size, time.history()).mark(
+    line({ along: "year", curve: Curve.linear() })
+  );
 
 /**
  * The port. The line starts at 1956 and is drawn in, one year every 200 ms,
@@ -114,7 +120,7 @@ export const Animated: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    port(playing()).render(container, { w: args.w, h: args.h });
+    port(playing(), args).render(container);
     return container;
   },
 };
@@ -125,7 +131,7 @@ export const Paused1979: StoryObj<Args> = {
   args: { w: 500, h: 500 },
   render: (args: Args) => {
     const container = initializeContainer();
-    port(paused()).render(container, { w: args.w, h: args.h });
+    port(paused(), args).render(container);
     return container;
   },
 };
@@ -137,8 +143,8 @@ export const Paused1979: StoryObj<Args> = {
  * connects. The line's curve is left to its default, which smooths the run
  * with a monotone cubic, so this is also the cut inside a curve.
  */
-const withDots = (clock: Clock) =>
-  years(clock)
+const withDots = (clock: Clock, size: Args) =>
+  years(clock, size)
     .mark(time.history([dot()]))
     .layer(line({ along: "year", stroke: "black", strokeWidth: 2 }));
 
@@ -146,7 +152,7 @@ export const WithDots: StoryObj<Args> = {
   args: { w: 500, h: 500 },
   render: (args: Args) => {
     const container = initializeContainer();
-    withDots(playing()).render(container, { w: args.w, h: args.h });
+    withDots(playing(), args).render(container);
     return container;
   },
 };
@@ -157,7 +163,7 @@ export const WithDotsPaused1979: StoryObj<Args> = {
   args: { w: 500, h: 500 },
   render: (args: Args) => {
     const container = initializeContainer();
-    withDots(paused()).render(container, { w: args.w, h: args.h });
+    withDots(paused(), args).render(container);
     return container;
   },
 };
@@ -175,8 +181,8 @@ const orangeDot = () =>
  * playhead. Both the line and the moving dot are smooth, and both use the
  * years as their knots, so the moving dot rides exactly on the line's tip.
  */
-const movingDot = (clock: Clock) =>
-  years(clock)
+const movingDot = (clock: Clock, size: Args) =>
+  years(clock, size)
     .mark(
       layer([
         time.history([dot()]),
@@ -189,10 +195,7 @@ export const MovingDot: StoryObj<Args> = {
   args: { w: 500, h: 500 },
   render: (args: Args) => {
     const container = initializeContainer();
-    movingDot(playing()).render(container, {
-      w: args.w,
-      h: args.h,
-    });
+    movingDot(playing(), args).render(container);
     return container;
   },
 };
@@ -203,18 +206,15 @@ export const MovingDotPaused1979: StoryObj<Args> = {
   args: { w: 500, h: 500 },
   render: (args: Args) => {
     const container = initializeContainer();
-    movingDot(paused()).render(container, {
-      w: args.w,
-      h: args.h,
-    });
+    movingDot(paused(), args).render(container);
     return container;
   },
 };
 
 /** Only the last ten years: the line's tail is cut as well as its tip, so a
  *  ten-year stretch of the run travels along the path. */
-const comet = (clock: Clock) =>
-  years(clock, time.history({ last: 10 })).mark(
+const comet = (clock: Clock, size: Args) =>
+  years(clock, size, time.history({ last: 10 })).mark(
     line({ along: "year", curve: Curve.linear() })
   );
 
@@ -222,7 +222,7 @@ export const Comet: StoryObj<Args> = {
   args: { w: 500, h: 500 },
   render: (args: Args) => {
     const container = initializeContainer();
-    comet(playing()).render(container, { w: args.w, h: args.h });
+    comet(playing(), args).render(container);
     return container;
   },
 };
@@ -233,7 +233,7 @@ export const CometPaused1979: StoryObj<Args> = {
   args: { w: 500, h: 500 },
   render: (args: Args) => {
     const container = initializeContainer();
-    comet(paused()).render(container, { w: args.w, h: args.h });
+    comet(paused(), args).render(container);
     return container;
   },
 };

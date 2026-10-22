@@ -94,7 +94,9 @@ async function main() {
       { id: "a", start: 10, width: 2 },
       { id: "b", start: 20, width: 4 },
     ];
+    // No axes, so the plot is the whole canvas (#1032).
     const dl = await chart(tasks, {
+      axes: false,
       schema: { start: Schema.unit("day"), width: Schema.unit("day") },
     })
       .flow(scatter({ by: "id", x: "start" }))
@@ -102,9 +104,12 @@ async function main() {
       .toDisplayList({ w: 200, h: 50 });
     const [a, b] = byFill(dl, "green").sort((p, q) => p.x! - q.x!);
     const center = (r: Item) => r.x! + r.w! / 2;
+    // The bars reach past their datums by half their widths, which the
+    // canvas keeps clear (#493), so the datums sit a little less than the
+    // canvas width apart. Over [0, 20] they would sit at most half of it apart.
     check(
-      "the bars' datums sit the canvas width apart (domain [10, 20])",
-      near(center(b) - center(a), 200),
+      "the bars' datums sit the plot width apart (domain [10, 20])",
+      center(b) - center(a) > 120 && a.x! >= -1e-6 && b.x! + b.w! <= 200 + 1e-6,
       { a, b }
     );
   }

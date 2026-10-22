@@ -21,10 +21,10 @@ from python_stories.vega_data_urls import read_json
 
 def story_default():
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, w=400, h=300)
         .flow(spread(by="lake", dir="x"))
         .mark(rect(h="count").label(field("count").sum())),
-        {"w": 400, "h": 300},
+        {},
     )
 
 
@@ -32,7 +32,7 @@ def story_default():
 
 def story_center():
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, w=400, h=300)
         .flow(
             spread(by="lake", dir="x"),
             stack(by="species", dir="y"),
@@ -42,7 +42,7 @@ def story_center():
                 "count", position="center", font_size=10
             )
         ),
-        {"w": 400, "h": 300},
+        {},
     )
 
 
@@ -50,10 +50,10 @@ def story_center():
 
 def story_above():
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, w=400, h=300)
         .flow(spread(by="lake", dir="x"))
         .mark(rect(h="count").label(field("count").sum(), position="outset")),
-        {"w": 400, "h": 300},
+        {},
     )
 
 
@@ -61,7 +61,7 @@ def story_above():
 
 def story_below():
     return (
-        chart(SEAFOOD, axes=False)
+        chart(SEAFOOD, axes=False, w=400, h=300)
         .flow(
             spread(by="lake", dir="y", spacing=30),
             stack(by="species", dir="x"),
@@ -71,7 +71,7 @@ def story_below():
                 "count", position="outset-bottom", font_size=9
             )
         ),
-        {"w": 400, "h": 300},
+        {},
     )
 
 
@@ -79,7 +79,7 @@ def story_below():
 
 def story_left():
     return (
-        chart(SEAFOOD, axes=False)
+        chart(SEAFOOD, axes=False, w=400, h=300)
         .flow(
             spread(by="lake", dir="y"),
             spread(by="species", dir="x", spacing=25),
@@ -92,7 +92,7 @@ def story_left():
                 offset=13,
             )
         ),
-        {"w": 400, "h": 300},
+        {},
     )
 
 
@@ -100,14 +100,14 @@ def story_left():
 
 def story_right():
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, w=400, h=300)
         .flow(spread(by="lake", dir="y"))
         .mark(
             rect(w="count").label(
                 field("count").sum(), position="outset-right", offset=15
             )
         ),
-        {"w": 400, "h": 300},
+        {},
     )
 
 
@@ -115,7 +115,7 @@ def story_right():
 
 def story_above_start():
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, w=500, h=300)
         .flow(
             spread(by="lake", dir="x"),
             stack(by="species", dir="x"),
@@ -125,7 +125,7 @@ def story_above_start():
                 "count", position="outset-top-start", font_size=9
             )
         ),
-        {"w": 500, "h": 300},
+        {},
     )
 
 
@@ -133,7 +133,7 @@ def story_above_start():
 
 def story_above_end():
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, w=500, h=300)
         .flow(
             spread(by="lake", dir="x"),
             stack(by="species", dir="x"),
@@ -143,7 +143,7 @@ def story_above_end():
                 "count", position="outset-top-end", font_size=9
             )
         ),
-        {"w": 500, "h": 300},
+        {},
     )
 
 
@@ -203,7 +203,7 @@ def story_all_positions():
     ]
     return (
         spread(rows, dir="y", spacing=28, alignment="start"),
-        {"w": 720, "h": 1200},
+        {},
     )
 
 
@@ -213,7 +213,7 @@ def story_all_positions():
 
 def story_label_on_spread():
     return (
-        chart(SEAFOOD, axes=False)
+        chart(SEAFOOD, axes=False, w=500, h=300)
         .flow(
             spread(by="lake", dir="x", spacing=50).label(
                 "lake", position="outset-top-start", font_size=13, rotate=60
@@ -224,7 +224,7 @@ def story_label_on_spread():
             .flow(stack(by="species", dir="x"))
             .mark(rect(h="count", fill="species"))
         ),
-        {"w": 500, "h": 300},
+        {},
     )
 
 
@@ -242,14 +242,14 @@ _HEAT_DATA = [
 
 def story_heatmap_with_labels():
     return (
-        chart(_HEAT_DATA, color=Color.gradient(["#e0f3ff", "#08519c"]))
+        chart(_HEAT_DATA, color=Color.gradient(["#e0f3ff", "#08519c"]), w=420, h=280)
         .flow(table(by={"x": "hour", "y": "day"}, spacing=4))
         .mark(
             rect(fill="value").label(
                 "value", position="center", font_size=11
             )
         ),
-        {"w": 420, "h": 280},
+        {},
     )
 
 
@@ -276,7 +276,7 @@ def story_rotated():
             spacing=40,
             alignment="start",
         ),
-        {"w": 500, "h": 800},
+        {},
     )
 
 
@@ -287,14 +287,14 @@ def story_label_on_stack_operator():
         "packages/gofish-graphics/src/data/titanicPassengers.json"
     )
     return (
-        chart(titanic_passengers, axes=False)
+        chart(titanic_passengers, axes=False, w=260, h=300)
         .flow(
             stack(by="pclass", dir="y").label(
                 "pclass", position="center", font_size=14, color="white"
             )
         )
         .mark(rect(w=120, h=field("survived").count())),
-        {"w": 260, "h": 300},
+        {},
     )
 
 
@@ -305,7 +305,7 @@ def story_label_on_stack_aggregate():
         "packages/gofish-graphics/src/data/titanicPassengers.json"
     )
     return (
-        chart(titanic_passengers, axes=False)
+        chart(titanic_passengers, axes=False, w=260, h=300)
         .flow(
             stack(by="pclass", dir="y").label(
                 field("survived").count(),
@@ -315,7 +315,7 @@ def story_label_on_stack_aggregate():
             )
         )
         .mark(rect(w=120, h=field("survived").count())),
-        {"w": 260, "h": 300},
+        {},
     )
 
 
@@ -326,7 +326,7 @@ def story_label_on_stack_aggregate():
 
 def story_two_labels_per_bar():
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, w=400, h=300)
         .flow(spread(by="lake", dir="x", spacing=40))
         .mark(
             rect(h=field("count").sum())
@@ -338,7 +338,7 @@ def story_two_labels_per_bar():
             )
             .label("lake", position="outset-top", font_size=9)
         ),
-        {"w": 400, "h": 300},
+        {},
     )
 
 
@@ -360,6 +360,8 @@ def story_normalized_stacked_bar_with_labels():
             year2000,
             color=Color.palette({"Female": "#675193", "Male": "#ca8861"}),
             axes={"x": {"side": "end", "title": "proportion"}, "y": True},
+            w=200,
+            h=19 * 17,
         )
         .flow(
             derive(_decode_sex),
@@ -377,7 +379,7 @@ def story_normalized_stacked_bar_with_labels():
             rect(fill="sex").label("people", position="center", color="white")
         ),
         # Keep the continuous proportion x-axis at the bottom (y-end).
-        {"w": 350, "h": 400},
+        {},
     )
 
 
@@ -425,5 +427,5 @@ def story_position_showcase():
         )
     return (
         chart([SHOWCASE_LABELS], axes=False).mark(mark),
-        {"w": 660, "h": 280},
+        {},
     )

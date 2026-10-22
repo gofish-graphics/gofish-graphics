@@ -34,11 +34,11 @@ def story_spatial_twin():
 # One frame of the animation: the 1955 scatter the playback starts from.
 def story_frame1955():
     return (
-        chart(_gapminder(), legend=False)
+        chart(_gapminder(), legend=False, w=200, h=200)
         .flow(
             filter(lambda d: d["year"] == 1955),
             scatter(by="country", x="fertility", y="life_expect"),
         )
         .mark(circle(r=4, fill="country")),
-        {"w": 500, "h": 400},
+        {},
     )

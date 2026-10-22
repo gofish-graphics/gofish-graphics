@@ -21,12 +21,12 @@ def story_default():
         )
 
     chart_builder = (
-        chart(SEAFOOD)
+        chart(SEAFOOD, w=400, h=400)
         .flow(spread(by="lake", dir="x"))
         .mark(rect(h="count"))
         .layer(chart().flow(group(by="lake")).mark(label_mark))
     )
-    return (chart_builder, {"w": 400, "h": 400})
+    return (chart_builder, {})
 
 
 # Demonstrates `pluck`, the uncollapsed sibling of the `by="field"` homogeneity
@@ -45,9 +45,9 @@ def story_species_count_per_lake():
         )
 
     chart_builder = (
-        chart(SEAFOOD)
+        chart(SEAFOOD, w=400, h=400)
         .flow(spread(by="lake", dir="x"))
         .mark(rect(h="count"))
         .layer(chart().flow(group(by="lake")).mark(label_mark))
     )
-    return (chart_builder, {"w": 400, "h": 400})
+    return (chart_builder, {})

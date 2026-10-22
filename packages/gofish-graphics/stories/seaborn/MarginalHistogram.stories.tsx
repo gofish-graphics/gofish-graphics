@@ -90,8 +90,8 @@ export const Default: StoryObj<Args> = {
           Constraint.position({ x: 0, y: 0, anchor: "baseline" }, [scatter]),
           Constraint.align({ x: "baseline" } as any, [scatter, topHist]),
           Constraint.align({ y: "baseline" } as any, [scatter, rightHist]),
-          Constraint.position({ y: args.h + GAP, anchor: "start" } as any, [topHist]),
-          Constraint.position({ x: args.w + GAP, anchor: "start" } as any, [rightHist]),
+          Constraint.distribute({ dir: "y", spacing: GAP }, [scatter, topHist]),
+          Constraint.distribute({ dir: "x", spacing: GAP }, [scatter, rightHist]),
         ])
         .render(container, {
           w: args.w,

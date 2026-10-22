@@ -29,17 +29,23 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 400, h: 300 },
+  // Vega-Lite's size: a 20 px step per offset bar, three per category over
+  // three categories, and a continuous y is 200 px tall.
+  args: { w: 3 * 3 * 20, h: 200 },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(values, { color: Color.palette("tableau10") })
+    chart(values, {
+      color: Color.palette("tableau10"),
+      w: args.w,
+      h: args.h,
+    })
       .flow(
         spread({ by: "category",  dir: "x", spacing: 24 }),
         spread({ by: "group",  dir: "x", spacing: 0 })
       )
       .mark(rect({ h: "value", fill: "group" }))
-      .render(container, { h: args.h } as any);
+      .render(container);
 
     return container;
   },

@@ -23,7 +23,7 @@ def story_connected_dots_per_group():
     `chart()` scope, so it draws the store's rows, and the line tier connects
     the dots that tier drew."""
     return (
-        chart(SALES)
+        chart(SALES, w=420, h=220)
         .flow(spread(by="store", dir="x", spacing=32))
         .mark(
             chart(axes=False)
@@ -31,7 +31,7 @@ def story_connected_dots_per_group():
             .mark(circle(r=4, fill="#08519c"))
             .layer(line(stroke="#6baed6", stroke_width=2))
         ),
-        {"w": 420, "h": 220},
+        {},
     )
 
 
@@ -70,7 +70,7 @@ def story_daily_highs_over_readings():
     own. The tier's rows, with their time column, travel as an Arrow table of
     their own, so they keep their time type and share the line's time axis."""
     return (
-        chart(READINGS)
+        chart(READINGS, w=560, h=220)
         .flow(scatter(by="time", x="time", y="temp"))
         .mark(line(stroke="steelblue", stroke_width=2))
         .layer(
@@ -78,7 +78,7 @@ def story_daily_highs_over_readings():
             .flow(scatter(by="time", x="time", y="temp"))
             .mark(circle(r=4, fill="firebrick"))
         ),
-        {"w": 560, "h": 220},
+        {},
     )
 
 
@@ -88,7 +88,7 @@ def story_captioned_bars_per_group():
     The mark is the `spread([...])`, and its chart child binds the store's
     rows, as an empty scope does wherever a chart sits."""
     return (
-        chart(SALES, axes=False)
+        chart(SALES, axes=False, w=420, h=220)
         .flow(spread(by="store", dir="x", spacing=32, alignment="end"))
         .mark(
             spread(
@@ -103,5 +103,5 @@ def story_captioned_bars_per_group():
                 alignment="middle",
             )
         ),
-        {"w": 420, "h": 220},
+        {},
     )

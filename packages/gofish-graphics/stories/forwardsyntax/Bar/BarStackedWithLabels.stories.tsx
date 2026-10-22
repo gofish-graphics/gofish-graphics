@@ -19,7 +19,7 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 400, h: 400 },
+  args: { w: 440, h: 400 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -31,7 +31,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood)
+    chart(seafood, { w: args.w, h: args.h })
       .flow(
         spread({ by: "lake",  dir: "x" }), //
         stack({ by: "species",  dir: "y" })
@@ -43,10 +43,7 @@ export const Default: StoryObj<Args> = {
           fontSize: 12,
         })
       )
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },

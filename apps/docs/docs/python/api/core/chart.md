@@ -51,8 +51,9 @@ Returns a `ChartBuilder` with [`.flow()`](/python/api/core/flow),
 
 ::: tip
 Chart **size** is set on [`.render()`](/python/api/core/render), not `chart()` —
-`render(w=500, h=300)`. `coord` and `color` are `chart()` options; `axes` and
-`padding` can be set on either, as in JS.
+`render(w=500, h=300)`. `coord` and `color` are `chart()` options; `axes` can be
+set on either, as in JS. `padding` is a `chart()` option only: the room
+between a polar chart's circle and the edge of its box.
 :::
 
 ## Axes

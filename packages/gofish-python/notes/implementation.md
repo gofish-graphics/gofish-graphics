@@ -200,7 +200,7 @@ Static (Python → JS, set once in `__init__`):
 - `doc` (Dict, synced) — The IR document as `ir_payload` ships it: its
   `root`, and its `tables` (the rows of every chart with rows of its own,
   wherever it sits) as base64 Arrow IPC by table id
-- `width`, `height`, `axes`, `legend`, `padding`, `debug` (synced) — Render options
+- `width`, `height`, `axes`, `legend`, `debug` (synced) — Render options
 - `container_id` (synced) — Unique DOM element ID
 
 The bridge's one call (bidirectional via observers), for every Python

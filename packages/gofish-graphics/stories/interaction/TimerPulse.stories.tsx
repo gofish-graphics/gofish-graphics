@@ -53,7 +53,7 @@ export const PaintOnly: StoryObj<Args> = {
     // Two states, 400ms each: the clock emits 0, 1, 0, 1, …
     const t = timer({ domain: [0, 1], step: 1, duration: 800 });
 
-    chart(base)
+    chart(base, { w: args.w, h: args.h })
       .flow(spread({ by: "cat", dir: "x" }))
       .mark(
         rect({
@@ -61,10 +61,7 @@ export const PaintOnly: StoryObj<Args> = {
           fill: live(() => (t() === 0 ? "#6b9bd1" : "#d62728")),
         })
       )
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },
@@ -88,7 +85,7 @@ export const GrowingData: StoryObj<Args> = {
       duration: SERIES.length * 500,
     });
 
-    chart(SERIES)
+    chart(SERIES, { w: args.w, h: args.h })
       .flow(
         // regime 2: reading head() in derive() makes it a pipeline dependency.
         // Each new index slides a rolling window over the real series and
@@ -100,10 +97,7 @@ export const GrowingData: StoryObj<Args> = {
         spread({ by: "t", dir: "x" })
       )
       .mark(rect({ h: "count", fill: "#6b9bd1" }))
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },

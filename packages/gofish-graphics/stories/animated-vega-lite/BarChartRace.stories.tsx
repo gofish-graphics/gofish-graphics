@@ -328,8 +328,6 @@ const SLOTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 
 /** The gap between two bars, in pixels. */
 const BAR_SPACING = 2;
-/** The library's default padding, which the clip math depends on. */
-const PADDING = 40;
 
 /**
  * PROBE (issue #831): the top-ten race with D3's entering and exiting bars,
@@ -345,7 +343,9 @@ const PADDING = 40;
  * - Slot 11 is hidden the way D3 hides it: it is a full band like the others,
  *   laid out just below the ten visible ones. The chart is laid out at eleven
  *   bands and the story's container is cut off at the bottom of band 10 with
- *   a CSS `clip-path` (`clipToTopTen`). A bar entering the top ten slides up
+ *   a CSS `clip-path` (`clipToTopTen`). The chart's own `h` is its plot, the
+ *   eleven bands, and the render gives no height, so the SVG ends at the
+ *   bottom of the plot. A bar entering the top ten slides up
  *   into view at full height, and a leaving one slides down out of it; the
  *   parked brands and their names are drawn but cut off.
  *   DECLARED HACK (issue #889): the library has no way to say "this slot is
@@ -369,7 +369,7 @@ const raceFromBelow = (
   const pitch = (args.h + BAR_SPACING) / 10;
   const layoutH = 11 * pitch - BAR_SPACING;
   clipToTopTen(container, pitch);
-  return chart(top10Ranked, { legend: false })
+  return chart(top10Ranked, { legend: false, h: layoutH })
     .flow(
       time.sequence({ by: "year", on: year }),
       spread({
@@ -392,18 +392,16 @@ const raceFromBelow = (
     .layer(yearReadout(year, args.h))
     .render(container, {
       w: args.w,
-      h: layoutH,
-      padding: PADDING,
       axes: { x: { side: "start" }, y: false },
     } as any);
 };
 
-/** Cut the container off at the bottom of band 10. The bottom reserve is the
- *  padding alone, since nothing is drawn under the plot, so this needs no DOM
- *  reads. `display: flex` removes the gap under the inline SVG. */
+/** Cut the container off at the bottom of band 10. The SVG ends at the
+ *  bottom of band 11, since nothing is drawn under the plot, so this needs
+ *  no DOM reads. `display: flex` removes the gap under the inline SVG. */
 const clipToTopTen = (container: HTMLElement, pitch: number) => {
   container.style.display = "flex";
-  container.style.clipPath = `inset(0 0 ${PADDING + pitch}px 0)`;
+  container.style.clipPath = `inset(0 0 ${pitch}px 0)`;
 };
 
 export const Top10FromBelow: StoryObj<Args> = {

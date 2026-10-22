@@ -914,8 +914,14 @@ function strategyType(
  *  options table (`::: gofish-ref ChartOptions`) read it as the named option
  *  type `ChartOptions` (`OPTION_TYPES`). */
 export const CHART_OPTIONS: FieldGroup = group({
-  w: { type: t.number, doc: "Chart width in pixels." },
-  h: { type: t.number, doc: "Chart height in pixels." },
+  w: {
+    type: t.number,
+    doc: "Width of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it.",
+  },
+  h: {
+    type: t.number,
+    doc: "Height of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it.",
+  },
   coord: {
     type: t.any,
     doc: "Coordinate transform for the whole chart, made by a call in the Coord family: Coord.polar(), Coord.clock(), Coord.wavy(), ...",
@@ -936,7 +942,8 @@ export const CHART_OPTIONS: FieldGroup = group({
   },
   padding: {
     type: t.number,
-    doc: "Extra padding in pixels between the plot and the SVG edge (polar charts, overflowing labels).",
+    default: 30,
+    doc: "Room in pixels between a non-linear coordinate space's drawing (a polar disc, a map) and the edge of the chart's box. It has no effect on a chart in linear coordinates.",
   },
   schema: {
     type: t.record(t.any),

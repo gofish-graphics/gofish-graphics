@@ -82,7 +82,7 @@ chart(seafood, axes=True).flow(
     stack(by=field("species").sort("count"), dir="y"),
 ).mark(rect(h="count", fill="species")).layer(
     ribbon(opacity=0.8)
-).render(w=400, h=400)
+).render(h=400)
 ```
 
 No `by` needed: the `stack(by="species")` tier already told the flow how to

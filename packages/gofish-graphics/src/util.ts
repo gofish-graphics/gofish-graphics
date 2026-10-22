@@ -24,6 +24,10 @@ export const lerp = (a: number, b: number, t: number): number => {
 export const clamp = (v: number, lo: number, hi: number): number =>
   Math.min(hi, Math.max(lo, v));
 
+/** A length in pixels as room: never below 0, and 0 when not finite. */
+export const room = (px: number): number =>
+  Number.isFinite(px) ? Math.max(0, px) : 0;
+
 /** Euclidean modulo: `a % n` with the sign of `n`, so a negative `a` wraps
  *  around to the top of the range. */
 export const mod = (a: number, n: number): number =>

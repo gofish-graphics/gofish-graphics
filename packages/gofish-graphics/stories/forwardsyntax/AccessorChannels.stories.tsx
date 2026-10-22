@@ -22,10 +22,10 @@ export const BarHeight: StoryObj<Args> = {
   args: { w: 400, h: 300 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(seafood)
+    chart(seafood, { w: args.w, h: args.h })
       .flow(spread({ by: "lake", dir: "x" }))
       .mark(rect({ h: (d: { count: number }) => d.count }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -35,7 +35,7 @@ export const RoseRadius: StoryObj<Args> = {
   args: { w: 400, h: 400 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(seafood, { coord: Coord.clock() })
+    chart(seafood, { coord: Coord.clock(), w: args.w, h: args.h })
       .flow(spread({ by: "lake", dir: "x", spacing: 0 }))
       .mark(
         rect({
@@ -45,7 +45,7 @@ export const RoseRadius: StoryObj<Args> = {
           dims: { r: { size: (d: { count: number }) => Math.sqrt(d.count) } },
         })
       )
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };

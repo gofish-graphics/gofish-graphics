@@ -30,7 +30,7 @@ export const Default: StoryObj<Args> = {
 
     const p = pointer();
 
-    chart(seafood)
+    chart(seafood, { w: args.w, h: args.h })
       .flow(spread({ by: "lake", dir: "x" }))
       // regime 0: the pointer read lives inside live() → paint patch only.
       .mark(
@@ -39,10 +39,7 @@ export const Default: StoryObj<Args> = {
           fill: live((d) => (d === p.datum() ? "#d62728" : "#6b9bd1")),
         })
       )
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },

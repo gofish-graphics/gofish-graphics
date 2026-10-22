@@ -73,13 +73,15 @@ export const Likert: StoryObj<Args> = {
       schema: { response: Schema.ordered(LEVELS).diverging() },
       color: likertColors,
       axes: { x: { title: "Respondents" }, y: true },
+      w: args.w,
+      h: args.h,
     })
       .flow(
         spread({ by: "question", dir: "y" }),
         stack({ by: "response", dir: "x" })
       )
       .mark(rect({ w: "count", fill: "response" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -109,13 +111,15 @@ export const LikertEven: StoryObj<Args> = {
       schema: { response: Schema.ordered(LEVELS4).diverging() },
       color: likertColors,
       axes: { x: { title: "Respondents" }, y: true },
+      w: args.w,
+      h: args.h,
     })
       .flow(
         spread({ by: "question", dir: "y" }),
         stack({ by: "response", dir: "x" })
       )
       .mark(rect({ w: "count", fill: "response" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };
@@ -164,13 +168,15 @@ export const PopulationPyramid: StoryObj<Args> = {
       schema: { sex: Schema.ordered(["Women", "Men"]).diverging() },
       color: Color.palette({ Women: "#c05780", Men: "#3b75af" }),
       axes: { x: { title: "People (millions)" }, y: true },
+      w: args.w,
+      h: args.h,
     })
       .flow(
         spread({ by: field("age").reverse(), dir: "y", spacing: 1 }),
         stack({ by: "sex", dir: "x" })
       )
       .mark(rect({ w: "people", fill: "sex" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };

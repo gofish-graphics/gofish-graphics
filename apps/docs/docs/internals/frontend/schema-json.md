@@ -3109,11 +3109,11 @@ for the API.
       "properties": {
         "w": {
           "$ref": "#/$defs/Number",
-          "description": "Chart width in pixels."
+          "description": "Width of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it."
         },
         "h": {
           "$ref": "#/$defs/Number",
-          "description": "Chart height in pixels."
+          "description": "Height of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it."
         },
         "coord": {
           "description": "Coordinate transform for the whole chart, made by a call in the Coord family: Coord.polar(), Coord.clock(), Coord.wavy(), ..."
@@ -3133,7 +3133,8 @@ for the API.
         },
         "padding": {
           "$ref": "#/$defs/Number",
-          "description": "Extra padding in pixels between the plot and the SVG edge (polar charts, overflowing labels)."
+          "description": "Room in pixels between a non-linear coordinate space's drawing (a polar disc, a map) and the edge of the chart's box. It has no effect on a chart in linear coordinates.",
+          "default": 30
         },
         "schema": {
           "type": "object",

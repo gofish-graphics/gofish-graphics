@@ -23,10 +23,10 @@ MOVIES = [
 
 def story_rating_histogram():
     return (
-        chart(MOVIES, axes=True)
+        chart(MOVIES, axes=True, w=560, h=200)
         .flow(spread(by=field("rating").bin(Bin.step(0.5)), dir="x", spacing=1))
         .mark(rect(h=field("rating").count(), fill="steelblue")),
-        {"w": 560, "h": 200},
+        {},
     )
 
 
@@ -61,64 +61,64 @@ DAILY = [d for d in ALL_DAILY if not d["date"].startswith("2024-04")]
 
 def story_monthly_bars():
     return (
-        chart(DAILY, schema={"date": Schema.time()}, axes=True)
+        chart(DAILY, schema={"date": Schema.time()}, axes=True, w=560, h=200)
         .flow(spread(by=field("date").bin(Calendar.year).bin(Calendar.month), dir="x"))
         .mark(rect(h=field("value").sum(), fill="steelblue")),
-        {"w": 560, "h": 200},
+        {},
     )
 
 
 def story_stacked_monthly_bars():
     return (
-        chart(ALL_DAILY, schema={"date": Schema.time()}, axes=True)
+        chart(ALL_DAILY, schema={"date": Schema.time()}, axes=True, w=560, h=200)
         .flow(
             spread(by=field("date").bin(Calendar.year).bin(Calendar.month), dir="x"),
             stack(by="region", dir="y"),
         )
         .mark(rect(h=field("value").sum(), fill="region")),
-        {"w": 560, "h": 200},
+        {},
     )
 
 
 def story_rating_histogram_continuous():
     return (
-        chart(MOVIES, axes=True)
+        chart(MOVIES, axes=True, w=560, h=200)
         .flow(partition(by=field("rating").bin(Bin.step(0.5)), dir="x"))
         .mark(rect(h=field("rating").count(), fill="steelblue", inset=0.5)),
-        {"w": 560, "h": 200},
+        {},
     )
 
 
 def story_month_bars_true_widths():
     return (
-        chart(ALL_DAILY, schema={"date": Schema.time()}, axes=True)
+        chart(ALL_DAILY, schema={"date": Schema.time()}, axes=True, w=560, h=200)
         .flow(partition(by=field("date").bin([Calendar.year, Calendar.month]), dir="x"))
         .mark(rect(h=field("value").sum(), fill="steelblue", inset=1)),
-        {"w": 560, "h": 200},
+        {},
     )
 
 
 def story_stacked_month_bars_true_widths():
     return (
-        chart(DAILY, schema={"date": Schema.time()}, axes=True)
+        chart(DAILY, schema={"date": Schema.time()}, axes=True, w=560, h=200)
         .flow(
             partition(by=field("date").bin(Calendar.year).bin(Calendar.month), dir="x"),
             stack(by="region", dir="y"),
         )
         .mark(rect(h=field("value").sum(), fill="region", inset=1)),
-        {"w": 560, "h": 200},
+        {},
     )
 
 
 def story_grouped_month_bars_true_widths():
     return (
-        chart(ALL_DAILY, schema={"date": Schema.time()}, axes=True)
+        chart(ALL_DAILY, schema={"date": Schema.time()}, axes=True, w=560, h=200)
         .flow(
             partition(by=field("date").bin([Calendar.year, Calendar.month]), dir="x"),
             spread(by="region", dir="x"),
         )
         .mark(rect(h=field("value").sum(), fill="region")),
-        {"w": 560, "h": 200},
+        {},
     )
 
 
@@ -133,10 +133,10 @@ def _between(start, end):
 
 def story_seasonal_precipitation():
     return (
-        chart(WEATHER, schema={"date": Schema.time()}, axes=True)
+        chart(WEATHER, schema={"date": Schema.time()}, axes=True, w=560, h=220)
         .flow(spread(by=field("date").bin(Calendar.month), dir="x"))
         .mark(rect(h=field("precipitation").mean(), fill="steelblue")),
-        {"w": 560, "h": 220},
+        {},
     )
 
 
@@ -146,10 +146,12 @@ def story_month_bars_product():
             _between("2014-07-01", "2015-07-01"),
             schema={"date": Schema.time()},
             axes={"x": {"label": {"angle": "auto"}}, "y": True},
+            w=600,
+            h=220,
         )
         .flow(spread(by=field("date").bin([Calendar.year, Calendar.month]), dir="x"))
         .mark(rect(h=field("precipitation").sum(), fill="steelblue")),
-        {"w": 600, "h": 220},
+        {},
     )
 
 
@@ -159,10 +161,12 @@ def story_month_bars_chained():
             _between("2014-01-01", "2016-01-01"),
             schema={"date": Schema.time()},
             axes=True,
+            w=640,
+            h=220,
         )
         .flow(spread(by=field("date").bin(Calendar.year).bin(Calendar.month), dir="x"))
         .mark(rect(h=field("precipitation").sum(), fill="steelblue")),
-        {"w": 640, "h": 220},
+        {},
     )
 
 
@@ -179,6 +183,8 @@ def story_grouped_month_bars():
             WINTER,
             schema={"date": Schema.time()},
             axes={"x": {"label": {"angle": "auto"}}, "y": True},
+            w=640,
+            h=240,
         )
         .flow(
             spread(
@@ -189,7 +195,7 @@ def story_grouped_month_bars():
             spread(by=BY_WEATHER, dir="x", spacing=1),
         )
         .mark(rect(h=field("weather").count(), fill="weather")),
-        {"w": 640, "h": 240},
+        {},
     )
 
 
@@ -199,6 +205,8 @@ def story_grouped_month_bars_hidden_inner():
             WINTER,
             schema={"date": Schema.time()},
             axes={"x": {"levels": [False, True]}, "y": True},
+            w=640,
+            h=240,
         )
         .flow(
             spread(
@@ -209,7 +217,7 @@ def story_grouped_month_bars_hidden_inner():
             spread(by=BY_WEATHER, dir="x", spacing=1),
         )
         .mark(rect(h=field("weather").count(), fill="weather")),
-        {"w": 640, "h": 240},
+        {},
     )
 
 
@@ -219,19 +227,21 @@ def story_month_bars_product_true_widths():
             _between("2014-01-01", "2016-01-01"),
             schema={"date": Schema.time()},
             axes=True,
+            w=640,
+            h=220,
         )
         .flow(partition(by=field("date").bin([Calendar.year, Calendar.month]), dir="x"))
         .mark(rect(h=field("precipitation").sum(), fill="steelblue", inset=1)),
-        {"w": 640, "h": 220},
+        {},
     )
 
 
 def story_weekday_temperature():
     return (
-        chart(WEATHER, schema={"date": Schema.time()}, axes=True)
+        chart(WEATHER, schema={"date": Schema.time()}, axes=True, w=420, h=220)
         .flow(spread(by=field("date").bin(Calendar.weekday), dir="x"))
         .mark(rect(h=field("temp_max").mean(), fill="steelblue")),
-        {"w": 420, "h": 220},
+        {},
     )
 
 
@@ -245,6 +255,8 @@ def story_calendar_heatmap():
                 "x": {"title": False, "levels": [False, Calendar.month, Calendar.year]},
                 "y": {"title": False},
             },
+            w=1100,
+            h=120,
         )
         .flow(
             # Weeks from Sunday, as GitHub's calendar has them: 2012 starts
@@ -258,5 +270,5 @@ def story_calendar_heatmap():
             )
         )
         .mark(rect(fill=field("temp_max").mean())),
-        {"w": 1100, "h": 120},
+        {},
     )

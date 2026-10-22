@@ -63,12 +63,34 @@ ring also records the boxes inside it as `GoFishNode.chrome`:
 - `chrome.content` is the node without chrome.
 - `chrome.withAxes` is the content with its axis gutters and category label
   rows. Titles and the legend are seated around this box, and the render root
-  uses it as its frame on the canvas (see
-  [Layout & Render Passes](/internals/layout/passes)).
+  reads its axis direction off it.
+- `chrome.rings` lists the rings, innermost first. A ring's first child is the
+  ring inside it (or the content); its other children are its chrome.
+- `chrome.gutters` is how far the chrome reaches past the plot on each side
+  (#1032), which the node's layout reads off the claims. See
+  [Chrome gutters](/internals/layout/passes#chrome-gutters).
 - The outermost ring itself is the box with all chrome.
 
 Tick and category labels are chrome, so they lie outside `chrome.content`.
 Code that needs a node's box without its axes reads `chrome.content`.
+
+Chrome sits outside its chart and takes room: every chrome shape claims its
+size (a text is measured when the claims are resolved), each ring claims the
+hull of what it wraps and of its shapes where its constraints place them
+(`placeByClaims`), and the outermost ring hands its content what its gutters
+leave of its slot. A category label is centered on its slot's ref. The claim
+walk knows where the slot lands (`placementIn`): on a data axis (time or
+number bins) through the data, and on a category axis because a band is a
+share, which claims one σ (#493 piece 3, `GoFishNode.sharesRoom`). So the
+label takes room, and only its overhang past the ends of the axis reaches
+past the ring's hull. One wider than its band overdraws its neighbors
+(#1115) instead of widening the bands, and a label in a ring that a spread
+along its axis holds (one group's labels in a grouped bar chart) is ink, so
+it does not widen the gap between groups. The boxes a category label is centered
+on (`axisSpan`, `runStartBox`) read their place along the axis from refs
+(`GoFishNode.inkOn`), so they are ink there too; one without a line has no
+depth across the axis and is not seated there, so it is ink across it as well.
+A divider is `cross` pixels deep across the axis and claims that.
 
 The **inner tier** holds the constraint-pinned axes (continuous/difference); the
 **outer tier** holds the ordinal label rows, which need the inner tier fully laid
@@ -95,7 +117,8 @@ literal-pixel pin there would put the baseline at the frame's 0, the niced
 domain's low end.)
 
 Everything else then seats around the stationary content in **negative gutter
-space** (into the SVG padding): the axis line distributes off the content's
+space** (the ring's box reaches past its origin, and the ring claims that room,
+see above): the axis line distributes off the content's
 near edge, tick marks align flush with the line, labels hang outward. Keeping
 the content at its origin — rather than letting the gutter chain push it, as
 the single-axis hand-drawn story does — is what keeps _two_ continuous axes on
@@ -404,7 +427,8 @@ difference axis), never off the size claim:
   interval; an axis line
   (a 1px `rect` auto-spanning the domain via `datum` endpoints), and a
   `spread([text, tickMark])` per tick pinned with
-  `Constraint.position({ [axis]: datum(v) })`. The gutter is negative space;
+  `Constraint.position({ [axis]: datum(v) })`. The gutter is negative space,
+  which the ring claims;
   the line seats one of two ways. When the **other** dim is position-like
   (whether this node or an ancestor draws its axis), the line is pinned just
   outside that dim's scale floor —
@@ -703,10 +727,13 @@ pie gets no cartesian title. It titles its own axes (the radial title, see
 The title ring (`axisTitles`) centers each title on the axis shape it
 describes, not on the plot:
 
-- The anchor is the axis line when the axis has one (continuous or
-  difference). `AxisElaboration` carries it as `anchor`. An ordinal axis is a
-  row of labels with no spanning line, so its title centers on the owner's
-  content box instead.
+- The anchor is the axis's own span, which `AxisElaboration` carries as
+  `anchor`: the axis line of a continuous or difference axis, and for an
+  ordinal axis an `axisSpan` from its first slot's start to its last slot's
+  end, which draws nothing. So a category axis's title centers on the plot,
+  not on the owner's content box, which holds the other axis's gutter when
+  the other axis is drawn by a node inside it. Only an ordinal axis with no
+  slots falls back to the content box.
 - The anchor is referenced with a `ref(anchorNode)` stand-in, the same
   direct-node `ref` form `elaborateOrdinalAxis` uses. The anchor sits in a ring
   inside the title ring, so it is placed by the time the constraints read the

@@ -94,19 +94,19 @@ VISITS = _visits()
 
 def story_daily_line():
     return (
-        chart(PRICES, schema={"date": Schema.time()})
+        chart(PRICES, schema={"date": Schema.time()}, w=560, h=200)
         .flow(scatter(by="date", x="date", y="price"))
         .mark(line(stroke="steelblue", stroke_width=2)),
-        {"w": 560, "h": 200},
+        {},
     )
 
 
 def story_hourly_line():
     return (
-        chart(READINGS)
+        chart(READINGS, w=560, h=200)
         .flow(scatter(by="time", x="time", y="temp"))
         .mark(line(stroke="steelblue", stroke_width=2)),
-        {"w": 560, "h": 200},
+        {},
     )
 
 
@@ -115,19 +115,27 @@ def story_daylight_saving_zone():
         chart(
             NEW_YORK,
             schema={"time": Schema.time(zone="America/New_York")},
+            w=560,
+            h=200,
         )
         .flow(scatter(by="time", x="time", y="load"))
         .mark(line(stroke="steelblue", stroke_width=2)),
-        {"w": 560, "h": 200},
+        {},
     )
 
 
 def story_event_timeline():
     return (
-        chart(RELEASES, schema={"date": Schema.time()}, axes={"x": True, "y": False})
+        chart(
+            RELEASES,
+            schema={"date": Schema.time()},
+            axes={"x": True, "y": False},
+            w=560,
+            h=80,
+        )
         .flow(scatter(by="name", x="date"))
         .mark(circle(r=5, fill="steelblue")),
-        {"w": 560, "h": 80},
+        {},
     )
 
 
@@ -137,19 +145,21 @@ def story_week_over_month_rows():
             VISITS,
             schema={"day": Schema.time()},
             axes={"x": {"levels": [Calendar.week, Calendar.month]}, "y": True},
+            w=560,
+            h=200,
         )
         .flow(scatter(by="day", x="day", y="visits"))
         .mark(line(stroke="steelblue", stroke_width=2)),
-        {"w": 560, "h": 200},
+        {},
     )
 
 
 def story_vertical_daily_dots():
     return (
-        chart(PRICES, schema={"date": Schema.time()})
+        chart(PRICES, schema={"date": Schema.time()}, w=300, h=480)
         .flow(scatter(by="date", x="price", y="date"))
         .mark(circle(r=1.5, fill="steelblue")),
-        {"w": 300, "h": 480},
+        {},
     )
 
 
@@ -168,11 +178,11 @@ def _monthly_highs(rows):
 
 def story_monthly_highs():
     return (
-        chart([p for p in PRICES if p["date"].startswith("2024")])
+        chart([p for p in PRICES if p["date"].startswith("2024")], w=480, h=200)
         .flow(
             derive(_monthly_highs, schema={"month": Schema.ordered(MONTHS)}),
             spread(by="month", dir="x"),
         )
         .mark(rect(h="price", fill="steelblue")),
-        {"w": 480, "h": 200},
+        {},
     )

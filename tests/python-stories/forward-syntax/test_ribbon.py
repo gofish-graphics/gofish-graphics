@@ -20,14 +20,14 @@ from python_stories.data import SEAFOOD
 
 def story_basic():
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, h=400)
         .flow(
             spread(by="lake", dir="x", spacing=64),
             stack(by=field("species").sort("count"), dir="y"),
         )
         .mark(rect(h="count", fill="species"))
         .layer(ribbon(opacity=0.8)),
-        {"w": 400, "h": 400},
+        {},
     )
 
 

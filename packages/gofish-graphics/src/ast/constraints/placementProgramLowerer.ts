@@ -47,13 +47,28 @@ export function freeBaselineOffset(
 export function anchorOffset(
   target: Placeable,
   axis: Axis,
-  anchor: RelationAnchor
+  anchor: RelationAnchor,
+  // Read the anchor off the target's plot (`localPlotSpan`): a chain lays
+  // its parts by their plots, so the dressing beside a part (a value label,
+  // a nested chart's chrome) never moves it (#1032).
+  plot = false
 ): number | undefined {
   if (anchor === "tail" || anchor === "head") {
     const tail = freeBaselineOffset(target, axis) ?? 0;
     if (anchor === "tail") return tail;
-    const end = anchorOffset(target, axis, "end");
+    const end = anchorOffset(target, axis, "end", plot);
     return end === undefined ? undefined : end - tail;
+  }
+  const span = plot ? target.localPlotSpan?.(axisIndex(axis)) : undefined;
+  if (span !== undefined && anchor !== "baseline") {
+    const min = target.localAnchor?.(axis, "min") ?? 0;
+    const at =
+      anchor === "start"
+        ? span[0]
+        : anchor === "end"
+          ? span[1]
+          : (span[0] + span[1]) / 2;
+    return at - min;
   }
   const local = target.localAnchor?.(axis, BOX_ANCHOR[anchor]);
   const localMin = target.localAnchor?.(axis, "min");

@@ -51,6 +51,21 @@ were read in, and the node's box is the outline's box. Both are kept in `renderD
 its holes wind opposite ways, so the default nonzero fill rule leaves the
 holes open, with no change to the display list.
 
+In the claim walk, an outline whose members are all refs is placed from
+them, as a label beside a ref is (`GoFishNode.placedFromRefs`; see
+[Overview](/internals/layout/passes)). Its claim in the layer that holds it is
+its members' boxes, each where `placementIn` lands it there, grown by
+`padding` and by half its stroke, which is drawn centered on the outline
+(`GoFishNode.strokeOverhang`). It takes that room and is dressing: it is no part of the plot, so a
+chart with a size of its own keeps its plot that size and the outline adds
+around it, and its members never move for it. The box is exact for
+`Shape.box()`, and a blob lies inside it. An oval can reach past it, and that
+reach is ink. Where the claim walk cannot place a member (it is in a
+coordinate space, or under a node with a size of its own), the whole outline
+is ink. An outline over fresh children has no claim yet: the claim walk
+reads no size for it. It should claim its children's union grown by
+`padding`, as a part of the plot.
+
 The outline paints under its members. Among a layer's children that is the
 default `zBelow` every relational mark gets; as a `.relate()` clause it is
 the same default installed by name (see

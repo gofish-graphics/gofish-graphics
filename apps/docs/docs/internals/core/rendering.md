@@ -49,11 +49,13 @@ paints — is the whole architecture of this pass.
 Layout produces a tree of boxes in **final y-down pixels**: SVG-native, top-left
 origin. There is no mirror anywhere between layout and paint. The lower pass maps
 each box's coordinates to canvas pixels through `toPixel`, installed on the render
-session (`RenderSession.toPixel` in `_node.ts`) before the baked entries lower. It
-only adds the gutter offset:
+session (`RenderSession.toPixel` in `_node.ts`) before the baked entries lower.
+Layout already placed the graphic on the canvas, chrome included (the render's
+`w`/`h` is the whole graphic, #493), so the map is the identity:
 
 ```ts
-toPixel: ([gx, gy]) => [gx + left, gy + top], // svgFrame in gofish.tsx
+// displayList/lower.ts: the root's map, unless a caller passes one
+export const lowerToDisplayList = (root, toPixel: ToPixel = (p) => p) => …
 ```
 
 So a continuous y axis growing upward is not something paint does. Layout places it
@@ -281,14 +283,13 @@ mask-and-blend-mode graphs and assigning their deterministic def ids.
 
 ## How the live `render()` wires it together
 
-The orchestrator `render()` in `gofish.tsx` is now small. It computes the gutter
-reserves from the measured overhangs (`layout()` reads them straight off the root's
-pixel box: a negative min is top overhang, a max past the canvas is bottom
-overhang), builds `toPixel`, and paints the lowered list into an `<svg>`:
+The orchestrator `render()` in `gofish.tsx` is now small. `layout()` has already
+fitted the graphic, chrome included, to the render's size and placed it on the
+canvas, so `render()` reserves no margins: it lowers the tree through the identity
+`toPixel` and paints the list into an `<svg>` of the layout's size:
 
 ```ts
-toPixel: ([gx, gy]) => [gx + left, gy + top], // svgFrame in gofish.tsx
-const paintBaked = () => lowerToDisplayList(child, toPixel).map(paintSVG);
+const paintBaked = () => lowerToDisplayList(child).map(paintSVG); // identity toPixel
 return (
   <svg width={…} height={…} xmlns="http://www.w3.org/2000/svg">
     <Show when={defs}><defs>{defs}</defs></Show>
@@ -301,7 +302,7 @@ The SVG-export terminals (`toSVG`/`toSVGElement`/`save`) run the same lower→pa
 pipeline against a throwaway container and serialize the result.
 
 The real `paintBaked` brackets each half with the perf instrumentation
-(`src/ast/perf.ts`): it times `lowerToDisplayList(child, toPixel)`
+(`src/ast/perf.ts`): it times `lowerToDisplayList(child)`
 under the `lower` label, records the emitted `items.length` as the `displayItems`
 count, then times `items.map((item) => paintSVG(item, interactive))` under `paint`.
 Like the layout-pass hooks, this is zero-cost when instrumentation is off and
@@ -342,7 +343,10 @@ signal during resolve), three things change; when it is absent — the common ca
   container over, the old chart is torn down entirely: its root and its
   runtime, which detaches its listeners and drops it from every input it read.
 - **The `View` handle.** `gofish()` returns a `View` for the chart it mounted:
-  `{ container, unmount() }`. Every public `render` returns one, synchronously
+  `{ container, warnings, unmount() }`. `warnings` reads the chart state's
+  latest layout warnings, which each layout replaces (see
+  [Layout warnings](/internals/layout/passes#layout-warnings)); the state
+  also keeps the warnings it has printed, so a re-render prints none twice. Every public `render` returns one, synchronously
   for a node and as a `Promise<View>` wherever a resolve comes first (a chart
   builder, a mark or combinator surface, a component thunk; `gofish()` reifies
   a function child, thunk or mark, through `resolveMarkResult`, which calls it

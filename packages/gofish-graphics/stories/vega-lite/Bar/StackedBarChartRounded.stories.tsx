@@ -33,7 +33,9 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 600, h: 300 },
+  // Vega-Lite's size: a 20 px step per month, and a continuous y is 200 px
+  // tall.
+  args: { w: 12 * 20, h: 200 },
   loaders: [async () => ({ weather: await data["seattle-weather.csv"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
@@ -45,6 +47,8 @@ export const Default: StoryObj<Args> = {
     // arguably this should be done with some kind of clip path or something.
     chart(context.loaded.weather as any[], {
       color: Color.palette({ sun: "#e7ba52", fog: "#dfdfdf", drizzle: "#79a1d5", rain: "#1f77b4", snow: "#9467bd" }),
+      w: args.w,
+      h: args.h,
     })
       .flow(
         derive((d: any[]) =>
@@ -57,7 +61,7 @@ export const Default: StoryObj<Args> = {
         stack({ by: "weather",  dir: "y" })
       )
       .mark(rect({ h: field("date").count(), fill: "weather", rx: 3, ry: 3 }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },

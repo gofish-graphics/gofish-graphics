@@ -18,7 +18,9 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 500, h: 300 },
+  // Vega-Lite's size: binned and continuous axes with no width or height make
+  // a 200 × 200 plot.
+  args: { w: 200, h: 200 },
   loaders: [async () => ({ movies: await data["movies.json"]() })],
   tags: ["gallery"],
   parameters: {
@@ -30,12 +32,12 @@ export const Default: StoryObj<Args> = {
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 
-    chart(context.loaded.movies as any[])
+    chart(context.loaded.movies as any[], { w: args.w, h: args.h })
       .flow(
         spread({ by: field("IMDB Rating").bin(), dir: "x", spacing: 1 })
       )
       .mark(rect({ h: field("IMDB Rating").count() }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },
