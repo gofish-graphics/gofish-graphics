@@ -37,6 +37,20 @@ two operators cover much of the same ground by different routes. When a
 degenerate overlap exists, build it through one shared mechanism so the
 operators cannot drift apart.
 
+**A convenience is defined by what it desugars into.** Writing a construct so
+that it desugars into other forms is how GoFish keeps overlapping ideas
+orthogonal: the convenient form is stated as a composition of explicit forms
+that the language can already express, so the overlap is a rewrite you can
+read, not a second mechanism. An inferred default (a hover that targets the
+mark it is written on) rewrites to the explicit form with the default filled
+in. A block of overrides declared once (every channel a hovered mark changes)
+rewrites to the per-channel forms. Show each convenience next to its rewrite.
+If a convenience needs something no explicit form can say, add the explicit
+form first; otherwise the convenience is a new capability with a friendly
+name, not sugar. When the rewrite also runs backwards, so the explicit form can
+be recognized and printed as the convenience, the two cannot drift, and a
+serialized document can be shown in the shorter spelling.
+
 **Prefer the simple general rule to a case split.** If a fix special-cases a
 shape or a count (`length === 1`, the first element, a fallback value), ask
 what the general operation is. Usually it has a known name in math or

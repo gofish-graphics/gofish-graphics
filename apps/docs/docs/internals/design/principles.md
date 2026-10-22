@@ -175,7 +175,11 @@ This one principle explains much of the rest of GoFish:
 
 - **Desugaring over special-casing.** Convenience methods (`.facet()`, `.stack()`)
   are pure sugar over `.flow(...)` — see [Pipeline
-  Syntax](/internals/frontend/pipeline-syntax).
+  Syntax](/internals/frontend/pipeline-syntax). The same holds inside the
+  surface: a convenience form is defined by its rewrite into explicit surface
+  forms, which is what keeps two overlapping constructs orthogonal (see
+  [API Design](/internals/design/api-design), "A convenience is defined by what
+  it desugars into").
 - **Prefer a polymorphic operator to a family of near-duplicates.** When two
   proposed operators share most of their semantics — `stackX`/`stackY`,
   `spreadX`/`spreadY` — the cheaper move is one operator that takes the
