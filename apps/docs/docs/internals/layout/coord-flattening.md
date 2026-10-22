@@ -271,6 +271,15 @@ seats data 0 by the claim, as the root does. The transform also declares that
 it belongs to the polar family, `polar: true`, which petals and the arc
 sampling of a warped box (`coordUtils.ts`) read.
 
+The polar family's radial axis (r = y) keeps the root's seating, but its
+claim always reaches down to radius 0: `fitAxis` takes the upper envelope of
+the claim's descent and 0. A radius is measured from the center, so a ring
+that starts past it, such as a chart moved out with `.translate({ y: 50 })`
+(whose claim the offset moves), keeps its gap to the center inside the
+radial budget, and σ fits the rest. Without it, the claim's negative descent
+would seat data 0 below the center and the gap would vanish. A radial claim
+that already reaches below 0 is unchanged.
+
 The
 coord's type is its children's overlay, kept for its own scope; upward it
 reports nothing on either axis, like every σ-scope root: to its parent it is a

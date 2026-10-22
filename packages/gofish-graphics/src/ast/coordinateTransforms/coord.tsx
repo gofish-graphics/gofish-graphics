@@ -31,7 +31,7 @@ import {
   CONTINUOUS,
   spaceTitle,
 } from "../underlyingSpace";
-import { boxExtent, impliedExtent } from "../extent";
+import { boxExtent, Extent, impliedExtent } from "../extent";
 import * as Monotonic from "../../util/monotonic";
 import {
   unionChildExtents,
@@ -380,7 +380,7 @@ export const coord = createNodeOperator(
             // type overlays their data, or, on an axis pinned to a declared
             // window, the window's own data width.
             const resolved = spaceRef.current?.[axis];
-            const claim =
+            const content =
               resolved === undefined
                 ? undefined
                 : coordTransform.dataWindow?.[axis] !== undefined
@@ -391,6 +391,19 @@ export const coord = createNodeOperator(
                       axis,
                       resolved
                     );
+            // A polar radius is measured from the center, so radius 0 is
+            // always in the radial budget: content that starts past it (a
+            // ring moved out with `.translate()`, which moves its claim)
+            // leaves the gap below it empty but inside the budget, and the
+            // claim fitted to the budget reaches down to 0. Seated by that
+            // claim, data 0 is the center.
+            const claim =
+              content === undefined || !coordTransform.polar || axis !== 1
+                ? content
+                : Extent(
+                    content.ascent,
+                    Monotonic.envelope([content.descent, Monotonic.ZERO])
+                  );
             const scope = scopes.solveScope(
               {
                 kind: "coord",
