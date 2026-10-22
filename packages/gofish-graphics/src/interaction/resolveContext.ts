@@ -29,11 +29,23 @@
  * shipped), so a module variable is only correct if no other chart's resolve
  * runs while it is set. `renderExclusive` makes that true: every interactive
  * render on the page waits for the one before it, so between the first and
- * the last await of a resolve, no other resolve's code runs. The registrar is
- * also never handed to a read made inside a reactive computation
- * (`getListener() !== null`): that is paint, which runs on its own schedule
- * (a clock tick, a pointer move) and belongs to the chart that painted it,
- * whose resolve already registered the input. A resolve itself runs untracked.
+ * the last await of a resolve, no other resolve's code runs.
+ *
+ * The queue does NOT cover paint. A render call returns once its view is
+ * mounted, but layout is an async resource, so the chart lowers and paints
+ * later, possibly while the next chart's resolve holds the registrar. Paint
+ * belongs to the chart that painted it, never to the resolve in progress, so
+ * paint reads are kept from the registrar in two ways, one per way paint
+ * runs:
+ * - Lowering is synchronous code we call, so it runs inside
+ *   {@link readUnregistered} (`lowerToDisplayList`). A build-in's lowering
+ *   reads its clock to have a frame to lower; without the scope that clock
+ *   registered with whichever chart was resolving.
+ * - A reactive re-run (a live slot on a clock tick or a pointer move, a paint
+ *   effect at mount) is code Solid calls on its own schedule, with no call
+ *   site of ours to wrap, so a read made inside a reactive computation
+ *   (`getListener() !== null`) gets no registrar either. A resolve itself
+ *   runs untracked, so this never hides a resolve's own reads.
  *
  * DECLARED SHORTCUT: the queue is page-wide, so a resolve that waits on
  * something slow (a Python callback during a kernel round trip) makes every
@@ -61,8 +73,9 @@ let queue: Promise<unknown> = Promise.resolve();
 const settled = (): void => undefined;
 
 /**
- * Run `fn` (one interactive render: its resolve and its paint) after every
- * render queued before it has finished, so no two resolves interleave. A
+ * Run `fn` (one interactive render: its resolve, then mounting its view) after
+ * every render queued before it has finished, so no two resolves interleave.
+ * Lowering and paint run after the view mounts, outside the queue. A
  * render that fails does not block the ones behind it.
  */
 export function renderExclusive<T>(fn: () => Promise<T>): Promise<T> {
@@ -90,15 +103,19 @@ export async function withInteractiveResolve<T>(
 }
 
 /** The registrar of the resolve in progress, if any. A read inside a reactive
- *  computation is paint, never a resolve's read, so it gets none. */
+ *  computation or inside {@link readUnregistered} (lowering, kernel shipping)
+ *  is never a resolve's read, so it gets none. */
 export const ambientRegistrar = (): AmbientRegistrar | undefined =>
   getListener() === null && unregisteredDepth === 0 ? current : undefined;
 
 let unregisteredDepth = 0;
 
-/** Run `fn`, whose reads register nothing: the values a kernel-tier call
- *  ships to Python (`kernelBridge` in serialize/fromJSON.ts), which become
- *  reads only once the reply says which ones the callback read. */
+/** Run `fn`, a synchronous computation whose reads register nothing. Two
+ *  callers: lowering (`lowerToDisplayList`), which is paint and may run
+ *  during another chart's resolve; and the values a kernel-tier call ships to
+ *  Python (`kernelBridge` in serialize/fromJSON.ts), which become reads only
+ *  once the reply says which ones the callback read. A depth counter is sound
+ *  because `fn` never awaits. */
 export function readUnregistered<T>(fn: () => T): T {
   unregisteredDepth++;
   try {

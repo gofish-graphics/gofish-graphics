@@ -145,6 +145,11 @@ alongside the labeled mark's own fragment (`lowerLabelItems`); a label is now
 labels), so by the time `bake`/`INTERNAL_lower` see the tree, a label is just an
 ordinary sibling shape with its own `_lower` fragment.
 
+The real driver also wraps the pass in `readUnregistered`, because lowering is
+paint: an interaction input it reads (a build-in's clock) must never register
+with the chart whose resolve happens to be running while this chart lowers
+([Reactivity](/internals/frontend/reactivity), "One resolve at a time").
+
 The display list is the **concatenation of every node's fragment**. A node with no
 `_lower` draws only its children, which `bake` lowers directly, so it reaches
 `INTERNAL_lower` only when it has none: then it draws nothing (an operator over a

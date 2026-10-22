@@ -52,6 +52,9 @@ const {
   frame,
   layer,
   Coord,
+  time,
+  Animation,
+  selectAll,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -2121,6 +2124,69 @@ async function main() {
       "the reading chart dropped the bars at or below the cut",
       a.querySelectorAll("rect").length < b.querySelectorAll("rect").length
     );
+  }
+
+  /* ------------- lowering registers nothing, even mid-resolve (#1191) ------------- */
+  console.log("\nlowering is paint: no cross-chart clock registration");
+  {
+    // A chart returns its View before it lowers: layout is async and lowering
+    // runs when the view mounts, so chart A can lower while chart B's resolve
+    // holds the registrar. A build-in's lowering reads its build clock (to
+    // have a frame to lower); that read is paint and must not register A's
+    // clock with B. No chart here reads an input in its spec, so none may
+    // carry `data-gf-id` hooks.
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      .split("")
+      .map((letter, i) => ({ letter, frequency: ((i * 7) % 13) + 1 }));
+    const chained = (c: HTMLElement, at: number, playing: boolean) =>
+      chart(alphabet)
+        .flow(
+          spread({ by: "letter", dir: "x" }).transition({
+            enter: time.stagger({ lag: 60 }),
+          })
+        )
+        .mark(
+          rect({ h: "frequency" }).transition({
+            enter: Animation.grow({ duration: 600 }),
+          })
+        )
+        .render(c, { w: 480, h: 220, playing, at });
+    const selection = (c: HTMLElement, at: number, playing: boolean) =>
+      chart(alphabet)
+        .flow(spread({ by: "letter", dir: "x" }))
+        .mark(rect({ h: "frequency" }).name("bars"))
+        .layer(
+          chart(selectAll("bars"))
+            .flow(time.stagger({ by: "letter", lag: 60 }))
+            .mark(
+              time.transition({ enter: Animation.grow({ duration: 600 }) })
+            )
+        )
+        .render(c, { w: 480, h: 220, playing, at });
+    for (const [form, make] of [
+      ["chained", chained],
+      ["selection", selection],
+    ] as const) {
+      for (const playing of [false, true]) {
+        const name = `${form}${playing ? ", playing" : ""}`;
+        const cs = [0, 300, 600, 900, 1200].map(() => makeContainer());
+        const views = await Promise.all(
+          cs.map((c, i) => make(c, i * 300, playing))
+        );
+        await settle();
+        const hooks = cs.map((c) => c.querySelectorAll("[data-gf-id]").length);
+        ok(
+          `${name}: build-ins rendered back to back carry no hooks`,
+          hooks.every((h) => h === 0),
+          hooks.join(",")
+        );
+        ok(
+          `${name}: every build-in drew its bars`,
+          cs.every((c) => c.querySelectorAll("rect").length >= alphabet.length)
+        );
+        for (const v of views) v?.unmount?.();
+      }
+    }
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);

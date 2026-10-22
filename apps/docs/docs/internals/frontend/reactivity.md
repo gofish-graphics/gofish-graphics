@@ -148,16 +148,26 @@ other chart's resolve runs while it is set, and a resolve suspends at every
 `await`. The browser has no way to carry a value across an `await` (TC39's
 AsyncContext is not shipped), so the render terminal makes the variable safe
 the other way: every interactive render on the page goes through one queue,
-`renderExclusive`, and waits for the render before it to finish, resolve and
-paint. Two charts started at once (a gallery page, a notebook with several
+`renderExclusive`, and waits for the render before it to resolve and mount its
+view. Two charts started at once (a gallery page, a notebook with several
 widgets) therefore resolve one after the other, and a read registers with the
-chart whose resolve made it. The other code that can run while a resolve waits
-is paint: a live slot that re-runs on a clock tick or a pointer move. A read
-made inside a reactive computation (`getListener() !== null`) is never handed
-the registrar, because it belongs to the chart that painted it, whose resolve
-already registered the input; a resolve itself runs untracked. Before the
-queue, a chart that read no input could pick up another chart's clock and
-re-render on its ticks (the Build-in prototype gallery's chart 3e did).
+chart whose resolve made it. Before the queue, a chart that read no input could
+pick up another chart's clock and re-render on its ticks (the Build-in
+prototype gallery's chart 3e did).
+
+The queue does not cover paint. Layout is an async resource, so a chart
+lowers and paints after its render has left the queue, often while the next
+chart is resolving. Paint belongs to the chart that painted it, never to the
+resolve in progress, so no paint read is handed the registrar. Paint runs in
+two ways, and each is closed off where it runs. Lowering is synchronous code
+the library calls, so `lowerToDisplayList` runs inside `readUnregistered`: a
+build-in's lowering reads its build clock to have a frame to lower, and before
+this scope that clock registered with whichever chart was resolving, which
+then grew `data-gf-id` hooks. A reactive re-run (a live slot on a clock tick
+or a pointer move) is called by Solid on its own schedule, with no call site
+to wrap, so a read made inside a reactive computation (`getListener() !==
+null`) gets no registrar either. A resolve itself runs untracked, so that
+rule never hides a resolve's own reads.
 
 > **Declared shortcut.** The queue is page-wide. A resolve that waits on
 > something slow, such as a Python callback during a kernel round trip, makes

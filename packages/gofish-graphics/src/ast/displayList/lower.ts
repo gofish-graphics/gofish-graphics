@@ -11,21 +11,28 @@
  * lowers itself (and its boundary subtree) at its absolute transform via
  * {@link GoFishNode.INTERNAL_lower}. Layout geometry is already y-down pixels,
  * so `toPixel` only adds the gutter offset.
+ *
+ * Lowering is paint, so it runs under `readUnregistered`: an input it reads
+ * (a build-in's clock, read to have a frame to lower) registers with no chart.
+ * A chart lowers when its view mounts, after its render call has returned, so
+ * it can lower while another chart's resolve holds the registrar (#1191).
  */
 
 import type { DisplayList } from "gofish-ir";
 import type { GoFishNode, ToPixel } from "../_node";
 import { bake } from "../coordinateTransforms/bake";
+import { readUnregistered } from "../../interaction/resolveContext";
 
 /** Drive the lower emit: install `toPixel` on the render session and lower
  *  every baked draw entry at its absolute transform. */
 export const lowerToDisplayList = (
   root: GoFishNode,
   toPixel: ToPixel
-): DisplayList.DisplayItem[] => {
-  const session = root.getRenderSession();
-  session.toPixel = toPixel;
-  return bake(root).flatMap((d) =>
-    d.node.INTERNAL_lower(undefined, d.transform)
-  );
-};
+): DisplayList.DisplayItem[] =>
+  readUnregistered(() => {
+    const session = root.getRenderSession();
+    session.toPixel = toPixel;
+    return bake(root).flatMap((d) =>
+      d.node.INTERNAL_lower(undefined, d.transform)
+    );
+  });

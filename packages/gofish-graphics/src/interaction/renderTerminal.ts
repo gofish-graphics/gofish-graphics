@@ -21,9 +21,10 @@
  *   5. tell each resolve which render it is for (a {@link RenderPass}): the
  *      first, or a re-render of the chart already on screen; and before a
  *      re-render, stop what the previous render started (its build clock);
- *   6. run each render (resolve and paint) in the page-wide render queue
+ *   6. run each render's resolve and mount in the page-wide render queue
  *      (`renderExclusive`), so two charts' resolves never interleave and an
- *      input registers with the chart whose resolve read it (#1191).
+ *      input registers with the chart whose resolve read it (#1191). Lowering
+ *      and paint happen later, outside the queue, and register nothing.
  *
  * Three callers share it: `ChartBuilder.render` and `LayerBuilder.render` (the
  * fluent chart pipeline) and the low-level `gofish()` terminal when handed a
@@ -82,8 +83,10 @@ export async function renderWithInteraction<O extends Record<string, unknown>>(
       if (runtime.hasWork()) {
         (options as Record<string, unknown>).interaction = runtime;
       }
-      // The paint runs in the queue too, with no registrar: its reads are
-      // paint (see resolveContext.ts), and no other resolve is in progress.
+      // This mounts the view and returns. Layout is async, so the chart
+      // lowers and paints after the queue slot is released, possibly during
+      // the next chart's resolve; paint reads never get a registrar (see
+      // resolveContext.ts), so that is safe.
       return node.render(container, options);
     });
   runtime.setRerender(doRender);
