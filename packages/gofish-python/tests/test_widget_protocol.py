@@ -9,9 +9,10 @@ base64 Arrow in, the reply's document (its tables as base64 Arrow) out.
 import base64
 
 import pyarrow as pa
+import pytest
 import pyarrow.ipc as pa_ipc
 
-from gofish import chart, derive, layer, rect, text
+from gofish import chart, concat_str, derive, layer, rect, spread, text, wheel
 from gofish.arrow_utils import arrow_to_records, data_to_arrow_bytes
 
 
@@ -185,6 +186,60 @@ class TestCallProtocol:
         widget, lambda_id = _derive_widget(assert_shape)
         response = _call(widget, lambda_id, [{"a": 1, "b": "x"}, {"a": 2, "b": "y"}])
         assert "reply" in response
+
+
+class TestKernelTier:
+    """The semantic zoom in the widget: a Python derive that reads a wheel.
+    JS ships the wheel's value with each call; the reply names the read; a
+    new value is a new call with new bins. (The JS half, registering the
+    read, re-running on change and dropping a stale reply, is
+    gofish-graphics' src/tests/kernelTier.test.ts.)"""
+
+    MASSES = [{"mass": m} for m in range(3000, 6000, 50)]
+
+    def _semantic_zoom(self):
+        bins = wheel(range=[3, 40], initial=12, round=True)
+
+        def bin_rows(rows):
+            k = bins()
+            lo, hi = 3000, 6000
+            counts = [0] * k
+            for r in rows:
+                counts[min(k - 1, (r["mass"] - lo) * k // (hi - lo))] += 1
+            return [{"bin": str(i), "count": c} for i, c in enumerate(counts)]
+
+        op = derive(bin_rows)
+        widget = (
+            chart(self.MASSES)
+            .flow(op, spread(by="bin", dir="x"))
+            .mark(rect(h="count"))
+            .layer(text(x=20, y=290, text=concat_str("bins: ", bins), fill="#333"))
+            .render(w=500, h=300)
+        )
+        return widget, op.lambda_id
+
+    def test_the_document_declares_the_wheel(self):
+        widget, _ = self._semantic_zoom()
+        assert widget.doc["sources"] == {
+            "s0": {"kind": "wheel", "range": [3, 40], "initial": 12, "round": True}
+        }
+
+    def test_the_shipped_value_is_read_and_reported(self):
+        widget, lambda_id = self._semantic_zoom()
+        first = _call(widget, lambda_id, self.MASSES, "r-0", {"s0": 12})
+        assert first["reply"]["reads"] == ["s0"]
+        assert len(_reply_rows(first)) == 12
+        second = _call(widget, lambda_id, self.MASSES, "r-1", {"s0": 24})
+        assert second["request_id"] == "r-1"
+        assert len(_reply_rows(second)) == 24
+
+    def test_reading_while_building_the_spec_raises(self):
+        # Building and rendering never call the derive; reading the wheel
+        # outside a call does, and raises.
+        bins = wheel(range=[3, 40])
+        chart(self.MASSES).flow(derive(lambda rows: rows[: bins()])).mark(rect()).render()
+        with pytest.raises(RuntimeError, match="while building the spec"):
+            bins()
 
 
 class TestRenderResultStatus:

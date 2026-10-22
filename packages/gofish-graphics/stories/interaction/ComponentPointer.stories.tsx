@@ -3,13 +3,14 @@
  *
  * A low-level COMPONENT (a `spreadX` of raw `rect`s, no `chart()`, no data)
  * rendered through the THUNK form: `gofish(container, opts, () => node)`. A
- * `pointer()` is read INSIDE a `live()` fill, so hovering a box recolors only
- * that box — a paint patch with zero pipeline re-runs.
+ * `pointer()` is read in each box's fill, `when(p.over)`, an expression on a
+ * paint channel, so hovering a box recolors only that box — a paint patch with
+ * zero pipeline re-runs.
  *
  * Hit-testing needs `data-gf-id` on the boxes, which is emitted only when an
  * InteractionRuntime is attached. The runtime is what the thunk form installs:
  * when the thunk is evaluated under the ambient interactive context, the
- * resolve-time evaluation of each `live()` fill reads `pointer()`, which
+ * resolve-time evaluation of each paint-tier fill reads `pointer()`, which
  * registers the input — so `runtime.hasWork()` is true and the runtime is
  * threaded through paint (emitting the ids and wiring the delegated pointer
  * listeners). A plain-node render would install no runtime, so a component that
@@ -19,14 +20,14 @@
  * no data binding), so we give each box one by INVOKING the mark with a
  * one-row list — `rect({…})([box])` (a mark's input is always a list). That
  * list becomes the box's datum, and it is the very list `pointer().datum()`
- * returns on hit-test — so `d === p.datum()` identifies the hovered box.
+ * returns on hit-test — so `p.over` is true on the hovered box alone.
  *
  * capture-one snapshots the initial (un-hovered) state: expect five boxes, all
  * in the base color.
  */
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { gofish, spreadX, rect, live, pointer } from "../../src/lib";
+import { gofish, spreadX, rect, pointer, when } from "../../src/lib";
 
 const meta: Meta = {
   title: "Interaction/Component Pointer",
@@ -54,14 +55,14 @@ export const Default: StoryObj<Args> = {
         { spacing: 14, alignment: "middle" },
         boxes.map((box) =>
           // Invoke the mark with `[box]` so this rect's datum IS that list. Reading
-          // pointer() in live() (at resolve, under the ambient context)
-          // registers the input → the runtime attaches for hit-testing. `d` is
-          // this box's datum; `p.datum()` is the hovered box's datum — the same
-          // list by reference on a hit.
+          // pointer() in a paint-tier fill (at resolve, under the ambient context)
+          // registers the input → the runtime attaches for hit-testing.
+          // `p.over` compares this box's datum with the hovered box's datum,
+          // the same list by reference on a hit.
           rect({
             w: 70,
             h: 60 + box.i * 18,
-            fill: live((d) => (d === p.datum() ? "#d62728" : "#6b9bd1")),
+            fill: when(p.over).then("#d62728").otherwise("#6b9bd1"),
           })([box])
         )
       )

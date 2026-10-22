@@ -2936,7 +2936,14 @@ for the API.
           "description": "Line color, or a field name or accessor for a color scale (constant within the line). Defaults to `fill`."
         },
         "strokeWidth": {
-          "$ref": "#/$defs/Number",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/ExprIR"
+            }
+          ],
           "description": "Line thickness in pixels.",
           "default": 1
         },
@@ -2945,7 +2952,14 @@ for the API.
           "description": "Raw SVG stroke-dasharray (e.g. \"12\") for a dashed line."
         },
         "opacity": {
-          "$ref": "#/$defs/Number",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/ExprIR"
+            }
+          ],
           "description": "Opacity, 0 to 1."
         },
         "mixBlendMode": {
@@ -3035,12 +3049,26 @@ for the API.
           "description": "Stroke color of the band's outline, or a field name or accessor for a color scale (constant within the band)."
         },
         "strokeWidth": {
-          "$ref": "#/$defs/Number",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/ExprIR"
+            }
+          ],
           "description": "Stroke width in pixels.",
           "default": 0
         },
         "opacity": {
-          "$ref": "#/$defs/Number",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/ExprIR"
+            }
+          ],
           "description": "Opacity, 0 to 1."
         },
         "mixBlendMode": {
@@ -3132,7 +3160,14 @@ for the API.
           "description": "Stroke color of the outline, or a field name or accessor for a color scale (constant within the enclosed group). Default a light gray."
         },
         "strokeWidth": {
-          "$ref": "#/$defs/Number",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/ExprIR"
+            }
+          ],
           "description": "Stroke width in pixels.",
           "default": 1
         },
@@ -3141,12 +3176,26 @@ for the API.
           "description": "Raw SVG stroke-dasharray (e.g. \"4 2\") for a dashed outline."
         },
         "opacity": {
-          "$ref": "#/$defs/Number",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/ExprIR"
+            }
+          ],
           "description": "Opacity of the whole outline, fill and stroke, 0 to 1.",
           "default": 1
         },
         "fillOpacity": {
-          "$ref": "#/$defs/Number",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/ExprIR"
+            }
+          ],
           "description": "Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`, so a tinted region can keep a full-strength outline."
         },
         "name": {

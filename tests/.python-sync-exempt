@@ -103,96 +103,55 @@ packages/gofish-gotree/stories/gallery/RotationTree.stories.tsx
 packages/gofish-graphics/stories/vega-lite/Bar/LayeredBarsAndArea.stories.tsx
 
 # ---------------------------------------------------------------------------
-# Interaction/reactivity stories — exempt from Python parity (JS-only feature).
+# Interaction and animation (#774, #1022).
 #
-# The reactive interaction layer (live()/pointer()/drag()/wheel()/timer()/
-# signal()) is JS-only: signals are Solid closures with no Python/IR bridge, so
-# these specs cannot cross the derive RPC. They exercise pointer/drag/wheel/
-# timer inputs read inside live() (paint patches) and inside derive() (pipeline
-# re-runs) — non-pure-spec by construction. Nothing to byte-match on the Python
-# side; keep exempt.
-packages/gofish-graphics/stories/interaction/HoverHighlight.stories.tsx
-packages/gofish-graphics/stories/interaction/SemanticZoomHistogram.stories.tsx
-packages/gofish-graphics/stories/interaction/DraggableThreshold.stories.tsx
-packages/gofish-graphics/stories/interaction/TimerPulse.stories.tsx
-packages/gofish-graphics/stories/interaction/ComponentPaintOnly.stories.tsx
-packages/gofish-graphics/stories/interaction/ComponentLayoutReactive.stories.tsx
-packages/gofish-graphics/stories/interaction/ComponentPointer.stories.tsx
-packages/gofish-graphics/stories/interaction/Widgets.stories.tsx
+# Sources (timer, signal, wheel, pointer, drag, click), expressions over them,
+# the time surface and the Animation family cross the bridge, so the
+# interaction and animated Vega-Lite stories are ported and byte-checked on
+# their first frame (the declared state at rest: a clock at `at` or its
+# domain's start, a pointer off the chart, a drag not started). What stays
+# exempt below is narrower.
 
-# The animated bird-migration panels — exempt for the same reason as the other
-# interaction stories above. The panels are driven by `timer()`, `live()` and a
-# `filter(...)` predicate written as a JS closure over the clock, none of which
-# cross the derive RPC. Panel A (the static species lines), a pure spec, is in
-# its own file, BirdMigrationStatic.stories.tsx, and is ported (#856).
-packages/gofish-graphics/stories/animated-vega-lite/BirdMigration.stories.tsx
+# ComponentPaintOnly drives its fill from a raw Solid `createSignal` that a
+# `setInterval` writes: plain JS state outside the source system, JS only by
+# design (#705).
+packages/gofish-graphics/stories/interaction/ComponentPaintOnly.stories.tsx
+
+# Phase 2 (decision 6 of proposals/python-animation-interaction): the spec of
+# ComponentLayoutReactive is a thunk that reads a wheel, which needs a Python
+# thunk callback (a mark function with no rows). The Widgets stories and Bird
+# Migration E_Controls write sources from widget actions (`onInput`, `onClick`,
+# play/pause) and format with a JS function, which need declared actions.
+packages/gofish-graphics/stories/interaction/ComponentLayoutReactive.stories.tsx
+packages/gofish-graphics/stories/interaction/Widgets.stories.tsx
+packages/gofish-graphics/stories/animated-vega-lite/BirdMigration.stories.tsx::E_Controls
+
+# Gapminder CurvesKinematics and CurvesKinematicsPaused build their sparklines
+# from internal spline helpers (`channelSpline`, `SMOOTH_CURVES`) and an
+# internal coordinate transform (`linear` from src/ast/coordinateTransforms),
+# none of which is public API in either language.
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::CurvesKinematics
+packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::CurvesKinematicsPaused
+
+# Bar chart race Top10FromBelow clips its container with CSS `clipPath` (page
+# markup set on the story's DOM container, not part of the spec), so a Python
+# render of the same spec draws the eleventh slot the JS page hides.
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Top10FromBelow
+packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Top10FromBelowPaused2007_5
 
 # Tutorials/Glyphs is the finished example of the docs Glyphs tutorial: a glyph
 # passed to `.mark()` as a per-group JS function, which cannot cross the bridge.
 packages/gofish-graphics/stories/tutorials/Glyphs.stories.tsx
 
-# The Gapminder animation panels — exempt for the same reason as the bird
-# migration panels above. Each of these stories is driven by
-# `time.sequence(...)` or `time.history`/`.transition(...)` on a `timer()`
-# clock (the paused ones on a clock held still): a live JS signal with no
-# Python/IR bridge, so the spec cannot cross the derive RPC. The two static
-# stories, SpatialTwin and Frame1955, are pure specs and are ported.
-packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::Animated
-packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::Paused1975
-packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::SequenceOnly
-packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::Curves
-packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::CurvesThree
-packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::CurvesKinematics
-packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::CurvesKinematicsPaused
-packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::CurvesPaused
-packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::Trails
-packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::TrailsPaused
-packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::TrailsCurves
-packages/gofish-graphics/stories/animated-vega-lite/Gapminder.stories.tsx::TrailsCurvesPaused
-
-# The Gapminder desugaring tower — exempt for the same reason. Every level in
-# it holds a clock: levels 0 and 1 through `time.sequence(...)`, levels 2 and 3
-# through a raw `timer()` the spec closes over. Level 3 additionally reads the
-# clock inside a `derive(...)` closure, which is the one shape the derive RPC
-# cannot carry.
-packages/gofish-graphics/stories/animated-vega-lite/GapminderTower.stories.tsx
-
-# The bar chart race, Gapminder's sibling — exempt for the same reason as the
-# Gapminder panels. Every animated story in it holds a `timer()` clock through
-# `time.sequence({ on })`, a live JS signal the derive RPC cannot carry, and the
-# year readout reads it through `live()`. The paused stories hold the same
-# clock still. Frame2000, the static frame, is a pure spec and is ported.
-packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Animated
-packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Paused2000
-packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Paused2010
-packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Paused2019
-packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Paused2007_5
-packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Top10
-packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Top10Paused2007_5
-packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Top10Paused2008
-packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Top10FromBelow
-packages/gofish-graphics/stories/animated-vega-lite/BarChartRace.stories.tsx::Top10FromBelowPaused2007_5
-
-# The connected scatterplot — exempt for the same reason as the Gapminder
-# panels. Every story in it is driven by `time.sequence(...)`, which owns or is
-# handed a `timer()` clock, a live JS signal the derive RPC cannot carry, and
-# `history` is an option of that JS-only operator.
-packages/gofish-graphics/stories/animated-vega-lite/ConnectedScatterplot.stories.tsx
-
-# The build-in animation prototype (draft PR #901). Every story renders a
-# build-in: `.transition()` on operators and marks, `time.stagger` /
-# `time.transition({ enter })`, and a `timer()` clock the build owns, all
-# JS-only like the rest of the animation surface (no IR, no Python bridge).
-# The race example holds a `time.sequence` clock, exempt for the same reason
-# as BarChartRace above.
+# The build-in prototype: HTML pages of several chart roots held at different
+# clock times (filmstrips and a gallery), while one root has one build clock.
+# The constructs all cross (`.transition()`, `time.stagger`, `Animation.*`,
+# `render(playing=, at=)`); port each example as its own single-root paused
+# story instead.
 packages/gofish-graphics/stories/animation/BuildInPrototype.stories.tsx
 
-# The data-space curve ladder: the same data drawn with each curve name, as a
-# test-like side-by-side comparison. It is not one spec: it lays ten charts out
-# in an HTML grid from a JS loop. Every curve name it shows is an ordinary
-# `line({ curve })` value that crosses the bridge as a string. The animated
-# exports are also driven by `time.sequence` on a `timer()` clock, a live JS
-# signal the derive RPC cannot carry (same reason as the Gapminder panels).
+# The data-space curve ladder: an HTML grid of several chart roots built by a
+# JS loop, not one spec. Every curve it shows crosses the bridge.
 packages/gofish-graphics/stories/forwardsyntax/CurveLadder.stories.tsx
 
 # Time (#1057): QuarterlyBars labels its one axis row with a JS format

@@ -22,6 +22,7 @@ import {
   button,
   chart,
   circle,
+  field,
   filter,
   group,
   layer,
@@ -127,14 +128,15 @@ export const C_Animated: StoryObj<Args> = {
     const container = initializeContainer();
 
     // The clock is a scale from the data's own `day` domain onto ten seconds of
-    // wall time, read backward — so `day()` is a day number, not a tick count.
+    // wall time, read backward — so its value is a day number, not a tick
+    // count. The filter is an expression over it, so it crosses to Python.
     const day = timer({ domain: [1, 365], step: 1, duration: 10000 });
 
     basemap()
       .layer(
         chart(birds)
           .flow(
-            filter((d: any) => d.day === day()),
+            filter(field("day").eq(day)),
             scatter({ x: "lon", y: "lat" })
           )
           .mark(circle({ r: 3, fill: "species" }))
@@ -190,17 +192,15 @@ export const D_Trails: StoryObj<Args> = {
 };
 
 /** A day clock like panel D's, held still on `at`. */
-const pausedDay = (at: number) => {
-  const day = timer({
+const pausedDay = (at: number) =>
+  timer({
     domain: [1, 365],
     step: 1,
     duration: 10000,
     playing: false,
     loop: false,
+    at,
   });
-  day.set(at);
-  return day;
-};
 
 /** Panel D held still on day `at`, for a deterministic capture. */
 const pausedPanel = (at: number): StoryObj<Args> => ({

@@ -4,7 +4,7 @@
  * `timer()` is a scale from a data domain onto wall-clock time, read backward,
  * so each story states the domain it wants values from and reads them out.
  *
- * PaintOnly: the timer is read inside a `live()` fill → paint patches only
+ * PaintOnly: the timer is read in an expression fill → paint patches only
  * (bars alternate as a two-value domain flips; zero layout re-runs).
  *
  * GrowingData: the timer is read inside `derive()` → it is a pipeline
@@ -16,7 +16,7 @@
  */
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, derive, spread, rect, live, timer } from "../../src/lib";
+import { chart, derive, spread, rect, timer, when } from "../../src/lib";
 
 const meta: Meta = {
   title: "Interaction/Timer Pulse",
@@ -43,7 +43,7 @@ const SERIES = Array.from({ length: 200 }, (_, k) => ({
   count: 20 + Math.round(15 * (1 + Math.sin(k / 2))),
 }));
 
-/** regime 0: timer read only inside live() → the fill pulses at paint time,
+/** regime 0: timer read only in a paint-tier fill → it pulses at paint time,
  *  the layout never re-runs. */
 export const PaintOnly: StoryObj<Args> = {
   args: { w: 400, h: 300 },
@@ -58,7 +58,7 @@ export const PaintOnly: StoryObj<Args> = {
       .mark(
         rect({
           h: "count",
-          fill: live(() => (t() === 0 ? "#6b9bd1" : "#d62728")),
+          fill: when(t.eq(0)).then("#6b9bd1").otherwise("#d62728"),
         })
       )
       .render(container, {

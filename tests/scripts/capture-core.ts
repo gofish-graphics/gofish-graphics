@@ -184,14 +184,19 @@ const PAINT_GRACE_MS = 2_000;
  * frozen `requestAnimationFrame` and a numeric polling interval is a frozen
  * `setTimeout`, so neither would ever fire.
  */
-async function waitForPaint(page: Page, graceMs: number): Promise<boolean> {
+async function waitForPaint(
+  page: Page,
+  graceMs: number,
+  rootSelector: string,
+  isDone: () => Promise<boolean>
+): Promise<boolean> {
   const deadline = Date.now() + graceMs;
   for (;;) {
-    const painted = await page.evaluate(
-      () =>
-        !!document.querySelector("#stories-root svg") ||
-        window.__STORY_RENDER_DONE__ === true
-    );
+    const painted =
+      (await page.evaluate(
+        (sel) => !!document.querySelector(`${sel} svg`),
+        rootSelector
+      )) || (await isDone());
     if (painted) return true;
     if (Date.now() > deadline) return false;
     await new Promise((r) => setTimeout(r, REAL_POLL_MS));
@@ -361,7 +366,7 @@ async function openRunnerPage(
   // page ever sees the real one; it keeps running at real speed until
   // `renderStoryOnFakeClock` pauses it, so page load is unaffected (see
   // header comment).
-  await context.clock.install({ time: CLOCK_EPOCH });
+  await installFakeClock(context);
   const page = await context.newPage();
   page.on("console", (msg) => {
     if (msg.type() === "error")
@@ -431,15 +436,58 @@ export async function renderStoryOnFakeClock(
   // module's init may wait on a timer of its own, which a paused clock
   // would never fire.
   await page.evaluate((s) => window.__loadStory__(s), story);
+
+  await renderOnFakeClock(page, {
+    // Kick the render off but do NOT await it: the runner's tail (a rAF
+    // plus a 100ms settle) can only complete once the paused clock is
+    // given virtual time, so awaiting here would deadlock.
+    start: () =>
+      page.evaluate((s) => {
+        void window.__renderStory__(s);
+      }, story),
+    rootSelector: "#stories-root",
+    isDone: () => page.evaluate(() => window.__STORY_RENDER_DONE__ === true),
+    label,
+    log,
+  });
+
+  const renderError = await page.evaluate(() => window.__STORY_RENDER_ERROR__);
+  return renderError ? String(renderError) : null;
+}
+
+/** Install the fake clock on a browser context, before its first
+ *  navigation. It runs at real speed until `renderOnFakeClock` pauses it. */
+export async function installFakeClock(context: BrowserContext): Promise<void> {
+  await context.clock.install({ time: CLOCK_EPOCH });
+}
+
+/**
+ * Pause the fake clock, start a render (`start`, which must not wait for
+ * the render to finish), and hand it the fixed virtual budget past its first
+ * paint, so an animated render is read on the same frame every run. The JS
+ * story runner and the Python parity harness both render this way, so a
+ * playing story and its Python port are captured at the same frame. Throws
+ * on timeout.
+ */
+export async function renderOnFakeClock(
+  page: Page,
+  {
+    start,
+    rootSelector,
+    isDone,
+    label,
+    log,
+  }: {
+    start: () => Promise<unknown>;
+    rootSelector: string;
+    isDone: () => Promise<boolean>;
+    label: string;
+    log: Log;
+  }
+): Promise<void> {
   // From here on time only moves when this process says so.
   await page.clock.pauseAt(CLOCK_PAUSE_AT);
-
-  // Kick the render off but do NOT await it: the runner's tail (a rAF
-  // plus a 100ms settle) can only complete once the paused clock is
-  // given virtual time below, so awaiting here would deadlock.
-  await page.evaluate((s) => {
-    void window.__renderStory__(s);
-  }, story);
+  await start();
 
   // Phase 1 — real time only. Loaders, dynamic imports, fonts and the
   // gofish render promise are real promises that resolve on their own.
@@ -448,7 +496,7 @@ export async function renderStoryOnFakeClock(
   // virtual ms spent before that read are ms the animation never sees.
   // Waiting for first paint here is what pins the budget below to the
   // same point in every run.
-  await waitForPaint(page, PAINT_GRACE_MS);
+  await waitForPaint(page, PAINT_GRACE_MS, rootSelector, isDone);
 
   // Phase 2 — the fixed virtual budget, run in full for every story
   // rather than stopped as soon as `__STORY_RENDER_DONE__` flips. That
@@ -466,10 +514,10 @@ export async function renderStoryOnFakeClock(
   // but say so: how much virtual time this story got is now a function
   // of the machine, so an ANIMATED story here would not land on a fixed
   // frame. A still one is unaffected.
-  if (!(await page.evaluate(() => window.__STORY_RENDER_DONE__))) {
+  if (!(await isDone())) {
     const deadline = Date.now() + 15_000;
     let overrun = 0;
-    while (!(await page.evaluate(() => window.__STORY_RENDER_DONE__))) {
+    while (!(await isDone())) {
       if (Date.now() > deadline)
         throw new Error(
           `Timed out after 15000ms waiting for ${label} to render`
@@ -482,9 +530,6 @@ export async function renderStoryOnFakeClock(
       text: `    (clock overrun: +${overrun}ms virtual past the ${VIRTUAL_SETTLE_MS}ms budget — fine for a still story, not a fixed frame for an animated one)`,
     });
   }
-
-  const renderError = await page.evaluate(() => window.__STORY_RENDER_ERROR__);
-  return renderError ? String(renderError) : null;
 }
 
 /** Render one story in `page` and write its output. Throws on timeout. */

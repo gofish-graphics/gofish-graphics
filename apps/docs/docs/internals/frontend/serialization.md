@@ -1185,7 +1185,10 @@ Python parity harness (`tests/harness/main.ts`,
 `tests/scripts/derive-server.py`). Both call the same function,
 `Serialize.renderIR(doc, container, renderOptions, bridge)` in
 `fromJSON.ts`, which rebuilds the document's root as a mark position
-(`buildIR`, then `mapMark`) and renders it. `buildIR` takes the one
+(`buildIR`, then `mapMark`) and renders it: a chart or a `.layer(...)` chain
+through its builder's `.render`, and a mark root as a component,
+`gofish(container, options, mark)`, so the sources its expressions read
+register with an interaction runtime as a JS component's do. `buildIR` takes the one
 document shape, `FrontendIRDocument`, with its tables as rows. Every rebuild
 threads one context object (`IRContext`: the bridge, the token resolver, and
 the current document's tables and a mark function's input refs), so a chart

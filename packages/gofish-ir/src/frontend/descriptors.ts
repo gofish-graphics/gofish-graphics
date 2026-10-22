@@ -2135,7 +2135,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         "Line color, or a field name or accessor for a color scale (constant within the line). Defaults to `fill`."
       ),
       strokeWidth: {
-        type: t.number,
+        type: t.union(t.number, t.ref("ExprIR")),
         default: 1,
         doc: "Line thickness in pixels.",
       },
@@ -2143,7 +2143,10 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         type: t.string,
         doc: 'Raw SVG stroke-dasharray (e.g. "12") for a dashed line.',
       },
-      opacity: { type: t.number, doc: "Opacity, 0 to 1." },
+      opacity: {
+        type: t.union(t.number, t.ref("ExprIR")),
+        doc: "Opacity, 0 to 1.",
+      },
       mixBlendMode: {
         type: t.enum("normal", "multiply"),
         doc: "Blend mode where connectors overlap.",
@@ -2199,11 +2202,14 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         "Stroke color of the band's outline, or a field name or accessor for a color scale (constant within the band)."
       ),
       strokeWidth: {
-        type: t.number,
+        type: t.union(t.number, t.ref("ExprIR")),
         default: 0,
         doc: "Stroke width in pixels.",
       },
-      opacity: { type: t.number, doc: "Opacity, 0 to 1." },
+      opacity: {
+        type: t.union(t.number, t.ref("ExprIR")),
+        doc: "Opacity, 0 to 1.",
+      },
       mixBlendMode: {
         type: t.enum("normal", "multiply"),
         default: "normal",
@@ -2258,7 +2264,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         "Stroke color of the outline, or a field name or accessor for a color scale (constant within the enclosed group). Default a light gray."
       ),
       strokeWidth: {
-        type: t.number,
+        type: t.union(t.number, t.ref("ExprIR")),
         default: 1,
         doc: "Stroke width in pixels.",
       },
@@ -2267,12 +2273,12 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         doc: 'Raw SVG stroke-dasharray (e.g. "4 2") for a dashed outline.',
       },
       opacity: {
-        type: t.number,
+        type: t.union(t.number, t.ref("ExprIR")),
         default: 1,
         doc: "Opacity of the whole outline, fill and stroke, 0 to 1.",
       },
       fillOpacity: {
-        type: t.number,
+        type: t.union(t.number, t.ref("ExprIR")),
         doc: "Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`, so a tinted region can keep a full-strength outline.",
       },
     },

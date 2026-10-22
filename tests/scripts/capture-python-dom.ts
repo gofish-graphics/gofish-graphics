@@ -28,6 +28,8 @@ import { normalizeDom } from "./normalize-dom.js";
 import { mapJsToPython } from "./path-mapping.js";
 import {
   defaultConcurrency,
+  installFakeClock,
+  renderOnFakeClock,
   runInOrder,
   type LogLine,
 } from "./capture-core.js";
@@ -275,7 +277,8 @@ async function captureStory(
   page: Page,
   harnessUrl: string,
   story: PythonStory,
-  ir: IRResult & { kind: "ok" }
+  ir: IRResult & { kind: "ok" },
+  log: (text: string) => void
 ): Promise<{ dom: string; screenshot: Buffer }> {
   // Wait for the harness module and the webfonts, not for `networkidle`:
   // that waits out 500ms of network silence after the load on every story.
@@ -296,35 +299,27 @@ async function captureStory(
   // and reaches Python over `deriveServerUrl`.
   const spec = { ...ir, deriveServerUrl };
 
-  await page.evaluate((s) => {
-    window.__GOFISH_RENDER_COMPLETE__ = false;
-    window.__GOFISH_RENDER_ERROR__ = null;
-    // Clear previous render
-    const root = document.getElementById("gofish-harness-root");
-    if (root) root.innerHTML = "";
-    window.__renderChart__(s);
-  }, spec);
-
-  // Wait for render completion. Most charts resolve quickly; heavy unit-dot
-  // treemaps can paint thousands of marks while the render promise is still
-  // settling, so fall back to waiting for visible SVG output.
-  try {
-    await page.waitForFunction(
-      () => window.__GOFISH_RENDER_COMPLETE__ === true,
-      { timeout: 8_000 }
-    );
-  } catch {
-    await page.waitForFunction(
-      () => {
+  // Render on the fake clock the JS capture uses (capture-core.ts): paused
+  // before the render starts, then handed the same fixed virtual budget past
+  // first paint, so a playing story (a `timer` source, a build-in) is read
+  // at the same frame as its JS twin. Python callbacks (the derive server)
+  // are real network round trips, which the paused clock does not charge.
+  await renderOnFakeClock(page, {
+    start: () =>
+      page.evaluate((s) => {
+        window.__GOFISH_RENDER_COMPLETE__ = false;
+        window.__GOFISH_RENDER_ERROR__ = null;
+        // Clear previous render
         const root = document.getElementById("gofish-harness-root");
-        return (
-          (root?.querySelectorAll("ellipse, circle, rect, path, line")
-            ?.length ?? 0) > 0
-        );
-      },
-      { timeout: 40_000 }
-    );
-  }
+        if (root) root.innerHTML = "";
+        window.__renderChart__(s);
+      }, spec),
+    rootSelector: "#gofish-harness-root",
+    isDone: () =>
+      page.evaluate(() => window.__GOFISH_RENDER_COMPLETE__ === true),
+    label: storyName(story),
+    log: ({ text }) => log(text),
+  });
 
   // Check for errors
   const error = await page.evaluate(() => window.__GOFISH_RENDER_ERROR__);
@@ -479,6 +474,7 @@ async function main() {
       const context = await browser!.newContext({
         viewport: { width: 1280, height: 720 },
       });
+      await installFakeClock(context);
       const page = await context.newPage();
       const pageErrors: string[] = [];
       // Surface in-page failures in the capture log AND fail the story — an
@@ -521,7 +517,8 @@ async function main() {
           page,
           `http://localhost:${HARNESS_PORT}`,
           story,
-          ir
+          ir,
+          log
         );
         if (pageErrors.length > 0) {
           throw new Error(`uncaught page error: ${pageErrors.join(" | ")}`);

@@ -66,6 +66,7 @@ from .charts import bar_chart
 from .sources import timer, signal, wheel
 from .readers import pointer, drag, click
 from .expr import when, concat_str
+from .interpolate import interpolate
 
 # The time surface, a namespace like JS `time` (`time.sequence(...)`).
 from . import time
@@ -158,6 +159,7 @@ __all__ = [
     "click",
     "when",
     "concat_str",
+    "interpolate",
     "time",
 ]
 

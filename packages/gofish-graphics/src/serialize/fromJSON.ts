@@ -19,7 +19,7 @@ import {
   LayerBuilder,
   PREVIOUS_LAYER_MARKS,
 } from "../ast/marks/chart";
-import type { AxesOptions, View } from "../ast/gofish";
+import { gofish, type AxesOptions, type View } from "../ast/gofish";
 import { createName, type Token } from "../ast/createName";
 import { Constraint, RelateOperand } from "../ast/constraints";
 import { palette, gradient } from "../families/color";
@@ -1090,5 +1090,14 @@ export function renderIR(
   bridge?: DeriveBridge
 ): Promise<View> {
   const options: any = definedFields({ ...renderOptions });
-  return buildIR(doc, bridge).render(container, options);
+  const root = buildIR(doc, bridge);
+  // A chart or a `.layer(...)` chain renders through its builder. A mark
+  // root (a combinator over explicit children) renders as a component, the
+  // `gofish(container, options, mark)` form a JS author writes: it resolves
+  // under the interaction runtime, so the sources its expressions read
+  // register (hit-testing, paint patches, re-runs), and with none it renders
+  // down the static path unchanged.
+  return typeof root === "function"
+    ? gofish(container, options, root)
+    : root.render(container, options);
 }

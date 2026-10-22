@@ -1041,7 +1041,7 @@ def _label_opts(*, position: Optional[str] = None, font_size: Optional[float] = 
             opts[_k] = _v
     return opts
 
-def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, stroke_dasharray: Optional[str] = None, opacity: Optional[float] = None, mix_blend_mode: Optional[str] = None, curve: Optional[dict] = None, dir: Optional[str] = None, source: Optional[Any] = None, target: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float | Expr] = None, stroke_dasharray: Optional[str] = None, opacity: Optional[float | Expr] = None, mix_blend_mode: Optional[str] = None, curve: Optional[dict] = None, dir: Optional[str] = None, source: Optional[Any] = None, target: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.
 
     Args:
@@ -1089,7 +1089,7 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
             opts[_k] = _v
     return opts
 
-def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, mix_blend_mode: Optional[str] = None, dir: Optional[str] = None, curve: Optional[dict] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float | Expr] = None, opacity: Optional[float | Expr] = None, mix_blend_mode: Optional[str] = None, dir: Optional[str] = None, curve: Optional[dict] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Edge-mode connector — a filled band between the facing edges of consecutive marks (areas, streamgraphs, sankey ribbons).
 
     Args:
@@ -1129,7 +1129,7 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
             opts[_k] = _v
     return opts
 
-def _enclose_opts(*, padding: Optional[float] = None, shape: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, stroke_dasharray: Optional[str] = None, opacity: Optional[float] = None, fill_opacity: Optional[float] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _enclose_opts(*, padding: Optional[float] = None, shape: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float | Expr] = None, stroke_dasharray: Optional[str] = None, opacity: Optional[float | Expr] = None, fill_opacity: Optional[float | Expr] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.oval()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs.
 
     Args:
