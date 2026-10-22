@@ -392,10 +392,12 @@ export const Text = ({
           if (Number.isFinite(relRot.minX) && Number.isFinite(relRot.minY)) {
             items.push(
               rectItemFromBox(
-                anchorX + relRot.minX,
-                anchorX + relRot.maxX,
-                anchorY + glyphDy + relRot.minY,
-                anchorY + glyphDy + relRot.maxY,
+                // Inset by half the 1 px stroke, so the overlay stays
+                // inside the box it marks and is never clipped at an edge.
+                anchorX + relRot.minX + 0.5,
+                anchorX + relRot.maxX - 0.5,
+                anchorY + glyphDy + relRot.minY + 0.5,
+                anchorY + glyphDy + relRot.maxY - 0.5,
                 toPixel,
                 {
                   role: "overlay",
