@@ -161,10 +161,14 @@ ticks, text — so neither has to widen the core. That is exactly why they sit i
 Frontend section of this wiki — [Axes](/internals/frontend/axes) and
 [Labels](/internals/design/label-syntax) — and not in Core.
 
-(A truth-in-advertising note: axes and labels desugar in spirit more than in
-implementation today. The renderer special-cases their placement rather than
-running them through the same desugaring path the rest of the frontend takes.
-The aspiration is to fold both into the same scheme. **Treemaps** are an even
+(A truth-in-advertising note: axes and labels now elaborate into ordinary
+shapes and constraints, and layout has no axis or label code, but the
+elaboration runs inside layout after domains are inferred rather than as a
+rewrite of the surface spec. Domain nicing still reads the ticks each axis
+asks for, and polar axes are still drawn by `coord`. The aspiration is to
+fold both into the same scheme as the rest of the frontend; see
+[API Design](/internals/design/api-design), "A convenience is defined by what
+it desugars into". **Treemaps** are an even
 more aspirational example: a treemap algorithm fits the same shape — desugar
 the user spec into nested rectangles laid out by ordinary `spread`/`stack` /
 `scatter` operators — but the engine cannot do that today.)

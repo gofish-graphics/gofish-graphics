@@ -103,3 +103,11 @@ Hand-authored SVG is a last resort, only for the rare figure GoFish cannot expre
 Code blocks are hand-written and tagged ` ```ts twoslash ` so they get real
 type-on-hover from the TypeScript compiler at build time — a wrong type fails the
 build, so samples cannot silently rot.
+
+## Prose
+
+Essays use American spelling: color, behavior, center, catalog, labeled. Use
+words that already have a meaning outside GoFish, and define every term of
+art the first time it appears (see
+[API Design](/internals/design/api-design#naming)). Say "visualization"
+unless the subject really is a statistical chart.

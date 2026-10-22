@@ -20,6 +20,16 @@ contributor guide to the `CoordinateTransform` interface and how to add a new on
 - Walkthrough: implementing a new transform end to end.
 - Gotchas — domains, grid lines, and [adaptive resampling](/internals/layout/adaptive-resampling).
 
+## Rules already settled
+
+**A point-like mark is a point to the transform.** For a circle or dot inside
+a `coord`, only its center goes through the transform. Its box does not, and
+it draws at its pixel size at the transformed center. So such marks are laid
+out with `spread({ anchor: "middle", spacing })`, with `spacing` in the
+transform's own units (radians along `theta` in polar), not edge to edge,
+which would turn each pixel of box width into a radian. Data-sized extents
+are for shapes that sweep through the space, such as polar bars and ribbons.
+
 ## Source
 
 Likely `covers:`: files under
