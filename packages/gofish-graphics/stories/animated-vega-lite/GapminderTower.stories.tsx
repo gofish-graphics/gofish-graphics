@@ -36,8 +36,8 @@ import {
   scatter,
   selectAll,
   time,
+  timer,
 } from "../../src/lib";
-import { pausedClock } from "./pausedClock";
 import data from "vega-datasets";
 
 const meta: Meta = {
@@ -126,7 +126,7 @@ export const L2ExplicitClock: StoryObj<Args> = {
   render: (args: Args, context: any) => {
     const container = initializeContainer();
     const gapminder = context.loaded.gapminder as any[];
-    const year = pausedClock(YEARS, 5000, AT);
+    const year = timer({ domain: YEARS, duration: 5000, playing: false, loop: false, at: AT });
 
     chart(gapminder, { legend: false })
       .flow(
@@ -164,7 +164,7 @@ export const L3DataSpace: StoryObj<Args> = {
   render: (args: Args, context: any) => {
     const container = initializeContainer();
     const gapminder = context.loaded.gapminder as any[];
-    const year = pausedClock(YEARS, 5000, AT);
+    const year = timer({ domain: YEARS, duration: 5000, playing: false, loop: false, at: AT });
 
     chart(gapminder, { legend: false })
       .flow(

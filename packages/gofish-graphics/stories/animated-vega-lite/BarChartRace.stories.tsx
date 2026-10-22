@@ -39,7 +39,6 @@ import {
   field,
   filter,
   group,
-  live,
   rect,
   scatter,
   selectAll,
@@ -50,7 +49,6 @@ import {
   type Timer,
   Curve,
 } from "../../src/lib";
-import { pausedClock } from "./pausedClock";
 import {
   categoryBrands,
   everyYearBrands,
@@ -123,12 +121,12 @@ const DURATION = 20000;
  * the plot, because the bars' y is a ranking, not a scale a row could sit on.
  * `zOrder(-1)` puts it behind the bars.
  */
-const yearReadout = (clock: () => number, h: number) =>
+const yearReadout = (clock: Timer<number>, h: number) =>
   chart([{ value: 210000 }])
     .flow(scatter({ x: "value" }))
     .mark(
       text({
-        text: live(() => String(Math.floor(clock()))),
+        text: clock.floor(),
         fontSize: 48,
         fill: "#ccc",
         y: h - 130,
@@ -218,7 +216,7 @@ export const Paused2000: StoryObj<Args> = {
   args: { w: 600, h: 600 },
   render: (args: Args) => {
     const container = initializeContainer();
-    race(container, args, pausedClock(YEARS, DURATION, 2000));
+    race(container, args, timer({ domain: YEARS, duration: DURATION, playing: false, loop: false, at: 2000 }));
     return container;
   },
 };
@@ -228,7 +226,7 @@ export const Paused2010: StoryObj<Args> = {
   args: { w: 600, h: 600 },
   render: (args: Args) => {
     const container = initializeContainer();
-    race(container, args, pausedClock(YEARS, DURATION, 2010));
+    race(container, args, timer({ domain: YEARS, duration: DURATION, playing: false, loop: false, at: 2010 }));
     return container;
   },
 };
@@ -238,7 +236,7 @@ export const Paused2019: StoryObj<Args> = {
   args: { w: 600, h: 600 },
   render: (args: Args) => {
     const container = initializeContainer();
-    race(container, args, pausedClock(YEARS, DURATION, 2019));
+    race(container, args, timer({ domain: YEARS, duration: DURATION, playing: false, loop: false, at: 2019 }));
     return container;
   },
 };
@@ -250,7 +248,7 @@ export const Paused2007_5: StoryObj<Args> = {
   args: { w: 600, h: 600 },
   render: (args: Args) => {
     const container = initializeContainer();
-    race(container, args, pausedClock(YEARS, DURATION, 2007.5));
+    race(container, args, timer({ domain: YEARS, duration: DURATION, playing: false, loop: false, at: 2007.5 }));
     return container;
   },
 };
@@ -278,7 +276,7 @@ export const Top10Paused2007_5: StoryObj<Args> = {
   args: { w: 600, h: 400 },
   render: (args: Args) => {
     const container = initializeContainer();
-    race(container, args, pausedClock(YEARS, DURATION, 2007.5), top10);
+    race(container, args, timer({ domain: YEARS, duration: DURATION, playing: false, loop: false, at: 2007.5 }), top10);
     return container;
   },
 };
@@ -290,7 +288,7 @@ export const Top10Paused2008: StoryObj<Args> = {
   args: { w: 600, h: 400 },
   render: (args: Args) => {
     const container = initializeContainer();
-    race(container, args, pausedClock(YEARS, DURATION, 2008), top10);
+    race(container, args, timer({ domain: YEARS, duration: DURATION, playing: false, loop: false, at: 2008 }), top10);
     return container;
   },
 };
@@ -425,7 +423,7 @@ export const Top10FromBelowPaused2007_5: StoryObj<Args> = {
   args: { w: 600, h: 400 },
   render: (args: Args) => {
     const container = initializeContainer();
-    raceFromBelow(container, args, pausedClock(YEARS, DURATION, 2007.5));
+    raceFromBelow(container, args, timer({ domain: YEARS, duration: DURATION, playing: false, loop: false, at: 2007.5 }));
     return container;
   },
 };

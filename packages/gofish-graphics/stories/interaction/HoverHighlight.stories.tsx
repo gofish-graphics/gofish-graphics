@@ -1,16 +1,14 @@
 /**
- * Hover highlight — regime 0 (paint-only).
+ * Hover highlight — the paint tier.
  *
- * A `pointer()` input is read INSIDE a `live()` fill channel: hovering a bar
- * re-evaluates the thunk at paint time and patches only the `fill` attribute —
- * zero layout re-runs. The bar's live thunk is bound to the same stamped datum
- * that `pointer().datum()` returns on hit-test, so reference (`===`) comparison
- * identifies the hovered bar.
+ * `hover.over` is true on the bar under the pointer. The fill is a paint
+ * channel whose values are literal colors, so hovering a bar patches only the
+ * `fill` attribute, with zero layout re-runs.
  */
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
-import { chart, spread, rect, live, pointer } from "../../src/lib";
+import { chart, spread, rect, pointer, when } from "../../src/lib";
 
 const meta: Meta = {
   title: "Interaction/Hover Highlight",
@@ -28,15 +26,14 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    const p = pointer();
+    const hover = pointer();
 
     chart(seafood)
       .flow(spread({ by: "lake", dir: "x" }))
-      // regime 0: the pointer read lives inside live() → paint patch only.
       .mark(
         rect({
           h: "count",
-          fill: live((d) => (d === p.datum() ? "#d62728" : "#6b9bd1")),
+          fill: when(hover.over).then("#d62728").otherwise("#6b9bd1"),
         })
       )
       .render(container, {

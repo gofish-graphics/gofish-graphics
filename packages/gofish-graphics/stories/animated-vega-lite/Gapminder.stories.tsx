@@ -33,7 +33,6 @@ import {
   blank,
   layer,
   line,
-  live,
   scatter,
   rect,
   spread,
@@ -48,7 +47,6 @@ import {
 // The identity transform is internal (not a public `Coord`); see `sparkRow`.
 import { linear } from "../../src/ast/coordinateTransforms/linear";
 import { SMOOTH_CURVES, channelSpline } from "../../src/spline";
-import { pausedClock } from "./pausedClock";
 import data from "vega-datasets";
 
 const meta: Meta = {
@@ -83,7 +81,7 @@ const yearReadout = (clock: any) =>
     .flow(scatter({ x: "fertility", y: "life_expect" }))
     .mark(
       text({
-        text: live(() => String(Math.floor(clock()))),
+        text: clock.floor(),
         fontSize: 48,
         fill: "#ccc",
       }).zOrder(-1)
@@ -285,7 +283,7 @@ const curvesRow = <C,>(
     () =>
       spreadY({ spacing: 16, alignment: "middle" }, [
         text({
-          text: live(() => String(Math.floor(clock()))),
+          text: clock.floor(),
           fontSize: 40,
           fill: "#ccc",
         }),
@@ -765,7 +763,7 @@ export const CurvesKinematicsPaused: StoryObj<Args> = {
     const container = initializeContainer();
     const gapminder = context.loaded.gapminder as any[];
 
-    const year = pausedClock(yearRange(gapminder), 10000, 1957.5);
+    const year = timer({ domain: yearRange(gapminder), duration: 10000, playing: false, loop: false, at: 1957.5 });
     curvesRow(
       container,
       args,
@@ -794,7 +792,7 @@ export const CurvesPaused: StoryObj<Args> = {
     const container = initializeContainer();
     const gapminder = context.loaded.gapminder as any[];
 
-    const year = pausedClock(yearRange(gapminder), 10000, 1957.5);
+    const year = timer({ domain: yearRange(gapminder), duration: 10000, playing: false, loop: false, at: 1957.5 });
     curvesRow(container, args, year, CURVES, (curve) =>
       curvePanel(gapminder, year, curve)
     );
@@ -914,7 +912,7 @@ export const TrailsPaused: StoryObj<Args> = {
     const container = initializeContainer();
     const gapminder = context.loaded.gapminder as any[];
 
-    const year = pausedClock(yearRange(gapminder), 10000, 1997.5);
+    const year = timer({ domain: yearRange(gapminder), duration: 10000, playing: false, loop: false, at: 1997.5 });
     trails(gapminder, year, Curve.monotone())
       .layer(yearReadout(year))
       .render(container, { w: args.w, h: args.h } as any);
@@ -966,7 +964,7 @@ export const TrailsCurvesPaused: StoryObj<Args> = {
     const container = initializeContainer();
     const gapminder = context.loaded.gapminder as any[];
 
-    const year = pausedClock(yearRange(gapminder), 10000, 1967.5);
+    const year = timer({ domain: yearRange(gapminder), duration: 10000, playing: false, loop: false, at: 1967.5 });
     trailCurvesRow(container, args, gapminder, year);
 
     return container;

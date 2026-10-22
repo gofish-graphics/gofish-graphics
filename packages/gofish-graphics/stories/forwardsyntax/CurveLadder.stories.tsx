@@ -17,7 +17,6 @@ import type {
   ChartBuilder,
   LayerBuilder,
 } from "../../src/ast/marks/chartBuilder";
-import { pausedClock } from "../animated-vega-lite/pausedClock";
 import {
   type Gap,
   type LadderCurve,
@@ -291,5 +290,5 @@ export const LadderAnimated: StoryObj = {
  *  `monotone` are furthest apart: 1980 to 1981, where gas peaks and miles
  *  turn back, and `smooth` rounds the peak past its point. */
 export const LadderAnimatedPaused1980: StoryObj = {
-  render: () => animatedLadder(pausedClock(YEARS, 20000, 1980.5)),
+  render: () => animatedLadder(timer({ domain: YEARS, duration: 20000, playing: false, loop: false, at: 1980.5 })),
 };

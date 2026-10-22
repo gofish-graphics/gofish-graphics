@@ -26,7 +26,7 @@ import {
   group,
   layer,
   line,
-  live,
+  when,
   polygon,
   pointer,
   scatter,
@@ -79,9 +79,6 @@ export const B_HoverHighlight: StoryObj<Args> = {
     const container = initializeContainer();
 
     const hover = pointer();
-    // A line's datum is the rows it was drawn through: one species' days, so
-    // any row gives its `species`.
-    const hot = (d: any) => hover.datum()?.[0]?.species === d?.[0]?.species;
 
     basemap()
       .layer(
@@ -93,8 +90,8 @@ export const B_HoverHighlight: StoryObj<Args> = {
           .mark(
             line({
               stroke: "species",
-              strokeWidth: live((d) => (hot(d) ? 3 : 0.1)),
-              opacity: live((d) => (hot(d) ? 1 : 0.5)),
+              strokeWidth: when(hover.over).then(3).otherwise(0.1),
+              opacity: when(hover.over).then(1).otherwise(0.5),
             })
           )
       )
@@ -105,7 +102,7 @@ export const B_HoverHighlight: StoryObj<Args> = {
       // express today. See the report / the plan note.
       .layer(
         text({
-          text: live(() => hover.datum()?.[0]?.species ?? ""),
+          text: hover.field("species").fillNull(""),
           fontSize: 14,
           fill: "#333",
         })

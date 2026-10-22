@@ -1,11 +1,11 @@
 /**
- * Semantic-zoom histogram — regime 2 (pipeline re-run) + a regime-0 live
- * readout.
+ * Semantic-zoom histogram — a pipeline re-run plus a paint-tier readout.
  *
  * `wheel({ range, initial })` is read INSIDE `derive()` (a spec read during
  * resolve), so it registers as a pipeline dependency: scrolling re-bins the
- * data and re-runs the whole pipeline (rAF-coalesced). The readout `text`
- * uses `live(...)` content, so its string patches at paint time only.
+ * data and re-runs the whole pipeline (rAF-coalesced). The readout `text` is
+ * an expression, `concatStr(...)`, and text content is a paint channel, so
+ * its string patches at paint time only.
  */
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
@@ -16,7 +16,7 @@ import {
   spread,
   rect,
   text,
-  live,
+  concatStr,
   wheel,
 } from "../../src/lib";
 
@@ -73,13 +73,13 @@ export const Default: StoryObj<Args> = {
         spread({ by: "bin", dir: "x" })
       )
       .mark(rect({ h: "count" }))
-      // regime 0: a component-level annotation tier — live text content patches
-      // at paint time only.
+      // A component-level annotation tier: text content is a paint channel, so
+      // the caption patches at paint time only.
       .layer(
         text({
           x: 20,
           y: 290,
-          text: live(() => `bins: ${bins()} (scroll to re-bin)`),
+          text: concatStr("bins: ", bins, " (scroll to re-bin)"),
           fill: "#333",
         })
       )

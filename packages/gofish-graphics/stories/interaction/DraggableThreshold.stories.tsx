@@ -1,30 +1,21 @@
 /**
- * Draggable threshold — BOTH regimes in one story.
+ * Draggable threshold — BOTH tiers in one story.
  *
- * `cut` is a gofish `signal()` (data-space count value). It is read in TWO
- * places:
- *   - the threshold rule's `y` position, an ordinary (non-live) accessor
- *     evaluated during resolve → `cut` becomes a pipeline dependency, so every
- *     drag frame re-runs resolve → layout → paint (regime 2);
- *   - the bars' `fill`, inside `live()` → a paint-time patch (regime 0).
+ * `cut` is an expression over a `drag()`: the drag's y in data (count) units,
+ * clamped to the data's range and 60 before the first drag. It is read in two
+ * places, and each read's tier is inferred from its channel:
+ *   - the threshold rule's `y`, a position, so a drag re-runs resolve → layout
+ *     → paint (the pipeline tier);
+ *   - the bars' `fill`, a paint channel whose values are literal colors, so a
+ *     drag patches the fill alone (the paint tier).
  *
- * A `drag()` input drives `cut`: the drag→data conversion (`currentData()`)
- * uses the chart's recorded frame scales, so dragging maps pixels back to
- * count units. The wiring runs in ordinary Solid code (a `createEffect` in a
- * root), which is fine — signals live outside the layout pipeline.
+ * The clamp keeps the rule inside the bars' range: an unclamped threshold
+ * dragged past the bars would extend the y domain, so every drag frame would
+ * re-derive the very conversions the drag is read through.
  */
 import type { Meta, StoryObj } from "@storybook/html";
-import { createRoot, createEffect } from "solid-js";
 import { initializeContainer } from "../helper";
-import {
-  chart,
-  spread,
-  rect,
-  live,
-  signal,
-  drag,
-  sumBy,
-} from "../../src/lib";
+import { chart, spread, rect, drag, when, field } from "../../src/lib";
 
 const meta: Meta = {
   title: "Interaction/Draggable Threshold",
@@ -51,55 +42,25 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    // Initial threshold in data (count) units.
-    const cut = signal(60);
     const dr = drag();
-
-    // Convert drag position → count units and write `cut`. Runs in ordinary
-    // Solid code (outside the layout pipeline). `dr` attaches to the runtime
-    // via the live read in the bar fill below, so `currentData()` can use the
-    // recorded frame scales.
-    //
-    // Clamp the write to the data's own range: an unclamped threshold dragged
-    // past the bars extends the y domain (a rule at count −20 makes the scale
-    // [−20, 100]), so every drag frame would re-derive the very conversions
-    // the drag is reading — a feedback loop that reads as a jarring rescale.
-    const maxCount = Math.max(...data.map((d) => d.count));
-    createRoot(() => {
-      createEffect(() => {
-        const c = dr.currentData();
-        if (c?.y != null) cut.set(Math.min(maxCount, Math.max(0, c.y)));
-      });
-    });
+    const cut = dr.y.clip(0, 95).fillNull(60);
 
     chart(data)
       .flow(spread({ by: "cat", dir: "x" }))
       .mark(
         rect({
           h: "count",
-          // regime 0: fill patches at paint time. Reading dr here also attaches
-          // the drag input to this chart's runtime (so currentData() works).
-          // The stamped datum is the spread group (one row per cat), so sum the
-          // count to get this bar's value.
-          fill: live((d) => {
-            dr.isActive();
-            const total = sumBy(d as { count: number }[], "count");
-            return total > cut() ? "#d62728" : "#6b9bd1";
-          }),
+          // The stamped datum is the spread group (one row per cat), so sum
+          // the count to get this bar's value.
+          fill: when(field("count").sum().gt(cut))
+            .then("#d62728")
+            .otherwise("#6b9bd1"),
         })
       )
-      // The threshold rule: a component-level annotation tier (a bare rect)
-      // whose y reads cut() during resolve (regime 2 → full re-run per drag
-      // frame). y is a data-space count value, so it aligns with the bars' count
-      // scale; w spans the plot in pixels.
-      .layer(
-        rect({
-          y: () => cut(),
-          h: 3,
-          w: args.w,
-          fill: "#333",
-        })
-      )
+      // The threshold rule: a bare rect tier whose y is `cut`, a data-space
+      // count value, so it aligns with the bars' count scale; w spans the
+      // plot in pixels.
+      .layer(rect({ y: cut, h: 3, w: args.w, fill: "#333" }))
       .render(container, {
         w: args.w,
         h: args.h,

@@ -50,7 +50,6 @@ import {
   Curve,
 } from "../../src/lib";
 import { drivingShifts } from "../../src/data/drivingShifts";
-import { pausedClock } from "./pausedClock";
 
 const meta: Meta = {
   title: "Animated Vega-Lite/Connected Scatterplot",
@@ -76,7 +75,7 @@ const AT = 1979.5;
 /** The clock a playing story runs on, and the one a paused twin is held
  *  still on, at `AT`. */
 const playing = (): Clock => timer({ domain: YEARS, duration: DURATION });
-const paused = (): Clock => pausedClock(YEARS, DURATION, AT);
+const paused = (): Clock => timer({ domain: YEARS, duration: DURATION, playing: false, loop: false, at: AT });
 
 /** The dots, styled like the static connected scatterplot
  *  (`stories/forwardsyntax/Scatter.stories.tsx`). */
