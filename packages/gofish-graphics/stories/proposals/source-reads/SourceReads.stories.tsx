@@ -9,6 +9,14 @@
  * extent, the clicked set) and draws it with today's JS closures. The proposed
  * spellings live in the proposal; the code here is only the rendering.
  *
+ * Round 2 adds STATE BLOCKS (`.when(cond, { ...overrides, rest })` chained
+ * after a mark). They do not run yet, so `desugarStates` below is a
+ * PROTOTYPE OF THE REWRITE: it turns state blocks into today's per-channel
+ * `when(c).then(v).otherwise(base)` chains. `raise` has no such rewrite
+ * today (see BirdStates), so the stories stand it in by data order.
+ * `StatePrecedence` (through the rewrite) and `StatePrecedenceExplicit`
+ * (hand-written explicit form) must render the same DOM.
+ *
  * Not gallery-tagged, and exempt from Python parity: review material.
  */
 import type { Meta, StoryObj } from "@storybook/html";
@@ -18,6 +26,7 @@ import { penguins } from "../../../src/data/penguins";
 import { birds } from "../../../src/data/birds";
 import { world110m } from "../../../src/data/world110m";
 import {
+  Color,
   Coord,
   chart,
   circle,
@@ -37,6 +46,7 @@ import {
   text,
   when,
 } from "../../../src/lib";
+import type { Expr } from "../../../src/ast/expr";
 
 const meta: Meta = { title: "Proposals/Source Reads" };
 export default meta;
@@ -318,7 +328,225 @@ export const LinkedLakes: StoryObj = {
     ),
 };
 
-/* 7. Diagram: hover a node, highlight its incident edges --------------- */
+/* 7. Round 2: the state-block rewrite -------------------------------- */
+
+/** One state block, `.when(cond, { ...set, rest })`. `any` is `cond.any()`
+ *  over the mark's shapes (is the condition true for at least one of them);
+ *  the capture holds the inputs fixed, so the panel passes it in. */
+type State = {
+  cond: Expr;
+  any: boolean;
+  set: Record<string, unknown>;
+  rest?: Record<string, unknown>;
+};
+
+/**
+ * PROTOTYPE of the rewrite. For each channel a state block touches:
+ *
+ *   k: when(c_n).then(v_n)                       // later blocks first
+ *        .when(c_n.not().and(c_n.any())).then(r_n)
+ *        ...
+ *        .otherwise(base_k)
+ *
+ * First true branch wins,
+ * so a later block overrides an earlier one channel by channel (the CSS
+ * cascade by source order).
+ */
+function desugarStates(base: Record<string, unknown>, states: State[]) {
+  const keys = new Set<string>();
+  for (const s of states)
+    for (const k of [...Object.keys(s.set), ...Object.keys(s.rest ?? {})])
+      keys.add(k);
+  const chainFor = (k: string, baseValue: unknown): any => {
+    const branches: [Expr, unknown][] = [];
+    for (const s of [...states].reverse()) {
+      if (k in s.set) branches.push([s.cond, s.set[k]]);
+      if (s.rest && k in s.rest)
+        branches.push([s.cond.not().and(s.any), s.rest[k]]);
+    }
+    if (branches.length === 0) return baseValue;
+    let chain: any = when(branches[0][0]).then(branches[0][1] as any);
+    for (const [c, v] of branches.slice(1)) chain = chain.when(c).then(v);
+    return chain.otherwise(baseValue as any);
+  };
+  const opts: Record<string, unknown> = { ...base };
+  for (const k of keys) opts[k] = chainFor(k, base[k]);
+  return { opts };
+}
+
+const inSet = (k: string, vals: string[]): Expr =>
+  vals.length === 0
+    ? (when(false).then(true).otherwise(false) as Expr)
+    : vals
+        .map((v) => field(k).eq(v) as Expr)
+        .reduce((a, b) => a.or(b) as Expr);
+
+/* 7a. Click multi-select with "fade the rest" -------------------------- */
+
+export const ClickRest: StoryObj = {
+  render: () =>
+    strip(
+      [[], ["Lake B"], ["Lake B", "Lake D"]] as string[][],
+      (sel) =>
+        sel.length
+          ? `toggled on: ${sel.join(", ")}; the rest fade`
+          : "nothing clicked: nothing fades",
+      (box, sel) => {
+        const picked = inSet("lake", sel);
+        const { opts } = desugarStates({ h: "count", fill: BLUE, opacity: 1 }, [
+          {
+            cond: picked,
+            any: sel.length > 0,
+            set: { fill: RED },
+            rest: { opacity: 0.3 },
+          },
+        ]);
+        chart(seafood)
+          .flow(spread({ by: "lake", dir: "x" }))
+          .mark(rect(opts as any))
+          .render(sub(box), { w: 240, h: 220 });
+      }
+    ),
+};
+
+/* 7b. Two states at once: selected, then hovered (later wins) ---------- */
+
+const PICKED = ["Lake B", "Lake D"];
+const precedenceStates = (hov: string | undefined): State[] => [
+  {
+    cond: inSet("lake", PICKED),
+    any: true,
+    set: { fill: RED },
+    rest: { opacity: 0.3 },
+  },
+  {
+    cond: inSet("lake", hov ? [hov] : []),
+    any: hov !== undefined,
+    set: { strokeWidth: 3, opacity: 1 },
+  },
+];
+const precedenceCaption = (hov: string | undefined) =>
+  `selected: B, D; hovered: ${hov ?? "none"}`;
+const PRECEDENCE_HOVERS = [undefined, "Lake C", "Lake D"];
+const BASE_BAR = {
+  h: "count",
+  fill: BLUE,
+  opacity: 1,
+  stroke: "#222",
+  strokeWidth: 0,
+};
+
+export const StatePrecedence: StoryObj = {
+  render: () =>
+    strip(PRECEDENCE_HOVERS, precedenceCaption, (box, hov) => {
+      const { opts } = desugarStates(BASE_BAR, precedenceStates(hov));
+      chart(seafood)
+        .flow(spread({ by: "lake", dir: "x" }))
+        .mark(rect(opts as any))
+        .render(sub(box), { w: 240, h: 220 });
+    }),
+};
+
+/** The same picture written by hand in the explicit form: one `when` chain
+ *  per channel. Must match `StatePrecedence` exactly. */
+export const StatePrecedenceExplicit: StoryObj = {
+  render: () =>
+    strip(PRECEDENCE_HOVERS, precedenceCaption, (box, hov) => {
+      const picked = inSet("lake", PICKED);
+      const hover = inSet("lake", hov ? [hov] : []);
+      chart(seafood)
+        .flow(spread({ by: "lake", dir: "x" }))
+        .mark(
+          rect({
+            h: "count",
+            fill: when(picked).then(RED).otherwise(BLUE),
+            opacity: when(hover)
+              .then(1)
+              .when(picked.not().and(true))
+              .then(0.3)
+              .otherwise(1),
+            stroke: "#222",
+            strokeWidth: when(hover).then(3).otherwise(0),
+          } as any)
+        )
+        .render(sub(box), { w: 240, h: 220 });
+    }),
+};
+
+/* 7c. Bird migration: per-channel conditions vs a state with raise ----- */
+
+const BIRD = "Black-and-white_Warbler";
+// A fixed species -> color map, so reordering the rows (the raise stand-in)
+// does not reshuffle the colors between panels.
+const TABLEAU = ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f",
+  "#edc948", "#b07aa1", "#ff9da7", "#9c755f", "#bab0ac"];
+const BIRD_COLORS = Color.palette(
+  Object.fromEntries(
+    [...new Set(birds.map((b: any) => b.species as string))].map((sp, i) => [
+      sp,
+      TABLEAU[i % TABLEAU.length],
+    ])
+  )
+);
+const eastMap = () =>
+  chart(world110m, {
+    coord: Coord.geo("equalEarth", { lon: [-100, -60], lat: [5, 50] }),
+    legend: false,
+  }).mark(polygon({ points: "ring", fill: "#f7f7f7", stroke: "#aaa" }));
+
+export const BirdStates: StoryObj = {
+  render: () =>
+    strip(
+      ["round 1", "state", "state + rest"] as const,
+      (v) =>
+        v === "round 1"
+          ? "round 1: two per-channel conditions, no raise"
+          : v === "state"
+            ? "round 2: one state block with raise: true"
+            : "round 2: the same block with rest: { opacity: 0.15 }",
+      (box, v) => {
+        const hot = field("species").eq(BIRD) as Expr;
+        const base = { stroke: "species", strokeWidth: 1.5, opacity: 0.7 };
+        const set: Record<string, unknown> = { strokeWidth: 5, opacity: 1 };
+        // `raise: true` has no per-channel rewrite: `.zOrder()` sorts only
+        // siblings, and under `group({ by: "species" })` each path is alone
+        // in its group's frame (#982), so `.zOrder(1)` on it changes nothing.
+        // Its explicit form is a z constraint over selections (proposed). The
+        // stand-in here: paint order follows data order, so the hovered
+        // species' rows go last.
+        const rows =
+          v === "round 1"
+            ? birds
+            : [
+                ...birds.filter((b: any) => b.species !== BIRD),
+                ...birds.filter((b: any) => b.species === BIRD),
+              ];
+        const { opts } = desugarStates(base, [
+          {
+            cond: hot,
+            any: true,
+            set,
+            rest: v === "state + rest" ? { opacity: 0.15 } : undefined,
+          },
+        ]);
+        eastMap()
+          .layer(
+            chart(rows, { color: BIRD_COLORS })
+              .flow(
+                group({ by: "species" }),
+                scatter({ by: "day", x: "lon", y: "lat" })
+              )
+              .mark(line(opts as any))
+          )
+          .layer(
+            text({ text: BIRD.replace(/_/g, " "), fontSize: 14, fill: "#333" })
+          )
+          .render(sub(box), { w: 400, h: 440 });
+      }
+    ),
+};
+
+/* 8. Diagram: hover a node; its edges turn red, rise, and the rest fade */
 
 const nodes = [
   { id: "a", grp: 0 },
@@ -341,21 +569,39 @@ export const GraphHover: StoryObj = {
       ["b", "c"],
       (id) => `hovered node: ${id}`,
       (box, hov) => {
-        // `line`'s paint channels take expressions, not closures, so the
-        // held hover is precomputed as a field: does this edge touch it?
-        const hotEdges = edges.map((e) => ({
+        // After `resolve`, source and target hold refs; the held hover is
+        // precomputed as a field standing in for
+        // `field("source").isIn(hover).or(field("target").isIn(hover))`.
+        // `raise: true` stand-in, as in BirdStates: the touching edges go
+        // last in data order.
+        const tagged = edges.map((e) => ({
           ...e,
           touches: e.source === hov || e.target === hov,
         }));
-        const touches = when(field("touches"));
+        const hotEdges = [
+          ...tagged.filter((e) => !e.touches),
+          ...tagged.filter((e) => e.touches),
+        ];
+        const nodeState = desugarStates({ r: 14, fill: BLUE }, [
+          { cond: field("id").eq(hov) as Expr, any: true, set: { fill: RED } },
+        ]);
+        const edgeState = desugarStates(
+          { stroke: "#999", strokeWidth: 1.5, opacity: 1 },
+          [
+            {
+              cond: field("touches").eq(true) as Expr,
+              any: true,
+              // `.zOrder(fn)` on this relational line runs once with the bag
+              // of all five edges, not once per edge, so `raise` cannot
+              // desugar to it (a finding; see the proposal).
+              set: { stroke: RED, strokeWidth: 3 },
+              rest: { opacity: 0.3 },
+            },
+          ]
+        );
         chart(nodes, { axes: false })
           .flow(scatter({ by: "id", x: "grp", y: "id" }))
-          .mark(
-            circle({
-              r: 14,
-              fill: ((d: any) => (one(d, "id") === hov ? RED : BLUE)) as any,
-            }).name("nodes")
-          )
+          .mark(circle(nodeState.opts as any).name("nodes"))
           .layer(
             chart(hotEdges)
               .flow(resolve(["source", "target"], { from: selectAll("nodes") }))
@@ -363,8 +609,7 @@ export const GraphHover: StoryObj = {
                 line({
                   from: "source",
                   to: "target",
-                  stroke: touches.then(RED).otherwise("#bbb"),
-                  strokeWidth: touches.then(3).otherwise(1.5),
+                  ...(edgeState.opts as any),
                 }).zOrder(-1)
               )
           )

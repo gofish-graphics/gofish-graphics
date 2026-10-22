@@ -1,42 +1,70 @@
-# Reading interaction sources: a hover is a selection
+# Reading interaction sources: a hover is a selection (round 2)
 
 **Summary.**
 
-1. "The mark under the pointer" is a GoFish selection: a list of refs, here of length 0 or 1. An input finds it by **picking** among named marks: `pointer().pick(selectAll("bars"))`. A brush picks the refs inside its rectangle, and a click with `.toggle()` picks a set. All three give the same kind of value.
-2. A channel reads a selection in one of two ways. `when(hover)` asks "is this mark one of the picked marks?" (identity). `field("lake").is_in(hover)` asks "does this row's lake match a picked mark's lake?" (a semi-join, matched by the same key rule `resolve` uses). The readout is `hover.field("species")`, a projection with the homogeneity collapse `by: "datum.k"` already uses.
-3. Because a selection is a list of refs, it is also chart data: `chart(hover).mark(enclose(...))` draws an outline over the hovered bar, the way `chart(selectAll("bars"))` works today. This is #830's "inputs are data", reached through the selection system instead of beside it.
+1. "The shapes under the pointer" is still a GoFish selection, a list of refs, as in round 1. New in round 2: an input with no scope that tests a mark's own shapes picks among **that mark's shapes**, so the single-chart hover needs no `.name()` and no `selectAll`. This is a rewrite: `when(pointer())` on mark M means `when(pointer().pick(selectAll(n)))` with M named `n`.
+2. Styling for a state is declared once, after the mark, as a **state block**: `rect({ fill: BLUE }).when(hover, { fill: RED, front: true, rest: { opacity: 0.3 } })`. A state block is sugar: it rewrites into one `when(...).then(...).otherwise(base)` chain per channel, plus a z-order constraint for `front`.
+3. Two parts of a state block have no explicit form in the language today, so the explicit layer needs them added first: a z-order constraint whose operands are selections (for `front`), and a whole-mark `.any()` (for `rest`, when the condition is a key test). Everything else desugars into what exists.
 
-**Recommendation: Approach C, "inputs pick refs."** Runner-up: Approach B, Vega-Lite style selection parameters, which Python users who know Altair would recognize at once. The strawman `hover.over` (Approach A) turns out to be C's identity test with the scope left implicit; the proposal keeps its reading (`when(hover)`) and makes the scope explicit.
+**Recommendation.** Round 1's Approach C (inputs pick refs), with two conveniences that are both defined by rewrites: the **default target** rule and **state blocks spelled `.when(cond, { ...overrides, rest, front })`** on a mark. Runner-up for the state spelling: per-state methods (`.hover({...})`, `.selected({...})`), which are shorter for one chart but add a name per input. They could be added later as a second layer of sugar over `.when`.
 
-**Scope.** This answers how a spec reads pointer, drag, brush and click-select inside the browser-evaluated expressions of the approved proposal `proposals/python-animation-interaction/proposal.md` (Approach B there: sources plus polars-style `when/then/otherwise`). Wheel, timer and signal reads are unchanged from that proposal: each is a value, read as itself.
+**Scope.** This answers how a spec reads pointer, drag, brush and click-select inside the browser-evaluated expressions of the approved proposal `proposals/python-animation-interaction/proposal.md` (Approach B there: sources plus polars-style `when/then/otherwise`). Wheel, timer and signal reads are unchanged from that proposal.
 
-**Prototype.** `packages/gofish-graphics/stories/proposals/source-reads/SourceReads.stories.tsx` (Storybook: "Proposals/Source Reads"). Throwaway, exempt from parity. The capture harness cannot send pointer events (#672), so every picture fixes the value the input would produce (the hovered lake, the brush extent, the clicked set) and draws it with today's JS closures. The pictures show what each spec draws; they cannot tell the approaches apart, because the approaches differ only in spelling. **All code labeled "proposed" does not run yet,** in either language.
+**Prototype.** `packages/gofish-graphics/stories/proposals/source-reads/SourceReads.stories.tsx` (Storybook: "Proposals/Source Reads"). Throwaway, exempt from parity. The capture harness cannot send pointer events (#672, scripted interaction states for captures), so every picture fixes the value the input would produce and draws it with today's JS. Round 2 adds `desugarStates`, a prototype of the state-block rewrite: it turns state blocks into today's per-channel `when` chains. **All code labeled "proposed" does not run yet,** in either language.
+
+**Sugar and rewrite render the same.** `StatePrecedence` draws two state blocks through `desugarStates`, and `StatePrecedenceExplicit` draws the same chart with the per-channel `when` chains written by hand. Their captured DOM and PNG are byte-identical (`cmp` of `tests/tmp/iterate/proposals/source-reads--state-precedence{,-explicit}.{html,png}`).
 
 ---
+
+## What changed in round 2
+
+Josh's feedback on round 1: the single chart was "weirdly awkward and circular" (`pointer().pick(selectAll("bars"))` read inside the bars that are named `"bars"`), the target can often be inferred, and several conditionals on one hovered object read better declared together after the mark, "a little bit like enter/update/exit". A later requirement: each convenience must **desugar** into explicit forms already in the language, so overlapping concepts are related by definition.
+
+| Round 1                                                                         | Round 2                                                                                                                                                                       |
+| ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Every pick names its scope: `pointer().pick(selectAll("bars"))`.                | An unscoped input that tests a mark's own shapes picks among that mark's shapes. Defined as a rewrite to the round 1 form. Value reads (`.field`, `isIn`) still need a scope. |
+| One `when(hover)` per channel.                                                  | One state block per state: `.when(hover, { ... })` after the mark. Defined as a rewrite to per-channel `when` chains.                                                         |
+| No way to raise the hovered shape.                                              | `front: true` in a state block. Its rewrite needs a new explicit form: `Constraint.zAbove` over selections.                                                                   |
+| "Fade the rest only when something is picked" was `when(picked.isEmpty() ...)`. | `rest: { ... }` in a state block. Its rewrite needs `.any()` over the mark's shapes for key tests.                                                                            |
+| `radius` on the pick.                                                           | `radius` on the pointer, `pointer({ radius: 8 })`, so an unscoped pointer can carry it.                                                                                       |
+| Hover tests and #641 `emphasize` were separate.                                 | `emphasize` (#641) is a preset over state blocks, defined by a rewrite; not designed here.                                                                                    |
+
+Kept from round 1: selections as data (`chart(sel)`), the identity test `when(sel)`, the key test `field(k).isIn(sel)` for linked views and graph edges, the readout `sel.field(k)`, the IR pick node, and all of round 1's precedent and research (below).
 
 ## Terms
 
 - **Source.** Anything whose value changes after the chart is drawn: a clock, a piece of state, or an input (`pointer`, `drag`, `click`, `wheel`). Decided in the parent proposal.
 - **Input.** A source driven by the user's pointer or keys.
 - **Ref.** A reference to a mark that is already placed. It carries the mark's geometry and its **datum**, the bag of rows that flowed into it (`ref.datum`).
-- **Selection.** In GoFish, a plain list of refs, as `selectAll("bars")` returns. In Vega-Lite, a "selection" is something else: a predicate over data rows. This proposal uses the GoFish meaning and calls the Vega-Lite one a **selection parameter**.
-- **Pick.** Deciding which drawn marks are at a screen point or inside a screen region. The term is from 3D graphics and deck.gl (`pickObject`, `pickObjects`).
-- **Hit test.** A pick that takes only the mark exactly under the point. A **nearest pick** takes the closest mark within a radius.
-- **Identity test.** "Is this mark one of the selected marks?"
-- **Semi-join.** Keep the rows of one table whose key appears in another table, without adding columns. SQL `WHERE lake IN (SELECT lake FROM ...)`; polars `is_in` and `join(how="semi")`.
-- **Homogeneity collapse.** Reading one field off a bag of rows gives the value when every row agrees, and nothing when they disagree. It is the rule `by: "datum.lake"` and `project()` already use.
-- **Paint tier, pipeline tier.** A source read that only repaints an attribute versus one that lays the chart out again. Decided in the parent proposal: inferred from the channel, no `live()` wrapper.
+- **Shape.** One drawn instance of a mark. `rect(...)` under `spread({ by: "lake" })` is one mark that draws six shapes.
+- **Selection.** In GoFish, a plain list of refs, as `selectAll("bars")` returns. In Vega-Lite, a "selection" is a predicate over data rows; this proposal calls that a **selection parameter**.
+- **Pick.** Deciding which drawn shapes are at a screen point or inside a screen region (the 3D graphics and deck.gl term). A **hit test** takes only the shape exactly under the point; a **nearest pick** takes the closest shape within a radius.
+- **Scope** of a pick. The selection it picks among.
+- **Default target.** The scope an input gets when it has none and tests a mark's own shapes: that mark's shapes.
+- **Identity test.** "Is this shape one of the selected shapes?" **Key test.** "Does this row's key match a selected shape's key?" (a **semi-join**: SQL `WHERE lake IN (...)`, polars `is_in`).
+- **State block.** One declaration on a mark: a condition and the overrides that apply while it holds. CSS calls the same thing a rule block (`.bar:hover { ... }`).
+- **The rest.** The shapes of the same mark for which a state's condition is false, while it is true for at least one shape. Mosaic and Bokeh style these as "unselected" and "nonselection".
+- **Sugar, rewrite, desugar.** Sugar is a short spelling defined as an exact rewrite into longer forms the language already has. To desugar is to apply that rewrite. **Decompile** is the reverse: recognize the long form and print the sugar.
+- **Paint order** (z-order). Which shape is drawn on top. GoFish sorts each node's direct children by `.zOrder()` (#982, paint order resolved per layer among its own children).
+- **Paint tier, pipeline tier.** A source read that only repaints versus one that lays the chart out again. Decided in the parent proposal: inferred from the channel, no `live()` wrapper.
 - **Previous frame.** #830's rule that an input is interpreted against the geometry that was on screen when the event happened.
 
 ## Related issues
 
+- **#641** An `emphasize` API that drives color and paint order from one declaration; open question "by category, by predicate, or by selection". Round 2's state blocks answer "by selection" and give `emphasize` a rewrite target.
+- **#643** (merged) `.zOrder(fn)` per shape, the enabling primitive #641 names.
+- **#982** Paint order sorts each layer among its own children instead of flattening nested layers. Why `.zOrder()` cannot raise a path that is alone in its group (finding below).
+- **#986** The relational default `zBelow` is not applied to lines drawn by `.relate()`.
+- **#914** Build-in: diff marks across re-renders by key (enter, update, exit) instead of animating the first render only. The machinery an animated state change would use.
+- **#881** The spelling of `.layer(time.transition())`; the chained `.transition()` came out of it.
+- **#802** Operators cannot be `.name()`d, so a state block cannot sit on the groups an operator makes.
+- **#819** A name lookup with zero matches is a loud error.
 - **#830** Interaction as data. An input is a dataset (`chart(drag())`); projections `.within(ref)`, `.snap(selectAll(...))`, `.lock`, `.offset` are methods on the input; selectors are `inside(ref, d)` over `ref.datum`; multi-brush is `spread({ by: "id" })` over gesture ids. Open, unsigned off, Josh's preferred direction.
 - **#667** Arvind's Meros prototype PR (open). Josh's review there: no explicit `when` keyword needed if callbacks work (but a serializable `when` is useful); `chart(pointerEvent()).flow(clamp(... selectAll("bars"))).mark(rect())`; "the dataset should always be a signal"; "differentiate binding modes by underlying space"; "always data to visuals, relayout every time".
 - **#671** (merged) The reactive layer: `live()`, `pointer/drag/click/wheel/timer/signal`, the two tiers.
 - **#705** Converge `signal()` and Solid's `createSignal()`.
 - **#672** Scripted interaction states for the capture harness. Why every picture here is a fixed state.
 - **#774** Port the reactive layer to Python. **#1022** IR and Python for animation. The parent proposal answers both.
-- **#641** An `emphasize` API that drives color and paint order from one declaration; open question "by category, by predicate, or by selection".
 - **#849** Hover on thin marks needs a nearest pick within a radius; decided there that it is a Meros Match projection, `pointer().snap(selectAll("paths"))`, not a one-off option.
 - **#850** `pointer().dataPos()` cannot invert a geo projection, which blocks a tooltip at the pointer on the bird migration map.
 - **#864** `click()` loses a press when the chart re-resolves between press and release, because node ids are per resolve.
@@ -76,19 +104,28 @@ Two things are already true here. First, `p.datum()` is a hit test over **every*
 
 There is no `inside(ref, d)` in the code; it exists only in #830's note. `between` exists as a field predicate for `filter` (`field("x").between(lo, hi)`).
 
+Also added in round 2 to what exists:
+
+- **Expressions.** `src/ast/expr.ts` has polars' `when(c).then(v).when(c2).then(v2).otherwise(w)` (first true branch wins), comparisons, `and`, `or`, `not`, `clip`, `fillNull`. An expression is a function of the datum and also data, so it crosses the IR. Paint channels on `line` take expressions, not closures.
+- **Paint order.** `.zOrder(n)` or `.zOrder((d) => n)` on a mark (#643). The bake sorts each node's **direct children** by it (#982). A z constraint, `Constraint.zAbove(a, b)` inside `.relate((c) => [...])`, orders shapes across frames: it orders the two children of the node where the operands' paths part. Its operands are names today.
+- **Transitions.** `.transition({ enter, update, exit })` on a mark (`src/ast/marks/createOperator.ts`, `MarkTransition` in `src/animation/transition.ts`). `enter` and `exit` take effects (`Animation.grow()`, `Animation.fadeIn()`); `update` takes a tween and today plays only between two keyframes of a `time.sequence`. An operator's `.transition()` takes time arrangements (`time.stagger`). On a re-render with no sequence, the chart draws its final frame (#914 is the keyed join that would fix that).
+
 ## The examples
 
-| Example                           | What makes it hard                                                                                                                                                                              |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Hover highlight on bars           | The easy case.                                                                                                                                                                                  |
-| Bird migration hover (hard, real) | 72 thin paths on a geo map with a basemap underneath: the hover must ignore the countries (scoping), wants a nearest pick (#849), and drives two channels and a readout of the hovered species. |
-| Draggable threshold               | A drag value read in both tiers; no marks are selected at all.                                                                                                                                  |
-| Brush on a scatterplot            | A region selects many marks; the points have no key field.                                                                                                                                      |
-| Click multi-select                | State accumulates across events (toggle).                                                                                                                                                       |
-| Linked views (hard)               | Hovering a bar highlights the same lake in a second chart, whose marks were never hovered.                                                                                                      |
-| Graph hover (diagram)             | Hovering a node highlights its edges. The edges are a different mark and match through `resolve`d ref columns.                                                                                  |
+| Example                           | What makes it hard                                                                                                                                                                         |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Hover highlight on bars           | The easy case. Round 2's test: it must be short.                                                                                                                                           |
+| Bird migration hover (hard, real) | 72 thin paths over a basemap: the hover must ignore the countries, wants a nearest pick (#849), drives three overrides (width, opacity, raise), fades the rest, and reads out the species. |
+| Click multi-select, fade the rest | State accumulates across clicks; "the rest" fades only once something is picked.                                                                                                           |
+| Two states at once                | Selected and hovered on the same bars; which wins on a shared channel.                                                                                                                     |
+| Draggable threshold               | Value logic (`count > cut`), no marks picked at all.                                                                                                                                       |
+| Brush on a scatterplot            | A region picks many shapes; the points have no key field.                                                                                                                                  |
+| Linked views (hard)               | Hovering a bar highlights the same lake in a second chart, whose shapes were never hovered.                                                                                                |
+| Graph hover (diagram)             | Hovering a node highlights and raises its edges, a different, relational mark matched through `resolve`d ref columns.                                                                      |
 
 ## Precedent
+
+### Round 1: what a hover or a selection is
 
 Each card: what the user writes, what the hover or selection is (a value, a per-item predicate, or a set), and how that relates to `hover.over` versus a selection.
 
@@ -120,25 +157,597 @@ Three lessons.
 - The systems that do both separate **which items** (a value: `createActiveElement`, `pickObject`, `selected.indices`) from **the test** (`createFocusSignal`, `createSelector`, `alt.when`). The test is derived from the value.
 - Scoping is always explicit where it exists: deck.gl `layerIds`, Bokeh tools' `renderers`, Vega-Lite's selection lives on the view that declares it. Plot and CSS scope by attaching to one mark.
 
-## The three questions, answered
+### Round 2: how per-state styling is declared
 
-**Is "the mark under the pointer" a selection?** Yes. It is a list of refs of length 0 or 1. It cannot be a singular `ref`, because `ref` means "exactly one, or fail" (#510), and a hover is usually empty. Making it a list also gives a brush (many) and a click toggle (a set) the same type, so one set of reads covers all three.
+The question here is where the overrides for a state live: on each channel (one conditional per channel), or in one block per state.
 
-**Property of the input, predicate over the datum, or selection compared against the current mark?** The selection is the value; the predicate is derived from it. `hover.over` is the identity test with the scope left out. Approach C keeps that test as `when(hover)` and adds the key test `field("lake").is_in(hover)`, which is what linking and diagrams need.
+| System                  | What the user writes                                                                                                                                                                              | Per channel or per state                                                                                    | The rest, several states, raise, animation                                                                                                                                                                               | Model or foil                                                                                      |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| **CSS**                 | `.bar { fill: steelblue; transition: fill 150ms }` `.bar:hover { fill: red; stroke-width: 3 }` `.chart:has(.bar:hover) .bar:not(:hover) { opacity: .3 }`                                          | **Per state**: one rule block per pseudo-class, holding every override                                      | Rest needs `:has()`. Several states: the cascade (specificity, then source order). Raise: `z-index`, which SVG ignores, so D3 has `selection.raise()`. Animation: `transition` on the element, not in the `:hover` block | **Model** for the block, the cascade, and transitions kept separate                                |
+| **Figma** variants      | A component set with a `State=Default/Hover` property; prototype trigger "While hovering", action "Change to" the Hover variant, with Smart animate                                               | **Per state**: a variant is a whole copy of the component                                                   | No rest. One state at a time per property. Animation chosen on the interaction                                                                                                                                           | Names ("while hovering"); the transition is separate from the state                                |
+| **SwiftUI**             | `.onHover { hovered = $0 }` then `.scaleEffect(hovered ? 1.1 : 1).zIndex(hovered ? 1 : 0).animation(.easeOut, value: hovered)`; `ButtonStyle` reads `configuration.isPressed`                     | **Per channel** (a ternary per modifier); `ButtonStyle` groups them per state                               | Raise is `zIndex`, a modifier among siblings, like GoFish's `.zOrder`. Animation is one modifier keyed on the state                                                                                                      | Foil for per-channel ternaries; model for `.animation(value:)`                                     |
+| **SolidJS** `classList` | `<rect classList={{ hovered: isHovered(d.id), selected: isSelected(d.id) }} />` with the overrides in CSS                                                                                         | **Per state**: a boolean per state name on the element, the overrides in a block elsewhere                  | Several states are several classes, resolved by the CSS cascade                                                                                                                                                          | Model: conditions and overrides separate, one boolean per state                                    |
+| **Vega-Lite / Altair**  | `"color": {"condition": {"param": "hover", "value": "red"}, "value": "steelblue"}` and the same again for `strokeWidth`, `opacity`; Altair `alt.when(hover).then(...).otherwise(...)` per channel | **Per channel**: the condition is repeated in every channel it touches                                      | Rest is the `value` branch (no "only while something is picked" without `empty`). Raise: an `order` channel with its own condition, or a second layer filtered to the selection                                          | **Foil**: three conditionals for one hovered path                                                  |
+| **Mosaic** `highlight`  | `vg.dot(..., { ... }), vg.highlight({ by: sel, channels: { opacity: 0.2 } })`                                                                                                                     | **Per state**, and only the rest: `channels` apply to the **unselected** items (default `{ opacity: 0.2 }`) | The rest applies only while the selection is not empty. No raise                                                                                                                                                         | **Model for `rest`**                                                                               |
+| **Bokeh**               | `p.scatter(..., selection_color="firebrick", nonselection_fill_alpha=0.2, hover_line_width=3)`; under the hood `renderer.selection_glyph`, `nonselection_glyph`, `hover_glyph`, `muted_glyph`     | **Per state**: a whole glyph per state. The flat `hover_line_width` kwargs are a prefixed shorthand for it  | `nonselection_glyph` applies only while something is selected (the rest). A fixed set of states                                                                                                                          | Model for per-state glyphs; the prefixed kwargs are the anti-pattern (api-design.md "Nest a role") |
+| **Plotly**              | `go.Scatter(selectedpoints=[...], selected={"marker": {"color": "red"}}, unselected={"marker": {"opacity": 0.3}})`                                                                                | **Per state**, nested: `selected` and `unselected` objects                                                  | `unselected` applies only while there is a selection. Two states only; hover styling is not declarative                                                                                                                  | Model for the nested `rest` object                                                                 |
+| **deck.gl**             | `new ScatterplotLayer({ ..., pickable: true, autoHighlight: true, highlightColor: [255, 0, 0, 255] })`                                                                                            | **Per state**, one channel: the picked object gets `highlightColor`                                         | No rest, no raise. The target is the layer's own objects with no scope written                                                                                                                                           | **Model for the default target**                                                                   |
 
-**Singular and plural.** The value is plural (a list). The readout collapses it with the existing homogeneity rule, so `hover.field("species")` is one species or nothing. This is the same split as `pluck` (every value) and `project` (one value when the rows agree).
+Four lessons.
 
-## Design axes
+- Every system that lets you style several properties of a hovered item groups them **per state** (CSS, Figma, Bokeh's glyphs, Plotly, Solid's `classList`). The per-channel form (Vega-Lite `condition`, SwiftUI ternaries) repeats the condition once per channel.
+- "The rest" is a first-class role in every data system that has selections (Mosaic, Bokeh, Plotly), and in all three it applies **only while something is selected**.
+- Raise is never a channel in the per-channel systems. In SwiftUI it is `zIndex` among siblings, the same limit as GoFish's `.zOrder` (finding below). In SVG it is a DOM reorder (D3 `selection.raise()`).
+- Animation of a state change is declared **apart** from the state: CSS `transition`, SwiftUI `.animation(value:)`, Figma's Smart animate on the interaction. So a state block need not carry timing.
+
+## Part 1: the default target
+
+### The rule
+
+> An input with no `.pick(...)`, used as an identity test on mark M (`when(input)` in M's options, or the condition of a state block on M), picks among M's own shapes.
+
+That is the whole rule. It applies only to the identity test, because that is the only read that asks about "this shape". A value read of an unscoped input (`.field(k)`, `.len()`, `.isEmpty()`, `field(k).isIn(input)`) has no shape asking, so it is a loud error: "`pointer()` has no scope here. A value read needs to know which shapes to pick from; write `pointer().pick(selectAll("paths"))`." An input's own row (`dr.x`, `chart(drag())`) is not a pick and needs no scope.
+
+### Its rewrite
+
+<table>
+<tr><th>Sugar</th><th>Rewrite (explicit form)</th></tr>
+<tr><td>
+
+```ts
+rect({ h: "count", fill: BLUE }).when(pointer(), { fill: RED });
+```
+
+</td><td>
+
+```ts
+const n = createName("hovered");
+rect({ h: "count", fill: BLUE })
+  .name(n)
+  .when(pointer().pick(selectAll(n)), { fill: RED });
+```
+
+</td></tr>
+</table>
+
+- **The name.** `n` is M's own name when it has one (`.name("bars")`), and otherwise a fresh `createName()` token, the hygienic name GoFish already uses to cross component boundaries.
+- **Why the lookup is well defined.** A name lookup starts at the use site and widens one ancestor at a time; it stops at the first level whose subtree has a match, and never crosses a `createMark` boundary (the scoping rule decided 2026-09-25). The use site is M itself, and M carries `n`, so the first level already matches. A fresh token cannot match anything else, so there is never a duplicate. If M already had a string name that a sibling repeats, that is today's duplicate-name error, unchanged.
+- **Total.** Every unscoped identity test sits on exactly one mark, so the rewrite always applies.
+- **Decompile.** A pick whose scope is `selectAll(n)`, where `n` names exactly the mark the test sits on and nothing else reads `n`, prints back as the bare input. This runs backwards exactly.
+
+### How it behaves in the hard cases
+
+| Case                                                                    | What the rule gives                                                                                                                                                                                                                                                                                       |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mark inside nested operators (`spread` then `stack` then `rect`)        | M's shapes are all its instances, in every group. The pick takes the topmost one under the pointer.                                                                                                                                                                                                       |
+| Mark inside a `createMark` component                                    | M's shapes in every instance of the component. No string name is involved, so the component boundary does not matter. To expose the hover outside the component, pass a `createName()` token out, as today.                                                                                               |
+| A layer with several marks (bars plus value labels)                     | Each mark gets its own scope. Hovering a label does not steal the bar's hover: the bar's pick ignores labels (the D3 `pointer-events: none` chore goes away). To make a label hover light up its bar, write one explicit scope and a key test.                                                            |
+| The same `const hover = pointer()` on two marks                         | Two rewrites, two picks, one per mark. This is CSS's `:hover`: each element answers for itself. A shared hover across marks is the explicit form.                                                                                                                                                         |
+| Relational marks: a line over points (`.mark(circle).layer(line(...))`) | The line's shapes are its paths, one per series. The line's own pointer picks the path under the pointer (with `pointer({ radius })` for thin paths); the points are not in its scope. To light up a series when one of its points is hovered: `field("series").isIn(pointer().pick(selectAll("dots")))`. |
+| Brush in a scatter's own options                                        | `circle({ fill: "#bbb" }).when(drag(), { fill: RED })`. The drag's rectangle picks the circle's own shapes. The count readout is a value read, so it names the scope.                                                                                                                                     |
+| A readout `text` that is not on the hovered marks                       | A value read: loud error until the pick is scoped.                                                                                                                                                                                                                                                        |
+| On an operator (`spread(...).when(...)`)                                | Not available: operators cannot be named (#802), so the rewrite has no `n`. Out of scope until #802.                                                                                                                                                                                                      |
+
+Uniform rule plus explicit override: the rule never looks at data or names to decide; it depends only on where the test is written.
+
+## Part 2: state blocks
+
+### The candidates
+
+All four spell the same thing: a condition, the overrides that apply while it holds, overrides for the rest, and whether the picked shapes come to the front. They differ in where that lives.
+
+**S1. `.when(cond, { ...overrides, rest, front })` chained after the mark (recommended).**
+
+```ts
+rect({ h: "count", fill: BLUE }).when(hover, {
+  fill: RED,
+  front: true,
+  rest: { opacity: 0.3 },
+});
+```
+
+```python
+rect(h="count", fill=BLUE).when(hover, fill=RED, front=True, rest=dict(opacity=0.3))
+```
+
+**S2. `.emphasize(cond, { ... })`** (#641's word; Mosaic's `highlight`).
+
+```ts
+rect({ h: "count", fill: BLUE }).emphasize(hover, {
+  fill: RED,
+  rest: { opacity: 0.3 },
+});
+```
+
+**S3. Per-state methods** (CSS pseudo-classes, Bokeh's states).
+
+```ts
+rect({ h: "count", fill: BLUE })
+  .hover({ fill: RED })
+  .selected({ stroke: "#222" });
+```
+
+**S4. A `states` option** (Plotly's `selected` / `unselected`).
+
+```ts
+rect({
+  h: "count",
+  fill: BLUE,
+  states: [{ when: hover, fill: RED, rest: { opacity: 0.3 } }],
+});
+```
+
+### The rewrite (shared by all four)
+
+For a mark with base options `base`, and state blocks `s1 ... sn` in chain order, each channel `k` that any block touches becomes:
+
+```ts
+k: when(sn.cond).then(sn[k])                                  // later blocks first
+     .when(sn.cond.not().and(sn.cond.any())).then(sn.rest[k])
+     ...
+     .when(s1.cond).then(s1[k])
+     .when(s1.cond.not().and(s1.cond.any())).then(s1.rest[k])
+     .otherwise(base[k])
+```
+
+(a branch is left out when its block does not set `k`), and each block with `front: true` adds one constraint on the mark's chart:
+
+```ts
+.relate(() => [Constraint.zAbove(selectAll(n).where(s.cond), selectAll(n))])
+```
+
+where `n` is the mark's name (a fresh token if it has none, as in Part 1). When `s.cond` is a selection used as an identity test, `selectAll(n).where(s.cond)` is just that selection.
+
+What each part of a block needs from the explicit layer:
+
+| Part of a state block                              | Explicit form                                                                                   | Exists today?                                                                                                                                                                                              |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Paint overrides (`fill`, `opacity`, `strokeWidth`) | a per-channel `when` chain                                                                      | **Yes.** The prototype's sugar and hand-written stories render byte-identical DOM.                                                                                                                         |
+| Size or position overrides (`r: 6`, `h`)           | a `when` chain on a layout channel                                                              | **Yes**, as an expression channel; it is pipeline tier (see Tiers).                                                                                                                                        |
+| Several states, later wins                         | branch order in one `when` chain                                                                | **Yes.** First true branch wins, so later blocks go first. This is the CSS cascade by source order, with no specificity.                                                                                   |
+| `rest` with a selection condition                  | `.when(sel.not().and(sel.isEmpty().not()))`                                                     | **Yes, given round 1.** With the default target, "some shape of M is picked" is "the pick is not empty".                                                                                                   |
+| `rest` with a key test or value condition          | `.when(c.not().and(c.any()))`, where `c.any()` is "c holds for at least one shape of this mark" | **No: needs `.any()`**, an aggregate over all of the mark's shapes, broadcast back to each shape. Polars has the same thing: `pl.col("c").any()` inside `with_columns` is one value repeated on every row. |
+| `front: true`                                      | `Constraint.zAbove(selectAll(n).where(c), selectAll(n))`                                        | **No: needs z constraints over selections**, and `selectAll(n).where(c)` (#517's query) for a non-selection condition. `.zOrder(expr)` is not enough (finding below).                                      |
+| Animating a state change                           | `.transition({ update: Animation.tween(...) })` on the mark                                     | **Not part of the block.** `update` today plays only between `time.sequence` keyframes. Letting it play on any keyed change of a mark is #914's join. A state block adds no timing, as in CSS.             |
+
+**Finding: `.zOrder()` cannot raise the hovered path.** The first prototype rewrote `front` as `.zOrder(when(c).then(1).otherwise(0))`. It did nothing on the bird map: under `group({ by: "species" })` each path is the only child of its group's frame, and the bake sorts only siblings (#982). On the graph, `.zOrder(fn)` on the relational edge line ran **once, with the bag of all five edges**, not once per edge. `.zOrder` raises shapes only when they are siblings (bars in one `spread`). A z constraint already orders shapes across frames, by pushing the order down to where their paths part, so it is the explicit form to extend: let its operands be selections, including a pick. The pictures stand `front` in by data order, and say so.
+
+So the state block is a sugar only once the explicit layer gains **`Constraint.zAbove` over selections** and **`.any()` over a mark**. Both are useful on their own (a raise driven by a brush; "is anything over the threshold") and both are listed under "Syntax changes to review" as explicit forms, so the sugar adds no capability the explicit layer lacks.
+
+### The candidates against the rewrite
+
+| Candidate                              | Desugars?                                                                                                                                                                                                                                | Notes                                                                                                                                                                                                                                                                                   |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S1 `.when(cond, {...})`                | **Desugars cleanly** given the two new explicit forms. Shortest rewrite: the block's condition is the chain's condition. **Decompiles** when a set of `when` chains share a condition node: group branches by condition, in chain order. | A method, because it reads the caller's state (its base options, its shapes for the default target, its name). Same word as the channel `when`, for the same idea at a different size. Python takes the overrides as keyword arguments.                                                 |
+| S2 `.emphasize(cond, {...})`           | **Desugars cleanly** with overrides given. With none, #641's default ("emphasized keep their color, the rest go muted, emphasized in front") **needs a new explicit form**: a theme "muted" color role that a channel can name.          | Better as a preset over S1: `.emphasize(c)` = `.when(c, { front: true, rest: { color: muted } })`. That keeps one mechanism and settles #641's "by selection" question. #641's other open question (the color scale's altitude) stays open.                                             |
+| S3 `.hover({...})`, `.selected({...})` | **Desugars cleanly**: `.hover(o)` = `.when(pointer(), o)`, `.selected(o)` = `.when(click().toggle(), o)`.                                                                                                                                | Shortest single chart. But one new name per input and configuration (`.brushed`, `.hoverNearest`?), which round 1 rejected for `hover.over` / `brush.covers`. Options such as `radius` need a second argument. Fine as later sugar over S1.                                             |
+| S4 `states: [...]` option              | **Desugars cleanly** (the same rewrite).                                                                                                                                                                                                 | Against the repo's taxonomy: an option is a local adjective, and a state reads other sources and other marks. It also puts conditions inside the options they override. Plotly's `selected` is the nested form, Bokeh's flat `selection_color` the prefixed form api-design.md rejects. |
+
+All four rewrite the same way, so the choice is spelling. S1 is the one whose rewrite is shortest (no name to expand, no preset to fill in) and total.
+
+### Value logic stays per channel
+
+`when` on a channel is still the form for logic about values, where the overrides are not a fixed block:
+
+```ts
+rect({
+  h: "count",
+  fill: when(field("count").sum().gt(cut)).then(RED).otherwise(BLUE),
+});
+```
+
+A state block with the same condition, `.when(field("count").sum().gt(cut), { fill: RED })`, is exactly that chain by the rewrite. Both spellings are fine, and they cannot drift, because one is defined as the other.
+
+### Precedence
+
+Blocks apply in chain order, later wins, per channel. Unset channels fall through to earlier blocks and then to the base. `rest` is a branch of its own block, so a later block's `rest` overrides an earlier block's overrides on the shapes it fades. `front` from several blocks adds several constraints; a shape in two raised sets is raised once.
+
+## The examples in the recommended spelling
+
+### Hover on bars (proposed)
+
+```ts
+chart(seafood)
+  .flow(spread({ by: "lake", dir: "x" }))
+  .mark(
+    rect({ h: "count", fill: "#6b9bd1" }).when(pointer(), { fill: "#d62728" })
+  )
+  .render(container, { w: 400, h: 400 });
+```
+
+```python
+(
+    chart(seafood)
+    .flow(spread(by="lake", dir="x"))
+    .mark(rect(h="count", fill="#6b9bd1").when(pointer(), fill="#d62728"))
+    .render(w=400, h=400)
+)
+```
+
+![hover highlight at three states](img/hover-bars.png)
+
+_Rendered (`HoverBars`): no pointer, pointer on Lake B, pointer on Lake E._
+
+No `.name()`, no `selectAll`, no circularity. The rewrite is the round 1 spelling (Part 1).
+
+### Bird migration hover (hard, real; proposed)
+
+```ts
+const hover = pointer({ radius: 8 }).pick(selectAll("paths"));
+
+basemap()
+  .layer(
+    chart(birds)
+      .flow(
+        group({ by: "species" }),
+        scatter({ by: "day", x: "lon", y: "lat" })
+      )
+      .mark(
+        line({ stroke: "species", strokeWidth: 1.5, opacity: 0.7 })
+          .when(hover, {
+            strokeWidth: 5,
+            opacity: 1,
+            front: true,
+            rest: { opacity: 0.15 },
+          })
+          .name("paths")
+      )
+  )
+  .layer(
+    text({
+      text: hover.field("species").fillNull(""),
+      fontSize: 14,
+      fill: "#333",
+    })
+  )
+  .render(container, { w: 600, h: 600 });
+```
+
+```python
+hover = pointer(radius=8).pick(select_all("paths"))
+
+(
+    basemap()
+    .layer(
+        chart(birds)
+        .flow(group(by="species"), scatter(by="day", x="lon", y="lat"))
+        .mark(
+            line(stroke="species", stroke_width=1.5, opacity=0.7)
+            .when(hover, stroke_width=5, opacity=1, front=True, rest=dict(opacity=0.15))
+            .name("paths")
+        )
+    )
+    .layer(text(text=hover.field("species").fill_null(""), font_size=14, fill="#333"))
+    .render(w=600, h=600)
+)
+```
+
+Its rewrite, with the one new explicit form marked:
+
+```ts
+line({
+  stroke: "species",
+  strokeWidth: when(hover).then(5).otherwise(1.5),
+  opacity: when(hover)
+    .then(1)
+    .when(hover.not().and(hover.isEmpty().not()))
+    .then(0.15)
+    .otherwise(0.7),
+})
+  .name("paths")
+  // on the chart that holds the paths:
+  .relate(() => [Constraint.zAbove(hover, selectAll("paths"))]); // new: selection operands
+```
+
+![bird migration: per-channel conditions versus a state block with raise and rest](img/bird-states.png)
+
+_Rendered (`BirdStates`, zoomed to the eastern flyway, the Black-and-white Warbler held as hovered): round 1's per-channel width and opacity, where the thick path is buried under 71 others; the state block with `front: true`; the same block with `rest: { opacity: 0.15 }`. The raise is drawn by putting the hovered species' rows last, a stand-in, because `.zOrder` cannot raise it (finding above)._
+
+What this example tests:
+
+- **Scope.** The readout is a value read, so the pick is scoped once, by name. Without the readout, `.when(pointer({ radius: 8 }), {...})` alone would do, and the countries would still be out of scope, since they are not the line's shapes.
+- **Nearest pick (#849).** `radius` is now an option of `pointer`, an adjective of the pointer's footprint (deck.gl's `pickingRadius` is likewise set on the deck, not per query). The nearest shape is chosen inside the scope, so never a country.
+- **Three overrides plus raise in one place,** and the rest. Round 1 needed a `when` per channel and could not raise.
+
+### Click to select several, fade the rest (proposed)
+
+```ts
+chart(seafood)
+  .flow(spread({ by: "lake", dir: "x" }))
+  .mark(
+    rect({ h: "count", fill: "#6b9bd1" }).when(click().toggle(), {
+      fill: "#d62728",
+      rest: { opacity: 0.3 },
+    })
+  );
+```
+
+```python
+(
+    chart(seafood)
+    .flow(spread(by="lake", dir="x"))
+    .mark(rect(h="count", fill="#6b9bd1").when(click().toggle(), fill="#d62728", rest=dict(opacity=0.3)))
+)
+```
+
+![click multi-select with the rest faded](img/click-rest.png)
+
+_Rendered (`ClickRest`, through `desugarStates`): nothing clicked, so nothing fades; Lake B; Lake B and Lake D._
+
+`click().toggle()` with no scope picks among the bars by the default target; the toggle folds the click history into a set, as in round 1. The rest fades only once something is picked, because the guard is `picked.isEmpty().not()`.
+
+### Two states at once (proposed)
+
+```ts
+rect({ h: "count", fill: BLUE, stroke: "#222", strokeWidth: 0 })
+  .when(click().toggle(), { fill: RED, rest: { opacity: 0.3 } })
+  .when(pointer(), { strokeWidth: 3, opacity: 1 });
+```
+
+<table>
+<tr><th>Sugar (<code>StatePrecedence</code>)</th><th>Rewrite (<code>StatePrecedenceExplicit</code>)</th></tr>
+<tr><td>
+
+```ts
+rect({ h: "count", fill: BLUE, opacity: 1, stroke: "#222", strokeWidth: 0 })
+  .when(picked, { fill: RED, rest: { opacity: 0.3 } })
+  .when(hover, { strokeWidth: 3, opacity: 1 });
+```
+
+</td><td>
+
+```ts
+rect({
+  h: "count",
+  stroke: "#222",
+  fill: when(picked).then(RED).otherwise(BLUE),
+  opacity: when(hover)
+    .then(1)
+    .when(picked.not().and(picked.isEmpty().not()))
+    .then(0.3)
+    .otherwise(1),
+  strokeWidth: when(hover).then(3).otherwise(0),
+});
+```
+
+</td></tr>
+</table>
+
+![two states: selected and hovered](img/state-precedence.png)
+
+_Rendered: Lake B and Lake D selected; hover on nothing, on Lake C, on Lake D. Hovering Lake C outlines it and lifts its opacity back to 1, because the hover block comes later and wins on `opacity`. The left story goes through the prototype rewrite and the right one is hand-written; their DOM and PNG are byte-identical._
+
+### Linked views (hard; proposed)
+
+The map's circles were never hovered, so this needs the explicit scope and the key test, as in round 1, now as state blocks:
+
+```ts
+const hover = pointer().pick(selectAll("bars"));
+
+spread({ dir: "x", spacing: 24 }, [
+  chart(seafood)
+    .flow(spread({ by: "lake", dir: "x" }))
+    .mark(
+      rect({ h: "count", fill: BLUE }).when(hover, { fill: RED }).name("bars")
+    ),
+  chart(lakeLocations, { axes: true })
+    .flow(scatter({ by: "lake", x: "x", y: "y" }))
+    .mark(
+      circle({ r: 9, fill: BLUE }).when(field("lake").isIn(hover), {
+        fill: RED,
+      })
+    ),
+]);
+```
+
+```python
+hover = pointer().pick(select_all("bars"))
+
+spread(
+    [
+        chart(seafood)
+        .flow(spread(by="lake", dir="x"))
+        .mark(rect(h="count", fill=BLUE).when(hover, fill=RED).name("bars")),
+        chart(lake_locations, axes=True)
+        .flow(scatter(by="lake", x="x", y="y"))
+        .mark(circle(r=9, fill=BLUE).when(field("lake").is_in(hover), fill=RED)),
+    ],
+    dir="x",
+    spacing=24,
+)
+```
+
+![linked views](img/linked-lakes.png)
+
+_Rendered (`LinkedLakes`): Lake D, then Lake F, held as hovered in the bar chart, highlighted in both charts._
+
+A `rest` on the map's circles would use `c.any()` (new), because the condition is a key test. Mosaic, Bokeh and Plotly would instead fade the rest whenever the selection is non-empty, even if no circle matches; see the decisions.
+
+### Graph hover, a diagram (proposed)
+
+```ts
+const hover = pointer().pick(selectAll("nodes"));
+const touches = field("source").isIn(hover).or(field("target").isIn(hover));
+
+chart(nodes)
+  .flow(scatter({ by: "id", x: "grp", y: "id" }))
+  .mark(circle({ r: 14, fill: BLUE }).when(hover, { fill: RED }).name("nodes"))
+  .layer(
+    chart(edges)
+      .flow(resolve(["source", "target"], { from: selectAll("nodes") }))
+      .mark(
+        line({
+          from: "source",
+          to: "target",
+          stroke: "#999",
+          strokeWidth: 1.5,
+        }).when(touches, {
+          stroke: RED,
+          strokeWidth: 3,
+          front: true,
+          rest: { opacity: 0.3 },
+        })
+      )
+  );
+```
+
+```python
+hover = pointer().pick(select_all("nodes"))
+touches = field("source").is_in(hover) | field("target").is_in(hover)
+
+(
+    chart(nodes)
+    .flow(scatter(by="id", x="grp", y="id"))
+    .mark(circle(r=14, fill=BLUE).when(hover, fill=RED).name("nodes"))
+    .layer(
+        chart(edges)
+        .flow(resolve(["source", "target"], from_=select_all("nodes")))
+        .mark(
+            line(from_="source", to="target", stroke="#999", stroke_width=1.5)
+            .when(touches, stroke=RED, stroke_width=3, front=True, rest=dict(opacity=0.3))
+        )
+    )
+)
+```
+
+![graph hover](img/graph-hover.png)
+
+_Rendered (`GraphHover`, through `desugarStates`): node b, then node c, held as hovered; incident edges red and thicker, the others faded to 0.3._
+
+The edge condition is a key test (refs after `resolve` match by identity), so `rest` here needs `touches.any()`, and `front` needs `selectAll(edges).where(touches)`: both new explicit forms. This is the example that found that `.zOrder(fn)` on a relational line sees all edges at once.
+
+### Brush on a scatterplot (sketch level; proposed)
+
+```ts
+const brush = drag(); // #830: drag().within(ref("plot"))
+const brushed = brush.pick(selectAll("dots"));
+
+chart(penguins, { axes: true })
+  .flow(scatter({ x: "Flipper Length (mm)", y: "Body Mass (g)" }))
+  .mark(
+    circle({ r: 2.5, fill: "#bbb" }).when(brushed, { fill: RED }).name("dots")
+  )
+  .layer(
+    chart(brush).mark(
+      rect({
+        x: "x0",
+        x2: "x",
+        y: "y0",
+        y2: "y",
+        fill: "#4c78a8",
+        opacity: 0.15,
+      })
+    )
+  )
+  .layer(text({ text: concatStr(brushed.len(), " selected") }));
+```
+
+```python
+brush = drag()
+brushed = brush.pick(select_all("dots"))
+
+(
+    chart(penguins, axes=True)
+    .flow(scatter(x="Flipper Length (mm)", y="Body Mass (g)"))
+    .mark(circle(r=2.5, fill="#bbb").when(brushed, fill=RED).name("dots"))
+    .layer(chart(brush).mark(rect(x="x0", x2="x", y="y0", y2="y", fill="#4c78a8", opacity=0.15)))
+    .layer(text(text=concat_str(brushed.len(), " selected")))
+)
+```
+
+![brush on a scatterplot](img/brush-scatter.png)
+
+_Rendered (`BrushScatter`): no brush, then two brush rectangles with the points inside them in red._
+
+Without the count readout, `circle(...).when(drag(), { fill: RED })` alone works by the default target.
+
+### Draggable threshold: value logic (proposed, unchanged)
+
+No marks are selected, so the threshold reads the drag's row, as in the parent proposal:
+
+```ts
+const dr = drag();
+const cut = dr.y.clip(0, 95).fillNull(60);
+
+chart(bars)
+  .flow(spread({ by: "cat", dir: "x" }))
+  .mark(
+    rect({
+      h: "count",
+      fill: when(field("count").sum().gt(cut))
+        .then("#d62728")
+        .otherwise("#6b9bd1"),
+    })
+  )
+  .layer(rect({ y: cut, h: 3, w: 500, fill: "#333" }));
+```
+
+```python
+dr = drag()
+cut = dr.y.clip(0, 95).fill_null(60)
+
+(
+    chart(bars)
+    .flow(spread(by="cat", dir="x"))
+    .mark(rect(h="count", fill=when(field("count").sum() > cut).then("#d62728").otherwise("#6b9bd1")))
+    .layer(rect(y=cut, h=3, w=500, fill="#333"))
+)
+```
+
+![threshold at three drag positions](img/threshold.png)
+
+_Rendered (`Threshold`): the drag held at y = 35, 60 and 85._
+
+Under #830, `.clip(0, 95)` becomes `drag().within(ref("plot"))`. This example is here to show the split: a drag's own fields are properties (`dr.y`), because their names are fixed by the input; a picked mark's fields are `sel.field("species")`, because their names are the user's.
+
+### Selections as data (kept from round 1)
+
+The same hover, consumed as data instead of as a condition, is an outline layer over the picked ref. Here the scope must be named, because `chart(hover)` is a value read:
+
+```ts
+const hover = pointer().pick(selectAll("bars"));
+chart(seafood)
+  .flow(spread({ by: "lake", dir: "x" }))
+  .mark(rect({ h: "count", fill: "#6b9bd1" }).name("bars"))
+  .layer(
+    chart(hover).mark(
+      enclose({ padding: 4, fill: "none", stroke: "#d62728", strokeWidth: 2.5 })
+    )
+  );
+```
+
+![hover as an overlay layer](img/hover-overlay.png)
+
+_Rendered (`HoverOverlay`): Lake B and Lake E held as hovered._
+
+## The IR and the tiers
+
+**IR.** Round 1's pick node stays: `{ "type": "pick", "source": "s3", "from": <selectAll IR> }`. An unscoped input in an identity test is a pick with `"from": null`. State blocks ride the mark as written, `"states": [{ "when": <expr>, "set": { "fill": "#d62728" }, "rest": { "opacity": 0.3 }, "front": true }]`, so Python and JS decompile to the same spelling. One JS lowering step, run before layout, applies both rewrites: it fills each `"from": null` with the mark's name (minting a token if needed), and expands `states` into channel `when` nodes and z constraints. No layout pass learns a new node kind. The new explicit forms are one expression op (`any`, evaluated over the mark's shapes) and selection operands for `zAbove` / `zBelow`.
+
+The alternative is to desugar in each frontend before the IR. That keeps the IR smallest, but needs the rewrite written twice (Python and JS) and loses the sugar when Python prints a document back. Lowering in JS keeps one implementation.
+
+**Tiers.** The parent proposal infers the tier from the channel, and the rewrite makes that rule apply unchanged: a state block's tier is the highest tier of the channels its rewrite reads the source in.
+
+| Override in a block                                         | Tier                                                                                                                                            |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Paint channels (`fill`, `stroke`, `opacity`, `strokeWidth`) | Paint: patch attributes.                                                                                                                        |
+| `front: true`                                               | Paint: a z constraint changes the order the bake paints children in, not any position. The renderer reorders DOM nodes, as D3's `raise()` does. |
+| Size or position (`r`, `h`, `x`)                            | Pipeline: the layout reads them, so a hover that grows a bar re-lays the chart out. Declared, not hidden.                                       |
+| `rest`                                                      | The tier of its own channels, by the same rule. `.any()` is computed once per change over the mark's shapes, in the tier of the read.           |
+
+**Animation.** A state change is a change of one keyed shape's channels between two frames, which is what `update` means in `.transition({ enter, update, exit })`. Today `update` plays only between `time.sequence` keyframes; #914 would make it play on any keyed change, and a state change is one. So `.transition({ update: Animation.tween({ duration: 150 }) })` on the mark would animate its hover, with no timing in the block, the way CSS keeps `transition` off the `:hover` rule. Paint order does not tween; it switches.
+
+## Round 1: the design axes and approaches (kept)
 
 Three choices are independent:
 
-1. **What the input yields** (the produce side): a contextual property of the input (A), a selection parameter over data (B), or a selection of refs (C).
-2. **How a channel tests it**: identity ("this mark") or key ("this row's lake").
+1. **What the input yields**: a contextual property of the input (A), a selection parameter over data (B), or a selection of refs (C).
+2. **How a channel tests it**: identity ("this shape") or key ("this row's lake").
 3. **Whether it is also data**: can a selection be charted (`chart(hover)`) and filtered, or only tested in a channel?
 
-The approaches below fix axis 1 and say what each allows on axes 2 and 3.
+Round 2 does not reopen axis 1. Its default target is A's reading (`hover.over` is "this shape, tested in its own context") defined as a rewrite into C, so the two no longer compete: A is C with the scope filled in.
 
-## Approach A: a property of the input (the strawman)
+### Approach A: a property of the input (the strawman)
 
 A pointer is a value with contextual properties. `hover.over` is true when evaluated on the mark under the pointer; `hover.field(k)` reads that mark's field.
 
@@ -224,7 +833,7 @@ circle({
 
 **Trade-offs.** Shortest for the single-chart hover, and it reads like CSS. But the scope is implicit (or a string option beside the selection system), each input invents a word, and linking needs a second spelling anyway. It does not grow into #830.
 
-## Approach B: selection parameters (Vega-Lite and Altair)
+### Approach B: selection parameters (Vega-Lite and Altair)
 
 An input declared with a key becomes a predicate over data rows. In a channel, the parameter itself is the condition: it tests the current row.
 
@@ -281,364 +890,28 @@ The graph: the edges have no `id` field, so B needs a value read: `when(field("s
 
 **Trade-offs.** Most familiar to the Python audience (Altair 5 users write `alt.when(hover)` today). Linking by key is built in. But it adds a second selection concept, the option list grows on every input (`on`, `fields`, `toggle`, `empty`, `nearest`), and the brushed marks are not refs.
 
-## Approach C: inputs pick refs (recommended)
+### Approach C: inputs pick refs (round 1's recommendation, kept)
 
-An input picks among the marks of a selection. The result is a selection: refs, with geometry and datums. A channel tests it by identity or by key; a chart can take it as data.
+An input picks among the shapes of a selection. The result is a selection: refs, with geometry and datums. A channel or a state block tests it by identity or by key; a chart can take it as data. Round 2 changes only where `radius` lives and adds the default target.
 
-### The surface (proposed)
+| Read                                                            | Meaning                                                                  | Precedent                                                                    |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| `pointer().pick(selectAll("bars"))`                             | the bars under the pointer (0 or 1, topmost)                             | deck.gl `pickObject({ layerIds })`, Plot `pointer`                           |
+| `pointer({ radius: 8 }).pick(selectAll("paths"))`               | the nearest path within 8 px (#849)                                      | deck.gl `pickingRadius`, Plot `maxRadius`, Vega-Lite `nearest`               |
+| `drag().pick(selectAll("dots"))`                                | the dots inside the drag's rectangle (start to current)                  | deck.gl `pickObjects({ width, height })`, Meros span selector                |
+| `click().pick(selectAll("bars")).toggle()`                      | the bars clicked an odd number of times                                  | Vega-Lite `toggle`, Mosaic `toggle`                                          |
+| `pointer()`, `drag()`, `click().toggle()` with no `.pick`       | in an identity test on mark M: picks among M's shapes (round 2)          | CSS `:hover`, deck.gl `autoHighlight`                                        |
+| `when(sel)`, `.when(sel, {...})`                                | this shape is one of `sel` (identity)                                    | CSS `:hover`, Solid `createSelector` by identity, Vega-Lite with no `fields` |
+| `field("lake").isIn(sel)`                                       | this row's `lake` matches a picked shape's key                           | polars `is_in`, SQL semi-join, Solid `createSelector(...)(key)`              |
+| `field("source").isIn(sel, { key: "id" })`                      | match against a named key of the picked shapes                           | `resolve(cols, { from, key })`                                               |
+| `sel.field("species")`                                          | the picked shapes' species, collapsed (null if none or if they disagree) | `by: "datum.species"`, `project()`                                           |
+| `sel.len()`, `sel.isEmpty()`                                    | how many picked; nothing picked                                          | polars `list.len()`                                                          |
+| `chart(sel)`                                                    | the picked refs as data                                                  | `chart(selectAll("bars"))`                                                   |
+| `dr.x`, `dr.y`, `dr.x0`, `dr.y0`, `dr.dx`, `dr.dy`, `dr.active` | the drag's own row (unchanged from the parent proposal)                  | mafs `p.x`, solid-primitives `pos.x`                                         |
 
-| Read                                                            | Meaning                                                                 | Precedent                                                                    |
-| --------------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `pointer().pick(selectAll("bars"))`                             | the bars under the pointer (0 or 1, topmost)                            | deck.gl `pickObject({ layerIds })`, Plot `pointer`                           |
-| `pointer().pick(selectAll("paths"), { radius: 8 })`             | the nearest path within 8 px (#849)                                     | deck.gl `radius`, Plot `maxRadius`, Vega-Lite `nearest`                      |
-| `drag().pick(selectAll("dots"))`                                | the dots inside the drag's rectangle (start to current)                 | deck.gl `pickObjects({ width, height })`, Meros span selector                |
-| `click().pick(selectAll("bars"))`                               | the bars picked by the last click                                       | Vega-Lite point selection on click                                           |
-| `click().pick(selectAll("bars")).toggle()`                      | the bars clicked an odd number of times                                 | Vega-Lite `toggle`, Mosaic `toggle`                                          |
-| `when(sel)`                                                     | this mark is one of `sel` (identity)                                    | CSS `:hover`, Solid `createSelector` by identity, Vega-Lite with no `fields` |
-| `field("lake").is_in(sel)`                                      | this row's `lake` matches a picked mark's key                           | polars `is_in`, SQL semi-join, Solid `createSelector(...)(key)`              |
-| `field("source").is_in(sel, key="id")`                          | match against a named key of the picked marks                           | `resolve(cols, { from, key })`                                               |
-| `sel.field("species")`                                          | the picked marks' species, collapsed (null if none or if they disagree) | `by: "datum.species"`, `project()`                                           |
-| `sel.is_empty()`                                                | nothing picked                                                          | polars `list.len() == 0`                                                     |
-| `chart(sel)`                                                    | the picked refs as data                                                 | `chart(selectAll("bars"))`                                                   |
-| `dr.x`, `dr.y`, `dr.x0`, `dr.y0`, `dr.dx`, `dr.dy`, `dr.active` | the drag's own row (unchanged from the parent proposal)                 | mafs `p.x`, solid-primitives `pos.x`                                         |
+`isIn`'s default key is the rule `resolve` already uses: the field the picked shapes were split by. A column that holds refs (after `resolve`) matches by identity. JS spells it `isIn`, Python `is_in`.
 
-`is_in`'s default key is the rule `resolve` already uses: the field the picked marks were split by (`spread({ by: "lake" })` makes the key `lake`). A column that holds refs (after `resolve`) matches by identity. JS spells the method `isIn`, Python `is_in`.
-
-### Example 1: hover on bars (proposed)
-
-```ts
-const hover = pointer().pick(selectAll("bars"));
-
-chart(seafood)
-  .flow(spread({ by: "lake", dir: "x" }))
-  .mark(
-    rect({
-      h: "count",
-      fill: when(hover).then("#d62728").otherwise("#6b9bd1"),
-    }).name("bars")
-  )
-  .render(container, { w: 400, h: 400 });
-```
-
-```python
-hover = pointer().pick(select_all("bars"))
-
-(
-    chart(seafood)
-    .flow(spread(by="lake", dir="x"))
-    .mark(rect(h="count", fill=when(hover).then("#d62728").otherwise("#6b9bd1")).name("bars"))
-    .render(w=400, h=400)
-)
-```
-
-Picture: `img/hover-bars.png` above. The same hover, consumed as data instead of as a condition, is an outline layer over the picked ref:
-
-```ts
-chart(seafood)
-  .flow(spread({ by: "lake", dir: "x" }))
-  .mark(rect({ h: "count", fill: "#6b9bd1" }).name("bars"))
-  .layer(
-    chart(hover).mark(
-      enclose({ padding: 4, fill: "none", stroke: "#d62728", strokeWidth: 2.5 })
-    )
-  );
-```
-
-```python
-(
-    chart(seafood)
-    .flow(spread(by="lake", dir="x"))
-    .mark(rect(h="count", fill="#6b9bd1").name("bars"))
-    .layer(chart(hover).mark(enclose(padding=4, fill="none", stroke="#d62728", stroke_width=2.5)))
-)
-```
-
-![hover as an overlay layer](img/hover-overlay.png)
-
-_Rendered (`HoverOverlay`): Lake B and Lake E held as hovered. Today's JS draws it as `chart(selectAll("bars")).flow(filter(...))`, which is exactly what `chart(hover)` would be._
-
-The bars' own fill reads `hover`, and `hover` picks among the bars. That is not a cycle: per #830, a pick reads the previous frame's geometry, and the fill is a paint-tier read.
-
-### Example 2: bird migration hover (hard, real; proposed)
-
-```ts
-const hover = pointer().pick(selectAll("paths"), { radius: 8 });
-const hot = when(hover);
-
-basemap()
-  .layer(
-    chart(birds)
-      .flow(
-        group({ by: "species" }),
-        scatter({ by: "day", x: "lon", y: "lat" })
-      )
-      .mark(
-        line({
-          stroke: "species",
-          strokeWidth: hot.then(3).otherwise(0.1),
-          opacity: hot.then(1).otherwise(0.5),
-        }).name("paths")
-      )
-  )
-  .layer(
-    text({
-      text: hover.field("species").fillNull(""),
-      fontSize: 14,
-      fill: "#333",
-    })
-  )
-  .render(container, { w: 600, h: 600 });
-```
-
-```python
-hover = pointer().pick(select_all("paths"), radius=8)
-hot = when(hover)
-
-(
-    basemap()
-    .layer(
-        chart(birds)
-        .flow(group(by="species"), scatter(by="day", x="lon", y="lat"))
-        .mark(
-            line(
-                stroke="species",
-                stroke_width=hot.then(3).otherwise(0.1),
-                opacity=hot.then(1).otherwise(0.5),
-            ).name("paths")
-        )
-    )
-    .layer(text(text=hover.field("species").fill_null(""), font_size=14, fill="#333"))
-    .render(w=600, h=600)
-)
-```
-
-Picture: `img/bird-hover.png` above. What this example tests:
-
-- **Scope.** `selectAll("paths")` keeps the countries out. Today it works only because countries lack a `species` field.
-- **Nearest pick (#849).** The radius belongs to the pick, which already has a scope, so "nearest" means nearest path, never the country polygon that always contains the pointer. #849 asked for `pointer().snap(selectAll("paths"))`; see "How C relates to #830" for why the pick, not the snap, is the right home.
-- **Readout.** `hover.field("species")` is one species or null. A tooltip at the pointer (`chart(hover)` placed at the pick) still waits on #850 (no geo inverse), and the readout in the corner does not.
-- **Shared condition.** `when(hover)` is a value, so the two channels share it; the closure `hot(d)` does the same today.
-
-### Example 3: draggable threshold (proposed, unchanged)
-
-No marks are selected, so the threshold reads the drag's row, as in the parent proposal:
-
-```ts
-const dr = drag();
-const cut = dr.y.clip(0, 95).fillNull(60);
-
-chart(bars)
-  .flow(spread({ by: "cat", dir: "x" }))
-  .mark(
-    rect({
-      h: "count",
-      fill: when(field("count").sum().gt(cut))
-        .then("#d62728")
-        .otherwise("#6b9bd1"),
-    })
-  )
-  .layer(rect({ y: cut, h: 3, w: 500, fill: "#333" }));
-```
-
-```python
-dr = drag()
-cut = dr.y.clip(0, 95).fill_null(60)
-
-(
-    chart(bars)
-    .flow(spread(by="cat", dir="x"))
-    .mark(rect(h="count", fill=when(field("count").sum() > cut).then("#d62728").otherwise("#6b9bd1")))
-    .layer(rect(y=cut, h=3, w=500, fill="#333"))
-)
-```
-
-![threshold at three drag positions](img/threshold.png)
-
-_Rendered (`Threshold`): the drag held at y = 35, 60 and 85._
-
-Under #830, `.clip(0, 95)` becomes `drag().within(ref("plot"))`. This example is here to show the split: a drag's own fields are properties (`dr.y`), because their names are fixed by the input; a picked mark's fields are `sel.field("species")`, because their names are the user's.
-
-### Example 4: brush on a scatterplot (sketch level; proposed)
-
-```ts
-const brush = drag(); // #830: drag().within(ref("plot"))
-const brushed = brush.pick(selectAll("dots"));
-
-chart(penguins, { axes: true })
-  .flow(scatter({ x: "Flipper Length (mm)", y: "Body Mass (g)" }))
-  .mark(
-    circle({
-      r: 2.5,
-      fill: when(brushed).then("#d62728").otherwise("#bbb"),
-    }).name("dots")
-  )
-  .layer(
-    chart(brush).mark(
-      rect({
-        x: "x0",
-        x2: "x",
-        y: "y0",
-        y2: "y",
-        fill: "#4c78a8",
-        opacity: 0.15,
-      })
-    )
-  )
-  .layer(text({ text: concatStr(brushed.len(), " selected") }));
-```
-
-```python
-brush = drag()
-brushed = brush.pick(select_all("dots"))
-
-(
-    chart(penguins, axes=True)
-    .flow(scatter(x="Flipper Length (mm)", y="Body Mass (g)"))
-    .mark(circle(r=2.5, fill=when(brushed).then("#d62728").otherwise("#bbb")).name("dots"))
-    .layer(chart(brush).mark(rect(x="x0", x2="x", y="y0", y2="y", fill="#4c78a8", opacity=0.15)))
-    .layer(text(text=concat_str(brushed.len(), " selected")))
-)
-```
-
-Picture: `img/brush-scatter.png` above. The points have no key field, so the identity test `when(brushed)` is the one that works; B would have to name both encoded fields. The brush rectangle as `chart(brush)` and the `x2`/`y2` channels are #830's step 1 and are sketch level. `brushed.len()` is a polars list length; the mean-line readout from #830 is `chart(brushed).flow(derive(...))`, since `brushed` is data.
-
-### Example 5: click to select several (proposed)
-
-```ts
-const picked = click().pick(selectAll("bars")).toggle();
-
-chart(seafood)
-  .flow(spread({ by: "lake", dir: "x" }))
-  .mark(
-    rect({
-      h: "count",
-      fill: when(picked).then("#d62728").otherwise("#6b9bd1"),
-    }).name("bars")
-  );
-```
-
-```python
-picked = click().pick(select_all("bars")).toggle()
-
-(
-    chart(seafood)
-    .flow(spread(by="lake", dir="x"))
-    .mark(rect(h="count", fill=when(picked).then("#d62728").otherwise("#6b9bd1")).name("bars"))
-)
-```
-
-![click multi-select](img/click-multi.png)
-
-_Rendered (`ClickMulti`): nothing clicked, Lake B clicked, then Lake B and Lake D._
-
-`.toggle()` folds the click history into a set (a mark is in it when clicked an odd number of times). Without it, the selection is the last click's pick, which is single select. #830's reading of `click()` as accumulating rows is what makes this a fold and not a new state machine. Mosaic-style "fade the rest only when something is picked" is `when(picked.is_empty() | picked)`, so no `empty` option is needed.
-
-### Example 6: linked views (hard; proposed)
-
-```ts
-const hover = pointer().pick(selectAll("bars"));
-const sameLake = when(field("lake").isIn(hover));
-
-spread({ dir: "x", spacing: 24 }, [
-  chart(seafood)
-    .flow(spread({ by: "lake", dir: "x" }))
-    .mark(
-      rect({
-        h: "count",
-        fill: sameLake.then("#d62728").otherwise("#6b9bd1"),
-      }).name("bars")
-    ),
-  chart(lakeLocations, { axes: true })
-    .flow(scatter({ by: "lake", x: "x", y: "y" }))
-    .mark(
-      circle({ r: 9, fill: sameLake.then("#d62728").otherwise("#6b9bd1") })
-    ),
-]);
-```
-
-```python
-hover = pointer().pick(select_all("bars"))
-same_lake = when(field("lake").is_in(hover))
-
-spread(
-    [
-        chart(seafood)
-        .flow(spread(by="lake", dir="x"))
-        .mark(rect(h="count", fill=same_lake.then("#d62728").otherwise("#6b9bd1")).name("bars")),
-        chart(lake_locations, axes=True)
-        .flow(scatter(by="lake", x="x", y="y"))
-        .mark(circle(r=9, fill=same_lake.then("#d62728").otherwise("#6b9bd1"))),
-    ],
-    dir="x",
-    spacing=24,
-)
-```
-
-Picture: `img/linked-lakes.png` above. The map's circles were never hovered, so the identity test cannot reach them; the key test does, with the key (`lake`) taken from how the bars were split. The map's `when(hover)` (identity) would be a loud error: "hover picks `bars` marks; this channel is on a `circle` that is not one of them. Test a key with `field(...).is_in(hover)`."
-
-### Example 7: graph hover, a diagram (proposed)
-
-```ts
-const hover = pointer().pick(selectAll("nodes"));
-
-chart(nodes)
-  .flow(scatter({ by: "id", x: "grp", y: "id" }))
-  .mark(
-    circle({
-      r: 14,
-      fill: when(hover).then("#d62728").otherwise("#6b9bd1"),
-    }).name("nodes")
-  )
-  .layer(
-    chart(edges)
-      .flow(resolve(["source", "target"], { from: selectAll("nodes") }))
-      .mark(
-        line({
-          from: "source",
-          to: "target",
-          stroke: when(
-            field("source").isIn(hover).or(field("target").isIn(hover))
-          )
-            .then("#d62728")
-            .otherwise("#bbb"),
-        })
-      )
-  );
-```
-
-```python
-hover = pointer().pick(select_all("nodes"))
-touches = field("source").is_in(hover) | field("target").is_in(hover)
-
-(
-    chart(nodes)
-    .flow(scatter(by="id", x="grp", y="id"))
-    .mark(circle(r=14, fill=when(hover).then("#d62728").otherwise("#6b9bd1")).name("nodes"))
-    .layer(
-        chart(edges)
-        .flow(resolve(["source", "target"], from_=select_all("nodes")))
-        .mark(line(from_="source", to="target", stroke=when(touches).then("#d62728").otherwise("#bbb")))
-    )
-)
-```
-
-![graph hover](img/graph-hover.png)
-
-_Rendered (`GraphHover`): node b, then node c, held as hovered; their incident edges turn red._
-
-After `resolve`, `source` and `target` hold refs, so `is_in` matches them by identity: "this edge's source is one of the hovered nodes". No key needs naming, and the diagram reads like the chart.
-
-### How it composes
-
-- **With the selection system.** A pick takes a selection and returns a selection. Everything that takes `selectAll(...)` takes a pick: `chart(...)`, `enclose`, `resolve(..., { from })`, labels once #803 lowers them onto selections. Names resolve by the existing rule (visible up to the nearest `createMark`), from where the input is read.
-- **With expressions.** `when(sel)`, `is_in`, `.field`, `.len`, `.is_empty` are entries in the parent proposal's expression table. A selection is a source-valued leaf.
-- **With the tiers.** A channel that reads a selection is in the paint tier when the channel is a paint channel (fill, opacity, stroke width), and in the pipeline tier otherwise (`chart(hover)` lays out again), as the parent proposal decided.
-- **With coordinate transforms.** A pick works in pixel space against the previous frame's boxes, so it works under geo and polar with no inverse. Only reading `dr.x` in data units needs the inverse (#850).
-- **With emphasize (#641).** A selection is the "by selection" argument #641 asked about: `emphasize(hover, ["color", "z"])` would forward to `when(hover)` for color and `.zOrder` for paint order. Mosaic's `highlight({ by: sel })` is the precedent. Not designed here.
-- **With #830.** See the next section.
-- **IR.** A pick is a source-expression node: `{ "type": "pick", "source": "s3", "from": <selectAll IR>, "radius": 8 }`; `toggle` is an op on it. `is_in` is one op. No new pass.
-
-### How C relates to #830, `inside`, `.within` and `.snap`
+#### How C relates to #830, `inside`, `.within` and `.snap`
 
 - **`inside(ref, d)`** (#830's selector) is the per-row form of a region pick: `drag().pick(selectAll("dots"))` is `selectAll("dots")` filtered by `inside(brush, r.datum)`. Exact composition. C does not add `inside` as a free function, because the input already knows its own shape.
 - **`.snap(selectAll(...))`** moves the input's coordinates onto the nearest member. `.pick(selectAll(...))` returns the member. Snap is pick followed by reading the member's position: `snap(S)` is `pick(S, nearest)` then its anchor. Exact composition, so define snap by that rewrite. #849's hover on thin paths wants the member (to highlight it), not the snapped coordinates, which is why the pick is the primitive.
@@ -647,7 +920,7 @@ After `resolve`, `source` and `target` hold refs, so `is_in` matches them by ide
 - **"The dataset should always be a signal."** A selection from a pick is a list that changes over time. `chart(hover)` is #830's `chart(pointer())`, but routed through refs, so it has geometry.
 - **Multi-brush.** `drag().pick(...)` over several gestures is a union of picks by gesture `id`, the same `spread({ by: "id" })` #830 proposes for the rectangles.
 
-### Variant C′: the pick on `selectAll` instead of on the input
+#### Variant C′: the pick on `selectAll` instead of on the input
 
 The same value, with the query on the selection, in the direction of #517:
 
@@ -657,63 +930,74 @@ const hover = selectAll("bars", { where: under(pointer()) }); // proposed varian
 
 It keeps all the reads above. It reads well as a query, but it puts a spatial test inside #517's `where`, which #517 framed as a predicate over `datum`. And #830 already chose methods on the input (`drag().within(...).snap(...)`), so C's `.pick` sits with its siblings. A third spelling, `pointer().selectAll("bars")`, reuses the GoFish verb but takes a name where `.snap` and `.within` take a selection.
 
-### Overlap check
+## Overlap check (round 2)
 
-- `when(sel)` versus `field(k).is_in(sel)`: they agree exactly when `k` is a key of the picked marks; otherwise they answer different questions (this mark, versus a row that shares a key). A small degenerate overlap, kept on purpose; the identity form is the only one that works without a key (the penguin dots, component boxes).
-- `pick` versus `.snap`: exact composition (above).
-- `pick` versus `filter(selectAll(...))` plus `inside`: exact composition.
-- `chart(hover)` versus `chart(selectAll("bars"))`: same mechanism.
-- `sel.field(k)` versus `project(ref.datum, k)` and `by: "datum.k"`: the same collapse rule, one implementation.
-- `.toggle()` versus Vega-Lite's `toggle`: a fold over click history, not a new state.
+- `.when(c, { k: v })` versus `k: when(c).then(v).otherwise(base)`: exact composition, the first defined by the rewrite into the second. Byte-identical renders in the prototype.
+- The default target versus an explicit `.pick(selectAll(n))`: exact composition by the Part 1 rewrite.
+- `emphasize` (#641) versus `.when`: a preset, defined by a rewrite into `.when`.
+- `front: true` versus `.zOrder(n)`: `.zOrder` orders siblings; `front` orders the mark's shapes wherever they sit, through a z constraint. They agree in the degenerate case where all of a mark's shapes are siblings (bars in one `spread`). Two mechanisms by design, because `.zOrder` is per-sibling by #982.
+- `rest` versus Mosaic's `highlight`: Mosaic's `channels` is our `rest`, alone.
+- `pick` versus `.snap`, `inside`, `filter(selectAll(...))`: exact compositions, as in round 1.
 
-### Trade-offs
+## Trade-offs
 
-Easy: every example above with one value type; scoping by the existing `.name()`; linking and diagrams by key; selections as data; Python and JS in the same shape. New terms: `pick`, `toggle`, `is_in` (polars), and selection-valued expressions. Awkward: `when(hover)` needs the channel's mark to be one of the picked kind (a loud error otherwise); `.name("bars")` must be written even for a one-chart hover (Josh's rule is to name only what is selected, and here the bars are selected); identity across re-resolves leans on datum identity until #673 lands. Cost to extend: a new pick shape (lasso) is one more input shape; a custom test is a JS function, JS only, as with strategies (#1101).
+| Spelling                                  | Single chart                                    | Desugars                                                             | New terms            | Python                                   |
+| ----------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------- | -------------------- | ---------------------------------------- |
+| Round 1 (`pick` + per-channel `when`)     | Long: name, `selectAll`, one `when` per channel | Nothing to desugar; cannot raise                                     | `pick`               | Same shape                               |
+| **S1 `.when(c, {...})` + default target** | `rect(...).when(pointer(), { fill: RED })`      | **Cleanly**, once `zAbove` takes selections and `.any()` exists      | `rest`, `front`      | `.when(hover, fill=RED, rest=dict(...))` |
+| S2 `.emphasize`                           | `rect(...).emphasize(pointer(), {...})`         | Cleanly with overrides; its default needs a theme "muted" role (new) | `emphasize`, `rest`  | Same                                     |
+| S3 `.hover({...})`                        | Shortest: `rect(...).hover({ fill: RED })`      | Cleanly, into S1                                                     | one method per input | `.hover(fill=RED)`                       |
+| S4 `states: [...]`                        | `rect({ ..., states: [{ when, fill }] })`       | Cleanly                                                              | `states`             | `states=[dict(when=..., fill=...)]`      |
+
+Awkward in S1: the readout still forces a named scope; `.any()` is a new kind of expression (an aggregate across shapes, not across one shape's rows); and `front` waits on z constraints over selections. Cost to extend: a new state is a new condition, not a new name; a new pick shape (lasso) is one more input shape; a custom condition is an expression or, in JS only, a function (#1101).
 
 ## Recommendation
 
-**Approach C.**
+**Approach C, with the default target and S1 state blocks.**
 
-- **One selection concept** (api-design.md, "One concept is one operator"). A hover, a brush and a click set are the same value as `selectAll`'s, so they work everywhere a selection already works. B would add a second meaning of "selection" with large partial overlap.
-- **It desugars into the existing core** (principles.md, "Why keep the core small"). A pick is a filter of a selection by a spatial test against the previous frame; `is_in` is a semi-join with `resolve`'s key rule; `chart(sel)` is `chart(selectAll(...))`. No pass learns a new node kind.
-- **A name says the shape of its value** (refs-and-selection.md, "Singular and plural"). A hover is a list because it can be empty, so it is not a `ref`; the readout collapses it with the existing projection rule.
-- **Precedent.** The test is Solid's `createSelector` (a keyed predicate derived from a value, the library GoFish's reactivity is built on) and polars' `is_in`. The pick is deck.gl's, with its `layerIds` scope and point versus rectangle forms. The channel reads like Altair's `alt.when(hover)`. The per-element forms (CSS, Figma, SwiftUI, Meros' `hovered()`) are kept as the identity test, with the scope made explicit.
-- **The general rule over a case split** (api-design.md). Scope, nearest pick, linking, and diagrams all come from one value plus two tests, with no `on`, `fields`, `nearest` or `empty` options.
-- **It is #830's direction.** Inputs become data, through refs; projections stay methods on the input; binding modes dispatch on shape and type.
-- **Same shape in JS and Python.** Every example has a twin with the same structure.
+- **Both conveniences are rewrites** into the explicit layer (principles.md, "Why keep the core small"). The default target rewrites to a named pick; a state block rewrites to `when` chains and z constraints. The prototype checks the second for paint channels: sugar and rewrite render byte-identical.
+- **The rewrites found the real gaps.** Raise across frames and "the rest" of a key test had no explicit form. The proposal adds them to the explicit layer (`Constraint.zAbove` over selections, `.any()`) instead of letting the sugar carry a capability of its own.
+- **Uniform rule plus explicit override.** The default target depends only on where the test is written, never on data or names; `.pick(...)` is the override.
+- **Calls, methods, options** (api-design.md). `.when` is a method because it reads the caller: its base options, its shapes, its name. The overrides are a nested role (`rest: {...}`), not prefixed names (`restOpacity`, Bokeh's `nonselection_alpha`).
+- **Precedent.** Per-state blocks are what CSS, Figma, Bokeh, Plotly and Solid's `classList` do; Mosaic, Bokeh and Plotly all have "the rest"; deck.gl's `autoHighlight` is the default target; CSS and SwiftUI keep animation apart from the state, as `.transition` does here.
+- **One word for one idea.** `when` already means "a conditional" in channels; `.when` is the same conditional at the size of a mark. #641's `emphasize` becomes a preset over it rather than a second mechanism.
+- **Same shape in JS and Python.** Overrides are keyword arguments in Python and `rest` is a nested dict. `front` was chosen over `raise` partly because `raise` is a Python keyword; it is also the design-tool word ("Bring to front").
 
-**What `hover.over` becomes.** Its reading survives as `when(hover)`. What changes is that `hover` is declared with its scope, `pointer().pick(selectAll("bars"))`, instead of meaning "whatever mark is asking".
-
-**Runner-up: Approach B.** It is what Altair users already know, and its `fields` key makes linking the default. What would change the pick: if Python users testing the API find `pick(select_all(...))` plus `is_in` harder than `pointer(fields=[...])`, or if the parity port finds that selections of refs cannot be computed in the browser at pointer rate (each pick is a geometry query over the previous frame). B could also return later as sugar: `pointer(fields=["lake"])` is `field("lake").is_in(pointer().pick(...))`.
+**Runner-up: S3, per-state methods.** Shortest for the one-chart hover and familiar from CSS. What would change the pick: if users mostly write single-chart hovers and never value logic, `.hover({...})` would earn its place, and it can be added later as sugar over S1 with no change to anything else.
 
 ## Decisions for Josh
 
-1. **Is a hover a selection?** Approve C's model: inputs pick refs, the result is a selection (list of refs), and `when(sel)` / `field(k).is_in(sel)` test it.
-2. **The verb.** `pointer().pick(selectAll("bars"))` (recommended; the graphics term, takes a selection like `.snap`), `pointer().selectAll("bars")` (the GoFish verb, takes a name), or C′ `selectAll("bars", { where: under(pointer()) })` (#517)?
-3. **Both tests?** Keep the identity test `when(sel)` beside the key test `field(k).is_in(sel)`, or ship only `is_in` (which then needs a key on every mark)?
-4. **`is_in`'s default key.** Reuse `resolve`'s rule (the field the picked marks were split by; refs match by identity), with `key=` to override?
-5. **Hover cardinality and radius.** A pointer picks only the topmost mark (0 or 1), or every mark under it? Default `radius` 0 (exact hit) or Plot's 40 px?
-6. **Brush shape.** Does `drag().pick(...)` use the rectangle from start to current, or should that be explicit (`drag().span().pick(...)`), leaving a plain drag to pick at its current point?
-7. **Toggle.** `.toggle()` as a method on the pick, or an option on `click()`? Does a click on empty space clear the set? Is shift-click a separate read (`key_held("Shift")`) or part of `toggle`?
-8. **Empty selections.** No `empty` option: an empty selection tests false, and "nothing picked yet" is `sel.is_empty()`. Agree?
-9. **Reads of a picked mark versus an input's own row.** `sel.field("species")` for the user's columns, and properties `dr.x`, `dr.y` for the input's fixed fields (as the parent proposal has them). Agree, or `dr.field("y")` for both?
+1. **Default target.** An unscoped input in an identity test picks among the shapes of the mark it sits on, defined by the rewrite to `.pick(selectAll(n))` with a fresh token when the mark has no name; value reads of an unscoped input are a loud error. Approve?
+2. **State spelling.** S1 `.when(cond, { ...overrides, rest, front })`, S2 `.emphasize`, S3 `.hover` / `.selected`, or S4 a `states` option?
+3. **Raise.** Add z constraints with selection operands (`Constraint.zAbove(sel, selectAll(n))`) as the explicit form of `front`, rather than changing `.zOrder` to sort across frames (which would reverse #982)?
+4. **Its name.** `front: true` (Figma and Keynote "Bring to front"), `raise` (D3; a Python keyword), or `z: "front"` (leaves room for `"back"`)?
+5. **The rest's guard.** "While the condition holds for at least one shape of this mark" (`c.any()`, uniform), or Mosaic, Bokeh and Plotly's "while the selection is non-empty", which differs only when a key test matches nothing in this chart?
+6. **`.any()`.** Add a whole-mark aggregate to the expression language (polars' broadcast `any`), which the rest of a key test needs?
+7. **Where the rewrite runs.** Keep state blocks in the IR and lower them in JS (one implementation, decompiles in Python), or desugar in each frontend?
+8. **Animated states.** Make `.transition({ update })` play on any keyed change of a mark (#914), so a hover tween needs no new syntax?
+9. **#641.** Settle `emphasize` as a preset over `.when` (its default needs a theme "muted" color role), and design that preset separately?
+
+Still open from round 1, unchanged: a pointer picks only the topmost shape, and the default `radius` is 0; `drag().pick` uses the rectangle from start to current; `.toggle()` is a method, and a click on empty space clears the set.
 
 ## Syntax changes to review
 
-- New in both languages (proposed): `.pick(selection, radius=)` on `pointer()`, `drag()` and `click()`; `.toggle()` on a click pick; `when(selection)`; `field(k).is_in(selection, key=)` (`isIn` in JS); `selection.field(k)`, `.len()`, `.is_empty()`; `chart(selection)` for a pick.
-- Unchanged from the parent proposal: `dr.x`, `dr.y`, `dr.x0`, `dr.y0`, `dr.dx`, `dr.dy`, `dr.active`; `when/then/otherwise`, `clip`, `fill_null`.
-- Dropped from the parent proposal: `hover.over` and `hover.field(k)` on a bare `pointer()`, replaced by `when(pointer().pick(...))` and `pointer().pick(...).field(k)`.
-- Errors (proposed): `when(sel)` on a mark that is not of the picked kind; `is_in` with no key and no ref column.
+- New (proposed): `.when(cond, { ...overrides, rest: {...}, front: true })` on marks (Python: `.when(cond, **overrides, rest=dict(...), front=True)`); unscoped `pointer()`, `drag()`, `click().toggle()` as identity tests; `pointer({ radius })`.
+- New explicit forms (proposed): `Constraint.zAbove` / `zBelow` with selection operands; `selectAll(n).where(cond)` (#517); `expr.any()` over a mark's shapes.
+- Kept from round 1 (proposed): `.pick(selection)`, `.toggle()`, `when(selection)`, `field(k).isIn(selection, { key })`, `selection.field(k)`, `.len()`, `.isEmpty()`, `chart(selection)`.
+- Changed from round 1: `radius` moves from `.pick(sel, { radius })` to `pointer({ radius })`.
+- Errors (proposed): a value read (`.field`, `.len`, `.isEmpty`, `isIn`, `chart(...)` of a pick) on an unscoped input; `when(sel)` on a mark that is not of the picked kind.
 
 ## Images
 
-All in `img/`, rendered with `pnpm capture-one "Proposals/Source Reads"` from fixed input states (the harness cannot dispatch pointer events, #672):
+All in `img/`, rendered with `pnpm capture-one "Proposals/Source Reads/<Story>"` from fixed input states (the harness cannot dispatch pointer events, #672):
 
 - `hover-bars.png`: hover highlight with no pointer, on Lake B, on Lake E.
-- `hover-overlay.png`: the hovered bar outlined by an `enclose` layer over the picked ref.
-- `bird-hover.png`: bird migration with no pointer, then two species held as hovered, with the readout.
-- `threshold.png`: the threshold at drag y = 35, 60, 85.
+- `bird-states.png` (new): the Black-and-white Warbler held as hovered: round 1's per-channel conditions (buried), a state block with `front` (on top), and with `rest` (others faded).
+- `click-rest.png` (new): click multi-select with the rest faded only once something is picked.
+- `state-precedence.png` (new): selected and hovered together; the later block wins on `opacity`. Sugar and hand-written rewrite render identically.
+- `graph-hover.png` (updated): node b, then node c, hovered; incident edges red and thicker, the rest faded.
+- `linked-lakes.png`: Lake D, then Lake F, hovered in the bar chart, highlighted in both charts.
 - `brush-scatter.png`: penguins with no brush and two brush rectangles.
-- `click-multi.png`: nothing, Lake B, then Lake B and Lake D clicked.
-- `linked-lakes.png`: Lake D and Lake F hovered in the bar chart, highlighted in both charts.
-- `graph-hover.png`: node b, then node c, hovered, with incident edges in red.
+- `hover-overlay.png`: the hovered bar outlined by an `enclose` layer over the picked ref.
+- `threshold.png`: the threshold at drag y = 35, 60, 85.
+- `bird-hover.png`: round 1's bird picture (per-channel conditions, whole map), used by Approach A above.
