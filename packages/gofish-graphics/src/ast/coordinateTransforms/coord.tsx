@@ -31,7 +31,7 @@ import {
   CONTINUOUS,
   spaceTitle,
 } from "../underlyingSpace";
-import { boxExtent, Extent, impliedExtent } from "../extent";
+import { boxExtent, Extent, hullExtent, impliedExtent } from "../extent";
 import * as Monotonic from "../../util/monotonic";
 import {
   unionChildExtents,
@@ -46,6 +46,34 @@ import { createNodeOperator } from "../withGoFish";
 import { computeTransformedBoundingBox } from "./coordUtils";
 import { empty, union } from "../../util/bbox";
 import type { AxesOptions } from "../gofish";
+
+/**
+ * The classes one axis of a coordinate space's domain has: a record keyed by
+ * class name, in the style of a column type (`ColumnType` in schema.ts, whose
+ * `HasZero` and `HasCycle` these anticipate; whether columns get them too is
+ * #1195). Each class is a fact that says what the coord's fit (`fitAxis`)
+ * must preserve on that axis, and each is optional and independent of the
+ * others. An axis with none of them (identity, wavy and geo axes) may shift
+ * and scale: its content fits the budget as at the root, so its claim, pixel
+ * offsets included, starts at the start of the budget.
+ */
+export type AxisClasses = {
+  /**
+   * Coordinate 0 is a fixed point (the polar center, radius 0). The
+   * content's data starts there, whatever value it starts at, and a literal
+   * pixel offset stays a distance from it, so a ring moved out with
+   * `.translate()` keeps its gap. No content reaches below 0, so an offset
+   * inward is taken up as on an axis with no classes.
+   */
+  HasZero?: Record<string, never>;
+  /**
+   * The axis is periodic: one `period`, in coordinate units, is one full
+   * turn (2π for a polar angle). Coordinate 0 is a fixed angle (the polar
+   * baseline angle), and data 0 sits there, whatever the data range, so a
+   * centered stack centers on the baseline angle.
+   */
+  HasCycle?: { period: number };
+};
 
 /**
  * A coordinate space. Its `transform` is MATH-HANDED: it maps a point of the
@@ -75,14 +103,12 @@ export type CoordinateTransform = {
    */
   polar?: true;
   /**
-   * The axes whose data 0 is the start of their budget, whatever the data
-   * range: the polar family's angular axis puts data 0 at θ = 0 of the
-   * transform, its baseline angle, so a centered stack stays centered on
-   * the baseline angle, full circle or partial arc. The coord's scope on
-   * such an axis seats data 0 there (`ScopeMeta.dataZero`); every other axis
-   * seats it by the claim, as the root does.
+   * The classes each axis of the space's domain has ({@link AxisClasses}),
+   * the one thing that decides how the coord fits its content to that axis.
+   * Absent ⇒ neither axis has any. The polar family declares θ
+   * `{ HasCycle: { period: 2π } }` and r `{ HasZero: {} }`.
    */
-  dataZeroAtStart?: [boolean, boolean];
+  axisClasses?: [AxisClasses, AxisClasses];
   /**
    * Donut-hole radius as a fraction [0,1) of the outer radius (polar family).
    * Default 0 (filled disc). `coord.layout` insets the radial range by this.
@@ -391,27 +417,34 @@ export const coord = createNodeOperator(
                       axis,
                       resolved
                     );
-            // A polar radius is measured from the center, so radius 0 is
-            // always in the radial budget: content that starts past it (a
-            // ring moved out with `.translate()`, which moves its claim)
-            // leaves the gap below it empty but inside the budget, and the
-            // claim fitted to the budget reaches down to 0. Seated by that
-            // claim, data 0 is the center.
+            // The axis's classes decide the fit (`AxisClasses`). An axis
+            // with none fits the content's claim alone. One with `HasZero`
+            // fits the hull of that claim and the point where the content's
+            // data starts (its type's low end, which no pixel offset moves):
+            // seated by the hull, the data start is coordinate 0, a pixel
+            // offset outward is a gap inside the budget, and one inward is
+            // taken up. One with `HasCycle` seats data 0 at its start
+            // (`dataZero` below).
+            const classes = coordTransform.axisClasses?.[axis] ?? {};
             const claim =
-              content === undefined || !coordTransform.polar || axis !== 1
+              classes.HasZero === undefined ||
+              content === undefined ||
+              resolved === undefined ||
+              !isCONTINUOUS(resolved)
                 ? content
-                : Extent(
-                    content.ascent,
-                    Monotonic.envelope([content.descent, Monotonic.ZERO])
+                : hullExtent(
+                    content,
+                    Extent(
+                      Monotonic.linear(resolved.dataInterval.min, 0),
+                      Monotonic.linear(-resolved.dataInterval.min, 0)
+                    )
                   );
             const scope = scopes.solveScope(
               {
                 kind: "coord",
                 rootKey: node.key ?? node.type,
                 axis,
-                dataZero: coordTransform.dataZeroAtStart?.[axis]
-                  ? "start"
-                  : "claim",
+                dataZero: classes.HasCycle === undefined ? "claim" : "start",
               },
               resolved,
               claim,
