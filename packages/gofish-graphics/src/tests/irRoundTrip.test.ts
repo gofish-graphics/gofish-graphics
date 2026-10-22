@@ -361,7 +361,7 @@ async function main(): Promise<void> {
             enter: Animation.grow({ ease: (u: number) => u }),
           })
         ),
-    /takes a JS function/
+    /holds a JS function/
   );
   await fails(
     "a drag with a hitTest function",

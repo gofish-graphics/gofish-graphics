@@ -31,6 +31,7 @@ import { GoFishRef } from "../ast/_ref";
 import { GoFishNode } from "../ast/_node";
 import { RelateOperand } from "../ast/constraints/relate";
 import { wireOf } from "../ast/wire";
+import { kindValue } from "../ast/strategyKind";
 import { nodeSelectionOf } from "../ast/nodeSelection";
 import {
   SOURCE,
@@ -114,11 +115,14 @@ function wireOpts(
     if (typeof value === "function" && !isExprValue(value)) continue;
     // A field whose declared type holds nodes (a blob's `avoiding`, inside
     // `shape`) carries their references; every other field is as given.
-    out[key] = Frontend.mapHeldNodes(
-      accepted[key].type,
-      valueToIR(value, ctx),
-      nodesToIR
-    );
+    const where = `${type}({ ${key} })`;
+    out[key] = holdsAnimation(accepted[key].type)
+      ? animationsToIR(value, ctx, where)
+      : Frontend.mapHeldNodes(
+          accepted[key].type,
+          valueToIR(value, ctx),
+          nodesToIR
+        );
   }
   return out;
 }
@@ -131,7 +135,6 @@ function wireOpts(
 function valueToIR(value: unknown, ctx: WireContext): unknown {
   if (isExprValue(value)) return exprToIR(exprNode(value), ctx);
   if (Array.isArray(value)) return value.map((v) => valueToIR(v, ctx));
-  if (isAnimation(value)) return animationToIR(value);
   if (Frontend.isPlainObject(value)) {
     const out: AnyObject = {};
     for (const [k, v] of Object.entries(value)) out[k] = valueToIR(v, ctx);
@@ -140,22 +143,32 @@ function valueToIR(value: unknown, ctx: WireContext): unknown {
   return value;
 }
 
-/** Whether `value` is an `Animation` value (an effect or a tween). */
-const isAnimation = (value: unknown): boolean =>
-  typeof value === "object" &&
-  value !== null &&
-  ((value as AnyObject).__effect === true ||
-    (value as AnyObject).__tween === true);
+/** Whether a field's declared type takes `Animation` values (an effect, or a
+ *  list of them). */
+const holdsAnimation = (type: Frontend.FieldType): boolean =>
+  (type.kind === "ref" && type.name === "Animation") ||
+  (type.kind === "array" && holdsAnimation(type.items)) ||
+  (type.kind === "union" && type.options.some(holdsAnimation));
 
-/** An `Animation` value's wire form, `{ kind, ...options }`, or a loud error
- *  for one with no IR form (a function ease). */
-function animationToIR(value: unknown): Frontend.AnimationIR {
-  const wire = wireOf<AnyObject>(value);
-  if (wire === undefined)
-    throw new Error("toJSON: an Animation value carries no IR form.");
-  if (typeof wire.noWire === "string")
-    throw new Error(`toJSON: ${wire.noWire}, so it has no IR form.`);
-  return wire as Frontend.AnimationIR;
+/** `Animation` values (one, or a list) as their wire form,
+ *  `{ kind, ...options }`, each checked against the family. A value is its
+ *  own wire form, except that an ease may be a JS function, which has none:
+ *  that is an error rather than a dropped ease. */
+function animationsToIR(
+  value: unknown,
+  ctx: WireContext,
+  where: string
+): unknown {
+  if (Array.isArray(value))
+    return value.map((v) => animationsToIR(v, ctx, where));
+  const v = kindValue(value) as AnyObject;
+  if (typeof v?.ease === "function")
+    throw new Error(
+      `toJSON: ${where}: Animation.${String(v.kind)}({ ease }) holds a JS function, so it has no IR form.`
+    );
+  const wire = valueToIR(v, ctx);
+  Frontend.checkStrategy("Animation", wire, where);
+  return wire;
 }
 
 /** An expression tree as `ExprIR`, each source it reads declared once in the
@@ -198,13 +211,16 @@ function exprToIR(node: ExprNode, ctx: WireContext): Frontend.ExprIR {
 
 /** A mark's `.transition(...)` spec as its IR: each phase's `Animation`
  *  values. */
-function markTransitionIR(spec: AnyObject): Frontend.MarkTransitionIR {
+function markTransitionIR(
+  spec: AnyObject,
+  ctx: WireContext
+): Frontend.MarkTransitionIR {
   const out: AnyObject = {};
-  for (const [phase, value] of Object.entries(spec))
-    if (value !== undefined)
-      out[phase] = Array.isArray(value)
-        ? value.map(animationToIR)
-        : animationToIR(value);
+  for (const [phase, value] of Object.entries(spec)) {
+    if (value === undefined) continue;
+    const where = `.transition({ ${phase} })`;
+    out[phase] = animationsToIR(value, ctx, where);
+  }
   return out;
 }
 
@@ -566,7 +582,7 @@ async function markToIR(
   if (tag.name !== undefined) chained.name = tag.name;
   if (tag.label !== undefined) chained.label = tag.label;
   if (tag.transition !== undefined)
-    chained.transition = markTransitionIR(tag.transition);
+    chained.transition = markTransitionIR(tag.transition, ctx);
 
   if (tag.__combinator) {
     const childrenResolved = await flatChildren(tag.children);

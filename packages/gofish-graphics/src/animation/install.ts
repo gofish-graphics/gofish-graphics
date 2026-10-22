@@ -38,7 +38,7 @@ import type { GoFishAST } from "../ast/_ast";
 import { timer } from "../interaction/inputs";
 import {
   DEFAULT_DURATION,
-  fadeIn,
+  effectOf,
   resolveEase,
   type Effect,
   type TimedEffect,
@@ -224,7 +224,10 @@ function clipOf(node: GoFishAST, underArrangement: boolean): Draft | undefined {
     if (clip !== undefined) (clips ??= []).push(clip);
   }
   if (drawsItself && underArrangement) {
-    return { kind: "leaf", found: { effects: [fadeIn()], targets: [node] } };
+    return {
+      kind: "leaf",
+      found: { effects: [effectOf({ kind: "fadeIn" })], targets: [node] },
+    };
   }
   if (clips === undefined) return undefined;
   if (clips.length === 1) return clips[0];

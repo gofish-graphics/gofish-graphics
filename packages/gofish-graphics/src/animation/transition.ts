@@ -27,10 +27,10 @@ import type { SplitBy } from "../ast/datumProjection";
 import { GoFishNode } from "../ast/_node";
 import {
   effectList,
-  isTween,
   sameTween,
   type Effect,
-  type TweenEffect,
+  type EffectValue,
+  type TweenValue,
 } from "./effects";
 import type { Arrangement } from "./schedule";
 
@@ -46,11 +46,11 @@ export type TimeArrangement = { readonly __timeArrangement: ArrangementSpec };
 
 export type MarkTransition = {
   /** How the mark enters: one effect, or several played together. */
-  enter?: Effect | Effect[];
+  enter?: EffectValue | EffectValue[];
   /** How the mark moves between two keyframes of a `time.sequence`. */
-  update?: TweenEffect;
+  update?: TweenValue;
   /** How the mark leaves. */
-  exit?: Effect | Effect[];
+  exit?: EffectValue | EffectValue[];
 };
 
 export type OperatorTransition = {
@@ -72,7 +72,7 @@ type NodeTransition =
   | {
       kind: "mark";
       enter?: Effect[];
-      update?: TweenEffect;
+      update?: TweenValue;
       exit?: Effect[];
       targets?: GoFishNode[];
     }
@@ -101,7 +101,10 @@ export function recordMarkTransition(
   spec: MarkTransition
 ): void {
   const where = "mark.transition()";
-  if (spec.update !== undefined && !isTween(spec.update)) {
+  if (
+    spec.update !== undefined &&
+    (spec.update as { kind?: unknown }).kind !== "tween"
+  ) {
     throw new Error(
       `[gofish] ${where}: \`update\` takes Animation.tween({ curve, ease }).`
     );
@@ -202,8 +205,8 @@ export function checkPhases(
  * sequence are not in this prototype (the build checks them, `checkPhases`).
  * The walk does not look inside a mark once it finds one.
  */
-export function chainedUpdates(nodes: GoFishNode[]): TweenEffect[] {
-  const found: TweenEffect[] = [];
+export function chainedUpdates(nodes: GoFishNode[]): TweenValue[] {
+  const found: TweenValue[] = [];
   const walk = (node: GoFishNode): void => {
     const record = records.get(node);
     if (record?.kind === "mark" && record.targets === undefined) {
@@ -235,7 +238,7 @@ export function chainedUpdates(nodes: GoFishNode[]): TweenEffect[] {
  */
 export function chainedMarks(
   node: GoFishNode,
-  update?: TweenEffect
+  update?: TweenValue
 ): GoFishNode[] {
   const record = records.get(node);
   if (record?.kind === "mark" && record.update !== undefined) {
@@ -251,7 +254,10 @@ export function chainedMarks(
 /** Under a sequence the enter / exit of a mark is the tween's fade in place,
  *  over the whole stretch between two keyframes. */
 export function checkSequencePhases(
-  spec: { enter?: Effect | Effect[]; exit?: Effect | Effect[] },
+  spec: {
+    enter?: EffectValue | EffectValue[];
+    exit?: EffectValue | EffectValue[];
+  },
   where: string
 ): void {
   const check = (phase: "enter" | "exit", kind: "fadeIn" | "fadeOut") => {

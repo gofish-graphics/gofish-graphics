@@ -462,8 +462,9 @@ The time surface crosses as ordinary descriptor entries: the operators
 (`STRATEGIES.Animation`): an effect is `{ "kind": "grow", "duration": 600,
 "ease": "cubicOut" }`, a tween `{ "kind": "tween", "curve": { "kind":
 "monotone" } }`. An ease is a name; a function ease has no IR form and
-serializing it throws. The JS factories attach each value's wire form with
-`withWire` (`animationWire` in `effects.ts`). A mark's
+serializing it throws (`valueToIR` refuses a function inside an option). As
+in every strategy family, the JS value is the wire form itself; the readers
+give it behavior (`effectOf` in `effects.ts`, `tweenOf` in `time.ts`). A mark's
 `.transition({ enter, update, exit })` is its `transition` field
 (`MarkTransition`), its `Animation` values per phase; an operator's is its
 `transition` field (`OperatorTransition`), an arrangement per phase,

@@ -60,9 +60,10 @@ import type { GoFishRef } from "../_ref";
 import type { NameableMark } from "../withGoFish";
 import { buildIn, stagger, parallel } from "../../animation/timeArrangements";
 import {
+  easeOf,
   effectList,
-  type Effect,
-  type TweenEffect,
+  type EffectValue,
+  type TweenValue,
 } from "../../animation/effects";
 import { checkSequencePhases } from "../../animation/transition";
 
@@ -360,14 +361,14 @@ export type TransitionOptions = {
    *  is a BUILD-IN: the marks enter once, from the empty chart, with these
    *  effects (`src/animation/`). Under a sequence it can only be the default
    *  fade, `Animation.fadeIn()`. */
-  enter?: Effect | Effect[];
+  enter?: EffectValue | EffectValue[];
   /** How the marks leave; under a sequence only `Animation.fadeOut()`. */
-  exit?: Effect | Effect[];
+  exit?: EffectValue | EffectValue[];
   /** The tween whose `.transition({ update })` marks this transition moves.
    *  Set by `Animation.tween()` for the chained spelling, where the chart
    *  builder draws one transition per tween (`ChartBuilder.resolve`); not
    *  written by hand. */
-  moves?: TweenEffect;
+  moves?: TweenValue;
 };
 
 /**
@@ -614,3 +615,13 @@ function knotOf(child: GoFishAST, by: string): number {
 }
 
 export const time = { sequence, history, transition, stagger, parallel };
+
+/**
+ * The `time.transition` tier that moves the marks that chained the tween
+ * `value` (`.transition({ update: Animation.tween(...) })`): the chained
+ * spelling of `.layer(time.transition({ curve, ease }))`, keeping its
+ * defaults (the auto curve, no ease). The chart builder draws one per tween
+ * it finds (`chainedUpdates`).
+ */
+export const tweenTier = (value: TweenValue) =>
+  transition({ curve: value.curve, ease: easeOf(value), moves: value });

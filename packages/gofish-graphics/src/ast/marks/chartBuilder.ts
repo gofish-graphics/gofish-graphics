@@ -974,7 +974,7 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
    *  Under a `time.sequence` a mark may chain `.transition({ update })`. The
    *  tier then draws, for each tween chained on its marks (`chainedUpdates`),
    *  a `time.transition()` over them: the chained spelling of
-   *  `.mark(m).layer(update.layer())`. The transition reads the tier's marks
+   *  `.mark(m).layer(tweenTier(update))`. The transition reads the tier's marks
    *  by name, as a tier layered next reads them, so a sequenced tier's mark
    *  is always named. It is drawn inside the tier's own frame, so a
    *  `.layer(...)` chained next still takes the tier's marks as its scope,
@@ -1021,8 +1021,14 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     const marks =
       name === undefined ? [] : (this.state.layerContext[name]?.nodes ?? []);
     const transitions: GoFishNode[] = [];
-    for (const update of chainedUpdates(marks)) {
-      const tier = update.layer() as Mark<any>;
+    const updates = chainedUpdates(marks);
+    // Imported here: `time.ts` builds on this module's dependents, so a
+    // static import would cycle. By the time a chart resolves, every module
+    // is loaded.
+    const { tweenTier } =
+      updates.length > 0 ? await import("./time") : { tweenTier: undefined };
+    for (const update of updates) {
+      const tier = tweenTier!(update) as unknown as Mark<any>;
       this.defaultRelationalTier(tier);
       transitions.push(
         await resolveMarkResult(

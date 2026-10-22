@@ -90,7 +90,7 @@ import {
 import { bbox, height, unionAll, width } from "../../util/bbox";
 import { targetOf } from "../constraints/relationalPaint";
 import { chainedMarks } from "../../animation/transition";
-import type { TweenEffect } from "../../animation/effects";
+import type { TweenValue } from "../../animation/effects";
 import {
   updateSlotOf,
   updateWarp,
@@ -128,7 +128,7 @@ export type TweenOptions = {
    *  transition moves (the chart builder draws one transition per tween,
    *  `ChartBuilder.resolve`). Omitted (the selection form), it moves the
    *  marks that chained any, or each operand itself when none did. */
-  moves?: TweenEffect;
+  moves?: TweenValue;
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
@@ -167,7 +167,7 @@ function markLeaves(node: GoFishNode): GoFishNode[] {
  */
 function movedIn(
   operand: GoFishNode | undefined,
-  moves: TweenEffect | undefined
+  moves: TweenValue | undefined
 ): GoFishNode[] {
   if (!(operand instanceof GoFishNode)) return [];
   const chained = chainedMarks(operand, moves);

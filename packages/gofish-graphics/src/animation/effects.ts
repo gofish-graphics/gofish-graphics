@@ -15,30 +15,7 @@
  */
 import type { DisplayList } from "gofish-ir";
 import { fadeItem } from "../ast/displayList/lowerHelpers";
-import type { InterpolationMethod } from "../interpolate";
-import { withWire } from "../ast/wire";
-
-/**
- * The frontend-IR form of an `Animation` value, `{ kind, ...options }` as it
- * was written (the `Animation` family in gofish-ir's `STRATEGIES`), or why
- * it has none: an ease that is a JS function. The emitter reads it with
- * `wireOf` and throws on the reason.
- */
-export type AnimationWire = Record<string, unknown> | { noWire: string };
-
-export function animationWire(
-  kind: string,
-  opts: Record<string, unknown>
-): AnimationWire {
-  if (typeof opts.ease === "function")
-    return { noWire: `Animation.${kind}({ ease }) takes a JS function` };
-  return {
-    kind,
-    ...Object.fromEntries(
-      Object.entries(opts).filter(([, v]) => v !== undefined)
-    ),
-  };
-}
+import { resolveMethod } from "../interpolate";
 
 /** A time warp `u -> u'` on [0, 1], or the name of a standard one. */
 export type Ease =
@@ -98,7 +75,26 @@ export type WipeOptions = EffectOptions & {
   shape?: "circle";
 };
 
-type EffectKind = "grow" | "shrink" | "fadeIn" | "fadeOut" | "appear" | "wipe";
+export type EffectKind =
+  | "grow"
+  | "shrink"
+  | "fadeIn"
+  | "fadeOut"
+  | "appear"
+  | "wipe";
+
+/** An effect as written: a plain `{ kind, ...options }` value, the same in JS
+ *  and on the wire (the `Animation` family in gofish-ir's `STRATEGIES`), apart
+ *  from an ease that is a JS function. `effectOf` gives it its behavior. */
+export type EffectValue = { kind: EffectKind } & WipeOptions;
+
+/** A tween as written: `{ kind: "tween", curve?, ease? }`. The chart builder
+ *  draws a `time.transition` tier for it (`tweenTier` in `ast/marks/time.ts`). */
+export type TweenValue = {
+  kind: "tween";
+  curve?: import("../families/curve").Curve;
+  ease?: Ease;
+};
 
 /** What an effect does to a mark at a progress `p` in [0, 1]. */
 type Look = {
@@ -124,10 +120,7 @@ type Look = {
  *  here). The build resolves the timing per mark (`TimedEffect`), which is
  *  where a field-valued duration gets its number. */
 export type Effect = Look &
-  EffectOptions & {
-    readonly __effect: true;
-    /** Its name, for messages. */
-    kind: EffectKind;
+  EffectValue & {
     /** Where the effect is at local time `t` (ms since the mark's start),
      *  given its duration and warp: 0 before the start, 1 from the end on. */
     progress(t: number, duration: number, ease: (u: number) => number): number;
@@ -140,29 +133,18 @@ export type TimedEffect = {
   ease: (u: number) => number;
 };
 
-/** `Animation.tween(...)`: how a mark MOVES between two keyframes of a
- *  `time.sequence` (the update phase). It is the chained spelling of today's
- *  `.layer(time.transition({ curve, ease }))`, and like it keeps
- *  `time.transition`'s defaults (the auto curve, no ease). `layer` builds that
- *  transition tier, which moves the marks that chained this tween; it is bound where the `time` namespace is in reach
- *  (`families/animation.ts`), so the chart builder can use it without importing
- *  `time` (which would cycle). */
-export type TweenEffect = {
-  readonly __tween: true;
-  /** How the run is read between keyframes, as for `time.transition`,
-   *  resolved (`resolveMethod`) to its name, so an unset curve is
-   *  `"monotone"` here. */
-  readonly curve: InterpolationMethod;
-  /** A time warp inside each keyframe interval, resolved. */
-  readonly ease?: (u: number) => number;
-  layer: () => unknown;
-};
-
 /** Whether two tweens move a mark the same way: the same curve and the same
- *  ease. Marks whose tweens do are moved by one transition, however many
- *  times `Animation.tween(...)` was called for them. */
-export const sameTween = (a: TweenEffect, b: TweenEffect): boolean =>
-  a.curve === b.curve && a.ease === b.ease;
+ *  ease, once resolved (an unset curve is `Curve.monotone()`). Marks whose
+ *  tweens do are moved by one transition, however many times
+ *  `Animation.tween(...)` was called for them. */
+export const sameTween = (a: TweenValue, b: TweenValue): boolean =>
+  resolveMethod(a.curve, "Animation.tween({ curve })") ===
+    resolveMethod(b.curve, "Animation.tween({ curve })") &&
+  easeOf(a) === easeOf(b);
+
+/** A tween's ease, resolved, or none. */
+export const easeOf = (t: TweenValue): ((u: number) => number) | undefined =>
+  t.ease === undefined ? undefined : resolveEase(t.ease);
 
 export const DEFAULT_DURATION = 500;
 
@@ -179,12 +161,13 @@ function ramp(
   return ease(raw);
 }
 
-function effect(
+/** Check an effect's timing options where they are written: a duration is
+ *  milliseconds (0 or more) or a field name, and an ease a known name or a
+ *  function. */
+export function checkEffectOptions(
   kind: EffectKind,
-  opts: EffectOptions = {},
-  look: Look,
-  progress: Effect["progress"] = ramp
-): Effect {
+  opts: EffectOptions
+): void {
   const { duration, ease } = opts;
   if (typeof duration !== "string") {
     const ms = duration ?? DEFAULT_DURATION;
@@ -197,10 +180,16 @@ function effect(
   }
   // An unknown ease name fails here, where it was written.
   resolveEase(ease);
-  return withWire(
-    { __effect: true, kind, duration, ease, progress, ...look },
-    animationWire(kind, opts)
-  );
+}
+
+/** An effect value with its behavior: what it does (`look`) and its timing. */
+function effect(
+  value: EffectValue,
+  look: Look,
+  progress: Effect["progress"] = ramp
+): Effect {
+  checkEffectOptions(value.kind, value);
+  return { ...value, progress, ...look };
 }
 
 /** `look` played backward: at progress `p` it shows what `look` shows at
@@ -276,63 +265,59 @@ const revealing = (
   },
 });
 
-/** Collapse the mark's SIZE axes toward its baseline, then let it grow to its
- *  laid-out size. A bar grows up from 0 (down, for a negative value); a
- *  stacked segment grows in place from its own stack start. A mark with no
- *  data size (a fixed-radius dot) has no baseline, so it grows from its
- *  center. */
-export const grow = (opts?: EffectOptions): Effect =>
-  effect("grow", opts, collapsing("grow"));
-/** `grow` reversed: from the laid-out size down to the baseline. */
-export const shrink = (opts?: EffectOptions): Effect =>
-  effect("shrink", opts, reversed(collapsing("shrink")));
-/** Opacity from 0 to the mark's own. */
-export const fadeIn = (opts?: EffectOptions): Effect =>
-  effect("fadeIn", opts, fading);
-/** `fadeIn` reversed: opacity from the mark's own to 0. */
-export const fadeOut = (opts?: EffectOptions): Effect =>
-  effect("fadeOut", opts, reversed(fading));
-/** No motion: hidden until the mark's start, then shown at once (Keynote and
- *  PowerPoint "Appear"). It holds for its duration, which only matters to
- *  what waits for it. */
-export const appear = (opts?: EffectOptions): Effect =>
-  effect("appear", opts, fading, (t) => (t >= 0 ? 1 : 0));
-/** Reveal the mark from one side (a clip), or from its center outward with
- *  `shape: "circle"`. */
-export const wipe = (opts: WipeOptions = {}): Effect =>
-  effect(
-    "wipe",
-    opts,
-    revealing(
-      opts.shape === undefined ? (opts.from ?? "bottom") : undefined,
-      opts.shape
-    )
-  );
+/** What each effect kind does. `grow` scales the mark's size axes from its
+ *  baseline (a mark with no data size grows from its center), `shrink` is
+ *  `grow` reversed, `fadeIn`/`fadeOut` take opacity from 0 to the mark's own
+ *  and back, `appear` shows the mark at once at its start (and holds for its
+ *  duration, which only matters to what waits for it), and `wipe` reveals the
+ *  mark from one side or, with `shape: "circle"`, from its center. */
+const LOOKS: Record<EffectKind, (v: EffectValue) => Effect> = {
+  grow: (v) => effect(v, collapsing("grow")),
+  shrink: (v) => effect(v, reversed(collapsing("shrink"))),
+  fadeIn: (v) => effect(v, fading),
+  fadeOut: (v) => effect(v, reversed(fading)),
+  appear: (v) => effect(v, fading, (t) => (t >= 0 ? 1 : 0)),
+  wipe: (v) =>
+    effect(
+      v,
+      revealing(
+        v.shape === undefined ? (v.from ?? "bottom") : undefined,
+        v.shape
+      )
+    ),
+};
 
-const isEffect = (v: unknown): v is Effect =>
-  typeof v === "object" && v !== null && (v as Effect).__effect === true;
+/** The effect each value describes, by the value: the marks one written
+ *  value animates share one effect, which a field-valued duration's scale is
+ *  over (`timeLeaves` in install.ts). */
+const effects = new WeakMap<object, Effect>();
 
-export const isTween = (v: unknown): v is TweenEffect =>
-  typeof v === "object" && v !== null && (v as TweenEffect).__tween === true;
+/** The effect an effect value describes. */
+export function effectOf(v: EffectValue): Effect {
+  let e = effects.get(v);
+  if (e === undefined) effects.set(v, (e = LOOKS[v.kind](v)));
+  return e;
+}
 
 /** An `enter` / `exit` value, which may be one effect or several played
  *  together, as a list. */
 export function effectList(
-  value: Effect | Effect[] | undefined,
+  value: EffectValue | EffectValue[] | undefined,
   where: string
 ): Effect[] | undefined {
   if (value === undefined) return undefined;
   const list: unknown[] = Array.isArray(value) ? value : [value];
-  for (const e of list) {
-    if (!isEffect(e)) {
+  return list.map((e) => {
+    const kind = (e as { kind?: unknown } | null)?.kind;
+    if (typeof kind !== "string" || !Object.hasOwn(LOOKS, kind)) {
       throw new Error(
         `[gofish] ${where}: expected animation effects (Animation.grow(), ` +
           `Animation.fadeIn(), …)` +
-          (isTween(e) ? `; Animation.tween() is for \`update\`.` : `.`)
+          (kind === "tween" ? `; Animation.tween() is for \`update\`.` : `.`)
       );
     }
-  }
-  return list as Effect[];
+    return effectOf(e as EffectValue);
+  });
 }
 
 /** The mark's frame at rest, which a geometric effect collapses toward. */
