@@ -76,6 +76,47 @@ export function sampleBoundingBoxPoints(
   return samples;
 }
 
+/** How many points along an edge {@link edgeExtreme} starts from. */
+const EDGE_SAMPLES = 64;
+
+/**
+ * The largest value `f` takes on [0, 1]: the best of evenly spaced samples,
+ * then a golden-section search between that sample's neighbors, which finds
+ * the maximum exactly where `f` has one peak there (a transformed edge does,
+ * at the spacing sampled).
+ */
+function edgeExtreme(f: (t: number) => number): number {
+  let best = 0;
+  let bestValue = f(0);
+  for (let i = 1; i <= EDGE_SAMPLES; i++) {
+    const v = f(i / EDGE_SAMPLES);
+    if (v > bestValue) [best, bestValue] = [i, v];
+  }
+  let lo = Math.max(0, best - 1) / EDGE_SAMPLES;
+  let hi = Math.min(EDGE_SAMPLES, best + 1) / EDGE_SAMPLES;
+  const g = (Math.sqrt(5) - 1) / 2;
+  let a = hi - g * (hi - lo);
+  let b = lo + g * (hi - lo);
+  let fa = f(a);
+  let fb = f(b);
+  for (let i = 0; i < 40; i++) {
+    if (fa < fb) {
+      lo = a;
+      a = b;
+      fa = fb;
+      b = lo + g * (hi - lo);
+      fb = f(b);
+    } else {
+      hi = b;
+      b = a;
+      fb = fa;
+      a = hi - g * (hi - lo);
+      fa = f(a);
+    }
+  }
+  return Math.max(bestValue, fa, fb);
+}
+
 /**
  * Computes the transformed bounding box of a given bounding box using a coordinate transform.
  * Samples points from the bounding box, transforms them to screen space, and computes
@@ -105,10 +146,51 @@ export function computeTransformedBoundingBox(
   );
 
   // Compute bounding box in screen space
-  const screenBboxMinX = Math.min(...screenSamples.map((p) => p[0]));
-  const screenBboxMaxX = Math.max(...screenSamples.map((p) => p[0]));
-  const screenBboxMinY = Math.min(...screenSamples.map((p) => p[1]));
-  const screenBboxMaxY = Math.max(...screenSamples.map((p) => p[1]));
+  let screenBboxMinX = Math.min(...screenSamples.map((p) => p[0]));
+  let screenBboxMaxX = Math.max(...screenSamples.map((p) => p[0]));
+  let screenBboxMinY = Math.min(...screenSamples.map((p) => p[1]));
+  let screenBboxMaxY = Math.max(...screenSamples.map((p) => p[1]));
+
+  // The samples fall between the box's extremes on a curved edge: a polar
+  // disc sampled every 7.2° misses its leftmost point by up to 0.2% of its
+  // radius, which the outline drawn there then reaches past. Without a
+  // lattice the extremes are on the box's boundary, so each edge's extreme
+  // is found exactly, from the best of its samples.
+  if (gridSamples === undefined) {
+    const edges: [[number, number], [number, number]][] = [
+      [
+        [minX, minY],
+        [maxX, minY],
+      ],
+      [
+        [minX, maxY],
+        [maxX, maxY],
+      ],
+      [
+        [minX, minY],
+        [minX, maxY],
+      ],
+      [
+        [maxX, minY],
+        [maxX, maxY],
+      ],
+    ];
+    for (const [[x0, y0], [x1, y1]] of edges) {
+      const at = (t: number) =>
+        coordTransform.transform([x0 + (x1 - x0) * t, y0 + (y1 - y0) * t]);
+      for (const axis of [0, 1] as const)
+        for (const sign of [1, -1] as const) {
+          const v = edgeExtreme((t) => sign * at(t)[axis]) * sign;
+          if (axis === 0) {
+            screenBboxMinX = Math.min(screenBboxMinX, v);
+            screenBboxMaxX = Math.max(screenBboxMaxX, v);
+          } else {
+            screenBboxMinY = Math.min(screenBboxMinY, v);
+            screenBboxMaxY = Math.max(screenBboxMaxY, v);
+          }
+        }
+    }
+  }
 
   return {
     minX: screenBboxMinX,

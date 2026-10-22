@@ -279,7 +279,13 @@ pixel box, and an explicit `w`/`h` sizes that box as it sizes a layer's (a
 drawn inside it: a stroke is in pixels while the interior is laid out in the
 space's coordinates, so the box it measures from its content is widened by
 the largest outline inside it (`outline`; see
-[Overview](/internals/layout/passes)). A space that frames its own window
+[Overview](/internals/layout/passes)). The content box it widens must be exact
+for that to hold: the box is measured by sampling the warped edges of the
+content's coordinate box (`computeTransformedBoundingBox`), and samples fall
+between a curved edge's extremes (a disc sampled every 7.2° misses its leftmost
+point by 0.2% of its radius, enough to clip half of a 1.5 px outline there), so
+each edge's extreme on each axis is then found exactly from its best sample by
+a golden-section search. A space that frames its own window
 clips them with the rest of what the window leaves out. So its axes are its own to draw, and so are their titles: the
 radial axis is drawn along the θ = 0 ray, and its title continues the ray
 past its outer end (past the last tick), reading along the ray, so it never
