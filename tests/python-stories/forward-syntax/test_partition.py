@@ -31,7 +31,7 @@ def story_movie_ratings_heatmap():
         movies["IMDB Rating"].notna() & movies["Rotten Tomatoes Rating"].notna()
     ]
     return (
-        chart(movies, color=Color.gradient("blues"), axes=True, w=480, h=320)
+        chart(movies, color=Color.gradient("blues"), axes=True, w=300, h=200)
         .flow(
             partition(
                 by={

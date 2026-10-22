@@ -135,7 +135,9 @@ export const SpatialTwin: StoryObj<Args> = {
  * spells `key: "country"` is inferred from the flow.
  */
 export const Animated: StoryObj<Args> = {
-  args: { w: 500, h: 400 },
+  // Vega-Lite's size: continuous axes with no width or height make a
+  // 200 × 200 plot.
+  args: { w: 200, h: 200 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -151,7 +153,11 @@ export const Animated: StoryObj<Args> = {
 
     const year = timer({ domain: yearRange(gapminder), duration: 5000 });
 
-    chart(gapminder, { legend: false })
+    chart(gapminder, {
+      legend: false,
+      w: args.w,
+      h: args.h,
+    })
       .flow(
         time.sequence({ by: "year", on: year }),
         scatter({ by: "country", x: "fertility", y: "life_expect" })
@@ -159,7 +165,7 @@ export const Animated: StoryObj<Args> = {
       .mark(circle({ r: 4, fill: "country" }))
       .layer(time.transition())
       .layer(yearReadout(year))
-      .render(container, { w: args.w, h: args.h } as any);
+      .render(container);
 
     return container;
   },
@@ -171,20 +177,24 @@ export const Animated: StoryObj<Args> = {
  * is what a screenshot needs and what a hand-scrubbed chart would write.
  */
 export const Paused1975: StoryObj<Args> = {
-  args: { w: 500, h: 400 },
+  args: { w: 200, h: 200 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
     const gapminder = context.loaded.gapminder as any[];
 
-    chart(gapminder, { legend: false })
+    chart(gapminder, {
+      legend: false,
+      w: args.w,
+      h: args.h,
+    })
       .flow(
         time.sequence({ by: "year", playing: false, at: 1975 }),
         scatter({ by: "country", x: "fertility", y: "life_expect" })
       )
       .mark(circle({ r: 4, fill: "country" }))
       .layer(time.transition())
-      .render(container, { w: args.w, h: args.h } as any);
+      .render(container);
 
     return container;
   },
@@ -200,7 +210,7 @@ export const Paused1975: StoryObj<Args> = {
  * `time.transition()` over it is what fills the gaps in.
  */
 export const SequenceOnly: StoryObj<Args> = {
-  args: { w: 500, h: 400 },
+  args: { w: 200, h: 200 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
@@ -208,14 +218,18 @@ export const SequenceOnly: StoryObj<Args> = {
 
     const year = timer({ domain: yearRange(gapminder), duration: 5000 });
 
-    chart(gapminder, { legend: false })
+    chart(gapminder, {
+      legend: false,
+      w: args.w,
+      h: args.h,
+    })
       .flow(
         time.sequence({ by: "year", on: year }),
         scatter({ by: "country", x: "fertility", y: "life_expect" })
       )
       .mark(circle({ r: 4, fill: "country" }))
       .layer(yearReadout(year))
-      .render(container, { w: args.w, h: args.h } as any);
+      .render(container);
 
     return container;
   },
@@ -805,19 +819,23 @@ export const CurvesPaused: StoryObj<Args> = {
 
 /** One frame of the animation: the 1955 scatter the playback starts from. */
 export const Frame1955: StoryObj<Args> = {
-  args: { w: 500, h: 400 },
+  args: { w: 200, h: 200 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
     const gapminder = context.loaded.gapminder as any[];
 
-    chart(gapminder, { legend: false })
+    chart(gapminder, {
+      legend: false,
+      w: args.w,
+      h: args.h,
+    })
       .flow(
         filter((d: any) => d.year === 1955),
         scatter({ by: "country", x: "fertility", y: "life_expect" })
       )
       .mark(circle({ r: 4, fill: "country" }))
-      .render(container, { w: args.w, h: args.h } as any);
+      .render(container);
 
     return container;
   },

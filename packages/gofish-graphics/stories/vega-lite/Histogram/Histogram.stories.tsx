@@ -18,7 +18,9 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 500, h: 300 },
+  // Vega-Lite's size: binned and continuous axes with no width or height make
+  // a 200 × 200 plot.
+  args: { w: 200, h: 200 },
   loaders: [async () => ({ movies: await data["movies.json"]() })],
   tags: ["gallery"],
   parameters: {

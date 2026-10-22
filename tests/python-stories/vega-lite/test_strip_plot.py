@@ -15,7 +15,7 @@ def story_default():
         for _, row in raw.iterrows()
     ]
     return (
-        chart(cars, axes={"x": {"side": "end"}, "y": True}, w=400, h=300)
+        chart(cars, axes={"x": {"side": "end"}, "y": True}, w=200, h=5 * 20)
         .flow(
             # Ascending so cylinders read 3 at the top → 8 at the bottom in y-down.
             derive(lambda d: sorted(d, key=lambda r: r["cylinders"])),

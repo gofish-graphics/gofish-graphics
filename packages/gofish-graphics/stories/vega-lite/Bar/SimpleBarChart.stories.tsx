@@ -30,7 +30,9 @@ export default meta;
 type Args = { h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { h: 300 },
+  // Vega-Lite's size: a continuous y is 200 px tall. Its x is a 20 px step per
+  // bar; the width is left to the rect default here (see below).
+  args: { h: 200 },
   tags: ["gallery"],
   parameters: {
     gallery: {

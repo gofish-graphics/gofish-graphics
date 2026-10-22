@@ -409,14 +409,16 @@ export const Rotated: StoryObj = {
 };
 
 // ─── Normalized stacked bar (population by age + gender) ──────────────────────
-// Mirrors https://vega.github.io/vega-lite/examples/bar_stacked_normalize_labeled.html
+// Mirrors https://vega.github.io/vega-lite/examples/stacked_bar_h_normalized_labeled.html
 // Each horizontal bar represents one age group; segments are Male / Female,
 // normalized so every row spans 100%. Labels show the raw people count inside
 // each segment in white text.
 
 export const NormalizedStackedBarWithLabels: StoryObj<Args> = {
   name: "Normalized stacked bar – center labels",
-  args: { w: 350, h: 400 },
+  // Vega-Lite's size: `height: {step: 17}` over the 19 age groups, and a
+  // continuous x is 200 px wide.
+  args: { w: 200, h: 19 * 17 },
   loaders: [async () => ({ population: await data["population.json"]() })],
   tags: ["gallery"],
   parameters: {

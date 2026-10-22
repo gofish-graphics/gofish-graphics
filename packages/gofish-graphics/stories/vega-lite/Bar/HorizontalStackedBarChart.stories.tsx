@@ -18,7 +18,9 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 500, h: 400 },
+  // Vega-Lite's size: a 20 px step per variety (10 of them), and a
+  // continuous x is 200 px wide.
+  args: { w: 200, h: 10 * 20 },
   loaders: [async () => ({ barley: await data["barley.json"]() })],
   tags: ["gallery"],
   parameters: {

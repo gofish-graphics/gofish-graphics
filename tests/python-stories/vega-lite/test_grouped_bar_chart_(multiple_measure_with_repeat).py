@@ -18,8 +18,8 @@ def story_default():
         chart(
             movies,
             axes={"x": {"label": {"angle": "auto"}}, "y": {"title": "Total Gross"}},
-            w=600,
-            h=300,
+            w=13 * 2 * 20,
+            h=200,
         )
         .flow(spread(by="Major Genre", dir="x"))
         .mark(

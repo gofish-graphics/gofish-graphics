@@ -11,7 +11,7 @@ from vega_datasets import data as vega_data
 def story_default():
     weather = vega_data.seattle_weather()
     return (
-        chart(weather, axes={"x": True, "y": False}, w=300)
+        chart(weather, axes={"x": True, "y": False}, w=200)
         .flow(scatter(by="date", x="precipitation"))
         .mark(rect(w=1, h=10, fill="rgb(31, 119, 180)", opacity=0.7)),
         {},

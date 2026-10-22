@@ -36,9 +36,10 @@ const measured = penguins.filter(
   (d) => d["Flipper Length (mm)"] !== null && d["Body Mass (g)"] !== null
 );
 
-// Mirrors https://vega.github.io/vega-lite/examples/heatmap_histogram.html
+// Mirrors https://vega.github.io/vega-lite/examples/rect_binned_heatmap.html,
+// whose plot is 300 × 200.
 export const MovieRatingsHeatmap: StoryObj<Args> = {
-  args: { w: 480, h: 320 },
+  args: { w: 300, h: 200 },
   loaders: [async () => ({ movies: await data["movies.json"]() })],
   tags: ["gallery"],
   parameters: {

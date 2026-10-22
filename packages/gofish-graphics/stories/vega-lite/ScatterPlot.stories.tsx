@@ -20,7 +20,9 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 300, h: 300 },
+  // Vega-Lite's size: continuous axes with no width or height make a
+  // 200 × 200 plot.
+  args: { w: 200, h: 200 },
   loaders: [async () => ({ cars: await data["cars.json"]() })],
   tags: ["gallery"],
   parameters: {

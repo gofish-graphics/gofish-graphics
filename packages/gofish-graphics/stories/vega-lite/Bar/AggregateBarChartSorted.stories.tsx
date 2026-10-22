@@ -18,7 +18,9 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 500, h: 300 },
+  // Vega-Lite's size: `height: {step: 17}` over the 19 age groups, and a
+  // continuous x is 200 px wide.
+  args: { w: 200, h: 19 * 17 },
   loaders: [async () => ({ population: await data["population.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();

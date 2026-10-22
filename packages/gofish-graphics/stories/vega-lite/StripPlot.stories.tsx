@@ -20,7 +20,9 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 400, h: 300 },
+  // Vega-Lite's size: a continuous x is 200 px wide, and an ordinal y takes a
+  // 20 px step per value, here five cylinder counts.
+  args: { w: 200, h: 5 * 20 },
   loaders: [async () => ({ cars: await data["cars.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();

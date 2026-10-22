@@ -18,7 +18,9 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 600, h: 300 },
+  // Vega-Lite's size: a 20 px step per offset bar, two per genre over 13
+  // genres (null included), and a continuous y is 200 px tall.
+  args: { w: 13 * 2 * 20, h: 200 },
   loaders: [async () => ({ movies: await data["movies.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();

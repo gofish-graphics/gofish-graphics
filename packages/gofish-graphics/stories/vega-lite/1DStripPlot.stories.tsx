@@ -17,7 +17,8 @@ export default meta;
 type Args = { w: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 300 },
+  // Vega-Lite's size: a continuous x with no width is 200 px wide.
+  args: { w: 200 },
   loaders: [async () => ({ weather: await data["seattle-weather.csv"]() })],
   tags: ["gallery"],
   parameters: {
