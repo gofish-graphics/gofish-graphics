@@ -81,7 +81,7 @@ def _x_axis(angle):
     return {"x": {} if angle is None else {"label": {"angle": angle}}}
 
 
-def _grouped_bar(angle, w=300):
+def _grouped_bar(angle, w=300, h=210):
     return (
         chart(CITY_YEAR, axes=_x_axis(angle))
         .flow(
@@ -89,7 +89,7 @@ def _grouped_bar(angle, w=300):
             spread(by="year", dir="x", spacing=0),
         )
         .mark(rect(h="visitors", fill="year")),
-        {"w": w, "h": 210},
+        {"w": w, "h": h},
     )
 
 
@@ -124,7 +124,7 @@ def story_grouped_label_angle_auto0():
 
 
 def story_grouped_label_angle_auto_inner45_outer0():
-    return _grouped_bar("auto", w=250)
+    return _grouped_bar("auto", w=336, h=290)
 
 
 # "Inner labels are often too long": product names under region groups.
@@ -135,7 +135,7 @@ REGION_PRODUCT = [
 ]
 
 
-def _grouped_products(w):
+def _grouped_products(w, h=210):
     return (
         chart(REGION_PRODUCT, axes={"x": {"label": {"angle": "auto"}}})
         .flow(
@@ -143,7 +143,7 @@ def _grouped_products(w):
             spread(by="product", dir="x", spacing=0),
         )
         .mark(rect(h="sales", fill="product")),
-        {"w": w, "h": 210},
+        {"w": w, "h": h},
     )
 
 
@@ -156,7 +156,7 @@ def story_grouped_label_angle_auto_long_inner45_outer0():
 
 
 def story_grouped_label_angle_auto_long_inner90_outer0():
-    return _grouped_products(220)
+    return _grouped_products(345, 329)
 
 
 # The products collide at every angle: that row is hidden and the color legend
