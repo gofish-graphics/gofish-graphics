@@ -103,6 +103,17 @@ condition (#1126). Use one uniform rule and an explicit override instead:
 declare the quantity with `Schema.unit("mm").quantity("Flipper Length")`, or
 write the title.
 
+**Inspectable by default; closures degrade gracefully.** Prefer a
+representation the system can read: a field name, an expression such as
+`when(field("count").sum().gt(cut))`, a named strategy. The system can then
+serialize it to Python, infer whether a change only repaints, and print it
+back. A closure stays available as the escape hatch for arbitrary computation,
+like a function strategy beside the named ones (#1101). Using it gives up only
+what the system can no longer see: a closure still renders, but it may not
+cross to Python, and it is treated as a pipeline read unless marked `live()`.
+What it never does is fail silently. An option that cannot take a closure
+says so with an error instead of dropping it.
+
 **Data always flows as lists.** Every step takes a list and gives back a list.
 A split turns a list into a list of groups and never looks inside an item, so
 an item may itself be an array. With no `by`, a split puts each item in its own
@@ -265,6 +276,13 @@ such as one that draws raw SVG or calls an outside JavaScript library. When a
 pure spec uses an option Python lacks, the fix is to expose the option, not
 to exempt the story (see
 [Constraints as Core](/internals/design/constraints-as-core)).
+
+The goals for Python are fixed and the mechanism is not: Python is as
+expressive as JavaScript, through constructs that are simple and compose. How
+a construct crosses the bridge, such as when a Python callback runs, which
+values are resolved ahead of time and what each round trip carries, is an
+implementation choice, judged by those goals and by staying inspectable where
+it can.
 
 ## Change and dependencies
 
