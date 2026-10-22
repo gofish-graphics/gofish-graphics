@@ -95,6 +95,7 @@ import {
   type SchemaEntry,
 } from "../schema";
 import { withWire } from "../wire";
+import { isExprValue } from "../expr";
 import { withKindValues } from "../strategyKind";
 import { datumOfInput } from "./markResult";
 export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
@@ -195,7 +196,9 @@ export function derive<T, U>(
  * filter carries `derive`'s opaque `{ type: "derive" }` tag.
  */
 export function filter<T>(pred: (row: T) => boolean): Operator<T[], T[]> {
-  const predicate = predicateWire(pred);
+  // A field predicate carries its wire form; an expression is its own (the
+  // emitter writes it as `ExprIR`). A hand-written function has none.
+  const predicate = isExprValue(pred) ? pred : predicateWire(pred);
   return mapOperator<T[], T[]>(
     (d) => d.filter(pred),
     predicate !== undefined

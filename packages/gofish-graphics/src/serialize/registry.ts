@@ -68,6 +68,8 @@ import { partition } from "../ast/graphicalOperators/partition";
 import { cut as cutSlices, cutMark } from "../ast/graphicalOperators/cut";
 import { offset as offsetOp } from "../ast/graphicalOperators/offset";
 import { fieldPredicate } from "../ast/fieldExpr";
+import { time } from "../ast/marks/time";
+import * as Animation from "../families/animation";
 import { polar } from "../ast/coordinateTransforms/polar";
 import { clock } from "../ast/coordinateTransforms/clock";
 import { wavy } from "../ast/coordinateTransforms/wavy";
@@ -190,6 +192,26 @@ export const FACTORIES: Record<string, (...args: any[]) => any> = {
   out: subtract,
   atop: paint,
   mask,
+  // The time surface. `time.history` is dual-form, like `spread`; a
+  // `time.transition` is a relational mark, like `line`, whose `enter` and
+  // `exit` are `Animation` values.
+  "time.sequence": time.sequence,
+  "time.history": time.history,
+  "time.stagger": time.stagger,
+  "time.parallel": () => time.parallel(),
+  "time.transition": (opts: Record<string, any>, children?: unknown[]) =>
+    time.transition(
+      {
+        ...opts,
+        ...(opts.enter !== undefined
+          ? { enter: animationFromIR(opts.enter) }
+          : {}),
+        ...(opts.exit !== undefined
+          ? { exit: animationFromIR(opts.exit) }
+          : {}),
+      } as any,
+      children as any
+    ),
   // Coordinate transforms. A transform is a JS object of functions, so the
   // wire carries only its `type` tag and options, and the factory makes it
   // again from them.
@@ -251,13 +273,41 @@ export const OPERATOR_BUILDERS: Record<
     });
   },
   // The IR carries the field predicate as data; the factory takes the
-  // predicate function `field(name).between(...)` builds from it.
-  filter: (opts) => filter(fieldPredicate(opts.predicate)),
+  // predicate function `field(name).between(...)` builds from it. An
+  // expression predicate arrives as an expression already (`unwrapOpts`),
+  // which is a predicate function itself.
+  filter: (opts) =>
+    filter(
+      typeof opts.predicate === "function"
+        ? opts.predicate
+        : fieldPredicate(opts.predicate)
+    ),
   // The factory takes the right-hand table as its first argument.
   join: (opts) => joinOp(opts.right as any[], { on: opts.on as string }),
   // The factory takes the prefix as its only argument.
   log: (opts) => log(opts.prefix),
 };
+
+/** An `Animation` value (or a list of them) from its IR, `{ kind, ...options }`:
+ *  the call a JS author writes, `Animation[kind](options)`. */
+export function animationFromIR(ir: unknown): unknown {
+  if (Array.isArray(ir)) return ir.map(animationFromIR);
+  const { kind, ...opts } = ir as { kind: string } & Record<string, unknown>;
+  const factory = (Animation as unknown as Record<string, unknown>)[kind];
+  if (typeof factory !== "function")
+    throw new Error(`unknown Animation kind ${JSON.stringify(kind)}`);
+  return (factory as (o: unknown) => unknown)(opts);
+}
+
+/** An arrangement from its IR, `{ kind: "stagger", ... }` or
+ *  `{ kind: "parallel" }`: the `time.stagger(...)` / `time.parallel()` value
+ *  an operator's `.transition({ enter })` takes. */
+export function arrangementFromIR(ir: unknown): unknown {
+  const { kind, ...opts } = ir as { kind: string } & Record<string, any>;
+  if (kind === "stagger") return time.stagger(opts);
+  if (kind === "parallel") return time.parallel();
+  throw new Error(`unknown arrangement kind ${JSON.stringify(kind)}`);
+}
 
 /**
  * Rebuild the construct of the given kind and wire `type` from its options,

@@ -32,6 +32,14 @@ import { GoFishNode } from "../ast/_node";
 import { RelateOperand } from "../ast/constraints/relate";
 import { wireOf } from "../ast/wire";
 import { nodeSelectionOf } from "../ast/nodeSelection";
+import {
+  SOURCE,
+  exprNode,
+  isExprValue,
+  type ExprNode,
+  type Source,
+} from "../ast/expr";
+import type { ArrangementSpec } from "../animation/transition";
 
 // The widget IR uses these symbol-loose shapes; toJSON returns them as-is.
 // The validator in `gofish-ir` accepts these shapes in permissive mode.
@@ -58,6 +66,17 @@ interface SerializeTag {
    *  its wrapper and stamps this field so the structural pixel offset
    *  reaches the wire (mirrors `TranslatableIR.translate` in gofish-ir). */
   translate?: { x?: number; y?: number };
+  /** Set when `.transition({ enter, update, exit })` is chained, on a mark
+   *  (its `Animation` values) or an operator (`time.stagger(...)` /
+   *  `time.parallel()` values). */
+  transition?: Record<string, unknown>;
+}
+
+/** What one document's walk collects beside its root: the rows of its
+ *  charts and the sources its expressions read. */
+interface WireContext {
+  tables: TableIds;
+  sources: SourceIds;
 }
 
 /**
@@ -77,7 +96,8 @@ interface SerializeTag {
 function wireOpts(
   kind: Frontend.NodeKind,
   type: string,
-  opts: AnyObject
+  opts: AnyObject,
+  ctx: WireContext
 ): AnyObject {
   const accepted = Frontend.acceptedFields(kind, type);
   if (accepted === undefined) {
@@ -88,11 +108,123 @@ function wireOpts(
   }
   const out: AnyObject = {};
   for (const [key, value] of Object.entries(opts)) {
-    if (Object.hasOwn(accepted, key) && typeof value !== "function") {
-      // A field whose declared type holds nodes (a blob's `avoiding`, inside
-      // `shape`) carries their references; every other field is as given.
-      out[key] = Frontend.mapHeldNodes(accepted[key].type, value, nodesToIR);
-    }
+    if (!Object.hasOwn(accepted, key)) continue;
+    // An expression or a source is a function, and data: it crosses as
+    // `ExprIR`, whatever the field. Any other function is a closure.
+    if (typeof value === "function" && !isExprValue(value)) continue;
+    // A field whose declared type holds nodes (a blob's `avoiding`, inside
+    // `shape`) carries their references; every other field is as given.
+    out[key] = Frontend.mapHeldNodes(
+      accepted[key].type,
+      valueToIR(value, ctx),
+      nodesToIR
+    );
+  }
+  return out;
+}
+
+/**
+ * An option value as the wire carries it: an expression or a source as its
+ * `ExprIR`, an `Animation` value as `{ kind, ...options }`, and lists and
+ * plain objects element by element. Anything else is as given.
+ */
+function valueToIR(value: unknown, ctx: WireContext): unknown {
+  if (isExprValue(value)) return exprToIR(exprNode(value), ctx);
+  if (Array.isArray(value)) return value.map((v) => valueToIR(v, ctx));
+  if (isAnimation(value)) return animationToIR(value);
+  if (Frontend.isPlainObject(value)) {
+    const out: AnyObject = {};
+    for (const [k, v] of Object.entries(value)) out[k] = valueToIR(v, ctx);
+    return out;
+  }
+  return value;
+}
+
+/** Whether `value` is an `Animation` value (an effect or a tween). */
+const isAnimation = (value: unknown): boolean =>
+  typeof value === "object" &&
+  value !== null &&
+  ((value as AnyObject).__effect === true ||
+    (value as AnyObject).__tween === true);
+
+/** An `Animation` value's wire form, `{ kind, ...options }`, or a loud error
+ *  for one with no IR form (a function ease). */
+function animationToIR(value: unknown): Frontend.AnimationIR {
+  const wire = wireOf<AnyObject>(value);
+  if (wire === undefined)
+    throw new Error("toJSON: an Animation value carries no IR form.");
+  if (typeof wire.noWire === "string")
+    throw new Error(`toJSON: ${wire.noWire}, so it has no IR form.`);
+  return wire as Frontend.AnimationIR;
+}
+
+/** An expression tree as `ExprIR`, each source it reads declared once in the
+ *  document's `sources` table. */
+function exprToIR(node: ExprNode, ctx: WireContext): Frontend.ExprIR {
+  switch (node.type) {
+    case "lit":
+      return node.value;
+    case "field":
+      return node.field.toJSON() as Frontend.FieldAccessor;
+    case "source":
+      return {
+        type: "source",
+        id: ctx.sources.add(node.source),
+        ...(node.read !== undefined ? { read: node.read } : {}),
+        ...(node.arg !== undefined ? { arg: node.arg } : {}),
+      };
+    case "op":
+      return {
+        type: "op",
+        op: node.op,
+        args: node.args.map((a) => exprToIR(a, ctx)),
+      };
+    case "when":
+      return {
+        type: "when",
+        branches: node.branches.map(
+          ([c, v]) =>
+            [exprToIR(c, ctx), exprToIR(v, ctx)] as [
+              Frontend.ExprIR,
+              Frontend.ExprIR,
+            ]
+        ),
+        ...(node.otherwise.type === "lit" && node.otherwise.value === null
+          ? {}
+          : { otherwise: exprToIR(node.otherwise, ctx) }),
+      };
+  }
+}
+
+/** A mark's `.transition(...)` spec as its IR: each phase's `Animation`
+ *  values. */
+function markTransitionIR(spec: AnyObject): Frontend.MarkTransitionIR {
+  const out: AnyObject = {};
+  for (const [phase, value] of Object.entries(spec))
+    if (value !== undefined)
+      out[phase] = Array.isArray(value)
+        ? value.map(animationToIR)
+        : animationToIR(value);
+  return out;
+}
+
+/** An operator's `.transition(...)` spec as its IR: each phase's
+ *  arrangement, `{ kind: "stagger", ... }` or `{ kind: "parallel" }`. */
+function operatorTransitionIR(spec: AnyObject): Frontend.OperatorTransitionIR {
+  const out: AnyObject = {};
+  for (const [phase, value] of Object.entries(spec)) {
+    if (value === undefined) continue;
+    const arrangement = (value as { __timeArrangement?: ArrangementSpec })
+      .__timeArrangement;
+    if (arrangement === undefined)
+      throw new Error(
+        `toJSON: an operator's .transition({ ${phase} }) takes time.stagger(...) or time.parallel().`
+      );
+    if (typeof arrangement.by === "function")
+      throw new Error(
+        "toJSON: time.stagger({ by }) with a JS key function has no IR form."
+      );
+    out[phase] = Frontend.encodeIR(arrangement);
   }
   return out;
 }
@@ -196,8 +328,34 @@ function readTag(value: unknown): SerializeTag | undefined {
 export async function toJSON(
   root: RenderableBuilder | Mark<any>
 ): Promise<Frontend.FrontendIRDocument> {
-  const tables = new TableIds();
-  return document(await markToIR(root, tables), tables);
+  const ctx: WireContext = { tables: new TableIds(), sources: new SourceIds() };
+  return document(await markToIR(root, ctx), ctx);
+}
+
+/**
+ * The sources one document's expressions read, each declared once under an
+ * id minted in walk order (`s0`, `s1`, ...): the same source object, read in
+ * two places, is one source. A source made with a JS function option (a
+ * drag's `hitTest`) has no declaration, so it throws.
+ */
+class SourceIds {
+  readonly sources: Frontend.Sources = {};
+  private readonly ids = new Map<Source, string>();
+
+  add(source: Source): string {
+    let id = this.ids.get(source);
+    if (id === undefined) {
+      const { kind, declaration } = source[SOURCE];
+      if (typeof (declaration as AnyObject).noWire === "string")
+        throw new Error(
+          `toJSON: ${(declaration as AnyObject).noWire}, so it has no IR form.`
+        );
+      id = `s${this.ids.size}`;
+      this.ids.set(source, id);
+      this.sources[id] = { kind, ...declaration } as Frontend.SourceIR;
+    }
+    return id;
+  }
 }
 
 /**
@@ -229,12 +387,18 @@ class TableIds {
  * them. A reader decodes them with `Serialize.readIR` before rebuilding the
  * chart.
  */
-function document(root: Frontend.FrontendIRDocument["root"], ids: TableIds) {
+function document(
+  root: Frontend.FrontendIRDocument["root"],
+  { tables, sources }: WireContext
+) {
   return Frontend.encodeIR<Frontend.FrontendIRDocument>({
     irVersion: 0,
     ir: "gofish-frontend",
     root,
-    ...(Object.keys(ids.tables).length > 0 ? { tables: ids.tables } : {}),
+    ...(Object.keys(tables.tables).length > 0 ? { tables: tables.tables } : {}),
+    ...(Object.keys(sources.sources).length > 0
+      ? { sources: sources.sources }
+      : {}),
   });
 }
 
@@ -268,23 +432,23 @@ function chartBuilderInternals(
 
 async function chartBuilderToChartIR(
   chart: ChartBuilder<any>,
-  tables: TableIds
+  ctx: WireContext
 ): Promise<Frontend.ChartIR> {
   const { data, options, operators, finalMark, nodeZOrder, nodeName } =
     chartBuilderInternals(chart);
 
   const ir: Frontend.ChartIR = {
     type: "chart",
-    data: dataToIR(data, tables),
+    data: dataToIR(data, ctx.tables),
     mark: finalMark
-      ? await markToIR(finalMark, tables)
+      ? await markToIR(finalMark, ctx)
       : ({ type: "rect" } as Frontend.LeafMarkIR),
   };
   // Match how `options` / `zOrder` are handled — omit empty arrays so a
   // round-trip through fromJSON → toJSON doesn't gain a spurious
   // `operators: []` on the second pass when none were specified.
   if (operators.length > 0) {
-    ir.operators = operators.map(operatorToIR);
+    ir.operators = operators.map((op) => operatorToIR(op, ctx));
   }
   if (options && Object.keys(options).length > 0) {
     ir.options = options as AnyObject;
@@ -322,7 +486,10 @@ function dataToIR(data: unknown, tables: TableIds): Frontend.DataIR {
   );
 }
 
-function operatorToIR(op: Operator<any, any>): Frontend.OperatorIR {
+function operatorToIR(
+  op: Operator<any, any>,
+  ctx: WireContext
+): Frontend.OperatorIR {
   const tag = readTag(op);
   if (!tag) {
     // No tag — opaque user-supplied operator. The widget wire format
@@ -336,9 +503,12 @@ function operatorToIR(op: Operator<any, any>): Frontend.OperatorIR {
   // `translateOperator`.
   return {
     type: tag.type,
-    ...wireOpts("operator", tag.type, tag.opts),
+    ...wireOpts("operator", tag.type, tag.opts, ctx),
     ...(tag.label !== undefined ? { label: tag.label } : {}),
     ...(tag.translate !== undefined ? { translate: tag.translate } : {}),
+    ...(tag.transition !== undefined
+      ? { transition: operatorTransitionIR(tag.transition) }
+      : {}),
   } as Frontend.OperatorIR;
 }
 
@@ -346,26 +516,26 @@ function operatorToIR(op: Operator<any, any>): Frontend.OperatorIR {
  *  mark-position form. */
 async function layerChainToIR(
   chain: LayerBuilder,
-  tables: TableIds
+  ctx: WireContext
 ): Promise<Frontend.LayerChainIR> {
   const tiers = (chain as any).tiers as Mark<any>[];
   const ir: Frontend.MarkIR[] = [];
   // In order, so table ids are minted in walk order.
-  for (const tier of tiers) ir.push(await markToIR(tier, tables));
+  for (const tier of tiers) ir.push(await markToIR(tier, ctx));
   return { type: "layer-chain", tiers: ir };
 }
 
 async function markToIR(
   mark: Mark<any> | RenderableBuilder,
-  tables: TableIds
+  ctx: WireContext
 ): Promise<Frontend.MarkIR> {
   // A whole chart or `.layer(...)` chain in a mark position (the root, a
   // `.mark(...)`, a combinator's child) is the builder itself, written as its
   // own `ChartIR` or `LayerChainIR` (see `Frontend.MarkIR`).
   if (mark instanceof RenderableBuilder) {
     return mark instanceof LayerBuilder
-      ? layerChainToIR(mark, tables)
-      : chartBuilderToChartIR(mark as ChartBuilder<any>, tables);
+      ? layerChainToIR(mark, ctx)
+      : chartBuilderToChartIR(mark as ChartBuilder<any>, ctx);
   }
   // A ref child (`ref("a")` in a combinator, an enclosure's member) is a
   // `RefMarkIR` by its name, the form fromJSON reads back with `ref(...)`.
@@ -395,14 +565,16 @@ async function markToIR(
   const chained: AnyObject = {};
   if (tag.name !== undefined) chained.name = tag.name;
   if (tag.label !== undefined) chained.label = tag.label;
+  if (tag.transition !== undefined)
+    chained.transition = markTransitionIR(tag.transition);
 
   if (tag.__combinator) {
     const childrenResolved = await flatChildren(tag.children);
-    const options = wireOpts("combinator-mark", tag.type, tag.opts);
+    const options = wireOpts("combinator-mark", tag.type, tag.opts, ctx);
     // In order, so table ids are minted in walk order.
     const children: Frontend.MarkIR[] = [];
     for (const c of childrenResolved)
-      children.push(await markToIR(c as Mark<any>, tables));
+      children.push(await markToIR(c as Mark<any>, ctx));
     const ir: Frontend.CombinatorMarkIR = {
       type: tag.type as Frontend.CombinatorMarkType,
       __combinator: true,
@@ -415,7 +587,7 @@ async function markToIR(
   // Leaf mark — spread opts plus any chained name/label at the top level.
   return {
     type: tag.type,
-    ...wireOpts("leaf-mark", tag.type, tag.opts),
+    ...wireOpts("leaf-mark", tag.type, tag.opts, ctx),
     ...chained,
   } as Frontend.LeafMarkIR;
 }

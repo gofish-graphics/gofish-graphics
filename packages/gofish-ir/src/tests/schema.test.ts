@@ -1463,6 +1463,140 @@ console.log("\n# Strategies");
   );
 }
 
+console.log("\n# Sources and expressions");
+{
+  const doc = (root: unknown, sources: unknown = {}) =>
+    ({
+      irVersion: 0,
+      ir: "gofish-frontend",
+      root,
+      tables: { t0: [{ cat: "a", count: 3 }] },
+      sources,
+    }) as unknown as FrontendIRDocument;
+  const sources = {
+    s0: { kind: "drag" },
+    s1: { kind: "pointer" },
+    s2: {
+      kind: "timer",
+      domain: [1955, 2005],
+      duration: 10000,
+      playing: false,
+      at: 1997.5,
+    },
+  };
+  const cut = {
+    type: "op",
+    op: "fillNull",
+    args: [
+      {
+        type: "op",
+        op: "clip",
+        args: [{ type: "source", id: "s0", read: "y" }, 0, 95],
+      },
+      60,
+    ],
+  };
+  const chartWith = (mark: unknown, operators: unknown[] = []) => ({
+    type: "chart",
+    data: { type: "table", id: "t0" },
+    operators,
+    mark,
+  });
+  const fill = {
+    type: "when",
+    branches: [
+      [
+        {
+          type: "op",
+          op: "gt",
+          args: [{ type: "field", name: "count", ops: [{ op: "sum" }] }, cut],
+        },
+        "#d62728",
+      ],
+    ],
+    otherwise: "#6b9bd1",
+  };
+  const valid = validate(
+    doc(
+      chartWith({ type: "rect", h: "count", fill, y: cut }, [
+        {
+          type: "filter",
+          predicate: {
+            type: "op",
+            op: "eq",
+            args: [{ type: "field", name: "cat" }, "a"],
+          },
+        },
+        { type: "time.sequence", by: "year", on: { type: "source", id: "s2" } },
+      ]),
+      sources
+    )
+  );
+  check(
+    "expressions over declared sources validate",
+    valid.valid,
+    JSON.stringify(valid)
+  );
+  const unknown = validate(
+    doc(chartWith({ type: "rect", y: { type: "source", id: "nope" } }), sources)
+  );
+  check(
+    "a read of an undeclared source is an error",
+    !unknown.valid &&
+      unknown.errors.some((e) => /names source "nope"/.test(e.message)),
+    JSON.stringify(unknown)
+  );
+  const arity = validate(
+    doc(
+      chartWith({ type: "rect", y: { type: "op", op: "clip", args: [1, 2] } })
+    )
+  );
+  check(
+    "an op with the wrong number of arguments is an error",
+    !arity.valid && arity.errors.some((e) => /clip takes 3/.test(e.message)),
+    JSON.stringify(arity)
+  );
+  const badKind = validate(
+    doc(chartWith({ type: "rect" }), { s0: { kind: "gyro" } })
+  );
+  check("an unknown source kind is an error", !badKind.valid);
+  const transition = validate(
+    doc(
+      chartWith(
+        {
+          type: "rect",
+          h: "count",
+          transition: {
+            enter: { kind: "grow", duration: 600, ease: "cubicOut" },
+          },
+        },
+        [
+          {
+            type: "spread",
+            by: "cat",
+            dir: "x",
+            transition: { enter: { kind: "stagger", lag: 60 } },
+          },
+        ]
+      )
+    )
+  );
+  check(
+    "a mark's and an operator's transition validate",
+    transition.valid,
+    JSON.stringify(transition)
+  );
+  const badEase = validate(
+    doc(
+      chartWith({
+        type: "rect",
+        transition: { enter: { kind: "grow", ease: "bouncy" } },
+      })
+    )
+  );
+  check("an unknown ease name is an error", !badEase.valid);
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) {
   process.exit(1);

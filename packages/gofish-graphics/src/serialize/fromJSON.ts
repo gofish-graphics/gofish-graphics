@@ -30,7 +30,19 @@ import { resolveMarkResult } from "../ast/marks/markResult";
 import { Frontend } from "gofish-ir";
 import { RESOLVE_ROWS } from "../ast/channels";
 import { applySchema } from "../ast/schema";
+import { FieldExpr } from "../ast/fieldExpr";
+import { makeExpr, type ExprNode, type Source } from "../ast/expr";
 import {
+  click,
+  drag,
+  pointer,
+  signal,
+  timer,
+  wheel,
+} from "../interaction/inputs";
+import {
+  animationFromIR,
+  arrangementFromIR,
   callForRows,
   rebuild,
   cutSlices,
@@ -70,6 +82,117 @@ export interface IRContext {
   /** The live `GoFishRef`s a mark function was called with, which an
    *  `{__inputRef: i}` sentinel in its reply resolves back to. */
   inputRefs?: any[];
+  /** The live sources the document's `sources` table declares, by id, built
+   *  once per build ({@link sourcesFromIR}). */
+  sources: Record<string, Source>;
+}
+
+// ---------------------------------------------------------------------------
+// Sources and expressions
+// ---------------------------------------------------------------------------
+
+/** The live source a declaration describes: the same input a JS author
+ *  makes with these options. */
+function sourceFromIR(decl: Frontend.SourceIR): Source {
+  const { kind, ...opts } = decl as Frontend.SourceIR & Record<string, any>;
+  switch (kind) {
+    case "timer":
+      return timer(opts as any) as unknown as Source;
+    case "signal":
+      return signal(opts.init) as unknown as Source;
+    case "wheel":
+      return wheel(opts as any) as unknown as Source;
+    case "pointer":
+      return pointer() as unknown as Source;
+    case "drag":
+      return drag() as unknown as Source;
+    case "click":
+      return click() as unknown as Source;
+    default:
+      throw new Error(`unknown source kind ${JSON.stringify(kind)}`);
+  }
+}
+
+/**
+ * A fresh live source per declaration of a document's `sources` table. One
+ * build is one render's worth of sources, so two renders of one document
+ * never share a clock or an input by accident; each registers with its own
+ * chart when that chart's resolve reads it (see `resolveContext.ts`).
+ */
+export function sourcesFromIR(
+  decls: Frontend.Sources | undefined
+): Record<string, Source> {
+  return Object.fromEntries(
+    Object.entries(decls ?? {}).map(([id, d]) => [id, sourceFromIR(d)])
+  );
+}
+
+const EXPR_TYPES = new Set(["source", "op", "when"]);
+
+/** Whether a wire value is an expression's object form. */
+const isExprIR = (v: any): boolean =>
+  v !== null && typeof v === "object" && EXPR_TYPES.has(v.type);
+
+/** An `ExprIR` as its JS tree, each source read resolved against `sources`. */
+function exprNodeFromIR(
+  ir: Frontend.ExprIR,
+  sources: Record<string, Source>
+): ExprNode {
+  if (ir === null || typeof ir !== "object") return { type: "lit", value: ir };
+  switch (ir.type) {
+    case "field":
+      return {
+        type: "field",
+        field: new FieldExpr(ir.name, (ir.ops ?? []) as any),
+      };
+    case "source": {
+      const source = sources[ir.id];
+      if (source === undefined)
+        throw new Error(
+          `an expression reads source "${ir.id}", which the document's sources do not declare`
+        );
+      return {
+        type: "source",
+        source,
+        ...(ir.read !== undefined ? { read: ir.read } : {}),
+        ...(ir.arg !== undefined ? { arg: ir.arg } : {}),
+      };
+    }
+    case "op":
+      return {
+        type: "op",
+        op: ir.op,
+        args: ir.args.map((a) => exprNodeFromIR(a, sources)),
+      };
+    case "when":
+      return {
+        type: "when",
+        branches: ir.branches.map(
+          ([c, v]) =>
+            [exprNodeFromIR(c, sources), exprNodeFromIR(v, sources)] as [
+              ExprNode,
+              ExprNode,
+            ]
+        ),
+        otherwise:
+          ir.otherwise === undefined
+            ? { type: "lit", value: null }
+            : exprNodeFromIR(ir.otherwise, sources),
+      };
+  }
+}
+
+/** An `ExprIR` object as the value a JS author writes there: a read of a
+ *  source's own value is the source itself (a clock handed to `on`), any
+ *  other expression an `Expr`. */
+function exprFromIR(
+  ir: Frontend.ExprIR,
+  sources: Record<string, Source>
+): unknown {
+  const node = exprNodeFromIR(ir, sources);
+  return node.type === "source" && node.read === undefined
+    ? node.source
+    : makeExpr(node);
 }
 
 /**
@@ -159,11 +282,17 @@ function makeLambdaAccessor(lambdaId: string, bridge: DeriveBridge) {
  * supplied, lambda sentinels throw — a pure-JS consumer should never
  * emit one.
  */
-export function unwrapOpts(value: any, bridge?: DeriveBridge): any {
+export function unwrapOpts(
+  value: any,
+  bridge?: DeriveBridge,
+  sources: Record<string, Source> = {}
+): any {
   if (value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) {
-    return value.map((item) => unwrapOpts(item, bridge));
+    return value.map((item) => unwrapOpts(item, bridge, sources));
   }
+  // An expression (a source read, an operation, a `when`), at any depth.
+  if (isExprIR(value)) return exprFromIR(value, sources);
   if (typeof value.__gofish_lambda === "string") {
     if (bridge === undefined) {
       throw new Error(
@@ -174,7 +303,7 @@ export function unwrapOpts(value: any, bridge?: DeriveBridge): any {
   }
   const out: Record<string, any> = {};
   for (const [k, val] of Object.entries(value)) {
-    out[k] = unwrapOpts(val, bridge);
+    out[k] = unwrapOpts(val, bridge, sources);
   }
   return out;
 }
@@ -323,13 +452,22 @@ export function resolveOptions(raw: Record<string, any>): Record<string, any> {
  *  `undefined`/`{}`, reproducing the pre-array-form suppression behavior. */
 export function mapOperator(
   op: OperatorSpec,
-  bridge?: DeriveBridge
+  bridge?: DeriveBridge,
+  sources: Record<string, Source> = {}
 ): Operator<any, any> | null {
-  const { type, translate, label, ...opts } = op as Record<string, any>;
-  let operator = rebuild("operator", type as string, unwrapOpts(opts, bridge), {
-    bridge,
-  });
+  const { type, translate, label, transition, ...opts } = op as Record<
+    string,
+    any
+  >;
+  let operator = rebuild(
+    "operator",
+    type as string,
+    unwrapOpts(opts, bridge, sources),
+    { bridge }
+  );
   if (operator === undefined) return null;
+  if (transition !== undefined)
+    operator = operator.transition(operatorTransitionFromIR(transition));
   if (
     operator &&
     label !== undefined &&
@@ -357,6 +495,32 @@ export function mapOperator(
   return operator;
 }
 
+/** An operator's `.transition(...)` spec from its IR: each phase's
+ *  arrangement as `time.stagger(...)` / `time.parallel()`. */
+function operatorTransitionFromIR(
+  ir: Frontend.OperatorTransitionIR
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(ir).map(([phase, a]) => [phase, arrangementFromIR(a)])
+  );
+}
+
+/** A mark's `.transition(...)` spec from its IR: each phase's `Animation`
+ *  values. */
+function markTransitionFromIR(
+  ir: Frontend.MarkTransitionIR
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(ir).map(([phase, v]) => [phase, animationFromIR(v)])
+  );
+}
+
+/** Chain a mark's `.transition(...)` when its IR has one. */
+const withTransition = <M>(mark: M, ir: unknown): M =>
+  ir === undefined
+    ? mark
+    : (mark as any).transition(markTransitionFromIR(ir as any));
+
 /**
  * Map an array of combinator-child mark specs to runtime children, expanding
  * any `cut` child into its N slice nodes IN PLACE. The pure `cut(source, opts)`
@@ -379,7 +543,7 @@ export function mapMarkChildren(specs: MarkSpec[], ctx: IRContext): any[] {
       // valid in the chart `.mark(cut(...))` (data-bound expand) form.
       const slices = cutSlices(sourceMark as any, {
         dir: child.dir,
-        size: unwrapOpts(child.size, ctx.bridge),
+        size: unwrapOpts(child.size, ctx.bridge, ctx.sources),
         inset: child.inset,
       });
       out.push(...slices);
@@ -437,7 +601,7 @@ function serializeMarkFnInput(items: any[]): {
  *  Python mark-fn embed the ref it was handed directly in its returned
  *  layout (mirrors JS `spread({...}, [d[0], text(...)])`). */
 export function mapMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
-  const { bridge, resolveToken, inputRefs } = ctx;
+  const { bridge, resolveToken, inputRefs, sources } = ctx;
   const spec = markSpec as any;
   const applyTranslate = <T>(mark: T): T =>
     spec.translate && typeof (mark as any).translate === "function"
@@ -553,7 +717,7 @@ export function mapMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
     let mark = cutMark({
       source: sourceMark as any,
       dir: spec.dir,
-      size: unwrapOpts(spec.size, bridge),
+      size: unwrapOpts(spec.size, bridge, sources),
       inset: spec.inset,
     });
     mark = applyTranslate(mark);
@@ -582,7 +746,7 @@ export function mapMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
     const opts = resolveNodeRefs(
       "combinator-mark",
       spec.type,
-      resolveOptions(unwrapOpts(spec.options ?? {}, bridge)),
+      resolveOptions(unwrapOpts(spec.options ?? {}, bridge, sources)),
       resolveToken
     );
     let mark = rebuild("combinator-mark", spec.type, opts, {
@@ -597,6 +761,7 @@ export function mapMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
       const clauses = spec.relate as RelateClauseIR[];
       mark = (mark as any).relate(() => relateClauses(clauses, ctx));
     }
+    mark = withTransition(mark, spec.transition);
     if (spec.__scope) {
       mark = wrapWithScope(mark);
     }
@@ -614,7 +779,7 @@ export function mapMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
     return mark;
   }
 
-  const { type, name: layerName, ...rest } = spec as any;
+  const { type, name: layerName, transition, ...rest } = spec as any;
   // Label is an array of `{accessor, ...opts}` specs — pull out and call the
   // chained `.label(accessor, opts)` method once per entry, in order, so
   // repeated `.label()` calls round-trip (adds one external label layer per
@@ -638,13 +803,14 @@ export function mapMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
     resolveNodeRefs(
       "leaf-mark",
       type as string,
-      unwrapOpts(opts, bridge),
+      unwrapOpts(opts, bridge, sources),
       resolveToken
     )
   );
   if (mark === undefined) {
     throw new Error(`Unknown mark type: ${String(type)}`);
   }
+  mark = withTransition(mark, transition);
   if (labelSpecs && typeof (mark as any).label === "function") {
     for (const labelObj of labelSpecs) {
       const { accessor, ...labelOpts } = labelObj;
@@ -728,7 +894,7 @@ function dataFromIR(data: Frontend.DataIR, ctx: IRContext): unknown {
 function chartFromIR(chartSpec: ChartSpec, ctx: IRContext): ChartBuilder<any> {
   const operators: Operator<any, any>[] = [];
   for (const opSpec of (chartSpec.operators ?? []) as OperatorSpec[]) {
-    const op = mapOperator(opSpec, ctx.bridge);
+    const op = mapOperator(opSpec, ctx.bridge, ctx.sources);
     if (op) operators.push(op);
   }
   const mark = mapMark(chartSpec.mark, ctx);
@@ -784,6 +950,11 @@ export interface RenderIROptions {
   legend?: boolean;
   padding?: number;
   debug?: boolean;
+  /** Play the chart's build-in (its marks' `.transition({ enter })`).
+   *  False holds it at `at`. */
+  playing?: boolean;
+  /** Where the build-in clock starts, in milliseconds. */
+  at?: number;
 }
 
 /** Drop undefined fields, so a render option the host left unset is absent
@@ -814,6 +985,7 @@ export function buildIR(
     bridge,
     resolveToken: makeTokenResolver(),
     tables: doc.tables ?? {},
+    sources: sourcesFromIR(doc.sources),
   });
 }
 

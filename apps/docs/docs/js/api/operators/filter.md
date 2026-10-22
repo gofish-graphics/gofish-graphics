@@ -43,6 +43,10 @@ serializes. This table lists the fields of that serialized form:
 ::: gofish-ref filter
 :::
 
+An [expression](/js/api/expressions) is a predicate too: a row stays when it
+is `true` (`filter(field("day").eq(day))`, where `day` is a `timer()`). It is
+data, so a `filter` over one serializes, as `ExprIR`.
+
 A hand-written predicate is a JavaScript function, which has no serialized
 form, so a `filter` over one serializes as an opaque
 [`derive`](/js/api/operators/derive).

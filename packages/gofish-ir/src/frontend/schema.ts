@@ -25,10 +25,184 @@ export interface FrontendIRDocument {
    *  table as base64 Arrow instead, an encoding it decodes before
    *  rebuilding. */
   tables?: Tables;
+  /** The sources the document's expressions read (clocks, signals, inputs),
+   *  each declared once, by the id a `{type: "source", id}` read names (see
+   *  {@link ExprIR}). The host builds a live source from each declaration per
+   *  render, and the browser runs it. */
+  sources?: Sources;
 }
 
 /** Rows by table id: what a `{type: "table", id}` data field names. */
 export type Tables = Record<string, Array<Record<string, unknown>>>;
+
+// ---------------------------------------------------------------------------
+// Sources and expressions
+// ---------------------------------------------------------------------------
+
+/** Source declarations by id: what a `{type: "source", id}` read names. */
+export type Sources = Record<string, SourceIR>;
+
+/**
+ * One source, as declared: its kind and the options it was made with (the
+ * `SOURCES` table in descriptors.ts). The state a capture draws is the one
+ * declared here: a clock at `at` (or its domain's start), a signal at `init`,
+ * a wheel at `initial`, a pointer off the chart, a drag not started.
+ */
+export type SourceIR =
+  | {
+      kind: "timer";
+      domain?: [number, number] | Array<string | number>;
+      duration?: number;
+      step?: number;
+      loop?: boolean;
+      playing?: boolean;
+      at?: number | string;
+    }
+  | { kind: "signal"; init?: unknown }
+  | {
+      kind: "wheel";
+      range: [number, number];
+      initial?: number;
+      domain?: [number, number];
+      round?: boolean;
+      sensitivity?: number;
+    }
+  | { kind: "pointer" }
+  | { kind: "drag" }
+  | { kind: "click" };
+
+/** The operations an {@link ExprOpIR} names, by their wire names (polars'
+ *  vocabulary, camelCase as nodejs-polars spells it), with how many
+ *  arguments each takes: `[min, max]`, `max` undefined for any number. */
+export const EXPR_OPS = {
+  gt: [2, 2],
+  gtEq: [2, 2],
+  lt: [2, 2],
+  ltEq: [2, 2],
+  eq: [2, 2],
+  neq: [2, 2],
+  add: [2, 2],
+  sub: [2, 2],
+  mul: [2, 2],
+  div: [2, 2],
+  and: [2, 2],
+  or: [2, 2],
+  not: [1, 1],
+  clip: [3, 3],
+  fillNull: [2, 2],
+  floor: [1, 1],
+  round: [1, 1],
+  concatStr: [1, undefined],
+} as const satisfies Record<string, readonly [number, number | undefined]>;
+
+export type ExprOpName = keyof typeof EXPR_OPS;
+
+/**
+ * An expression: a value built from literals, field reads, source reads and
+ * a fixed set of operations, evaluated in JS at a mark's datum. A literal is
+ * a bare JSON value (inside an expression a string is a literal, never a
+ * field name: a field is `{type: "field"}`). A channel value, a `filter`
+ * predicate, a `time.sequence`'s `on` and a `time.transition`'s `at` may be
+ * one. Which tier a source read lands in (paint or re-layout) is inferred
+ * from the channel; the IR does not say.
+ */
+export type ExprIR =
+  | string
+  | number
+  | boolean
+  | null
+  | FieldAccessor
+  | SourceReadIR
+  | ExprOpIR
+  | WhenIR;
+
+/**
+ * A read of a source: its own value (no `read`), or one of its named values
+ * (`read`, with an `arg` when that read takes one). Which reads a source has
+ * is the source kind's own business (a drag reads `"x"`, `"y"`, `"dx"`,
+ * ...; a pointer reads `"over"` and `"field"` with a field name), so the IR
+ * names them generically.
+ */
+export interface SourceReadIR {
+  type: "source";
+  id: string;
+  read?: string;
+  arg?: string;
+}
+
+/** One operation over its arguments (`EXPR_OPS`). */
+export interface ExprOpIR {
+  type: "op";
+  op: ExprOpName;
+  args: ExprIR[];
+}
+
+/** `when(c).then(v)...otherwise(z)`: the value of the first branch whose
+ *  condition is true, else `otherwise` (null when absent). */
+export interface WhenIR {
+  type: "when";
+  branches: [ExprIR, ExprIR][];
+  otherwise?: ExprIR;
+}
+
+// ---------------------------------------------------------------------------
+// Animation
+// ---------------------------------------------------------------------------
+
+/** A named ease (a function ease is JS only). */
+export type EaseIR =
+  | "linear"
+  | "quadIn"
+  | "quadOut"
+  | "quadInOut"
+  | "cubicIn"
+  | "cubicOut"
+  | "cubicInOut";
+
+/** A value of the `Animation` family: an effect (how a mark enters or
+ *  leaves) or a tween (how it moves between keyframes). `duration` is
+ *  milliseconds or a field name. */
+export type AnimationIR =
+  | { kind: "grow"; duration?: number | string; ease?: EaseIR }
+  | { kind: "shrink"; duration?: number | string; ease?: EaseIR }
+  | { kind: "fadeIn"; duration?: number | string; ease?: EaseIR }
+  | { kind: "fadeOut"; duration?: number | string; ease?: EaseIR }
+  | { kind: "appear"; duration?: number | string; ease?: EaseIR }
+  | {
+      kind: "wipe";
+      duration?: number | string;
+      ease?: EaseIR;
+      from?: "bottom" | "top" | "left" | "right";
+      shape?: "circle";
+    }
+  | { kind: "tween"; curve?: CurveIR; ease?: EaseIR };
+
+/** How an operator's children are arranged in time:
+ *  `time.stagger({...})` or `time.parallel()`. */
+export type ArrangementIR =
+  | {
+      kind: "stagger";
+      lag?: number;
+      spacing?: number;
+      dwell?: number;
+      by?: string | FieldAccessor | ChunkKeyIR;
+      from?: "first" | "last" | "center" | "edges" | number;
+    }
+  | { kind: "parallel" };
+
+/** A mark's `.transition({ enter, update, exit })`. */
+export interface MarkTransitionIR {
+  enter?: AnimationIR | AnimationIR[];
+  update?: AnimationIR;
+  exit?: AnimationIR | AnimationIR[];
+}
+
+/** An operator's `.transition({ enter, update, exit })`. */
+export interface OperatorTransitionIR {
+  enter?: ArrangementIR;
+  update?: ArrangementIR;
+  exit?: ArrangementIR;
+}
 
 /**
  * A frontend-IR root holds anything a mark position holds ({@link MarkIR}):
@@ -87,6 +261,9 @@ interface TranslatableIR {
 interface OperatorFlagsIR {
   /** Dev escape hatch (`debug: true`); a no-op for layout. */
   debug?: boolean;
+  /** `.transition({ enter, update, exit })`: how the operator's children
+   *  are arranged in time. */
+  transition?: OperatorTransitionIR;
 }
 
 export interface Origin {
@@ -186,7 +363,59 @@ export type OperatorIR =
   | LogOperator
   | TreemapOperator
   | PackOperator
-  | PartitionOperator;
+  | PartitionOperator
+  | TimeSequenceOperator
+  | TimeHistoryOperator
+  | TimeStaggerOperator
+  | TimeParallelOperator;
+
+/** `time.sequence({ by })`: one keyframe per value of `by`, played through on
+ *  a clock: its own (`duration`, `loop`, `playing`, `at`), or the source
+ *  `on` names. */
+export interface TimeSequenceOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
+  type: "time.sequence";
+  by: string;
+  duration?: number;
+  loop?: boolean;
+  playing?: boolean;
+  at?: number;
+  on?: SourceReadIR;
+  cyclic?: boolean | number;
+}
+
+/** `time.history({ last })`: keep the marks below on screen `last` units of
+ *  the sequence's field after their keyframe. */
+export interface TimeHistoryOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
+  type: "time.history";
+  last?: number;
+}
+
+/** `time.stagger({...})`: start groups one after another. */
+export interface TimeStaggerOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
+  type: "time.stagger";
+  lag?: number;
+  spacing?: number;
+  dwell?: number;
+  by?: string | FieldAccessor | ChunkKeyIR;
+  from?: "first" | "last" | "center" | "edges" | number;
+}
+
+/** `time.parallel()`: start the children together. */
+export interface TimeParallelOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
+  type: "time.parallel";
+}
 
 /**
  * `derive(fn)` — opaque user transformation. Function bodies are not
@@ -262,7 +491,11 @@ export interface FilterOperator
     TranslatableIR,
     OperatorFlagsIR {
   type: "filter";
-  predicate: FieldPredicateIR;
+  /** A field predicate, or an expression read as a row predicate (a row
+   *  stays when it is true). */
+  predicate:
+    | FieldPredicateIR
+    | Exclude<ExprIR, string | number | boolean | null>;
 }
 
 /** A `by` key that groups consecutive rows, as `chunk(size)` builds it: row
@@ -672,6 +905,7 @@ export type MarkIR =
   | LayerChainIR;
 
 export type LeafMarkType =
+  | "time.transition"
   | "rect"
   | "circle"
   | "line"
@@ -688,6 +922,8 @@ export type LeafMarkType =
 // Carries a `lambdaId` field; resolved via the bridge.
 
 export type CombinatorMarkType =
+  | "time.history"
+  | "time.transition"
   | "spread"
   | "stack"
   | "scatter"
@@ -734,6 +970,7 @@ export interface LeafMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   type: LeafMarkType;
   name?: string;
   label?: LabelIR;
+  transition?: MarkTransitionIR;
   relate?: RelateClauseIR[];
   zOrder?: number;
   translate?: TranslateIR;
@@ -752,6 +989,7 @@ export interface CombinatorMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   children: MarkIR[];
   name?: string;
   label?: LabelIR;
+  transition?: MarkTransitionIR;
   relate?: RelateClauseIR[];
   zOrder?: number;
   translate?: TranslateIR;
@@ -833,7 +1071,10 @@ export type ChannelValue =
   | null
   | FieldAccessor
   | DatumValue
-  | BridgeLambdaSentinel;
+  | BridgeLambdaSentinel
+  | SourceReadIR
+  | ExprOpIR
+  | WhenIR;
 
 /** One axis of a `dims` option, as an interval: its anchors, each a channel
  *  value (`size` a size channel, the rest positions). */
@@ -1078,10 +1319,15 @@ export const OPERATOR_TYPES = [
   "treemap",
   "pack",
   "partition",
+  "time.sequence",
+  "time.history",
+  "time.stagger",
+  "time.parallel",
 ] as const;
 
 /** The set of leaf-mark type discriminators recognized in v0. */
 export const LEAF_MARK_TYPES: readonly LeafMarkType[] = [
+  "time.transition",
   "rect",
   "circle",
   "line",
@@ -1099,6 +1345,8 @@ export const LEAF_MARK_TYPES: readonly LeafMarkType[] = [
 
 /** The set of combinator-mark type discriminators recognized in v0. */
 export const COMBINATOR_MARK_TYPES: readonly CombinatorMarkType[] = [
+  "time.history",
+  "time.transition",
   "spread",
   "stack",
   "scatter",

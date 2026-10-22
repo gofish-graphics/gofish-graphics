@@ -407,8 +407,10 @@ arrangement of its children off the resolved tree. `translateOperator`
 delegates `.transition()` to the base operator, as it does `.label()`. Which
 phases can play depends on the chart's clock, so the build-in checks the
 recorded phases when it reads them (`checkPhases`), including an arrangement
-under a `time.sequence`, where it is not built yet. Animation is
-JavaScript-only, so nothing reaches the IR.
+under a `time.sequence`, where it is not built yet. The setter also stamps
+the spec on the operator's IR tag (`tag.transition`), so the emitter writes it
+as the operator's `transition` field, each phase as its arrangement
+(`{ kind: "stagger", ... }`).
 
 ## 8. The relationship with `createMark`
 
@@ -446,7 +448,9 @@ reads as named; without it, a tier that names its mark when the mark has no
 name (`ensureNamedMark`, for a later `.layer()` tier or a `time.sequence`'s
 transitions) would rename the mark and break `selectAll("dots")`.
 The `transition` modifier (`transitionModifier`, in `nameableMark`'s set)
-tags nothing on the mark. It records the mark's effects on each produced node,
+puts the spec on the mark's IR tag (`tag.transition`), which the emitter
+writes as the mark's `transition` field, each `Animation` value as
+`{ kind, ...options }`. It records the mark's effects on each produced node,
 and every reader finds them there: the build-in, and under a `time.sequence`
 the chart builder (`chainedUpdates`). So a spec chained on a mark inside
 `time.history({ last }, [...])`, `spread({...}, [...])` or a `createMark`

@@ -119,6 +119,7 @@ type FrontendIRDocument = {
   $schema?: string; // optional canonical URL
   root: MarkIR;
   tables?: Record<string, Row[]>; // by table id
+  sources?: Record<string, SourceIR>; // by source id
 };
 ```
 
@@ -410,6 +411,64 @@ and hand the list back through `.relate(() => clauses)`, so the
 layer schedules the clauses exactly as it would for a JS author. The field was
 called `constraints`, and held constraints only, before the `.constrain()` →
 `.relate()` rename.
+
+### Sources and expressions
+
+A clock, a piece of state or an input (a **source**) crosses as a
+declaration in the document's `sources` table, `{ kind, ...options }`, the
+options it was made with: `{ "kind": "timer", "domain": [1955, 2005],
+"duration": 10000, "playing": false, "at": 1997.5 }`, `{ "kind": "drag" }`.
+The kinds and their options are the `SOURCES` table in `descriptors.ts`
+(`timer`, `signal`, `wheel`, `pointer`, `drag`, `click`), which the validator
+walks as the option type `SourceDeclaration`. The emitter (`SourceIds` in
+`toJSON.ts`) declares each source object once, under an id minted in walk
+order (`s0`, `s1`, ...), so a clock read by a sequence and by a readout is
+one source. A source made with a JS function option (a drag's `hitTest`)
+has no declaration, and serializing it throws. The deserializer
+(`sourcesFromIR` in `fromJSON.ts`) builds a fresh live source per
+declaration per build, so each render of a document has its own; each
+registers with its own chart when that chart's resolve reads it.
+
+A read of a source is an **expression**, `ExprIR` in `schema.ts`:
+
+```json
+{ "type": "source", "id": "s0" }
+{ "type": "source", "id": "s1", "read": "y" }
+{ "type": "source", "id": "s3", "read": "field", "arg": "species" }
+{ "type": "field", "name": "count", "ops": [{ "op": "sum" }] }
+{ "type": "op", "op": "clip", "args": [<ExprIR>, 0, 95] }
+{ "type": "when", "branches": [[<ExprIR>, <ExprIR>]], "otherwise": <ExprIR> }
+```
+
+A literal is a bare JSON value, and inside an expression a string is always a
+literal. A read names its source by id and, for a source with several
+readable values, the read (`"over"`, `"y"`) and its argument; which reads a
+kind has is the kind's business, so the IR stays generic. The operations and
+their arities are `EXPR_OPS` in `schema.ts`, which the JS evaluator
+(`src/ast/expr.ts`) implements. A channel value may be an expression, and so
+may a `filter`'s `predicate`, a `time.sequence`'s `on` (a bare read) and a
+`time.transition`'s `at`. The IR does not say which tier a read lands in:
+JS infers it from the channel (`exprTier.ts`). The emitter writes an
+expression wherever an option holds one (`valueToIR`), and `unwrapOpts`
+turns each object form back into an expression at any depth, a bare read
+into the source itself.
+
+### Animation
+
+The time surface crosses as ordinary descriptor entries: the operators
+`time.sequence`, `time.history` (dual form, also a combinator mark),
+`time.stagger` and `time.parallel`, and the relational mark
+`time.transition`. The `Animation` family is a strategy family
+(`STRATEGIES.Animation`): an effect is `{ "kind": "grow", "duration": 600,
+"ease": "cubicOut" }`, a tween `{ "kind": "tween", "curve": { "kind":
+"monotone" } }`. An ease is a name; a function ease has no IR form and
+serializing it throws. The JS factories attach each value's wire form with
+`withWire` (`animationWire` in `effects.ts`). A mark's
+`.transition({ enter, update, exit })` is its `transition` field
+(`MarkTransition`), its `Animation` values per phase; an operator's is its
+`transition` field (`OperatorTransition`), an arrangement per phase,
+`{ "kind": "stagger", "lag": 60 }`. A build-in's clock belongs to the chart,
+held by the render options `playing` and `at` (`RenderIROptions`).
 
 ## A worked example
 

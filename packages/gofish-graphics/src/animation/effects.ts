@@ -16,6 +16,29 @@
 import type { DisplayList } from "gofish-ir";
 import { fadeItem } from "../ast/displayList/lowerHelpers";
 import type { InterpolationMethod } from "../interpolate";
+import { withWire } from "../ast/wire";
+
+/**
+ * The frontend-IR form of an `Animation` value, `{ kind, ...options }` as it
+ * was written (the `Animation` family in gofish-ir's `STRATEGIES`), or why
+ * it has none: an ease that is a JS function. The emitter reads it with
+ * `wireOf` and throws on the reason.
+ */
+export type AnimationWire = Record<string, unknown> | { noWire: string };
+
+export function animationWire(
+  kind: string,
+  opts: Record<string, unknown>
+): AnimationWire {
+  if (typeof opts.ease === "function")
+    return { noWire: `Animation.${kind}({ ease }) takes a JS function` };
+  return {
+    kind,
+    ...Object.fromEntries(
+      Object.entries(opts).filter(([, v]) => v !== undefined)
+    ),
+  };
+}
 
 /** A time warp `u -> u'` on [0, 1], or the name of a standard one. */
 export type Ease =
@@ -174,7 +197,10 @@ function effect(
   }
   // An unknown ease name fails here, where it was written.
   resolveEase(ease);
-  return { __effect: true, kind, duration, ease, progress, ...look };
+  return withWire(
+    { __effect: true, kind, duration, ease, progress, ...look },
+    animationWire(kind, opts)
+  );
 }
 
 /** `look` played backward: at progress `p` it shows what `look` shows at

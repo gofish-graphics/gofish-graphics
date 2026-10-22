@@ -29,6 +29,7 @@
  * note and are not built.
  */
 import { createOperator } from "./createOperator";
+import { withWire } from "../wire";
 import { createRelationalMark } from "./chart";
 import { Frame } from "../graphicalOperators/frame";
 import { tween } from "../graphicalOperators/tween";
@@ -316,9 +317,9 @@ export function sequence(opts: SequenceOptions) {
    *  It is also the owner of the keyframes' visibility rules. */
   const shown = sequenceWindow(tier.knots, tier.clock, tier.cycle);
   (operator as any).__timeTier = tier;
-  // The clock is a live JS signal, so a sequence cannot cross the Python
-  // bridge; leaving the IR tag off makes the emitter treat it as opaque.
-  return operator;
+  // A clock handed in with `on` is a source, so the emitter writes it as a
+  // read of the document's `sources` table.
+  return withWire(operator, { type: "time.sequence", opts });
 }
 
 export type TransitionOptions = {
@@ -549,6 +550,7 @@ const historyOperator = createOperator<any, HistoryOptions>(
   {
     split: (_o, d) => new Map([[0, d]]),
     arrangement: { kind: "none" },
+    serialize: "time.history",
   }
 );
 

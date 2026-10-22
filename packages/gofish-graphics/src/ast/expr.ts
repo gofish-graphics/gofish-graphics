@@ -29,6 +29,7 @@
  * decided by `tierOf` (`src/ast/exprTier.ts`), from the channel and the
  * expression, by one rule.
  */
+import type { Frontend } from "gofish-ir";
 import { FieldExpr, evalFieldValues, getFieldOps } from "./fieldExpr";
 
 /* ------------------------------ sources ------------------------------- */
@@ -66,30 +67,9 @@ export const isSource = (v: unknown): v is Source =>
 
 /* ------------------------------- nodes -------------------------------- */
 
-/** The comparison, arithmetic and boolean operations, plus the unary and
- *  n-ary ones, by their wire names. */
-export const EXPR_OPS = [
-  "gt",
-  "gtEq",
-  "lt",
-  "ltEq",
-  "eq",
-  "neq",
-  "add",
-  "sub",
-  "mul",
-  "div",
-  "and",
-  "or",
-  "not",
-  "clip",
-  "fillNull",
-  "floor",
-  "round",
-  "concatStr",
-] as const;
-
-export type ExprOp = (typeof EXPR_OPS)[number];
+/** An operation's name. The operations and their arities are declared once,
+ *  in gofish-ir (`Frontend.EXPR_OPS`); `evalOp` below implements each. */
+export type ExprOp = Frontend.ExprOpName;
 
 /** An expression tree in JS: the IR's shape (`Frontend.ExprIR`), with the
  *  source object in place of its id and the `FieldExpr` in place of its wire

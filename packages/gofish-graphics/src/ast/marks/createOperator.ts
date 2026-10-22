@@ -455,15 +455,18 @@ export const zOrderModifier = {
  * the effects on each produced node. The build-in reads them there
  * (`src/animation/install.ts`), and so does the chart builder when the flow
  * has a `time.sequence` (then the phases are `time.transition()`'s,
- * `chainedUpdates`). Animation is JS-only, so nothing reaches the IR.
+ * `chainedUpdates`). The spec rides the IR tag, so the emitter writes it as
+ * the mark's `transition` field.
  */
 export const transitionModifier = {
   name: "transition",
   apply: (node, _layerContext, _datum, spec) => {
     recordMarkTransition(node, spec);
   },
-  tag: (wrapped, base) => {
-    propagateSerialize(base, wrapped, () => {});
+  tag: (wrapped, base, spec) => {
+    propagateSerialize(base, wrapped, (tag) => {
+      tag.transition = spec;
+    });
   },
 } satisfies ModifierConfig<[spec: MarkTransition]>;
 
@@ -802,9 +805,11 @@ function translateOperator<T, U>(
   }
   // `.transition()` delegates the same way, so either chain order works.
   if (typeof (operator as any).transition === "function") {
-    attachTransitionOption(withTranslate, (spec) =>
-      (operator as any).transition(spec)
-    );
+    attachTransitionOption(withTranslate, (spec) => {
+      (operator as any).transition(spec);
+      const tag = wireOf(translated);
+      if (tag) tag.transition = spec;
+    });
   }
   return withTranslate;
 }
@@ -1261,6 +1266,8 @@ export function createOperator<Datum, Options extends Record<string, any>>(
     });
     attachTransitionOption(withTranslate, (spec) => {
       transitionState = spec;
+      const tag = wireOf(operator);
+      if (tag) tag.transition = spec;
     });
     return withTranslate;
   }

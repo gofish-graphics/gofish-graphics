@@ -269,7 +269,8 @@ t() = scale(domain → [0, duration]).invert(elapsed)
 | `duration` | Milliseconds for one pass through the domain. Default 5000.                                                                           |
 | `step`     | Quantize a continuous domain to `lo + k*step`, rounding down. Ignored for a band domain.                                              |
 | `loop`     | Wrap at the end (default `true`). When `false` the clock stops at the end of the domain.                                              |
-| `playing`  | Start playing (default `true`). `false` starts paused at the domain's start.                                                          |
+| `playing`  | Start playing (default `true`). `false` starts paused at `at`.                                                                        |
+| `at`       | Where the clock starts, in domain units. Default: the domain's start. With `playing: false` it is a clock held still at `at`.         |
 
 A band domain is the shape Observable's Scrubber uses, and the one Animated
 Vega-Lite gives a time encoding by default:

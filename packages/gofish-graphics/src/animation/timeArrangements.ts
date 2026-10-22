@@ -76,6 +76,7 @@ function timeOperator(spec: ArrangementSpec): TimeArrangementOperator {
       split: (o, refs) => groupEntries(refs, rowsOf, o.by),
       // Positions nothing in space.
       arrangement: { kind: "none" },
+      serialize: `time.${spec.kind}`,
     }
   )(spec) as unknown as TimeArrangementOperator;
   Object.defineProperty(operator, "__timeArrangement", { value: spec });

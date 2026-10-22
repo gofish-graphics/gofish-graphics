@@ -11,6 +11,7 @@
 
 import {
   COMBINATOR_MARK_TYPES,
+  EXPR_OPS,
   LEAF_MARK_TYPES,
   OPERATOR_TYPES,
   type ChannelValue,
@@ -98,6 +99,9 @@ interface Context {
   /** The ids of the document's tables, when the walk is of a document: a
    *  chart's `{type: "table", id}` must name one of them. */
   tables?: ReadonlySet<string>;
+  /** The ids of the document's sources, when the walk is of a document: a
+   *  `{type: "source", id}` read must name one of them. */
+  sources?: ReadonlySet<string>;
 }
 
 function walkDocument(node: unknown, path: string, ctx: Context): void {
@@ -122,12 +126,18 @@ function walkDocument(node: unknown, path: string, ctx: Context): void {
   optionalField(node, "$schema", path, ctx, expectString);
   // Every table a chart names, at any depth, is one of the document's.
   ctx.tables = new Set(isObject(node.tables) ? Object.keys(node.tables) : []);
+  ctx.sources = new Set(
+    isObject(node.sources) ? Object.keys(node.sources) : []
+  );
   // A root holds anything a mark position holds (`FrontendIR`).
   expectField(node, "root", path, ctx, walkMark);
   optionalField(node, "tables", path, ctx, walkTables);
+  optionalField(node, "sources", path, ctx, (v, p) =>
+    walkFieldType(t.record(t.ref("SourceDeclaration")), v, p, ctx)
+  );
   rejectUnknown(
     node,
-    ["irVersion", "ir", "$schema", "root", "tables"],
+    ["irVersion", "ir", "$schema", "root", "tables", "sources"],
     path,
     ctx
   );
@@ -609,6 +619,19 @@ function walkRefType(
     case "NodeSelectionIR":
       walkNodeSelection(value, path, ctx);
       return;
+    case "ExprIR":
+      walkExpr(value, path, ctx);
+      return;
+    case "SourceReadIR":
+      if (!isObject(value) || value.type !== "source") {
+        ctx.errors.push({
+          path,
+          message: `expected a source read { type: "source", id }, got ${JSON.stringify(value)}`,
+        });
+        return;
+      }
+      walkExpr(value, path, ctx);
+      return;
     case "FieldAccessor":
       if (!isObject(value)) {
         ctx.errors.push({
@@ -817,6 +840,10 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
     walkFieldAccessor(obj, path, ctx);
     return;
   }
+  if (obj.type === "source" || obj.type === "op" || obj.type === "when") {
+    walkExpr(obj, path, ctx);
+    return;
+  }
   if (obj.type === "literal") {
     if (!("value" in obj)) {
       ctx.errors.push({
@@ -828,6 +855,104 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
   }
   // Permissive fallback: allow an unknown `type` tag (and arrays) for
   // forward-compat.
+}
+
+/**
+ * An expression (`ExprIR`): a bare literal, a field read, a source read by
+ * id (which must name one of the document's sources), an operation of the
+ * right arity (`EXPR_OPS`), or a `when` chain.
+ */
+function walkExpr(value: unknown, path: string, ctx: Context): void {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  )
+    return;
+  if (!isObject(value)) {
+    ctx.errors.push({
+      path,
+      message: `an expression is a literal or a tagged object, got ${typeNameOf(value)}`,
+    });
+    return;
+  }
+  switch (value.type) {
+    case "field":
+      walkFieldAccessor(value, path, ctx);
+      return;
+    case "source":
+      expectField(value, "id", path, ctx, (v, p) => {
+        expectString(v, p, ctx);
+        if (typeof v === "string" && ctx.sources && !ctx.sources.has(v))
+          ctx.errors.push({
+            path: p,
+            message: `names source ${JSON.stringify(v)}, which the document's sources do not hold`,
+          });
+      });
+      optionalField(value, "read", path, ctx, expectString);
+      optionalField(value, "arg", path, ctx, expectString);
+      rejectUnknown(value, ["type", "id", "read", "arg"], path, ctx);
+      return;
+    case "op": {
+      const arity = (EXPR_OPS as Record<string, readonly [number, number?]>)[
+        value.op as string
+      ];
+      if (arity === undefined) {
+        ctx.errors.push({
+          path: `${path}.op`,
+          message: `unknown expression op ${JSON.stringify(value.op)}; expected one of ${Object.keys(EXPR_OPS).join(", ")}`,
+        });
+        return;
+      }
+      expectField(value, "args", path, ctx, (v, p) => {
+        if (!Array.isArray(v)) {
+          ctx.errors.push({ path: p, message: "args must be an array" });
+          return;
+        }
+        const [min, max] = arity;
+        if (v.length < min || (max !== undefined && v.length > max))
+          ctx.errors.push({
+            path: p,
+            message: `${String(value.op)} takes ${max === min ? min : `at least ${min}`} argument${min === 1 && max === min ? "" : "s"}, got ${v.length}`,
+          });
+        v.forEach((a, i) => walkExpr(a, `${p}[${i}]`, ctx));
+      });
+      rejectUnknown(value, ["type", "op", "args"], path, ctx);
+      return;
+    }
+    case "when":
+      expectField(value, "branches", path, ctx, (v, p) => {
+        if (!Array.isArray(v) || v.length === 0) {
+          ctx.errors.push({
+            path: p,
+            message: "branches must be a non-empty array of [condition, value]",
+          });
+          return;
+        }
+        v.forEach((b, i) => {
+          if (!Array.isArray(b) || b.length !== 2) {
+            ctx.errors.push({
+              path: `${p}[${i}]`,
+              message: "a branch is [condition, value]",
+            });
+            return;
+          }
+          walkExpr(b[0], `${p}[${i}][0]`, ctx);
+          walkExpr(b[1], `${p}[${i}][1]`, ctx);
+        });
+      });
+      optionalField(value, "otherwise", path, ctx, (v, p) =>
+        walkExpr(v, p, ctx)
+      );
+      rejectUnknown(value, ["type", "branches", "otherwise"], path, ctx);
+      return;
+    default:
+      ctx.errors.push({
+        path: `${path}.type`,
+        message: `expression type must be "field" | "source" | "op" | "when", got ${JSON.stringify(value.type)}`,
+      });
+  }
 }
 
 /**

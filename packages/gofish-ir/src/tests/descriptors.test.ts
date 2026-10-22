@@ -39,6 +39,7 @@ import type {
   LabelSpecIR,
   OverlapIR,
   TileIR,
+  AnimationIR,
 } from "../frontend/schema.js";
 
 declare const process: { exit(code: number): never };
@@ -137,6 +138,10 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
   ],
   pack: ["by"],
   partition: ["by", "dir", "alignment", "axes"],
+  "time.sequence": ["by", "duration", "loop", "playing", "at", "on", "cyclic"],
+  "time.history": ["last"],
+  "time.stagger": ["lag", "spacing", "dwell", "by", "from"],
+  "time.parallel": [],
 };
 
 console.log("\n# Descriptor fields agree with schema.ts operator interfaces");
@@ -325,6 +330,15 @@ const SCHEMA_STRATEGY_KEYS: Record<
       clearance: true,
     },
   } satisfies StrategyKeys<ShapeIR>,
+  Animation: {
+    grow: { duration: true, ease: true },
+    shrink: { duration: true, ease: true },
+    fadeIn: { duration: true, ease: true },
+    fadeOut: { duration: true, ease: true },
+    appear: { duration: true, ease: true },
+    wipe: { duration: true, ease: true, from: true, shape: true },
+    tween: { curve: true, ease: true },
+  } satisfies StrategyKeys<AnimationIR>,
 };
 
 console.log(

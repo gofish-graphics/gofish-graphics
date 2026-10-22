@@ -588,6 +588,16 @@ export default defineConfig({
               items: [{ text: "Shape", link: "/js/api/shape" }],
             },
             {
+              text: "Time",
+              collapsed: true,
+              items: [{ text: "time", link: "/js/api/time" }],
+            },
+            {
+              text: "Expressions",
+              collapsed: true,
+              items: [{ text: "Expressions", link: "/js/api/expressions" }],
+            },
+            {
               text: "Reactivity",
               collapsed: true,
               items: [
@@ -708,6 +718,11 @@ export default defineConfig({
               text: "Shape",
               collapsed: true,
               items: [{ text: "Shape", link: "/python/api/shape" }],
+            },
+            {
+              text: "Time",
+              collapsed: true,
+              items: [{ text: "time", link: "/python/api/time" }],
             },
             {
               text: "GoTree",

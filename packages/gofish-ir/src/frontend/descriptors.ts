@@ -313,6 +313,10 @@ export const MARK_BASE_FIELDS: FieldGroup = group({
   relate: { type: t.array(t.ref("RelateClauseIR")) },
   zOrder: { type: t.number },
   translate: { type: t.ref("TranslateIR") },
+  transition: {
+    type: t.ref("MarkTransition"),
+    doc: "`.transition({ enter, update, exit })`: how the mark looks as it enters, moves between keyframes, and leaves.",
+  },
   debug: {
     type: t.boolean,
     doc: "Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.",
@@ -356,6 +360,10 @@ export const PY_LEAF_BASE_KWARGS: FieldGroup = group({
 export const OPERATOR_BASE_FIELDS: FieldGroup = group({
   label: { type: t.ref("LabelIR") },
   translate: { type: t.ref("TranslateIR") },
+  transition: {
+    type: t.ref("OperatorTransition"),
+    doc: "`.transition({ enter, update, exit })`: how the operator's children are arranged in time.",
+  },
   debug: {
     type: t.boolean,
     doc: "Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.",
@@ -524,6 +532,144 @@ const calendarKind = (doc: string): StrategyKind => ({
   doc,
   params: { every: calendarEvery },
 });
+
+/** An effect's duration: milliseconds, or a field name (each mark's effect
+ *  lasts in proportion to its own value of that field). */
+const effectDuration: FieldSpec = {
+  type: t.union(t.num({ min: 0, finite: true }), t.string),
+  default: 500,
+  doc: "Milliseconds, or a field name: each mark's effect lasts in proportion to its own value of that field.",
+};
+
+/** The named eases (`Ease` in gofish-graphics' `animation/effects.ts`). */
+const EASES = [
+  "linear",
+  "quadIn",
+  "quadOut",
+  "quadInOut",
+  "cubicIn",
+  "cubicOut",
+  "cubicInOut",
+];
+
+/** An effect's ease, by name. */
+const effectEase: FieldSpec = {
+  type: t.enum(...EASES),
+  default: "cubicInOut",
+  doc: "A time warp, by name. A function ease is JS only.",
+};
+
+/**
+ * The sources: the clocks, state and inputs an expression reads, by kind. A
+ * document declares each one in its `sources` table as `{ kind, ...params }`
+ * (`SourceIR` in schema.ts); the host builds the live JS source from it. Same
+ * shape as a strategy family's kinds, so the option type below is built the
+ * same way.
+ */
+export const SOURCES = {
+  timer: {
+    doc: "A clock: a scale from a data domain onto wall-clock time, read backward, so its value is a value of the domain.",
+    params: {
+      domain: {
+        type: t.array(t.union(t.number, t.string)),
+        doc: "`[lo, hi]` (a continuous domain), or the values a band domain steps through. Omitted, `[0, duration]`.",
+      },
+      duration: {
+        type: t.num({ min: 0, finite: true }),
+        default: 5000,
+        doc: "Wall-clock milliseconds one sweep of the domain takes.",
+      },
+      step: {
+        type: t.num({ exclusiveMin: 0, finite: true }),
+        doc: "Quantize a continuous domain to `lo + k*step`.",
+      },
+      loop: {
+        type: t.boolean,
+        default: true,
+        doc: "Wrap at the end of the domain. False clamps at the end and pauses.",
+      },
+      playing: {
+        type: t.boolean,
+        default: true,
+        doc: "Start playing. False holds the clock at `at`.",
+      },
+      at: {
+        type: t.union(t.number, t.string),
+        doc: "Where the clock starts, in domain units. Omitted, the domain's start.",
+      },
+    },
+  },
+  signal: {
+    doc: "A piece of state, at its initial value.",
+    params: { init: { type: t.any, doc: "The initial value." } },
+  },
+  wheel: {
+    doc: "A wheel-driven number in `range`.",
+    params: {
+      range: {
+        type: t.tuple(t.number, t.number),
+        required: true,
+        doc: "The range the wheel maps onto.",
+      },
+      initial: {
+        type: t.number,
+        doc: "The initial value. Omitted, the range's midpoint.",
+      },
+      domain: {
+        type: t.tuple(t.number, t.number),
+        default: [0, 600],
+        doc: "The accumulated wheel delta the range is mapped from.",
+      },
+      round: {
+        type: t.boolean,
+        default: false,
+        doc: "Round the value to a whole number.",
+      },
+      sensitivity: {
+        type: t.number,
+        default: 1,
+        doc: "Multiplier on each wheel delta.",
+      },
+    },
+  },
+  pointer: {
+    doc: "The pointer over the chart. Reads: `over` (true on the mark under the pointer) and `field` (that mark's value of the field named by the read's argument).",
+    params: {},
+  },
+  drag: {
+    doc: "A drag on the chart, in data units. Reads: `x`, `y`, `x0`, `y0`, `dx`, `dy`, `active`.",
+    params: {},
+  },
+  click: {
+    doc: "Clicks on the chart's marks. Reads: `count`, `armed`.",
+    params: {},
+  },
+} satisfies Record<string, StrategyKind>;
+
+/** `time.stagger`'s options, which an arrangement on the wire carries too. */
+const staggerFields: FieldGroup = {
+  lag: {
+    type: t.num({ min: 0, finite: true }),
+    doc: "Milliseconds between the starts of neighboring groups.",
+  },
+  spacing: {
+    type: t.num({ finite: true }),
+    doc: "Milliseconds between one group's end and the next one's start; 0 is one after another.",
+  },
+  dwell: {
+    type: t.num({ min: 0, max: 1 }),
+    doc: "The share of the time spent between starts, 0 (all together) to 1 (back to back).",
+  },
+  by: {
+    type: t.union(t.string, t.ref("FieldAccessor"), t.ref("ChunkKey")),
+    doc: "Split the children by this key; children with equal keys start together.",
+  },
+  from: {
+    type: t.union(t.enum("first", "last", "center", "edges"), t.number),
+    default: "first",
+    doc: "Which group starts first.",
+  },
+};
 
 /**
  * The strategy families whose values cross the Python↔JS wire, by family
@@ -864,6 +1010,60 @@ export const STRATEGIES = {
       },
     },
   },
+  Animation: {
+    doc: "What changes as a mark enters, moves, or leaves: the values of `.transition()`'s `enter`, `update` and `exit`. The effects (`grow`, `shrink`, `fadeIn`, `fadeOut`, `appear`, `wipe`) are for `enter` and `exit`; `tween` is for `update`. An ease is a name; a function ease is JS only.",
+    kinds: {
+      grow: {
+        doc: "Grow from the mark's baseline to its laid-out size.",
+        params: { duration: effectDuration, ease: effectEase },
+      },
+      shrink: {
+        doc: "`grow` reversed: from the laid-out size down to the baseline.",
+        params: { duration: effectDuration, ease: effectEase },
+      },
+      fadeIn: {
+        doc: "Opacity from 0 to the mark's own.",
+        params: { duration: effectDuration, ease: effectEase },
+      },
+      fadeOut: {
+        doc: "Opacity from the mark's own to 0.",
+        params: { duration: effectDuration, ease: effectEase },
+      },
+      appear: {
+        doc: "No motion: hidden until the mark's start, then shown at once.",
+        params: { duration: effectDuration, ease: effectEase },
+      },
+      wipe: {
+        doc: 'Reveal the mark from one side, or from its center with `shape: "circle"`.',
+        params: {
+          duration: effectDuration,
+          ease: effectEase,
+          from: {
+            type: t.enum("bottom", "top", "left", "right"),
+            default: "bottom",
+            doc: "The side the reveal starts from, on screen.",
+          },
+          shape: {
+            type: t.enum("circle"),
+            doc: "A circular reveal from the mark's center.",
+          },
+        },
+      },
+      tween: {
+        doc: "How a mark moves between two keyframes of a `time.sequence` (`update`).",
+        params: {
+          curve: {
+            type: t.ref("Curve"),
+            doc: "How the run is read between keyframes. Omitted, `Curve.monotone()`.",
+          },
+          ease: {
+            type: t.enum(...EASES),
+            doc: "A time warp inside each keyframe interval, by name. Omitted, none.",
+          },
+        },
+      },
+    },
+  },
 } satisfies Record<string, StrategyFamily>;
 
 /** The name of a strategy family: `"Tile"`, `"Overlap"`, `"Curve"`,
@@ -1020,6 +1220,48 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
     doc: "The cells `struct({ x, y }).bin(...)` divides the plane of its two fields into: Bin.hex({ radius }) or Bin.voronoi({ seeds }).",
     type: strategyType(STRATEGIES.Bin, BIN_KINDS.struct),
   },
+  SourceDeclaration: {
+    doc: "One source of a document's `sources` table: `{ kind, ...options }`.",
+    type: t.union(...kindBranches({ doc: "", kinds: SOURCES })),
+  },
+  Arrangement: {
+    doc: "How an operator's children are arranged in time: time.stagger({ ... }) or time.parallel().",
+    type: t.union(
+      t.object({
+        kind: { type: t.literal("stagger"), required: true },
+        ...staggerFields,
+      }),
+      t.object({ kind: { type: t.literal("parallel"), required: true } })
+    ),
+  },
+  MarkTransition: {
+    doc: "A mark's `.transition({ enter, update, exit })`.",
+    type: t.object({
+      enter: {
+        type: t.union(t.ref("Animation"), t.array(t.ref("Animation"))),
+        doc: "How the mark enters: an effect, or several played together.",
+      },
+      update: {
+        type: t.ref("Animation"),
+        doc: "How the mark moves between keyframes: Animation.tween(...).",
+      },
+      exit: {
+        type: t.union(t.ref("Animation"), t.array(t.ref("Animation"))),
+        doc: "How the mark leaves.",
+      },
+    }),
+  },
+  OperatorTransition: {
+    doc: "An operator's `.transition({ enter, update, exit })`.",
+    type: t.object({
+      enter: {
+        type: t.ref("Arrangement"),
+        doc: "How the children are arranged in time as they enter.",
+      },
+      update: { type: t.ref("Arrangement") },
+      exit: { type: t.ref("Arrangement") },
+    }),
+  },
   // Each strategy family (`STRATEGIES`) is one entry, under its family name.
   ...Object.fromEntries(
     Object.entries(STRATEGIES).map(([name, family]) => [
@@ -1050,6 +1292,11 @@ export const AUTHORED_REFS: Readonly<
   // pass it through; the code that reads the nodes checks them, and the
   // serializers write each node as its IR (`Mark.to_dict` in Python).
   NodeSelectionIR: { holdsNodes: true },
+  // An expression (`ExprIR` in schema.ts), walked by `walkExpr`. Its object
+  // forms are tagged by `type` (`source`, `op`, `when`, `field`).
+  ExprIR: {},
+  // A read of a source by id, `{ type: "source", id, read?, arg? }`.
+  SourceReadIR: { tag: "source" },
 };
 
 /** The Python class for a named type, if it has one. */
@@ -1263,9 +1510,9 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
     doc: "Keep the rows a field predicate accepts (`filter(field(name).between(lo, hi, { closed }))`). A filter over a hand-written predicate has no wire form and serializes as an opaque `derive`.",
     fields: {
       predicate: {
-        type: t.ref("FieldPredicate"),
+        type: t.union(t.ref("FieldPredicate"), t.ref("ExprIR")),
         required: true,
-        doc: "The field predicate `field(name).between(lo, hi, { closed })` builds: `{ field, between: [lo, hi], closed? }`.",
+        doc: "The field predicate `field(name).between(lo, hi, { closed })` builds (`{ field, between: [lo, hi], closed? }`), or an expression read as a row predicate: a row stays when it is true.",
       },
     },
   }),
@@ -1508,6 +1755,65 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         "Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
       ),
     },
+  }),
+
+  "time.sequence": operator("time.sequence", {
+    doc: "One keyframe per value of `by`, laid out in one shared frame and shown one at a time as a clock plays: its own clock, or the source `on` names.",
+    fields: {
+      by: {
+        type: t.string,
+        required: true,
+        doc: "The numeric field whose values are the keyframes.",
+      },
+      duration: {
+        type: t.num({ min: 0, finite: true }),
+        default: 5000,
+        doc: "Milliseconds one pass through the field takes (own clock only).",
+      },
+      loop: {
+        type: t.boolean,
+        default: true,
+        doc: "Start over at the end (own clock only).",
+      },
+      playing: {
+        type: t.boolean,
+        default: true,
+        doc: "Start the clock (own clock only). False holds it at `at`.",
+      },
+      at: {
+        type: t.number,
+        doc: "Where the playhead starts, in the field's units (own clock only).",
+      },
+      on: {
+        type: t.ref("SourceReadIR"),
+        doc: "A clock to play on (a `timer` source), instead of one of its own. It owns its domain and play state, so `duration`, `loop`, `playing` and `at` are errors beside it.",
+      },
+      cyclic: {
+        type: t.union(t.boolean, t.num({ exclusiveMin: 0, finite: true })),
+        doc: "The field is a cycle: true infers the period from evenly spaced keyframes, a number is the period.",
+      },
+    },
+  }),
+
+  "time.history": operator("time.history", {
+    doc: "Keep the marks below on screen for `last` units of the sequence's field after their keyframe.",
+    fields: {
+      last: {
+        type: t.num({ min: 0 }),
+        default: Infinity,
+        doc: "How far back from the playhead the marks keep showing, in the sequence field's units. Infinity keeps everything reached.",
+      },
+    },
+  }),
+
+  "time.stagger": operator("time.stagger", {
+    doc: "Start the children (or the groups of `by`) one after another. As an operator it groups the refs it is given; as an operator's `.transition({ enter })` it arranges that operator's children.",
+    fields: staggerFields,
+  }),
+
+  "time.parallel": operator("time.parallel", {
+    doc: "Start the children together.",
+    fields: {},
   }),
 
   partition: operator("partition", {
@@ -1778,6 +2084,36 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       debug: {
         type: t.boolean,
         doc: "Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.",
+      },
+    },
+  }),
+
+  "time.transition": leafMark("time.transition", {
+    doc: "The mark that moves between the keyframes of a `time.sequence`, or, with no sequence and an `enter`, the build-in of the marks it selects.",
+    fields: {
+      along: {
+        type: t.string,
+        doc: "The keyframes' time field. Omitted, the flow's `time.sequence`'s `by`.",
+      },
+      at: {
+        type: t.union(t.number, t.ref("ExprIR")),
+        doc: "The playhead, in `along`'s units: a number, or an expression (a clock). Omitted, the sequence's clock.",
+      },
+      curve: {
+        type: t.ref("Curve"),
+        doc: "How the run is read between keyframes. Omitted, `Curve.monotone()`.",
+      },
+      fill: ch.color("Fill color of the moving mark."),
+      stroke: ch.color("Stroke color of the moving mark."),
+      strokeWidth: { type: t.number, doc: "Stroke width in pixels." },
+      opacity: { type: t.number, doc: "Opacity, 0 to 1." },
+      enter: {
+        type: t.union(t.ref("Animation"), t.array(t.ref("Animation"))),
+        doc: "How the marks enter. With no `time.sequence` this is a build-in.",
+      },
+      exit: {
+        type: t.union(t.ref("Animation"), t.array(t.ref("Animation"))),
+        doc: "How the marks leave.",
       },
     },
   }),
@@ -2094,6 +2430,14 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   line: combinatorMark("line", { fields: resolveFields(LEAF_MARKS.line) }),
+  "time.transition": combinatorMark("time.transition", {
+    doc: "Combinator form of `time.transition`, over explicit children.",
+    fields: resolveFields(LEAF_MARKS["time.transition"]),
+  }),
+  "time.history": combinatorMark("time.history", {
+    doc: "Combinator form of `time.history`: the history applies to these marks alone.",
+    fields: resolveFields(OPERATORS["time.history"]),
+  }),
   ribbon: combinatorMark("ribbon", {
     fields: resolveFields(LEAF_MARKS.ribbon),
   }),

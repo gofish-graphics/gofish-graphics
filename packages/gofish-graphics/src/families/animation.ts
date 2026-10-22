@@ -7,12 +7,17 @@
  *   rect({ h: "frequency" }).transition({ enter: Animation.grow({ duration: 600 }) })
  *
  * `lib.ts` binds this module as `Animation`, and `gofish-graphics/animation`
- * exports the same module. JS-only, like the rest of the animation surface.
+ * exports the same module. A value crosses the frontend IR as
+ * `{ kind, ...options }` (the `Animation` family in gofish-ir's
+ * `STRATEGIES`); one with a function `ease` is JS only.
  * The effects themselves are in `animation/effects.ts`.
  */
 import { time, type TransitionOptions } from "../ast/marks/time";
 import { resolveMethod } from "../interpolate";
+import { withWire } from "../ast/wire";
+import { withKindValues } from "../ast/strategyKind";
 import {
+  animationWire,
   resolveEase,
   type Ease,
   type Effect,
@@ -57,5 +62,11 @@ export const tween = (opts: TweenOptions = {}): TweenEffect => {
     ease,
     layer: () => time.transition({ curve: opts.curve, ease, moves: effect }),
   };
-  return effect;
+  return withWire(
+    effect,
+    animationWire("tween", {
+      curve: withKindValues(opts.curve),
+      ease: opts.ease,
+    })
+  );
 };

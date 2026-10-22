@@ -33,6 +33,7 @@ import {
   type FieldGroup,
   type FieldType,
 } from "./descriptors.js";
+import { EXPR_OPS } from "./schema.js";
 
 // ---------------------------------------------------------------------------
 // Descriptor → JSON Schema fragment
@@ -248,6 +249,12 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         type: "array",
         items: { type: "object" },
       },
+    },
+    sources: {
+      type: "object",
+      description:
+        'The sources the document\'s expressions read (clocks, signals, inputs), each declared once as { kind, ...options }, by the id a {type: "source", id} read names.',
+      additionalProperties: { $ref: "#/$defs/SourceDeclaration" },
     },
   },
   $defs: {
@@ -736,7 +743,66 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           required: ["__gofish_lambda"],
           properties: { __gofish_lambda: { type: "string" } },
         },
+        { $ref: "#/$defs/SourceReadIR" },
+        { $ref: "#/$defs/ExprOpIR" },
+        { $ref: "#/$defs/WhenIR" },
       ],
+    },
+    ExprIR: {
+      description:
+        "An expression: a literal (a string here is a literal, never a field name), a field read, a source read, an operation, or a when chain. JS evaluates it at a mark's datum.",
+      anyOf: [
+        { type: "string" },
+        { $ref: "#/$defs/Number" },
+        { type: "boolean" },
+        { type: "null" },
+        { $ref: "#/$defs/FieldAccessor" },
+        { $ref: "#/$defs/SourceReadIR" },
+        { $ref: "#/$defs/ExprOpIR" },
+        { $ref: "#/$defs/WhenIR" },
+      ],
+    },
+    SourceReadIR: {
+      description:
+        "A read of a source by id: its own value, or one of its named values (read), with an argument when that read takes one.",
+      type: "object",
+      required: ["type", "id"],
+      additionalProperties: false,
+      properties: {
+        type: { const: "source" },
+        id: { type: "string" },
+        read: { type: "string" },
+        arg: { type: "string" },
+      },
+    },
+    ExprOpIR: {
+      type: "object",
+      required: ["type", "op", "args"],
+      additionalProperties: false,
+      properties: {
+        type: { const: "op" },
+        op: { enum: Object.keys(EXPR_OPS) },
+        args: { type: "array", items: { $ref: "#/$defs/ExprIR" } },
+      },
+    },
+    WhenIR: {
+      type: "object",
+      required: ["type", "branches"],
+      additionalProperties: false,
+      properties: {
+        type: { const: "when" },
+        branches: {
+          type: "array",
+          minItems: 1,
+          items: {
+            type: "array",
+            minItems: 2,
+            maxItems: 2,
+            items: { $ref: "#/$defs/ExprIR" },
+          },
+        },
+        otherwise: { $ref: "#/$defs/ExprIR" },
+      },
     },
     ...GENERATED_DEFS,
   },

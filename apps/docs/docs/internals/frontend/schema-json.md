@@ -51,6 +51,13 @@ for the API.
           "type": "object"
         }
       }
+    },
+    "sources": {
+      "type": "object",
+      "description": "The sources the document's expressions read (clocks, signals, inputs), each declared once as { kind, ...options }, by the id a {type: \"source\", id} read names.",
+      "additionalProperties": {
+        "$ref": "#/$defs/SourceDeclaration"
+      }
     }
   },
   "$defs": {
@@ -831,8 +838,129 @@ for the API.
               "type": "string"
             }
           }
+        },
+        {
+          "$ref": "#/$defs/SourceReadIR"
+        },
+        {
+          "$ref": "#/$defs/ExprOpIR"
+        },
+        {
+          "$ref": "#/$defs/WhenIR"
         }
       ]
+    },
+    "ExprIR": {
+      "description": "An expression: a literal (a string here is a literal, never a field name), a field read, a source read, an operation, or a when chain. JS evaluates it at a mark's datum.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/Number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/FieldAccessor"
+        },
+        {
+          "$ref": "#/$defs/SourceReadIR"
+        },
+        {
+          "$ref": "#/$defs/ExprOpIR"
+        },
+        {
+          "$ref": "#/$defs/WhenIR"
+        }
+      ]
+    },
+    "SourceReadIR": {
+      "description": "A read of a source by id: its own value, or one of its named values (read), with an argument when that read takes one.",
+      "type": "object",
+      "required": ["type", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "source"
+        },
+        "id": {
+          "type": "string"
+        },
+        "read": {
+          "type": "string"
+        },
+        "arg": {
+          "type": "string"
+        }
+      }
+    },
+    "ExprOpIR": {
+      "type": "object",
+      "required": ["type", "op", "args"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "op"
+        },
+        "op": {
+          "enum": [
+            "gt",
+            "gtEq",
+            "lt",
+            "ltEq",
+            "eq",
+            "neq",
+            "add",
+            "sub",
+            "mul",
+            "div",
+            "and",
+            "or",
+            "not",
+            "clip",
+            "fillNull",
+            "floor",
+            "round",
+            "concatStr"
+          ]
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ExprIR"
+          }
+        }
+      }
+    },
+    "WhenIR": {
+      "type": "object",
+      "required": ["type", "branches"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "when"
+        },
+        "branches": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "$ref": "#/$defs/ExprIR"
+            }
+          }
+        },
+        "otherwise": {
+          "$ref": "#/$defs/ExprIR"
+        }
+      }
     },
     "DeriveOperator": {
       "description": "Transforms the data with a function, `derive(fn)`. A function does not serialize: the IR carries a Python bridge handle in its place.",
@@ -958,8 +1086,15 @@ for the API.
           "const": "filter"
         },
         "predicate": {
-          "$ref": "#/$defs/FieldPredicate",
-          "description": "The field predicate `field(name).between(lo, hi, { closed })` builds: `{ field, between: [lo, hi], closed? }`."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FieldPredicate"
+            },
+            {
+              "$ref": "#/$defs/ExprIR"
+            }
+          ],
+          "description": "The field predicate `field(name).between(lo, hi, { closed })` builds (`{ field, between: [lo, hi], closed? }`), or an expression read as a row predicate: a row stays when it is true."
         },
         "label": {
           "$ref": "#/$defs/LabelIR"
@@ -1540,6 +1675,197 @@ for the API.
         }
       }
     },
+    "Time.sequenceOperator": {
+      "description": "One keyframe per value of `by`, laid out in one shared frame and shown one at a time as a clock plays: its own clock, or the source `on` names.",
+      "type": "object",
+      "required": ["type", "by"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "time.sequence"
+        },
+        "by": {
+          "type": "string",
+          "description": "The numeric field whose values are the keyframes."
+        },
+        "duration": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Milliseconds one pass through the field takes (own clock only).",
+          "default": 5000
+        },
+        "loop": {
+          "type": "boolean",
+          "description": "Start over at the end (own clock only).",
+          "default": true
+        },
+        "playing": {
+          "type": "boolean",
+          "description": "Start the clock (own clock only). False holds it at `at`.",
+          "default": true
+        },
+        "at": {
+          "$ref": "#/$defs/Number",
+          "description": "Where the playhead starts, in the field's units (own clock only)."
+        },
+        "on": {
+          "$ref": "#/$defs/SourceReadIR",
+          "description": "A clock to play on (a `timer` source), instead of one of its own. It owns its domain and play state, so `duration`, `loop`, `playing` and `at` are errors beside it."
+        },
+        "cyclic": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          ],
+          "description": "The field is a cycle: true infers the period from evenly spaced keyframes, a number is the period."
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        },
+        "debug": {
+          "type": "boolean"
+        }
+      }
+    },
+    "Time.historyOperator": {
+      "description": "Keep the marks below on screen for `last` units of the sequence's field after their keyframe.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "time.history"
+        },
+        "last": {
+          "$ref": "#/$defs/Number",
+          "minimum": 0,
+          "description": "How far back from the playhead the marks keep showing, in the sequence field's units. Infinity keeps everything reached.",
+          "default": null
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        },
+        "debug": {
+          "type": "boolean"
+        }
+      }
+    },
+    "Time.staggerOperator": {
+      "description": "Start the children (or the groups of `by`) one after another. As an operator it groups the refs it is given; as an operator's `.transition({ enter })` it arranges that operator's children.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "time.stagger"
+        },
+        "lag": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Milliseconds between the starts of neighboring groups."
+        },
+        "spacing": {
+          "type": "number",
+          "description": "Milliseconds between one group's end and the next one's start; 0 is one after another."
+        },
+        "dwell": {
+          "$ref": "#/$defs/Number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "The share of the time spent between starts, 0 (all together) to 1 (back to back)."
+        },
+        "by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FieldAccessor"
+            },
+            {
+              "$ref": "#/$defs/ChunkKey"
+            }
+          ],
+          "description": "Split the children by this key; children with equal keys start together."
+        },
+        "from": {
+          "anyOf": [
+            {
+              "enum": ["first", "last", "center", "edges"]
+            },
+            {
+              "$ref": "#/$defs/Number"
+            }
+          ],
+          "description": "Which group starts first.",
+          "default": "first"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        },
+        "debug": {
+          "type": "boolean"
+        }
+      }
+    },
+    "Time.parallelOperator": {
+      "description": "Start the children together.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "time.parallel"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        },
+        "debug": {
+          "type": "boolean"
+        }
+      }
+    },
     "PartitionOperator": {
       "description": "Divide the space into the cells of a binned key, and give each group its cell. Each cell sits at its true place on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size of its own fills its cell, and a mark with a size of its own is centered in it.",
       "type": "object",
@@ -1627,6 +1953,18 @@ for the API.
         },
         {
           "$ref": "#/$defs/PackOperator"
+        },
+        {
+          "$ref": "#/$defs/Time.sequenceOperator"
+        },
+        {
+          "$ref": "#/$defs/Time.historyOperator"
+        },
+        {
+          "$ref": "#/$defs/Time.staggerOperator"
+        },
+        {
+          "$ref": "#/$defs/Time.parallelOperator"
         },
         {
           "$ref": "#/$defs/PartitionOperator"
@@ -2485,6 +2823,101 @@ for the API.
         }
       }
     },
+    "Time.transitionMark": {
+      "description": "The mark that moves between the keyframes of a `time.sequence`, or, with no sequence and an `enter`, the build-in of the marks it selects.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "time.transition"
+        },
+        "along": {
+          "type": "string",
+          "description": "The keyframes' time field. Omitted, the flow's `time.sequence`'s `by`."
+        },
+        "at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/ExprIR"
+            }
+          ],
+          "description": "The playhead, in `along`'s units: a number, or an expression (a clock). Omitted, the sequence's clock."
+        },
+        "curve": {
+          "$ref": "#/$defs/Curve",
+          "description": "How the run is read between keyframes. Omitted, `Curve.monotone()`."
+        },
+        "fill": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Fill color of the moving mark."
+        },
+        "stroke": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Stroke color of the moving mark."
+        },
+        "strokeWidth": {
+          "$ref": "#/$defs/Number",
+          "description": "Stroke width in pixels."
+        },
+        "opacity": {
+          "$ref": "#/$defs/Number",
+          "description": "Opacity, 0 to 1."
+        },
+        "enter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Animation"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Animation"
+              }
+            }
+          ],
+          "description": "How the marks enter. With no `time.sequence` this is a build-in."
+        },
+        "exit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Animation"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Animation"
+              }
+            }
+          ],
+          "description": "How the marks leave."
+        },
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "relate": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RelateClauseIR"
+          }
+        },
+        "zOrder": {
+          "$ref": "#/$defs/Number"
+        },
+        "debug": {
+          "type": "boolean"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        }
+      }
+    },
     "LineMark": {
       "description": "Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.",
       "type": "object",
@@ -2802,6 +3235,9 @@ for the API.
         },
         {
           "$ref": "#/$defs/RegionMark"
+        },
+        {
+          "$ref": "#/$defs/Time.transitionMark"
         },
         {
           "$ref": "#/$defs/LineMark"
@@ -3286,6 +3722,275 @@ for the API.
         }
       ],
       "description": "The cells `struct({ x, y }).bin(...)` divides the plane of its two fields into: Bin.hex({ radius }) or Bin.voronoi({ seeds })."
+    },
+    "SourceDeclaration": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "timer"
+            },
+            "domain": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Number"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "description": "`[lo, hi]` (a continuous domain), or the values a band domain steps through. Omitted, `[0, duration]`."
+            },
+            "duration": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Wall-clock milliseconds one sweep of the domain takes.",
+              "default": 5000
+            },
+            "step": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "Quantize a continuous domain to `lo + k*step`."
+            },
+            "loop": {
+              "type": "boolean",
+              "description": "Wrap at the end of the domain. False clamps at the end and pauses.",
+              "default": true
+            },
+            "playing": {
+              "type": "boolean",
+              "description": "Start playing. False holds the clock at `at`.",
+              "default": true
+            },
+            "at": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Number"
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "description": "Where the clock starts, in domain units. Omitted, the domain's start."
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "signal"
+            },
+            "init": {
+              "description": "The initial value."
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "wheel"
+            },
+            "range": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "prefixItems": [
+                {
+                  "$ref": "#/$defs/Number"
+                },
+                {
+                  "$ref": "#/$defs/Number"
+                }
+              ],
+              "description": "The range the wheel maps onto."
+            },
+            "initial": {
+              "$ref": "#/$defs/Number",
+              "description": "The initial value. Omitted, the range's midpoint."
+            },
+            "domain": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "prefixItems": [
+                {
+                  "$ref": "#/$defs/Number"
+                },
+                {
+                  "$ref": "#/$defs/Number"
+                }
+              ],
+              "description": "The accumulated wheel delta the range is mapped from.",
+              "default": [0, 600]
+            },
+            "round": {
+              "type": "boolean",
+              "description": "Round the value to a whole number.",
+              "default": false
+            },
+            "sensitivity": {
+              "$ref": "#/$defs/Number",
+              "description": "Multiplier on each wheel delta.",
+              "default": 1
+            }
+          },
+          "required": ["kind", "range"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "pointer"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "drag"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "click"
+            }
+          },
+          "required": ["kind"]
+        }
+      ],
+      "description": "One source of a document's `sources` table: `{ kind, ...options }`."
+    },
+    "Arrangement": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "stagger"
+            },
+            "lag": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Milliseconds between the starts of neighboring groups."
+            },
+            "spacing": {
+              "type": "number",
+              "description": "Milliseconds between one group's end and the next one's start; 0 is one after another."
+            },
+            "dwell": {
+              "$ref": "#/$defs/Number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "The share of the time spent between starts, 0 (all together) to 1 (back to back)."
+            },
+            "by": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/$defs/FieldAccessor"
+                },
+                {
+                  "$ref": "#/$defs/ChunkKey"
+                }
+              ],
+              "description": "Split the children by this key; children with equal keys start together."
+            },
+            "from": {
+              "anyOf": [
+                {
+                  "enum": ["first", "last", "center", "edges"]
+                },
+                {
+                  "$ref": "#/$defs/Number"
+                }
+              ],
+              "description": "Which group starts first.",
+              "default": "first"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "parallel"
+            }
+          },
+          "required": ["kind"]
+        }
+      ],
+      "description": "How an operator's children are arranged in time: time.stagger({ ... }) or time.parallel()."
+    },
+    "MarkTransition": {
+      "type": "object",
+      "properties": {
+        "enter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Animation"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Animation"
+              }
+            }
+          ],
+          "description": "How the mark enters: an effect, or several played together."
+        },
+        "update": {
+          "$ref": "#/$defs/Animation",
+          "description": "How the mark moves between keyframes: Animation.tween(...)."
+        },
+        "exit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Animation"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Animation"
+              }
+            }
+          ],
+          "description": "How the mark leaves."
+        }
+      },
+      "description": "A mark's `.transition({ enter, update, exit })`."
+    },
+    "OperatorTransition": {
+      "type": "object",
+      "properties": {
+        "enter": {
+          "$ref": "#/$defs/Arrangement",
+          "description": "How the children are arranged in time as they enter."
+        },
+        "update": {
+          "$ref": "#/$defs/Arrangement"
+        },
+        "exit": {
+          "$ref": "#/$defs/Arrangement"
+        }
+      },
+      "description": "An operator's `.transition({ enter, update, exit })`."
     },
     "Tile": {
       "anyOf": [
@@ -3849,6 +4554,255 @@ for the API.
         }
       ],
       "description": "The outline `enclose` draws around its members: the value of its `shape` option. `padding` and the paint stay on `enclose`."
+    },
+    "Animation": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "grow"
+            },
+            "duration": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "description": "Milliseconds, or a field name: each mark's effect lasts in proportion to its own value of that field.",
+              "default": 500
+            },
+            "ease": {
+              "enum": [
+                "linear",
+                "quadIn",
+                "quadOut",
+                "quadInOut",
+                "cubicIn",
+                "cubicOut",
+                "cubicInOut"
+              ],
+              "description": "A time warp, by name. A function ease is JS only.",
+              "default": "cubicInOut"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "shrink"
+            },
+            "duration": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "description": "Milliseconds, or a field name: each mark's effect lasts in proportion to its own value of that field.",
+              "default": 500
+            },
+            "ease": {
+              "enum": [
+                "linear",
+                "quadIn",
+                "quadOut",
+                "quadInOut",
+                "cubicIn",
+                "cubicOut",
+                "cubicInOut"
+              ],
+              "description": "A time warp, by name. A function ease is JS only.",
+              "default": "cubicInOut"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "fadeIn"
+            },
+            "duration": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "description": "Milliseconds, or a field name: each mark's effect lasts in proportion to its own value of that field.",
+              "default": 500
+            },
+            "ease": {
+              "enum": [
+                "linear",
+                "quadIn",
+                "quadOut",
+                "quadInOut",
+                "cubicIn",
+                "cubicOut",
+                "cubicInOut"
+              ],
+              "description": "A time warp, by name. A function ease is JS only.",
+              "default": "cubicInOut"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "fadeOut"
+            },
+            "duration": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "description": "Milliseconds, or a field name: each mark's effect lasts in proportion to its own value of that field.",
+              "default": 500
+            },
+            "ease": {
+              "enum": [
+                "linear",
+                "quadIn",
+                "quadOut",
+                "quadInOut",
+                "cubicIn",
+                "cubicOut",
+                "cubicInOut"
+              ],
+              "description": "A time warp, by name. A function ease is JS only.",
+              "default": "cubicInOut"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "appear"
+            },
+            "duration": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "description": "Milliseconds, or a field name: each mark's effect lasts in proportion to its own value of that field.",
+              "default": 500
+            },
+            "ease": {
+              "enum": [
+                "linear",
+                "quadIn",
+                "quadOut",
+                "quadInOut",
+                "cubicIn",
+                "cubicOut",
+                "cubicInOut"
+              ],
+              "description": "A time warp, by name. A function ease is JS only.",
+              "default": "cubicInOut"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "wipe"
+            },
+            "duration": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "description": "Milliseconds, or a field name: each mark's effect lasts in proportion to its own value of that field.",
+              "default": 500
+            },
+            "ease": {
+              "enum": [
+                "linear",
+                "quadIn",
+                "quadOut",
+                "quadInOut",
+                "cubicIn",
+                "cubicOut",
+                "cubicInOut"
+              ],
+              "description": "A time warp, by name. A function ease is JS only.",
+              "default": "cubicInOut"
+            },
+            "from": {
+              "enum": ["bottom", "top", "left", "right"],
+              "description": "The side the reveal starts from, on screen.",
+              "default": "bottom"
+            },
+            "shape": {
+              "enum": ["circle"],
+              "description": "A circular reveal from the mark's center."
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "tween"
+            },
+            "curve": {
+              "$ref": "#/$defs/Curve",
+              "description": "How the run is read between keyframes. Omitted, `Curve.monotone()`."
+            },
+            "ease": {
+              "enum": [
+                "linear",
+                "quadIn",
+                "quadOut",
+                "quadInOut",
+                "cubicIn",
+                "cubicOut",
+                "cubicInOut"
+              ],
+              "description": "A time warp inside each keyframe interval, by name. Omitted, none."
+            }
+          },
+          "required": ["kind"]
+        }
+      ],
+      "description": "What changes as a mark enters, moves, or leaves: the values of `.transition()`'s `enter`, `update` and `exit`. The effects (`grow`, `shrink`, `fadeIn`, `fadeOut`, `appear`, `wipe`) are for `enter` and `exit`; `tween` is for `update`. An ease is a name; a function ease is JS only."
     }
   }
 }
