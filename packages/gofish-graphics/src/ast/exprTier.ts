@@ -3,12 +3,12 @@
 // </gofish-wiki>
 
 /**
- * Which tier a source read in an expression lands in, inferred from the
+ * Which tier an expression on a channel is evaluated in, inferred from the
  * channel and the expression by ONE rule, so an expression needs no `live()`
  * wrapper (a JS closure still does: it is opaque, so `live(fn)` says what the
  * rule cannot see).
  *
- * The rule: an expression that reads a source PATCHES PAINT when
+ * The rule: an expression is evaluated AT PAINT, at the mark's datum, when
  *   1. its channel is a paint channel, one the display list draws without
  *      layout: a `DisplayList.Style` key, or text content; and
  *   2. its value reaches the screen as written: either the channel draws its
@@ -16,7 +16,12 @@
  *      expression can produce is a literal color (a `when(...)` whose branches
  *      are colors), so no color scale with an inferred domain stands between
  *      the value and the paint.
- * Otherwise it is a PIPELINE read: a change lays the chart out again.
+ * Otherwise it is an accessor of the PIPELINE.
+ *
+ * So a source the expression reads either patches paint or lays the chart out
+ * again when it changes. Whether the expression reads a source at all does
+ * not enter the rule: a paint-tier expression with none is evaluated once, at
+ * the mark's datum, as a paint-tier one with a source is at each change.
  *
  * DECISION FOR JOSH: text content counts as a paint channel (here, and only
  * here). A changing string changes the size it would measure at, so strictly
@@ -25,7 +30,7 @@
  * measured.
  */
 import { parse } from "../colorModes";
-import { type ExprNode, exprNode, isExprValue, sourcesOf } from "./expr";
+import { type ExprNode, exprNode, isExprValue } from "./expr";
 import type { Expr, Source } from "./expr";
 
 export type Tier = "paint" | "pipeline";
@@ -62,11 +67,9 @@ const isColorLiteral = (node: ExprNode): boolean =>
   (node.value === null ||
     (typeof node.value === "string" && parse(node.value) !== undefined));
 
-/** The tier of `expr` on `channel`. An expression that reads no source has
- *  nothing to re-run, so it is an ordinary accessor (`"pipeline"`). */
+/** The tier of `expr` on `channel`. */
 export function tierOf(channel: string, expr: Expr | Source): Tier {
   const node = exprNode(expr);
-  if (sourcesOf(node).size === 0) return "pipeline";
   if (!PAINT_CHANNELS.has(channel)) return "pipeline";
   if (COLOR_CHANNELS.has(channel) && !results(node).every(isColorLiteral))
     return "pipeline";

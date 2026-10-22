@@ -81,11 +81,13 @@ propagates, as in polars.
 
 **The tier is inferred.** An expression is data, so the pipeline can see what
 it reads and where its value goes, which a closure hides. `tierOf(channel,
-expr)` (`exprTier.ts`) applies one rule: a source read patches paint when the
-channel is a paint channel (a `DisplayList.Style` key, or text content) and the
+expr)` (`exprTier.ts`) applies one rule: an expression is evaluated at paint,
+at the mark's datum, when the channel is a paint channel (a `DisplayList.Style` key, or text content) and the
 value reaches the screen as written (the channel draws it raw, or every value
 the expression can produce is a literal color, so no color scale stands
-between it and the paint). Anything else is a pipeline read. `liveChannelsOf`
+between it and the paint). Anything else is an accessor of the pipeline. The
+rule does not ask whether the expression reads a source; a source it reads
+then patches paint or lays the chart out again. `liveChannelsOf`
 asks it, so an expression of the paint tier is stamped exactly as a `live(fn)`
 is, and one of the pipeline tier is an ordinary accessor whose read registers
 a pipeline dependency. So `fill: when(hover.over).then("red").otherwise("blue")`

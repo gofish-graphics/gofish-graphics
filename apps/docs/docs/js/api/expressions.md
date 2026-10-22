@@ -65,12 +65,14 @@ error; fold the rows with an aggregate.
 
 ## Tier
 
-Where a source read in an expression takes effect is inferred from the
-channel, by one rule. On a paint channel (`fill`, `stroke`, `strokeWidth`,
+Where an expression is evaluated is inferred from the channel, by one rule.
+On a paint channel (`fill`, `stroke`, `strokeWidth`,
 `opacity`, `fillOpacity`, `mixBlendMode`, `strokeDasharray`, `filter`, or text
 content) whose value reaches the screen as written (a raw channel, or a color
-channel whose every possible value is a literal color), a change patches paint.
-Anywhere else, a change lays the chart out again. A JavaScript closure is
+channel whose every possible value is a literal color), it is evaluated at
+paint, at the mark's datum, and a change to a source it reads patches paint.
+Anywhere else it is an accessor of the pipeline, and a change to a source it
+reads lays the chart out again. A JavaScript closure is
 opaque to the rule, so it keeps [`live(fn)`](/js/reactivity) to say it is paint.
 
 ## Serialization

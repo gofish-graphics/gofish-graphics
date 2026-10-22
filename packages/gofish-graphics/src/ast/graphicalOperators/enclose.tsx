@@ -34,6 +34,7 @@ import { isValue, type MaybeValue } from "../data";
 import { foldFinite } from "../../util";
 import { UNDEFINED, type UnderlyingSpace } from "../underlyingSpace";
 import type { LiveValue } from "../../interaction/live";
+import type { Expr } from "../expr";
 import type { LayerContext } from "../marks/chart";
 import { resolveRefData } from "../marks/chartBuilder";
 import { box, type Nodes, type Shape } from "../../families/shape";
@@ -50,13 +51,13 @@ export type EncloseOptions = {
   padding?: number;
   /** The outline: a call in the Shape family. Default `Shape.box()`. */
   shape?: Shape;
-  fill?: MaybeValue<string> | LiveValue;
-  stroke?: MaybeValue<string> | LiveValue;
-  strokeWidth?: number | LiveValue;
+  fill?: MaybeValue<string> | LiveValue | Expr;
+  stroke?: MaybeValue<string> | LiveValue | Expr;
+  strokeWidth?: number | LiveValue | Expr;
   strokeDasharray?: string;
-  opacity?: number | LiveValue;
+  opacity?: number | LiveValue | Expr;
   /** Opacity of the fill alone; the stroke keeps `opacity`. */
-  fillOpacity?: number | LiveValue;
+  fillOpacity?: number | LiveValue | Expr;
 };
 
 /** The resolved options the node is built from (live values already read). */

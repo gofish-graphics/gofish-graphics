@@ -95,7 +95,7 @@ import {
   type SchemaEntry,
 } from "../schema";
 import { withWire } from "../wire";
-import { isExprValue } from "../expr";
+import { isExprValue, type Expr } from "../expr";
 import { withKindValues } from "../strategyKind";
 import { datumOfInput } from "./markResult";
 export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
@@ -920,11 +920,11 @@ export function createRelationalMark<O extends Record<string, unknown>>(
 }
 
 export type LineOptions = {
-  fill?: MaybeValue<string> | LiveValue;
-  stroke?: MaybeValue<string> | LiveValue;
-  strokeWidth?: number | LiveValue;
+  fill?: MaybeValue<string> | LiveValue | Expr;
+  stroke?: MaybeValue<string> | LiveValue | Expr;
+  strokeWidth?: number | LiveValue | Expr;
   strokeDasharray?: string;
-  opacity?: number | LiveValue;
+  opacity?: number | LiveValue | Expr;
   mixBlendMode?: "normal" | "multiply";
   // Screen-space path shape, made by a call in the Curve family
   // (`Curve.bezier()`, `Curve.orthogonal()`, `Curve.arc({ direction })`,
@@ -985,10 +985,10 @@ export const line = createRelationalMark<LineOptions>(
 );
 
 export type RibbonOptions = {
-  fill?: MaybeValue<string> | LiveValue;
-  stroke?: MaybeValue<string> | LiveValue;
-  strokeWidth?: number | LiveValue;
-  opacity?: number | LiveValue;
+  fill?: MaybeValue<string> | LiveValue | Expr;
+  stroke?: MaybeValue<string> | LiveValue | Expr;
+  strokeWidth?: number | LiveValue | Expr;
+  opacity?: number | LiveValue | Expr;
   mixBlendMode?: "normal" | "multiply";
   dir?: "x" | "y";
   // Screen-space path shape for the band edges (`"linear"` | `bezier()`).

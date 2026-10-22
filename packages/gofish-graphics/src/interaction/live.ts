@@ -34,6 +34,7 @@ import {
 } from "solid-js";
 import { runInLiveEval } from "./resolveContext";
 import { isPaintExpr } from "../ast/exprTier";
+import type { Expr } from "../ast/expr";
 
 const LIVE_BRAND = Symbol.for("gofish.liveValue");
 
@@ -149,7 +150,9 @@ export const liveChannelsOf = (
  * a leaf mark's channel encoding) read each channel straight through instead of
  * casting the `LiveValue` arm back off one by one.
  */
-export type StripLive<O> = { [K in keyof O]: Exclude<O[K], LiveValue> };
+export type StripLive<O> = {
+  [K in keyof O]: Exclude<O[K], LiveValue | Expr>;
+};
 
 /**
  * `opts` with each live channel replaced by its resolve-time value at `datum`.

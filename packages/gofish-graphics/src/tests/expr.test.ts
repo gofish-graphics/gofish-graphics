@@ -141,9 +141,9 @@ console.log("tier inference");
   ok("a position: pipeline", tierOf("y", cut) === "pipeline");
   ok("a size: pipeline", tierOf("h", cut.mul(2)) === "pipeline");
   ok(
-    "no source: an ordinary accessor",
+    "the rule does not ask whether a source is read",
     tierOf("fill", when(field("a").gt(1)).then("red").otherwise("blue")) ===
-      "pipeline"
+      "paint"
   );
 }
 
