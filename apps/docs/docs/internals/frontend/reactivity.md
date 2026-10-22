@@ -607,3 +607,18 @@ fresh source from each declaration per `renderIR`, so two charts never share
 one by accident. `live()` callbacks and any source made with a JS function
 option (a drag's `hitTest`) are closures, so they do not cross; serializing
 one is an error.
+
+A Python callback that calls a source (`bins()` in a `derive`) is the
+**kernel tier**: the pipeline tier with a round trip added. Each bridge call
+ships the current values of the build's sources of one value, read inside
+`readUnregistered` (resolveContext.ts), which hands no read the registrar, so
+shipping a value makes nothing a dependency. The reply names the sources the
+callback read, and the deserializer (`kernelBridge` in
+serialize/fromJSON.ts) reads each of them again under the resolve's
+registrar, so the chart becomes a pipeline reader of exactly those, as a JS
+`derive` that read them would. If one of them changed during the round trip,
+the reply is stale, and the chart is invalidated, so the scheduler's
+latest-wins rule re-runs it once with the newest value. The round trip sits
+inside the resolve, so it holds the page-wide render queue for its length
+(the declared shortcut above): every other chart's render waits for the
+kernel.

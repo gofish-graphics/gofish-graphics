@@ -44,17 +44,18 @@ declare global {
   }
 }
 
-/** The bridge over HTTP: one POST of the rows (base64 Arrow) per call,
- *  answered by the reply's shipped document. */
+/** The bridge over HTTP: one POST per call of the rows (base64 Arrow) and
+ *  the current values of the document's sources, answered by the reply's
+ *  shipped document. */
 function httpBridge(
   deriveServerUrl: string | undefined
 ): Serialize.DeriveBridge | undefined {
   if (deriveServerUrl === undefined) return undefined;
-  return arrowBridge(async (lambdaId, rowsB64) => {
+  return arrowBridge(async (lambdaId, rowsB64, sources) => {
     const resp = await fetch(`${deriveServerUrl}/call/${lambdaId}`, {
       method: "POST",
-      headers: { "Content-Type": "text/plain" },
-      body: rowsB64,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows_b64: rowsB64, sources }),
     });
     if (!resp.ok) {
       throw new Error(

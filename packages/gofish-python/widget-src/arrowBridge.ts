@@ -46,20 +46,22 @@ export function rowsToArrowB64(items: readonly unknown[]): string {
   return btoa(binary);
 }
 
-/** How a host's transport sends one call: the callback's lambda id and the
- *  rows as base64 Arrow, answered by the shipped reply. */
+/** How a host's transport sends one call: the callback's lambda id, the
+ *  rows as base64 Arrow, and the current values of the document's sources
+ *  (JSON), answered by the shipped reply. */
 export type SendCall = (
   lambdaId: string,
-  rowsB64: string
+  rowsB64: string,
+  sources: Serialize.SourceValues
 ) => Promise<ShippedDocument<Serialize.BridgeReply>>;
 
 /** The bridge over a host's transport: one call, rows out as Arrow, the
  *  reply's tables decoded from Arrow. */
 export function arrowBridge(send: SendCall): Serialize.DeriveBridge {
   return {
-    async call(lambdaId, rows) {
+    async call(lambdaId, rows, sources) {
       return decodeDocument<Serialize.BridgeReply>(
-        await send(lambdaId, rowsToArrowB64(rows))
+        await send(lambdaId, rowsToArrowB64(rows), sources)
       );
     },
   };

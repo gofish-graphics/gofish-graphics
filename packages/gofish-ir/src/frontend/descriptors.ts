@@ -1294,9 +1294,12 @@ export const AUTHORED_REFS: Readonly<
   NodeSelectionIR: { holdsNodes: true },
   // An expression (`ExprIR` in schema.ts), walked by `walkExpr`. Its object
   // forms are tagged by `type` (`source`, `op`, `when`, `field`).
-  ExprIR: {},
-  // A read of a source by id, `{ type: "source", id, read?, arg? }`.
-  SourceReadIR: { tag: "source" },
+  // In Python, an `Expr` (gofish/expr.py) or a `field(...)`, which the
+  // option walk writes as its IR.
+  ExprIR: { pyClass: "Expr" },
+  // A read of a source by id, `{ type: "source", id, read?, arg? }`. In
+  // Python, the `Source` object itself (gofish/sources.py).
+  SourceReadIR: { pyClass: "Source", tag: "source" },
 };
 
 /** The Python class for a named type, if it has one. */

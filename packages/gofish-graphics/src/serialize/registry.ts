@@ -96,7 +96,27 @@ export { cutSlices, cutMark, offsetOp };
 export interface DeriveBridge {
   /** Call the Python callback registered under `lambdaId` with `rows`, a
    *  list that may carry column types (`getColumnTypes`), which the
-   *  transport reads to type its columns. */
+   *  transport reads to type its columns, and with `sources`, the current
+   *  values of the document's sources of one value, by id, which the
+   *  callback reads when it calls a source (`bins()`). */
+  call(
+    lambdaId: string,
+    rows: readonly unknown[],
+    sources: SourceValues
+  ): Promise<BridgeReply>;
+}
+
+/** The current values of a document's sources of one value (a `timer`, a
+ *  `signal`, a `wheel`), by source id, as a bridge call ships them. */
+export type SourceValues = Record<string, unknown>;
+
+/**
+ * How the deserializer calls a Python callback: the host's
+ * {@link DeriveBridge} wrapped by `kernelBridge` (fromJSON.ts), which ships
+ * the values of the document's sources with each call and makes the chart a
+ * pipeline reader of the sources the callback read.
+ */
+export interface Kernel {
   call(lambdaId: string, rows: readonly unknown[]): Promise<BridgeReply>;
 }
 
@@ -114,6 +134,13 @@ export interface BridgeReply {
   /** The reply's tables, decoded. A callback's list need not be records,
    *  so a table here is any list. */
   tables?: Record<string, unknown[]>;
+  /** The sources the reply names or its callback read, declared by the
+   *  document's ids (a reply is a document, so it declares the sources it
+   *  reads; a source the document already declared keeps its live JS
+   *  source). */
+  sources?: Frontend.Sources;
+  /** The ids of the sources the callback read while it ran. */
+  reads?: string[];
 }
 
 /**
@@ -123,7 +150,7 @@ export interface BridgeReply {
  * no rows without crossing the bridge.
  */
 export async function callForRows(
-  bridge: DeriveBridge,
+  bridge: Kernel,
   lambdaId: string,
   rows: readonly unknown[]
 ): Promise<any[]> {
@@ -227,7 +254,7 @@ export const FACTORIES: Record<string, (...args: any[]) => any> = {
  */
 export const OPERATOR_BUILDERS: Record<
   string,
-  (opts: Record<string, any>, bridge?: DeriveBridge) => Operator<any, any>
+  (opts: Record<string, any>, bridge?: Kernel) => Operator<any, any>
 > = {
   // The IR names a Python lambda: the rebuilt operator calls it through the
   // bridge and types the returned rows by the operator's `schema`.
@@ -328,7 +355,7 @@ export function rebuild(
   kind: Frontend.ConstructKind,
   type: string,
   opts: Record<string, any>,
-  { children, bridge }: { children?: unknown[]; bridge?: DeriveBridge } = {}
+  { children, bridge }: { children?: unknown[]; bridge?: Kernel } = {}
 ): any {
   const table = Frontend.DESCRIPTOR_TABLES[kind];
   if (!Object.hasOwn(table, type)) return undefined;

@@ -13,6 +13,7 @@ export {
   rebuild,
   type BridgeReply,
   type DeriveBridge,
+  type SourceValues,
 } from "./registry";
 
 // Column types (schema.ts) a host attaches to the rows it decodes, the way a

@@ -986,7 +986,7 @@ class TestSchema:
 
     def test_field_takes_no_unit(self):
         # A column's unit lives in the schema, not on a channel.
-        assert field("x") == {"type": "field", "name": "x"}
+        assert dict(field("x")) == {"type": "field", "name": "x"}
         with pytest.raises(TypeError):
             field("x", "plane")  # type: ignore[call-arg]
 

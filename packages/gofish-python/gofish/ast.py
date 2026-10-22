@@ -13,6 +13,8 @@ import uuid
 
 from . import _nonfinite
 from ._nonfinite import KEEP, encode_number
+from .expr import Expr, ExprMethods, expr_ir
+from .sources import Source, _SourceIds, _SourceNotShipped, _READING, _reading
 
 T = TypeVar("T")
 
@@ -31,6 +33,17 @@ class Operator:
         # repeated calls append rather than overwrite. Mirrors JS
         # createOperator.ts's `labelState` array.
         self._labels: List[dict] = []
+        # `.transition(enter=, update=, exit=)`, in wire form.
+        self._transition: Optional[dict] = None
+
+    def _copy(self) -> "Operator":
+        """A new operator of the same subclass, with the same options and
+        modifiers, for a modifier method to change."""
+        new_op = type(self)(self.op_type, **self.kwargs)
+        new_op._translate = self._translate
+        new_op._labels = list(self._labels)
+        new_op._transition = self._transition
+        return new_op
 
     def translate(
         self,
@@ -44,8 +57,7 @@ class Operator:
         it offsets the arranged result without merging ``x`` / ``y`` into the
         operator's own channel grammar.
         """
-        new_op = type(self)(self.op_type, **self.kwargs)
-        new_op._labels = list(self._labels)
+        new_op = self._copy()
         new_op._translate = {
             k: v for k, v in {"x": x, "y": y}.items() if v is not None
         }
@@ -79,9 +91,39 @@ class Operator:
         Returns:
             New Operator (same subclass as self) with the label appended.
         """
-        new_op = type(self)(self.op_type, **self.kwargs)
-        new_op._translate = self._translate
+        new_op = self._copy()
         new_op._labels = [*self._labels, _label_spec(accessor, options)]
+        return new_op
+
+    def transition(
+        self,
+        *,
+        enter: Optional["Operator"] = None,
+        update: Optional["Operator"] = None,
+        exit: Optional["Operator"] = None,
+    ) -> "Operator":
+        """How this operator's children are arranged in time as they enter,
+        move and leave: ``time.stagger(...)`` or ``time.parallel()``. Mirrors
+        JS ``op.transition({ enter, update, exit })``.
+
+        Example::
+
+            spread(by="letter", dir="x").transition(enter=time.stagger(lag=60))
+
+        Returns:
+            New Operator (same subclass as self) with the transition set.
+        """
+        from .time import _arrangement
+
+        spec = {
+            k: _arrangement(v, k)
+            for k, v in {"enter": enter, "update": update, "exit": exit}.items()
+            if v is not None
+        }
+        if not spec:
+            raise TypeError(".transition() needs enter=, update= or exit=")
+        new_op = self._copy()
+        new_op._transition = spec
         return new_op
 
     def to_dict(self, payload: "_Payload") -> dict:
@@ -95,6 +137,8 @@ class Operator:
             d["translate"] = self._translate
         if self._labels:
             d["label"] = self._labels
+        if self._transition is not None:
+            d["transition"] = self._transition
         return d
 
 
@@ -139,6 +183,14 @@ class DeriveOperator(Operator):
             "not a layout operator with per-group leaves to label. Chain "
             ".label() on the layout operator (stack/spread/group/scatter/"
             "table/treemap) instead."
+        )
+
+    def transition(self, *args, **kwargs) -> "DeriveOperator":
+        """A ``derive`` has no children to arrange in time."""
+        raise NotImplementedError(
+            "derive(fn) does not support .transition(): it is a data "
+            "transform with no children to arrange in time. Chain "
+            ".transition() on a layout operator instead."
         )
 
     def to_dict(self, payload: "_Payload") -> dict:
@@ -248,9 +300,16 @@ class _PendingAccessor:
 
 
 def _is_tagged(v: Any) -> bool:
-    """A `field(...)` or `datum(...)` value: a dict subclass that already holds
-    wire data, so the option walks treat it as a leaf."""
-    return isinstance(v, (FieldAccessor, DatumValue))
+    """A value the option walks treat as a leaf: a `field(...)` or `datum(...)`
+    value (a dict subclass that already holds wire data), an expression, or a
+    source (which `_wire_options` writes as its IR)."""
+    return isinstance(v, (DatumValue, ExprMethods, Source))
+
+
+def _writes_ir(v: Any) -> bool:
+    """An expression or a source, which `_wire_options` writes as its
+    `ExprIR` with the payload (a `field(...)` is wire data already)."""
+    return isinstance(v, (Expr, Source))
 
 
 def _channel(v: Any) -> Any:
@@ -275,7 +334,10 @@ def _channel(v: Any) -> Any:
 
 
 def _scan_options(construct: str, options: Dict[str, Any]) -> Dict[str, List["_PendingAccessor"]]:
-    """The accessors in a construct's options, by option key, in one walk.
+    """The parts of a construct's options that are written with the payload,
+    by option key, in one walk: its accessors, and its expressions and
+    sources (an expression may sit in any option: a channel, a `filter`
+    predicate, a `time.sequence`'s `on`).
 
     A Python callable crosses to JS only as a channel accessor, which the
     generated factories wrap with `_channel` for the options the descriptor
@@ -289,7 +351,7 @@ def _scan_options(construct: str, options: Dict[str, Any]) -> Dict[str, List["_P
         accessors: List[_PendingAccessor] = []
 
         def visit(x: Any, key: str = key, accessors: list = accessors) -> Any:
-            if isinstance(x, _PendingAccessor):
+            if isinstance(x, _PendingAccessor) or _writes_ir(x):
                 accessors.append(x)
                 return x
             if _is_tagged(x):
@@ -313,10 +375,11 @@ def _wire_options(
 ) -> Dict[str, Any]:
     """The options as the wire carries them: each `_PendingAccessor` becomes
     its `{"__gofish_lambda": id}` sentinel, at any depth, and ``payload``
-    records its callback (``_accessor_reply``). Only the options
-    `_scan_options` found accessors in are walked; the rest are the same
-    objects. The JS deserializer turns each sentinel back into an accessor
-    that calls into Python."""
+    records its callback (``_accessor_reply``); each expression and source
+    becomes its ``ExprIR``, and ``payload`` declares the sources it reads.
+    Only the options `_scan_options` found such parts in are walked; the rest
+    are the same objects. The JS deserializer turns each sentinel back into
+    an accessor that calls into Python."""
     return {
         k: _nonfinite.walk(
             v,
@@ -326,6 +389,8 @@ def _wire_options(
                 )
             }
             if isinstance(x, _PendingAccessor)
+            else expr_ir(x, payload)
+            if _writes_ir(x)
             else x
             if _is_tagged(x)
             else KEEP,
@@ -448,7 +513,7 @@ class _Root:
         by the id its data names). A host ships the same document with its
         tables as Arrow instead (``ir_payload``)."""
         root, payload = _walk(self)
-        return _document(root, payload.json_tables())
+        return _document(root, payload.json_tables(), payload.sources)
 
 
 class Mark(_Root):
@@ -494,6 +559,8 @@ class Mark(_Root):
         # render). Mirrors JS `node._zOrder` (`.zOrder(n)`).
         self._z_order: Optional[float] = None
         self._translate: Optional[dict] = None
+        # `.transition(enter=, update=, exit=)`, in wire form.
+        self._transition: Optional[dict] = None
 
     def _copy_meta(self, target: "Mark") -> "Mark":
         target._name = self._name
@@ -505,6 +572,7 @@ class Mark(_Root):
         target._key = self._key
         target._z_order = self._z_order
         target._translate = self._translate
+        target._transition = self._transition
         return target
 
     def bind_data(self, datum: Any, key: Optional[str] = None) -> "Mark":
@@ -625,6 +693,45 @@ class Mark(_Root):
         new_mark._labels = [*self._labels, _label_spec(accessor, options)]
         return new_mark
 
+    def transition(
+        self,
+        *,
+        enter: Any = None,
+        update: Any = None,
+        exit: Any = None,
+    ) -> "Mark":
+        """How the mark looks as it enters, moves between the keyframes of a
+        ``time.sequence``, and leaves. Mirrors JS
+        ``mark.transition({ enter, update, exit })``.
+
+        Args:
+            enter: An ``Animation`` effect (``Animation.grow(duration=600)``),
+                or a list of them played together.
+            update: ``Animation.tween(...)``: how the mark moves between
+                keyframes.
+            exit: An ``Animation`` effect, or a list of them.
+
+        Returns:
+            New Mark (same subclass as self) with the transition set.
+        """
+        from ._generated import _to_wire
+
+        spec = {
+            k: v
+            for k, v in {"enter": enter, "update": update, "exit": exit}.items()
+            if v is not None
+        }
+        if not spec:
+            raise TypeError(".transition() needs enter=, update= or exit=")
+        new_mark = type(self)(
+            self.mark_type, _children=self._children, **self.kwargs
+        )
+        self._copy_meta(new_mark)
+        new_mark._transition = _to_wire(
+            ("ref", "MarkTransition"), spec, ".transition()"
+        )
+        return new_mark
+
     def children(self) -> List[Any]:
         """The mark positions this mark holds: a combinator's children."""
         return self._children or []
@@ -658,6 +765,8 @@ class Mark(_Root):
             )
         if self._labels:
             d["label"] = self._labels
+        if self._transition is not None:
+            d["transition"] = self._transition
         # Only RelatableMark carries _relate, but reading via getattr keeps
         # the base class oblivious to the subclass extension.
         relate = getattr(self, "_relate", None)
@@ -687,6 +796,8 @@ class Mark(_Root):
         axes: Optional[Any] = None,
         legend: Optional[bool] = None,
         padding: Optional[float] = None,
+        playing: Optional[bool] = None,
+        at: Optional[float] = None,
         debug: bool = False,
     ):
         """
@@ -694,13 +805,15 @@ class Mark(_Root):
         pattern `spread({...}, [marks]).render(container, {w, h})`.
 
         The options are the JS ``.render(container, options)`` options
-        (``w``, ``h``, ``axes``, ``legend``, ``padding``, ``debug``); one left
+        (``w``, ``h``, ``axes``, ``legend``, ``padding``, ``playing``, ``at``,
+        ``debug``); one left
         unset (``None``) takes its default.
 
         Returns a GoFishChartWidget; in a notebook this auto-displays.
         """
         return _render_widget(
-            self, w=w, h=h, axes=axes, legend=legend, padding=padding, debug=debug
+            self, w=w, h=h, axes=axes, legend=legend, padding=padding,
+            playing=playing, at=at, debug=debug,
         )
 
     def save(
@@ -711,11 +824,14 @@ class Mark(_Root):
         axes: Optional[Any] = None,
         legend: Optional[bool] = None,
         padding: Optional[float] = None,
+        playing: Optional[bool] = None,
+        at: Optional[float] = None,
         debug: bool = False,
     ):
         """Save this mark's render to ``path`` (see ``ChartBuilder.save``)."""
         widget = self.render(
-            w=w, h=h, axes=axes, legend=legend, padding=padding, debug=debug
+            w=w, h=h, axes=axes, legend=legend, padding=padding,
+            playing=playing, at=at, debug=debug,
         )
         widget.save(path)
         return widget
@@ -1488,6 +1604,8 @@ class ChartBuilder(_Root):
         axes: Optional[Any] = None,
         legend: Optional[bool] = None,
         padding: Optional[float] = None,
+        playing: Optional[bool] = None,
+        at: Optional[float] = None,
         debug: bool = False,
     ):
         """
@@ -1505,6 +1623,9 @@ class ChartBuilder(_Root):
                 wins over this one.
             padding: Extra pixels between the drawing and the SVG edge (the JS
                 render option ``padding``). Leave unset for the default.
+            playing: Play the chart's build-in (its marks'
+                ``.transition(enter=...)``). False holds it at ``at``.
+            at: Where the build-in clock starts, in milliseconds.
             debug: Whether to enable debug mode
 
         Returns:
@@ -1522,7 +1643,8 @@ class ChartBuilder(_Root):
         if self._mark is None:
             raise ValueError("Chart must have a mark before rendering")
         return _render_widget(
-            self, w=w, h=h, axes=axes, legend=legend, padding=padding, debug=debug
+            self, w=w, h=h, axes=axes, legend=legend, padding=padding,
+            playing=playing, at=at, debug=debug,
         )
 
     def save(
@@ -1533,6 +1655,8 @@ class ChartBuilder(_Root):
         axes: Optional[Any] = None,
         legend: Optional[bool] = None,
         padding: Optional[float] = None,
+        playing: Optional[bool] = None,
+        at: Optional[float] = None,
         debug: bool = False,
     ):
         """Save the rendered chart to ``path`` (format inferred from the
@@ -1547,7 +1671,8 @@ class ChartBuilder(_Root):
             >>> chart(data).mark(rect(h="y")).save("chart.svg")
         """
         widget = self.render(
-            w=w, h=h, axes=axes, legend=legend, padding=padding, debug=debug
+            w=w, h=h, axes=axes, legend=legend, padding=padding,
+            playing=playing, at=at, debug=debug,
         )
         widget.save(path)
         return widget
@@ -2720,7 +2845,7 @@ def datum(value: Any) -> DatumValue:
     return DatumValue({"type": "datum", "datum": value})
 
 
-class FieldAccessor(dict):
+class FieldAccessor(ExprMethods, dict):
     """
     The `{type: "field", name, ops?}` wire shape, as a dict
     subclass so `field(name)` supports the same chainable pipeline syntax as
@@ -2743,7 +2868,15 @@ class FieldAccessor(dict):
     - `normalize()` is valid only on an operator's (`spread`/`stack`)
       entry-flagged `size` channel — `size=field("count").normalize()` turns
       the stack axis into a space-filling spine (the mosaic/marimekko case).
+
+    It is also an expression leaf (``gofish/expr.py``), so it takes the
+    expression operations: ``field("count").sum() > cut``. As in polars,
+    ``==`` builds an expression, so compare two accessors' wire forms with
+    ``dict(a) == dict(b)``.
     """
+
+    def _expr_ir(self, payload: Any) -> Any:
+        return dict(self)
 
     def _with_op(self, op: dict) -> "FieldAccessor":
         out = FieldAccessor(self)
@@ -2897,13 +3030,16 @@ class FieldPredicate(dict):
 
 
 def filter(
-    predicate: Union[FieldPredicate, Callable[[dict], bool]],
+    predicate: Union[FieldPredicate, "Expr", Callable[[dict], bool]],
 ) -> Operator:
     """Keep the rows a predicate accepts, and drop the rest.
 
     Mirrors JS ``filter(pred)``. A field predicate,
     ``field("day").between(100, 120, closed="right")``, goes on the wire as
-    ``{type: "filter", predicate}``. A plain Python function of one row is a
+    ``{type: "filter", predicate}``, and so does an expression, read as a
+    row predicate (a row stays where it is true):
+    ``filter(field("day") == day)`` keeps the rows of the day a clock is on,
+    and runs in the browser. A plain Python function of one row is a
     callback, so that filter is a :func:`derive` and runs in Python, like
     JS's ``filter`` over a hand-written predicate.
 
@@ -2912,6 +3048,8 @@ def filter(
     """
     if isinstance(predicate, FieldPredicate):
         return Operator("filter", predicate=dict(predicate))
+    if isinstance(predicate, ExprMethods):
+        return Operator("filter", predicate=predicate)
     if callable(predicate):
         # Data always flows as a list, so the filter keeps a sublist.
         return derive(lambda rows: [row for row in rows if predicate(row)])
@@ -3393,7 +3531,19 @@ def chart(
 # A callback, as a payload records it: the rows JS calls it with and the
 # call's scope (see `_Payload`), to the reply's root and the payload the reply
 # ships (see `_Payload.callback`).
-_Reply = Callable[[List[Any], str], Tuple[dict, "_Payload"]]
+_Reply = Callable[[List[Any], "_Payload"], dict]
+
+
+class _Callback:
+    """A callback as a host registers it: its reply, and the source ids of
+    the document that named it, which a call's reply names its sources by
+    (so a reply's read of a source the document declared is that source)."""
+
+    __slots__ = ("reply", "sources")
+
+    def __init__(self, reply: _Reply, sources: _SourceIds):
+        self.reply = reply
+        self.sources = sources
 
 
 class _Payload:
@@ -3409,7 +3559,12 @@ class _Payload:
       ``derive`` operator, an accessor, a mark function), recorded as the
       walk writes its id. A host registers them and answers JS's calls with
       ``answer``. A call's reply is a payload of its own, so a mark
-      function's reply carries the callbacks of what it drew.
+      function's reply carries the callbacks of what it drew;
+    - ``sources``: the declaration of every source the IR reads (a clock, a
+      signal, an input), by id, keyed by the source object's identity, so a
+      source named twice is declared once. The ids are the document's
+      (``source_ids``), shared by the root walk and every reply to a call
+      from that document.
 
     A reply's payload has the call's ``scope`` (see ``answer``), and names
     each callback it records by the scope and its walk order rather than by
@@ -3419,12 +3574,24 @@ class _Payload:
     ones it registered before: the registry holds one set per distinct
     call, not one per call."""
 
-    def __init__(self, scope: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        scope: Optional[str] = None,
+        source_ids: Optional[_SourceIds] = None,
+    ) -> None:
         self.tables: Dict[str, Any] = {}
         self._ids: Dict[int, str] = {}
-        self.callbacks: Dict[str, _Reply] = {}
+        self.callbacks: Dict[str, _Callback] = {}
+        self.sources: Dict[str, Dict[str, Any]] = {}
+        self.source_ids = _SourceIds() if source_ids is None else source_ids
         self._scope = scope
         self._names: Dict[str, str] = {}
+
+    def source(self, source: Source) -> str:
+        """Declare ``source``; return the id a source read in the IR names."""
+        sid = self.source_ids.id_of(source, self._scope)
+        self.sources[sid] = source._decl()
+        return sid
 
     def table(self, data: Any) -> dict:
         """The data IR of a chart over ``data``: its table's id."""
@@ -3443,7 +3610,7 @@ class _Payload:
             lambda_id = self._names.setdefault(
                 lambda_id, f"{self._scope}.{len(self._names)}"
             )
-        self.callbacks[lambda_id] = reply
+        self.callbacks[lambda_id] = _Callback(reply, self.source_ids)
         return lambda_id
 
     def json_tables(self) -> Dict[str, List[dict]]:
@@ -3462,9 +3629,8 @@ def _table_reply(fn: Callable[[List[Any]], Any]) -> _Reply:
     table of the list ``fn`` returned (its rows, or any other items; see
     ``arrow_utils.to_arrow_table``)."""
 
-    def reply(rows: List[Any], scope: str) -> Tuple[dict, "_Payload"]:
-        payload = _Payload(scope)
-        return payload.table(fn(rows)), payload
+    def reply(rows: List[Any], payload: "_Payload") -> dict:
+        return payload.table(fn(rows))
 
     return reply
 
@@ -3482,27 +3648,25 @@ def _mark_fn_reply(fn: Callable[[List[Any]], Any]) -> _Reply:
     ``{"__inputRef": i, "datum": ...}`` row (a ref can't cross the bridge);
     it becomes an ``_InputRef``, so ``d[0].datum`` reads as in JS (#591)."""
 
-    def reply(rows: List[Any], scope: str) -> Tuple[dict, "_Payload"]:
-        return _walk(
-            fn(
-                [
-                    _InputRef(row["__inputRef"], row.get("datum"))
-                    if isinstance(row, dict) and "__inputRef" in row
-                    else row
-                    for row in rows
-                ]
-            ),
-            scope,
+    def reply(rows: List[Any], payload: "_Payload") -> dict:
+        drawn = fn(
+            [
+                _InputRef(row["__inputRef"], row.get("datum"))
+                if isinstance(row, dict) and "__inputRef" in row
+                else row
+                for row in rows
+            ]
         )
+        return drawn.to_dict(payload)
 
     return reply
 
 
-def _walk(root: Any, scope: Optional[str] = None) -> Tuple[dict, "_Payload"]:
+def _walk(root: Any) -> Tuple[dict, "_Payload"]:
     """``root``'s IR (a chart, a ``.layer(...)`` chain, or a mark: a root
     holds anything a mark position does), and what the walk collected
-    beside it, in ``scope`` for a call's reply (see ``_Payload``)."""
-    payload = _Payload(scope)
+    beside it (see ``_Payload``)."""
+    payload = _Payload()
     return root.to_dict(payload), payload
 
 
@@ -3530,29 +3694,39 @@ def _json_value(value: Any) -> Any:
             return encode_number(v)
         if isinstance(v, (datetime.date, datetime.time)):
             return v.isoformat()
+        if isinstance(v, FieldAccessor):
+            # Its wire form, as a plain dict: a document holds data, and
+            # `==` on an accessor builds an expression.
+            return _nonfinite.walk(dict(v), swap)
         return KEEP
 
     return _nonfinite.walk(value, swap)
 
 
-def _document(root: dict, tables: Dict[str, Any]) -> dict:
-    """The IR document envelope around ``root`` and its ``tables``, written
-    as JSON once at its top (``_json_value``), as JS ``toJSON`` writes it."""
+def _document(
+    root: dict, tables: Dict[str, Any], sources: Dict[str, Any]
+) -> dict:
+    """The IR document envelope around ``root``, its ``tables`` and its
+    ``sources``, written as JSON once at its top (``_json_value``), as JS
+    ``toJSON`` writes it."""
     doc: dict = {"irVersion": 0, "ir": "gofish-frontend", "root": root}
     if tables:
         doc["tables"] = tables
+    if sources:
+        doc["sources"] = sources
     return _json_value(doc)
 
 
 def _transport(root: dict, payload: "_Payload") -> dict:
-    """The document a host ships: ``root`` and its tables as base64 Arrow IPC
-    by id (timestamp and date columns cross as Arrow times)."""
+    """The document a host ships: ``root``, its tables as base64 Arrow IPC
+    by id (timestamp and date columns cross as Arrow times), and its
+    sources."""
     from .arrow_utils import b64_tables
 
-    return _document(root, b64_tables(payload.tables))
+    return _document(root, b64_tables(payload.tables), payload.sources)
 
 
-def ir_payload(root: Any) -> Tuple[dict, Dict[str, _Reply]]:
+def ir_payload(root: Any) -> Tuple[dict, Dict[str, _Callback]]:
     """What a host ships to render ``root``: its document, with the tables as
     base64 Arrow, and the callbacks the IR names, by lambda id, which the
     host answers JS's calls with (``answer``). The notebook widget and the
@@ -3561,12 +3735,26 @@ def ir_payload(root: Any) -> Tuple[dict, Dict[str, _Reply]]:
     return _transport(root_ir, payload), payload.callbacks
 
 
-def answer(callbacks: Dict[str, _Reply], lambda_id: str, rows_b64: str) -> dict:
+def answer(
+    callbacks: Dict[str, _Callback],
+    lambda_id: str,
+    rows_b64: str,
+    sources: Dict[str, Any],
+) -> dict:
     """Answer one call from JS: run the callback named ``lambda_id`` on the
     rows JS sent (base64 Arrow), register the callbacks its reply names, and
     return the reply's document, shipped like a root's: its root (a table
     reference for a derive or an accessor, a mark-position IR for a mark
-    function) and its tables as base64 Arrow.
+    function), its tables as base64 Arrow, and its sources.
+
+    ``sources`` is the current value of each of the document's sources of
+    one value, by id. While the callback runs they are what the sources
+    read (``bins()`` returns the value JS shipped), and each read is
+    recorded: the reply's ``reads`` lists the ids, and JS makes the chart a
+    reader of exactly those sources (the kernel tier). The reply declares
+    the sources it read or names, by the document's ids. A read of a source
+    JS shipped no value for (one only this callback names) stops the
+    callback; the reply declares it, and JS calls again with its value.
 
     The reply's scope is the call itself, the callback and the rows, so the
     callbacks a mark function's reply names are named by the call that made
@@ -3576,13 +3764,26 @@ def answer(callbacks: Dict[str, _Reply], lambda_id: str, rows_b64: str) -> dict:
 
     from .arrow_utils import arrow_to_records
 
-    reply = callbacks.get(lambda_id)
-    if reply is None:
+    entry = callbacks.get(lambda_id)
+    if entry is None:
         raise KeyError(f"no Python callback is registered as {lambda_id}")
     scope = hashlib.sha256(f"{lambda_id}\n{rows_b64}".encode()).hexdigest()[:16]
-    root, payload = reply(arrow_to_records(base64.b64decode(rows_b64)), scope)
+    entry.sources.restart(scope)
+    payload = _Payload(scope, entry.sources)
+    rows = arrow_to_records(base64.b64decode(rows_b64))
+    reading, token = _reading(sources, entry.sources, scope)
+    try:
+        root = entry.reply(rows, payload)
+    except _SourceNotShipped:
+        # The callback stopped at a source JS has no value for; JS adopts
+        # its declaration below and calls again.
+        root = payload.table([])
+    finally:
+        _READING.reset(token)
+    for sid in reading.reads:
+        payload.sources.setdefault(sid, entry.sources.declaration(sid))
     callbacks.update(payload.callbacks)
-    return _transport(root, payload)
+    return {**_transport(root, payload), "reads": reading.reads}
 
 
 def _render_widget(
@@ -3592,6 +3793,8 @@ def _render_widget(
     axes: Optional[Any],
     legend: Optional[bool],
     padding: Optional[float],
+    playing: Optional[bool],
+    at: Optional[float],
     debug: bool,
 ):
     """Render ``root`` as a notebook widget: its document and the callbacks
@@ -3608,6 +3811,8 @@ def _render_widget(
         axes=axes,
         legend=legend,
         padding=padding,
+        playing=playing,
+        at=at,
         debug=debug,
     )
 
@@ -3652,6 +3857,8 @@ class LayerBuilder(_Root):
         axes: Optional[Any] = None,
         legend: Optional[bool] = None,
         padding: Optional[float] = None,
+        playing: Optional[bool] = None,
+        at: Optional[float] = None,
         debug: bool = False,
     ):
         """
@@ -3669,13 +3876,17 @@ class LayerBuilder(_Root):
                 wins over this one.
             padding: Extra pixels between the drawing and the SVG edge (the JS
                 render option ``padding``). Leave unset for the default.
+            playing: Play the chart's build-in (its marks'
+                ``.transition(enter=...)``). False holds it at ``at``.
+            at: Where the build-in clock starts, in milliseconds.
             debug: Whether to enable debug mode
 
         Returns:
             GoFishChartWidget instance that will display in Jupyter
         """
         return _render_widget(
-            self, w=w, h=h, axes=axes, legend=legend, padding=padding, debug=debug
+            self, w=w, h=h, axes=axes, legend=legend, padding=padding,
+            playing=playing, at=at, debug=debug,
         )
 
     def save(
@@ -3686,11 +3897,14 @@ class LayerBuilder(_Root):
         axes: Optional[Any] = None,
         legend: Optional[bool] = None,
         padding: Optional[float] = None,
+        playing: Optional[bool] = None,
+        at: Optional[float] = None,
         debug: bool = False,
     ):
         """Save the chain's render to ``path`` (see ``ChartBuilder.save``)."""
         widget = self.render(
-            w=w, h=h, axes=axes, legend=legend, padding=padding, debug=debug
+            w=w, h=h, axes=axes, legend=legend, padding=padding,
+            playing=playing, at=at, debug=debug,
         )
         widget.save(path)
         return widget

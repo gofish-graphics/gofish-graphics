@@ -63,9 +63,11 @@ import {
   PY_OPERATOR_BASE_KWARGS,
   LABEL_OPTIONS,
   STRATEGIES,
+  SOURCES,
   pyKwarg,
   resolveFields,
   type StrategyFamily,
+  type StrategyKind,
   type FieldGroup,
   type FieldSpec,
   type FieldType,
@@ -328,9 +330,11 @@ function renderOptsCore(
     `            opts[_k] = _v`,
     `    return opts`,
   ].join("\n");
-  return [`def ${fnName}(*, ${sig}) -> Dict[str, Any]:`, docstring, body].join(
-    "\n"
-  );
+  return [
+    `def ${fnName}(${sig === "" ? "" : `*, ${sig}`}) -> Dict[str, Any]:`,
+    docstring,
+    body,
+  ].join("\n");
 }
 
 /** Combinator-only mark that always takes children + a small options set
@@ -650,6 +654,45 @@ for (const name of ["line", "ribbon", "enclose"]) {
 {
   const d = COMBINATOR_MARKS["layer"];
   parts.push(renderOptsCore("_layer_opts", resolveFields(d), d.doc) + "\n");
+}
+
+// The time surface (`gofish/time.py`): one core per construct. The
+// operators take the operator base kwargs; `time.transition` takes the mark
+// base `debug`, as line/ribbon do.
+for (const [name, fields, doc] of [
+  [
+    "_time_sequence_opts",
+    { ...OPERATORS["time.sequence"].fields, ...PY_OPERATOR_BASE_KWARGS },
+    OPERATORS["time.sequence"].doc,
+  ],
+  [
+    "_time_history_opts",
+    { ...OPERATORS["time.history"].fields, ...PY_OPERATOR_BASE_KWARGS },
+    OPERATORS["time.history"].doc,
+  ],
+  [
+    "_time_stagger_opts",
+    { ...OPERATORS["time.stagger"].fields, ...PY_OPERATOR_BASE_KWARGS },
+    OPERATORS["time.stagger"].doc,
+  ],
+  [
+    "_time_transition_opts",
+    {
+      ...LEAF_MARKS["time.transition"].fields,
+      debug: MARK_BASE_FIELDS.debug,
+    },
+    LEAF_MARKS["time.transition"].doc,
+  ],
+] as Array<[string, FieldGroup, string | undefined]>) {
+  parts.push(renderOptsCore(name, fields, doc) + "\n");
+}
+
+// The sources (`gofish/sources.py`): one core per kind of the SOURCES table,
+// whose result is the source's declaration in the document's `sources`.
+for (const [kind, k] of Object.entries(SOURCES) as Array<
+  [string, StrategyKind]
+>) {
+  parts.push(renderOptsCore(`_${kind}_source_opts`, k.params, k.doc) + "\n");
 }
 
 // chart(data, **options): the chart-level options (CHART_OPTIONS).

@@ -5,7 +5,8 @@
  *   - JS reads `doc` (the IR document, its tables as base64 Arrow) and the
  *     render options on mount and renders.
  *   - For every Python callback the IR names (a `derive` operator, an
- *     accessor, a mark function), JS sets `call_request` and awaits a
+ *     accessor, a mark function), JS sets `call_request` (the rows, and the
+ *     current values of the document's sources) and awaits a
  *     `call_response` change. Python's `@traitlets.observe` answers it.
  *     Sequential — at most one call in flight per widget.
  *   - On success/failure, JS sets `render_result` so Python can read
@@ -34,6 +35,8 @@ interface WidgetModel {
   get(key: "legend"): boolean | null;
   get(key: "padding"): number | null;
   get(key: "debug"): boolean;
+  get(key: "playing"): boolean | null;
+  get(key: "at"): number | null;
   get(key: "container_id"): string;
   get(key: "call_response"): {
     request_id: string;
@@ -86,7 +89,11 @@ function traitTransport(model: WidgetModel): SendCall {
   // `call_request` write happens in its own comm tick.
   let chain: Promise<unknown> = Promise.resolve();
 
-  function sendOne(lambdaId: string, rowsB64: string): Promise<Reply> {
+  function sendOne(
+    lambdaId: string,
+    rowsB64: string,
+    sources: Serialize.SourceValues
+  ): Promise<Reply> {
     if (
       typeof (model as any).set !== "function" ||
       typeof (model as any).save_changes !== "function"
@@ -105,17 +112,18 @@ function traitTransport(model: WidgetModel): SendCall {
         request_id: requestId,
         lambda_id: lambdaId,
         rows_b64: rowsB64,
+        sources,
       });
       model.save_changes();
     });
   }
 
-  return (lambdaId, rowsB64) => {
+  return (lambdaId, rowsB64, sources) => {
     // Recover from a previous failure so one bad call doesn't block the
     // queue.
     const next = chain.then(
-      () => sendOne(lambdaId, rowsB64),
-      () => sendOne(lambdaId, rowsB64)
+      () => sendOne(lambdaId, rowsB64, sources),
+      () => sendOne(lambdaId, rowsB64, sources)
     );
     chain = next.catch(() => undefined);
     return next;
@@ -185,6 +193,8 @@ function renderChart(
     axes: model.get("axes") ?? undefined,
     legend: model.get("legend") ?? undefined,
     padding: model.get("padding") ?? undefined,
+    playing: model.get("playing") ?? undefined,
+    at: model.get("at") ?? undefined,
     debug,
   };
   log("Rendering with options:", renderOptions);

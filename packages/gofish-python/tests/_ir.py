@@ -26,5 +26,5 @@ def call(node: Any, lambda_id: str, rows: List[dict]) -> List[Any]:
     rendering ``node``: the list its reply's root names."""
     _, callbacks = ir_payload(_root(node))
     rows_b64 = base64.b64encode(data_to_arrow_bytes(rows)).decode("ascii")
-    reply = answer(callbacks, lambda_id, rows_b64)
+    reply = answer(callbacks, lambda_id, rows_b64, {})
     return arrow_to_records(base64.b64decode(reply["tables"][reply["root"]["id"]]))

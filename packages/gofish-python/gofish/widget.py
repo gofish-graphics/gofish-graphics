@@ -34,6 +34,9 @@ class GoFishChartWidget(anywidget.AnyWidget):
     axes = traitlets.Any(None, allow_none=True).tag(sync=True)
     legend = traitlets.Bool(None, allow_none=True).tag(sync=True)
     padding = traitlets.Float(None, allow_none=True).tag(sync=True)
+    # The chart's build-in clock: play it, or hold it at `at` milliseconds.
+    playing = traitlets.Bool(None, allow_none=True).tag(sync=True)
+    at = traitlets.Float(None, allow_none=True).tag(sync=True)
     debug = traitlets.Bool(False).tag(sync=True)
     container_id = traitlets.Unicode().tag(sync=True)
 
@@ -57,12 +60,14 @@ class GoFishChartWidget(anywidget.AnyWidget):
     def __init__(
         self,
         doc: Dict[str, Any],
-        callbacks: Optional[Dict[str, Callable]] = None,
+        callbacks: Optional[Dict[str, Any]] = None,
         width: int = 800,
         height: int = 600,
         axes: Optional[Any] = None,
         legend: Optional[bool] = None,
         padding: Optional[float] = None,
+        playing: Optional[bool] = None,
+        at: Optional[float] = None,
         debug: bool = False,
         **kwargs,
     ):
@@ -87,6 +92,8 @@ class GoFishChartWidget(anywidget.AnyWidget):
             axes=_to_wire(("ref", "AxesOptions"), axes, "axes"),
             legend=legend,
             padding=padding,
+            playing=playing,
+            at=at,
             debug=debug,
             container_id=container_id,
             callbacks=callbacks or {},
@@ -103,11 +110,14 @@ class GoFishChartWidget(anywidget.AnyWidget):
     def _on_call_request(self, change):
         """Answer one bridge call from JS.
 
-        JS sets ``call_request = {request_id, lambda_id, rows_b64}``, the
-        rows as base64 Arrow. ``answer`` runs the callback and returns the
-        reply's document, which we publish as ``call_response = {request_id,
-        reply}``. Errors are surfaced via ``call_response = {request_id,
-        error}`` so the JS bridge can reject the awaiting promise.
+        JS sets ``call_request = {request_id, lambda_id, rows_b64,
+        sources}``: the rows as base64 Arrow, and the current values of the
+        document's sources by id, which the callback reads when it calls a
+        source. ``answer`` runs the callback and returns the reply's
+        document, with the ids of the sources it read (``reads``), which we
+        publish as ``call_response = {request_id, reply}``. Errors are
+        surfaced via ``call_response = {request_id, error}`` so the JS bridge
+        can reject the awaiting promise.
         """
         msg = change["new"]
         if not msg:
@@ -119,7 +129,7 @@ class GoFishChartWidget(anywidget.AnyWidget):
             return
 
         try:
-            reply = answer(self.callbacks, lambda_id, rows_b64)
+            reply = answer(self.callbacks, lambda_id, rows_b64, msg["sources"])
             self.call_response = {"request_id": request_id, "reply": reply}
         except Exception as exc:
             self.call_response = {"request_id": request_id, "error": str(exc)}

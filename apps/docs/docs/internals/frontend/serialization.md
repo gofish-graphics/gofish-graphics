@@ -1163,6 +1163,20 @@ replaces the ones it registered before, so the registry holds one set per
 distinct call, which a document's fixed rows bound. A root's callbacks keep
 their lambda ids.
 
+The same walk declares the sources. A Python source (`timer(...)`,
+`wheel(...)`, `drag()`; `gofish/sources.py` and `gofish/readers.py`) is a
+declaration the browser runs, and an expression over it (`gofish/expr.py`)
+is written as its `ExprIR` by the option walk (`_wire_options`), which calls
+`payload.source(src)` for each source it meets. The payload keys sources by
+object identity, as it keys tables, so a source named by a sequence's `on`
+and a readout is declared once. The ids belong to the document
+(`_SourceIds`), which every callback a walk records carries with it: a
+reply names a source the document declared by the same id, and a source
+first named in a reply gets an id in the call's scope, as a reply's
+callbacks do. A `field(...)` is an expression too (polars-style `==`
+builds an expression), so a document holds its wire form as a plain dict
+(`_json_value`).
+
 ### One renderer, two hosts
 
 Two hosts render Python IR: the notebook widget
@@ -1189,19 +1203,42 @@ transport:
   `tables` are already rows. A chart that names a table its document does
   not carry is an error, and the validator reports it too, at any depth.
 - **The one bridge call.** `DeriveBridge` has one method,
-  `call(lambdaId, rows)`, for every callback kind. Both hosts build it with
-  the same codec, `arrowBridge(send)`: the rows go out as base64 Arrow, and
+  `call(lambdaId, rows, sources)`, for every callback kind. Both hosts build it with
+  the same codec, `arrowBridge(send)`: the rows go out as base64 Arrow, the
+  current values of the document's sources of one value go out as JSON by
+  source id, and
   the reply is a document of the same shape, read by `decodeDocument`. Its root
   says what the callback produced: a table reference, `{type: "table",
 id}`, to the list a derive or an accessor returned (`callForRows` in
   `registry.ts` reads it), or the mark-position IR a mark function drew.
-  Only `send` differs: the widget sets its `call_request` trait and waits for
-  `call_response`, and the harness POSTs to the derive server's
+  Only `send` differs: the widget sets its `call_request` trait
+  (`{request_id, lambda_id, rows_b64, sources}`) and waits for
+  `call_response`, and the harness POSTs `{rows_b64, sources}` to the derive server's
   `/call/<id>`. On the Python side both run `answer(callbacks, lambda_id,
-rows_b64)`, which calls the callback, registers the callbacks its reply
+rows_b64, sources)`, which calls the callback, registers the callbacks its reply
   names (by the call's scope, § One walk collects the callbacks), and ships
   the reply as `ir_payload` ships a root. So the widget
   answers mark functions and accessors as the harness does (#1049).
+- **The kernel tier.** A Python callback may read a source (`bins()` in a
+  `derive`). `answer` sets the shipped values in a `contextvars` context
+  while the callback runs (`gofish/sources.py`), so the call returns the
+  value and records the read; the reply lists the ids read (`reads`) and
+  declares the sources it reads or names (`sources`), by the document's ids
+  (one `_SourceIds` object serves the root walk and every reply). The
+  deserializer never calls the host's bridge directly: `buildIR` wraps it
+  in `kernelBridge` (fromJSON.ts), which ships the values (read with
+  `readUnregistered`, so shipping registers nothing), adds any source a reply
+  declares to the build's sources (so a mark function's reply reads the
+  document's live sources), and then reads each source the reply lists under
+  the resolve's registrar, which makes the chart a pipeline reader of
+  exactly those sources. A read with no shipped value (a source only a
+  Python closure names) means the callback stopped there, so the call is
+  made again with its value. A read whose value changed during the round
+  trip makes the reply stale: it is used, and the chart is invalidated, so
+  the runtime's latest-wins scheduler re-runs it once with the newest
+  values. Because every interactive resolve on the page runs in
+  `renderExclusive`, at most one call is ever queued, so there is no queue
+  of stale calls to drop.
 - **The codec.** A table is a list, so in both languages and both
   directions it is an Arrow table with one column, `item`, whose type is
   the type of the list's items: a struct column for records (its fields are

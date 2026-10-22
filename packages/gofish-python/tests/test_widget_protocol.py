@@ -32,11 +32,14 @@ def _derive_widget(fn):
     return widget, op.lambda_id
 
 
-def _call(widget, lambda_id: str, rows: list, request_id: str = "r-0") -> dict:
+def _call(
+    widget, lambda_id: str, rows: list, request_id: str = "r-0", sources=None
+) -> dict:
     widget.call_request = {
         "request_id": request_id,
         "lambda_id": lambda_id,
         "rows_b64": _arrow_b64(rows),
+        "sources": sources or {},
     }
     return widget.call_response
 
@@ -88,6 +91,7 @@ class TestCallProtocol:
             "request_id": "r-0",
             "lambda_id": lambda_id,
             "rows_b64": base64.b64encode(sink.getvalue().to_pybytes()).decode(),
+            "sources": {},
         }
         [row] = seen["rows"]
         assert type(row["x"]) is float and row["x"] == 2.0

@@ -251,7 +251,7 @@ def test_bare_kind_wire_form_at_an_option():
     assert ir(line(curve=Curve.perfect_arrows))["curve"] == {
         "kind": "perfectArrows"
     }
-    assert field("d").bin(Calendar.month) == field("d").bin(Calendar.month())
+    assert dict(field("d").bin(Calendar.month)) == dict(field("d").bin(Calendar.month()))
 
 
 def test_bare_kind_errors_name_its_options():

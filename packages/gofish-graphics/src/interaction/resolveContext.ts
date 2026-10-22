@@ -92,7 +92,21 @@ export async function withInteractiveResolve<T>(
 /** The registrar of the resolve in progress, if any. A read inside a reactive
  *  computation is paint, never a resolve's read, so it gets none. */
 export const ambientRegistrar = (): AmbientRegistrar | undefined =>
-  getListener() === null ? current : undefined;
+  getListener() === null && unregisteredDepth === 0 ? current : undefined;
+
+let unregisteredDepth = 0;
+
+/** Run `fn`, whose reads register nothing: the values a kernel-tier call
+ *  ships to Python (`kernelBridge` in serialize/fromJSON.ts), which become
+ *  reads only once the reply says which ones the callback read. */
+export function readUnregistered<T>(fn: () => T): T {
+  unregisteredDepth++;
+  try {
+    return fn();
+  } finally {
+    unregisteredDepth--;
+  }
+}
 
 let liveEvalDepth = 0;
 

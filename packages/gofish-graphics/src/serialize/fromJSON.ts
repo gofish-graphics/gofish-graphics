@@ -31,7 +31,17 @@ import { Frontend } from "gofish-ir";
 import { RESOLVE_ROWS } from "../ast/channels";
 import { applySchema } from "../ast/schema";
 import { FieldExpr } from "../ast/fieldExpr";
-import { makeExpr, type ExprNode, type Source } from "../ast/expr";
+import {
+  SOURCE,
+  isExprValue,
+  makeExpr,
+  type ExprNode,
+  type Source,
+} from "../ast/expr";
+import {
+  ambientRegistrar,
+  readUnregistered,
+} from "../interaction/resolveContext";
 import {
   click,
   drag,
@@ -50,6 +60,8 @@ import {
   offsetOp,
   type ChartBuilder,
   type DeriveBridge,
+  type Kernel,
+  type SourceValues,
   type Mark,
   type Operator,
 } from "./registry";
@@ -73,7 +85,7 @@ type RelateClauseIR = Frontend.RelateClauseIR;
  */
 export interface IRContext {
   /** Runs the Python callbacks the IR names. */
-  bridge?: DeriveBridge;
+  bridge?: Kernel;
   /** Mints one JS token per hygienic-name sentinel, per render. */
   resolveToken: TokenResolver;
   /** The rows of the document's charts, by the id a `{type: "table", id}`
@@ -82,8 +94,9 @@ export interface IRContext {
   /** The live `GoFishRef`s a mark function was called with, which an
    *  `{__inputRef: i}` sentinel in its reply resolves back to. */
   inputRefs?: any[];
-  /** The live sources the document's `sources` table declares, by id, built
-   *  once per build ({@link sourcesFromIR}). */
+  /** The live sources of the build, by id: the ones the document's `sources`
+   *  table declares ({@link sourcesFromIR}), and the ones a bridge reply
+   *  declares, which {@link kernelBridge} adds to this same object. */
   sources: Record<string, Source>;
 }
 
@@ -125,6 +138,74 @@ export function sourcesFromIR(
   return Object.fromEntries(
     Object.entries(decls ?? {}).map(([id, d]) => [id, sourceFromIR(d)])
   );
+}
+
+/**
+ * The kernel tier: a Python callback that reads a source (`bins()` inside a
+ * `derive`). It is the pipeline tier with a round trip added, so it follows
+ * the JS rule for a read outside `live()`: the chart becomes a pipeline
+ * reader of exactly the sources the callback read.
+ *
+ * Each call ships the current values of the build's sources of one value
+ * (read without registering anything). The reply names the sources the
+ * callback read (`reads`) and declares any the build does not have yet (a
+ * source only a Python closure names, or one a mark function's IR reads),
+ * which join `sources`, so ids stay one namespace per document. Then each
+ * read is read again here, under the resolve's registrar, which registers
+ * the chart as its reader.
+ *
+ * A read the call shipped no value for (a source the build did not have)
+ * means the callback stopped there, so the call is made again, now with
+ * that value. A read whose value changed during the round trip means the
+ * reply is stale: the reply is used, and the chart is invalidated, so the
+ * runtime's latest-wins scheduler re-runs it once with the newest values
+ * (however many changes arrived meanwhile). Nothing is queued per change.
+ */
+export function kernelBridge(
+  bridge: DeriveBridge,
+  sources: Record<string, Source>
+): Kernel {
+  return {
+    async call(lambdaId, rows) {
+      for (;;) {
+        const shipped = sourceValues(sources);
+        const reply = await bridge.call(lambdaId, rows, shipped);
+        for (const [id, decl] of Object.entries(reply.sources ?? {}))
+          if (!Object.hasOwn(sources, id)) sources[id] = sourceFromIR(decl);
+        const reads = reply.reads ?? [];
+        if (reads.some((id) => !Object.hasOwn(shipped, id))) continue;
+        const stale = reads.filter(
+          (id) => !Object.is(readSource(sources, id), shipped[id])
+        );
+        if (stale.length > 0) ambientRegistrar()?.invalidate();
+        return reply;
+      }
+    },
+  };
+}
+
+/** The current values of the sources of one value, read without
+ *  registering a reader. */
+function sourceValues(sources: Record<string, Source>): SourceValues {
+  return readUnregistered(() =>
+    Object.fromEntries(
+      Object.entries(sources)
+        .filter(([, s]) => isExprValue(s))
+        .map(([id, s]) => [id, s[SOURCE].read(undefined, undefined, undefined)])
+    )
+  );
+}
+
+/** Read a source a Python callback read, as a spec read: under the
+ *  resolve's registrar, so the chart becomes its pipeline reader. */
+function readSource(sources: Record<string, Source>, id: string): unknown {
+  const source = sources[id];
+  if (source === undefined || !isExprValue(source))
+    throw new Error(
+      `a Python callback read source "${id}", which is not a source of one ` +
+        `value in this chart`
+    );
+  return source[SOURCE].read(undefined, undefined, undefined);
 }
 
 const EXPR_TYPES = new Set(["source", "op", "when"]);
@@ -257,7 +338,7 @@ export function isTokenSentinel(v: any): v is TokenSentinel {
  * milliseconds). Called per row, it throws: a Python accessor works only in
  * a channel.
  */
-function makeLambdaAccessor(lambdaId: string, bridge: DeriveBridge) {
+function makeLambdaAccessor(lambdaId: string, bridge: Kernel) {
   const accessor = () => {
     throw new Error(
       "a Python accessor was called per row; it is resolved only in a channel"
@@ -284,7 +365,7 @@ function makeLambdaAccessor(lambdaId: string, bridge: DeriveBridge) {
  */
 export function unwrapOpts(
   value: any,
-  bridge?: DeriveBridge,
+  bridge?: Kernel,
   sources: Record<string, Source> = {}
 ): any {
   if (value === null || typeof value !== "object") return value;
@@ -452,7 +533,7 @@ export function resolveOptions(raw: Record<string, any>): Record<string, any> {
  *  `undefined`/`{}`, reproducing the pre-array-form suppression behavior. */
 export function mapOperator(
   op: OperatorSpec,
-  bridge?: DeriveBridge,
+  bridge?: Kernel,
   sources: Record<string, Source> = {}
 ): Operator<any, any> | null {
   const { type, translate, label, transition, ...opts } = op as Record<
@@ -660,7 +741,11 @@ export function mapMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
   // what the callback returned (a mark, a chart or a layer), and its tables
   // are the ones that IR's charts name, by ids of the reply's own. So it
   // rebuilds here like any other mark position, with the reply's tables and
-  // the refs this call was given. Like a JS mark function's result, it is
+  // the refs this call was given. Its sources are the document's: the reply
+  // declares the ones it reads by the document's ids, and `kernelBridge`
+  // has already added any the build did not have to `ctx.sources`, so a
+  // source the outer document declared is the same live source here. Like a
+  // JS mark function's result, it is
   // returned unresolved: the caller, `resolveMarkResult`, resolves a Mark, a
   // ChartBuilder or a LayerBuilder.
   if (spec.type === "mark-fn") {
@@ -981,11 +1066,12 @@ export function buildIR(
   doc: Frontend.FrontendIRDocument,
   bridge?: DeriveBridge
 ): any {
+  const sources = sourcesFromIR(doc.sources);
   return mapMark(doc.root, {
-    bridge,
+    bridge: bridge && kernelBridge(bridge, sources),
     resolveToken: makeTokenResolver(),
     tables: doc.tables ?? {},
-    sources: sourcesFromIR(doc.sources),
+    sources,
   });
 }
 

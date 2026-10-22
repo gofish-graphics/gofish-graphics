@@ -18,7 +18,7 @@ from . import ast as _ast
 from .ast import Mark, _channel
 
 if TYPE_CHECKING:
-    from .ast import ChunkKey, FieldAccessor, FieldPredicate, StructAccessor
+    from .ast import ChunkKey, Expr, FieldAccessor, FieldPredicate, Source, StructAccessor
 
 
 # --- Nested option dicts -----------------------------------------------------
@@ -1198,6 +1198,199 @@ def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | flo
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("transform", _to_wire(("object", {"scale": ("scale", ("object", {"x": ("x", None), "y": ("y", None)}))}), transform, "transform")),
         ("box", box),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _time_sequence_opts(*, by: str, duration: Optional[float] = None, loop: Optional[bool] = None, playing: Optional[bool] = None, at: Optional[float] = None, on: Optional[Source] = None, cyclic: Optional[bool | float] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """One keyframe per value of `by`, laid out in one shared frame and shown one at a time as a clock plays: its own clock, or the source `on` names.
+
+    Args:
+        by: The numeric field whose values are the keyframes.
+        duration: Milliseconds one pass through the field takes (own clock only). Default 5000.
+        loop: Start over at the end (own clock only). Default true.
+        playing: Start the clock (own clock only). False holds it at `at`. Default true.
+        at: Where the playhead starts, in the field's units (own clock only).
+        on: A clock to play on (a `timer` source), instead of one of its own. It owns its domain and play state, so `duration`, `loop`, `playing` and `at` are errors beside it.
+        cyclic: The field is a cycle: true infers the period from evenly spaced keyframes, a number is the period.
+        debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("by", by),
+        ("duration", duration),
+        ("loop", loop),
+        ("playing", playing),
+        ("at", at),
+        ("on", on),
+        ("cyclic", cyclic),
+        ("debug", debug),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _time_history_opts(*, last: Optional[float] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Keep the marks below on screen for `last` units of the sequence's field after their keyframe.
+
+    Args:
+        last: How far back from the playhead the marks keep showing, in the sequence field's units. Infinity keeps everything reached. Default Infinity.
+        debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("last", last),
+        ("debug", debug),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _time_stagger_opts(*, lag: Optional[float] = None, spacing: Optional[float] = None, dwell: Optional[float] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, from_: Optional[str | float] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Start the children (or the groups of `by`) one after another. As an operator it groups the refs it is given; as an operator's `.transition({ enter })` it arranges that operator's children.
+
+    Args:
+        lag: Milliseconds between the starts of neighboring groups.
+        spacing: Milliseconds between one group's end and the next one's start; 0 is one after another.
+        dwell: The share of the time spent between starts, 0 (all together) to 1 (back to back).
+        by: Split the children by this key; children with equal keys start together.
+        from_: Which group starts first. Default "first".
+        debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("lag", lag),
+        ("spacing", spacing),
+        ("dwell", dwell),
+        ("by", by),
+        ("from", from_),
+        ("debug", debug),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _time_transition_opts(*, along: Optional[str] = None, at: Optional[float | Expr] = None, curve: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, enter: Optional[dict | list] = None, exit: Optional[dict | list] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """The mark that moves between the keyframes of a `time.sequence`, or, with no sequence and an `enter`, the build-in of the marks it selects.
+
+    Args:
+        along: The keyframes' time field. Omitted, the flow's `time.sequence`'s `by`.
+        at: The playhead, in `along`'s units: a number, or an expression (a clock). Omitted, the sequence's clock.
+        curve: How the run is read between keyframes. Omitted, `Curve.monotone()`.
+        fill: Fill color of the moving mark.
+        stroke: Stroke color of the moving mark.
+        stroke_width: Stroke width in pixels.
+        opacity: Opacity, 0 to 1.
+        enter: How the marks enter. With no `time.sequence` this is a build-in.
+        exit: How the marks leave.
+        debug: Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("along", along),
+        ("at", at),
+        ("curve", _to_wire(("ref", "Curve"), curve, "curve")),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
+        ("strokeWidth", stroke_width),
+        ("opacity", opacity),
+        ("enter", _to_wire(("union", ("ref", "Animation"), ("array", ("ref", "Animation"))), enter, "enter")),
+        ("exit", _to_wire(("union", ("ref", "Animation"), ("array", ("ref", "Animation"))), exit, "exit")),
+        ("debug", debug),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _timer_source_opts(*, domain: Optional[list] = None, duration: Optional[float] = None, step: Optional[float] = None, loop: Optional[bool] = None, playing: Optional[bool] = None, at: Optional[float | str] = None) -> Dict[str, Any]:
+    """A clock: a scale from a data domain onto wall-clock time, read backward, so its value is a value of the domain.
+
+    Args:
+        domain: `[lo, hi]` (a continuous domain), or the values a band domain steps through. Omitted, `[0, duration]`.
+        duration: Wall-clock milliseconds one sweep of the domain takes. Default 5000.
+        step: Quantize a continuous domain to `lo + k*step`.
+        loop: Wrap at the end of the domain. False clamps at the end and pauses. Default true.
+        playing: Start playing. False holds the clock at `at`. Default true.
+        at: Where the clock starts, in domain units. Omitted, the domain's start.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("domain", domain),
+        ("duration", duration),
+        ("step", step),
+        ("loop", loop),
+        ("playing", playing),
+        ("at", at),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _signal_source_opts(*, init: Optional[Any] = None) -> Dict[str, Any]:
+    """A piece of state, at its initial value.
+
+    Args:
+        init: The initial value.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("init", init),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _wheel_source_opts(*, range: tuple, initial: Optional[float] = None, domain: Optional[tuple] = None, round: Optional[bool] = None, sensitivity: Optional[float] = None) -> Dict[str, Any]:
+    """A wheel-driven number in `range`.
+
+    Args:
+        range: The range the wheel maps onto.
+        initial: The initial value. Omitted, the range's midpoint.
+        domain: The accumulated wheel delta the range is mapped from. Default [0,600].
+        round: Round the value to a whole number. Default false.
+        sensitivity: Multiplier on each wheel delta. Default 1.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("range", range),
+        ("initial", initial),
+        ("domain", domain),
+        ("round", round),
+        ("sensitivity", sensitivity),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _pointer_source_opts() -> Dict[str, Any]:
+    """The pointer over the chart. Reads: `over` (true on the mark under the pointer) and `field` (that mark's value of the field named by the read's argument).
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _drag_source_opts() -> Dict[str, Any]:
+    """A drag on the chart, in data units. Reads: `x`, `y`, `x0`, `y0`, `dx`, `dy`, `active`.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _click_source_opts() -> Dict[str, Any]:
+    """Clicks on the chart's marks. Reads: `count`, `armed`.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+
     ]:
         if _v is not None:
             opts[_k] = _v

@@ -62,6 +62,14 @@ from .ast import (
 from .datum_projection import pluck
 from .charts import bar_chart
 
+# Sources (declared here, run by the browser) and expressions over them.
+from .sources import timer, signal, wheel
+from .readers import pointer, drag, click
+from .expr import when, concat_str
+
+# The time surface, a namespace like JS `time` (`time.sequence(...)`).
+from . import time
+
 # Strategy families (#1013): one module per family, with a lowercase file
 # name, bound here under its capitalized name. `Curve.monotone` and
 # `from gofish.curve import monotone` are the same function.
@@ -73,6 +81,7 @@ from . import curve as Curve
 from . import overlap as Overlap
 from . import shape as Shape
 from . import tile as Tile
+from . import animation as Animation
 
 __all__ = [
     "chart",
@@ -140,6 +149,16 @@ __all__ = [
     "Overlap",
     "Shape",
     "Tile",
+    "Animation",
+    "timer",
+    "signal",
+    "wheel",
+    "pointer",
+    "drag",
+    "click",
+    "when",
+    "concat_str",
+    "time",
 ]
 
 __version__ = "0.1.0"

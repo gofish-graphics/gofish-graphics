@@ -148,6 +148,7 @@ class TestWidgetMarkFnBagContract:
             "request_id": "r-0",
             "lambda_id": lambda_id,
             "rows_b64": base64.b64encode(_ipc_bytes(table)).decode("utf-8"),
+            "sources": {},
         }
 
         assert widget.call_response["reply"]["root"]["type"] == "rect"
