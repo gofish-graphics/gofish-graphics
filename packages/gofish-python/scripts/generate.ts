@@ -185,6 +185,25 @@ function taggedShape(branches: FieldType[], where: string): string | null {
   return `("tagged", ${pyStr(DISCRIMINATOR)}, {${entries.join(", ")}})`;
 }
 
+/** The shape of a union's dict-shaped branches: the one branch's, or a
+ *  tagged union of several, or null when none has option keys. */
+function dictUnionShape(
+  dictBranches: FieldType[],
+  where: string
+): string | null {
+  const shapes = dictBranches.map((b) => wireShape(b, where));
+  if (shapes.every((sh) => sh === null)) return null;
+  if (dictBranches.length === 1) return shapes[0];
+  const tagged = taggedShape(dictBranches, where);
+  if (tagged !== null) return tagged;
+  throw new Error(
+    `${where}: a union with more than one dict-shaped branch, one of ` +
+      `them with option keys, and the branches are not told apart by ` +
+      `distinct \`${DISCRIMINATOR}\` values; a Python dict value could ` +
+      `mean either.`
+  );
+}
+
 /** The key structure of a field type, as the Python literal `_to_wire` reads,
  *  or null when a value of this type has no option keys to rename and passes
  *  through unchanged. Object fields use the same `pyKwarg` rule as top-level
@@ -223,18 +242,23 @@ function wireShape(type: FieldType, where: string): string | null {
       );
     }
     case "union": {
-      const dictBranches = type.options.filter(acceptsDict);
-      const shapes = dictBranches.map((b) => wireShape(b, where));
-      if (shapes.every((sh) => sh === null)) return null;
-      if (dictBranches.length === 1) return shapes[0];
-      const tagged = taggedShape(dictBranches, where);
-      if (tagged !== null) return tagged;
-      throw new Error(
-        `${where}: a union with more than one dict-shaped branch, one of ` +
-          `them with option keys, and the branches are not told apart by ` +
-          `distinct \`${DISCRIMINATOR}\` values; a Python dict value could ` +
-          `mean either.`
-      );
+      // A Python dict can only mean a dict-shaped branch and a list only a
+      // list-shaped one, so the two are routed apart (`("union", dict_shape,
+      // list_shape)`); within each, the branches must be told apart.
+      const dict = dictUnionShape(type.options.filter(acceptsDict), where);
+      const listShapes = type.options
+        .filter((b) => b.kind === "array" || b.kind === "tuple")
+        .map((b) => wireShape(b, where))
+        .filter((sh): sh is string => sh !== null);
+      if (listShapes.length > 1)
+        throw new Error(
+          `${where}: a union with more than one list-shaped branch with ` +
+            `option keys; a Python list value could mean either.`
+        );
+      const [list] = listShapes;
+      if (list === undefined) return dict;
+      if (dict === null) return list;
+      return `("union", ${dict}, ${list})`;
     }
     case "array": {
       const sub = wireShape(type.items, `${where}[]`);
@@ -404,7 +428,8 @@ parts.push(
       `# The key structure of each named option type (descriptors.ts OPTION_TYPES):`,
       `# ("object", {py_key: (wire_key, shape)}), ("ref", name), ("array", shape),`,
       `# ("tuple", (shape, ...)), ("record", value_shape),`,
-      `# ("tagged", tag_key, {tag_value: shape}); None passes a value through.`,
+      `# ("tagged", tag_key, {tag_value: shape}), ("union", dict_shape, list_shape);`,
+      `# None passes a value through.`,
       `_OPTION_TYPES: Dict[str, Any] = {`,
       ...optionTypes,
       `}`,
@@ -431,6 +456,8 @@ parts.push(
       `    kind = shape[0]`,
       `    if kind == "ref":`,
       `        return _to_wire(_OPTION_TYPES[shape[1]], value, path)`,
+      `    if kind == "union":`,
+      `        return _to_wire(shape[1] if isinstance(value, dict) else shape[2], value, path)`,
       `    if kind == "object":`,
       `        if not isinstance(value, dict):`,
       `            return value`,
@@ -687,6 +714,9 @@ function describeType(type: FieldType): string {
         : `one of ${type.values.map((v) => JSON.stringify(v)).join(", ")}`;
     case "union":
       return type.options.map(describeType).join(" or ");
+    case "ref":
+      if (familyOf(type) !== undefined) return `a ${type.name} value`;
+      throw new Error(`no Python check for a ref ${type.name} strategy param`);
     default:
       throw new Error(`no Python check for a ${type.kind} strategy param`);
   }
@@ -711,9 +741,22 @@ function pyTypeTest(type: FieldType, v: string): string {
       return `isinstance(${v}, list)`;
     case "tuple":
       return `isinstance(${v}, (list, tuple))`;
+    case "ref":
+      if (familyOf(type) !== undefined) return `isinstance(${v}, dict)`;
+      throw new Error(`no Python check for a ref ${type.name} strategy param`);
     default:
       throw new Error(`no Python check for a ${type.kind} strategy param`);
   }
+}
+
+/** The strategy family a param type names, when it is a value of one
+ *  (`Animation.tween`'s `curve` is a `Curve`). Every family's values are
+ *  dicts tagged by `kind`, so a param of one is checked by its tag against
+ *  that family's kinds. */
+function familyOf(type: FieldType): StrategyFamily | undefined {
+  return type.kind === "ref" && Object.hasOwn(STRATEGIES, type.name)
+    ? (STRATEGIES as Record<string, StrategyFamily>)[type.name]
+    : undefined;
 }
 
 /** Whether a param type is a table: an array of rows, each a record. A
@@ -814,6 +857,14 @@ function pyValueChecks(
           ];
         }),
       ];
+    }
+    case "ref": {
+      // A value of another family: its tag names one of that family's kinds.
+      const kinds = Object.keys(familyOf(type)!.kinds);
+      return fail(
+        `${v}.get("kind") not in (${kinds.map((k) => JSON.stringify(k)).join(", ")}${kinds.length === 1 ? "," : ""})`,
+        `must be ${describeType(whole)}`
+      );
     }
     case "enum":
       return fail(

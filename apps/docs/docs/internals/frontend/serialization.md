@@ -921,7 +921,12 @@ object whose `kind` field is a literal or enum, and no two branches share a
 ratio?}` or `{kind: "slice"}` or ...; scatter's `overlap`; a `curve`), the generator emits a
 `("tagged", "kind", {kind_value: branch_shape})` shape, and `_to_wire` picks
 the branch by the dict's `kind`. A missing or unknown `kind`, or a key that
-branch does not declare (`ratio` on `slice`), is a `TypeError`. And a `t.ref` must name either an `OPTION_TYPES` entry or one of the
+branch does not declare (`ratio` on `slice`), is a `TypeError`. A union may
+also have one list-shaped branch beside its dict branch (`.transition(enter=...)`
+takes an `Animation` value or a list of them): the generator emits
+`("union", dict_shape, list_shape)`, and `_to_wire` routes a dict to the first
+and a list to the second, so each item of the list is renamed like the single
+value. And a `t.ref` must name either an `OPTION_TYPES` entry or one of the
 few refs the generator lists as already in wire form (today
 `FieldAccessor`, built by `field(...)`, and `ChunkKey`, built by `chunk(...)`), or generation fails, so a new nested
 type has to be declared before Python can take it.
@@ -969,7 +974,9 @@ It emits:
   `radius={"x": 2, "y": 500}`) has its keys and each value checked the
   same way, and a table param (an array of records: `Bin.voronoi`'s
   `seeds`) is read first with `to_records`, so a dataframe works too, and
-  goes on the wire as dict rows. These are the same constraints
+  goes on the wire as dict rows. A param that is a value of another family
+  (`Animation.tween`'s `curve`, a `t.ref("Curve")`) is checked by its tag:
+  it must be a dict whose `kind` is one of that family's kinds. These are the same constraints
   `checkStrategy` checks on the JS side, read from the same table, so Python
   users see the error at the line that made it.
 - The **Coord family** module, `gofish/coord.py`, bound in `__init__.py` as

@@ -259,3 +259,28 @@ def test_bare_kind_errors_name_its_options():
         Curve.arc.bend
     with pytest.raises(TypeError, match=r"Curve\.arc: .*direction=\.\.\."):
         Curve.arc(bend="auto")
+
+
+def test_a_param_that_is_a_value_of_another_family_is_checked_by_its_kind():
+    # Animation.tween's `curve` is a Curve value: checked by its tag against
+    # the Curve family's kinds, at the call.
+    from gofish import animation
+
+    assert animation.tween(curve=Curve.monotone) == {"kind": "tween", "curve": {"kind": "monotone"}}
+    with pytest.raises(TypeError, match="must be a Curve value"):
+        animation.tween(curve="monotone")
+    with pytest.raises(ValueError, match="must be a Curve value"):
+        animation.tween(curve={"kind": "squarify"})
+
+
+def test_a_list_branch_of_an_option_union_renames_its_items():
+    # `.transition(enter=[...])` is an Animation or a list of them; each item
+    # of the list is renamed to wire keys like the single value is.
+    from gofish import animation
+    from gofish._generated import _OPTION_TYPES, _to_wire
+
+    shape = _OPTION_TYPES["MarkTransition"]
+    one = _to_wire(shape, {"enter": animation.wipe(from_="top")}, "t")
+    many = _to_wire(shape, {"enter": [animation.wipe(from_="top"), animation.fade_in]}, "t")
+    assert one == {"enter": {"kind": "wipe", "from": "top"}}
+    assert many == {"enter": [{"kind": "wipe", "from": "top"}, {"kind": "fadeIn"}]}
