@@ -473,7 +473,11 @@ export const Envelope: StoryObj<Args> = {
         "log₁₀ engine ms": log10(e.totalMs.median),
       }));
 
-    const base = chart(synPts, { color: Color.palette(FAMILY_COLORS) })
+    const base = chart(synPts, {
+      color: Color.palette(FAMILY_COLORS),
+      w: args.w,
+      h: args.h,
+    })
       .flow(scatter({ by: "id", x: "log₁₀ nodes", y: "log₁₀ engine ms" }))
       .mark(circle({ r: 2, fill: "family" }))
       .layer(
@@ -491,7 +495,7 @@ export const Envelope: StoryObj<Args> = {
         )
       : base;
 
-    final.render(container, { w: args.w, h: args.h });
+    final.render(container);
 
     caption(
       container,

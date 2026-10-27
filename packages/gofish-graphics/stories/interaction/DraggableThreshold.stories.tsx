@@ -72,7 +72,7 @@ export const Default: StoryObj<Args> = {
       });
     });
 
-    chart(data)
+    chart(data, { w: args.w, h: args.h })
       .flow(spread({ by: "cat", dir: "x" }))
       .mark(
         rect({
@@ -99,10 +99,7 @@ export const Default: StoryObj<Args> = {
           fill: "#333",
         })
       )
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },
