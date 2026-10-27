@@ -22,8 +22,10 @@ __pycache__/
 _static/
 .cursor/
 .claude/*
-# Share project skills with the team; keep everything else under .claude/ local.
+# Share project skills, settings, and hooks with the team; keep everything else under .claude/ local.
 !.claude/skills/
+!.claude/settings.json
+!.claude/hooks/
 tests/tmp/
 __snapshots__/
 
