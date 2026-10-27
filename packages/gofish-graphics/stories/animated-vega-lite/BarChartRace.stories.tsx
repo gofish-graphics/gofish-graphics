@@ -146,7 +146,7 @@ const race = (
   year: Timer<number>,
   rows: CategoryBrand[] = brands
 ) =>
-  chart(rows, { legend: false })
+  chart(rows, { legend: false, w: args.w, h: args.h })
     .flow(
       time.sequence({ by: "year", on: year }),
       spread({
@@ -162,11 +162,7 @@ const race = (
     )
     .layer(time.transition({ curve: Curve.linear() }))
     .layer(yearReadout(year, args.h))
-    .render(container, {
-      w: args.w,
-      h: args.h,
-      axes: { x: true, y: false },
-    } as any);
+    .render(container, { axes: { x: true, y: false } } as any);
 
 /**
  * The animation. Beside Gapminder's `Animated`, the scatter became a spread
@@ -187,7 +183,7 @@ export const Animated: StoryObj<Args> = {
     const container = initializeContainer();
     const year = timer({ domain: YEARS, duration: DURATION });
 
-    chart(brands, { legend: false })
+    chart(brands, { legend: false, w: args.w, h: args.h })
       .flow(
         time.sequence({ by: "year", on: year }),
         spread({
@@ -203,11 +199,7 @@ export const Animated: StoryObj<Args> = {
       )
       .layer(time.transition({ curve: Curve.linear() }))
       .layer(yearReadout(year, args.h))
-      .render(container, {
-        w: args.w,
-        h: args.h,
-        axes: { x: true, y: false },
-      } as any);
+      .render(container, { axes: { x: true, y: false } } as any);
 
     return container;
   },
@@ -300,7 +292,7 @@ export const Frame2000: StoryObj<Args> = {
   args: { w: 600, h: 600 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(brands, { legend: false })
+    chart(brands, { legend: false, w: args.w, h: args.h })
       .flow(
         filter((d: any) => d.year === 2000),
         spread({
@@ -314,11 +306,7 @@ export const Frame2000: StoryObj<Args> = {
           position: "outset-right",
         })
       )
-      .render(container, {
-        w: args.w,
-        h: args.h,
-        axes: { x: true, y: false },
-      } as any);
+      .render(container, { axes: { x: true, y: false } } as any);
     return container;
   },
 };
@@ -369,7 +357,7 @@ const raceFromBelow = (
   const pitch = (args.h + BAR_SPACING) / 10;
   const layoutH = 11 * pitch - BAR_SPACING;
   clipToTopTen(container, pitch);
-  return chart(top10Ranked, { legend: false, h: layoutH })
+  return chart(top10Ranked, { legend: false, w: args.w, h: layoutH })
     .flow(
       time.sequence({ by: "year", on: year }),
       spread({
@@ -390,10 +378,7 @@ const raceFromBelow = (
         .mark(time.transition({ along: "year", curve: Curve.linear() }))
     )
     .layer(yearReadout(year, args.h))
-    .render(container, {
-      w: args.w,
-      axes: { x: { side: "start" }, y: false },
-    } as any);
+    .render(container, { axes: { x: { side: "start" }, y: false } } as any);
 };
 
 /** Cut the container off at the bottom of band 10. The SVG ends at the

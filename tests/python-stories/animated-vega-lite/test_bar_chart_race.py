@@ -22,7 +22,7 @@ def _every_year_brands(rows):
 # One frame of the animation: the 2000 bar chart the playback starts from.
 def story_frame2000():
     return (
-        chart(_every_year_brands(CATEGORY_BRANDS), legend=False)
+        chart(_every_year_brands(CATEGORY_BRANDS), legend=False, w=600, h=600)
         .flow(
             filter(lambda d: d["year"] == 2000),
             spread(by=field("name").sort("value", "desc"), dir="y", spacing=2),
@@ -32,5 +32,5 @@ def story_frame2000():
                 "name", position="outset-right"
             )
         ),
-        {"w": 600, "h": 600, "axes": {"x": True, "y": False}},
+        {"axes": {"x": True, "y": False}},
     )

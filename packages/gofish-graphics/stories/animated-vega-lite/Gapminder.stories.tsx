@@ -914,9 +914,9 @@ export const Trails: StoryObj<Args> = {
     const gapminder = context.loaded.gapminder as any[];
 
     const year = timer({ domain: yearRange(gapminder), duration: 10000 });
-    trails(gapminder, year, Curve.monotone())
+    trails(gapminder, year, Curve.monotone(), { w: args.w, h: args.h })
       .layer(yearReadout(year))
-      .render(container, { w: args.w, h: args.h } as any);
+      .render(container);
 
     return container;
   },
@@ -933,9 +933,9 @@ export const TrailsPaused: StoryObj<Args> = {
     const gapminder = context.loaded.gapminder as any[];
 
     const year = pausedClock(yearRange(gapminder), 10000, 1997.5);
-    trails(gapminder, year, Curve.monotone())
+    trails(gapminder, year, Curve.monotone(), { w: args.w, h: args.h })
       .layer(yearReadout(year))
-      .render(container, { w: args.w, h: args.h } as any);
+      .render(container);
 
     return container;
   },
