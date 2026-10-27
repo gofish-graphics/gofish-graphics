@@ -28,6 +28,7 @@ import {
   type LabelRowSetting,
 } from "./elaborate";
 import { chooseFirstFit, type Score } from "../choice/choose";
+import { turnPoint, turnedBox } from "../geometry/plane";
 
 /**
  * Candidates per row, most readable first. A category (ordinal) row that
@@ -70,34 +71,6 @@ export type LabelBox = {
   rotate: number;
   rel: RelBox;
 };
-
-/** Rotate `p` by `deg` degrees about the origin, clockwise on screen (y-down
- *  pixels). */
-function rotatePoint([x, y]: [number, number], deg: number): [number, number] {
-  const rad = (deg * Math.PI) / 180;
-  const c = Math.cos(rad);
-  const s = Math.sin(rad);
-  return [x * c - y * s, x * s + y * c];
-}
-
-/** The axis-aligned box around a rotated `rel`, relative to the pivot. */
-export function rotatedExtent(rel: RelBox, deg: number): RelBox {
-  if (!deg) return rel;
-  const corners = [
-    rotatePoint([rel.minX, rel.minY], deg),
-    rotatePoint([rel.maxX, rel.minY], deg),
-    rotatePoint([rel.maxX, rel.maxY], deg),
-    rotatePoint([rel.minX, rel.maxY], deg),
-  ];
-  const xs = corners.map((p) => p[0]);
-  const ys = corners.map((p) => p[1]);
-  return {
-    minX: Math.min(...xs),
-    minY: Math.min(...ys),
-    maxX: Math.max(...xs),
-    maxY: Math.max(...ys),
-  };
-}
 
 /**
  * Read every tagged axis label's final geometry off a laid-out tree. The
@@ -173,8 +146,8 @@ function scoreRow(row: LabelBox[]): [number, number] {
   const parallel = row.every((b) => b.rotate === angle);
   const turn = parallel ? -angle : 0;
   const boxes = row.map((b) => {
-    const [px, py] = rotatePoint(b.pivot, turn);
-    const r = parallel ? b.rel : rotatedExtent(b.rel, b.rotate);
+    const [px, py] = turnPoint(b.pivot, turn);
+    const r = parallel ? b.rel : turnedBox(b.rel, b.rotate);
     return {
       minX: px + r.minX,
       maxX: px + r.maxX,

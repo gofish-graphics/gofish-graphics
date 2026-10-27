@@ -27,12 +27,11 @@ import { rawPlaceable } from "../axisDirection";
 import type { ConstraintRef } from "../constraints/shared";
 import { placedOutlines as outlinesAt, type Outline } from "../geometry";
 import type { Place } from "../../families/place";
+import { ringExtent } from "../geometry/box";
 import {
   ObstacleGrid,
   corners,
-  convexOverlap,
   outlineObstacles,
-  segmentInk,
   type HalfSize,
   type Obstacle,
   type Pt,
@@ -47,7 +46,7 @@ import {
   type Candidate,
   type TargetShape,
 } from "./strategies";
-import { rotatedHalfExtents, type LabelNode } from "./labelNode";
+import type { LabelNode } from "./labelNode";
 
 /** How far sampled outlines may stray from the shapes they stand for. */
 const TOLERANCE = 0.25;
@@ -122,32 +121,12 @@ const obstaclesOf = (
   outlines: Outline[],
   owner: unknown,
   scope?: unknown
-): Obstacle[] =>
-  outlines.flatMap((o) =>
-    outlineObstacles(o.points as Pt[], o.closed, owner, o.filled, o.width).map(
-      (ob) => ({
-        ...ob,
-        scope,
-      })
-    )
-  );
-
-/** A label's unturned half size: its text and chrome. */
-const halfSize = (node: LabelNode, angle: number): HalfSize => {
-  const [hx, hy] = rotatedHalfExtents(
-    [
-      node.metrics.w / 2 + node.metrics.pad[0],
-      node.metrics.h / 2 + node.metrics.pad[1],
-    ],
-    angle
-  );
-  return { hx, hy };
-};
+): Obstacle[] => outlines.flatMap((o) => outlineObstacles(o, owner, scope));
 
 /** Seat a label at `spot`: its angle, and its box, centered there. */
 function seat(p: Placeable, node: LabelNode, spot: Spot): void {
   node.state.angle = spot.angle;
-  const { hx, hy } = halfSize(node, spot.angle);
+  const { hx, hy } = node.halfSize(spot.angle);
   const raw = rawPlaceable(p);
   raw.setExtent!("x", { min: spot.cx - hx, size: 2 * hx });
   raw.setExtent!("y", { min: spot.cy - hy, size: 2 * hy });
@@ -285,29 +264,20 @@ export function applyLabelPlacement(
     for (const item of items) {
       const shape = shapeOf(item.target);
       const angle = item.node.state.angle;
-      const size = halfSize(item.node, angle);
+      const size = item.node.halfSize(angle);
       const candidates = candidatesFor(item, shape, size, angle);
-      // Its own mark is read as its outline's band only: a label may sit
-      // inside its own mark, filled or not.
-      const ownSegments = shape.outlines.flatMap((o) =>
-        outlineObstacles(o.points as Pt[], o.closed, shape.mark, false, o.width)
-      );
       const keep = (o: Obstacle) =>
         o.owner !== shape.mark && (o.scope === undefined || o.scope === group);
+      // Its own mark is read as its outline's band only: a label may sit
+      // inside its own mark, filled or not.
+      const own = (o: Obstacle) =>
+        o.owner === shape.mark && o.kind === "segment";
       let chosen: Candidate | undefined;
       for (const c of candidates) {
         const poly = corners(c, size, CLEARANCE);
         if (!inFrame(corners(c, size))) continue;
         if (grid.hits(poly, keep)) continue;
-        if (
-          !c.onOutline &&
-          ownSegments.some(
-            (o) =>
-              o.kind === "segment" &&
-              convexOverlap(poly, segmentInk(o.a, o.b, o.w))
-          )
-        )
-          continue;
+        if (!c.onOutline && grid.hits(poly, own)) continue;
         chosen = c;
         break;
       }
@@ -337,18 +307,10 @@ const placeName = (p: Place): string => `Place.${p.kind}()`;
 
 /** The middle of a mark's outlines' box. */
 function centerOf(shape: TargetShape): Pt {
-  let x0 = Infinity;
-  let y0 = Infinity;
-  let x1 = -Infinity;
-  let y1 = -Infinity;
-  for (const o of shape.outlines)
-    for (const [x, y] of o.points) {
-      x0 = Math.min(x0, x);
-      x1 = Math.max(x1, x);
-      y0 = Math.min(y0, y);
-      y1 = Math.max(y1, y);
-    }
-  return Number.isFinite(x0) ? [(x0 + x1) / 2, (y0 + y1) / 2] : [0, 0];
+  const e = ringExtent(shape.outlines.flatMap((o) => o.points));
+  return Number.isFinite(e.minX)
+    ? [(e.minX + e.maxX) / 2, (e.minY + e.maxY) / 2]
+    : [0, 0];
 }
 
 const DEFAULT_OFFSET = { around: 3, along: 3, start: 4, end: 4 } as const;
@@ -397,7 +359,7 @@ function placeEnds(
 ): void {
   const wanted = items.map((item) => {
     const angle = item.node.state.angle;
-    const size = halfSize(item.node, angle);
+    const size = item.node.halfSize(angle);
     const place = item.place as { offset?: number };
     const spot = endSpot(
       shapeOf(item.target),

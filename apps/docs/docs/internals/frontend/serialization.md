@@ -204,8 +204,9 @@ is a closure), so a relate clause's IR comes from Python. A label's
 is a `NodeSelectionIR` like a blob's. A `.label()` chain is not a construct
 with a descriptor, so the emitter writes it with `wireLabels` in `toJSON.ts`:
 each call's `accessor`, and of its options only the keys `LABEL_OPTIONS`
-declares, with the nodes in them converted by the same `mapHeldNodes` walk.
-The reader rebuilds them with `resolveLabelNodeRefs` in `fromJSON.ts`. The families are namespaces in the two surfaces only; the
+declares, kept by the same `wireFields` that `wireOpts` uses, with the nodes
+in them converted by the same `mapHeldNodes` walk. The reader rebuilds them
+with the same `resolveHeldNodes` over `LABEL_OPTIONS` in `fromJSON.ts`. The families are namespaces in the two surfaces only; the
 wire carries the plain objects. Their kinds and params are declared once, in
 the `STRATEGIES` table (below). Note `join`
 inlines its right-hand table as JSON rows, so unlike `derive` it round-trips

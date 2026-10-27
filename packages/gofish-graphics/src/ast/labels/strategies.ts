@@ -8,6 +8,7 @@
  * takes the first free one. All geometry is in the frame of the layer the
  * labels are placed in, in pixels with y down.
  */
+import { Frontend } from "gofish-ir";
 import type {
   AlongPlace,
   AroundPlace,
@@ -15,17 +16,18 @@ import type {
   Direction,
   Side,
 } from "../../families/place";
-import type { Outline } from "../geometry";
+import type { Outline, OutlinePart } from "../geometry";
+import { ringExtent } from "../geometry/box";
+import { pointInRing, signedArea2 } from "../geometry/plane";
 import {
-  aabbOf,
-  convexOverlap,
   corners,
+  covers,
+  outlineObstacles,
   pointAt,
-  pointInRing,
   pointsBetween,
   polyline,
-  signedArea2,
   type HalfSize,
+  type Obstacle,
   type Polyline,
   type Pt,
   type Spot,
@@ -55,13 +57,29 @@ const STRATEGY_ERROR = (strategy: string, needs: string, t: TargetShape) => {
 
 /** The outline a strategy that reads one outline reads: the longest of the
  *  kind it needs. */
-function longest(outlines: Outline[]): Polyline | undefined {
-  let best: Polyline | undefined;
+function longest(outlines: Outline[]): Outline | undefined {
+  let best: Outline | undefined;
+  let bestLength = -Infinity;
   for (const o of outlines) {
-    const p = polyline(o.points, o.closed);
-    if (best === undefined || p.length > best.length) best = p;
+    const length = polyline(o.points, o.closed).length;
+    if (best === undefined || length > bestLength) {
+      best = o;
+      bestLength = length;
+    }
   }
   return best;
+}
+
+/** The outline that has a part named `name`, and the part. */
+function partNamed(
+  outlines: Outline[],
+  name: string
+): { outline: Outline; part: OutlinePart } | undefined {
+  for (const outline of outlines) {
+    const part = outline.parts?.find((p) => p.name === name);
+    if (part !== undefined) return { outline, part };
+  }
+  return undefined;
 }
 
 const sub = (a: Pt, b: Pt): Pt => [a[0] - b[0], a[1] - b[1]];
@@ -83,16 +101,10 @@ const upright = (deg: number): number => {
 
 // ── around ─────────────────────────────────────────────────────────────────
 
-export const DEFAULT_DIRECTIONS: Direction[] = [
-  "top-right",
-  "top-left",
-  "bottom-right",
-  "bottom-left",
-  "right",
-  "left",
-  "top",
-  "bottom",
-];
+/** `Place.around`'s directions when it is given none, as the `Place`
+ *  family declares them. */
+const DEFAULT_DIRECTIONS = Frontend.STRATEGIES.Place.kinds.around.params
+  .directions.default as Direction[];
 
 const COMPASS: Record<Direction, Pt> = {
   "top-right": [1, -1],
@@ -145,10 +157,10 @@ export function extremePoint(outlines: Outline[], dir: Direction): Pt {
     }
     flush();
   }
-  const box = aabbOf(outlines.flatMap((o) => o.points));
+  const box = ringExtent(outlines.flatMap((o) => o.points));
   const side: Pt = [
-    d[0] > 0 ? box.x1 : d[0] < 0 ? box.x0 : (box.x0 + box.x1) / 2,
-    d[1] > 0 ? box.y1 : d[1] < 0 ? box.y0 : (box.y0 + box.y1) / 2,
+    d[0] > 0 ? box.maxX : d[0] < 0 ? box.minX : (box.minX + box.maxX) / 2,
+    d[1] > 0 ? box.maxY : d[1] < 0 ? box.minY : (box.minY + box.maxY) / 2,
   ];
   let best = runs[0];
   let bestDist = Infinity;
@@ -194,19 +206,10 @@ export function aroundCandidates(
   const out: Candidate[] = [];
   for (const dir of directions) {
     const c = COMPASS[dir];
-    if (c === undefined)
-      throw new Error(
-        `[gofish] Place.around({ directions }): "${dir}" is not a direction; ` +
-          `use ${DEFAULT_DIRECTIONS.map((x) => `"${x}"`).join(", ")}.`
-      );
     const p = extremePoint(t.outlines, dir);
     const d = unit(c);
     for (const side of sides) {
       const k = side === "inset" ? -1 : 1;
-      if (side !== "inset" && side !== "outset")
-        throw new Error(
-          `[gofish] Place.around({ side }): "${side}" is not a side; use "outset" or "inset".`
-        );
       out.push({
         cx: p[0] + k * (d[0] * offset + Math.sign(c[0]) * size.hx),
         cy: p[1] + k * (d[1] * offset + Math.sign(c[1]) * size.hy),
@@ -258,16 +261,6 @@ function sideNormal(
   }
 }
 
-const SIDES = new Set<Side>([
-  "on",
-  "above",
-  "below",
-  "left",
-  "right",
-  "inset",
-  "outset",
-]);
-
 /** Arc lengths to try, in order: `s0`, then sliding away from it, nearest
  *  first, while the label's half-span `e` stays within `[lo, hi]`. */
 function slide(s0: number, lo: number, hi: number, closed: boolean): number[] {
@@ -299,28 +292,20 @@ export function alongCandidates(
   opts: AlongPlace,
   offset: number
 ): Candidate[] {
-  const outline =
-    typeof opts.at === "string" && opts.at.includes("-")
-      ? t.outlines.find((o) => o.parts?.some((p) => p.name === opts.at))
-      : undefined;
-  const path =
-    outline !== undefined
-      ? polyline(outline.points, outline.closed)
-      : longest(t.outlines);
-  if (path === undefined || path.length === 0)
+  const at = opts.at ?? "middle";
+  // A part names a stretch of one outline; anything else reads the longest.
+  const named =
+    typeof at === "number" || at === "start" || at === "middle" || at === "end"
+      ? undefined
+      : partNamed(t.outlines, at);
+  const outline = named?.outline ?? longest(t.outlines);
+  const path = outline && polyline(outline.points, outline.closed);
+  if (outline === undefined || path === undefined || path.length === 0)
     throw STRATEGY_ERROR("Place.along", "an outline", t);
   const sides: Side[] = Array.isArray(opts.side)
     ? opts.side
     : [opts.side ?? "on"];
   for (const side of sides) {
-    if (!SIDES.has(side))
-      throw new Error(
-        `[gofish] Place.along({ side }): "${side}" is not a side; use ${[
-          ...SIDES,
-        ]
-          .map((s) => `"${s}"`)
-          .join(", ")}.`
-      );
     if ((side === "inset" || side === "outset") && !path.closed)
       throw new Error(
         `[gofish] Place.along({ side: "${side}" }) needs a closed outline; ` +
@@ -328,13 +313,7 @@ export function alongCandidates(
           `"above", "below" or "on".`
       );
   }
-  const orient = opts.orient ?? "horizontal";
-  if (orient !== "horizontal" && orient !== "sloped")
-    throw new Error(
-      `[gofish] Place.along({ orient }): "${orient}" is not an orientation; ` +
-        `use "horizontal" or "sloped".`
-    );
-  const sloped = orient === "sloped";
+  const sloped = opts.orient === "sloped";
   const ring = path.points.slice(0, -1);
   const outsideIsLeft = path.closed ? signedArea2(ring) > 0 : undefined;
   const L = path.length;
@@ -349,18 +328,12 @@ export function alongCandidates(
   let s0: number;
   let lo = 0;
   let hi = L;
-  const at = opts.at ?? "middle";
-  if (typeof at === "number") {
-    if (!(at >= 0 && at <= 1))
-      throw new Error(
-        `[gofish] Place.along({ at: ${at} }): a fraction of the outline is 0 to 1.`
-      );
-    s0 = at * L;
-  } else if (at === "middle") s0 = L / 2;
+  if (typeof at === "number") s0 = at * L;
+  else if (at === "middle") s0 = L / 2;
   else if (at === "start") s0 = halfSpan(0);
   else if (at === "end") s0 = L - halfSpan(L);
   else {
-    const part = outline?.parts?.find((p) => p.name === at);
+    const part = named?.part;
     if (part === undefined) {
       const names = t.outlines.flatMap((o) => o.parts ?? []).map((p) => p.name);
       throw new Error(
@@ -379,7 +352,10 @@ export function alongCandidates(
   const isPart = lo !== 0 || hi !== L;
   const closedSlide = path.closed && !isPart;
 
-  const own = ownSegments(path);
+  // The outline's own pieces, as wide as its stroke.
+  const own = outlineObstacles(outline, undefined).filter(
+    (o) => o.kind === "segment"
+  );
   const out: Candidate[] = [];
   for (const s of slide(s0, lo, hi, closedSlide)) {
     const e = halfSpan(s);
@@ -394,14 +370,6 @@ export function alongCandidates(
   return out;
 }
 
-/** A polyline's segments, for testing a label against it. */
-const ownSegments = (p: Polyline): [Pt, Pt][] => {
-  const out: [Pt, Pt][] = [];
-  for (let i = 0; i + 1 < p.points.length; i++)
-    out.push([p.points[i], p.points[i + 1]]);
-  return out;
-};
-
 /** A level label at arc length `s`. */
 function levelAt(
   path: Polyline,
@@ -411,7 +379,7 @@ function levelAt(
   side: Side,
   offset: number,
   outsideIsLeft: boolean | undefined,
-  own: [Pt, Pt][]
+  own: Obstacle[]
 ): Candidate | null {
   const p = pointAt(path, s);
   if (side === "on") return { cx: p[0], cy: p[1], angle, onOutline: true };
@@ -429,8 +397,7 @@ function levelAt(
   for (let d = offset + reach; d <= limit; d += 1) {
     const spot = { cx: p[0] + n[0] * d, cy: p[1] + n[1] * d, angle };
     const poly = corners(spot, size, Math.max(0, offset - 1));
-    if (!own.some(([a, b]) => convexOverlap(poly, [a, b])))
-      return { ...spot, onOutline: false };
+    if (!own.some((o) => covers(poly, o))) return { ...spot, onOutline: false };
   }
   return null;
 }
@@ -644,14 +611,14 @@ export function interiorCandidates(
         m = Math.min(m, boxDistance(c, ring[i], ring[(i + 1) % n], a, b));
       return m;
     };
-    const box = aabbOf(ring);
-    const w = box.x1 - box.x0;
-    const h = box.y1 - box.y0;
+    const box = ringExtent(ring);
+    const w = box.maxX - box.minX;
+    const h = box.maxY - box.minY;
     let step = Math.min(8, Math.max(1, Math.min(w, h) / 20));
     step = Math.max(step, Math.sqrt((w * h) / INTERIOR_GRID));
     const grid: { c: Pt; room: number }[] = [];
-    for (let x = box.x0 + step / 2; x < box.x1; x += step)
-      for (let y = box.y0 + step / 2; y < box.y1; y += step) {
+    for (let x = box.minX + step / 2; x < box.maxX; x += step)
+      for (let y = box.minY + step / 2; y < box.maxY; y += step) {
         const c: Pt = [x, y];
         const r = room(c);
         if (r > 0) grid.push({ c, room: r });

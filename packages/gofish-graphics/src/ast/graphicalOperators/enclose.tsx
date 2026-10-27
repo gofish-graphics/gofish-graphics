@@ -42,6 +42,7 @@ import { membersOf } from "./enclose/members";
 import { ovalOutline } from "./enclose/oval";
 import { targetOf } from "../constraints/relationalPaint";
 import { ringExtent } from "../geometry/box";
+import { ringPathData } from "../geometry/plane";
 
 export type EncloseOptions = {
   /** Pixels between the members and the outline. Default 2. */
@@ -80,19 +81,7 @@ function checkedShape(shape: Shape | undefined): Shape {
 /** One SVG path over every loop: the loops wind so that the nonzero rule
  *  fills the region and leaves its holes open. */
 const loopsPath = (loops: Pt[][], toPixel: (p: Pt) => Pt) =>
-  loops
-    .map(
-      (loop) =>
-        "M" +
-        loop
-          .map((p) => {
-            const [x, y] = toPixel(p);
-            return `${+x.toFixed(2)},${+y.toFixed(2)}`;
-          })
-          .join("L") +
-        "Z"
-    )
-    .join("");
+  loops.map((loop) => ringPathData(loop.map((p) => toPixel(p)))).join("");
 
 /** The enclosure node over `members`, keeping out `avoided`. Both are its
  *  children (an avoided ref draws nothing); only the members count toward

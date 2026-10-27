@@ -43,7 +43,7 @@ import {
   type AxisDirection,
 } from "../axisDirection";
 import { rowLabels } from "./timeRows";
-import { rotatedExtent } from "./autoLabelAngle";
+import { turnedBox } from "../geometry/plane";
 import { axisSpan, runStartBox } from "./axisSpan";
 import {
   applyLevelEntries,
@@ -991,7 +991,7 @@ function elaborateOrdinalAxis(
   const boxes = levels.map((level, k) =>
     runs[k].map(([i]) => {
       const { width, height } = font(level.groups[i].label);
-      return rotatedExtent(
+      return turnedBox(
         { minX: 0, minY: 0, maxX: width, maxY: height },
         settings[k].rotation?.rotate ?? 0
       );

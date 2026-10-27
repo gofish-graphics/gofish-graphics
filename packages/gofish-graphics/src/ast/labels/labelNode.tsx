@@ -2,12 +2,19 @@
 // @wiki Labels — /internals/frontend/labels
 // </gofish-wiki>
 
-import type { DisplayList } from "gofish-ir";
+import { Frontend, type DisplayList } from "gofish-ir";
 import { GoFishNode } from "../_node";
 import { displayTranslate } from "../dims";
 import { UNDEFINED } from "../underlyingSpace";
 import { lowerStyle, roleFor } from "../displayList/lowerHelpers";
 import { estimateTextDimensions } from "../shapes/text";
+import {
+  ringPathData,
+  turnPoint,
+  turnedBox,
+  turnedCorners,
+} from "../geometry/plane";
+import type { HalfSize } from "./collide";
 
 /** A text outline painted behind the glyphs (SVG `paint-order: stroke`),
  *  so a label stays legible over lines and fills. */
@@ -27,8 +34,22 @@ export type LabelBackground = {
   padding?: number | [number, number];
 };
 
-const DEFAULT_HALO_WIDTH = 3;
-const DEFAULT_BACKGROUND_PADDING: [number, number] = [2, 1];
+/** The default of one field of a label's `halo` or `background`, as
+ *  `Frontend.LABEL_OPTIONS` declares it. */
+function chromeDefault<T>(option: "halo" | "background", field: string): T {
+  const type = Frontend.LABEL_OPTIONS[option].type;
+  if (type.kind !== "object")
+    throw new Error(`[gofish] label option ${option} is not an object`);
+  return type.fields[field].default as T;
+}
+const HALO = {
+  color: chromeDefault<string>("halo", "color"),
+  width: chromeDefault<number>("halo", "width"),
+};
+const BACKGROUND = {
+  fill: chromeDefault<string>("background", "fill"),
+  padding: chromeDefault<[number, number]>("background", "padding"),
+};
 
 /**
  * What a placement step may change on a label after layout: the angle the
@@ -65,23 +86,14 @@ export type LabelMetrics = {
   pad: [number, number];
 };
 
-/** The axis-aligned half extents of a `2hx × 2hy` box rotated by `deg`. */
-export const rotatedHalfExtents = (
-  [hx, hy]: [number, number],
-  deg: number
-): [number, number] => {
-  if (!deg) return [hx, hy];
-  const a = (deg * Math.PI) / 180;
-  const c = Math.abs(Math.cos(a));
-  const s = Math.abs(Math.sin(a));
-  return [c * hx + s * hy, s * hx + c * hy];
-};
-
 /** A label node and the state a placement writes. */
 export type LabelNode = {
   node: GoFishNode;
   state: LabelState;
   metrics: LabelMetrics;
+  /** Half the width and height of the label's box (text and chrome) turned
+   *  by `angle` degrees: the box a placement seats. */
+  halfSize(angle: number): HalfSize;
 };
 
 /**
@@ -107,13 +119,13 @@ export function LabelText(opts: LabelNodeOptions): LabelNode {
     fontStyle,
     fontWeight
   );
-  const haloPad = opts.halo ? (opts.halo.width ?? DEFAULT_HALO_WIDTH) / 2 : 0;
+  const haloPad = opts.halo ? (opts.halo.width ?? HALO.width) / 2 : 0;
   const bgPad: [number, number] =
     opts.background === undefined
       ? [0, 0]
       : typeof opts.background.padding === "number"
         ? [opts.background.padding, opts.background.padding]
-        : (opts.background.padding ?? DEFAULT_BACKGROUND_PADDING);
+        : (opts.background.padding ?? BACKGROUND.padding);
   const metrics: LabelMetrics = {
     w: dims.width,
     h: dims.height,
@@ -122,6 +134,12 @@ export function LabelText(opts: LabelNodeOptions): LabelNode {
   };
   const baseAngle = opts.rotate ?? 0;
   const state: LabelState = { angle: baseAngle, hidden: false };
+  const halfSize = (angle: number): HalfSize => {
+    const hx = metrics.w / 2 + metrics.pad[0];
+    const hy = metrics.h / 2 + metrics.pad[1];
+    const b = turnedBox({ minX: -hx, maxX: hx, minY: -hy, maxY: hy }, angle);
+    return { hx: b.maxX, hy: b.maxY };
+  };
 
   const node: GoFishNode = new GoFishNode(
     {
@@ -131,10 +149,7 @@ export function LabelText(opts: LabelNodeOptions): LabelNode {
       layout: () => {
         state.angle = baseAngle;
         state.hidden = false;
-        const [hx, hy] = rotatedHalfExtents(
-          [metrics.w / 2 + metrics.pad[0], metrics.h / 2 + metrics.pad[1]],
-          baseAngle
-        );
+        const { hx, hy } = halfSize(baseAngle);
         return {
           intrinsicDims: [
             { min: -hx, size: 2 * hx },
@@ -154,21 +169,13 @@ export function LabelText(opts: LabelNodeOptions): LabelNode {
           ty + y.min! + y.size! / 2,
         ]);
         const deg = state.angle;
-        const rad = (deg * Math.PI) / 180;
-        const cos = Math.cos(rad);
-        const sin = Math.sin(rad);
-        // A point given relative to the center of the unrotated text, in
-        // pixels, turned by the label's angle.
-        const at = (dx: number, dy: number): [number, number] =>
-          deg
-            ? [cx + dx * cos - dy * sin, cy + dx * sin + dy * cos]
-            : [cx + dx, cy + dy];
         const { w, h, ascent, pad } = metrics;
         const items: DisplayList.DisplayItem[] = [];
         if (opts.background !== undefined) {
-          const fill = opts.background.fill ?? "white";
+          const fill = opts.background.fill ?? BACKGROUND.fill;
           const bw = w / 2 + pad[0];
           const bh = h / 2 + pad[1];
+          const style = lowerStyle({ fill });
           if (!deg)
             items.push({
               kind: "rect",
@@ -179,33 +186,34 @@ export function LabelText(opts: LabelNodeOptions): LabelNode {
               rx: 2,
               ry: 2,
               role: "overlay",
-              style: lowerStyle({ fill }),
+              style,
             });
           else
             items.push({
               kind: "path",
-              d:
-                "M" +
-                [at(-bw, -bh), at(bw, -bh), at(bw, bh), at(-bw, bh)]
-                  .map(([px, py]) => `${+px.toFixed(2)},${+py.toFixed(2)}`)
-                  .join("L") +
-                "Z",
+              d: ringPathData(
+                turnedCorners(
+                  { minX: -bw, maxX: bw, minY: -bh, maxY: bh },
+                  deg,
+                  [cx, cy]
+                )
+              ),
               role: "overlay",
-              style: lowerStyle({ fill }),
+              style,
             });
         }
         // The glyph anchor: the start of the baseline.
-        const [gx, gy] = at(-w / 2, -h / 2 + ascent);
+        const [gx, gy] = turnPoint([-w / 2, -h / 2 + ascent], deg, [cx, cy]);
         const fill =
           typeof opts.fill === "string" ? opts.fill : opts.fill(self);
         const style = lowerStyle({
           fill,
           stroke:
-            opts.halo === undefined ? undefined : (opts.halo.color ?? "white"),
-          strokeWidth:
             opts.halo === undefined
-              ? 0
-              : (opts.halo.width ?? DEFAULT_HALO_WIDTH),
+              ? undefined
+              : (opts.halo.color ?? HALO.color),
+          strokeWidth:
+            opts.halo === undefined ? 0 : (opts.halo.width ?? HALO.width),
         });
         if (opts.halo !== undefined) {
           style.paintOrder = "stroke";
@@ -233,5 +241,5 @@ export function LabelText(opts: LabelNodeOptions): LabelNode {
     },
     []
   );
-  return { node, state, metrics };
+  return { node, state, metrics, halfSize };
 }

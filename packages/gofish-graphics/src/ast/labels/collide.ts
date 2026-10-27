@@ -12,6 +12,12 @@
  * in, in pixels with y down.
  */
 
+import type { Outline } from "../geometry";
+import { ringExtent } from "../geometry/box";
+import { outlineSegments } from "../geometry/outline";
+import { pointInRing, turnedCorners } from "../geometry/plane";
+import { overlaps, type BoundingBox } from "../../util/bbox";
+
 export type Pt = [number, number];
 
 /** A spot for a label: its center, and its angle in degrees, clockwise on
@@ -95,73 +101,20 @@ export function pointsBetween(p: Polyline, s0: number, s1: number): Pt[] {
   return out;
 }
 
-/** Twice the signed area of a ring; positive when it runs clockwise on a
- *  y-down screen. */
-export function signedArea2(ring: Pt[]): number {
-  let a = 0;
-  for (let i = 0; i < ring.length; i++) {
-    const p = ring[i];
-    const q = ring[(i + 1) % ring.length];
-    a += p[0] * q[1] - q[0] * p[1];
-  }
-  return a;
-}
-
-/** Whether `p` is inside a ring (even-odd). */
-export function pointInRing(p: Pt, ring: Pt[]): boolean {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const a = ring[i];
-    const b = ring[j];
-    if (
-      a[1] > p[1] !== b[1] > p[1] &&
-      p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]
-    )
-      inside = !inside;
-  }
-  return inside;
-}
-
 // ── A label's box ──────────────────────────────────────────────────────────
 
 /** The corners of a label's box at a spot, grown by `pad` on every side. */
-export function corners(spot: Spot, size: HalfSize, pad = 0): Pt[] {
-  const hx = size.hx + pad;
-  const hy = size.hy + pad;
-  const local: Pt[] = [
-    [-hx, -hy],
-    [hx, -hy],
-    [hx, hy],
-    [-hx, hy],
-  ];
-  if (!spot.angle) return local.map(([x, y]) => [spot.cx + x, spot.cy + y]);
-  const a = (spot.angle * Math.PI) / 180;
-  const c = Math.cos(a);
-  const s = Math.sin(a);
-  return local.map(([x, y]) => [
-    spot.cx + x * c - y * s,
-    spot.cy + x * s + y * c,
-  ]);
-}
-
-export type Aabb = { x0: number; y0: number; x1: number; y1: number };
-
-export function aabbOf(points: Pt[]): Aabb {
-  let x0 = Infinity;
-  let y0 = Infinity;
-  let x1 = -Infinity;
-  let y1 = -Infinity;
-  for (const [x, y] of points) {
-    if (x < x0) x0 = x;
-    if (x > x1) x1 = x;
-    if (y < y0) y0 = y;
-    if (y > y1) y1 = y;
-  }
-  return { x0, y0, x1, y1 };
-}
-
-const aabbsMeet = (a: Aabb, b: Aabb): boolean =>
-  a.x0 <= b.x1 && b.x0 <= a.x1 && a.y0 <= b.y1 && b.y0 <= a.y1;
+export const corners = (spot: Spot, size: HalfSize, pad = 0): Pt[] =>
+  turnedCorners(
+    {
+      minX: -(size.hx + pad),
+      maxX: size.hx + pad,
+      minY: -(size.hy + pad),
+      maxY: size.hy + pad,
+    },
+    spot.angle,
+    [spot.cx, spot.cy]
+  );
 
 /** Whether two convex polygons overlap with positive area or touch along a
  *  segment (separating axes; a segment is a two-point polygon). */
@@ -254,36 +207,39 @@ export function covers(poly: Pt[], o: Obstacle): boolean {
 }
 
 /**
- * The obstacles an outline's ink stands for: its segments, as wide as its
- * stroke `width`, and the area inside when it is closed and `filled`. A
- * closed outline that is not filled is only its band. `filled` is false for
- * a label's own mark, which it may sit inside.
+ * The obstacles an outline's ink stands for: its pieces
+ * (`outlineSegments`), as wide as its stroke `width`, and the area inside
+ * when it is closed and filled. A closed outline that is not filled is only
+ * its band. `scope` limits them to one `.label()` call.
  */
 export function outlineObstacles(
-  points: Pt[],
-  closed: boolean,
+  o: Outline,
   owner: unknown,
-  filled: boolean,
-  width?: number
+  scope?: unknown
 ): Obstacle[] {
-  const out: Obstacle[] = [];
-  const n = points.length;
-  const w = width !== undefined && width > 0 ? { w: width } : {};
-  for (let i = 0; i + 1 < n; i++)
-    out.push({ kind: "segment", a: points[i], b: points[i + 1], ...w, owner });
-  if (closed && n > 2) {
-    out.push({ kind: "segment", a: points[n - 1], b: points[0], ...w, owner });
-    if (filled) out.push({ kind: "area", ring: points, owner });
-  }
-  if (n === 1)
-    out.push({ kind: "segment", a: points[0], b: points[0], ...w, owner });
+  const w = o.width !== undefined && o.width > 0 ? { w: o.width } : {};
+  const s = scope === undefined ? {} : { scope };
+  const out: Obstacle[] = outlineSegments(o).map(([a, b]) => ({
+    kind: "segment",
+    a,
+    b,
+    ...w,
+    owner,
+    ...s,
+  }));
+  if (o.closed && o.filled && o.points.length > 2)
+    out.push({ kind: "area", ring: o.points, owner, ...s });
   return out;
 }
 
-const obstacleAabb = (o: Obstacle): Aabb =>
-  o.kind === "segment"
-    ? aabbOf(segmentInk(o.a, o.b, o.w))
-    : aabbOf(o.kind === "area" ? o.ring : o.poly);
+const obstacleBox = (o: Obstacle): BoundingBox =>
+  ringExtent(
+    o.kind === "segment"
+      ? segmentInk(o.a, o.b, o.w)
+      : o.kind === "area"
+        ? o.ring
+        : o.poly
+  );
 
 /**
  * A uniform grid of obstacles: each is filed in every cell its box touches,
@@ -292,25 +248,26 @@ const obstacleAabb = (o: Obstacle): Aabb =>
  */
 export class ObstacleGrid {
   private readonly cells = new Map<string, number[]>();
-  private readonly items: { o: Obstacle; box: Aabb }[] = [];
+  private readonly items: { o: Obstacle; box: BoundingBox }[] = [];
   private stamp = 0;
   private readonly seen: number[] = [];
 
   constructor(private readonly cell: number) {}
 
-  private range(b: Aabb): [number, number, number, number] {
+  private range(b: BoundingBox): [number, number, number, number] {
     const c = this.cell;
     return [
-      Math.floor(b.x0 / c),
-      Math.floor(b.y0 / c),
-      Math.floor(b.x1 / c),
-      Math.floor(b.y1 / c),
+      Math.floor(b.minX / c),
+      Math.floor(b.minY / c),
+      Math.floor(b.maxX / c),
+      Math.floor(b.maxY / c),
     ];
   }
 
   add(o: Obstacle): void {
-    const box = obstacleAabb(o);
-    if (![box.x0, box.y0, box.x1, box.y1].every(Number.isFinite)) return;
+    const box = obstacleBox(o);
+    if (![box.minX, box.minY, box.maxX, box.maxY].every(Number.isFinite))
+      return;
     const id = this.items.length;
     this.items.push({ o, box });
     this.seen.push(0);
@@ -326,7 +283,7 @@ export class ObstacleGrid {
 
   /** Whether `poly` covers any obstacle `keep` accepts. */
   hits(poly: Pt[], keep: (o: Obstacle) => boolean): boolean {
-    const box = aabbOf(poly);
+    const box = ringExtent(poly);
     const stamp = ++this.stamp;
     const [i0, j0, i1, j1] = this.range(box);
     for (let i = i0; i <= i1; i++)
@@ -337,7 +294,7 @@ export class ObstacleGrid {
           if (this.seen[id] === stamp) continue;
           this.seen[id] = stamp;
           const { o, box: ob } = this.items[id];
-          if (!aabbsMeet(box, ob) || !keep(o)) continue;
+          if (!overlaps(box, ob) || !keep(o)) continue;
           if (covers(poly, o)) return true;
         }
       }

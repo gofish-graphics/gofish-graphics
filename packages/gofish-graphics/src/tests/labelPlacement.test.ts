@@ -23,9 +23,9 @@ import {
   corners,
   covers,
   outlineObstacles,
-  pointInRing,
   type Pt,
 } from "../ast/labels/collide";
+import { pointInRing } from "../ast/geometry/plane";
 import { boxOutline } from "../ast/geometry";
 import { autoLabelColorForFill } from "../ast/labels/autoLabelColor";
 import {
@@ -541,8 +541,8 @@ console.log("# unfilled regions");
     [100, 100],
     [0, 100],
   ];
-  const unfilled = outlineObstacles(square, true, "m", false, 4);
-  const filled = outlineObstacles(square, true, "m", true, 4);
+  const unfilled = outlineObstacles({ points: square, closed: true, filled: false, width: 4 }, "m");
+  const filled = outlineObstacles({ points: square, closed: true, filled: true, width: 4 }, "m");
   const inside = corners({ cx: 50, cy: 50, angle: 0 }, { hx: 10, hy: 5 });
   ok(
     "an unfilled closed outline is only its band: a label inside it is free",
@@ -558,7 +558,7 @@ console.log("# unfilled regions");
   ok(
     "the band is as wide as the stroke",
     unfilled.some((o) => covers(nearEdge, o)) &&
-      !outlineObstacles(square, true, "m", false).some((o) =>
+      !outlineObstacles({ points: square, closed: true, filled: false }, "m").some((o) =>
         covers(nearEdge, o)
       )
   );

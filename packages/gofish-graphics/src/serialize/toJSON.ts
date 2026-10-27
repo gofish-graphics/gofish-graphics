@@ -86,35 +86,40 @@ function wireOpts(
         "table, so it has no IR form."
     );
   }
+  return wireFields(accepted, opts);
+}
+
+/** Of `opts`, the keys `accepted` declares, as the wire carries them: a
+ *  function value is dropped, and a field whose declared type holds nodes (a
+ *  blob's `avoiding`, inside `shape`) carries their references. */
+function wireFields(
+  accepted: Readonly<Record<string, { type: Frontend.FieldType }>>,
+  opts: AnyObject
+): AnyObject {
   const out: AnyObject = {};
   for (const [key, value] of Object.entries(opts)) {
-    if (Object.hasOwn(accepted, key) && typeof value !== "function") {
-      // A field whose declared type holds nodes (a blob's `avoiding`, inside
-      // `shape`) carries their references; every other field is as given.
+    if (Object.hasOwn(accepted, key) && typeof value !== "function")
       out[key] = Frontend.mapHeldNodes(accepted[key].type, value, nodesToIR);
-    }
   }
   return out;
 }
 
 /**
  * A `.label()` chain as the wire carries it: each call's `accessor`, and of
- * its options only the keys `Frontend.LABEL_OPTIONS` declares, as
- * {@link wireOpts} keeps a construct's, with the nodes a label avoids
+ * its options the keys `Frontend.LABEL_OPTIONS` declares (`wireFields`, as
+ * {@link wireOpts} keeps a construct's), with the nodes a label avoids
  * written as their references.
  */
 function wireLabels(
   label: NonNullable<SerializeTag["label"]>
 ): Frontend.LabelSpecIR[] {
-  return label.map(({ accessor, ...opts }) => {
-    const out: AnyObject = { accessor };
-    for (const [key, value] of Object.entries(opts)) {
-      const field = Frontend.LABEL_OPTIONS[key];
-      if (field !== undefined && typeof value !== "function")
-        out[key] = Frontend.mapHeldNodes(field.type, value, nodesToIR);
-    }
-    return out as Frontend.LabelSpecIR;
-  });
+  return label.map(
+    ({ accessor, ...opts }) =>
+      ({
+        accessor,
+        ...wireFields(Frontend.LABEL_OPTIONS, opts),
+      }) as Frontend.LabelSpecIR
+  );
 }
 
 /**

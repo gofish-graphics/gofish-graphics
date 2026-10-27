@@ -309,7 +309,7 @@ child's translate, which is the only transform a node has today (`Transform` is 
 plus scale). If rotation is added to `Transform` later, it composes the same way. Under that
 design a rotated box is a box in the local frame with a rotation applied, which is how
 tldraw handles it, and it needs no new representation. Rotated text today folds its rotated
-corners into an AABB (`rotateRelBBox`). With local geometry it could report the rotated
+corners into an AABB (`turnedBox`). With local geometry it could report the rotated
 rectangle as its boundary instead, which is what `autoLabelAngle` on the auto-label-angle
 branch ([#961](https://github.com/gofish-graphics/gofish-graphics/pull/961)) reconstructs by
 hand.

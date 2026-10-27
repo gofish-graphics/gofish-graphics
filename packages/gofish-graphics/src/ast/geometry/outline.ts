@@ -1,4 +1,4 @@
-import type { Path } from "../../path";
+import { cubicAt, type Path } from "../../path";
 import type { AxisDirection } from "../axisDirection";
 import type { Dimensions } from "../dims";
 import type { Box } from "./box";
@@ -268,16 +268,9 @@ export function flattenPath(path: Path, tolerance: number): OutlinePoint[] {
     push(p0);
     for (let k = 1; k <= n; k++) {
       const t = k / n;
-      const u = 1 - t;
       push([
-        u * u * u * p0[0] +
-          3 * u * u * t * p1[0] +
-          3 * u * t * t * p2[0] +
-          t * t * t * p3[0],
-        u * u * u * p0[1] +
-          3 * u * u * t * p1[1] +
-          3 * u * t * t * p2[1] +
-          t * t * t * p3[1],
+        cubicAt(p0[0], p1[0], p2[0], p3[0], t),
+        cubicAt(p0[1], p1[1], p2[1], p3[1], t),
       ]);
     }
   }
@@ -292,6 +285,22 @@ export function openRing(points: OutlinePoint[]): OutlinePoint[] {
   return Math.abs(a[0] - b[0]) < 1e-9 && Math.abs(a[1] - b[1]) < 1e-9
     ? points.slice(0, -1)
     : points;
+}
+
+/**
+ * The straight pieces an outline's path is drawn with, each from one point
+ * to the next: on a closed outline, the last point back to the first too (a
+ * repeated closing point is no piece of its own). A single point is one
+ * piece from itself to itself, so its stroke still counts.
+ */
+export function outlineSegments(o: Outline): [OutlinePoint, OutlinePoint][] {
+  const pts = o.closed ? openRing(o.points) : o.points;
+  const n = pts.length;
+  if (n === 1) return [[pts[0], pts[0]]];
+  const out: [OutlinePoint, OutlinePoint][] = [];
+  for (let i = 0; i + 1 < n; i++) out.push([pts[i], pts[i + 1]]);
+  if (o.closed && n > 2) out.push([pts[n - 1], pts[0]]);
+  return out;
 }
 
 /** Points kept in a node's axis order (`y` grows with the axis), in the

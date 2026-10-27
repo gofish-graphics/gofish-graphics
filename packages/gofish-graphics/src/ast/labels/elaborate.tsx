@@ -11,7 +11,7 @@ import { ref } from "../shapes/ref";
 import { Constraint } from "../constraints";
 import type { AlignAnchor, ConstraintRef } from "../constraints/shared";
 import { placedOutlines } from "../geometry";
-import { pointInRing } from "./collide";
+import { pointInRing } from "../geometry/plane";
 import { createLabelPlaceConstraint, type LabelPlaceItem } from "./placeStep";
 import { avoidedRefs } from "../nodeRefs";
 import { kindValue } from "../strategyKind";

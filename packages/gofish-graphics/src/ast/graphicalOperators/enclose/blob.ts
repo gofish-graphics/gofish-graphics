@@ -33,6 +33,7 @@
  */
 import { Delaunay } from "d3-delaunay";
 import { ringExtent } from "../../geometry/box";
+import { pointInRing, signedArea2 } from "../../geometry/plane";
 
 /** A point in pixels. */
 export type Pt = [number, number];
@@ -112,19 +113,6 @@ const segIntersect = (p1: Pt, p2: Pt, p3: Pt, p4: Pt) => {
     d4 = cross(p1, p2, p4);
   return d1 * d2 < 0 && d3 * d4 < 0;
 };
-const inPoly = (p: Pt, poly: Pt[]) => {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const [xi, yi] = poly[i],
-      [xj, yj] = poly[j];
-    if (
-      yi > p[1] !== yj > p[1] &&
-      p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi
-    )
-      inside = !inside;
-  }
-  return inside;
-};
 type Poly = Pt[];
 const centerOf = (m: Member): Pt =>
   m.kind === "disc"
@@ -152,11 +140,11 @@ const polyInfo = (poly: Poly) => {
   if (!v)
     polyInfoMemo.set(
       poly,
-      (v = { bb: bboxOf(poly), sg: signedArea(poly) > 0 ? 1 : -1 })
+      (v = { bb: bboxOf(poly), sg: signedArea2(poly) > 0 ? 1 : -1 })
     );
   return v;
 };
-/** Is p inside polygon `poly`? The same as inPoly, with a bounding-box test first. */
+/** Is p inside polygon `poly`? The same as pointInRing, with a bounding-box test first. */
 const inPolyFast = (p: Pt, poly: Poly) => {
   const { bb } = polyInfo(poly);
   return (
@@ -164,7 +152,7 @@ const inPolyFast = (p: Pt, poly: Poly) => {
     p[0] <= bb[2] + 1e-6 &&
     p[1] >= bb[1] - 1e-6 &&
     p[1] <= bb[3] + 1e-6 &&
-    inPoly(p, poly)
+    pointInRing(p, poly)
   );
 };
 /** Does segment ab pass through the interior of convex polygon `poly`? (Cyrus–Beck clipping) */
@@ -406,8 +394,6 @@ const memberRadius = (m: Member) =>
     : m.kind === "segment"
       ? m.w / 2
       : Math.min(m.w, m.h) / 2;
-const signedArea = (l: Pt[]) =>
-  l.reduce((a, p, i) => a + cross([0, 0], p, l[(i + 1) % l.length]), 0) / 2;
 const circumR = (a: Pt, b: Pt, c: Pt) =>
   (dist(a, b) * dist(b, c) * dist(c, a)) /
   (2 * Math.abs(cross(a, b, c)) || 1e-12);
@@ -2140,7 +2126,7 @@ const closeInlets = (
           (pts[i][1] + pts[(i + run) % N][1]) / 2,
           false
         ) < w ||
-        inPoly([zp.x1, zp.y1], poly)
+        pointInRing([zp.x1, zp.y1], poly)
       )
         hit = true;
     });
@@ -2475,7 +2461,7 @@ const neckOutline = (
       PY[k] = p[1];
     }
   // the region lies to the left of every loop when the outermost loop runs counterclockwise
-  const areas = loops.map((l) => signedArea(l.pts));
+  const areas = loops.map((l) => signedArea2(l.pts));
   const side =
     Math.sign(areas.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a), 0)) ||
     1;
@@ -2889,7 +2875,7 @@ type SmoothOpts = SkelOpts & {
 const fillHoles = (region: Region, zones: Prim[], res: number): Region => {
   const loops = region.loops;
   if (loops.length < 2) return region;
-  const areas = loops.map((l) => signedArea(l.pts));
+  const areas = loops.map((l) => signedArea2(l.pts));
   const outer = Math.sign(
     areas.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a), 0)
   );
@@ -2902,7 +2888,7 @@ const fillHoles = (region: Region, zones: Prim[], res: number): Region => {
       !filled.includes(l) &&
       !filled.some(
         (h) =>
-          Math.abs(signedArea(h.pts)) > Math.abs(signedArea(l.pts)) &&
+          Math.abs(signedArea2(h.pts)) > Math.abs(signedArea2(l.pts)) &&
           inPolyFast(l.pts[0], h.pts)
       )
   );
@@ -2938,7 +2924,7 @@ const fillHoles = (region: Region, zones: Prim[], res: number): Region => {
   );
   const cut = traceRegion([around], held, res, Math.min(1, res));
   const disc = cut.loops.reduce((a, b) =>
-    Math.abs(signedArea(b.pts)) > Math.abs(signedArea(a.pts)) ? b : a
+    Math.abs(signedArea2(b.pts)) > Math.abs(signedArea2(a.pts)) ? b : a
   );
   // every point of these holes is on a zone's edge, also where two zones meet (a resampled point
   // there cuts the corner, so the trace alone would not call it a zone's)

@@ -32,8 +32,13 @@
  */
 import type { Placeable } from "../../_node";
 import { rawPlaceable } from "../../axisDirection";
-import { openRing, placedOutlines, type Outline } from "../../geometry";
-import type { BlobMember, Pt } from "./blob";
+import {
+  outlineSegments,
+  placedOutlines,
+  ringExtent,
+  type Outline,
+} from "../../geometry";
+import type { BlobMember } from "./blob";
 
 /** How far the samples of a curved outline may stray from it, in pixels. */
 const TOLERANCE = 0.5;
@@ -46,32 +51,20 @@ function membersOfOutline(o: Outline): BlobMember[] {
     return [rx === ry ? disc : { ...disc, axes: [rx, ry] }];
   }
   if (o.box !== undefined || (o.closed && o.filled)) {
-    const [x0, y0, x1, y1] = o.box
-      ? [o.box.min[0], o.box.min[1], o.box.max[0], o.box.max[1]]
-      : extent(o.points);
-    return [{ kind: "box", x: x0, y: y0, w: x1 - x0, h: y1 - y0 }];
+    const e = ringExtent(o.box ? [o.box.min, o.box.max] : o.points);
+    const [x, y] = [e.minX, e.minY];
+    return [{ kind: "box", x, y, w: e.maxX - x, h: e.maxY - y }];
   }
   // An open path, or the loop of an unfilled closed one: its pieces.
-  const pts = (o.closed ? openRing(o.points) : o.points) as Pt[];
   const w = o.width ?? 0;
-  const out: BlobMember[] = [];
-  for (let i = 1; i < pts.length; i++)
-    out.push({ kind: "segment", a: pts[i - 1], b: pts[i], w });
-  if (o.closed && pts.length > 2)
-    out.push({ kind: "segment", a: pts[pts.length - 1], b: pts[0], w });
-  return out;
-}
-
-/** The bounding box of some points, as `[x0, y0, x1, y1]`. */
-function extent(points: readonly (readonly [number, number])[]) {
-  const xs = points.map((p) => p[0]);
-  const ys = points.map((p) => p[1]);
-  return [
-    Math.min(...xs),
-    Math.min(...ys),
-    Math.max(...xs),
-    Math.max(...ys),
-  ] as const;
+  return outlineSegments(o).map(
+    ([a, b]): BlobMember => ({
+      kind: "segment",
+      a,
+      b,
+      w,
+    })
+  );
 }
 
 /**

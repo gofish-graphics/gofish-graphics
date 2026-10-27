@@ -280,15 +280,9 @@ export function resolveNodeRefs(
   return resolveHeldNodes(accepted, opts, resolveToken);
 }
 
-/** One `.label()` call's options from the wire (`Frontend.LabelSpecIR` but
- *  the accessor), with the nodes it avoids rebuilt as refs, as
- *  {@link resolveNodeRefs} rebuilds a construct's. */
-export const resolveLabelNodeRefs = (
-  opts: Record<string, any>,
-  resolveToken: TokenResolver = makeTokenResolver()
-): Record<string, any> =>
-  resolveHeldNodes(Frontend.LABEL_OPTIONS, opts, resolveToken);
-
+/** `opts` with the nodes held by the fields `accepted` declares rebuilt as
+ *  refs: a construct's options ({@link resolveNodeRefs}), or one `.label()`
+ *  call's (`Frontend.LABEL_OPTIONS`). */
 function resolveHeldNodes(
   accepted: Readonly<Record<string, { type: Frontend.FieldType }>>,
   opts: Record<string, any>,
@@ -361,7 +355,7 @@ export function mapOperator(
       operator = (operator as any).label(
         accessor,
         Object.keys(labelOpts).length > 0
-          ? resolveLabelNodeRefs(labelOpts, resolveToken)
+          ? resolveHeldNodes(Frontend.LABEL_OPTIONS, labelOpts, resolveToken)
           : undefined
       );
     }
@@ -673,7 +667,7 @@ function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
       mark = (mark as any).label(
         accessor,
         Object.keys(labelOpts).length > 0
-          ? resolveLabelNodeRefs(labelOpts, resolveToken)
+          ? resolveHeldNodes(Frontend.LABEL_OPTIONS, labelOpts, resolveToken)
           : undefined
       );
     }

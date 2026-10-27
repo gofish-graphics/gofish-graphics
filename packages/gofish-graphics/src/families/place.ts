@@ -20,21 +20,36 @@
  * in `avoiding`; a label with no free spot is hidden. The placement itself
  * is in `ast/labels/`.
  */
+import type { Frontend } from "gofish-ir";
 import { bareKind, given } from "../ast/strategyKind";
 
+/** Every placement strategy: a value of `.label()`'s `position`. */
+export type Place = Frontend.PlaceIR;
+
+/** `around()`: at the outline's extreme point in each direction. See
+ *  {@link around}. */
+export type AroundPlace = Extract<Place, { kind: "around" }>;
+
+/** `along()`: on an outline. See {@link along}. */
+export type AlongPlace = Extract<Place, { kind: "along" }>;
+
+/** `start()`: past the first point of an open path. See {@link start}. */
+export type StartPlace = Extract<Place, { kind: "start" }>;
+
+/** `end()`: past the last point of an open path. See {@link end}. */
+export type EndPlace = Extract<Place, { kind: "end" }>;
+
+/** `interior()`: inside a region. See {@link interior}. */
+export type InteriorPlace = Extract<Place, { kind: "interior" }>;
+
 /** A screen direction from a mark: the four sides and the four corners. */
-export type Direction =
-  | "top-right"
-  | "top-left"
-  | "bottom-right"
-  | "bottom-left"
-  | "right"
-  | "left"
-  | "top"
-  | "bottom";
+export type Direction = Frontend.PlaceDirectionIR;
 
 /** Which side of a region's boundary a label sits on. */
-export type BoundarySide = "outset" | "inset";
+export type BoundarySide = Exclude<
+  NonNullable<AroundPlace["side"]>,
+  readonly unknown[]
+>;
 
 /**
  * Which side of an outline a label sits on. `"on"` straddles the outline.
@@ -43,62 +58,20 @@ export type BoundarySide = "outset" | "inset";
  * and `"right"` are the path's own, of its direction of travel. On a closed
  * outline, `"inset"` and `"outset"` are inside and outside.
  */
-export type Side =
-  | "on"
-  | "above"
-  | "below"
-  | "left"
-  | "right"
-  | "inset"
-  | "outset";
-
-/** A box's edges, named by axis in the mark's own frame (`y-max` is the
- *  top of a bar on a continuous y). */
-export type Part = "x-min" | "x-max" | "y-min" | "y-max";
+export type Side = Frontend.PlaceSideIR;
 
 /** Where along an outline: a fraction of its length (the label is centered
  *  there), its start, middle or end (the label's start or end is flush with
  *  the path's), or one of the mark's parts (the label stays within it). */
-export type At = number | "start" | "middle" | "end" | Part;
+export type At = NonNullable<AlongPlace["at"]>;
+
+/** A box's edges, named by axis in the mark's own frame (`y-max` is the
+ *  top of a bar on a continuous y). */
+export type Part = Exclude<At, number | "start" | "middle" | "end">;
 
 /** How a label along an outline is turned: level, or turned to the chord of
  *  the outline across the label's width. */
-export type Orient = "horizontal" | "sloped";
-
-/** `around()`: at the outline's extreme point in each direction. See
- *  {@link around}. */
-export type AroundPlace = {
-  kind: "around";
-  directions?: Direction[];
-  side?: BoundarySide | BoundarySide[];
-  offset?: number;
-};
-
-/** `along()`: on an outline. See {@link along}. */
-export type AlongPlace = {
-  kind: "along";
-  at?: At;
-  side?: Side | Side[];
-  orient?: Orient;
-  offset?: number;
-};
-
-/** `start()`: past the first point of an open path. See {@link start}. */
-export type StartPlace = { kind: "start"; offset?: number };
-
-/** `end()`: past the last point of an open path. See {@link end}. */
-export type EndPlace = { kind: "end"; offset?: number };
-
-/** `interior()`: inside a region. See {@link interior}. */
-export type InteriorPlace = { kind: "interior" };
-
-/** Every placement strategy: a value of `.label()`'s `position`. */
-export type Place =
-  | AroundPlace
-  | AlongPlace
-  | StartPlace
-  | EndPlace
-  | InteriorPlace;
+export type Orient = NonNullable<AlongPlace["orient"]>;
 
 /**
  * Around a mark, by screen direction: each candidate sits at the point of
