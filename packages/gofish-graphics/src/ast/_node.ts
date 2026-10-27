@@ -1310,6 +1310,27 @@ export class GoFishNode {
   }
 
   /**
+   * Whether this node is a chart's outer box (#1032): the outermost ring of
+   * chrome around a `chart()` with no size of its own. The chart's chrome
+   * adds around its plot, but its parent lays the chart out whole, plot and
+   * chrome, so to its parent all of it is plot. (A chart with a size of its
+   * own wears its chrome inside its frame, which claims the total.)
+   */
+  public isChartBox(): boolean {
+    return this.chrome?.content._chartBox !== undefined;
+  }
+
+  /**
+   * Whether this node's plot on `axis` is its whole box: it is a part of
+   * its parent's plot with its chrome and dressing included. That is a
+   * chart's outer box ({@link isChartBox}), and a node with a size of its
+   * own there, which maps its plot into that size and claims the total.
+   */
+  public plotIsBox(axis: 0 | 1): boolean {
+    return this.isChartBox() || this.claimWalk?.ownScope[axis] === true;
+  }
+
+  /**
    * Whether something data sizes or places on `axis` composes into this
    * node's claim: its type there is continuous, or a child's is, short of a
    * child with a size of its own (a σ-scope of its own, which claims its
@@ -1898,9 +1919,9 @@ export class GoFishNode {
   /**
    * Where its plot lies on `axis` in its local frame, once laid out: its
    * box without its dressing and chrome (see {@link resolvePlotExtent}), or
-   * undefined when that is its whole box. A node that wears chrome has its
-   * content's; a layer has the hull of its children that are no dressing
-   * there, each at its own plot. A chain lays its parts by their plots
+   * undefined when that is its whole box ({@link plotIsBox}). Any other
+   * node that wears chrome has its content's; a layer has the hull of its
+   * children that are no dressing there, each at its own plot. A chain lays its parts by their plots
    * (`anchorOffset`), so dressing never moves the parts it dresses (#1032).
    */
   public localPlotSpan(axis: 0 | 1): [number, number] | undefined {
@@ -1912,6 +1933,7 @@ export class GoFishNode {
   }
 
   private computePlotSpan(axis: 0 | 1): [number, number] | undefined {
+    if (this.plotIsBox(axis)) return undefined;
     // A child's plot in its parent's frame, or its box when that is its
     // plot. Both are in pixels, as the child stores its box, whichever way
     // the parent reads y: a parent that reads y the other way sees the span

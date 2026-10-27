@@ -804,7 +804,12 @@ report their size).
   its constraints place leaves out the dressing (`placeByClaims`' plot
   hull). A node that wears chrome has its content's plot as its plot: its
   rings are never plot, so a grouped bar chart's inner row of category
-  labels adds around the outer chart's plot, as its own axes do.
+  labels adds around the outer chart's plot, as its own axes do. A chart's
+  outer box is the exception (`GoFishNode.isChartBox`): the outermost ring
+  around a `chart()` with no size of its own is its parent's plot whole,
+  axes included, since a parent lays a chart out by its outer box. So a
+  chart in a spread beside a caption or another chart keeps its axes
+  clear of them.
 - **Dressing never moves the parts it dresses.** Labels are a layer applied
   after the spread: they take room in the chart, but do not change how the
   spread lays out its parts. A chain of parts of the plot lays them by their
@@ -818,7 +823,8 @@ report their size).
   overlaps where it does not fit (#1171); a label past the first or last
   row reaches past the chain, into the chart's margin. A chain that slices
   its room (facet panels) gives each part its slice as its plot, and the
-  part's chrome adds around it (`guttersAroundPlot`). A chain edge to a
+  part's chrome adds around it (`guttersAroundPlot`), except a part whose
+  plot is its whole box (a chart, below): its chrome is in its slice. A chain edge to a
   part that is no part of the plot (dressing, ink, a ring's chrome, a
   stand-in) clears that part's whole box, so a ring still seats its title
   past its tick labels. The plot of a chain with a stand-in reaches only as
@@ -829,8 +835,13 @@ report their size).
   are its claim past the plot claim of its content (`claims` in
   `chromeGutters.ts`), so a chart with a size of its own maps that plot into
   its size, and its labels, like its chrome, add around it (#1032). A node
-  with a size of its own is a part of its parent's plot, chrome and labels
-  included.
+  with a size of its own, and a chart's outer box, are a part of their
+  parent's plot, chrome and labels included (`GoFishNode.plotIsBox`), in
+  the claim and in the layout alike: a chain lays such a part by its whole
+  box, and an align that places it by its plot aligns that box. So a row of
+  charts aligned at their tops lines up the tops of their outer boxes, and
+  a chart whose labels reach above its plot sits lower than one whose
+  labels do not.
 - **An outline takes room as dressing does.** A shape's box is its geometry,
   which data places and sizes and a chain lays out. Its stroke is centered
   on that geometry, so it is drawn half its width past the box on every side

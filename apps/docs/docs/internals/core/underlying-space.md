@@ -535,8 +535,10 @@ each inherent to what the origin states are:
   `ref` stand-in for its mark), a shape's outline (half its stroke past its
   box, which its claim reaches and its plot leaves out; a node a `nest`
   derives reaches its own outline past the padded inner's plot,
-  `applyNestExtentPlan`) and the chrome rings of a nested node. A
-  chain of parts of the plot lays them by their plots, so dressing never
+  `applyNestExtentPlan`) and the chrome rings of a nested node, short of
+  a node whose plot is its whole box (a node with a size of its own, or
+  the outermost ring of a `chart()`: a parent lays a chart out whole,
+  `GoFishNode.plotIsBox`). A chain of parts of the plot lays them by their plots, so dressing never
   moves the parts it dresses: it reaches past the chain, or sits in the gaps
   (`composePlanExtents`' `parts`, `chainFold`'s `reaches`). The plot of a
   chain with a stand-in reaches only as far as its stand-ins; an align

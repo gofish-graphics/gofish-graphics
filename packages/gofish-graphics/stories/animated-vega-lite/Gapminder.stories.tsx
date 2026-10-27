@@ -237,11 +237,16 @@ export const SequenceOnly: StoryObj<Args> = {
   },
 };
 
-/** One panel's box, and the gap between two of them. The sparklines below the
- *  row are built from the same two numbers, so a sparkline sits exactly under
- *  the panel it reads. */
+/** One panel's plot width, and the gap between two panels. The sparklines
+ *  below the row are built from the same two numbers, so a sparkline sits
+ *  exactly under the plot it reads. */
 const PANEL_W = 240;
 const PANEL_GAP = 16;
+/** One panel's plot height. */
+const PANEL_H = 280;
+/** A panel's plot size: a chart's own `w`/`h` is its plot, and its axes are
+ *  drawn around it. */
+type PanelSize = { w: number; h: number };
 
 /** How a panel reads the run. `null` is the sequence with nothing layered over
  *  it, which is what the step curve coincides with. */
@@ -269,8 +274,13 @@ const CURVES_THREE: { caption: string; curve: Reading }[] = [
  *  `padding: 0` for the same reason the bird-migration controls panel needs it:
  *  a chart's coord padding is drawn OUTSIDE its box, so in a composition it
  *  would paint over the neighbor the `spreadX` stacked against it. */
-const curvePanel = (rows: any[], clock: any, curve: Reading) => {
-  const keyframes = chart(rows, { legend: false, padding: 0 })
+const curvePanel = (
+  rows: any[],
+  clock: any,
+  curve: Reading,
+  size: PanelSize
+) => {
+  const keyframes = chart(rows, { legend: false, padding: 0, ...size })
     .flow(
       time.sequence({ by: "year", on: clock }),
       scatter({ by: "country", x: "fertility", y: "life_expect" })
@@ -283,15 +293,15 @@ const curvePanel = (rows: any[], clock: any, curve: Reading) => {
 
 /** A row of panels, one per reading, each under its caption, on a clock the
  *  caller hands in — so the playing and the paused stories are one picture
- *  read at two playheads. `panel` draws a reading's panel. `panelW` is a
- *  panel's width, and `leadW` the width of an empty cell before the first
+ *  read at two playheads. `panel` draws a reading's panel at a plot size.
+ *  `panelW` is a panel's plot width, and `leadW` the width of an empty cell before the first
  *  panel, which leaves a column for the labels of what goes `below`. */
 const curvesRow = <C,>(
   container: HTMLElement,
   args: Args,
   clock: any,
   readings: { caption: string; curve: C }[],
-  panel: (curve: C) => any,
+  panel: (curve: C, size: PanelSize) => any,
   below: any[] = [],
   { panelW = PANEL_W, leadW }: { panelW?: number; leadW?: number } = {}
 ) =>
@@ -312,7 +322,7 @@ const curvesRow = <C,>(
           ...readings.map(({ caption, curve }) =>
             spreadY({ spacing: 8, alignment: "middle" }, [
               text({ text: caption, fontSize: 12, fill: "#555" }),
-              frame({ w: panelW, h: 280 }, [panel(curve)]),
+              panel(curve, { w: panelW, h: PANEL_H }),
             ])
           ),
         ]),
@@ -342,8 +352,8 @@ export const Curves: StoryObj<Args> = {
     // Ten seconds rather than five: the four readings differ most between
     // keyframes, and a slower clock spends longer there.
     const year = timer({ domain: yearRange(gapminder), duration: 10000 });
-    curvesRow(container, args, year, CURVES, (curve) =>
-      curvePanel(gapminder, year, curve)
+    curvesRow(container, args, year, CURVES, (curve, size) =>
+      curvePanel(gapminder, year, curve, size)
     );
 
     return container;
@@ -362,8 +372,8 @@ export const CurvesThree: StoryObj<Args> = {
     const gapminder = context.loaded.gapminder as any[];
 
     const year = timer({ domain: yearRange(gapminder), duration: 10000 });
-    curvesRow(container, args, year, CURVES_THREE, (curve) =>
-      curvePanel(gapminder, year, curve)
+    curvesRow(container, args, year, CURVES_THREE, (curve, size) =>
+      curvePanel(gapminder, year, curve, size)
     );
 
     return container;
@@ -700,10 +710,15 @@ const kinematicsBlock = (rows: any[], clock: any) => {
  * The layered charts place their marks by the same fields as the panel, so
  * they share its x and y scales.
  */
-const highlightPanel = (rows: any[], clock: any, curve: Curve.Curve) => {
+const highlightPanel = (
+  rows: any[],
+  clock: any,
+  curve: Curve.Curve,
+  size: PanelSize
+) => {
   const own = rows.filter((d) => d.country === SPARK_COUNTRY);
   const place = scatter({ x: "fertility", y: "life_expect" });
-  return chart(rows, { legend: false, padding: 0 })
+  return chart(rows, { legend: false, padding: 0, ...size })
     .flow(
       time.sequence({ by: "year", on: clock }),
       scatter({ by: "country", x: "fertility", y: "life_expect" })
@@ -747,7 +762,7 @@ const highlightPanel = (rows: any[], clock: any, curve: Curve.Curve) => {
  * any moment the dots mark the state the panels above them are drawing.
  */
 export const CurvesKinematics: StoryObj<Args> = {
-  args: { w: 1180, h: 620 },
+  args: { w: 1180, h: 645 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
@@ -759,7 +774,7 @@ export const CurvesKinematics: StoryObj<Args> = {
       args,
       year,
       LADDER,
-      (curve) => highlightPanel(gapminder, year, curve),
+      (curve, size) => highlightPanel(gapminder, year, curve, size),
       kinematicsBlock(gapminder, year),
       { panelW: LADDER_PANEL_W, leadW: LEAD_W }
     );
@@ -775,7 +790,7 @@ export const CurvesKinematics: StoryObj<Args> = {
  * has there.
  */
 export const CurvesKinematicsPaused: StoryObj<Args> = {
-  args: { w: 1180, h: 620 },
+  args: { w: 1180, h: 645 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
@@ -787,7 +802,7 @@ export const CurvesKinematicsPaused: StoryObj<Args> = {
       args,
       year,
       LADDER,
-      (curve) => highlightPanel(gapminder, year, curve),
+      (curve, size) => highlightPanel(gapminder, year, curve, size),
       kinematicsBlock(gapminder, year),
       { panelW: LADDER_PANEL_W, leadW: LEAD_W }
     );
@@ -811,8 +826,8 @@ export const CurvesPaused: StoryObj<Args> = {
     const gapminder = context.loaded.gapminder as any[];
 
     const year = pausedClock(yearRange(gapminder), 10000, 1957.5);
-    curvesRow(container, args, year, CURVES, (curve) =>
-      curvePanel(gapminder, year, curve)
+    curvesRow(container, args, year, CURVES, (curve, size) =>
+      curvePanel(gapminder, year, curve, size)
     );
 
     return container;
@@ -958,8 +973,8 @@ const trailCurvesRow = (
   rows: any[],
   clock: any
 ) =>
-  curvesRow(container, args, clock, TRAIL_CURVES, (curve) =>
-    trails(rows, clock, curve, { legend: false, padding: 0 })
+  curvesRow(container, args, clock, TRAIL_CURVES, (curve, size) =>
+    trails(rows, clock, curve, { legend: false, padding: 0, ...size })
   );
 
 export const TrailsCurves: StoryObj<Args> = {

@@ -829,11 +829,12 @@ export const layer = createNodeOperatorSequential(
             if (px !== undefined) return at(axis, fixedClaim(axis, px));
             return at(axis, resolved[axis]);
           }) as [Extent | undefined, Extent | undefined];
-          // A node with a size of its own is a part of its parent's plot,
-          // chrome and dressing included.
+          // A node with a size of its own, and a chart's outer box, are a
+          // part of their parent's plot, chrome and dressing included
+          // (`GoFishNode.plotIsBox`). Any other ring has its content's plot.
           const chromeContent = node.chrome?.content.resolvePlotExtent();
           node._plotExtent =
-            plotIsClaim && chromeContent === undefined
+            (plotIsClaim && chromeContent === undefined) || node.isChartBox()
               ? undefined
               : (([0, 1] as const).map((axis) =>
                   dims[axis].size !== undefined
@@ -1125,7 +1126,9 @@ export const layer = createNodeOperatorSequential(
             // its slice as its plot: what dresses it (its chrome) adds
             // around the slice, into the gaps and past the chain's ends, as
             // the chain lays it by its plot (#1032). A ring's own shapes
-            // are chrome, and take their slices whole.
+            // are chrome, and take their slices whole, and so does a part
+            // whose plot is its whole box (a chart: its chrome is in its
+            // slice).
             const slice =
               childName === undefined ? undefined : sliceByName?.get(childName);
             const proposed = proposedParts.map((v, axis) =>
@@ -1133,7 +1136,8 @@ export const layer = createNodeOperatorSequential(
               v === slice[axis] &&
               v !== size[axis] &&
               !isRing(node) &&
-              child instanceof GoFishNode
+              child instanceof GoFishNode &&
+              !child.plotIsBox(axis as 0 | 1)
                 ? v + sum(guttersAroundPlot(child, axis as 0 | 1, v))
                 : v
             ) as Size;
