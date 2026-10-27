@@ -5,7 +5,6 @@
 import { evalFieldValues, FieldExpr, FieldExprWire } from "../fieldExpr";
 import type { Place } from "../../families/place";
 import type { Nodes } from "../../families/shape";
-import type { LayerContext } from "../marks/chart";
 import type { LabelBackground, LabelHalo } from "./labelNode";
 
 export type LabelAccessor<D = any> =
@@ -19,10 +18,11 @@ export interface LabelOptions {
    *  (`"outset-top"`, `"center"`, ...), or a `Place` strategy, which reads
    *  the mark's outline and tries spots in order (`Place.around()`,
    *  `Place.along({ at: 0.6 })`, `Place.end()`, `Place.interior()`).
-   *  Default: by the mark's kind of geometry, `Place.around()` for a dot,
-   *  `Place.end()` for a line or an arrow, `Place.interior()` for a filled
-   *  band or polygon (`Place.around()` for an unfilled polygon), and
-   *  `"outset"` for anything else. */
+   *  Default: by the mark, `Place.around()` for a dot, `Place.end()` for
+   *  an arrow; for a line, a band or a polygon, by the outline it draws,
+   *  `Place.end()` for an open path, `Place.interior()` for a filled region
+   *  and `Place.around()` for one with no fill; and `"outset"` for anything
+   *  else. */
   position?: LabelPosition | Place;
   /** Nodes a `Place` label keeps off, beside the labeled marks and the
    *  other labels: a list of nodes or refs, or one `selectAll(name)`. */
@@ -47,8 +47,6 @@ export interface LabelSpec<D = any> extends LabelOptions {
   /** Which `.label()` call the spec comes from: the labels of one call are
    *  placed together (see `GoFishNode.label`). */
   group: unknown;
-  /** The chart's named layers, where `avoiding: selectAll(name)` is found. */
-  layerContext?: LayerContext;
 }
 
 /** Is this accessor a field-expression (either the `FieldExpr` class or its

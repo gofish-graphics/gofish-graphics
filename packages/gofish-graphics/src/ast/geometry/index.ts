@@ -29,7 +29,6 @@ export {
 } from "./enclosingCircle";
 export type { Circle, HasEnclosingCircle } from "./enclosingCircle";
 export {
-  outlines,
   boxOutline,
   ellipseOutline,
   outlinePaint,

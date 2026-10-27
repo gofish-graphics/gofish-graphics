@@ -26,7 +26,15 @@ import type { GoFishRef } from "../_ref";
 import { rawPlaceable } from "../axisDirection";
 import type { ConstraintRef } from "../constraints/shared";
 import { placedOutlines as outlinesAt, type Outline } from "../geometry";
-import type { Place } from "../../families/place";
+import {
+  around,
+  end,
+  interior,
+  type AlongPlace,
+  type AroundPlace,
+  type InteriorPlace,
+  type Place,
+} from "../../families/place";
 import { ringExtent } from "../geometry/box";
 import { turnedCorners } from "../geometry/plane";
 import {
@@ -49,8 +57,9 @@ import {
 } from "./strategies";
 import type { LabelNode } from "./labelNode";
 
-/** How far sampled outlines may stray from the shapes they stand for. */
-const TOLERANCE = 0.25;
+/** How far sampled outlines may stray from the shapes they stand for, in
+ *  placement and in the inside test of the auto color. */
+export const LABEL_TOLERANCE = 0.25;
 /** Pixels a label's box is grown by when it is tested for collisions. */
 const CLEARANCE = 1;
 /** Pixels between labels that `start`/`end` slide apart. */
@@ -65,9 +74,11 @@ export type LabelPlaceItem = {
   target: ConstraintRef;
   label: ConstraintRef;
   node: LabelNode;
-  place: Place;
-  /** Pixels between the outline and the label (see {@link placeOffset}). */
-  offset: number;
+  /** Its strategy, or `"outline"`: read from its mark's outline
+   *  ({@link placeByOutline}). */
+  place: Place | "outline";
+  /** The label's `offset` option (see {@link placeOffset}). */
+  offset?: number;
   /** `ref()` stand-ins of the nodes it avoids. */
   avoiding: ConstraintRef[];
   /** How the label's call reads in a message (`.label("country")`). */
@@ -102,12 +113,8 @@ export function createLabelPlaceConstraint(
 }
 
 /** A placed node's outlines in the layer's frame, in pixels. */
-function placedOutlines(p: Placeable): Outline[] {
-  const raw = rawPlaceable(p) as Placeable & {
-    yFrame?: { direction: 1 | -1 };
-  };
-  return outlinesAt(raw, TOLERANCE, raw.yFrame?.direction ?? 1);
-}
+const placedOutlines = (p: Placeable): Outline[] =>
+  outlinesAt(rawPlaceable(p), LABEL_TOLERANCE);
 
 /** The node a placeable stands for: a ref's target, or the node itself. */
 const markOf = (p: Placeable): unknown => {
@@ -244,26 +251,37 @@ export function applyLabelPlacement(
   }
 
   // The calls, in the order their first label appears; each call's labels
-  // in data order.
-  const calls = new Map<unknown, LabelPlaceItem[]>();
+  // in data order, each with its strategy and its offset resolved.
+  const calls = new Map<unknown, Resolved[]>();
   for (const item of constraint.items) {
+    const place =
+      item.place === "outline"
+        ? placeByOutline(shapeOf(item.target))
+        : item.place;
+    const resolved = {
+      ...item,
+      place,
+      offset: placeOffset(place, item.offset),
+    };
     const list = calls.get(item.group);
-    if (list) list.push(item);
-    else calls.set(item.group, [item]);
+    if (list) list.push(resolved);
+    else calls.set(item.group, [resolved]);
   }
 
   for (const [group, items] of calls) {
-    const kind = items[0].place.kind;
-    if (kind === "start" || kind === "end") {
-      placeEnds(items, kind, shapeOf, get, grid);
-      continue;
+    // `start` and `end` labels are never hidden: each kind's slide apart.
+    for (const which of ["start", "end"] as const) {
+      const ends = items.filter((i) => i.place.kind === which);
+      if (ends.length > 0) placeEnds(ends, which, shapeOf, get, grid);
     }
-    let hidden = 0;
+    // The rest take their first free candidate, in data order.
     for (const item of items) {
+      const { place } = item;
+      if (place.kind === "start" || place.kind === "end") continue;
       const shape = shapeOf(item.target);
       const angle = item.node.state.angle;
       const size = item.node.halfSize(angle);
-      const candidates = candidatesFor(item, shape, size, angle);
+      const candidates = candidatesFor(place, item.offset, shape, size, angle);
       const keep = (o: Obstacle) =>
         o.owner !== shape.mark && (o.scope === undefined || o.scope === group);
       // Its own mark is read as its outline's band only: a label may sit
@@ -279,9 +297,13 @@ export function applyLabelPlacement(
         chosen = c;
         break;
       }
+      const key = `${item.call} with ${placeName(place)}`;
+      const entry = hiddenLabels.get(key) ?? { hidden: 0, total: 0 };
+      entry.total++;
+      hiddenLabels.set(key, entry);
       const p = get(item.label);
       if (chosen === undefined) {
-        hidden++;
+        entry.hidden++;
         hide(p, item.node, centerOf(shape));
         continue;
       }
@@ -292,16 +314,29 @@ export function applyLabelPlacement(
         owner: item.label,
       });
     }
-    const key = `${items[0].call} with ${placeName(items[0].place)}`;
-    const entry = hiddenLabels.get(key) ?? { hidden: 0, total: 0 };
-    entry.hidden += hidden;
-    entry.total += items.length;
-    hiddenLabels.set(key, entry);
   }
 }
 
+/** A label to place, with its strategy and its offset resolved. */
+type Resolved = Omit<LabelPlaceItem, "place" | "offset"> & {
+  place: Place;
+  offset: number;
+};
+
 /** A strategy's name as written: `Place.around()`. */
 const placeName = (p: Place): string => `Place.${p.kind}()`;
+
+/**
+ * The strategy of a label whose default is read from its mark's outline
+ * (`labelPosition: "outline"`): inside a filled region, around a closed
+ * outline that is not filled, and at the end of an open path.
+ */
+const placeByOutline = (t: TargetShape): Place =>
+  t.outlines.some((o) => o.closed && o.filled)
+    ? interior()
+    : t.outlines.some((o) => o.closed)
+      ? around()
+      : end();
 
 /** The middle of a mark's outlines' box. */
 function centerOf(shape: TargetShape): Pt {
@@ -317,35 +352,33 @@ const DEFAULT_OFFSET = { around: 3, along: 3, start: 4, end: 4, interior: 0 };
 
 /** The pixels between the outline and a label placed by `place`: the
  *  strategy's `offset`, else the label's, else the strategy's default. */
-export const placeOffset = (place: Place, label: number | undefined) =>
+const placeOffset = (place: Place, label: number | undefined): number =>
   ("offset" in place ? place.offset : undefined) ??
   label ??
   DEFAULT_OFFSET[place.kind];
 
+/** The candidates of a strategy that offers several, best first. */
 function candidatesFor(
-  item: LabelPlaceItem,
+  place: AroundPlace | AlongPlace | InteriorPlace,
+  offset: number,
   shape: TargetShape,
   size: HalfSize,
   angle: number
 ): Candidate[] {
-  const place = item.place;
   switch (place.kind) {
     case "around":
-      return aroundCandidates(shape, size, angle, place, item.offset);
+      return aroundCandidates(shape, size, angle, place, offset);
     case "along":
-      return alongCandidates(shape, size, angle, place, item.offset);
+      return alongCandidates(shape, size, angle, place, offset);
     case "interior":
       return interiorCandidates(shape, size, angle);
-    case "start":
-    case "end":
-      throw new Error(`[gofish] Place.${place.kind}() is placed by placeEnds`);
   }
 }
 
 /** `Place.start()` / `Place.end()` for one call: each label at its path's
  *  end, then the labels on each side slid apart vertically. */
 function placeEnds(
-  items: LabelPlaceItem[],
+  items: Resolved[],
   which: "start" | "end",
   shapeOf: (ref: ConstraintRef) => TargetShape,
   get: (ref: ConstraintRef) => Placeable,

@@ -441,6 +441,89 @@ console.log("# the chooser, in a chart");
   );
 }
 
+console.log("# one call, one placement");
+{
+  // Bars stacked in two columns: each column is its own tier, but the
+  // labels of one .label() call are placed together, in the plot's area.
+  const rows = [
+    { x: "a", c: "p", v: 3 },
+    { x: "a", c: "q", v: 2 },
+    { x: "b", c: "p", v: 2 },
+    { x: "b", c: "q", v: 3 },
+  ];
+  const node = (await chart(rows, { axes: false })
+    .flow(
+      spread({ by: "x", dir: "x", spacing: 30 }),
+      stack({ by: "c", dir: "y" })
+    )
+    .mark(rect({ h: "v", w: 10 }).label("c", { position: Place.around() }))
+    .resolve()) as GoFishNode;
+  const doc = await node.toDisplayList({ w: 200, h: 200 });
+  const labels = [...walk(node)].filter((n) => n.type === "label");
+  ok(
+    "the labels of one call sit in one tier",
+    labels.length === 4 && labels.every((l) => l.parent === labels[0].parent),
+    String(labels.length)
+  );
+  const texts = textItems(doc);
+  let clash = "";
+  for (let i = 0; i < texts.length; i++)
+    for (let j = 0; j < i; j++)
+      if (convexOverlap(textBox(texts[i]), textBox(texts[j])))
+        clash ||= `${texts[i].text} / ${texts[j].text}`;
+  ok(
+    "they are placed together: none is hidden and none covers another",
+    texts.length === 4 && clash === "",
+    `${texts.length} ${clash}`
+  );
+  const bare = (await chart(rows, { axes: false })
+    .flow(
+      spread({ by: "x", dir: "x", spacing: 30 }),
+      stack({ by: "c", dir: "y" })
+    )
+    .mark(rect({ h: "v", w: 10 }))
+    .resolve()) as GoFishNode;
+  const boxes = (d: any) =>
+    JSON.stringify(
+      items(d)
+        .filter((i) => i.kind === "rect")
+        .map((r) => [r.x, r.y, r.w, r.h])
+    );
+  ok(
+    "the labels do not move the bars",
+    boxes(doc) === boxes(await bare.toDisplayList({ w: 200, h: 200 })),
+    boxes(doc)
+  );
+}
+
+console.log("# a call over marks with different defaults");
+{
+  // One call labels dots (around) and the line through them (end): each
+  // kind is placed its own way, in one run.
+  const rows = [
+    { x: 1, y: 1 },
+    { x: 2, y: 3 },
+    { x: 3, y: 2 },
+  ];
+  const node = (await chart(rows, { axes: false })
+    .flow(scatter({ x: "x", y: "y" }))
+    .mark(circle({ r: 3 }))
+    .layer(line())
+    .resolve()) as GoFishNode;
+  const call = {};
+  for (const n of [...walk(node)])
+    if (n.type === "ellipse" || n.type === "connect")
+      n.label(() => n.type, undefined, call);
+  const doc = await node.toDisplayList({ w: 200, h: 200 });
+  const texts = textItems(doc).map((t) => t.text);
+  ok(
+    "a call that mixes end and around places both",
+    texts.filter((t) => t === "connect").length === 1 &&
+      texts.filter((t) => t === "ellipse").length >= 1,
+    JSON.stringify(texts)
+  );
+}
+
 console.log("# defaults by geometry");
 {
   const rows = [

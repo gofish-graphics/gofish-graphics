@@ -254,10 +254,7 @@ const reflectGeometry = (g: Geometry): Geometry => {
             }
             return reflectedCircle;
           },
-    outline:
-      outline === undefined
-        ? undefined
-        : (tolerance: number) => outline(tolerance).map(reflectOutlineY),
+    outline: (tolerance: number) => outline(tolerance).map(reflectOutlineY),
   } as Geometry;
 };
 

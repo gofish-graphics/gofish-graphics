@@ -12,7 +12,6 @@ import { GoFishAST } from "../_ast";
 import { projectBy, type SplitBy } from "../datumProjection";
 import { GoFishNode, defaultGeometry } from "../_node";
 import { outlinePaint, pathOutline } from "../geometry";
-import { end, interior } from "../../families/place";
 import { resolveColorChannel } from "../../color";
 import type { DisplayList } from "gofish-ir";
 import {
@@ -276,8 +275,8 @@ export const connect = createNodeOperator(
     return new GoFishNode(
       {
         type: "connect",
-        // A line is labeled at its end, a band inside itself.
-        labelPosition: closed ? interior() : end(),
+        // Labeled by its outline: a line at its end, a band inside itself.
+        labelPosition: "outline",
         // The domain-building walk (`GoFishNode.resolveColorScale`) only
         // reads a node's single `color` property to register a field-valued
         // paint into the shared discrete-color scale. Prefer whichever

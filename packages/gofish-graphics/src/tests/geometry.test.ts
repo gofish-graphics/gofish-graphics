@@ -13,7 +13,7 @@ import { defaultGeometry, GoFishNode } from "../ast/_node";
 import {
   enclosingCircle,
   translateCircle,
-  outlines,
+  boxOutline,
   flattenPath,
   reflectOutlineY,
   translateOutline,
@@ -166,14 +166,14 @@ console.log("# outline: box fallback");
   const rg = layOut(Rect({ w: 30, h: 40 })).geometry();
   // A geometry with only a box: what a node with no outline of its own reads.
   const g = { box: rg.box };
-  const [down] = outlines(g, 0.5, 1);
+  const [down] = [boxOutline(g.box, 1)];
   ok(
     "a node with no paint of its own is read as filling its box",
     down.filled && down.width === undefined
   );
   ok(
     "a filled rect's outline is the fallback's",
-    JSON.stringify(outlines(rg, 0.5, 1)) === JSON.stringify([down])
+    JSON.stringify(rg.outline(0.5)) === JSON.stringify([down])
   );
   ok("the fallback is one closed rect", down.closed && down.points.length === 4);
   ok(
@@ -198,7 +198,7 @@ console.log("# outline: box fallback");
       part(down, "x-min").from === 100 &&
       part(down, "x-min").to === 140
   );
-  const [up] = outlines(g, 0.5, -1);
+  const [up] = [boxOutline(g.box, -1)];
   ok(
     "a y that grows upward names the top edge y-max",
     part(up, "y-max").from === 0 && part(up, "y-min").from === 70
@@ -209,7 +209,7 @@ console.log("# outline: ellipse");
 {
   const g = layOut(circle(20)).geometry();
   for (const tol of [0.1, 1]) {
-    const [o] = outlines(g, tol, 1);
+    const [o] = (g).outline(tol);
     ok(`circle outline is closed (tolerance ${tol})`, o.closed);
     ok(
       `circle samples lie on the circle (tolerance ${tol})`,
@@ -224,10 +224,10 @@ console.log("# outline: ellipse");
       `${sagitta}`
     );
   }
-  const fine = outlines(g, 0.1, 1)[0].points.length;
-  const coarse = outlines(g, 1, 1)[0].points.length;
+  const fine = (g).outline(0.1)[0].points.length;
+  const coarse = (g).outline(1)[0].points.length;
   ok("a finer tolerance takes more samples", fine > coarse, `${fine} ${coarse}`);
-  const e = outlines(g, 0.5, 1)[0].ellipse;
+  const e = (g).outline(0.5)[0].ellipse;
   ok(
     "a circle's outline gives its ellipse exactly",
     e !== undefined && e.cx === 20 && e.cy === 20 && e.rx === 20 && e.ry === 20,
@@ -245,38 +245,26 @@ console.log("# outline: polygon and text");
     [10, 30],
     [0, 30],
   ];
-  const [o] = outlines(layOut(Polygon({ points: ring })).geometry(), 0.5, 1);
+  const [o] = (layOut(Polygon({ points: ring })).geometry()).outline(0.5);
   ok(
     "polygon outline is its ring, closed",
     o.closed && JSON.stringify(o.points) === JSON.stringify(ring)
   );
   ok("a polygon is filled by default", o.filled && o.width === undefined);
 
-  const [u] = outlines(
-    layOut(
+  const [u] = (layOut(
       Polygon({ points: ring, fill: "none", stroke: "black", strokeWidth: 3 })
-    ).geometry(),
-    0.5,
-    1
-  );
+    ).geometry()).outline(0.5);
   ok(
     "an unfilled polygon's outline is closed, not filled, as wide as its stroke",
     u.closed && !u.filled && u.width === 3,
     JSON.stringify({ closed: u.closed, filled: u.filled, width: u.width })
   );
-  const [tr] = outlines(
-    layOut(Polygon({ points: ring, fill: "transparent" })).geometry(),
-    0.5,
-    1
-  );
+  const [tr] = (layOut(Polygon({ points: ring, fill: "transparent" })).geometry()).outline(0.5);
   ok("a transparent fill is not filled", tr.closed && !tr.filled);
 
-  const [ro] = outlines(
-    layOut(Rect({ w: 20, h: 10, fill: "none", stroke: "red", strokeWidth: 2 }))
-      .geometry(),
-    0.5,
-    1
-  );
+  const [ro] = (layOut(Rect({ w: 20, h: 10, fill: "none", stroke: "red", strokeWidth: 2 }))
+      .geometry()).outline(0.5);
   ok(
     "a rect's box outline carries its paint",
     ro.closed && !ro.filled && ro.width === 2 && ro.box !== undefined
@@ -303,7 +291,7 @@ console.log("# outline: polygon and text");
 
   const t = layOut(Text({ text: "hello", fontSize: 10, rotate: 90 }));
   const tg = t.geometry();
-  const [to] = outlines(tg, 0.5, 1);
+  const [to] = (tg).outline(0.5);
   ok("rotated text outline is a closed quad", to.closed && to.points.length === 4);
   const xs = to.points.map((p) => p[0]);
   const ys = to.points.map((p) => p[1]);
@@ -315,9 +303,10 @@ console.log("# outline: polygon and text");
       near(Math.max(...ys), tg.box.max[1]),
     JSON.stringify({ pts: to.points, box: tg.box })
   );
+  const hi = layOut(Text({ text: "hi" })).geometry();
   ok(
-    "unrotated text has no outline of its own",
-    !layOut(Text({ text: "hi" })).geometry().outline
+    "unrotated text's outline is its box",
+    JSON.stringify(hi.outline(0.5)[0].box) === JSON.stringify(hi.box)
   );
 }
 
@@ -406,7 +395,7 @@ console.log("# outline: line and ribbon connectors");
     .resolve()) as GoFishNode;
   await lineChart.toDisplayList({ w: 200, h: 100, axes: false });
   const conn = [...walk(lineChart)].find((n) => n.type === "connect")!;
-  const lo = outlines(conn.geometry(), 0.5, conn.yFrame.direction);
+  const lo = (conn.geometry()).outline(0.5);
   ok("a line's outline is one open path", lo.length === 1 && !lo[0].closed);
   ok("a line's outline samples its curve", lo[0].points.length > 3);
   ok("a line's outline carries its stroke width", lo[0].width === 1, `${lo[0].width}`);
@@ -439,7 +428,7 @@ console.log("# outline: line and ribbon connectors");
     .resolve()) as GoFishNode;
   await band.toDisplayList({ w: 200, h: 100, axes: false });
   const rib = [...walk(band)].find((n) => n.type === "connect")!;
-  const ro = outlines(rib.geometry(), 0.5, rib.yFrame.direction);
+  const ro = (rib.geometry()).outline(0.5);
   ok("a ribbon's outline is one closed band", ro.length === 1 && ro[0].closed);
   ok("a ribbon's band has no stroke width", ro[0].width === undefined);
 }

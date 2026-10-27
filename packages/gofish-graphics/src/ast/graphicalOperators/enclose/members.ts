@@ -31,7 +31,6 @@
  * widths, keep-out polygon and avoidance pivots).
  */
 import type { Placeable } from "../../_node";
-import { rawPlaceable } from "../../axisDirection";
 import {
   outlineSegments,
   placedOutlines,
@@ -72,13 +71,5 @@ function membersOfOutline(o: Outline): BlobMember[] {
  * enclosure's layout got it back (its view of the child), so its geometry
  * and `dims` are both in the enclosure's frame.
  */
-export function membersOf(placed: Placeable): BlobMember[] {
-  // A box's edges are named in the node's own axis order: its direction,
-  // turned when the view reflects it into the enclosure's.
-  const raw = rawPlaceable(placed) as Placeable & {
-    yFrame?: { direction: 1 | -1 };
-  };
-  const own = raw.yFrame?.direction ?? 1;
-  const direction = raw === placed ? own : own === 1 ? -1 : 1;
-  return placedOutlines(placed, TOLERANCE, direction).flatMap(membersOfOutline);
-}
+export const membersOf = (placed: Placeable): BlobMember[] =>
+  placedOutlines(placed, TOLERANCE).flatMap(membersOfOutline);

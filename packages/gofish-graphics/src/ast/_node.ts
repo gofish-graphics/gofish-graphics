@@ -124,12 +124,13 @@ import {
 } from "./labels/labelPlacement";
 import type { HiddenLabels } from "./labels/placeStep";
 import type { Place } from "../families/place";
-import type { LayerContext } from "./marks/chart";
+import type { LabelPosition } from "./labels/labelPlacement";
 import { withKindValues } from "./strategyKind";
 import { packEnclose } from "d3-hierarchy";
 import type { KeyCell } from "./cells";
 import {
   boxOfDims,
+  boxOutline,
   enclosingCircle,
   reflectRegionY,
   translateCircle,
@@ -317,7 +318,7 @@ export type GeometryFn = (
   },
   children: GoFishAST[],
   node: GoFishNode
-) => Geometry;
+) => Omit<Geometry, "outline"> & Partial<Pick<Geometry, "outline">>;
 
 /** The geometry a node has when its definition supplies none. A leaf answers
  *  only `box`. A node with children also answers `enclosingCircle`, lazily: the
@@ -553,7 +554,7 @@ export class GoFishNode {
   public colorConfig?: ColorConfig;
   public _labels?: LabelSpec[];
   /** Where a `.label()` with no `position` goes (see the constructor). */
-  public labelPosition?: Place;
+  public labelPosition?: LabelPosition | Place | "outline";
   /** Nodes that belong to this node as a mark but live OUTSIDE its subtree:
    *  today the label `Text`s the label pass seats for it in the tier above
    *  (`labels/elaborate.tsx`), which stay out of the subtree so they never
@@ -691,11 +692,14 @@ export class GoFishNode {
       lower?: Lower;
       geometry?: GeometryFn;
       color?: MaybeValue<string>;
-      /** Where a `.label()` with no `position` goes on this node, by the
-       *  kind of geometry it is: a dot is labeled around itself, a path at
-       *  its end, a region in its interior. Default `"outset"` (above its
-       *  box). */
-      labelPosition?: Place;
+      /** Where a `.label()` with no `position` goes on this node: a
+       *  position or a `Place` strategy by convention (a dot is labeled
+       *  around itself, an arrow at its end), or `"outline"`, read from the
+       *  outline the node draws when the label is placed: at the end of an
+       *  open path, around a closed outline with no fill, inside a filled
+       *  one. Default `"outset"` (above its box). A node that sets it draws
+       *  its own ink and is itself the target of a `.label()` on it. */
+      labelPosition?: LabelPosition | Place | "outline";
     },
     children: GoFishAST[]
   ) {
@@ -1495,15 +1499,25 @@ export class GoFishNode {
       throw new Error(
         `[gofish] geometry() called on ${this.type} before it was laid out`
       );
-    return (this._geometry ??= (this._geometryFn ?? defaultGeometry)(
-      {
-        intrinsicDims: this.intrinsicDims,
-        transform: this.transform,
-        renderData: this.renderData,
-      },
-      this.children,
-      this
-    ));
+    if (this._geometry === undefined) {
+      const g = (this._geometryFn ?? defaultGeometry)(
+        {
+          intrinsicDims: this.intrinsicDims,
+          transform: this.transform,
+          renderData: this.renderData,
+        },
+        this.children,
+        this
+      );
+      // A node whose definition gives no outline is read as its box, its
+      // edges named in its own axis order.
+      this._geometry = {
+        ...g,
+        outline:
+          g.outline ?? (() => [boxOutline(g.box, this.yFrame.direction)]),
+      };
+    }
+    return this._geometry;
   }
 
   public get dims(): Dimensions {
@@ -2144,22 +2158,21 @@ export class GoFishNode {
   }
 
   /**
-   * Label this node (see `labels/elaborate.tsx`). The labels of one call are
-   * placed together, so a mark's call marks each node's spec with the same
-   * `group`: the call's options object, or its accessor when it has none.
-   * `layerContext` is the chart's named layers, where a `selectAll(name)` in
-   * `avoiding` is found.
+   * Label this node (see `labels/elaborate.tsx`). `call` stands for the
+   * `.label()` call the label comes from, and the labels of one call are
+   * placed together: a mark's or an operator's `.label()` passes the one
+   * `call` it made to every node it labels. Called on a node directly, it
+   * is a call of its own.
    */
   public label(
     accessor: LabelAccessor,
     options?: LabelOptions,
-    layerContext?: LayerContext
+    call: object = {}
   ): this {
     (this._labels ??= []).push({
       accessor,
       ...withKindValues(options),
-      group: options ?? accessor,
-      layerContext,
+      group: call,
     });
     return this;
   }

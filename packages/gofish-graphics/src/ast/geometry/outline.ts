@@ -90,12 +90,14 @@ export function outlinePaint(paint: {
 }
 
 /**
- * A shape that knows its outline. One shape may have several (a ribbon cut
- * by gaps is one closed band per run). `tolerance` is the most the samples
- * may stray from the true shape, in pixels.
+ * A shape's outlines. One shape may have several (a ribbon cut by gaps is
+ * one closed band per run). `tolerance` is the most the samples may stray
+ * from the true shape, in pixels. Every node's geometry has them: its
+ * shape's own, or its box ({@link boxOutline}) when its definition gives
+ * none (`GoFishNode.geometry`).
  */
 export interface HasOutline {
-  readonly outline?: (tolerance: number) => Outline[];
+  readonly outline: (tolerance: number) => Outline[];
 }
 
 /** A box's outline: a closed rect, clockwise on the screen from its top-left
@@ -134,19 +136,6 @@ export function boxOutline(
       { name: "x-min", from: 2 * w + h, to: 2 * w + 2 * h },
     ],
   };
-}
-
-/**
- * A geometry's outlines, falling back to its box (see {@link boxOutline}),
- * in the geometry's own frame. For a node's own geometry (pixels),
- * `direction` is that node's y direction.
- */
-export function outlines(
-  g: Geometry,
-  tolerance: number,
-  direction: AxisDirection
-): Outline[] {
-  return g.outline?.(tolerance) ?? [boxOutline(g.box, direction)];
 }
 
 /** Move an outline by `[dx, dy]`, e.g. by a child's translate into its
@@ -190,21 +179,17 @@ export function reflectOutlineY(o: Outline): Outline {
  * A placed node's outlines in its parent's frame: the outlines of `p`'s
  * geometry, moved so its box sits where `p.dims` puts it. `p` is any
  * placeable (a node, a `ref()` stand-in, or a parent's oriented view of
- * one), whose `geometry()` and `dims` are read in the same frame;
- * `direction` names a box's edges (see {@link boxOutline}).
+ * one), whose `geometry()` and `dims` are read in the same frame.
  */
 export function placedOutlines(
   p: { geometry(): Geometry; dims: Dimensions },
-  tolerance: number,
-  direction: AxisDirection
+  tolerance: number
 ): Outline[] {
   const g = p.geometry();
   const d = p.dims;
   const dx = (d[0].min ?? 0) - g.box.min[0];
   const dy = (d[1].min ?? 0) - g.box.min[1];
-  return outlines(g, tolerance, direction).map((o) =>
-    translateOutline(o, [dx, dy])
-  );
+  return g.outline(tolerance).map((o) => translateOutline(o, [dx, dy]));
 }
 
 /** A closed ring's outline: `ring` kept in a node's axis order (see

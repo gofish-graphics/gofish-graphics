@@ -10,7 +10,7 @@ import { GoFishNode } from "./_node";
 import { GoFishRef } from "./_ref";
 import { RelateOperand } from "./constraints/relate";
 import type { LayerContext } from "./marks/chart";
-import { resolveRefData } from "./marks/chartBuilder";
+import { resolveRefData } from "./marks/resolveRefData";
 import { nodeSelectionOf } from "./nodeSelection";
 import type { Nodes } from "../families/shape";
 

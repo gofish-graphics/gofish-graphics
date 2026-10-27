@@ -3,7 +3,6 @@ import { datumOfInput } from "../marks/markResult";
 import { packEnclose } from "d3-hierarchy";
 import { GoFishNode } from "../_node";
 import { boxOfDims, outlinePaint, ringExtent, ringOutline } from "../geometry";
-import { around, interior } from "../../families/place";
 import { GoFishAST } from "../_ast";
 import { Size } from "../dims";
 import { UNDEFINED, UnderlyingSpace, CONTINUOUS } from "../underlyingSpace";
@@ -78,9 +77,8 @@ export const Polygon = ({
   return new GoFishNode(
     {
       type: "polygon",
-      // A filled region is labeled inside itself; an unfilled one draws only
-      // its outline, so it is labeled around it.
-      labelPosition: paint.filled ? interior() : around(),
+      // Labeled by its outline: inside it when filled, around it when not.
+      labelPosition: "outline",
       // Used to seed the unit color scale. Prefer whichever channel is
       // data-driven — the same rule `rect` follows.
       color: isValue(fill) ? fill : stroke,
