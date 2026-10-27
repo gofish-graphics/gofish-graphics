@@ -2413,6 +2413,37 @@ class ColumnSchema(dict):
         name = _require_str(unit, "unit")
         return ColumnSchema({**self, "HasUnit": {"unit": name, "symbol": name}})
 
+    def summable(self) -> "ColumnSchema":
+        """Say that the column's amounts can be added (``CanAdd``): a sum of
+        them means something, so a ``size`` channel, ``stack``, treemap
+        ``size`` and ``.sum()`` may sum the column. Only amounts in a declared
+        unit add up, so it needs ``HasUnit``, and a time has none: two
+        instants do not add, though their difference (a duration) does. A
+        column without it raises a TypeError, with the messages of JS
+        ``checkSummableType`` in schema.ts."""
+        column_type = {**self, "CanAdd": {}}
+        _check_summable_type(".summable: the column", column_type)
+        return ColumnSchema(column_type)
+
+
+def _check_summable_type(who: str, column_type: Dict[str, Any]) -> None:
+    """Raise when ``CanAdd`` is on a column with no unit or on a time, with
+    the messages of JS ``checkSummableType`` in schema.ts, which explains
+    the rules."""
+    if "CanAdd" not in column_type:
+        return
+    if "HasCalendar" in column_type:
+        raise TypeError(
+            f"{who} is a time, which cannot be summable: two instants do not "
+            "add up. Subtract a reference first (e.g. date - start gives a "
+            "duration, which adds)."
+        )
+    if "HasUnit" not in column_type:
+        raise TypeError(
+            f"{who} has CanAdd but no unit. Only amounts in a unit add up; "
+            "declare the unit first: Schema.unit(unit).summable()."
+        )
+
 
 def _require_str(value: Any, what: str) -> str:
     """``value``, checked to be a string; ``what`` names it in the message."""
@@ -2441,6 +2472,7 @@ _ACCEPTS: Dict[str, Callable[[Any, Any], bool]] = {
     "HasUnit": lambda v, c: v is None
     or _is_number(v)
     or (c.get("unit") == _INSTANT["unit"] and isinstance(v, datetime.date)),
+    "CanAdd": lambda v, c: True,
     "HasQuantity": lambda v, c: True,
 }
 
@@ -2522,7 +2554,8 @@ class Schema:
         Columns in the same unit may share an axis; two different units on
         one axis are an error. A column with no unit declared may share an
         axis with any other. An axis title shows the unit after its
-        quantity: "Pay (USD)".
+        quantity: "Pay (USD)". Its amounts cannot be summed until
+        ``.summable()`` says they can (``CanAdd``).
         """
         return ColumnSchema({}).unit(unit)
 

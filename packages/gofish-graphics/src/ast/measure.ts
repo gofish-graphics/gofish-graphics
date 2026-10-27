@@ -2,7 +2,7 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import type { ColumnType, HasCalendar, HasUnit } from "./schema";
+import type { CanAdd, ColumnType, HasCalendar, HasUnit } from "./schema";
 
 /**
  * Measures: what the values along an axis are amounts of, and in what unit.
@@ -32,6 +32,11 @@ import type { ColumnType, HasCalendar, HasUnit } from "./schema";
  * The unit decides which axes may share a scale. The quantity names title
  * the axis, followed by the unit's symbol when it has one: "Pay (USD)"
  * (`spaceTitle` in underlyingSpace.ts).
+ *
+ * A declared unit also says whether its amounts add up (`CanAdd`, #1197):
+ * every place that sums values checks it ({@link checkSummable}). A unit
+ * that cannot add still subtracts: its differences are in its
+ * {@link differenceUnit}, which can.
  */
 
 /** What one channel's values are amounts of, as its column says (pure data,
@@ -40,7 +45,7 @@ export type Quantity = {
   /** Titles the axis and names the unit variable. */
   name: string;
   /** The declared unit, if any. Absent: unknown, the variable `name`. */
-  unit?: HasUnit;
+  unit?: MeasureUnit;
   /** The column the values were read from, when they were read from one (a
    *  count or a share was not): what a schema declares a unit for. */
   column?: string;
@@ -48,30 +53,56 @@ export type Quantity = {
   calendar?: HasCalendar;
 };
 
-// A declared unit is a `HasUnit` (schema.ts): its `unit` says which units
-// are the same, and its `symbol` is what an axis title shows it by, "Pay
-// (USD)". A unit the user declares (`Schema.unit(u)`) has the symbol `u`.
-// The engine's own units (INSTANT, DURATION, COUNT, a normalize share) have
-// none: a count or a share is a plain number, and a time axis's ticks
-// already read as dates.
+/**
+ * A declared unit as the engine reads it: a `HasUnit` (schema.ts), whose
+ * `unit` says which units are the same and whose `symbol` is what an axis
+ * title shows it by, "Pay (USD)", and `CanAdd` when its amounts add up. A
+ * unit the user declares (`Schema.unit(u)`) has the symbol `u`, and `CanAdd`
+ * when its column says `.summable()` ({@link columnQuantity}). The engine's
+ * own units (INSTANT, DURATION, COUNT, a normalize share) have no symbol: a
+ * count or a share is a plain number, and a time axis's ticks already read
+ * as dates. Which of them add up is written on each below.
+ */
+export type MeasureUnit = HasUnit & { CanAdd?: CanAdd };
 
 /** The unit of a time column, an instant, which `Schema.time()` writes
  *  beside `HasCalendar`. Its zone is a display parameter, kept in the
- *  calendar. */
+ *  calendar. Two instants do not add: an instant has no `CanAdd`. */
 export const INSTANT: HasUnit = { unit: "instant" };
 
-/** The unit of a difference of two instants: a duration. */
-export const DURATION: HasUnit = { unit: "duration" };
+/** The unit of a difference of two instants: a duration, which adds. */
+export const DURATION: MeasureUnit = { unit: "duration", CanAdd: {} };
 
-/** The unit `.count()` and `.distinct()` declare. */
-export const COUNT: HasUnit = { unit: "count" };
+/** The unit `.count()` and `.distinct()` declare, which adds. */
+export const COUNT: MeasureUnit = { unit: "count", CanAdd: {} };
 
-/** The {@link Quantity} of column `column`, whose type is `type`. */
+/**
+ * The unit of a difference of two amounts in `unit`: the unit itself when
+ * its amounts add (USD − USD = USD); a duration for two instants; else the
+ * derived unit `Δ<unit>` (°C − °C = Δ°C), whose amounts add. Points on a
+ * scale (temperatures, dates) do not add, but their differences do.
+ */
+export const differenceUnit = (unit: MeasureUnit): MeasureUnit =>
+  unit.CanAdd !== undefined
+    ? unit
+    : unit.unit === INSTANT.unit
+      ? DURATION
+      : {
+          unit: `Δ${unit.unit}`,
+          ...(unit.symbol !== undefined ? { symbol: `Δ${unit.symbol}` } : {}),
+          CanAdd: {},
+        };
+
+/** The {@link Quantity} of column `column`, whose type is `type`: its
+ *  declared unit carries the column's `CanAdd`. */
 export const columnQuantity = (
   column: string,
   type: ColumnType | undefined
 ): Quantity => {
-  const unit = type?.HasUnit;
+  const unit: MeasureUnit | undefined = type?.HasUnit && {
+    ...type.HasUnit,
+    ...(type.CanAdd !== undefined ? { CanAdd: type.CanAdd } : {}),
+  };
   return {
     name: type?.HasQuantity?.name ?? column,
     column,
@@ -79,6 +110,64 @@ export const columnQuantity = (
     ...(type?.HasCalendar ? { calendar: type.HasCalendar } : {}),
   };
 };
+
+/**
+ * The loud error for summing amounts that do not add (#1197): `where` sums
+ * values in the declared unit `unit`, which has no `CanAdd`, read from
+ * `columns` (none when they were not read from a column). A column with no
+ * declared unit never reaches here: its type is unknown, so it passes.
+ */
+export function notSummableError(
+  where: string,
+  unit: MeasureUnit,
+  columns: readonly string[],
+  names: readonly string[] = []
+): Error {
+  const what =
+    columns.length > 0
+      ? `the column${columns.length > 1 ? "s" : ""} ${columns.map((c) => `"${c}"`).join(", ")}`
+      : `the values of ${names.map((n) => `"${n}"`).join(", ") || "this quantity"}`;
+  const column = columns[0] ?? "value";
+  if (unit.unit === INSTANT.unit)
+    return new Error(
+      `${where} sums ${what}, but ${columns.length > 1 ? "they are times" : "it is a time"} ` +
+        `(Schema.time()), and times cannot be summed: two instants do not ` +
+        `add up. Subtract a reference first, e.g. derive a column ` +
+        `${column} - start, which is a duration, or give the mark two ` +
+        `positions (x: "start", x2: "end").`
+    );
+  return new Error(
+    `${where} sums ${what}, in the unit "${unit.unit}", which cannot be ` +
+      `summed: it has no CanAdd. If its amounts add up (money, counts, ` +
+      `lengths), declare it with Schema.unit("${unit.unit}").summable(). If ` +
+      `they are points on a scale (temperatures, dates), subtract a ` +
+      `reference first (e.g. date - start gives a duration): differences ` +
+      `add up.`
+  );
+}
+
+/** Check that `where` may sum values of quantity `q` (#1197): its declared
+ *  unit has `CanAdd`. A quantity with no declared unit passes (gradual
+ *  typing, #1125: its type is unknown). */
+export function checkSummable(q: Quantity | undefined, where: string): void {
+  const unit = q?.unit;
+  if (unit === undefined || unit.CanAdd !== undefined) return;
+  throw notSummableError(
+    where,
+    unit,
+    q!.column !== undefined ? [q!.column] : [],
+    [q!.name]
+  );
+}
+
+/** {@link checkSummable} for a unit variable, as a fold that adds spaces
+ *  reads it: the declared unit its class is bound to must have `CanAdd`. An
+ *  unknown passes. */
+export function checkSummableVar(v: UnitVar, where: string): void {
+  const root = findRoot(v);
+  if (root.unit === undefined || root.unit.CanAdd !== undefined) return;
+  throw notSummableError(where, root.unit, root.columns, root.names);
+}
 
 /**
  * A unit variable, as a node of the render's union-find. A root holds the
@@ -89,7 +178,7 @@ export class UnitVar {
   /** @internal union-find parent; undefined at a root. */
   parent?: UnitVar;
   /** @internal at a root: the declared unit the class is bound to. */
-  unit?: HasUnit;
+  unit?: MeasureUnit;
   /** @internal at a root: the quantity names in the class. */
   names: string[];
   /** @internal at a root: the columns in the class, the keys a schema
@@ -125,7 +214,7 @@ const findRoot = (v: UnitVar): UnitVar => {
  *  when its class is bound to one, else the unknown its class stands for
  *  (named by one of its quantities). */
 export type Unit =
-  | ({ kind: "declared" } & HasUnit)
+  | ({ kind: "declared" } & MeasureUnit)
   | { kind: "unknown"; name: string };
 
 /** What a unit variable stands for now. */
@@ -149,7 +238,7 @@ export const sameUnitVar = (a: UnitVar, b: UnitVar): boolean => {
  *  concrete term, so it binds no other quantity of that name. */
 export const declaredVar = (
   name: string,
-  unit: HasUnit,
+  unit: MeasureUnit,
   column?: string
 ): UnitVar => {
   const v = new UnitVar(name, column);
@@ -251,15 +340,26 @@ export function unify(a: UnitVar, b: UnitVar, site: MeasureSite): UnitVar {
   }
   rb.parent = ra;
   // One unit declared twice keeps a symbol either side gives it, so the
-  // title does not depend on which side met first.
-  ra.unit =
+  // title does not depend on which side met first. Its amounts add only
+  // when both sides say so: under the declared shortcut of #1197, CanAdd is
+  // per column, and a class of columns adds up only if each of them does.
+  const unit =
     ra.unit && rb.unit && ra.unit.symbol === undefined
       ? rb.unit
       : (ra.unit ?? rb.unit);
+  ra.unit =
+    ra.unit && rb.unit && unit?.CanAdd !== undefined
+      ? ra.unit.CanAdd !== undefined && rb.unit.CanAdd !== undefined
+        ? unit
+        : withoutCanAdd(unit)
+      : unit;
   ra.names = unionInOrder(ra.names, rb.names);
   ra.columns = unionInOrder(ra.columns, rb.columns);
   return ra;
 }
+
+const withoutCanAdd = ({ CanAdd: _, ...rest }: MeasureUnit): MeasureUnit =>
+  rest;
 
 /** Where two measures meet: the axis (0 or 1) when the clash is on an axis,
  *  and a plain phrase for the composition, read as "(... )" in the message,

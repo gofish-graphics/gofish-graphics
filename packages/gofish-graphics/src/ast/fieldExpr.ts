@@ -29,7 +29,7 @@
 // import THIS module's class at runtime without a cycle.
 import sumBy from "lodash/sumBy";
 import type { MaybeValue } from "./data";
-import { COUNT, type Quantity } from "./measure";
+import { checkSummable, COUNT, type Quantity } from "./measure";
 import { withWire, wireOf } from "./wire";
 import {
   binStepToJSON,
@@ -452,13 +452,18 @@ export const sumOf = (values: readonly unknown[]): number | undefined => {
  * reports none, leaving the quantity to the caller (`resolveColumn`): a
  * `sum` or `mean` keeps its source column's quantity and unit.
  *
+ * `folded` says whether an aggregate op folded the rows. A `.sum()` adds the
+ * rows, so it checks that `column` (the quantity of the column it reads,
+ * when the caller knows it) can be summed (`checkSummable`, #1197).
+ *
  * Domain ops (`sort`/`reverse`/`bin`) don't belong in a value slot and throw;
  * so does a second aggregate (the fold happens once).
  */
 export function evalFieldValues<T>(
   accessor: string | ((r: T) => unknown) | FieldExprWire | FieldExpr,
-  rows: T[]
-): { values: unknown[]; quantity?: Quantity } {
+  rows: T[],
+  column?: Quantity
+): { values: unknown[]; quantity?: Quantity; folded: boolean } {
   const key: (r: T) => unknown =
     typeof accessor === "function"
       ? accessor
@@ -480,22 +485,24 @@ export function evalFieldValues<T>(
     }
     agg = op;
   }
-  if (agg === undefined) return { values: rows.map(key) };
+  if (agg === undefined) return { values: rows.map(key), folded: false };
   switch (agg.op) {
     case "count":
-      return { values: [rows.length], quantity: COUNT_QUANTITY };
+      return { values: [rows.length], quantity: COUNT_QUANTITY, folded: true };
     case "distinct":
       return {
         values: [new Set(rows.map(key)).size],
         quantity: COUNT_QUANTITY,
+        folded: true,
       };
     case "mean":
       // No values, no mean: the fold is the singleton of no value
       // (`meanOf`), which every channel's own aggregation keeps (a sum of
       // `[undefined]` is undefined), so the channel has no value either.
-      return { values: [meanOf(rows.map(key))] };
+      return { values: [meanOf(rows.map(key))], folded: true };
     default: // "sum"
-      return { values: [sumOf(rows.map(key))] };
+      checkSummable(column, "field(...).sum()");
+      return { values: [sumOf(rows.map(key))], folded: true };
   }
 }
 
@@ -580,14 +587,15 @@ const datumQuantity = (v: MaybeValue<number>): Quantity | undefined =>
  * were computed over, so a per-`origin` share and a per-`cylinders` share
  * (two nesting levels of the same mosaic) stay distinct units even though
  * both are "count share". The name doubles as the axis title. The unit has
- * no symbol: a share is a plain number, so the title adds no "(unit)".
+ * no symbol: a share is a plain number, so the title adds no "(unit)". Shares
+ * add up (to 1), so the unit has `CanAdd`.
  */
 export const shareQuantity = (
   base: Quantity | undefined,
   byName?: string
 ): Quantity => {
   const name = `${base?.name ?? "value"} share${byName ? ` by ${byName}` : ""}`;
-  return { name, unit: { unit: name } };
+  return { name, unit: { unit: name, CanAdd: {} } };
 };
 
 /**
@@ -607,6 +615,8 @@ export function applyEntryNormalize(
   const baseQuantity = entryValues
     .map(datumQuantity)
     .find((q) => q !== undefined);
+  // The window's total adds the entries.
+  checkSummable(baseQuantity, "field(...).normalize()");
   const quantity = shareQuantity(baseQuantity, byName);
   if (!(total > 0)) {
     if (typeof console !== "undefined" && typeof console.warn === "function") {

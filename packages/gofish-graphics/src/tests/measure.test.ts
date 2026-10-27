@@ -38,7 +38,15 @@ import {
 import { GoFishNode } from "../ast/_node";
 import { DatumValueImpl } from "../ast/data";
 import { positionNode } from "../ast/graphicalOperators/positionNode";
-import { DURATION, INSTANT, type Quantity } from "../ast/measure";
+import {
+  differenceUnit,
+  DURATION,
+  INSTANT,
+  Units,
+  withUnits,
+  type Quantity,
+} from "../ast/measure";
+import { differenceUnits } from "../ast/underlyingSpace";
 import { declared, fresh, textsOf, unknown } from "./testHelpers";
 import { distributeSpaceFold } from "../ast/constraints/distribute";
 import { interval } from "../util/interval";
@@ -59,6 +67,8 @@ const {
   ribbon,
   line,
   Schema,
+  stack,
+  treemap,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -577,7 +587,7 @@ console.log("# measure: declared units clash");
     { genre: "b", us: 20, eu: 18 },
   ];
   const usdEur = await errorOf(() =>
-    chart(gross, { schema: { us: Schema.unit("USD"), eu: Schema.unit("EUR") } })
+    chart(gross, { schema: { us: Schema.unit("USD").summable(), eu: Schema.unit("EUR").summable() } })
       .flow(spread({ by: "genre", dir: "x" }))
       .mark(layer([rect({ h: "us" }), rect({ h: "eu" })]))
       .toDisplayList(SIZE)
@@ -591,7 +601,7 @@ console.log("# measure: declared units clash");
   );
 
   const countMm = await errorOf(() =>
-    chart(penguins, { schema: { flipper: Schema.unit("mm") } })
+    chart(penguins, { schema: { flipper: Schema.unit("mm").summable() } })
       .flow(spread({ by: "sp", dir: "x" }))
       .mark(
         layer([rect({ h: field("flipper").count() }), rect({ h: "flipper" })])
@@ -621,8 +631,8 @@ console.log("# measure: declared units clash");
       ],
       {
         schema: {
-          q1: Schema.quantity("Pay").unit("USD"),
-          eu: Schema.unit("EUR"),
+          q1: Schema.quantity("Pay").unit("USD").summable(),
+          eu: Schema.unit("EUR").summable(),
         },
       }
     )
@@ -649,7 +659,7 @@ console.log("# measure: declared units clash");
     { genre: "b", value: 2 },
   ];
   const valueIn = (unit: string) =>
-    chart(values, { w: 100, h: 100, schema: { value: Schema.unit(unit) } })
+    chart(values, { w: 100, h: 100, schema: { value: Schema.unit(unit).summable() } })
       .flow(spread({ by: "genre", dir: "x" }))
       .mark(rect({ h: "value" }));
   const twoValues = await errorOf(() =>
@@ -666,7 +676,7 @@ console.log("# measure: declared units clash");
     { genre: "b", count: 4, v: 2 },
   ];
   const peopleCount = await errorOf(() =>
-    chart(counted, { schema: { count: Schema.unit("people") } })
+    chart(counted, { schema: { count: Schema.unit("people").summable() } })
       .flow(spread({ by: "genre", dir: "x" }))
       .mark(rect({ h: field("v").count(), w: field("count").sum() }))
       .toDisplayList(SIZE)
@@ -732,7 +742,7 @@ console.log("# measure: titles are Quantity (unit)");
 
   const usd = await bars(
     gross,
-    { "Production Budget": Schema.unit("USD") },
+    { "Production Budget": Schema.unit("USD").summable() },
     rect({ h: "Production Budget" })
   );
   ok(
@@ -743,7 +753,7 @@ console.log("# measure: titles are Quantity (unit)");
 
   const explicit = await bars(
     gross,
-    { "Production Budget": Schema.unit("USD") },
+    { "Production Budget": Schema.unit("USD").summable() },
     rect({ h: "Production Budget" }),
     { axes: { y: { title: "Budget" } } }
   );
@@ -759,7 +769,7 @@ console.log("# measure: titles are Quantity (unit)");
       { genre: "a", "Flipper Length (mm)": 190 },
       { genre: "b", "Flipper Length (mm)": 210 },
     ],
-    { "Flipper Length (mm)": Schema.unit("mm") },
+    { "Flipper Length (mm)": Schema.unit("mm").summable() },
     rect({ h: "Flipper Length (mm)" })
   );
   ok(
@@ -774,7 +784,7 @@ console.log("# measure: titles are Quantity (unit)");
       { genre: "b", "Flipper Length (mm)": 210 },
     ],
     {
-      "Flipper Length (mm)": Schema.quantity("Flipper Length").unit("mm"),
+      "Flipper Length (mm)": Schema.quantity("Flipper Length").unit("mm").summable(),
     },
     rect({ h: "Flipper Length (mm)" })
   );
@@ -1011,6 +1021,165 @@ console.log("# measure: titles are Quantity (unit)");
     times.includes("day") && !times.some((t) => t.includes("instant")),
     times.join(" | ")
   );
+}
+
+// ── CanAdd: only amounts that add up are summed (#1197) ─────────────────────
+
+console.log("# measure: CanAdd");
+{
+  const sales = [
+    { region: "n", product: "a", usd: 10, temp: 20, day: "2024-03-01" },
+    { region: "n", product: "b", usd: 5, temp: 22, day: "2024-03-02" },
+    { region: "s", product: "a", usd: 7, temp: 25, day: "2024-03-03" },
+    { region: "s", product: "a", usd: 3, temp: 26, day: "2024-03-04" },
+  ];
+  const stacked = (schema: object, mark: unknown) =>
+    chart(sales, { schema })
+      .flow(spread({ by: "region", dir: "x" }), stack({ by: "product", dir: "y" }))
+      .mark(mark)
+      .toDisplayList(SIZE);
+
+  const usd = await errorOf(() =>
+    stacked({ usd: Schema.unit("USD").summable() }, rect({ h: "usd" }))
+  );
+  ok("a .summable() USD column stacks and sums", usd === undefined, usd);
+
+  const celsius = await errorOf(() =>
+    stacked({ temp: Schema.unit("°C") }, rect({ h: "temp" }))
+  );
+  ok(
+    "stacking a Schema.unit(\"°C\") column throws, naming the column",
+    celsius !== undefined &&
+      /"temp"/.test(celsius) &&
+      /cannot be summed/.test(celsius) &&
+      /\.summable\(\)/.test(celsius) &&
+      /subtract a reference/.test(celsius),
+    celsius
+  );
+
+  // One row per bar is still a sum: the check reads the column's type, not
+  // how many rows a group holds.
+  const oneRow = await errorOf(() =>
+    chart(sales.slice(0, 2), { schema: { temp: Schema.unit("°C") } })
+      .flow(spread({ by: "product", dir: "x" }))
+      .mark(rect({ h: "temp" }))
+      .toDisplayList(SIZE)
+  );
+  ok("a one-row bar of °C throws as well", oneRow !== undefined, oneRow);
+
+  // A mean folds the rows itself, so the size channel adds nothing; but a
+  // stack of means adds them, and that is checked at the stack.
+  const meanBars = await errorOf(() =>
+    chart(sales, { schema: { temp: Schema.unit("°C") } })
+      .flow(spread({ by: "region", dir: "x" }))
+      .mark(rect({ h: field("temp").mean() }))
+      .toDisplayList(SIZE)
+  );
+  ok("a bar of a mean °C sums nothing", meanBars === undefined, meanBars);
+  const meanStack = await errorOf(() =>
+    stacked({ temp: Schema.unit("°C") }, rect({ h: field("temp").mean() }))
+  );
+  ok(
+    "a stack of mean °C throws at the stack",
+    meanStack !== undefined && /^stack sums/.test(meanStack),
+    meanStack
+  );
+
+  const time = await errorOf(() =>
+    stacked({ day: Schema.time() }, rect({ h: "day" }))
+  );
+  ok(
+    "a Schema.time() column as a size throws, suggesting a difference",
+    time !== undefined &&
+      /"day"/.test(time) &&
+      /times cannot be summed/.test(time) &&
+      /duration/.test(time),
+    time
+  );
+
+  const undeclared = await errorOf(() => stacked({}, rect({ h: "temp" })));
+  ok("an undeclared column still stacks", undeclared === undefined, undeclared);
+
+  const sum = await errorOf(() =>
+    chart(sales, { schema: { temp: Schema.unit("°C") } })
+      .flow(spread({ by: "region", dir: "x" }))
+      .mark(rect({ h: field("temp").sum() }))
+      .toDisplayList(SIZE)
+  );
+  ok(
+    "field(...).sum() of °C throws",
+    sum !== undefined && /field\(\.\.\.\)\.sum\(\)/.test(sum),
+    sum
+  );
+
+  const tree = await errorOf(() =>
+    chart(sales, { schema: { temp: Schema.unit("°C") } })
+      .flow(treemap({ by: "region", size: field("temp").mean() }))
+      .mark(rect({}))
+      .toDisplayList(SIZE)
+  );
+  ok(
+    "a treemap of mean °C throws",
+    tree !== undefined && /treemap/.test(tree),
+    tree
+  );
+
+  const spans = await errorOf(() =>
+    chart(
+      [
+        { task: "a", start: "2024-03-01", end: "2024-03-05" },
+        { task: "b", start: "2024-03-03", end: "2024-03-09" },
+      ],
+      { schema: { start: Schema.time(), end: Schema.time() } }
+    )
+      .flow(spread({ by: "task", dir: "y" }))
+      .mark(rect({ x: "start", x2: "end", h: 10 }))
+      .toDisplayList(SIZE)
+  );
+  ok("x/x2 spans of instants still render", spans === undefined, spans);
+
+  const delta = differenceUnit({ unit: "°C", symbol: "°C" });
+  ok(
+    "°C − °C is Δ°C, which adds",
+    delta.unit === "Δ°C" && delta.symbol === "Δ°C" && delta.CanAdd !== undefined
+  );
+  const usdUnit = { unit: "USD", symbol: "USD", CanAdd: {} };
+  ok("USD − USD is USD when USD adds", differenceUnit(usdUnit) === usdUnit);
+  ok("instant − instant is a duration", differenceUnit(INSTANT) === DURATION);
+  const recorded = withUnits(new Units(), () => {
+    const r = differenceUnits(
+      quantityUnits({
+        name: "temp",
+        column: "temp",
+        unit: { unit: "°C", symbol: "°C" },
+      })!
+    );
+    const u = resolveUnit(r.unit!);
+    return u.kind === "declared" ? u : undefined;
+  });
+  ok(
+    "a °C record's difference units are Δ°C, summable",
+    recorded?.unit === "Δ°C" && recorded.CanAdd !== undefined
+  );
+
+  const noUnit = await errorOf(() =>
+    chart(sales, { schema: { usd: { CanAdd: {} } } })
+      .flow(spread({ by: "region", dir: "x" }))
+      .mark(rect({ h: "usd" }))
+      .toDisplayList(SIZE)
+  );
+  ok(
+    "a wire CanAdd with no HasUnit throws",
+    noUnit !== undefined && /no unit/.test(noUnit),
+    noUnit
+  );
+  const wire = await errorOf(() =>
+    chart(sales, { schema: { usd: { HasUnit: { unit: "USD" }, CanAdd: {} } } })
+      .flow(spread({ by: "region", dir: "x" }), stack({ by: "product", dir: "y" }))
+      .mark(rect({ h: "usd" }))
+      .toDisplayList(SIZE)
+  );
+  ok("the wire form { CanAdd: {} } sums", wire === undefined, wire);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

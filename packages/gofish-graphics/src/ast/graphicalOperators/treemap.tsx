@@ -20,7 +20,8 @@ import {
   deferAxisDims,
   elaborateDims,
 } from "../dims";
-import { getValue, isValue, MaybeValue } from "../data";
+import { getQuantity, getValue, isValue, MaybeValue } from "../data";
+import { checkSummable } from "../measure";
 import { computeAesthetic, computeSize } from "../../util";
 import { posFn, pxOf } from "../domain";
 import { UnderlyingSpace, UNDEFINED, magnitude } from "../underlyingSpace";
@@ -96,6 +97,10 @@ const Treemap = createNodeOperator(
     } = opts;
 
     const dims = elaborateDims(fancyDims);
+    // A tile's area is its entry's share of the total, so the treemap adds
+    // its entries: their unit must add up (#1197).
+    for (const v of sizeChannel ?? [])
+      checkSummable(getQuantity(v), "treemap({ size })");
 
     const node = new GoFishNode(
       {

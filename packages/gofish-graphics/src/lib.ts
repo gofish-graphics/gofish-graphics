@@ -113,6 +113,7 @@ export type {
   HasMidpoint,
   HasCalendar,
   HasUnit,
+  CanAdd,
   HasQuantity,
   Level,
   SchemaEntry,

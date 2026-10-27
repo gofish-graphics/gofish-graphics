@@ -18,8 +18,7 @@ import {
 } from "./data";
 import {
   declaredVar,
-  DURATION,
-  INSTANT,
+  differenceUnit,
   MeasureClash,
   resolveUnit,
   unify,
@@ -180,33 +179,33 @@ export const isCONTINUOUS = (
   space: UnderlyingSpace
 ): space is CONTINUOUS_TYPE => space.kind === "continuous";
 
-/** The space of a datum magnitude `size`: `[0, v]` with the datum's units.
- *  Free by default (its parent places its baseline); `"none"` when the mark's
- *  position is an aesthetic, so the magnitude has only a width. A size is
- *  never an instant (a span of time is a duration, and `.count()` over a
- *  time column is a count), so it reads on no calendar: only a position read
- *  from a time column does. */
+/** The space of a datum magnitude `size`: `[0, v]` with the datum's units,
+ *  as they are. Free by default (its parent places its baseline); `"none"`
+ *  when the mark's position is an aesthetic, so the magnitude has only a
+ *  width. A size read from a column of amounts that do not add (a time, a
+ *  temperature) is an error where it was summed (`checkSummable` in
+ *  measure.ts), so it is never relabeled here; a span of time is a duration
+ *  because it was computed as one (#1197). */
 export const magnitude = (
   size: MaybeValue<number | undefined>,
   origin: "free" | "none" = "free"
-): CONTINUOUS_TYPE => {
-  const units = valueUnits(size);
-  return CONTINUOUS(
-    interval(0, getValue(size)!),
-    origin,
-    units && differenceUnits(units)
-  );
-};
+): CONTINUOUS_TYPE =>
+  CONTINUOUS(interval(0, getValue(size)!), origin, valueUnits(size));
 
-/** The units of a difference of two values in units `r`: an instant's
- *  difference is a duration, on no calendar. Other units are unchanged. */
+/** The units of a difference of two values in units `r`, on no calendar:
+ *  the declared unit's {@link differenceUnit} (USD stays USD when it adds,
+ *  an instant's difference is a duration, °C's is Δ°C). An unknown unit is
+ *  unchanged. */
 export const differenceUnits = (r: UnitRecord): UnitRecord => {
   const { calendar: _, ...rest } = r;
   if (rest.unit === undefined) return rest;
   const u = resolveUnit(rest.unit);
-  return u.kind === "declared" && u.unit === INSTANT.unit
-    ? { ...rest, unit: declaredVar(r.titles[0] ?? INSTANT.unit, DURATION) }
-    : rest;
+  if (u.kind !== "declared") return rest;
+  const { kind: __, ...unit } = u;
+  const diff = differenceUnit(unit);
+  return diff === unit
+    ? rest
+    : { ...rest, unit: declaredVar(r.titles[0] ?? diff.unit, diff) };
 };
 
 /** The absolute `[min, max]` data domain of a PINNED space, or undefined for a

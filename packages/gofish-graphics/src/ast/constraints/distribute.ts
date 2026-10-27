@@ -21,6 +21,7 @@ import {
   hasOrigin,
 } from "../underlyingSpace";
 import { Extent, impliedExtent } from "../extent";
+import { checkSummableVar } from "../measure";
 import {
   inCoordinateSpace,
   yDirection,
@@ -344,6 +345,13 @@ export function distributeSpaceFold(
     // the middle of the 20 spans [−25, 75]. A part with no data baseline
     // lies from its start ({@link tailSides}). This is "shift each part's
     // data interval and pin the origin": a glued stack is a pinned space.
+    //
+    // A free part is an amount from its baseline, so the stack adds the
+    // amounts themselves, and their unit must add up (#1197: a stack of
+    // temperatures or dates has no meaning). A pinned part adds only its
+    // width, a difference, which always adds (`differenceUnit`).
+    if (targets.some((t) => t.origin === "free") && childMeasure?.unit)
+      checkSummableVar(childMeasure.unit, "stack");
     const { origin } = opts;
     const sides = targets.map(tailSides);
     sides.forEach(({ descent }, i) => {

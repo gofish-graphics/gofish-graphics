@@ -996,6 +996,30 @@ class TestSchema:
             "HasQuantity": {"name": "When"},
         }
 
+    def test_summable_is_can_add(self):
+        # #1197: `.summable()` declares CanAdd, whose wire form is `{}`.
+        assert Schema.unit("USD").summable() == {
+            "HasUnit": {"unit": "USD", "symbol": "USD"},
+            "CanAdd": {},
+        }
+        assert Schema.quantity("Pay").unit("USD").summable().quantity("Pay") == {
+            "HasQuantity": {"name": "Pay"},
+            "HasUnit": {"unit": "USD", "symbol": "USD"},
+            "CanAdd": {},
+        }
+        # Only amounts in a unit add up, and two instants never do. The
+        # messages are JS `checkSummableType`'s.
+        with pytest.raises(
+            TypeError,
+            match=r"^\.summable: the column has CanAdd but no unit\. ",
+        ):
+            Schema.quantity("Pay").summable()
+        with pytest.raises(
+            TypeError,
+            match=r"^\.summable: the column is a time, which cannot be summable",
+        ):
+            Schema.time().summable()
+
     def test_levels_fit_the_column_classes(self):
         # Text levels are not amounts; a Likert scale's numbers are.
         message = (

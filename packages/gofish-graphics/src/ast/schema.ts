@@ -31,6 +31,15 @@ import { INSTANT } from "./measure";
  *    `Schema.unit(unit)` (or `.unit(unit)` after another builder), which
  *    says what unit they are in; without it a
  *    column's unit is unknown and unifies with any other (`measure.ts`).
+ *  - {@link CanAdd}: the column's amounts can be added: a sum of them means
+ *    something (money, counts, lengths). Declared with `.summable()`, which
+ *    exists only after `.unit(...)`, because only amounts in a unit add up,
+ *    and never on a time, because two instants do not add. Every place that
+ *    sums rows (a `size` channel, `stack`, treemap `size`, `.sum()`) needs
+ *    it from a column whose unit is declared; a column with no declared unit
+ *    passes, since its type is unknown (`checkSummable` in measure.ts).
+ *    Declared shortcut (#1197): the class sits on the column type, so two
+ *    columns of one unit can disagree; its home is the unit itself (#1142).
  *  - {@link HasQuantity}: what the column's values are amounts of, its
  *    quantity, when that is not the column's name. Declared with
  *    `Schema.quantity(name)` (or `.quantity(name)` after another builder).
@@ -97,6 +106,12 @@ export type HasInteger = Record<string, never>;
  */
 export type HasUnit = { unit: string; symbol?: string };
 
+/** The class of a column whose amounts can be added (`.summable()`): a sum
+ *  of them is an amount in the same unit, and it starts from 0. It has no
+ *  options. It requires {@link HasUnit}, and a time (`HasCalendar`) never has
+ *  it. */
+export type CanAdd = Record<string, never>;
+
 /** The class of a column whose values are amounts of the quantity `name`
  *  (`Schema.quantity("Pay")`), when that is not the column's own name.
  *  Columns of one quantity share one unit variable, and the quantity titles
@@ -119,6 +134,7 @@ export type ColumnType = {
   HasMidpoint?: HasMidpoint;
   HasCalendar?: HasCalendar;
   HasUnit?: HasUnit;
+  CanAdd?: CanAdd;
   HasQuantity?: HasQuantity;
   HasDomain?: HasDomain;
   HasInteger?: HasInteger;
@@ -143,6 +159,7 @@ const isEpochMs = (v: unknown): boolean =>
  *  - `HasMidpoint`: anything; its values are its order's.
  *  - `HasUnit`: numbers, the amounts the unit measures. In the instant
  *    unit, also a valid `Date`, which is an instant (see `HasCalendar`).
+ *  - `CanAdd`: anything; its values are its unit's (`HasUnit` checks them).
  *  - `HasQuantity`: anything; a name says nothing about the values.
  *  - `HasDomain`: numbers from `lo` to `hi`.
  *  - `HasInteger`: integers. */
@@ -157,6 +174,7 @@ const ACCEPTS: {
   HasMidpoint: () => true,
   HasUnit: (v, { unit }) =>
     v == null || typeof v === "number" || (unit === INSTANT.unit && isDate(v)),
+  CanAdd: () => true,
   HasQuantity: () => true,
   HasDomain: (v, { lo, hi }) =>
     v == null || (typeof v === "number" && lo <= v && v <= hi),
@@ -194,7 +212,8 @@ export type ColumnTypes = Record<string, ColumnType>;
  * A column type under construction. Each builder method adds one class, and a
  * method that needs a class already present, or one absent, says so in its
  * `this` type, so breaking the rule is a type error: `.diverging()` needs
- * `HasOrder`, and `.unit()` needs no `HasUnit` yet. The constructor checks
+ * `HasOrder`, `.unit()` needs no `HasUnit` yet, and `.summable()` needs
+ * `HasUnit` and no `HasCalendar`. The constructor checks
  * that an order's levels fit the column's other classes
  * ({@link checkLevelsFit}).
  */
@@ -235,6 +254,19 @@ export class ColumnSchema<C extends ColumnType = ColumnType> {
     return new ColumnSchema({ ...this.type, HasUnit: { unit, symbol: unit } });
   }
 
+  /** Say that the column's amounts can be added (`CanAdd`): a sum of them
+   *  means something, so a `size` channel, `stack`, treemap `size` and
+   *  `.sum()` may sum the column. Only amounts in a declared unit add up, so
+   *  it needs `HasUnit` ({@link checkSummableType}), and a time has none: two
+   *  instants do not add, though their difference (a duration) does. */
+  summable(
+    this: ColumnSchema<C & { HasUnit: HasUnit; HasCalendar?: never }>
+  ): ColumnSchema<C & { HasUnit: HasUnit; CanAdd: CanAdd }> {
+    const type: ColumnType = { ...this.type, CanAdd: {} };
+    checkSummableType(".summable: the column", type);
+    return new ColumnSchema(type as C & { HasUnit: HasUnit; CanAdd: CanAdd });
+  }
+
   toJSON(): C {
     return this.type;
   }
@@ -260,7 +292,8 @@ export const Schema = {
   /** A column whose values are amounts in the unit `unit` (`HasUnit`), an
    *  opaque name such as `"USD"` or `"mm"`. Columns in the same unit may
    *  share an axis; two different units on one axis are an error. A column
-   *  with no unit declared may share an axis with any other. */
+   *  with no unit declared may share an axis with any other. Its amounts
+   *  cannot be summed until `.summable()` says they can (`CanAdd`). */
   unit(unit: string): ColumnSchema<{ HasUnit: HasUnit }> {
     return new ColumnSchema({}).unit(unit);
   },
@@ -284,8 +317,9 @@ export type SchemaEntry =
  *  record is read as the builders' writes, so `HasCalendar` writes the
  *  instant unit as `Schema.time()` does, and a different `HasUnit` is a
  *  second unit ({@link checkNoUnit}). Then its levels must fit
- *  ({@link checkLevelsFit}), and a midpoint needs an order and must lie on
- *  it, with the same check `.diverging()` runs. */
+ *  ({@link checkLevelsFit}), `CanAdd` needs a unit and no calendar
+ *  ({@link checkSummableType}), and a midpoint needs an order and must lie
+ *  on it, with the same check `.diverging()` runs. */
 export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
   const who = `schema: column "${column}"`;
   const record: ColumnType = entry instanceof ColumnSchema ? entry.type : entry;
@@ -306,6 +340,7 @@ export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
     type.HasUnit = unit;
   }
   checkLevelsFit(who, type);
+  checkSummableType(who, type);
   if (type.HasMidpoint === undefined) return type;
   if (!type.HasOrder) {
     throw new Error(
@@ -326,6 +361,25 @@ function checkNoUnit(who: string, type: ColumnType): void {
   throw new Error(
     `${who} already has the unit ${JSON.stringify(type.HasUnit.unit)}.`
   );
+}
+
+/** The rules of `CanAdd`: it needs `HasUnit`, because only amounts in a
+ *  declared unit add up, and a time (`HasCalendar`) never has it, because
+ *  two instants do not add. Python's `ColumnSchema.summable` raises the same
+ *  messages. */
+function checkSummableType(who: string, type: ColumnType): void {
+  if (type.CanAdd === undefined) return;
+  if (type.HasCalendar !== undefined)
+    throw new Error(
+      `${who} is a time, which cannot be summable: two instants do not add ` +
+        `up. Subtract a reference first (e.g. date - start gives a duration, ` +
+        `which adds).`
+    );
+  if (type.HasUnit === undefined)
+    throw new Error(
+      `${who} has CanAdd but no unit. Only amounts in a unit add up; ` +
+        `declare the unit first: Schema.unit(unit).summable().`
+    );
 }
 
 /** The rule that an order's levels fit the column's other classes: each

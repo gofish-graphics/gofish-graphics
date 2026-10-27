@@ -15,7 +15,7 @@ import {
   type FieldAccessor,
   type LiteralValue,
 } from "./data";
-import { columnQuantity, type Quantity } from "./measure";
+import { checkSummable, columnQuantity, type Quantity } from "./measure";
 import { Frontend } from "gofish-ir";
 import {
   evalFieldValues,
@@ -232,9 +232,15 @@ export const inferEntrySize = <T>(
  * records the field it was read from. The caller may pass the column
  * (createOperator resolves it once per channel from the array carrying the
  * column types); when omitted it is resolved locally from `d`.
+ *
+ * `sums` says the channel's own aggregation adds the rows (a size channel):
+ * then, unless an aggregate op already folded them, the column must be one
+ * whose amounts add (`checkSummable`, #1197). The check reads the column's
+ * type, never the rows, so a group of one row is checked as any other: the
+ * channel's operation is a sum whatever the group holds.
  */
 const inferNumeric =
-  (agg: (values: any[]) => number | undefined) =>
+  (agg: (values: any[]) => number | undefined, sums: boolean) =>
   <T>(
     accessor:
       | string
@@ -256,10 +262,12 @@ const inferNumeric =
     // folds them to a singleton. The channel then applies its default
     // aggregation exactly as it always did — over a folded singleton, sum and
     // mean are both the identity, so neither side knows about the other.
-    const { values, quantity: pipelineQuantity } = evalFieldValues(
-      accessor,
-      data
-    );
+    const {
+      values,
+      quantity: pipelineQuantity,
+      folded: byOp,
+    } = evalFieldValues(accessor, data, column.quantity);
+    if (sums && !byOp) checkSummable(column.quantity, "A size channel");
     const folded = agg(values as any[]);
     if (folded === undefined) return undefined;
     return columnValue(
@@ -271,12 +279,12 @@ const inferNumeric =
 
 /** Infer a size value (sums the field/function across the data array,
  *  missing values aside; see {@link sumOf}). */
-export const inferSize = inferNumeric(sumOf);
+export const inferSize = inferNumeric(sumOf, true);
 
 /** Infer a position value (averages the field/function across the data
  *  array, missing values aside). Over no rows, or only missing values, it
  *  has no value: undefined (see {@link meanOf}). */
-export const inferPos = inferNumeric(meanOf);
+export const inferPos = inferNumeric(meanOf, false);
 
 /**
  * Shared core of the non-aggregating channels ({@link inferColor} /
