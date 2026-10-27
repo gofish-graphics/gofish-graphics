@@ -5,12 +5,7 @@
 import type { StackOrigin } from "./constraints/distribute";
 import { loadTemporal, temporal } from "./calendar";
 import { tagArray } from "./data";
-import {
-  DURATION,
-  INSTANT,
-  meetUnitClasses,
-  type UnitOccurrence,
-} from "./measure";
+import { DURATION, INSTANT, meetInto, type UnitOccurrence } from "./measure";
 
 /**
  * Column types (#984): `chart(data, { schema })` declares, per column, the
@@ -286,6 +281,7 @@ export class UnitDefinition<C extends UnitClasses = UnitClasses> {
       throw new Error(
         `Unit: the name must be a string, got ${String(type.unit)}.`
       );
+    freezeUnit(type);
     Object.freeze(this);
   }
 
@@ -306,6 +302,17 @@ export class UnitDefinition<C extends UnitClasses = UnitClasses> {
       classes: { ...this.type.classes, CanAdd: {} },
     });
   }
+}
+
+/** Freeze a unit's {@link HasUnit}, its classes and its difference unit, so
+ *  every column in the unit shares the one record. */
+function freezeUnit(unit: HasUnit): void {
+  if (unit.classes !== undefined) {
+    for (const c of Object.values(unit.classes)) Object.freeze(c);
+    Object.freeze(unit.classes);
+  }
+  if (unit.difference !== undefined) freezeUnit(unit.difference);
+  Object.freeze(unit);
 }
 
 /** A unit definition ({@link UnitDefinition}). */
@@ -361,10 +368,7 @@ export type SchemaEntry =
 /** The classes of a column in `unit`: a definition's unit, or a name alone,
  *  whose classes are unknown. */
 const unitType = (unit: Unit | string): ColumnType => ({
-  HasUnit:
-    typeof unit === "string"
-      ? { unit, symbol: unit }
-      : structuredClone(unit.type),
+  HasUnit: typeof unit === "string" ? { unit, symbol: unit } : unit.type,
 });
 
 /** The record of classes a schema entry stands for, before any check: a
@@ -426,15 +430,14 @@ export const schemaToWire = (
  *  `.diverging()` runs. */
 export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
   const who = `schema: column "${column}"`;
-  const record = classesOf(who, entry);
-  if (record.HasDomain !== undefined)
+  const type = classesOf(who, entry);
+  if (type.HasDomain !== undefined)
     throw new Error(
-      `${who} declares HasDomain ${JSON.stringify(record.HasDomain)}, but ` +
+      `${who} declares HasDomain ${JSON.stringify(type.HasDomain)}, but ` +
         `declaring a column's domain is not supported yet: a column's ` +
         `domain is computed from its values. Drop HasDomain from the ` +
         `schema.`
     );
-  const type: ColumnType = { ...record };
   checkLevelsFit(who, type);
   if (type.HasMidpoint === undefined) return type;
   if (!type.HasOrder) {
@@ -693,12 +696,10 @@ function meetChartUnits(types: ColumnTypes): void {
   for (const [column, t] of Object.entries(types)) {
     const unit = t.HasUnit;
     if (unit === undefined) continue;
-    const here = { classes: unit.classes, who: `the column "${column}"` };
-    const met = known.get(unit.unit);
-    known.set(
-      unit.unit,
-      met === undefined ? here : meetUnitClasses(unit.unit, met, here)
-    );
+    meetInto(known, unit.unit, {
+      classes: unit.classes,
+      who: { name: column, column },
+    });
   }
   for (const [column, t] of Object.entries(types)) {
     const unit = t.HasUnit;

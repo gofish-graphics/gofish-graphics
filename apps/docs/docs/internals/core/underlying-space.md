@@ -1648,7 +1648,7 @@ a whole it adds up, so its per-row size channel (`inferEntrySize`) checks
 its column with `checkSummable` too. These sums read the unit as their
 chart knows it. A stack adds spaces, not values, in the type walk, so a
 space's `UnitRecord` carries `summands`, the quantities of its values in a
-declared unit (`quantityUnits`; a shared `joinUnits` concatenates them),
+declared unit (`quantityUnits`; a shared `joinUnits` unions them, each once),
 and `distributeSpaceFold` sums each free part's own list with `Units.sum`,
 which reads the unit's classes as the figure knows them. While they are
 unknown the sum waits, and it is checked when an occurrence that knows

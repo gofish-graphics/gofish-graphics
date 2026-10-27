@@ -85,18 +85,40 @@ export const INSTANT = {
 } satisfies HasUnit;
 
 /** The unit `.count()` and `.distinct()` declare. Counts add up. */
-export const COUNT: HasUnit = { unit: "count", classes: { CanAdd: {} } };
+export const COUNT = {
+  unit: "count",
+  classes: { CanAdd: {} },
+} satisfies HasUnit;
+
+/** The quantities {@link columnQuantity} has made, by column type and
+ *  column: one object per column, so the marks that read a column share its
+ *  quantity, and a list of quantities (`summands` in underlyingSpace.ts, the
+ *  sums waiting in {@link Units}) holds it once. */
+const columnQuantities = new WeakMap<ColumnType, Map<string, Quantity>>();
 
 /** The {@link Quantity} of column `column`, whose type is `type`: its
  *  declared unit, with the unit's zone when its values are instants. */
 export const columnQuantity = (
   column: string,
   type: ColumnType | undefined
-): Quantity => ({
-  name: type?.HasQuantity?.name ?? column,
-  column,
-  ...(type?.HasUnit !== undefined ? { unit: type.HasUnit } : {}),
-});
+): Quantity => {
+  if (type === undefined) return { name: column, column };
+  let byColumn = columnQuantities.get(type);
+  if (byColumn === undefined) {
+    byColumn = new Map();
+    columnQuantities.set(type, byColumn);
+  }
+  let q = byColumn.get(column);
+  if (q === undefined) {
+    q = {
+      name: type.HasQuantity?.name ?? column,
+      column,
+      ...(type.HasUnit !== undefined ? { unit: type.HasUnit } : {}),
+    };
+    byColumn.set(column, q);
+  }
+  return q;
+};
 
 /** `xs` quoted and joined, for a message: `"a", "b"`. */
 const quoteList = (xs: readonly string[]): string =>
@@ -118,10 +140,7 @@ export const addsUp = (q: Quantity): boolean =>
  */
 export function checkSummable(q: Quantity | undefined, where: string): void {
   if (q === undefined || addsUp(q)) return;
-  const what =
-    q.column !== undefined
-      ? `the column ${quoteList([q.column])}`
-      : `the values of ${quoteList([q.name])}`;
+  const what = whoOf(q);
   const unit = q.unit!.unit; // declared, or it would add up
   const difference = q.unit!.difference;
   if (difference?.classes?.CanAdd !== undefined)
@@ -143,8 +162,9 @@ export function checkSummable(q: Quantity | undefined, where: string): void {
 
 /** One occurrence of a unit's definition, as {@link meetUnitClasses} reads
  *  it: the unit's classes there (undefined when they are unknown, a unit's
- *  name alone) and who it is, for messages (`the column "usd"`). */
-export type UnitOccurrence = { classes?: UnitClasses; who: string };
+ *  name alone) and the values it is the unit of, which a message names
+ *  ({@link whoOf}) only when it throws. */
+export type UnitOccurrence = { classes?: UnitClasses; who: Quantity };
 
 /** Who the values of quantity `q` are, for a message: its column, or, for
  *  values read from none (a count, a share), its name. */
@@ -183,7 +203,7 @@ export function meetUnitClasses(
   if (sameClasses(a.classes, b.classes)) return a;
   const [yes, no] = a.classes.CanAdd !== undefined ? [a, b] : [b, a];
   throw new Error(
-    `${capitalize(yes.who)} and ${no.who} are both in the unit ` +
+    `${capitalize(whoOf(yes.who))} and ${whoOf(no.who)} are both in the unit ` +
       `${JSON.stringify(name)}, but they define it differently: ` +
       `${definitionOf(name, yes.classes!)} and ` +
       `${definitionOf(name, no.classes!)}. A unit either adds up or does ` +
@@ -194,17 +214,28 @@ export function meetUnitClasses(
 
 const capitalize = (s: string): string => s[0].toUpperCase() + s.slice(1);
 
+/** Meet `occurrence` with the occurrences of unit `name` in `met`
+ *  ({@link meetUnitClasses}), and store what they meet to: the one
+ *  store-or-meet over a map of a unit's occurrences by name. Returns the
+ *  met occurrence. */
+export function meetInto(
+  met: Map<string, UnitOccurrence>,
+  name: string,
+  occurrence: UnitOccurrence
+): UnitOccurrence {
+  const before = met.get(name);
+  const after =
+    before === undefined
+      ? occurrence
+      : meetUnitClasses(name, before, occurrence);
+  if (after !== before) met.set(name, after);
+  return after;
+}
+
 /** A JS identifier a unit's definition could be bound to in an example, in
  *  a message: the unit's name when it is one, else `unit`. */
 const identifierFor = (name: string): string =>
   /^[A-Za-z_$][\w$]*$/.test(name) ? name : "unit";
-
-/** What the figure knows of one unit (by name): its classes as its
- *  occurrences have met so far, and the sums of it that wait on them. */
-type UnitEntry = {
-  definition: UnitOccurrence;
-  sums: { q: Quantity; where: string }[];
-};
 
 /**
  * A unit variable, as a node of the render's union-find. A root holds the
@@ -253,6 +284,10 @@ const findRoot = (v: UnitVar): UnitVar => {
 export type UnitTerm =
   | ({ kind: "declared" } & HasUnit)
   | { kind: "unknown"; name: string };
+
+/** The declared unit a unit variable's class is bound to, if any: what
+ *  {@link resolveUnit} reads, without building a term. */
+export const rootUnit = (v: UnitVar): HasUnit | undefined => findRoot(v).unit;
 
 /** What a unit variable stands for now. */
 export const resolveUnit = (v: UnitVar): UnitTerm => {
@@ -310,25 +345,37 @@ export const unitKey = (unit: UnitTerm): string =>
  */
 export class Units {
   private readonly vars = new Map<string, UnitVar>();
-  private readonly units = new Map<string, UnitEntry>();
+  /** Each unit's classes as its occurrences have met so far, by name. */
+  private readonly definitions = new Map<string, UnitOccurrence>();
+  /** The sums of each unit, by name, that wait on its classes. */
+  private readonly waiting = new Map<
+    string,
+    { q: Quantity; where: string }[]
+  >();
 
   /** Meet the declared unit of quantity `q` with the figure's other
    *  occurrences of its name ({@link meetUnitClasses}), and check the sums
    *  that waited on its classes once they are known. */
   meet(q: Quantity): void {
-    if (q.unit === undefined) return;
-    const name = q.unit.unit;
-    const occurrence = { classes: q.unit.classes, who: whoOf(q) };
-    const entry = this.units.get(name);
-    if (entry === undefined) {
-      this.units.set(name, { definition: occurrence, sums: [] });
+    const unit = q.unit;
+    if (unit === undefined) return;
+    const name = unit.unit;
+    const known = this.definitions.get(name);
+    // Unknown classes, or the very classes already met, change nothing.
+    if (
+      known !== undefined &&
+      (unit.classes === undefined || unit.classes === known.classes)
+    )
       return;
-    }
-    entry.definition = meetUnitClasses(name, entry.definition, occurrence);
-    const { classes } = entry.definition;
+    const { classes } = meetInto(this.definitions, name, {
+      classes: unit.classes,
+      who: q,
+    });
     if (classes === undefined) return;
-    const waiting = entry.sums;
-    entry.sums = [];
+    const waiting = this.waiting.get(name);
+    if (waiting === undefined) return;
+    this.waiting.delete(name);
+    if (classes.CanAdd !== undefined) return;
     for (const s of waiting) checkSummable(withClasses(s.q, classes), s.where);
   }
 
@@ -339,11 +386,17 @@ export class Units {
   sum(q: Quantity, where: string): void {
     if (q.unit === undefined) return;
     this.meet(q);
-    const entry = this.units.get(q.unit.unit)!;
-    const { classes } = entry.definition;
-    if (classes !== undefined) checkSummable(withClasses(q, classes), where);
-    else if (!entry.sums.some((s) => s.q === q && s.where === where))
-      entry.sums.push({ q, where });
+    const name = q.unit.unit;
+    const { classes } = this.definitions.get(name)!;
+    if (classes !== undefined) {
+      if (classes.CanAdd === undefined)
+        checkSummable(withClasses(q, classes), where);
+      return;
+    }
+    const waiting = this.waiting.get(name);
+    if (waiting === undefined) this.waiting.set(name, [{ q, where }]);
+    else if (!waiting.some((s) => s.q === q && s.where === where))
+      waiting.push({ q, where });
   }
 
   /** The variable of unknown quantity `q`'s name, shared by every unknown

@@ -2432,7 +2432,7 @@ def _accepts_amount(v: Any, unit: Dict[str, Any]) -> bool:
 _ACCEPTS: Dict[str, Callable[[Any, Any], bool]] = {
     "HasOrder": lambda v, c: v is None or isinstance(v, str) or _is_number(v),
     "HasMidpoint": lambda v, c: True,
-    "HasUnit": lambda v, c: _accepts_amount(v, c),
+    "HasUnit": _accepts_amount,
     "HasQuantity": lambda v, c: True,
 }
 

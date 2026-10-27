@@ -20,6 +20,7 @@ import {
   declaredVar,
   MeasureClash,
   resolveUnit,
+  rootUnit,
   unify,
   unionInOrder,
   unitOf,
@@ -203,8 +204,7 @@ export const magnitude = (
  *  differ by USD (#1197), and so does an unknown unit. The summands become
  *  differences too, so a fold that adds them checks the difference unit. */
 export const differenceUnits = (r: UnitRecord): UnitRecord => {
-  const term = r.unit && resolveUnit(r.unit);
-  const difference = term?.kind === "declared" ? term.difference : undefined;
+  const difference = r.unit && rootUnit(r.unit)?.difference;
   if (difference === undefined) return r;
   const { zone: _, summands, ...rest } = r;
   return {
@@ -216,10 +216,21 @@ export const differenceUnits = (r: UnitRecord): UnitRecord => {
   };
 };
 
+/** The differences {@link differenceQuantity} has made, one per quantity. */
+const differenceQuantities = new WeakMap<Quantity, Quantity>();
+
 /** `q` as a difference of two of its values: in its unit's difference unit,
- *  when the unit names one ({@link differenceUnits}). */
-const differenceQuantity = (q: Quantity): Quantity =>
-  q.unit?.difference !== undefined ? { ...q, unit: q.unit.difference } : q;
+ *  when the unit names one ({@link differenceUnits}). One object per `q`, so
+ *  the summands of many marks hold it once ({@link joinUnits}). */
+const differenceQuantity = (q: Quantity): Quantity => {
+  if (q.unit?.difference === undefined) return q;
+  let d = differenceQuantities.get(q);
+  if (d === undefined) {
+    d = { ...q, unit: q.unit.difference };
+    differenceQuantities.set(q, d);
+  }
+  return d;
+};
 
 /** The absolute `[min, max]` data domain of a PINNED space, or undefined for a
  *  free magnitude or a difference. */
@@ -646,7 +657,11 @@ export const joinUnits = (
   const unit = shared ? (a.unit ?? b.unit) : a.unit;
   const titles = shared ? unionInOrder(a.titles, b.titles) : a.titles;
   const summands =
-    shared && b.summands ? [...(a.summands ?? []), ...b.summands] : a.summands;
+    shared && b.summands
+      ? a.summands
+        ? unionInOrder(a.summands, b.summands)
+        : b.summands
+      : a.summands;
   if (
     unit === a.unit &&
     titles === a.titles &&
