@@ -45,7 +45,7 @@ def story_nested_charts():
         spread(
             [_mini_chart(g["bars"], g["name"]) for g in _GROUPS],
             dir="x",
-            spacing=40,
+            spacing=48,
             alignment="start",
         ),
         {"axes": True},

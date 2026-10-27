@@ -33,7 +33,7 @@ export const Default: StoryObj<Args> = {
 
     chart(seafood, { w: args.w, h: args.h })
       .flow(
-        spread({ by: "lake",  dir: "x" }), //
+        spread({ by: "lake", dir: "x", spacing: 24 }), //
         stack({ by: "species",  dir: "x" })
       )
       .mark(rect({ h: "count", fill: "species" }))

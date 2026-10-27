@@ -95,12 +95,12 @@ export const Above: StoryObj<Args> = {
 
 export const Below: StoryObj<Args> = {
   name: "Position: outset-bottom",
-  args: { w: 400, h: 300 },
+  args: { w: 400, h: 390 },
   render: (args) => {
     const container = initializeContainer();
     chart(seafood, { axes: false, w: args.w, h: args.h })
       .flow(
-        spread({ by: "lake",  dir: "y", spacing: 30 }),
+        spread({ by: "lake", dir: "y", spacing: 48 }),
         stack({ by: "species",  dir: "x" })
       )
       .mark(
@@ -165,7 +165,7 @@ export const AboveStart: StoryObj<Args> = {
     const container = initializeContainer();
     chart(seafood, { w: args.w, h: args.h })
       .flow(
-        spread({ by: "lake",  dir: "x" }),
+        spread({ by: "lake", dir: "x", spacing: 24 }),
         stack({ by: "species",  dir: "x" })
       )
       .mark(
@@ -189,7 +189,7 @@ export const AboveEnd: StoryObj<Args> = {
     const container = initializeContainer();
     chart(seafood, { w: args.w, h: args.h })
       .flow(
-        spread({ by: "lake",  dir: "x" }),
+        spread({ by: "lake", dir: "x", spacing: 24 }),
         stack({ by: "species",  dir: "x" })
       )
       .mark(
@@ -225,9 +225,9 @@ const ALL_POSITIONS: LabelPosition[] = [
   "outset-top-end",
 ];
 
-/** A chart captioned above with `caption`. */
-const captioned = (caption: string, body: any) =>
-  spread({ dir: "y", spacing: 16, alignment: "start" }, [
+/** A chart captioned above with `caption`, `spacing` px above the chart. */
+const captioned = (caption: string, body: any, spacing = 16) =>
+  spread({ dir: "y", spacing, alignment: "start" }, [
     text({ text: caption, fontSize: 12, fontFamily: "monospace" }),
     body,
   ]);
@@ -246,7 +246,8 @@ export const AllPositions: StoryObj = {
               position,
               fontSize: 9,
             })
-          )
+          ),
+        32
       );
     const rows = Array.from({ length: ALL_POSITIONS.length / 2 }, (_, i) =>
       spread({ dir: "x", spacing: 48, alignment: "start" }, [
@@ -254,7 +255,7 @@ export const AllPositions: StoryObj = {
         cell(ALL_POSITIONS[2 * i + 1]),
       ])
     );
-    spread({ dir: "y", spacing: 28, alignment: "start" }, rows).render(
+    spread({ dir: "y", spacing: 40, alignment: "start" }, rows).render(
       container
     );
     return container;
@@ -389,7 +390,7 @@ export const Rotated: StoryObj = {
   render: () => {
     const container = initializeContainer();
     spread(
-      { dir: "y", spacing: 40, alignment: "start" },
+      { dir: "y", spacing: 64, alignment: "start" },
       [45, -30, 0].map((rotate) =>
         captioned(
           `rotate: ${rotate}°`,

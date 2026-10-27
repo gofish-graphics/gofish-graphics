@@ -191,7 +191,7 @@ export const NestedDerive: StoryObj<Args> = {
             };
           })
         ),
-        spread({ by: "lake",  dir: "x" }),
+        spread({ by: "lake", dir: "x", spacing: 24 }),
         stack({ by: "species",  dir: "x" })
       )
       .mark(rect({ h: "count", fill: "highlight" }))
@@ -216,7 +216,7 @@ export const SelectiveDerive: StoryObj<Args> = {
             highlight: item.species === "Salmon" ? "highlighted" : ""
           }))
         ),
-        spread({ by: "lake",  dir: "x" }),
+        spread({ by: "lake", dir: "x", spacing: 24 }),
         stack({ by: "species",  dir: "x" })
       )
       .mark(rect({ h: "count", fill: "highlight" }))
@@ -242,7 +242,7 @@ export const SelectiveGroup: StoryObj<Args> = {
 
     chart(seafood, { color: Color.palette({ Salmon: "#e15759" }), w: args.w, h: args.h })
       .flow(
-        spread({ by: "lake",  dir: "x" }),
+        spread({ by: "lake", dir: "x", spacing: 24 }),
         stack({ by: "species",  dir: "x" })
       )
       .mark(rect({ h: "count", fill: "species" }))

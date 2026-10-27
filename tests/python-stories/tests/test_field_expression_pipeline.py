@@ -187,7 +187,7 @@ def story_shared_bins_across_groups():
     return (
         chart(_GROUPED_AGES, axes=True, w=500, h=300)
         .flow(
-            spread(by="group", dir="y", spacing=20),
+            spread(by="group", dir="y", spacing=48),
             spread(by=field("age").bin(Bin.thresholds(10)), dir="x", spacing=2),
         )
         .mark(rect(w=30, h=field("age").count())),

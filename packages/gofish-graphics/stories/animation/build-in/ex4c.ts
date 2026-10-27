@@ -11,9 +11,9 @@ import {
 import { weather } from "./data";
 
 export default (container: HTMLElement, clock?: BuildClockOptions) =>
-  chart(weather, { w: 560, h: 220 })
+  chart(weather, { w: 820, h: 220 })
     .flow(
-      spread({ by: "month", dir: "x" }),
+      spread({ by: "month", dir: "x", spacing: 32 }),
       spread({ by: "city", dir: "x", spacing: 0 })
     )
     .mark(rect({ h: "precipitation", fill: "city" }).name("bars"))

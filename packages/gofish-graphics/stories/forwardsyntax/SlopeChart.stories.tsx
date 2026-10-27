@@ -39,7 +39,7 @@ export const Default: StoryObj<Args> = {
 
     chart(barley, { h: args.h })
       .flow(
-        spread({ by: "site", dir: "x", spacing: 110 }),
+        spread({ by: "site", dir: "x", spacing: 128 }),
         spread({ by: "year", dir: "x", spacing: 36 }),
         scatter({ by: "variety", y: "yield" })
       )

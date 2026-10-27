@@ -61,9 +61,9 @@ def story_above():
 
 def story_below():
     return (
-        chart(SEAFOOD, axes=False, w=400, h=300)
+        chart(SEAFOOD, axes=False, w=400, h=390)
         .flow(
-            spread(by="lake", dir="y", spacing=30),
+            spread(by="lake", dir="y", spacing=48),
             stack(by="species", dir="x"),
         )
         .mark(
@@ -117,7 +117,7 @@ def story_above_start():
     return (
         chart(SEAFOOD, w=500, h=300)
         .flow(
-            spread(by="lake", dir="x"),
+            spread(by="lake", dir="x", spacing=24),
             stack(by="species", dir="x"),
         )
         .mark(
@@ -135,7 +135,7 @@ def story_above_end():
     return (
         chart(SEAFOOD, w=500, h=300)
         .flow(
-            spread(by="lake", dir="x"),
+            spread(by="lake", dir="x", spacing=24),
             stack(by="species", dir="x"),
         )
         .mark(
@@ -169,12 +169,12 @@ ALL_POSITIONS = [
 ]
 
 
-def _captioned(caption, body):
-    """A chart captioned above with `caption`."""
+def _captioned(caption, body, spacing=16):
+    """A chart captioned above with `caption`, `spacing` px above the chart."""
     return spread(
         [text(text=caption, font_size=12, font_family="monospace"), body],
         dir="y",
-        spacing=16,
+        spacing=spacing,
         alignment="start",
     )
 
@@ -190,6 +190,7 @@ def story_all_positions():
                     field("count").sum(), position=position, font_size=9
                 )
             ),
+            32,
         )
 
     rows = [
@@ -202,7 +203,7 @@ def story_all_positions():
         for i in range(len(ALL_POSITIONS) // 2)
     ]
     return (
-        spread(rows, dir="y", spacing=28, alignment="start"),
+        spread(rows, dir="y", spacing=40, alignment="start"),
         {},
     )
 
@@ -273,7 +274,7 @@ def story_rotated():
                 for rotate in [45, -30, 0]
             ],
             dir="y",
-            spacing=40,
+            spacing=64,
             alignment="start",
         ),
         {},

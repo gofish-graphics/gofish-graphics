@@ -17,7 +17,7 @@ type Args = { w: number; h: number };
 const DOCS_GROUPED_BAR_CODE = `
 chart(seafood, { w, h })
   .flow(
-    spread({ by: "lake",  dir: "x" }),
+    spread({ by: "lake", dir: "x", spacing: 24 }),
     stack({ by: "species",  dir: "x", label: false })
   )
   .mark(rect({ h: "count", fill: "species" }))
@@ -73,7 +73,7 @@ const runDirectStorybookVersion = (container: HTMLElement, w: number, h: number)
 
   chart(seafood, { w, h })
     .flow(
-      spread({ by: "lake",  dir: "x" }),
+      spread({ by: "lake", dir: "x", spacing: 24 }),
       stack({ by: "species",  dir: "x" })
     )
     .mark(rect({ h: "count", fill: "species" }))

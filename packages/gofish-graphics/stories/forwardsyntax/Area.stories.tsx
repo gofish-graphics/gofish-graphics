@@ -30,7 +30,7 @@ export const Basic: StoryObj<Args> = {
     const container = initializeContainer();
 
     chart(seafood, { h: args.h })
-      .flow(spread({ by: "lake", dir: "x", spacing: 64 }))
+      .flow(spread({ by: "lake", dir: "x", spacing: 96 }))
       .mark(ribbon({ h: "count", opacity: 0.8 }))
       .render(container);
 

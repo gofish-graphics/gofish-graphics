@@ -8,7 +8,7 @@ def story_default():
     return (
         chart(SEAFOOD, w=1000, h=400)
         .flow(
-            spread(by="lake", dir="x", spacing=15),
+            spread(by="lake", dir="x", spacing=24),
             spread(by="species", dir="x", spacing=2, axes={"x": True, "y": False}),
         )
         .mark(rect(h="count", w=20)),

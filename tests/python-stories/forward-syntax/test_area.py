@@ -7,7 +7,7 @@ from python_stories.data import SEAFOOD, STREAMGRAPH_DATA
 def story_basic():
     return (
         chart(SEAFOOD, h=300)
-        .flow(spread(by="lake", dir="x", spacing=64))
+        .flow(spread(by="lake", dir="x", spacing=96))
         .mark(ribbon(h="count", opacity=0.8)),
         {},
     )

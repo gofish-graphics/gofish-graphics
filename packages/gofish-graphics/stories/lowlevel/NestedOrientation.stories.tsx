@@ -32,7 +32,7 @@ export const NestedCharts: StoryObj = {
   render: () => {
     const container = initializeContainer();
     spreadX(
-      { spacing: 40, alignment: "start" },
+      { spacing: 48, alignment: "start" },
       map(groups, (g) => miniChart(g.bars, g.name))
     ).render(container, { axes: true });
     return container;

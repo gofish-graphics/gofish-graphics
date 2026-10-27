@@ -124,7 +124,7 @@ def story_nested_derive():
                 }
                 for item in d
             ]),
-            spread(by="lake", dir="x"),
+            spread(by="lake", dir="x", spacing=24),
             stack(by="species", dir="x"),
         )
         .mark(rect(h="count", fill="highlight")),
@@ -140,7 +140,7 @@ def story_selective_derive():
                 {**item, "highlight": "highlighted" if item["species"] == "Salmon" else ""}
                 for item in d
             ]),
-            spread(by="lake", dir="x"),
+            spread(by="lake", dir="x", spacing=24),
             stack(by="species", dir="x"),
         )
         .mark(rect(h="count", fill="highlight")),
@@ -152,7 +152,7 @@ def story_selective_group():
     return (
         chart(SEAFOOD, color=Color.palette({"Salmon": "#e15759"}), w=400, h=400)
         .flow(
-            spread(by="lake", dir="x"),
+            spread(by="lake", dir="x", spacing=24),
             stack(by="species", dir="x"),
         )
         .mark(rect(h="count", fill="species")),

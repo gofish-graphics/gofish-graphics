@@ -233,7 +233,7 @@ export const SharedBinsAcrossGroups: StoryObj<Args> = {
     // slots (#763), and neither group reads the other's rows.
     chart(groupedAges, { axes: true, w: args.w, h: args.h })
       .flow(
-        spread({ by: "group", dir: "y", spacing: 20 }),
+        spread({ by: "group", dir: "y", spacing: 48 }),
         spread({
           by: field("age").bin(Bin.thresholds(10)),
           dir: "x",
