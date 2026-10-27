@@ -21,6 +21,8 @@ covers:
   - packages/gofish-graphics/src/ast/structExpr.ts
   - packages/gofish-graphics/src/families/bin.ts
   - packages/gofish-graphics/src/families/calendar.ts
+  - packages/gofish-graphics/src/families/domain.ts
+  - packages/gofish-graphics/src/families/trait.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/partition.tsx
   - packages/gofish-graphics/src/ast/shapes/region.tsx
   - packages/gofish-graphics/src/ast/measure.ts
@@ -1625,7 +1627,7 @@ dates, and their classes are known: a duration, a count and a share add
 up, and an instant does not.
 
 **Which amounts add up.** `CanAdd` (#1197) is a class of the unit, not of a
-column: `Unit(name).summable()` defines it, and it rides on the unit
+column: `Unit(name, { traits: [Trait.summable()] })` defines it, and it rides on the unit
 (`HasUnit.classes`) into the `Quantity` read from a column. A unit is its
 name, so every occurrence of one name is one unit, and where two
 occurrences meet their classes meet by one rule, `meetUnitClasses`
@@ -1633,7 +1635,7 @@ occurrences meet their classes meet by one rule, `meetUnitClasses`
 known definitions that disagree throw an error naming both columns. They
 meet in two places. When a chart's schema is applied, its columns of one
 unit name meet (`meetChartUnits`, `schema.ts`), so a column declared
-`"USD"` beside `Unit("USD").summable()` adds up. In the type walk, every
+`"USD"` beside `Unit("USD", { traits: [Trait.summable()] })` adds up. In the type walk, every
 declared unit read (`unitOf`) meets the figure's other occurrences of its
 name in the walk's `Units`, wherever they are, so two charts that define
 one unit differently throw. `addsUp` (`measure.ts`) is the rule for one
@@ -1661,7 +1663,7 @@ the parts, not the unit class they joined, so a `start` point beside a
 stacked width is checked only for the width; a pinned part is not summed,
 since the stack adds only its width. Summing a declared unit without
 `CanAdd` throws an error that names the column and says to declare
-`Unit(name).summable()`; for a unit whose difference unit adds up (a
+`Unit(name, { traits: [Trait.summable()] })`; for a unit whose difference unit adds up (a
 time), it says to subtract a reference first (`date - start` gives a
 duration, which adds up). That message reads the unit's `difference`, not
 a calendar. An unknown unit passes, as everywhere in gradual typing. The check
@@ -1767,7 +1769,7 @@ Otherwise the content is a difference (a magnitude, a width) and the offset
 is the point it hangs from. The difference must be in the point's difference
 units (`differenceUnits`), so the join is between `differenceUnits(point)`
 and the difference: a USD position moves by USD (whether or not its column
-is `.summable()`), a °C position by °C, and a time position by a
+is summable), a °C position by °C, and a time position by a
 duration, or by a plain number, which is bound to one. Two instants clash
 (`"instant"` against `"duration"`), since a time does not move a time.
 The result takes the point's unit and zone, titled by both sides. An ordinal axis has titles and no unit, so it takes no part in the
@@ -1909,36 +1911,75 @@ keyed by `spaceUnit` (cf. issues #452, #386).
 ## Column types: the chart schema
 
 `chart(data, { schema })` (`schema.ts`, #984) declares, per column, the
-classes the column's values have, in the style of typeclasses:
+classes the column's values have, in the style of typeclasses. A column's
+entry is a unit definition, a unit's name, or a column record
+`{ name, unit }`:
 
 ```ts
-chart(survey, { schema: { response: Schema.ordered(LEVELS).diverging() } });
+const Likert = Unit({
+  domain: Domain.ordered(LEVELS),
+  traits: [Trait.diverging()],
+});
+chart(survey, { schema: { response: Likert } });
 ```
 
-A column type is a record keyed by class name (`ColumnType`), and the engine
-reads only the classes, never the builder words. Eight classes exist:
+A unit definition (`Unit(name?, { domain?, traits? })`, #1197) separates
+what its values are, its `domain`, from the capabilities they have, its
+`traits`, as Rust separates a type from the traits it implements. `Domain`
+and `Trait` are strategy families (`families/domain.ts`,
+`families/trait.ts`), but they are not in `STRATEGIES`: a domain and the
+traits are read when the `Unit` is made (`unitTypeOf`) and never reach the
+wire, which carries only the classes they expand into
+(`UnitDefinition.type`, a `UnitType`):
 
-- `HasOrder` (`Schema.ordered(levels)`): the values are the levels of a fixed
-  order. `splitEntries` groups a `by` over the column in that order instead
-  of first appearance, so every operator that splits (spread, stack, group,
-  scatter, ...) follows it, and `field(...).sort(...)` and `.reverse()` still
-  reorder from there. A value outside the levels is a loud error naming the
-  column and the stray values (`strayLevelsError`), checked where the order
-  is used (`orderByLevels`, at a split or a color scale), not when the chart
-  types its data, so a `filter` in the flow can drop the stray rows first.
-- `HasMidpoint` (`.diverging({ midpoint })`): the order has a midpoint, the
+| Definition                   | Classes                                   |
+| ---------------------------- | ----------------------------------------- |
+| a name `u`                   | `HasUnit { unit: u, symbol: u, classes }` |
+| `Domain.discrete(levels)`    | `HasLevels { levels }`                    |
+| `Domain.ordered(levels)`     | `HasLevels { levels }`, `HasOrder {}`     |
+| `Trait.diverging(midpoint?)` | `HasMidpoint { at }`                      |
+| `Trait.summable()`           | `CanAdd` in `HasUnit.classes`             |
+
+`unitTypeOf` checks the definition: a unit needs a name or a domain; a
+domain is a `Domain` value (a bare list or an interval is an error: an
+interval domain, `Domain.continuous`, is a follow-up); a trait appears once;
+`Trait.diverging` needs `Domain.ordered` (no domain, the reals, is "not
+supported yet"); `Trait.summable` needs a name, since adding up is a class
+of a unit and a unit is known by its name. A unit with no name writes no
+`HasUnit`, so its columns are typed one by one, as before the unit existed.
+Two units of one name with different domains are not compared yet.
+
+A column type is a record keyed by class name (`ColumnType`), and the engine
+reads only the classes, never the definition. Nine classes exist:
+
+- `HasLevels` (`{ levels }`, from a domain): the values are the levels of a
+  fixed list. `splitEntries` groups a `by` over the column in that order
+  instead of first appearance, so every operator that splits (spread,
+  stack, group, scatter, ...) follows it, and `field(...).sort(...)` and
+  `.reverse()` still reorder from there. A color legend lists its values in
+  the same order. A value outside the levels is a loud error naming the
+  column and the stray values (`strayLevelsError`), checked where the levels
+  are used (`orderByLevels`, at a split or a color scale), not when the
+  chart types its data, so a `filter` in the flow can drop the stray rows
+  first.
+- `HasOrder` (`{}`, from `Domain.ordered`): the levels are ordered. It is a
+  marker over `HasLevels`, which `columnTypeOf` requires. A split over the
+  column says its groups are ordered (`SplitGroups.hasOrder`), so an
+  ordinal axis starts an outer level's labels at their runs; over
+  `Domain.discrete` levels, which have no order, it centers them.
+- `HasMidpoint` (`{ at }`, from `Trait.diverging({ midpoint })`): the order has a midpoint, the
   point `{ at }` along it in edge coordinates. Level `i` spans `[i, i + 1]`,
   so 0 is the first level's leading edge, `n` the last level's trailing
   edge, and 2.25 a quarter of the way into the third level (the `cutoff` of
-  ggstats' `gglikert`). `.diverging()` writes the default `n / 2` into the
+  ggstats' `gglikert`). `Unit` writes the default `n / 2` into the
   record, so the wire form always carries a number: the middle of the
   middle level when the count is odd, the boundary between the two middle
-  levels when it is even. It requires `HasOrder`; the builder's `this` type
-  makes `.diverging()` exist only after `.ordered(...)`, and `columnTypeOf`
+  levels when it is even. It requires `HasOrder`: `unitTypeOf` rejects
+  `Trait.diverging` without `Domain.ordered`, and `columnTypeOf`
   rejects a wire record that has one without the other. A midpoint that is
   not a finite number in `[0, n]` is an error from `checkMidpointOnOrder`,
-  which `.diverging()` calls at once and `columnTypeOf` calls on a wire
-  record; Python's `.diverging()` raises the same messages, word for word. A stack over the column takes the
+  which `Unit` calls at once and `columnTypeOf` calls on a wire
+  record; Python's `Unit` raises the same messages, word for word. A stack over the column takes the
   midpoint as its origin (`stackOrigin`, then the stack fold and the
   free-origin seat above): inside a present level, that fraction of its
   part; on a boundary, or inside a level the row lacks, the tail of the
@@ -2006,13 +2047,13 @@ reads only the classes, never the builder words. Eight classes exist:
   #1197): the values
   are amounts in the declared unit `unit`. A column's entry declares it with
   a `Unit(u)` definition, which writes the unit's `classes` (`{ CanAdd: {} }`
-  after `.summable()`, else `{}`), or with the name `u` alone, which writes
+  with `Trait.summable()`, else `{}`), or with the name `u` alone, which writes
   no `classes`: what the unit can do is unknown. Either writes the symbol
   `u`. The engine's units are definitions too, with no symbol:
   `Unit.time({ zone })` (the instant, with its `zone` and its `difference`,
   a duration) and `Unit.duration`. A column
   without it has an unknown unit, a unit variable (see
-  [measures](#measures-units-are-types)). An order's levels must fit its
+  [measures](#measures-units-are-types)). A column's levels must fit its
   other classes, so a text-level column takes no unit (`checkLevelsFit` in
   `schema.ts`, which only a wire record can break).
 - `CanAdd` (`{}`, #1197) is not a column class: it is a class of the unit,

@@ -865,7 +865,7 @@ for the API.
         "schema": {
           "type": "object",
           "additionalProperties": {},
-          "description": "Column types of the result, keyed by column name, as in a chart's schema, e.g. Schema.ordered(levels) or Unit.time(). They override the types the result keeps from its input or infers, and convert values (an ISO string in a time column becomes an instant)."
+          "description": "Column types of the result, keyed by column name, as in a chart's schema, e.g. Unit({ domain: Domain.ordered(levels) }) or Unit.time(). They override the types the result keeps from its input or infers, and convert values (an ISO string in a time column becomes an instant)."
         },
         "label": {
           "$ref": "#/$defs/LabelIR"
@@ -3138,7 +3138,7 @@ for the API.
         "schema": {
           "type": "object",
           "additionalProperties": {},
-          "description": "Column types, keyed by column name: a Unit (Unit(\"USD\").summable()), a unit's name (\"km²\"), a column record { name, unit }, Unit.time() for a time, or Schema.ordered(levels)."
+          "description": "Column types, keyed by column name: a Unit (Unit(\"USD\", { traits: [Trait.summable()] }), Unit({ domain: Domain.ordered(levels) }), Unit.time() for a time), a unit's name (\"km²\"), or a column record { name, unit }."
         }
       },
       "description": "Chart-level options: chart(data, {...}) in JS, chart(data, **options) in Python."

@@ -67,7 +67,9 @@ are, since its rows are the input's rows.
 
 ```ts
 // Monthly highs, months in calendar order
-derive(monthlyHighs, { schema: { month: Schema.ordered(MONTHS) } });
+derive(monthlyHighs, {
+  schema: { month: Unit({ domain: Domain.ordered(MONTHS) }) },
+});
 ```
 
 ## Examples

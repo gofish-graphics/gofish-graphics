@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Underlying Space — /internals/core/underlying-space
+// </gofish-wiki>
+
 /**
  * The `Domain` family: what a unit's values are, a unit definition's
  * `domain` (`Unit({ domain: Domain.ordered(["low", "mid", "high"]) })`).

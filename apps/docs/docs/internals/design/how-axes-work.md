@@ -67,7 +67,12 @@ the stack puts its 0 there. Nothing on the axis is set by hand:
 ```ts
 // stories/forwardsyntax/Bar/Diverging.stories.tsx (Likert)
 chart(survey, {
-  schema: { response: Schema.ordered(LEVELS).diverging() },
+  schema: {
+    response: Unit({
+      domain: Domain.ordered(LEVELS),
+      traits: [Trait.diverging()],
+    }),
+  },
   color: likertColors,
   axes: { x: { title: "Respondents" }, y: true },
 })
@@ -367,7 +372,7 @@ different things.
 **Ordered or not.** A centered label collects unordered items under it, such as a lake
 over its species. A start-aligned label marks where an ordered run of equal values
 begins, such as a year over its months. So by default an outer level over an ordered
-type (calendar cells, numeric bins, `Schema.ordered`) starts each label at its run, an
+type (calendar cells, numeric bins, `Domain.ordered`) starts each label at its run, an
 unordered outer level centers its labels, and the innermost level stays centered. A
 color, a bracket or another grouping cue could do the job of start alignment, so it
 can be overridden per depth:

@@ -217,10 +217,14 @@ wrote: JS `toJSON` writes a chart's with `schemaToWire` (`schema.ts`), JS
 `derive` keeps its own in that form from the moment it is built, and Python's
 `chart` and `derive` write theirs with `_schema_wire`, so a `Unit`, a unit's name and a
 column record `{ name, unit }` reach the wire the same from both languages.
-A unit's classes ride in its `HasUnit`: `Unit("USD").summable()` is
+A unit's classes ride in its `HasUnit`: `Unit("USD", { traits: [Trait.summable()] })` is
 `{ "HasUnit": { "unit": "USD", "symbol": "USD", "classes": { "CanAdd": {} } } }`,
 `Unit("°C")` has `"classes": {}`, and the name `"km²"` alone has no
-`classes`, since what it can do is unknown. (A `derive` once also carried a
+`classes`, since what it can do is unknown. A unit's domain and traits do
+not reach the wire as such, only the classes they expand into: the Likert
+unit `Unit({ domain: Domain.ordered(LEVELS), traits: [Trait.diverging()] })`
+is `{ "HasLevels": { "levels": [...] }, "HasOrder": {}, "HasMidpoint":
+{ "at": 2.5 } }`, with no `HasUnit`, since it has no name. (A `derive` once also carried a
 measure `provenance` map for the rows of the `bin()` data helper; both are
 gone, #1058.) A binned key, `field("date").bin(Calendar.month)`, is an op in
 the field expression's `ops`: `{ "op": "bin", "partition": { "kind": "month",

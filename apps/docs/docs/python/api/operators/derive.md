@@ -68,7 +68,7 @@ Give the column its type with `derive(fn, schema={...})`.
 
 ```python
 # Monthly highs, months in calendar order
-derive(monthly_highs, schema={"month": Schema.ordered(MONTHS)})
+derive(monthly_highs, schema={"month": Unit(domain=Domain.ordered(MONTHS))})
 ```
 
 ## How it works

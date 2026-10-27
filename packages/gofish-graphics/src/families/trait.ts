@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Underlying Space — /internals/core/underlying-space
+// </gofish-wiki>
+
 /**
  * The `Trait` family: the capabilities a unit's values have, listed in a
  * unit definition's `traits`
