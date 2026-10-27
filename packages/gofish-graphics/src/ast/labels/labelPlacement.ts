@@ -3,6 +3,7 @@
 // </gofish-wiki>
 
 import { evalFieldValues, FieldExpr, FieldExprWire } from "../fieldExpr";
+import { resolveColumn } from "../channels";
 
 export type LabelAccessor<D = any> =
   | string
@@ -45,7 +46,8 @@ const isFieldExprAccessor = (
  * - Function accessor: call it directly on the rows — the raw,
  *   non-serializable escape hatch.
  * - Field-expression accessor (`field(name).sum()`/`.mean()`/etc., or its
- *   wire form): evaluate the aggregate over the rows via `evalFieldValues`.
+ *   wire form): evaluate the aggregate over the rows via `evalFieldValues`,
+ *   with the column's quantity, so `.sum()` checks that it adds up.
  * - Bare string accessor: read the field off every row.
  *
  * Without an aggregate, the field must be constant across the rows (this is
@@ -62,7 +64,8 @@ export function resolveLabelText(
 
   const isExpr = isFieldExprAccessor(accessor);
   const values = isExpr
-    ? evalFieldValues(accessor, rows).values
+    ? evalFieldValues(accessor, rows, resolveColumn(rows, accessor).quantity)
+        .values
     : rows.map((row) => row?.[accessor]);
   const first = values[0];
   if (values.length > 1 && !values.every((v) => v === first)) {

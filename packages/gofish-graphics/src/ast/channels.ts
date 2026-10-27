@@ -15,11 +15,10 @@ import {
   type FieldAccessor,
   type LiteralValue,
 } from "./data";
-import { columnQuantity, type Quantity } from "./measure";
+import { checkSummable, columnQuantity, type Quantity } from "./measure";
 import { Frontend } from "gofish-ir";
 import {
   evalFieldValues,
-  getFieldOps,
   isMissing,
   meanOf,
   sumIn,
@@ -196,6 +195,9 @@ export const resolveColumn = (data: unknown, accessor: unknown): ColumnInfo => {
  * - `string` (field name): mapped per-row to `Number(d[field]) || 0`.
  * - function: called per-row.
  * - `undefined`: returns `undefined` (caller decides default — typically equal slices).
+ *
+ * Each row's value is a slice of a whole the mark divides by their total,
+ * so a named column must add up, as for any sum (`checkSummable`, #1197).
  */
 export const inferEntrySize = <T>(
   accessor: string | MaybeValue<number>[] | ((d: T) => number) | undefined,
@@ -207,6 +209,10 @@ export const inferEntrySize = <T>(
     return data.map((d) => value(accessor(d)));
   }
   if (typeof accessor === "string") {
+    checkSummable(
+      resolveColumn(data, accessor).quantity,
+      "A per-row size channel"
+    );
     return data.map((d) => value(Number((d as any)[accessor]) || 0));
   }
   return undefined;
@@ -258,20 +264,19 @@ const inferNumeric =
     if (isValue(accessor)) return accessor as MaybeValue<number>;
     // The pipeline maps the rows to values, and an aggregate op (`.mean()`,
     // `.count()`, ...) folds them to a singleton. The rows are folded once:
-    // by the op when the pipeline has one (any other op throws in
-    // `evalFieldValues`), else by the channel's own aggregation.
-    const { values, quantity: pipelineQuantity } = evalFieldValues(
-      accessor,
-      data,
-      column.quantity
-    );
-    const folded =
-      getFieldOps(accessor).length > 0
-        ? (values[0] as number | undefined)
-        : agg(values, column.quantity);
-    if (folded === undefined) return undefined;
-    return columnValue(
+    // by the op when `evalFieldValues` says it `folded` them, else by the
+    // channel's own aggregation.
+    const {
+      values,
       folded,
+      quantity: pipelineQuantity,
+    } = evalFieldValues(accessor, data, column.quantity);
+    const result = folded
+      ? (values[0] as number | undefined)
+      : agg(values, column.quantity);
+    if (result === undefined) return undefined;
+    return columnValue(
+      result,
       { quantity: pipelineQuantity ?? column.quantity, type: column.type },
       fieldNameOf(accessor)
     );
@@ -308,19 +313,23 @@ function firstRowValue<T extends Record<string, any>>(
   | { kind: "row"; value: unknown; field?: string }
   | { kind: "none" } {
   if (isLiteral(accessor)) return { kind: "literal", value: accessor.value };
-  if (isField(accessor) && getFieldOps(accessor).length > 0) {
-    // An expression pipeline folds the group's rows itself, as for a size
-    // channel (`evalFieldValues`): `.count()` is the number of rows, even
-    // when there are none. The value is the fold's, not a value of the
-    // field, so it records no field. A fold that has no value (the mean
-    // of nothing) is no value here either.
-    const [folded] = evalFieldValues(accessor, data).values;
-    return isMissing(folded)
-      ? { kind: "none" }
-      : { kind: "row", value: folded };
-  }
   const row = data.length > 0 && data[0] != null ? data[0] : undefined;
   if (isField(accessor)) {
+    // An expression pipeline with an aggregate folds the group's rows
+    // itself, as for a size channel (`evalFieldValues`): `.count()` is the
+    // number of rows, even when there are none, and `.sum()` checks that
+    // its column adds up. The value is the fold's, not a value of the
+    // field, so it records no field. A fold that has no value (the mean of
+    // nothing) is no value here either.
+    const { values, folded } = evalFieldValues(
+      accessor,
+      data,
+      resolveColumn(data, accessor).quantity
+    );
+    if (folded)
+      return isMissing(values[0])
+        ? { kind: "none" }
+        : { kind: "row", value: values[0] };
     return row === undefined
       ? { kind: "none" }
       : { kind: "row", value: row[accessor.name], field: accessor.name };

@@ -1124,6 +1124,59 @@ console.log("# measure: CanAdd");
     tree
   );
 
+  // Every `.sum()` is checked, wherever it is read: a label's and a color's
+  // as well as a size's.
+  const labelSum = await errorOf(() =>
+    chart(sales, { schema: { temp: Schema.unit("°C") } })
+      .flow(spread({ by: "region", dir: "x" }))
+      .mark(rect({ h: "usd" }).label(field("temp").sum()))
+      .toDisplayList(SIZE)
+  );
+  ok(
+    "a label of field(...).sum() of °C throws",
+    labelSum !== undefined && /field\(\.\.\.\)\.sum\(\)/.test(labelSum),
+    labelSum
+  );
+  const colorSum = await errorOf(() =>
+    chart(sales, { schema: { temp: Schema.unit("°C") } })
+      .flow(spread({ by: "region", dir: "x" }))
+      .mark(rect({ h: "usd", fill: field("temp").sum() }))
+      .toDisplayList(SIZE)
+  );
+  ok(
+    "a color of field(...).sum() of °C throws",
+    colorSum !== undefined && /field\(\.\.\.\)\.sum\(\)/.test(colorSum),
+    colorSum
+  );
+  const labelMean = await errorOf(() =>
+    chart(sales, { schema: { temp: Schema.unit("°C") } })
+      .flow(spread({ by: "region", dir: "x" }))
+      .mark(rect({ h: "usd" }).label(field("temp").mean()))
+      .toDisplayList(SIZE)
+  );
+  ok("a label of a mean °C sums nothing", labelMean === undefined, labelMean);
+
+  // A cut's slices are parts of a whole, so its sizes must add up.
+  const cutOf = (schema: object) =>
+    chart(sales, { schema })
+      .flow(spread({ dir: "y" }))
+      .mark(rect({ w: 100, h: 80 }).cut({ dir: "x", size: "temp" }))
+      .toDisplayList(SIZE);
+  const cutCelsius = await errorOf(() =>
+    cutOf({ temp: Schema.unit("°C") })
+  );
+  ok(
+    "cut({ size }) of °C throws, naming the column",
+    cutCelsius !== undefined &&
+      /"temp"/.test(cutCelsius) &&
+      /cannot be summed/.test(cutCelsius),
+    cutCelsius
+  );
+  const cutSummable = await errorOf(() =>
+    cutOf({ temp: Schema.unit("°C").summable() })
+  );
+  ok("cut({ size }) of a .summable() unit cuts", cutSummable === undefined, cutSummable);
+
   const spans = await errorOf(() =>
     chart(
       [

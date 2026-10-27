@@ -101,8 +101,9 @@ needs one.
 factory, `inferNumeric(agg)` — they differ only in the aggregation
 (`sumIn` vs `meanOf`, `fieldExpr.ts`). `agg` also gets the column's
 quantity, so `inferSize`'s sum checks that the column's unit can be summed
-(`sumIn`, #1197). When a pipeline op already folded the rows, the channel
-takes the op's value and applies no aggregation of its own. Both skip a missing value (null or undefined,
+(`sumIn`, #1197). When a pipeline op already folded the rows
+(`evalFieldValues` reports it as `folded`), the channel takes the op's value
+and applies no aggregation of its own. Both skip a missing value (null or undefined,
 `isMissing`, the rule `dropNulls` and the schema's classes use; NaN is a
 number). A mean divides by how many values there are, and over none it is
 undefined. A sum over no rows is 0, and over rows whose values are all
@@ -202,7 +203,9 @@ Walking `withGoFish.ts:431-477`:
      scale knows which field it maps; a function accessor records none. A
      `field(...)` with an aggregate (`field("a").count()`) is the
      exception: it folds all of `data` (`evalFieldValues`), as a size
-     channel does, and records no field, because the value is the fold's.
+     channel does, with the column's quantity, so a `.sum()` checks that
+     the column adds up, and records no field, because the value is the
+     fold's.
      A fold with no value (the mean of no rows) gives no color. A text
      (`"raw"`) channel folds the same way, and `DeriveMarkProps` types
      both kinds to accept a `FieldExpr`, as it does a size. It
@@ -434,9 +437,9 @@ Today's channels are `"size"` and `"color"`. To add (say) `"angle"`:
 
 1. Add `"angle"` to the `ChannelType` union in `channels.ts`.
 2. If a numeric aggregation fits, instantiate the existing factory —
-   `export const inferAngle = inferNumeric(meanOf, false)` (or whatever aggregation
+   `export const inferAngle = inferNumeric(meanOf)` (or whatever aggregation
    makes sense) — and measure tagging comes along for free. Otherwise write
-   `inferAngle(accessor, data, measure?)` next to it with the same signature.
+   `inferAngle(accessor, data, column?)` next to it with the same signature.
 3. Extend `DeriveMarkProps`'s conditional with the input type for `"angle"`.
 4. Extend the `if (channelType === "size") ... else if (channelType === "color")`
    chain in `withGoFish.ts` to handle it.

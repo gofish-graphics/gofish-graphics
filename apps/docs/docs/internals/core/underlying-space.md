@@ -1626,8 +1626,11 @@ share and every `Δ` unit have it, and `INSTANT` does not. Every place that
 adds values sums them with `sumIn` (`fieldExpr.ts`), which checks it with
 `checkSummable`: a size channel's sum over its rows (`inferNumeric`; when
 an aggregate op already folded the rows, the channel takes the op's value
-and sums nothing), `.sum()`, the total of `.normalize()`, and a treemap's
-total. A stack adds unit variables, not values, and checks its free parts
+and sums nothing), `.sum()` in any channel or label (every caller of
+`evalFieldValues` passes the column's quantity), the total of
+`.normalize()`, and a treemap's total. A cut's sizes are slices of a whole
+it adds up, so its per-row size channel (`inferEntrySize`) checks its column
+with `checkSummable` too. A stack adds unit variables, not values, and checks its free parts
 with `checkSummableVar` (`distributeSpaceFold`; a pinned part adds only its
 width, a difference, which always adds). Summing a declared unit without
 `CanAdd` throws an error that names the column and says to declare
@@ -2441,9 +2444,10 @@ or a text sits at a hexagon's center.
 **Expression evaluation is orthogonal to the channel's own aggregation.**
 `inferSize`/`inferPos`'s shared core (`inferNumeric` in `channels.ts`) always
 called a sum or a mean over the raw per-row values; it now instead calls
-`evalFieldValues(accessor, data)` first — running any pipeline ops (an
-aggregate, if the accessor carries one). The rows are folded once: when the
-pipeline already folded them to a singleton, the channel takes that value
+`evalFieldValues(accessor, data, column)` first — running any pipeline ops
+(an aggregate, if the accessor carries one). The rows are folded once: when
+the pipeline already folded them to a singleton (`evalFieldValues` reports
+`folded`, the one place that decides it), the channel takes that value
 as it is and applies no aggregation of its own (so a size channel sums
 nothing and checks no `CanAdd`); otherwise it applies its own sum or mean
 to the per-row values. So `rect({ h: field("weight").mean() })` reports the

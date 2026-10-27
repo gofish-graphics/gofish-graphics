@@ -449,10 +449,12 @@ export const sumIn = (
 /**
  * Evaluate a field expression (or bare string/function accessor) against a
  * group's rows: the per-row values, folded to a SINGLETON when the pipeline
- * carries an aggregate op. This is self-contained expression evaluation — it
- * knows nothing about the consuming channel. A channel that aggregates (sum
- * for a size slot, mean for a pos slot) folds the per-row values itself, and
- * takes a value the op already folded as it is.
+ * carries an aggregate op. `folded` says which: it is the one place that
+ * decides whether the rows were folded. This is self-contained expression
+ * evaluation — it knows nothing about the consuming channel. A channel that
+ * aggregates (sum for a size slot, mean for a pos slot) folds the per-row
+ * values itself when they are not `folded`, and takes a folded value as it
+ * is.
  *
  * Also reports the quantity the pipeline itself determines, if any: `count` /
  * `distinct` yield counts — not the source field's units — so they report
@@ -461,7 +463,9 @@ export const sumIn = (
  * `sum` or `mean` keeps its source column's quantity and unit.
  *
  * A `.sum()` adds the rows, so it checks that `column` (the quantity of the
- * column it reads, when the caller knows it) can be summed ({@link sumIn}).
+ * column it reads, `resolveColumn` in channels.ts; undefined when it reads
+ * none) can be summed ({@link sumIn}). Every caller passes it, so no
+ * `.sum()` goes unchecked.
  *
  * Domain ops (`sort`/`reverse`/`bin`) don't belong in a value slot and throw;
  * so does a second aggregate (the fold happens once).
@@ -469,8 +473,8 @@ export const sumIn = (
 export function evalFieldValues<T>(
   accessor: string | ((r: T) => unknown) | FieldExprWire | FieldExpr,
   rows: T[],
-  column?: Quantity
-): { values: unknown[]; quantity?: Quantity } {
+  column: Quantity | undefined
+): { values: unknown[]; folded: boolean; quantity?: Quantity } {
   const key: (r: T) => unknown =
     typeof accessor === "function"
       ? accessor
@@ -492,22 +496,26 @@ export function evalFieldValues<T>(
     }
     agg = op;
   }
-  if (agg === undefined) return { values: rows.map(key) };
+  if (agg === undefined) return { values: rows.map(key), folded: false };
   switch (agg.op) {
     case "count":
-      return { values: [rows.length], quantity: COUNT_QUANTITY };
+      return { values: [rows.length], folded: true, quantity: COUNT_QUANTITY };
     case "distinct":
       return {
         values: [new Set(rows.map(key)).size],
+        folded: true,
         quantity: COUNT_QUANTITY,
       };
     case "mean":
       // No values, no mean: the fold is the singleton of no value
       // (`meanOf`), which a channel takes as it is, so the channel has no
       // value either.
-      return { values: [meanOf(rows.map(key))] };
+      return { values: [meanOf(rows.map(key))], folded: true };
     default: // "sum"
-      return { values: [sumIn(rows.map(key), column, "field(...).sum()")] };
+      return {
+        values: [sumIn(rows.map(key), column, "field(...).sum()")],
+        folded: true,
+      };
   }
 }
 

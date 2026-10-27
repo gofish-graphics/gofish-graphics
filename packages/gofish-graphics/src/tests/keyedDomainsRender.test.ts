@@ -95,7 +95,7 @@ async function main() {
       { id: "b", start: 20, width: 4 },
     ];
     const dl = await chart(tasks, {
-      schema: { start: Schema.unit("day").summable(), width: Schema.unit("day").summable() },
+      schema: { start: Schema.unit("day"), width: Schema.unit("day").summable() },
     })
       .flow(scatter({ by: "id", x: "start" }))
       .mark(rectMark({ w: "width", h: 10, fill: "green" }))
