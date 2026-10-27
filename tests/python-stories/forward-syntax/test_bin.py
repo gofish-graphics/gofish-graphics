@@ -3,7 +3,7 @@
 import math
 from datetime import datetime, timedelta, timezone
 
-from gofish import chart, rect, field, spread, stack, partition, table, Schema, Calendar, Bin, Color
+from gofish import chart, rect, field, spread, stack, partition, table, Unit, Calendar, Bin, Color
 from python_stories.data import SEATTLE_WEATHER
 
 # Seventy-two movie ratings from 1 to 9.5, none from 2 to 2.5: a hump around
@@ -61,7 +61,7 @@ DAILY = [d for d in ALL_DAILY if not d["date"].startswith("2024-04")]
 
 def story_monthly_bars():
     return (
-        chart(DAILY, schema={"date": Schema.time()}, axes=True)
+        chart(DAILY, schema={"date": Unit.time()}, axes=True)
         .flow(spread(by=field("date").bin(Calendar.year).bin(Calendar.month), dir="x"))
         .mark(rect(h=field("value").sum(), fill="steelblue")),
         {"w": 560, "h": 200},
@@ -70,7 +70,7 @@ def story_monthly_bars():
 
 def story_stacked_monthly_bars():
     return (
-        chart(ALL_DAILY, schema={"date": Schema.time()}, axes=True)
+        chart(ALL_DAILY, schema={"date": Unit.time()}, axes=True)
         .flow(
             spread(by=field("date").bin(Calendar.year).bin(Calendar.month), dir="x"),
             stack(by="region", dir="y"),
@@ -91,7 +91,7 @@ def story_rating_histogram_continuous():
 
 def story_month_bars_true_widths():
     return (
-        chart(ALL_DAILY, schema={"date": Schema.time()}, axes=True)
+        chart(ALL_DAILY, schema={"date": Unit.time()}, axes=True)
         .flow(partition(by=field("date").bin([Calendar.year, Calendar.month]), dir="x"))
         .mark(rect(h=field("value").sum(), fill="steelblue", inset=1)),
         {"w": 560, "h": 200},
@@ -100,7 +100,7 @@ def story_month_bars_true_widths():
 
 def story_stacked_month_bars_true_widths():
     return (
-        chart(DAILY, schema={"date": Schema.time()}, axes=True)
+        chart(DAILY, schema={"date": Unit.time()}, axes=True)
         .flow(
             partition(by=field("date").bin(Calendar.year).bin(Calendar.month), dir="x"),
             stack(by="region", dir="y"),
@@ -112,7 +112,7 @@ def story_stacked_month_bars_true_widths():
 
 def story_grouped_month_bars_true_widths():
     return (
-        chart(ALL_DAILY, schema={"date": Schema.time()}, axes=True)
+        chart(ALL_DAILY, schema={"date": Unit.time()}, axes=True)
         .flow(
             partition(by=field("date").bin([Calendar.year, Calendar.month]), dir="x"),
             spread(by="region", dir="x"),
@@ -133,7 +133,7 @@ def _between(start, end):
 
 def story_seasonal_precipitation():
     return (
-        chart(WEATHER, schema={"date": Schema.time()}, axes=True)
+        chart(WEATHER, schema={"date": Unit.time()}, axes=True)
         .flow(spread(by=field("date").bin(Calendar.month), dir="x"))
         .mark(rect(h=field("precipitation").mean(), fill="steelblue")),
         {"w": 560, "h": 220},
@@ -144,7 +144,7 @@ def story_month_bars_product():
     return (
         chart(
             _between("2014-07-01", "2015-07-01"),
-            schema={"date": Schema.time()},
+            schema={"date": Unit.time()},
             axes={"x": {"label": {"angle": "auto"}}, "y": True},
         )
         .flow(spread(by=field("date").bin([Calendar.year, Calendar.month]), dir="x"))
@@ -157,7 +157,7 @@ def story_month_bars_chained():
     return (
         chart(
             _between("2014-01-01", "2016-01-01"),
-            schema={"date": Schema.time()},
+            schema={"date": Unit.time()},
             axes=True,
         )
         .flow(spread(by=field("date").bin(Calendar.year).bin(Calendar.month), dir="x"))
@@ -177,7 +177,7 @@ def story_grouped_month_bars():
     return (
         chart(
             WINTER,
-            schema={"date": Schema.time()},
+            schema={"date": Unit.time()},
             axes={"x": {"label": {"angle": "auto"}}, "y": True},
         )
         .flow(
@@ -197,7 +197,7 @@ def story_grouped_month_bars_hidden_inner():
     return (
         chart(
             WINTER,
-            schema={"date": Schema.time()},
+            schema={"date": Unit.time()},
             axes={"x": {"levels": [False, True]}, "y": True},
         )
         .flow(
@@ -217,7 +217,7 @@ def story_month_bars_product_true_widths():
     return (
         chart(
             _between("2014-01-01", "2016-01-01"),
-            schema={"date": Schema.time()},
+            schema={"date": Unit.time()},
             axes=True,
         )
         .flow(partition(by=field("date").bin([Calendar.year, Calendar.month]), dir="x"))
@@ -228,7 +228,7 @@ def story_month_bars_product_true_widths():
 
 def story_weekday_temperature():
     return (
-        chart(WEATHER, schema={"date": Schema.time()}, axes=True)
+        chart(WEATHER, schema={"date": Unit.time()}, axes=True)
         .flow(spread(by=field("date").bin(Calendar.weekday), dir="x"))
         .mark(rect(h=field("temp_max").mean(), fill="steelblue")),
         {"w": 420, "h": 220},
@@ -239,7 +239,7 @@ def story_calendar_heatmap():
     return (
         chart(
             WEATHER,
-            schema={"date": Schema.time()},
+            schema={"date": Unit.time()},
             color=Color.gradient(["#fee8c8", "#fd8d3c", "#bd0026"]),
             axes={
                 "x": {"title": False, "levels": [False, Calendar.month, Calendar.year]},

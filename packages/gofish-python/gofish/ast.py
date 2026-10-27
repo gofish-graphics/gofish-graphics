@@ -1942,9 +1942,10 @@ def derive(fn: Callable, *, schema: Optional[dict] = None) -> DeriveOperator:
             rows (a list of dicts, ``None``, or a dataframe). It returns a
             list even for one row: ``lambda d: [d[0]]``, not ``d[0]``.
         schema: Column types of the result, keyed by column name, as in
-            ``chart(data, schema={...})``: a ``Unit``, a unit's name, a
-            column record ``{"name": ..., "unit": ...}``,
-            ``Schema.ordered(levels)`` or ``Schema.time(zone=...)``. Without it, a result column keeps the
+            ``chart(data, schema={...})``: a ``Unit`` (``Unit.time(zone=...)``
+            for a time), a unit's name, a column record
+            ``{"name": ..., "unit": ...}`` or ``Schema.ordered(levels)``.
+            Without it, a result column keeps the
             type it had in the input while its values still fit it, a
             datetime column is a time, and any other column has no type. A
             ``schema`` entry overrides those and converts the column's
@@ -1985,7 +1986,7 @@ def partition(
     keeps its place. A mark with no size of its own fills its cell, and a mark
     with a size of its own is centered in it.
 
-        chart(daily, schema={"date": Schema.time()}).flow(
+        chart(daily, schema={"date": Unit.time()}).flow(
             partition(by=field("date").bin(Calendar.month), dir="x")
         ).mark(rect(h=field("value").sum()))
 
@@ -2401,27 +2402,37 @@ def _require_str(value: Any, what: str) -> str:
     return value
 
 
-# The unit of a time column, which ``Schema.time()`` writes beside
-# ``HasCalendar``: JS ``INSTANT`` in measure.ts. Its classes are known: it
-# has none, since two instants do not add up.
-_INSTANT = {"unit": "instant", "classes": {}}
+# The unit of a difference of two instants, ``Unit.duration``: JS
+# ``DURATION`` in measure.ts. Durations add up.
+_DURATION = {"unit": "duration", "classes": {"CanAdd": {}}}
+
+# The unit of a time column without its zone, which ``Unit.time(zone=...)``
+# adds: JS ``INSTANT`` in measure.ts. Its classes are known: it has none,
+# since two instants do not add up. Its difference is a duration.
+_INSTANT = {"unit": "instant", "classes": {}, "difference": _DURATION}
 
 
 def _is_number(v: Any) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
+def _accepts_amount(v: Any, unit: Dict[str, Any]) -> bool:
+    """Whether ``v`` is an amount in ``unit``: a number, or, in a unit read
+    on a calendar (one with a ``zone``), an instant: finite epoch
+    milliseconds or a datetime. JS ``ACCEPTS.HasUnit`` in schema.ts."""
+    if v is None:
+        return True
+    if "zone" in unit:
+        return (_is_number(v) and math.isfinite(v)) or isinstance(v, datetime.date)
+    return _is_number(v)
+
+
 # Which values each class accepts, given the class's own record: JS
-# ``ACCEPTS`` in schema.ts. A datetime is an instant.
+# ``ACCEPTS`` in schema.ts.
 _ACCEPTS: Dict[str, Callable[[Any, Any], bool]] = {
-    "HasCalendar": lambda v, c: v is None
-    or (_is_number(v) and math.isfinite(v))
-    or isinstance(v, datetime.date),
     "HasOrder": lambda v, c: v is None or isinstance(v, str) or _is_number(v),
     "HasMidpoint": lambda v, c: True,
-    "HasUnit": lambda v, c: v is None
-    or _is_number(v)
-    or (c.get("unit") == _INSTANT["unit"] and isinstance(v, datetime.date)),
+    "HasUnit": lambda v, c: _accepts_amount(v, c),
     "HasQuantity": lambda v, c: True,
 }
 
@@ -2475,26 +2486,6 @@ class Schema:
         """
         return ColumnSchema({"HasOrder": {"levels": list(levels)}})
 
-    @staticmethod
-    def time(zone: str = "UTC") -> ColumnSchema:
-        """A column whose values are instants (``HasCalendar``) in the
-        instant unit (``HasUnit``), read on the calendar of ``zone``, an IANA
-        time zone (``"UTC"`` by default).
-
-        A value may be an ISO 8601 string (``"2024-03-05"`` is the start of
-        that day in ``zone``; a string without an offset is a wall-clock time
-        in ``zone``), a datetime, or epoch milliseconds. A pandas or polars
-        datetime column is a time without a schema entry. An axis over the
-        column labels its ticks with calendar cells (see ``Calendar``).
-        """
-        if not isinstance(zone, str):
-            raise TypeError(
-                f"Schema.time: zone must be an IANA time zone name, got {zone!r}"
-            )
-        return ColumnSchema(
-            {"HasCalendar": {"zone": zone}, "HasUnit": copy.deepcopy(_INSTANT)}
-        )
-
 
 class Unit:
     """A unit definition, ``Unit("USD")``: a unit's name and the classes
@@ -2505,17 +2496,34 @@ class Unit:
 
     It is immutable: ``.summable()`` returns a new definition. Two units are
     the same when their names are equal. Declare a unit once and use it for
-    every column in it.
+    every column in it. The built-in units are ``Unit.time(zone=...)``, for
+    instants, and ``Unit.duration``, for spans of time.
     """
 
-    __slots__ = ("name", "_classes")
+    __slots__ = ("_type",)
 
-    name: str
-    _classes: Dict[str, Any]
+    # The unit as a column's ``HasUnit`` writes it: JS ``UnitDefinition.type``.
+    _type: Dict[str, Any]
 
-    def __init__(self, name: str, _classes: Optional[Dict[str, Any]] = None):
-        object.__setattr__(self, "name", _require_str(name, "Unit: the name"))
-        object.__setattr__(self, "_classes", dict(_classes or {}))
+    # ``Unit.duration``, set below the class.
+    duration: "Unit"
+
+    def __init__(self, name: str):
+        _require_str(name, "Unit: the name")
+        object.__setattr__(self, "_type", {"unit": name, "symbol": name, "classes": {}})
+
+    @classmethod
+    def _of(cls, type_: Dict[str, Any]) -> "Unit":
+        """The definition whose ``HasUnit`` is ``type_``."""
+        unit = object.__new__(cls)
+        object.__setattr__(unit, "_type", copy.deepcopy(type_))
+        return unit
+
+    @property
+    def name(self) -> str:
+        """The unit's name: two units are the same when their names are
+        equal."""
+        return self._type["unit"]
 
     def __setattr__(self, key: str, value: Any) -> None:
         raise AttributeError("Unit is immutable; chain its methods instead.")
@@ -2526,21 +2534,44 @@ class Unit:
         channel, ``stack``, treemap ``size`` and ``.sum()`` may sum a column
         in the unit. Amounts that do not add up (temperatures, prices,
         rates) are in a unit without it."""
-        return Unit(self.name, {**self._classes, "CanAdd": {}})
-
-    def __eq__(self, other: object) -> bool:
-        return (
-            isinstance(other, Unit)
-            and other.name == self.name
-            and other._classes == self._classes
+        return Unit._of(
+            {**self._type, "classes": {**self._type["classes"], "CanAdd": {}}}
         )
 
+    @staticmethod
+    def time(zone: str = "UTC") -> "Unit":
+        """The unit of instants read on the calendar of ``zone``, an IANA
+        time zone (``"UTC"`` by default). A column in it is a time.
+
+        A value may be an ISO 8601 string (``"2024-03-05"`` is the start of
+        that day in ``zone``; a string without an offset is a wall-clock time
+        in ``zone``), a datetime, or epoch milliseconds. A pandas or polars
+        datetime column is a time without a schema entry. An axis over the
+        column labels its ticks with calendar cells (see ``Calendar``).
+        Instants do not add up; a difference of two is a ``Unit.duration``.
+        """
+        if not isinstance(zone, str):
+            raise TypeError(
+                f"Unit.time: zone must be an IANA time zone name, got {zone!r}"
+            )
+        return Unit._of({**_INSTANT, "zone": zone})
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, Unit) and other._type == self._type
+
     def __hash__(self) -> int:
-        return hash((self.name, tuple(sorted(self._classes))))
+        return hash(json.dumps(self._type, sort_keys=True))
 
     def __repr__(self) -> str:
-        chain = ".summable()" if "CanAdd" in self._classes else ""
+        if self._type.get("zone") is not None:
+            return f"Unit.time(zone={self._type['zone']!r})"
+        if self._type == _DURATION:
+            return "Unit.duration"
+        chain = ".summable()" if "CanAdd" in self._type["classes"] else ""
         return f"Unit({self.name!r}){chain}"
+
+
+Unit.duration = Unit._of(_DURATION)
 
 
 # The class names of a column type, the keys of its wire record: JS
@@ -2548,7 +2579,6 @@ class Unit:
 _CLASS_NAMES = (
     "HasOrder",
     "HasMidpoint",
-    "HasCalendar",
     "HasUnit",
     "HasQuantity",
     "HasDomain",
@@ -2560,18 +2590,12 @@ _RECORD_KEYS = ("name", "unit")
 
 
 def _unit_type(unit: Union[Unit, str]) -> Dict[str, Any]:
-    """The classes of a column in ``unit``: a definition's name and the
-    unit's classes, or a name alone, whose classes are unknown (no
-    ``classes``). JS ``unitType`` in schema.ts."""
+    """The classes of a column in ``unit``: a definition's unit, or a name
+    alone, whose classes are unknown (no ``classes``). JS ``unitType`` in
+    schema.ts."""
     if isinstance(unit, str):
         return {"HasUnit": {"unit": unit, "symbol": unit}}
-    return {
-        "HasUnit": {
-            "unit": unit.name,
-            "symbol": unit.name,
-            "classes": copy.deepcopy(unit._classes),
-        }
-    }
+    return {"HasUnit": copy.deepcopy(unit._type)}
 
 
 def _column_type_of(column: str, entry: Any) -> Dict[str, Any]:

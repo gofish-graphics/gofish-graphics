@@ -298,7 +298,7 @@ export default {
 - Decodes a shipped document's base64 Arrow tables into lists
   (`arrowDecode.ts`): a table is one column of its items, so column 0 is
   the list; a struct column's fields are the records' columns, read from
-  its child vectors, and carry column types (`HasCalendar` for times,
+  its child vectors, and carry column types (`Unit.time({ zone })` for times,
   `HasInteger` for integers); BigInt -> Number
 
 `arrowBridge(send)` (`arrowBridge.ts`)
@@ -306,7 +306,7 @@ export default {
 - The `Serialize.DeriveBridge`: one `call(lambdaId, rows)`
 - Encodes the rows as base64 Arrow (`arrowTransport.ts`: one column of the
   items; a number column is Int64 when typed `HasInteger`, a timestamp
-  when typed `HasCalendar`, Float64 otherwise), sends them, and decodes the
+  when its unit has a zone (`Unit.time()`), Float64 otherwise), sends them, and decodes the
   reply document's tables
 - The parity harness builds its bridge with it too, over HTTP
 

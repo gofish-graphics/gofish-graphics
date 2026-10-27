@@ -93,14 +93,18 @@ class TestOperators:
             lambda d: d,
             schema={
                 "month": Schema.ordered(["Jan", "Feb"]),
-                "at": Schema.time(zone="America/New_York"),
+                "at": Unit.time(zone="America/New_York"),
             },
         )
         expected = {
             "month": {"HasOrder": {"levels": ["Jan", "Feb"]}},
             "at": {
-                "HasCalendar": {"zone": "America/New_York"},
-                "HasUnit": {"unit": "instant", "classes": {}},
+                "HasUnit": {
+                    "unit": "instant",
+                    "classes": {},
+                    "difference": {"unit": "duration", "classes": {"CanAdd": {}}},
+                    "zone": "America/New_York",
+                },
             },
         }
         assert ir(op)["schema"] == expected
@@ -1015,7 +1019,9 @@ class TestSchema:
                     "area": "km²",
                     "temp": {"unit": Celsius},
                     "region": Schema.ordered(["n", "s"]).diverging(),
-                    "day": Schema.time(zone="UTC"),
+                    "day": Unit.time(zone="UTC"),
+                    "sold": {"name": "Sold", "unit": Unit.time(zone="America/New_York")},
+                    "wait": Unit.duration,
                 },
             ).mark(rect())
         )["options"]["schema"]
@@ -1121,19 +1127,42 @@ class TestSchema:
 
 
 class TestTime:
-    """`Schema.time()` (HasCalendar), `Calendar` partitions, and datetime
-    columns crossing the bridge (#1057)."""
+    """`Unit.time()`, `Calendar` partitions, and datetime columns crossing
+    the bridge (#1057)."""
 
-    def test_schema_time_record(self):
-        # A time's unit is the instant, the same INSTANT as JS measure.ts.
-        assert Schema.time() == {
-            "HasCalendar": {"zone": "UTC"},
-            "HasUnit": {"unit": "instant", "classes": {}},
+    def test_unit_time_record(self):
+        # A time's unit is the instant, the same INSTANT as JS measure.ts,
+        # in its zone, and its difference is a duration.
+        def schema_of(entry):
+            return ir(chart([], schema={"t": entry}).mark(rect()))["options"][
+                "schema"
+            ]["t"]
+
+        assert schema_of(Unit.time()) == {"HasUnit": {
+            "unit": "instant",
+            "classes": {},
+            "difference": {"unit": "duration", "classes": {"CanAdd": {}}},
+            "zone": "UTC",
+        }}
+        assert schema_of(Unit.time(zone="America/New_York")) == {
+            "HasUnit": {
+                "unit": "instant",
+                "classes": {},
+                "difference": {"unit": "duration", "classes": {"CanAdd": {}}},
+                "zone": "America/New_York",
+            }
         }
-        assert Schema.time(zone="America/New_York") == {
-            "HasCalendar": {"zone": "America/New_York"},
-            "HasUnit": {"unit": "instant", "classes": {}},
+        assert schema_of({"name": "Sold", "unit": Unit.time()})["HasQuantity"] == {
+            "name": "Sold"
         }
+        assert schema_of(Unit.duration) == {
+            "HasUnit": {"unit": "duration", "classes": {"CanAdd": {}}}
+        }
+        assert Unit.duration.name == "duration"
+        assert repr(Unit.time(zone="Asia/Tokyo")) == "Unit.time(zone='Asia/Tokyo')"
+        assert repr(Unit.duration) == "Unit.duration"
+        with pytest.raises(TypeError, match="Unit.time: zone must be"):
+            Unit.time(zone=3)
 
     def test_calendar_wire_form(self):
         assert Calendar.month == {"kind": "month"}
@@ -1204,7 +1233,7 @@ class TestTime:
         node = (
             chart(
                 [{"t": "2024-01-01", "v": 1}],
-                schema={"t": Schema.time()},
+                schema={"t": Unit.time()},
                 axes={"x": {"levels": [Calendar.month, False, True]}},
             )
             .flow(scatter(by="t", x="t", y="v"))
@@ -1257,12 +1286,17 @@ class TestTime:
         pd = pytest.importorskip("pandas")
         df = pd.DataFrame({"t": pd.to_datetime(["2024-02-28"]), "n": [1]})
         node = (
-            chart(df, schema={"t": Schema.time(zone="Asia/Tokyo")})
+            chart(df, schema={"t": Unit.time(zone="Asia/Tokyo")})
             .mark(rect(w=1))
             .to_ir()["root"]
         )
         assert node["options"]["schema"] == {
-            "t": {"HasCalendar": {"zone": "Asia/Tokyo"}, "HasUnit": {"unit": "instant", "classes": {}}}
+            "t": {"HasUnit": {
+                "unit": "instant",
+                "classes": {},
+                "difference": {"unit": "duration", "classes": {"CanAdd": {}}},
+                "zone": "Asia/Tokyo",
+            }}
         }
 
     def test_strings_are_never_inferred(self):

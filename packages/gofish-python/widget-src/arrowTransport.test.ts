@@ -22,7 +22,7 @@ import {
   layer,
   rect,
   text,
-  Schema,
+  Unit,
 } from "gofish-graphics";
 import { arrowTableToRows } from "./arrowDecode";
 import { decodeDocument } from "./arrowBridge";
@@ -337,7 +337,7 @@ function testConflictingNestedTypesThrow(): boolean {
  *  milliseconds tagged with its zone; a naive timestamp or a date reads as
  *  an ISO wall-clock string without an offset, tagged UTC. */
 function testTimeColumnsDecodeAsTimes(): boolean {
-  console.log("Test: time columns decode with HasCalendar");
+  console.log("Test: time columns decode in Unit.time()");
   const ms = Date.UTC(2024, 2, 10, 5);
   const day = Date.UTC(2024, 2, 1);
   const table = records({
@@ -362,9 +362,9 @@ function testTimeColumnsDecodeAsTimes(): boolean {
     rows[1].n === 2 &&
     JSON.stringify(types) ===
       JSON.stringify({
-        ny: Schema.time({ zone: "America/New_York" }).type,
-        naive: Schema.time().type,
-        d: Schema.time().type,
+        ny: { HasUnit: Unit.time({ zone: "America/New_York" }).type },
+        naive: { HasUnit: Unit.time().type },
+        d: { HasUnit: Unit.time().type },
         n: { HasInteger: {} },
       });
   console.log(
@@ -389,7 +389,7 @@ async function testNaiveTimesReadInTheChartZone(): Promise<boolean> {
   const rows = arrowTableToRows(Arrow.tableFromIPC(Arrow.tableToIPC(table)));
   const labels = async (data: any[], zone: string) => {
     const dl = await chart(data, {
-      schema: { t: Schema.time({ zone }) },
+      schema: { t: Unit.time({ zone }) },
       axes: { x: { title: false }, y: false },
     })
       .flow(scatter({ by: "t", x: "t", y: "v" }))
@@ -562,9 +562,9 @@ function testNestedTimesDecodeAsEpochMs(): boolean {
     rows[0].points[1] === null &&
     JSON.stringify(Serialize.getColumnTypes(rows[0].points)) ===
       JSON.stringify({
-        naive: Schema.time().type,
-        ny: Schema.time({ zone: "America/New_York" }).type,
-        d: Schema.time().type,
+        naive: { HasUnit: Unit.time().type },
+        ny: { HasUnit: Unit.time({ zone: "America/New_York" }).type },
+        d: { HasUnit: Unit.time().type },
         v: { HasInteger: {} },
       }) &&
     JSON.stringify(rows[0].stamps) === JSON.stringify([ms, null]) &&
@@ -636,7 +636,7 @@ async function testCallbackResultsAreTyped(): Promise<boolean> {
   };
   const utc = await derived();
   const ny = await derived({
-    t: { HasCalendar: { zone: "America/New_York" } },
+    t: { HasUnit: Unit.time({ zone: "America/New_York" }).type },
   });
   const ok =
     fromAccessor === feb28 &&
