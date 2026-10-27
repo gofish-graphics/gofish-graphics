@@ -8,6 +8,7 @@ import type { Size } from "./dims";
 import type { Placeable } from "./_node";
 import type { BBoxKey } from "./constraints/bbox";
 import type { Geometry } from "./geometry";
+import { reflectOutlineY } from "./geometry/outline";
 import {
   isCONTINUOUS,
   isUNDEFINED,
@@ -236,6 +237,7 @@ const isY = (axis: unknown): boolean => axis === 1 || axis === "y";
 /** A local shape reflected about its origin's y. */
 const reflectGeometry = (g: Geometry): Geometry => {
   const circle = g.enclosingCircle;
+  const outline = g.outline;
   let reflectedCircle: ReturnType<NonNullable<typeof circle>> | undefined;
   return {
     box: {
@@ -252,6 +254,10 @@ const reflectGeometry = (g: Geometry): Geometry => {
             }
             return reflectedCircle;
           },
+    outline:
+      outline === undefined
+        ? undefined
+        : (tolerance: number) => outline(tolerance).map(reflectOutlineY),
   } as Geometry;
 };
 

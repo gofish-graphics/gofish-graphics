@@ -2,7 +2,7 @@ import { getColumnTypes, setColumnTypes } from "../schema";
 import { datumOfInput } from "../marks/markResult";
 import { packEnclose } from "d3-hierarchy";
 import { GoFishNode } from "../_node";
-import { boxOfDims, ringExtent } from "../geometry";
+import { boxOfDims, orderToPixel, ringExtent } from "../geometry";
 import { GoFishAST } from "../_ast";
 import { Size } from "../dims";
 import { UNDEFINED, UnderlyingSpace, CONTINUOUS } from "../underlyingSpace";
@@ -156,9 +156,15 @@ export const Polygon = ({
       },
       // The smallest circle through the ring's vertices (Welzl, via d3's
       // `packEnclose` over zero-radius circles), in the local frame `layout`
-      // resolved the ring into.
+      // resolved the ring into. Its outline is the ring.
       geometry: ({ intrinsicDims }, _children, node) => ({
         box: boxOfDims(intrinsicDims, node.type),
+        outline: () => [
+          {
+            points: orderToPixel(localRef.current, node.yFrame.direction),
+            closed: true,
+          },
+        ],
         enclosingCircle: () => {
           const d = node.yFrame.direction;
           const e = packEnclose(

@@ -16,8 +16,9 @@
  */
 import type { HasBox } from "./box";
 import type { HasEnclosingCircle } from "./enclosingCircle";
+import type { HasOutline } from "./outline";
 
-export interface Geometry extends HasBox, HasEnclosingCircle {}
+export interface Geometry extends HasBox, HasEnclosingCircle, HasOutline {}
 
 export { boxOfDims, ringExtent } from "./box";
 export type { Box, HasBox } from "./box";
@@ -27,5 +28,16 @@ export {
   translateCircle,
 } from "./enclosingCircle";
 export type { Circle, HasEnclosingCircle } from "./enclosingCircle";
+export {
+  outlines,
+  boxOutline,
+  ellipseOutline,
+  flattenPath,
+  translateOutline,
+  reflectOutlineY,
+  openRing,
+  orderToPixel,
+} from "./outline";
+export type { Outline, OutlinePart, OutlinePoint, HasOutline } from "./outline";
 export { reflectRegionY, rebaseRegion, hasSpan } from "./region";
 export type { Region, Span, Point } from "./region";

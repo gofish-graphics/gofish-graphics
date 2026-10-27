@@ -13,6 +13,7 @@ import {
   Transform,
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
+import { boxOfDims } from "../geometry";
 import { FALLBACK_FONT_FAMILY } from "./fontUtils";
 import { createMark } from "../withGoFish";
 import { MARK_CHANNELS } from "../markChannels.generated";
@@ -401,6 +402,31 @@ export const Text = ({
         if (rotate) textItem.rotate = rotate;
         items.push(textItem);
         return items;
+      },
+      // A rotated text's outline is its turned glyph box: the box about the
+      // glyph anchor, turned by `rotate` about it. The anchor sits at the
+      // local x origin, `glyphDy` pixels down from the local y origin.
+      // Unrotated, the glyph box is the box itself.
+      geometry: ({ intrinsicDims, renderData }, _children, node) => {
+        const box = boxOfDims(intrinsicDims, node.type);
+        const layout = (renderData as { layout?: TextLayout })?.layout;
+        if (!rotate || layout === undefined) return { box };
+        const glyphDy = (renderData as { glyphDy?: number }).glyphDy ?? 0;
+        const rad = (rotate * Math.PI) / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+        const { bbox, anchor } = layout;
+        const corners: [number, number][] = [
+          [bbox.minX, bbox.minY],
+          [bbox.maxX, bbox.minY],
+          [bbox.maxX, bbox.maxY],
+          [bbox.minX, bbox.maxY],
+        ].map(([x, y]) => {
+          const dx = x - anchor.x;
+          const dy = y - anchor.y;
+          return [dx * cos - dy * sin, glyphDy + dx * sin + dy * cos];
+        });
+        return { box, outline: () => [{ points: corners, closed: true }] };
       },
     },
     []

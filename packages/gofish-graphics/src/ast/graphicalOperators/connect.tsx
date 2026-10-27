@@ -10,7 +10,8 @@ import {
 } from "../../path";
 import { GoFishAST } from "../_ast";
 import { projectBy, type SplitBy } from "../datumProjection";
-import { GoFishNode } from "../_node";
+import { GoFishNode, defaultGeometry } from "../_node";
+import { flattenPath, orderToPixel } from "../geometry";
 import { resolveColorChannel } from "../../color";
 import type { DisplayList } from "gofish-ir";
 import {
@@ -960,6 +961,27 @@ export const connect = createNodeOperator(
           const item = toItem(readLive(drawnOver));
           setLiveSlots(item, { d: drawnOver });
           return [item];
+        },
+        // Its outline is what it draws, over its whole run: an open path per
+        // run for a line (center mode, or a connector between two anchors),
+        // a closed band per run for a ribbon (edge mode). The paths are kept
+        // in axis order; the outline is in pixels.
+        geometry: (laidOut, layoutChildren, node) => {
+          const closed =
+            mode !== "center" &&
+            resolvedSource === undefined &&
+            resolvedTarget === undefined;
+          return {
+            ...defaultGeometry(laidOut, layoutChildren, node),
+            outline: (tolerance) =>
+              ((laidOut.renderData?.paths ?? []) as Path[]).map((path) => ({
+                points: orderToPixel(
+                  flattenPath(path, tolerance),
+                  node.yFrame.direction
+                ),
+                closed,
+              })),
+          };
         },
       },
       children

@@ -6,7 +6,7 @@ import type { DisplayList } from "gofish-ir";
 import { color6, resolveColorChannel } from "../../color";
 import { isValue, type MaybeValue } from "../data";
 import { displayDims } from "../dims";
-import type { Point } from "../geometry";
+import { boxOfDims, orderToPixel, type Point } from "../geometry";
 import {
   lowerStyle,
   rectItemFromBox,
@@ -143,6 +143,22 @@ export const Region = ({
         return [
           ringItem(points, coordinateTransform, toPixel, node.datum, style),
         ];
+      },
+      // Its outline is the region's outline when it has one, and its box
+      // otherwise.
+      geometry: ({ intrinsicDims }, _children, node) => {
+        const box = boxOfDims(intrinsicDims, node.type);
+        const ring = outline;
+        if (ring === undefined) return { box };
+        return {
+          box,
+          outline: () => [
+            {
+              points: orderToPixel(ring, node.yFrame.direction),
+              closed: true,
+            },
+          ],
+        };
       },
     },
     []

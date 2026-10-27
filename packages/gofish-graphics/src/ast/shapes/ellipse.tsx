@@ -24,7 +24,7 @@ import {
 } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import { MARK_CHANNELS } from "../markChannels.generated";
-import { boxOfDims } from "../geometry";
+import { boxOfDims, ellipseOutline } from "../geometry";
 import type { DisplayList } from "gofish-ir";
 import {
   lowerStyle,
@@ -278,15 +278,17 @@ export const Ellipse = ({
       },
       // The smallest circle enclosing an ellipse is the circle of its larger
       // radius, centered on it.
+      // Its outline is the ellipse itself, sampled.
       geometry: ({ intrinsicDims }, _children, node) => {
         const box = boxOfDims(intrinsicDims, node.type);
+        const cx = (box.min[0] + box.max[0]) / 2;
+        const cy = (box.min[1] + box.max[1]) / 2;
+        const rx = (box.max[0] - box.min[0]) / 2;
+        const ry = (box.max[1] - box.min[1]) / 2;
         return {
           box,
-          enclosingCircle: () => ({
-            cx: (box.min[0] + box.max[0]) / 2,
-            cy: (box.min[1] + box.max[1]) / 2,
-            r: Math.max(box.max[0] - box.min[0], box.max[1] - box.min[1]) / 2,
-          }),
+          enclosingCircle: () => ({ cx, cy, r: Math.max(rx, ry) }),
+          outline: (tolerance) => [ellipseOutline(cx, cy, rx, ry, tolerance)],
         };
       },
     },

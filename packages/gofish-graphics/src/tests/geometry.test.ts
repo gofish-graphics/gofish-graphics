@@ -10,7 +10,17 @@ import { Ellipse } from "../ast/shapes/ellipse";
 import { Polygon } from "../ast/shapes/polygon";
 import { Pack } from "../ast/graphicalOperators/pack";
 import { defaultGeometry, GoFishNode } from "../ast/_node";
-import { enclosingCircle, translateCircle, type Circle } from "../ast/geometry";
+import {
+  enclosingCircle,
+  translateCircle,
+  outlines,
+  flattenPath,
+  reflectOutlineY,
+  type Circle,
+  type Outline,
+} from "../ast/geometry";
+import { Text } from "../ast/shapes/text";
+import { chart, line, ribbon, scatter, spread, stack, rect } from "../lib";
 
 let passed = 0;
 let failed = 0;
@@ -124,6 +134,220 @@ console.log("# geometry: polygon override");
     sameCircle(s, { cx: 15, cy: 15, r: Math.SQRT2 * 5 }),
     show(s)
   );
+}
+
+/** The largest distance from any point of `pts` to the circle or ellipse
+ *  `(x−cx)²/rx² + (y−cy)²/ry² = 1`, measured along the radius. */
+const ellipseStray = (
+  pts: [number, number][],
+  cx: number,
+  cy: number,
+  r: number
+): number =>
+  Math.max(...pts.map(([x, y]) => Math.abs(Math.hypot(x - cx, y - cy) - r)));
+
+/** The longest gap between consecutive points (closing the ring when
+ *  `closed`): a stand-in for "the samples follow the shape". */
+const longestStep = (o: Outline): number => {
+  let m = 0;
+  const n = o.points.length;
+  for (let i = 0; i + 1 < (o.closed ? n + 1 : n); i++) {
+    const a = o.points[i];
+    const b = o.points[(i + 1) % n];
+    m = Math.max(m, Math.hypot(b[0] - a[0], b[1] - a[1]));
+  }
+  return m;
+};
+
+console.log("# outline: box fallback");
+{
+  const g = layOut(Rect({ w: 30, h: 40 })).geometry();
+  ok("rect answers no outline of its own", !g.outline);
+  const [down] = outlines(g, 0.5, 1);
+  ok("the fallback is one closed rect", down.closed && down.points.length === 4);
+  ok(
+    "it runs clockwise from the top-left corner",
+    JSON.stringify(down.points) === "[[0,0],[30,0],[30,40],[0,40]]",
+    JSON.stringify(down.points)
+  );
+  const part = (o: Outline, name: string) =>
+    o.parts!.find((p) => p.name === name)!;
+  ok(
+    "a y that reads top-down names the top edge y-min",
+    part(down, "y-min").from === 0 && part(down, "y-min").to === 30
+  );
+  ok(
+    "the right edge is x-max, the left x-min",
+    part(down, "x-max").from === 30 &&
+      part(down, "x-max").to === 70 &&
+      part(down, "x-min").from === 100 &&
+      part(down, "x-min").to === 140
+  );
+  const [up] = outlines(g, 0.5, -1);
+  ok(
+    "a y that grows upward names the top edge y-max",
+    part(up, "y-max").from === 0 && part(up, "y-min").from === 70
+  );
+}
+
+console.log("# outline: ellipse");
+{
+  const g = layOut(circle(20)).geometry();
+  for (const tol of [0.1, 1]) {
+    const [o] = outlines(g, tol, 1);
+    ok(`circle outline is closed (tolerance ${tol})`, o.closed);
+    ok(
+      `circle samples lie on the circle (tolerance ${tol})`,
+      ellipseStray(o.points, 20, 20, 20) < 1e-9
+    );
+    // The sagitta of the longest chord is within the tolerance.
+    const step = longestStep(o);
+    const sagitta = 20 - Math.sqrt(20 * 20 - (step / 2) ** 2);
+    ok(
+      `circle chords stray at most the tolerance (${tol})`,
+      sagitta <= tol + 1e-9,
+      `${sagitta}`
+    );
+  }
+  const fine = outlines(g, 0.1, 1)[0].points.length;
+  const coarse = outlines(g, 1, 1)[0].points.length;
+  ok("a finer tolerance takes more samples", fine > coarse, `${fine} ${coarse}`);
+}
+
+console.log("# outline: polygon and text");
+{
+  const ring: [number, number][] = [
+    [0, 0],
+    [30, 0],
+    [30, 10],
+    [10, 10],
+    [10, 30],
+    [0, 30],
+  ];
+  const [o] = outlines(layOut(Polygon({ points: ring })).geometry(), 0.5, 1);
+  ok(
+    "polygon outline is its ring, closed",
+    o.closed && JSON.stringify(o.points) === JSON.stringify(ring)
+  );
+
+  const t = layOut(Text({ text: "hello", fontSize: 10, rotate: 90 }));
+  const tg = t.geometry();
+  const [to] = outlines(tg, 0.5, 1);
+  ok("rotated text outline is a closed quad", to.closed && to.points.length === 4);
+  const xs = to.points.map((p) => p[0]);
+  const ys = to.points.map((p) => p[1]);
+  ok(
+    "rotated text outline fills its box",
+    near(Math.min(...xs), tg.box.min[0]) &&
+      near(Math.max(...xs), tg.box.max[0]) &&
+      near(Math.min(...ys), tg.box.min[1]) &&
+      near(Math.max(...ys), tg.box.max[1]),
+    JSON.stringify({ pts: to.points, box: tg.box })
+  );
+  ok(
+    "unrotated text has no outline of its own",
+    !layOut(Text({ text: "hi" })).geometry().outline
+  );
+}
+
+console.log("# outline: paths");
+{
+  const pts = flattenPath(
+    [
+      {
+        type: "bezier",
+        start: [0, 0],
+        control1: [0, 100],
+        control2: [100, 100],
+        end: [100, 0],
+      },
+    ],
+    0.25
+  );
+  // The bezier's own points at the sample parameters are exact; check the
+  // midpoints of the chords against the curve's points between them.
+  const bez = (t: number): [number, number] => {
+    const u = 1 - t;
+    return [
+      3 * u * t * t * 100 + t * t * t * 100,
+      3 * u * u * t * 100 + 3 * u * t * t * 100,
+    ];
+  };
+  const n = pts.length - 1;
+  let worst = 0;
+  for (let k = 0; k < n; k++) {
+    const m = bez((k + 0.5) / n);
+    const a = pts[k];
+    const b = pts[k + 1];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const d =
+      Math.abs((b[0] - a[0]) * (a[1] - m[1]) - (a[0] - m[0]) * (b[1] - a[1])) /
+      len;
+    worst = Math.max(worst, d);
+  }
+  ok("a flattened bezier stays within the tolerance", worst <= 0.25, `${worst}`);
+  ok(
+    "flattening keeps the ends",
+    pts[0][0] === 0 && pts[0][1] === 0 && pts[n][0] === 100 && pts[n][1] === 0
+  );
+  const r = reflectOutlineY({ points: [[1, 2]], closed: false });
+  ok("reflecting flips y", r.points[0][0] === 1 && r.points[0][1] === -2);
+}
+
+/** Every node of a laid-out tree, depth first. */
+function* walk(node: GoFishNode): Generator<GoFishNode> {
+  yield node;
+  for (const c of node.children)
+    if (c instanceof GoFishNode) yield* walk(c);
+}
+
+console.log("# outline: line and ribbon connectors");
+{
+  const rows = [
+    { x: 0, y: 1, s: "a" },
+    { x: 1, y: 3, s: "a" },
+    { x: 2, y: 2, s: "a" },
+  ];
+  const lineChart = (await chart(rows)
+    .flow(scatter({ x: "x", y: "y" }))
+    .mark(line())
+    .resolve()) as GoFishNode;
+  await lineChart.toDisplayList({ w: 200, h: 100, axes: false });
+  const conn = [...walk(lineChart)].find((n) => n.type === "connect")!;
+  const lo = outlines(conn.geometry(), 0.5, conn.yFrame.direction);
+  ok("a line's outline is one open path", lo.length === 1 && !lo[0].closed);
+  ok("a line's outline samples its curve", lo[0].points.length > 3);
+  const g = conn.geometry();
+  ok(
+    "a line's outline lies in its box",
+    lo[0].points.every(
+      ([x, y]) =>
+        x >= g.box.min[0] - EPS &&
+        x <= g.box.max[0] + EPS &&
+        y >= g.box.min[1] - EPS &&
+        y <= g.box.max[1] + EPS
+    ),
+    JSON.stringify({ pts: lo[0].points, box: g.box })
+  );
+  // A larger y is higher on the screen: the middle row (y = 3) is above
+  // both ends, which are the first and last rows (y = 1 and y = 2).
+  const py = lo[0].points.map((p) => p[1]);
+  const top = Math.min(...py);
+  ok(
+    "the outline is in pixels, y down",
+    top < py[0] && top < py[py.length - 1] && py[0] > py[py.length - 1],
+    JSON.stringify(py)
+  );
+
+  const band = (await chart(rows)
+    .flow(spread({ by: "x", dir: "x", spacing: 20 }), stack({ by: "s", dir: "y" }))
+    .mark(rect({ h: "y", w: 0 }))
+    .layer(ribbon({ by: "s" }))
+    .resolve()) as GoFishNode;
+  await band.toDisplayList({ w: 200, h: 100, axes: false });
+  const rib = [...walk(band)].find((n) => n.type === "connect")!;
+  const ro = outlines(rib.geometry(), 0.5, rib.yFrame.direction);
+  ok("a ribbon's outline is one closed band", ro.length === 1 && ro[0].closed);
 }
 
 const radii = [30, 5, 18, 12, 25, 8, 3, 15, 20, 10];

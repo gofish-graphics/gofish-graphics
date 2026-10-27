@@ -1,5 +1,6 @@
 import { GoFishAST } from "../_ast";
-import { GoFishNode, type ToPixel } from "../_node";
+import { GoFishNode, defaultGeometry, type ToPixel } from "../_node";
+import { flattenPath, orderToPixel } from "../geometry";
 import { Size, displayTranslate } from "../dims";
 import type { DisplayList } from "gofish-ir";
 import {
@@ -220,6 +221,23 @@ export const arrow = createNodeOperator(
           );
           return items;
         },
+        // Its outline is its body, an open path from its start to the tip
+        // of its head; the head's triangle is decoration on it.
+        geometry: (laidOut, layoutChildren, node) => ({
+          ...defaultGeometry(laidOut, layoutChildren, node),
+          outline: (tolerance) =>
+            laidOut.renderData === undefined
+              ? []
+              : [
+                  {
+                    points: orderToPixel(
+                      flattenPath(laidOut.renderData.body as Path, tolerance),
+                      node.yFrame.direction
+                    ),
+                    closed: false,
+                  },
+                ],
+        }),
       },
       children
     );

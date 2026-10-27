@@ -681,13 +681,33 @@ an outline, the cell's polygon; every other region is a box.
 Once a node is laid out, `node.geometry()` describes its shape in the same
 local frame as `intrinsicDims`, with no translate applied (`src/ast/geometry/`).
 The result always has a `box`, which is `intrinsicDims` as a plain box. It may
-also answer optional queries. The only query today is `enclosingCircle`. A
-consumer calls the helper `enclosingCircle(g)`, which falls back to the circle
-through the box corners when the node does not answer.
+also answer optional queries, one file per query in `src/ast/geometry/`, joined
+into `Geometry` with `extends`. There are two. A consumer calls each query's
+helper, which falls back to the box when the node does not answer.
+
+- `enclosingCircle` (`enclosingCircle(g)`): a circle around the shape. The
+  fallback is the circle through the box corners.
+- `outline` (`outlines(g, tolerance, direction)`): the shape's outline as
+  polylines that stray at most `tolerance` pixels from it. Each is `closed` (a
+  region's boundary, whose inside is known) or open (a path with a start, an
+  end and a direction of travel), and may name `parts`, arc-length ranges for
+  the mark's own pieces. The fallback is the box as a closed rect whose parts
+  are its edges, `x-min`, `x-max`, `y-min` and `y-max`, named in the node's own
+  axis order (so on a continuous y, `y-max` is the top edge). Labels are its
+  first consumer.
 
 - A node definition may pass a `geometry` function next to `lower`. `ellipse`
-  answers with the circle of its larger radius, and `polygon` answers with the
-  smallest circle through its ring.
+  answers with the circle of its larger radius and its sampled outline, and
+  `polygon` with the smallest circle through its ring and the ring itself. A
+  `line` connector's outline is the open path it draws, one per run, a
+  `ribbon`'s is its closed band, and an `arrow`'s is its body. A rotated
+  `text` answers with its turned glyph box, and a `region` with its cell's
+  outline when it has one. Paths that a node keeps in its axis order are
+  turned into pixels (`orderToPixel`).
+- `enclose` reads its members through a private reader (`enclose/members.ts`)
+  rather than `outline`: the blob needs a circle as an exact disc and an
+  ellipse's semi-axes, and it cuts each bezier into exactly 8 pieces, so a
+  sampled outline would move every blob slightly (#1167).
 - A node with children and no `geometry` function answers `enclosingCircle`
   lazily. It takes the smallest circle around its children's circles, each
   moved by the child's translate into the node's frame.
