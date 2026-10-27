@@ -499,13 +499,16 @@ They live in their own registry (`terminals.ts`): a `TERMINALS` list plus
 `attachTerminals(target, resolveNode)`, where each surface supplies only its own
 node-resolution strategy (a `withGoFish` promise resolves by awaiting). The
 other surfaces go through the same list via `attachBuilderTerminals(target,
-resolveForRender, render)`, which lets a surface also prepare the render options
-and drive `render` through its own strategy. A combinator mark resolves as a
+resolveForRender)`, which lets a surface also prepare the render options. Every
+surface's `render` goes through `renderWithInteraction`, so a reactive read in
+any spec registers, a chart's inside a combinator included (#1170): a
+`wheel()` read in the `derive()` of a chart inside `spread([caption, chart])`
+re-runs the whole resolve. A combinator mark resolves as a
 root (`resolveMarkResult`, with `NO_ROWS`) and installs the build-in its own
 `.transition({ enter })` asks for, reading the clock's `playing`/`at`.
 `ChartBuilder` and `LayerBuilder` merge in the chart-level `axes`/`color` config,
-read the build-in clock's `playing`/`at` (which `TerminalMethods<Extra>` adds to
-their options type), and drive `render` through `renderWithInteraction`. Every
+and read the build-in clock's `playing`/`at` (which `TerminalMethods<Extra>` adds to
+their options type). Every
 resolve also sets `node.rebuild` on the resolved root (the same resolve, for the
 same render pass), so a layout that must run once per candidate, such as
 `label.angle: "auto"`, can get a fresh tree for each run. So the

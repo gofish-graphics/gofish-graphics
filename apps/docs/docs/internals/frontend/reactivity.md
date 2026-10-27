@@ -126,12 +126,16 @@ build-in on the first render only and to stop that render's build clock (a
 declared shortcut, #914). It resolves to the chart's `View` (see
 [Rendering](/internals/core/rendering)), and a re-render that finishes resolving
 after its chart was unmounted (`runtime.isDisposed()`) returns without mounting
-anything. Three callers share it:
+anything. Every `render` terminal shares it:
 
-- `ChartBuilder.render` and `LayerBuilder.render` — the fluent chart pipeline. Both
-  get `render` from the shared terminal registry (`marks/terminals.ts`) with
-  `renderWithInteraction` as their render strategy, and their one shared
-  `resolveForRender` runs domain inference + layout over the builder's spec.
+- `ChartBuilder.render` and `LayerBuilder.render` — the fluent chart pipeline — and
+  a mark's or combinator's `.render`. All of them get `render` from the shared
+  terminal registry (`marks/terminals.ts`), which drives every surface's resolve
+  through `renderWithInteraction`. The builders' one shared `resolveForRender`
+  runs domain inference + layout over the builder's spec; a combinator resolves
+  as a root (`resolveMarkResult`), which builds the charts inside it again, so
+  `spread({ dir: "y" }, [caption, chart])` re-runs a chart's `derive()` when a
+  `wheel()` it reads changes (#1170).
 - the low-level `gofish()` terminal (`gofish.tsx`) when handed a **component
   thunk** — `gofish(container, opts, () => node)`, a raw shape/operator
   composition with no `chart()` builder and no data binding — or a mark such

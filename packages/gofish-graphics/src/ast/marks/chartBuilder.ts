@@ -16,12 +16,7 @@ import {
   type InferredRelational,
   type TimeTier,
 } from "../datumProjection";
-// The shared interactive render terminal lives in the interaction layer
-// (renderTerminal.ts) so the low-level `gofish()` terminal can reach it too.
-import {
-  renderWithInteraction,
-  type RenderPass,
-} from "../../interaction/renderTerminal";
+import type { RenderPass } from "../../interaction/renderTerminal";
 import {
   attachBuilderTerminals,
   type RenderOptions,
@@ -1438,13 +1433,6 @@ async function resolveForRender(
 }
 
 // Define the export terminals declared on `RenderableBuilder`, once, from the
-// shared registry, so both builder surfaces expose the same set. `render` goes
-// through `renderWithInteraction` so resolution runs under the ambient
-// interactive context and the reactive surface (live() channels, input reads in
-// derive()) can register; a chart where nothing registers renders down the
-// static path untouched. See terminals.ts.
-attachBuilderTerminals(
-  RenderableBuilder.prototype,
-  resolveForRender,
-  renderWithInteraction
-);
+// shared registry, so both builder surfaces expose the same set. See
+// terminals.ts.
+attachBuilderTerminals(RenderableBuilder.prototype, resolveForRender);
