@@ -1600,11 +1600,11 @@ concrete units on one axis are a type error. The concrete units are:
   column, so a start and an end time share an axis; the time zone stays in
   the calendar, a display parameter;
 - `"count"`, for `.count()` and `.distinct()`;
-- `"duration"`, for a difference of two instants (`differenceUnit`: the
-  engine's `INSTANT` names `DURATION` as its `difference`; the calendar is
-  dropped too);
-- `"Δ<u>"`, for a difference of two amounts in a declared unit `u` that does
-  not add up (`differenceUnit`: °C − °C is `"Δ°C"`, with the symbol `Δ°C`);
+- `"duration"`, for a difference of two instants, such as a size read from
+  a time column (`differenceUnits`, which `magnitude` applies; it keys on
+  the calendar, and drops it). It is the only difference with a unit of its
+  own: a difference of two amounts in any other unit is in that unit, so
+  USD − USD is USD and °C − °C is °C;
 - `"<base> share by <by>"`, for `.normalize()` (`shareQuantity`), so a share
   axis never silently unions with its base's own axis.
 
@@ -1615,40 +1615,43 @@ units (`INSTANT`, `DURATION`, `COUNT` in `measure.ts`, a share) have none: a
 count or a share is a plain number, and a time axis's ticks already read as
 dates.
 
-**Which units add up.** The engine reads a declared unit as a `MeasureUnit`
-(`measure.ts`): the `HasUnit` and `CanAdd` when its amounts add up (#1197),
-and, for a unit that does not add, optionally the unit of its differences
-(`difference`). A user's unit gets `CanAdd` from its column's `.summable()`
-(`columnQuantity` copies the column type's `CanAdd` onto the unit, and
-reads a column type's `"instant"` as the engine's `INSTANT`). The
-engine's own units say it where they are defined: `COUNT`, `DURATION`, a
-share and every `Δ` unit have it, and `INSTANT` does not. Every place that
-adds values sums them with `sumIn` (`fieldExpr.ts`), which checks it with
-`checkSummable`: a size channel's sum over its rows (`inferNumeric`; when
+**Which amounts add up.** A column's `CanAdd` (#1197, from `.summable()`)
+rides on the `Quantity` read from it (`columnQuantity` copies it), not on
+its unit: two columns of one unit may disagree, and a sum checks only the
+columns it sums. The engine's own quantities say it where they are made:
+a count (`COUNT_QUANTITY`) and a share (`shareQuantity`) have it.
+`addsUp` (`measure.ts`) is the rule: a quantity adds up when it has
+`CanAdd` or no declared unit. Every place that adds values sums them with
+`sumIn` (`fieldExpr.ts`), which checks it with `checkSummable`: a size
+channel's sum over its rows (`inferNumeric`; when
 an aggregate op already folded the rows, the channel takes the op's value
 and sums nothing), `.sum()` in any channel or label (every caller of
 `evalFieldValues` passes the column's quantity), the total of
 `.normalize()`, and a treemap's total. A cut's sizes are slices of a whole
 it adds up, so its per-row size channel (`inferEntrySize`) checks its column
-with `checkSummable` too. A stack adds unit variables, not values, and checks its free parts
-with `checkSummableVar` (`distributeSpaceFold`; a pinned part adds only its
-width, a difference, which always adds). Summing a declared unit without
+with `checkSummable` too. A stack adds spaces, not values, so a space's
+`UnitRecord` carries `cannotAdd`, the quantities of its values that do not
+add up (`quantityUnits`; a shared `joinUnits` concatenates them), and
+`distributeSpaceFold` checks each free part's own list. It reads the
+parts, not the unit class they joined, so a `start` point in days beside a
+stacked `.summable()` width in days is fine; a pinned part is not summed,
+since the stack adds only its width. Summing a declared unit without
 `CanAdd` throws an error that names the column and says to declare
-`.summable()` or to subtract a reference first (`date - start` gives a
-duration). An unknown unit passes, as everywhere in gradual typing. The
+`.summable()`; for a time (a quantity on a calendar) it says to subtract a
+reference first (`date - start` gives a duration, which adds up). An
+unknown unit passes, as everywhere in gradual typing. The
 check reads the column's type, not the rows, so a group of one row is
 checked like any other: whether a chart type-checks never depends on how
 many rows a group holds. A bar of one date or one temperature is the
 missing zero (`HasZero`, #1051), not this check. Under the declared shortcut
-of #1197, `CanAdd` is per column, so two columns of one unit can disagree:
-`unify` keeps it on the class only when both sides have it. Its home is the
-unit's one definition (#1142).
+of #1197, `CanAdd` is per column; its home may become the unit's one
+definition (#1142).
 
-A size is not a difference: `magnitude` takes its value's units as they
-are, and never relabels a time as a duration. A span of time is a duration
-because something computed it as one, a `position` offset joined against
-the point's difference units below, or two positions (`x: start, x2: end`),
-which are two instants and add nothing.
+A size is never read on a calendar: `magnitude` takes its value's
+`differenceUnits`, so a size read from a time column (`h:
+field("day").mean()`) is a duration, not a bar on a time axis from 1970,
+and its `cannotAdd` drops the time, since a duration adds up. A sum of a
+time column as a size still throws first, at the sum.
 
 A quantity whose unit is declared is that unit, a concrete term, and nothing
 more: two charts that each declare their own `"value"` column, one in USD and
@@ -1730,9 +1733,9 @@ but as a point plus a difference, not two points. When the content is
 pinned, it is the point and the offset is the difference that moves it.
 Otherwise the content is a difference (a magnitude, a width) and the offset
 is the point it hangs from. The difference must be in the point's difference
-units (`differenceUnits`, from `differenceUnit` in `measure.ts`), so the join
-is between `differenceUnits(point)` and the difference: a USD position moves
-by USD when USD adds, a °C position by Δ°C, and a time position by a
+units (`differenceUnits`), so the join is between `differenceUnits(point)`
+and the difference: a USD position moves by USD (whether or not its column
+is `.summable()`), a °C position by °C, and a time position by a
 duration, or by a plain number, which is bound to one. Two instants clash
 (`"instant"` against `"duration"`), since a time does not move a time.
 The result takes the point's unit and calendar, titled by both sides. An ordinal axis has titles and no unit, so it takes no part in the

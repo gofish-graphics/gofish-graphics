@@ -39,14 +39,13 @@ import { GoFishNode } from "../ast/_node";
 import { DatumValueImpl } from "../ast/data";
 import { positionNode } from "../ast/graphicalOperators/positionNode";
 import {
-  differenceUnit,
   DURATION,
   INSTANT,
   Units,
   withUnits,
   type Quantity,
 } from "../ast/measure";
-import { differenceUnits } from "../ast/underlyingSpace";
+import { differenceUnits, magnitude } from "../ast/underlyingSpace";
 import { declared, fresh, textsOf, unknown } from "./testHelpers";
 import { distributeSpaceFold } from "../ast/constraints/distribute";
 import { interval } from "../util/interval";
@@ -398,6 +397,20 @@ console.log("# measure: a position offset joins in difference units");
     spaceUnit(a)?.unit?.kind === "declared" &&
       (spaceUnit(a)!.unit as any).unit === "USD" &&
       JSON.stringify(a.dataInterval) === JSON.stringify(interval(5, 15))
+  );
+  // #1197 review: a USD column that does not add (no `.summable()`) still
+  // moves by USD: a difference keeps its unit, with no derived ΔUSD.
+  const plainUsd = await errorOf(() =>
+    positionNode({ y: by(5, usd) }, [
+      leaf("pinned", usd),
+    ]).resolveUnderlyingSpace()
+  );
+  const usdByUsd = yOf(positionNode({ y: by(5, usd) }, [leaf("pinned", usd)]));
+  ok(
+    "a plain USD position moved by a USD offset is USD, with no clash",
+    plainUsd === undefined &&
+      (spaceUnit(usdByUsd)!.unit as any).unit === "USD",
+    plainUsd
   );
   const b = await errorOf(() =>
     positionNode({ y: by(5, count) }, [
@@ -1053,7 +1066,7 @@ console.log("# measure: CanAdd");
       /"temp"/.test(celsius) &&
       /cannot be summed/.test(celsius) &&
       /\.summable\(\)/.test(celsius) &&
-      /subtract a reference/.test(celsius),
+      !/subtract a reference/.test(celsius),
     celsius
   );
 
@@ -1191,28 +1204,109 @@ console.log("# measure: CanAdd");
   );
   ok("x/x2 spans of instants still render", spans === undefined, spans);
 
-  const delta = differenceUnit({ unit: "°C", symbol: "°C" });
-  ok(
-    "°C − °C is Δ°C, which adds",
-    delta.unit === "Δ°C" && delta.symbol === "Δ°C" && delta.CanAdd !== undefined
-  );
-  const usdUnit = { unit: "USD", symbol: "USD", CanAdd: {} };
-  ok("USD − USD is USD when USD adds", differenceUnit(usdUnit) === usdUnit);
-  ok("instant − instant is a duration", differenceUnit(INSTANT) === DURATION);
-  const recorded = withUnits(new Units(), () => {
-    const r = differenceUnits(
-      quantityUnits({
-        name: "temp",
-        column: "temp",
-        unit: { unit: "°C", symbol: "°C" },
-      })!
-    );
-    const u = resolveUnit(r.unit!);
-    return u.kind === "declared" ? u : undefined;
+  // A difference keeps its unit: °C − °C is in °C. Only an instant's
+  // difference has a unit of its own, a duration, on no calendar.
+  const celsiusRecord = withUnits(new Units(), () => {
+    const r = quantityUnits({
+      name: "temp",
+      column: "temp",
+      unit: { unit: "°C", symbol: "°C" },
+    })!;
+    return { r, d: differenceUnits(r) };
   });
   ok(
-    "a °C record's difference units are Δ°C, summable",
-    recorded?.unit === "Δ°C" && recorded.CanAdd !== undefined
+    "a °C record's difference units are the record, in °C",
+    celsiusRecord.d === celsiusRecord.r
+  );
+  const timeDiff = withUnits(new Units(), () => {
+    const r = differenceUnits(
+      quantityUnits({
+        name: "day",
+        column: "day",
+        unit: INSTANT,
+        calendar: { zone: "UTC" },
+      })!
+    );
+    return { unit: resolveUnit(r.unit!), r };
+  });
+  ok(
+    "an instant's difference units are a duration, on no calendar, which adds",
+    timeDiff.unit.kind === "declared" &&
+      timeDiff.unit.unit === DURATION.unit &&
+      timeDiff.r.calendar === undefined &&
+      timeDiff.r.cannotAdd === undefined
+  );
+
+  // CanAdd is the summed column's, not its unit class's (#1197 review): a
+  // stack on one axis of a `start` point in days that do not add and a
+  // `width` in days that do. The parts join into one class of "day", but
+  // the stack adds only the free part, the width, so it renders in either
+  // order. Before, the class lost CanAdd when `start` joined it, and the
+  // stack threw.
+  const dayPart = (rows: any[]) =>
+    (rows[0].start !== undefined
+      ? rect({ x: "start", w: 1, h: 10 })
+      : rect({ w: "width", h: 10 }))(rows);
+  const dayStack = (rows: object[], width: unknown) =>
+    chart(rows, { schema: { start: Schema.unit("day"), width } })
+      .flow(stack({ by: "id", dir: "x" }))
+      .mark(dayPart)
+      .toDisplayList(SIZE);
+  const point = { id: "a", start: 10 };
+  const span = { id: "b", width: 3 };
+  const summableDay = Schema.unit("day").summable();
+  const pointFirst = await errorOf(() => dayStack([point, span], summableDay));
+  const spanFirst = await errorOf(() => dayStack([span, point], summableDay));
+  ok(
+    "a day point stacked with a .summable() day width renders, in both orders",
+    pointFirst === undefined && spanFirst === undefined,
+    pointFirst ?? spanFirst
+  );
+  const plainWidth = await errorOf(() =>
+    dayStack([point, span], Schema.unit("day"))
+  );
+  ok(
+    "a stacked day width that does not add throws, naming only its column",
+    plainWidth !== undefined &&
+      /sums the column "width"/.test(plainWidth) &&
+      !/"start"/.test(plainWidth),
+    plainWidth
+  );
+
+  // A size is never read on a calendar: a mean of times as a bar's height
+  // is a duration (main's behavior), not a bar on a time axis from 1970.
+  const meanTime = withUnits(new Units(), () => {
+    const space = magnitude(
+      new DatumValueImpl(5, {
+        name: "day",
+        column: "day",
+        unit: INSTANT,
+        calendar: { zone: "UTC" },
+      })
+    );
+    return { unit: resolveUnit(space.measure!.unit!), space };
+  });
+  ok(
+    "a magnitude read from a time is a duration on no calendar",
+    meanTime.unit.kind === "declared" &&
+      meanTime.unit.unit === DURATION.unit &&
+      meanTime.space.measure?.calendar === undefined
+  );
+  const meanBar = await errorOf(async () => {
+    const dl = await chart(
+      sales.map((d) => ({ ...d, day: `${d.day}T00:00:00Z` })),
+      { schema: { day: Schema.time() } }
+    )
+      .flow(spread({ by: "region", dir: "x" }))
+      .mark(rect({ h: field("day").mean() }))
+      .toDisplayList(SIZE);
+    const years = textsOf(dl).filter((t) => /19[67]\d/.test(t));
+    if (years.length > 0) throw new Error(`calendar ticks: ${years}`);
+  });
+  ok(
+    "rect({ h: field(time).mean() }) renders with no calendar axis",
+    meanBar === undefined,
+    meanBar
   );
 
   const noUnit = await errorOf(() =>

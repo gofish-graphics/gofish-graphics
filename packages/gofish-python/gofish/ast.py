@@ -2436,7 +2436,7 @@ def _check_summable_type(who: str, column_type: Dict[str, Any]) -> None:
         raise TypeError(
             f"{who} is a time, which cannot be summable: two instants do not "
             "add up; subtract a reference first (e.g. date - start gives a "
-            "duration): differences add up."
+            "duration, which adds up)."
         )
     if "HasUnit" not in column_type:
         raise TypeError(

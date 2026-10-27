@@ -157,8 +157,8 @@ unit other than a time's.
   [`treemap`](/python/api/operators/treemap) `size`, `field(x).sum()` and
   `field(x).normalize()` add up their values. Adding up values in a declared
   unit needs `CanAdd`: without it, it is an error that names the column and
-  the unit, and says to declare `.summable()` or to subtract a reference
-  first.
+  the unit, and says to declare `.summable()`, or, for a time, to subtract
+  a reference first.
 - A time column never has `CanAdd`: two instants do not add up. Its
   difference does (`end - start` is a duration), and a mark with two
   positions (`x="start", x2="end"`) adds nothing.
@@ -167,9 +167,12 @@ unit other than a time's.
   group has one row. A pipeline op that folds the rows first
   (`field(x).mean()`, `.count()`) adds nothing.
 - `.count()`, `.distinct()` and `.normalize()` shares add up.
-- The difference of two amounts in a unit that adds up is in that unit. The
-  difference of two amounts in a unit that does not is in the unit `Δ` and
-  the unit's name (`"Δ°C"`), which adds up.
+- The difference of two amounts is in their unit (USD − USD is USD, °C − °C
+  is °C), except the difference of two times, which is a duration. A size
+  read from a time column is a duration too, never a time.
+- `CanAdd` is the column's, not its unit's: a stack checks only the
+  columns it adds, so a `start` column in days with no `CanAdd` may share an
+  axis with a stacked `.summable()` width in days.
 - `.summable()` needs a unit, so `Schema.quantity(name).summable()` and
   `Schema.time().summable()` raise a `TypeError`. `chart` checks a
   column-type record passed as is (the wire form, `{"CanAdd": {}}`) the

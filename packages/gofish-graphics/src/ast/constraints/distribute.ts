@@ -21,7 +21,7 @@ import {
   hasOrigin,
 } from "../underlyingSpace";
 import { Extent, impliedExtent } from "../extent";
-import { checkSummableVar } from "../measure";
+import { checkSummable } from "../measure";
 import {
   inCoordinateSpace,
   yDirection,
@@ -347,11 +347,14 @@ export function distributeSpaceFold(
     // data interval and pin the origin": a glued stack is a pinned space.
     //
     // A free part is an amount from its baseline, so the stack adds the
-    // amounts themselves, and their unit must add up (#1197: a stack of
-    // temperatures or dates has no meaning). A pinned part adds only its
-    // width, a difference, which always adds (`differenceUnit`).
-    if (targets.some((t) => t.origin === "free") && childMeasure?.unit)
-      checkSummableVar(childMeasure.unit, "stack");
+    // amounts themselves, and the columns they were read from must add up
+    // (#1197: a stack of temperatures or dates has no meaning). The check
+    // reads each part's own record, not the unit class the parts joined, so
+    // a column that is only a position on the same axis is not checked. A
+    // pinned part is not summed: the stack adds only its width.
+    for (const t of targets)
+      if (t.origin === "free")
+        checkSummable(t.measure?.cannotAdd?.[0], "stack");
     const { origin } = opts;
     const sides = targets.map(tailSides);
     sides.forEach(({ descent }, i) => {

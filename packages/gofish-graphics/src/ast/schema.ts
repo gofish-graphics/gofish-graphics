@@ -287,10 +287,7 @@ export const Schema = {
     HasCalendar: HasCalendar;
     HasUnit: HasUnit;
   }> {
-    return new ColumnSchema({
-      HasCalendar: { zone },
-      HasUnit: { unit: INSTANT.unit },
-    });
+    return new ColumnSchema({ HasCalendar: { zone }, HasUnit: INSTANT });
   },
   /** A column whose values are amounts in the unit `unit` (`HasUnit`), an
    *  opaque name such as `"USD"` or `"mm"`. Columns in the same unit may

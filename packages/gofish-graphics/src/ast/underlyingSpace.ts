@@ -17,9 +17,10 @@ import {
   type MaybeValue,
 } from "./data";
 import {
-  declaredUnit,
+  addsUp,
   declaredVar,
-  differenceUnit,
+  DURATION,
+  INSTANT,
   MeasureClash,
   resolveUnit,
   unify,
@@ -180,30 +181,37 @@ export const isCONTINUOUS = (
   space: UnderlyingSpace
 ): space is CONTINUOUS_TYPE => space.kind === "continuous";
 
-/** The space of a datum magnitude `size`: `[0, v]` with the datum's units,
- *  as they are. Free by default (its parent places its baseline); `"none"`
- *  when the mark's position is an aesthetic, so the magnitude has only a
- *  width. A size read from a column of amounts that do not add (a time, a
- *  temperature) is an error where it was summed (`checkSummable` in
- *  measure.ts), so it is never relabeled here; a span of time is a duration
- *  because it was computed as one (#1197). */
+/** The space of a datum magnitude `size`: `[0, v]` with the datum's units.
+ *  Free by default (its parent places its baseline); `"none"` when the mark's
+ *  position is an aesthetic, so the magnitude has only a width. A size is
+ *  never an instant (a span of time is a duration, and `.count()` over a
+ *  time column is a count), so it reads on no calendar: only a position read
+ *  from a time column does. */
 export const magnitude = (
   size: MaybeValue<number | undefined>,
   origin: "free" | "none" = "free"
-): CONTINUOUS_TYPE =>
-  CONTINUOUS(interval(0, getValue(size)!), origin, valueUnits(size));
+): CONTINUOUS_TYPE => {
+  const units = valueUnits(size);
+  return CONTINUOUS(
+    interval(0, getValue(size)!),
+    origin,
+    units && differenceUnits(units)
+  );
+};
 
-/** The units of a difference of two values in units `r`, on no calendar:
- *  the declared unit's {@link differenceUnit} (USD stays USD when it adds,
- *  an instant's difference is a duration, °C's is Δ°C). An unknown unit is
- *  unchanged. */
+/** The units of a difference of two values in units `r`: a difference of
+ *  two instants (values on a calendar) is a duration, on no calendar, and a
+ *  duration adds up. Other units are unchanged: a difference of two amounts
+ *  in USD, or in °C, is in USD, or in °C (#1197). */
 export const differenceUnits = (r: UnitRecord): UnitRecord => {
-  const { calendar: _, ...rest } = r;
-  const unit = rest.unit && declaredUnit(rest.unit);
-  // A unit that adds is its own difference.
-  if (unit === undefined || unit.CanAdd !== undefined) return rest;
-  const diff = differenceUnit(unit);
-  return { ...rest, unit: declaredVar(r.titles[0] ?? diff.unit, diff) };
+  if (r.calendar === undefined) return r;
+  const { calendar: _, cannotAdd, ...rest } = r;
+  const others = cannotAdd?.filter((q) => q.calendar === undefined);
+  return {
+    ...rest,
+    unit: declaredVar(r.titles[0] ?? INSTANT.unit, DURATION),
+    ...(others?.length ? { cannotAdd: others } : {}),
+  };
 };
 
 /** The absolute `[min, max]` data domain of a PINNED space, or undefined for a
@@ -557,16 +565,22 @@ export const isPositioningSpace = (space: UnderlyingSpace): boolean =>
  *  - `calendar`: over instants, the calendar they read on (`HasCalendar`).
  *  - `titles`: the quantities that title the axis, in the order they met:
  *    each column's declared quantity (`HasQuantity`), else its name.
+ *  - `cannotAdd`: the quantities of the values that do not add up
+ *    (`checkSummable` in measure.ts refuses them), so a stack that adds the
+ *    space checks the columns it adds, not every column its unit has met
+ *    (#1197).
  */
 export type UnitRecord = {
   unit?: UnitVar;
   calendar?: HasCalendar;
   titles: string[];
+  cannotAdd?: Quantity[];
 };
 
 /** The units of values of quantity `q`: its unit (`unitOf`: its declared
  *  unit, else the variable of its name in the type walk's union-find), its
- *  calendar, and its name as the title. */
+ *  calendar, its name as the title, and `q` itself when its values do not
+ *  add up. */
 export const quantityUnits = (
   q: Quantity | undefined
 ): UnitRecord | undefined =>
@@ -576,6 +590,7 @@ export const quantityUnits = (
         unit: unitOf(q),
         ...(q.calendar ? { calendar: q.calendar } : {}),
         titles: [q.name],
+        ...(addsUp(q) ? {} : { cannotAdd: [q] }),
       };
 
 /** The units of a datum value: of the quantity it was read from; undefined
@@ -603,7 +618,7 @@ export const valueUnits = (v: MaybeValue<unknown>): UnitRecord | undefined =>
  * A binding holds for the whole render, so an unknown bound to two
  * different declared units is a {@link MeasureClash} too. "Forget" records
  * nothing and raises nothing: the result keeps `a`'s record. A shared join
- * unions the titles. Either way the calendars must agree: one axis reads one
+ * unions the titles and the quantities that cannot add. Either way the calendars must agree: one axis reads one
  * calendar.
  */
 export const joinUnits = (
@@ -618,12 +633,22 @@ export const joinUnits = (
   if (shared && a.unit && b.unit) unify(a.unit, b.unit, site);
   const unit = shared ? (a.unit ?? b.unit) : a.unit;
   const titles = shared ? unionInOrder(a.titles, b.titles) : a.titles;
-  if (unit === a.unit && titles === a.titles && calendar === a.calendar)
+  const cannotAdd =
+    shared && b.cannotAdd
+      ? [...(a.cannotAdd ?? []), ...b.cannotAdd]
+      : a.cannotAdd;
+  if (
+    unit === a.unit &&
+    titles === a.titles &&
+    calendar === a.calendar &&
+    cannotAdd === a.cannotAdd
+  )
     return a;
   return {
     ...(unit !== undefined ? { unit } : {}),
     ...(calendar !== undefined ? { calendar } : {}),
     titles,
+    ...(cannotAdd !== undefined ? { cannotAdd } : {}),
   };
 };
 
@@ -658,7 +683,8 @@ const joinCalendars = (
 };
 
 /** A space's {@link UnitRecord} as {@link spaceUnit} reads it: the unit
- *  replaced by its representative in the render's union-find. */
+ *  replaced by its representative in the render's union-find, and no
+ *  `cannotAdd`, which only a fold that adds reads. */
 export type SpaceUnits = {
   unit?: Unit;
   calendar?: HasCalendar;
@@ -678,7 +704,7 @@ export const spaceUnit = (
 ): SpaceUnits | undefined => {
   const r = space && isCONTINUOUS(space) ? space.measure : undefined;
   if (r === undefined) return undefined;
-  const { unit, ...rest } = r;
+  const { unit, cannotAdd: _, ...rest } = r;
   return unit === undefined ? rest : { ...rest, unit: resolveUnit(unit) };
 };
 
