@@ -889,14 +889,10 @@ export const connect = createNodeOperator(
             // The box above is the WHOLE run's, cut or not: the room a line
             // uses over its run, the way a transition claims its whole
             // trajectory, so the window moving changes nothing above it.
-            // `centerline`: the paths are a stroked line (center mode) of
-            // this width, not a band's outline. `enclose` reads a line
-            // operand as its segments by it.
             renderData: {
               paths: mergedPaths,
               defaultColor,
               timeRun,
-              centerline: mode === "center" ? (strokeWidth ?? 1) : undefined,
             },
           };
         },
@@ -972,13 +968,15 @@ export const connect = createNodeOperator(
         },
         // Its outline is what it draws, over its whole run: an open path per
         // run for a line (center mode, or a connector between two anchors),
-        // a closed band per run for a ribbon (edge mode). The paths are kept
-        // in axis order; the outline is in pixels.
+        // a closed band per run for a ribbon (edge mode). A line's path is
+        // stroked, so its outline carries the stroke's width. The paths are
+        // kept in axis order; the outline is in pixels.
         geometry: (laidOut, layoutChildren, node) => {
           const closed =
             mode !== "center" &&
             resolvedSource === undefined &&
             resolvedTarget === undefined;
+          const width = mode === "center" ? (strokeWidth ?? 1) : undefined;
           return {
             ...defaultGeometry(laidOut, layoutChildren, node),
             outline: (tolerance) =>
@@ -988,6 +986,7 @@ export const connect = createNodeOperator(
                   node.yFrame.direction
                 ),
                 closed,
+                ...(width !== undefined && { width }),
               })),
           };
         },

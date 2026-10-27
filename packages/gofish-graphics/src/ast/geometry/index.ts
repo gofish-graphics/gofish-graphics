@@ -34,6 +34,7 @@ export {
   ellipseOutline,
   flattenPath,
   translateOutline,
+  placedOutlines,
   reflectOutlineY,
   openRing,
   orderToPixel,

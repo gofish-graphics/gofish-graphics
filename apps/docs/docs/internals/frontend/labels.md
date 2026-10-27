@@ -252,7 +252,8 @@ A strategy that needs geometry the target lacks is an error that names it
 `overlap`: the solver never sees it, and `applyConstraints` runs it after the
 solve and after `overlap`, when the labeled marks are placed and their `ref()`
 stand-ins can be read. It reads and writes in pixels through each
-placeable's unoriented node (`rawPlaceable`). The labels of one `.label()`
+placeable's unoriented node (`rawPlaceable`), and reads a placed node's
+outlines with `placedOutlines`, as `enclose` does. The labels of one `.label()`
 call (one `group`, which `GoFishNode.label` sets from the call's options
 object) are taken in data order; each takes its first candidate that stays
 inside the area the layer was given (`[0, size]` on each axis, so labels stay

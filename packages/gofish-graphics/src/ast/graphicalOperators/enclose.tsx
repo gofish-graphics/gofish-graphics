@@ -150,7 +150,7 @@ function Enclose(
             .flatMap((child, i) =>
               from > 0 && memberNodes.has(targetOf(child))
                 ? []
-                : membersOf(child, placed[from + i].dims)
+                : membersOf(placed[from + i])
             );
         let loops: Pt[][] | undefined;
         if (shape.kind === "blob")

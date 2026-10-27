@@ -10,7 +10,7 @@ import { LabelText } from "./labelNode";
 import { ref } from "../shapes/ref";
 import { Constraint } from "../constraints";
 import type { AlignAnchor, ConstraintRef } from "../constraints/shared";
-import { outlines, translateOutline } from "../geometry";
+import { placedOutlines } from "../geometry";
 import { pointInRing } from "./collide";
 import { createLabelPlaceConstraint, type LabelPlaceItem } from "./placeStep";
 import { avoidedRefs } from "../nodeRefs";
@@ -91,15 +91,9 @@ function resolveNodeFill(node: GoFishNode): string | null {
 function sitsInside(label: GoFishNode, target: GoFishRef): boolean {
   const d = label.dims;
   if (d[0].center === undefined || d[1].center === undefined) return false;
-  const g = target.geometry();
-  const t = target.dims;
-  const dx = (t[0].min ?? 0) - g.box.min[0];
-  const dy = (t[1].min ?? 0) - g.box.min[1];
   const c: [number, number] = [d[0].center, d[1].center];
-  return outlines(g, 0.5, target.yFrame.direction).some(
-    (o) =>
-      o.closed &&
-      pointInRing(c, translateOutline(o, [dx, dy]).points as [number, number][])
+  return placedOutlines(target, 0.5, target.yFrame.direction).some(
+    (o) => o.closed && pointInRing(c, o.points as [number, number][])
   );
 }
 

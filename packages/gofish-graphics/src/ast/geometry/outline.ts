@@ -1,9 +1,17 @@
 import type { Path } from "../../path";
 import type { AxisDirection } from "../axisDirection";
+import type { Dimensions } from "../dims";
 import type { Box } from "./box";
 import type { Geometry } from "./index";
 
-/** A point of an outline, in a node's local layout frame (pixels, y down). */
+/**
+ * A point of an outline. Every outline, a shape's own and the box fallback
+ * alike, is in the frame of the geometry it was read from: for
+ * `GoFishNode.geometry()`, the node's local layout frame, which is pixels
+ * with y down (the frame of `intrinsicDims`, see `axisDirection.ts`). An
+ * outline read through a parent's view of a child (`orientView`) is in that
+ * parent's axis order instead, like the view's box.
+ */
 export type OutlinePoint = [number, number];
 
 /**
@@ -17,14 +25,28 @@ export type OutlinePart = { name: string; from: number; to: number };
 
 /**
  * A shape's outline, sampled: a polyline that is never farther from the true
- * shape than the tolerance asked for. `closed` says whether it is a region's
- * boundary (the last point joins the first; the inside is known) or an open
- * path with a start, an end and a direction of travel (a line, an arrow).
+ * shape than the tolerance asked for.
+ *
+ * `closed: true` means a filled region whose boundary is `points` (the last
+ * point joins the first, and the inside is part of the shape). `closed:
+ * false` means an open path with a start, an end and a direction of travel
+ * (a line, an arrow's body).
+ *
+ * An outline may also give its shape exactly, beside the samples, for a
+ * consumer that reads a primitive in closed form (the blob in `enclose`):
+ *  - `ellipse`, on a closed outline that is an axis-aligned ellipse (a circle
+ *    when `rx === ry`);
+ *  - `box`, on a closed outline that is an axis-aligned box;
+ *  - `width`, on an open outline drawn as a stroke: the stroke's width, so
+ *    the shape is the path swept by a pen that wide.
  */
 export interface Outline {
   points: OutlinePoint[];
   closed: boolean;
   parts?: OutlinePart[];
+  ellipse?: { cx: number; cy: number; rx: number; ry: number };
+  box?: Box;
+  width?: number;
 }
 
 /**
@@ -37,8 +59,9 @@ export interface HasOutline {
 }
 
 /** A box's outline: a closed rect, clockwise on the screen from its top-left
- *  corner, with its edges as parts. `direction` is the y direction of the
- *  box's own axis order, which names the top and bottom edges. */
+ *  corner, with the box as its exact form and its edges as parts.
+ *  `direction` is the y direction of the box's own axis order relative to
+ *  the frame the box is in, which names the top and bottom edges. */
 export function boxOutline(box: Box, direction: AxisDirection): Outline {
   const [x0, y0] = box.min;
   const [x1, y1] = box.max;
@@ -56,6 +79,7 @@ export function boxOutline(box: Box, direction: AxisDirection): Outline {
       [x0, y1],
     ],
     closed: true,
+    box: { min: [x0, y0], max: [x1, y1] },
     parts: [
       { name: top, from: 0, to: w },
       { name: "x-max", from: w, to: w + h },
@@ -66,9 +90,9 @@ export function boxOutline(box: Box, direction: AxisDirection): Outline {
 }
 
 /**
- * A geometry's outlines, falling back to its box (see {@link boxOutline}).
- * `g` must be a node's own geometry, in its pixel frame, and `direction`
- * that node's y direction.
+ * A geometry's outlines, falling back to its box (see {@link boxOutline}),
+ * in the geometry's own frame. For a node's own geometry (pixels),
+ * `direction` is that node's y direction.
  */
 export function outlines(
   g: Geometry,
@@ -79,18 +103,61 @@ export function outlines(
 }
 
 /** Move an outline by `[dx, dy]`, e.g. by a child's translate into its
- *  parent's frame. */
+ *  parent's frame. Its exact forms move with it. */
 export function translateOutline(
   o: Outline,
   [dx, dy]: [number, number]
 ): Outline {
-  return { ...o, points: o.points.map(([x, y]) => [x + dx, y + dy]) };
+  const { ellipse, box } = o;
+  return {
+    ...o,
+    points: o.points.map(([x, y]) => [x + dx, y + dy]),
+    ...(ellipse && {
+      ellipse: { ...ellipse, cx: ellipse.cx + dx, cy: ellipse.cy + dy },
+    }),
+    ...(box && {
+      box: {
+        min: [box.min[0] + dx, box.min[1] + dy],
+        max: [box.max[0] + dx, box.max[1] + dy],
+      },
+    }),
+  };
 }
 
-/** An outline reflected about its origin's y. Its parts keep their names:
- *  they name the mark's own pieces, wherever a frame puts them. */
+/** An outline reflected about its origin's y, exact forms and all. Its
+ *  parts keep their names: they name the mark's own pieces, wherever a frame
+ *  puts them. */
 export function reflectOutlineY(o: Outline): Outline {
-  return { ...o, points: o.points.map(([x, y]) => [x, -y]) };
+  const { ellipse, box } = o;
+  return {
+    ...o,
+    points: o.points.map(([x, y]) => [x, -y]),
+    ...(ellipse && { ellipse: { ...ellipse, cy: -ellipse.cy } }),
+    ...(box && {
+      box: { min: [box.min[0], -box.max[1]], max: [box.max[0], -box.min[1]] },
+    }),
+  };
+}
+
+/**
+ * A placed node's outlines in its parent's frame: the outlines of `p`'s
+ * geometry, moved so its box sits where `p.dims` puts it. `p` is any
+ * placeable (a node, a `ref()` stand-in, or a parent's oriented view of
+ * one), whose `geometry()` and `dims` are read in the same frame;
+ * `direction` names a box's edges (see {@link boxOutline}).
+ */
+export function placedOutlines(
+  p: { geometry(): Geometry; dims: Dimensions },
+  tolerance: number,
+  direction: AxisDirection
+): Outline[] {
+  const g = p.geometry();
+  const d = p.dims;
+  const dx = (d[0].min ?? 0) - g.box.min[0];
+  const dy = (d[1].min ?? 0) - g.box.min[1];
+  return outlines(g, tolerance, direction).map((o) =>
+    translateOutline(o, [dx, dy])
+  );
 }
 
 /** How many equal steps of angle keep a circle of radius `r` within
@@ -117,7 +184,7 @@ export function ellipseOutline(
     const t = (2 * Math.PI * i) / n;
     points.push([cx + rx * Math.cos(t), cy + ry * Math.sin(t)]);
   }
-  return { points, closed: true };
+  return { points, closed: true, ellipse: { cx, cy, rx, ry } };
 }
 
 /**

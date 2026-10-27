@@ -25,11 +25,7 @@ import type { Placeable } from "../_node";
 import type { GoFishRef } from "../_ref";
 import { rawPlaceable } from "../axisDirection";
 import type { ConstraintRef } from "../constraints/shared";
-import {
-  outlines as outlinesOf,
-  translateOutline,
-  type Outline,
-} from "../geometry";
+import { placedOutlines as outlinesAt, type Outline } from "../geometry";
 import type { Place } from "../../families/place";
 import {
   ObstacleGrid,
@@ -109,13 +105,7 @@ function placedOutlines(p: Placeable): Outline[] {
   const raw = rawPlaceable(p) as Placeable & {
     yFrame?: { direction: 1 | -1 };
   };
-  const g = raw.geometry();
-  const d = raw.dims;
-  const dx = (d[0].min ?? 0) - g.box.min[0];
-  const dy = (d[1].min ?? 0) - g.box.min[1];
-  return outlinesOf(g, TOLERANCE, raw.yFrame?.direction ?? 1).map((o) =>
-    translateOutline(o, [dx, dy])
-  );
+  return outlinesAt(raw, TOLERANCE, raw.yFrame?.direction ?? 1);
 }
 
 /** The node a placeable stands for: a ref's target, or the node itself. */

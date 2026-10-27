@@ -16,6 +16,7 @@ import {
   outlines,
   flattenPath,
   reflectOutlineY,
+  translateOutline,
   type Circle,
   type Outline,
 } from "../ast/geometry";
@@ -166,6 +167,10 @@ console.log("# outline: box fallback");
   const [down] = outlines(g, 0.5, 1);
   ok("the fallback is one closed rect", down.closed && down.points.length === 4);
   ok(
+    "the fallback gives its box exactly, in the same frame as its points",
+    JSON.stringify(down.box) === JSON.stringify(g.box)
+  );
+  ok(
     "it runs clockwise from the top-left corner",
     JSON.stringify(down.points) === "[[0,0],[30,0],[30,40],[0,40]]",
     JSON.stringify(down.points)
@@ -212,6 +217,12 @@ console.log("# outline: ellipse");
   const fine = outlines(g, 0.1, 1)[0].points.length;
   const coarse = outlines(g, 1, 1)[0].points.length;
   ok("a finer tolerance takes more samples", fine > coarse, `${fine} ${coarse}`);
+  const e = outlines(g, 0.5, 1)[0].ellipse;
+  ok(
+    "a circle's outline gives its ellipse exactly",
+    e !== undefined && e.cx === 20 && e.cy === 20 && e.rx === 20 && e.ry === 20,
+    JSON.stringify(e)
+  );
 }
 
 console.log("# outline: polygon and text");
@@ -292,6 +303,26 @@ console.log("# outline: paths");
   );
   const r = reflectOutlineY({ points: [[1, 2]], closed: false });
   ok("reflecting flips y", r.points[0][0] === 1 && r.points[0][1] === -2);
+  const ex = reflectOutlineY(
+    translateOutline(
+      {
+        points: [],
+        closed: true,
+        ellipse: { cx: 1, cy: 2, rx: 3, ry: 4 },
+        box: { min: [0, 1], max: [5, 6] },
+      },
+      [10, 20]
+    )
+  );
+  ok(
+    "moving and reflecting an outline moves its exact forms with it",
+    JSON.stringify([ex.ellipse, ex.box]) ===
+      JSON.stringify([
+        { cx: 11, cy: -22, rx: 3, ry: 4 },
+        { min: [10, -26], max: [15, -21] },
+      ]),
+    JSON.stringify([ex.ellipse, ex.box])
+  );
 }
 
 /** Every node of a laid-out tree, depth first. */
@@ -317,6 +348,7 @@ console.log("# outline: line and ribbon connectors");
   const lo = outlines(conn.geometry(), 0.5, conn.yFrame.direction);
   ok("a line's outline is one open path", lo.length === 1 && !lo[0].closed);
   ok("a line's outline samples its curve", lo[0].points.length > 3);
+  ok("a line's outline carries its stroke width", lo[0].width === 1, `${lo[0].width}`);
   const g = conn.geometry();
   ok(
     "a line's outline lies in its box",
@@ -348,6 +380,7 @@ console.log("# outline: line and ribbon connectors");
   const rib = [...walk(band)].find((n) => n.type === "connect")!;
   const ro = outlines(rib.geometry(), 0.5, rib.yFrame.direction);
   ok("a ribbon's outline is one closed band", ro.length === 1 && ro[0].closed);
+  ok("a ribbon's band has no stroke width", ro[0].width === undefined);
 }
 
 const radii = [30, 5, 18, 12, 25, 8, 3, 15, 20, 10];

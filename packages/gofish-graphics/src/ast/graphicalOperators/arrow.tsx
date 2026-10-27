@@ -225,7 +225,8 @@ export const arrow = createNodeOperator(
           return items;
         },
         // Its outline is its body, an open path from its start to the tip
-        // of its head; the head's triangle is decoration on it.
+        // of its head, as wide as its stroke; the head's triangle is
+        // decoration on it.
         geometry: (laidOut, layoutChildren, node) => ({
           ...defaultGeometry(laidOut, layoutChildren, node),
           outline: (tolerance) =>
@@ -238,6 +239,7 @@ export const arrow = createNodeOperator(
                       node.yFrame.direction
                     ),
                     closed: false,
+                    width: props.strokeWidth ?? 0,
                   },
                 ],
         }),

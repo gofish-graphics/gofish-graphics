@@ -689,25 +689,37 @@ helper, which falls back to the box when the node does not answer.
   fallback is the circle through the box corners.
 - `outline` (`outlines(g, tolerance, direction)`): the shape's outline as
   polylines that stray at most `tolerance` pixels from it. Each is `closed` (a
-  region's boundary, whose inside is known) or open (a path with a start, an
-  end and a direction of travel), and may name `parts`, arc-length ranges for
-  the mark's own pieces. The fallback is the box as a closed rect whose parts
-  are its edges, `x-min`, `x-max`, `y-min` and `y-max`, named in the node's own
-  axis order (so on a continuous y, `y-max` is the top edge). Labels are its
-  first consumer.
+  filled region whose boundary is the polyline) or open (a path with a start,
+  an end and a direction of travel), and may name `parts`, arc-length ranges
+  for the mark's own pieces. The fallback is the box as a closed rect whose
+  parts are its edges, `x-min`, `x-max`, `y-min` and `y-max`, named in the
+  node's own axis order (so on a continuous y, `y-max` is the top edge).
+  Every outline, a node's own and the fallback alike, is in the frame of the
+  geometry it was read from: pixels, y down, for a node's own geometry, and
+  the parent's axis order for a parent's view of a child (`orientView`
+  reflects the outlines with the box). `direction` only names the box's
+  edges. Beside its samples, an outline may give its shape exactly: an
+  `ellipse` (`cx`, `cy`, `rx`, `ry`) or a `box` on a closed outline, and the
+  stroke `width` on an open one that is drawn as a stroke. Moving or
+  reflecting an outline moves its exact forms with it. `placedOutlines(p,
+tolerance, direction)` reads a placed node's outlines in its parent's
+  frame, moved so the geometry's box sits where `p.dims` puts it. Labels and
+  `enclose` read members this way.
 
 - A node definition may pass a `geometry` function next to `lower`. `ellipse`
-  answers with the circle of its larger radius and its sampled outline, and
-  `polygon` with the smallest circle through its ring and the ring itself. A
-  `line` connector's outline is the open path it draws, one per run, a
-  `ribbon`'s is its closed band, and an `arrow`'s is its body. A rotated
+  answers with the circle of its larger radius and its sampled outline,
+  which gives the ellipse exactly, and `polygon` with the smallest circle
+  through its ring and the ring itself. A `line` connector's outline is the
+  open path it draws, one per run, with its stroke width, a `ribbon`'s is its
+  closed band, and an `arrow`'s is its body, with its stroke width. A rotated
   `text` answers with its turned glyph box, and a `region` with its cell's
   outline when it has one. Paths that a node keeps in its axis order are
   turned into pixels (`orderToPixel`).
-- `enclose` reads its members through a private reader (`enclose/members.ts`)
-  rather than `outline`: the blob needs a circle as an exact disc and an
-  ellipse's semi-axes, and it cuts each bezier into exactly 8 pieces, so a
-  sampled outline would move every blob slightly (#1167).
+- `enclose` reads its members through `outline` (`enclose/members.ts`),
+  taking the exact forms where an outline gives them: an ellipse is a disc,
+  a box a box, an open outline its pieces as wide as its stroke, and any
+  other closed outline its edges (see
+  [Enclose](/internals/frontend/enclose)).
 - A node with children and no `geometry` function answers `enclosingCircle`
   lazily. It takes the smallest circle around its children's circles, each
   moved by the child's translate into the node's frame.
