@@ -13,8 +13,18 @@
     "HasUnit": { "unit": "°C", "symbol": "°C", "classes": {} }
   },
   "region": {
-    "HasOrder": { "levels": ["n", "s"] },
+    "HasLevels": { "levels": ["n", "s"] },
+    "HasOrder": {},
     "HasMidpoint": { "at": 1 }
+  },
+  "party": {
+    "HasLevels": { "levels": ["Dem", "Rep", "Ind"] }
+  },
+  "rating": {
+    "HasQuantity": { "name": "Rating" },
+    "HasUnit": { "unit": "stars", "symbol": "stars", "classes": {} },
+    "HasLevels": { "levels": [1, 2, 3, 4, 5] },
+    "HasOrder": {}
   },
   "day": {
     "HasUnit": {

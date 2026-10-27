@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, layer, rect, spread, Schema, Unit } from "../../src/lib";
+import { chart, layer, rect, spread, Domain, Unit } from "../../src/lib";
 import { genderPayGap, payGrade } from "../../src/data/genderPayGap";
 
 /**
@@ -30,7 +30,7 @@ export const GenderPayGap: StoryObj<Args> = {
     const pay = { name: "Pay", unit: Unit("USD") };
     chart(genderPayGap, {
       schema: {
-        "Pay Grade": Schema.ordered(payGrade),
+        "Pay Grade": Unit({ domain: Domain.ordered(payGrade) }),
         Min: pay,
         "25-Percentile": pay,
         Median: pay,
@@ -45,7 +45,12 @@ export const GenderPayGap: StoryObj<Args> = {
       .mark(
         layer([
           rect({ x: 7.5, w: 1, y: "Min", y2: "Max", fill: "gray" }),
-          rect({ w: 16, y: "25-Percentile", y2: "75-Percentile", fill: "Gender" }),
+          rect({
+            w: 16,
+            y: "25-Percentile",
+            y2: "75-Percentile",
+            fill: "Gender",
+          }),
           rect({ w: 16, h: 1.5, y: "Median", fill: "white" }),
         ])
       )

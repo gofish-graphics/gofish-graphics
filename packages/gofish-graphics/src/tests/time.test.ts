@@ -26,7 +26,6 @@ import {
   getColumnTypes,
   setColumnTypes,
   toEpochMs,
-  Schema as SrcSchema,
   Unit as SrcUnit,
 } from "../ast/schema";
 import { rowLabels } from "../ast/axes/timeRows";
@@ -58,7 +57,7 @@ const {
   field,
   line,
   circle,
-  Schema,
+  Domain,
   Unit,
 } = GoFish as any;
 const DistCalendar = (GoFish as any).Calendar;
@@ -133,7 +132,11 @@ async function main() {
       "a cell ends where the next starts",
       months.every((c, i) => i === 0 || months[i - 1].end === c.start)
     );
-    const q = Calendar.month({ every: 3 }).cells(lo, Date.UTC(2024, 11, 31), "UTC");
+    const q = Calendar.month({ every: 3 }).cells(
+      lo,
+      Date.UTC(2024, 11, 31),
+      "UTC"
+    );
     check(
       "month({ every: 3 }) starts in Jan, Apr, Jul, Oct",
       same(
@@ -141,8 +144,11 @@ async function main() {
         [10, 1, 4, 7, 10]
       )
     );
-    const d2 = Calendar.day({ every: 2 })
-      .cells(Date.UTC(2024, 0, 29), Date.UTC(2024, 1, 3), "UTC");
+    const d2 = Calendar.day({ every: 2 }).cells(
+      Date.UTC(2024, 0, 29),
+      Date.UTC(2024, 1, 3),
+      "UTC"
+    );
     check(
       "day({ every: 2 }) restarts on the 1st (a 31st is a one-day cell)",
       same(
@@ -150,8 +156,11 @@ async function main() {
         [29, 31, 1, 3]
       ) && d2[1].end - d2[1].start === 864e5
     );
-    const h6 = Calendar.hour({ every: 6 })
-      .cells(Date.UTC(2024, 1, 28, 1), Date.UTC(2024, 1, 29, 1), "UTC");
+    const h6 = Calendar.hour({ every: 6 }).cells(
+      Date.UTC(2024, 1, 28, 1),
+      Date.UTC(2024, 1, 29, 1),
+      "UTC"
+    );
     check(
       "hour({ every: 6 }) starts at 0, 6, 12, 18",
       same(
@@ -159,8 +168,11 @@ async function main() {
         [0, 6, 12, 18, 0]
       )
     );
-    const y5 = Calendar.year({ every: 5 })
-      .cells(Date.UTC(2018, 2), Date.UTC(2031, 0), "UTC");
+    const y5 = Calendar.year({ every: 5 }).cells(
+      Date.UTC(2018, 2),
+      Date.UTC(2031, 0),
+      "UTC"
+    );
     check(
       "year({ every: 5 }) starts on years divisible by 5",
       same(
@@ -226,7 +238,8 @@ async function main() {
     );
     check(
       "a step below 1 is an error",
-      (await errorOf(() => Calendar.month({ every: 0 })))?.includes("every") === true
+      (await errorOf(() => Calendar.month({ every: 0 })))?.includes("every") ===
+        true
     );
   }
 
@@ -308,7 +321,7 @@ async function main() {
       "a Date column is inferred as a UTC time",
       same(getColumnTypes(typed), {
         when: {
-          HasUnit: SrcUnit.time().type,
+          ...SrcUnit.time().type,
           HasDomain: { lo: Date.UTC(2024, 0, 1), hi: Date.UTC(2024, 0, 1) },
         },
         k: { HasDomain: { lo: 1, hi: 1 } },
@@ -413,8 +426,8 @@ async function main() {
       "a derive's Date column is a time, in epoch ms",
       fromJs[0].at === at &&
         same(withoutDomains(getColumnTypes(fromJs)), {
-          day: { HasUnit: SrcUnit.time().type },
-          at: { HasUnit: SrcUnit.time().type },
+          day: SrcUnit.time().type,
+          at: SrcUnit.time().type,
         }),
       JSON.stringify([fromJs[0], getColumnTypes(fromJs)])
     );
@@ -427,7 +440,7 @@ async function main() {
     const fromPython = await derived((rows) =>
       setColumnTypes(
         rows.map((r) => ({ ...r, at: new Date(at) })),
-        { at: { HasUnit: SrcUnit.time({ zone: "America/New_York" }).type } }
+        { at: SrcUnit.time({ zone: "America/New_York" }).type }
       )
     );
     const rewritten = await derived((rows) =>
@@ -454,7 +467,9 @@ async function main() {
         { m: "Jan", n: 1 },
         { m: "Feb", n: 2 },
       ],
-      { m: SrcSchema.ordered(["Jan", "Feb", "Mar"]) }
+      {
+        m: SrcUnit({ domain: Domain.ordered(["Jan", "Feb", "Mar"]) }),
+      }
     );
     const kept = await derived((rows) => rows.slice(1), undefined, months);
     const quarters = await derived(
@@ -464,7 +479,11 @@ async function main() {
     );
     const reordered = await derived(
       (rows) => rows.map((r) => ({ ...r, m: "Q1" })),
-      { schema: { m: Schema.ordered(["Q1", "Q2"]) } },
+      {
+        schema: {
+          m: Unit({ domain: Domain.ordered(["Q1", "Q2"]) }),
+        },
+      },
       months
     );
     const flags = await derived(
@@ -475,14 +494,14 @@ async function main() {
     check(
       "an ordered column keeps its order while its values are text or " +
         "numbers, even outside the levels, and loses it otherwise",
-      same(getColumnTypes(kept)?.m?.HasOrder?.levels, ["Jan", "Feb", "Mar"]) &&
-        same(getColumnTypes(quarters)?.m?.HasOrder?.levels, [
+      same(getColumnTypes(kept)?.m?.HasLevels?.levels, ["Jan", "Feb", "Mar"]) &&
+        same(getColumnTypes(quarters)?.m?.HasLevels?.levels, [
           "Jan",
           "Feb",
           "Mar",
         ]) &&
         getColumnTypes(flags)?.m === undefined &&
-        same(getColumnTypes(reordered)?.m?.HasOrder?.levels, ["Q1", "Q2"])
+        same(getColumnTypes(reordered)?.m?.HasLevels?.levels, ["Q1", "Q2"])
     );
     const filtered = await (async () => {
       let seen: any;
@@ -501,8 +520,7 @@ async function main() {
     check(
       "a typed derive result keeps its own type for its columns",
       fromPython[0].at === at &&
-        getColumnTypes(fromPython)?.at?.HasUnit?.zone ===
-          "America/New_York" &&
+        getColumnTypes(fromPython)?.at?.HasUnit?.zone === "America/New_York" &&
         getColumnTypes(fromPython)?.day?.HasUnit?.zone === "UTC"
     );
 
@@ -574,7 +592,7 @@ async function main() {
     // filter's rows are its input's, so it carries the input's types as
     // they are, with no fit check (a derive would drop this one).
     const unfit = setColumnTypes([{ day: "not a time", n: 1 }], {
-      day: { HasUnit: SrcUnit.time().type },
+      day: SrcUnit.time().type,
     });
     let filteredUnfit: any;
     await (
@@ -759,7 +777,9 @@ async function main() {
       "a bare partition still uses the default labels",
       Calendar.month.formatCell === undefined &&
         same(
-          rowLabels(Calendar.month({ every: 3 }), lo, hi, "UTC").map((l) => l.text),
+          rowLabels(Calendar.month({ every: 3 }), lo, hi, "UTC").map(
+            (l) => l.text
+          ),
           ["Jan", "Apr", "Jul", "Oct"]
         ) &&
         same(
@@ -779,8 +799,8 @@ async function main() {
     check(
       "a partition with a format has no wire form: serializing it is a loud " +
         "error naming the row",
-      wire?.includes("[1]: Calendar.month({ every: 3 }).format(...)") === true &&
-        wire.includes("has no wire form"),
+      wire?.includes("[1]: Calendar.month({ every: 3 }).format(...)") ===
+        true && wire.includes("has no wire form"),
       wire
     );
     check(
@@ -858,7 +878,7 @@ async function main() {
       "a column whose first value is null is still inferred from its Dates",
       rows[1].d === at &&
         same(withoutDomains(getColumnTypes(rows)), {
-          d: { HasUnit: SrcUnit.time().type },
+          d: SrcUnit.time().type,
         }),
       JSON.stringify([rows, getColumnTypes(rows)])
     );
@@ -878,9 +898,9 @@ async function main() {
         },
       ],
       {
-        naive: { HasUnit: SrcUnit.time().type },
-        day: { HasUnit: SrcUnit.time().type },
-        aware: { HasUnit: SrcUnit.time().type },
+        naive: SrcUnit.time().type,
+        day: SrcUnit.time().type,
+        aware: SrcUnit.time().type,
       }
     );
     const ny = SrcUnit.time({ zone: "America/New_York" });

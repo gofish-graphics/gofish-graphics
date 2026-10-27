@@ -369,7 +369,7 @@ export function distributeSpaceFold(
             `${keys[i] !== undefined ? `"${keys[i]}"` : `child ${i + 1}`} ` +
             `is negative. Its \`by\` column${by ? ` ${by}` : ""} has ` +
             `HasMidpoint (declared ` +
-            `with \`.diverging()\`), so the stack's 0 is the midpoint of its ` +
+            `with \`Trait.diverging()\`), so the stack's 0 is the midpoint of its ` +
             `order and each part lies on the side its level is on; a ` +
             `negative amount has no meaning there.`
         );

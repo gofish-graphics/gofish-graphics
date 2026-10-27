@@ -35,9 +35,10 @@ import type { ColumnType, HasUnit, UnitClasses } from "./schema";
  *
  * A unit also says what its amounts can do, its classes: whether they add
  * up (`CanAdd`, #1197). The classes belong to the unit, not to a column
- * (`HasUnit.classes`): `Unit(name).summable()` defines them, and a unit's
- * name alone (`"USD"`) leaves them unknown. A unit is its name, so every
- * occurrence of one name is one unit, and where two occurrences meet their
+ * (`HasUnit.classes`): `Unit(name, { traits: [Trait.summable()] })` defines
+ * them, and a unit's name alone (`"USD"`) leaves them unknown. A unit is
+ * its name, so every occurrence of one name is one unit, and where two
+ * occurrences meet their
  * classes meet by one rule ({@link meetUnitClasses}): unknown and known is
  * known, and two known definitions that disagree are a loud error. They
  * meet in two places: among the columns of one chart, when its schema is
@@ -154,7 +155,8 @@ export function checkSummable(q: Quantity | undefined, where: string): void {
   throw new Error(
     `${where} sums ${what}, in the unit "${unit}", which cannot be ` +
       `summed: it has no CanAdd. If its amounts add up (money, counts, ` +
-      `lengths), declare it with Unit("${unit}").summable(). If ` +
+      `lengths), declare it with ` +
+      `Unit("${unit}", { traits: [Trait.summable()] }). If ` +
       `they do not (temperatures, prices, rates), average them instead, ` +
       `e.g. field("${q.column ?? q.name}").mean().`
   );
@@ -175,7 +177,9 @@ export const whoOf = (q: Quantity): string =>
 
 /** How a definition of unit `name` with `classes` is written. */
 const definitionOf = (name: string, classes: UnitClasses): string =>
-  `Unit(${JSON.stringify(name)})${classes.CanAdd !== undefined ? ".summable()" : ""}`;
+  classes.CanAdd !== undefined
+    ? `Unit(${JSON.stringify(name)}, { traits: [Trait.summable()] })`
+    : `Unit(${JSON.stringify(name)})`;
 
 /** Whether two known sets of classes are the same. */
 const sameClasses = (a: UnitClasses, b: UnitClasses): boolean => {

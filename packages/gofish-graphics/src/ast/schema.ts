@@ -13,14 +13,21 @@ import { DURATION, INSTANT, meetInto, type UnitOccurrence } from "./measure";
  * engine reasons over the classes, never over the builder words that declare
  * them:
  *
- *  - {@link HasOrder}: the column's values are the levels of a fixed order.
- *    Declared with `Schema.ordered(levels)`. Every `by` split over the column
- *    lays its groups out in that order, and a categorical color scale over it
- *    lists its domain in that order.
+ *  - {@link HasLevels}: the column's values are the levels of a finite
+ *    domain, declared with a unit's `domain`:
+ *    `Domain.discrete(levels)` or `Domain.ordered(levels)`. Every `by`
+ *    split over the column lays its groups out in the order of the list, a
+ *    categorical color scale over it lists its domain in that order, and a
+ *    value outside the list is an error where the levels are used.
+ *  - {@link HasOrder}: the levels are ordered, first to last. Declared with
+ *    `Domain.ordered(levels)`. The levels of `Domain.discrete(levels)` are
+ *    nominal: they keep the list's order for display, but an ordinal axis
+ *    over them treats its groups as unordered (it centers its outer
+ *    labels), and they cannot have a midpoint.
  *  - {@link HasMidpoint}: the order has a midpoint, a point along it.
- *    Declared with `.diverging()`, which exists only after `.ordered(...)`
- *    because a midpoint is a point along an order. A stack over the column
- *    puts its origin (its 0) at the midpoint.
+ *    Declared with `Trait.diverging(midpoint?)` in the unit's `traits`,
+ *    over a `Domain.ordered` domain. A stack over the column puts its
+ *    origin (its 0) at the midpoint.
  *  - {@link HasUnit}: the column's values are amounts. Declared with a
  *    unit in the column's entry: a {@link Unit} definition (`Unit("USD")`),
  *    which says what unit the values are in and what the unit can do (its
@@ -52,13 +59,18 @@ import { DURATION, INSTANT, meetInto, type UnitOccurrence } from "./measure";
  *    Arrow), and the host's encode reads it to send the column back as
  *    integers. Nothing in the engine reads it.
  *
+ * A unit definition ({@link Unit}) stands for every class but HasQuantity,
+ * HasDomain and HasInteger: its name is the column's HasUnit (with CanAdd
+ * when its traits say `Trait.summable()`), its `domain` is HasLevels (and
+ * HasOrder for `Domain.ordered`), and `Trait.diverging()` is HasMidpoint.
+ *
  * A column made from another keeps that column's type: the cells of
  * `field(x).bin(p)` are amounts of `x`'s quantity, in `x`'s unit, and a
  * `.count()` is a count.
  *
  * A column type is a record keyed by class name, so a later class (`HasZero`,
  * `HasCycle`, ...) is one more optional key. The record is also the wire form:
- * {@link columnTypeOf} turns every schema entry into it, `ColumnSchema#toJSON`
+ * {@link columnTypeOf} turns every schema entry into it, {@link schemaToWire}
  * writes it, and `chart` accepts it as is (that is what arrives from Python,
  * which turns its entries into it the same way).
  *
@@ -66,20 +78,27 @@ import { DURATION, INSTANT, meetInto, type UnitOccurrence } from "./measure";
  * operator reads a column's type off the data it splits.
  */
 
-/** One level of an ordered column. */
+/** One level of a column with a declared domain. */
 export type Level = string | number;
 
-/** The class of a column whose values are the levels of a fixed order, first
- *  to last. */
-export type HasOrder = { levels: readonly Level[] };
+/** The class of a column whose values are the levels of a finite domain,
+ *  declared with a unit's `domain` (`Domain.discrete(levels)`,
+ *  `Domain.ordered(levels)`). The list's order is the order its
+ *  groups are laid out and listed in. */
+export type HasLevels = { levels: readonly Level[] };
+
+/** The class of a column whose levels ({@link HasLevels}) are ordered, first
+ *  to last (`Domain.ordered(levels)`). It has no options: the order is the levels'
+ *  list. It requires {@link HasLevels}. */
+export type HasOrder = Record<string, never>;
 
 /** The class of an ordered column whose order has a midpoint: the point `at`
  *  along the order, in edge coordinates. 0 is the first level's leading
  *  edge, `n` is the last level's trailing edge (`n` levels), and level `i`
  *  spans `[i, i + 1]`, so 2.25 has two levels and a quarter of the third
- *  before it. `.diverging()` defaults it to `n / 2`: the middle of the middle
- *  level when `n` is odd, the boundary between the two middle levels when it
- *  is even. It requires {@link HasOrder}, and `0 <= at <= n`. */
+ *  before it. `Trait.diverging()` defaults it to `n / 2`: the middle of the
+ *  middle level when `n` is odd, the boundary between the two middle levels
+ *  when it is even. It requires {@link HasOrder}, and `0 <= at <= n`. */
 export type HasMidpoint = { at: number };
 
 /** The class of a column whose values are integers. It has no options. */
@@ -124,7 +143,8 @@ export type HasUnit = {
   difference?: HasUnit;
 };
 
-/** The class of a unit whose amounts can be added (`Unit(name).summable()`):
+/** The class of a unit whose amounts can be added
+ *  (`Unit(name, { traits: [Trait.summable()] })`):
  *  a sum of them is an amount in the same unit, and it starts from 0. It has
  *  no options. The instant, a time's unit, never has it, because two
  *  instants do not add. */
@@ -148,6 +168,7 @@ export type HasDomain = { lo: number; hi: number };
 
 /** A column's type: the classes it has, keyed by class name. */
 export type ColumnType = {
+  HasLevels?: HasLevels;
   HasOrder?: HasOrder;
   HasMidpoint?: HasMidpoint;
   HasUnit?: HasUnit;
@@ -165,10 +186,10 @@ const isEpochMs = (v: unknown): boolean =>
  *  them, given the class's own record. A missing value (null, undefined)
  *  fits every class.
  *
- *  - `HasOrder`: text or numbers, the kinds its levels are. A value outside
- *    the levels still fits, so the order stays and its stray-level error
- *    fires where the order is used.
- *  - `HasMidpoint`: anything; its values are its order's.
+ *  - `HasLevels`: text or numbers, the kinds its levels are. A value outside
+ *    the levels still fits, so the levels stay and their stray-level error
+ *    fires where they are used.
+ *  - `HasOrder`, `HasMidpoint`: anything; their values are the levels'.
  *  - `HasUnit`: numbers, the amounts the unit measures. In a unit read on a
  *    calendar (one with a `zone`), an instant: epoch milliseconds (a finite
  *    number) or a valid `Date`. A `Date` is an instant, so turning it into
@@ -183,7 +204,8 @@ const ACCEPTS: {
     c: NonNullable<ColumnType[K]>
   ) => boolean;
 } = {
-  HasOrder: (v) => v == null || typeof v === "string" || typeof v === "number",
+  HasLevels: (v) => v == null || typeof v === "string" || typeof v === "number",
+  HasOrder: () => true,
   HasMidpoint: () => true,
   HasUnit: (v, { zone }) =>
     v == null ||
@@ -221,108 +243,217 @@ const fitsType =
 /** The column types of a dataset, keyed by column name. */
 export type ColumnTypes = Record<string, ColumnType>;
 
-/**
- * A column type under construction. Each builder method adds one class, and a
- * method that needs a class already present says so in its `this` type, so
- * breaking the rule is a type error: `.diverging()` needs `HasOrder`. The
- * constructor checks that an order's levels fit the column's other classes
- * ({@link checkLevelsFit}), as {@link columnTypeOf} does for a record.
- */
-export class ColumnSchema<C extends ColumnType = ColumnType> {
-  constructor(public readonly type: C) {
-    checkLevelsFit("schema: the column", type);
-  }
-
-  /** Give the column a midpoint (`HasMidpoint`) at `midpoint`, in edge
-   *  coordinates over its order. The default is the middle of the order,
-   *  `n / 2` for `n` levels. A midpoint that is not a number from 0 to `n`
-   *  throws here. */
-  diverging(
-    this: ColumnSchema<C & { HasOrder: HasOrder }>,
-    { midpoint }: { midpoint?: number } = {}
-  ): ColumnSchema<C & { HasOrder: HasOrder; HasMidpoint: HasMidpoint }> {
-    const { levels } = this.type.HasOrder;
-    const at = midpoint ?? levels.length / 2;
-    checkMidpointOnOrder(levels, at);
-    return new ColumnSchema({ ...this.type, HasMidpoint: { at } });
-  }
-
-  toJSON(): C {
-    return this.type;
-  }
-}
-
-/** Factories for column types, used in `chart(data, { schema })`. */
-export const Schema = {
-  /** A column whose values are `levels`, in this order (`HasOrder`). */
-  ordered(levels: readonly Level[]): ColumnSchema<{ HasOrder: HasOrder }> {
-    return new ColumnSchema({ HasOrder: { levels: [...levels] } });
-  },
-};
-
 /** The classes of a unit, what its amounts can do, keyed by class name: a
  *  {@link Unit} definition's, which every column in the unit shares. A later
  *  class of units (`HasZero`, ...) is one more optional key. */
 export type UnitClasses = { CanAdd?: CanAdd };
 
+/** A trait that the order of a unit's levels has a midpoint
+ *  (`Trait.diverging(midpoint?)`): its columns have {@link HasMidpoint}. It
+ *  needs an ordered domain (`Domain.ordered`). Without `midpoint`, the
+ *  midpoint is the middle of the order. */
+export type DivergingTrait = {
+  readonly kind: "diverging";
+  readonly midpoint?: number;
+};
+
+/** A trait that a unit's amounts add up (`Trait.summable()`): the unit has
+ *  {@link CanAdd}. */
+export type SummableTrait = { readonly kind: "summable" };
+
+/** A capability of a unit's values, one entry of a unit definition's
+ *  `traits` (the `Trait` family, `families/trait.ts`). */
+export type Trait = DivergingTrait | SummableTrait;
+
+/** The kinds of {@link Trait}. */
+const TRAIT_KINDS: readonly Trait["kind"][] = ["diverging", "summable"];
+
+/** A finite domain of levels, in the order to lay them out in: unordered
+ *  (`Domain.discrete(levels)`, nominal) or ordered first to last
+ *  (`Domain.ordered(levels)`, ordinal). */
+export type LevelsDomain = {
+  readonly kind: "discrete" | "ordered";
+  readonly levels: readonly Level[];
+};
+
+/** What a unit's values are, a unit definition's `domain` (the `Domain`
+ *  family, `families/domain.ts`). An interval (`Domain.continuous`) comes
+ *  later. */
+export type Domain = LevelsDomain;
+
+/** What a unit definition takes besides its name: its `domain`, what its
+ *  values are, and its `traits`, the capabilities they have. */
+export type UnitOptions = {
+  /** The unit's values: `Domain.discrete(levels)` or
+   *  `Domain.ordered(levels)`. Without it, a named unit's values are
+   *  amounts (numbers). */
+  domain?: Domain;
+  /** The capabilities of the unit's values: `Trait.diverging(midpoint?)`,
+   *  `Trait.summable()`. */
+  traits?: readonly Trait[];
+};
+
+/** The classes a unit definition gives every column in it: its name's
+ *  {@link HasUnit}, its domain's {@link HasLevels}, and the classes its
+ *  traits declare. */
+export type UnitType = Pick<
+  ColumnType,
+  "HasUnit" | "HasLevels" | "HasOrder" | "HasMidpoint"
+>;
+
 /**
- * A unit definition (`Unit("USD")`, `Unit.time()`): the unit as every column
- * in it writes it (`type`, the column's {@link HasUnit}), with the classes
- * every column in the unit has. It is immutable: each chained method returns
- * a new definition with one more class, and a method that needs a class
- * absent says so in its `this` type, so `.summable().summable()` is a type
- * error. One definition is meant to be declared once and used by every
- * column in the unit.
+ * A unit definition (`Unit("USD", { traits: [Trait.summable()] })`,
+ * `Unit.time()`): the classes every column in the unit has (`type`). It is
+ * immutable, and is meant to be declared once and used by every column in
+ * the unit.
  */
-export class UnitDefinition<C extends UnitClasses = UnitClasses> {
-  constructor(readonly type: HasUnit & { classes: C }) {
-    if (typeof type.unit !== "string")
-      throw new Error(
-        `Unit: the name must be a string, got ${String(type.unit)}.`
-      );
-    freezeUnit(type);
+export class UnitDefinition {
+  constructor(readonly type: UnitType) {
+    for (const c of Object.values(type)) freezeDeep(c);
+    Object.freeze(type);
     Object.freeze(this);
   }
 
-  /** The unit's name: two units are the same when their names are equal. */
-  get name(): string {
-    return this.type.unit;
-  }
-
-  /** Say that amounts in the unit can be added (`CanAdd`): a sum of them
-   *  means something (money, counts, lengths), so a `size` channel, `stack`,
-   *  treemap `size` and `.sum()` may sum a column in the unit. Amounts that
-   *  do not add up (temperatures, prices, rates) are in a unit without it. */
-  summable(
-    this: UnitDefinition<C & { CanAdd?: never }>
-  ): UnitDefinition<C & { CanAdd: CanAdd }> {
-    return new UnitDefinition({
-      ...this.type,
-      classes: { ...this.type.classes, CanAdd: {} },
-    });
+  /** The unit's name, if it has one: two units are the same when their
+   *  names are equal. */
+  get name(): string | undefined {
+    return this.type.HasUnit?.unit;
   }
 }
 
-/** Freeze a unit's {@link HasUnit}, its classes and its difference unit, so
- *  every column in the unit shares the one record. */
-function freezeUnit(unit: HasUnit): void {
-  if (unit.classes !== undefined) {
-    for (const c of Object.values(unit.classes)) Object.freeze(c);
-    Object.freeze(unit.classes);
-  }
-  if (unit.difference !== undefined) freezeUnit(unit.difference);
-  Object.freeze(unit);
+/** Freeze a class record and every record and list in it, so every column in
+ *  a unit shares the one record. */
+function freezeDeep(value: unknown): void {
+  if (value === null || typeof value !== "object") return;
+  for (const v of Object.values(value)) freezeDeep(v);
+  Object.freeze(value);
 }
 
 /** A unit definition ({@link UnitDefinition}). */
-export type Unit<C extends UnitClasses = UnitClasses> = UnitDefinition<C>;
+export type Unit = UnitDefinition;
 
-/** The unit named `name`, e.g. `"USD"` or `"mm"`, with no classes yet: chain
- *  `.summable()` when its amounts add up. Two units are the same when their
- *  names are equal. A unit the user names has its name as its symbol, which
- *  an axis title appends: "Pay (USD)". */
-export function Unit(name: string): UnitDefinition<Record<never, never>> {
-  return new UnitDefinition({ unit: name, symbol: name, classes: {} });
+/** How the unit `name` is written in a message. */
+const unitWho = (name: string | undefined): string =>
+  name === undefined ? "Unit" : `Unit(${JSON.stringify(name)})`;
+
+/**
+ * A unit: `Unit(name, { domain, traits })`, or `Unit({ domain, traits })`
+ * with no name. Its name (`"USD"`, `"mm"`) is its identity: two units are
+ * the same when their names are equal, and a unit the user names has its
+ * name as its symbol, which an axis title appends ("Pay (USD)"). Its
+ * `domain` is a list of the levels its values take, and its `traits` the
+ * capabilities its values have (the `Trait` family). A unit with a domain
+ * but no name is a type of levels for the columns that use it, with no
+ * unit for an axis to show.
+ */
+export function Unit(name: string, options?: UnitOptions): UnitDefinition;
+export function Unit(options: UnitOptions): UnitDefinition;
+export function Unit(
+  nameOrOptions: string | UnitOptions,
+  options?: UnitOptions
+): UnitDefinition {
+  if (typeof nameOrOptions === "string")
+    return new UnitDefinition(unitTypeOf(nameOrOptions, options ?? {}));
+  if (options !== undefined)
+    throw new Error(
+      `Unit: the name must be a string, got ${String(nameOrOptions)}.`
+    );
+  return new UnitDefinition(unitTypeOf(undefined, nameOrOptions));
+}
+
+/** The classes of the unit `name` with `options` ({@link UnitType}),
+ *  checked. Python's `Unit` raises the same messages, word for word. */
+function unitTypeOf(name: string | undefined, options: UnitOptions): UnitType {
+  const who = unitWho(name);
+  if (options === null || typeof options !== "object" || Array.isArray(options))
+    throw new Error(
+      `${who}: the options must be { domain, traits }, got ${String(options)}.`
+    );
+  const unknown = Object.keys(options).filter(
+    (k) => k !== "domain" && k !== "traits"
+  );
+  if (unknown.length > 0)
+    throw new Error(
+      `${who} has the unknown ${unknown.length === 1 ? "option" : "options"} ` +
+        `${unknown.map((k) => JSON.stringify(k)).join(", ")}. A unit takes ` +
+        `domain and traits.`
+    );
+  const { domain, traits = [] } = options;
+  if (
+    domain !== undefined &&
+    !(
+      domain !== null &&
+      typeof domain === "object" &&
+      (domain.kind === "discrete" || domain.kind === "ordered") &&
+      Array.isArray(domain.levels)
+    )
+  )
+    throw new Error(
+      `${who}: domain must be a Domain: Domain.discrete(levels) or ` +
+        `Domain.ordered(levels), got ${JSON.stringify(domain) ?? String(domain)}. ` +
+        `A domain that is an interval is not supported yet.`
+    );
+  if (name === undefined && domain === undefined)
+    throw new Error(
+      `Unit needs a name, a domain, or both: Unit("USD"), ` +
+        `Unit({ domain: Domain.discrete(["low", "high"]) }).`
+    );
+  if (!Array.isArray(traits))
+    throw new Error(`${who}: traits must be a list of Trait values.`);
+  const kinds = new Set<Trait["kind"]>();
+  let midpoint: number | undefined;
+  for (const trait of traits) {
+    const kind = (trait as { kind?: unknown } | null)?.kind;
+    if (!TRAIT_KINDS.includes(kind as Trait["kind"]))
+      throw new Error(
+        `${who} has the trait ${JSON.stringify(trait) ?? String(trait)}. A ` +
+          `unit's traits are Trait.diverging() and Trait.summable().`
+      );
+    if (kinds.has(kind as Trait["kind"]))
+      throw new Error(`${who} lists Trait.${String(kind)}() twice.`);
+    kinds.add(kind as Trait["kind"]);
+    if (kind === "diverging") midpoint = (trait as DivergingTrait).midpoint;
+  }
+  if (kinds.has("diverging") && domain?.kind !== "ordered")
+    throw new Error(
+      domain === undefined
+        ? `${who}: Trait.diverging() needs an ordered domain: a midpoint is ` +
+          `a point along an order, so list the levels in ` +
+          `Domain.ordered(levels). A midpoint on a unit's amounts is not ` +
+          `supported yet.`
+        : `${who}: Trait.diverging() needs an ordered domain, but ` +
+          `Domain.discrete(levels) is unordered. A midpoint is a point ` +
+          `along an order: use Domain.ordered(levels).`
+    );
+  if (kinds.has("summable") && name === undefined)
+    throw new Error(
+      `Unit: Trait.summable() needs a name. Whether amounts add up belongs ` +
+        `to their unit, which is known by its name: ` +
+        `Unit("USD", { traits: [Trait.summable()] }).`
+    );
+  const type: UnitType = {
+    ...(name !== undefined
+      ? {
+          HasUnit: {
+            unit: name,
+            symbol: name,
+            classes: kinds.has("summable") ? { CanAdd: {} } : {},
+          },
+        }
+      : {}),
+    ...(domain !== undefined
+      ? { HasLevels: { levels: [...domain.levels] } }
+      : {}),
+    ...(domain?.kind === "ordered" ? { HasOrder: {} } : {}),
+  };
+  if (kinds.has("diverging")) {
+    const levels = domain!.levels;
+    const at = midpoint ?? levels.length / 2;
+    checkMidpointOnOrder(levels, at);
+    type.HasMidpoint = { at };
+  }
+  checkLevelsFit(who, type);
+  return type;
 }
 
 /** The unit of instants read on the calendar of `zone`, an IANA time zone
@@ -332,55 +463,49 @@ export function Unit(name: string): UnitDefinition<Record<never, never>> {
  *  milliseconds, and an axis over it is a time axis. Instants do not add up;
  *  a difference of two is in {@link Unit.duration}. A column of JS `Date`
  *  values is in `Unit.time()` without a schema entry. */
-Unit.time = ({ zone = "UTC" }: { zone?: string } = {}): UnitDefinition<
-  Record<never, never>
-> => new UnitDefinition({ ...INSTANT, zone });
+Unit.time = ({ zone = "UTC" }: { zone?: string } = {}): UnitDefinition =>
+  new UnitDefinition({ HasUnit: { ...INSTANT, zone } });
 
 /** The unit of a span of time, a difference of two instants
  *  ({@link Unit.time}). Durations add up. */
-Unit.duration = new UnitDefinition(DURATION) as UnitDefinition<{
-  CanAdd: CanAdd;
-}>;
+Unit.duration = new UnitDefinition({ HasUnit: DURATION });
 
 /** A column record in `chart`'s `schema`: the quantity the column's values
- *  are amounts of (`name`, `HasQuantity`), and the unit they are in (`unit`,
- *  `HasUnit`): a {@link Unit} definition, or a unit's name alone. */
+ *  are amounts of (`name`, `HasQuantity`), and the unit they are in
+ *  (`unit`): a {@link Unit} definition, which gives the column every class
+ *  of the unit's type ({@link UnitType}), or a unit's name alone. */
 export type ColumnRecord = { name?: string; unit?: Unit | string };
 
 /** The keys a {@link ColumnRecord} takes. */
 const RECORD_KEYS: readonly string[] = ["name", "unit"];
 
-/** What `chart`'s `schema` option takes per column: a builder
- *  (`Schema.ordered(...)`), a column record, or one of its
- *  two shorthands: a {@link Unit} for `{ unit }`, and a unit's name for
+/** What `chart`'s `schema` option takes per column: a column record, or
+ *  one of its two shorthands: a {@link Unit} for `{ unit }`, and a unit's name for
  *  `{ unit: name }`. The engine also reads the record of classes every entry
  *  stands for (the wire form, which Python sends), which is not a user form.
  *  A column's domain ({@link HasDomain}) is computed from its values;
  *  declaring one is not supported yet. */
 export type SchemaEntry =
-  | ColumnSchema<ColumnType>
   | Unit
   | string
   | ColumnRecord
   | Omit<ColumnType, "HasDomain">;
 
-/** The classes of a column in `unit`: a definition's unit, or a name alone,
- *  whose classes are unknown. */
-const unitType = (unit: Unit | string): ColumnType => ({
-  HasUnit: typeof unit === "string" ? { unit, symbol: unit } : unit.type,
-});
+/** The classes of a column in `unit`: a definition's ({@link UnitType}), or
+ *  a name alone, whose classes are unknown. */
+const unitType = (unit: Unit | string): ColumnType =>
+  typeof unit === "string" ? { HasUnit: { unit, symbol: unit } } : unit.type;
 
 /** The record of classes a schema entry stands for, before any check: a
- *  builder's record, a unit's ({@link unitType}), a column record's, or the
- *  record itself (the wire form). An object with any other key throws. */
+ *  unit's ({@link unitType}), a column record's, or the record itself (the
+ *  wire form). An object with any other key throws. */
 function classesOf(who: string, entry: SchemaEntry): ColumnType {
-  if (entry instanceof ColumnSchema) return entry.type;
   if (entry instanceof UnitDefinition || typeof entry === "string")
     return unitType(entry);
   if (entry === null || typeof entry !== "object")
     throw new Error(
       `${who} has the entry ${String(entry)}. A column's entry is a Unit, a ` +
-        `unit's name, a column record { name, unit }, or a Schema builder.`
+        `unit's name, or a column record { name, unit }.`
     );
   const keys = Object.keys(entry);
   if (keys.every((k) => (CLASSES as string[]).includes(k)))
@@ -423,10 +548,10 @@ export const schemaToWire = (
   );
 
 /** The record a schema entry stands for ({@link classesOf}), checked for the
- *  rules the builders enforce (a record from the wire, as Python sends it,
- *  has no types): its levels must fit ({@link checkLevelsFit}), and a
- *  midpoint needs an order and must lie on it, with the same check
- *  `.diverging()` runs. */
+ *  rules `Unit` enforces (a record from the wire, as Python sends it, is
+ *  not a `Unit`): its levels must fit ({@link checkLevelsFit}), an order
+ *  needs levels, and a midpoint needs an order and must lie on it, with the
+ *  same check `Trait.diverging()` runs. */
 export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
   const who = `schema: column "${column}"`;
   const type = classesOf(who, entry);
@@ -438,26 +563,30 @@ export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
         `schema.`
     );
   checkLevelsFit(who, type);
-  if (type.HasMidpoint === undefined) return type;
-  if (!type.HasOrder) {
+  if (type.HasOrder !== undefined && type.HasLevels === undefined)
     throw new Error(
-      `schema: column "${column}" has HasMidpoint but no HasOrder. A ` +
-        `midpoint is a point along an order; declare the order with ` +
-        `\`Schema.ordered(levels)\` before \`.diverging()\`.`
+      `${who} has HasOrder but no HasLevels. An order is an order of ` +
+        `levels; declare them with a unit's domain: ` +
+        `Unit({ domain: Domain.ordered(levels) }).`
     );
-  }
-  checkMidpointOnOrder(type.HasOrder.levels, type.HasMidpoint.at);
+  if (type.HasMidpoint === undefined) return type;
+  if (type.HasOrder === undefined)
+    throw new Error(
+      `${who} has HasMidpoint but no HasOrder. A midpoint is a point along ` +
+        `an order; declare it with ` +
+        `Unit({ domain: Domain.ordered(levels), traits: [Trait.diverging()] }).`
+    );
+  checkMidpointOnOrder(type.HasLevels!.levels, type.HasMidpoint.at);
   return type;
 }
 
-/** The rule that an order's levels fit the column's other classes: each
- *  level is one of the column's values, so every class must accept it
- *  ({@link ACCEPTS}). Text levels are not amounts, so
- *  `Schema.ordered(["low", "high"]).unit("pts")` throws, while a Likert
- *  scale's levels `[1, 2, 3, 4, 5]` take a unit. Python's `ColumnSchema`
- *  raises the same message. */
+/** The rule that a column's levels fit its other classes: each level is one
+ *  of the column's values, so every class must accept it ({@link ACCEPTS}).
+ *  Text levels are not amounts, so `Unit("pts", { domain: Domain.discrete(["low", "high"]) })`
+ *  throws, while a rating's levels `[1, 2, 3, 4, 5]` take a unit. Python's
+ *  `Unit` and `chart` raise the same message. */
 function checkLevelsFit(who: string, type: ColumnType): void {
-  for (const level of type.HasOrder?.levels ?? []) {
+  for (const level of type.HasLevels?.levels ?? []) {
     const rejects = rejectingClass(type, level);
     if (rejects !== undefined) {
       throw new Error(
@@ -468,8 +597,8 @@ function checkLevelsFit(who: string, type: ColumnType): void {
 }
 
 /** The loud error for a midpoint off its order: `at` must be a finite number
- *  from 0 to `n`, for `n` levels. Python's `ColumnSchema.diverging` raises
- *  the same two messages, word for word. */
+ *  from 0 to `n`, for `n` levels. Python's `Unit` raises the same two
+ *  messages, word for word. */
 function checkMidpointOnOrder(levels: readonly Level[], at: unknown): void {
   const n = levels.length;
   const order = `the edges of the order [${levels.map(showLevel).join(", ")}]`;
@@ -527,14 +656,14 @@ export const copyColumnTypes = <T>(target: T, source: unknown): T => {
 const showLevel = (level: unknown): string =>
   typeof level === "string" ? JSON.stringify(level) : String(level);
 
-/** The loud error for values of an ordered column that its order does not
- *  list. The user defines the order, so GoFish never guesses where a stray
- *  level goes. */
+/** The loud error for values of a column with levels that its levels do
+ *  not list. The user defines the levels, so GoFish never guesses where a
+ *  stray value goes. */
 export function strayLevelsError(column: string, strays: unknown[]): Error {
   return new Error(
     `schema: column "${column}" has ${strays.length === 1 ? "a value" : "values"} ` +
-      `outside its order: ${strays.map(showLevel).join(", ")}. HasOrder ` +
-      `(declared with \`Schema.ordered(levels)\`) lists every level of the ` +
+      `outside its levels: ${strays.map(showLevel).join(", ")}. HasLevels ` +
+      `(declared with a unit's \`domain\`) lists every level of the ` +
       `column, so add ${strays.length === 1 ? "it" : "them"} to the levels, ` +
       `filter those rows out, or, if a derive changed the values, annotate ` +
       `the derive's result type with \`derive(fn, { schema })\`.`
@@ -628,7 +757,7 @@ export async function applySchema<T>(
     for (const column of unresolved) {
       const v = r[column];
       if (v == null) continue;
-      if (v instanceof Date) types[column] = unitType(Unit.time());
+      if (v instanceof Date) types[column] = Unit.time().type;
       unresolved.delete(column);
     }
   }
@@ -679,7 +808,7 @@ export async function applySchema<T>(
  * in one unit, so their classes meet by THE rule (`meetUnitClasses` in
  * measure.ts). Two definitions that disagree throw, and a column whose unit
  * is a name alone takes the classes a definition of that name gives, so
- * `"USD"` beside `Unit("USD").summable()` adds up.
+ * `"USD"` beside `Unit("USD", { traits: [Trait.summable()] })` adds up.
  *
  * This is the chart's share of the meeting. A chart's channels sum their
  * rows while the chart is built, before the type walk, so they read the
@@ -794,18 +923,18 @@ export function toEpochMs(v: unknown, zone: string, column: string): unknown {
   );
 }
 
-/** Each level of `order`, mapped to its rank (its index in the order). */
-const levelRanks = (order: HasOrder): Map<unknown, number> =>
-  new Map(order.levels.map((level, i) => [level, i]));
+/** Each level of `levels`, mapped to its rank (its index in the list). */
+const levelRanks = (levels: HasLevels): Map<unknown, number> =>
+  new Map(levels.levels.map((level, i) => [level, i]));
 
-/** `keys` in the order of `order`'s levels. A key the order does not list is
- *  a stray level (a loud error). */
+/** `keys` in the order of `levels`. A key the levels do not list is a stray
+ *  level (a loud error). */
 export function orderByLevels<K>(
   column: string,
-  order: HasOrder,
+  levels: HasLevels,
   keys: K[]
 ): K[] {
-  const rank = levelRanks(order);
+  const rank = levelRanks(levels);
   const strays = keys.filter((k) => !rank.has(k));
   if (strays.length > 0) throw strayLevelsError(column, strays);
   return [...keys].sort((a, b) => rank.get(a)! - rank.get(b)!);
@@ -841,7 +970,7 @@ export function stackOrigin(
 ): StackOrigin<number> | undefined {
   if (column === undefined || !type?.HasMidpoint || keys.length === 0)
     return undefined;
-  const rank = levelRanks(type.HasOrder!);
+  const rank = levelRanks(type.HasLevels!);
   const midpoint = type.HasMidpoint.at;
   // The order's ranks as the stack lays the levels out: along the order (+1)
   // or against it (−1). It must be one or the other, or "before the
@@ -856,7 +985,7 @@ export function stackOrigin(
         `stack({ by: "${column}" }): a centered stack lays its parts out in ` +
           `the order of "${column}" (or its reverse), but its \`by\` puts ` +
           `the levels in the order ${split.map(showLevel).join(", ")}. ` +
-          `HasMidpoint (declared with \`.diverging()\`) puts the stack's 0 at ` +
+          `HasMidpoint (declared with \`Trait.diverging()\`) puts the stack's 0 at ` +
           `a point along that order, which needs the parts on each side of ` +
           `it together. Drop the reordering of "${column}".`
       );

@@ -8,7 +8,7 @@ import {
   rect,
   derive,
   spread,
-  Schema,
+  Domain,
   Unit,
   Calendar,
 } from "../../src/lib";
@@ -285,7 +285,11 @@ export const MonthlyHighs: StoryObj<Args> = {
               .map(([month, price]) => ({ month, price }))
               .sort((a, b) => b.price - a.price);
           },
-          { schema: { month: Schema.ordered(MONTHS) } }
+          {
+            schema: {
+              month: Unit({ domain: Domain.ordered(MONTHS) }),
+            },
+          }
         ),
         spread({ by: "month", dir: "x" })
       )

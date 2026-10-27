@@ -64,7 +64,7 @@ import {
 } from "./data";
 import { color6 } from "../color";
 import { hasUnits, Units, withUnits } from "./measure";
-import { orderByLevels, type HasOrder } from "./schema";
+import { orderByLevels, type HasLevels } from "./schema";
 import {
   isCONTINUOUS,
   isORDINAL,
@@ -724,14 +724,14 @@ export class GoFishNode {
 
   /** Collect the distinct color values in this subtree, in first-seen order.
    *  `seen` is the membership index for `out` (which keeps the order).
-   *  `orders` collects the order of the column each value was read from
-   *  (`HasOrder`, from the chart's `schema`), or `undefined` for a value from
-   *  an unordered column. */
+   *  `orders` collects the levels of the column each value was read from
+   *  (`HasLevels`, from the chart's `schema`), or `undefined` for a value
+   *  from a column without declared levels. */
   private collectColorValues(
     out: any[],
     seen: Set<any> = new Set(),
     fields?: Set<string>,
-    orders?: Set<HasOrder | undefined>
+    orders?: Set<HasLevels | undefined>
   ): void {
     if (this.color !== undefined && isValue(this.color)) {
       const val = getValue(this.color);
@@ -741,7 +741,7 @@ export class GoFishNode {
       }
       const field = getValueField(this.color);
       if (field !== undefined) fields?.add(field);
-      orders?.add(getValueFieldType(this.color)?.HasOrder);
+      orders?.add(getValueFieldType(this.color)?.HasLevels);
     }
     this.children.forEach((child) => {
       if (child instanceof GoFishNode)
@@ -838,7 +838,7 @@ export class GoFishNode {
       delete unit.color;
     } else {
       const seenKeys: any[] = [];
-      const orders = new Set<HasOrder | undefined>();
+      const orders = new Set<HasLevels | undefined>();
       this.collectColorValues(
         seenKeys,
         new Set(),
@@ -846,8 +846,9 @@ export class GoFishNode {
         orders
       );
       // The domain lists its values in first-seen order, or in the order of
-      // their column when every value comes from one ordered column, so the
-      // legend follows the order the schema declares.
+      // their column's levels when every value comes from one column with
+      // declared levels, so the legend follows the order the schema
+      // declares.
       // TODO(#996): a diverging palette driven by HasMidpoint.
       const [order] = orders;
       const orderedKeys =

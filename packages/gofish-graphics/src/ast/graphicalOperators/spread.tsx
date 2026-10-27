@@ -264,7 +264,7 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
       return hasOrder ? { entries, layoutOpts: { hasOrder } } : entries;
     const column = fieldNameOf(by);
     const type = columnType(d, column);
-    const levels = (type?.HasOrder?.levels ?? []) as (string | number)[];
+    const levels = (type?.HasLevels?.levels ?? []) as (string | number)[];
     const split = orderEntries(
       by,
       new Map(levels.map((level) => [level, entries.get(level) ?? []]))

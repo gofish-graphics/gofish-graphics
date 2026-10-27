@@ -13,7 +13,7 @@
 import * as GoFish from "../../dist/index.js";
 import { check, items, report } from "./testHelpers";
 
-const { chart, stack, rect, Schema, Coord } = GoFish as any;
+const { chart, stack, rect, Unit, Domain, Trait, Coord } = GoFish as any;
 
 type Pt = [number, number];
 const pointsOf = (d: string): Pt[] => {
@@ -34,7 +34,10 @@ async function wedgeSpans(builder: any): Promise<[number, number][]> {
     .map((it: any) => pointsOf(it.d));
   const shared = paths
     .map((ps: Pt[]) => new Set(ps.map(key)))
-    .reduce((a: Set<string>, b: Set<string>) => new Set([...a].filter((k) => b.has(k))));
+    .reduce(
+      (a: Set<string>, b: Set<string>) =>
+        new Set([...a].filter((k) => b.has(k)))
+    );
   const [cx, cy] = [...shared][0].split(",").map(Number);
   return paths.map((ps: Pt[]) => {
     const rim = ps.filter(([x, y]) => Math.hypot(x - cx, y - cy) > 1);
@@ -56,7 +59,8 @@ async function wedgeSpans(builder: any): Promise<[number, number][]> {
 const mid = ([a, b]: [number, number]) => (a + b) / 2;
 /** Equal as angles (mod 2π). */
 const sameAngle = (a: number, b: number) => {
-  const d = (((a - b) % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
+  const d =
+    ((((a - b) % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI)) - Math.PI;
   return Math.abs(d) < 1e-3;
 };
 
@@ -71,7 +75,12 @@ const centered = (coord: any) =>
     coord,
     axes: false,
     // b is the middle level: midpoint 1.5 is the middle of its cell.
-    schema: { r: Schema.ordered(LEVELS).diverging({ midpoint: 1.5 }) },
+    schema: {
+      r: Unit({
+        domain: Domain.ordered(LEVELS),
+        traits: [Trait.diverging(1.5)],
+      }),
+    },
   })
     .flow(stack({ by: "r", dir: "x", h: 50 }))
     .mark(rect({ w: "n" }));

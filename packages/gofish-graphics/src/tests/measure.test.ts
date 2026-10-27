@@ -52,11 +52,7 @@ import {
   withUnits,
   type Quantity,
 } from "../ast/measure";
-import {
-  differenceUnits,
-  magnitude,
-  spaceZone,
-} from "../ast/underlyingSpace";
+import { differenceUnits, magnitude, spaceZone } from "../ast/underlyingSpace";
 import { declared, fresh, textsOf, unknown } from "./testHelpers";
 import { distributeSpaceFold } from "../ast/constraints/distribute";
 import { interval } from "../util/interval";
@@ -77,6 +73,7 @@ const {
   ribbon,
   line,
   Unit,
+  Trait,
   stack,
   treemap,
   normalize,
@@ -147,16 +144,16 @@ console.log("# measure: quantities on the source array");
   );
   ok(
     "a time column's unit is an instant",
-    columnQuantity("start", { HasUnit: Unit.time().type }).unit?.unit === "instant"
+    columnQuantity("start", Unit.time().type).unit?.unit === "instant"
   );
   ok(
     "and an instant has no symbol",
-    columnQuantity("start", { HasUnit: Unit.time().type }).unit?.symbol === undefined
+    columnQuantity("start", Unit.time().type).unit?.symbol === undefined
   );
   ok(
     "a Unit declares the unit",
-    columnQuantity("gross", columnTypeOf("gross", SrcUnit("USD"))).unit?.unit ===
-      "USD"
+    columnQuantity("gross", columnTypeOf("gross", SrcUnit("USD"))).unit
+      ?.unit === "USD"
   );
   ok(
     "and its symbol is the unit's name",
@@ -414,7 +411,7 @@ console.log("# measure: a position offset joins in difference units");
       (spaceUnit(a)!.unit as any).unit === "USD" &&
       JSON.stringify(a.dataInterval) === JSON.stringify(interval(5, 15))
   );
-  // #1197 review: a USD column that does not add (no `.summable()`) still
+  // #1197 review: a USD column that does not add (no `Trait.summable()`) still
   // moves by USD: a difference keeps its unit, with no derived ΔUSD.
   const plainUsd = await errorOf(() =>
     positionNode({ y: by(5, usd) }, [
@@ -424,8 +421,7 @@ console.log("# measure: a position offset joins in difference units");
   const usdByUsd = yOf(positionNode({ y: by(5, usd) }, [leaf("pinned", usd)]));
   ok(
     "a plain USD position moved by a USD offset is USD, with no clash",
-    plainUsd === undefined &&
-      (spaceUnit(usdByUsd)!.unit as any).unit === "USD",
+    plainUsd === undefined && (spaceUnit(usdByUsd)!.unit as any).unit === "USD",
     plainUsd
   );
   const b = await errorOf(() =>
@@ -441,14 +437,12 @@ console.log("# measure: a position offset joins in difference units");
   const c1 = yOf(positionNode({ y: by(5, shift) }, [leaf("pinned", date)]));
   ok(
     "(c) a time position with a numeric offset: the offset is a duration",
-    (spaceUnit(c1)!.unit as any).unit === "instant" &&
-      spaceZone(c1) === "UTC"
+    (spaceUnit(c1)!.unit as any).unit === "instant" && spaceZone(c1) === "UTC"
   );
   const c2 = yOf(positionNode({ y: by(5, lag) }, [leaf("pinned", date)]));
   ok(
     "(c) a time position with a duration offset stays on its calendar",
-    (spaceUnit(c2)!.unit as any).unit === "instant" &&
-      spaceZone(c2) === "UTC"
+    (spaceUnit(c2)!.unit as any).unit === "instant" && spaceZone(c2) === "UTC"
   );
   const twoTimes = await errorOf(() =>
     positionNode({ y: by(5, date) }, [
@@ -643,7 +637,12 @@ console.log("# measure: declared units clash");
     { genre: "b", us: 20, eu: 18 },
   ];
   const usdEur = await errorOf(() =>
-    chart(gross, { schema: { us: Unit("USD").summable(), eu: Unit("EUR").summable() } })
+    chart(gross, {
+      schema: {
+        us: Unit("USD", { traits: [Trait.summable()] }),
+        eu: Unit("EUR", { traits: [Trait.summable()] }),
+      },
+    })
       .flow(spread({ by: "genre", dir: "x" }))
       .mark(layer([rect({ h: "us" }), rect({ h: "eu" })]))
       .toDisplayList(SIZE)
@@ -657,7 +656,9 @@ console.log("# measure: declared units clash");
   );
 
   const countMm = await errorOf(() =>
-    chart(penguins, { schema: { flipper: Unit("mm").summable() } })
+    chart(penguins, {
+      schema: { flipper: Unit("mm", { traits: [Trait.summable()] }) },
+    })
       .flow(spread({ by: "sp", dir: "x" }))
       .mark(
         layer([rect({ h: field("flipper").count() }), rect({ h: "flipper" })])
@@ -687,8 +688,11 @@ console.log("# measure: declared units clash");
       ],
       {
         schema: {
-          q1: { name: "Pay", unit: Unit("USD").summable() },
-          eu: Unit("EUR").summable(),
+          q1: {
+            name: "Pay",
+            unit: Unit("USD", { traits: [Trait.summable()] }),
+          },
+          eu: Unit("EUR", { traits: [Trait.summable()] }),
         },
       }
     )
@@ -715,7 +719,11 @@ console.log("# measure: declared units clash");
     { genre: "b", value: 2 },
   ];
   const valueIn = (unit: string) =>
-    chart(values, { w: 100, h: 100, schema: { value: Unit(unit).summable() } })
+    chart(values, {
+      w: 100,
+      h: 100,
+      schema: { value: Unit(unit, { traits: [Trait.summable()] }) },
+    })
       .flow(spread({ by: "genre", dir: "x" }))
       .mark(rect({ h: "value" }));
   const twoValues = await errorOf(() =>
@@ -732,7 +740,9 @@ console.log("# measure: declared units clash");
     { genre: "b", count: 4, v: 2 },
   ];
   const peopleCount = await errorOf(() =>
-    chart(counted, { schema: { count: Unit("people").summable() } })
+    chart(counted, {
+      schema: { count: Unit("people", { traits: [Trait.summable()] }) },
+    })
       .flow(spread({ by: "genre", dir: "x" }))
       .mark(rect({ h: field("v").count(), w: field("count").sum() }))
       .toDisplayList(SIZE)
@@ -798,7 +808,7 @@ console.log("# measure: titles are Quantity (unit)");
 
   const usd = await bars(
     gross,
-    { "Production Budget": Unit("USD").summable() },
+    { "Production Budget": Unit("USD", { traits: [Trait.summable()] }) },
     rect({ h: "Production Budget" })
   );
   ok(
@@ -809,7 +819,7 @@ console.log("# measure: titles are Quantity (unit)");
 
   const explicit = await bars(
     gross,
-    { "Production Budget": Unit("USD").summable() },
+    { "Production Budget": Unit("USD", { traits: [Trait.summable()] }) },
     rect({ h: "Production Budget" }),
     { axes: { y: { title: "Budget" } } }
   );
@@ -825,7 +835,7 @@ console.log("# measure: titles are Quantity (unit)");
       { genre: "a", "Flipper Length (mm)": 190 },
       { genre: "b", "Flipper Length (mm)": 210 },
     ],
-    { "Flipper Length (mm)": Unit("mm").summable() },
+    { "Flipper Length (mm)": Unit("mm", { traits: [Trait.summable()] }) },
     rect({ h: "Flipper Length (mm)" })
   );
   ok(
@@ -840,7 +850,10 @@ console.log("# measure: titles are Quantity (unit)");
       { genre: "b", "Flipper Length (mm)": 210 },
     ],
     {
-      "Flipper Length (mm)": { name: "Flipper Length", unit: Unit("mm").summable() },
+      "Flipper Length (mm)": {
+        name: "Flipper Length",
+        unit: Unit("mm", { traits: [Trait.summable()] }),
+      },
     },
     rect({ h: "Flipper Length (mm)" })
   );
@@ -1091,24 +1104,30 @@ console.log("# measure: CanAdd");
   ];
   const stacked = (schema: object, mark: unknown) =>
     chart(sales, { schema })
-      .flow(spread({ by: "region", dir: "x" }), stack({ by: "product", dir: "y" }))
+      .flow(
+        spread({ by: "region", dir: "x" }),
+        stack({ by: "product", dir: "y" })
+      )
       .mark(mark)
       .toDisplayList(SIZE);
 
   const usd = await errorOf(() =>
-    stacked({ usd: Unit("USD").summable() }, rect({ h: "usd" }))
+    stacked(
+      { usd: Unit("USD", { traits: [Trait.summable()] }) },
+      rect({ h: "usd" })
+    )
   );
-  ok("a .summable() USD column stacks and sums", usd === undefined, usd);
+  ok("a Trait.summable() USD column stacks and sums", usd === undefined, usd);
 
   const celsius = await errorOf(() =>
     stacked({ temp: Unit("°C") }, rect({ h: "temp" }))
   );
   ok(
-    "stacking a Unit(\"°C\") column throws, naming the column",
+    'stacking a Unit("°C") column throws, naming the column',
     celsius !== undefined &&
       /"temp"/.test(celsius) &&
       /cannot be summed/.test(celsius) &&
-      /\.summable\(\)/.test(celsius) &&
+      /Trait\.summable\(\)/.test(celsius) &&
       !/subtract a reference/.test(celsius),
     celsius
   );
@@ -1119,7 +1138,11 @@ console.log("# measure: CanAdd");
   const nameOnly = await errorOf(() =>
     stacked({ temp: "°C" }, rect({ h: "temp" }))
   );
-  ok("a column in a unit's name alone stacks", nameOnly === undefined, nameOnly);
+  ok(
+    "a column in a unit's name alone stacks",
+    nameOnly === undefined,
+    nameOnly
+  );
   const nameOnlyTitle = textsOf(
     await chart(sales, { schema: { temp: "°C" }, axes: true })
       .flow(spread({ by: "region", dir: "x" }))
@@ -1135,10 +1158,18 @@ console.log("# measure: CanAdd");
   // A column record: its name titles the axis, its unit is a Unit.
   const record = textsOf(
     await chart(sales, {
-      schema: { usd: { name: "Revenue", unit: Unit("USD").summable() } },
+      schema: {
+        usd: {
+          name: "Revenue",
+          unit: Unit("USD", { traits: [Trait.summable()] }),
+        },
+      },
       axes: true,
     })
-      .flow(spread({ by: "region", dir: "x" }), stack({ by: "product", dir: "y" }))
+      .flow(
+        spread({ by: "region", dir: "x" }),
+        stack({ by: "product", dir: "y" })
+      )
       .mark(rect({ h: "usd" }))
       .toDisplayList(SIZE)
   );
@@ -1194,11 +1225,14 @@ console.log("# measure: CanAdd");
     "a name beside a Unit of that name that is not summable does not stack",
     takesNot !== undefined &&
       /sums the column "usd", in the unit "USD"/.test(takesNot) &&
-      /Unit\("USD"\)\.summable\(\)/.test(takesNot),
+      /Unit\("USD", \{ traits: \[Trait\.summable\(\)\] \}\)/.test(takesNot),
     takesNot
   );
   const takesSummable = await errorOf(() =>
-    stacked({ usd: "USD", cost: Unit("USD").summable() }, rect({ h: "usd" }))
+    stacked(
+      { usd: "USD", cost: Unit("USD", { traits: [Trait.summable()] }) },
+      rect({ h: "usd" })
+    )
   );
   ok(
     "and beside a summable Unit of that name it stacks",
@@ -1206,19 +1240,24 @@ console.log("# measure: CanAdd");
     takesSummable
   );
   const conflict = await errorOf(() =>
-    stacked({ usd: Unit("USD").summable(), cost: Unit("USD") }, rect({ h: "usd" }))
+    stacked(
+      { usd: Unit("USD", { traits: [Trait.summable()] }), cost: Unit("USD") },
+      rect({ h: "usd" })
+    )
   );
   ok(
-    "two Units of one name that disagree on .summable() throw",
+    "two Units of one name that disagree on Trait.summable() throw",
     conflict !== undefined &&
       /The column "usd" and the column "cost" are both in the unit "USD"/.test(
         conflict
       ) &&
-      /const USD = Unit\("USD"\)\.summable\(\)/.test(conflict),
+      /const USD = Unit\("USD", \{ traits: \[Trait\.summable\(\)\] \}\)/.test(
+        conflict
+      ),
     conflict
   );
   const sameDef = await errorOf(() => {
-    const USD = Unit("USD").summable();
+    const USD = Unit("USD", { traits: [Trait.summable()] });
     return stacked({ usd: USD, cost: USD }, rect({ h: "usd" }));
   });
   ok("one Unit shared by two columns stacks", sameDef === undefined, sameDef);
@@ -1311,7 +1350,10 @@ console.log("# measure: CanAdd");
       /^normalize\(\.\.\.\) sums the column "temp"/.test(normCelsius.e),
     normCelsius.e
   );
-  const normUsd = await normalized({ usd: Unit("USD").summable() }, "usd");
+  const normUsd = await normalized(
+    { usd: Unit("USD", { traits: [Trait.summable()] }) },
+    "usd"
+  );
   ok(
     "normalize(rows, field) of a summable USD column divides by the total",
     normUsd.e === undefined &&
@@ -1323,8 +1365,9 @@ console.log("# measure: CanAdd");
   // A window's shares: a NaN entry makes the total NaN, so every share is 0
   // with a warning, never a NaN share beside valid ones.
   const shares = (xs: number[]) =>
-    applyEntryNormalize(xs.map((datum) => ({ type: "datum", datum }) as any))
-      .map((v: any) => v.datum);
+    applyEntryNormalize(
+      xs.map((datum) => ({ type: "datum", datum }) as any)
+    ).map((v: any) => v.datum);
   const warn = console.warn;
   let warned = 0;
   console.warn = () => void warned++;
@@ -1379,9 +1422,7 @@ console.log("# measure: CanAdd");
       .flow(spread({ dir: "y" }))
       .mark(rect({ w: 100, h: 80 }).cut({ dir: "x", size: "temp" }))
       .toDisplayList(SIZE);
-  const cutCelsius = await errorOf(() =>
-    cutOf({ temp: Unit("°C") })
-  );
+  const cutCelsius = await errorOf(() => cutOf({ temp: Unit("°C") }));
   ok(
     "cut({ size }) of °C throws, naming the column",
     cutCelsius !== undefined &&
@@ -1390,9 +1431,13 @@ console.log("# measure: CanAdd");
     cutCelsius
   );
   const cutSummable = await errorOf(() =>
-    cutOf({ temp: Unit("°C").summable() })
+    cutOf({ temp: Unit("°C", { traits: [Trait.summable()] }) })
   );
-  ok("cut({ size }) of a .summable() unit cuts", cutSummable === undefined, cutSummable);
+  ok(
+    "cut({ size }) of a Trait.summable() unit cuts",
+    cutSummable === undefined,
+    cutSummable
+  );
 
   const spans = await errorOf(() =>
     chart(
@@ -1457,17 +1502,15 @@ console.log("# measure: CanAdd");
       .toDisplayList(SIZE);
   const point = { id: "a", start: 10 };
   const span = { id: "b", width: 3 };
-  const summableDay = Unit("day").summable();
+  const summableDay = Unit("day", { traits: [Trait.summable()] });
   const pointFirst = await errorOf(() => dayStack([point, span], summableDay));
   const spanFirst = await errorOf(() => dayStack([span, point], summableDay));
   ok(
-    "a day point stacked with a .summable() day width renders, in both orders",
+    "a day point stacked with a Trait.summable() day width renders, in both orders",
     pointFirst === undefined && spanFirst === undefined,
     pointFirst ?? spanFirst
   );
-  const plainWidth = await errorOf(() =>
-    dayStack([point, span], Unit("day"))
-  );
+  const plainWidth = await errorOf(() => dayStack([point, span], Unit("day")));
   ok(
     "a stacked day width that does not add throws, naming only its column",
     plainWidth !== undefined &&
@@ -1527,7 +1570,10 @@ console.log("# measure: CanAdd");
     chart(sales, {
       schema: { usd: { HasUnit: { unit: "USD", classes: { CanAdd: {} } } } },
     })
-      .flow(spread({ by: "region", dir: "x" }), stack({ by: "product", dir: "y" }))
+      .flow(
+        spread({ by: "region", dir: "x" }),
+        stack({ by: "product", dir: "y" })
+      )
       .mark(rect({ h: "usd" }))
       .toDisplayList(SIZE)
   );
@@ -1544,7 +1590,10 @@ console.log("# measure: CanAdd");
       .mark(rect({ h: field("cost").mean() }));
   const names = () =>
     chart(ledger, { schema: { usd: "USD" } })
-      .flow(spread({ by: "region", dir: "x" }), stack({ by: "product", dir: "y" }))
+      .flow(
+        spread({ by: "region", dir: "x" }),
+        stack({ by: "product", dir: "y" })
+      )
       .mark(rect({ h: "usd" }));
   const nameFirst = await errorOf(() =>
     layer([names(), defines(Unit("USD"))]).toDisplayList(SIZE)
@@ -1553,26 +1602,29 @@ console.log("# measure: CanAdd");
     layer([defines(Unit("USD")), names()]).toDisplayList(SIZE)
   );
   ok(
-    "a stack of \"USD\" beside another chart's Unit(\"USD\") throws, in both orders",
+    'a stack of "USD" beside another chart\'s Unit("USD") throws, in both orders',
     [nameFirst, defFirst].every(
       (e) =>
         e !== undefined &&
         /^stack sums the column "usd", in the unit "USD"/.test(e) &&
-        /Unit\("USD"\)\.summable\(\)/.test(e)
+        /Unit\("USD", \{ traits: \[Trait\.summable\(\)\] \}\)/.test(e)
     ),
     nameFirst ?? defFirst
   );
   const crossSummable = await errorOf(() =>
-    layer([names(), defines(Unit("USD").summable())]).toDisplayList(SIZE)
+    layer([
+      names(),
+      defines(Unit("USD", { traits: [Trait.summable()] })),
+    ]).toDisplayList(SIZE)
   );
   ok(
-    "and beside another chart's Unit(\"USD\").summable() it stacks",
+    'and beside another chart\'s Unit("USD", { traits: [Trait.summable()] }) it stacks',
     crossSummable === undefined,
     crossSummable
   );
   const crossConflict = await errorOf(() =>
     layer([
-      defines(Unit("USD").summable()),
+      defines(Unit("USD", { traits: [Trait.summable()] })),
       chart(ledger, { schema: { usd: Unit("USD") } })
         .flow(spread({ by: "region", dir: "x" }))
         .mark(rect({ h: field("usd").mean() })),

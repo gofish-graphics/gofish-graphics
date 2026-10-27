@@ -25,6 +25,7 @@ import {
   Coord,
   rect as rectMark,
   Unit,
+  Trait,
 } from "../lib";
 import { check, items, report, type Item } from "./testHelpers";
 
@@ -94,7 +95,7 @@ async function main() {
       { id: "a", start: 10, width: 2 },
       { id: "b", start: 20, width: 4 },
     ];
-    const Day = Unit("day").summable();
+    const Day = Unit("day", { traits: [Trait.summable()] });
     const dl = await chart(tasks, {
       schema: { start: Day, width: Day },
     })
