@@ -22,7 +22,7 @@ import {
 } from "../ast/geometry";
 import { Text } from "../ast/shapes/text";
 import { membersOf } from "../ast/graphicalOperators/enclose/members";
-import { chart, line, ribbon, scatter, spread, stack, rect } from "../lib";
+import { chart, line, live, ribbon, scatter, spread, stack, rect } from "../lib";
 
 let passed = 0;
 let failed = 0;
@@ -431,6 +431,31 @@ console.log("# outline: line and ribbon connectors");
   const ro = (rib.geometry()).outline(0.5);
   ok("a ribbon's outline is one closed band", ro.length === 1 && ro[0].closed);
   ok("a ribbon's band has no stroke width", ro[0].width === undefined);
+
+  // The outline's width is the stroke the line draws, with a live width
+  // too: the connector is built from its value when the chart resolves,
+  // and draws that value until the input changes.
+  const liveChart = (await chart(rows)
+    .flow(scatter({ x: "x", y: "y" }))
+    .mark(line({ strokeWidth: live(() => 4) }))
+    .resolve()) as GoFishNode;
+  const doc = await liveChart.toDisplayList({ w: 200, h: 100, axes: false });
+  const drawn: any[] = [];
+  const collect = (n: any): void => {
+    if (Array.isArray(n)) return n.forEach(collect);
+    if (n === null || typeof n !== "object") return;
+    if (n.kind === "path") drawn.push(n);
+    collect(n.items ?? []);
+    collect(n.children ?? []);
+  };
+  collect(doc.items);
+  const liveConn = [...walk(liveChart)].find((n) => n.type === "connect")!;
+  const [lw] = liveConn.geometry().outline(0.5);
+  ok(
+    "a live stroke width: the outline is as wide as the path drawn",
+    lw.width === 4 && drawn.length === 1 && drawn[0].style.strokeWidth === 4,
+    JSON.stringify({ outline: lw.width, drawn: drawn.map((d) => d.style) })
+  );
 }
 
 const radii = [30, 5, 18, 12, 25, 8, 3, 15, 20, 10];
