@@ -194,9 +194,11 @@ def story_airports_by_nearest_hub():
                 chart(hubs)
                 .flow(scatter(x="longitude", y="latitude"))
                 .mark(circle(r=3, fill="black")),
-            ]
+            ],
+            w=600,
+            h=360,
         ),
-        {"w": 600, "h": 360, "axes": True},
+        {"axes": True},
     )
 
 
@@ -221,9 +223,11 @@ def story_penguin_beak_voronoi():
                 chart(BEAKED)
                 .flow(scatter(x="Beak Length (mm)", y="Beak Depth (mm)"))
                 .mark(circle(r=2.5, fill="Species")),
-            ]
+            ],
+            w=480,
+            h=360,
         ),
-        {"w": 480, "h": 360, "axes": True},
+        {"axes": True},
     )
 
 

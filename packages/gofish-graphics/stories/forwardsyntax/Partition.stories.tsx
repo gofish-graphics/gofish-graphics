@@ -272,7 +272,7 @@ export const AirportsByNearestHub: StoryObj<Args> = {
     const container = initializeContainer();
     const airports = contiguous(context.loaded.airports);
     const hubs = airports.filter((d) => HUBS.includes(d.iata));
-    layer([
+    layer({ w: args.w, h: args.h }, [
       chart(airports, { color: Color.gradient("reds") })
         .flow(
           partition({
@@ -285,7 +285,7 @@ export const AirportsByNearestHub: StoryObj<Args> = {
       chart(hubs)
         .flow(scatter({ x: "longitude", y: "latitude" }))
         .mark(circle({ r: 3, fill: "black" })),
-    ]).render(container, { w: args.w, h: args.h, axes: true });
+    ]).render(container, { axes: true });
     return container;
   },
 };
@@ -312,14 +312,14 @@ export const PenguinBeakVoronoi: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     const key = struct({ x: "Beak Length (mm)", y: "Beak Depth (mm)" });
-    layer([
+    layer({ w: args.w, h: args.h }, [
       chart(beaked)
         .flow(partition({ by: key.bin(Bin.voronoi({ seeds: beaked })) }))
         .mark(region({ fill: "#f4f1ea", stroke: "#b9b2a3", strokeWidth: 0.5 })),
       chart(beaked)
         .flow(scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
         .mark(circle({ r: 2.5, fill: "Species" })),
-    ]).render(container, { w: args.w, h: args.h, axes: true });
+    ]).render(container, { axes: true });
     return container;
   },
 };
