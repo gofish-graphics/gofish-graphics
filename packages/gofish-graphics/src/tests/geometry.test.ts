@@ -21,6 +21,7 @@ import {
   type Outline,
 } from "../ast/geometry";
 import { Text } from "../ast/shapes/text";
+import { membersOf } from "../ast/graphicalOperators/enclose/members";
 import { chart, line, ribbon, scatter, spread, stack, rect } from "../lib";
 
 let passed = 0;
@@ -162,9 +163,18 @@ const longestStep = (o: Outline): number => {
 
 console.log("# outline: box fallback");
 {
-  const g = layOut(Rect({ w: 30, h: 40 })).geometry();
-  ok("rect answers no outline of its own", !g.outline);
+  const rg = layOut(Rect({ w: 30, h: 40 })).geometry();
+  // A geometry with only a box: what a node with no outline of its own reads.
+  const g = { box: rg.box };
   const [down] = outlines(g, 0.5, 1);
+  ok(
+    "a node with no paint of its own is read as filling its box",
+    down.filled && down.width === undefined
+  );
+  ok(
+    "a filled rect's outline is the fallback's",
+    JSON.stringify(outlines(rg, 0.5, 1)) === JSON.stringify([down])
+  );
   ok("the fallback is one closed rect", down.closed && down.points.length === 4);
   ok(
     "the fallback gives its box exactly, in the same frame as its points",
@@ -240,6 +250,56 @@ console.log("# outline: polygon and text");
     "polygon outline is its ring, closed",
     o.closed && JSON.stringify(o.points) === JSON.stringify(ring)
   );
+  ok("a polygon is filled by default", o.filled && o.width === undefined);
+
+  const [u] = outlines(
+    layOut(
+      Polygon({ points: ring, fill: "none", stroke: "black", strokeWidth: 3 })
+    ).geometry(),
+    0.5,
+    1
+  );
+  ok(
+    "an unfilled polygon's outline is closed, not filled, as wide as its stroke",
+    u.closed && !u.filled && u.width === 3,
+    JSON.stringify({ closed: u.closed, filled: u.filled, width: u.width })
+  );
+  const [tr] = outlines(
+    layOut(Polygon({ points: ring, fill: "transparent" })).geometry(),
+    0.5,
+    1
+  );
+  ok("a transparent fill is not filled", tr.closed && !tr.filled);
+
+  const [ro] = outlines(
+    layOut(Rect({ w: 20, h: 10, fill: "none", stroke: "red", strokeWidth: 2 }))
+      .geometry(),
+    0.5,
+    1
+  );
+  ok(
+    "a rect's box outline carries its paint",
+    ro.closed && !ro.filled && ro.width === 2 && ro.box !== undefined
+  );
+
+  // enclose reads an unfilled closed outline as its loop: a ring of segments
+  // as wide as its stroke, closing back to its start.
+  const members = membersOf(
+    layOut(
+      Polygon({ points: ring, fill: "none", stroke: "black", strokeWidth: 3 })
+    )
+  );
+  ok(
+    "enclose reads an unfilled polygon as a ring of segments",
+    members.length === ring.length &&
+      members.every((m) => m.kind === "segment" && m.w === 3),
+    JSON.stringify(members.map((m) => m.kind))
+  );
+  const filledMembers = membersOf(layOut(Polygon({ points: ring })));
+  ok(
+    "enclose reads a filled polygon as its box",
+    filledMembers.length === 1 && filledMembers[0].kind === "box"
+  );
 
   const t = layOut(Text({ text: "hello", fontSize: 10, rotate: 90 }));
   const tg = t.geometry();
@@ -301,13 +361,14 @@ console.log("# outline: paths");
     "flattening keeps the ends",
     pts[0][0] === 0 && pts[0][1] === 0 && pts[n][0] === 100 && pts[n][1] === 0
   );
-  const r = reflectOutlineY({ points: [[1, 2]], closed: false });
+  const r = reflectOutlineY({ points: [[1, 2]], closed: false, filled: false });
   ok("reflecting flips y", r.points[0][0] === 1 && r.points[0][1] === -2);
   const ex = reflectOutlineY(
     translateOutline(
       {
         points: [],
         closed: true,
+        filled: true,
         ellipse: { cx: 1, cy: 2, rx: 3, ry: 4 },
         box: { min: [0, 1], max: [5, 6] },
       },

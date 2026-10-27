@@ -426,7 +426,11 @@ export const Text = ({
           const dy = y - anchor.y;
           return [dx * cos - dy * sin, glyphDy + dx * sin + dy * cos];
         });
-        return { box, outline: () => [{ points: corners, closed: true }] };
+        // Its glyphs are read as filling the turned box.
+        return {
+          box,
+          outline: () => [{ points: corners, closed: true, filled: true }],
+        };
       },
     },
     []

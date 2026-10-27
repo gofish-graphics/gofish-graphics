@@ -2,7 +2,7 @@ import { getColumnTypes, setColumnTypes } from "../schema";
 import { datumOfInput } from "../marks/markResult";
 import { packEnclose } from "d3-hierarchy";
 import { GoFishNode } from "../_node";
-import { boxOfDims, orderToPixel, ringExtent } from "../geometry";
+import { boxOfDims, orderToPixel, outlinePaint, ringExtent } from "../geometry";
 import { interior } from "../../families/place";
 import { GoFishAST } from "../_ast";
 import { Size } from "../dims";
@@ -166,6 +166,7 @@ export const Polygon = ({
           {
             points: orderToPixel(localRef.current, node.yFrame.direction),
             closed: true,
+            ...outlinePaint({ fill, stroke, strokeWidth }),
           },
         ],
         enclosingCircle: () => {

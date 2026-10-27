@@ -84,7 +84,8 @@ function resolveNodeFill(node: GoFishNode): string | null {
 
 /**
  * Whether a placed label sits inside its mark: its center is inside one of
- * the mark's closed outlines. Both are read in the label layer's frame: the
+ * the mark's filled closed outlines. Inside an unfilled one, the page shows
+ * through, so the label is read as outside. Both are read in the label layer's frame: the
  * label's own box, and the mark through its `ref()` stand-in (a sibling of
  * the label), in pixels.
  */
@@ -93,7 +94,8 @@ function sitsInside(label: GoFishNode, target: GoFishRef): boolean {
   if (d[0].center === undefined || d[1].center === undefined) return false;
   const c: [number, number] = [d[0].center, d[1].center];
   return placedOutlines(target, 0.5, target.yFrame.direction).some(
-    (o) => o.closed && pointInRing(c, o.points as [number, number][])
+    (o) =>
+      o.closed && o.filled && pointInRing(c, o.points as [number, number][])
   );
 }
 

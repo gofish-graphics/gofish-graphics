@@ -25,28 +25,68 @@ export type OutlinePart = { name: string; from: number; to: number };
 
 /**
  * A shape's outline, sampled: a polyline that is never farther from the true
- * shape than the tolerance asked for.
+ * shape than the tolerance asked for. It states three facts about the shape:
  *
- * `closed: true` means a filled region whose boundary is `points` (the last
- * point joins the first, and the inside is part of the shape). `closed:
- * false` means an open path with a start, an end and a direction of travel
- * (a line, an arrow's body).
+ *  - `closed`, its topology: `true` when the path loops back (the last point
+ *    joins the first), `false` for an open path with a start, an end and a
+ *    direction of travel (a line, an arrow's body).
+ *  - `filled`, its paint: `true` when the inside of a closed loop is drawn,
+ *    so the inside is ink. An open outline is never filled. A mark is filled
+ *    unless its fill is `"none"` or `"transparent"` (see {@link outlinePaint}).
+ *  - `width`, its stroke: the width of the band a pen draws along the path,
+ *    on an open or a closed outline alike. Absent (or 0) when no stroke is
+ *    drawn.
+ *
+ * The ink a shape puts down is its inside when filled, plus the stroke band
+ * of `width` along its points. A closed outline that is not filled is ink
+ * only along its band; what is behind its inside shows through.
  *
  * An outline may also give its shape exactly, beside the samples, for a
  * consumer that reads a primitive in closed form (the blob in `enclose`):
  *  - `ellipse`, on a closed outline that is an axis-aligned ellipse (a circle
  *    when `rx === ry`);
- *  - `box`, on a closed outline that is an axis-aligned box;
- *  - `width`, on an open outline drawn as a stroke: the stroke's width, so
- *    the shape is the path swept by a pen that wide.
+ *  - `box`, on a closed outline that is an axis-aligned box.
+ *
+ * TODO(#1201): a region with holes (a donut slice, a country with a lake) is
+ * several loops filled under a fill rule, which one outline cannot say. No
+ * producer in a Cartesian space makes one yet; when one does, the outline
+ * grows its loops and its fill rule.
  */
 export interface Outline {
   points: OutlinePoint[];
   closed: boolean;
+  filled: boolean;
+  width?: number;
   parts?: OutlinePart[];
   ellipse?: { cx: number; cy: number; rx: number; ry: number };
   box?: Box;
-  width?: number;
+}
+
+/** How a mark paints its outline: whether it is filled, and its stroke's
+ *  width when it draws one. */
+export type OutlinePaint = Pick<Outline, "filled" | "width">;
+
+/** Whether a color draws ink: any color but `"none"` or `"transparent"`. A
+ *  data-driven color, and no color at all (SVG fills black by default), do. */
+const inks = (color: unknown): boolean =>
+  color !== "none" && color !== "transparent";
+
+/**
+ * The paint a mark puts on its outline, read from its own `fill`, `stroke`
+ * and `strokeWidth`: filled unless its fill is `"none"` or `"transparent"`,
+ * and stroked as wide as `strokeWidth` unless that is 0 or its stroke is
+ * `"none"` or `"transparent"`.
+ */
+export function outlinePaint(paint: {
+  fill?: unknown;
+  stroke?: unknown;
+  strokeWidth?: number;
+}): OutlinePaint {
+  const w = paint.strokeWidth ?? 0;
+  return {
+    filled: inks(paint.fill),
+    ...(w > 0 && inks(paint.stroke) && { width: w }),
+  };
 }
 
 /**
@@ -61,8 +101,14 @@ export interface HasOutline {
 /** A box's outline: a closed rect, clockwise on the screen from its top-left
  *  corner, with the box as its exact form and its edges as parts.
  *  `direction` is the y direction of the box's own axis order relative to
- *  the frame the box is in, which names the top and bottom edges. */
-export function boxOutline(box: Box, direction: AxisDirection): Outline {
+ *  the frame the box is in, which names the top and bottom edges. `paint` is
+ *  the mark's (a rect's); a node with no paint of its own (a layer, a
+ *  `blank`, a group) is read as filled, so it occupies its box. */
+export function boxOutline(
+  box: Box,
+  direction: AxisDirection,
+  paint: OutlinePaint = { filled: true }
+): Outline {
   const [x0, y0] = box.min;
   const [x1, y1] = box.max;
   const w = x1 - x0;
@@ -79,6 +125,7 @@ export function boxOutline(box: Box, direction: AxisDirection): Outline {
       [x0, y1],
     ],
     closed: true,
+    ...paint,
     box: { min: [x0, y0], max: [x1, y1] },
     parts: [
       { name: top, from: 0, to: w },
@@ -170,13 +217,14 @@ const circleSteps = (r: number, tolerance: number): number => {
 };
 
 /** A closed ellipse, sampled, clockwise on the screen from its rightmost
- *  point. */
+ *  point, painted as `paint`. */
 export function ellipseOutline(
   cx: number,
   cy: number,
   rx: number,
   ry: number,
-  tolerance: number
+  tolerance: number,
+  paint: OutlinePaint
 ): Outline {
   const n = circleSteps(Math.max(rx, ry), tolerance);
   const points: OutlinePoint[] = [];
@@ -184,7 +232,7 @@ export function ellipseOutline(
     const t = (2 * Math.PI * i) / n;
     points.push([cx + rx * Math.cos(t), cy + ry * Math.sin(t)]);
   }
-  return { points, closed: true, ellipse: { cx, cy, rx, ry } };
+  return { points, closed: true, ...paint, ellipse: { cx, cy, rx, ry } };
 }
 
 /**

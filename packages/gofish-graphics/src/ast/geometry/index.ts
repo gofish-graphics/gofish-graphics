@@ -32,6 +32,7 @@ export {
   outlines,
   boxOutline,
   ellipseOutline,
+  outlinePaint,
   flattenPath,
   translateOutline,
   placedOutlines,
@@ -39,6 +40,12 @@ export {
   openRing,
   orderToPixel,
 } from "./outline";
-export type { Outline, OutlinePart, OutlinePoint, HasOutline } from "./outline";
+export type {
+  Outline,
+  OutlinePaint,
+  OutlinePart,
+  OutlinePoint,
+  HasOutline,
+} from "./outline";
 export { reflectRegionY, rebaseRegion, hasSpan } from "./region";
 export type { Region, Span, Point } from "./region";

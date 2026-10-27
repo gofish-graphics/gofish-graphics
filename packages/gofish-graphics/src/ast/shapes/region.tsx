@@ -6,7 +6,7 @@ import type { DisplayList } from "gofish-ir";
 import { color6, resolveColorChannel } from "../../color";
 import { isValue, type MaybeValue } from "../data";
 import { displayDims } from "../dims";
-import { boxOfDims, orderToPixel, type Point } from "../geometry";
+import { boxOfDims, orderToPixel, outlinePaint, type Point } from "../geometry";
 import {
   lowerStyle,
   rectItemFromBox,
@@ -156,6 +156,7 @@ export const Region = ({
             {
               points: orderToPixel(ring, node.yFrame.direction),
               closed: true,
+              ...outlinePaint({ fill, stroke, strokeWidth }),
             },
           ],
         };

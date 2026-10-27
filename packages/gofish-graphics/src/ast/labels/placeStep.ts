@@ -32,6 +32,7 @@ import {
   corners,
   convexOverlap,
   outlineObstacles,
+  segmentInk,
   type HalfSize,
   type Obstacle,
   type Pt,
@@ -114,18 +115,21 @@ const markOf = (p: Placeable): unknown => {
   return raw.targetNode ?? raw;
 };
 
-/** The obstacles a placed node's outlines stand for: segments, and the
- *  area inside each closed outline. `scope` limits them to one call. */
+/** The obstacles a placed node's outlines stand for: the ink each draws,
+ *  its stroke band and, when filled, its inside. `scope` limits them to one
+ *  call. */
 const obstaclesOf = (
   outlines: Outline[],
   owner: unknown,
   scope?: unknown
 ): Obstacle[] =>
   outlines.flatMap((o) =>
-    outlineObstacles(o.points as Pt[], o.closed, owner, true).map((ob) => ({
-      ...ob,
-      scope,
-    }))
+    outlineObstacles(o.points as Pt[], o.closed, owner, o.filled, o.width).map(
+      (ob) => ({
+        ...ob,
+        scope,
+      })
+    )
   );
 
 /** A label's unturned half size: its text and chrome. */
@@ -283,8 +287,10 @@ export function applyLabelPlacement(
       const angle = item.node.state.angle;
       const size = halfSize(item.node, angle);
       const candidates = candidatesFor(item, shape, size, angle);
+      // Its own mark is read as its outline's band only: a label may sit
+      // inside its own mark, filled or not.
       const ownSegments = shape.outlines.flatMap((o) =>
-        outlineObstacles(o.points as Pt[], o.closed, shape.mark, false)
+        outlineObstacles(o.points as Pt[], o.closed, shape.mark, false, o.width)
       );
       const keep = (o: Obstacle) =>
         o.owner !== shape.mark && (o.scope === undefined || o.scope === group);
@@ -296,7 +302,9 @@ export function applyLabelPlacement(
         if (
           !c.onOutline &&
           ownSegments.some(
-            (o) => o.kind === "segment" && convexOverlap(poly, [o.a, o.b])
+            (o) =>
+              o.kind === "segment" &&
+              convexOverlap(poly, segmentInk(o.a, o.b, o.w))
           )
         )
           continue;

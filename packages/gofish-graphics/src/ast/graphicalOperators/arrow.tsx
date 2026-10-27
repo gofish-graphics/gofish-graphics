@@ -1,6 +1,6 @@
 import { GoFishAST } from "../_ast";
 import { GoFishNode, defaultGeometry, type ToPixel } from "../_node";
-import { flattenPath, orderToPixel } from "../geometry";
+import { flattenPath, orderToPixel, outlinePaint } from "../geometry";
 import { end } from "../../families/place";
 import { Size, displayTranslate } from "../dims";
 import type { DisplayList } from "gofish-ir";
@@ -239,7 +239,11 @@ export const arrow = createNodeOperator(
                       node.yFrame.direction
                     ),
                     closed: false,
-                    width: props.strokeWidth ?? 0,
+                    ...outlinePaint({
+                      fill: "none",
+                      stroke: props.stroke,
+                      strokeWidth: props.strokeWidth,
+                    }),
                   },
                 ],
         }),

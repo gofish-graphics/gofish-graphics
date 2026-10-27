@@ -18,7 +18,14 @@ import {
   interiorCandidates,
   type TargetShape,
 } from "../ast/labels/strategies";
-import { convexOverlap, corners, pointInRing, type Pt } from "../ast/labels/collide";
+import {
+  convexOverlap,
+  corners,
+  covers,
+  outlineObstacles,
+  pointInRing,
+  type Pt,
+} from "../ast/labels/collide";
 import { boxOutline } from "../ast/geometry";
 import { autoLabelColorForFill } from "../ast/labels/autoLabelColor";
 import {
@@ -96,7 +103,7 @@ const circleShape = (cx: number, cy: number, r: number): TargetShape => {
     const t = (2 * Math.PI * i) / 64;
     points.push([cx + r * Math.cos(t), cy + r * Math.sin(t)]);
   }
-  return { outlines: [{ points, closed: true }], type: "ellipse" };
+  return { outlines: [{ points, closed: true, filled: true }], type: "ellipse" };
 };
 
 console.log("# Place family");
@@ -162,7 +169,7 @@ console.log("# around");
     [40, 40],
     [0, 40],
   ];
-  const p = extremePoint([{ points: C, closed: true }], "right");
+  const p = extremePoint([{ points: C, closed: true, filled: true }], "right");
   ok("C facing right: the upper arm tip, at its middle", near(p[0], 40) && near(p[1], 5), JSON.stringify(p));
 }
 
@@ -176,6 +183,7 @@ console.log("# along");
           [200, 50],
         ],
         closed: false,
+        filled: false,
       },
     ],
     type: "connect",
@@ -205,6 +213,7 @@ console.log("# along");
           [0, 200],
         ],
         closed: false,
+        filled: false,
       },
     ],
     type: "connect",
@@ -234,6 +243,7 @@ console.log("# along");
             [100, 100],
           ],
           closed: false,
+          filled: false,
         },
       ],
       type: "connect",
@@ -249,7 +259,7 @@ console.log("# along");
   ok(
     "sloped: no spot where the path strays from the chord",
     alongCandidates(
-      { outlines: [{ points: zigzag, closed: false }], type: "connect" },
+      { outlines: [{ points: zigzag, closed: false, filled: false }], type: "connect" },
       size,
       0,
       Place.along({ orient: "sloped" }),
@@ -297,6 +307,7 @@ console.log("# start, end, dodge");
           [100, 40],
         ],
         closed: false,
+        filled: false,
       },
     ],
     type: "connect",
@@ -337,7 +348,7 @@ console.log("# interior");
     [100, 100],
     [0, 100],
   ];
-  const shape: TargetShape = { outlines: [{ points: L, closed: true }], type: "polygon" };
+  const shape: TargetShape = { outlines: [{ points: L, closed: true, filled: true }], type: "polygon" };
   const c = interiorCandidates(shape, { hx: 20, hy: 5 }, 0);
   ok("an L: the label goes in the foot", c[0].cy > 80 && c[0].cx > 30, JSON.stringify(c[0]));
   ok(
@@ -358,6 +369,7 @@ console.log("# interior");
               [10, 10],
             ],
             closed: false,
+            filled: false,
           },
         ],
         type: "connect",
@@ -368,7 +380,7 @@ console.log("# interior");
   );
   ok(
     "interior on an open path is an error naming it",
-    msg === "[gofish] Place.interior needs a closed outline; connect has an open one.",
+    msg === "[gofish] Place.interior needs a filled region; connect has an open one.",
     msg
   );
 }
@@ -519,6 +531,78 @@ console.log("# the auto color reads where the label landed");
   );
 }
 
+console.log("# unfilled regions");
+{
+  // A closed outline with no fill is ink only along its stroke: a label
+  // inside it covers nothing, one across its edge covers the band.
+  const square: Pt[] = [
+    [0, 0],
+    [100, 0],
+    [100, 100],
+    [0, 100],
+  ];
+  const unfilled = outlineObstacles(square, true, "m", false, 4);
+  const filled = outlineObstacles(square, true, "m", true, 4);
+  const inside = corners({ cx: 50, cy: 50, angle: 0 }, { hx: 10, hy: 5 });
+  ok(
+    "an unfilled closed outline is only its band: a label inside it is free",
+    !unfilled.some((o) => covers(inside, o))
+  );
+  ok(
+    "a filled one covers its inside",
+    filled.some((o) => covers(inside, o))
+  );
+  // 1 px from the edge's center line: clear of a 0-wide segment, inside
+  // the 4 px band.
+  const nearEdge = corners({ cx: 50, cy: 6, angle: 0 }, { hx: 10, hy: 5 });
+  ok(
+    "the band is as wide as the stroke",
+    unfilled.some((o) => covers(nearEdge, o)) &&
+      !outlineObstacles(square, true, "m", false).some((o) =>
+        covers(nearEdge, o)
+      )
+  );
+
+  const ring: Pt[] = [
+    [0, 0],
+    [40, 0],
+    [40, 40],
+    [0, 40],
+  ];
+  const msg = await errorOf(() =>
+    interiorCandidates(
+      {
+        outlines: [{ points: ring, closed: true, filled: false, width: 1 }],
+        type: "polygon",
+      },
+      { hx: 1, hy: 1 },
+      0
+    )
+  );
+  ok(
+    "interior on an unfilled polygon is an error naming it",
+    msg ===
+      "[gofish] Place.interior needs a filled region; polygon has a closed one with no fill.",
+    msg
+  );
+  const chartMsg = await errorOf(async () => {
+    const node = (await chart([{ n: "a", ring }], { axes: false })
+      .flow(group({ by: "n" }))
+      .mark(
+        polygon({ points: "ring", fill: "none", stroke: "black" }).label("n", {
+          position: Place.interior(),
+        })
+      )
+      .resolve()) as GoFishNode;
+    await node.toDisplayList({ w: 100, h: 100 });
+  });
+  ok(
+    "Place.interior on a polygon with fill none throws through a chart",
+    chartMsg === msg,
+    chartMsg
+  );
+}
+
 console.log("# halo and background");
 {
   const node = (await chart([{ c: "a", v: 3 }])
@@ -556,7 +640,7 @@ console.log("# errors");
   });
   ok(
     "Place.interior on a line names the missing outline",
-    lineMsg === "[gofish] Place.interior needs a closed outline; connect has an open one.",
+    lineMsg === "[gofish] Place.interior needs a filled region; connect has an open one.",
     lineMsg
   );
   const polarMsg = await errorOf(async () => {

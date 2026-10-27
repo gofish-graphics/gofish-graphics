@@ -70,14 +70,18 @@ frame, and it reads each outline by its exact form where it has one:
   two semi-axes as well. The blob reads only the disc, so it pads the ellipse
   a little more along its short axis (a declared shortcut, below). The oval
   reads the semi-axes and samples the ellipse itself.
-- An outline that gives a `box` (the fallback of a node with no outline of
-  its own, such as a `rect`) is its box. The blob measures the distance to
-  it exactly, as a rectangle.
+- An outline that gives a `box` (a `rect`'s, or the fallback of a node with
+  no outline of its own) is its box. The blob measures the distance to it
+  exactly, as a rectangle.
 - An open outline (a `line`, an `arrow`'s body) is its pieces, each a tube
   as wide as the stroke `width` the outline carries. A curve is cut into
   pieces that stray at most 0.5 px from it.
-- Any other closed outline (a `polygon`, a `ribbon`'s band, a rotated
-  `text`'s glyph box) is its bounding box, a declared shortcut (below).
+- A closed outline that is not `filled` (a `polygon` with fill `"none"`) is
+  the pieces of its loop, each a tube as wide as its stroke: a ring. Its
+  inside is not ink, so it is not part of the member.
+- Any other closed outline, which is filled (a `polygon`, a `ribbon`'s band,
+  a rotated `text`'s glyph box), is its bounding box, a declared shortcut
+  (below).
 
 The blob needs these exact forms. A disc is one Delaunay site and links to
 its neighbors by its radius, and a stroke is a tube of its width. A disc read
@@ -251,8 +255,8 @@ Shortcuts, each a known approximation:
   short axis. The oval samples the ellipse itself.
 - A curved `line` piece (a Bezier segment) is cut into straight segments
   that stray at most 0.5 px from it.
-- A closed outline with no exact form (a polygon, a ribbon's band) is read
-  as its bounding box, so the blob hugs the box, not the shape. Reading it
+- A filled closed outline with no exact form (a polygon, a ribbon's band) is
+  read as its bounding box, so the blob hugs the box, not the shape. Reading it
   as its edges at no width hugs the shape, but only through hole filling:
   with `holes: true` a large polygon's inside stays a hole, and an avoided
   polygon keeps out only a band along its edges. The fix is a filled-ring

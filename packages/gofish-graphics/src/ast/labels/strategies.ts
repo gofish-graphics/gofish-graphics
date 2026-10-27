@@ -43,9 +43,11 @@ const STRATEGY_ERROR = (strategy: string, needs: string, t: TargetShape) => {
   const has =
     t.outlines.length === 0
       ? "none"
-      : t.outlines.every((o) => o.closed)
-        ? "a closed one"
-        : "an open one";
+      : !t.outlines.every((o) => o.closed)
+        ? "an open one"
+        : t.outlines.every((o) => o.filled)
+          ? "a closed one"
+          : "a closed one with no fill";
   return new Error(
     `[gofish] ${strategy} needs ${needs}; ${t.type} has ${has}.`
   );
@@ -608,7 +610,7 @@ function boxDistance(c: Pt, p: Pt, q: Pt, a: number, b: number): number {
 }
 
 /**
- * `Place.interior`: inside a closed outline, the spots where the label's
+ * `Place.interior`: inside a filled closed outline, the spots where the label's
  * own box (with a little padding) can grow largest, best first; only spots
  * where it fits at its own size. The room at a point is the scale at which
  * the box centered there first touches the outline (d3-area-label's rule,
@@ -624,9 +626,11 @@ export function interiorCandidates(
   size: HalfSize,
   angle: number
 ): Candidate[] {
-  const rings = t.outlines.filter((o) => o.closed && o.points.length >= 3);
+  const rings = t.outlines.filter(
+    (o) => o.closed && o.filled && o.points.length >= 3
+  );
   if (rings.length === 0)
-    throw STRATEGY_ERROR("Place.interior", "a closed outline", t);
+    throw STRATEGY_ERROR("Place.interior", "a filled region", t);
   const a = size.hx + INTERIOR_PADDING;
   const b = size.hy + INTERIOR_PADDING;
   const found: { c: Pt; room: number }[] = [];

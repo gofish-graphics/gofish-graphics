@@ -11,7 +11,7 @@ import {
 import { GoFishAST } from "../_ast";
 import { projectBy, type SplitBy } from "../datumProjection";
 import { GoFishNode, defaultGeometry } from "../_node";
-import { flattenPath, orderToPixel } from "../geometry";
+import { flattenPath, orderToPixel, outlinePaint } from "../geometry";
 import { end, interior } from "../../families/place";
 import { resolveColorChannel } from "../../color";
 import type { DisplayList } from "gofish-ir";
@@ -968,15 +968,22 @@ export const connect = createNodeOperator(
         },
         // Its outline is what it draws, over its whole run: an open path per
         // run for a line (center mode, or a connector between two anchors),
-        // a closed band per run for a ribbon (edge mode). A line's path is
-        // stroked, so its outline carries the stroke's width. The paths are
-        // kept in axis order; the outline is in pixels.
+        // a closed band per run for a ribbon (edge mode). Its paint is read
+        // as `lower` draws it: a ribbon is filled with its fill (its first
+        // child's color when it sets none), a line is never filled, and
+        // either is stroked with its stroke (its fill when it sets none). The
+        // paths are kept in axis order; the outline is in pixels.
         geometry: (laidOut, layoutChildren, node) => {
           const closed =
             mode !== "center" &&
             resolvedSource === undefined &&
             resolvedTarget === undefined;
-          const width = mode === "center" ? (strokeWidth ?? 1) : undefined;
+          const color = fill ?? laidOut.renderData?.defaultColor;
+          const paint = outlinePaint({
+            fill: mode === "center" ? "none" : (color ?? "none"),
+            stroke: stroke ?? color ?? "black",
+            strokeWidth: mode === "center" ? (strokeWidth ?? 1) : strokeWidth,
+          });
           return {
             ...defaultGeometry(laidOut, layoutChildren, node),
             outline: (tolerance) =>
@@ -986,7 +993,8 @@ export const connect = createNodeOperator(
                   node.yFrame.direction
                 ),
                 closed,
-                ...(width !== undefined && { width }),
+                ...paint,
+                filled: closed && paint.filled,
               })),
           };
         },

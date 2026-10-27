@@ -198,16 +198,19 @@ export function convexOverlap(a: Pt[], b: Pt[]): boolean {
 // ── Obstacles ──────────────────────────────────────────────────────────────
 
 /**
- * What a label must not cover. `owner` names the mark it came from (a
- * label's own target is read separately, as its outline only), and `scope`
- * limits it to one `.label()` call (that call's `avoiding`).
- *  - `segment`: a stretch of an outline, open or closed.
- *  - `area`: the inside of a closed outline. A label covers it when one of
- *    its corners is inside; its boundary is filed as segments beside it.
+ * What a label must not cover: the ink a mark puts down, or a placed label.
+ * `owner` names the mark it came from (a label's own target is read
+ * separately, as its outline only), and `scope` limits it to one `.label()`
+ * call (that call's `avoiding`).
+ *  - `segment`: a stretch of an outline, open or closed, as the band its
+ *    stroke draws: `w` wide, centered on it (no width when it has no stroke).
+ *  - `area`: the inside of a filled closed outline. A label covers it when
+ *    one of its corners is inside; its boundary is filed as segments beside
+ *    it.
  *  - `box`: a placed label, a convex polygon.
  */
 export type Obstacle = (
-  | { kind: "segment"; a: Pt; b: Pt }
+  | { kind: "segment"; a: Pt; b: Pt; w?: number }
   | { kind: "area"; ring: Pt[] }
   | { kind: "box"; poly: Pt[] }
 ) & {
@@ -216,11 +219,33 @@ export type Obstacle = (
   scope?: unknown;
 };
 
+/**
+ * The ink of a segment as a convex polygon: the segment itself when it has
+ * no width, and otherwise the rectangle a square-capped pen `w` wide sweeps
+ * along it (a square for a single point).
+ */
+export function segmentInk(a: Pt, b: Pt, w = 0): Pt[] {
+  if (!(w > 0)) return [a, b];
+  const h = w / 2;
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const [ux, uy] =
+    len > 0 ? [(b[0] - a[0]) / len, (b[1] - a[1]) / len] : [1, 0];
+  // Along the segment (u) and across it (n), each h long.
+  const [tx, ty] = [ux * h, uy * h];
+  const [nx, ny] = [-uy * h, ux * h];
+  return [
+    [a[0] - tx + nx, a[1] - ty + ny],
+    [b[0] + tx + nx, b[1] + ty + ny],
+    [b[0] + tx - nx, b[1] + ty - ny],
+    [a[0] - tx - nx, a[1] - ty - ny],
+  ];
+}
+
 /** Whether a label's box (a convex polygon) covers an obstacle. */
 export function covers(poly: Pt[], o: Obstacle): boolean {
   switch (o.kind) {
     case "segment":
-      return convexOverlap(poly, [o.a, o.b]);
+      return convexOverlap(poly, segmentInk(o.a, o.b, o.w));
     case "box":
       return convexOverlap(poly, o.poly);
     case "area":
@@ -228,29 +253,36 @@ export function covers(poly: Pt[], o: Obstacle): boolean {
   }
 }
 
-/** The obstacles a closed or open outline stands for: its segments, and
- *  for a closed one the area inside. */
+/**
+ * The obstacles an outline's ink stands for: its segments, as wide as its
+ * stroke `width`, and the area inside when it is closed and `filled`. A
+ * closed outline that is not filled is only its band. `filled` is false for
+ * a label's own mark, which it may sit inside.
+ */
 export function outlineObstacles(
   points: Pt[],
   closed: boolean,
   owner: unknown,
-  filled: boolean
+  filled: boolean,
+  width?: number
 ): Obstacle[] {
   const out: Obstacle[] = [];
   const n = points.length;
+  const w = width !== undefined && width > 0 ? { w: width } : {};
   for (let i = 0; i + 1 < n; i++)
-    out.push({ kind: "segment", a: points[i], b: points[i + 1], owner });
+    out.push({ kind: "segment", a: points[i], b: points[i + 1], ...w, owner });
   if (closed && n > 2) {
-    out.push({ kind: "segment", a: points[n - 1], b: points[0], owner });
+    out.push({ kind: "segment", a: points[n - 1], b: points[0], ...w, owner });
     if (filled) out.push({ kind: "area", ring: points, owner });
   }
-  if (n === 1) out.push({ kind: "segment", a: points[0], b: points[0], owner });
+  if (n === 1)
+    out.push({ kind: "segment", a: points[0], b: points[0], ...w, owner });
   return out;
 }
 
 const obstacleAabb = (o: Obstacle): Aabb =>
   o.kind === "segment"
-    ? aabbOf([o.a, o.b])
+    ? aabbOf(segmentInk(o.a, o.b, o.w))
     : aabbOf(o.kind === "area" ? o.ring : o.poly);
 
 /**

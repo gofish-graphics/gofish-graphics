@@ -238,7 +238,7 @@ best first (`strategies.ts`):
   have no spot where the outline is steeper than about 75°.
 - `start` and `end` put a level label just past the first or last point of
   an open path, on the side the path heads.
-- `interior` takes the spots inside a closed outline where the label's box
+- `interior` takes the spots inside a filled closed outline where the label's box
   (with 2 px padding) can grow largest: the room at a point is the scale at
   which the box centered there first touches the outline, its smallest
   weighted L∞ distance to an edge. A coarse grid finds the best cells and
@@ -246,7 +246,9 @@ best first (`strategies.ts`):
   are candidates.
 
 A strategy that needs geometry the target lacks is an error that names it
-(`Place.interior needs a closed outline; connect has an open one`).
+(`Place.interior needs a filled region; connect has an open one`). A
+polygon with fill `"none"` has a closed outline but no filled region, so
+`interior` is an error on it too.
 
 `labelPlace` (`placeStep.ts`) is a private elaboration target like
 `overlap`: the solver never sees it, and `applyConstraints` runs it after the
@@ -259,8 +261,10 @@ object) are taken in data order; each takes its first candidate that stays
 inside the area the layer was given (`[0, size]` on each axis, so labels stay
 off the axes around the plot) and whose box, grown by 1 px, covers no
 obstacle. The obstacles sit in a uniform grid (`collide.ts`): the labeled
-marks of the layer (closed outlines as filled areas, open ones as segments),
-the label's own mark as its outline only (so a label may sit inside its
+marks of the layer, as the ink each draws (the inside of a filled closed
+outline, and the band its stroke `width` draws along every outline, open or
+closed, so an unfilled closed outline is only its band), the label's own
+mark as its outline's band only (so a label may sit inside its
 region, and a label `"on"` a path may cover it), the labels placed so far
 (by this step, or by the solve for a position string), and the call's
 `avoiding` nodes, read through fresh refs (`nodeRefs.ts`, shared with
@@ -297,7 +301,8 @@ or a literal string), not some approximation of it. The color math itself lives
 in `autoLabelColorForFill` (`autoLabelColor.ts`), and it runs on the color a
 renderer paints: the fill clipped to the sRGB gamut and rounded to 8 bits per
 channel. Whether the label is inside is read when it is drawn, from where it
-landed: its center is inside one of its target's closed outlines. So a
+landed: its center is inside one of its target's filled closed outlines.
+Inside an unfilled one the page shows through, so it counts as outside. So a
 `"center"` label on a C-shaped polygon, whose box center falls in the C's
 opening, is colored for the page, and a `Place.interior()` label for the
 fill. Inside the shape, the fill's LUV

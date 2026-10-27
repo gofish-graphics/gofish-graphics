@@ -688,10 +688,17 @@ helper, which falls back to the box when the node does not answer.
 - `enclosingCircle` (`enclosingCircle(g)`): a circle around the shape. The
   fallback is the circle through the box corners.
 - `outline` (`outlines(g, tolerance, direction)`): the shape's outline as
-  polylines that stray at most `tolerance` pixels from it. Each is `closed` (a
-  filled region whose boundary is the polyline) or open (a path with a start,
-  an end and a direction of travel), and may name `parts`, arc-length ranges
-  for the mark's own pieces. The fallback is the box as a closed rect whose
+  polylines that stray at most `tolerance` pixels from it. Each states three
+  facts. `closed` is its topology: the path loops back, or it is open, with
+  a start, an end and a direction of travel. `filled` is its paint: the
+  inside of a closed loop is drawn. An open outline is never filled, and a
+  mark is filled unless its fill is `"none"` or `"transparent"`
+  (`outlinePaint`). `width` is its stroke: the width of the band drawn along
+  it, on an open or a closed outline, and absent when no stroke is drawn.
+  The ink is the inside when filled, plus the band. An outline may also name
+  `parts`, arc-length ranges for the mark's own pieces. A region with holes
+  (several loops under a fill rule) is not an outline yet (#1201). The
+  fallback is the box as a closed, filled rect whose
   parts are its edges, `x-min`, `x-max`, `y-min` and `y-max`, named in the
   node's own axis order (so on a continuous y, `y-max` is the top edge).
   Every outline, a node's own and the fallback alike, is in the frame of the
@@ -699,8 +706,7 @@ helper, which falls back to the box when the node does not answer.
   the parent's axis order for a parent's view of a child (`orientView`
   reflects the outlines with the box). `direction` only names the box's
   edges. Beside its samples, an outline may give its shape exactly: an
-  `ellipse` (`cx`, `cy`, `rx`, `ry`) or a `box` on a closed outline, and the
-  stroke `width` on an open one that is drawn as a stroke. Moving or
+  `ellipse` (`cx`, `cy`, `rx`, `ry`) or a `box` on a closed outline. Moving or
   reflecting an outline moves its exact forms with it. `placedOutlines(p,
 tolerance, direction)` reads a placed node's outlines in its parent's
   frame, moved so the geometry's box sits where `p.dims` puts it. Labels and
@@ -709,16 +715,20 @@ tolerance, direction)` reads a placed node's outlines in its parent's
 - A node definition may pass a `geometry` function next to `lower`. `ellipse`
   answers with the circle of its larger radius and its sampled outline,
   which gives the ellipse exactly, and `polygon` with the smallest circle
-  through its ring and the ring itself. A `line` connector's outline is the
-  open path it draws, one per run, with its stroke width, a `ribbon`'s is its
-  closed band, and an `arrow`'s is its body, with its stroke width. A rotated
-  `text` answers with its turned glyph box, and a `region` with its cell's
-  outline when it has one. Paths that a node keeps in its axis order are
+  through its ring and the ring itself. A `rect` answers with its box as
+  the fallback reads it, painted as it is drawn. A `line` connector's
+  outline is the open path it draws, one per run, a `ribbon`'s is its closed
+  band, and an `arrow`'s is its body. A rotated `text` answers with its
+  turned glyph box, read as filled, and a `region` with its cell's outline
+  when it has one. Each mark reads `filled` and `width` from its own
+  `fill`, `stroke` and `strokeWidth`; a node with no paint of its own (a
+  layer, a `blank`) is read as filling its box. Paths that a node keeps in its axis order are
   turned into pixels (`orderToPixel`).
 - `enclose` reads its members through `outline` (`enclose/members.ts`),
   taking the exact forms where an outline gives them: an ellipse is a disc,
-  a box a box, an open outline its pieces as wide as its stroke, and any
-  other closed outline its bounding box for now (#1207; see
+  a box a box, an open outline or an unfilled closed one its pieces as wide
+  as its stroke, and any other filled closed outline its bounding box for
+  now (#1207; see
   [Enclose](/internals/frontend/enclose)).
 - A node with children and no `geometry` function answers `enclosingCircle`
   lazily. It takes the smallest circle around its children's circles, each

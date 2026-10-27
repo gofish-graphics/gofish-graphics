@@ -24,7 +24,7 @@ import {
 } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import { MARK_CHANNELS } from "../markChannels.generated";
-import { boxOfDims, ellipseOutline } from "../geometry";
+import { boxOfDims, ellipseOutline, outlinePaint } from "../geometry";
 import { around } from "../../families/place";
 import type { DisplayList } from "gofish-ir";
 import {
@@ -291,7 +291,16 @@ export const Ellipse = ({
         return {
           box,
           enclosingCircle: () => ({ cx, cy, r: Math.max(rx, ry) }),
-          outline: (tolerance) => [ellipseOutline(cx, cy, rx, ry, tolerance)],
+          outline: (tolerance) => [
+            ellipseOutline(
+              cx,
+              cy,
+              rx,
+              ry,
+              tolerance,
+              outlinePaint({ fill, stroke, strokeWidth })
+            ),
+          ],
         };
       },
     },
