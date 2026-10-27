@@ -71,6 +71,7 @@ from . import color as Color
 from . import coord as Coord
 from . import curve as Curve
 from . import overlap as Overlap
+from . import place as Place
 from . import shape as Shape
 from . import tile as Tile
 
@@ -139,6 +140,7 @@ __all__ = [
     "Coord",
     "Curve",
     "Overlap",
+    "Place",
     "Shape",
     "Tile",
 ]

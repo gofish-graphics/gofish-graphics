@@ -9,7 +9,7 @@ import pytest
 import gofish
 
 from ._ir import ir
-from gofish import Bin, Calendar, Coord, Curve, Overlap, Tile, field, line, ribbon, scatter, chart, circle
+from gofish import Bin, Calendar, Coord, Curve, Overlap, Place, Tile, field, line, ribbon, scatter, chart, circle, select_all
 
 FAMILIES = {
     "Color": ("color", ["palette", "gradient"]),
@@ -29,6 +29,7 @@ FAMILIES = {
         ],
     ),
     "Overlap": ("overlap", ["separate", "noise", "sina", "jitter"]),
+    "Place": ("place", ["around", "along", "start", "end", "interior"]),
     "Tile": ("tile", ["squarify", "slice", "dice", "binary", "slice_dice"]),
     "Bin": ("bin", ["step", "thresholds", "hex", "voronoi"]),
     "Calendar": (
@@ -111,7 +112,7 @@ def test_curves_are_calls_on_the_wire():
 def test_strategy_modules_are_generated():
     # gofish/<family>.py for the strategy families and Coord is written by
     # scripts/generate.ts from the gofish-ir STRATEGIES and COORDS tables.
-    for module_name in ("tile", "overlap", "curve", "bin", "calendar", "coord"):
+    for module_name in ("tile", "overlap", "curve", "bin", "calendar", "place", "coord"):
         module = importlib.import_module(f"gofish.{module_name}")
         with open(module.__file__) as f:
             assert f.readline().startswith("# GENERATED")
@@ -211,6 +212,8 @@ BARE = [
     (Overlap, "jitter"),
     (Calendar, "month"),
     (Calendar, "week"),
+    (Place, "around"),
+    (Place, "interior"),
 ]
 
 
@@ -227,7 +230,7 @@ def test_bare_kind_is_its_call(family, name):
 def test_every_kind_without_a_required_option_is_bare():
     from gofish._strategy import StrategyKind
 
-    for family in (Tile, Overlap, Curve, Calendar):
+    for family in (Tile, Overlap, Curve, Calendar, Place):
         for name in family.__all__:
             assert isinstance(getattr(family, name), StrategyKind), name
     # A kind with a required option is a function only.
@@ -259,3 +262,53 @@ def test_bare_kind_errors_name_its_options():
         Curve.arc.bend
     with pytest.raises(TypeError, match=r"Curve\.arc: .*direction=\.\.\."):
         Curve.arc(bend="auto")
+
+
+def test_place_at_a_label_crosses_as_its_plain_object():
+    spec = ir(
+        line(stroke_width=2).label(
+            "s",
+            position=Place.along(at=0.6, side=["above", "below"], orient="sloped"),
+            halo={"color": "#fafafa", "width": 2},
+            background={"fill": "#eee", "padding": [3, 2]},
+            font_weight=600,
+        )
+    )["label"][0]
+    assert spec == {
+        "accessor": "s",
+        "position": {
+            "kind": "along",
+            "at": 0.6,
+            "side": ["above", "below"],
+            "orient": "sloped",
+        },
+        "halo": {"color": "#fafafa", "width": 2},
+        "background": {"fill": "#eee", "padding": [3, 2]},
+        "fontWeight": 600,
+    }
+    # A bare kind is its call; a position string is as it was.
+    assert ir(circle(r=3).label("c", position=Place.end))["label"][0][
+        "position"
+    ] == {"kind": "end"}
+    assert ir(circle(r=3).label("c", position="center"))["label"][0][
+        "position"
+    ] == "center"
+
+
+def test_label_avoiding_is_a_node_selection():
+    doc = (
+        chart([{"c": "a", "x": 1, "y": 2}])
+        .flow(scatter(by="c", x="x", y="y"))
+        .mark(circle(r=4).label("c", avoiding=select_all("trend")))
+        .to_ir()
+    )
+    assert doc["root"]["mark"]["label"][0]["avoiding"] == {
+        "type": "select",
+        "layer": "trend",
+        "mode": "all",
+    }
+
+
+def test_label_halo_rejects_an_unknown_key():
+    with pytest.raises(TypeError, match="halo"):
+        circle(r=3).label("c", halo={"radius": 2})

@@ -43,6 +43,7 @@ _OPTION_TYPES: Dict[str, Any] = {
     "Bin": ("tagged", "kind", {"step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)}), "hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),
     "Calendar": ("tagged", "kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)})}),
     "Shape": ("tagged", "kind", {"box": ("object", {"kind": ("kind", None), "rx": ("rx", None), "ry": ("ry", None)}), "oval": ("object", {"kind": ("kind", None)}), "blob": ("object", {"kind": ("kind", None), "convexity": ("convexity", None), "holes": ("holes", None), "roundness": ("roundness", None), "neck": ("neck", None), "avoiding": ("avoiding", None), "clearance": ("clearance", None)})}),
+    "Place": ("tagged", "kind", {"around": ("object", {"kind": ("kind", None), "directions": ("directions", None), "side": ("side", None), "offset": ("offset", None)}), "along": ("object", {"kind": ("kind", None), "at": ("at", None), "side": ("side", None), "orient": ("orient", None), "offset": ("offset", None)}), "start": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "end": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "interior": ("object", {"kind": ("kind", None)})}),
 }
 
 
@@ -1005,11 +1006,14 @@ def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optiona
             opts[_k] = _v
     return opts
 
-def _label_opts(*, position: Optional[str] = None, font_size: Optional[float] = None, color: Optional[str] = None, offset: Optional[float] = None, rotate: Optional[float] = None, font_family: Optional[str] = None, font_weight: Optional[float | str] = None, font_style: Optional[str] = None) -> Dict[str, Any]:
+def _label_opts(*, position: Optional[str | dict] = None, avoiding: Optional[Any] = None, halo: Optional[dict] = None, background: Optional[dict] = None, font_size: Optional[float] = None, color: Optional[str] = None, offset: Optional[float] = None, rotate: Optional[float] = None, font_family: Optional[str] = None, font_weight: Optional[float | str] = None, font_style: Optional[str] = None) -> Dict[str, Any]:
     """Options of one .label(accessor, **options) call.
 
     Args:
-        position: Label position, e.g. "center", "outset-top", "inset-bottom-start".
+        position: Where the label goes: a position string, one spot by the mark's box ("center", "outset", "outset-top", "inset-bottom-start", ...), or a Place strategy, which reads the mark's outline and tries spots in order (Place.around(), Place.along({at}), Place.start(), Place.end(), Place.interior()). The labels of one .label() call that a Place strategy places take, in data order, their first spot that covers no labeled mark, no label already placed and no node in `avoiding`; a label with no free spot is hidden. Omitted, by the mark's kind of geometry: Place.around() for a dot, Place.end() for a line or an arrow, Place.interior() for a band or a polygon, and "outset" for anything else. In a polar or other curved coordinate space a Place strategy is an error, and the default is "outset".
+        avoiding: Nodes a Place label keeps off, beside the labeled marks and the other labels: a list of nodes or refs, or a `selectAll(name)` selection. A position string ignores it.
+        halo: An outline drawn behind the glyphs, so a line under the label does not run through the text. An empty object draws the default halo.
+        background: A filled box drawn behind the text. An empty object draws the default box. A Place label counts the box as part of the label when it looks for a free spot.
         font_size: Font size in pixels.
         color: Label color. Omitted, it is chosen to contrast with the mark.
         offset: Offset from the shape's edge in pixels.
@@ -1020,7 +1024,10 @@ def _label_opts(*, position: Optional[str] = None, font_size: Optional[float] = 
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
-        ("position", position),
+        ("position", _to_wire(("ref", "Place"), position, "position")),
+        ("avoiding", avoiding),
+        ("halo", _to_wire(("object", {"color": ("color", None), "width": ("width", None)}), halo, "halo")),
+        ("background", _to_wire(("object", {"fill": ("fill", None), "padding": ("padding", None)}), background, "background")),
         ("fontSize", font_size),
         ("color", color),
         ("offset", offset),
