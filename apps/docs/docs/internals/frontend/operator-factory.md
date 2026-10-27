@@ -394,7 +394,10 @@ leaf` (the leaf's own subdata — usually the rows array `split` handed it)
   serializes via its own `.toJSON()` (the `FieldExprWire` shape) into
   `tag.label = {accessor: {type: "field", name, ops?}, ...options}`;
   a function accessor warns and is dropped from the emitted IR (functions
-  aren't serializable). `.translate()`'s wrapper has no tag of its own by
+  aren't serializable). The options are read through `withKindValues`, so a
+  bare `Place` kind (`position: Place.end`) is stored as its value; the
+  emitter keeps only the `LABEL_OPTIONS` keys (`wireLabels` in `toJSON.ts`).
+  `.translate()`'s wrapper has no tag of its own by
   default (the wrapped function is new), so `translateOperator` copies the
   base operator's wire tag (`wireOf`) onto the wrapper and stamps
   `tag.translate` — without that copy, a translated operator would silently

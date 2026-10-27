@@ -592,7 +592,7 @@ console.log("# errors");
       .resolve()) as GoFishNode;
     await node.toDisplayList({ w: 100, h: 100 });
   });
-  ok("an unknown strategy is an error", bad?.includes("is not a position") ?? false, bad);
+  ok("an unknown strategy is an error", bad?.includes("Make one with the Place family") ?? false, bad);
 }
 
 console.log("# a ribbon's label goes inside its band");

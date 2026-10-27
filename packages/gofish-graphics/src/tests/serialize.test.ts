@@ -47,6 +47,9 @@ const {
   literal,
   Serialize,
   Overlap,
+  Place,
+  group,
+  blank,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -972,6 +975,153 @@ async function main() {
         mark2.label?.[0]?.fontWeight === 700 &&
         mark2.label?.[0]?.fontStyle === "italic"
     );
+  }
+
+  // -------------------------------------------------------------------------
+  // Label placement: a Place strategy, avoiding, halo and background.
+  // -------------------------------------------------------------------------
+  console.log("\n# Place, avoiding, halo and background round-trip");
+  {
+    const paint = async (b: any) =>
+      JSON.stringify(await b.toDisplayList({ w: 300, h: 200 }), (k, v) =>
+        k === "id" ? undefined : v
+      );
+    const dots = [
+      { c: "a", x: 1, y: 1 },
+      { c: "b", x: 2, y: 3 },
+      { c: "c", x: 3, y: 2 },
+    ];
+    const series = [
+      { s: "p", x: 0, y: 1 },
+      { s: "p", x: 1, y: 2 },
+      { s: "p", x: 2, y: 1.5 },
+      { s: "q", x: 0, y: 3 },
+      { s: "q", x: 1, y: 2.5 },
+      { s: "q", x: 2, y: 3.5 },
+    ];
+    const lines = (position: unknown) =>
+      chart(series)
+        .flow(group({ by: "s" }), scatter({ by: "x", x: "x", y: "y" }))
+        .mark(line({ stroke: "s" }).label("s", { position }));
+    const cases: [string, any, unknown][] = [
+      [
+        "Place.around({...})",
+        chart(dots)
+          .flow(scatter({ by: "c", x: "x", y: "y" }))
+          .mark(
+            circle({ r: 4 }).label("c", {
+              position: Place.around({
+                directions: ["top-right", "bottom-left"],
+                side: ["outset", "inset"],
+                offset: 2,
+              }),
+            })
+          ),
+        {
+          kind: "around",
+          directions: ["top-right", "bottom-left"],
+          side: ["outset", "inset"],
+          offset: 2,
+        },
+      ],
+      [
+        "Place.along({...})",
+        lines(Place.along({ at: 0.6, side: "above", orient: "sloped" })),
+        { kind: "along", at: 0.6, side: "above", orient: "sloped" },
+      ],
+      ["Place.start({ offset })", lines(Place.start({ offset: 6 })), { kind: "start", offset: 6 }],
+      ["Place.end used bare", lines(Place.end), { kind: "end" }],
+      [
+        "Place.interior()",
+        chart(series)
+          .flow(
+            spread({ by: "x", dir: "x", spacing: 40 }),
+            stack({ by: "s", dir: "y" })
+          )
+          .mark(ribbon({ h: "y", fill: "s" }).label("s", { position: Place.interior() })),
+        { kind: "interior" },
+      ],
+    ];
+    for (const [name, built, wire] of cases) {
+      const doc = await built.toJSON();
+      validateDoc(doc, `a label at ${name}`);
+      const position = JSON.stringify(doc).match(
+        /"position":(\{[^}]*\})/
+      )?.[1];
+      check(
+        `${name} is written as its plain object`,
+        position === JSON.stringify(wire),
+        position
+      );
+      const rebuilt = Serialize.buildIR(JSON.parse(JSON.stringify(doc)));
+      check(
+        `${name} round-trips`,
+        JSON.stringify(await rebuilt.toJSON()) === JSON.stringify(doc)
+      );
+      const original = await paint(built);
+      check(
+        `a rebuilt label at ${name} draws what the original draws`,
+        original === (await paint(rebuilt)) && original.includes('"text"'),
+        original.slice(0, 200)
+      );
+    }
+
+    // avoiding: selectAll(name), with a halo and a background.
+    const avoidingChart = () =>
+      chart([
+        { x: 0, y: 2 },
+        { x: 4, y: 2 },
+      ])
+        .flow(scatter({ by: "x", x: "x", y: "y" }))
+        .mark(blank().name("ends"))
+        .layer(chart(selectAll("ends")).mark(line({ stroke: "gray" }).name("trend")))
+        .layer(
+          chart(dots)
+            .flow(scatter({ by: "c", x: "x", y: "y" }))
+            .mark(
+              circle({ r: 4 }).label("c", {
+                avoiding: selectAll("trend"),
+                halo: { color: "#fafafa", width: 2 },
+                background: { fill: "#eee", padding: [3, 2] },
+                notAnOption: true,
+              })
+            )
+        );
+    const doc = await avoidingChart().toJSON();
+    validateDoc(doc, "a label avoiding a layer");
+    const spec = JSON.stringify(doc).match(/"label":\[(\{.*?\}\})\]/)?.[1];
+    check(
+      "avoiding, halo and background are written; an unknown key is dropped",
+      spec ===
+        JSON.stringify({
+          accessor: "c",
+          avoiding: { type: "select", layer: "trend", mode: "all" },
+          halo: { color: "#fafafa", width: 2 },
+          background: { fill: "#eee", padding: [3, 2] },
+        }),
+      spec
+    );
+    const rebuilt = Serialize.buildIR(JSON.parse(JSON.stringify(doc)));
+    check(
+      "avoiding, halo and background round-trip",
+      JSON.stringify(await rebuilt.toJSON()) === JSON.stringify(doc)
+    );
+    const original = await paint(avoidingChart());
+    check(
+      "a rebuilt label avoiding a layer draws what the original draws",
+      original === (await paint(rebuilt)) && original.includes('"text"'),
+      original.slice(0, 200)
+    );
+    const bad = Frontend.validate({
+      ...(doc as object),
+      root: JSON.parse(
+        JSON.stringify((doc as any).root).replace(
+          '"halo":{',
+          '"halo":{"radius":1,'
+        )
+      ),
+    });
+    check("an unknown halo key is a validation error", !bad.valid);
   }
 
   // -------------------------------------------------------------------------

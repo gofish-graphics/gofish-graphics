@@ -278,7 +278,13 @@ definition (`labelPosition`), by its kind of geometry: `ellipse` gives
 `ribbon` band and `polygon` give `Place.interior()`, and anything else
 `"outset"`. Inside a coordinate space that is not linear (a polar `coord`),
 outlines are not on the screen yet, so a default falls back to `"outset"` and
-a strategy written out is an error.
+a strategy written out is an error that cites #1201. Before that, a strategy
+is checked against the `Place` family with `checkStrategy` (an unknown kind,
+an undeclared param or a value out of bounds throws the validator's own
+message). The family's kinds and params are declared once in `STRATEGIES`
+(`descriptors.ts`), which also gives the wire form, the Python `Place`
+module, and the docs; a label's `avoiding`, `halo` and `background` are
+`LABEL_OPTIONS` fields (see [Frontend IR](/internals/frontend/serialization)).
 
 ## Auto-color
 

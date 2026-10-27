@@ -20,6 +20,7 @@ import type { Place } from "../../families/place";
 import { wrapPreservingIdentity, wrapRing } from "../elaborationUtils";
 import { getValue, type MaybeValue } from "../data";
 import { resolveColorChannel } from "../../color";
+import { Frontend } from "gofish-ir";
 import {
   orientSide,
   wrapperDirection,
@@ -118,8 +119,6 @@ const autoLabelColor =
 const isPlace = (p: unknown): p is Place =>
   p !== null && typeof p === "object" && "kind" in (p as object);
 
-const PLACE_KINDS = new Set(["around", "along", "start", "end", "interior"]);
-
 /** The coordinate space a node is drawn in when it is not linear (a polar
  *  `coord`), or undefined. */
 function warpedSpace(node: GoFishAST): string | undefined {
@@ -152,13 +151,8 @@ function positionOf(
   target: GoFishNode
 ): LabelPosition | Place {
   const given = kindValue(spec.position);
-  if (isPlace(given) && !PLACE_KINDS.has(given.kind))
-    throw new Error(
-      `[gofish] .label({ position }): ${JSON.stringify(given)} is not a ` +
-        `position: use a position string ("outset", "center", "inset-top", ...) ` +
-        `or a Place strategy (Place.around(), Place.along(), Place.start(), ` +
-        `Place.end(), Place.interior()).`
-    );
+  if (isPlace(given))
+    Frontend.checkStrategy("Place", given, ".label({ position })");
   const space = warpedSpace(target);
   if (given !== undefined) {
     if (isPlace(given) && space !== undefined)

@@ -98,6 +98,26 @@ function wireOpts(
 }
 
 /**
+ * A `.label()` chain as the wire carries it: each call's `accessor`, and of
+ * its options only the keys `Frontend.LABEL_OPTIONS` declares, as
+ * {@link wireOpts} keeps a construct's, with the nodes a label avoids
+ * written as their references.
+ */
+function wireLabels(
+  label: NonNullable<SerializeTag["label"]>
+): Frontend.LabelSpecIR[] {
+  return label.map(({ accessor, ...opts }) => {
+    const out: AnyObject = { accessor };
+    for (const [key, value] of Object.entries(opts)) {
+      const field = Frontend.LABEL_OPTIONS[key];
+      if (field !== undefined && typeof value !== "function")
+        out[key] = Frontend.mapHeldNodes(field.type, value, nodesToIR);
+    }
+    return out as Frontend.LabelSpecIR;
+  });
+}
+
+/**
  * Nodes named inside an option (a blob's `avoiding`), written as their IR
  * (`Frontend.NodeSelectionIR`), at any depth: a ref becomes
  * `{ type: "ref", selection }`, and a `selectAll(name)` becomes
@@ -337,7 +357,7 @@ function operatorToIR(op: Operator<any, any>): Frontend.OperatorIR {
   return {
     type: tag.type,
     ...wireOpts("operator", tag.type, tag.opts),
-    ...(tag.label !== undefined ? { label: tag.label } : {}),
+    ...(tag.label !== undefined ? { label: wireLabels(tag.label) } : {}),
     ...(tag.translate !== undefined ? { translate: tag.translate } : {}),
   } as Frontend.OperatorIR;
 }
@@ -394,7 +414,7 @@ async function markToIR(
   // Python's `to_dict()` shape).
   const chained: AnyObject = {};
   if (tag.name !== undefined) chained.name = tag.name;
-  if (tag.label !== undefined) chained.label = tag.label;
+  if (tag.label !== undefined) chained.label = wireLabels(tag.label);
 
   if (tag.__combinator) {
     const childrenResolved = await flatChildren(tag.children);

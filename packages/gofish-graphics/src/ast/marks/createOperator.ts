@@ -450,7 +450,9 @@ function labelIRField(
   if (typeof accessor === "string") {
     return {
       accessor,
-      ...(options && typeof options === "object" ? options : {}),
+      ...(options && typeof options === "object"
+        ? withKindValues(options)
+        : {}),
     };
   }
   if (
@@ -462,7 +464,9 @@ function labelIRField(
     const wire = accessor instanceof FieldExpr ? accessor.toJSON() : accessor;
     return {
       accessor: wire,
-      ...(options && typeof options === "object" ? options : {}),
+      ...(options && typeof options === "object"
+        ? withKindValues(options)
+        : {}),
     };
   }
   if (
