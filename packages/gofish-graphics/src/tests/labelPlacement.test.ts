@@ -601,6 +601,18 @@ console.log("# unfilled regions");
     chartMsg === msg,
     chartMsg
   );
+  const defaultMsg = await errorOf(async () => {
+    const node = (await chart([{ n: "a", ring }], { axes: false })
+      .flow(group({ by: "n" }))
+      .mark(polygon({ points: "ring", fill: "none", stroke: "black" }).label("n"))
+      .resolve()) as GoFishNode;
+    await node.toDisplayList({ w: 100, h: 100 });
+  });
+  ok(
+    "an unfilled polygon's default label goes around it instead of throwing",
+    defaultMsg === undefined,
+    defaultMsg
+  );
 }
 
 console.log("# halo and background");

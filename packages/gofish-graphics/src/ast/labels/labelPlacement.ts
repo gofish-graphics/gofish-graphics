@@ -20,8 +20,9 @@ export interface LabelOptions {
    *  the mark's outline and tries spots in order (`Place.around()`,
    *  `Place.along({ at: 0.6 })`, `Place.end()`, `Place.interior()`).
    *  Default: by the mark's kind of geometry, `Place.around()` for a dot,
-   *  `Place.end()` for a line or an arrow, `Place.interior()` for a band or
-   *  a polygon, and `"outset"` for anything else. */
+   *  `Place.end()` for a line or an arrow, `Place.interior()` for a filled
+   *  band or polygon (`Place.around()` for an unfilled polygon), and
+   *  `"outset"` for anything else. */
   position?: LabelPosition | Place;
   /** Nodes a `Place` label keeps off, beside the labeled marks and the
    *  other labels: a list of nodes or refs, or one `selectAll(name)`. */
