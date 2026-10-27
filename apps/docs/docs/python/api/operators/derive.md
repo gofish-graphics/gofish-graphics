@@ -57,7 +57,7 @@ Each column of the returned rows is typed like chart data:
 - Any other column has no type. A `derive` that rewrites a date to `"Mar"`
   makes the column plain text.
 - A `schema` entry overrides these for its column and converts the values
-  as a chart's schema does: an ISO 8601 string in a `Schema.time()` column
+  as a chart's schema does: an ISO 8601 string in a `Unit.time()` column
   becomes an instant.
 
 Fitting reads the values, not what they mean: a `derive` that turns a time

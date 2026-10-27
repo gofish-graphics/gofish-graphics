@@ -250,7 +250,7 @@ type CONTINUOUS_TYPE = {
   kind: "continuous";
   dataInterval: Interval; // signed data extent about the local origin
   origin: Origin; // where that origin sits
-  measure?: UnitRecord; // { unit?, calendar?, titles }
+  measure?: UnitRecord; // { unit?, zone?, titles }
   mirrored?: true;
   cells?: readonly Cell[]; // every region placed along the axis is a cell
 };
@@ -1397,7 +1397,7 @@ nices** (its domains map into a fixed coordinate range).
 
 A domain nices **to the ticks of the axis drawn over it** (`AxisTicks`): a tick
 count (10) on a numeric axis, rounded with `d3.nice`; on a **time** space
-(`calendar` set, see the column types below) the calendar partition of the
+(`zone` set, see the column types below) the calendar partition of the
 axis's inner row, rounded outward to its cells (`niceToCells` in
 `calendar.ts`), so both ends of the axis are ticks. Both read the domain and the
 axis options only, never pixels.
@@ -1575,7 +1575,7 @@ three things:
 // underlyingSpace.ts
 type UnitRecord = {
   unit?: UnitVar; // a declared unit or an unknown, a term of the render's union-find
-  calendar?: HasCalendar; // over instants: the calendar they read on
+  zone?: string; // over instants: the zone of the calendar they read on
   titles: string[]; // the quantities on the axis: they title it
 };
 export type CONTINUOUS_TYPE = { kind: "continuous"; dataInterval: Interval; origin: Origin; measure?: UnitRecord; ... };
@@ -1596,15 +1596,19 @@ concrete units on one axis are a type error. The concrete units are:
 
 - a column's unit, a `Unit(u)` definition or the name `u` alone (`HasUnit`,
   see [column types](#column-types-the-chart-schema));
-- `"instant"`, which `Schema.time()` writes as the `HasUnit` of every time
-  column, so a start and an end time share an axis; the time zone stays in
-  the calendar, a display parameter;
+- `"instant"`, the unit `Unit.time({ zone })` declares for every time
+  column, so a start and an end time share an axis. The zone is a parameter
+  of the unit (`HasUnit.zone`), not part of its name, so it does not split
+  the unit: the record keeps it beside the unit (`UnitRecord.zone`), and
+  `joinZones` requires one zone per axis;
 - `"count"`, for `.count()` and `.distinct()`;
-- `"duration"`, for a difference of two instants, such as a size read from
-  a time column (`differenceUnits`, which `magnitude` applies; it keys on
-  the calendar, and drops it). It is the only difference with a unit of its
-  own: a difference of two amounts in any other unit is in that unit, so
-  USD − USD is USD and °C − °C is °C;
+- `"duration"` (`Unit.duration`), for a difference of two instants, such
+  as a size read from a time column. A unit names its own difference unit
+  (`HasUnit.difference`): the instant names the duration, and
+  `differenceUnits`, which `magnitude` applies, reads that property and
+  drops the zone. A unit that names none is its own difference, so USD − USD
+  is USD and °C − °C is °C. Only the engine's units name one today; it is
+  the mechanism a °C unit with a Δ°C difference will use (#1142);
 - `"<base> share by <by>"`, for `.normalize()` (`shareQuantity`), so a share
   axis never silently unions with its base's own axis.
 
@@ -1654,9 +1658,10 @@ the parts, not the unit class they joined, so a `start` point beside a
 stacked width is checked only for the width; a pinned part is not summed,
 since the stack adds only its width. Summing a declared unit without
 `CanAdd` throws an error that names the column and says to declare
-`Unit(name).summable()`; for a time (a quantity on a calendar) it says to
-subtract a reference first (`date - start` gives a duration, which adds
-up). An unknown unit passes, as everywhere in gradual typing. The check
+`Unit(name).summable()`; for a unit whose difference unit adds up (a
+time), it says to subtract a reference first (`date - start` gives a
+duration, which adds up). That message reads the unit's `difference`, not
+a calendar. An unknown unit passes, as everywhere in gradual typing. The check
 reads the column's type, not the rows, so a group of one row is checked
 like any other: whether a chart type-checks never depends on how many rows
 a group holds. A bar of one date or one temperature is the missing zero
@@ -1673,7 +1678,7 @@ the charts to be built inside the figure's walk scope (TODO in
 A size is never read on a calendar: `magnitude` takes its value's
 `differenceUnits`, so a size read from a time column (`h:
 field("day").mean()`) is a duration, not a bar on a time axis from 1970,
-and its `summands` drop the time, since a duration adds up. A sum of a
+and its `summands` become durations, which add up. A sum of a
 time column as a size still throws first, at the sum.
 
 A quantity whose unit is declared is that unit, a concrete term, and nothing
@@ -1761,7 +1766,7 @@ and the difference: a USD position moves by USD (whether or not its column
 is `.summable()`), a °C position by °C, and a time position by a
 duration, or by a plain number, which is bound to one. Two instants clash
 (`"instant"` against `"duration"`), since a time does not move a time.
-The result takes the point's unit and calendar, titled by both sides. An ordinal axis has titles and no unit, so it takes no part in the
+The result takes the point's unit and zone, titled by both sides. An ordinal axis has titles and no unit, so it takes no part in the
 join: a datum position beside a category spread on the same axis, or a
 spread whose targets mix a category spread with bars, unifies only the
 continuous units.
@@ -1942,18 +1947,20 @@ reads only the classes, never the builder words. Eight classes exist:
   (`orderEntries`), and `stackOrigin` reads the stack's direction off that,
   so a row with one part puts it where a full row does. A split order that
   is neither the order nor its reverse is an error.
-- `HasCalendar` (`Schema.time({ zone })`, #1057): the values are instants,
-  read on the calendar of the IANA zone `zone` (UTC by default). It is the
-  one class that changes the data: `applySchema` (now async, because it
+- A time (`Unit.time({ zone })`, #1057) is a `HasUnit` with a `zone`: the
+  values are instants, read on the calendar of the IANA zone `zone` (UTC by
+  default). There is no separate calendar class: the zone is a parameter of
+  the unit, and nothing needs a calendar without a unit. It is the one unit
+  that changes the data: `applySchema` (now async, because it
   loads Temporal; see `calendar.ts`) copies the rows and turns each value
   into epoch milliseconds (`toEpochMs`: an ISO date is the start of that day
   in the zone, a date-time without an offset is wall-clock time in the zone).
-  It is also the one class that is inferred, and only locally: a column
+  It is also the one unit that is inferred, and only locally: a column
   whose first non-null value is a JS `Date` is a UTC time. Strings and
   numbers never are. A pandas, polars or pyarrow datetime column crosses
   from Python as an Arrow timestamp or date column, unchanged, and the
-  widget's decode (`widget-src/arrowDecode.ts`) attaches `HasCalendar` to
-  the rows, as column types. A tz-aware timestamp is an instant: it decodes
+  widget's decode (`widget-src/arrowDecode.ts`) attaches `Unit.time({ zone })`
+  to the rows, as column types. A tz-aware timestamp is an instant: it decodes
   to epoch milliseconds, typed in its own zone. A naive timestamp or a date
   is a wall-clock value: it decodes to an ISO string without an offset,
   typed UTC, so `applySchema` reads it in the zone of a declared `schema`
@@ -1969,13 +1976,14 @@ reads only the classes, never the builder words. Eight classes exist:
   class on its `DatumValueImpl` (`fieldType`, which `inferNumeric` now sets
   for any typed column, with `createOperator` passing the column it resolved
   from the whole input, quantity and type together, `resolveColumn`), and its
-  quantity carries the calendar, so the point space it builds has it in its
-  measure (`measure.calendar`, read with `spaceCalendar`). The one merge
+  quantity carries the unit, zone included, so the point space it builds
+  has the zone in its measure (`measure.zone`, read with `spaceZone`). The one merge
   (`joinUnits`) keeps it through every fold that builds a continuous
   space from parts (the overlay fold, a layer's datum-position domain in
   `compose.ts`, a rect's two ends, the `position` operator's offset), and
-  two parts on different zones are an error. `Schema.time()` also writes
-  the unit `"instant"` (`HasUnit`), so two time columns share an axis. A
+  two parts in different zones are an error (`joinZones`). Every time
+  column is in the unit `"instant"`, whatever its zone, so two time columns
+  share an axis. A
   time space
   is niced to the cells of its axis's inner row (`niceToCells`: the
   smallest run of whole cells that covers the domain, so a domain of one
@@ -1989,18 +1997,19 @@ reads only the classes, never the builder words. Eight classes exist:
   The values a user writes are the `Calendar` strategy family
   (`families/calendar.ts`): each kind is a `CalendarPartition` used bare or
   called with its options (`Calendar.month({ every: 3 })`, #1133).
-- `HasUnit` (`{ unit, symbol?, classes? }`, #994, #955, #1197): the values
+- `HasUnit` (`{ unit, symbol?, classes?, zone?, difference? }`, #994, #955,
+  #1197): the values
   are amounts in the declared unit `unit`. A column's entry declares it with
   a `Unit(u)` definition, which writes the unit's `classes` (`{ CanAdd: {} }`
   after `.summable()`, else `{}`), or with the name `u` alone, which writes
   no `classes`: what the unit can do is unknown. Either writes the symbol
-  `u`. A column
+  `u`. The engine's units are definitions too, with no symbol:
+  `Unit.time({ zone })` (the instant, with its `zone` and its `difference`,
+  a duration) and `Unit.duration`. A column
   without it has an unknown unit, a unit variable (see
-  [measures](#measures-units-are-types)). A column has one unit, and an
-  order's levels must fit its other classes, so a time or a text-level
-  column takes no other unit (`checkNoUnit` and `checkLevelsFit` in
-  `schema.ts`, which only a wire record can break: no entry adds a unit to
-  an order or a time).
+  [measures](#measures-units-are-types)). An order's levels must fit its
+  other classes, so a text-level column takes no unit (`checkLevelsFit` in
+  `schema.ts`, which only a wire record can break).
 - `CanAdd` (`{}`, #1197) is not a column class: it is a class of the unit,
   in `HasUnit.classes`. See [which units add up](#measures-units-are-types).
 - `HasQuantity` (`{ name }`, #955): the values are amounts of the quantity
@@ -2042,7 +2051,7 @@ of `Date`s keeps its inherited type, zone included, and its Dates become
 epoch milliseconds; a string needs a zone to read, so it does not fit. The
 inherited types never reinterpret or check values, so a date rewritten to
 "Mar" is plain text, not an error. Fitting reads values, not meanings: a
-derive that recodes a time to plain numbers (years) keeps `HasCalendar`,
+derive that recodes a time to plain numbers (years) keeps its time unit,
 since any finite number is epoch milliseconds (#1089), and
 `derive(fn, { schema })` is the fix. The result's own types override the
 inherited ones column by column, inference types a column of `Date`s as a

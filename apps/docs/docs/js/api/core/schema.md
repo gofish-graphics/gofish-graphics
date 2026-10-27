@@ -12,11 +12,11 @@ Declares the types of a chart's columns. Pass a record of column types as the
 Schema.ordered(levels); // HasOrder
 Schema.ordered(levels).diverging(); // HasOrder and HasMidpoint
 Schema.ordered(levels).diverging({ midpoint }); // HasOrder and HasMidpoint
-Schema.time(); // HasCalendar and HasUnit (the instant), in UTC
-Schema.time({ zone }); // the same, in the time zone `zone`
-
 Unit(name); // a unit definition
 Unit(name).summable(); // a unit whose amounts add up (CanAdd)
+Unit.time(); // the unit of instants (a time), read in UTC
+Unit.time({ zone }); // the same, read in the time zone `zone`
+Unit.duration; // the unit of a span of time, which adds up
 
 {
   (name, unit);
@@ -48,15 +48,16 @@ chart(ledger, {
 });
 ```
 
-| Entry                     | Class                    | Meaning                                                 |
-| ------------------------- | ------------------------ | ------------------------------------------------------- |
-| `Schema.ordered(levels)`  | `HasOrder`               | The column's values are `levels`, in this order.        |
-| `.diverging()`            | `HasMidpoint`            | The order has a midpoint, a point along it. See below.  |
-| `Schema.time()`           | `HasCalendar`, `HasUnit` | The column's values are instants, read on a calendar.   |
-| `{ unit }`, a `Unit`      | `HasUnit`                | The column's values are amounts in the unit.            |
-| `Unit(name).summable()`   | `CanAdd`                 | The unit's amounts add up. See below.                   |
-| `{ unit }`, a unit's name | `HasUnit`                | The same, with no word on whether the amounts add up.   |
-| `{ name }`                | `HasQuantity`            | The column's values are amounts of the quantity `name`. |
+| Entry                     | Class               | Meaning                                                 |
+| ------------------------- | ------------------- | ------------------------------------------------------- |
+| `Schema.ordered(levels)`  | `HasOrder`          | The column's values are `levels`, in this order.        |
+| `.diverging()`            | `HasMidpoint`       | The order has a midpoint, a point along it. See below.  |
+| `{ unit }`, a `Unit`      | `HasUnit`           | The column's values are amounts in the unit.            |
+| `Unit.time()`             | `HasUnit`           | The column's values are instants, read on a calendar.   |
+| `Unit.duration`           | `HasUnit`, `CanAdd` | The column's values are spans of time.                  |
+| `Unit(name).summable()`   | `CanAdd`            | The unit's amounts add up. See below.                   |
+| `{ unit }`, a unit's name | `HasUnit`           | The same, with no word on whether the amounts add up.   |
+| `{ name }`                | `HasQuantity`       | The column's values are amounts of the quantity `name`. |
 
 ## Parameters
 
@@ -109,7 +110,7 @@ chart(ledger, {
 - The parts must follow the column's order, or its reverse. Reordering them
   some other way is an error.
 
-**`HasCalendar`.**
+**`Unit.time()`.**
 
 - Each value becomes epoch milliseconds (UTC) when the chart applies its
   schema. A value may be an ISO 8601 string, a `Date`, or epoch milliseconds.
@@ -126,8 +127,12 @@ chart(ledger, {
   cells of its first row. See [`Calendar`](/js/api/core/calendar) for the rows.
 - An unknown `zone` is an error. Two time columns on one axis must have the
   same zone.
-- The unit of a time column is an instant, so two time columns (a start and
-  an end) share an axis.
+- Every time column is in one unit, the instant, whatever its zone, so two
+  time columns (a start and an end) share an axis. The zone is a parameter
+  of the unit.
+- A time column is named with a column record, as any column of amounts:
+  `{ name: "Sold", unit: Unit.time() }`.
+- The difference of two instants is in `Unit.duration`, which adds up.
 
 **`HasUnit`.**
 
@@ -160,7 +165,8 @@ chart(ledger, {
   `field(x).normalize()` add up their values. Adding up values in a declared
   unit needs `CanAdd`: without it, it is an error that names the column and
   the unit, and says to declare the unit with `Unit(name).summable()`, or,
-  for a time, to subtract a reference first.
+  for a unit whose differences add up (a time), to subtract a reference
+  first.
 - A time column never has `CanAdd`: two instants do not add up. Its
   difference does (`end - start` is a duration), and a mark with two
   positions (`x: "start", x2: "end"`) adds nothing.
@@ -172,7 +178,8 @@ chart(ledger, {
   (`field(x).mean()`, `.count()`) adds nothing.
 - `.count()`, `.distinct()` and `.normalize()` shares add up.
 - The difference of two amounts is in their unit (USD − USD is USD, °C − °C
-  is °C), except the difference of two times, which is a duration. A size
+  is °C), except the difference of two times, which is a duration
+  (`Unit.duration`). A size
   read from a time column is a duration too, never a time.
 - `CanAdd` is the unit's, not the column's. A unit is its name, so two
   `Unit`s of one name in one chart's schema, or in the columns two charts
@@ -248,10 +255,10 @@ chart(sunflower, {
 ::: gofish example:sunflower-equal-scale hidden
 :::
 
-A column of date strings is a time with `Schema.time()`:
+A column of date strings is a time in `Unit.time()`:
 
 ```ts
-chart(prices, { schema: { date: Schema.time() }, axes: true })
+chart(prices, { schema: { date: Unit.time() }, axes: true })
   .flow(scatter({ by: "date", x: "date", y: "price" }))
   .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
   .render(container, { w: 560, h: 200 });

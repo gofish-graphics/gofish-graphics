@@ -78,12 +78,12 @@ chart(survey, {
   .mark(rect({ w: "count", fill: "response" }));
 ```
 
-The time axis works the same way. A `Schema.time()` column gives a calendar, and the
+The time axis works the same way. A `Unit.time()` column gives a calendar, and the
 axis draws one row per calendar level:
 
 ```ts
 // stories/forwardsyntax/Time.stories.tsx
-chart(prices, { schema: { date: Schema.time() } })
+chart(prices, { schema: { date: Unit.time() } })
   .flow(scatter({ by: "date", x: "date", y: "price" }))
   .mark(line({ stroke: "steelblue", strokeWidth: 2 }));
 ```

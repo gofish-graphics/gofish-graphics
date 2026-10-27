@@ -1216,7 +1216,7 @@ rows_b64)`, which decodes the ref sentinels in the rows, calls the
   column keeps its declared type across a round trip, and nothing guesses a
   type from the values. A Python integer column decodes as `HasInteger`
   and goes back as Int64; a time goes back as a millisecond timestamp in its
-  `HasCalendar` zone; a number column JS authored is Float64, because JS has
+  unit's zone; a number column JS authored is Float64, because JS has
   one number type, so `{x: 2}` reaches Python as the float 2.0. The types
   ride the array, so a split leaf, a `filter`'s result, and a derive's
   result whose values still fit keep them (`copyColumnTypes`, `applySchema`
@@ -1229,9 +1229,9 @@ rows_b64)`, which decodes the ref sentinels in the rows, calls the
   replaces its decoded type, integer included.
 - **Values.** The decode converts each column once by its Arrow type: a
   tz-aware timestamp becomes epoch milliseconds and marks the column as a
-  time (`HasCalendar` in its zone);
+  time (`Unit.time({ zone })` in its zone);
   a naive timestamp or a date is a wall-clock value, so it becomes an ISO
-  string without an offset and is marked `HasCalendar` in UTC, which
+  string without an offset and is marked `Unit.time()` (UTC), which
   `applySchema` reads in the zone the chart declares for the column, as it
   reads the same string from JS data. The decode attaches types and converts
   no time to an instant itself: every reader of decoded rows runs
@@ -1245,8 +1245,8 @@ rows_b64)`, which decodes the ref sentinels in the rows, calls the
   number, and a null stays `null`. No schema names a value inside a list or a
   struct, so a time there decodes to epoch milliseconds (a naive timestamp
   or a date read in UTC, as a chart with no zone reads it), and a list of
-  structs, a list of rows, carries its own column types (`HasCalendar` in the
-  timestamp's zone, or UTC, and `HasInteger`). A float NaN stays NaN: GoFish
+  structs, a list of rows, carries its own column types (`Unit.time({ zone })`
+  in the timestamp's zone, or UTC, and `HasInteger`). A float NaN stays NaN: GoFish
   never reads NaN as missing. Only a pandas DataFrame's NaN crosses as null,
   because pandas defines NaN as the missing value of its float columns and
   pyarrow's `from_pandas` follows that rule. A column whose rows mix types

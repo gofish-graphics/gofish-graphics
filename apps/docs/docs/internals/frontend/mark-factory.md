@@ -127,7 +127,7 @@ an unknown unit.
 result down, since the accessor and what the data carries are loop-invariant
 across split entries. A value read from a column with a type also records
 that type (`DatumValueImpl.fieldType`) and the field it read, so a position
-over a `Schema.time()` column builds a space on that column's calendar (see
+over a `Unit.time()` column builds a space on that column's calendar (see
 [Underlying Space](/internals/core/underlying-space#column-types-the-chart-schema)).
 
 Inference is synchronous. A Python lambda reaches JS as an accessor with a
