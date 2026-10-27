@@ -34,12 +34,16 @@ export const A_StaticLines: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    // The Americas under Equal Earth. `legend: false`: the bird layer colors
+    // The Americas under Equal Earth. The window is the original's framing:
+    // its spec fits the world into 1000 px and clips at x = 400 px, a straight
+    // line that is lon -180 at the equator on the left and passes through lon
+    // -58.7 at lat 84 on the right, so Greenland is cut there as it is in the
+    // original. `legend: false`: the bird layer colors
     // by species, and a 72-entry swatch column would take more of the canvas
     // than the map. The colors still come from the scale; only the chrome is
     // dropped.
     chart(world110m, {
-      coord: Coord.geo("equalEarth", { lon: [-170, -30], lat: [-60, 75] }),
+      coord: Coord.geo("equalEarth", { lon: [-180, -58.7], lat: [-60, 84] }),
       legend: false,
       w: args.w,
       h: args.h,

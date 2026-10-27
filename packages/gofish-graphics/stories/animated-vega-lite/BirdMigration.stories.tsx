@@ -52,7 +52,11 @@ type Args = { w: number; h: number };
 
 /**
  * The Americas under Equal Earth — the basemap every panel shares (panel A
- * spells it out inline in BirdMigrationStatic.stories.tsx).
+ * spells it out inline in BirdMigrationStatic.stories.tsx). The window is the
+ * original's framing: its spec fits the world into 1000 px and clips at
+ * x = 400 px, a straight line that is lon -180 at the equator on the left and
+ * passes through lon -58.7 at lat 84 on the right, so Greenland is cut there
+ * as it is in the original.
  *
  * `legend: false`: the bird layers color by species, and a 72-entry swatch
  * column would take more of the canvas than the map. The colors still come
@@ -60,7 +64,7 @@ type Args = { w: number; h: number };
  */
 const basemap = (options: { padding?: number } = {}) =>
   chart(world110m, {
-    coord: Coord.geo("equalEarth", { lon: [-170, -30], lat: [-60, 75] }),
+    coord: Coord.geo("equalEarth", { lon: [-180, -58.7], lat: [-60, 84] }),
     legend: false,
     ...options,
   }).mark(polygon({ points: "ring", fill: "#f7f7f7", stroke: "#aaa" }));
