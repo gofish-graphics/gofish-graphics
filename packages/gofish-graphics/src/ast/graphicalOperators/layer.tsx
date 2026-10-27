@@ -2,12 +2,7 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import {
-  GoFishNode,
-  placeUnplacedChild,
-  warnLayout,
-  type ToPixel,
-} from "../_node";
+import { GoFishNode, warnLayout, type ToPixel } from "../_node";
 import { fixedOverflowInside, spacingOverflow } from "../layoutWarnings";
 import type { DisplayList } from "gofish-ir";
 import { shadowCheckScaleRoot } from "../solver/shadow";
@@ -757,13 +752,15 @@ export const layer = createNodeOperatorSequential(
           // magnitude. A literal size claims its own pixels: the box is a
           // sized node, so its content's σ is its own, and the parent must
           // not solve against the content as if it were data-scaled room.
-          // The claim keeps the content's split about data 0, at the σ the
-          // box solves: its content widened to its keyed domain and niced,
+          // Its content is widened to its keyed domain and niced, and
           // solved once against the literal size through the registry
-          // (`solveFixed`), whose solution `layout` reuses. So the box's 0
-          // sits where its content's does. Content that maps no domain
+          // (`solveFixed`), whose solution `layout` reuses. The box's 0 is
+          // its start edge, as its parent lays it out whole (#1032): the
+          // scope seats the content past it, so the claim is the content's
+          // at that σ, from the start edge. Content that maps no domain
           // (`mapsDomain`) is laid out in the box, which claims its pixels
-          // from its start edge (#493: fixed-size nodes report their size).
+          // from its start edge too (#493: fixed-size nodes report their
+          // size).
           // A literal size on both axes over one declared unit keeps one
           // data unit the same length on x and y (#582): both scopes take
           // the binding σ (`equalizeFixed`), so both are solved before
@@ -805,9 +802,15 @@ export const layer = createNodeOperatorSequential(
             const solved = scopes.fixedSolve(node, axis);
             if (solved === undefined) return resolved[axis];
             const { claim, solution } = solved;
+            const ascent = claim.ascent.run(solution.sigma);
+            const descent = claim.descent.run(solution.sigma);
+            // Where the content's 0 sits past the box's start edge: data 0
+            // where the scope has one, else past what reaches before it
+            // (`seatChild` in `layout`).
+            const zero = solution.originPx ?? descent;
             return Extent(
-              Monotonic.linear(0, claim.ascent.run(solution.sigma)),
-              Monotonic.linear(0, claim.descent.run(solution.sigma))
+              Monotonic.linear(0, zero + ascent),
+              Monotonic.linear(0, descent - zero)
             );
           };
           // A literal start places the layer that many pixels from its
@@ -1043,6 +1046,29 @@ export const layer = createNodeOperatorSequential(
               : (cp.dims[1].size ?? 0);
             return [bx, by + frame];
           };
+          // Place a child no constraint places (`unplacedOnly`: on the axes
+          // the constraints left it unplaced): its baseline at its seat
+          // (`baselineFor`), or, on an axis where this layer solved a scope
+          // with no data 0 (`boxSeated`), its box at this layer's start
+          // edge. So a node with a size of its own starts at its start edge
+          // on every axis: a frame with a data 0 seats its content there
+          // (`originPx` counts what reaches below data 0), and one without
+          // places the box, as the render root places its box (`placeRoot`
+          // in gofish.tsx). A label hanging before a chart's first bar then
+          // sits inside the chart's box, as one below its bars does (#1032).
+          const seatChild = (
+            cp: (typeof childPlaceables)[number],
+            i: number,
+            unplacedOnly = false
+          ) => {
+            const seat = baselineFor(cp, i);
+            for (const axis of [0, 1] as const) {
+              if (unplacedOnly && cp.dims[axis].min !== undefined) continue;
+              const name = axis === 0 ? "x" : "y";
+              if (layerScales.boxSeated[axis]) cp.place(name, 0, "min");
+              else cp.place(name, seat[axis], "baseline");
+            }
+          };
 
           const childPlaceables: ReturnType<
             (typeof children)[number]["layout"]
@@ -1177,9 +1203,7 @@ export const layer = createNodeOperatorSequential(
               childRegion
             );
             if (!constrainedChildren.has(i)) {
-              const [bx, by] = baselineFor(childPlaceable, i);
-              childPlaceable.place("x", bx, "baseline");
-              childPlaceable.place("y", by, "baseline");
+              seatChild(childPlaceable, i);
             } else {
               // A literal pin of its origin depends on nothing else, so it
               // places the child now: the children laid out after it (a
@@ -1350,14 +1374,14 @@ export const layer = createNodeOperatorSequential(
               apart
             );
 
-            // Place any child the constraints left unplaced at its baseline
-            // origin (`baselineFor`), the same rule as the phase-1 placement in
+            // Place any child the constraints left unplaced at its seat
+            // (`seatChild`), the same rule as the phase-1 placement in
             // `layoutChild`. A layer without constraints needs no step here:
             // phase 1 already placed every child. A drawing clause that reads the
             // constrained positions is laid out after this (see
             // `relateOrder`), not by a re-layout pass here.
             childPlaceables.forEach((cp, i) => {
-              if (cp) placeUnplacedChild(cp, "baseline", baselineFor(cp, i));
+              if (cp) seatChild(cp, i, true);
             });
           }
 

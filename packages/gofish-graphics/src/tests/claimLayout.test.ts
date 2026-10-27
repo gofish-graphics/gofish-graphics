@@ -5,7 +5,17 @@
  * (wired into `pnpm test` as `test:claim-layout`).
  */
 // The library first, so its modules initialize in their usual order.
-import { chart, spread, stack, rect, enclose, selectAll } from "../lib";
+import {
+  chart,
+  spread,
+  stack,
+  rect,
+  enclose,
+  selectAll,
+  text,
+  field,
+  layer as layerOf,
+} from "../lib";
 import { runLayout } from "../ast/gofish";
 import { GoFishNode } from "../ast/_node";
 import { Rect } from "../ast/shapes/rect";
@@ -242,6 +252,47 @@ async function main() {
       "the chart's plot starts 16 px below the rect",
       close(rects[0].y, 0) && close(top, rects[0].y! + 10 + 16),
       rects.map((r) => [r.y, r.h])
+    );
+  }
+
+  console.log(
+    "\n# a layer places a sized chart by its outer box on both axes (#1032)"
+  );
+  {
+    // Labels hanging before the bars on x (a spread, whose scope has no
+    // data 0) and below them on y (data 0) are both inside the chart's
+    // box, and a caption at x 0 / y 132 counts from that box's corner.
+    const data = [
+      { k: "a", v: 1 },
+      { k: "b", v: 2 },
+    ];
+    const cell = async (position: "outset-left" | "outset-bottom") => {
+      const dl = await layerOf([
+        chart(data, { axes: false, w: 100, h: 50 })
+          .flow(spread({ by: "k", dir: "x" }))
+          .mark(rect({ h: "v" }).label(field("v").sum(), { position })),
+        text({ x: 0, y: 132, text: "CAP", fontSize: 12 }),
+      ]).toDisplayList({});
+      const all = items(dl);
+      const rects = all.filter((i) => i.kind === "rect");
+      const labels = all.filter((i) => i.kind === "text" && i.text !== "CAP");
+      const cap = all.find((i) => i.text === "CAP")!;
+      return { rects, labels, cap, height: dl.viewport.h };
+    };
+    const left = await cell("outset-left");
+    const plotLeft = Math.min(...left.rects.map((r) => r.x!));
+    check(
+      "labels left of the bars: the caption starts where the labels do, and the plot past them",
+      close(left.cap.x, Math.min(...left.labels.map((l) => l.x!))) &&
+        plotLeft > left.cap.x! + 1,
+      [left.cap.x, plotLeft]
+    );
+    const bottom = await cell("outset-bottom");
+    const plotBottom = Math.max(...bottom.rects.map((r) => r.y! + r.h!));
+    check(
+      "labels below the bars: the caption's height counts from below the labels",
+      close(bottom.height, 132 + 12, 0.5) && plotBottom < bottom.height - 1,
+      [bottom.height, plotBottom]
     );
   }
 

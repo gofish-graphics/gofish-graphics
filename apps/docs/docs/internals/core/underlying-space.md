@@ -500,7 +500,13 @@ each inherent to what the origin states are:
   its parent places that baseline at the frame's `originPx`; a child with no
   data 0 sits at 0 and has no frame. This is the split between "a constraint
   fixes the baseline" and "the parent sets it". A scope root's frame is its
-  solved scope (`scopeFrame`), whatever its type's origin.
+  solved scope (`scopeFrame`), whatever its type's origin. A scope with no
+  data 0 (a spread of magnitudes) has no frame to seat its content, so the
+  scope places the content's box at its start edge, as the render root
+  places its box (`placeRoot`; `boxSeated` in `solveLayerScales`,
+  `seatChild` in `layer.tsx`). So a sized node starts at its start edge on
+  every axis, whatever reaches before its content's 0 (a label hanging
+  before the first bar, or below the bars' baseline).
 - **Seating in a fold**: a pinned child sits at its own data coordinates; a
   free child sits there too when the fold seats children on their baselines
   (an overlay, a baseline alignment), and is a box from the aligned edge
@@ -1579,8 +1585,10 @@ A **literal** `w`/`h` carries no data, so the node reports its content's type
 upward unchanged, and its keyed domain is shared as the sharing sets say. Its
 claim, though, is its own pixels: the box solves its own σ, so its content's σ
 claim is not room its parent can scale. The node claims the content's claim
-at the σ it solves, which keeps the content's split about data 0 and sums to
-the size (`fixedClaim` in `layer.tsx`). It solves that σ once, through the
+at the σ it solves, which sums to the size, measured from the box's start
+edge (`fixedClaim` in `layer.tsx`): its parent lays it out whole (#1032), and
+the box's 0 is its start edge, where its layout puts it, data 0 sitting
+`originPx` past it. It solves that σ once, through the
 registry (`solveFixed`), and its layout reuses the solution. A claim that is only pixels over
 a type wider than one value maps no domain (`mapsDomain` in `extent.ts`): it
 needs no canvas at the root, and a sized node has nothing to solve from it. A **data-valued** `w`/`h` (a field name, a `field(...)`

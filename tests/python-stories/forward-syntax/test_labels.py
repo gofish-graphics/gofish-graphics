@@ -152,9 +152,11 @@ def story_above_end():
 # The same bars once per position, each captioned with its position, two to a
 # row (a position beside its counterpart) so they can be compared side by side.
 # A row lines its cells up by their outer boxes, labels included, so the caption
-# is layered at a fixed height above the plot rather than spread above the
+# is layered at a fixed height above the chart rather than spread above the
 # cell: labels above the bars then sit under the caption instead of pushing the
-# plot down.
+# plot down. A layer places the chart by its outer box, so the caption starts at
+# its left edge and its height counts from its bottom edge, labels to the left
+# of or below the bars included.
 
 ALL_POSITIONS = [
     "center",
@@ -195,7 +197,8 @@ def story_all_positions():
                         field("count").sum(), position=position, font_size=9
                     )
                 ),
-                # 32 px above the 100 px plot.
+                # 132 px above the bottom of the chart: 32 px above its 100 px
+                # plot when no labels hang below the bars.
                 text(
                     x=0, y=132, text=position, font_size=12, font_family="monospace"
                 ),
