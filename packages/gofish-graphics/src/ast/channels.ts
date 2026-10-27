@@ -15,14 +15,14 @@ import {
   type FieldAccessor,
   type LiteralValue,
 } from "./data";
-import { checkSummable, columnQuantity, type Quantity } from "./measure";
+import { columnQuantity, type Quantity } from "./measure";
 import { Frontend } from "gofish-ir";
 import {
   evalFieldValues,
   getFieldOps,
   isMissing,
   meanOf,
-  sumOf,
+  sumIn,
   type FieldExpr,
 } from "./fieldExpr";
 import { columnType, type ColumnType } from "./schema";
@@ -214,7 +214,7 @@ export const inferEntrySize = <T>(
 
 /**
  * Shared core of {@link inferSize} / {@link inferPos}: they differ only in the
- * aggregation ({@link sumOf} vs {@link meanOf}), which both skip missing
+ * aggregation ({@link sumIn} vs {@link meanOf}), which both skip missing
  * values. An aggregation with no value (the mean of no rows, the sum of only
  * missing values) is no value: the channel is undefined. Resolves a numeric
  * value from a field name, field expression, function accessor, or literal number:
@@ -233,14 +233,13 @@ export const inferEntrySize = <T>(
  * (createOperator resolves it once per channel from the array carrying the
  * column types); when omitted it is resolved locally from `d`.
  *
- * `sums` says the channel's own aggregation adds the rows (a size channel):
- * then, unless an aggregate op already folded them, the column must be one
- * whose amounts add (`checkSummable`, #1197). The check reads the column's
- * type, never the rows, so a group of one row is checked as any other: the
- * channel's operation is a sum whatever the group holds.
+ * `agg` also takes the column's quantity, so a size channel's sum checks that
+ * its amounts add (`sumIn`, #1197). The check reads the column's type, never
+ * the rows, so a group of one row is checked as any other: the channel's
+ * operation is a sum whatever the group holds.
  */
 const inferNumeric =
-  (agg: (values: any[]) => number | undefined, sums: boolean) =>
+  (agg: (values: any[], quantity?: Quantity) => number | undefined) =>
   <T>(
     accessor:
       | string
@@ -257,18 +256,19 @@ const inferNumeric =
     if (typeof accessor === "number") return accessor;
     if (isLiteral(accessor)) return accessor.value as number;
     if (isValue(accessor)) return accessor as MaybeValue<number>;
-    // Expression evaluation is orthogonal to this channel: the pipeline maps
-    // the rows to values, and an aggregate op (`.mean()`, `.count()`, ...)
-    // folds them to a singleton. The channel then applies its default
-    // aggregation exactly as it always did — over a folded singleton, sum and
-    // mean are both the identity, so neither side knows about the other.
-    const {
-      values,
-      quantity: pipelineQuantity,
-      folded: byOp,
-    } = evalFieldValues(accessor, data, column.quantity);
-    if (sums && !byOp) checkSummable(column.quantity, "A size channel");
-    const folded = agg(values as any[]);
+    // The pipeline maps the rows to values, and an aggregate op (`.mean()`,
+    // `.count()`, ...) folds them to a singleton. The rows are folded once:
+    // by the op when the pipeline has one (any other op throws in
+    // `evalFieldValues`), else by the channel's own aggregation.
+    const { values, quantity: pipelineQuantity } = evalFieldValues(
+      accessor,
+      data,
+      column.quantity
+    );
+    const folded =
+      getFieldOps(accessor).length > 0
+        ? (values[0] as number | undefined)
+        : agg(values, column.quantity);
     if (folded === undefined) return undefined;
     return columnValue(
       folded,
@@ -278,13 +278,15 @@ const inferNumeric =
   };
 
 /** Infer a size value (sums the field/function across the data array,
- *  missing values aside; see {@link sumOf}). */
-export const inferSize = inferNumeric(sumOf, true);
+ *  missing values aside; see {@link sumIn}). */
+export const inferSize = inferNumeric((values, quantity) =>
+  sumIn(values, quantity, "A size channel")
+);
 
 /** Infer a position value (averages the field/function across the data
  *  array, missing values aside). Over no rows, or only missing values, it
  *  has no value: undefined (see {@link meanOf}). */
-export const inferPos = inferNumeric(meanOf, false);
+export const inferPos = inferNumeric(meanOf);
 
 /**
  * Shared core of the non-aggregating channels ({@link inferColor} /

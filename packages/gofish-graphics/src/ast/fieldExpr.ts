@@ -27,7 +27,6 @@
 //
 // Only type-only imports from `data.ts` (no runtime import) so `data.ts` can
 // import THIS module's class at runtime without a cycle.
-import sumBy from "lodash/sumBy";
 import type { MaybeValue } from "./data";
 import { checkSummable, COUNT, type Quantity } from "./measure";
 import { withWire, wireOf } from "./wire";
@@ -427,9 +426,7 @@ export const meanOf = (values: readonly unknown[]): number | undefined => {
 
 /** The sum of the values of `values` that are not missing. Over no rows it
  *  is 0, the sum of nothing. Over rows whose values are all missing it is
- *  undefined, as in SQL: their sum is unknown, not 0. So the sum of a
- *  singleton is the singleton, missing or not, which is what lets a channel
- *  sum a value an aggregate op already folded (`.mean()` over no rows). */
+ *  undefined, as in SQL: their sum is unknown, not 0. */
 export const sumOf = (values: readonly unknown[]): number | undefined => {
   const vs = present(values);
   return vs.length === 0 && values.length > 0
@@ -437,14 +434,25 @@ export const sumOf = (values: readonly unknown[]): number | undefined => {
     : vs.reduce((a, b) => a + b, 0);
 };
 
+/** {@link sumOf}, checked: the sum `where` takes of values of quantity
+ *  `quantity`, whose unit must add up (`checkSummable`, #1197). Every
+ *  place that sums values sums them here. */
+export const sumIn = (
+  values: readonly unknown[],
+  quantity: Quantity | undefined,
+  where: string
+): number | undefined => {
+  checkSummable(quantity, where);
+  return sumOf(values);
+};
+
 /**
  * Evaluate a field expression (or bare string/function accessor) against a
  * group's rows: the per-row values, folded to a SINGLETON when the pipeline
  * carries an aggregate op. This is self-contained expression evaluation — it
- * knows nothing about the consuming channel, and the channel needs no
- * knowledge of the pipeline: whatever default aggregation the channel applies
- * afterwards (sum for a size slot, mean for a pos slot) is the identity on a
- * singleton.
+ * knows nothing about the consuming channel. A channel that aggregates (sum
+ * for a size slot, mean for a pos slot) folds the per-row values itself, and
+ * takes a value the op already folded as it is.
  *
  * Also reports the quantity the pipeline itself determines, if any: `count` /
  * `distinct` yield counts — not the source field's units — so they report
@@ -452,9 +460,8 @@ export const sumOf = (values: readonly unknown[]): number | undefined => {
  * reports none, leaving the quantity to the caller (`resolveColumn`): a
  * `sum` or `mean` keeps its source column's quantity and unit.
  *
- * `folded` says whether an aggregate op folded the rows. A `.sum()` adds the
- * rows, so it checks that `column` (the quantity of the column it reads,
- * when the caller knows it) can be summed (`checkSummable`, #1197).
+ * A `.sum()` adds the rows, so it checks that `column` (the quantity of the
+ * column it reads, when the caller knows it) can be summed ({@link sumIn}).
  *
  * Domain ops (`sort`/`reverse`/`bin`) don't belong in a value slot and throw;
  * so does a second aggregate (the fold happens once).
@@ -463,7 +470,7 @@ export function evalFieldValues<T>(
   accessor: string | ((r: T) => unknown) | FieldExprWire | FieldExpr,
   rows: T[],
   column?: Quantity
-): { values: unknown[]; quantity?: Quantity; folded: boolean } {
+): { values: unknown[]; quantity?: Quantity } {
   const key: (r: T) => unknown =
     typeof accessor === "function"
       ? accessor
@@ -485,24 +492,22 @@ export function evalFieldValues<T>(
     }
     agg = op;
   }
-  if (agg === undefined) return { values: rows.map(key), folded: false };
+  if (agg === undefined) return { values: rows.map(key) };
   switch (agg.op) {
     case "count":
-      return { values: [rows.length], quantity: COUNT_QUANTITY, folded: true };
+      return { values: [rows.length], quantity: COUNT_QUANTITY };
     case "distinct":
       return {
         values: [new Set(rows.map(key)).size],
         quantity: COUNT_QUANTITY,
-        folded: true,
       };
     case "mean":
       // No values, no mean: the fold is the singleton of no value
-      // (`meanOf`), which every channel's own aggregation keeps (a sum of
-      // `[undefined]` is undefined), so the channel has no value either.
-      return { values: [meanOf(rows.map(key))], folded: true };
+      // (`meanOf`), which a channel takes as it is, so the channel has no
+      // value either.
+      return { values: [meanOf(rows.map(key))] };
     default: // "sum"
-      checkSummable(column, "field(...).sum()");
-      return { values: [sumOf(rows.map(key))], folded: true };
+      return { values: [sumIn(rows.map(key), column, "field(...).sum()")] };
   }
 }
 
@@ -611,12 +616,11 @@ export function applyEntryNormalize(
   byName?: string
 ): MaybeValue<number>[] {
   const nums = entryValues.map(numericDatum);
-  const total = sumBy(nums);
   const baseQuantity = entryValues
     .map(datumQuantity)
     .find((q) => q !== undefined);
   // The window's total adds the entries.
-  checkSummable(baseQuantity, "field(...).normalize()");
+  const total = sumIn(nums, baseQuantity, "field(...).normalize()")!;
   const quantity = shareQuantity(baseQuantity, byName);
   if (!(total > 0)) {
     if (typeof console !== "undefined" && typeof console.warn === "function") {

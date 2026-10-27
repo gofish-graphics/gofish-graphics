@@ -17,6 +17,7 @@ import {
   type MaybeValue,
 } from "./data";
 import {
+  declaredUnit,
   declaredVar,
   differenceUnit,
   MeasureClash,
@@ -198,14 +199,11 @@ export const magnitude = (
  *  unchanged. */
 export const differenceUnits = (r: UnitRecord): UnitRecord => {
   const { calendar: _, ...rest } = r;
-  if (rest.unit === undefined) return rest;
-  const u = resolveUnit(rest.unit);
-  if (u.kind !== "declared") return rest;
-  const { kind: __, ...unit } = u;
+  const unit = rest.unit && declaredUnit(rest.unit);
+  // A unit that adds is its own difference.
+  if (unit === undefined || unit.CanAdd !== undefined) return rest;
   const diff = differenceUnit(unit);
-  return diff === unit
-    ? rest
-    : { ...rest, unit: declaredVar(r.titles[0] ?? diff.unit, diff) };
+  return { ...rest, unit: declaredVar(r.titles[0] ?? diff.unit, diff) };
 };
 
 /** The absolute `[min, max]` data domain of a PINNED space, or undefined for a

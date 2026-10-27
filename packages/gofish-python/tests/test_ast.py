@@ -1011,12 +1011,12 @@ class TestSchema:
         # messages are JS `checkSummableType`'s.
         with pytest.raises(
             TypeError,
-            match=r"^\.summable: the column has CanAdd but no unit\. ",
+            match=r"^schema: the column has CanAdd but no unit\. ",
         ):
             Schema.quantity("Pay").summable()
         with pytest.raises(
             TypeError,
-            match=r"^\.summable: the column is a time, which cannot be summable",
+            match=r"^schema: the column is a time, which cannot be summable",
         ):
             Schema.time().summable()
 

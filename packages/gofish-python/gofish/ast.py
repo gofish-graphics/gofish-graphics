@@ -2343,12 +2343,14 @@ class ColumnSchema(dict):
 
     Mirrors JS ``ColumnSchema``. Build one with ``Schema.ordered(levels)``;
     each method adds one class. Constructing one checks that an order's
-    levels fit the column's other classes (``_check_levels_fit``).
+    levels fit the column's other classes (``_check_levels_fit``) and
+    that ``CanAdd`` has a unit and no calendar (``_check_summable_type``).
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         _check_levels_fit("schema: the column", self)
+        _check_summable_type("schema: the column", self)
 
     def diverging(self, midpoint: Optional[float] = None) -> "ColumnSchema":
         """Give the column a midpoint (``HasMidpoint``) along its order.
@@ -2421,9 +2423,7 @@ class ColumnSchema(dict):
         instants do not add, though their difference (a duration) does. A
         column without it raises a TypeError, with the messages of JS
         ``checkSummableType`` in schema.ts."""
-        column_type = {**self, "CanAdd": {}}
-        _check_summable_type(".summable: the column", column_type)
-        return ColumnSchema(column_type)
+        return ColumnSchema({**self, "CanAdd": {}})
 
 
 def _check_summable_type(who: str, column_type: Dict[str, Any]) -> None:
@@ -2435,8 +2435,8 @@ def _check_summable_type(who: str, column_type: Dict[str, Any]) -> None:
     if "HasCalendar" in column_type:
         raise TypeError(
             f"{who} is a time, which cannot be summable: two instants do not "
-            "add up. Subtract a reference first (e.g. date - start gives a "
-            "duration, which adds)."
+            "add up; subtract a reference first (e.g. date - start gives a "
+            "duration): differences add up."
         )
     if "HasUnit" not in column_type:
         raise TypeError(

@@ -5,7 +5,7 @@
 import type { StackOrigin } from "./constraints/distribute";
 import { loadTemporal, temporal } from "./calendar";
 import { tagArray } from "./data";
-import { INSTANT } from "./measure";
+import { INSTANT, SUBTRACT_A_REFERENCE } from "./measure";
 
 /**
  * Column types (#984): `chart(data, { schema })` declares, per column, the
@@ -215,11 +215,13 @@ export type ColumnTypes = Record<string, ColumnType>;
  * `HasOrder`, `.unit()` needs no `HasUnit` yet, and `.summable()` needs
  * `HasUnit` and no `HasCalendar`. The constructor checks
  * that an order's levels fit the column's other classes
- * ({@link checkLevelsFit}).
+ * ({@link checkLevelsFit}) and that `CanAdd` has a unit and no calendar
+ * ({@link checkSummableType}), as {@link columnTypeOf} does for a record.
  */
 export class ColumnSchema<C extends ColumnType = ColumnType> {
   constructor(public readonly type: C) {
     checkLevelsFit("schema: the column", type);
+    checkSummableType("schema: the column", type);
   }
 
   /** Give the column a midpoint (`HasMidpoint`) at `midpoint`, in edge
@@ -262,9 +264,7 @@ export class ColumnSchema<C extends ColumnType = ColumnType> {
   summable(
     this: ColumnSchema<C & { HasUnit: HasUnit; HasCalendar?: never }>
   ): ColumnSchema<C & { HasUnit: HasUnit; CanAdd: CanAdd }> {
-    const type: ColumnType = { ...this.type, CanAdd: {} };
-    checkSummableType(".summable: the column", type);
-    return new ColumnSchema(type as C & { HasUnit: HasUnit; CanAdd: CanAdd });
+    return new ColumnSchema({ ...this.type, CanAdd: {} });
   }
 
   toJSON(): C {
@@ -287,7 +287,10 @@ export const Schema = {
     HasCalendar: HasCalendar;
     HasUnit: HasUnit;
   }> {
-    return new ColumnSchema({ HasCalendar: { zone }, HasUnit: INSTANT });
+    return new ColumnSchema({
+      HasCalendar: { zone },
+      HasUnit: { unit: INSTANT.unit },
+    });
   },
   /** A column whose values are amounts in the unit `unit` (`HasUnit`), an
    *  opaque name such as `"USD"` or `"mm"`. Columns in the same unit may
@@ -365,15 +368,15 @@ function checkNoUnit(who: string, type: ColumnType): void {
 
 /** The rules of `CanAdd`: it needs `HasUnit`, because only amounts in a
  *  declared unit add up, and a time (`HasCalendar`) never has it, because
- *  two instants do not add. Python's `ColumnSchema.summable` raises the same
+ *  two instants do not add. Python's `ColumnSchema` raises the same
  *  messages. */
 function checkSummableType(who: string, type: ColumnType): void {
   if (type.CanAdd === undefined) return;
   if (type.HasCalendar !== undefined)
     throw new Error(
       `${who} is a time, which cannot be summable: two instants do not add ` +
-        `up. Subtract a reference first (e.g. date - start gives a duration, ` +
-        `which adds).`
+        `up; ` +
+        SUBTRACT_A_REFERENCE
     );
   if (type.HasUnit === undefined)
     throw new Error(

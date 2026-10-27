@@ -98,19 +98,19 @@ own; `createMark` could grow a `"pos"` channel the same way if a future shape
 needs one.
 
 `inferSize` and `inferPos` are two instantiations of one numeric-inference
-factory, `inferNumeric(agg, sums)` — they differ only in the aggregation
-(`sumOf` vs `meanOf`, `fieldExpr.ts`), and `sums` says the aggregation adds
-the rows, so `inferSize` checks that the column's unit can be summed
-(`checkSummable`, #1197) unless a pipeline op already folded the rows. Both skip a missing value (null or undefined,
+factory, `inferNumeric(agg)` — they differ only in the aggregation
+(`sumIn` vs `meanOf`, `fieldExpr.ts`). `agg` also gets the column's
+quantity, so `inferSize`'s sum checks that the column's unit can be summed
+(`sumIn`, #1197). When a pipeline op already folded the rows, the channel
+takes the op's value and applies no aggregation of its own. Both skip a missing value (null or undefined,
 `isMissing`, the rule `dropNulls` and the schema's classes use; NaN is a
 number). A mean divides by how many values there are, and over none it is
 undefined. A sum over no rows is 0, and over rows whose values are all
 missing it is undefined, as in SQL. An aggregation with no value makes the
 channel undefined, so a position read off a group with no rows has no
 value. A pipeline's fold with no value (`field(x).mean()` over no rows) is
-the singleton `[undefined]`, which the channel's own aggregation keeps (the
-sum of `[undefined]` is undefined), so a size read as a mean of no rows has
-no value either, while a size read as a sum of no rows is 0. A `count`
+the singleton `[undefined]`, which the channel takes as it is, so a size
+read as a mean of no rows has no value either, while a size read as a sum of no rows is 0. A `count`
 counts rows, missing values included. Both take an optional third argument, the accessor's
 resolved column (`ColumnInfo`, from `resolveColumn(data, accessor)`): its
 `Quantity` and its type in the chart's `schema`. A string/`field()` accessor's

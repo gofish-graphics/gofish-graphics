@@ -1600,8 +1600,9 @@ concrete units on one axis are a type error. The concrete units are:
   column, so a start and an end time share an axis; the time zone stays in
   the calendar, a display parameter;
 - `"count"`, for `.count()` and `.distinct()`;
-- `"duration"`, for a difference of two instants (`differenceUnit`; the
-  calendar is dropped too);
+- `"duration"`, for a difference of two instants (`differenceUnit`: the
+  engine's `INSTANT` names `DURATION` as its `difference`; the calendar is
+  dropped too);
 - `"Δ<u>"`, for a difference of two amounts in a declared unit `u` that does
   not add up (`differenceUnit`: °C − °C is `"Δ°C"`, with the symbol `Δ°C`);
 - `"<base> share by <by>"`, for `.normalize()` (`shareQuantity`), so a share
@@ -1615,16 +1616,19 @@ count or a share is a plain number, and a time axis's ticks already read as
 dates.
 
 **Which units add up.** The engine reads a declared unit as a `MeasureUnit`
-(`measure.ts`): the `HasUnit` and `CanAdd` when its amounts add up (#1197).
-A user's unit gets `CanAdd` from its column's `.summable()`
-(`columnQuantity` copies the column type's `CanAdd` onto the unit). The
+(`measure.ts`): the `HasUnit` and `CanAdd` when its amounts add up (#1197),
+and, for a unit that does not add, optionally the unit of its differences
+(`difference`). A user's unit gets `CanAdd` from its column's `.summable()`
+(`columnQuantity` copies the column type's `CanAdd` onto the unit, and
+reads a column type's `"instant"` as the engine's `INSTANT`). The
 engine's own units say it where they are defined: `COUNT`, `DURATION`, a
 share and every `Δ` unit have it, and `INSTANT` does not. Every place that
-adds values checks it with `checkSummable` (or `checkSummableVar`, for a
-fold that holds unit variables): a size channel's sum over its rows
-(`inferNumeric`, unless an aggregate op already folded them), `.sum()` and
-the total of `.normalize()` (`fieldExpr.ts`), a treemap's entries, and a
-stack's free parts (`distributeSpaceFold`; a pinned part adds only its
+adds values sums them with `sumIn` (`fieldExpr.ts`), which checks it with
+`checkSummable`: a size channel's sum over its rows (`inferNumeric`; when
+an aggregate op already folded the rows, the channel takes the op's value
+and sums nothing), `.sum()`, the total of `.normalize()`, and a treemap's
+total. A stack adds unit variables, not values, and checks its free parts
+with `checkSummableVar` (`distributeSpaceFold`; a pinned part adds only its
 width, a difference, which always adds). Summing a declared unit without
 `CanAdd` throws an error that names the column and says to declare
 `.summable()` or to subtract a reference first (`date - start` gives a
@@ -1753,7 +1757,7 @@ literal has no column, so no quantity: its value makes no claim.
 `inferSize`/`inferPos` tag the `value(...)` they emit with it, and a pipeline
 that determines its own quantity (`.count()`) overrides it; `.sum()` and
 `.mean()` keep the column's. The channel aggregators are a sum for size
-and a mean for position (`sumOf` and `meanOf` in `fieldExpr.ts`), and both
+and a mean for position (`sumIn` and `meanOf` in `fieldExpr.ts`), and both
 skip a missing value (null or undefined, `isMissing`, the rule `dropNulls`
 uses). The mean of no values has no value (see
 [Cells](#cells-a-binned-key)); so has the sum of values that are all
@@ -1967,9 +1971,9 @@ reads only the classes, never the builder words. Eight classes exist:
 - `CanAdd` (`{}`, #1197): the column's amounts add up, so a sum of them
   means something. Declared with `.summable()`, which needs `HasUnit` and no
   `HasCalendar` in its `this` type: only amounts in a unit add up, and two
-  instants never do (`checkSummableType` in `schema.ts` checks a wire
-  record the same way, and Python's `.summable()` raises the same
-  messages). See [which units add up](#measures-units-are-types).
+  instants never do (`checkSummableType` in `schema.ts`, which the
+  `ColumnSchema` constructor runs and which checks a wire record the same
+  way; Python's `ColumnSchema` raises the same messages). See [which units add up](#measures-units-are-types).
 - `HasQuantity` (`{ name }`, #955): the values are amounts of the quantity
   `name` (`Schema.quantity(name)`, or `.quantity(name)` after another
   builder), when it is not the column's own name. It titles the axis and
@@ -2438,11 +2442,12 @@ or a text sits at a hexagon's center.
 `inferSize`/`inferPos`'s shared core (`inferNumeric` in `channels.ts`) always
 called a sum or a mean over the raw per-row values; it now instead calls
 `evalFieldValues(accessor, data)` first — running any pipeline ops (an
-aggregate, if the accessor carries one) — and only _then_ applies its own
-default aggregation to whatever that produced. Neither side knows about the
-other: when the pipeline already folded the rows to a singleton, the
-channel's own sum/mean is the identity over that singleton, so
-`rect({ h: field("weight").mean() })` reports the mean, not
+aggregate, if the accessor carries one). The rows are folded once: when the
+pipeline already folded them to a singleton, the channel takes that value
+as it is and applies no aggregation of its own (so a size channel sums
+nothing and checks no `CanAdd`); otherwise it applies its own sum or mean
+to the per-row values. So `rect({ h: field("weight").mean() })` reports the
+mean, not
 `mean-of-a-1-element-array`-nonsense. A bare string or plain function accessor
 carries no ops, so this is a strict superset of the pre-#700 behavior, not a
 new code path for the common case. The color and raw channels, which read
