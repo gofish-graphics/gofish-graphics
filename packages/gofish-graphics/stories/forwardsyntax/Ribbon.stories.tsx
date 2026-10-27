@@ -56,7 +56,7 @@ export const Basic: StoryObj<Args> = {
 };
 
 export const Polar: StoryObj<Args> = {
-  args: { w: 400, h: 400 },
+  args: { w: 500, h: 500 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -68,7 +68,7 @@ export const Polar: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    layer({ coord: clock() }, [
+    layer({ coord: clock(), w: args.w, h: args.h }, [
       chart(seafood)
         .flow(
           scatter({
@@ -83,11 +83,7 @@ export const Polar: StoryObj<Args> = {
       chart(selectAll("bars"))
         .flow(group({ by: "species" }))
         .mark(ribbon({ opacity: 0.8 })),
-    ]).render(container, {
-      w: args.w,
-      h: args.h,
-      axes: true,
-    });
+    ]).render(container, { axes: true });
 
     return container;
   },
