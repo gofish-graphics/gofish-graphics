@@ -37,13 +37,17 @@ import {
   type CONTINUOUS_TYPE,
 } from "../ast/underlyingSpace";
 import { interval } from "../util/interval";
+import { declaredVar, INSTANT } from "../ast/measure";
 
 /** `space` over instants read on the calendar of `zone`: a time column's
  *  measure. */
 const withCalendar = (
   space: CONTINUOUS_TYPE,
   { zone }: { zone: string }
-): CONTINUOUS_TYPE => ({ ...space, measure: { titles: ["t"], zone } });
+): CONTINUOUS_TYPE => ({
+  ...space,
+  measure: { unit: declaredVar("t", { ...INSTANT, zone }), titles: ["t"] },
+});
 
 const {
   chart,

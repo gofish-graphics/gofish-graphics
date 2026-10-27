@@ -250,7 +250,7 @@ type CONTINUOUS_TYPE = {
   kind: "continuous";
   dataInterval: Interval; // signed data extent about the local origin
   origin: Origin; // where that origin sits
-  measure?: UnitRecord; // { unit?, zone?, titles }
+  measure?: UnitRecord; // { unit?, titles, summands? }
   mirrored?: true;
   cells?: readonly Cell[]; // every region placed along the axis is a cell
 };
@@ -1575,8 +1575,8 @@ three things:
 // underlyingSpace.ts
 type UnitRecord = {
   unit?: UnitVar; // a declared unit or an unknown, a term of the render's union-find
-  zone?: string; // over instants: the zone of the calendar they read on
   titles: string[]; // the quantities on the axis: they title it
+  summands?: Quantity[]; // the quantities a fold that adds the space sums
 };
 export type CONTINUOUS_TYPE = { kind: "continuous"; dataInterval: Interval; origin: Origin; measure?: UnitRecord; ... };
 ```
@@ -1599,8 +1599,9 @@ concrete units on one axis are a type error. The concrete units are:
 - `"instant"`, the unit `Unit.time({ zone })` declares for every time
   column, so a start and an end time share an axis. The zone is a parameter
   of the unit (`HasUnit.zone`), not part of its name, so it does not split
-  the unit: the record keeps it beside the unit (`UnitRecord.zone`), and
-  `joinZones` requires one zone per axis;
+  the unit: two instants in different zones unify as one unit, and the
+  one `HasUnit` their class is bound to (`meetUnits` in `unify`) can read
+  only one calendar, so two zones on one shared axis throw;
 - `"count"`, for `.count()` and `.distinct()`;
 - `"duration"` (`Unit.duration`), for a difference of two instants, such
   as a size read from a time column. A unit names its own difference unit
@@ -1742,8 +1743,9 @@ of the measure-keyed domains design (#1114):
 | unknown x, unknown y   | x and y unify                         | forget: two units          |
 
 "Forget" records nothing and raises nothing, and the result keeps `a`'s
-record. A shared join unions the titles in order. Either way the calendars
-must agree (two time zones on one axis throw). Two errors remain, both
+record. A shared join unions the titles in order, and its calendars must
+agree (two time zones on one shared axis throw, where `unify` meets the two
+instants). Two errors remain, both
 `MeasureClash`: two declared units on one shared axis (a stack's parts in two
 units among them), and one unknown bound to two declared units (a column
 that meets `"count"` on one shared axis and `"mm"` on another).
@@ -1977,11 +1979,12 @@ reads only the classes, never the builder words. Eight classes exist:
   for any typed column, with `createOperator` passing the column it resolved
   from the whole input, quantity and type together, `resolveColumn`), and its
   quantity carries the unit, zone included, so the point space it builds
-  has the zone in its measure (`measure.zone`, read with `spaceZone`). The one merge
+  has the zone in the unit of its measure (read with `spaceZone`). The one merge
   (`joinUnits`) keeps it through every fold that builds a continuous
   space from parts (the overlay fold, a layer's datum-position domain in
   `compose.ts`, a rect's two ends, the `position` operator's offset), and
-  two parts in different zones are an error (`joinZones`). Every time
+  two parts in different zones are an error (`unify`, which meets the
+  two units). Every time
   column is in the unit `"instant"`, whatever its zone, so two time columns
   share an axis. A
   time space

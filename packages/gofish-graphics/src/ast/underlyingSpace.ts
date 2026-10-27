@@ -90,14 +90,14 @@ export type CONTINUOUS_TYPE = {
   dataInterval: Interval;
   /** Where the local origin sits. See {@link Origin}. */
   origin: Origin;
-  /** What this axis measures: its unit, its titles, and, over instants, the
-   *  zone of their calendar ({@link UnitRecord}). Spaces join records with
-   *  {@link joinUnits}; read one with {@link spaceUnit}. Undefined = "no
-   *  claim" (permissive). The zone is set when the data along this axis are
-   *  instants (from a column in `Unit.time({ zone })`): epoch milliseconds
-   *  read on the calendar of the zone. An axis over it is a time axis: its
-   *  ticks are calendar cells (axes/timeRows.ts), and its domain is niced
-   *  outward to the cells of its inner row ({@link niceContinuous}). */
+  /** What this axis measures: its unit and its titles ({@link UnitRecord}).
+   *  Spaces join records with {@link joinUnits}; read one with
+   *  {@link spaceUnit}. Undefined = "no claim" (permissive). When the data
+   *  along this axis are instants (from a column in `Unit.time({ zone })`),
+   *  its unit has a zone ({@link spaceZone}): epoch milliseconds read on the
+   *  calendar of the zone. An axis over it is a time axis: its ticks are
+   *  calendar cells (axes/timeRows.ts), and its domain is niced outward to
+   *  the cells of its inner row ({@link niceContinuous}). */
   measure?: UnitRecord;
   coordinateTransform?: CoordinateTransform;
   /** True when both sides of the 0 hold nonnegative amounts measured away from
@@ -206,7 +206,7 @@ export const magnitude = (
 export const differenceUnits = (r: UnitRecord): UnitRecord => {
   const difference = r.unit && rootUnit(r.unit)?.difference;
   if (difference === undefined) return r;
-  const { zone: _, summands, ...rest } = r;
+  const { summands, ...rest } = r;
   return {
     ...rest,
     unit: declaredVar(r.titles[0] ?? difference.unit, difference),
@@ -580,11 +580,6 @@ export const isPositioningSpace = (space: UnderlyingSpace): boolean =>
  *    a declared unit, or an unknown that unifies with anything. Two
  *    declared units that differ on one shared axis are a type error
  *    ({@link joinUnits}).
- *  - `zone`: over instants, the zone of the calendar they read on (the
- *    `zone` of their unit, `Unit.time({ zone })`). It is kept beside the
- *    unit, not in it, because the unit is a term of the union-find, which
- *    joins units by name: two instants in different zones are one unit,
- *    and their zones meet by {@link joinZones}.
  *  - `titles`: the quantities that title the axis, in the order they met:
  *    each column's declared quantity (`HasQuantity`), else its name.
  *  - `summands`: the quantities of the values in a declared unit, which a
@@ -595,14 +590,13 @@ export const isPositioningSpace = (space: UnderlyingSpace): boolean =>
  */
 export type UnitRecord = {
   unit?: UnitVar;
-  zone?: string;
   titles: string[];
   summands?: Quantity[];
 };
 
 /** The units of values of quantity `q`: its unit (`unitOf`: its declared
- *  unit, else the variable of its name in the type walk's union-find), its
- *  unit's zone, its name as the title, and `q` itself as a summand when its
+ *  unit, zone and all, else the variable of its name in the type walk's
+ *  union-find), its name as the title, and `q` itself as a summand when its
  *  unit is declared. */
 export const quantityUnits = (
   q: Quantity | undefined
@@ -611,7 +605,6 @@ export const quantityUnits = (
     ? undefined
     : {
         unit: unitOf(q),
-        ...(q.unit?.zone !== undefined ? { zone: q.unit.zone } : {}),
         titles: [q.name],
         ...(q.unit !== undefined ? { summands: [q] } : {}),
       };
@@ -641,8 +634,9 @@ export const valueUnits = (v: MaybeValue<unknown>): UnitRecord | undefined =>
  * A binding holds for the whole render, so an unknown bound to two
  * different declared units is a {@link MeasureClash} too. "Forget" records
  * nothing and raises nothing: the result keeps `a`'s record. A shared join
- * unions the titles and the summands. Either way the zones must agree: one
- * axis reads one calendar ({@link joinZones}).
+ * unions the titles and the summands. Units of one name meet in `unify`
+ * (measure.ts), which also requires two instants to share a zone: one axis
+ * reads one calendar.
  */
 export const joinUnits = (
   a: UnitRecord | undefined,
@@ -652,7 +646,6 @@ export const joinUnits = (
 ): UnitRecord | undefined => {
   if (a === undefined) return b;
   if (b === undefined) return a;
-  const zone = joinZones(a.zone, b.zone);
   if (shared && a.unit && b.unit) unify(a.unit, b.unit, site);
   const unit = shared ? (a.unit ?? b.unit) : a.unit;
   const titles = shared ? unionInOrder(a.titles, b.titles) : a.titles;
@@ -662,16 +655,10 @@ export const joinUnits = (
         ? unionInOrder(a.summands, b.summands)
         : b.summands
       : a.summands;
-  if (
-    unit === a.unit &&
-    titles === a.titles &&
-    zone === a.zone &&
-    summands === a.summands
-  )
+  if (unit === a.unit && titles === a.titles && summands === a.summands)
     return a;
   return {
     ...(unit !== undefined ? { unit } : {}),
-    ...(zone !== undefined ? { zone } : {}),
     titles,
     ...(summands !== undefined ? { summands } : {}),
   };
@@ -688,31 +675,11 @@ export const joinAllUnits = (
     undefined
   );
 
-/** The zone of one axis's calendar: the one its time parts share. A part
- *  with no zone (a literal among times) makes no claim. Two parts in
- *  different zones are an error: one axis reads one calendar. */
-const joinZones = (
-  a: string | undefined,
-  b: string | undefined
-): string | undefined => {
-  if (a === undefined) return b;
-  if (b === undefined) return a;
-  if (a !== b) {
-    throw new Error(
-      `Two time columns on one axis are read in different time zones, ` +
-        `"${a}" and "${b}". One axis reads one calendar: give both columns ` +
-        `the same zone in Unit.time({ zone }).`
-    );
-  }
-  return a;
-};
-
 /** A space's {@link UnitRecord} as {@link spaceUnit} reads it: the unit
  *  replaced by its representative in the render's union-find, and no
  *  `summands`, which only a fold that adds reads. */
 export type SpaceUnits = {
   unit?: UnitTerm;
-  zone?: string;
   titles: string[];
 };
 
@@ -734,11 +701,13 @@ export const spaceUnit = (
 };
 
 /** The zone of the calendar of a space's axis, when its data are
- *  instants. */
+ *  instants: the zone of its unit. */
 export const spaceZone = (
   space: UnderlyingSpace | undefined
-): string | undefined =>
-  space && isCONTINUOUS(space) ? space.measure?.zone : undefined;
+): string | undefined => {
+  const unit = space && isCONTINUOUS(space) ? space.measure?.unit : undefined;
+  return unit && rootUnit(unit)?.zone;
+};
 
 /**
  * THE title a space gives its axis, in the SI style `Quantity (unit)`: its

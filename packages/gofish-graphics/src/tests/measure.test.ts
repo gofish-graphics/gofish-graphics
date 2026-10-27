@@ -51,7 +51,11 @@ import {
   withUnits,
   type Quantity,
 } from "../ast/measure";
-import { differenceUnits, magnitude } from "../ast/underlyingSpace";
+import {
+  differenceUnits,
+  magnitude,
+  spaceZone,
+} from "../ast/underlyingSpace";
 import { declared, fresh, textsOf, unknown } from "./testHelpers";
 import { distributeSpaceFold } from "../ast/constraints/distribute";
 import { interval } from "../util/interval";
@@ -436,13 +440,13 @@ console.log("# measure: a position offset joins in difference units");
   ok(
     "(c) a time position with a numeric offset: the offset is a duration",
     (spaceUnit(c1)!.unit as any).unit === "instant" &&
-      c1.measure?.zone === "UTC"
+      spaceZone(c1) === "UTC"
   );
   const c2 = yOf(positionNode({ y: by(5, lag) }, [leaf("pinned", date)]));
   ok(
     "(c) a time position with a duration offset stays on its calendar",
     (spaceUnit(c2)!.unit as any).unit === "instant" &&
-      c2.measure?.zone === "UTC"
+      spaceZone(c2) === "UTC"
   );
   const twoTimes = await errorOf(() =>
     positionNode({ y: by(5, date) }, [
@@ -454,8 +458,35 @@ console.log("# measure: a position offset joins in difference units");
   ok(
     "a duration hung at a time is a time on its calendar",
     (spaceUnit(hung)!.unit as any).unit === "instant" &&
-      hung.measure?.zone === "UTC" &&
+      spaceZone(hung) === "UTC" &&
       JSON.stringify(hung.measure?.titles) === JSON.stringify(["date", "lag"])
+  );
+  // Two instants in different zones are one unit, so they unify, and the
+  // unit they meet to can read only one calendar.
+  let zones: string | undefined;
+  try {
+    withUnits(new Units(), () =>
+      joinUnits(
+        quantityUnits(date),
+        quantityUnits({
+          name: "at",
+          column: "at",
+          unit: { ...INSTANT, zone: "America/New_York" },
+        }),
+        true,
+        { axis: 1, where: "in a test" }
+      )
+    );
+  } catch (e) {
+    zones = (e as Error).message;
+  }
+  ok(
+    "two time zones on one shared axis throw",
+    zones ===
+      `Two time columns on one axis are read in different time zones, ` +
+        `"UTC" and "America/New_York". One axis reads one calendar: give ` +
+        `both columns the same zone in Unit.time({ zone }).`,
+    zones
   );
 }
 
@@ -1353,7 +1384,7 @@ console.log("# measure: CanAdd");
     "an instant's difference units are its difference unit, a duration, on no calendar",
     timeDiff.unit.kind === "declared" &&
       timeDiff.unit.unit === DURATION.unit &&
-      timeDiff.r.zone === undefined &&
+      timeDiff.unit.zone === undefined &&
       timeDiff.r.summands?.length === 1 &&
       timeDiff.r.summands[0].unit?.unit === DURATION.unit
   );
@@ -1408,7 +1439,7 @@ console.log("# measure: CanAdd");
     "a magnitude read from a time is a duration on no calendar",
     meanTime.unit.kind === "declared" &&
       meanTime.unit.unit === DURATION.unit &&
-      meanTime.space.measure?.zone === undefined
+      spaceZone(meanTime.space) === undefined
   );
   const meanBar = await errorOf(async () => {
     const dl = await chart(

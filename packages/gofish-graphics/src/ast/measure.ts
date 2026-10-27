@@ -467,7 +467,8 @@ export const currentUnits = (): Units => {
 /** Bind two unit variables to one class, for the whole render. Two classes
  *  bound to different declared units are a {@link MeasureClash}: two
  *  declared units on one shared axis, or one unknown bound to two declared
- *  units. */
+ *  units. Two bound to one unit meet ({@link meetUnits}), so two instants in
+ *  different zones throw. */
 export function unify(a: UnitVar, b: UnitVar, site: MeasureSite): UnitVar {
   const ra = findRoot(a);
   const rb = findRoot(b);
@@ -479,17 +480,33 @@ export function unify(a: UnitVar, b: UnitVar, site: MeasureSite): UnitVar {
       site
     );
   }
+  const unit = ra.unit && rb.unit ? meetUnits(ra.unit, rb.unit) : undefined;
   rb.parent = ra;
-  // One unit declared twice keeps a symbol either side gives it, so the
-  // title does not depend on which side met first.
-  ra.unit =
-    ra.unit && rb.unit && ra.unit.symbol === undefined
-      ? rb.unit
-      : (ra.unit ?? rb.unit);
+  ra.unit = unit ?? ra.unit ?? rb.unit;
   ra.names = unionInOrder(ra.names, rb.names);
   ra.columns = unionInOrder(ra.columns, rb.columns);
   return ra;
 }
+
+/**
+ * Two declared occurrences of one unit (one name) that meet in a class of
+ * the union-find: the one `HasUnit` the class is bound to. It keeps a
+ * symbol either side gives, so the title does not depend on which side met
+ * first, and the zone either side reads its instants on. Two instants in
+ * different zones are an error: the class lies on one axis, and an axis
+ * reads one calendar.
+ */
+const meetUnits = (a: HasUnit, b: HasUnit): HasUnit => {
+  const unit = a.symbol === undefined ? b : a;
+  const zone = a.zone ?? b.zone;
+  if (a.zone !== undefined && b.zone !== undefined && a.zone !== b.zone)
+    throw new Error(
+      `Two time columns on one axis are read in different time zones, ` +
+        `"${a.zone}" and "${b.zone}". One axis reads one calendar: give both ` +
+        `columns the same zone in Unit.time({ zone }).`
+    );
+  return unit.zone === zone ? unit : { ...unit, zone };
+};
 
 /** Where two measures meet: the axis (0 or 1) when the clash is on an axis,
  *  and a plain phrase for the composition, read as "(... )" in the message,

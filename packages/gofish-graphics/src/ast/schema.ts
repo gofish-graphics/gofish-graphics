@@ -107,8 +107,8 @@ export type HasInteger = Record<string, never>;
  *    start (a day starts at local midnight) and how labels read. It is a
  *    parameter of the unit, not part of its name: two time columns in
  *    different zones are both in the instant, and one axis over both is an
- *    error, since an axis reads one calendar (`joinZones` in
- *    underlyingSpace.ts).
+ *    error, since an axis reads one calendar (`unify` in measure.ts, where
+ *    the two meet).
  *  - `difference`: the unit of a difference of two amounts in this one, when
  *    it is not this unit itself. A difference of two instants is a duration
  *    (`Unit.duration`), which adds up although instants do not. Absent, a
