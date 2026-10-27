@@ -1941,8 +1941,9 @@ def derive(fn: Callable, *, schema: Optional[dict] = None) -> DeriveOperator:
             rows (a list of dicts, ``None``, or a dataframe). It returns a
             list even for one row: ``lambda d: [d[0]]``, not ``d[0]``.
         schema: Column types of the result, keyed by column name, as in
-            ``chart(data, schema={...})``: ``Schema.ordered(levels)`` or
-            ``Schema.time(zone=...)``. Without it, a result column keeps the
+            ``chart(data, schema={...})``: a ``Unit``, a unit's name, a
+            column record ``{"name": ..., "unit": ...}``,
+            ``Schema.ordered(levels)`` or ``Schema.time(zone=...)``. Without it, a result column keeps the
             type it had in the input while its values still fit it, a
             datetime column is a time, and any other column has no type. A
             ``schema`` entry overrides those and converts the column's
@@ -1951,7 +1952,7 @@ def derive(fn: Callable, *, schema: Optional[dict] = None) -> DeriveOperator:
     Returns:
         DeriveOperator object
     """
-    return DeriveOperator(fn, schema)
+    return DeriveOperator(fn, None if schema is None else _schema_wire(schema))
 
 
 def group(*, by: Union[str, "FieldAccessor"], **options: Any) -> Operator:
@@ -2393,38 +2394,6 @@ class ColumnSchema(dict):
             )
         return ColumnSchema({**self, "HasMidpoint": {"at": at}})
 
-    def quantity(self, name: str) -> "ColumnSchema":
-        """Say what the column's values are amounts of (``HasQuantity``): the
-        quantity ``name``, which titles the axis in place of the column's
-        name."""
-        return ColumnSchema(
-            {**self, "HasQuantity": {"name": _require_str(name, "name")}}
-        )
-
-    def unit(self, unit: str) -> "ColumnSchema":
-        """Say what unit the column's values are in (``HasUnit``): the unit
-        ``unit``, whose symbol follows the quantity in the axis title,
-        "Pay (USD)". A column has one unit, so ``.unit`` on a column that has
-        one (``Schema.time()`` writes the instant) raises a TypeError, with
-        the message of JS ``checkNoUnit`` in schema.ts."""
-        if "HasUnit" in self:
-            raise TypeError(
-                ".unit: the column already has the unit "
-                f"{json.dumps(self['HasUnit']['unit'], ensure_ascii=False)}."
-            )
-        name = _require_str(unit, "unit")
-        return ColumnSchema({**self, "HasUnit": {"unit": name, "symbol": name}})
-
-    def summable(self) -> "ColumnSchema":
-        """Say that the column's amounts can be added (``CanAdd``): a sum of
-        them means something, so a ``size`` channel, ``stack``, treemap
-        ``size`` and ``.sum()`` may sum the column. Only amounts in a declared
-        unit add up, so it needs ``HasUnit``, and a time has none: two
-        instants do not add, though their difference (a duration) does. A
-        column without it raises a TypeError, with the messages of JS
-        ``checkSummableType`` in schema.ts."""
-        return ColumnSchema({**self, "CanAdd": {}})
-
 
 def _check_summable_type(who: str, column_type: Dict[str, Any]) -> None:
     """Raise when ``CanAdd`` is on a column with no unit or on a time, with
@@ -2441,7 +2410,7 @@ def _check_summable_type(who: str, column_type: Dict[str, Any]) -> None:
     if "HasUnit" not in column_type:
         raise TypeError(
             f"{who} has CanAdd but no unit. Only amounts in a unit add up; "
-            "declare the unit first: Schema.unit(unit).summable()."
+            "declare its unit with Unit(unit).summable()."
         )
 
 
@@ -2546,27 +2515,124 @@ class Schema:
             {"HasCalendar": {"zone": zone}, "HasUnit": dict(_INSTANT)}
         )
 
-    @staticmethod
-    def unit(unit: str) -> ColumnSchema:
-        """A column whose values are amounts in the unit ``unit``
-        (``HasUnit``), an opaque name such as ``"USD"`` or ``"mm"``.
 
-        Columns in the same unit may share an axis; two different units on
-        one axis are an error. A column with no unit declared may share an
-        axis with any other. An axis title shows the unit after its
-        quantity: "Pay (USD)". Its amounts cannot be summed until
-        ``.summable()`` says they can (``CanAdd``).
-        """
-        return ColumnSchema({}).unit(unit)
+class Unit:
+    """A unit definition, ``Unit("USD")``: a unit's name and the classes
+    every column in the unit has. Mirrors JS ``Unit``::
 
-    @staticmethod
-    def quantity(name: str) -> ColumnSchema:
-        """A column whose values are amounts of the quantity ``name``
-        (``HasQuantity``), e.g. ``"Pay"``. The quantity titles the axis in
-        place of the column's name, and columns of one quantity share one
-        unit.
-        """
-        return ColumnSchema({}).quantity(name)
+        USD = Unit("USD").summable()
+        chart(ledger, schema={"balance": {"name": "Balance", "unit": USD}})
+
+    It is immutable: ``.summable()`` returns a new definition. Two units are
+    the same when their names are equal. Declare a unit once and use it for
+    every column in it.
+    """
+
+    __slots__ = ("name", "_classes")
+
+    name: str
+    _classes: Dict[str, Any]
+
+    def __init__(self, name: str, _classes: Optional[Dict[str, Any]] = None):
+        object.__setattr__(self, "name", _require_str(name, "Unit: the name"))
+        object.__setattr__(self, "_classes", dict(_classes or {}))
+
+    def __setattr__(self, key: str, value: Any) -> None:
+        raise AttributeError("Unit is immutable; chain its methods instead.")
+
+    def summable(self) -> "Unit":
+        """Say that amounts in the unit can be added (``CanAdd``): a sum of
+        them means something (money, counts, lengths), so a ``size``
+        channel, ``stack``, treemap ``size`` and ``.sum()`` may sum a column
+        in the unit. Amounts that do not add up (temperatures, prices,
+        rates) are in a unit without it."""
+        return Unit(self.name, {**self._classes, "CanAdd": {}})
+
+    def __eq__(self, other: object) -> bool:
+        return (
+            isinstance(other, Unit)
+            and other.name == self.name
+            and other._classes == self._classes
+        )
+
+    def __hash__(self) -> int:
+        return hash((self.name, tuple(sorted(self._classes))))
+
+    def __repr__(self) -> str:
+        chain = ".summable()" if "CanAdd" in self._classes else ""
+        return f"Unit({self.name!r}){chain}"
+
+
+# The class names of a column type, the keys of its wire record: JS
+# ``ColumnType`` in schema.ts.
+_CLASS_NAMES = (
+    "HasOrder",
+    "HasMidpoint",
+    "HasCalendar",
+    "HasUnit",
+    "CanAdd",
+    "HasQuantity",
+    "HasDomain",
+    "HasInteger",
+)
+
+# The keys a column record takes: JS ``ColumnRecord`` in schema.ts.
+_RECORD_KEYS = ("name", "unit")
+
+
+def _unit_type(unit: Union[Unit, str]) -> Dict[str, Any]:
+    """The classes of a column in ``unit``: a definition's name and
+    classes, or a name alone, whose classes are unknown (``nameOnly``). JS
+    ``unitType`` in schema.ts."""
+    if isinstance(unit, str):
+        return {"HasUnit": {"unit": unit, "symbol": unit, "nameOnly": True}}
+    return {"HasUnit": {"unit": unit.name, "symbol": unit.name}, **unit._classes}
+
+
+def _column_type_of(column: str, entry: Any) -> Dict[str, Any]:
+    """The record of classes a schema entry stands for, the wire form: a
+    builder's record, a unit's, a column record's, or a wire record as is.
+    JS ``classesOf`` in schema.ts, with the same messages."""
+    who = f'schema: column "{column}"'
+    if isinstance(entry, (Unit, str)):
+        return _unit_type(entry)
+    if not isinstance(entry, dict):
+        raise TypeError(
+            f"{who} has the entry {entry!r}. A column's entry is a Unit, a "
+            "unit's name, a column record { name, unit }, or a Schema builder."
+        )
+    if all(k in _CLASS_NAMES for k in entry):
+        return dict(entry)
+    unknown = [k for k in entry if k not in _RECORD_KEYS]
+    if unknown:
+        keys = ", ".join(json.dumps(k, ensure_ascii=False) for k in unknown)
+        raise TypeError(
+            f"{who} has the unknown {'key' if len(unknown) == 1 else 'keys'} "
+            f'{keys}. A column record takes name and unit: {{ name: "Pay", '
+            'unit: Unit("USD") }.'
+        )
+    name = entry.get("name")
+    unit = entry.get("unit")
+    if name is not None and not isinstance(name, str):
+        raise TypeError(f"{who} has the name {name!r}, which is not text.")
+    if unit is not None and not isinstance(unit, (Unit, str)):
+        raise TypeError(
+            f"{who} has the unit {unit!r}, which is neither a Unit nor a "
+            "unit's name."
+        )
+    return {
+        **({"HasQuantity": {"name": name}} if name is not None else {}),
+        **(_unit_type(unit) if unit is not None else {}),
+    }
+
+
+def _schema_wire(schema: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """A chart's (or a derive's) ``schema`` as the wire carries it: each
+    entry's record of classes (``_column_type_of``), as JS ``schemaToWire``
+    writes it."""
+    if not isinstance(schema, dict):
+        raise TypeError(f"schema must be a dict of column types, got {schema!r}")
+    return {column: _column_type_of(column, e) for column, e in schema.items()}
 
 
 # Color helpers (the scales themselves are the `Color` family, color.py)
@@ -3047,7 +3113,7 @@ def field(name: str) -> FieldAccessor:
     a field name could be read as a literal, or to chain a pipeline.
 
     A column's unit is declared in the chart's schema
-    (``Schema.unit("USD")``), not here. A column with no declared unit may
+    (``Unit("USD")``), not here. A column with no declared unit may
     share an axis with any other.
 
     The returned `FieldAccessor` is chainable, mirroring JS's
@@ -3477,9 +3543,11 @@ def chart(
 
         spread(by="species", dir="x", axes={"x": True, "y": False})
 
-    ``schema`` declares column types, keyed by column name (see ``Schema``):
+    ``schema`` declares column types, keyed by column name (see ``Schema``
+    and ``Unit``):
 
         chart(survey, schema={"response": Schema.ordered(LEVELS).diverging()})
+        chart(ledger, schema={"balance": {"name": "Balance", "unit": USD}})
 
     Keys inside the per-axis dict are snake_case like every kwarg; an
     unknown key (such as the old flat ``"label_angle"``) raises TypeError
@@ -3495,6 +3563,8 @@ def chart(
     Returns:
         ChartBuilder instance
     """
+    if options.get("schema") is not None:
+        options["schema"] = _schema_wire(options["schema"])
     return ChartBuilder(data, _chart_opts(**options) or None)
 
 

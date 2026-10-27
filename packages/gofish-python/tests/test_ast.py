@@ -28,6 +28,7 @@ from gofish import (
     Constraint,
     Schema,
     ColumnSchema,
+    Unit,
     Calendar,
     Bin,
     datum,
@@ -37,6 +38,7 @@ from gofish import (
     Coord,
 )
 import base64
+import pathlib
 import json
 
 from gofish.arrow_utils import arrow_to_records
@@ -958,82 +960,111 @@ class TestSchema:
     def test_ordered_is_has_order(self):
         assert Schema.ordered(["a", "b"]) == {"HasOrder": {"levels": ["a", "b"]}}
 
-    def test_unit_is_has_unit(self):
-        assert Schema.unit("USD") == {"HasUnit": {"unit": "USD", "symbol": "USD"}}
-        with pytest.raises(TypeError):
-            Schema.unit(3)  # type: ignore[arg-type]
+    def test_unit_is_a_definition(self):
+        usd = Unit("USD")
+        assert usd.name == "USD" and repr(usd) == "Unit('USD')"
+        summable = usd.summable()
+        # Immutable: `.summable()` is a new definition.
+        assert summable is not usd and summable != usd
+        assert summable == Unit("USD").summable()
+        assert repr(summable) == "Unit('USD').summable()"
+        with pytest.raises(AttributeError):
+            usd.name = "EUR"  # type: ignore[misc]
+        with pytest.raises(TypeError, match=r"^Unit: the name must be a string"):
+            Unit(3)  # type: ignore[arg-type]
 
-    def test_quantity_is_has_quantity(self):
-        assert Schema.quantity("Pay") == {"HasQuantity": {"name": "Pay"}}
-        assert Schema.quantity("Pay").unit("USD") == {
-            "HasUnit": {"unit": "USD", "symbol": "USD"},
-            "HasQuantity": {"name": "Pay"},
+    def test_schema_entries_write_the_wire_form(self):
+        usd = Unit("USD").summable()
+        schema_of = lambda **schema: ir(chart([], schema=schema).mark(rect()))[
+            "options"
+        ]["schema"]
+        # A Unit is `{ unit }`, a name alone is a unit whose classes are
+        # unknown, and a record adds the quantity.
+        assert schema_of(revenue=usd) == {
+            "revenue": {"HasUnit": {"unit": "USD", "symbol": "USD"}, "CanAdd": {}}
         }
-        # Either order gives the same column type.
-        assert Schema.quantity("Pay").unit("USD") == Schema.unit("USD").quantity(
-            "Pay"
+        assert schema_of(area="km²") == {
+            "area": {"HasUnit": {"unit": "km²", "symbol": "km²", "nameOnly": True}}
+        }
+        assert schema_of(temp={"name": "Temperature", "unit": Unit("°C")}) == {
+            "temp": {
+                "HasQuantity": {"name": "Temperature"},
+                "HasUnit": {"unit": "°C", "symbol": "°C"},
+            }
+        }
+        assert schema_of(q1={"name": "Pay"}) == {"q1": {"HasQuantity": {"name": "Pay"}}}
+        # A derive's schema is written the same way.
+        assert ir(derive(lambda d: d, schema={"x": usd}))["schema"] == {
+            "x": {"HasUnit": {"unit": "USD", "symbol": "USD"}, "CanAdd": {}}
+        }
+
+    def test_schema_matches_the_js_wire_fixture(self):
+        # The same schema JS's schema.test.ts serializes: both compare with
+        # one fixture, so the two languages write the same wire form.
+        fixture = pathlib.Path(__file__).parents[2] / (
+            "gofish-graphics/src/tests/fixtures/schema-wire.json"
         )
-        with pytest.raises(TypeError, match=r"^name must be a string, got 3$"):
-            Schema.quantity(3)  # type: ignore[arg-type]
-        with pytest.raises(TypeError, match=r"^name must be a string, got 3$"):
-            Schema.unit("USD").quantity(3)  # type: ignore[arg-type]
-        with pytest.raises(TypeError, match=r"^unit must be a string, got 3$"):
-            Schema.unit(3)  # type: ignore[arg-type]
-        with pytest.raises(TypeError, match=r"^unit must be a string, got 3$"):
-            Schema.quantity("Pay").unit(3)  # type: ignore[arg-type]
+        USD = Unit("USD").summable()
+        Celsius = Unit("°C")
+        schema = ir(
+            chart(
+                [{"balance": 1}],
+                schema={
+                    "balance": {"name": "Balance", "unit": USD},
+                    "revenue": USD,
+                    "area": "km²",
+                    "temp": {"unit": Celsius},
+                    "region": Schema.ordered(["n", "s"]).diverging(),
+                    "day": Schema.time(zone="UTC"),
+                },
+            ).mark(rect())
+        )["options"]["schema"]
+        assert schema == json.loads(fixture.read_text(encoding="utf-8"))
 
-    def test_a_column_has_one_unit(self):
-        # `Schema.time()` writes the instant, so a second unit raises.
-        with pytest.raises(
-            TypeError, match=r'^\.unit: the column already has the unit "instant"\.$'
-        ):
-            Schema.time().unit("USD")
-        with pytest.raises(TypeError, match='already has the unit "USD"'):
-            Schema.unit("USD").unit("EUR")
-        assert Schema.time().quantity("When") == {
-            "HasCalendar": {"zone": "UTC"},
-            "HasUnit": {"unit": "instant"},
-            "HasQuantity": {"name": "When"},
-        }
-
-    def test_summable_is_can_add(self):
-        # #1197: `.summable()` declares CanAdd, whose wire form is `{}`.
-        assert Schema.unit("USD").summable() == {
-            "HasUnit": {"unit": "USD", "symbol": "USD"},
-            "CanAdd": {},
-        }
-        assert Schema.quantity("Pay").unit("USD").summable().quantity("Pay") == {
-            "HasQuantity": {"name": "Pay"},
-            "HasUnit": {"unit": "USD", "symbol": "USD"},
-            "CanAdd": {},
-        }
-        # Only amounts in a unit add up, and two instants never do. The
-        # messages are JS `checkSummableType`'s.
+    def test_a_column_record_rejects_unknown_keys(self):
         with pytest.raises(
             TypeError,
-            match=r"^schema: the column has CanAdd but no unit\. ",
+            match=r'^schema: column "pay" has the unknown key "entity"\. A column '
+            r"record takes name and unit",
         ):
-            Schema.quantity("Pay").summable()
+            chart([], schema={"pay": {"name": "Pay", "entity": "grade"}})
+        with pytest.raises(TypeError, match=r"which is neither a Unit nor"):
+            chart([], schema={"pay": {"unit": 3}})
+        with pytest.raises(TypeError, match=r"which is not text"):
+            chart([], schema={"pay": {"name": 3}})
+        with pytest.raises(TypeError, match=r"A column's entry is a Unit"):
+            chart([], schema={"pay": 3})
+
+    def test_old_spellings_are_gone(self):
+        assert not hasattr(Schema, "unit") and not hasattr(Schema, "quantity")
+        for method in ("unit", "quantity", "summable"):
+            assert not hasattr(Schema.ordered([1]), method)
+
+    def test_column_type_rules_on_wire_records(self):
+        # The rules JS's `checkSummableType` and `checkLevelsFit` enforce,
+        # on a record as it would arrive from the wire. The messages are
+        # JS's.
+        with pytest.raises(
+            TypeError,
+            match=r"^schema: the column has CanAdd but no unit\. .*Unit\(unit\)\.summable\(\)",
+        ):
+            ColumnSchema({"HasQuantity": {"name": "Pay"}, "CanAdd": {}})
         with pytest.raises(
             TypeError,
             match=r"^schema: the column is a time, which cannot be summable",
         ):
-            Schema.time().summable()
-
-    def test_levels_fit_the_column_classes(self):
-        # Text levels are not amounts; a Likert scale's numbers are.
-        message = (
-            r'^schema: the column has the level "low", which is not a value '
-            r"HasUnit accepts\.$"
-        )
-        with pytest.raises(TypeError, match=message):
-            Schema.ordered(["low", "mid", "high"]).unit("pts")
-        with pytest.raises(TypeError, match=message):
-            Schema.ordered(["low", "high"]).diverging().unit("pts")
-        assert Schema.ordered([1, 2, 3, 4, 5]).unit("pts") == {
-            "HasOrder": {"levels": [1, 2, 3, 4, 5]},
-            "HasUnit": {"unit": "pts", "symbol": "pts"},
-        }
+            ColumnSchema({**Schema.time(), "CanAdd": {}})
+        with pytest.raises(
+            TypeError,
+            match=r'^schema: the column has the level "low", which is not a '
+            r"value HasUnit accepts\.$",
+        ):
+            ColumnSchema(
+                {"HasOrder": {"levels": ["low", "high"]}, "HasUnit": {"unit": "pts"}}
+            )
+        assert ColumnSchema(
+            {"HasOrder": {"levels": [1, 2, 3]}, "HasUnit": {"unit": "pts"}}
+        ) == {"HasOrder": {"levels": [1, 2, 3]}, "HasUnit": {"unit": "pts"}}
 
     def test_field_takes_no_unit(self):
         # A column's unit lives in the schema, not on a channel.
