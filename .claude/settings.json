@@ -6,17 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/pr-gate.py\"",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "mcp__.*github.*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/pr-gate.py\"",
+            "command": "sh -c 'in=$(cat); case \"$in\" in *\"gh pr\"*) printf %s \"$in\" | python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/pr-gate.py\";; esac'",
             "timeout": 10
           }
         ]
