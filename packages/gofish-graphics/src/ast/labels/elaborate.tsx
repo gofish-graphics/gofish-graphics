@@ -6,7 +6,7 @@ import { autoLabelColorForFill } from "./autoLabelColor";
 import { GoFishNode } from "../_node";
 import type { GoFishAST } from "../_ast";
 import { GoFishRef } from "../_ref";
-import { LabelText } from "./labelNode";
+import { LabelText, type LabelNode } from "./labelNode";
 import { ref } from "../shapes/ref";
 import { Constraint } from "../constraints";
 import type { AlignAnchor, ConstraintRef } from "../constraints/shared";
@@ -48,7 +48,7 @@ import {
  * The pass first resolves each `.label()` spec to its TARGET node
  * (`resolveLabelTargets`, replacing the old `GoFishNode.resolveLabels`
  * method), then walks the tree bottom-up; each node whose DIRECT CHILDREN
- * carry `_labels` is wrapped once in a `Layer` with one `ref()` + `Text`
+ * hold labels is wrapped once in a `Layer` with one `ref()` + `Text`
  * pair per (labeled child × spec) — the PARENT wraps, never the labeled mark
  * itself, so a label's bbox never inflates the mark's own box and can never
  * push siblings apart (see `elaborateLabelsWalk`). A labeled ROOT gets a
@@ -359,19 +359,19 @@ let labelUid = 0;
  * position string is placed by the solve, by the constraints
  * `buildLabelConstraints` derives from it; a label the chooser places is
  * placed after the solve, by one `labelPlace` constraint over all of them,
- * which also keeps them off the labels at a position string here and the
- * labels the pass seated in wrappers below (`below`, read through refs).
- * Returns the wrapper and the labels it seated at a position string.
+ * which also keeps them off the labels at a position string here and every
+ * label the pass seated in wrappers below (`below`, read through refs).
+ * Returns the wrapper and every label it seated.
  */
 async function wrapWithLabels(
   node: GoFishNode,
   pairs: LabelPair[],
-  below: GoFishNode[]
-): Promise<{ node: GoFishNode; texts: GoFishNode[] }> {
+  below: LabelNode[]
+): Promise<{ node: GoFishNode; labels: LabelNode[] }> {
   // The label constraints run in the wrapper's axis order, which is the
   // wrapped node's: the wrapper's spaces are the node's.
   const yDirection = wrapperDirection(node);
-  const fixedTexts: GoFishNode[] = [];
+  const seated: LabelNode[] = [];
   const root = await wrapPreservingIdentity(node, async (content) => {
     const refs: GoFishAST[] = [];
     const texts: GoFishNode[] = [];
@@ -381,6 +381,7 @@ async function wrapWithLabels(
       textName: string;
       position: LabelPosition;
       offset?: number;
+      label: LabelNode;
     }[] = [];
     // Labels the chooser places after the solve.
     const placed: {
@@ -420,14 +421,20 @@ async function wrapWithLabels(
       });
       label.node.name(textName);
       texts.push(label.node);
+      seated.push(label);
       // The label is part of its target as a mark, though it lives out of
       // the target's subtree; record that, so whatever takes the mark over
       // (a `time.transition()`) takes the label with it, and the label
       // paints under its mark's build-in animation.
       target.INTERNAL_attach(label.node);
       if (!isChosen(position)) {
-        fixed.push({ refName, textName, position, offset: spec.offset });
-        fixedTexts.push(label.node);
+        fixed.push({
+          refName,
+          textName,
+          position,
+          offset: spec.offset,
+          label,
+        });
         continue;
       }
       let avoidNames = avoided.get(spec.group);
@@ -459,8 +466,8 @@ async function wrapWithLabels(
         ? []
         : below.map((t) => {
             const name = `__lbelow${labelUid++}`;
-            refs.push(ref(t).name(name));
-            return name;
+            refs.push(ref(t.node).name(name));
+            return { name, label: t };
           });
 
     // The content is seated at its own origin first, so every label
@@ -494,16 +501,23 @@ async function wrapWithLabels(
                     call: callName(p.spec.accessor),
                   })
                 ),
-                [...fixed.map(({ textName }) => textName), ...belowNames].map(
-                  (n) => g[n] as ConstraintRef
-                ),
+                [
+                  ...fixed.map(({ textName, label }) => ({
+                    name: textName,
+                    label,
+                  })),
+                  ...belowNames,
+                ].map(({ name, label }) => ({
+                  ref: g[name] as ConstraintRef,
+                  label,
+                })),
                 yDirection
               ),
             ]),
       ],
     });
   });
-  return { node: root, texts: fixedTexts };
+  return { node: root, labels: seated };
 }
 
 /** What the walk below hands up from a subtree. */
@@ -513,15 +527,15 @@ type Walked = {
   /** Labels the chooser places whose call has targets outside the subtree
    *  yet: they are seated further up. */
   pending: LabelPair[];
-  /** The labels seated at a position string in the subtree. */
-  texts: GoFishNode[];
+  /** Every label seated in the subtree. */
+  labels: LabelNode[];
 };
 
 /**
  * Recursively elaborate labels, children first. A label at a position
  * string is wrapped at the PARENT of the labeled node, never at the labeled
- * node itself: at each node P, every direct child still carrying `_labels`
- * (after `resolveLabelTargets` pushed specs to their real targets)
+ * node itself: at each node P, every direct child still holding labels
+ * (in `held`, after `resolveLabelTargets` pushed specs to their real targets)
  * contributes its ref+label pairs to ONE Layer wrapping P. This is
  * deliberate: wrapping each mark individually would fold the label's bbox
  * into the mark's own box, and an outset label would push stacked or
@@ -538,40 +552,41 @@ type Walked = {
  * marks or higher, so they never push marks apart either, and the area the
  * chooser keeps them in is that node's.
  *
- * A node's OWN `_labels` are left alone here for ITS parent to consume,
+ * A node's OWN labels are left alone here for ITS parent to consume,
  * except the root's, which has no parent; `elaborateLabels` handles those
  * with a self-wrap.
  */
 async function elaborateLabelsWalk(
   node: GoFishNode,
+  held: Held,
   calls: Map<unknown, number>,
   order: { next: number }
 ): Promise<Walked> {
   let changed = false;
   const pending: LabelPair[] = [];
-  const below: GoFishNode[] = [];
+  const below: LabelNode[] = [];
   for (let i = 0; i < node.children.length; i++) {
     const child = node.children[i];
     if (child instanceof GoFishNode) {
-      const res = await elaborateLabelsWalk(child, calls, order);
+      const res = await elaborateLabelsWalk(child, held, calls, order);
       if (res.changed) changed = true;
       if (res.node !== child) {
         node.children[i] = res.node;
         res.node.parent = node;
       }
       pending.push(...res.pending);
-      below.push(...res.texts);
+      below.push(...res.labels);
     }
   }
 
-  // Direct children still carrying `_labels`: their labels at a position
+  // Direct children still holding labels: their labels at a position
   // string are wrapped here, and the ones the chooser places join those
-  // waiting. The node's OWN `_labels` are NOT collected: they belong to this
+  // waiting. The node's OWN labels are NOT collected: they belong to this
   // node's parent (or the root self-wrap).
   const pairs: LabelPair[] = [];
   for (const child of node.children)
-    if (child instanceof GoFishNode && child._labels?.length)
-      pairs.push(...consumeLabels(child, order));
+    if (child instanceof GoFishNode && held.has(child))
+      pairs.push(...consumeLabels(child, held, order));
   for (const p of pairs) if (isChosen(p.position)) pending.push(p);
   // The calls whose every target is under this node are placed here.
   const seen = new Map<unknown, number>();
@@ -584,56 +599,79 @@ async function elaborateLabelsWalk(
     ...pending.filter(complete),
   ];
   const rest = pending.filter((p) => !complete(p));
-  if (here.length === 0) return { node, changed, pending: rest, texts: below };
+  if (here.length === 0) return { node, changed, pending: rest, labels: below };
 
-  const { node: root, texts } = await wrapWithLabels(node, here, below);
+  const { node: root, labels } = await wrapWithLabels(node, here, below);
 
-  // If this node ALSO carries its own labels (pending for ITS parent), hoist
-  // them onto the wrapper — the parent's collection loop sees the wrapper as
-  // its child now, and the label should describe the whole labeled unit.
-  if (node._labels && node._labels.length > 0) {
-    root._labels = node._labels;
-    if (root.datum === undefined) root.datum = node.datum;
-    node._labels = undefined;
+  // If this node ALSO holds its own labels (pending for ITS parent), the
+  // wrapper holds them now: the parent's collection loop sees the wrapper as
+  // its child. They keep their target and position: they still describe
+  // this node.
+  const own = held.get(node);
+  if (own !== undefined) {
+    held.delete(node);
+    held.set(root, own);
   }
 
   return {
     node: root,
     changed: true,
     pending: rest,
-    texts: [...below, ...texts],
+    labels: [...below, ...labels],
   };
 }
 
-/** A target's labels as pairs, each at its position, taken off it. */
-function consumeLabels(
-  target: GoFishNode,
-  order: { next: number }
-): LabelPair[] {
-  const specs = target._labels ?? [];
-  target._labels = undefined;
-  return specs.map((spec) => ({
-    target,
-    spec,
-    position: positionOf(spec, target),
-    order: order.next++,
-  }));
+/** A label spec on its target, at the position it resolves to there. */
+type HeldLabel = Omit<LabelPair, "order">;
+
+/** The labels not seated yet, by the node that holds them: their target, or
+ *  the wrapper that took its place in its parent. */
+type Held = Map<GoFishNode, HeldLabel[]>;
+
+/**
+ * Take every node's `_labels` off it into `held`, each spec resolved ONCE to
+ * its position on its target (`positionOf`), and count, per call, the
+ * targets the chooser places: the labels of one call are placed together
+ * once the walk has met them all.
+ */
+function holdLabels(
+  node: GoFishNode,
+  held: Held,
+  calls: Map<unknown, number>
+): void {
+  if (node._labels?.length) {
+    const labels = node._labels.map((spec) => ({
+      target: node,
+      spec,
+      position: positionOf(spec, node),
+    }));
+    node._labels = undefined;
+    held.set(node, labels);
+    for (const { spec, position } of labels)
+      if (isChosen(position))
+        calls.set(spec.group, (calls.get(spec.group) ?? 0) + 1);
+  }
+  for (const child of node.children)
+    if (child instanceof GoFishNode) holdLabels(child, held, calls);
 }
 
-/** How many targets each call has that the chooser places: the labels of
- *  one call are placed together once the walk has met them all. */
-function countChosen(node: GoFishNode, calls: Map<unknown, number>): void {
-  for (const spec of node._labels ?? [])
-    if (isChosen(positionOf(spec, node)))
-      calls.set(spec.group, (calls.get(spec.group) ?? 0) + 1);
-  for (const child of node.children)
-    if (child instanceof GoFishNode) countChosen(child, calls);
+/** The labels `holder` holds, as pairs in the order the pass meets them,
+ *  taken off it. */
+function consumeLabels(
+  holder: GoFishNode,
+  held: Held,
+  order: { next: number }
+): LabelPair[] {
+  const labels = held.get(holder) ?? [];
+  held.delete(holder);
+  return labels.map((l) => ({ ...l, order: order.next++ }));
 }
 
 /**
  * Elaborate every `.label()` in `node`'s subtree into real label nodes and
  * constraints. Entry point for the pipeline (see `gofish.tsx`). Runs
- * `resolveLabelTargets` once up front, then the bottom-up wrap walk; the
+ * `resolveLabelTargets` and `holdLabels` once up front, then the bottom-up
+ * wrap walk; the
  * root's own labels (no parent to wrap them), and the placed labels of a
  * call that also labels the root, get one final self-wrap.
  */
@@ -641,16 +679,14 @@ export async function elaborateLabels(
   node: GoFishNode
 ): Promise<{ node: GoFishNode; changed: boolean }> {
   resolveLabelTargets(node);
+  const held: Held = new Map();
   const calls = new Map<unknown, number>();
-  countChosen(node, calls);
+  holdLabels(node, held, calls);
   const order = { next: 0 };
-  const res = await elaborateLabelsWalk(node, calls, order);
+  const res = await elaborateLabelsWalk(node, held, calls, order);
   let out = res.node;
-  const pairs = [
-    ...res.pending,
-    ...(out._labels?.length ? consumeLabels(out, order) : []),
-  ];
+  const pairs = [...res.pending, ...consumeLabels(out, held, order)];
   if (pairs.length === 0) return { node: out, changed: res.changed };
-  out = (await wrapWithLabels(out, pairs, res.texts)).node;
+  out = (await wrapWithLabels(out, pairs, res.labels)).node;
   return { node: out, changed: true };
 }

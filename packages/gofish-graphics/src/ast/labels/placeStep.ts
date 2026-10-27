@@ -92,9 +92,14 @@ export interface LabelPlaceConstraint {
   /** Every operand, so the layer resolves them like any constraint's. */
   children: ConstraintRef[];
   items: LabelPlaceItem[];
-  /** Labels in the same layer placed by the solve (a position string). */
-  fixed: ConstraintRef[];
+  /** The labels placed before this step: in this layer by the solve (a
+   *  position string), and in the layers below by the solve or the chooser.
+   *  A hidden one takes no room. */
+  seated: SeatedLabel[];
 }
+
+/** A label placed before the chooser runs, read through its `ref()`. */
+export type SeatedLabel = { ref: ConstraintRef; label: LabelNode };
 
 export const isLabelPlaceConstraint = (
   c: { type: string } | undefined
@@ -102,14 +107,14 @@ export const isLabelPlaceConstraint = (
 
 export function createLabelPlaceConstraint(
   items: LabelPlaceItem[],
-  fixed: ConstraintRef[],
+  seated: SeatedLabel[],
   direction: 1 | -1
 ): LabelPlaceConstraint {
   const children = [
     ...items.flatMap((i) => [i.target, i.label, ...i.avoiding]),
-    ...fixed,
+    ...seated.map((s) => s.ref),
   ];
-  return { type: "labelPlace", direction, children, items, fixed };
+  return { type: "labelPlace", direction, children, items, seated };
 }
 
 /** A placed node's outlines in the layer's frame, in pixels. */
@@ -238,8 +243,9 @@ export function applyLabelPlacement(
         grid.add(o);
     }
   }
-  // The labels the solve placed.
-  for (const ref of constraint.fixed) {
+  // The labels placed before this step; a hidden one takes no room.
+  for (const { ref, label } of constraint.seated) {
+    if (label.state.hidden) continue;
     const d = rawPlaceable(get(ref)).dims;
     const box = {
       minX: d[0].min ?? NaN,

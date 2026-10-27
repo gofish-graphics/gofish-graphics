@@ -82,15 +82,20 @@ legend past it. It has two phases:
    children keeps its label too: it says where its label goes
    (`labelPosition`, below), as `arrow` and the `line` connector do, and it
    is the thing labeled.
-2. **`elaborateLabelsWalk`** — a bottom-up recursion. At each node `P`, every
-   **direct child** still carrying a non-empty `_labels` (after step 1) is
-   collected as a target. Its labels at a position string are wrapped at
+2. **`holdLabels`** — a pre-pass that takes every node's `_labels` off it
+   into a map, `held`, keyed by the node that holds them. Each spec is
+   resolved once, here, to its position on its target (`positionOf`), and
+   each call's targets that the chooser places are counted. The target and
+   the position travel with the spec from then on.
+3. **`elaborateLabelsWalk`** — a bottom-up recursion. At each node `P`, every
+   **direct child** that still holds labels is collected. Its labels at a
+   position string are wrapped at
    `P`: `P` is wrapped once in a `Layer` holding its original content plus
    one `ref()` + `label` pair per (target × spec). Its labels that the
    chooser places wait instead (`pending`), and so do the ones handed up
    from below, until the walk reaches the nearest node that all of their
-   call's targets are under (a pre-pass, `countChosen`, counts each call's
-   targets); they are wrapped there, so one call is placed in one run. A
+   call's targets are under (by the counts from `holdLabels`); they are
+   wrapped there, so one call is placed in one run. A
    labeled ROOT (no parent to wrap it) gets one final self-wrap in
    `elaborateLabels` itself.
 
@@ -143,11 +148,16 @@ placed):
    all of them, which the layer runs after its solve (see "Placement
    strategies" below).
 
-If a node being wrapped **also** carries its own `_labels` (pending for its
-own parent), `elaborateLabelsWalk` hoists them onto the freshly built wrapper
-rather than leaving them on the now-replaced original node, so the parent's
-collection loop — which walks `node.children` by identity — sees them on the
-node that actually occupies that slot.
+If a node being wrapped **also** holds its own labels (pending for its own
+parent), `elaborateLabelsWalk` moves them in `held` to the freshly built
+wrapper, so the parent's collection loop — which walks `node.children` by
+identity — finds them on the node that actually occupies that slot. They
+keep their target and their position: an `arrow` whose children carry
+labels is still labeled at its end, through a `ref()` to the arrow itself,
+not to the wrapper.
+
+The wrapper hands up every label it seated, placed by the solve or by the
+chooser, so a chooser in a wrapper above keeps its labels off them.
 
 ## Position vocabulary → constraints
 

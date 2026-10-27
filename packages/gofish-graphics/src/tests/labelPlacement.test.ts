@@ -862,5 +862,79 @@ console.log("# an arrow is labeled past its head");
   );
 }
 
+console.log("# a mark's own label beside labeled children");
+{
+  // The arrow's own label is placed at its end even when its children carry
+  // labels too (its labels then move up with the tier that wraps them).
+  const { tip, label } = await arrowDoc(true);
+  ok(
+    "an arrow with labeled children is still labeled at its end",
+    label !== undefined && textBox(label)[0][0] >= tip,
+    JSON.stringify({ label: label && textBox(label), tip })
+  );
+}
+
+console.log("# labels placed lower down keep later calls off");
+{
+  // Call A sits in an inner tier, call B in the outer one; A's label to the
+  // right of its box covers the only spot B has, left of its box.
+  const inner = layer([
+    rect({ x: 0, y: 0, w: 10, h: 10, fill: "#ccc" }).label(() => "AAAAAAAA", {
+      position: Place.around({ directions: ["right"] }),
+    }),
+  ]);
+  const node = layer([
+    inner,
+    rect({ x: 60, y: 0, w: 10, h: 10, fill: "#ccc" }).label(() => "BBBBBBBB", {
+      position: Place.around({ directions: ["left"] }),
+    }),
+  ]);
+  const saved = console.info;
+  console.info = () => {};
+  const doc = await (node as any).toDisplayList({ w: 200, h: 50 });
+  console.info = saved;
+  const texts = textItems(doc);
+  const A = texts.find((t) => t.text === "AAAAAAAA");
+  const B = texts.find((t) => t.text === "BBBBBBBB");
+  ok(
+    "a label placed by the chooser in a lower tier is an obstacle above",
+    A !== undefined && (B === undefined || !boxesOverlap(textBox(A), textBox(B))),
+    JSON.stringify({ A: A && textBox(A), B: B && textBox(B) })
+  );
+
+  // A hidden label takes no room: its empty box at its mark's center does
+  // not keep a later call off that point.
+  const hiddenInner = layer([
+    rect({ x: 20, y: 0, w: 10, h: 10, fill: "#ccc" }).label(() => "HIDDEN", {
+      position: Place.around({ directions: ["top"] }),
+    }),
+  ]);
+  const over = (withHidden: boolean) =>
+    layer([
+      rect({ x: 0, y: 0, w: 60, h: 20, fill: "#eee" }).label(() => "CCCCC", {
+        position: Place.interior(),
+      }),
+      withHidden
+        ? hiddenInner
+        : layer([rect({ x: 20, y: 0, w: 10, h: 10, fill: "#ccc" })]),
+    ]);
+  console.info = () => {};
+  const odoc = await (over(true) as any).toDisplayList({ w: 200, h: 50 });
+  const bdoc = await (over(false) as any).toDisplayList({ w: 200, h: 50 });
+  console.info = saved;
+  const otexts = textItems(odoc);
+  const C = otexts.find((t) => t.text === "CCCCC");
+  const bare = textItems(bdoc).find((t) => t.text === "CCCCC");
+  ok(
+    "a hidden label lower down does not block a later call",
+    otexts.every((t) => t.text !== "HIDDEN") &&
+      C !== undefined &&
+      bare !== undefined &&
+      C.x === bare.x &&
+      C.y === bare.y,
+    JSON.stringify({ texts: otexts.map((t) => t.text), C, bare })
+  );
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
