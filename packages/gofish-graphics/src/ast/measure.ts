@@ -130,7 +130,9 @@ export function checkSummable(q: Quantity | undefined, where: string): void {
   throw new Error(
     `${where} sums ${what}, in the unit "${unit}", which cannot be ` +
       `summed: it has no CanAdd. If its amounts add up (money, counts, ` +
-      `lengths), declare it with Schema.unit("${unit}").summable().`
+      `lengths), declare it with Schema.unit("${unit}").summable(). If ` +
+      `they do not (temperatures, prices, rates), average them instead, ` +
+      `e.g. field("${q.column ?? q.name}").mean().`
   );
 }
 
