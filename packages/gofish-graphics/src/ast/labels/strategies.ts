@@ -21,15 +21,14 @@ import { ringExtent } from "../geometry/box";
 import { pointInRing, signedArea2 } from "../geometry/plane";
 import type { BoundingBox } from "../../util/bbox";
 import {
+  ObstacleGrid,
   corners,
-  covers,
   outlineObstacles,
   pathLength,
   pointAt,
   pointsBetween,
   polyline,
   type HalfSize,
-  type Obstacle,
   type Polyline,
   type Pt,
   type Spot,
@@ -388,10 +387,12 @@ export function* alongCandidates(
   const isPart = lo !== 0 || hi !== L;
   const closedSlide = path.closed && !isPart;
 
-  // The outline's own pieces, as wide as its stroke.
-  const own = outlineObstacles(outline, undefined).filter(
-    (o) => o.kind === "segment"
-  );
+  // The outline's own pieces, as wide as its stroke, filed in a grid: a
+  // level label beside the outline tests them at every step it moves.
+  const own = new ObstacleGrid(Math.max(16, 8 * size.hy));
+  if (!sloped)
+    for (const o of outlineObstacles(outline, undefined))
+      if (o.kind === "segment") own.add(o);
   for (const s of slide(s0, lo, hi, closedSlide)) {
     const e = halfSpan(s);
     if (!closedSlide && (s - e < lo - 1e-9 || s + e > hi + 1e-9)) continue;
@@ -413,7 +414,7 @@ function levelAt(
   side: Side,
   offset: number,
   outsideIsLeft: boolean | undefined,
-  own: Obstacle[]
+  own: ObstacleGrid
 ): Candidate | null {
   const p = pointAt(path, s);
   if (side === "on") return { cx: p[0], cy: p[1], angle, onOutline: true };
@@ -431,7 +432,7 @@ function levelAt(
   for (let d = offset + reach; d <= limit; d += 1) {
     const spot = { cx: p[0] + n[0] * d, cy: p[1] + n[1] * d, angle };
     const poly = corners(spot, size, Math.max(0, offset - 1));
-    if (!own.some((o) => covers(poly, o))) return { ...spot, onOutline: false };
+    if (!own.hits(poly, () => true)) return { ...spot, onOutline: false };
   }
   return null;
 }

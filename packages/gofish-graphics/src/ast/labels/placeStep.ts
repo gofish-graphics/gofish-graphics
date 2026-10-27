@@ -201,19 +201,20 @@ export function applyLabelPlacement(
     return p;
   };
 
-  // Each labeled mark's outlines, read once.
-  const shapes = new Map<string, TargetShape & { mark: unknown }>();
+  // Each labeled mark's outlines, read once per mark, however many labels
+  // (each with its own ref) it has.
+  const shapes = new Map<unknown, TargetShape & { mark: unknown }>();
   const shapeOf = (ref: ConstraintRef): TargetShape & { mark: unknown } => {
-    let s = shapes.get(ref.name);
+    const p = get(ref);
+    const mark = markOf(p);
+    let s = shapes.get(mark);
     if (s === undefined) {
-      const p = get(ref);
-      const mark = markOf(p);
       s = {
         outlines: placedOutlines(p),
         type: (mark as { type?: string }).type ?? "node",
         mark,
       };
-      shapes.set(ref.name, s);
+      shapes.set(mark, s);
     }
     return s;
   };
