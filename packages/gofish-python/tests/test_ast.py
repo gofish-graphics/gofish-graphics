@@ -26,8 +26,8 @@ from gofish import (
     text,
     image,
     Constraint,
-    Schema,
-    ColumnSchema,
+    Domain,
+    Trait,
     Unit,
     Calendar,
     Bin,
@@ -87,17 +87,15 @@ class TestOperators:
     def test_derive_schema_round_trips(self):
         """`derive(fn, schema=...)` carries the result's column types in the
         wire form of a chart's schema, and keeps them through `.translate`."""
-        from gofish import Schema
-
         op = derive(
             lambda d: d,
             schema={
-                "month": Schema.ordered(["Jan", "Feb"]),
+                "month": Unit(domain=Domain.ordered(["Jan", "Feb"])),
                 "at": Unit.time(zone="America/New_York"),
             },
         )
         expected = {
-            "month": {"HasOrder": {"levels": ["Jan", "Feb"]}},
+            "month": {"HasLevels": {"levels": ["Jan", "Feb"]}, "HasOrder": {}},
             "at": {
                 "HasUnit": {
                     "unit": "instant",
@@ -958,27 +956,119 @@ class TestRelateCallback:
 
 
 class TestSchema:
-    """`Schema.ordered(levels).diverging(midpoint=...)` builds the column-type record
-    JS reads as is (#984)."""
+    """`Unit(name, domain=..., traits=[...])` builds the column-type record
+    JS reads as is (#984, #1197)."""
 
-    def test_ordered_is_has_order(self):
-        assert Schema.ordered(["a", "b"]) == {"HasOrder": {"levels": ["a", "b"]}}
+    def test_domains_are_levels(self):
+        assert Unit(domain=Domain.ordered(["a", "b"])).type == {
+            "HasLevels": {"levels": ["a", "b"]},
+            "HasOrder": {},
+        }
+        # Domain.discrete is nominal: levels, no order.
+        party = Unit(domain=Domain.discrete(["Dem", "Rep", "Ind"]))
+        assert party.type == {"HasLevels": {"levels": ["Dem", "Rep", "Ind"]}}
+        assert party.name is None
+        assert repr(party) == "Unit(domain=Domain.discrete(['Dem', 'Rep', 'Ind']))"
+        stars = Unit("stars", domain=Domain.ordered([1, 2, 3, 4, 5]))
+        assert stars.type == {
+            "HasUnit": {"unit": "stars", "symbol": "stars", "classes": {}},
+            "HasLevels": {"levels": [1, 2, 3, 4, 5]},
+            "HasOrder": {},
+        }
+        assert repr(stars) == "Unit('stars', domain=Domain.ordered([1, 2, 3, 4, 5]))"
 
     def test_unit_is_a_definition(self):
         usd = Unit("USD")
         assert usd.name == "USD" and repr(usd) == "Unit('USD')"
-        summable = usd.summable()
-        # Immutable: `.summable()` is a new definition.
-        assert summable is not usd and summable != usd
-        assert summable == Unit("USD").summable()
-        assert repr(summable) == "Unit('USD').summable()"
+        summable = Unit("USD", traits=[Trait.summable()])
+        assert summable != usd
+        assert repr(summable) == "Unit('USD', traits=[Trait.summable()])"
+        likert = Unit(domain=Domain.ordered(["a", "b"]), traits=[Trait.diverging()])
+        assert (
+            repr(likert)
+            == "Unit(domain=Domain.ordered(['a', 'b']), traits=[Trait.diverging()])"
+        )
+        # Immutable, and `.type` is a copy.
         with pytest.raises(AttributeError):
             usd.name = "EUR"  # type: ignore[misc]
+        usd.type["HasUnit"]["unit"] = "EUR"
+        assert usd.name == "USD"
         with pytest.raises(TypeError, match=r"^Unit: the name must be a string"):
             Unit(3)  # type: ignore[arg-type]
 
+    # The same literals as `errors` in the JS schema.test.ts.
+    @pytest.mark.parametrize(
+        "make, message",
+        [
+            (
+                lambda: Unit(traits=[Trait.diverging()]),
+                'Unit needs a name, a domain, or both: Unit("USD"), '
+                'Unit({ domain: Domain.discrete(["low", "high"]) }).',
+            ),
+            (
+                lambda: Unit("pp", traits=[Trait.summable(), Trait.diverging(0)]),
+                'Unit("pp"): Trait.diverging() needs an ordered domain: a '
+                "midpoint is a point along an order, so list the levels in "
+                "Domain.ordered(levels). A midpoint on a unit's amounts is not "
+                "supported yet.",
+            ),
+            (
+                lambda: Unit(
+                    domain=Domain.discrete(["SD", "D", "N", "A", "SA"]),
+                    traits=[Trait.diverging()],
+                ),
+                "Unit: Trait.diverging() needs an ordered domain, but "
+                "Domain.discrete(levels) is unordered. A midpoint is a point "
+                "along an order: use Domain.ordered(levels).",
+            ),
+            (
+                lambda: Unit(domain=Domain.discrete([1, 2]), traits=[Trait.summable()]),
+                "Unit: Trait.summable() needs a name. Whether amounts add up "
+                "belongs to their unit, which is known by its name: "
+                'Unit("USD", { traits: [Trait.summable()] }).',
+            ),
+            (
+                lambda: Unit("USD", traits=[Trait.summable(), Trait.summable()]),
+                'Unit("USD") lists Trait.summable() twice.',
+            ),
+            (
+                lambda: Unit(
+                    domain=Domain.ordered(["SD", "D", "N", "A", "SA"]),
+                    traits=[Trait.diverging(1), Trait.diverging(2)],
+                ),
+                "Unit lists Trait.diverging() twice.",
+            ),
+            (
+                lambda: Unit("pp", domain=[1, 2]),  # type: ignore[arg-type]
+                'Unit("pp"): domain must be a Domain: Domain.discrete(levels) '
+                "or Domain.ordered(levels), got [1,2]. A domain that is an "
+                "interval is not supported yet.",
+            ),
+            (
+                lambda: Unit("pp", domain={"lo": 0, "hi": 1}),
+                'Unit("pp"): domain must be a Domain: Domain.discrete(levels) '
+                'or Domain.ordered(levels), got {"lo":0,"hi":1}. A domain '
+                "that is an interval is not supported yet.",
+            ),
+            (
+                lambda: Unit("USD", traits=["summable"]),  # type: ignore[list-item]
+                'Unit("USD") has the trait "summable". A unit\'s traits are '
+                "Trait.diverging() and Trait.summable().",
+            ),
+            (
+                lambda: Unit("pts", domain=Domain.discrete(["low", "high"])),
+                'Unit("pts") has the level "low", which is not a value HasUnit '
+                "accepts.",
+            ),
+        ],
+    )
+    def test_unit_definition_errors(self, make, message):
+        with pytest.raises((TypeError, ValueError)) as error:
+            make()
+        assert str(error.value) == message
+
     def test_schema_entries_write_the_wire_form(self):
-        usd = Unit("USD").summable()
+        usd = Unit("USD", traits=[Trait.summable()])
         schema_of = lambda **schema: ir(chart([], schema=schema).mark(rect()))[
             "options"
         ]["schema"]
@@ -1008,8 +1098,9 @@ class TestSchema:
         fixture = pathlib.Path(__file__).parents[2] / (
             "gofish-graphics/src/tests/fixtures/schema-wire.json"
         )
-        USD = Unit("USD").summable()
+        USD = Unit("USD", traits=[Trait.summable()])
         Celsius = Unit("°C")
+        Stars = Unit("stars", domain=Domain.ordered([1, 2, 3, 4, 5]))
         schema = ir(
             chart(
                 [{"balance": 1}],
@@ -1018,7 +1109,9 @@ class TestSchema:
                     "revenue": USD,
                     "area": "km²",
                     "temp": {"unit": Celsius},
-                    "region": Schema.ordered(["n", "s"]).diverging(),
+                    "region": Unit(domain=Domain.ordered(["n", "s"]), traits=[Trait.diverging()]),
+                    "party": Unit(domain=Domain.discrete(["Dem", "Rep", "Ind"])),
+                    "rating": {"name": "Rating", "unit": Stars},
                     "day": Unit.time(zone="UTC"),
                     "sold": {"name": "Sold", "unit": Unit.time(zone="America/New_York")},
                     "wait": Unit.duration,
@@ -1035,7 +1128,9 @@ class TestSchema:
                     "revenue": USD,
                     "area": "km²",
                     "temp": {"unit": Celsius},
-                    "region": Schema.ordered(["n", "s"]).diverging(),
+                    "region": Unit(domain=Domain.ordered(["n", "s"]), traits=[Trait.diverging()]),
+                    "party": Unit(domain=Domain.discrete(["Dem", "Rep", "Ind"])),
+                    "rating": {"name": "Rating", "unit": Stars},
                     "day": Unit.time(zone="UTC"),
                     "sold": {"name": "Sold", "unit": Unit.time(zone="America/New_York")},
                     "wait": Unit.duration,
@@ -1059,24 +1154,13 @@ class TestSchema:
             chart([], schema={"pay": 3})
 
     def test_old_spellings_are_gone(self):
-        assert not hasattr(Schema, "unit") and not hasattr(Schema, "quantity")
-        for method in ("unit", "quantity", "summable"):
-            assert not hasattr(Schema.ordered([1]), method)
+        import gofish
 
-    def test_column_type_rules_on_wire_records(self):
-        # The rule JS's `checkLevelsFit` enforces, on a record as it would
-        # arrive from the wire. The message is JS's.
-        with pytest.raises(
-            TypeError,
-            match=r'^schema: the column has the level "low", which is not a '
-            r"value HasUnit accepts\.$",
-        ):
-            ColumnSchema(
-                {"HasOrder": {"levels": ["low", "high"]}, "HasUnit": {"unit": "pts"}}
-            )
-        assert ColumnSchema(
-            {"HasOrder": {"levels": [1, 2, 3]}, "HasUnit": {"unit": "pts"}}
-        ) == {"HasOrder": {"levels": [1, 2, 3]}, "HasUnit": {"unit": "pts"}}
+        for name in ("Schema", "ColumnSchema"):
+            assert not hasattr(gofish, name)
+        for method in ("unit", "quantity", "summable", "diverging"):
+            assert not hasattr(Unit(domain=Domain.ordered([1])), method)
+        assert not hasattr(Trait, "ordered")
 
     def test_field_takes_no_unit(self):
         # A column's unit lives in the schema, not on a channel.
@@ -1085,25 +1169,24 @@ class TestSchema:
             field("x", "plane")  # type: ignore[call-arg]
 
     def test_diverging_defaults_the_midpoint_to_half_the_levels(self):
-        assert Schema.ordered(["a", "b"]).diverging() == {
-            "HasOrder": {"levels": ["a", "b"]},
+        assert Unit(domain=Domain.ordered(["a", "b"]), traits=[Trait.diverging()]).type == {
+            "HasLevels": {"levels": ["a", "b"]},
+            "HasOrder": {},
             "HasMidpoint": {"at": 1},
         }
-        assert Schema.ordered(["a", "b", "c"]).diverging()["HasMidpoint"] == {
-            "at": 1.5
-        }
+        assert Unit(
+            domain=Domain.ordered(["a", "b", "c"]), traits=[Trait.diverging()]
+        ).type["HasMidpoint"] == {"at": 1.5}
 
     def test_diverging_midpoint(self):
         levels = ["SD", "D", "N", "A", "SA"]
-        assert Schema.ordered(levels).diverging(midpoint=2) == {
-            "HasOrder": {"levels": levels},
-            "HasMidpoint": {"at": 2},
-        }
-        assert Schema.ordered(levels).diverging(midpoint=2.25)["HasMidpoint"] == {
-            "at": 2.25
-        }
-        assert Schema.ordered(levels).diverging(midpoint=0)["HasMidpoint"] == {"at": 0}
-        assert Schema.ordered(levels).diverging(midpoint=5)["HasMidpoint"] == {"at": 5}
+        midpoint = lambda m: Unit(  # noqa: E731
+            domain=Domain.ordered(levels), traits=[Trait.diverging(m)]
+        ).type["HasMidpoint"]
+        assert midpoint(2) == {"at": 2}
+        assert midpoint(2.25) == {"at": 2.25}
+        assert midpoint(0) == {"at": 0}
+        assert midpoint(5) == {"at": 5}
 
     # The same literals as the JS schema.test.ts: the two languages raise the
     # same messages, word for word.
@@ -1127,16 +1210,12 @@ class TestSchema:
     )
     def test_diverging_midpoint_off_the_order(self, midpoint, message):
         with pytest.raises(ValueError) as error:
-            Schema.ordered(["SD", "D", "N", "A", "SA"]).diverging(midpoint=midpoint)
+            Unit(domain=Domain.ordered(["SD", "D", "N", "A", "SA"]), traits=[Trait.diverging(midpoint)])
         assert str(error.value) == message
-
-    def test_diverging_needs_has_order(self):
-        with pytest.raises(ValueError, match="HasMidpoint needs HasOrder"):
-            ColumnSchema({}).diverging()
 
     def test_schema_rides_chart_options(self):
         node = (
-            chart([{"r": "a"}], schema={"r": Schema.ordered(["a"]).diverging()})
+            chart([{"r": "a"}], schema={"r": Unit(domain=Domain.ordered(["a"]), traits=[Trait.diverging()])})
             .mark(rect(w=1))
             .to_ir()["root"]
         )

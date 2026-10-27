@@ -13,8 +13,6 @@ from .ast import (
     enclose,
     position,
     Constraint,
-    Schema,
-    ColumnSchema,
     Unit,
     ref,
     arrow,
@@ -71,9 +69,11 @@ from . import calendar as Calendar
 from . import color as Color
 from . import coord as Coord
 from . import curve as Curve
+from . import domain as Domain
 from . import overlap as Overlap
 from . import shape as Shape
 from . import tile as Tile
+from . import trait as Trait
 
 __all__ = [
     "chart",
@@ -86,9 +86,9 @@ __all__ = [
     "enclose",
     "position",
     "Constraint",
-    "Schema",
-    "ColumnSchema",
     "Unit",
+    "Domain",
+    "Trait",
     "Calendar",
     "ref",
     "arrow",

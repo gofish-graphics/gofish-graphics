@@ -1944,7 +1944,8 @@ def derive(fn: Callable, *, schema: Optional[dict] = None) -> DeriveOperator:
         schema: Column types of the result, keyed by column name, as in
             ``chart(data, schema={...})``: a ``Unit`` (``Unit.time(zone=...)``
             for a time), a unit's name, a column record
-            ``{"name": ..., "unit": ...}`` or ``Schema.ordered(levels)``.
+            ``{"name": ..., "unit": ...}``, e.g.
+            ``Unit(domain=Domain.ordered(levels))``.
             Without it, a result column keeps the
             type it had in the input while its values still fit it, a
             datetime column is a time, and any other column has no type. A
@@ -2340,61 +2341,6 @@ def log(prefix: Optional[str] = None) -> Operator:
 # Column types
 
 
-class ColumnSchema(dict):
-    """A column type for ``chart(data, schema={...})``: the classes the
-    column has, keyed by class name (the wire form JS reads as is).
-
-    Mirrors JS ``ColumnSchema``. Build one with ``Schema.ordered(levels)``;
-    each method adds one class. Constructing one checks that an order's
-    levels fit the column's other classes (``_check_levels_fit``).
-    """
-
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        _check_levels_fit("schema: the column", self)
-
-    def diverging(self, midpoint: Optional[float] = None) -> "ColumnSchema":
-        """Give the column a midpoint (``HasMidpoint``) along its order.
-
-        ``midpoint`` is in edge coordinates over the order: 0 is the first
-        level's leading edge, ``n`` is the last level's trailing edge (``n``
-        levels), and 2.25 has two levels and a quarter of the third before it.
-        The default is ``n / 2``: the middle of the middle level when ``n`` is
-        odd, the boundary between the two middle levels when it is even. A
-        stack over the column puts its 0 there.
-        """
-        if "HasOrder" not in self:
-            raise ValueError(
-                "HasMidpoint needs HasOrder: a midpoint is a point along an "
-                "order. Declare the order with `Schema.ordered(levels)` before "
-                "`.diverging()`."
-            )
-        levels = self["HasOrder"]["levels"]
-        n = len(levels)
-        at = n / 2 if midpoint is None else midpoint
-        # The same two messages as JS `checkMidpointOnOrder` in schema.ts,
-        # word for word.
-        order = (
-            "the edges of the order ["
-            + ", ".join(_show_level(level) for level in levels)
-            + "]"
-        )
-        if (
-            isinstance(at, bool)
-            or not isinstance(at, (int, float))
-            or not math.isfinite(at)
-        ):
-            raise ValueError(
-                f"diverging: midpoint must be a finite number from 0 to {n}, "
-                f"{order}."
-            )
-        if not 0 <= at <= n:
-            raise ValueError(
-                f"diverging: midpoint {_js_number(at)} is outside 0..{n}, {order}."
-            )
-        return ColumnSchema({**self, "HasMidpoint": {"at": at}})
-
-
 def _require_str(value: Any, what: str) -> str:
     """``value``, checked to be a string; ``what`` names it in the message."""
     if not isinstance(value, str):
@@ -2430,7 +2376,8 @@ def _accepts_amount(v: Any, unit: Dict[str, Any]) -> bool:
 # Which values each class accepts, given the class's own record: JS
 # ``ACCEPTS`` in schema.ts.
 _ACCEPTS: Dict[str, Callable[[Any, Any], bool]] = {
-    "HasOrder": lambda v, c: v is None or isinstance(v, str) or _is_number(v),
+    "HasLevels": lambda v, c: v is None or isinstance(v, str) or _is_number(v),
+    "HasOrder": lambda v, c: True,
     "HasMidpoint": lambda v, c: True,
     "HasUnit": _accepts_amount,
     "HasQuantity": lambda v, c: True,
@@ -2438,10 +2385,10 @@ _ACCEPTS: Dict[str, Callable[[Any, Any], bool]] = {
 
 
 def _check_levels_fit(who: str, column_type: Dict[str, Any]) -> None:
-    """Raise when one of an order's levels is not a value one of the
+    """Raise when one of a column's levels is not a value one of the
     column's classes accepts, with the message of JS ``checkLevelsFit`` in
     schema.ts, which explains the rule."""
-    for level in column_type.get("HasOrder", {}).get("levels", []):
+    for level in column_type.get("HasLevels", {}).get("levels", []):
         for cls, accepts in _ACCEPTS.items():
             if cls in column_type and not accepts(level, column_type[cls]):
                 raise TypeError(
@@ -2469,74 +2416,170 @@ def _js_number(x: Union[int, float]) -> str:
     return re.sub(r"e([+-])0*(\d)", r"e\1\2", repr(x))
 
 
-class Schema:
-    """Factories for column types, used in ``chart(data, schema={...})``.
+def _check_midpoint_on_order(levels: List[Any], at: Any) -> None:
+    """Raise when ``at`` is not a midpoint on the order ``levels``: JS
+    ``checkMidpointOnOrder`` in schema.ts, with the same two messages, word
+    for word."""
+    n = len(levels)
+    order = (
+        "the edges of the order ["
+        + ", ".join(_show_level(level) for level in levels)
+        + "]"
+    )
+    if isinstance(at, bool) or not isinstance(at, (int, float)) or not math.isfinite(at):
+        raise ValueError(
+            f"diverging: midpoint must be a finite number from 0 to {n}, {order}."
+        )
+    if not 0 <= at <= n:
+        raise ValueError(
+            f"diverging: midpoint {_js_number(at)} is outside 0..{n}, {order}."
+        )
 
-    Mirrors JS ``Schema``::
 
-        chart(survey, schema={"response": Schema.ordered(LEVELS).diverging()})
-    """
+def _json(value: Any) -> str:
+    """``value`` as JS ``JSON.stringify`` writes it, for a message."""
+    try:
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return repr(value)
 
-    @staticmethod
-    def ordered(levels: List[Any]) -> ColumnSchema:
-        """A column whose values are ``levels``, in this order (``HasOrder``).
 
-        Every ``by`` split over the column lays its groups out in this order,
-        and a value outside the levels is an error.
-        """
-        return ColumnSchema({"HasOrder": {"levels": list(levels)}})
+_TRAIT_KINDS = ("diverging", "summable")
+
+
+def _unit_type_of(name: Optional[str], domain: Any, traits: Any) -> Dict[str, Any]:
+    """The classes of the unit ``name`` with ``domain`` and ``traits``,
+    checked: JS ``unitTypeOf`` in schema.ts, with the same messages."""
+    who = "Unit" if name is None else f"Unit({json.dumps(name, ensure_ascii=False)})"
+    if domain is not None and not (
+        isinstance(domain, dict)
+        and domain.get("kind") in ("discrete", "ordered")
+        and isinstance(domain.get("levels"), list)
+    ):
+        raise TypeError(
+            f"{who}: domain must be a Domain: Domain.discrete(levels) or "
+            f"Domain.ordered(levels), got {_json(domain)}. A domain that is "
+            "an interval is not supported yet."
+        )
+    if name is None and domain is None:
+        raise TypeError(
+            'Unit needs a name, a domain, or both: Unit("USD"), '
+            'Unit({ domain: Domain.discrete(["low", "high"]) }).'
+        )
+    if traits is None:
+        traits = []
+    if not isinstance(traits, (list, tuple)):
+        raise TypeError(f"{who}: traits must be a list of Trait values.")
+    kinds: List[str] = []
+    midpoint = None
+    for trait in traits:
+        kind = trait.get("kind") if isinstance(trait, dict) else None
+        if kind not in _TRAIT_KINDS:
+            raise TypeError(
+                f"{who} has the trait {_json(trait)}. A unit's traits are "
+                "Trait.diverging() and Trait.summable()."
+            )
+        if kind in kinds:
+            raise TypeError(f"{who} lists Trait.{kind}() twice.")
+        kinds.append(kind)
+        if kind == "diverging":
+            midpoint = trait.get("midpoint")
+    if "diverging" in kinds and (domain is None or domain["kind"] != "ordered"):
+        if domain is None:
+            raise TypeError(
+                f"{who}: Trait.diverging() needs an ordered domain: a midpoint "
+                "is a point along an order, so list the levels in "
+                "Domain.ordered(levels). A midpoint on a unit's amounts is not "
+                "supported yet."
+            )
+        raise TypeError(
+            f"{who}: Trait.diverging() needs an ordered domain, but "
+            "Domain.discrete(levels) is unordered. A midpoint is a point "
+            "along an order: use Domain.ordered(levels)."
+        )
+    if "summable" in kinds and name is None:
+        raise TypeError(
+            "Unit: Trait.summable() needs a name. Whether amounts add up "
+            "belongs to their unit, which is known by its name: "
+            'Unit("USD", { traits: [Trait.summable()] }).'
+        )
+    type_: Dict[str, Any] = {}
+    if name is not None:
+        type_["HasUnit"] = {
+            "unit": name,
+            "symbol": name,
+            "classes": {"CanAdd": {}} if "summable" in kinds else {},
+        }
+    if domain is not None:
+        type_["HasLevels"] = {"levels": list(domain["levels"])}
+        if domain["kind"] == "ordered":
+            type_["HasOrder"] = {}
+    if "diverging" in kinds:
+        levels = domain["levels"]
+        at = len(levels) / 2 if midpoint is None else midpoint
+        _check_midpoint_on_order(levels, at)
+        type_["HasMidpoint"] = {"at": at}
+    _check_levels_fit(who, type_)
+    return type_
 
 
 class Unit:
-    """A unit definition, ``Unit("USD")``: a unit's name and the classes
-    every column in the unit has. Mirrors JS ``Unit``::
+    """A unit: ``Unit(name, domain=..., traits=[...])``, or
+    ``Unit(domain=..., traits=[...])`` with no name. Mirrors JS ``Unit``::
 
-        USD = Unit("USD").summable()
+        USD = Unit("USD", traits=[Trait.summable()])
+        Likert = Unit(domain=Domain.ordered(LEVELS), traits=[Trait.diverging()])
         chart(ledger, schema={"balance": {"name": "Balance", "unit": USD}})
 
-    It is immutable: ``.summable()`` returns a new definition. Two units are
-    the same when their names are equal. Declare a unit once and use it for
-    every column in it. The built-in units are ``Unit.time(zone=...)``, for
-    instants, and ``Unit.duration``, for spans of time.
+    Its name is its identity: two units are the same when their names are
+    equal. Its ``domain`` (``Domain.discrete(levels)``,
+    ``Domain.ordered(levels)``) is what its values are, and its ``traits``
+    (the ``Trait`` family) the capabilities they have. It is immutable.
+    Declare a unit once and use it for every column in it. The built-in
+    units are ``Unit.time(zone=...)``, for instants, and ``Unit.duration``,
+    for spans of time.
     """
 
     __slots__ = ("_type",)
 
-    # The unit as a column's ``HasUnit`` writes it: JS ``UnitDefinition.type``.
+    # The classes every column in the unit has: JS ``UnitDefinition.type``.
     _type: Dict[str, Any]
 
     # ``Unit.duration``, set below the class.
     duration: "Unit"
 
-    def __init__(self, name: str):
-        _require_str(name, "Unit: the name")
-        object.__setattr__(self, "_type", {"unit": name, "symbol": name, "classes": {}})
+    def __init__(
+        self,
+        name: Optional[str] = None,
+        *,
+        domain: Optional[Dict[str, Any]] = None,
+        traits: Optional[List[Dict[str, Any]]] = None,
+    ):
+        if name is not None:
+            _require_str(name, "Unit: the name")
+        object.__setattr__(self, "_type", _unit_type_of(name, domain, traits))
 
     @classmethod
     def _of(cls, type_: Dict[str, Any]) -> "Unit":
-        """The definition whose ``HasUnit`` is ``type_``."""
+        """The definition whose classes are ``type_``."""
         unit = object.__new__(cls)
         object.__setattr__(unit, "_type", copy.deepcopy(type_))
         return unit
 
     @property
-    def name(self) -> str:
-        """The unit's name: two units are the same when their names are
-        equal."""
-        return self._type["unit"]
+    def name(self) -> Optional[str]:
+        """The unit's name, if it has one: two units are the same when their
+        names are equal."""
+        return self._type.get("HasUnit", {}).get("unit")
+
+    @property
+    def type(self) -> Dict[str, Any]:
+        """The classes every column in the unit has, as the wire writes
+        them: JS ``UnitDefinition.type``."""
+        return copy.deepcopy(self._type)
 
     def __setattr__(self, key: str, value: Any) -> None:
-        raise AttributeError("Unit is immutable; chain its methods instead.")
-
-    def summable(self) -> "Unit":
-        """Say that amounts in the unit can be added (``CanAdd``): a sum of
-        them means something (money, counts, lengths), so a ``size``
-        channel, ``stack``, treemap ``size`` and ``.sum()`` may sum a column
-        in the unit. Amounts that do not add up (temperatures, prices,
-        rates) are in a unit without it."""
-        return Unit._of(
-            {**self._type, "classes": {**self._type["classes"], "CanAdd": {}}}
-        )
+        raise AttributeError("Unit is immutable.")
 
     @staticmethod
     def time(zone: str = "UTC") -> "Unit":
@@ -2554,7 +2597,7 @@ class Unit:
             raise TypeError(
                 f"Unit.time: zone must be an IANA time zone name, got {zone!r}"
             )
-        return Unit._of({**_INSTANT, "zone": zone})
+        return Unit._of({"HasUnit": {**_INSTANT, "zone": zone}})
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, Unit) and other._type == self._type
@@ -2563,20 +2606,36 @@ class Unit:
         return hash(json.dumps(self._type, sort_keys=True))
 
     def __repr__(self) -> str:
-        if self._type.get("zone") is not None:
-            return f"Unit.time(zone={self._type['zone']!r})"
-        if self._type == _DURATION:
+        unit = self._type.get("HasUnit")
+        if unit is not None and unit.get("zone") is not None:
+            return f"Unit.time(zone={unit['zone']!r})"
+        if unit == _DURATION:
             return "Unit.duration"
-        chain = ".summable()" if "CanAdd" in self._type["classes"] else ""
-        return f"Unit({self.name!r}){chain}"
+        args = [] if unit is None else [repr(unit["unit"])]
+        levels = self._type.get("HasLevels")
+        if levels is not None:
+            kind = "ordered" if "HasOrder" in self._type else "discrete"
+            args.append(f"domain=Domain.{kind}({levels['levels']!r})")
+        traits = []
+        midpoint = self._type.get("HasMidpoint")
+        if midpoint is not None:
+            default = len(levels["levels"]) / 2 if levels is not None else None
+            at = "" if midpoint["at"] == default else repr(midpoint["at"])
+            traits.append(f"Trait.diverging({at})")
+        if unit is not None and "CanAdd" in (unit.get("classes") or {}):
+            traits.append("Trait.summable()")
+        if traits:
+            args.append(f"traits=[{', '.join(traits)}]")
+        return f"Unit({', '.join(args)})"
 
 
-Unit.duration = Unit._of(_DURATION)
+Unit.duration = Unit._of({"HasUnit": _DURATION})
 
 
 # The class names of a column type, the keys of its wire record: JS
 # ``ColumnType`` in schema.ts.
 _CLASS_NAMES = (
+    "HasLevels",
     "HasOrder",
     "HasMidpoint",
     "HasUnit",
@@ -2590,17 +2649,17 @@ _RECORD_KEYS = ("name", "unit")
 
 
 def _unit_type(unit: Union[Unit, str]) -> Dict[str, Any]:
-    """The classes of a column in ``unit``: a definition's unit, or a name
-    alone, whose classes are unknown (no ``classes``). JS ``unitType`` in
+    """The classes of a column in ``unit``: a definition's, or a name alone,
+    whose classes are unknown (no ``classes``). JS ``unitType`` in
     schema.ts."""
     if isinstance(unit, str):
         return {"HasUnit": {"unit": unit, "symbol": unit}}
-    return {"HasUnit": copy.deepcopy(unit._type)}
+    return copy.deepcopy(unit._type)
 
 
 def _column_type_of(column: str, entry: Any) -> Dict[str, Any]:
     """The record of classes a schema entry stands for, the wire form: a
-    builder's record, a unit's, a column record's, or a wire record as is.
+    unit's, a column record's, or a wire record as is.
     JS ``classesOf`` in schema.ts, with the same messages."""
     who = f'schema: column "{column}"'
     if isinstance(entry, (Unit, str)):
@@ -2608,7 +2667,7 @@ def _column_type_of(column: str, entry: Any) -> Dict[str, Any]:
     if not isinstance(entry, dict):
         raise TypeError(
             f"{who} has the entry {entry!r}. A column's entry is a Unit, a "
-            "unit's name, a column record { name, unit }, or a Schema builder."
+            "unit's name, or a column record { name, unit }."
         )
     if all(k in _CLASS_NAMES for k in entry):
         return dict(entry)
@@ -3552,10 +3611,11 @@ def chart(
 
         spread(by="species", dir="x", axes={"x": True, "y": False})
 
-    ``schema`` declares column types, keyed by column name (see ``Schema``
-    and ``Unit``):
+    ``schema`` declares column types, keyed by column name (see ``Unit``,
+    ``Domain`` and ``Trait``):
 
-        chart(survey, schema={"response": Schema.ordered(LEVELS).diverging()})
+        Likert = Unit(domain=Domain.ordered(LEVELS), traits=[Trait.diverging()])
+        chart(survey, schema={"response": Likert})
         chart(ledger, schema={"balance": {"name": "Balance", "unit": USD}})
 
     Keys inside the per-axis dict are snake_case like every kwarg; an

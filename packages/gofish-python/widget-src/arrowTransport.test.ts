@@ -362,9 +362,9 @@ function testTimeColumnsDecodeAsTimes(): boolean {
     rows[1].n === 2 &&
     JSON.stringify(types) ===
       JSON.stringify({
-        ny: { HasUnit: Unit.time({ zone: "America/New_York" }).type },
-        naive: { HasUnit: Unit.time().type },
-        d: { HasUnit: Unit.time().type },
+        ny: Unit.time({ zone: "America/New_York" }).type,
+        naive: Unit.time().type,
+        d: Unit.time().type,
         n: { HasInteger: {} },
       });
   console.log(
@@ -562,9 +562,9 @@ function testNestedTimesDecodeAsEpochMs(): boolean {
     rows[0].points[1] === null &&
     JSON.stringify(Serialize.getColumnTypes(rows[0].points)) ===
       JSON.stringify({
-        naive: { HasUnit: Unit.time().type },
-        ny: { HasUnit: Unit.time({ zone: "America/New_York" }).type },
-        d: { HasUnit: Unit.time().type },
+        naive: Unit.time().type,
+        ny: Unit.time({ zone: "America/New_York" }).type,
+        d: Unit.time().type,
         v: { HasInteger: {} },
       }) &&
     JSON.stringify(rows[0].stamps) === JSON.stringify([ms, null]) &&
@@ -636,7 +636,7 @@ async function testCallbackResultsAreTyped(): Promise<boolean> {
   };
   const utc = await derived();
   const ny = await derived({
-    t: { HasUnit: Unit.time({ zone: "America/New_York" }).type },
+    t: Unit.time({ zone: "America/New_York" }).type,
   });
   const ok =
     fromAccessor === feb28 &&

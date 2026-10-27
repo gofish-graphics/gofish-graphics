@@ -182,7 +182,7 @@ function columnTypes(fields: Arrow.Field[]): Serialize.ColumnTypes {
   for (const { name, type } of fields) {
     if (Arrow.DataType.isTimestamp(type) || Arrow.DataType.isDate(type)) {
       const zone = (Arrow.DataType.isTimestamp(type) && type.timezone) || "UTC";
-      types[name] = { HasUnit: Unit.time({ zone }).type };
+      types[name] = Unit.time({ zone }).type;
     } else if (Arrow.DataType.isInt(type)) {
       types[name] = { HasInteger: {} };
     }
