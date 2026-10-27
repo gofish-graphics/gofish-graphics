@@ -89,8 +89,10 @@ property and `Can<Verb>` for an operation: `HasZero`, `HasOrder`, `HasCycle`,
 `CanAdd`, `CanNegate`. These read at a glance for someone who is not a
 mathematician. Math names like monoid or torsor appear only in the docs, as
 analogies. The builder method that declares a capability names what the user
-gets, not the class: `.summable()` declares `CanAdd`, as `.diverging()`
-declares `HasMidpoint`. Named types such as `Price` or `Revenue` are sugar over the
+gets, not the class: `Unit(name).summable()` declares `CanAdd`, as
+`.diverging()` declares `HasMidpoint`. A capability of amounts sits on the
+unit, which is declared once and shared by its columns, so one unit cannot
+both add up and not. Named types such as `Price` or `Revenue` are sugar over the
 capabilities, like chart templates over operators, so design the capabilities
 first.
 

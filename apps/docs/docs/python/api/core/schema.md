@@ -29,38 +29,61 @@ Schema.ordered(levels).diverging()   # HasOrder and HasMidpoint
 Schema.ordered(levels).diverging(midpoint=m)   # HasOrder and HasMidpoint
 Schema.time()                        # HasCalendar and HasUnit (the instant), in UTC
 Schema.time(zone=zone)               # the same, in the time zone `zone`
-Schema.unit(unit)                    # HasUnit, in the unit `unit`
-Schema.unit(unit).summable()         # HasUnit and CanAdd: the amounts add up
-Schema.quantity(name)                # HasQuantity, amounts of the quantity `name`
-Schema.quantity(name).unit(unit)     # HasUnit and HasQuantity
+
+Unit(name)                           # a unit definition
+Unit(name).summable()                # a unit whose amounts add up (CanAdd)
+
+{"name": name, "unit": unit}         # a column record: HasQuantity and HasUnit
+unit                                 # a Unit: the same as {"unit": unit}
+"km²"                                # a unit's name: the same as {"unit": "km²"}
 ```
 
 A column type is a set of classes. Each builder method adds the classes its
 row below lists, and `.diverging()` needs the order that `.ordered(...)`
-gives, because a midpoint is a point along an order. `.quantity(name)` and
-`.unit(unit)` may follow any builder, but a column has one unit, so
-`.unit(unit)` after `Schema.time()` raises a `TypeError`, and an ordered
-column takes a unit only when its levels are numbers. `.summable()` needs a
-unit other than a time's.
+gives, because a midpoint is a point along an order.
 
-| Builder                                     | Class                    | Meaning                                                 |
-| ------------------------------------------- | ------------------------ | ------------------------------------------------------- |
-| `Schema.ordered(levels)`                    | `HasOrder`               | The column's values are `levels`, in this order.        |
-| `.diverging()`                              | `HasMidpoint`            | The order has a midpoint, a point along it. See below.  |
-| `Schema.time()`                             | `HasCalendar`, `HasUnit` | The column's values are instants, read on a calendar.   |
-| `Schema.unit(unit)` / `.unit(unit)`         | `HasUnit`                | The column's values are amounts in the unit `unit`.     |
-| `.summable()`                               | `CanAdd`                 | The column's amounts add up. See below.                 |
-| `Schema.quantity(name)` / `.quantity(name)` | `HasQuantity`            | The column's values are amounts of the quantity `name`. |
+A column of amounts is declared with a column record, or with one of its two
+shorthands. A record takes the keys `"name"` and `"unit"`. Any other key
+raises a `TypeError`. `"unit"` is a `Unit` or a unit's name. A `Unit` is
+declared once and used by every column in it, so its columns agree on what
+it can do:
+
+```python
+from gofish import Unit
+
+USD = Unit("USD").summable()
+Celsius = Unit("°C")
+
+chart(
+    ledger,
+    schema={
+        "balance": {"name": "Balance", "unit": USD},
+        "revenue": USD,
+        "area": "km²",
+        "temp": {"unit": Celsius},
+    },
+)
+```
+
+| Entry                     | Class                    | Meaning                                                 |
+| ------------------------- | ------------------------ | ------------------------------------------------------- |
+| `Schema.ordered(levels)`  | `HasOrder`               | The column's values are `levels`, in this order.        |
+| `.diverging()`            | `HasMidpoint`            | The order has a midpoint, a point along it. See below.  |
+| `Schema.time()`           | `HasCalendar`, `HasUnit` | The column's values are instants, read on a calendar.   |
+| `{"unit": ...}`, a `Unit` | `HasUnit`                | The column's values are amounts in the unit.            |
+| `Unit(name).summable()`   | `CanAdd`                 | The unit's amounts add up. See below.                   |
+| `{"unit": ...}`, a name   | `HasUnit`                | The same, with no word on whether the amounts add up.   |
+| `{"name": ...}`           | `HasQuantity`            | The column's values are amounts of the quantity `name`. |
 
 ## Parameters
 
-| Parameter  | Type               | Description                                                                                                        |
-| ---------- | ------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| `levels`   | `list[str \| int]` | Every value the column takes, first to last.                                                                       |
-| `midpoint` | `float`            | Where the midpoint lies along the order, from 0 (before the first level) to `n` (after the last). Default `n / 2`. |
-| `zone`     | `str`              | The IANA time zone the column's instants are read in, e.g. `"America/New_York"`. Default `"UTC"`.                  |
-| `unit`     | `str`              | The name of the unit, e.g. `"USD"` or `"mm"`. Two units are the same when their names are equal.                   |
-| `name`     | `str`              | The name of the quantity, e.g. `"Pay"`. It titles the axis in place of the column's name.                          |
+| Parameter  | Type               | Description                                                                                                              |
+| ---------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `levels`   | `list[str \| int]` | Every value the column takes, first to last.                                                                             |
+| `midpoint` | `float`            | Where the midpoint lies along the order, from 0 (before the first level) to `n` (after the last). Default `n / 2`.       |
+| `zone`     | `str`              | The IANA time zone the column's instants are read in, e.g. `"America/New_York"`. Default `"UTC"`.                        |
+| `unit`     | `Unit \| str`      | A record's unit: a `Unit`, or a unit's name, e.g. `"USD"` or `"mm"`. Two units are the same when their names are equal.  |
+| `name`     | `str`              | A record's quantity, e.g. `"Pay"`. It titles the axis in place of the column's name. `Unit(name)` takes the unit's name. |
 
 ## Behavior
 
@@ -138,13 +161,14 @@ unit other than a time's.
   for the whole chart, so meeting another unit anywhere else is an error.
 - A column's unit is the same everywhere in a chart: columns with the same
   name have the same unit.
+- A `Unit` and a unit's name are the same unit when their names are equal.
 - When x and y have the same unit, they get one scale: one data unit is the
   same length on both axes.
 - An axis title shows a declared unit after its quantities, in
   parentheses: `"Production Budget (USD)"`. The rule does not read the
   names, so a column named `"Flipper Length (mm)"` in `"mm"` titles
   `"Flipper Length (mm) (mm)"`. Declare its quantity
-  (`Schema.quantity("Flipper Length").unit("mm")`) or set the axis `title`
+  (`{"name": "Flipper Length", "unit": Unit("mm")}`) or set the axis `title`
   for `"Flipper Length (mm)"`.
 - `.count()` and `.distinct()` are in the unit `"count"`. The cells of
   `field(x).bin(...)` are amounts of `x`: a `partition` over them titles its
@@ -157,12 +181,14 @@ unit other than a time's.
   [`treemap`](/python/api/operators/treemap) `size`, `field(x).sum()` and
   `field(x).normalize()` add up their values. Adding up values in a declared
   unit needs `CanAdd`: without it, it is an error that names the column and
-  the unit, and says to declare `.summable()`, or, for a time, to subtract
-  a reference first.
+  the unit, and says to declare the unit with `Unit(name).summable()`, or,
+  for a time, to subtract a reference first.
 - A time column never has `CanAdd`: two instants do not add up. Its
   difference does (`end - start` is a duration), and a mark with two
   positions (`x="start", x2="end"`) adds nothing.
-- A column with no declared unit adds up without `.summable()`.
+- A column with no declared unit adds up without `.summable()`, and so does
+  a column whose unit is a name alone (`"km²"`), since that says nothing
+  about whether the amounts add up.
 - A size channel adds up its rows whenever it reads a column, even when a
   group has one row. A pipeline op that folds the rows first
   (`field(x).mean()`, `.count()`) adds nothing.
@@ -170,13 +196,12 @@ unit other than a time's.
 - The difference of two amounts is in their unit (USD − USD is USD, °C − °C
   is °C), except the difference of two times, which is a duration. A size
   read from a time column is a duration too, never a time.
-- `CanAdd` is the column's, not its unit's: a stack checks only the
-  columns it adds, so a `start` column in days with no `CanAdd` may share an
-  axis with a stacked `.summable()` width in days.
-- `.summable()` needs a unit, so `Schema.quantity(name).summable()` and
-  `Schema.time().summable()` raise a `TypeError`. `chart` checks a
-  column-type record passed as is (the wire form, `{"CanAdd": {}}`) the
-  same way.
+- `CanAdd` is the unit's. Two columns whose `Unit`s have one name must
+  agree on `.summable()`: in one chart's schema, a disagreement is an error
+  that names both columns. A column whose unit is a name alone takes the
+  `CanAdd` of a `Unit` of that name in the same chart.
+- A stack checks only the columns it adds, so a `start` column in days may
+  share an axis with a stacked width in days.
 
 **`HasQuantity`.**
 
@@ -216,7 +241,7 @@ data stays a circle:
 ```python
 chart(
     sunflower,
-    schema={"x": Schema.unit("plane"), "y": Schema.unit("plane")},
+    schema={"x": "plane", "y": "plane"},
 ).flow(scatter(x="x", y="y")).mark(circle(r=4, fill="i"))
 ```
 
@@ -234,7 +259,7 @@ chart(prices, schema={"date": Schema.time()}, axes=True).flow(
 Five summary columns of one quantity title their axis once:
 
 ```python
-pay = Schema.quantity("Pay").unit("USD")
+pay = {"name": "Pay", "unit": Unit("USD")}
 
 chart(
     boxes,

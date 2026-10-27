@@ -212,11 +212,11 @@ quantity, so their scales must be equal — a circle stays circular, a 45° line
 looks 45°. The way maps, geometric data, and correlation plots need.
 
 GoFish does this from the **unit**, not a knob: declare both columns in the
-same unit with [`Schema.unit`](/js/api/core/schema) and the shared scale
+same unit with [`Unit`](/js/api/core/schema) or a unit's name and the shared scale
 follows.
 
 ```ts
-chart(data, { schema: { x: Schema.unit("plane"), y: Schema.unit("plane") } })
+chart(data, { schema: { x: "plane", y: "plane" } })
   .flow(scatter({ x: "x", y: "y" }))
   .mark(circle({ r: 4 }))
   .render(container, { w: 640, h: 380 }); // a true circle, not an ellipse
@@ -232,7 +232,7 @@ the leftover space. It applies to axes that carry a data-driven scale (a positio
 scale over a data domain, or a data-driven size); an axis with nothing to scale
 (a category axis) leaves it a no-op. Two columns with no declared unit stay
 independent (`bill_length` and `bill_depth`), while `predicted` and `actual`,
-both declared `Schema.unit("price")`, share a scale.
+both declared in the unit `"price"`, share a scale.
 
 ## Example
 

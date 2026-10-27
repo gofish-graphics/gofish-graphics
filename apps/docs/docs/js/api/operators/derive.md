@@ -101,7 +101,7 @@ units to decide when two axes may share a scale. A column with no declared
 unit has an unknown unit, which shares an axis with any column, so the
 columns a `derive` computes (`lo`, `hi`, a box plot's quartiles) share an
 axis with no annotation. Two different declared units on one axis are an
-error. See [`Schema.unit`](/js/api/core/schema).
+error. See [`Unit`](/js/api/core/schema).
 
 - **A column's type** (its declared quantity and unit, `HasQuantity` and
   `HasUnit`) rides the data array, so a column the input declares keeps it
@@ -111,13 +111,13 @@ error. See [`Schema.unit`](/js/api/core/schema).
 
   ```ts
   derive(quartiles, {
-    schema: { lo: Schema.unit("USD"), hi: Schema.unit("USD") },
+    schema: { lo: Unit("USD"), hi: Unit("USD") },
   });
   ```
 
 An axis is titled by the quantities of its columns (each column's name,
 unless its schema declares a quantity), then a declared unit in parentheses:
-`"Pay (USD)"`. See [`Schema.quantity`](/js/api/core/schema).
+`"Pay (USD)"`. See [`Schema`](/js/api/core/schema).
 
 If an axis combines two different units, you have two remedies:
 

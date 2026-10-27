@@ -211,7 +211,11 @@ expression's `ops`. A `filter` over a hand-written JS predicate has no wire
 form and emits the opaque `derive`. A `derive`'s `schema` (`derive(fn, { schema })`, Python
 `derive(fn, schema={...})`) is plain data, the wire form of a chart's
 `schema`, and the registry passes it to the rebuilt `derive`, which applies
-it to the rows the Python callback returns. (A `derive` once also carried a
+it to the rows the Python callback returns. A chart's `schema` crosses as
+the record of classes each entry stands for, never as the entry a user
+wrote: JS `toJSON` writes it with `schemaToWire` (`schema.ts`), and Python's
+`chart` and `derive` with `_schema_wire`, so a `Unit`, a unit's name and a
+column record `{ name, unit }` reach the wire the same from both languages. (A `derive` once also carried a
 measure `provenance` map for the rows of the `bin()` data helper; both are
 gone, #1058.) A binned key, `field("date").bin(Calendar.month)`, is an op in
 the field expression's `ops`: `{ "op": "bin", "partition": { "kind": "month",

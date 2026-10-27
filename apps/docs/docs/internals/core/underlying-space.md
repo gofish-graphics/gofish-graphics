@@ -1594,8 +1594,8 @@ a column whose unit nobody declared has an _unknown_ unit, a **unit variable**,
 which unifies with anything. A declared unit is concrete. Two different
 concrete units on one axis are a type error. The concrete units are:
 
-- a column's `Schema.unit(u)` (`HasUnit`, see
-  [column types](#column-types-the-chart-schema));
+- a column's unit, a `Unit(u)` definition or the name `u` alone (`HasUnit`,
+  see [column types](#column-types-the-chart-schema));
 - `"instant"`, which `Schema.time()` writes as the `HasUnit` of every time
   column, so a start and an end time share an axis; the time zone stays in
   the calendar, a display parameter;
@@ -1610,18 +1610,24 @@ concrete units on one axis are a type error. The concrete units are:
 
 Each declared unit is a `HasUnit` (the column type, `schema.ts`): a `unit`
 name, which says which units are the same, and an optional **symbol**, which
-an axis title shows. `Schema.unit(u)` writes the symbol `u`. The engine's own
+an axis title shows. A user's unit `u` has the symbol `u`, and a unit
+declared by its name alone is marked `nameOnly`. The engine's own
 units (`INSTANT`, `DURATION`, `COUNT` in `measure.ts`, a share) have none: a
 count or a share is a plain number, and a time axis's ticks already read as
 dates.
 
-**Which amounts add up.** A column's `CanAdd` (#1197, from `.summable()`)
-rides on the `Quantity` read from it (`columnQuantity` copies it), not on
-its unit: two columns of one unit may disagree, and a sum checks only the
-columns it sums. The engine's own quantities say it where they are made:
-a count (`COUNT_QUANTITY`) and a share (`shareQuantity`) have it.
-`addsUp` (`measure.ts`) is the rule: a quantity adds up when it has
-`CanAdd` or no declared unit. Every place that adds values sums them with
+**Which amounts add up.** `CanAdd` (#1197) is declared on a unit,
+`Unit(name).summable()`, and written on the type of each column in it. It
+rides on the `Quantity` read from a column (`columnQuantity` copies it), and
+a sum checks only the columns it sums. Within one chart's types the columns
+of one unit name agree on it (`unifyUnitClasses`, `schema.ts`): two `Unit`
+definitions of one name that disagree throw, and a unit declared by its
+name alone (`nameOnly`) takes the classes of a definition of that name.
+The engine's own quantities say it where they are made: a count
+(`COUNT_QUANTITY`) and a share (`shareQuantity`) have it. `addsUp`
+(`measure.ts`) is the rule: a quantity adds up when it has `CanAdd`, no
+declared unit, or a unit declared by its name alone, whose classes are
+unknown. Every place that adds values sums them with
 `sumIn` (`fieldExpr.ts`), which checks it with `checkSummable`: a size
 channel's sum over its rows (`inferNumeric`; when
 an aggregate op already folded the rows, the channel takes the op's value
@@ -1633,19 +1639,20 @@ with `checkSummable` too. A stack adds spaces, not values, so a space's
 `UnitRecord` carries `cannotAdd`, the quantities of its values that do not
 add up (`quantityUnits`; a shared `joinUnits` concatenates them), and
 `distributeSpaceFold` checks each free part's own list. It reads the
-parts, not the unit class they joined, so a `start` point in days beside a
-stacked `.summable()` width in days is fine; a pinned part is not summed,
+parts, not the unit class they joined, so a `start` point beside a stacked
+width is checked only for the width; a pinned part is not summed,
 since the stack adds only its width. Summing a declared unit without
 `CanAdd` throws an error that names the column and says to declare
-`.summable()`; for a time (a quantity on a calendar) it says to subtract a
+`Unit(name).summable()`; for a time (a quantity on a calendar) it says to subtract a
 reference first (`date - start` gives a duration, which adds up). An
 unknown unit passes, as everywhere in gradual typing. The
 check reads the column's type, not the rows, so a group of one row is
 checked like any other: whether a chart type-checks never depends on how
 many rows a group holds. A bar of one date or one temperature is the
 missing zero (`HasZero`, #1051), not this check. Under the declared shortcut
-of #1197, `CanAdd` is per column; its home may become the unit's one
-definition (#1142).
+of #1197, `CanAdd` is still written per column and unified per chart: two
+charts that share an axis keep each column's own classes. Its home for the
+whole figure is the unit's one definition (#1142).
 
 A size is never read on a calendar: `magnitude` takes its value's
 `differenceUnits`, so a size read from a time column (`h:
@@ -1658,7 +1665,7 @@ more: two charts that each declare their own `"value"` column, one in USD and
 one in EUR, share nothing, and a column `"count"` declared in people is not
 the `"count"` of `.count()`. Only an unknown is a variable. A unit variable
 is named by its **quantity**: the column's declared quantity
-(`HasQuantity`, from `Schema.quantity(name)`), or, for a column a transform
+(`HasQuantity`, a column record's `name`), or, for a column a transform
 derived from another, the source column's quantity (`bin(field)`'s
 `start`/`end`/`size` are amounts of `field`), or else the column's name. The
 column name is a weak default: it makes no claim, so two columns with
@@ -1828,7 +1835,7 @@ a grouped bar chart over a column declared in dollars and one in euros:
 > unit.
 > If they are the same kind of quantity, declare the same unit for their
 > columns in the chart's schema, e.g. schema: { "Worldwide Gross":
-> Schema.unit("EUR") }.
+> "EUR" }.
 > If they are different kinds of quantity, each needs its own axis: give the
 > inner chart its own w and h so it scales on its own.
 
@@ -1848,7 +1855,7 @@ names it on the way out (`GoFishNode.axisName`): `x` or `y`, or the name the
 innermost enclosing coordinate space gives it (`r`, `theta`, `lon`, `lat`). It
 reads the same axis scope the name pass uses (`axisScopeFor`), so a space that
 declares no names leaves `x` and `y` even inside a polar one.
-`Schema.unit` is spelled the same in Python, so one message serves both.
+A unit's name is spelled the same in Python, so one message serves both.
 
 The two remedies are the two escape hatches this essay already describes:
 declare that the units _are_ the same, or place the foreign region apart
@@ -1862,11 +1869,11 @@ quantities), joined with `", "` in the order the merge met them, then the
 symbol of the axis's unit in parentheses when that unit is declared and has
 a symbol. A histogram's edges title as their source column, an axis over
 `lo` and `hi` reads `"lo, hi"`, and the four summary columns of a box plot
-declared `Schema.quantity("Pay").unit("USD")` read `"Pay (USD)"`. A count, a
+declared `{ name: "Pay", unit: Unit("USD") }` read `"Pay (USD)"`. A count, a
 share, a time, and an unknown unit add nothing. The rule never reads the
 names, so a column named `"Flipper Length (mm)"` declared in `"mm"` titles
 `"Flipper Length (mm) (mm)"`. The clean title comes from declaring the
-quantity (`Schema.quantity("Flipper Length").unit("mm")`) or from the `axes`
+quantity (`{ name: "Flipper Length", unit: Unit("mm") }`) or from the `axes`
 option's `title`, which overrides all of this.
 
 **Stage 2.** This is Stage 1: one unit per axis, unified or refused. The
@@ -1966,23 +1973,25 @@ reads only the classes, never the builder words. Eight classes exist:
   The values a user writes are the `Calendar` strategy family
   (`families/calendar.ts`): each kind is a `CalendarPartition` used bare or
   called with its options (`Calendar.month({ every: 3 })`, #1133).
-- `HasUnit` (`{ unit, symbol? }`, #994, #955): the values are amounts in
-  the declared unit `unit`. Both `Schema.unit(u)` and `.unit(u)` (after
-  another builder) declare the unit `u` and write the symbol `u`. A column
+- `HasUnit` (`{ unit, symbol?, nameOnly? }`, #994, #955): the values are
+  amounts in the declared unit `unit`. A column's entry declares it with a
+  `Unit(u)` definition, or with the name `u` alone, which writes `nameOnly`:
+  the unit's classes are unknown. Either writes the symbol `u`. A column
   without it has an unknown unit, a unit variable (see
   [measures](#measures-units-are-types)). A column has one unit, and an
   order's levels must fit its other classes, so a time or a text-level
   column takes no other unit (`checkNoUnit` and `checkLevelsFit` in
-  `schema.ts`).
+  `schema.ts`, which only a wire record can break: no entry adds a unit to
+  an order or a time).
 - `CanAdd` (`{}`, #1197): the column's amounts add up, so a sum of them
-  means something. Declared with `.summable()`, which needs `HasUnit` and no
-  `HasCalendar` in its `this` type: only amounts in a unit add up, and two
-  instants never do (`checkSummableType` in `schema.ts`, which the
-  `ColumnSchema` constructor runs and which checks a wire record the same
-  way; Python's `ColumnSchema` raises the same messages). See [which units add up](#measures-units-are-types).
+  means something. Declared on the unit, `Unit(u).summable()`, and written
+  on every column in it. It needs `HasUnit` and no `HasCalendar`: only
+  amounts in a unit add up, and two instants never do (`checkSummableType`
+  in `schema.ts`, which checks a wire record; Python's `ColumnSchema`
+  raises the same messages). See [which units add up](#measures-units-are-types).
 - `HasQuantity` (`{ name }`, #955): the values are amounts of the quantity
-  `name` (`Schema.quantity(name)`, or `.quantity(name)` after another
-  builder), when it is not the column's own name. It titles the axis and
+  `name` (a column record's `name`, `{ name, unit }`), when it is not the
+  column's own name. It titles the axis and
   names the unit variable. A transform writes it for the columns it makes
   (`bin(field)`'s `start`/`end`/`size` are amounts of `field`'s quantity, in
   `field`'s declared unit if it has one; its `count` is in `"count"`).
@@ -2046,8 +2055,11 @@ A column's unit is one of these classes, `HasUnit`, so a unit moves with
 the rest of the column's type, by the same rules: it survives a split, a
 `filter`, and a `derive` whose column still holds numbers, and a `schema`
 entry that names the column replaces it with the rest of the type (#994).
-`chart(data, { schema })` and `derive(fn, { schema })` declare it with
-`Schema.unit(u)`.
+`chart(data, { schema })` and `derive(fn, { schema })` declare it with a
+`Unit(u)` or the name `u`. `columnTypeOf` turns every entry (a builder, a
+column record `{ name, unit }`, a `Unit`, a unit's name) into its record of
+classes, the wire form, in one place (`classesOf`), which Python's `chart`
+mirrors before it serializes.
 
 A column's **domain** (`HasDomain`) moves with the rest of its type, by the
 rules above, with one difference: it is of the rows it was computed over.
