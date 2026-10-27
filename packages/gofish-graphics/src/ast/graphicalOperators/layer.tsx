@@ -58,6 +58,7 @@ import { GoFishRef } from "../_ref";
 import { applyRelationalZBelowDefaults } from "../constraints/relationalPaint";
 import {
   axisIndex,
+  buildNameIndex,
   childNameKey,
   type ConstraintPosScales,
   type FreeOrigin,
@@ -432,14 +433,25 @@ export const layer = createNodeOperatorSequential(
       // axis, merged with any POSITION domain bubbled up from children. This
       // is what lets the layer build a position scale at layout time so
       // `Constraint.position` can map data values to pixels.
-      const posDomains = collectPositionDomains(constraints);
+      // A layer's rule is built on `planSharing`, so its plan carries
+      // `datumPlaced`.
+      const sharing = node.sharing() as LayerSharingPlan;
+      // Only the datums that place children of the layer's own set: a
+      // constraint that places a detached child (a chrome ring's tick, which
+      // the ring's sharing puts in a set of its own) positions it in the
+      // layer's frame but is no part of the type the layer reports, so a
+      // chart's chrome never re-types it (#1170).
+      const nameIndex = buildNameIndex(childNodes);
+      const posDomains = collectPositionDomains(constraints, (c, axis) =>
+        c.children.every((r) => {
+          const i = nameIndex.get(r.name);
+          return i === undefined || sharing.sets[axis][i] === 0;
+        })
+      );
       // The children the layer's own union leaves out on each axis: those
       // its sharing sets detach (a literal `position` places them
       // elsewhere), and those a datum position places (their own extent is
       // nested at the datum, which is what they add to the domain).
-      // A layer's rule is built on `planSharing`, so its plan carries
-      // `datumPlaced`.
-      const sharing = node.sharing() as LayerSharingPlan;
       const placed = ([0, 1] as const).map(
         (axis) =>
           new Set([

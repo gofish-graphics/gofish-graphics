@@ -266,14 +266,20 @@ export function resolveConstraintOperands(
  * `joinUnits`: an untagged side takes the other's unit) — restoring the unit
  * tag the scatter reduction dropped. A child its sharing sets detach or a
  * datum places is not in that union, so its unit takes no part.
+ *
+ * `counts` says which constraints count on each axis: a layer's type counts
+ * only those that place children of its own set (`layer.tsx`), so a chrome
+ * ring's ticks, each a set of its own, add nothing to the type it reports.
  */
 export function collectPositionDomains(
-  constraints: ConstraintSpec[]
+  constraints: ConstraintSpec[],
+  counts: (c: ConstraintSpec, axis: 0 | 1) => boolean = () => true
 ): PositionDomains {
   const axes = [newAxisDomain(), newAxisDomain()] as const;
   for (const c of constraints) {
     if (c.type !== "position") continue;
     for (const axis of [0, 1] as const) {
+      if (!counts(c, axis)) continue;
       const acc = axes[axis];
       const point = axis === 0 ? c.x : c.y;
       if (point !== undefined) {

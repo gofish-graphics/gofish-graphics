@@ -641,7 +641,14 @@ composes its targets' spaces into the layer's claim on that axis:
   (Literal-pixel coordinates are not data and don't contribute; neither do
   discrete scatter slots, which resolve directly from the already-known layer
   size.) That domain is what the layer later turns into a data→pixel scale to
-  resolve those constraints.
+  resolve those constraints. Only a constraint whose targets are in the
+  layer's own set on that axis contributes (see Sharing sets below). A chrome
+  ring's ticks are each a set of their own (`wrapRing`), so their datums
+  place them in the ring's frame but are no part of the type the ring
+  reports: a chart's box reports its content's type, and its chrome never
+  re-types it (#1170). A bar chart beside a caption is still a free magnitude
+  to the spread that holds them, so the spread gives it the room its bars
+  claim.
 - `Constraint.distribute` contributes the stack fold, as a type fold
   (`distributeSpaceFold`, `constraints/distribute.ts`) and a claim fold
   (`distributeExtentFold`). The chain moves every target to its place, so it

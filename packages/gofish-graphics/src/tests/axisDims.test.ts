@@ -394,11 +394,16 @@ async function main() {
         await dots({ x: "name", y: "angle" })
       )
     );
-    const minDims = await dots({
+    // A non-numeric span has no data interval, so the chart's x axis has no
+    // domain to map: the render may fail. Both spellings must still agree,
+    // on the dots or on the error.
+    const outcome = (opts: any) =>
+      dots(opts).catch((e: Error) => `error: ${e.message}`);
+    const minDims = await outcome({
       dims: { x: { min: "name", max: "name" } },
       y: "angle",
     });
-    const minTop = await dots({ xMin: "name", xMax: "name", y: "angle" });
+    const minTop = await outcome({ xMin: "name", xMax: "name", y: "angle" });
     check(
       "dims {x: {min: <non-numeric>}} ≡ xMin (neither discrete)",
       same(minDims, minTop),
