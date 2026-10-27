@@ -6,6 +6,7 @@ from gofish import (
     chart,
     derive,
     field,
+    layer,
     rect,
     spread,
     stack,
@@ -150,6 +151,10 @@ def story_above_end():
 # ─── all positions grid ──────────────────────────────────────────────────────
 # The same bars once per position, each captioned with its position, two to a
 # row (a position beside its counterpart) so they can be compared side by side.
+# A row lines its cells up by their outer boxes, labels included, so the caption
+# is layered at a fixed height above the plot rather than spread above the
+# cell: labels above the bars then sit under the caption instead of pushing the
+# plot down.
 
 ALL_POSITIONS = [
     "center",
@@ -169,28 +174,32 @@ ALL_POSITIONS = [
 ]
 
 
-def _captioned(caption, body, spacing=16):
-    """A chart captioned above with `caption`, `spacing` px above the chart."""
+def _captioned(caption, body):
+    """A chart captioned above with `caption`."""
     return spread(
         [text(text=caption, font_size=12, font_family="monospace"), body],
         dir="y",
-        spacing=spacing,
+        spacing=16,
         alignment="start",
     )
 
 
 def story_all_positions():
     def cell(position):
-        return _captioned(
-            position,
-            chart(SEAFOOD, axes=False, w=300, h=100)
-            .flow(spread(by="lake", dir="x"))
-            .mark(
-                rect(h="count").label(
-                    field("count").sum(), position=position, font_size=9
-                )
-            ),
-            32,
+        return layer(
+            [
+                chart(SEAFOOD, axes=False, w=300, h=100)
+                .flow(spread(by="lake", dir="x"))
+                .mark(
+                    rect(h="count").label(
+                        field("count").sum(), position=position, font_size=9
+                    )
+                ),
+                # 32 px above the 100 px plot.
+                text(
+                    x=0, y=132, text=position, font_size=12, font_family="monospace"
+                ),
+            ]
         )
 
     rows = [

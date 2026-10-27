@@ -9,6 +9,7 @@ import {
   rect,
   text,
   derive,
+  layer,
   field,
   Color,
 } from "../../src/lib";
@@ -206,7 +207,10 @@ export const AboveEnd: StoryObj<Args> = {
 // ─── All positions grid ────────────────────────────────────────────────────────
 // The same bars once per position, each captioned with its position, two to
 // a row (a position beside its counterpart) so they can be compared side by
-// side.
+// side. A row lines its cells up by their outer boxes, labels included, so the
+// caption is layered at a fixed height above the plot rather than spread above
+// the cell: labels above the bars then sit under the caption instead of
+// pushing the plot down.
 
 const ALL_POSITIONS: LabelPosition[] = [
   "center",
@@ -225,9 +229,9 @@ const ALL_POSITIONS: LabelPosition[] = [
   "outset-top-end",
 ];
 
-/** A chart captioned above with `caption`, `spacing` px above the chart. */
-const captioned = (caption: string, body: any, spacing = 16) =>
-  spread({ dir: "y", spacing, alignment: "start" }, [
+/** A chart captioned above with `caption`. */
+const captioned = (caption: string, body: any) =>
+  spread({ dir: "y", spacing: 16, alignment: "start" }, [
     text({ text: caption, fontSize: 12, fontFamily: "monospace" }),
     body,
   ]);
@@ -237,8 +241,7 @@ export const AllPositions: StoryObj = {
   render: () => {
     const container = initializeContainer();
     const cell = (position: LabelPosition) =>
-      captioned(
-        position,
+      layer([
         chart(seafood, { axes: false, w: 300, h: 100 })
           .flow(spread({ by: "lake", dir: "x" }))
           .mark(
@@ -247,8 +250,15 @@ export const AllPositions: StoryObj = {
               fontSize: 9,
             })
           ),
-        32
-      );
+        // 32 px above the 100 px plot.
+        text({
+          x: 0,
+          y: 132,
+          text: position,
+          fontSize: 12,
+          fontFamily: "monospace",
+        }),
+      ]);
     const rows = Array.from({ length: ALL_POSITIONS.length / 2 }, (_, i) =>
       spread({ dir: "x", spacing: 48, alignment: "start" }, [
         cell(ALL_POSITIONS[2 * i]),
