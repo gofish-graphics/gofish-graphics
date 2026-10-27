@@ -78,20 +78,27 @@ legend past it. It has two phases:
    array. It is what makes `.label()` on an **operator** (`spread`, `stack`,
    `group`, ...) label the group rather than every leaf mark inside it: the
    operator factory stamps `datum` on each group leaf it produces, so the push-down
-   stops there. A node whose children are all refs keeps its label too: a
-   relational mark like `arrow` draws between placed operands, and it is the
-   thing labeled.
+   stops there. A mark that draws its own ink between or around its
+   children keeps its label too: it says where its label goes
+   (`labelPosition`, below), as `arrow` and the `line` connector do, and it
+   is the thing labeled.
 2. **`elaborateLabelsWalk`** — a bottom-up recursion. At each node `P`, every
    **direct child** still carrying a non-empty `_labels` (after step 1) is
-   collected as a target; if any exist, `P` is wrapped once in a `Layer`
-   holding its original content plus one `ref()` + `label` pair per
-   (target × spec). A labeled ROOT (no parent to wrap it) gets one final
-   self-wrap in `elaborateLabels` itself.
+   collected as a target. Its labels at a position string are wrapped at
+   `P`: `P` is wrapped once in a `Layer` holding its original content plus
+   one `ref()` + `label` pair per (target × spec). Its labels that the
+   chooser places wait instead (`pending`), and so do the ones handed up
+   from below, until the walk reaches the nearest node that all of their
+   call's targets are under (a pre-pass, `countChosen`, counts each call's
+   targets); they are wrapped there, so one call is placed in one run. A
+   labeled ROOT (no parent to wrap it) gets one final self-wrap in
+   `elaborateLabels` itself.
 
 ## The parent-tier wrap invariant
 
-The wrap happens at the labeled node's **parent**, never at the labeled node
-itself. This is deliberate and mirrors the axis gutter invariant exactly
+The wrap happens at the labeled node's **parent** (or, for the labels the
+chooser places, at the nearest node above all of their call's targets),
+never at the labeled node itself. This is deliberate and mirrors the axis gutter invariant exactly
 (labels must never shift the marks they describe, #493): wrapping a mark
 individually would fold the label's bbox into the mark's own box, and an
 outset label would then push stacked/box-driven siblings apart — a label on
@@ -113,7 +120,7 @@ label lowers under its mark's build-in animation (`INTERNAL_animate`), which it
 finds through `_attachedTo`, so it follows its mark's timing
 (`src/animation/paint.ts`).
 
-Concretely, `wrapWithLabelTexts` builds:
+Concretely, `wrapWithLabels` builds:
 
 ```
 wrap = Layer([ content.name("__labelContent"), ...refs, ...texts ])
@@ -132,9 +139,9 @@ placed):
 2. Per target × spec at a position string, the constraints
    `buildLabelConstraints` derives from it (below), relating the spec's label
    to a `ref(target)` stand-in.
-3. When any spec has a `Place` strategy, one `labelPlace` constraint over all
-   of them, which the layer runs after its solve (see "Placement strategies"
-   below).
+3. When any label is placed by the chooser, one `labelPlace` constraint over
+   all of them, which the layer runs after its solve (see "Placement
+   strategies" below).
 
 If a node being wrapped **also** carries its own `_labels` (pending for its
 own parent), `elaborateLabelsWalk` hoists them onto the freshly built wrapper
@@ -243,7 +250,9 @@ best first (`strategies.ts`):
   which the box centered there first touches the outline, its smallest
   weighted L∞ distance to an edge. A coarse grid finds the best cells and
   halving steps refine them. Only spots where the box fits at its own size
-  are candidates.
+  are candidates. The edges are filed in a grid of cells sized to the
+  label, and the room at a point reads the cells around it ring by ring,
+  stopping once no unread edge can be nearer.
 
 A strategy that needs geometry the target lacks is an error that names it
 (`Place.interior needs a filled region; connect has an open one`). A
@@ -256,19 +265,28 @@ solve and after `overlap`, when the labeled marks are placed and their `ref()`
 stand-ins can be read. It reads and writes in pixels through each
 placeable's unoriented node (`rawPlaceable`), and reads a placed node's
 outlines with `placedOutlines`, as `enclose` does. The labels of one `.label()`
-call (one `group`, which `GoFishNode.label` sets from the call's options
-object) are taken in data order; each takes its first candidate that stays
+call share one `group`: an identity made once per call, where the call is
+recorded (the mark modifier's `bind`, an operator's label state, so a call
+read back by `fromJSON` too), so two calls with the same accessor are two
+calls. They are placed in one run, in the layer of the nearest node all of
+their targets are under, so the area they keep to is that node's: the plot
+area below the axes when the call spans the plot. A call's `start` and `end`
+labels are placed first, each kind on its own; the rest are taken in data
+order, and each takes its first candidate that stays
 inside the area the layer was given (`[0, size]` on each axis, so labels stay
 off the axes around the plot) and whose box, grown by 1 px, covers no
-obstacle. The obstacles sit in a uniform grid (`collide.ts`): the labeled
+obstacle. The strategies yield their candidates lazily, so the chooser stops
+computing at the first free one. The obstacles sit in a uniform grid (`collide.ts`): the labeled
 marks of the layer, as the ink each draws (the inside of a filled closed
 outline, and the band its stroke `width` draws along every outline, open or
 closed, so an unfilled closed outline is only its band), the label's own
 mark as its outline's band only (so a label may sit inside its
 region, and a label `"on"` a path may cover it), the labels placed so far
-(by this step, or by the solve for a position string), and the call's
-`avoiding` nodes, read through fresh refs (`nodeRefs.ts`, shared with
-`enclose`). A label with no free candidate is hidden: it draws nothing and
+(by this step, or by the solve for a position string, in this wrapper or in
+one below it, read through refs), and the call's
+`avoiding` nodes, read through fresh refs made once per call (`nodeRefs.ts`,
+shared with `enclose`; a `selectAll` in `avoiding` is resolved where the
+call is recorded, against the chart's named layers). A label with no free candidate is hidden: it draws nothing and
 its box is empty at its mark's center. `start` and `end` labels are never
 hidden: the labels of one call on each side slide apart vertically
 (`dodgeVertically`, directlabels' `last.qp`). A seated label writes its
@@ -278,10 +296,12 @@ labels each call hid (`reportHiddenLabels`, from `gofish.tsx`).
 
 A position string never goes through the chooser, so it places exactly as
 before. With no `position`, the default comes from the target's node
-definition (`labelPosition`), by its kind of geometry: `ellipse` gives
-`Place.around()`, a `line` connector and `arrow` give `Place.end()`, a
-`ribbon` band and `polygon` give `Place.interior()`, and anything else
-`"outset"`. Inside a coordinate space that is not linear (a polar `coord`),
+definition (`labelPosition`): `ellipse` gives `Place.around()` and `arrow`
+`Place.end()` by convention; a connector (`line`, `ribbon`) and a `polygon`
+give `"outline"`, which the chooser reads from the outline the mark draws
+(`placeByOutline`): `Place.end()` for an open path, `Place.interior()` for a
+filled region, `Place.around()` for a closed outline with no fill. Anything
+else gets `"outset"`. Inside a coordinate space that is not linear (a polar `coord`),
 outlines are not on the screen yet, so a default falls back to `"outset"` and
 a strategy written out is an error that cites #1201. Before that, a strategy
 is checked against the `Place` family with `checkStrategy` (an unknown kind,
@@ -318,7 +338,7 @@ with no resolvable fill, or a fill that is not a parseable color (`none`,
 ## Multi-label and typography options
 
 Repeated `.label()` calls on the same node **append**: `GoFishNode.label()`
-pushes onto an array (`(this._labels ??= []).push({ accessor, ...options, group, layerContext })`),
+pushes onto an array (`(this._labels ??= []).push({ accessor, ...options, group: call })`),
 so `_labels` is genuinely a list of independent specs, each with its own
 accessor, position, and styling — not a single mutable slot. `LabelOptions`
 carries `fontFamily`/`fontWeight`/`fontStyle` alongside the older

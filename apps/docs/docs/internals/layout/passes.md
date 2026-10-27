@@ -687,7 +687,7 @@ helper, which falls back to the box when the node does not answer.
 
 - `enclosingCircle` (`enclosingCircle(g)`): a circle around the shape. The
   fallback is the circle through the box corners.
-- `outline` (`outlines(g, tolerance, direction)`): the shape's outline as
+- `outline` (`g.outline(tolerance)`): the shape's outline as
   polylines that stray at most `tolerance` pixels from it. Each states three
   facts. `closed` is its topology: the path loops back, or it is open, with
   a start, an end and a direction of travel. `filled` is its paint: the
@@ -697,20 +697,22 @@ helper, which falls back to the box when the node does not answer.
   it, on an open or a closed outline, and absent when no stroke is drawn.
   The ink is the inside when filled, plus the band. An outline may also name
   `parts`, arc-length ranges for the mark's own pieces. A region with holes
-  (several loops under a fill rule) is not an outline yet (#1201). The
-  fallback is the box as a closed, filled rect whose
+  (several loops under a fill rule) is not an outline yet (#1201). Every
+  node answers it: `GoFishNode.geometry()` gives a node whose definition
+  has no outline the box as a closed, filled rect (`boxOutline`) whose
   parts are its edges, `x-min`, `x-max`, `y-min` and `y-max`, named in the
-  node's own axis order (so on a continuous y, `y-max` is the top edge).
-  Every outline, a node's own and the fallback alike, is in the frame of the
-  geometry it was read from: pixels, y down, for a node's own geometry, and
-  the parent's axis order for a parent's view of a child (`orientView`
-  reflects the outlines with the box). `direction` only names the box's
-  edges. Beside its samples, an outline may give its shape exactly: an
-  `ellipse` (`cx`, `cy`, `rx`, `ry`) or a `box` on a closed outline. Moving or
-  reflecting an outline moves its exact forms with it. `placedOutlines(p,
-tolerance, direction)` reads a placed node's outlines in its parent's
-  frame, moved so the geometry's box sits where `p.dims` puts it. Labels and
-  `enclose` read members this way.
+  node's own axis order (so on a continuous y, `y-max` is the top edge),
+  and keeps each tolerance's samples for the layout. Every outline, a
+  node's own and the box alike, is in the frame of the geometry it was
+  read from: pixels, y down, for a node's own geometry, and the parent's
+  axis order for a parent's view of a child (`orientView` reflects the
+  outlines with the box; the parts keep their names). Beside its samples,
+  an outline may give its shape exactly: an `ellipse` (`cx`, `cy`, `rx`,
+  `ry`) or a `box` on a closed outline. Moving or reflecting an outline
+  moves its exact forms with it. `placedOutlines(p, tolerance)` reads a
+  placed node's outlines in its parent's frame, moved so the geometry's box
+  sits where `p.dims` puts it. Labels and `enclose` read members this way,
+  and `outlineSegments` walks an outline's straight pieces for both.
 
 - A node definition may pass a `geometry` function next to `lower`. `ellipse`
   answers with the circle of its larger radius and its sampled outline,
@@ -721,9 +723,10 @@ tolerance, direction)` reads a placed node's outlines in its parent's
   band, and an `arrow`'s is its body. A rotated `text` answers with its
   turned glyph box, read as filled, and a `region` with its cell's outline
   when it has one. Each mark reads `filled` and `width` from its own
-  `fill`, `stroke` and `strokeWidth`; a node with no paint of its own (a
-  layer, a `blank`) is read as filling its box. Paths that a node keeps in its axis order are
-  turned into pixels (`orderToPixel`).
+  `fill`, `stroke` and `strokeWidth` once, when it is made; a node with no
+  paint of its own (a layer, a `blank`) is read as filling its box. Rings
+  and paths that a node keeps in its axis order are turned into pixel
+  outlines by `ringOutline` and `pathOutline` (through `orderToPixel`).
 - `enclose` reads its members through `outline` (`enclose/members.ts`),
   taking the exact forms where an outline gives them: an ellipse is a disc,
   a box a box, an open outline or an unfilled closed one its pieces as wide
@@ -806,8 +809,9 @@ constraint (`labels/placeStep.ts`), another step the solver never sees:
 the labels a position string placed are where they land. It reads each
 labeled mark's `outline` through its `ref()`, picks each label's first free
 candidate spot, and writes the label's box with `setExtent`. A node definition
-may also pass `labelPosition`, the strategy a `.label()` with no `position`
-uses on it. After the root's layout, `gofish.tsx` prints one note for the
+may also pass `labelPosition`, where a `.label()` with no `position` goes on
+it: a strategy by convention, or `"outline"`, read from its outline when the
+label is placed. After the root's layout, `gofish.tsx` prints one note for the
 labels the step hid (`reportHiddenLabels`).
 
 ### Pass 10: Placement
