@@ -15,17 +15,35 @@ it declares (``HasLevels``, and ``HasOrder`` for an ordered one). Mirrors JS
 A domain that is an interval of numbers (``Domain.continuous``) comes later.
 """
 
-from typing import Any, Dict, Sequence
+import json
+from typing import Any, Dict, List, Sequence
 
 __all__ = ["discrete", "ordered"]
 
 
 def _levels_domain(kind: str, levels: Sequence[Any]) -> Dict[str, Any]:
+    """The domain of ``kind`` over ``levels``, checked to be a list of at
+    least one level with no level listed twice: JS ``levelsDomain`` in
+    families/domain.ts, with the same messages."""
     if not isinstance(levels, (list, tuple)):
         raise TypeError(
             f"Domain.{kind}: levels must be a list, e.g. "
             f'Domain.{kind}(["low", "mid", "high"]), got {levels!r}.'
         )
+    if len(levels) == 0:
+        raise ValueError(
+            f"Domain.{kind}: levels must list at least one level, e.g. "
+            f'Domain.{kind}(["low", "mid", "high"]).'
+        )
+    seen: List[Any] = []
+    for level in levels:
+        if level in seen:
+            raise ValueError(
+                f"Domain.{kind}: the level "
+                f"{json.dumps(level, ensure_ascii=False)} is listed twice. "
+                "Each level is listed once, in its place."
+            )
+        seen.append(level)
     return {"kind": kind, "levels": list(levels)}
 
 

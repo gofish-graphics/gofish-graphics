@@ -25,8 +25,10 @@ import type { Level, LevelsDomain } from "../ast/schema";
 
 export type { Domain } from "../ast/schema";
 
-/** The domain of `kind` over `levels`, checked to be a list. */
-const levelsDomain = (
+/** The domain of `kind` over `levels`, checked to be a list of at least one
+ *  level with no level listed twice. Python's `Domain` raises the same
+ *  messages, word for word. */
+export const levelsDomain = (
   kind: LevelsDomain["kind"],
   levels: readonly Level[]
 ): LevelsDomain => {
@@ -35,6 +37,20 @@ const levelsDomain = (
       `Domain.${kind}: levels must be a list, e.g. ` +
         `Domain.${kind}(["low", "mid", "high"]), got ${String(levels)}.`
     );
+  if (levels.length === 0)
+    throw new Error(
+      `Domain.${kind}: levels must list at least one level, e.g. ` +
+        `Domain.${kind}(["low", "mid", "high"]).`
+    );
+  const seen = new Set<Level>();
+  for (const level of levels) {
+    if (seen.has(level))
+      throw new Error(
+        `Domain.${kind}: the level ${JSON.stringify(level)} is listed twice. ` +
+          `Each level is listed once, in its place.`
+      );
+    seen.add(level);
+  }
   return Object.freeze({ kind, levels: Object.freeze([...levels]) });
 };
 

@@ -51,6 +51,7 @@ const {
   spread,
   stack,
   scatter,
+  layer,
   rect,
   circle,
   filter,
@@ -656,6 +657,34 @@ async function main() {
         `Unit("pts") has the level "low", which is not a value HasUnit ` +
           `accepts.`,
       ],
+      [
+        "a level listed twice",
+        () => Domain.ordered(["a", "b", "a"]),
+        `Domain.ordered: the level "a" is listed twice. Each level is listed ` +
+          `once, in its place.`,
+      ],
+      [
+        "a level listed twice in a domain written as a record",
+        () => Unit({ domain: { kind: "discrete", levels: [1, 2, 1] } } as any),
+        `Domain.discrete: the level 1 is listed twice. Each level is listed ` +
+          `once, in its place.`,
+      ],
+      [
+        "a domain with no levels",
+        () => Domain.ordered([]),
+        `Domain.ordered: levels must list at least one level, e.g. ` +
+          `Domain.ordered(["low", "mid", "high"]).`,
+      ],
+      [
+        "a name that is not a string",
+        () => Unit(42 as any),
+        `Unit: the name must be a string, got 42`,
+      ],
+      [
+        "an undefined name",
+        () => Unit(undefined as any),
+        `Unit: the name must be a string, got undefined`,
+      ],
     ];
     for (const [name, fn, expected] of errors) {
       const got = await errorOf(fn);
@@ -823,6 +852,33 @@ async function main() {
       "a stray level a color scale reads is an error",
       colored !== undefined && colored.includes(`"Refused"`),
       colored
+    );
+  }
+
+  console.log("\n# a legend over two columns with equal levels (#1197)");
+  {
+    // Two columns, each in its own unit with the same levels (as two columns
+    // read from the wire are: each has its own copy of the levels). The
+    // legend follows the levels, not the order the values are first seen.
+    const rows = [
+      { g1: "high", g2: "mid", a: 1, b: 3 },
+      { g1: "low", g2: "high", a: 2, b: 1 },
+    ];
+    const grade = () => Unit({ domain: Domain.ordered(["low", "mid", "high"]) });
+    const dl = await chart(rows, {
+      schema: { g1: grade(), g2: grade() },
+      color: Color.palette(["red", "green", "blue"]),
+    })
+      .flow(scatter({ x: "a", y: "b" }))
+      .mark(layer([circle({ r: 3, fill: "g1" }), circle({ r: 2, fill: "g2" })]))
+      .toDisplayList({ w: 100, h: 100 });
+    const legend = textsOf(dl).filter((t) =>
+      ["low", "mid", "high"].includes(t)
+    );
+    check(
+      "two columns whose levels are equal lists order the legend by the levels",
+      legend.join() === "low,mid,high",
+      legend.join()
     );
   }
 

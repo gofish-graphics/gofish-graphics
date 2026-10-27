@@ -688,13 +688,12 @@ export function splitEntries<T extends Record<string, any>>(
   // levels are ordered (HasOrder). The ops below reorder from there.
   const binned = binKey(by, d);
   const column = fieldNameOf(by);
-  const ordered =
-    binned !== undefined || columnType(d, column)?.HasOrder !== undefined;
+  const type = columnType(d, column);
+  const ordered = binned !== undefined || type?.HasOrder !== undefined;
   let entries: Map<SplitKey, T[]>;
   if (binned !== undefined) entries = binEntries(binned, rows);
   else {
     entries = Map.groupBy(rows, splitKeyFn(by, d) as (r: T) => SplitKey);
-    const type = columnType(d, column);
     if (type?.HasLevels) {
       const keys = orderByLevels(column!, type.HasLevels, [...entries.keys()]);
       entries = new Map(keys.map((k) => [k, entries.get(k)!]));

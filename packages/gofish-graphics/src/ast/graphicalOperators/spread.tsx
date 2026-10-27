@@ -264,6 +264,11 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
       return hasOrder ? { entries, layoutOpts: { hasOrder } } : entries;
     const column = fieldNameOf(by);
     const type = columnType(d, column);
+    // Only a column with HasMidpoint moves the origin (as in `stackOrigin`),
+    // so the level order is built only for one. The stack's origin stays
+    // undefined, the default.
+    if (!type?.HasMidpoint)
+      return { entries, layoutOpts: { hasOrder, origin: undefined } };
     const levels = (type?.HasLevels?.levels ?? []) as (string | number)[];
     const split = orderEntries(
       by,

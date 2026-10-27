@@ -995,6 +995,15 @@ class TestSchema:
         assert usd.name == "USD"
         with pytest.raises(TypeError, match=r"^Unit: the name must be a string"):
             Unit(3)  # type: ignore[arg-type]
+        # Equal units hash the same, so a set or dict keeps one of them.
+        assert Unit(
+            domain=Domain.ordered([1, 2, 3]), traits=[Trait.diverging(2)]
+        ) == Unit(domain=Domain.ordered([1.0, 2.0, 3.0]), traits=[Trait.diverging(2.0)])
+        assert hash(
+            Unit(domain=Domain.ordered([1, 2, 3]), traits=[Trait.diverging(2)])
+        ) == hash(
+            Unit(domain=Domain.ordered([1.0, 2.0, 3.0]), traits=[Trait.diverging(2.0)])
+        )
 
     # The same literals as `errors` in the JS schema.test.ts.
     @pytest.mark.parametrize(
@@ -1059,6 +1068,25 @@ class TestSchema:
                 lambda: Unit("pts", domain=Domain.discrete(["low", "high"])),
                 'Unit("pts") has the level "low", which is not a value HasUnit '
                 "accepts.",
+            ),
+            (
+                lambda: Domain.ordered(["a", "b", "a"]),
+                'Domain.ordered: the level "a" is listed twice. Each level is '
+                "listed once, in its place.",
+            ),
+            (
+                lambda: Unit(domain={"kind": "discrete", "levels": [1, 2, 1]}),
+                "Domain.discrete: the level 1 is listed twice. Each level is "
+                "listed once, in its place.",
+            ),
+            (
+                lambda: Domain.ordered([]),
+                "Domain.ordered: levels must list at least one level, e.g. "
+                'Domain.ordered(["low", "mid", "high"]).',
+            ),
+            (
+                lambda: Unit(42),  # type: ignore[arg-type]
+                "Unit: the name must be a string, got 42",
             ),
         ],
     )

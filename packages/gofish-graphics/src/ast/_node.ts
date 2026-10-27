@@ -846,15 +846,23 @@ export class GoFishNode {
         orders
       );
       // The domain lists its values in first-seen order, or in the order of
-      // their column's levels when every value comes from one column with
-      // declared levels, so the legend follows the order the schema
-      // declares.
+      // their columns' levels when every value comes from a column with
+      // declared levels and those levels are the same list, so the legend
+      // follows the order the schema declares. Levels compare by value: each
+      // column read from the wire has its own copy of its unit's levels.
       // TODO(#996): a diverging palette driven by HasMidpoint.
       const [order] = orders;
-      const orderedKeys =
-        orders.size === 1 && order !== undefined
-          ? orderByLevels([...unit.fields].join(", "), order, seenKeys)
-          : seenKeys;
+      const oneOrder =
+        order !== undefined &&
+        [...orders].every(
+          (o) =>
+            o !== undefined &&
+            o.levels.length === order.levels.length &&
+            o.levels.every((level, i) => level === order.levels[i])
+        );
+      const orderedKeys = oneOrder
+        ? orderByLevels([...unit.fields].join(", "), order, seenKeys)
+        : seenKeys;
       if (!(unit.color instanceof Map)) unit.color = new Map();
       const color = unit.color;
       orderedKeys.forEach((key, i) => {

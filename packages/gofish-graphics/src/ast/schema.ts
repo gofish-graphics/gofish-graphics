@@ -6,6 +6,7 @@ import type { StackOrigin } from "./constraints/distribute";
 import { loadTemporal, temporal } from "./calendar";
 import { tagArray } from "./data";
 import { DURATION, INSTANT, meetInto, type UnitOccurrence } from "./measure";
+import { levelsDomain } from "../families/domain";
 
 /**
  * Column types (#984): `chart(data, { schema })` declares, per column, the
@@ -354,9 +355,15 @@ export function Unit(
 ): UnitDefinition {
   if (typeof nameOrOptions === "string")
     return new UnitDefinition(unitTypeOf(nameOrOptions, options ?? {}));
-  if (options !== undefined)
+  // Python's `Unit` raises the same message, word for word.
+  if (
+    options !== undefined ||
+    nameOrOptions === null ||
+    typeof nameOrOptions !== "object" ||
+    Array.isArray(nameOrOptions)
+  )
     throw new Error(
-      `Unit: the name must be a string, got ${String(nameOrOptions)}.`
+      `Unit: the name must be a string, got ${String(nameOrOptions)}`
     );
   return new UnitDefinition(unitTypeOf(undefined, nameOrOptions));
 }
@@ -393,6 +400,8 @@ function unitTypeOf(name: string | undefined, options: UnitOptions): UnitType {
         `Domain.ordered(levels), got ${JSON.stringify(domain) ?? String(domain)}. ` +
         `A domain that is an interval is not supported yet.`
     );
+  // A domain written as a record, not with `Domain`, gets the same checks.
+  if (domain !== undefined) levelsDomain(domain.kind, domain.levels);
   if (name === undefined && domain === undefined)
     throw new Error(
       `Unit needs a name, a domain, or both: Unit("USD"), ` +

@@ -1942,7 +1942,10 @@ wire, which carries only the classes they expand into
 
 `unitTypeOf` checks the definition: a unit needs a name or a domain; a
 domain is a `Domain` value (a bare list or an interval is an error: an
-interval domain, `Domain.continuous`, is a follow-up); a trait appears once;
+interval domain, `Domain.continuous`, is a follow-up); a domain lists at
+least one level and no level twice (`levelsDomain`, which the `Domain`
+factories call and `unitTypeOf` calls again on a domain written as a
+record); a trait appears once;
 `Trait.diverging` needs `Domain.ordered` (no domain, the reals, is "not
 supported yet"); `Trait.summable` needs a name, since adding up is a class
 of a unit and a unit is known by its name. A unit with no name writes no
@@ -1967,7 +1970,7 @@ reads only the classes, never the definition. Nine classes exist:
   column says its groups are ordered (`SplitGroups.hasOrder`), so an
   ordinal axis starts an outer level's labels at their runs; over
   `Domain.discrete` levels, which have no order, it centers them.
-- `HasMidpoint` (`{ at }`, from `Trait.diverging({ midpoint })`): the order has a midpoint, the
+- `HasMidpoint` (`{ at }`, from `Trait.diverging(midpoint)`): the order has a midpoint, the
   point `{ at }` along it in edge coordinates. Level `i` spans `[i, i + 1]`,
   so 0 is the first level's leading edge, `n` the last level's trailing
   edge, and 2.25 a quarter of the way into the third level (the `cutoff` of
@@ -2200,8 +2203,8 @@ error rather than silently doing the wrong thing:
   `floor(i / size)` (an operator with no `by` splits by `chunk(1)`, row
   identity), and the groups come in
   order of first appearance, or in the order of the column's levels when the
-  data declares the column ordered (`HasOrder`, see
-  [Column types](#column-types-the-chart-schema)). A binned key (`bin`, or a
+  data declares them (`HasLevels`, from `Domain.discrete` or
+  `Domain.ordered`, see [Column types](#column-types-the-chart-schema)). A binned key (`bin`, or a
   binned struct) instead keys each row by its **cell**, and its groups are the
   cells of its partition, in order, one entry per cell, empty cells included
   (`binEntries`; see [Cells](#cells-a-binned-key)). The same key function

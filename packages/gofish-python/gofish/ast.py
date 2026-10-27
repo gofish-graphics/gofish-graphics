@@ -2461,6 +2461,11 @@ def _unit_type_of(name: Optional[str], domain: Any, traits: Any) -> Dict[str, An
             f"Domain.ordered(levels), got {_json(domain)}. A domain that is "
             "an interval is not supported yet."
         )
+    # A domain written as a dict, not with ``Domain``, gets the same checks.
+    if domain is not None:
+        from .domain import _levels_domain
+
+        _levels_domain(domain["kind"], domain["levels"])
     if name is None and domain is None:
         raise TypeError(
             'Unit needs a name, a domain, or both: Unit("USD"), '
@@ -2603,7 +2608,16 @@ class Unit:
         return isinstance(other, Unit) and other._type == self._type
 
     def __hash__(self) -> int:
-        return hash(json.dumps(self._type, sort_keys=True))
+        # Hash what ``__eq__`` compares, by value: equal units (a midpoint of
+        # 2 or 2.0, levels [1, 2] or [1.0, 2.0]) hash the same.
+        def frozen(value: Any) -> Any:
+            if isinstance(value, dict):
+                return frozenset((k, frozen(v)) for k, v in value.items())
+            if isinstance(value, list):
+                return tuple(frozen(v) for v in value)
+            return value
+
+        return hash(frozen(self._type))
 
     def __repr__(self) -> str:
         unit = self._type.get("HasUnit")
