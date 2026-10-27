@@ -7,6 +7,7 @@ covers:
   - packages/gofish-graphics/src/ast/labels/elaborate.tsx
   - packages/gofish-graphics/src/ast/labels/labelPlacement.ts
   - packages/gofish-graphics/src/ast/labels/autoLabelColor.ts
+  - packages/gofish-graphics/src/ast/labels/labelNode.tsx
 ---
 
 # Labels
@@ -14,8 +15,8 @@ covers:
 `.label(accessor, options?)` attaches a text label to a mark or an operator's
 groups. Like [axes](/internals/frontend/axes) and
 [legends](/internals/frontend/legends), a label is **not a privileged render-time
-overlay**. It is _elaborated_ into an ordinary `Text` shape, seated beside (or
-inside) the labeled node via a `ref()` stand-in and ordinary `align`/`distribute`
+overlay**. It is _elaborated_ into an ordinary shape, a `label` node (text,
+drawn as one mark; `labelNode.tsx`), seated beside (or inside) the labeled node via a `ref()` stand-in and ordinary `align`/`distribute`
 constraints, wrapped in a `Layer` tier at the labeled node's **parent** — the same
 technique `elaborateOrdinalAxis` uses for its ref-based tick labels. The layout
 engine has no label-specific code at all.
@@ -77,7 +78,7 @@ legend past it. It has two phases:
 2. **`elaborateLabelsWalk`** — a bottom-up recursion. At each node `P`, every
    **direct child** still carrying a non-empty `_labels` (after step 1) is
    collected as a target; if any exist, `P` is wrapped once in a `Layer`
-   holding its original content plus one `ref()` + `Text` pair per
+   holding its original content plus one `ref()` + `label` pair per
    (target × spec). A labeled ROOT (no parent to wrap it) gets one final
    self-wrap in `elaborateLabels` itself.
 
@@ -184,8 +185,24 @@ visual top, and an authored `align: "start"` on a left/right edge always means t
 visual top.
 
 A label's `rotate` option is authored as **literal screen-clockwise degrees**
-(Vega-Lite's convention), and `Text`'s `rotate` is SVG's rotation, so it passes
-through unchanged.
+(Vega-Lite's convention), and the label node draws it as SVG's rotation, so it
+passes through unchanged.
+
+## The label node
+
+The label node (`LabelText`, `labelNode.tsx`) measures its text the way `Text`
+does (`estimateTextDimensions`), and its box is the text's box rotated by its
+angle, centered on the node's local origin, so the box reads the same in either
+y direction. Unrotated, it draws exactly as a `Text` of the same font: the
+glyphs start at the box's left edge, on the baseline `ascent` below its top.
+Rotated, the text turns about the box's center. A `Text` turns about its glyph
+anchor instead, but once either box is placed the rotated text sits in the same
+spot, because a rectangle's center is the center of its rotated bounding box.
+
+It is its own node, not a `Text`, because a label holds state a placement may
+write after layout: the angle it is drawn at and whether it is hidden. A
+transition moves it rigidly, as it moves a `Text` (`RIGID_SHAPES` in
+`tween.tsx`).
 
 ## Auto-color
 
@@ -214,9 +231,8 @@ so `_labels` is genuinely a list of independent specs, each with its own
 accessor, position, and styling — not a single mutable slot. `LabelOptions`
 carries `fontFamily`/`fontWeight`/`fontStyle` alongside the older
 `position`/`fontSize`/`color`/`offset`/`rotate`; all three pass straight
-through to the elaborated `Text`, which already measures font family/weight/
-style for its own bbox, so no extra plumbing was needed to make them affect
-layout correctly. `minSpace` — the old overlay path's fit-heuristic knob for
+through to the elaborated label node, which measures font family/weight/
+style for its own bbox, so they affect layout correctly. `minSpace` — the old overlay path's fit-heuristic knob for
 `shouldShowLabel` — has no elaboration-era equivalent and was dropped: a real
 `Text` node doesn't need a hint about whether it fits, it just occupies the
 space it measures.

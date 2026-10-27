@@ -4,7 +4,7 @@
 
 import { autoLabelColorForFill } from "./autoLabelColor";
 import { GoFishNode } from "../_node";
-import { Text } from "../shapes/text";
+import { LabelText } from "./labelNode";
 import { ref } from "../shapes/ref";
 import { Constraint } from "../constraints";
 import type { AlignAnchor } from "../constraints/shared";
@@ -272,16 +272,15 @@ async function wrapWithLabelTexts(
         refs.push((ref(target) as any).name(refName) as GoFishNode);
 
         const position = spec.position ?? "outset";
-        const rotate = spec.rotate ?? undefined;
-        const label = Text({
+        const label = LabelText({
           text,
           fontSize: spec.fontSize ?? 11,
           fontFamily: spec.fontFamily ?? LABEL_FONT_FAMILY,
           fontWeight: spec.fontWeight,
           fontStyle: spec.fontStyle,
           fill: spec.color ?? autoLabelColor(target, position),
-          rotate,
-        } as any).name(textName) as GoFishNode;
+          rotate: spec.rotate,
+        }).node.name(textName);
         texts.push(label);
         // The label is part of its target as a mark, though it lives out of
         // the target's subtree; record that, so whatever takes the mark over
