@@ -165,8 +165,8 @@ function positionOf(
       throw new Error(
         `[gofish] .label({ position: Place.${given.kind}() }): Place ` +
           `strategies read a mark's outline on the screen, which a ${space} ` +
-          `coordinate space does not give yet (see the polar/curved label ` +
-          `follow-up issue). Use a position string, which places the label ` +
+          `coordinate space does not give yet (#1201: ` +
+          `https://github.com/gofish-graphics/gofish-graphics/issues/1201). Use a position string, which places the label ` +
           `by the mark's box.`
       );
     return given;

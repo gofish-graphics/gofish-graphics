@@ -568,7 +568,7 @@ console.log("# errors");
   });
   ok(
     "a Place strategy in polar coordinates is not supported yet",
-    polarMsg?.includes("polar/curved label follow-up issue") ?? false,
+    polarMsg?.includes("issues/1201") ?? false,
     polarMsg
   );
   const defaultPolar = await errorOf(async () => {
