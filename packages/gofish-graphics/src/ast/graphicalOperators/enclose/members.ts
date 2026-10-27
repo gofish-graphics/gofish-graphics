@@ -16,20 +16,19 @@
  *  - An open outline (a line, an arrow's body) is its pieces, each as wide
  *    as its stroke.
  *  - Any other closed outline (a polygon, a ribbon's band, a rotated text's
- *    glyph box) is its edges at no width; the blob fills the inside, as it
- *    fills any hole.
+ *    glyph box) is its bounding box.
  *
- * TODO(#1167): the last rule is a declared shortcut. A closed outline is a
- * filled region, but the blob has no filled-ring primitive, so the inside is
- * filled only by hole filling: with `holes: true` the inside of a large
- * polygon member stays a hole, and an avoided polygon or ribbon keeps out
- * only a band along its edges, so the blob may cover its inside. The fix is
- * a filled-ring member kind in `blob.ts` (its distance, sites, link widths,
- * keep-out polygon and avoidance pivots).
+ * TODO(#1207): the last rule is a declared shortcut. A closed outline is a
+ * filled region, and the blob should hug it, but the blob has no filled-ring
+ * primitive. Reading the ring as its edges at no width hugs the shape only
+ * through hole filling: with `holes: true` a large polygon's inside stays a
+ * hole, and an avoided polygon keeps out only a band along its edges. The
+ * fix is a filled-ring member kind in `blob.ts` (its distance, sites, link
+ * widths, keep-out polygon and avoidance pivots).
  */
 import type { Placeable } from "../../_node";
 import { rawPlaceable } from "../../axisDirection";
-import { openRing, placedOutlines, type Outline } from "../../geometry";
+import { placedOutlines, type Outline } from "../../geometry";
 import type { BlobMember, Pt } from "./blob";
 
 /** How far the samples of a curved outline may stray from it, in pixels. */
@@ -42,26 +41,30 @@ function membersOfOutline(o: Outline): BlobMember[] {
     const disc: BlobMember = { kind: "disc", cx, cy, r: Math.max(rx, ry) };
     return [rx === ry ? disc : { ...disc, axes: [rx, ry] }];
   }
-  if (o.box !== undefined) {
-    const { min, max } = o.box;
-    return [
-      {
-        kind: "box",
-        x: min[0],
-        y: min[1],
-        w: max[0] - min[0],
-        h: max[1] - min[1],
-      },
-    ];
+  if (o.box !== undefined || o.closed) {
+    const [x0, y0, x1, y1] = o.box
+      ? [o.box.min[0], o.box.min[1], o.box.max[0], o.box.max[1]]
+      : extent(o.points);
+    return [{ kind: "box", x: x0, y: y0, w: x1 - x0, h: y1 - y0 }];
   }
-  const pts = (o.closed ? openRing(o.points) : o.points) as Pt[];
-  const w = o.closed ? 0 : (o.width ?? 0);
+  const pts = o.points as Pt[];
+  const w = o.width ?? 0;
   const out: BlobMember[] = [];
   for (let i = 1; i < pts.length; i++)
     out.push({ kind: "segment", a: pts[i - 1], b: pts[i], w });
-  if (o.closed && pts.length > 2)
-    out.push({ kind: "segment", a: pts[pts.length - 1], b: pts[0], w });
   return out;
+}
+
+/** The bounding box of some points, as `[x0, y0, x1, y1]`. */
+function extent(points: readonly (readonly [number, number])[]) {
+  const xs = points.map((p) => p[0]);
+  const ys = points.map((p) => p[1]);
+  return [
+    Math.min(...xs),
+    Math.min(...ys),
+    Math.max(...xs),
+    Math.max(...ys),
+  ] as const;
 }
 
 /**

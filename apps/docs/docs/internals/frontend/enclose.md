@@ -77,8 +77,7 @@ frame, and it reads each outline by its exact form where it has one:
   as wide as the stroke `width` the outline carries. A curve is cut into
   pieces that stray at most 0.5 px from it.
 - Any other closed outline (a `polygon`, a `ribbon`'s band, a rotated
-  `text`'s glyph box) is its edges at no width. The blob's hole filling
-  fills the inside, since a closed outline is a filled region.
+  `text`'s glyph box) is its bounding box, a declared shortcut (below).
 
 The blob needs these exact forms. A disc is one Delaunay site and links to
 its neighbors by its radius, and a stroke is a tube of its width. A disc read
@@ -253,11 +252,11 @@ Shortcuts, each a known approximation:
 - A curved `line` piece (a Bezier segment) is cut into straight segments
   that stray at most 0.5 px from it.
 - A closed outline with no exact form (a polygon, a ribbon's band) is read
-  as its edges, and its inside is left to the blob's hole filling. So with
-  `holes: true` the inside of a large polygon member stays a hole, and an
-  avoided polygon or ribbon keeps out only a band along its edges, so the
-  blob may cover its inside. The fix is a filled-ring member kind in
-  `blob.ts` (#1167).
+  as its bounding box, so the blob hugs the box, not the shape. Reading it
+  as its edges at no width hugs the shape, but only through hole filling:
+  with `holes: true` a large polygon's inside stays a hole, and an avoided
+  polygon keeps out only a band along its edges. The fix is a filled-ring
+  member kind in `blob.ts` (#1207).
 - A segment member keeps its own padding band at every `convexity`: a filled
   triangle's side along a member edge is that edge's band, and only the
   enclosure's own links thin under `neck`.

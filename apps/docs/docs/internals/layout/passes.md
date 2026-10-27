@@ -718,7 +718,7 @@ tolerance, direction)` reads a placed node's outlines in its parent's
 - `enclose` reads its members through `outline` (`enclose/members.ts`),
   taking the exact forms where an outline gives them: an ellipse is a disc,
   a box a box, an open outline its pieces as wide as its stroke, and any
-  other closed outline its edges (see
+  other closed outline its bounding box for now (#1207; see
   [Enclose](/internals/frontend/enclose)).
 - A node with children and no `geometry` function answers `enclosingCircle`
   lazily. It takes the smallest circle around its children's circles, each
