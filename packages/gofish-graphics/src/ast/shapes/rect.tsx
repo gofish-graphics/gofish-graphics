@@ -115,6 +115,8 @@ export const Rect = ({
   const fills = (axis: 0 | 1): boolean =>
     dims[axis].size === undefined &&
     !(dims[axis].min !== undefined && dims[axis].max !== undefined);
+  // How it paints its outline, read once.
+  const paint = outlinePaint({ fill, stroke, strokeWidth });
   const node = new GoFishNode(
     {
       key,
@@ -409,13 +411,7 @@ export const Rect = ({
         const box = boxOfDims(intrinsicDims, node.type);
         return {
           box,
-          outline: () => [
-            boxOutline(
-              box,
-              node.yFrame.direction,
-              outlinePaint({ fill, stroke, strokeWidth })
-            ),
-          ],
+          outline: () => [boxOutline(box, node.yFrame.direction, paint)],
         };
       },
     },

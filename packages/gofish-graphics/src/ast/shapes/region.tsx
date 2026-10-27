@@ -6,7 +6,7 @@ import type { DisplayList } from "gofish-ir";
 import { color6, resolveColorChannel } from "../../color";
 import { isValue, type MaybeValue } from "../data";
 import { displayDims } from "../dims";
-import { boxOfDims, orderToPixel, outlinePaint, type Point } from "../geometry";
+import { boxOfDims, outlinePaint, ringOutline, type Point } from "../geometry";
 import {
   lowerStyle,
   rectItemFromBox,
@@ -56,6 +56,8 @@ export const Region = ({
   // it (the region's outline less the node's translate), or none.
   let outline: Point[] | undefined;
 
+  // How it paints its outline, read once.
+  const paint = outlinePaint({ fill, stroke, strokeWidth });
   return new GoFishNode(
     {
       key,
@@ -152,13 +154,7 @@ export const Region = ({
         if (ring === undefined) return { box };
         return {
           box,
-          outline: () => [
-            {
-              points: orderToPixel(ring, node.yFrame.direction),
-              closed: true,
-              ...outlinePaint({ fill, stroke, strokeWidth }),
-            },
-          ],
+          outline: () => [ringOutline(ring, node.yFrame.direction, paint)],
         };
       },
     },

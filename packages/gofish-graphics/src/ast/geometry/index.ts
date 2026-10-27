@@ -39,6 +39,8 @@ export {
   reflectOutlineY,
   openRing,
   outlineSegments,
+  ringOutline,
+  pathOutline,
   orderToPixel,
 } from "./outline";
 export type {

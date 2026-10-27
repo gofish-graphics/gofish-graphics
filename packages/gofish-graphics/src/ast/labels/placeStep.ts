@@ -28,6 +28,7 @@ import type { ConstraintRef } from "../constraints/shared";
 import { placedOutlines as outlinesAt, type Outline } from "../geometry";
 import type { Place } from "../../families/place";
 import { ringExtent } from "../geometry/box";
+import { turnedCorners } from "../geometry/plane";
 import {
   ObstacleGrid,
   corners,
@@ -65,8 +66,8 @@ export type LabelPlaceItem = {
   label: ConstraintRef;
   node: LabelNode;
   place: Place;
-  /** The label's `offset` option, for a strategy that gives none. */
-  offset?: number;
+  /** Pixels between the outline and the label (see {@link placeOffset}). */
+  offset: number;
   /** `ref()` stand-ins of the nodes it avoids. */
   avoiding: ConstraintRef[];
   /** How the label's call reads in a message (`.label("country")`). */
@@ -123,10 +124,15 @@ const obstaclesOf = (
   scope?: unknown
 ): Obstacle[] => outlines.flatMap((o) => outlineObstacles(o, owner, scope));
 
-/** Seat a label at `spot`: its angle, and its box, centered there. */
-function seat(p: Placeable, node: LabelNode, spot: Spot): void {
+/** Seat a label at `spot`: its angle, and its box (`size`, its own turned
+ *  box when not given), centered there. */
+function seat(
+  p: Placeable,
+  node: LabelNode,
+  spot: Spot,
+  { hx, hy }: HalfSize = node.halfSize(spot.angle)
+): void {
   node.state.angle = spot.angle;
-  const { hx, hy } = node.halfSize(spot.angle);
   const raw = rawPlaceable(p);
   raw.setExtent!("x", { min: spot.cx - hx, size: 2 * hx });
   raw.setExtent!("y", { min: spot.cy - hy, size: 2 * hy });
@@ -134,11 +140,9 @@ function seat(p: Placeable, node: LabelNode, spot: Spot): void {
 
 /** Hide a label: it draws nothing, and its box is an empty one at its
  *  mark's center, so it takes no room. */
-function hide(p: Placeable, node: LabelNode, at: Pt): void {
+function hide(p: Placeable, node: LabelNode, [cx, cy]: Pt): void {
+  seat(p, node, { cx, cy, angle: node.state.angle }, { hx: 0, hy: 0 });
   node.state.hidden = true;
-  const raw = rawPlaceable(p);
-  raw.setExtent!("x", { min: at[0], size: 0 });
-  raw.setExtent!("y", { min: at[1], size: 0 });
 }
 
 /** The hidden labels of one render, per call, for the one note a render
@@ -200,10 +204,10 @@ export function applyLabelPlacement(
     return s;
   };
 
-  const cell = Math.max(
-    16,
-    4 * Math.max(...constraint.items.map((i) => i.node.metrics.h), 4)
-  );
+  let tallest = 4;
+  for (const i of constraint.items)
+    tallest = Math.max(tallest, i.node.metrics.h);
+  const cell = Math.max(16, 4 * tallest);
   const grid = new ObstacleGrid(cell);
   // The labeled marks, each once.
   const filed = new Set<unknown>();
@@ -230,19 +234,13 @@ export function applyLabelPlacement(
   // The labels the solve placed.
   for (const ref of constraint.fixed) {
     const d = rawPlaceable(get(ref)).dims;
-    const [x0, x1, y0, y1] = [d[0].min, d[0].max, d[1].min, d[1].max];
-    if ([x0, x1, y0, y1].some((v) => v === undefined || !Number.isFinite(v)))
-      continue;
-    grid.add({
-      kind: "box",
-      poly: [
-        [x0!, y0!],
-        [x1!, y0!],
-        [x1!, y1!],
-        [x0!, y1!],
-      ],
-      owner: ref,
-    });
+    const box = {
+      minX: d[0].min ?? NaN,
+      maxX: d[0].max ?? NaN,
+      minY: d[1].min ?? NaN,
+      maxY: d[1].max ?? NaN,
+    };
+    grid.add({ kind: "box", poly: turnedCorners(box, 0), owner: ref });
   }
 
   // The calls, in the order their first label appears; each call's labels
@@ -313,7 +311,16 @@ function centerOf(shape: TargetShape): Pt {
     : [0, 0];
 }
 
-const DEFAULT_OFFSET = { around: 3, along: 3, start: 4, end: 4 } as const;
+/** Pixels between the outline and a label at a strategy that takes an
+ *  `offset`, when neither it nor the label gives one. */
+const DEFAULT_OFFSET = { around: 3, along: 3, start: 4, end: 4, interior: 0 };
+
+/** The pixels between the outline and a label placed by `place`: the
+ *  strategy's `offset`, else the label's, else the strategy's default. */
+export const placeOffset = (place: Place, label: number | undefined) =>
+  ("offset" in place ? place.offset : undefined) ??
+  label ??
+  DEFAULT_OFFSET[place.kind];
 
 function candidatesFor(
   item: LabelPlaceItem,
@@ -324,27 +331,14 @@ function candidatesFor(
   const place = item.place;
   switch (place.kind) {
     case "around":
-      return aroundCandidates(
-        shape,
-        size,
-        angle,
-        place,
-        place.offset ?? item.offset ?? DEFAULT_OFFSET.around
-      );
+      return aroundCandidates(shape, size, angle, place, item.offset);
     case "along":
-      return alongCandidates(
-        shape,
-        size,
-        angle,
-        place,
-        place.offset ?? item.offset ?? DEFAULT_OFFSET.along
-      );
+      return alongCandidates(shape, size, angle, place, item.offset);
     case "interior":
       return interiorCandidates(shape, size, angle);
-    default:
-      throw new Error(
-        `[gofish] .label({ position }): ${JSON.stringify(place)} is not a Place strategy.`
-      );
+    case "start":
+    case "end":
+      throw new Error(`[gofish] Place.${place.kind}() is placed by placeEnds`);
   }
 }
 
@@ -360,14 +354,7 @@ function placeEnds(
   const wanted = items.map((item) => {
     const angle = item.node.state.angle;
     const size = item.node.halfSize(angle);
-    const place = item.place as { offset?: number };
-    const spot = endSpot(
-      shapeOf(item.target),
-      size,
-      angle,
-      which,
-      place.offset ?? item.offset ?? DEFAULT_OFFSET[which]
-    );
+    const spot = endSpot(shapeOf(item.target), size, angle, which, item.offset);
     return { item, size, spot };
   });
   for (const side of [1, -1] as const) {

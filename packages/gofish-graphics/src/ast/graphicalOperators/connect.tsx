@@ -11,7 +11,7 @@ import {
 import { GoFishAST } from "../_ast";
 import { projectBy, type SplitBy } from "../datumProjection";
 import { GoFishNode, defaultGeometry } from "../_node";
-import { flattenPath, orderToPixel, outlinePaint } from "../geometry";
+import { outlinePaint, pathOutline } from "../geometry";
 import { end, interior } from "../../families/place";
 import { resolveColorChannel } from "../../color";
 import type { DisplayList } from "gofish-ir";
@@ -256,17 +256,28 @@ export const connect = createNodeOperator(
     // A curve that is not a Curve-family object fails here, where the
     // connector is made.
     curveName(curve, "line/ribbon({ curve })");
+    // What it draws: a closed band per run for a ribbon (edge mode), and an
+    // open path per run for a line (center mode, or a connector between two
+    // anchors).
+    const closed =
+      mode !== "center" &&
+      resolvedSource === undefined &&
+      resolvedTarget === undefined;
+    // How it paints its paths, from its fill color (its first child's when
+    // it sets none) and its stroke color: a ribbon is filled, a line never,
+    // and either is stroked with its stroke, or its fill when it sets none.
+    // `lower` reads it with the colors resolved, `geometry` as given.
+    const paintOf = <C,>(color: C | undefined, strokeColor: C | undefined) => ({
+      fill: mode === "center" ? "none" : (color ?? "none"),
+      stroke: strokeColor ?? color ?? "black",
+      strokeWidth: strokeWidth ?? 0,
+    });
 
     return new GoFishNode(
       {
         type: "connect",
         // A line is labeled at its end, a band inside itself.
-        labelPosition:
-          mode === "center" ||
-          resolvedSource !== undefined ||
-          resolvedTarget !== undefined
-            ? end()
-            : interior(),
+        labelPosition: closed ? interior() : end(),
         // The domain-building walk (`GoFishNode.resolveColorScale`) only
         // reads a node's single `color` property to register a field-valued
         // paint into the shared discrete-color scale. Prefer whichever
@@ -919,9 +930,7 @@ export const connect = createNodeOperator(
           );
 
           const style = lowerStyle({
-            fill: mode === "center" ? "none" : (resolvedFill ?? "none"),
-            stroke: resolvedStroke ?? resolvedFill ?? "black",
-            strokeWidth: strokeWidth ?? 0,
+            ...paintOf(resolvedFill, resolvedStroke),
             strokeDasharray,
             opacity: opacity ?? 1,
             // Normal by default for both modes; a ribbon that wants overlaps to
@@ -966,36 +975,25 @@ export const connect = createNodeOperator(
           setLiveSlots(item, { d: drawnOver });
           return [item];
         },
-        // Its outline is what it draws, over its whole run: an open path per
-        // run for a line (center mode, or a connector between two anchors),
-        // a closed band per run for a ribbon (edge mode). Its paint is read
-        // as `lower` draws it: a ribbon is filled with its fill (its first
-        // child's color when it sets none), a line is never filled, and
-        // either is stroked with its stroke (its fill when it sets none). The
-        // paths are kept in axis order; the outline is in pixels.
+        // Its outline is what it draws, over its whole run, painted as
+        // `lower` paints it (`paintOf`). The paths are kept in axis order;
+        // the outline is in pixels.
         geometry: (laidOut, layoutChildren, node) => {
-          const closed =
-            mode !== "center" &&
-            resolvedSource === undefined &&
-            resolvedTarget === undefined;
-          const color = fill ?? laidOut.renderData?.defaultColor;
-          const paint = outlinePaint({
-            fill: mode === "center" ? "none" : (color ?? "none"),
-            stroke: stroke ?? color ?? "black",
-            strokeWidth: mode === "center" ? (strokeWidth ?? 1) : strokeWidth,
-          });
+          const paint = outlinePaint(
+            paintOf(fill ?? laidOut.renderData?.defaultColor, stroke)
+          );
           return {
             ...defaultGeometry(laidOut, layoutChildren, node),
             outline: (tolerance) =>
-              ((laidOut.renderData?.paths ?? []) as Path[]).map((path) => ({
-                points: orderToPixel(
-                  flattenPath(path, tolerance),
-                  node.yFrame.direction
-                ),
-                closed,
-                ...paint,
-                filled: closed && paint.filled,
-              })),
+              ((laidOut.renderData?.paths ?? []) as Path[]).map((path) =>
+                pathOutline(
+                  path,
+                  tolerance,
+                  node.yFrame.direction,
+                  closed,
+                  paint
+                )
+              ),
           };
         },
       },

@@ -12,10 +12,12 @@ import { Constraint } from "../constraints";
 import type { AlignAnchor, ConstraintRef } from "../constraints/shared";
 import { placedOutlines } from "../geometry";
 import { pointInRing } from "../geometry/plane";
-import { createLabelPlaceConstraint, type LabelPlaceItem } from "./placeStep";
+import {
+  createLabelPlaceConstraint,
+  placeOffset,
+  type LabelPlaceItem,
+} from "./placeStep";
 import { avoidedRefs } from "../nodeRefs";
-import { kindValue } from "../strategyKind";
-import { FieldExpr } from "../fieldExpr";
 import type { Place } from "../../families/place";
 import { wrapPreservingIdentity, wrapRing } from "../elaborationUtils";
 import { getValue, type MaybeValue } from "../data";
@@ -130,8 +132,7 @@ function callName(accessor: LabelSpec["accessor"]): string {
   if (typeof accessor === "string")
     return `.label(${JSON.stringify(accessor)})`;
   if (typeof accessor === "function") return ".label(fn)";
-  const name = accessor instanceof FieldExpr ? accessor.name : accessor.name;
-  return `.label(field(${JSON.stringify(name)}))`;
+  return `.label(field(${JSON.stringify(accessor.name)}))`;
 }
 
 /**
@@ -146,7 +147,7 @@ function positionOf(
   spec: LabelSpec,
   target: GoFishNode
 ): LabelPosition | Place {
-  const given = kindValue(spec.position);
+  const given = spec.position;
   if (isPlace(given))
     Frontend.checkStrategy("Place", given, ".label({ position })");
   const space = warpedSpace(target);
@@ -436,12 +437,12 @@ async function wrapWithLabelTexts(
               createLabelPlaceConstraint(
                 placed.map(
                   (p): LabelPlaceItem => ({
-                    group: p.spec.group ?? p.spec,
+                    group: p.spec.group,
                     target: g[p.refName] as ConstraintRef,
                     label: g[p.textName] as ConstraintRef,
                     node: p.node,
                     place: p.place,
-                    offset: p.spec.offset,
+                    offset: placeOffset(p.place, p.spec.offset),
                     avoiding: p.avoidNames.map((n) => g[n] as ConstraintRef),
                     call: callName(p.spec.accessor),
                   })

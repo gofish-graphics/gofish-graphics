@@ -1,6 +1,6 @@
 import { GoFishAST } from "../_ast";
 import { GoFishNode, defaultGeometry, type ToPixel } from "../_node";
-import { flattenPath, orderToPixel, outlinePaint } from "../geometry";
+import { outlinePaint, pathOutline } from "../geometry";
 import { end } from "../../families/place";
 import { Size, displayTranslate } from "../dims";
 import type { DisplayList } from "gofish-ir";
@@ -63,6 +63,12 @@ export const arrow = createNodeOperator(
   (opts: ArrowOpts, children: GoFishAST[]) => {
     const props = { ...defaultArrowOpts, ...opts };
 
+    // Its body is an open path, stroked; the head is decoration on it.
+    const paint = outlinePaint({
+      fill: "none",
+      stroke: props.stroke,
+      strokeWidth: props.strokeWidth,
+    });
     return new GoFishNode(
       {
         type: "arrow",
@@ -233,18 +239,13 @@ export const arrow = createNodeOperator(
             laidOut.renderData === undefined
               ? []
               : [
-                  {
-                    points: orderToPixel(
-                      flattenPath(laidOut.renderData.body as Path, tolerance),
-                      node.yFrame.direction
-                    ),
-                    closed: false,
-                    ...outlinePaint({
-                      fill: "none",
-                      stroke: props.stroke,
-                      strokeWidth: props.strokeWidth,
-                    }),
-                  },
+                  pathOutline(
+                    laidOut.renderData.body as Path,
+                    tolerance,
+                    node.yFrame.direction,
+                    false,
+                    paint
+                  ),
                 ],
         }),
       },

@@ -53,6 +53,8 @@ export const Ellipse = ({
 } & FancyDims<MaybeValue<number>>) => {
   // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
   const dims = elaborateDims(fancyDims);
+  // How it paints its outline, read once.
+  const paint = outlinePaint({ fill, stroke, strokeWidth });
   const node = new GoFishNode(
     {
       type: "ellipse",
@@ -292,14 +294,7 @@ export const Ellipse = ({
           box,
           enclosingCircle: () => ({ cx, cy, r: Math.max(rx, ry) }),
           outline: (tolerance) => [
-            ellipseOutline(
-              cx,
-              cy,
-              rx,
-              ry,
-              tolerance,
-              outlinePaint({ fill, stroke, strokeWidth })
-            ),
+            ellipseOutline(cx, cy, rx, ry, tolerance, paint),
           ],
         };
       },

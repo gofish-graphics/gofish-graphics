@@ -180,7 +180,8 @@ export function extremePoint(outlines: Outline[], dir: Direction): Pt {
 /** The point halfway along a run of points, by arc length. */
 function runMiddle(run: Pt[]): Pt {
   if (run.length === 1) return run[0];
-  return pointAt(polyline(run, false), polyline(run, false).length / 2);
+  const p = polyline(run, false);
+  return pointAt(p, p.length / 2);
 }
 
 /**

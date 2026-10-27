@@ -46,7 +46,7 @@ export interface LabelSpec<D = any> extends LabelOptions {
   accessor: LabelAccessor<D>;
   /** Which `.label()` call the spec comes from: the labels of one call are
    *  placed together (see `GoFishNode.label`). */
-  group?: unknown;
+  group: unknown;
   /** The chart's named layers, where `avoiding: selectAll(name)` is found. */
   layerContext?: LayerContext;
 }

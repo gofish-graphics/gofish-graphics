@@ -2,7 +2,7 @@ import { getColumnTypes, setColumnTypes } from "../schema";
 import { datumOfInput } from "../marks/markResult";
 import { packEnclose } from "d3-hierarchy";
 import { GoFishNode } from "../_node";
-import { boxOfDims, orderToPixel, outlinePaint, ringExtent } from "../geometry";
+import { boxOfDims, outlinePaint, ringExtent, ringOutline } from "../geometry";
 import { around, interior } from "../../families/place";
 import { GoFishAST } from "../_ast";
 import { Size } from "../dims";
@@ -73,14 +73,14 @@ export const Polygon = ({
   // what layout measured.
   const localRef: { current: Ring } = { current: ring };
 
+  // How it paints its outline, read once.
+  const paint = outlinePaint({ fill, stroke, strokeWidth });
   return new GoFishNode(
     {
       type: "polygon",
       // A filled region is labeled inside itself; an unfilled one draws only
       // its outline, so it is labeled around it.
-      labelPosition: outlinePaint({ fill, stroke, strokeWidth }).filled
-        ? interior()
-        : around(),
+      labelPosition: paint.filled ? interior() : around(),
       // Used to seed the unit color scale. Prefer whichever channel is
       // data-driven — the same rule `rect` follows.
       color: isValue(fill) ? fill : stroke,
@@ -166,11 +166,7 @@ export const Polygon = ({
       geometry: ({ intrinsicDims }, _children, node) => ({
         box: boxOfDims(intrinsicDims, node.type),
         outline: () => [
-          {
-            points: orderToPixel(localRef.current, node.yFrame.direction),
-            closed: true,
-            ...outlinePaint({ fill, stroke, strokeWidth }),
-          },
+          ringOutline(localRef.current, node.yFrame.direction, paint),
         ],
         enclosingCircle: () => {
           const d = node.yFrame.direction;

@@ -207,6 +207,34 @@ export function placedOutlines(
   );
 }
 
+/** A closed ring's outline: `ring` kept in a node's axis order (see
+ *  {@link orderToPixel}), painted as `paint`. */
+export const ringOutline = (
+  ring: readonly (readonly [number, number])[],
+  direction: AxisDirection,
+  paint: OutlinePaint
+): Outline => ({
+  points: orderToPixel(ring, direction),
+  closed: true,
+  ...paint,
+});
+
+/** A path's outline: `path`, kept in a node's axis order, flattened to
+ *  `tolerance` (see {@link flattenPath}) and closed or open as `closed`
+ *  says, painted as `paint`. An open outline is never filled. */
+export const pathOutline = (
+  path: Path,
+  tolerance: number,
+  direction: AxisDirection,
+  closed: boolean,
+  paint: OutlinePaint
+): Outline => ({
+  points: orderToPixel(flattenPath(path, tolerance), direction),
+  closed,
+  ...paint,
+  filled: closed && paint.filled,
+});
+
 /** How many equal steps of angle keep a circle of radius `r` within
  *  `tolerance` of its chords: the sagitta `r (1 − cos(θ/2))` at most the
  *  tolerance. At least 8. */
