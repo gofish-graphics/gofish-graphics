@@ -1016,7 +1016,7 @@ def _label_opts(*, position: Optional[str | dict] = None, avoiding: Optional[Any
         background: A filled box drawn behind the text. An empty object draws the default box. A Place label counts the box as part of the label when it looks for a free spot.
         font_size: Font size in pixels.
         color: Label color. Omitted, it is chosen to contrast with the mark.
-        offset: Offset from the shape's edge in pixels.
+        offset: Pixels between the mark and the label. At a position string it is the distance from the shape's edge, 6 when omitted. A Place strategy's own `offset` overrides it; omitted in both, a Place label is 3 pixels from the outline (4 for Place.start and Place.end).
         rotate: Rotation in degrees, clockwise on screen.
         font_family: Font family of the label's text node. Omitted, the elaborator's own font family.
         font_weight: Font weight, e.g. "bold" or a numeric weight.

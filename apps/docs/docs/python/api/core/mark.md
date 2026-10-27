@@ -232,12 +232,20 @@ The input crosses to JS as the mark's `__datum` field (and `key` as
 
 ## Labeling a mark
 
-Call `.label(accessor, position=..., font_size=..., color=..., offset=..., rotate=..., font_family=..., font_weight=..., font_style=...)`
+Call `.label(accessor, position=..., avoiding=..., halo=..., background=..., font_size=..., color=..., offset=..., rotate=..., font_family=..., font_weight=..., font_style=...)`
 on a mark to attach a deferred text label, mirroring JS's `.label(accessor, options?)`:
 
 ```python
 rect(h="count").label("count", position="center", font_size=10)
 ```
+
+`position` is a position string or a value of the [`Place`](/python/api/place)
+family, which reads the mark's outline and keeps the labels of one call off
+the marks, off each other, and off the nodes in `avoiding`
+(`avoiding=select_all("trend")`). `halo={"color": ..., "width": ...}` draws an
+outline behind the glyphs, and `background={"fill": ..., "padding": ...}` a box
+behind the text; an empty dict draws the default. See
+[How to place labels](/python/api/howto/label-placement).
 
 `accessor` is either a plain field name (a string) or a `field(...)`
 aggregate. Python has no function-accessor form (JS accepts a callback

@@ -426,7 +426,10 @@ export const LABEL_OPTIONS: FieldGroup = group({
     type: t.string,
     doc: "Label color. Omitted, it is chosen to contrast with the mark.",
   },
-  offset: { type: t.number, doc: "Offset from the shape's edge in pixels." },
+  offset: {
+    type: t.number,
+    doc: "Pixels between the mark and the label. At a position string it is the distance from the shape's edge, 6 when omitted. A Place strategy's own `offset` overrides it; omitted in both, a Place label is 3 pixels from the outline (4 for Place.start and Place.end).",
+  },
   rotate: { type: t.number, doc: "Rotation in degrees, clockwise on screen." },
   fontFamily: {
     type: t.string,

@@ -729,7 +729,7 @@ for the API.
               },
               "offset": {
                 "$ref": "#/$defs/Number",
-                "description": "Offset from the shape's edge in pixels."
+                "description": "Pixels between the mark and the label. At a position string it is the distance from the shape's edge, 6 when omitted. A Place strategy's own `offset` overrides it; omitted in both, a Place label is 3 pixels from the outline (4 for Place.start and Place.end)."
               },
               "rotate": {
                 "$ref": "#/$defs/Number",
