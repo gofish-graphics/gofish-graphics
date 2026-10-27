@@ -288,13 +288,14 @@ export function applyLabelPlacement(
       // inside its own mark, filled or not.
       const own = (o: Obstacle) =>
         o.owner === shape.mark && o.kind === "segment";
-      let chosen: Candidate | undefined;
+      let chosen: { spot: Candidate; box: Pt[] } | undefined;
       for (const c of candidates) {
+        const box = corners(c, size);
+        if (!inFrame(box)) continue;
         const poly = corners(c, size, CLEARANCE);
-        if (!inFrame(corners(c, size))) continue;
         if (grid.hits(poly, keep)) continue;
         if (!c.onOutline && grid.hits(poly, own)) continue;
-        chosen = c;
+        chosen = { spot: c, box };
         break;
       }
       const key = `${item.call} with ${placeName(place)}`;
@@ -307,12 +308,8 @@ export function applyLabelPlacement(
         hide(p, item.node, centerOf(shape));
         continue;
       }
-      seat(p, item.node, chosen);
-      grid.add({
-        kind: "box",
-        poly: corners(chosen, size),
-        owner: item.label,
-      });
+      seat(p, item.node, chosen.spot);
+      grid.add({ kind: "box", poly: chosen.box, owner: item.label });
     }
   }
 }
@@ -364,7 +361,7 @@ function candidatesFor(
   shape: TargetShape,
   size: HalfSize,
   angle: number
-): Candidate[] {
+): Iterable<Candidate> {
   switch (place.kind) {
     case "around":
       return aroundCandidates(shape, size, angle, place, offset);

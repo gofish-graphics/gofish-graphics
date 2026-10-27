@@ -19,10 +19,12 @@ import type {
 import type { Outline, OutlinePart } from "../geometry";
 import { ringExtent } from "../geometry/box";
 import { pointInRing, signedArea2 } from "../geometry/plane";
+import type { BoundingBox } from "../../util/bbox";
 import {
   corners,
   covers,
   outlineObstacles,
+  pathLength,
   pointAt,
   pointsBetween,
   polyline,
@@ -61,7 +63,7 @@ function longest(outlines: Outline[]): Outline | undefined {
   let best: Outline | undefined;
   let bestLength = -Infinity;
   for (const o of outlines) {
-    const length = polyline(o.points, o.closed).length;
+    const length = pathLength(o.points, o.closed);
     if (best === undefined || length > bestLength) {
       best = o;
       bestLength = length;
@@ -120,6 +122,40 @@ const COMPASS: Record<Direction, Pt> = {
 /** Points within this many pixels of the extreme in a direction tie. */
 const TIE = 0.75;
 
+/** What `extremePoint` reads of a target's outlines, once: their box, and
+ *  how far they reach in each direction. */
+type Reach = { box: BoundingBox; max: Record<Direction, number> };
+const DIRECTIONS = Object.keys(COMPASS) as Direction[];
+const reaches = new WeakMap<Outline[], Reach>();
+
+function reachOf(outlines: Outline[]): Reach {
+  let r = reaches.get(outlines);
+  if (r !== undefined) return r;
+  const ds = DIRECTIONS.map((dir) => unit(COMPASS[dir]));
+  const max = DIRECTIONS.map(() => -Infinity);
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const o of outlines)
+    for (const p of o.points) {
+      for (let k = 0; k < ds.length; k++)
+        max[k] = Math.max(max[k], dot(p, ds[k]));
+      if (p[0] < minX) minX = p[0];
+      if (p[0] > maxX) maxX = p[0];
+      if (p[1] < minY) minY = p[1];
+      if (p[1] > maxY) maxY = p[1];
+    }
+  r = {
+    box: { minX, maxX, minY, maxY },
+    max: Object.fromEntries(
+      DIRECTIONS.map((dir, k) => [dir, max[k]])
+    ) as Record<Direction, number>,
+  };
+  reaches.set(outlines, r);
+  return r;
+}
+
 /**
  * The point of the outlines farthest in direction `d`. Tied points form
  * runs along an outline (a flat top edge is one run), and a run stands for
@@ -129,9 +165,8 @@ const TIE = 0.75;
  */
 export function extremePoint(outlines: Outline[], dir: Direction): Pt {
   const d = unit(COMPASS[dir]);
-  let max = -Infinity;
-  for (const o of outlines)
-    for (const p of o.points) max = Math.max(max, dot(p, d));
+  const { box, max: reach } = reachOf(outlines);
+  const max = reach[dir];
   const runs: Pt[] = [];
   for (const o of outlines) {
     const pts = o.points;
@@ -157,7 +192,6 @@ export function extremePoint(outlines: Outline[], dir: Direction): Pt {
     }
     flush();
   }
-  const box = ringExtent(outlines.flatMap((o) => o.points));
   const side: Pt = [
     d[0] > 0 ? box.maxX : d[0] < 0 ? box.minX : (box.minX + box.maxX) / 2,
     d[1] > 0 ? box.maxY : d[1] < 0 ? box.minY : (box.minY + box.maxY) / 2,
@@ -191,35 +225,33 @@ function runMiddle(run: Pt[]): Pt {
  * points to: its lower-left corner for top-right, its bottom edge's middle
  * for top.
  */
-export function aroundCandidates(
+export function* aroundCandidates(
   t: TargetShape,
   size: HalfSize,
   angle: number,
   opts: AroundPlace,
   offset: number
-): Candidate[] {
+): Generator<Candidate> {
   if (t.outlines.length === 0)
     throw STRATEGY_ERROR("Place.around", "an outline", t);
   const directions = opts.directions ?? DEFAULT_DIRECTIONS;
   const sides: BoundarySide[] = Array.isArray(opts.side)
     ? opts.side
     : [opts.side ?? "outset"];
-  const out: Candidate[] = [];
   for (const dir of directions) {
     const c = COMPASS[dir];
     const p = extremePoint(t.outlines, dir);
     const d = unit(c);
     for (const side of sides) {
       const k = side === "inset" ? -1 : 1;
-      out.push({
+      yield {
         cx: p[0] + k * (d[0] * offset + Math.sign(c[0]) * size.hx),
         cy: p[1] + k * (d[1] * offset + Math.sign(c[1]) * size.hy),
         angle,
         onOutline: false,
-      });
+      };
     }
   }
-  return out;
 }
 
 // ── along ──────────────────────────────────────────────────────────────────
@@ -264,20 +296,23 @@ function sideNormal(
 
 /** Arc lengths to try, in order: `s0`, then sliding away from it, nearest
  *  first, while the label's half-span `e` stays within `[lo, hi]`. */
-function slide(s0: number, lo: number, hi: number, closed: boolean): number[] {
-  const out: number[] = [];
+function* slide(
+  s0: number,
+  lo: number,
+  hi: number,
+  closed: boolean
+): Generator<number> {
   const ok = (s: number) => closed || (s >= lo - 1e-9 && s <= hi + 1e-9);
-  if (ok(s0)) out.push(s0);
+  if (ok(s0)) yield s0;
   for (let k = 1; k <= SLIDE_MAX; k++) {
     const a = s0 + k * SLIDE_STEP;
     const b = s0 - k * SLIDE_STEP;
     const span = k * SLIDE_STEP;
     if (closed && span > (hi - lo) / 2) break;
-    if (ok(a)) out.push(a);
-    if (ok(b)) out.push(b);
+    if (ok(a)) yield a;
+    if (ok(b)) yield b;
     if (!closed && a > hi && b < lo) break;
   }
-  return out;
 }
 
 /**
@@ -286,13 +321,13 @@ function slide(s0: number, lo: number, hi: number, closed: boolean): number[] {
  * normal until its box clears the outline; a sloped one is turned to the
  * chord across its width.
  */
-export function alongCandidates(
+export function* alongCandidates(
   t: TargetShape,
   size: HalfSize,
   angle: number,
   opts: AlongPlace,
   offset: number
-): Candidate[] {
+): Generator<Candidate> {
   const at = opts.at ?? "middle";
   // A part names a stretch of one outline; anything else reads the longest.
   const named =
@@ -357,7 +392,6 @@ export function alongCandidates(
   const own = outlineObstacles(outline, undefined).filter(
     (o) => o.kind === "segment"
   );
-  const out: Candidate[] = [];
   for (const s of slide(s0, lo, hi, closedSlide)) {
     const e = halfSpan(s);
     if (!closedSlide && (s - e < lo - 1e-9 || s + e > hi + 1e-9)) continue;
@@ -365,10 +399,9 @@ export function alongCandidates(
       const c = sloped
         ? slopedAt(path, s, size, side, offset, outsideIsLeft)
         : levelAt(path, s, size, angle, side, offset, outsideIsLeft, own);
-      if (c !== null) out.push(c);
+      if (c !== null) yield c;
     }
   }
-  return out;
 }
 
 /** A level label at arc length `s`. */
@@ -589,11 +622,11 @@ function boxDistance(c: Pt, p: Pt, q: Pt, a: number, b: number): number {
  * A coarse grid over the region finds the best cells; each is then refined
  * by halving steps.
  */
-export function interiorCandidates(
+export function* interiorCandidates(
   t: TargetShape,
   size: HalfSize,
   angle: number
-): Candidate[] {
+): Generator<Candidate> {
   const rings = t.outlines.filter(
     (o) => o.closed && o.filled && o.points.length >= 3
   );
@@ -601,32 +634,42 @@ export function interiorCandidates(
     throw STRATEGY_ERROR("Place.interior", "a filled region", t);
   const a = size.hx + INTERIOR_PADDING;
   const b = size.hy + INTERIOR_PADDING;
-  const found: { c: Pt; room: number }[] = [];
-  for (const o of rings) {
+  // Every spot found, best first: by room, then in the order found (for
+  // each ring, its refined spots, then the rest of its grid).
+  const found = new Heap<{ c: Pt; room: number; order: number[] }>(
+    (p, q) => q.room - p.room || compareOrder(p.order, q.order)
+  );
+  rings.forEach((o, ringIndex) => {
     const ring = o.points;
-    const n = ring.length;
-    const room = (c: Pt): number => {
-      if (!pointInRing(c, ring)) return 0;
-      let m = Infinity;
-      for (let i = 0; i < n; i++)
-        m = Math.min(m, boxDistance(c, ring[i], ring[(i + 1) % n], a, b));
-      return m;
-    };
+    const room = roomIn(ring, a, b);
     const box = ringExtent(ring);
     const w = box.maxX - box.minX;
     const h = box.maxY - box.minY;
     let step = Math.min(8, Math.max(1, Math.min(w, h) / 20));
     step = Math.max(step, Math.sqrt((w * h) / INTERIOR_GRID));
-    const grid: { c: Pt; room: number }[] = [];
+    // The grid's spots with room, and the best few, in order: by room,
+    // then in scan order.
+    const grid: { c: Pt; room: number; scan: number }[] = [];
+    const best: typeof grid = [];
+    const better = (p: (typeof grid)[number], q: (typeof grid)[number]) =>
+      p.room > q.room || (p.room === q.room && p.scan < q.scan);
     for (let x = box.minX + step / 2; x < box.maxX; x += step)
       for (let y = box.minY + step / 2; y < box.maxY; y += step) {
         const c: Pt = [x, y];
         const r = room(c);
-        if (r > 0) grid.push({ c, room: r });
+        if (!(r > 0)) continue;
+        const spot = { c, room: r, scan: grid.length };
+        grid.push(spot);
+        if (best.length < REFINED || better(spot, best[best.length - 1])) {
+          let k = Math.min(best.length, REFINED - 1);
+          best[k] = spot;
+          for (; k > 0 && better(best[k], best[k - 1]); k--)
+            [best[k], best[k - 1]] = [best[k - 1], best[k]];
+        }
       }
-    grid.sort((p, q) => q.room - p.room);
+    const refined = new Set(best);
     // Refine the best few by hill climbing with halving steps.
-    for (const start of grid.slice(0, 8)) {
+    best.forEach((start, rank) => {
       let { c, room: r } = start;
       for (let s = step / 2; s >= 0.25; s /= 2) {
         let moved = true;
@@ -652,13 +695,18 @@ export function interiorCandidates(
           }
         }
       }
-      found.push({ c, room: r });
-    }
-    found.push(...grid.slice(8));
-  }
-  found.sort((p, q) => q.room - p.room);
+      found.push({ c, room: r, order: [ringIndex, 0, rank] });
+    });
+    for (const spot of grid)
+      if (!refined.has(spot))
+        found.push({
+          c: spot.c,
+          room: spot.room,
+          order: [ringIndex, 1, spot.scan],
+        });
+  });
   const out: Candidate[] = [];
-  for (const f of found) {
+  for (let f = found.pop(); f !== undefined; f = found.pop()) {
     if (f.room < 1) break;
     // Keep candidates apart, so the chooser's fallbacks are real
     // alternatives.
@@ -669,8 +717,118 @@ export function interiorCandidates(
       )
     )
       continue;
-    out.push({ cx: f.c[0], cy: f.c[1], angle, onOutline: false });
+    const c = { cx: f.c[0], cy: f.c[1], angle, onOutline: false };
+    out.push(c);
+    yield c;
     if (out.length >= INTERIOR_CANDIDATES) break;
   }
-  return out;
+}
+
+/** How many of a ring's best grid spots the interior search refines. */
+const REFINED = 8;
+
+/** Lexicographic order of two keys of the same length. */
+const compareOrder = (p: number[], q: number[]): number => {
+  for (let i = 0; i < p.length; i++) if (p[i] !== q[i]) return p[i] - q[i];
+  return 0;
+};
+
+/**
+ * The room at a point inside `ring` for a box of half size `(a, b)`
+ * (0 outside it): the least `boxDistance` to an edge. The edges are filed
+ * in a grid of cells `s·a` wide and `s·b` tall, so the search visits the
+ * cells around the point ring by ring and stops once no edge left can be
+ * nearer: every point of a cell `r` rings out is at least `(r − 1)·s` away
+ * in the box's measure. It finds the same least distance as reading every
+ * edge.
+ */
+function roomIn(ring: Pt[], a: number, b: number): (c: Pt) => number {
+  const n = ring.length;
+  const box = ringExtent(ring);
+  // About √n cells a side.
+  const s =
+    Math.max((box.maxX - box.minX) / a, (box.maxY - box.minY) / b) /
+      Math.sqrt(n) || 1;
+  const cw = s * a;
+  const ch = s * b;
+  const col = (x: number) => Math.floor((x - box.minX) / cw);
+  const row = (y: number) => Math.floor((y - box.minY) / ch);
+  const cols = col(box.maxX) + 1;
+  const rows = row(box.maxY) + 1;
+  const cells: number[][] = Array.from({ length: cols * rows }, () => []);
+  for (let i = 0; i < n; i++) {
+    const p = ring[i];
+    const q = ring[(i + 1) % n];
+    const i0 = col(Math.min(p[0], q[0]));
+    const i1 = col(Math.max(p[0], q[0]));
+    const j0 = row(Math.min(p[1], q[1]));
+    const j1 = row(Math.max(p[1], q[1]));
+    for (let ci = i0; ci <= i1; ci++)
+      for (let cj = j0; cj <= j1; cj++) cells[ci * rows + cj].push(i);
+  }
+  const seen = new Int32Array(n);
+  let stamp = 0;
+  return (c: Pt): number => {
+    if (!pointInRing(c, ring)) return 0;
+    stamp++;
+    const ci = Math.min(Math.max(col(c[0]), 0), cols - 1);
+    const cj = Math.min(Math.max(row(c[1]), 0), rows - 1);
+    let m = Infinity;
+    const reach = Math.max(ci, cols - 1 - ci, cj, rows - 1 - cj);
+    for (let r = 0; r <= reach; r++) {
+      for (let i = ci - r; i <= ci + r; i++) {
+        if (i < 0 || i >= cols) continue;
+        for (let j = cj - r; j <= cj + r; j++) {
+          if (j < 0 || j >= rows) continue;
+          if (Math.max(Math.abs(i - ci), Math.abs(j - cj)) !== r) continue;
+          for (const e of cells[i * rows + j]) {
+            if (seen[e] === stamp) continue;
+            seen[e] = stamp;
+            m = Math.min(m, boxDistance(c, ring[e], ring[(e + 1) % n], a, b));
+          }
+        }
+      }
+      // Every edge not read yet is at least `r · s` away.
+      if (r * s > m + 1e-9) break;
+    }
+    return m;
+  };
+}
+
+/** A binary heap: `pop` gives the least item by `less`'s order. */
+class Heap<T> {
+  private readonly items: T[] = [];
+  constructor(private readonly compare: (p: T, q: T) => number) {}
+
+  push(item: T): void {
+    const a = this.items;
+    a.push(item);
+    for (let i = a.length - 1; i > 0; ) {
+      const parent = (i - 1) >> 1;
+      if (this.compare(a[i], a[parent]) >= 0) break;
+      [a[i], a[parent]] = [a[parent], a[i]];
+      i = parent;
+    }
+  }
+
+  pop(): T | undefined {
+    const a = this.items;
+    if (a.length === 0) return undefined;
+    const top = a[0];
+    const last = a.pop()!;
+    if (a.length > 0) {
+      a[0] = last;
+      for (let i = 0; ; ) {
+        const l = 2 * i + 1;
+        const r = l + 1;
+        let m = i;
+        if (l < a.length && this.compare(a[l], a[m]) < 0) m = l;
+        if (r < a.length && this.compare(a[r], a[m]) < 0) m = r;
+        if (m === i) break;
+        [a[i], a[m]] = [a[m], a[i]];
+        i = m;
+      }
+    }
+    return top;
+  }
 }

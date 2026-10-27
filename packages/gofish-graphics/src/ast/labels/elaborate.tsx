@@ -10,7 +10,7 @@ import { LabelText } from "./labelNode";
 import { ref } from "../shapes/ref";
 import { Constraint } from "../constraints";
 import type { AlignAnchor, ConstraintRef } from "../constraints/shared";
-import { placedOutlines } from "../geometry";
+import { placedOutlines, type Outline } from "../geometry";
 import { pointInRing } from "../geometry/plane";
 import {
   createLabelPlaceConstraint,
@@ -95,10 +95,23 @@ function sitsInside(label: GoFishNode, target: GoFishRef): boolean {
   const d = label.dims;
   if (d[0].center === undefined || d[1].center === undefined) return false;
   const c: [number, number] = [d[0].center, d[1].center];
+  // A mark with no filled region (a line) has no inside.
+  if (!target.geometry().outline(LABEL_TOLERANCE).some(filledRegion))
+    return false;
   return placedOutlines(target, LABEL_TOLERANCE).some(
-    (o) =>
-      o.closed && o.filled && pointInRing(c, o.points as [number, number][])
+    (o) => filledRegion(o) && insideOutline(c, o)
   );
+}
+
+const filledRegion = (o: Outline) => o.closed && o.filled;
+
+/** Whether `c` is inside a closed outline (even-odd), read from its exact
+ *  box when it has one: the same answer `pointInRing` gives on the box's
+ *  corners, half-open on each axis. */
+function insideOutline(c: [number, number], o: Outline): boolean {
+  if (o.box === undefined) return pointInRing(c, o.points);
+  const [[x0, y0], [x1, y1]] = [o.box.min, o.box.max];
+  return c[0] < x0 !== c[0] < x1 && c[1] < y0 !== c[1] < y1;
 }
 
 /**

@@ -135,6 +135,7 @@ import {
   reflectRegionY,
   translateCircle,
   type Geometry,
+  type Outline,
   type Region,
 } from "./geometry";
 
@@ -1510,11 +1511,18 @@ export class GoFishNode {
         this
       );
       // A node whose definition gives no outline is read as its box, its
-      // edges named in its own axis order.
+      // edges named in its own axis order. Its samples are kept per
+      // tolerance, for every reader of this layout.
+      const outline =
+        g.outline ?? (() => [boxOutline(g.box, this.yFrame.direction)]);
+      const sampled = new Map<number, Outline[]>();
       this._geometry = {
         ...g,
-        outline:
-          g.outline ?? (() => [boxOutline(g.box, this.yFrame.direction)]),
+        outline: (tolerance) => {
+          let o = sampled.get(tolerance);
+          if (o === undefined) sampled.set(tolerance, (o = outline(tolerance)));
+          return o;
+        },
       };
     }
     return this._geometry;

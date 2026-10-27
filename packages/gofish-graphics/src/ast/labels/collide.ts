@@ -39,6 +39,19 @@ export type Polyline = {
   length: number;
 };
 
+/** The length of a path through `points`, back to the first when
+ *  `closed`: a polyline's `length`, without building it. */
+export function pathLength(points: Pt[], closed: boolean): number {
+  let length = 0;
+  const n = points.length;
+  for (let i = 1; i < (closed && n > 0 ? n + 1 : n); i++) {
+    const p = points[i - 1];
+    const q = points[i % n];
+    length += Math.hypot(q[0] - p[0], q[1] - p[1]);
+  }
+  return length;
+}
+
 export function polyline(points: Pt[], closed: boolean): Polyline {
   const pts = closed && points.length > 0 ? [...points, points[0]] : points;
   const cum = [0];
@@ -232,14 +245,18 @@ export function outlineObstacles(
   return out;
 }
 
-const obstacleBox = (o: Obstacle): BoundingBox =>
-  ringExtent(
-    o.kind === "segment"
-      ? segmentInk(o.a, o.b, o.w)
-      : o.kind === "area"
-        ? o.ring
-        : o.poly
-  );
+/** The convex polygon of an obstacle's ink, for a segment or a box; an
+ *  area has none (its ring may be concave). */
+const inkOf = (o: Obstacle): Pt[] | undefined =>
+  o.kind === "segment"
+    ? segmentInk(o.a, o.b, o.w)
+    : o.kind === "box"
+      ? o.poly
+      : undefined;
+
+/** A grid cell's key: its column and row, packed into one number (rows
+ *  within ±2^19 of the origin, far beyond any drawing). */
+const cellKey = (i: number, j: number) => i * 1048576 + j;
 
 /**
  * A uniform grid of obstacles: each is filed in every cell its box touches,
@@ -247,8 +264,13 @@ const obstacleBox = (o: Obstacle): BoundingBox =>
  * a placement is the same every time.
  */
 export class ObstacleGrid {
-  private readonly cells = new Map<string, number[]>();
-  private readonly items: { o: Obstacle; box: BoundingBox }[] = [];
+  private readonly cells = new Map<number, number[]>();
+  /** Each obstacle with its box and, for a segment or a box, its ink. */
+  private readonly items: {
+    o: Obstacle;
+    box: BoundingBox;
+    ink: Pt[] | undefined;
+  }[] = [];
   private stamp = 0;
   private readonly seen: number[] = [];
 
@@ -265,16 +287,17 @@ export class ObstacleGrid {
   }
 
   add(o: Obstacle): void {
-    const box = obstacleBox(o);
+    const ink = inkOf(o);
+    const box = ringExtent(ink ?? (o as { ring: Pt[] }).ring);
     if (![box.minX, box.minY, box.maxX, box.maxY].every(Number.isFinite))
       return;
     const id = this.items.length;
-    this.items.push({ o, box });
+    this.items.push({ o, box, ink });
     this.seen.push(0);
     const [i0, j0, i1, j1] = this.range(box);
     for (let i = i0; i <= i1; i++)
       for (let j = j0; j <= j1; j++) {
-        const k = `${i},${j}`;
+        const k = cellKey(i, j);
         const bucket = this.cells.get(k);
         if (bucket) bucket.push(id);
         else this.cells.set(k, [id]);
@@ -288,14 +311,14 @@ export class ObstacleGrid {
     const [i0, j0, i1, j1] = this.range(box);
     for (let i = i0; i <= i1; i++)
       for (let j = j0; j <= j1; j++) {
-        const bucket = this.cells.get(`${i},${j}`);
+        const bucket = this.cells.get(cellKey(i, j));
         if (!bucket) continue;
         for (const id of bucket) {
           if (this.seen[id] === stamp) continue;
           this.seen[id] = stamp;
-          const { o, box: ob } = this.items[id];
+          const { o, box: ob, ink } = this.items[id];
           if (!overlaps(box, ob) || !keep(o)) continue;
-          if (covers(poly, o)) return true;
+          if (ink ? convexOverlap(poly, ink) : covers(poly, o)) return true;
         }
       }
     return false;

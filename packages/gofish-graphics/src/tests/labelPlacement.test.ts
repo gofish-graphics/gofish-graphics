@@ -10,12 +10,12 @@
 import { GoFishNode } from "../ast/_node";
 import * as Place from "../families/place";
 import {
-  aroundCandidates,
-  alongCandidates,
+  aroundCandidates as aroundSpots,
+  alongCandidates as alongSpots,
   dodgeVertically,
   endSpot,
   extremePoint,
-  interiorCandidates,
+  interiorCandidates as interiorSpots,
   type TargetShape,
 } from "../ast/labels/strategies";
 import {
@@ -41,6 +41,17 @@ import {
   spread,
   stack,
 } from "../lib";
+
+// The strategies yield their candidates lazily; these read them all.
+const aroundCandidates = (...a: Parameters<typeof aroundSpots>) => [
+  ...aroundSpots(...a),
+];
+const alongCandidates = (...a: Parameters<typeof alongSpots>) => [
+  ...alongSpots(...a),
+];
+const interiorCandidates = (...a: Parameters<typeof interiorSpots>) => [
+  ...interiorSpots(...a),
+];
 
 let passed = 0;
 let failed = 0;
