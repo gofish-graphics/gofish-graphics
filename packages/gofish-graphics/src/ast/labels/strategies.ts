@@ -488,7 +488,7 @@ function slopedAt(
  * `Place.start` / `Place.end`: the spot a level label wants just past the
  * first or last point of an open path, on the side the path heads that way
  * (right of a line's end when it runs rightward). The chooser then slides
- * colliding ones apart vertically (`dodgeVertically`).
+ * the ones that overlap apart vertically (`dodgeVertically`).
  */
 export function endSpot(
   t: TargetShape,
@@ -496,7 +496,7 @@ export function endSpot(
   angle: number,
   which: "start" | "end",
   offset: number
-): Spot & { side: 1 | -1 } {
+): Spot {
   const open = t.outlines.filter((o) => !o.closed && o.points.length > 0);
   if (open.length === 0)
     throw STRATEGY_ERROR(`Place.${which}`, "an open path", t);
@@ -515,7 +515,6 @@ export function endSpot(
     cx: p[0] + side * (offset + size.hx),
     cy: p[1],
     angle,
-    side,
   };
 }
 

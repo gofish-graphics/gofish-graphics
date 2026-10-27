@@ -281,8 +281,8 @@ read back by `fromJSON` too), so two calls with the same accessor are two
 calls. They are placed in one run, in the layer of the nearest node all of
 their targets are under, so the area they keep to is that node's: the plot
 area below the axes when the call spans the plot. A call's `start` and `end`
-labels are placed first, each kind on its own; the rest are taken in data
-order, and each takes its first candidate that stays
+labels are placed first, each kind on its own (see below); the rest are
+taken in data order, and each takes its first candidate that stays
 inside the area the layer was given (`[0, size]` on each axis, so labels stay
 off the axes around the plot) and whose box, grown by 1 px, covers no
 obstacle. The strategies yield their candidates lazily, so the chooser stops
@@ -292,14 +292,20 @@ outline, and the band its stroke `width` draws along every outline, open or
 closed, so an unfilled closed outline is only its band), the label's own
 mark as its outline's band only (so a label may sit inside its
 region, and a label `"on"` a path may cover it), the labels placed so far
-(by this step, or by the solve for a position string, in this wrapper or in
-one below it, read through refs), and the call's
+(by this step, by the solve for a position string, or by the chooser in a
+wrapper below, read through refs; a hidden one takes no room), and the call's
 `avoiding` nodes, read through fresh refs made once per call (`nodeRefs.ts`,
 shared with `enclose`; a `selectAll` in `avoiding` is resolved where the
 call is recorded, against the chart's named layers). A label with no free candidate is hidden: it draws nothing and
-its box is empty at its mark's center. `start` and `end` labels are never
-hidden: the labels of one call on each side slide apart vertically
-(`dodgeVertically`, directlabels' `last.qp`). A seated label writes its
+its box is empty at its mark's center. A `start` or `end` label has one
+spot, past its path's end: the labels of one call whose boxes overlap in x
+there slide apart vertically, a run at a time (`dodgeVertically`,
+directlabels' `last.qp`), and labels apart in x keep the heights their ends
+want. Each is then tested against the same obstacles as any label, and one
+that covers an obstacle is hidden and counted. The area the layer was given
+does not hold them: a path's end is where its label goes, often past the
+area (a line chart's end labels take the margin), and the labels join the
+layout's box. A seated label writes its
 angle to the label node and its box with `setExtent`, so a sloped label's
 box is its turned box. The render prints one `console.info` naming how many
 labels each call hid (`reportHiddenLabels`, from `gofish.tsx`).

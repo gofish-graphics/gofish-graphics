@@ -126,7 +126,7 @@ def along(*, at: Optional[float | str] = None, side: Optional[str | list] = None
 
 @bare_kind("Place")
 def start(*, offset: Optional[float] = None) -> Dict[str, Any]:
-    """Just before the first point of an open path, level: on a line chart, left of where each series starts. Labels of one `.label()` call that would cover each other slide apart vertically; none is hidden.
+    """Just before the first point of an open path, level: on a line chart, left of where each series starts. Labels of one `.label()` call that would cover each other slide apart vertically; one that still covers a mark or a label is hidden.
 
     Args:
         offset: Pixels between the outline and the label. Default: the label's `offset`, or 4.
@@ -147,7 +147,7 @@ def start(*, offset: Optional[float] = None) -> Dict[str, Any]:
 
 @bare_kind("Place")
 def end(*, offset: Optional[float] = None) -> Dict[str, Any]:
-    """Just past the last point of an open path, level: on a line chart, right of where each series ends. Labels of one `.label()` call that would cover each other slide apart vertically; none is hidden. The default for a line and an arrow.
+    """Just past the last point of an open path, level: on a line chart, right of where each series ends. Labels of one `.label()` call that would cover each other slide apart vertically; one that still covers a mark or a label is hidden. The default for a line and an arrow.
 
     Args:
         offset: Pixels between the outline and the label. Default: the label's `offset`, or 4.

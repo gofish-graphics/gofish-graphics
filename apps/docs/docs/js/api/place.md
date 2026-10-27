@@ -56,8 +56,10 @@ The labels of one `.label()` call are placed together, in data order. Each
 takes its first spot that stays inside the plot and covers no labeled mark,
 no label already placed, and no node in the label's `avoiding` option. A
 label with no free spot is hidden, and the render prints how many labels
-each call hid. The labels of `Place.start()` and `Place.end()` are never
-hidden: labels that would cover each other slide apart vertically.
+each call hid. A label of `Place.start()` or `Place.end()` has one spot,
+past its path's end, which may be outside the plot. Labels there that would
+cover each other slide apart vertically, and a label that still covers a
+mark, a label or a node in `avoiding` is hidden.
 
 A position string ignores `avoiding`, and is never hidden.
 

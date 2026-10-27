@@ -12,11 +12,13 @@
  * For each `.label()` call, its labels are taken in data order, and each
  * takes its strategy's first candidate whose box covers no obstacle: the
  * marks the labels of this layer describe (the label's own mark is read as
- * its outline only), the labels already placed in this layer (by this step,
- * or by the solve for a position string), and the nodes in the call's
- * `avoiding`. A label with no free candidate is hidden. `Place.start()` and
- * `Place.end()` labels are not hidden: the labels of one call slide apart
- * vertically instead.
+ * its outline only), the labels already placed (by this step, by the solve
+ * for a position string, or by the chooser in a layer below; a hidden one
+ * takes no room), and the nodes in the call's `avoiding`. A label with no
+ * free candidate is hidden. `Place.start()` and `Place.end()` labels have
+ * one spot each, past their paths' ends: the ones of a call that overlap
+ * there slide apart vertically, and one that still covers an obstacle is
+ * hidden.
  *
  * Everything is read and written in pixels, through each placeable's
  * unoriented node (`rawPlaceable`), in the layer's frame.
@@ -274,48 +276,76 @@ export function applyLabelPlacement(
     else calls.set(item.group, [resolved]);
   }
 
+  /** Whether a label of `group` on `shape` is clear at `c`: its box covers
+   *  no obstacle of its call and, unless it sits on its own mark's outline,
+   *  not that outline's band either (a label may sit inside its own mark,
+   *  filled or not). */
+  const clear = (
+    c: Spot & { onOutline: boolean },
+    size: HalfSize,
+    shape: TargetShape & { mark: unknown },
+    group: unknown
+  ): boolean => {
+    const poly = corners(c, size, CLEARANCE);
+    const keep = (o: Obstacle) =>
+      o.owner !== shape.mark && (o.scope === undefined || o.scope === group);
+    if (grid.hits(poly, keep)) return false;
+    const own = (o: Obstacle) => o.owner === shape.mark && o.kind === "segment";
+    return c.onOutline || !grid.hits(poly, own);
+  };
+  /** Seat a label at the spot it took and file its box (`size` at the
+   *  spot), or hide it when it took none, counting it for the render's
+   *  note. */
+  const settle = (item: Resolved, spot: Spot | undefined, size: HalfSize) => {
+    const key = `${item.call} with ${placeName(item.place)}`;
+    const entry = hiddenLabels.get(key) ?? { hidden: 0, total: 0 };
+    entry.total++;
+    hiddenLabels.set(key, entry);
+    const p = get(item.label);
+    if (spot === undefined) {
+      entry.hidden++;
+      hide(p, item.node, centerOf(shapeOf(item.target)));
+      return;
+    }
+    seat(p, item.node, spot);
+    grid.add({ kind: "box", poly: corners(spot, size), owner: item.label });
+  };
+
   for (const [group, items] of calls) {
-    // `start` and `end` labels are never hidden: each kind's slide apart.
+    // `start` and `end` labels: each at its path's end, slid apart from
+    // the others of its kind it overlaps; one that is not clear there is
+    // hidden. All are tested before any is filed: the slide already keeps
+    // them off each other. The frame does not hold them: a path's end is
+    // where its label goes, often past the area (a line chart's end labels
+    // take the margin), and the labels join the layout's box.
     for (const which of ["start", "end"] as const) {
       const ends = items.filter((i) => i.place.kind === which);
-      if (ends.length > 0) placeEnds(ends, which, shapeOf, get, grid);
+      const spots = endSpots(ends, which, shapeOf).map((e) => ({
+        ...e,
+        ok: clear(
+          { ...e.spot, onOutline: false },
+          e.size,
+          shapeOf(e.item.target),
+          group
+        ),
+      }));
+      for (const { item, spot, size, ok } of spots)
+        settle(item, ok ? spot : undefined, size);
     }
-    // The rest take their first free candidate, in data order.
+    // The rest take their first free candidate in the frame, in data order.
     for (const item of items) {
       const { place } = item;
       if (place.kind === "start" || place.kind === "end") continue;
       const shape = shapeOf(item.target);
       const angle = item.node.state.angle;
       const size = item.node.halfSize(angle);
-      const candidates = candidatesFor(place, item.offset, shape, size, angle);
-      const keep = (o: Obstacle) =>
-        o.owner !== shape.mark && (o.scope === undefined || o.scope === group);
-      // Its own mark is read as its outline's band only: a label may sit
-      // inside its own mark, filled or not.
-      const own = (o: Obstacle) =>
-        o.owner === shape.mark && o.kind === "segment";
-      let chosen: { spot: Candidate; box: Pt[] } | undefined;
-      for (const c of candidates) {
-        const box = corners(c, size);
-        if (!inFrame(box)) continue;
-        const poly = corners(c, size, CLEARANCE);
-        if (grid.hits(poly, keep)) continue;
-        if (!c.onOutline && grid.hits(poly, own)) continue;
-        chosen = { spot: c, box };
-        break;
-      }
-      const key = `${item.call} with ${placeName(place)}`;
-      const entry = hiddenLabels.get(key) ?? { hidden: 0, total: 0 };
-      entry.total++;
-      hiddenLabels.set(key, entry);
-      const p = get(item.label);
-      if (chosen === undefined) {
-        entry.hidden++;
-        hide(p, item.node, centerOf(shape));
-        continue;
-      }
-      seat(p, item.node, chosen.spot);
-      grid.add({ kind: "box", poly: chosen.box, owner: item.label });
+      let chosen: Candidate | undefined;
+      for (const c of candidatesFor(place, item.offset, shape, size, angle))
+        if (inFrame(corners(c, size)) && clear(c, size, shape, group)) {
+          chosen = c;
+          break;
+        }
+      settle(item, chosen, size);
     }
   }
 }
@@ -378,37 +408,51 @@ function candidatesFor(
   }
 }
 
-/** `Place.start()` / `Place.end()` for one call: each label at its path's
- *  end, then the labels on each side slid apart vertically. */
-function placeEnds(
+/**
+ * The spots of one call's `Place.start()` or `Place.end()` labels: each at
+ * its path's end, then the labels whose boxes overlap in x slid apart
+ * vertically, a run of them at a time (labels apart in x keep the heights
+ * their ends want). In input order, with each label's box size.
+ */
+function endSpots(
   items: Resolved[],
   which: "start" | "end",
-  shapeOf: (ref: ConstraintRef) => TargetShape,
-  get: (ref: ConstraintRef) => Placeable,
-  grid: ObstacleGrid
-): void {
+  shapeOf: (ref: ConstraintRef) => TargetShape
+): { item: Resolved; spot: Spot; size: HalfSize }[] {
   const wanted = items.map((item) => {
     const angle = item.node.state.angle;
     const size = item.node.halfSize(angle);
     const spot = endSpot(shapeOf(item.target), size, angle, which, item.offset);
     return { item, size, spot };
   });
-  for (const side of [1, -1] as const) {
-    const onSide = wanted.filter((w) => w.spot.side === side);
+  // Runs of boxes that overlap in x, chained: sorted by left edge, a box
+  // joins the run while it starts before the run's right edge.
+  const left = (k: number) => wanted[k].spot.cx - wanted[k].size.hx;
+  const right = (k: number) => wanted[k].spot.cx + wanted[k].size.hx;
+  const order = wanted.map((_, k) => k).sort((a, b) => left(a) - left(b));
+  const runs: number[][] = [];
+  let reach = -Infinity;
+  for (const k of order) {
+    if (runs.length > 0 && left(k) < reach) {
+      runs[runs.length - 1].push(k);
+      reach = Math.max(reach, right(k));
+    } else {
+      runs.push([k]);
+      reach = right(k);
+    }
+  }
+  for (const run of runs) {
+    const members = [...run].sort((a, b) => a - b);
     const ys = dodgeVertically(
-      onSide.map((w) => ({ want: w.spot.cy, h: 2 * w.size.hy })),
+      members.map((k) => ({
+        want: wanted[k].spot.cy,
+        h: 2 * wanted[k].size.hy,
+      })),
       DODGE_GAP
     );
-    onSide.forEach((w, k) => {
-      const spot = { ...w.spot, cy: ys[k] };
-      seat(get(w.item.label), w.item.node, spot);
-      grid.add({
-        kind: "box",
-        poly: corners(spot, w.size),
-        owner: w.item.label,
-      });
-    });
+    members.forEach((k, i) => (wanted[k].spot.cy = ys[i]));
   }
+  return wanted;
 }
 
 /** Print one note for a render's hidden labels, and clear them. */

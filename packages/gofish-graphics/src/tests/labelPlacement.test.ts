@@ -328,9 +328,9 @@ console.log("# start, end, dodge");
     type: "connect",
   };
   const e = endSpot(path, { hx: 10, hy: 5 }, 0, "end", 4);
-  ok("end: right of the last point", near(e.cx, 114) && near(e.cy, 40) && e.side === 1);
+  ok("end: right of the last point", near(e.cx, 114) && near(e.cy, 40));
   const s = endSpot(path, { hx: 10, hy: 5 }, 0, "start", 4);
-  ok("start: left of the first point", near(s.cx, -14) && s.side === -1);
+  ok("start: left of the first point", near(s.cx, -14));
   const ys = dodgeVertically(
     [
       { want: 50, h: 10 },
@@ -933,6 +933,60 @@ console.log("# labels placed lower down keep later calls off");
       C.x === bare.x &&
       C.y === bare.y,
     JSON.stringify({ texts: otexts.map((t) => t.text), C, bare })
+  );
+}
+
+console.log("# end labels dodge only labels they overlap");
+{
+  // Two lines end at the same height far apart in x: their labels do not
+  // overlap, so neither moves off its line's end.
+  const rows = [
+    { s: "a", x: 0, y: 1 },
+    { s: "a", x: 1, y: 2 },
+    { s: "b", x: 5, y: 1 },
+    { s: "b", x: 6, y: 2 },
+  ];
+  const node = (await chart(rows, { axes: false })
+    .flow(group({ by: "s" }), scatter({ by: "x", x: "x", y: "y" }))
+    .mark(line({ strokeWidth: 2 }).label("s"))
+    .resolve()) as GoFishNode;
+  const doc = await node.toDisplayList({ w: 300, h: 100 });
+  const [ta, tb] = ["a", "b"].map((s) => textItems(doc).find((t) => t.text === s));
+  ok(
+    "labels apart in x keep their ends' height",
+    ta !== undefined && tb !== undefined && near(ta.y, tb.y, 1e-6),
+    JSON.stringify({ ta: ta && [ta.x, ta.y], tb: tb && [tb.x, tb.y] })
+  );
+
+  // A line runs up right past another's end: the end label would cover it,
+  // so it is hidden and counted like any other label with no free spot.
+  const cross = [
+    { s: "a", k: 0, x: 0, y: 5 },
+    { s: "a", k: 1, x: 1, y: 5 },
+    { s: "b", k: 0, x: 1.03, y: 0 },
+    { s: "b", k: 1, x: 1.03, y: 10 },
+  ];
+  const info: string[] = [];
+  const saved = console.info;
+  console.info = (m: string) => info.push(m);
+  const cnode = (await chart(cross, { axes: false })
+    .flow(group({ by: "s" }), scatter({ by: "k", x: "x", y: "y" }))
+    .mark(line({ strokeWidth: 2 }).label("s", { position: Place.end() }))
+    .resolve()) as GoFishNode;
+  const cdoc = await cnode.toDisplayList({ w: 300, h: 100 });
+  console.info = saved;
+  const ca = textItems(cdoc).find((t) => t.text === "a");
+  const bPath = items(cdoc).filter((i) => i.kind === "path")[1];
+  const bx = pathPoints(bPath.d)[0][0];
+  ok(
+    "an end label that would cover another mark is hidden",
+    ca === undefined || textBox(ca)[2][0] < bx - 1 || textBox(ca)[0][0] > bx + 1,
+    JSON.stringify({ ca: ca && textBox(ca), bx })
+  );
+  ok(
+    "and counted in the note",
+    ca !== undefined || info.some((m) => m.includes("Place.end()")),
+    JSON.stringify(info)
   );
 }
 

@@ -990,11 +990,11 @@ export const STRATEGIES = {
         },
       },
       start: {
-        doc: "Just before the first point of an open path, level: on a line chart, left of where each series starts. Labels of one `.label()` call that would cover each other slide apart vertically; none is hidden.",
+        doc: "Just before the first point of an open path, level: on a line chart, left of where each series starts. Labels of one `.label()` call that would cover each other slide apart vertically; one that still covers a mark or a label is hidden.",
         params: { offset: placeOffset(4) },
       },
       end: {
-        doc: "Just past the last point of an open path, level: on a line chart, right of where each series ends. Labels of one `.label()` call that would cover each other slide apart vertically; none is hidden. The default for a line and an arrow.",
+        doc: "Just past the last point of an open path, level: on a line chart, right of where each series ends. Labels of one `.label()` call that would cover each other slide apart vertically; one that still covers a mark or a label is hidden. The default for a line and an arrow.",
         params: { offset: placeOffset(4) },
       },
       interior: {

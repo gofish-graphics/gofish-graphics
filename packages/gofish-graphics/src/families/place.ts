@@ -130,7 +130,8 @@ export const along = bareKind(
 /**
  * Just before the first point of an open path, level: on a line chart,
  * left of where each series starts. Labels of one `.label()` that would
- * cover each other slide apart vertically; none is hidden.
+ * cover each other slide apart vertically; one that still covers a mark or
+ * a label is hidden.
  *
  * @param offset Pixels between the path's start and the label. Default: the
  *   label's `offset`, or 4.
@@ -146,8 +147,8 @@ export const start = bareKind(
 /**
  * Just past the last point of an open path, level: on a line chart, right
  * of where each series ends. Labels of one `.label()` that would cover each
- * other slide apart vertically; none is hidden. The default for a line and
- * an arrow.
+ * other slide apart vertically; one that still covers a mark or a label is
+ * hidden. The default for a line and an arrow.
  *
  * @param offset Pixels between the path's end and the label. Default: the
  *   label's `offset`, or 4.
