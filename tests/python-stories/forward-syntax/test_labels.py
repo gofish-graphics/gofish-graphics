@@ -361,7 +361,7 @@ def story_normalized_stacked_bar_with_labels():
             year2000,
             color=Color.palette({"Female": "#675193", "Male": "#ca8861"}),
             axes={"x": {"side": "end", "title": "proportion"}, "y": True},
-            w=200,
+            w=300,
             h=19 * 17,
         )
         .flow(

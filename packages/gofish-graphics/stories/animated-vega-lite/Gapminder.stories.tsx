@@ -136,8 +136,10 @@ export const SpatialTwin: StoryObj<Args> = {
  */
 export const Animated: StoryObj<Args> = {
   // Vega-Lite's size: continuous axes with no width or height make a
-  // 200 × 200 plot.
-  args: { w: 200, h: 200 },
+  // 300 × 300 plot, Vega-Lite's default continuous size (its compiled
+  // point_2d example). Animated Vega-Lite's gapminder has no compiled
+  // render to check against, so this assumes the same default.
+  args: { w: 300, h: 300 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -177,7 +179,7 @@ export const Animated: StoryObj<Args> = {
  * is what a screenshot needs and what a hand-scrubbed chart would write.
  */
 export const Paused1975: StoryObj<Args> = {
-  args: { w: 200, h: 200 },
+  args: { w: 300, h: 300 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
@@ -210,7 +212,7 @@ export const Paused1975: StoryObj<Args> = {
  * `time.transition()` over it is what fills the gaps in.
  */
 export const SequenceOnly: StoryObj<Args> = {
-  args: { w: 200, h: 200 },
+  args: { w: 300, h: 300 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
@@ -819,7 +821,7 @@ export const CurvesPaused: StoryObj<Args> = {
 
 /** One frame of the animation: the 1955 scatter the playback starts from. */
 export const Frame1955: StoryObj<Args> = {
-  args: { w: 200, h: 200 },
+  args: { w: 300, h: 300 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();

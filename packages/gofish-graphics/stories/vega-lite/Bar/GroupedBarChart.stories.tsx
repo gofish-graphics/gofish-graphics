@@ -29,9 +29,10 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  // Vega-Lite's size: a 20 px step per offset bar, three per category over
-  // three categories, and a continuous y is 200 px tall.
-  args: { w: 3 * 3 * 20, h: 200 },
+  // Vega-Lite's size: its compiled bar_grouped plot is 240 × 300. Each of the
+  // three categories takes 80 px (three 20 px offset bars plus padding), and a
+  // continuous y is 300 px tall, Vega-Lite's default.
+  args: { w: 240, h: 300 },
   render: (args: Args) => {
     const container = initializeContainer();
 

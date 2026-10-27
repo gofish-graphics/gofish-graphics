@@ -17,8 +17,9 @@ export default meta;
 type Args = { w: number };
 
 export const Default: StoryObj<Args> = {
-  // Vega-Lite's size: a continuous x with no width is 200 px wide.
-  args: { w: 200 },
+  // Vega-Lite's size: a continuous x with no width is 300 px wide, Vega-Lite's
+  // default (its compiled tick_dot plot is 300 × 20).
+  args: { w: 300 },
   loaders: [async () => ({ weather: await data["seattle-weather.csv"]() })],
   tags: ["gallery"],
   parameters: {

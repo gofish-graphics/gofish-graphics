@@ -65,8 +65,10 @@ const YEARS: [number, number] = [1955, 2005];
  */
 export const L0Sugar: StoryObj<Args> = {
   // Vega-Lite's size: continuous axes with no width or height make a
-  // 200 × 200 plot.
-  args: { w: 200, h: 200 },
+  // 300 × 300 plot, Vega-Lite's default continuous size (its compiled
+  // point_2d example). Animated Vega-Lite's gapminder has no compiled
+  // render to check against, so this assumes the same default.
+  args: { w: 300, h: 300 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
@@ -97,7 +99,7 @@ export const L0Sugar: StoryObj<Args> = {
  * tier the same way that tier inherits the marks it connects.
  */
 export const L1ExplicitKey: StoryObj<Args> = {
-  args: { w: 200, h: 200 },
+  args: { w: 300, h: 300 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
@@ -131,7 +133,7 @@ export const L1ExplicitKey: StoryObj<Args> = {
  * `timer` handed to the transition as `at`.
  */
 export const L2ExplicitClock: StoryObj<Args> = {
-  args: { w: 200, h: 200 },
+  args: { w: 300, h: 300 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
@@ -173,7 +175,7 @@ export const L2ExplicitClock: StoryObj<Args> = {
  * layout and interpolating after it land in the same place.
  */
 export const L3DataSpace: StoryObj<Args> = {
-  args: { w: 200, h: 200 },
+  args: { w: 300, h: 300 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();

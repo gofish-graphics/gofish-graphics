@@ -37,7 +37,7 @@ def story_default():
                 "snow": "#9467bd",
             }),
             w=12 * 20,
-            h=200,
+            h=300,
         )
         .flow(
             derive(_with_month),

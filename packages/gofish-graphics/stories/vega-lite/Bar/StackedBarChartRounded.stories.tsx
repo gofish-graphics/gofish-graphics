@@ -33,9 +33,9 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  // Vega-Lite's size: a 20 px step per month, and a continuous y is 200 px
+  // Vega-Lite's size: a 20 px step per month, and a continuous y is 300 px
   // tall.
-  args: { w: 12 * 20, h: 200 },
+  args: { w: 12 * 20, h: 300 },
   loaders: [async () => ({ weather: await data["seattle-weather.csv"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();

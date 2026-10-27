@@ -19,8 +19,9 @@ type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
   // Vega-Lite's size: `height: {step: 17}` over the 19 age groups, and a
-  // continuous x is 200 px wide.
-  args: { w: 200, h: 19 * 17 },
+  // continuous x is 300 px wide, Vega-Lite's default (its compiled
+  // bar_aggregate plot is 300 × 323).
+  args: { w: 300, h: 19 * 17 },
   loaders: [async () => ({ population: await data["population.json"]() })],
   tags: ["gallery"],
   parameters: {

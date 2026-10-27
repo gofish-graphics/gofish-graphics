@@ -19,7 +19,7 @@ def story_default():
             year2000,
             color=Color.palette({"Female": "#675193", "Male": "#ca8861"}),
             w=19 * 17,
-            h=200,
+            h=300,
         )
         .flow(
             derive(_map_sex),

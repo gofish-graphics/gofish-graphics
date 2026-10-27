@@ -20,8 +20,8 @@ type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
   // Vega-Lite's size: binned continuous axes with no width or height make a
-  // 200 × 200 plot.
-  args: { w: 200, h: 200 },
+  // 300 × 300 plot, Vega-Lite's default (its compiled circle_binned plot).
+  args: { w: 300, h: 300 },
   loaders: [async () => ({ movies: await data["movies.json"]() })],
   render: (args: Args, context: any) => {
 

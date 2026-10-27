@@ -38,6 +38,6 @@ def story_default():
     ]
 
     return (
-        layer(charts, w=200, h=200),
+        layer(charts, w=300, h=300),
         {"axes": True},
     )

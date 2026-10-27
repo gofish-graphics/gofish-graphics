@@ -18,9 +18,10 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  // Vega-Lite's size: a 20 px step per offset bar, two per genre over 13
-  // genres (null included), and a continuous y is 200 px tall.
-  args: { w: 13 * 2 * 20, h: 200 },
+  // Vega-Lite's size: its compiled bar_grouped_repeated plot is 660 × 300,
+  // from a 20 px step per offset bar, two per genre, plus padding; a
+  // continuous y is 300 px tall, Vega-Lite's default.
+  args: { w: 660, h: 300 },
   loaders: [async () => ({ movies: await data["movies.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
