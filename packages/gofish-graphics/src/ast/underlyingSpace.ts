@@ -17,7 +17,6 @@ import {
   type MaybeValue,
 } from "./data";
 import {
-  addsUp,
   declaredVar,
   DURATION,
   INSTANT,
@@ -205,12 +204,12 @@ export const magnitude = (
  *  in USD, or in °C, is in USD, or in °C (#1197). */
 export const differenceUnits = (r: UnitRecord): UnitRecord => {
   if (r.calendar === undefined) return r;
-  const { calendar: _, cannotAdd, ...rest } = r;
-  const others = cannotAdd?.filter((q) => q.calendar === undefined);
+  const { calendar: _, summands, ...rest } = r;
+  const others = summands?.filter((q) => q.calendar === undefined);
   return {
     ...rest,
     unit: declaredVar(r.titles[0] ?? INSTANT.unit, DURATION),
-    ...(others?.length ? { cannotAdd: others } : {}),
+    ...(others?.length ? { summands: others } : {}),
   };
 };
 
@@ -565,22 +564,23 @@ export const isPositioningSpace = (space: UnderlyingSpace): boolean =>
  *  - `calendar`: over instants, the calendar they read on (`HasCalendar`).
  *  - `titles`: the quantities that title the axis, in the order they met:
  *    each column's declared quantity (`HasQuantity`), else its name.
- *  - `cannotAdd`: the quantities of the values that do not add up
- *    (`checkSummable` in measure.ts refuses them), so a stack that adds the
- *    space checks the columns it adds, not every column its unit has met
- *    (#1197).
+ *  - `summands`: the quantities of the values in a declared unit, which a
+ *    fold that adds the space sums (`Units.sum` in measure.ts checks their
+ *    unit), so a stack checks the columns it adds, not every column its
+ *    unit has met (#1197). A quantity in no declared unit passes any sum,
+ *    so it is not listed.
  */
 export type UnitRecord = {
   unit?: UnitVar;
   calendar?: HasCalendar;
   titles: string[];
-  cannotAdd?: Quantity[];
+  summands?: Quantity[];
 };
 
 /** The units of values of quantity `q`: its unit (`unitOf`: its declared
  *  unit, else the variable of its name in the type walk's union-find), its
- *  calendar, its name as the title, and `q` itself when its values do not
- *  add up. */
+ *  calendar, its name as the title, and `q` itself as a summand when its
+ *  unit is declared. */
 export const quantityUnits = (
   q: Quantity | undefined
 ): UnitRecord | undefined =>
@@ -590,7 +590,7 @@ export const quantityUnits = (
         unit: unitOf(q),
         ...(q.calendar ? { calendar: q.calendar } : {}),
         titles: [q.name],
-        ...(addsUp(q) ? {} : { cannotAdd: [q] }),
+        ...(q.unit !== undefined ? { summands: [q] } : {}),
       };
 
 /** The units of a datum value: of the quantity it was read from; undefined
@@ -618,8 +618,8 @@ export const valueUnits = (v: MaybeValue<unknown>): UnitRecord | undefined =>
  * A binding holds for the whole render, so an unknown bound to two
  * different declared units is a {@link MeasureClash} too. "Forget" records
  * nothing and raises nothing: the result keeps `a`'s record. A shared join
- * unions the titles and the quantities that cannot add. Either way the calendars must agree: one axis reads one
- * calendar.
+ * unions the titles and the summands. Either way the calendars must agree:
+ * one axis reads one calendar.
  */
 export const joinUnits = (
   a: UnitRecord | undefined,
@@ -633,22 +633,20 @@ export const joinUnits = (
   if (shared && a.unit && b.unit) unify(a.unit, b.unit, site);
   const unit = shared ? (a.unit ?? b.unit) : a.unit;
   const titles = shared ? unionInOrder(a.titles, b.titles) : a.titles;
-  const cannotAdd =
-    shared && b.cannotAdd
-      ? [...(a.cannotAdd ?? []), ...b.cannotAdd]
-      : a.cannotAdd;
+  const summands =
+    shared && b.summands ? [...(a.summands ?? []), ...b.summands] : a.summands;
   if (
     unit === a.unit &&
     titles === a.titles &&
     calendar === a.calendar &&
-    cannotAdd === a.cannotAdd
+    summands === a.summands
   )
     return a;
   return {
     ...(unit !== undefined ? { unit } : {}),
     ...(calendar !== undefined ? { calendar } : {}),
     titles,
-    ...(cannotAdd !== undefined ? { cannotAdd } : {}),
+    ...(summands !== undefined ? { summands } : {}),
   };
 };
 
@@ -684,7 +682,7 @@ const joinCalendars = (
 
 /** A space's {@link UnitRecord} as {@link spaceUnit} reads it: the unit
  *  replaced by its representative in the render's union-find, and no
- *  `cannotAdd`, which only a fold that adds reads. */
+ *  `summands`, which only a fold that adds reads. */
 export type SpaceUnits = {
   unit?: UnitTerm;
   calendar?: HasCalendar;
@@ -704,7 +702,7 @@ export const spaceUnit = (
 ): SpaceUnits | undefined => {
   const r = space && isCONTINUOUS(space) ? space.measure : undefined;
   if (r === undefined) return undefined;
-  const { unit, cannotAdd: _, ...rest } = r;
+  const { unit, summands: _, ...rest } = r;
   return unit === undefined ? rest : { ...rest, unit: resolveUnit(unit) };
 };
 

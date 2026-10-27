@@ -2,7 +2,7 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import type { CanAdd, ColumnType, HasCalendar, HasUnit } from "./schema";
+import type { ColumnType, HasCalendar, HasUnit, UnitClasses } from "./schema";
 
 /**
  * Measures: what the values along an axis are amounts of, and in what unit.
@@ -33,12 +33,17 @@ import type { CanAdd, ColumnType, HasCalendar, HasUnit } from "./schema";
  * the axis, followed by the unit's symbol when it has one: "Pay (USD)"
  * (`spaceTitle` in underlyingSpace.ts).
  *
- * A column also says whether its amounts add up (`CanAdd`, #1197), and so
- * does the {@link Quantity} read from it: every place that sums values
- * checks the quantity of the values it sums ({@link checkSummable}). It is
- * declared on the unit (`Unit(name).summable()`), and the columns of one
- * unit agree on it within one chart (`unifyUnitClasses` in schema.ts), but
- * a sum checks only the columns it sums.
+ * A unit also says what its amounts can do, its classes: whether they add
+ * up (`CanAdd`, #1197). The classes belong to the unit, not to a column
+ * (`HasUnit.classes`): `Unit(name).summable()` defines them, and a unit's
+ * name alone (`"USD"`) leaves them unknown. A unit is its name, so every
+ * occurrence of one name is one unit, and where two occurrences meet their
+ * classes meet by one rule ({@link meetUnitClasses}): unknown and known is
+ * known, and two known definitions that disagree are a loud error. They
+ * meet in two places: among the columns of one chart, when its schema is
+ * applied (`applySchema` in schema.ts), and across the whole figure, in the
+ * type walk's {@link Units}. Every place that sums values checks the unit
+ * of the values it sums ({@link checkSummable}).
  */
 
 /** What one channel's values are amounts of, as its column says (pure data,
@@ -46,11 +51,9 @@ import type { CanAdd, ColumnType, HasCalendar, HasUnit } from "./schema";
 export type Quantity = {
   /** Titles the axis and names the unit variable. */
   name: string;
-  /** The declared unit, if any. Absent: unknown, the variable `name`. */
+  /** The declared unit, if any, with its classes when they are known.
+   *  Absent: unknown, the variable `name`. */
   unit?: HasUnit;
-  /** The values add up (`CanAdd`): the column's unit is `.summable()`, or the
-   *  engine computed them as amounts that add (a count, a share). */
-  CanAdd?: CanAdd;
   /** The column the values were read from, when they were read from one (a
    *  count or a share was not): what a schema declares a unit for. */
   column?: string;
@@ -63,23 +66,25 @@ export type Quantity = {
 // (USD)". A unit the user declares (`Unit(u)`, or `u`) has the symbol `u`.
 // The engine's own units (INSTANT, DURATION, COUNT, a normalize share) have
 // none: a count or a share is a plain number, and a time axis's ticks
-// already read as dates.
+// already read as dates. The engine's units are definitions: their classes
+// are known.
 
 /** The unit of a time column, an instant, which `Schema.time()` writes
  *  beside `HasCalendar`. Its zone is a display parameter, kept in the
  *  calendar. */
-export const INSTANT: HasUnit = { unit: "instant" };
+export const INSTANT: HasUnit = { unit: "instant", classes: {} };
 
-/** The unit of a difference of two instants: a duration. It is the only
- *  difference with a unit of its own: a difference of two amounts in any
- *  other unit is in that unit (`differenceUnits` in underlyingSpace.ts). */
-export const DURATION: HasUnit = { unit: "duration" };
+/** The unit of a difference of two instants: a duration, which adds up. It
+ *  is the only difference with a unit of its own: a difference of two
+ *  amounts in any other unit is in that unit (`differenceUnits` in
+ *  underlyingSpace.ts). */
+export const DURATION: HasUnit = { unit: "duration", classes: { CanAdd: {} } };
 
-/** The unit `.count()` and `.distinct()` declare. */
-export const COUNT: HasUnit = { unit: "count" };
+/** The unit `.count()` and `.distinct()` declare. Counts add up. */
+export const COUNT: HasUnit = { unit: "count", classes: { CanAdd: {} } };
 
 /** The {@link Quantity} of column `column`, whose type is `type`: its
- *  declared unit, its `CanAdd` and its calendar. */
+ *  declared unit and its calendar. */
 export const columnQuantity = (
   column: string,
   type: ColumnType | undefined
@@ -87,25 +92,19 @@ export const columnQuantity = (
   name: type?.HasQuantity?.name ?? column,
   column,
   ...(type?.HasUnit !== undefined ? { unit: type.HasUnit } : {}),
-  ...(type?.CanAdd !== undefined ? { CanAdd: type.CanAdd } : {}),
   ...(type?.HasCalendar ? { calendar: type.HasCalendar } : {}),
 });
-
-/** The advice for times, which do not add, shared by the sum check and
- *  `CanAdd`'s (schema.ts): their differences, durations, do. */
-export const SUBTRACT_A_REFERENCE =
-  "subtract a reference first (e.g. date - start gives a duration, which " +
-  "adds up).";
 
 /** `xs` quoted and joined, for a message: `"a", "b"`. */
 const quoteList = (xs: readonly string[]): string =>
   xs.map((x) => `"${x}"`).join(", ");
 
-/** Whether values of quantity `q` may be summed (#1197): it has `CanAdd`,
- *  or no declared unit, or a unit declared by its name alone (`nameOnly`):
- *  gradual typing (#1125), what its unit can do is unknown, so it passes. */
+/** Whether values of quantity `q` may be summed (#1197): its unit has
+ *  `CanAdd`, or it has no declared unit, or its unit's classes are unknown
+ *  (a unit's name alone): gradual typing (#1125), what its unit can do is
+ *  unknown, so it passes. */
 export const addsUp = (q: Quantity): boolean =>
-  q.unit === undefined || q.unit.nameOnly === true || q.CanAdd !== undefined;
+  q.unit?.classes === undefined || q.unit.classes.CanAdd !== undefined;
 
 /**
  * Check that `where` may sum values of quantity `q` ({@link addsUp}). Else
@@ -136,6 +135,71 @@ export function checkSummable(q: Quantity | undefined, where: string): void {
       `e.g. field("${q.column ?? q.name}").mean().`
   );
 }
+
+/** One occurrence of a unit's definition, as {@link meetUnitClasses} reads
+ *  it: the unit's classes there (undefined when they are unknown, a unit's
+ *  name alone) and who it is, for messages (`the column "usd"`). */
+export type UnitOccurrence = { classes?: UnitClasses; who: string };
+
+/** Who the values of quantity `q` are, for a message: its column, or, for
+ *  values read from none (a count, a share), its name. */
+export const whoOf = (q: Quantity): string =>
+  q.column !== undefined
+    ? `the column "${q.column}"`
+    : `the values of "${q.name}"`;
+
+/** How a definition of unit `name` with `classes` is written. */
+const definitionOf = (name: string, classes: UnitClasses): string =>
+  `Unit(${JSON.stringify(name)})${classes.CanAdd !== undefined ? ".summable()" : ""}`;
+
+/** Whether two known sets of classes are the same. */
+const sameClasses = (a: UnitClasses, b: UnitClasses): boolean => {
+  const ka = Object.keys(a).sort();
+  const kb = Object.keys(b).sort();
+  return ka.length === kb.length && ka.every((k, i) => k === kb[i]);
+};
+
+/**
+ * THE rule for two occurrences of the unit `name` that meet: a unit is its
+ * name, so they are one unit, and its classes are what either knows.
+ * Unknown classes (a unit's name alone) and known ones are the known ones;
+ * two known definitions that disagree are a loud error naming both, since
+ * one unit cannot both add up and not. It runs wherever occurrences meet:
+ * among one chart's columns (`applySchema` in schema.ts) and across the
+ * figure ({@link Units}).
+ */
+export function meetUnitClasses(
+  name: string,
+  a: UnitOccurrence,
+  b: UnitOccurrence
+): UnitOccurrence {
+  if (b.classes === undefined) return a;
+  if (a.classes === undefined) return b;
+  if (sameClasses(a.classes, b.classes)) return a;
+  const [yes, no] = a.classes.CanAdd !== undefined ? [a, b] : [b, a];
+  throw new Error(
+    `${capitalize(yes.who)} and ${no.who} are both in the unit ` +
+      `${JSON.stringify(name)}, but they define it differently: ` +
+      `${definitionOf(name, yes.classes!)} and ` +
+      `${definitionOf(name, no.classes!)}. A unit either adds up or does ` +
+      `not: define it once and use it for both, e.g. const ` +
+      `${identifierFor(name)} = ${definitionOf(name, yes.classes!)}.`
+  );
+}
+
+const capitalize = (s: string): string => s[0].toUpperCase() + s.slice(1);
+
+/** A JS identifier a unit's definition could be bound to in an example, in
+ *  a message: the unit's name when it is one, else `unit`. */
+const identifierFor = (name: string): string =>
+  /^[A-Za-z_$][\w$]*$/.test(name) ? name : "unit";
+
+/** What the figure knows of one unit (by name): its classes as its
+ *  occurrences have met so far, and the sums of it that wait on them. */
+type UnitEntry = {
+  definition: UnitOccurrence;
+  sums: { q: Quantity; where: string }[];
+};
 
 /**
  * A unit variable, as a node of the render's union-find. A root holds the
@@ -230,9 +294,52 @@ export const unitKey = (unit: UnitTerm): string =>
  * The unit substitution of one type walk: the variable of each unknown
  * quantity's name, and the union-find over them. One per walk, so a binding
  * made anywhere in the figure holds everywhere in it.
+ *
+ * It is also where the figure's units meet: every declared unit the walk
+ * reads ({@link unitOf}) meets the other occurrences of its name
+ * ({@link meetUnitClasses}), wherever in the figure they are, and a sum the
+ * walk takes ({@link Units.sum}) checks the unit's classes as the figure
+ * knows them. A sum of a unit whose classes are still unknown waits, and is
+ * checked when an occurrence that knows them is met, so the order in which
+ * the walk meets them does not matter.
  */
 export class Units {
   private readonly vars = new Map<string, UnitVar>();
+  private readonly units = new Map<string, UnitEntry>();
+
+  /** Meet the declared unit of quantity `q` with the figure's other
+   *  occurrences of its name ({@link meetUnitClasses}), and check the sums
+   *  that waited on its classes once they are known. */
+  meet(q: Quantity): void {
+    if (q.unit === undefined) return;
+    const name = q.unit.unit;
+    const occurrence = { classes: q.unit.classes, who: whoOf(q) };
+    const entry = this.units.get(name);
+    if (entry === undefined) {
+      this.units.set(name, { definition: occurrence, sums: [] });
+      return;
+    }
+    entry.definition = meetUnitClasses(name, entry.definition, occurrence);
+    const { classes } = entry.definition;
+    if (classes === undefined) return;
+    const waiting = entry.sums;
+    entry.sums = [];
+    for (const s of waiting) checkSummable(withClasses(s.q, classes), s.where);
+  }
+
+  /** Check that `where` may sum values of quantity `q`
+   *  ({@link checkSummable}), with its unit's classes as the figure knows
+   *  them. While they are unknown the check waits for an occurrence that
+   *  knows them ({@link Units.meet}). */
+  sum(q: Quantity, where: string): void {
+    if (q.unit === undefined) return;
+    this.meet(q);
+    const entry = this.units.get(q.unit.unit)!;
+    const { classes } = entry.definition;
+    if (classes !== undefined) checkSummable(withClasses(q, classes), where);
+    else if (!entry.sums.some((s) => s.q === q && s.where === where))
+      entry.sums.push({ q, where });
+  }
 
   /** The variable of unknown quantity `q`'s name, shared by every unknown
    *  quantity of that name. */
@@ -250,13 +357,21 @@ export class Units {
   }
 }
 
+/** `q` with its unit's classes set to `classes`. */
+const withClasses = (q: Quantity, classes: UnitClasses): Quantity => ({
+  ...q,
+  unit: { ...q.unit!, classes },
+});
+
 /** The unit of quantity `q`: its declared unit, a fresh concrete term that
- *  needs no substitution; else the variable of its name in the installed
- *  one ({@link currentUnits}). */
-export const unitOf = (q: Quantity): UnitVar =>
-  q.unit !== undefined
-    ? declaredVar(q.name, q.unit, q.column)
-    : currentUnits().variable(q);
+ *  needs no substitution, which meets the figure's other occurrences of its
+ *  name ({@link Units.meet}); else the variable of its name in the installed
+ *  substitution ({@link currentUnits}). */
+export const unitOf = (q: Quantity): UnitVar => {
+  if (q.unit === undefined) return currentUnits().variable(q);
+  currentUnits().meet(q);
+  return declaredVar(q.name, q.unit, q.column);
+};
 
 let current: Units | undefined;
 

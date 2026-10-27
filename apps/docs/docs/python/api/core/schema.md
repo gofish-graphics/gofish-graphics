@@ -196,10 +196,12 @@ chart(
 - The difference of two amounts is in their unit (USD − USD is USD, °C − °C
   is °C), except the difference of two times, which is a duration. A size
   read from a time column is a duration too, never a time.
-- `CanAdd` is the unit's. Two columns whose `Unit`s have one name must
-  agree on `.summable()`: in one chart's schema, a disagreement is an error
-  that names both columns. A column whose unit is a name alone takes the
-  `CanAdd` of a `Unit` of that name in the same chart.
+- `CanAdd` is the unit's, not the column's. A unit is its name, so two
+  `Unit`s of one name in one chart's schema, or in the columns two charts
+  of one figure draw, must agree on `.summable()`: a disagreement is an
+  error that names both columns. A column whose unit is a name alone takes the `CanAdd` of a
+  `Unit` of that name in the same chart; a stack of it also takes the
+  `CanAdd` of a `Unit` of that name in another chart of the figure.
 - A stack checks only the columns it adds, so a `start` column in days may
   share an axis with a stacked width in days.
 

@@ -521,7 +521,7 @@ export function evalFieldValues<T>(
 
 /** What `.count()` and `.distinct()` report: counts, read from no column,
  *  which add up. */
-const COUNT_QUANTITY: Quantity = { name: "count", unit: COUNT, CanAdd: {} };
+const COUNT_QUANTITY: Quantity = { name: "count", unit: COUNT };
 
 /** The "not yet supported" error for `normalize()` outside its one valid
  *  slot (an operator's entry-flagged `size` channel), shared so every other
@@ -602,14 +602,14 @@ const datumQuantity = (v: MaybeValue<number>): Quantity | undefined =>
  * (two nesting levels of the same mosaic) stay distinct units even though
  * both are "count share". The name doubles as the axis title. The unit has
  * no symbol: a share is a plain number, so the title adds no "(unit)". Shares
- * add up (to 1), so the quantity has `CanAdd`.
+ * add up (to 1), so the unit has `CanAdd`.
  */
 export const shareQuantity = (
   base: Quantity | undefined,
   byName?: string
 ): Quantity => {
   const name = `${base?.name ?? "value"} share${byName ? ` by ${byName}` : ""}`;
-  return { name, unit: { unit: name }, CanAdd: {} };
+  return { name, unit: { unit: name, classes: { CanAdd: {} } } };
 };
 
 /**

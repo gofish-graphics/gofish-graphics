@@ -177,7 +177,7 @@ console.log("# measure: quantities on the source array");
         (c) =>
           c ===
           classes({
-            HasUnit: { unit: "USD", symbol: "USD" },
+            HasUnit: { unit: "USD", symbol: "USD", classes: {} },
             HasQuantity: { name: "Pay" },
           })
       )
@@ -1182,7 +1182,7 @@ console.log("# measure: CanAdd");
   ok(
     "two Units of one name that disagree on .summable() throw",
     conflict !== undefined &&
-      /the columns "usd" and "cost" are both in the unit "USD"/.test(
+      /The column "usd" and the column "cost" are both in the unit "USD"/.test(
         conflict
       ) &&
       /const USD = Unit\("USD"\)\.summable\(\)/.test(conflict),
@@ -1358,7 +1358,7 @@ console.log("# measure: CanAdd");
     timeDiff.unit.kind === "declared" &&
       timeDiff.unit.unit === DURATION.unit &&
       timeDiff.r.calendar === undefined &&
-      timeDiff.r.cannotAdd === undefined
+      timeDiff.r.summands === undefined
   );
 
   // A stack checks only the columns it adds (#1197 review): a stack on one
@@ -1431,24 +1431,81 @@ console.log("# measure: CanAdd");
     meanBar
   );
 
-  const noUnit = await errorOf(() =>
+  // CanAdd is a class of the unit, not of the column.
+  const columnCanAdd = await errorOf(() =>
     chart(sales, { schema: { usd: { CanAdd: {} } } })
       .flow(spread({ by: "region", dir: "x" }))
       .mark(rect({ h: "usd" }))
       .toDisplayList(SIZE)
   );
   ok(
-    "a wire CanAdd with no HasUnit throws",
-    noUnit !== undefined && /no unit/.test(noUnit),
-    noUnit
+    "a column-level CanAdd is not a column class, and throws",
+    columnCanAdd !== undefined && /unknown key "CanAdd"/.test(columnCanAdd),
+    columnCanAdd
   );
   const wire = await errorOf(() =>
-    chart(sales, { schema: { usd: { HasUnit: { unit: "USD" }, CanAdd: {} } } })
+    chart(sales, {
+      schema: { usd: { HasUnit: { unit: "USD", classes: { CanAdd: {} } } } },
+    })
       .flow(spread({ by: "region", dir: "x" }), stack({ by: "product", dir: "y" }))
       .mark(rect({ h: "usd" }))
       .toDisplayList(SIZE)
   );
-  ok("the wire form { CanAdd: {} } sums", wire === undefined, wire);
+  ok("the wire form HasUnit.classes.CanAdd sums", wire === undefined, wire);
+
+  // A unit is its name across the whole figure: two charts that share an
+  // axis meet their occurrences of "USD" in the type walk. Chart `defines`
+  // defines USD without CanAdd (its bars are means, which sum nothing);
+  // chart `names` names USD only, and stacks it.
+  const ledger = sales.map((d) => ({ ...d, cost: d.usd / 2 }));
+  const defines = (unit: unknown) =>
+    chart(ledger, { schema: { cost: unit } })
+      .flow(spread({ by: "region", dir: "x" }))
+      .mark(rect({ h: field("cost").mean() }));
+  const names = () =>
+    chart(ledger, { schema: { usd: "USD" } })
+      .flow(spread({ by: "region", dir: "x" }), stack({ by: "product", dir: "y" }))
+      .mark(rect({ h: "usd" }));
+  const nameFirst = await errorOf(() =>
+    layer([names(), defines(Unit("USD"))]).toDisplayList(SIZE)
+  );
+  const defFirst = await errorOf(() =>
+    layer([defines(Unit("USD")), names()]).toDisplayList(SIZE)
+  );
+  ok(
+    "a stack of \"USD\" beside another chart's Unit(\"USD\") throws, in both orders",
+    [nameFirst, defFirst].every(
+      (e) =>
+        e !== undefined &&
+        /^stack sums the column "usd", in the unit "USD"/.test(e) &&
+        /Unit\("USD"\)\.summable\(\)/.test(e)
+    ),
+    nameFirst ?? defFirst
+  );
+  const crossSummable = await errorOf(() =>
+    layer([names(), defines(Unit("USD").summable())]).toDisplayList(SIZE)
+  );
+  ok(
+    "and beside another chart's Unit(\"USD\").summable() it stacks",
+    crossSummable === undefined,
+    crossSummable
+  );
+  const crossConflict = await errorOf(() =>
+    layer([
+      defines(Unit("USD").summable()),
+      chart(ledger, { schema: { usd: Unit("USD") } })
+        .flow(spread({ by: "region", dir: "x" }))
+        .mark(rect({ h: field("usd").mean() })),
+    ]).toDisplayList(SIZE)
+  );
+  ok(
+    "two charts whose Units of one name disagree throw, naming both columns",
+    crossConflict !== undefined &&
+      /The column "cost" and the column "usd" are both in the unit "USD"/.test(
+        crossConflict
+      ),
+    crossConflict
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

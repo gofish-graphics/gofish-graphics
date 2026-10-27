@@ -789,8 +789,8 @@ async function main() {
     const back = await applySchema([{ balance: 1 }], schemaWireFixture as any);
     check(
       "and the wire form reads back with the area's unit name alone",
-      getColumnTypes(back)?.area?.HasUnit?.nameOnly === true &&
-        getColumnTypes(back)?.revenue?.CanAdd !== undefined
+      getColumnTypes(back)?.area?.HasUnit?.classes === undefined &&
+        getColumnTypes(back)?.revenue?.HasUnit?.classes?.CanAdd !== undefined
     );
   }
 

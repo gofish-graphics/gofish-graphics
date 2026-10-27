@@ -1609,55 +1609,71 @@ concrete units on one axis are a type error. The concrete units are:
   axis never silently unions with its base's own axis.
 
 Each declared unit is a `HasUnit` (the column type, `schema.ts`): a `unit`
-name, which says which units are the same, and an optional **symbol**, which
-an axis title shows. A user's unit `u` has the symbol `u`, and a unit
-declared by its name alone is marked `nameOnly`. The engine's own
-units (`INSTANT`, `DURATION`, `COUNT` in `measure.ts`, a share) have none: a
-count or a share is a plain number, and a time axis's ticks already read as
-dates.
+name, which says which units are the same, an optional **symbol**, which
+an axis title shows, and the unit's **classes**, what its amounts can do,
+when they are known. A user's unit `u` has the symbol `u`. A `Unit(u)`
+definition writes its classes; a unit declared by its name alone writes
+none, so its classes are unknown. The engine's own units (`INSTANT`,
+`DURATION`, `COUNT` in `measure.ts`, a share) have no symbol, since a count
+or a share is a plain number and a time axis's ticks already read as
+dates, and their classes are known: a duration, a count and a share add
+up, and an instant does not.
 
-**Which amounts add up.** `CanAdd` (#1197) is declared on a unit,
-`Unit(name).summable()`, and written on the type of each column in it. It
-rides on the `Quantity` read from a column (`columnQuantity` copies it), and
-a sum checks only the columns it sums. Within one chart's types the columns
-of one unit name agree on it (`unifyUnitClasses`, `schema.ts`): two `Unit`
-definitions of one name that disagree throw, and a unit declared by its
-name alone (`nameOnly`) takes the classes of a definition of that name.
-The engine's own quantities say it where they are made: a count
-(`COUNT_QUANTITY`) and a share (`shareQuantity`) have it. `addsUp`
-(`measure.ts`) is the rule: a quantity adds up when it has `CanAdd`, no
-declared unit, or a unit declared by its name alone, whose classes are
-unknown. Every place that adds values sums them with
-`sumIn` (`fieldExpr.ts`), which checks it with `checkSummable`: a size
-channel's sum over its rows (`inferNumeric`; when
-an aggregate op already folded the rows, the channel takes the op's value
-and sums nothing), `.sum()` in any channel or label (every caller of
-`evalFieldValues` passes the column's quantity), the total of
-`.normalize()`, and a treemap's total. A cut's sizes are slices of a whole
-it adds up, so its per-row size channel (`inferEntrySize`) checks its column
-with `checkSummable` too. A stack adds spaces, not values, so a space's
-`UnitRecord` carries `cannotAdd`, the quantities of its values that do not
-add up (`quantityUnits`; a shared `joinUnits` concatenates them), and
-`distributeSpaceFold` checks each free part's own list. It reads the
-parts, not the unit class they joined, so a `start` point beside a stacked
-width is checked only for the width; a pinned part is not summed,
+**Which amounts add up.** `CanAdd` (#1197) is a class of the unit, not of a
+column: `Unit(name).summable()` defines it, and it rides on the unit
+(`HasUnit.classes`) into the `Quantity` read from a column. A unit is its
+name, so every occurrence of one name is one unit, and where two
+occurrences meet their classes meet by one rule, `meetUnitClasses`
+(`measure.ts`): unknown classes and known ones are the known ones, and two
+known definitions that disagree throw an error naming both columns. They
+meet in two places. When a chart's schema is applied, its columns of one
+unit name meet (`meetChartUnits`, `schema.ts`), so a column declared
+`"USD"` beside `Unit("USD").summable()` adds up. In the type walk, every
+declared unit read (`unitOf`) meets the figure's other occurrences of its
+name in the walk's `Units`, wherever they are, so two charts that define
+one unit differently throw. `addsUp` (`measure.ts`) is the rule for one
+quantity: it adds up when its unit has `CanAdd`, when it has no declared
+unit, or when its unit's classes are unknown. Every place that adds values
+while a chart is built sums them with `sumIn` (`fieldExpr.ts`), which
+checks it with `checkSummable`: a size channel's sum over its rows
+(`inferNumeric`; when an aggregate op already folded the rows, the channel
+takes the op's value and sums nothing), `.sum()` in any channel or label
+(every caller of `evalFieldValues` passes the column's quantity), the
+total of `.normalize()`, and a treemap's total. A cut's sizes are slices of
+a whole it adds up, so its per-row size channel (`inferEntrySize`) checks
+its column with `checkSummable` too. These sums read the unit as their
+chart knows it. A stack adds spaces, not values, in the type walk, so a
+space's `UnitRecord` carries `summands`, the quantities of its values in a
+declared unit (`quantityUnits`; a shared `joinUnits` concatenates them),
+and `distributeSpaceFold` sums each free part's own list with `Units.sum`,
+which reads the unit's classes as the figure knows them. While they are
+unknown the sum waits, and it is checked when an occurrence that knows
+them is met, so a stack of `"USD"` in one chart throws beside a
+`Unit("USD")` in another, whichever the walk meets first. The stack reads
+the parts, not the unit class they joined, so a `start` point beside a
+stacked width is checked only for the width; a pinned part is not summed,
 since the stack adds only its width. Summing a declared unit without
 `CanAdd` throws an error that names the column and says to declare
-`Unit(name).summable()`; for a time (a quantity on a calendar) it says to subtract a
-reference first (`date - start` gives a duration, which adds up). An
-unknown unit passes, as everywhere in gradual typing. The
-check reads the column's type, not the rows, so a group of one row is
-checked like any other: whether a chart type-checks never depends on how
-many rows a group holds. A bar of one date or one temperature is the
-missing zero (`HasZero`, #1051), not this check. Under the declared shortcut
-of #1197, `CanAdd` is still written per column and unified per chart: two
-charts that share an axis keep each column's own classes. Its home for the
-whole figure is the unit's one definition (#1142).
+`Unit(name).summable()`; for a time (a quantity on a calendar) it says to
+subtract a reference first (`date - start` gives a duration, which adds
+up). An unknown unit passes, as everywhere in gradual typing. The check
+reads the column's type, not the rows, so a group of one row is checked
+like any other: whether a chart type-checks never depends on how many rows
+a group holds. A bar of one date or one temperature is the missing zero
+(`HasZero`, #1051), not this check.
+
+One gap remains. A sum taken while a chart is built (a size channel,
+`.sum()`, a treemap, a cut, `.normalize()`) runs before the type walk, so
+it cannot see a definition of its unit in another chart: a bar chart of
+`"USD"` beside another chart's `Unit("USD")` sums its bars. Only the
+stack's sum, which the walk takes, sees the whole figure. Closing it needs
+the charts to be built inside the figure's walk scope (TODO in
+`meetChartUnits`).
 
 A size is never read on a calendar: `magnitude` takes its value's
 `differenceUnits`, so a size read from a time column (`h:
 field("day").mean()`) is a duration, not a bar on a time axis from 1970,
-and its `cannotAdd` drops the time, since a duration adds up. A sum of a
+and its `summands` drop the time, since a duration adds up. A sum of a
 time column as a size still throws first, at the sum.
 
 A quantity whose unit is declared is that unit, a concrete term, and nothing
@@ -1973,22 +1989,20 @@ reads only the classes, never the builder words. Eight classes exist:
   The values a user writes are the `Calendar` strategy family
   (`families/calendar.ts`): each kind is a `CalendarPartition` used bare or
   called with its options (`Calendar.month({ every: 3 })`, #1133).
-- `HasUnit` (`{ unit, symbol?, nameOnly? }`, #994, #955): the values are
-  amounts in the declared unit `unit`. A column's entry declares it with a
-  `Unit(u)` definition, or with the name `u` alone, which writes `nameOnly`:
-  the unit's classes are unknown. Either writes the symbol `u`. A column
+- `HasUnit` (`{ unit, symbol?, classes? }`, #994, #955, #1197): the values
+  are amounts in the declared unit `unit`. A column's entry declares it with
+  a `Unit(u)` definition, which writes the unit's `classes` (`{ CanAdd: {} }`
+  after `.summable()`, else `{}`), or with the name `u` alone, which writes
+  no `classes`: what the unit can do is unknown. Either writes the symbol
+  `u`. A column
   without it has an unknown unit, a unit variable (see
   [measures](#measures-units-are-types)). A column has one unit, and an
   order's levels must fit its other classes, so a time or a text-level
   column takes no other unit (`checkNoUnit` and `checkLevelsFit` in
   `schema.ts`, which only a wire record can break: no entry adds a unit to
   an order or a time).
-- `CanAdd` (`{}`, #1197): the column's amounts add up, so a sum of them
-  means something. Declared on the unit, `Unit(u).summable()`, and written
-  on every column in it. It needs `HasUnit` and no `HasCalendar`: only
-  amounts in a unit add up, and two instants never do (`checkSummableType`
-  in `schema.ts`, which checks a wire record; Python's `ColumnSchema`
-  raises the same messages). See [which units add up](#measures-units-are-types).
+- `CanAdd` (`{}`, #1197) is not a column class: it is a class of the unit,
+  in `HasUnit.classes`. See [which units add up](#measures-units-are-types).
 - `HasQuantity` (`{ name }`, #955): the values are amounts of the quantity
   `name` (a column record's `name`, `{ name, unit }`), when it is not the
   column's own name. It titles the axis and

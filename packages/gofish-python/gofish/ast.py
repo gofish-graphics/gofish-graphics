@@ -1,6 +1,7 @@
 """AST classes for building GoFish chart specifications."""
 
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union
+import copy
 import datetime
 import decimal
 import hashlib
@@ -2344,14 +2345,12 @@ class ColumnSchema(dict):
 
     Mirrors JS ``ColumnSchema``. Build one with ``Schema.ordered(levels)``;
     each method adds one class. Constructing one checks that an order's
-    levels fit the column's other classes (``_check_levels_fit``) and
-    that ``CanAdd`` has a unit and no calendar (``_check_summable_type``).
+    levels fit the column's other classes (``_check_levels_fit``).
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         _check_levels_fit("schema: the column", self)
-        _check_summable_type("schema: the column", self)
 
     def diverging(self, midpoint: Optional[float] = None) -> "ColumnSchema":
         """Give the column a midpoint (``HasMidpoint``) along its order.
@@ -2395,25 +2394,6 @@ class ColumnSchema(dict):
         return ColumnSchema({**self, "HasMidpoint": {"at": at}})
 
 
-def _check_summable_type(who: str, column_type: Dict[str, Any]) -> None:
-    """Raise when ``CanAdd`` is on a column with no unit or on a time, with
-    the messages of JS ``checkSummableType`` in schema.ts, which explains
-    the rules."""
-    if "CanAdd" not in column_type:
-        return
-    if "HasCalendar" in column_type:
-        raise TypeError(
-            f"{who} is a time, which cannot be summable: two instants do not "
-            "add up; subtract a reference first (e.g. date - start gives a "
-            "duration, which adds up)."
-        )
-    if "HasUnit" not in column_type:
-        raise TypeError(
-            f"{who} has CanAdd but no unit. Only amounts in a unit add up; "
-            "declare its unit with Unit(unit).summable()."
-        )
-
-
 def _require_str(value: Any, what: str) -> str:
     """``value``, checked to be a string; ``what`` names it in the message."""
     if not isinstance(value, str):
@@ -2422,8 +2402,9 @@ def _require_str(value: Any, what: str) -> str:
 
 
 # The unit of a time column, which ``Schema.time()`` writes beside
-# ``HasCalendar``: JS ``INSTANT`` in measure.ts.
-_INSTANT = {"unit": "instant"}
+# ``HasCalendar``: JS ``INSTANT`` in measure.ts. Its classes are known: it
+# has none, since two instants do not add up.
+_INSTANT = {"unit": "instant", "classes": {}}
 
 
 def _is_number(v: Any) -> bool:
@@ -2441,7 +2422,6 @@ _ACCEPTS: Dict[str, Callable[[Any, Any], bool]] = {
     "HasUnit": lambda v, c: v is None
     or _is_number(v)
     or (c.get("unit") == _INSTANT["unit"] and isinstance(v, datetime.date)),
-    "CanAdd": lambda v, c: True,
     "HasQuantity": lambda v, c: True,
 }
 
@@ -2512,7 +2492,7 @@ class Schema:
                 f"Schema.time: zone must be an IANA time zone name, got {zone!r}"
             )
         return ColumnSchema(
-            {"HasCalendar": {"zone": zone}, "HasUnit": dict(_INSTANT)}
+            {"HasCalendar": {"zone": zone}, "HasUnit": copy.deepcopy(_INSTANT)}
         )
 
 
@@ -2570,7 +2550,6 @@ _CLASS_NAMES = (
     "HasMidpoint",
     "HasCalendar",
     "HasUnit",
-    "CanAdd",
     "HasQuantity",
     "HasDomain",
     "HasInteger",
@@ -2581,12 +2560,18 @@ _RECORD_KEYS = ("name", "unit")
 
 
 def _unit_type(unit: Union[Unit, str]) -> Dict[str, Any]:
-    """The classes of a column in ``unit``: a definition's name and
-    classes, or a name alone, whose classes are unknown (``nameOnly``). JS
-    ``unitType`` in schema.ts."""
+    """The classes of a column in ``unit``: a definition's name and the
+    unit's classes, or a name alone, whose classes are unknown (no
+    ``classes``). JS ``unitType`` in schema.ts."""
     if isinstance(unit, str):
-        return {"HasUnit": {"unit": unit, "symbol": unit, "nameOnly": True}}
-    return {"HasUnit": {"unit": unit.name, "symbol": unit.name}, **unit._classes}
+        return {"HasUnit": {"unit": unit, "symbol": unit}}
+    return {
+        "HasUnit": {
+            "unit": unit.name,
+            "symbol": unit.name,
+            "classes": copy.deepcopy(unit._classes),
+        }
+    }
 
 
 def _column_type_of(column: str, entry: Any) -> Dict[str, Any]:

@@ -100,7 +100,7 @@ class TestOperators:
             "month": {"HasOrder": {"levels": ["Jan", "Feb"]}},
             "at": {
                 "HasCalendar": {"zone": "America/New_York"},
-                "HasUnit": {"unit": "instant"},
+                "HasUnit": {"unit": "instant", "classes": {}},
             },
         }
         assert ir(op)["schema"] == expected
@@ -978,24 +978,24 @@ class TestSchema:
         schema_of = lambda **schema: ir(chart([], schema=schema).mark(rect()))[
             "options"
         ]["schema"]
-        # A Unit is `{ unit }`, a name alone is a unit whose classes are
-        # unknown, and a record adds the quantity.
-        assert schema_of(revenue=usd) == {
-            "revenue": {"HasUnit": {"unit": "USD", "symbol": "USD"}, "CanAdd": {}}
-        }
+        # A Unit is `{ unit }` with the unit's classes, a name alone is a
+        # unit whose classes are unknown (no `classes`), and a record adds
+        # the quantity.
+        summable_usd = {"unit": "USD", "symbol": "USD", "classes": {"CanAdd": {}}}
+        assert schema_of(revenue=usd) == {"revenue": {"HasUnit": summable_usd}}
         assert schema_of(area="km²") == {
-            "area": {"HasUnit": {"unit": "km²", "symbol": "km²", "nameOnly": True}}
+            "area": {"HasUnit": {"unit": "km²", "symbol": "km²"}}
         }
         assert schema_of(temp={"name": "Temperature", "unit": Unit("°C")}) == {
             "temp": {
                 "HasQuantity": {"name": "Temperature"},
-                "HasUnit": {"unit": "°C", "symbol": "°C"},
+                "HasUnit": {"unit": "°C", "symbol": "°C", "classes": {}},
             }
         }
         assert schema_of(q1={"name": "Pay"}) == {"q1": {"HasQuantity": {"name": "Pay"}}}
         # A derive's schema is written the same way.
         assert ir(derive(lambda d: d, schema={"x": usd}))["schema"] == {
-            "x": {"HasUnit": {"unit": "USD", "symbol": "USD"}, "CanAdd": {}}
+            "x": {"HasUnit": summable_usd}
         }
 
     def test_schema_matches_the_js_wire_fixture(self):
@@ -1041,19 +1041,8 @@ class TestSchema:
             assert not hasattr(Schema.ordered([1]), method)
 
     def test_column_type_rules_on_wire_records(self):
-        # The rules JS's `checkSummableType` and `checkLevelsFit` enforce,
-        # on a record as it would arrive from the wire. The messages are
-        # JS's.
-        with pytest.raises(
-            TypeError,
-            match=r"^schema: the column has CanAdd but no unit\. .*Unit\(unit\)\.summable\(\)",
-        ):
-            ColumnSchema({"HasQuantity": {"name": "Pay"}, "CanAdd": {}})
-        with pytest.raises(
-            TypeError,
-            match=r"^schema: the column is a time, which cannot be summable",
-        ):
-            ColumnSchema({**Schema.time(), "CanAdd": {}})
+        # The rule JS's `checkLevelsFit` enforces, on a record as it would
+        # arrive from the wire. The message is JS's.
         with pytest.raises(
             TypeError,
             match=r'^schema: the column has the level "low", which is not a '
@@ -1139,11 +1128,11 @@ class TestTime:
         # A time's unit is the instant, the same INSTANT as JS measure.ts.
         assert Schema.time() == {
             "HasCalendar": {"zone": "UTC"},
-            "HasUnit": {"unit": "instant"},
+            "HasUnit": {"unit": "instant", "classes": {}},
         }
         assert Schema.time(zone="America/New_York") == {
             "HasCalendar": {"zone": "America/New_York"},
-            "HasUnit": {"unit": "instant"},
+            "HasUnit": {"unit": "instant", "classes": {}},
         }
 
     def test_calendar_wire_form(self):
@@ -1273,7 +1262,7 @@ class TestTime:
             .to_ir()["root"]
         )
         assert node["options"]["schema"] == {
-            "t": {"HasCalendar": {"zone": "Asia/Tokyo"}, "HasUnit": {"unit": "instant"}}
+            "t": {"HasCalendar": {"zone": "Asia/Tokyo"}, "HasUnit": {"unit": "instant", "classes": {}}}
         }
 
     def test_strings_are_never_inferred(self):

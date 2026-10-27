@@ -1,7 +1,7 @@
 /**
  * Helpers shared by the unit, space and schema tests. Not a test itself.
  */
-import { Units, withUnits } from "../ast/measure";
+import { hasUnits, Units, withUnits } from "../ast/measure";
 import { quantityUnits, type UnitRecord } from "../ast/underlyingSpace";
 
 declare const process: { exit(code: number): never };
@@ -65,10 +65,14 @@ export const textsOf = (dl: any): string[] => {
 export const fresh = <T>(f: () => T): T => withUnits(new Units(), f);
 
 /** The units of a column `name` declared in unit `unit` (named by it unless
- *  given), with `unit` as its symbol. A declared unit is a concrete term, so
- *  this needs no union-find. */
-export const declared = (name: string, unit = name): UnitRecord =>
-  quantityUnits({ name, column: name, unit: { unit, symbol: unit } })!;
+ *  given), with `unit` as its symbol. A declared unit is a concrete term,
+ *  but it meets the other occurrences of its name in the walk's units, so
+ *  outside a walk (or `fresh`) it meets them in units of its own. */
+export const declared = (name: string, unit = name): UnitRecord => {
+  const read = () =>
+    quantityUnits({ name, column: name, unit: { unit, symbol: unit } })!;
+  return hasUnits() ? read() : fresh(read);
+};
 
 /** The units of a column `name` with no declared unit (inside `fresh`). */
 export const unknown = (name: string): UnitRecord =>
