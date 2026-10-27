@@ -105,9 +105,12 @@ export { GoFishRef } from "./ast/_ref";
 export { pluck, projectPath as project } from "./ast/datumProjection";
 
 // Column types for `chart(data, { schema })` (#984): `Schema` is the
-// capitalized factory namespace, like `Constraint`.
-export { Schema, ColumnSchema } from "./ast/schema";
+// capitalized factory namespace, like `Constraint`. `Unit` is a unit
+// definition (a class instance), declared once and used by every column in it.
+export { Schema, ColumnSchema, Unit } from "./ast/schema";
 export type {
+  ColumnRecord,
+  UnitClasses,
   ColumnType,
   HasOrder,
   HasMidpoint,

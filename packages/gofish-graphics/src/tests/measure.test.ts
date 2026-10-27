@@ -2,9 +2,9 @@
  * Units as gradual types with inference (#955; `measure.ts`).
  *
  * A column with no declared unit has an unknown unit, a unit variable named
- * by its quantity (its declared `Schema.quantity`, else the column; the
+ * by its quantity (its declared `name`, else the column; the
  * cells of `field(x).bin(p)` are amounts of `x`), which unifies with
- * anything. A declared unit (`Schema.unit`, the
+ * anything. A declared unit (`Unit`, or a unit's name, the
  * "instant" of `Schema.time()`, the "count" of `.count()`) is concrete, and
  * two different declared units on one axis are a `MeasureClash`. A binding
  * holds for the whole render. The quantity names title the axis, followed by
@@ -19,7 +19,13 @@
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 import { getQuantity } from "../ast/data";
-import { columnType, copyColumnTypes, setColumnTypes } from "../ast/schema";
+import {
+  columnType,
+  columnTypeOf,
+  copyColumnTypes,
+  setColumnTypes,
+  Unit as SrcUnit,
+} from "../ast/schema";
 import { inferSize, resolveColumn } from "../ast/channels";
 import {
   columnQuantity,
@@ -66,6 +72,7 @@ const {
   ribbon,
   line,
   Schema,
+  Unit,
   stack,
   treemap,
 } = GoFish as any;
@@ -142,25 +149,30 @@ console.log("# measure: quantities on the source array");
     columnQuantity("start", Schema.time().type).unit?.symbol === undefined
   );
   ok(
-    "Schema.unit declares the unit",
-    columnQuantity("gross", Schema.unit("USD").type).unit?.unit === "USD"
+    "a Unit declares the unit",
+    columnQuantity("gross", columnTypeOf("gross", SrcUnit("USD"))).unit?.unit ===
+      "USD"
   );
   ok(
     "and its symbol is the unit's name",
-    columnQuantity("gross", Schema.unit("USD").type).unit?.symbol === "USD"
+    columnQuantity("gross", columnTypeOf("gross", SrcUnit("USD"))).unit
+      ?.symbol === "USD"
   );
   ok(
-    "Schema.quantity names the quantity in place of the column",
-    columnQuantity("q1", Schema.quantity("Pay").type).name === "Pay"
+    "a record's name names the quantity in place of the column",
+    columnQuantity("q1", columnTypeOf("q1", { name: "Pay" })).name === "Pay"
   );
   // A column type is a record keyed by class, so compare it with its classes
   // in a fixed order: the order the builders ran in is not part of the type.
   const classes = (t: Record<string, unknown>) =>
     JSON.stringify(Object.entries(t).sort(([a], [b]) => a.localeCompare(b)));
   ok(
-    ".unit() and .quantity() chain in either order to the same column type",
-    [Schema.quantity("Pay").unit("USD"), Schema.unit("USD").quantity("Pay")]
-      .map((s) => classes(s.type))
+    "a record and its key order write the same column type",
+    [
+      { name: "Pay", unit: SrcUnit("USD") },
+      { unit: SrcUnit("USD"), name: "Pay" },
+    ]
+      .map((s) => classes(columnTypeOf("q1", s)))
       .every(
         (c) =>
           c ===
@@ -600,7 +612,7 @@ console.log("# measure: declared units clash");
     { genre: "b", us: 20, eu: 18 },
   ];
   const usdEur = await errorOf(() =>
-    chart(gross, { schema: { us: Schema.unit("USD").summable(), eu: Schema.unit("EUR").summable() } })
+    chart(gross, { schema: { us: Unit("USD").summable(), eu: Unit("EUR").summable() } })
       .flow(spread({ by: "genre", dir: "x" }))
       .mark(layer([rect({ h: "us" }), rect({ h: "eu" })]))
       .toDisplayList(SIZE)
@@ -614,7 +626,7 @@ console.log("# measure: declared units clash");
   );
 
   const countMm = await errorOf(() =>
-    chart(penguins, { schema: { flipper: Schema.unit("mm").summable() } })
+    chart(penguins, { schema: { flipper: Unit("mm").summable() } })
       .flow(spread({ by: "sp", dir: "x" }))
       .mark(
         layer([rect({ h: field("flipper").count() }), rect({ h: "flipper" })])
@@ -629,7 +641,7 @@ console.log("# measure: declared units clash");
   ok(
     "its hint declares the column, never the count, in the schema",
     countMm !== undefined &&
-      countMm.includes('schema: { "flipper": Schema.unit("count") }') &&
+      countMm.includes('schema: { "flipper": "count" }') &&
       !countMm.includes('schema: { "count"'),
     countMm
   );
@@ -644,8 +656,8 @@ console.log("# measure: declared units clash");
       ],
       {
         schema: {
-          q1: Schema.quantity("Pay").unit("USD").summable(),
-          eu: Schema.unit("EUR").summable(),
+          q1: { name: "Pay", unit: Unit("USD").summable() },
+          eu: Unit("EUR").summable(),
         },
       }
     )
@@ -657,7 +669,7 @@ console.log("# measure: declared units clash");
     "a declared quantity's clash hint names its column, not its quantity",
     payEur !== undefined &&
       /"USD" \("Pay"\)/.test(payEur) &&
-      payEur.includes('schema: { "q1": Schema.unit("EUR") }') &&
+      payEur.includes('schema: { "q1": "EUR" }') &&
       !payEur.includes('schema: { "Pay"'),
     payEur
   );
@@ -672,7 +684,7 @@ console.log("# measure: declared units clash");
     { genre: "b", value: 2 },
   ];
   const valueIn = (unit: string) =>
-    chart(values, { w: 100, h: 100, schema: { value: Schema.unit(unit).summable() } })
+    chart(values, { w: 100, h: 100, schema: { value: Unit(unit).summable() } })
       .flow(spread({ by: "genre", dir: "x" }))
       .mark(rect({ h: "value" }));
   const twoValues = await errorOf(() =>
@@ -689,7 +701,7 @@ console.log("# measure: declared units clash");
     { genre: "b", count: 4, v: 2 },
   ];
   const peopleCount = await errorOf(() =>
-    chart(counted, { schema: { count: Schema.unit("people").summable() } })
+    chart(counted, { schema: { count: Unit("people").summable() } })
       .flow(spread({ by: "genre", dir: "x" }))
       .mark(rect({ h: field("v").count(), w: field("count").sum() }))
       .toDisplayList(SIZE)
@@ -705,7 +717,7 @@ console.log("# measure: declared units clash");
   // count. Chart B alone renders: its "lo" is unknown there.
   const a = () =>
     chart([{ id: "p", lo: 1, price: 5 }], {
-      schema: { price: Schema.unit("USD") },
+      schema: { price: Unit("USD") },
     })
       .flow(spread({ by: "id", dir: "x" }))
       .mark(rect({ y: "lo", y2: "price" }));
@@ -755,7 +767,7 @@ console.log("# measure: titles are Quantity (unit)");
 
   const usd = await bars(
     gross,
-    { "Production Budget": Schema.unit("USD").summable() },
+    { "Production Budget": Unit("USD").summable() },
     rect({ h: "Production Budget" })
   );
   ok(
@@ -766,7 +778,7 @@ console.log("# measure: titles are Quantity (unit)");
 
   const explicit = await bars(
     gross,
-    { "Production Budget": Schema.unit("USD").summable() },
+    { "Production Budget": Unit("USD").summable() },
     rect({ h: "Production Budget" }),
     { axes: { y: { title: "Budget" } } }
   );
@@ -782,7 +794,7 @@ console.log("# measure: titles are Quantity (unit)");
       { genre: "a", "Flipper Length (mm)": 190 },
       { genre: "b", "Flipper Length (mm)": 210 },
     ],
-    { "Flipper Length (mm)": Schema.unit("mm").summable() },
+    { "Flipper Length (mm)": Unit("mm").summable() },
     rect({ h: "Flipper Length (mm)" })
   );
   ok(
@@ -797,7 +809,7 @@ console.log("# measure: titles are Quantity (unit)");
       { genre: "b", "Flipper Length (mm)": 210 },
     ],
     {
-      "Flipper Length (mm)": Schema.quantity("Flipper Length").unit("mm").summable(),
+      "Flipper Length (mm)": { name: "Flipper Length", unit: Unit("mm").summable() },
     },
     rect({ h: "Flipper Length (mm)" })
   );
@@ -839,8 +851,8 @@ console.log("# measure: titles are Quantity (unit)");
   );
 
   const mmSchema = {
-    flipper: Schema.quantity("Flipper Length").unit("mm"),
-    cm: Schema.unit("cm"),
+    flipper: { name: "Flipper Length", unit: Unit("mm") },
+    cm: Unit("cm"),
   };
   const histMm = textsOf(await histOf(mmSchema).toDisplayList(SIZE));
   ok(
@@ -888,8 +900,10 @@ console.log("# measure: titles are Quantity (unit)");
     price: i * 2,
   }));
   const timeSchema = {
-    date: Schema.time().quantity("Sold"),
-    price: Schema.unit("USD"),
+    // A time with a quantity has no user form (a column record takes no
+    // calendar), so this one is the record of classes, the wire form.
+    date: { HasCalendar: { zone: "UTC" }, HasQuantity: { name: "Sold" } },
+    price: Unit("USD"),
   };
   const byTime = (by: any, op: any = partition) =>
     chart(sales, { schema: timeSchema, axes: true })
@@ -939,8 +953,8 @@ console.log("# measure: titles are Quantity (unit)");
   const plane = textsOf(
     await chart(penguins, {
       schema: {
-        flipper: Schema.quantity("Flipper Length").unit("mm"),
-        mass: Schema.quantity("Mass").unit("g"),
+        flipper: { name: "Flipper Length", unit: Unit("mm") },
+        mass: { name: "Mass", unit: Unit("g") },
       },
       axes: true,
     })
@@ -993,7 +1007,7 @@ console.log("# measure: titles are Quantity (unit)");
     undeclared.includes("lo, hi, q1, q3"),
     undeclared.join(" | ")
   );
-  const pay = Schema.quantity("Pay").unit("USD");
+  const pay = { name: "Pay", unit: Unit("USD") };
   const declaredBox = await box({ lo: pay, q1: pay, q3: pay, hi: pay });
   ok(
     "one declared quantity over four columns titles once, with its unit",
@@ -1053,15 +1067,15 @@ console.log("# measure: CanAdd");
       .toDisplayList(SIZE);
 
   const usd = await errorOf(() =>
-    stacked({ usd: Schema.unit("USD").summable() }, rect({ h: "usd" }))
+    stacked({ usd: Unit("USD").summable() }, rect({ h: "usd" }))
   );
   ok("a .summable() USD column stacks and sums", usd === undefined, usd);
 
   const celsius = await errorOf(() =>
-    stacked({ temp: Schema.unit("°C") }, rect({ h: "temp" }))
+    stacked({ temp: Unit("°C") }, rect({ h: "temp" }))
   );
   ok(
-    "stacking a Schema.unit(\"°C\") column throws, naming the column",
+    "stacking a Unit(\"°C\") column throws, naming the column",
     celsius !== undefined &&
       /"temp"/.test(celsius) &&
       /cannot be summed/.test(celsius) &&
@@ -1070,10 +1084,120 @@ console.log("# measure: CanAdd");
     celsius
   );
 
+  // A unit's name alone declares the unit and nothing about what it can do:
+  // a sum of it passes, as a sum of an undeclared column does, and its axis
+  // still shows the unit.
+  const nameOnly = await errorOf(() =>
+    stacked({ temp: "°C" }, rect({ h: "temp" }))
+  );
+  ok("a column in a unit's name alone stacks", nameOnly === undefined, nameOnly);
+  const nameOnlyTitle = textsOf(
+    await chart(sales, { schema: { temp: "°C" }, axes: true })
+      .flow(spread({ by: "region", dir: "x" }))
+      .mark(rect({ h: field("temp").mean() }))
+      .toDisplayList(SIZE)
+  );
+  ok(
+    "and its axis title shows the unit",
+    nameOnlyTitle.includes("temp (°C)"),
+    nameOnlyTitle.join(" | ")
+  );
+
+  // A column record: its name titles the axis, its unit is a Unit.
+  const record = textsOf(
+    await chart(sales, {
+      schema: { usd: { name: "Revenue", unit: Unit("USD").summable() } },
+      axes: true,
+    })
+      .flow(spread({ by: "region", dir: "x" }), stack({ by: "product", dir: "y" }))
+      .mark(rect({ h: "usd" }))
+      .toDisplayList(SIZE)
+  );
+  ok(
+    "a column record's name and summable Unit title and stack",
+    record.includes("Revenue (USD)"),
+    record.join(" | ")
+  );
+  const unknownKey = await errorOf(() =>
+    stacked({ usd: { name: "Revenue", entity: "region" } }, rect({ h: "usd" }))
+  );
+  ok(
+    "a column record with an unknown key throws, naming it",
+    unknownKey !== undefined &&
+      /column "usd" has the unknown key "entity"/.test(unknownKey) &&
+      /takes name and unit/.test(unknownKey),
+    unknownKey
+  );
+
+  // A name and a definition of one unit are one unit: they share an axis,
+  // and the name takes the definition's classes.
+  const both = (schema: object, op: unknown) =>
+    chart(
+      sales.map((d) => ({ ...d, cost: d.usd / 2 })),
+      { schema, axes: true }
+    )
+      .flow(spread({ by: "region", dir: "x" }), op)
+      .mark(
+        layer([
+          rect({ h: field("usd").mean() }),
+          rect({ h: field("cost").mean() }),
+        ])
+      )
+      .toDisplayList(SIZE);
+  const shared = await errorOf(async () => {
+    const texts = textsOf(
+      await both(
+        { usd: "USD", cost: Unit("USD") },
+        spread({ by: "product", dir: "x" })
+      )
+    );
+    if (!texts.includes("usd, cost (USD)")) throw new Error(texts.join(" | "));
+  });
+  ok(
+    "a unit's name and its Unit share one axis, titled once",
+    shared === undefined,
+    shared
+  );
+  const takesNot = await errorOf(() =>
+    stacked({ usd: "USD", cost: Unit("USD") }, rect({ h: "usd" }))
+  );
+  ok(
+    "a name beside a Unit of that name that is not summable does not stack",
+    takesNot !== undefined &&
+      /sums the column "usd", in the unit "USD"/.test(takesNot) &&
+      /Unit\("USD"\)\.summable\(\)/.test(takesNot),
+    takesNot
+  );
+  const takesSummable = await errorOf(() =>
+    stacked({ usd: "USD", cost: Unit("USD").summable() }, rect({ h: "usd" }))
+  );
+  ok(
+    "and beside a summable Unit of that name it stacks",
+    takesSummable === undefined,
+    takesSummable
+  );
+  const conflict = await errorOf(() =>
+    stacked({ usd: Unit("USD").summable(), cost: Unit("USD") }, rect({ h: "usd" }))
+  );
+  ok(
+    "two Units of one name that disagree on .summable() throw",
+    conflict !== undefined &&
+      /the columns "usd" and "cost" are both in the unit "USD"/.test(
+        conflict
+      ) &&
+      /const USD = Unit\("USD"\)\.summable\(\)/.test(conflict),
+    conflict
+  );
+  const sameDef = await errorOf(() => {
+    const USD = Unit("USD").summable();
+    return stacked({ usd: USD, cost: USD }, rect({ h: "usd" }));
+  });
+  ok("one Unit shared by two columns stacks", sameDef === undefined, sameDef);
+
   // One row per bar is still a sum: the check reads the column's type, not
   // how many rows a group holds.
   const oneRow = await errorOf(() =>
-    chart(sales.slice(0, 2), { schema: { temp: Schema.unit("°C") } })
+    chart(sales.slice(0, 2), { schema: { temp: Unit("°C") } })
       .flow(spread({ by: "product", dir: "x" }))
       .mark(rect({ h: "temp" }))
       .toDisplayList(SIZE)
@@ -1083,14 +1207,14 @@ console.log("# measure: CanAdd");
   // A mean folds the rows itself, so the size channel adds nothing; but a
   // stack of means adds them, and that is checked at the stack.
   const meanBars = await errorOf(() =>
-    chart(sales, { schema: { temp: Schema.unit("°C") } })
+    chart(sales, { schema: { temp: Unit("°C") } })
       .flow(spread({ by: "region", dir: "x" }))
       .mark(rect({ h: field("temp").mean() }))
       .toDisplayList(SIZE)
   );
   ok("a bar of a mean °C sums nothing", meanBars === undefined, meanBars);
   const meanStack = await errorOf(() =>
-    stacked({ temp: Schema.unit("°C") }, rect({ h: field("temp").mean() }))
+    stacked({ temp: Unit("°C") }, rect({ h: field("temp").mean() }))
   );
   ok(
     "a stack of mean °C throws at the stack",
@@ -1114,7 +1238,7 @@ console.log("# measure: CanAdd");
   ok("an undeclared column still stacks", undeclared === undefined, undeclared);
 
   const sum = await errorOf(() =>
-    chart(sales, { schema: { temp: Schema.unit("°C") } })
+    chart(sales, { schema: { temp: Unit("°C") } })
       .flow(spread({ by: "region", dir: "x" }))
       .mark(rect({ h: field("temp").sum() }))
       .toDisplayList(SIZE)
@@ -1126,7 +1250,7 @@ console.log("# measure: CanAdd");
   );
 
   const tree = await errorOf(() =>
-    chart(sales, { schema: { temp: Schema.unit("°C") } })
+    chart(sales, { schema: { temp: Unit("°C") } })
       .flow(treemap({ by: "region", size: field("temp").mean() }))
       .mark(rect({}))
       .toDisplayList(SIZE)
@@ -1140,7 +1264,7 @@ console.log("# measure: CanAdd");
   // Every `.sum()` is checked, wherever it is read: a label's and a color's
   // as well as a size's.
   const labelSum = await errorOf(() =>
-    chart(sales, { schema: { temp: Schema.unit("°C") } })
+    chart(sales, { schema: { temp: Unit("°C") } })
       .flow(spread({ by: "region", dir: "x" }))
       .mark(rect({ h: "usd" }).label(field("temp").sum()))
       .toDisplayList(SIZE)
@@ -1151,7 +1275,7 @@ console.log("# measure: CanAdd");
     labelSum
   );
   const colorSum = await errorOf(() =>
-    chart(sales, { schema: { temp: Schema.unit("°C") } })
+    chart(sales, { schema: { temp: Unit("°C") } })
       .flow(spread({ by: "region", dir: "x" }))
       .mark(rect({ h: "usd", fill: field("temp").sum() }))
       .toDisplayList(SIZE)
@@ -1162,7 +1286,7 @@ console.log("# measure: CanAdd");
     colorSum
   );
   const labelMean = await errorOf(() =>
-    chart(sales, { schema: { temp: Schema.unit("°C") } })
+    chart(sales, { schema: { temp: Unit("°C") } })
       .flow(spread({ by: "region", dir: "x" }))
       .mark(rect({ h: "usd" }).label(field("temp").mean()))
       .toDisplayList(SIZE)
@@ -1176,7 +1300,7 @@ console.log("# measure: CanAdd");
       .mark(rect({ w: 100, h: 80 }).cut({ dir: "x", size: "temp" }))
       .toDisplayList(SIZE);
   const cutCelsius = await errorOf(() =>
-    cutOf({ temp: Schema.unit("°C") })
+    cutOf({ temp: Unit("°C") })
   );
   ok(
     "cut({ size }) of °C throws, naming the column",
@@ -1186,7 +1310,7 @@ console.log("# measure: CanAdd");
     cutCelsius
   );
   const cutSummable = await errorOf(() =>
-    cutOf({ temp: Schema.unit("°C").summable() })
+    cutOf({ temp: Unit("°C").summable() })
   );
   ok("cut({ size }) of a .summable() unit cuts", cutSummable === undefined, cutSummable);
 
@@ -1237,24 +1361,22 @@ console.log("# measure: CanAdd");
       timeDiff.r.cannotAdd === undefined
   );
 
-  // CanAdd is the summed column's, not its unit class's (#1197 review): a
-  // stack on one axis of a `start` point in days that do not add and a
-  // `width` in days that do. The parts join into one class of "day", but
-  // the stack adds only the free part, the width, so it renders in either
-  // order. Before, the class lost CanAdd when `start` joined it, and the
-  // stack threw.
+  // A stack checks only the columns it adds (#1197 review): a stack on one
+  // axis of a `start` point in days and a `width` in days. The parts join
+  // into one class of "day", but the stack adds only the free part, the
+  // width. `start` names its unit only, so it takes the width's classes.
   const dayPart = (rows: any[]) =>
     (rows[0].start !== undefined
       ? rect({ x: "start", w: 1, h: 10 })
       : rect({ w: "width", h: 10 }))(rows);
   const dayStack = (rows: object[], width: unknown) =>
-    chart(rows, { schema: { start: Schema.unit("day"), width } })
+    chart(rows, { schema: { start: "day", width } })
       .flow(stack({ by: "id", dir: "x" }))
       .mark(dayPart)
       .toDisplayList(SIZE);
   const point = { id: "a", start: 10 };
   const span = { id: "b", width: 3 };
-  const summableDay = Schema.unit("day").summable();
+  const summableDay = Unit("day").summable();
   const pointFirst = await errorOf(() => dayStack([point, span], summableDay));
   const spanFirst = await errorOf(() => dayStack([span, point], summableDay));
   ok(
@@ -1263,7 +1385,7 @@ console.log("# measure: CanAdd");
     pointFirst ?? spanFirst
   );
   const plainWidth = await errorOf(() =>
-    dayStack([point, span], Schema.unit("day"))
+    dayStack([point, span], Unit("day"))
   );
   ok(
     "a stacked day width that does not add throws, naming only its column",

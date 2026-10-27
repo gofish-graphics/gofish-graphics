@@ -1,0 +1,25 @@
+{
+  "balance": {
+    "HasQuantity": { "name": "Balance" },
+    "HasUnit": { "unit": "USD", "symbol": "USD" },
+    "CanAdd": {}
+  },
+  "revenue": {
+    "HasUnit": { "unit": "USD", "symbol": "USD" },
+    "CanAdd": {}
+  },
+  "area": {
+    "HasUnit": { "unit": "km²", "symbol": "km²", "nameOnly": true }
+  },
+  "temp": {
+    "HasUnit": { "unit": "°C", "symbol": "°C" }
+  },
+  "region": {
+    "HasOrder": { "levels": ["n", "s"] },
+    "HasMidpoint": { "at": 1 }
+  },
+  "day": {
+    "HasCalendar": { "zone": "UTC" },
+    "HasUnit": { "unit": "instant" }
+  }
+}

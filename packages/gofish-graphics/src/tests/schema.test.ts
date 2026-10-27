@@ -32,6 +32,7 @@ import {
   type ColumnType,
 } from "../ast/schema";
 import { interval } from "../util/interval";
+import schemaWireFixture from "./fixtures/schema-wire.json";
 import { textsOf } from "./testHelpers";
 import {
   distributeSpaceFold,
@@ -54,6 +55,8 @@ const {
   derive,
   chunk,
   Schema,
+  Unit,
+  Serialize,
   Color,
 } = GoFish as any;
 
@@ -453,12 +456,6 @@ async function main() {
       timeUnit === `schema: column "t" already has the unit "instant".`,
       timeUnit
     );
-    const builtTime = await errorOf(() => Schema.time().unit("USD"));
-    check(
-      "and so is the builder's",
-      builtTime === `.unit: the column already has the unit "instant".`,
-      builtTime
-    );
     check(
       "a time record is read as Schema.time() wrote it",
       columnTypeOf("t", { HasCalendar: { zone: "UTC" } }).HasUnit?.unit ===
@@ -477,19 +474,9 @@ async function main() {
         `schema: column "r" has the level "SD", which is not a value HasUnit accepts.`,
       textUnit
     );
-    const builtText = await errorOf(() =>
-      Schema.ordered(["low", "mid", "high"]).unit("pts")
-    );
-    check(
-      "and so is the builder's",
-      builtText ===
-        'schema: the column has the level "low", which is not a value HasUnit accepts.',
-      builtText
-    );
     check(
       "numeric levels take a unit",
-      Schema.ordered([1, 2, 3, 4, 5]).unit("pts").type.HasUnit.unit === "pts" &&
-        columnTypeOf("likert", {
+      columnTypeOf("likert", {
           HasOrder: { levels: [1, 2, 3, 4, 5] },
           HasUnit: { unit: "pts" },
         }).HasUnit?.unit === "pts"
@@ -760,6 +747,50 @@ async function main() {
       "a split never looks inside an item: an array item is one item, `[item]`",
       JSON.stringify(items) === JSON.stringify(nested.map((x) => [x])),
       JSON.stringify(items)
+    );
+  }
+
+  console.log("\n# units and column records cross the wire as classes");
+  {
+    // The same schema, spelled in Python, writes the same wire form: Python's
+    // test_ast.py compares its `to_ir()` against this one fixture.
+    const USD = Unit("USD").summable();
+    const Celsius = Unit("°C");
+    const doc = await Serialize.toJSON(
+      chart([{ balance: 1 }], {
+        schema: {
+          balance: { name: "Balance", unit: USD },
+          revenue: USD,
+          area: "km²",
+          temp: { unit: Celsius },
+          region: Schema.ordered(["n", "s"]).diverging(),
+          day: Schema.time({ zone: "UTC" }),
+        },
+      }).mark(rect({}))
+    );
+    const sorted = (v: unknown): unknown =>
+      Array.isArray(v)
+        ? v.map(sorted)
+        : v !== null && typeof v === "object"
+          ? Object.fromEntries(
+              Object.entries(v)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([k, x]) => [k, sorted(x)])
+            )
+          : v;
+    const wire = JSON.stringify(sorted(doc.root.options?.schema));
+    const fixture = JSON.stringify(sorted(schemaWireFixture));
+    check(
+      "a schema of Units, names and records serializes to the shared fixture",
+      wire === fixture,
+      wire
+    );
+    // A record of the wire form is read back to the same column types.
+    const back = await applySchema([{ balance: 1 }], schemaWireFixture as any);
+    check(
+      "and the wire form reads back with the area's unit name alone",
+      getColumnTypes(back)?.area?.HasUnit?.nameOnly === true &&
+        getColumnTypes(back)?.revenue?.CanAdd !== undefined
     );
   }
 

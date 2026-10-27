@@ -11,7 +11,7 @@ import type { CanAdd, ColumnType, HasCalendar, HasUnit } from "./schema";
  * units of measure (and Siek and Vachharajani's gradual typing with
  * unification-based inference, 2008): a column whose
  * unit nobody declared has an UNKNOWN unit, a unit variable, which unifies
- * with anything. A declared unit (`Schema.unit("USD")`, `Schema.time()`'s
+ * with anything. A declared unit (`Unit("USD")` or `"USD"` in a schema, `Schema.time()`'s
  * "instant", the "count" of `.count()`) is concrete, and two different
  * concrete units on one shared axis are a type error ({@link MeasureClash};
  * the join itself is `joinUnits` in underlyingSpace.ts).
@@ -19,7 +19,7 @@ import type { CanAdd, ColumnType, HasCalendar, HasUnit } from "./schema";
  * A quantity whose unit is declared is that unit, a concrete term: two
  * charts that each declare their own "value" column, one USD and one EUR,
  * share nothing. Only an UNKNOWN unit is a variable, named by its QUANTITY:
- * the column's declared quantity (`HasQuantity`, from `Schema.quantity(name)`),
+ * the column's declared quantity (`HasQuantity`, the `name` of its record),
  * else the column's name. The cells of `field(x).bin(p)` are amounts of
  * `x`'s quantity, in `x`'s unit. The same name is the same
  * variable across the whole figure, and a binding holds for the whole
@@ -36,7 +36,8 @@ import type { CanAdd, ColumnType, HasCalendar, HasUnit } from "./schema";
  * A column also says whether its amounts add up (`CanAdd`, #1197), and so
  * does the {@link Quantity} read from it: every place that sums values
  * checks the quantity of the values it sums ({@link checkSummable}). It is
- * the column's, not its unit's: two columns of one unit may disagree, and
+ * declared on the unit (`Unit(name).summable()`), and the columns of one
+ * unit agree on it within one chart (`unifyUnitClasses` in schema.ts), but
  * a sum checks only the columns it sums.
  */
 
@@ -47,7 +48,7 @@ export type Quantity = {
   name: string;
   /** The declared unit, if any. Absent: unknown, the variable `name`. */
   unit?: HasUnit;
-  /** The values add up (`CanAdd`): the column says `.summable()`, or the
+  /** The values add up (`CanAdd`): the column's unit is `.summable()`, or the
    *  engine computed them as amounts that add (a count, a share). */
   CanAdd?: CanAdd;
   /** The column the values were read from, when they were read from one (a
@@ -59,7 +60,7 @@ export type Quantity = {
 
 // A declared unit is a `HasUnit` (schema.ts): its `unit` says which units
 // are the same, and its `symbol` is what an axis title shows it by, "Pay
-// (USD)". A unit the user declares (`Schema.unit(u)`) has the symbol `u`.
+// (USD)". A unit the user declares (`Unit(u)`, or `u`) has the symbol `u`.
 // The engine's own units (INSTANT, DURATION, COUNT, a normalize share) have
 // none: a count or a share is a plain number, and a time axis's ticks
 // already read as dates.
@@ -91,7 +92,7 @@ export const columnQuantity = (
 });
 
 /** The advice for times, which do not add, shared by the sum check and
- *  `.summable()`'s (schema.ts): their differences, durations, do. */
+ *  `CanAdd`'s (schema.ts): their differences, durations, do. */
 export const SUBTRACT_A_REFERENCE =
   "subtract a reference first (e.g. date - start gives a duration, which " +
   "adds up).";
@@ -101,10 +102,10 @@ const quoteList = (xs: readonly string[]): string =>
   xs.map((x) => `"${x}"`).join(", ");
 
 /** Whether values of quantity `q` may be summed (#1197): it has `CanAdd`,
- *  or no declared unit (gradual typing, #1125: its type is unknown, so it
- *  passes). */
+ *  or no declared unit, or a unit declared by its name alone (`nameOnly`):
+ *  gradual typing (#1125), what its unit can do is unknown, so it passes. */
 export const addsUp = (q: Quantity): boolean =>
-  q.unit === undefined || q.CanAdd !== undefined;
+  q.unit === undefined || q.unit.nameOnly === true || q.CanAdd !== undefined;
 
 /**
  * Check that `where` may sum values of quantity `q` ({@link addsUp}). Else
@@ -130,7 +131,7 @@ export function checkSummable(q: Quantity | undefined, where: string): void {
   throw new Error(
     `${where} sums ${what}, in the unit "${unit}", which cannot be ` +
       `summed: it has no CanAdd. If its amounts add up (money, counts, ` +
-      `lengths), declare it with Schema.unit("${unit}").summable(). If ` +
+      `lengths), declare it with Unit("${unit}").summable(). If ` +
       `they do not (temperatures, prices, rates), average them instead, ` +
       `e.g. field("${q.column ?? q.name}").mean().`
   );
@@ -180,12 +181,12 @@ const findRoot = (v: UnitVar): UnitVar => {
 /** A unit variable's representative in the union-find: its declared unit
  *  when its class is bound to one, else the unknown its class stands for
  *  (named by one of its quantities). */
-export type Unit =
+export type UnitTerm =
   | ({ kind: "declared" } & HasUnit)
   | { kind: "unknown"; name: string };
 
 /** What a unit variable stands for now. */
-export const resolveUnit = (v: UnitVar): Unit => {
+export const resolveUnit = (v: UnitVar): UnitTerm => {
   const root = findRoot(v);
   return root.unit !== undefined
     ? { kind: "declared", ...root.unit }
@@ -222,7 +223,7 @@ export const unionInOrder = <T>(a: T[], b: readonly T[]): T[] => {
 
 /** A string that names a unit: equal for two units iff they are one unit
  *  (as {@link sameUnitVar} decides for their variables). */
-export const unitKey = (unit: Unit): string =>
+export const unitKey = (unit: UnitTerm): string =>
   unit.kind === "declared" ? `declared:${unit.unit}` : `unknown:${unit.name}`;
 
 /**
@@ -371,7 +372,7 @@ export class MeasureClash extends Error {
       named.columns.length > 0
         ? `If they are the same kind of quantity, declare the same unit for ` +
           `their columns in the chart's schema, e.g. ` +
-          `schema: { "${named.columns[0]}": Schema.unit("${other.unit}") }.\n`
+          `schema: { "${named.columns[0]}": "${other.unit}" }.\n`
         : "";
     return (
       `${subject} two different units, ${side(a)} and ${side(b)} ` +

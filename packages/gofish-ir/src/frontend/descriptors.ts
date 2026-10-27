@@ -940,7 +940,7 @@ export const CHART_OPTIONS: FieldGroup = group({
   },
   schema: {
     type: t.record(t.any),
-    doc: "Column types, keyed by column name, e.g. Schema.ordered(levels) or Schema.time().",
+    doc: 'Column types, keyed by column name: a Unit (Unit("USD").summable()), a unit\'s name ("km²"), a column record { name, unit }, Schema.ordered(levels) or Schema.time().',
   },
 });
 

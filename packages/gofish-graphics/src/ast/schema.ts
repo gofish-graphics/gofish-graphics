@@ -27,23 +27,26 @@ import { INSTANT, SUBTRACT_A_REFERENCE } from "./measure";
  *    schema is applied, and an axis over them is a time axis whose ticks are
  *    calendar cells (calendar.ts). A time has no zero. `Schema.time()` also
  *    writes its unit, the instant, so two time columns may share an axis.
- *  - {@link HasUnit}: the column's values are amounts. Declared with
- *    `Schema.unit(unit)` (or `.unit(unit)` after another builder), which
- *    says what unit they are in; without it a
- *    column's unit is unknown and unifies with any other (`measure.ts`).
+ *  - {@link HasUnit}: the column's values are amounts. Declared with a
+ *    unit in the column's entry: a {@link Unit} definition (`Unit("USD")`),
+ *    or a unit's name alone (`"USD"`), which says what unit the values are
+ *    in and nothing about what the unit can do. Without it a column's unit
+ *    is unknown and unifies with any other (`measure.ts`).
  *  - {@link CanAdd}: the column's amounts can be added: a sum of them means
- *    something (money, counts, lengths). Declared with `.summable()`, which
- *    exists only after `.unit(...)`, because only amounts in a unit add up,
- *    and never on a time, because two instants do not add. Every place that
- *    sums rows (a `size` channel, `stack`, treemap `size`, `.sum()`) needs
- *    it from a column whose unit is declared; a column with no declared unit
- *    passes, since its type is unknown (`checkSummable` in measure.ts).
- *    Declared shortcut (#1197): the class sits on the column type, so two
- *    columns of one unit can disagree; its home is the unit itself (#1142).
+ *    something (money, counts, lengths). Declared on the unit, with
+ *    `Unit(name).summable()`, so every column of that unit has it. A time
+ *    never has it, because two instants do not add. Every place that sums
+ *    rows (a `size` channel, `stack`, treemap `size`, `.sum()`) needs it
+ *    from a column whose unit is a definition; a column with no declared
+ *    unit, or a unit's name alone, passes, since what its unit can do is
+ *    unknown (`checkSummable` in measure.ts). Declared shortcut (#1197):
+ *    the class still sits on each column type, and {@link applySchema}
+ *    unifies the columns of one unit within one chart's types
+ *    ({@link unifyUnitClasses}); its home is the unit itself (#1142).
  *  - {@link HasQuantity}: what the column's values are amounts of, its
- *    quantity, when that is not the column's name. Declared with
- *    `Schema.quantity(name)` (or `.quantity(name)` after another builder).
- *    The quantity titles the axis and names the unit variable.
+ *    quantity, when that is not the column's name. Declared with the
+ *    `name` of a column record, `{ name: "Pay", unit: USD }`. The quantity
+ *    titles the axis and names the unit variable.
  *  - {@link HasDomain}: the interval `[lo, hi]` the column's values span in
  *    the data it was typed with. Never declared: {@link applySchema} computes
  *    it for every column of finite numbers (a time's are epoch
@@ -62,8 +65,9 @@ import { INSTANT, SUBTRACT_A_REFERENCE } from "./measure";
  *
  * A column type is a record keyed by class name, so a later class (`HasZero`,
  * `HasCycle`, ...) is one more optional key. The record is also the wire form:
- * `ColumnSchema#toJSON` writes it, and `chart` accepts it as is (that is what
- * arrives from Python).
+ * {@link columnTypeOf} turns every schema entry into it, `ColumnSchema#toJSON`
+ * writes it, and `chart` accepts it as is (that is what arrives from Python,
+ * which turns its entries into it the same way).
  *
  * The types ride the chart's data ARRAY under {@link COLUMN_TYPES}, so an
  * operator reads a column's type off the data it splits.
@@ -96,24 +100,29 @@ export type HasInteger = Record<string, never>;
 
 /** The class of a column whose values are amounts in a declared unit:
  *
- *  - `unit`: the unit's name (`Schema.unit("USD")`). Two units are the same
- *    when their names are equal, and two different units never share an
- *    axis. A column without this class has an unknown unit, a unit variable
- *    that unifies with any unit (`measure.ts`).
- *  - `symbol`: what an axis title appends to show the unit, "Pay (USD)".
- *    `Schema.unit(u)` writes `u`. The engine's own units (the "count" of
- *    `.count()`) have none, so their axes add nothing.
+ *  - `unit`: the unit's name (`Unit("USD")`, or `"USD"`). Two units are the
+ *    same when their names are equal, and two different units never share
+ *    an axis. A column without this class has an unknown unit, a unit
+ *    variable that unifies with any unit (`measure.ts`).
+ *  - `symbol`: what an axis title appends to show the unit, "Pay (USD)". A
+ *    unit the user declares has its name as its symbol. The engine's own
+ *    units (the "count" of `.count()`) have none, so their axes add nothing.
+ *  - `nameOnly`: the unit was declared by its name alone (`"USD"`), so what
+ *    it can do is unknown: whether its amounts add up is unknown, and a sum
+ *    of them passes, as a sum of a column with no declared unit does. A
+ *    {@link Unit} definition of the same name in the same chart's types
+ *    tells it ({@link unifyUnitClasses}).
  */
-export type HasUnit = { unit: string; symbol?: string };
+export type HasUnit = { unit: string; symbol?: string; nameOnly?: true };
 
-/** The class of a column whose amounts can be added (`.summable()`): a sum
- *  of them is an amount in the same unit, and it starts from 0. It has no
- *  options. It requires {@link HasUnit}, and a time (`HasCalendar`) never has
- *  it. */
+/** The class of a column whose amounts can be added (its unit is
+ *  `Unit(name).summable()`): a sum of them is an amount in the same unit, and
+ *  it starts from 0. It has no options. It requires {@link HasUnit}, and a
+ *  time (`HasCalendar`) never has it. */
 export type CanAdd = Record<string, never>;
 
 /** The class of a column whose values are amounts of the quantity `name`
- *  (`Schema.quantity("Pay")`), when that is not the column's own name.
+ *  (`{ name: "Pay", unit: USD }`), when that is not the column's own name.
  *  Columns of one quantity share one unit variable, and the quantity titles
  *  the axis: the five summary columns of a box plot can all be "Pay". */
 export type HasQuantity = { name: string };
@@ -210,11 +219,9 @@ export type ColumnTypes = Record<string, ColumnType>;
 
 /**
  * A column type under construction. Each builder method adds one class, and a
- * method that needs a class already present, or one absent, says so in its
- * `this` type, so breaking the rule is a type error: `.diverging()` needs
- * `HasOrder`, `.unit()` needs no `HasUnit` yet, and `.summable()` needs
- * `HasUnit` and no `HasCalendar`. The constructor checks
- * that an order's levels fit the column's other classes
+ * method that needs a class already present says so in its `this` type, so
+ * breaking the rule is a type error: `.diverging()` needs `HasOrder`. The
+ * constructor checks that an order's levels fit the column's other classes
  * ({@link checkLevelsFit}) and that `CanAdd` has a unit and no calendar
  * ({@link checkSummableType}), as {@link columnTypeOf} does for a record.
  */
@@ -236,35 +243,6 @@ export class ColumnSchema<C extends ColumnType = ColumnType> {
     const at = midpoint ?? levels.length / 2;
     checkMidpointOnOrder(levels, at);
     return new ColumnSchema({ ...this.type, HasMidpoint: { at } });
-  }
-
-  /** Say what the column's values are amounts of (`HasQuantity`): the
-   *  quantity `name`, which titles the axis in place of the column's name. */
-  quantity(name: string): ColumnSchema<C & { HasQuantity: HasQuantity }> {
-    return new ColumnSchema({ ...this.type, HasQuantity: { name } });
-  }
-
-  /** Say what unit the column's values are in (`HasUnit`): the unit `unit`,
-   *  whose symbol follows the quantity in the axis title, "Pay (USD)". A
-   *  column has one unit, so a builder that already has one (`Schema.time()`
-   *  writes the instant) has no `.unit()` ({@link checkNoUnit}). */
-  unit(
-    this: ColumnSchema<C & { HasUnit?: never }>,
-    unit: string
-  ): ColumnSchema<C & { HasUnit: HasUnit }> {
-    checkNoUnit(".unit: the column", this.type);
-    return new ColumnSchema({ ...this.type, HasUnit: { unit, symbol: unit } });
-  }
-
-  /** Say that the column's amounts can be added (`CanAdd`): a sum of them
-   *  means something, so a `size` channel, `stack`, treemap `size` and
-   *  `.sum()` may sum the column. Only amounts in a declared unit add up, so
-   *  it needs `HasUnit` ({@link checkSummableType}), and a time has none: two
-   *  instants do not add, though their difference (a duration) does. */
-  summable(
-    this: ColumnSchema<C & { HasUnit: HasUnit; HasCalendar?: never }>
-  ): ColumnSchema<C & { HasUnit: HasUnit; CanAdd: CanAdd }> {
-    return new ColumnSchema({ ...this.type, CanAdd: {} });
   }
 
   toJSON(): C {
@@ -289,40 +267,144 @@ export const Schema = {
   }> {
     return new ColumnSchema({ HasCalendar: { zone }, HasUnit: INSTANT });
   },
-  /** A column whose values are amounts in the unit `unit` (`HasUnit`), an
-   *  opaque name such as `"USD"` or `"mm"`. Columns in the same unit may
-   *  share an axis; two different units on one axis are an error. A column
-   *  with no unit declared may share an axis with any other. Its amounts
-   *  cannot be summed until `.summable()` says they can (`CanAdd`). */
-  unit(unit: string): ColumnSchema<{ HasUnit: HasUnit }> {
-    return new ColumnSchema({}).unit(unit);
-  },
-  /** A column whose values are amounts of the quantity `name`
-   *  (`HasQuantity`), e.g. `"Pay"`. The quantity titles the axis in place of
-   *  the column's name, and columns of one quantity share one unit. */
-  quantity(name: string): ColumnSchema<{ HasQuantity: HasQuantity }> {
-    return new ColumnSchema({}).quantity(name);
-  },
 };
 
-/** What `chart`'s `schema` option takes per column: a builder, or the record
- *  it writes (the wire form). A column's domain ({@link HasDomain}) is
- *  computed from its values; declaring one is not supported yet. */
+/** The classes a {@link Unit} definition gives every column in it, keyed
+ *  by class name. A later class of units (`HasZero`, ...) is one more
+ *  optional key. */
+export type UnitClasses = { CanAdd?: CanAdd };
+
+/**
+ * A unit definition (`Unit("USD")`): a unit's name and the classes every
+ * column in the unit has. It is immutable: each chained method returns a new
+ * definition with one more class, and a method that needs a class absent says
+ * so in its `this` type, so `.summable().summable()` is a type error. One
+ * definition is meant to be declared once and used by every column in the
+ * unit.
+ */
+export class UnitDefinition<C extends UnitClasses = UnitClasses> {
+  constructor(
+    readonly name: string,
+    readonly classes: C
+  ) {
+    if (typeof name !== "string")
+      throw new Error(`Unit: the name must be a string, got ${String(name)}.`);
+    Object.freeze(this);
+  }
+
+  /** Say that amounts in the unit can be added (`CanAdd`): a sum of them
+   *  means something (money, counts, lengths), so a `size` channel, `stack`,
+   *  treemap `size` and `.sum()` may sum a column in the unit. Amounts that
+   *  do not add up (temperatures, prices, rates) are in a unit without it. */
+  summable(
+    this: UnitDefinition<C & { CanAdd?: never }>
+  ): UnitDefinition<C & { CanAdd: CanAdd }> {
+    return new UnitDefinition(this.name, { ...this.classes, CanAdd: {} });
+  }
+}
+
+/** A unit definition ({@link UnitDefinition}). */
+export type Unit<C extends UnitClasses = UnitClasses> = UnitDefinition<C>;
+
+/** The unit named `name`, e.g. `"USD"` or `"mm"`, with no classes yet: chain
+ *  `.summable()` when its amounts add up. Two units are the same when their
+ *  names are equal. */
+export function Unit(name: string): UnitDefinition<Record<never, never>> {
+  return new UnitDefinition(name, {});
+}
+
+/** A column record in `chart`'s `schema`: the quantity the column's values
+ *  are amounts of (`name`, `HasQuantity`), and the unit they are in (`unit`,
+ *  `HasUnit`): a {@link Unit} definition, or a unit's name alone. */
+export type ColumnRecord = { name?: string; unit?: Unit | string };
+
+/** The keys a {@link ColumnRecord} takes. */
+const RECORD_KEYS: readonly string[] = ["name", "unit"];
+
+/** What `chart`'s `schema` option takes per column: a builder
+ *  (`Schema.ordered(...)`, `Schema.time()`), a column record, or one of its
+ *  two shorthands: a {@link Unit} for `{ unit }`, and a unit's name for
+ *  `{ unit: name }`. The engine also reads the record of classes every entry
+ *  stands for (the wire form, which Python sends), which is not a user form.
+ *  A column's domain ({@link HasDomain}) is computed from its values;
+ *  declaring one is not supported yet. */
 export type SchemaEntry =
   | ColumnSchema<ColumnType>
+  | Unit
+  | string
+  | ColumnRecord
   | Omit<ColumnType, "HasDomain">;
 
-/** The record a schema entry stands for, checked for the rules the builder
- *  enforces (a record from the wire, as Python sends it, has no types): the
- *  record is read as the builders' writes, so `HasCalendar` writes the
- *  instant unit as `Schema.time()` does, and a different `HasUnit` is a
- *  second unit ({@link checkNoUnit}). Then its levels must fit
- *  ({@link checkLevelsFit}), `CanAdd` needs a unit and no calendar
- *  ({@link checkSummableType}), and a midpoint needs an order and must lie
- *  on it, with the same check `.diverging()` runs. */
+/** The classes of a column in `unit`: a definition's name and classes, or a
+ *  name alone, whose classes are unknown (`nameOnly`). */
+const unitType = (unit: Unit | string): ColumnType =>
+  typeof unit === "string"
+    ? { HasUnit: { unit, symbol: unit, nameOnly: true } }
+    : { HasUnit: { unit: unit.name, symbol: unit.name }, ...unit.classes };
+
+/** The record of classes a schema entry stands for, before any check: a
+ *  builder's record, a unit's ({@link unitType}), a column record's, or the
+ *  record itself (the wire form). An object with any other key throws. */
+function classesOf(who: string, entry: SchemaEntry): ColumnType {
+  if (entry instanceof ColumnSchema) return entry.type;
+  if (entry instanceof UnitDefinition || typeof entry === "string")
+    return unitType(entry);
+  if (entry === null || typeof entry !== "object")
+    throw new Error(
+      `${who} has the entry ${String(entry)}. A column's entry is a Unit, a ` +
+        `unit's name, a column record { name, unit }, or a Schema builder.`
+    );
+  const keys = Object.keys(entry);
+  if (keys.every((k) => (CLASSES as string[]).includes(k)))
+    return entry as ColumnType;
+  const unknown = keys.filter((k) => !RECORD_KEYS.includes(k));
+  if (unknown.length > 0)
+    throw new Error(
+      `${who} has the unknown ${unknown.length === 1 ? "key" : "keys"} ` +
+        `${unknown.map((k) => JSON.stringify(k)).join(", ")}. A column ` +
+        `record takes name and unit: { name: "Pay", unit: Unit("USD") }.`
+    );
+  const { name, unit } = entry as ColumnRecord;
+  if (name !== undefined && typeof name !== "string")
+    throw new Error(`${who} has the name ${String(name)}, which is not text.`);
+  if (
+    unit !== undefined &&
+    typeof unit !== "string" &&
+    !(unit instanceof UnitDefinition)
+  )
+    throw new Error(
+      `${who} has the unit ${String(unit)}, which is neither a Unit nor a ` +
+        `unit's name.`
+    );
+  return {
+    ...(name !== undefined ? { HasQuantity: { name } } : {}),
+    ...(unit !== undefined ? unitType(unit) : {}),
+  };
+}
+
+/** A schema as the wire carries it: each entry's record of classes
+ *  ({@link classesOf}), as Python's `chart` writes it. */
+export const schemaToWire = (
+  schema: Record<string, SchemaEntry>
+): Record<string, ColumnType> =>
+  Object.fromEntries(
+    Object.entries(schema).map(([column, entry]) => [
+      column,
+      classesOf(`schema: column "${column}"`, entry),
+    ])
+  );
+
+/** The record a schema entry stands for ({@link classesOf}), checked for the
+ *  rules the builders enforce (a record from the wire, as Python sends it,
+ *  has no types): the record is read as the builders' writes, so
+ *  `HasCalendar` writes the instant unit as `Schema.time()` does, and a
+ *  different `HasUnit` is a second unit ({@link checkNoUnit}). Then its
+ *  levels must fit ({@link checkLevelsFit}), `CanAdd` needs a unit and no
+ *  calendar ({@link checkSummableType}), and a midpoint needs an order and
+ *  must lie on it, with the same check `.diverging()` runs. */
 export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
   const who = `schema: column "${column}"`;
-  const record: ColumnType = entry instanceof ColumnSchema ? entry.type : entry;
+  const record = classesOf(who, entry);
   if (record.HasDomain !== undefined)
     throw new Error(
       `${who} declares HasDomain ${JSON.stringify(record.HasDomain)}, but ` +
@@ -354,8 +436,9 @@ export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
 }
 
 /** The one-unit rule: a column has one unit, so a column type that already
- *  has `HasUnit` (`Schema.time()` writes the instant) takes no other.
- *  Python's `ColumnSchema.unit` raises the same message. */
+ *  has `HasUnit` (`Schema.time()` writes the instant) takes no other. Only
+ *  a record from the wire can break it: no builder adds a unit to another
+ *  builder's column. */
 function checkNoUnit(who: string, type: ColumnType): void {
   if (type.HasUnit === undefined) return;
   throw new Error(
@@ -378,7 +461,7 @@ function checkSummableType(who: string, type: ColumnType): void {
   if (type.HasUnit === undefined)
     throw new Error(
       `${who} has CanAdd but no unit. Only amounts in a unit add up; ` +
-        `declare the unit first: Schema.unit(unit).summable().`
+        `declare its unit with Unit(unit).summable().`
     );
 }
 
@@ -546,6 +629,7 @@ export async function applySchema<T>(
   for (const [column, entry] of Object.entries(schema)) {
     types[column] = columnTypeOf(column, entry);
   }
+  unifyUnitClasses(types);
   // Date inference, in one pass over the rows: each untyped column of the
   // first row is resolved by its first non-null value.
   const unresolved = new Set(
@@ -603,6 +687,63 @@ export async function applySchema<T>(
     types[column] = { ...types[column], HasDomain: domain };
   return Object.keys(types).length === 0 ? out : setColumnTypes(out, types);
 }
+
+/**
+ * One unit, one set of classes, across the column types of one chart (its
+ * schema, and the types its data carries or inherits), in place. A unit is
+ * its name, so every column in units of one name is in one unit:
+ *
+ *  - Two columns whose units are definitions ({@link Unit}) must agree on
+ *    the unit's classes: `Unit("USD").summable()` and `Unit("USD")` in one
+ *    chart are a loud error, since one unit cannot both add up and not.
+ *  - A column whose unit is a name alone (`nameOnly`) takes the classes of
+ *    a definition of that name, when there is one, so `"USD"` beside
+ *    `Unit("USD").summable()` adds up. Without one its classes stay unknown.
+ *
+ * A time's instant unit is the engine's, and is skipped. Declared shortcut
+ * (#1197): the scope is one chart's types. Two charts that share an axis
+ * keep each column's own classes, since a sum checks the column it sums
+ * (`checkSummable`); moving the classes onto the unit itself, for the whole
+ * figure, is #1142.
+ */
+function unifyUnitClasses(types: ColumnTypes): void {
+  const defined = new Map<string, { column: string; adds: boolean }>();
+  for (const [column, t] of Object.entries(types)) {
+    const unit = t.HasUnit;
+    if (unit === undefined || unit.nameOnly || t.HasCalendar) continue;
+    const adds = t.CanAdd !== undefined;
+    const other = defined.get(unit.unit);
+    if (other === undefined) defined.set(unit.unit, { column, adds });
+    else if (other.adds !== adds) {
+      const [yes, no] = adds ? [column, other.column] : [other.column, column];
+      throw new Error(
+        `schema: the columns "${yes}" and "${no}" are both in the unit ` +
+          `"${unit.unit}", but only "${yes}"'s unit is summable. A unit ` +
+          `either adds up or does not: define it once and use it for both, ` +
+          `e.g. const ${identifierFor(unit.unit)} = Unit("${unit.unit}")` +
+          `.summable().`
+      );
+    }
+  }
+  for (const [column, t] of Object.entries(types)) {
+    const unit = t.HasUnit;
+    if (!unit?.nameOnly) continue;
+    const def = defined.get(unit.unit);
+    if (def === undefined) continue;
+    const { nameOnly: _, ...known } = unit;
+    const { CanAdd: __, ...rest } = t;
+    types[column] = {
+      ...rest,
+      HasUnit: known,
+      ...(def.adds ? { CanAdd: {} } : {}),
+    };
+  }
+}
+
+/** A JS identifier a unit's definition could be bound to in an example, in
+ *  a message: the unit's name when it is one, else `unit`. */
+const identifierFor = (name: string): string =>
+  /^[A-Za-z_$][\w$]*$/.test(name) ? name : "unit";
 
 /** The domain ({@link HasDomain}) of each column of `rows` whose values are
  *  all finite numbers, missing values aside. A column with any other value

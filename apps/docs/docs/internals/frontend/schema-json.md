@@ -3138,7 +3138,7 @@ for the API.
         "schema": {
           "type": "object",
           "additionalProperties": {},
-          "description": "Column types, keyed by column name, e.g. Schema.ordered(levels) or Schema.time()."
+          "description": "Column types, keyed by column name: a Unit (Unit(\"USD\").summable()), a unit's name (\"km²\"), a column record { name, unit }, Schema.ordered(levels) or Schema.time()."
         }
       },
       "description": "Chart-level options: chart(data, {...}) in JS, chart(data, **options) in Python."

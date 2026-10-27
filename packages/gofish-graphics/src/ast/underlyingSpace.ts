@@ -28,7 +28,7 @@ import {
   unitOf,
   type MeasureSite,
   type Quantity,
-  type Unit,
+  type UnitTerm,
   type UnitVar,
 } from "./measure";
 
@@ -686,7 +686,7 @@ const joinCalendars = (
  *  replaced by its representative in the render's union-find, and no
  *  `cannotAdd`, which only a fold that adds reads. */
 export type SpaceUnits = {
-  unit?: Unit;
+  unit?: UnitTerm;
   calendar?: HasCalendar;
   titles: string[];
 };
@@ -721,7 +721,7 @@ export const spaceCalendar = (
  * symbol (a count, a share, an instant) adds nothing, and neither does an
  * unknown unit. The rule reads no names, so a column named "Flipper Length
  * (mm)" in "mm" titles "Flipper Length (mm) (mm)": declare its quantity
- * (`Schema.quantity("Flipper Length").unit("mm")`) or set the axis title.
+ * (`{ name: "Flipper Length", unit: Unit("mm") }`) or set the axis title.
  */
 export const spaceTitle = (
   space: UnderlyingSpace | undefined
