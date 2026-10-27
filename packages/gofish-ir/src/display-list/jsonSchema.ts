@@ -18,6 +18,8 @@ const STYLE = {
     mixBlendMode: { type: "string" },
     strokeDasharray: { type: "string" },
     filter: { type: "string" },
+    paintOrder: { type: "string" },
+    strokeLinejoin: { type: "string" },
   },
 } as const;
 

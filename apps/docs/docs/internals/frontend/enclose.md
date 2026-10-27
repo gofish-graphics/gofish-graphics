@@ -224,7 +224,9 @@ Settled:
 - `avoiding` takes a list of nodes or refs, or one `selectAll(name)` as the
   whole value, in JS as on the wire (`NodeSelectionIR`): a single ref and a
   `selectAll` inside a list are errors. A listed node that is also a member
-  is ignored, so the user never computes a set difference.
+  is ignored, so the user never computes a set difference. The value is read
+  into fresh refs by `avoidedRefs` (`ast/nodeRefs.ts`), which `.label()`'s
+  `avoiding` shares (see [Labels](/internals/frontend/labels)).
 - `neck` is above 0 and at most 1. At 0 a link would have no width: its two
   pulled-in sides meet, the crossing check gives the pull back, and the
   outline comes out fuller than at a small `neck`. Any value above 0 is

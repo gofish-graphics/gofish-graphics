@@ -122,6 +122,10 @@ import {
   type LabelOptions,
   type LabelSpec,
 } from "./labels/labelPlacement";
+import type { HiddenLabels } from "./labels/placeStep";
+import type { Place } from "../families/place";
+import type { LayerContext } from "./marks/chart";
+import { withKindValues } from "./strategyKind";
 import { packEnclose } from "d3-hierarchy";
 import type { KeyCell } from "./cells";
 import {
@@ -156,6 +160,9 @@ export type RenderSession = {
    *  elaborated; the rewrites read it and never rebuild it. Its demand half
    *  is refreshed once the axes are assigned. */
   keyedDomains?: KeyedDomains;
+  /** Labels the label chooser hid in this render, per `.label()` call, for
+   *  the one note the render prints (`labels/placeStep.ts`). */
+  hiddenLabels?: HiddenLabels;
 };
 
 export type Placeable = {
@@ -545,6 +552,8 @@ export class GoFishNode {
   public constraints: ConstraintSpec[] = [];
   public colorConfig?: ColorConfig;
   public _labels?: LabelSpec[];
+  /** Where a `.label()` with no `position` goes (see the constructor). */
+  public labelPosition?: Place;
   /** Nodes that belong to this node as a mark but live OUTSIDE its subtree:
    *  today the label `Text`s the label pass seats for it in the tier above
    *  (`labels/elaborate.tsx`), which stay out of the subtree so they never
@@ -670,6 +679,7 @@ export class GoFishNode {
       lower,
       geometry,
       color,
+      labelPosition,
     }: {
       key?: string;
       type: string;
@@ -681,6 +691,11 @@ export class GoFishNode {
       lower?: Lower;
       geometry?: GeometryFn;
       color?: MaybeValue<string>;
+      /** Where a `.label()` with no `position` goes on this node, by the
+       *  kind of geometry it is: a dot is labeled around itself, a path at
+       *  its end, a region in its interior. Default `"outset"` (above its
+       *  box). */
+      labelPosition?: Place;
     },
     children: GoFishAST[]
   ) {
@@ -701,6 +716,7 @@ export class GoFishNode {
     this.type = type;
     this.args = args;
     this.color = color;
+    this.labelPosition = labelPosition;
   }
 
   /** This node's sharing plan: its rule ({@link ResolveSharing}) applied to
@@ -2127,8 +2143,24 @@ export class GoFishNode {
     return this;
   }
 
-  public label(accessor: LabelAccessor, options?: LabelOptions): this {
-    (this._labels ??= []).push({ accessor, ...options });
+  /**
+   * Label this node (see `labels/elaborate.tsx`). The labels of one call are
+   * placed together, so a mark's call marks each node's spec with the same
+   * `group`: the call's options object, or its accessor when it has none.
+   * `layerContext` is the chart's named layers, where a `selectAll(name)` in
+   * `avoiding` is found.
+   */
+  public label(
+    accessor: LabelAccessor,
+    options?: LabelOptions,
+    layerContext?: LayerContext
+  ): this {
+    (this._labels ??= []).push({
+      accessor,
+      ...withKindValues(options),
+      group: options ?? accessor,
+      layerContext,
+    });
     return this;
   }
 

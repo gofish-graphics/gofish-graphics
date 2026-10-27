@@ -499,8 +499,8 @@ function pushLabelField(
 /** `.label(accessor, options?)` — defers label placement on each node. */
 export const labelModifier = {
   name: "label",
-  apply: (node, _layerContext, _datum, accessor, options) => {
-    node.label(accessor, options);
+  apply: (node, layerContext, _datum, accessor, options) => {
+    node.label(accessor, options, layerContext);
   },
   tag: (wrapped, base, accessor, options) => {
     propagateSerialize(base, wrapped, (tag) => {
@@ -1305,7 +1305,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
               for (const node of leafNodes) {
                 if (node.datum === undefined) node.datum = leaf;
                 for (const { accessor, options } of labelState) {
-                  node.label(accessor, options);
+                  node.label(accessor, options, layerContext);
                 }
               }
             }

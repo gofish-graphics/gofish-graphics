@@ -9,9 +9,31 @@ import { UNDEFINED } from "../underlyingSpace";
 import { lowerStyle, roleFor } from "../displayList/lowerHelpers";
 import { estimateTextDimensions } from "../shapes/text";
 
+/** A text outline painted behind the glyphs (SVG `paint-order: stroke`),
+ *  so a label stays legible over lines and fills. */
+export type LabelHalo = {
+  /** Default `"white"`. */
+  color?: string;
+  /** The outline's width in pixels. Default 3. */
+  width?: number;
+};
+
+/** A filled box behind the text. */
+export type LabelBackground = {
+  /** Default `"white"`. */
+  fill?: string;
+  /** Pixels around the text: one number for both axes, or `[x, y]`.
+   *  Default `[2, 1]`. */
+  padding?: number | [number, number];
+};
+
+const DEFAULT_HALO_WIDTH = 3;
+const DEFAULT_BACKGROUND_PADDING: [number, number] = [2, 1];
+
 /**
  * What a placement step may change on a label after layout: the angle the
- * text is drawn at, and whether it is hidden. Reset by every layout.
+ * text is drawn at (a sloped label takes its path's), and whether it is
+ * hidden (no free spot). Reset by every layout.
  */
 export type LabelState = {
   angle: number;
@@ -24,18 +46,23 @@ export type LabelNodeOptions = {
   fontFamily: string;
   fontWeight?: number | string;
   fontStyle?: string;
-  /** The text color, or a function that picks it when the label is lowered. */
+  /** The text color, or a function that picks it when the label is lowered
+   *  (the auto color reads where the label landed). */
   fill: string | ((node: GoFishNode) => string);
   /** A fixed rotation in degrees, clockwise on screen. */
   rotate?: number;
+  halo?: LabelHalo;
+  background?: LabelBackground;
 };
 
-/** The label's measured text, in pixels. */
+/** The label's measured text, and the room its chrome takes, in pixels. */
 export type LabelMetrics = {
   /** Text width and height (ascent + descent). */
   w: number;
   h: number;
   ascent: number;
+  /** Pixels the chrome adds on each side of the text, per axis. */
+  pad: [number, number];
 };
 
 /** The axis-aligned half extents of a `2hx × 2hy` box rotated by `deg`. */
@@ -58,15 +85,18 @@ export type LabelNode = {
 };
 
 /**
- * A label: text drawn as one mark, the node `.label()` elaborates into. Its
- * box is the text's box, rotated by its angle and centered on the node's
- * local origin, so it reads the same in either y direction.
+ * A label: text with optional chrome (a halo, a background box), drawn as
+ * one mark, the node `.label()` elaborates into. Its box is the text's box
+ * plus the chrome, rotated by its angle and centered on the node's local
+ * origin, so it reads the same in either y direction. A placement step may
+ * turn it to another angle after layout (`setExtent` then resizes its box)
+ * or hide it.
  *
- * Unrotated, it draws exactly as a `Text` of the same font does: the glyphs
- * start at the box's left edge, on the baseline `ascent` below its top.
- * Rotated, the text turns about the box's center; the box is the rotated
- * text's bounding box, which is where a `Text` turned about its anchor sits
- * too, once its box is placed.
+ * Unrotated and with no chrome, it draws exactly as a `Text` of the same
+ * font does: the glyphs start at the box's left edge, on the baseline
+ * `ascent` below its top. Rotated, the text turns about the box's center;
+ * the box is the rotated text's bounding box, which is where a `Text` turned
+ * about its anchor sits too, once its box is placed.
  */
 export function LabelText(opts: LabelNodeOptions): LabelNode {
   const { text, fontSize, fontFamily, fontWeight, fontStyle } = opts;
@@ -77,10 +107,18 @@ export function LabelText(opts: LabelNodeOptions): LabelNode {
     fontStyle,
     fontWeight
   );
+  const haloPad = opts.halo ? (opts.halo.width ?? DEFAULT_HALO_WIDTH) / 2 : 0;
+  const bgPad: [number, number] =
+    opts.background === undefined
+      ? [0, 0]
+      : typeof opts.background.padding === "number"
+        ? [opts.background.padding, opts.background.padding]
+        : (opts.background.padding ?? DEFAULT_BACKGROUND_PADDING);
   const metrics: LabelMetrics = {
     w: dims.width,
     h: dims.height,
     ascent: dims.ascent,
+    pad: [Math.max(haloPad, bgPad[0]), Math.max(haloPad, bgPad[1])],
   };
   const baseAngle = opts.rotate ?? 0;
   const state: LabelState = { angle: baseAngle, hidden: false };
@@ -94,7 +132,7 @@ export function LabelText(opts: LabelNodeOptions): LabelNode {
         state.angle = baseAngle;
         state.hidden = false;
         const [hx, hy] = rotatedHalfExtents(
-          [metrics.w / 2, metrics.h / 2],
+          [metrics.w / 2 + metrics.pad[0], metrics.h / 2 + metrics.pad[1]],
           baseAngle
         );
         return {
@@ -125,11 +163,54 @@ export function LabelText(opts: LabelNodeOptions): LabelNode {
           deg
             ? [cx + dx * cos - dy * sin, cy + dx * sin + dy * cos]
             : [cx + dx, cy + dy];
-        const { w, h, ascent } = metrics;
+        const { w, h, ascent, pad } = metrics;
+        const items: DisplayList.DisplayItem[] = [];
+        if (opts.background !== undefined) {
+          const fill = opts.background.fill ?? "white";
+          const bw = w / 2 + pad[0];
+          const bh = h / 2 + pad[1];
+          if (!deg)
+            items.push({
+              kind: "rect",
+              x: cx - bw,
+              y: cy - bh,
+              w: 2 * bw,
+              h: 2 * bh,
+              rx: 2,
+              ry: 2,
+              role: "overlay",
+              style: lowerStyle({ fill }),
+            });
+          else
+            items.push({
+              kind: "path",
+              d:
+                "M" +
+                [at(-bw, -bh), at(bw, -bh), at(bw, bh), at(-bw, bh)]
+                  .map(([px, py]) => `${+px.toFixed(2)},${+py.toFixed(2)}`)
+                  .join("L") +
+                "Z",
+              role: "overlay",
+              style: lowerStyle({ fill }),
+            });
+        }
         // The glyph anchor: the start of the baseline.
         const [gx, gy] = at(-w / 2, -h / 2 + ascent);
         const fill =
           typeof opts.fill === "string" ? opts.fill : opts.fill(self);
+        const style = lowerStyle({
+          fill,
+          stroke:
+            opts.halo === undefined ? undefined : (opts.halo.color ?? "white"),
+          strokeWidth:
+            opts.halo === undefined
+              ? 0
+              : (opts.halo.width ?? DEFAULT_HALO_WIDTH),
+        });
+        if (opts.halo !== undefined) {
+          style.paintOrder = "stroke";
+          style.strokeLinejoin = "round";
+        }
         const item: DisplayList.TextItem = {
           kind: "text",
           x: gx,
@@ -143,10 +224,11 @@ export function LabelText(opts: LabelNodeOptions): LabelNode {
           dominantBaseline: "auto",
           role: roleFor(self.datum),
           datum: self.datum,
-          style: lowerStyle({ fill, strokeWidth: 0 }),
+          style,
         };
         if (deg) item.rotate = deg;
-        return [item];
+        items.push(item);
+        return items;
       },
     },
     []

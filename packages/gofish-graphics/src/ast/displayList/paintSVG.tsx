@@ -71,6 +71,10 @@ const styleProps = (style: Style) =>
     opacity: style?.opacity,
     "fill-opacity": style?.fillOpacity,
     filter: style?.filter,
+    "paint-order": style?.paintOrder,
+    "stroke-linejoin": style?.strokeLinejoin as
+      | JSX.PathSVGAttributes<SVGPathElement>["stroke-linejoin"]
+      | undefined,
     style: cssStyle(style),
   }) as const;
 

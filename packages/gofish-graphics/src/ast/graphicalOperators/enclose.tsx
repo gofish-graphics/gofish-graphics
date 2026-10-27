@@ -35,15 +35,13 @@ import { foldFinite } from "../../util";
 import { UNDEFINED, type UnderlyingSpace } from "../underlyingSpace";
 import type { LiveValue } from "../../interaction/live";
 import type { LayerContext } from "../marks/chart";
-import { resolveRefData } from "../marks/chartBuilder";
-import { box, type Nodes, type Shape } from "../../families/shape";
+import { box, type Shape } from "../../families/shape";
+import { avoidedRefs } from "../nodeRefs";
 import { blobOutline, type BlobMember, type Pt } from "./enclose/blob";
 import { membersOf } from "./enclose/members";
 import { ovalOutline } from "./enclose/oval";
 import { targetOf } from "../constraints/relationalPaint";
 import { ringExtent } from "../geometry/box";
-import { RelateOperand } from "../constraints/relate";
-import { nodeSelectionOf } from "../nodeSelection";
 
 export type EncloseOptions = {
   /** Pixels between the members and the outline. Default 2. */
@@ -77,40 +75,6 @@ function checkedShape(shape: Shape | undefined): Shape {
   if (shape === undefined) return box();
   Frontend.checkStrategy("Shape", shape, "enclose({ shape })");
   return shape;
-}
-
-/** The avoided nodes, as fresh refs the enclosure holds (each read where it
- *  is placed, like a ref member). A `selectAll(name)` resolves against the
- *  chart's named layers. */
-function avoidedRefs(
-  avoiding: Nodes | undefined,
-  layerContext: LayerContext | undefined
-): GoFishRef[] {
-  if (avoiding === undefined) return [];
-  const selection = nodeSelectionOf(avoiding, "enclose({ shape }): avoiding");
-  let items: unknown[];
-  if ("all" in selection) {
-    if (layerContext === undefined)
-      throw new Error(
-        "[gofish] enclose({ shape }): avoiding: selectAll(...) names a chart's layer, so it works where enclose is a chart's mark; in the combinator form, list the nodes."
-      );
-    const resolved = resolveRefData(selection.all, layerContext);
-    items = Array.isArray(resolved) ? resolved : [resolved];
-  } else items = selection.items;
-  return items.map((item) => {
-    if (item instanceof GoFishRef) {
-      const target = item.targetNode;
-      return target !== undefined
-        ? new GoFishRef({ node: target })
-        : new GoFishRef({ selection: item.selection! });
-    }
-    if (item instanceof GoFishNode) return new GoFishRef({ node: item });
-    if (item instanceof RelateOperand)
-      return new GoFishRef({ selection: item.name });
-    throw new Error(
-      "[gofish] enclose({ shape }): avoiding lists placed nodes or refs (a .relate() operand, ref(...)); a fresh mark has no place to avoid."
-    );
-  });
 }
 
 /** One SVG path over every loop: the loops wind so that the nonzero rule
@@ -288,7 +252,15 @@ export function encloseNode(
   layerContext: LayerContext | undefined
 ): GoFishNode {
   const shape = checkedShape(o.shape);
+  // The avoided nodes, as fresh refs the enclosure holds.
   const avoided =
-    shape.kind === "blob" ? avoidedRefs(shape.avoiding, layerContext) : [];
+    shape.kind === "blob"
+      ? avoidedRefs(
+          shape.avoiding,
+          layerContext,
+          "enclose({ shape }): avoiding",
+          "enclose"
+        )
+      : [];
   return Enclose(o, shape, members, avoided);
 }

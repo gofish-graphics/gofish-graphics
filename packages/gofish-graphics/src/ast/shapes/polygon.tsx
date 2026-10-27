@@ -3,6 +3,7 @@ import { datumOfInput } from "../marks/markResult";
 import { packEnclose } from "d3-hierarchy";
 import { GoFishNode } from "../_node";
 import { boxOfDims, orderToPixel, ringExtent } from "../geometry";
+import { interior } from "../../families/place";
 import { GoFishAST } from "../_ast";
 import { Size } from "../dims";
 import { UNDEFINED, UnderlyingSpace, CONTINUOUS } from "../underlyingSpace";
@@ -75,6 +76,8 @@ export const Polygon = ({
   return new GoFishNode(
     {
       type: "polygon",
+      // A region is labeled inside itself.
+      labelPosition: interior(),
       // Used to seed the unit color scale. Prefer whichever channel is
       // data-driven — the same rule `rect` follows.
       color: isValue(fill) ? fill : stroke,

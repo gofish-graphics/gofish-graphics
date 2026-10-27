@@ -777,6 +777,17 @@ inside a non-linear coordinate space, where the layout frame is not the screen
 (#1002); the axis scope the scatter elaborates in carries the nearest
 non-linear space (`AxisScope.warpedBy`), so the scatter can tell.
 
+The third consumer is `.label()` with a `Place` strategy (see
+[Labels](/internals/frontend/labels)). Its label layer gets a `labelPlace`
+constraint (`labels/placeStep.ts`), another step the solver never sees:
+`applyConstraints` runs it last, after `overlap`, when the labeled marks and
+the labels a position string placed are where they land. It reads each
+labeled mark's `outline` through its `ref()`, picks each label's first free
+candidate spot, and writes the label's box with `setExtent`. A node definition
+may also pass `labelPosition`, the strategy a `.label()` with no `position`
+uses on it. After the root's layout, `gofish.tsx` prints one note for the
+labels the step hid (`reportHiddenLabels`).
+
 ### Pass 10: Placement
 
 **Location**: `src/ast/gofish.tsx`

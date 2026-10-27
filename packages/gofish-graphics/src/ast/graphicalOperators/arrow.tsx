@@ -1,6 +1,7 @@
 import { GoFishAST } from "../_ast";
 import { GoFishNode, defaultGeometry, type ToPixel } from "../_node";
 import { flattenPath, orderToPixel } from "../geometry";
+import { end } from "../../families/place";
 import { Size, displayTranslate } from "../dims";
 import type { DisplayList } from "gofish-ir";
 import {
@@ -65,6 +66,8 @@ export const arrow = createNodeOperator(
     return new GoFishNode(
       {
         type: "arrow",
+        // A path is labeled at its end.
+        labelPosition: end(),
         resolveUnderlyingSpace: (
           _childSpaces: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]

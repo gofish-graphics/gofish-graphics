@@ -4,10 +4,19 @@
 
 import { autoLabelColorForFill } from "./autoLabelColor";
 import { GoFishNode } from "../_node";
+import type { GoFishAST } from "../_ast";
+import { GoFishRef } from "../_ref";
 import { LabelText } from "./labelNode";
 import { ref } from "../shapes/ref";
 import { Constraint } from "../constraints";
-import type { AlignAnchor } from "../constraints/shared";
+import type { AlignAnchor, ConstraintRef } from "../constraints/shared";
+import { outlines, translateOutline } from "../geometry";
+import { pointInRing } from "./collide";
+import { createLabelPlaceConstraint, type LabelPlaceItem } from "./placeStep";
+import { avoidedRefs } from "../nodeRefs";
+import { kindValue } from "../strategyKind";
+import { FieldExpr } from "../fieldExpr";
+import type { Place } from "../../families/place";
 import { wrapPreservingIdentity, wrapRing } from "../elaborationUtils";
 import { getValue, type MaybeValue } from "../data";
 import { resolveColorChannel } from "../../color";
@@ -73,14 +82,97 @@ function resolveNodeFill(node: GoFishNode): string | null {
 }
 
 /**
- * Compute an auto label color from the node's resolved fill (see
- * `autoLabelColorForFill`): contrast against the fill inside the shape, a
- * darkened tint of it outside.
+ * Whether a placed label sits inside its mark: its center is inside one of
+ * the mark's closed outlines. Both are read in the label layer's frame: the
+ * label's own box, and the mark through its `ref()` stand-in (a sibling of
+ * the label), in pixels.
  */
-function autoLabelColor(node: GoFishNode, position: LabelPosition): string {
-  const isInside =
-    position === "center" || (position as string).startsWith("inset");
-  return autoLabelColorForFill(resolveNodeFill(node), isInside);
+function sitsInside(label: GoFishNode, target: GoFishRef): boolean {
+  const d = label.dims;
+  if (d[0].center === undefined || d[1].center === undefined) return false;
+  const g = target.geometry();
+  const t = target.dims;
+  const dx = (t[0].min ?? 0) - g.box.min[0];
+  const dy = (t[1].min ?? 0) - g.box.min[1];
+  const c: [number, number] = [d[0].center, d[1].center];
+  return outlines(g, 0.5, target.yFrame.direction).some(
+    (o) =>
+      o.closed &&
+      pointInRing(c, translateOutline(o, [dx, dy]).points as [number, number][])
+  );
+}
+
+/**
+ * The auto label color (see `autoLabelColorForFill`), picked when the label
+ * is drawn: contrast against the mark's fill when the label sits inside its
+ * mark's outline, and a darkened tint of the fill outside. Inside is read
+ * from the outline, not the position, so a `"center"` label on a C-shaped
+ * polygon, whose box center is outside the shape, is colored for the page.
+ */
+const autoLabelColor =
+  (target: GoFishNode, stand: GoFishRef) =>
+  (label: GoFishNode): string =>
+    autoLabelColorForFill(resolveNodeFill(target), sitsInside(label, stand));
+
+/** Is this position value a `Place` strategy (not a position string)? */
+const isPlace = (p: unknown): p is Place =>
+  p !== null && typeof p === "object" && "kind" in (p as object);
+
+const PLACE_KINDS = new Set(["around", "along", "start", "end", "interior"]);
+
+/** The coordinate space a node is drawn in when it is not linear (a polar
+ *  `coord`), or undefined. */
+function warpedSpace(node: GoFishAST): string | undefined {
+  for (let cur: GoFishAST | undefined = node; cur; cur = cur.parent) {
+    const space = (cur as GoFishNode)._space;
+    if (space !== undefined && space.type !== "linear") return space.type;
+  }
+  return undefined;
+}
+
+/** How a label call reads in a message: `.label("country")`. */
+function callName(accessor: LabelSpec["accessor"]): string {
+  if (typeof accessor === "string")
+    return `.label(${JSON.stringify(accessor)})`;
+  if (typeof accessor === "function") return ".label(fn)";
+  const name = accessor instanceof FieldExpr ? accessor.name : accessor.name;
+  return `.label(field(${JSON.stringify(name)}))`;
+}
+
+/**
+ * The position a spec places its label at on `target`: its own, or the
+ * target's default by its kind of geometry (`GoFishNode.labelPosition`),
+ * or `"outset"`. A `Place` strategy reads the target's outline in screen
+ * space, which a polar or other warped coordinate space does not give yet:
+ * there, a default falls back to `"outset"` (by the box, as before), and a
+ * strategy written out is an error.
+ */
+function positionOf(
+  spec: LabelSpec,
+  target: GoFishNode
+): LabelPosition | Place {
+  const given = kindValue(spec.position);
+  if (isPlace(given) && !PLACE_KINDS.has(given.kind))
+    throw new Error(
+      `[gofish] .label({ position }): ${JSON.stringify(given)} is not a ` +
+        `position: use a position string ("outset", "center", "inset-top", ...) ` +
+        `or a Place strategy (Place.around(), Place.along(), Place.start(), ` +
+        `Place.end(), Place.interior()).`
+    );
+  const space = warpedSpace(target);
+  if (given !== undefined) {
+    if (isPlace(given) && space !== undefined)
+      throw new Error(
+        `[gofish] .label({ position: Place.${given.kind}() }): Place ` +
+          `strategies read a mark's outline on the screen, which a ${space} ` +
+          `coordinate space does not give yet (see the polar/curved label ` +
+          `follow-up issue). Use a position string, which places the label ` +
+          `by the mark's box.`
+      );
+    return given;
+  }
+  if (space !== undefined) return "outset";
+  return target.labelPosition ?? "outset";
 }
 
 /**
@@ -88,7 +180,9 @@ function autoLabelColor(node: GoFishNode, position: LabelPosition): string {
  * of its own — a group node (e.g. a spread's per-key band) merely relays a
  * label to whichever descendant should actually carry it. A node WITH a datum
  * (a leaf shape, or a group combinator that stamped its own subdata) keeps its
- * own label rather than propagating it further. Mirrors the old
+ * own label rather than propagating it further, and so does a node whose
+ * children are all refs (a relational mark like `arrow`, which draws between
+ * placed operands and is the thing labeled). Mirrors the old
  * `GoFishNode.resolveLabels()`, generalized to an array of specs. Runs ONCE,
  * top-down, before the elaboration walk below.
  */
@@ -96,7 +190,7 @@ function resolveLabelTargets(node: GoFishNode): void {
   if (
     node._labels &&
     node._labels.length > 0 &&
-    node.children.length > 0 &&
+    node.children.some((c) => c instanceof GoFishNode) &&
     node.datum === undefined
   ) {
     for (const child of node.children) {
@@ -170,19 +264,19 @@ const inwardSpacing = (anchor: AlignAnchor, offset: number): number =>
  * constraints run in (see `edgeAnchor`'s doc comment).
  */
 function buildLabelConstraints(
-  spec: LabelSpec,
+  positionStr: LabelPosition,
+  offsetOpt: number | undefined,
   refRef: any,
   textRef: any,
   yDirection: AxisDirection
 ): any[] {
-  const positionStr = spec.position ?? "outset";
   if (positionStr === "center") {
     return [Constraint.align({ x: "middle", y: "middle" }, [textRef, refRef])];
   }
 
   const { side, edge: rawEdge, align } = parseLabelPosition(positionStr);
   const edge = rawEdge ?? "top";
-  const offset = spec.offset ?? DEFAULT_OFFSET;
+  const offset = offsetOpt ?? DEFAULT_OFFSET;
   const dir: "x" | "y" = edge === "left" || edge === "right" ? "x" : "y";
   const crossDim: "x" | "y" = dir === "x" ? "y" : "x";
   const mainAnchor = edgeAnchor(edge, yDirection);
@@ -252,10 +346,24 @@ async function wrapWithLabelTexts(
   // wrapped node's: the wrapper's spaces are the node's.
   const yDirection = wrapperDirection(node);
   return wrapPreservingIdentity(node, async (content) => {
-    const refs: GoFishNode[] = [];
+    const refs: GoFishAST[] = [];
     const texts: GoFishNode[] = [];
-    const pending: { refName: string; textName: string; spec: LabelSpec }[] =
-      [];
+    // Labels at a position string, placed by the solve.
+    const fixed: {
+      refName: string;
+      textName: string;
+      position: LabelPosition;
+      offset?: number;
+    }[] = [];
+    // Labels at a `Place` strategy, placed by the chooser after the solve.
+    const placed: {
+      refName: string;
+      textName: string;
+      avoidNames: string[];
+      spec: LabelSpec;
+      place: Place;
+      node: ReturnType<typeof LabelText>;
+    }[] = [];
 
     for (const target of targets) {
       const specs = target._labels!;
@@ -269,37 +377,90 @@ async function wrapWithLabelTexts(
         const refName = `__lref${idx}`;
         const textName = `__ltxt${idx}`;
 
-        refs.push((ref(target) as any).name(refName) as GoFishNode);
+        const stand = ref(target).name(refName);
+        refs.push(stand);
 
-        const position = spec.position ?? "outset";
+        const position = positionOf(spec, target);
         const label = LabelText({
           text,
           fontSize: spec.fontSize ?? 11,
           fontFamily: spec.fontFamily ?? LABEL_FONT_FAMILY,
           fontWeight: spec.fontWeight,
           fontStyle: spec.fontStyle,
-          fill: spec.color ?? autoLabelColor(target, position),
+          fill: spec.color ?? autoLabelColor(target, stand),
           rotate: spec.rotate,
-        }).node.name(textName);
-        texts.push(label);
+          halo: spec.halo,
+          background: spec.background,
+        });
+        label.node.name(textName);
+        texts.push(label.node);
         // The label is part of its target as a mark, though it lives out of
         // the target's subtree; record that, so whatever takes the mark over
         // (a `time.transition()`) takes the label with it, and the label
         // paints under its mark's build-in animation.
-        target.INTERNAL_attach(label);
-        pending.push({ refName, textName, spec });
+        target.INTERNAL_attach(label.node);
+        if (!isPlace(position)) {
+          fixed.push({ refName, textName, position, offset: spec.offset });
+          continue;
+        }
+        // The nodes this label keeps off, each read through a fresh ref.
+        const avoidNames = avoidedRefs(
+          spec.avoiding,
+          spec.layerContext,
+          ".label({ avoiding })",
+          ".label()"
+        ).map((r, k) => {
+          const name = `__lavoid${idx}_${k}`;
+          refs.push(r.name(name));
+          return name;
+        });
+        placed.push({
+          refName,
+          textName,
+          avoidNames,
+          spec,
+          place: position,
+          node: label,
+        });
       }
     }
 
     // The content is seated at its own origin first, so every label
     // constraint (which reads a target via its `ref()`) sees it already
-    // placed and only moves the label `Text`.
+    // placed and only moves the label. The chooser runs after the solve.
     return wrapRing(content, CONTENT_NAME, {
-      nodes: [...refs, ...texts],
-      constraints: (g) =>
-        pending.flatMap(({ refName, textName, spec }) =>
-          buildLabelConstraints(spec, g[refName], g[textName], yDirection)
+      nodes: [...refs, ...texts] as GoFishNode[],
+      constraints: (g) => [
+        ...fixed.flatMap(({ refName, textName, position, offset }) =>
+          buildLabelConstraints(
+            position,
+            offset,
+            g[refName],
+            g[textName],
+            yDirection
+          )
         ),
+        ...(placed.length === 0
+          ? []
+          : [
+              createLabelPlaceConstraint(
+                placed.map(
+                  (p): LabelPlaceItem => ({
+                    group: p.spec.group ?? p.spec,
+                    target: g[p.refName] as ConstraintRef,
+                    label: g[p.textName] as ConstraintRef,
+                    node: p.node,
+                    place: p.place,
+                    offset: p.spec.offset,
+                    avoiding: p.avoidNames.map((n) => g[n] as ConstraintRef),
+                    call: callName(p.spec.accessor),
+                  })
+                ),
+                fixed.map(({ textName }) => g[textName] as ConstraintRef),
+                yDirection
+              ),
+            ]),
+      ],
     });
   });
 }
