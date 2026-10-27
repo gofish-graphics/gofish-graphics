@@ -1585,10 +1585,11 @@ A **literal** `w`/`h` carries no data, so the node reports its content's type
 upward unchanged, and its keyed domain is shared as the sharing sets say. Its
 claim, though, is its own pixels: the box solves its own σ, so its content's σ
 claim is not room its parent can scale. The node claims the content's claim
-at the σ it solves, which sums to the size, measured from the box's start
-edge (`fixedClaim` in `layer.tsx`): its parent lays it out whole (#1032), and
-the box's 0 is its start edge, where its layout puts it, data 0 sitting
-`originPx` past it. It solves that σ once, through the
+at the σ it solves, which sums to the size (`fixedClaim` in `layer.tsx`).
+Where its scope has a data 0, the claim keeps the content's split about it,
+since the node reports its content's type upward and a parent reads that
+type's claim from its data 0. Where the scope has none, the node places its
+content's box at its start edge (#1032), so the claim runs from there. It solves that σ once, through the
 registry (`solveFixed`), and its layout reuses the solution. A claim that is only pixels over
 a type wider than one value maps no domain (`mapsDomain` in `extent.ts`): it
 needs no canvas at the root, and a sized node has nothing to solve from it. A **data-valued** `w`/`h` (a field name, a `field(...)`

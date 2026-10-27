@@ -804,14 +804,17 @@ export const layer = createNodeOperatorSequential(
             const { claim, solution } = solved;
             const ascent = claim.ascent.run(solution.sigma);
             const descent = claim.descent.run(solution.sigma);
-            // Where the content's 0 sits past the box's start edge: data 0
-            // where the scope has one, else past what reaches before it
-            // (`seatChild` in `layout`).
-            const zero = solution.originPx ?? descent;
-            return Extent(
-              Monotonic.linear(0, zero + ascent),
-              Monotonic.linear(0, descent - zero)
-            );
+            // A scope with a data 0 keeps the content's split about it: the
+            // node reports its content's type upward, and a parent reads
+            // the claim of a type with a data 0 from there. A scope with
+            // none places its content's box at the start edge (`seatChild`
+            // in `layout`), so its claim runs from there.
+            return solution.originPx !== undefined
+              ? Extent(
+                  Monotonic.linear(0, ascent),
+                  Monotonic.linear(0, descent)
+                )
+              : Extent(Monotonic.linear(0, ascent + descent));
           };
           // A literal start places the layer that many pixels from its
           // parent's origin (`translate` in `layout`), so its claim moves
