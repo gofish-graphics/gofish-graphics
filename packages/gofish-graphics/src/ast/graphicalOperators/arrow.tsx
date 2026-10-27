@@ -230,23 +230,29 @@ export const arrow = createNodeOperator(
           );
           return items;
         },
-        // Its outline is its body, an open path from its start to the tip
-        // of its head, as wide as its stroke; the head's triangle is
-        // decoration on it.
+        // Its outline is an open path from its start to the tip of its head:
+        // the body, then on through the head to its tip, as wide as its
+        // stroke. Its end is where the arrow's ink ends, so a label at its
+        // end clears the head.
         geometry: (laidOut, layoutChildren, node) => ({
           ...defaultGeometry(laidOut, layoutChildren, node),
-          outline: (tolerance) =>
-            laidOut.renderData === undefined
-              ? []
-              : [
-                  pathOutline(
-                    laidOut.renderData.body as Path,
-                    tolerance,
-                    node.yFrame.direction,
-                    false,
-                    paint
-                  ),
-                ],
+          outline: (tolerance) => {
+            if (laidOut.renderData === undefined) return [];
+            const { body, head } = laidOut.renderData as {
+              body: Path;
+              head: Point[];
+            };
+            const end = (body[body.length - 1] as BezierCurve).end;
+            return [
+              pathOutline(
+                [...body, segment(end, head[1])],
+                tolerance,
+                node.yFrame.direction,
+                false,
+                paint
+              ),
+            ];
+          },
         }),
       },
       children

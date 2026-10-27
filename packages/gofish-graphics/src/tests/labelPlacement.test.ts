@@ -29,11 +29,15 @@ import { pointInRing } from "../ast/geometry/plane";
 import { boxOutline } from "../ast/geometry";
 import { autoLabelColorForFill } from "../ast/labels/autoLabelColor";
 import {
+  arrow,
   chart,
   circle,
   Coord,
+  createName,
   group,
+  layer,
   line,
+  ref,
   polygon,
   rect,
   ribbon,
@@ -803,6 +807,59 @@ console.log("# a ribbon's label goes inside its band");
   const labels = [...walk(node)].filter((n) => n.type === "label");
   const bands = [...walk(node)].filter((n) => n.type === "connect");
   ok("one label per band", labels.length === 2 && bands.length === 2);
+}
+
+/** The points of a display-list path's data, as [x, y] pairs. */
+const pathPoints = (d: string): Pt[] => {
+  const ns = d.match(/-?\d+(\.\d+)?(e-?\d+)?/g)!.map(Number);
+  const out: Pt[] = [];
+  for (let i = 0; i + 1 < ns.length; i += 2) out.push([ns[i], ns[i + 1]]);
+  return out;
+};
+
+/** Two boxes `[x0, y0, x1, y1]` that overlap with some area. */
+const boxesOverlap = (a: Pt[], b: Pt[]) =>
+  Math.min(a[2][0], b[2][0]) > Math.max(a[0][0], b[0][0]) &&
+  Math.min(a[2][1], b[2][1]) > Math.max(a[0][1], b[0][1]);
+
+/** An arrow from a box at x 0 to a box at x 200, level, its default label
+ *  given by `label`; and, with `childLabels`, the boxes as the arrow's own
+ *  children, labeled too. */
+async function arrowDoc(childLabels: boolean) {
+  const a = createName("a");
+  const b = createName("b");
+  const box = (x: number, n: string) =>
+    childLabels
+      ? rect({ x, y: 40, w: 20, h: 20, fill: "#ccc" }).label(() => n, {
+          position: "center",
+        })
+      : rect({ x, y: 40, w: 20, h: 20, fill: "#ccc" }).name(n === "A" ? a : b);
+  const edge = (children: any[]) =>
+    arrow(
+      { stroke: "black", strokeWidth: 2, straights: true, stretch: 0, padEnd: 40 },
+      children
+    )
+      .label(() => "edge");
+  const node = childLabels
+    ? layer([edge([box(0, "A"), box(200, "B")])])
+    : layer([box(0, "A"), box(200, "B"), edge([ref(a), ref(b)])]);
+  const doc = await (node as any).toDisplayList({ w: 300, h: 100 });
+  const head = items(doc).find(
+    (i) => i.kind === "path" && /Z\s*$/.test(i.d) && i.style?.fill === "black"
+  );
+  const tip = Math.max(...pathPoints(head.d).map(([x]) => x));
+  const label = textItems(doc).find((t) => t.text === "edge");
+  return { tip, label, head: pathPoints(head.d) };
+}
+
+console.log("# an arrow is labeled past its head");
+{
+  const { tip, label, head } = await arrowDoc(false);
+  ok(
+    "the default end label clears the arrowhead",
+    label !== undefined && textBox(label)[0][0] >= tip,
+    JSON.stringify({ label: label && textBox(label), head })
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

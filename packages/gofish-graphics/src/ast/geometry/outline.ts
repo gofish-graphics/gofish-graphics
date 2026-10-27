@@ -29,7 +29,7 @@ export type OutlinePart = { name: string; from: number; to: number };
  *
  *  - `closed`, its topology: `true` when the path loops back (the last point
  *    joins the first), `false` for an open path with a start, an end and a
- *    direction of travel (a line, an arrow's body).
+ *    direction of travel (a line, an arrow).
  *  - `filled`, its paint: `true` when the inside of a closed loop is drawn,
  *    so the inside is ink. An open outline is never filled. A mark is filled
  *    unless its fill is `"none"` or `"transparent"` (see {@link outlinePaint}).

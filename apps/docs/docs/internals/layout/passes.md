@@ -720,7 +720,8 @@ helper, which falls back to the box when the node does not answer.
   through its ring and the ring itself. A `rect` answers with its box as
   the fallback reads it, painted as it is drawn. A `line` connector's
   outline is the open path it draws, one per run, a `ribbon`'s is its closed
-  band, and an `arrow`'s is its body. A rotated `text` answers with its
+  band, and an `arrow`'s is its body run on to the tip of its head, so its
+  end is where its ink ends. A rotated `text` answers with its
   turned glyph box, read as filled, and a `region` with its cell's outline
   when it has one. Each mark reads `filled` and `width` from its own
   `fill`, `stroke` and `strokeWidth` once, when it is made; a node with no

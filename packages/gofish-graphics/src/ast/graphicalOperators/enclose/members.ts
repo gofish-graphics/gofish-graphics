@@ -14,8 +14,8 @@
  *    short axis, and the oval samples the ellipse itself.
  *  - A box (a rect's outline, or that of a node with none of its own) is a
  *    box.
- *  - An open outline (a line, an arrow's body) is its pieces, each as wide
- *    as its stroke.
+ *  - An open outline (a line, an arrow to its head's tip) is its pieces,
+ *    each as wide as its stroke.
  *  - A closed outline that is not filled (a polygon with fill "none") is
  *    its loop's pieces, each as wide as its stroke: a ring, whose inside is
  *    not part of the member.

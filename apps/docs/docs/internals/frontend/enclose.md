@@ -73,8 +73,8 @@ frame, and it reads each outline by its exact form where it has one:
 - An outline that gives a `box` (a `rect`'s, or the fallback of a node with
   no outline of its own) is its box. The blob measures the distance to it
   exactly, as a rectangle.
-- An open outline (a `line`, an `arrow`'s body) is its pieces, each a tube
-  as wide as the stroke `width` the outline carries. A curve is cut into
+- An open outline (a `line`, an `arrow` to the tip of its head) is its
+  pieces, each a tube as wide as the stroke `width` the outline carries. A curve is cut into
   pieces that stray at most 0.5 px from it.
 - A closed outline that is not `filled` (a `polygon` with fill `"none"`) is
   the pieces of its loop, each a tube as wide as its stroke: a ring. Its
