@@ -17,7 +17,7 @@ import re
 import shlex
 import sys
 
-SEPARATORS = {"&&", "||", ";", "|", "&", ";;", "<<", "<<<", ">", ">>", "(", ")"}
+PUNCTUATION = "();<>|&\n"
 BODY_FLAGS = {"--body", "-b", "--body-file", "-F"}
 BODY_SPLIT = re.compile(r"(?:^|\s)(?:%s)(?:\s|=|$)" % "|".join(
     re.escape(f) for f in sorted(BODY_FLAGS, key=len, reverse=True)))
@@ -35,23 +35,42 @@ def deny(reason):
     sys.exit(0)
 
 
+def is_separator(tok):
+    """A token made only of punctuation: `&&`, `;`, `|`, a newline, `(`, `>`, ..."""
+    return tok != "" and not tok.strip(PUNCTUATION)
+
+
+def shell_tokens(command):
+    """Shell words and separators of command; raises ValueError on unbalanced quotes."""
+    # Drop line continuations first, or the escaped newline would read as a separator.
+    lex = shlex.shlex(command.replace("\\\n", ""), posix=True, punctuation_chars=PUNCTUATION)
+    lex.whitespace = " \t\r"
+    lex.whitespace_split = True
+    lex.commenters = ""
+    return list(lex)
+
+
+def args_until_separator(tokens):
+    args = []
+    for tok in tokens:
+        if is_separator(tok):
+            break
+        args.append(tok)
+    return args
+
+
 def subcommand_args(command, sub):
     """Yield the argument list of each `gh pr <sub>` invocation in command."""
-    for m in re.finditer(r"\bgh\s+pr\s+" + sub + r"\b", command):
-        tail = command[m.end():]
-        try:
-            lex = shlex.shlex(tail, posix=True, punctuation_chars=True)
-            lex.whitespace_split = True
-            tokens = list(lex)
-        except ValueError:
-            # Unparseable (e.g. unbalanced quotes): use the text before any body flag.
-            tokens = BODY_SPLIT.split(tail)[0].split()
-        args = []
-        for tok in tokens:
-            if tok in SEPARATORS:
-                break
-            args.append(tok)
-        yield args
+    try:
+        tokens = shell_tokens(command)
+    except ValueError:
+        # Unparseable (e.g. unbalanced quotes): use the text before any body flag.
+        for m in re.finditer(r"\bgh\s+pr\s+" + sub + r"\b", command):
+            yield args_until_separator(BODY_SPLIT.split(command[m.end():])[0].split())
+        return
+    for i in range(len(tokens) - 2):
+        if tokens[i:i + 3] == ["gh", "pr", sub]:
+            yield args_until_separator(tokens[i + 3:])
 
 
 def has_flag(args, names):
@@ -79,8 +98,8 @@ def is_bash_ready(command):
 def missing_skills(transcript_path):
     """Skills not run since the last successful `gh pr ready` in the transcript."""
     last_skill = {}  # skill -> last line number
-    ready_uses = {}  # tool_use_id -> line number
-    results = {}  # tool_use_id -> is_error
+    last_ready = -1
+    pending = {}  # tool_use_id -> (skill name or "ready", line number)
     with open(transcript_path, encoding="utf-8", errors="replace") as fh:
         for i, line in enumerate(fh):
             try:
@@ -106,18 +125,23 @@ def missing_skills(transcript_path):
                     if name == "Skill":
                         m = SKILL_RE.match(str(inp.get("skill", "")))
                         if m:
-                            last_skill[m.group(1)] = i
+                            pending[block.get("id")] = (m.group(1), i)
                     elif name == "Bash" and is_bash_ready(str(inp.get("command", ""))):
-                        ready_uses[block.get("id")] = i
+                        pending[block.get("id")] = ("ready", i)
                 elif role == "user" and btype == "text":
                     for m in SLASH_RE.finditer(str(block.get("text", ""))):
                         last_skill[m.group(1)] = i
                 elif role == "user" and btype == "tool_result":
-                    results[block.get("tool_use_id")] = bool(block.get("is_error"))
-    # A mark-ready counts only once its result is in and is not an error, so the
-    # pending call (whose tool_use may already be in the transcript) is ignored.
-    done = [ln for uid, ln in ready_uses.items() if uid in results and not results[uid]]
-    last_ready = max(done, default=-1)
+                    # A skill run or mark-ready counts only once its result is in and
+                    # is not an error, so the pending call (whose tool_use may already
+                    # be in the transcript) is ignored.
+                    use = pending.pop(block.get("tool_use_id"), None)
+                    if use and not block.get("is_error"):
+                        kind, ln = use
+                        if kind == "ready":
+                            last_ready = max(last_ready, ln)
+                        else:
+                            last_skill[kind] = max(last_skill.get(kind, -1), ln)
     return [s for s in SKILLS if last_skill.get(s, -1) <= last_ready]
 
 
