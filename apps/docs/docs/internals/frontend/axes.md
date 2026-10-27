@@ -404,9 +404,12 @@ bespoke pipeline hand-coded falls out of ordinary layout:
 - **Stacked outer/inner labels** — an inner facet's axis sits below its content,
   the outer facet's axis below the whole group; they stack naturally (the former
   `innerBaseline` 2×AXIS_WIDTH special case is gone).
-- **Per-facet local scales** — each facet wrapper infers its own POSITION domain
-  from its tick `position` constraints (`collectPositionDomains` → `layer.tsx`),
-  so the old per-facet local-posScale special case is gone too.
+- **Per-facet local scales** — each facet wrapper resolves its tick `position`
+  constraints in its own frame, the frame of the keyed domain its content maps,
+  so the old per-facet local-posScale special case is gone too. The ticks are
+  detached in the ring's sharing sets (`wrapRing`), so their datums are no part
+  of the type the ring reports: a chart's box reports its content's type to its
+  parent, whatever chrome it wears (#1170).
 - **Shared (overlay) axes** — a `"budget"` sibling is elaborated identically to the
   `true` owner; overlapping siblings simply overdraw the same axis, which keeps
   their content aligned without a reserved budget.
@@ -632,7 +635,10 @@ rule: a chart with no size of its own on a dim draws the axis around itself
 its own (`_chartBox`, set by the chart builder) draws it around its content,
 inside the box it solves σ in, and its content's free baseline is placed there
 (`placedSpace`); the render root is the outermost boundary, which draws the
-axes of the domains it solves, a bare low-level render's included. On an axis
+axes of the domains it solves, a bare low-level render's included. A chart is
+placed whole, its baseline with it, so a chart's own free baseline is placed
+too (`placedSpace`): a bar chart beside a caption in a `spread` draws the
+value axis it draws on its own (#1170). On an axis
 the render gives no size, the root maps its domain at the σ the sized nodes
 below it solve it at, when they agree, so a bare spread of 160 px mini charts
 draws a 160 px axis (`rootSizes` in `gofish.tsx`, which reads the σ from
@@ -657,14 +663,18 @@ node above it claimed: the outer chart claims each axis its type covers
 first, and a continuous axis has one owner.
 
 Each chart's `axes` option applies at that chart. `frameChart` stamps it on
-the chart's node (`_chartAxes`, default `true`), and `resolveAxes` carries the
-dims the nearest chart turns on (`axesEnabled`) down its walk; the root's are
-the render's `axes`, which is the outermost chart's own unless the render
-gives one. A node that claims an axis on a dim its chart turns off still
-owns it, so the axis is hidden, not drawn by a chart below. A nested chart
-with `axes: false` turns off only the axes it owns. The titles, sides and
-per-level options (`levels`, `label`, `divider`) still come from the
-outermost chart's options alone (see Axis titles below).
+the chart's node (`_chartAxes`, default `true`), and `resolveAxes` carries
+what the nearest chart decides on each dim (`axesEnabled`) down its walk; the
+root's is the render's `axes`, which is the outermost chart's own unless the
+render gives one. A node that claims an axis on a dim its chart turns off
+still owns it, so the axis is hidden, not drawn by a chart below. A nested
+chart with `axes: false` turns off only the axes it owns. A render that passes
+no `axes` and has no chart at its root (a bare render, or a combinator of
+charts such as `spread({ dir: "y" }, [caption, chart])`) decides neither
+dim, so its root claims no axis and each chart inside it draws its own, as it
+would rendered alone (#1170). The titles follow each chart's own options (see
+Axis titles below); the sides and per-level options (`levels`, `label`,
+`divider`) still come from the render's `axes` alone.
 
 `resolveAxes` decides the boundaries in its one top-down walk, asking each
 node once. No other node claims a continuous axis, so a
@@ -713,12 +723,15 @@ space before elaboration re-resolves it. That is why a grouped bar chart's x tit
 names the outer grouping ("lake") and not the inner one ("species"): the inner
 axes inserted below the root would change the root's space after elaboration.
 
-The chart's `axes` options describe the chrome of the chart root, so `layout()`
-stamps them only on the root. It titles each axis the root owns that
-the options turn on, with the option's `title` or else the space's title. Axes owned
-deeper in the tree, e.g. the per-panel axes of the Gapminder panels, get no
-title. The mechanism does not depend on this choice. A nested chart that
-passed its own options would title its own axes through the same ring.
+Each chart titles the axes it draws, wherever it sits (#1170). `layout()`
+stamps every chart's `axes` options on it as its request: the render's on the
+root, and each nested chart's own (`_chartAxes`) on it; a chart with a size of
+its own draws its axes around its content, so its content carries the request
+too. A node titles each axis it owns that its request turns on, with the
+option's `title` or else the space's title. So a chart beside a caption in a
+`spread`, or each panel of the Gapminder curves row, titles its own axes. A
+node that is no chart and no sized chart's content carries no request, so an
+axis an operator's override draws gets no title.
 
 A coordinate space owns no cartesian axes (`resolveAxes` clears them), so a
 pie gets no cartesian title. It titles its own axes (the radial title, see

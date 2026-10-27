@@ -1157,10 +1157,14 @@ export class GoFishNode {
    *  placed ({@link placeBaseline}) when this node is seated by a sized scope
    *  that places a free baseline at the scope's `originPx` — the render root,
    *  or the content of a chart with a size of its own on `dim` — so the root
-   *  of a bar chart renders an absolute value axis over its free bars.
+   *  of a bar chart renders an absolute value axis over its free bars. A
+   *  chart is placed whole, its baseline with it, so it does too: a bar
+   *  chart beside a caption draws the axis it draws on its own (#1170).
    *  Anywhere else a free space is still waiting for its parent to place it. */
   public placedSpace(space: UnderlyingSpace, dim: 0 | 1): UnderlyingSpace {
-    return this.parent === undefined || this.isSizedChartContent(dim)
+    return this.parent === undefined ||
+      this._chartBox !== undefined ||
+      this.isSizedChartContent(dim)
       ? placeBaseline(space)
       : space;
   }
@@ -1551,18 +1555,20 @@ export class GoFishNode {
    * keyed domain an ancestor already draws is the same axis, so it is not
    * drawn again.
    *
-   * `enabled` maps each dim the nearest enclosing chart's `axes` option turns
-   * on to what its axis ticks at ({@link AxisTicks}, `axesEnabled`): the
-   * render's at the root, and each chart's own below it ({@link _chartAxes}).
-   * A node that claims an axis draws it only on a dim `enabled` has, and
-   * stamps those ticks as its `axisDemand`; on any other dim it still owns
-   * the axis, so the axis is hidden, not drawn by a chart below. An
-   * operator's explicit override can draw an axis on a dim `enabled` leaves
-   * out, with the default ticks.
+   * `enabled` is what the nearest enclosing chart's `axes` option decides
+   * on each dim (`axesEnabled`): the render's at the root, and each chart's
+   * own below it ({@link _chartAxes}). On a dim it turns on, it maps to what
+   * the axis ticks at ({@link AxisTicks}): a node that claims the axis draws
+   * it and stamps those ticks as its `axisDemand`. On a dim it turns off
+   * (`false`), a node that claims the axis still owns it, so the axis is
+   * hidden, not drawn by a chart below. A dim it decides nothing about (a
+   * bare render that passes no `axes`) is claimed by no node, so each chart
+   * below decides its own (#1170). An operator's explicit override can draw
+   * an axis on a dim `enabled` does not turn on, with the default ticks.
    */
   public resolveAxes(
     claimed: Map<0 | 1, string> = new Map(),
-    enabled: Map<0 | 1, AxisTicks> = new Map([
+    enabled: Map<0 | 1, AxisTicks | false> = new Map([
       [0, DEFAULT_AXIS_TICKS],
       [1, DEFAULT_AXIS_TICKS],
     ])
@@ -1633,7 +1639,7 @@ export class GoFishNode {
     };
     const space = this._underlyingSpace;
     const ticksOf = (dim: 0 | 1): AxisTicks =>
-      enabled.get(dim) ?? DEFAULT_AXIS_TICKS;
+      enabled.get(dim) || DEFAULT_AXIS_TICKS;
     // A continuous axis is named by the keyed domain it is drawn over.
     const continuousSig = (dim: 0 | 1): string | undefined => {
       const s = space?.[dim];
@@ -1672,7 +1678,7 @@ export class GoFishNode {
         else this.axis.y = show;
         if (show) this.axisDemand[dim] = ticksOf(dim);
         claim(dim, sig ?? AXIS_CLAIM_OPAQUE); // claim regardless — false blocks children too
-      } else if (space && !isUNDEFINED(space[dim])) {
+      } else if (space && !isUNDEFINED(space[dim]) && enabled.has(dim)) {
         // A baseline magnitude ("free") owns no guide yet — only an anchored
         // (POSITION), unanchored (DIFFERENCE), or ORDINAL axis does.
         const s = space[dim];
@@ -1705,7 +1711,7 @@ export class GoFishNode {
         // A node owns the axis whether or not its chart draws it: an axis
         // its chart turns off is hidden, not handed to a chart below.
         if (sig !== undefined) {
-          if (enabled.has(dim)) {
+          if (enabled.get(dim) !== false) {
             if (dim === 0) this.axis.x = true;
             else this.axis.y = true;
             this.axisDemand[dim] = ticksOf(dim);
@@ -1721,7 +1727,9 @@ export class GoFishNode {
 
   /** The axes this node draws, given its parent's (`enabled`): its own
    *  chart's `axes` option when it is a chart, else its parent's. */
-  private axesBelow(enabled: Map<0 | 1, AxisTicks>): Map<0 | 1, AxisTicks> {
+  private axesBelow(
+    enabled: Map<0 | 1, AxisTicks | false>
+  ): Map<0 | 1, AxisTicks | false> {
     return this._chartAxes === undefined
       ? enabled
       : axesEnabled(this._chartAxes);

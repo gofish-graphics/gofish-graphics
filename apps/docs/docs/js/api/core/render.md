@@ -141,7 +141,7 @@ per-dimension object, or per-dimension title control:
 
 ```ts
 axes: true                                     // both axes, titles inferred (the chart() default)
-axes: false                                    // no axes (the default for a bare node)
+axes: false                                    // no axes
 axes: { x: true, y: false }                    // x only
 axes: { x: { title: "Year" }, y: true }        // custom x title, inferred y title
 axes: { x: { title: false }, y: true }         // suppress the inferred x title
@@ -266,7 +266,19 @@ A few rules:
 `gf.chart(data, { axes: true })`); it is also accepted directly on `.render()`, as
 the examples below show. On `.render()` it overrides only the outermost chart's
 `axes`. A chart nested inside keeps its own (see
-[chart › Axes](/js/api/core/chart#axes)).
+[chart › Axes](/js/api/core/chart#axes)). A bare node or a combinator rendered
+with no `axes` draws no axes of its own, and each chart inside it draws its own
+axes and titles, as it would rendered alone:
+
+```ts
+gf.spread({ dir: "y" }, [
+  gf.text({ text: "Catch by lake" }),
+  gf
+    .chart(seafood)
+    .flow(gf.spread({ by: "lake", dir: "x" }))
+    .mark(gf.rect({ h: "count" })),
+]).render(container, { w: 400, h: 300 });
+```
 
 ### Axes with inferred titles
 

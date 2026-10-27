@@ -40,6 +40,8 @@ Returns a `GoFishChartWidget`.
 `axes` can be passed to [`chart`](/python/api/core/chart) or to
 `render`, as in JS (`chart(data, { axes: true })` or
 `.render(container, { axes: true })`). See [chart](/python/api/core/chart) for the full `axes` shape.
+A combinator rendered with no `axes` draws no axes of its own, and each chart
+inside it draws its own axes and titles, as it would rendered alone.
 :::
 
 ## Automatic display

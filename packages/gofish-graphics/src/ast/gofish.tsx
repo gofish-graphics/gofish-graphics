@@ -60,6 +60,7 @@ import {
   labelRowSettingsFromAngles,
   type LabelRowSettings,
 } from "./axes/elaborate";
+import { breadthFirst } from "./elaborationUtils";
 import { layoutWithAutoLabelAngles } from "./axes/autoLabelAngle";
 import { dumpKeyedDomains, dumpSharing } from "./debug/dump";
 import {
@@ -322,22 +323,26 @@ function manualLabelRowSettings(
 }
 
 /**
- * The dims a chart's `axes` option draws, each with what its axis ticks at
- * ({@link AxisTicks}). `true` draws both and `false` (or no option, as for a
- * bare render) neither. For an `{ x?, y? }` object a dim is drawn unless it is
- * explicitly `false`: specifying one axis does not turn the other off. Each
- * drawn dim ticks at about 10 ticks. A time axis adds its rows when it is
- * elaborated (`elaborationsFor`), since its levels depend on the axes inside
- * it.
+ * What a chart's `axes` option decides on each dim: what its axis ticks at
+ * ({@link AxisTicks}) on a dim it draws, and `false` on a dim it turns off.
+ * `true` draws both and `false` turns both off. For an `{ x?, y? }` object a
+ * dim is drawn unless it is explicitly `false`: specifying one axis does not
+ * turn the other off. No option (a bare render that does not pass `axes`)
+ * decides neither dim, so the charts inside it decide their own (#1170).
+ * Each drawn dim ticks at about 10 ticks. A time axis adds its rows when it
+ * is elaborated (`elaborationsFor`), since its levels depend on the axes
+ * inside it.
  */
 export const axesEnabled = (
   axes: AxesOptions | undefined
-): Map<0 | 1, AxisTicks> => {
-  const enabled = new Map<0 | 1, AxisTicks>();
-  if (!axes) return enabled;
+): Map<0 | 1, AxisTicks | false> => {
+  const enabled = new Map<0 | 1, AxisTicks | false>();
+  if (axes == null) return enabled;
   for (const dim of [0, 1] as const) {
-    const on = axes === true || (dim === 0 ? axes.x : axes.y) !== false;
-    if (on) enabled.set(dim, DEFAULT_AXIS_TICKS);
+    const on =
+      axes === true ||
+      (typeof axes === "object" && (dim === 0 ? axes.x : axes.y) !== false);
+    enabled.set(dim, on ? DEFAULT_AXIS_TICKS : false);
   }
   return enabled;
 };
@@ -355,7 +360,7 @@ export async function layout(
     y,
     transform,
     debug = false,
-    axes = false,
+    axes,
     legend = true,
     labelRowSettings,
   }: {
@@ -451,20 +456,22 @@ export async function layout(
 
   // Chrome elaboration (src/ast/axes/elaborate.tsx): every node that owns
   // chrome wraps itself in it, as ordinary shapes + constraints — its axes,
-  // their titles, its legend. The chart's options describe the chrome of the
-  // chart ROOT, stamped on it as its request: its axes are titled (with the
-  // measure of the axis, so the outermost grouping names it), and it carries
-  // the legend, because the color scale is resolved once, from the root, for
-  // the whole render. The legend is built here, from the root as it is laid
-  // out, before any chrome wraps the nodes inside it. `legend: false` drops
-  // the legend; the color scale still paints the marks.
+  // their titles, its legend. Each chart titles the axes it draws (with the
+  // measure of the axis, so the outermost grouping names it) by its own
+  // `axes` option, wherever it sits (#1170): the render's at the root, which
+  // is the outermost chart's own unless the render gives one, and each
+  // chart's own below it (`GoFishNode._chartAxes`). Its options are stamped
+  // on it as its request. The root also carries the legend, because the
+  // color scale is resolved once, from the root, for the whole render. The
+  // legend is built here, from the root as it is laid out, before any
+  // chrome wraps the nodes inside it. `legend: false` drops the legend; the
+  // color scale still paints the marks.
   const unitScale = contexts.session.scaleContext.unit;
   const hasLegend =
     legend !== false &&
     ((isCategoricalScale(unitScale) && unitScale.color.size > 0) ||
       isContinuousColorScale(unitScale));
   child._chromeRequest = {
-    axes,
     legend: hasLegend
       ? await legendRing(
           unitScale as CategoricalScale | ContinuousColorScale,
@@ -472,15 +479,17 @@ export async function layout(
         )
       : undefined,
   };
-  // A root chart with a size of its own draws its axes around its content,
-  // its frame's one child (`isAxisBoundary`), so the content carries the
-  // request for their titles; each node titles only the axes it draws.
-  const rootContent = child.children[0];
-  if (
-    child._chartBox?.some((sized) => sized) &&
-    rootContent instanceof GoFishNode
-  )
-    rootContent._chromeRequest = { axes };
+  // A chart with a size of its own draws its axes around its content, its
+  // frame's one child (`isAxisBoundary`), so the content carries the
+  // request for their titles too; each node titles only the axes it draws.
+  for (const n of [...breadthFirst(child)]) {
+    if (n !== child && n._chartAxes === undefined) continue;
+    const chartAxes = n === child ? axes : n._chartAxes;
+    n._chromeRequest = { ...n._chromeRequest, axes: chartAxes };
+    const content = n.children[0];
+    if (n._chartBox?.some((sized) => sized) && content instanceof GoFishNode)
+      content._chromeRequest = { axes: chartAxes };
+  }
   const elaborated = await elaborateChrome(child, {
     sides: [read[0].side, read[1].side],
     labelSettings: labelRowSettings ?? manualLabelRowSettings(read),
@@ -1121,7 +1130,7 @@ async function layoutOnce(
     y,
     transform,
     debug = false,
-    axes = false,
+    axes,
     legend = true,
     colorConfig,
   } = options;

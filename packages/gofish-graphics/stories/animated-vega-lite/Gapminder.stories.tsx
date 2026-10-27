@@ -343,7 +343,7 @@ const curvesRow = <C,>(
  * to do exactly that, so the transition has nothing left to add.
  */
 export const Curves: StoryObj<Args> = {
-  args: { w: 1160, h: 400 },
+  args: { w: 1210, h: 418 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
@@ -365,7 +365,7 @@ export const Curves: StoryObj<Args> = {
  * panel is left out because it is the same picture as the first one.
  */
 export const CurvesThree: StoryObj<Args> = {
-  args: { w: 880, h: 400 },
+  args: { w: 905, h: 418 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
@@ -420,15 +420,15 @@ const SPARK_PER_INTERVAL = 20;
  *  is a hundredth of a pixel wide on screen and still strictly increasing. */
 const SPARK_EPS = 1e-3;
 /** One sparkline's height, and the layout numbers that line the sparklines
- *  up under the panels. A panel's y-axis chrome is drawn outside its box,
- *  which pushes the panels apart by roughly 29px more than the `spacing`
- *  says. The sparklines have no chrome, so they are told that number
+ *  up under the panels. A panel's y-axis chrome (its tick labels and its
+ *  title) is drawn outside its box, which pushes the panels apart by roughly
+ *  50px more than the `spacing` says. The sparklines have no chrome, so they are told that number
  *  (`SPARK_GAP`), and the label column under the row's empty lead cell is
  *  wider by the same amount, for the first panel's chrome. Both were read off
  *  a render, and both are cosmetic: a wrong number leaves the sparklines a few
  *  pixels off their panel, nothing more. */
 const SPARK_H_PX = 70;
-const PANEL_CHROME = 29;
+const PANEL_CHROME = 50;
 const SPARK_GAP = PANEL_GAP + PANEL_CHROME;
 /** The width of `n` sparklines side by side, one under each of `n` panels. */
 const sparkW = (n: number) => n * LADDER_PANEL_W + (n - 1) * SPARK_GAP;
@@ -762,7 +762,7 @@ const highlightPanel = (
  * any moment the dots mark the state the panels above them are drawing.
  */
 export const CurvesKinematics: StoryObj<Args> = {
-  args: { w: 1180, h: 645 },
+  args: { w: 1180, h: 663 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
@@ -790,7 +790,7 @@ export const CurvesKinematics: StoryObj<Args> = {
  * has there.
  */
 export const CurvesKinematicsPaused: StoryObj<Args> = {
-  args: { w: 1180, h: 645 },
+  args: { w: 1180, h: 663 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
@@ -819,7 +819,7 @@ export const CurvesKinematicsPaused: StoryObj<Args> = {
  * is already bending toward 1965.
  */
 export const CurvesPaused: StoryObj<Args> = {
-  args: { w: 1160, h: 400 },
+  args: { w: 1210, h: 418 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
@@ -978,7 +978,7 @@ const trailCurvesRow = (
   );
 
 export const TrailsCurves: StoryObj<Args> = {
-  args: { w: 600, h: 400 },
+  args: { w: 604, h: 418 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
@@ -995,7 +995,7 @@ export const TrailsCurves: StoryObj<Args> = {
  *  through its 1960 famine: the straight segments meet at a corner at 1960,
  *  and the smooth curve swings round it. */
 export const TrailsCurvesPaused: StoryObj<Args> = {
-  args: { w: 600, h: 400 },
+  args: { w: 604, h: 418 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();

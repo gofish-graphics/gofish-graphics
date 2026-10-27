@@ -164,7 +164,9 @@ the axes off. Each chart's `axes` applies at that chart: a chart used as a mark 
 its own, and draws only the axes of the domains it owns. An axis a chart turns off is
 hidden, not drawn by a chart inside it. A render's own `axes` overrides only the
 outermost chart's. The render root is an implicit chart, and a bare node rendered
-without a chart still draws no axes by default. A coordinate frame's own axes (the
+without a chart still draws no axes by default. **Built** in #1170: that default is no
+decision rather than `axes: false`, so a bare render or a combinator of charts claims no
+axis, and each chart inside it draws and titles its own axes, as it would rendered alone. A coordinate frame's own axes (the
 polar rings and angle ticks) still need an explicit `axes: true`; that is a declared
 shortcut until the frame reads its chart's setting (reading the default there would
 draw rings on every pie glyph and reject every geo map).
