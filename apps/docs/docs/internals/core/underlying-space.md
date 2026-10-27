@@ -1600,9 +1600,10 @@ concrete units on one axis are a type error. The concrete units are:
   column, so a start and an end time share an axis; the time zone stays in
   the calendar, a display parameter;
 - `"count"`, for `.count()` and `.distinct()`;
-- `"duration"`, for a size read from a time column: a difference of two
-  instants (`differenceUnits`, which `magnitude` applies; the calendar is
-  dropped too);
+- `"duration"`, for a difference of two instants (`differenceUnit`; the
+  calendar is dropped too);
+- `"Δ<u>"`, for a difference of two amounts in a declared unit `u` that does
+  not add up (`differenceUnit`: °C − °C is `"Δ°C"`, with the symbol `Δ°C`);
 - `"<base> share by <by>"`, for `.normalize()` (`shareQuantity`), so a share
   axis never silently unions with its base's own axis.
 
@@ -1612,6 +1613,35 @@ an axis title shows. `Schema.unit(u)` writes the symbol `u`. The engine's own
 units (`INSTANT`, `DURATION`, `COUNT` in `measure.ts`, a share) have none: a
 count or a share is a plain number, and a time axis's ticks already read as
 dates.
+
+**Which units add up.** The engine reads a declared unit as a `MeasureUnit`
+(`measure.ts`): the `HasUnit` and `CanAdd` when its amounts add up (#1197).
+A user's unit gets `CanAdd` from its column's `.summable()`
+(`columnQuantity` copies the column type's `CanAdd` onto the unit). The
+engine's own units say it where they are defined: `COUNT`, `DURATION`, a
+share and every `Δ` unit have it, and `INSTANT` does not. Every place that
+adds values checks it with `checkSummable` (or `checkSummableVar`, for a
+fold that holds unit variables): a size channel's sum over its rows
+(`inferNumeric`, unless an aggregate op already folded them), `.sum()` and
+the total of `.normalize()` (`fieldExpr.ts`), a treemap's entries, and a
+stack's free parts (`distributeSpaceFold`; a pinned part adds only its
+width, a difference, which always adds). Summing a declared unit without
+`CanAdd` throws an error that names the column and says to declare
+`.summable()` or to subtract a reference first (`date - start` gives a
+duration). An unknown unit passes, as everywhere in gradual typing. The
+check reads the column's type, not the rows, so a group of one row is
+checked like any other: whether a chart type-checks never depends on how
+many rows a group holds. A bar of one date or one temperature is the
+missing zero (`HasZero`, #1051), not this check. Under the declared shortcut
+of #1197, `CanAdd` is per column, so two columns of one unit can disagree:
+`unify` keeps it on the class only when both sides have it. Its home is the
+unit's one definition (#1142).
+
+A size is not a difference: `magnitude` takes its value's units as they
+are, and never relabels a time as a duration. A span of time is a duration
+because something computed it as one, a `position` offset joined against
+the point's difference units below, or two positions (`x: start, x2: end`),
+which are two instants and add nothing.
 
 A quantity whose unit is declared is that unit, a concrete term, and nothing
 more: two charts that each declare their own `"value"` column, one in USD and
@@ -1693,10 +1723,11 @@ but as a point plus a difference, not two points. When the content is
 pinned, it is the point and the offset is the difference that moves it.
 Otherwise the content is a difference (a magnitude, a width) and the offset
 is the point it hangs from. The difference must be in the point's difference
-units (`differenceUnits`), so the join is between `differenceUnits(point)`
-and the difference: a USD position moves by USD, and a time position moves
-by a duration, or by a plain number, which is bound to one. Two instants
-clash (`"instant"` against `"duration"`), since a time does not move a time.
+units (`differenceUnits`, from `differenceUnit` in `measure.ts`), so the join
+is between `differenceUnits(point)` and the difference: a USD position moves
+by USD when USD adds, a °C position by Δ°C, and a time position by a
+duration, or by a plain number, which is bound to one. Two instants clash
+(`"instant"` against `"duration"`), since a time does not move a time.
 The result takes the point's unit and calendar, titled by both sides. An ordinal axis has titles and no unit, so it takes no part in the
 join: a datum position beside a category spread on the same axis, or a
 spread whose targets mix a category spread with bars, unifies only the
@@ -1843,7 +1874,7 @@ chart(survey, { schema: { response: Schema.ordered(LEVELS).diverging() } });
 ```
 
 A column type is a record keyed by class name (`ColumnType`), and the engine
-reads only the classes, never the builder words. Six classes exist:
+reads only the classes, never the builder words. Eight classes exist:
 
 - `HasOrder` (`Schema.ordered(levels)`): the values are the levels of a fixed
   order. `splitEntries` groups a `by` over the column in that order instead
@@ -1933,6 +1964,12 @@ reads only the classes, never the builder words. Six classes exist:
   order's levels must fit its other classes, so a time or a text-level
   column takes no other unit (`checkNoUnit` and `checkLevelsFit` in
   `schema.ts`).
+- `CanAdd` (`{}`, #1197): the column's amounts add up, so a sum of them
+  means something. Declared with `.summable()`, which needs `HasUnit` and no
+  `HasCalendar` in its `this` type: only amounts in a unit add up, and two
+  instants never do (`checkSummableType` in `schema.ts` checks a wire
+  record the same way, and Python's `.summable()` raises the same
+  messages). See [which units add up](#measures-units-are-types).
 - `HasQuantity` (`{ name }`, #955): the values are amounts of the quantity
   `name` (`Schema.quantity(name)`, or `.quantity(name)` after another
   builder), when it is not the column's own name. It titles the axis and

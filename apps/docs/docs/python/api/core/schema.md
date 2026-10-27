@@ -30,6 +30,7 @@ Schema.ordered(levels).diverging(midpoint=m)   # HasOrder and HasMidpoint
 Schema.time()                        # HasCalendar and HasUnit (the instant), in UTC
 Schema.time(zone=zone)               # the same, in the time zone `zone`
 Schema.unit(unit)                    # HasUnit, in the unit `unit`
+Schema.unit(unit).summable()         # HasUnit and CanAdd: the amounts add up
 Schema.quantity(name)                # HasQuantity, amounts of the quantity `name`
 Schema.quantity(name).unit(unit)     # HasUnit and HasQuantity
 ```
@@ -39,7 +40,8 @@ row below lists, and `.diverging()` needs the order that `.ordered(...)`
 gives, because a midpoint is a point along an order. `.quantity(name)` and
 `.unit(unit)` may follow any builder, but a column has one unit, so
 `.unit(unit)` after `Schema.time()` raises a `TypeError`, and an ordered
-column takes a unit only when its levels are numbers.
+column takes a unit only when its levels are numbers. `.summable()` needs a
+unit other than a time's.
 
 | Builder                                     | Class                    | Meaning                                                 |
 | ------------------------------------------- | ------------------------ | ------------------------------------------------------- |
@@ -47,6 +49,7 @@ column takes a unit only when its levels are numbers.
 | `.diverging()`                              | `HasMidpoint`            | The order has a midpoint, a point along it. See below.  |
 | `Schema.time()`                             | `HasCalendar`, `HasUnit` | The column's values are instants, read on a calendar.   |
 | `Schema.unit(unit)` / `.unit(unit)`         | `HasUnit`                | The column's values are amounts in the unit `unit`.     |
+| `.summable()`                               | `CanAdd`                 | The column's amounts add up. See below.                 |
 | `Schema.quantity(name)` / `.quantity(name)` | `HasQuantity`            | The column's values are amounts of the quantity `name`. |
 
 ## Parameters
@@ -147,6 +150,30 @@ column takes a unit only when its levels are numbers.
   `field(x).bin(...)` are amounts of `x`: a `partition` over them titles its
   axis as `x` does and shares its unit. Counts, `.normalize()` shares, and
   times add no unit to an axis title.
+
+**`CanAdd`.**
+
+- A `size` channel (`w`, `h`, ...), a [`stack`](/python/api/operators/stack), a
+  [`treemap`](/python/api/operators/treemap) `size`, `field(x).sum()` and
+  `field(x).normalize()` add up their values. Adding up values in a declared
+  unit needs `CanAdd`: without it, it is an error that names the column and
+  the unit, and says to declare `.summable()` or to subtract a reference
+  first.
+- A time column never has `CanAdd`: two instants do not add up. Its
+  difference does (`end - start` is a duration), and a mark with two
+  positions (`x="start", x2="end"`) adds nothing.
+- A column with no declared unit adds up without `.summable()`.
+- A size channel adds up its rows whenever it reads a column, even when a
+  group has one row. A pipeline op that folds the rows first
+  (`field(x).mean()`, `.count()`) adds nothing.
+- `.count()`, `.distinct()` and `.normalize()` shares add up.
+- The difference of two amounts in a unit that adds up is in that unit. The
+  difference of two amounts in a unit that does not is in the unit `Δ` and
+  the unit's name (`"Δ°C"`), which adds up.
+- `.summable()` needs a unit, so `Schema.quantity(name).summable()` and
+  `Schema.time().summable()` raise a `TypeError`. `chart` checks a
+  column-type record passed as is (the wire form, `{"CanAdd": {}}`) the
+  same way.
 
 **`HasQuantity`.**
 

@@ -86,9 +86,11 @@ and yields to either real source. See
 
 **Capabilities get plain names.** A capability is named `Has<Thing>` for a
 property and `Can<Verb>` for an operation: `HasZero`, `HasOrder`, `HasCycle`,
-`CanSum`, `CanNegate`. These read at a glance for someone who is not a
+`CanAdd`, `CanNegate`. These read at a glance for someone who is not a
 mathematician. Math names like monoid or torsor appear only in the docs, as
-analogies. Named types such as `Price` or `Revenue` are sugar over the
+analogies. The builder method that declares a capability names what the user
+gets, not the class: `.summable()` declares `CanAdd`, as `.diverging()`
+declares `HasMidpoint`. Named types such as `Price` or `Revenue` are sugar over the
 capabilities, like chart templates over operators, so design the capabilities
 first.
 

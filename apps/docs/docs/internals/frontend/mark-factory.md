@@ -98,8 +98,10 @@ own; `createMark` could grow a `"pos"` channel the same way if a future shape
 needs one.
 
 `inferSize` and `inferPos` are two instantiations of one numeric-inference
-factory, `inferNumeric(agg)` — they differ only in the aggregation (`sumOf`
-vs `meanOf`, `fieldExpr.ts`). Both skip a missing value (null or undefined,
+factory, `inferNumeric(agg, sums)` — they differ only in the aggregation
+(`sumOf` vs `meanOf`, `fieldExpr.ts`), and `sums` says the aggregation adds
+the rows, so `inferSize` checks that the column's unit can be summed
+(`checkSummable`, #1197) unless a pipeline op already folded the rows. Both skip a missing value (null or undefined,
 `isMissing`, the rule `dropNulls` and the schema's classes use; NaN is a
 number). A mean divides by how many values there are, and over none it is
 undefined. A sum over no rows is 0, and over rows whose values are all
@@ -432,7 +434,7 @@ Today's channels are `"size"` and `"color"`. To add (say) `"angle"`:
 
 1. Add `"angle"` to the `ChannelType` union in `channels.ts`.
 2. If a numeric aggregation fits, instantiate the existing factory —
-   `export const inferAngle = inferNumeric(meanOf)` (or whatever aggregation
+   `export const inferAngle = inferNumeric(meanOf, false)` (or whatever aggregation
    makes sense) — and measure tagging comes along for free. Otherwise write
    `inferAngle(accessor, data, measure?)` next to it with the same signature.
 3. Extend `DeriveMarkProps`'s conditional with the input type for `"angle"`.
