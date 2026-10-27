@@ -108,13 +108,13 @@ type LabelAngle = AxisLabelOptions["angle"];
 function renderGroupedBar(args: Args, angle: LabelAngle): HTMLElement {
   const container = initializeContainer();
 
-  chart(cityYear, { axes: { x: { label: { angle } } } })
+  chart(cityYear, { axes: { x: { label: { angle } } }, w: args.w, h: args.h })
     .flow(
       spread({ by: "city", dir: "x", spacing: 24 }),
       spread({ by: "year", dir: "x", spacing: 0 })
     )
     .mark(rect({ h: "visitors", fill: "year" }))
-    .render(container, { w: args.w, h: args.h });
+    .render(container);
 
   return container;
 }
@@ -161,10 +161,9 @@ export const GroupedLabelAngleAuto0: StoryObj<Args> = {
 };
 
 // Narrower than GroupedLabelAngleAuto0, so upright years would overlap, while
-// the city names still fit: inner (year) 45°, outer (city) 0°. The render
-// holds the axes and legend, so it is wider and taller than the 250 x 210 plot.
+// the city names still fit: inner (year) 45°, outer (city) 0°.
 export const GroupedLabelAngleAutoInner45Outer0: StoryObj<Args> = {
-  args: { w: 336, h: 290 },
+  args: { w: 250, h: 210 },
   render: (args: Args) => renderGroupedBar(args, "auto"),
 };
 
@@ -181,13 +180,13 @@ const regionProduct = ["Laptops", "Smartphones", "Accessories", "Wearables"]
 function renderGroupedProducts(args: Args, angle: LabelAngle) {
   const container = initializeContainer();
 
-  chart(regionProduct, { axes: { x: { label: { angle } } } })
+  chart(regionProduct, { axes: { x: { label: { angle } } }, w: args.w, h: args.h })
     .flow(
       spread({ by: "region", dir: "x", spacing: 24 }),
       spread({ by: "product", dir: "x", spacing: 0 })
     )
     .mark(rect({ h: "sales", fill: "product" }))
-    .render(container, { w: args.w, h: args.h });
+    .render(container);
 
   return container;
 }
@@ -206,9 +205,8 @@ export const GroupedLabelAngleAutoLongInner45Outer0: StoryObj<Args> = {
 };
 
 // Narrow: only vertical product names clear each other: inner 90°, outer 0°.
-// The render holds the axes and legend around a 220 x 210 plot.
 export const GroupedLabelAngleAutoLongInner90Outer0: StoryObj<Args> = {
-  args: { w: 345, h: 329 },
+  args: { w: 220, h: 210 },
   render: (args: Args) => renderGroupedProducts(args, "auto"),
 };
 
@@ -216,7 +214,7 @@ export const GroupedLabelAngleAutoLongInner90Outer0: StoryObj<Args> = {
 // hidden and takes no space; the color legend still names each product. The
 // region names fit upright: inner hidden, outer 0°.
 export const GroupedLabelAngleAutoInnerHiddenOuter0: StoryObj<Args> = {
-  args: { w: 230, h: 210 },
+  args: { w: 90, h: 210 },
   render: (args: Args) => renderGroupedProducts(args, "auto"),
 };
 
@@ -224,17 +222,17 @@ export const GroupedLabelAngleAutoInnerHiddenOuter0: StoryObj<Args> = {
 // the products. Inner hidden, outer 0°, and it logs a console warning that
 // the "product" categories are not labeled.
 export const GroupedLabelAngleAutoInnerHiddenNoLegend: StoryObj<Args> = {
-  args: { w: 190, h: 210 },
+  args: { w: 90, h: 210 },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(regionProduct, { axes: { x: { label: { angle: "auto" } } } })
+    chart(regionProduct, { axes: { x: { label: { angle: "auto" } } }, w: args.w, h: args.h })
       .flow(
         spread({ by: "region", dir: "x", spacing: 24 }),
         spread({ by: "product", dir: "x", spacing: 0 })
       )
       .mark(rect({ h: "sales", fill: "region" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },
@@ -247,13 +245,13 @@ export const GroupedHorizontalLabelAngleAuto0: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(regionProduct, { axes: { y: { label: { angle: "auto" } } } })
+    chart(regionProduct, { axes: { y: { label: { angle: "auto" } } }, w: args.w, h: args.h })
       .flow(
         spread({ by: "region", dir: "y", spacing: 16 }),
         spread({ by: "product", dir: "y", spacing: 0 })
       )
       .mark(rect({ w: "sales", fill: "product" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },
