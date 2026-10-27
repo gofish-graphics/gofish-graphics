@@ -435,8 +435,7 @@ export const sumOf = (values: readonly unknown[]): number | undefined => {
 };
 
 /** {@link sumOf}, checked: the sum `where` takes of values of quantity
- *  `quantity`, whose unit must add up (`checkSummable`, #1197). Every
- *  place that sums values sums them here. */
+ *  `quantity`, whose unit must add up (`checkSummable`, #1197). */
 export const sumIn = (
   values: readonly unknown[],
   quantity: Quantity | undefined,
@@ -628,10 +627,11 @@ export function applyEntryNormalize(
   const baseQuantity = entryValues
     .map(datumQuantity)
     .find((q) => q !== undefined);
-  // The window's total adds the entries.
-  const total = sumIn(nums, baseQuantity, "field(...).normalize()")!;
+  // The window's total adds the entries. They are numbers (a missing one is
+  // NaN), so a NaN entry makes the total NaN, and every share 0.
+  const total = sumIn(nums, baseQuantity, "field(...).normalize()");
   const quantity = shareQuantity(baseQuantity, byName);
-  if (!(total > 0)) {
+  if (total === undefined || !(total > 0)) {
     if (typeof console !== "undefined" && typeof console.warn === "function") {
       console.warn(
         `field(...).normalize(): the entry total is ${total} (≤ 0), so ` +

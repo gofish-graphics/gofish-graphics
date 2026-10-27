@@ -19,6 +19,7 @@
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 import { getQuantity } from "../ast/data";
+import { applyEntryNormalize } from "../ast/fieldExpr";
 import {
   columnType,
   columnTypeOf,
@@ -78,6 +79,7 @@ const {
   Unit,
   stack,
   treemap,
+  normalize,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -1286,6 +1288,57 @@ console.log("# measure: CanAdd");
     "a treemap of mean °C throws",
     tree !== undefined && /treemap/.test(tree),
     tree
+  );
+
+  // The `normalize(rows, field)` data helper adds the column, so it checks
+  // it as `field(...).normalize()` does.
+  const normalized = (schema: object, column: string) => {
+    let seen: any[] = [];
+    return errorOf(async () => {
+      await chart(sales, { schema })
+        .flow(
+          derive((rows: any[]) => (seen = normalize(rows, column))),
+          spread({ by: "region", dir: "x" })
+        )
+        .mark(rect({ h: field(column).mean() }))
+        .toDisplayList(SIZE);
+    }).then((e) => ({ e, seen }));
+  };
+  const normCelsius = await normalized({ temp: Unit("°C") }, "temp");
+  ok(
+    "normalize(rows, field) of °C throws, naming the column",
+    normCelsius.e !== undefined &&
+      /^normalize\(\.\.\.\) sums the column "temp"/.test(normCelsius.e),
+    normCelsius.e
+  );
+  const normUsd = await normalized({ usd: Unit("USD").summable() }, "usd");
+  ok(
+    "normalize(rows, field) of a summable USD column divides by the total",
+    normUsd.e === undefined &&
+      JSON.stringify(normUsd.seen.map((r) => r.usd)) ===
+        JSON.stringify([10 / 25, 5 / 25, 7 / 25, 3 / 25]),
+    normUsd.e ?? JSON.stringify(normUsd.seen)
+  );
+
+  // A window's shares: a NaN entry makes the total NaN, so every share is 0
+  // with a warning, never a NaN share beside valid ones.
+  const shares = (xs: number[]) =>
+    applyEntryNormalize(xs.map((datum) => ({ type: "datum", datum }) as any))
+      .map((v: any) => v.datum);
+  const warn = console.warn;
+  let warned = 0;
+  console.warn = () => void warned++;
+  const nanShares = shares([1, NaN, 3]);
+  console.warn = warn;
+  ok(
+    "a NaN entry in a normalize window makes every share 0, with a warning",
+    JSON.stringify(nanShares) === "[0,0,0]" && warned === 1,
+    JSON.stringify(nanShares)
+  );
+  ok(
+    "and a window of numbers shares its total",
+    JSON.stringify(shares([1, 3])) === "[0.25,0.75]",
+    JSON.stringify(shares([1, 3]))
   );
 
   // Every `.sum()` is checked, wherever it is read: a label's and a color's

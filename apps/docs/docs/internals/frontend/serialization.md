@@ -213,8 +213,9 @@ form and emits the opaque `derive`. A `derive`'s `schema` (`derive(fn, { schema 
 `schema`, and the registry passes it to the rebuilt `derive`, which applies
 it to the rows the Python callback returns. A chart's `schema` crosses as
 the record of classes each entry stands for, never as the entry a user
-wrote: JS `toJSON` writes it with `schemaToWire` (`schema.ts`), and Python's
-`chart` and `derive` with `_schema_wire`, so a `Unit`, a unit's name and a
+wrote: JS `toJSON` writes a chart's with `schemaToWire` (`schema.ts`), JS
+`derive` keeps its own in that form from the moment it is built, and Python's
+`chart` and `derive` write theirs with `_schema_wire`, so a `Unit`, a unit's name and a
 column record `{ name, unit }` reach the wire the same from both languages.
 A unit's classes ride in its `HasUnit`: `Unit("USD").summable()` is
 `{ "HasUnit": { "unit": "USD", "symbol": "USD", "classes": { "CanAdd": {} } } }`,

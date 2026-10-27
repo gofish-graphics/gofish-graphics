@@ -27,7 +27,8 @@ import { UnderlyingSpace, UNDEFINED, magnitude } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
 import { createOperator } from "../marks/createOperator";
 import { SplitBy, splitEntries } from "../datumProjection";
-import { sumIn, type FieldExpr } from "../fieldExpr";
+import type { FieldExpr } from "../fieldExpr";
+import { checkSummable } from "../measure";
 import { squarify, type Tile } from "../../families/tile";
 import { Frontend } from "gofish-ir";
 
@@ -97,10 +98,12 @@ const Treemap = createNodeOperator(
 
     const dims = elaborateDims(fancyDims);
     // A tile's area is its entry's share of the total, so the treemap adds
-    // its entries: their unit must add up (`sumIn`, #1197).
-    const sizeQuantity = sizeChannel
-      ?.map(getQuantity)
-      .find((q) => q !== undefined);
+    // its entries: their unit must add up (`checkSummable`, #1197). It is
+    // checked once here, so the layout below sums the weights as they are.
+    checkSummable(
+      sizeChannel?.map(getQuantity).find((q) => q !== undefined),
+      "treemap({ size })"
+    );
 
     const node = new GoFishNode(
       {
@@ -206,11 +209,7 @@ const Treemap = createNodeOperator(
           }));
 
           // Ensure total > 0 so d3 doesn't produce NaNs.
-          const total = sumIn(
-            leafData.map((d) => d.weight),
-            sizeQuantity,
-            "treemap({ size })"
-          )!;
+          const total = leafData.reduce((acc, d) => acc + d.weight, 0);
           if (total <= 0) {
             for (const d of leafData) d.weight = 1;
           }

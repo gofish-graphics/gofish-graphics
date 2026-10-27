@@ -1644,9 +1644,11 @@ checks it with `checkSummable`: a size channel's sum over its rows
 (`inferNumeric`; when an aggregate op already folded the rows, the channel
 takes the op's value and sums nothing), `.sum()` in any channel or label
 (every caller of `evalFieldValues` passes the column's quantity), the
-total of `.normalize()`, and a treemap's total. A cut's sizes are slices of
-a whole it adds up, so its per-row size channel (`inferEntrySize`) checks
-its column with `checkSummable` too. These sums read the unit as their
+total of `.normalize()`, and the total of the `normalize(rows, field)` data
+helper. A treemap's layout adds its tiles' weights on every pass, so the
+treemap checks its `size` channel with `checkSummable` once, where it is
+built. A cut's sizes are slices of a whole it adds up, so its per-row size
+channel (`inferEntrySize`) checks its column with `checkSummable` too. These sums read the unit as their
 chart knows it. A stack adds spaces, not values, in the type walk, so a
 space's `UnitRecord` carries `summands`, the quantities of its values in a
 declared unit (`quantityUnits`; a shared `joinUnits` unions them, each once),

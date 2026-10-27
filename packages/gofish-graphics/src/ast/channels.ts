@@ -19,6 +19,7 @@ import { checkSummable, columnQuantity, type Quantity } from "./measure";
 import { Frontend } from "gofish-ir";
 import {
   evalFieldValues,
+  getFieldOps,
   isMissing,
   meanOf,
   sumIn,
@@ -320,16 +321,19 @@ function firstRowValue<T extends Record<string, any>>(
     // number of rows, even when there are none, and `.sum()` checks that
     // its column adds up. The value is the fold's, not a value of the
     // field, so it records no field. A fold that has no value (the mean of
-    // nothing) is no value here either.
-    const { values, folded } = evalFieldValues(
-      accessor,
-      data,
-      resolveColumn(data, accessor).quantity
-    );
-    if (folded)
-      return isMissing(values[0])
-        ? { kind: "none" }
-        : { kind: "row", value: values[0] };
+    // nothing) is no value here either. A field with no ops reads the
+    // first row alone.
+    if (getFieldOps(accessor).length > 0) {
+      const { values, folded } = evalFieldValues(
+        accessor,
+        data,
+        resolveColumn(data, accessor).quantity
+      );
+      if (folded)
+        return isMissing(values[0])
+          ? { kind: "none" }
+          : { kind: "row", value: values[0] };
+    }
     return row === undefined
       ? { kind: "none" }
       : { kind: "row", value: row[accessor.name], field: accessor.name };

@@ -1026,6 +1026,23 @@ class TestSchema:
             ).mark(rect())
         )["options"]["schema"]
         assert schema == json.loads(fixture.read_text(encoding="utf-8"))
+        # A derive's schema crosses the wire the same way, as JS's does.
+        derive_schema = ir(
+            derive(
+                lambda d: d,
+                schema={
+                    "balance": {"name": "Balance", "unit": USD},
+                    "revenue": USD,
+                    "area": "km²",
+                    "temp": {"unit": Celsius},
+                    "region": Schema.ordered(["n", "s"]).diverging(),
+                    "day": Unit.time(zone="UTC"),
+                    "sold": {"name": "Sold", "unit": Unit.time(zone="America/New_York")},
+                    "wait": Unit.duration,
+                },
+            )
+        )["schema"]
+        assert derive_schema == schema
 
     def test_a_column_record_rejects_unknown_keys(self):
         with pytest.raises(

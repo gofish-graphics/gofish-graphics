@@ -799,6 +799,38 @@ async function main() {
       wire === fixture,
       wire
     );
+    // A derive's schema crosses the wire the same way (Python's test_ast.py
+    // checks its derive against the fixture too).
+    const deriveDoc = await Serialize.toJSON(
+      chart([{ balance: 1 }])
+        .flow(
+          derive((rows: any[]) => rows, {
+            schema: {
+              balance: { name: "Balance", unit: USD },
+              revenue: USD,
+              area: "km²",
+              temp: { unit: Celsius },
+              region: Schema.ordered(["n", "s"]).diverging(),
+              day: Unit.time({ zone: "UTC" }),
+              sold: {
+                name: "Sold",
+                unit: Unit.time({ zone: "America/New_York" }),
+              },
+              wait: Unit.duration,
+            },
+          })
+        )
+        .mark(rect({}))
+    );
+    const deriveWire = JSON.stringify(
+      sorted(deriveDoc.root.operators?.[0]?.schema)
+    );
+    check(
+      "a derive's schema of Units, names and records serializes to the " +
+        "shared fixture",
+      deriveWire === fixture,
+      deriveWire
+    );
     // A record of the wire form is read back to the same column types.
     const back = await applySchema([{ balance: 1 }], schemaWireFixture as any);
     check(

@@ -523,6 +523,27 @@ async function main() {
         getColumnTypes(asDates)?.t?.HasUnit?.zone === "America/New_York",
       JSON.stringify([asDates[0], getColumnTypes(asDates)])
     );
+    // A missing value fits every class, a time's included: a derive whose
+    // result has a null time keeps the column's type, as Python's does.
+    const withNull = await derived(
+      (rows) => [
+        ...rows.map((r) => ({ ...r, t: new Date(r.t) })),
+        { t: null, n: 2 },
+      ],
+      undefined,
+      ny
+    );
+    const nullFresh = await derived((rows) => [
+      ...rows.map((r) => ({ ...r, at: new Date(at) })),
+      { at: null },
+    ]);
+    check(
+      "a derive result with a null time keeps the time type",
+      withNull[1].t === null &&
+        getColumnTypes(withNull)?.t?.HasUnit?.zone === "America/New_York" &&
+        getColumnTypes(nullFresh)?.at?.HasUnit?.zone === "UTC",
+      JSON.stringify([withNull, getColumnTypes(withNull), nullFresh])
+    );
     const asStrings = await derived(
       (rows) => rows.map((r) => ({ ...r, t: "2024-03-05T09:00" })),
       undefined,

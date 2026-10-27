@@ -186,9 +186,8 @@ const ACCEPTS: {
   HasOrder: (v) => v == null || typeof v === "string" || typeof v === "number",
   HasMidpoint: () => true,
   HasUnit: (v, { zone }) =>
-    zone !== undefined
-      ? isEpochMs(v) || isDate(v)
-      : v == null || typeof v === "number",
+    v == null ||
+    (zone !== undefined ? isEpochMs(v) || isDate(v) : typeof v === "number"),
   HasQuantity: () => true,
   HasDomain: (v, { lo, hi }) =>
     v == null || (typeof v === "number" && lo <= v && v <= hi),
