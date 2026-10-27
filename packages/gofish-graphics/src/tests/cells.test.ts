@@ -36,7 +36,7 @@ import {
   applySchema,
   copyColumnTypes,
   setColumnTypes,
-  Schema as SrcSchema,
+  Unit as SrcUnit,
 } from "../ast/schema";
 import { struct as srcStruct } from "../lib";
 
@@ -57,6 +57,7 @@ const {
   line,
   selectAll,
   Schema,
+  Unit,
 } = GoFish as any;
 const DistCalendar = (GoFish as any).Calendar;
 const distField = (GoFish as any).field;
@@ -923,7 +924,7 @@ async function main() {
     );
     const times = await applySchema(
       [{ d: "2024-01-05" }, { d: "2024-03-20" }],
-      { d: SrcSchema.time() }
+      { d: SrcUnit.time() }
     );
     check(
       "a time column bins into calendar cells in its zone",
@@ -969,7 +970,7 @@ async function main() {
     );
     const render = async (by: any, x: any = { title: false }) =>
       await chart(daily, {
-        schema: { date: Schema.time() },
+        schema: { date: Unit.time() },
         axes: { x, y: false },
       })
         .flow(spread({ by, dir: "x" }))
@@ -1136,7 +1137,7 @@ async function main() {
       value: 1,
     }));
     const weekDl = await chart(weekDays, {
-      schema: { date: Schema.time() },
+      schema: { date: Unit.time() },
       axes: { x: { title: false, levels: [true, DistCalendar.month] }, y: false },
     })
       .flow(spread({ by: distField("date").bin(DistCalendar.week), dir: "x" }))
@@ -1187,7 +1188,7 @@ async function main() {
     const groupedBy = async (outer: any, x: any) =>
       await chart(
         daily.flatMap((d) => ["a", "b"].map((g) => ({ ...d, g }))),
-        { schema: { date: Schema.time() }, axes: { x, y: false } }
+        { schema: { date: Unit.time() }, axes: { x, y: false } }
       )
         .flow(spread({ by: outer, dir: "x" }), spread({ by: "g", dir: "x" }))
         .mark(rect({ w: 10, h: distField("value").sum() }))
@@ -1269,7 +1270,7 @@ async function main() {
     // Nested splits that bin the same column partition one value, as one
     // chained key does: the same dividers and the same row gaps.
     const split = await chart(daily, {
-      schema: { date: Schema.time() },
+      schema: { date: Unit.time() },
       axes: { x: { title: false }, y: false },
     })
       .flow(
@@ -1540,7 +1541,7 @@ async function main() {
       v: 1,
     }));
     const tableDl = await chart(days, {
-      schema: { date: Schema.time() },
+      schema: { date: Unit.time() },
       axes: { x: { title: false }, y: { title: false } },
     })
       .flow(
@@ -1591,7 +1592,7 @@ async function main() {
     console.log("\n# partition over the parts of a cycle");
     const cycleErr = async (step: any) =>
       await errorOfAsync(() =>
-        chart(days, { schema: { date: Schema.time() }, axes: false })
+        chart(days, { schema: { date: Unit.time() }, axes: false })
           .flow(partition({ by: distField("date").bin(step), dir: "x" }))
           .mark(rect({ h: 10 }))
           .toDisplayList({ w: 200, h: 100 })
@@ -1624,7 +1625,7 @@ async function main() {
     // the user's levels, with the cycle's unit first.
     const keyErr = async (by: any) =>
       await errorOfAsync(() =>
-        chart(days, { schema: { date: Schema.time() }, axes: false })
+        chart(days, { schema: { date: Unit.time() }, axes: false })
           .flow(partition({ by, dir: "x" }))
           .mark(rect({ h: 10 }))
           .toDisplayList({ w: 200, h: 100 })
@@ -1663,7 +1664,7 @@ async function main() {
     const heat = async (fill: any) =>
       rectsOf(
         await chart(days, {
-          schema: { date: Schema.time() },
+          schema: { date: Unit.time() },
           axes: false,
           legend: false,
         })
@@ -1693,7 +1694,7 @@ async function main() {
         (await heat(distField("v").count())).length === 14
     );
     const placed = await chart(days, {
-      schema: { date: Schema.time() },
+      schema: { date: Unit.time() },
       axes: false,
       legend: false,
     })
@@ -1763,7 +1764,7 @@ async function main() {
       value: 1,
     }));
     const months = rectsOf(
-      await chart(daily, { schema: { date: Schema.time() }, ...noAxes })
+      await chart(daily, { schema: { date: Unit.time() }, ...noAxes })
         .flow(
           partition({
             by: distField("date").bin([DistCalendar.year, DistCalendar.month]),
@@ -1790,7 +1791,7 @@ async function main() {
       { date: "2024-03-10", region: "S", value: 3 },
     ];
     const stacked = rectsOf(
-      await chart(regions, { schema: { date: Schema.time() }, ...noAxes })
+      await chart(regions, { schema: { date: Unit.time() }, ...noAxes })
         .flow(
           partition({
             by: distField("date")

@@ -234,7 +234,7 @@ export const inferEntrySize = <T>(
  * ({@link resolveColumn}): its {@link Quantity}, so the underlying-space
  * layer can unify units and title axes, and the column's type from
  * the chart's schema, when it has one, so a position over a time column
- * (`HasCalendar`) builds a time space. A value with a column type also
+ * (in `Unit.time()`) builds a time space. A value with a column type also
  * records the field it was read from. The caller may pass the column
  * (createOperator resolves it once per channel from the array carrying the
  * column types); when omitted it is resolved locally from `d`.

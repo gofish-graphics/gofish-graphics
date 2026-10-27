@@ -5,7 +5,7 @@
  * by its quantity (its declared `name`, else the column; the
  * cells of `field(x).bin(p)` are amounts of `x`), which unifies with
  * anything. A declared unit (`Unit`, or a unit's name, the
- * "instant" of `Schema.time()`, the "count" of `.count()`) is concrete, and
+ * "instant" of `Unit.time()`, the "count" of `.count()`) is concrete, and
  * two different declared units on one axis are a `MeasureClash`. A binding
  * holds for the whole render. The quantity names title the axis, followed by
  * a declared unit's symbol: "Pay (USD)".
@@ -71,7 +71,6 @@ const {
   Calendar,
   ribbon,
   line,
-  Schema,
   Unit,
   stack,
   treemap,
@@ -142,11 +141,11 @@ console.log("# measure: quantities on the source array");
   );
   ok(
     "a time column's unit is an instant",
-    columnQuantity("start", Schema.time().type).unit?.unit === "instant"
+    columnQuantity("start", { HasUnit: Unit.time().type }).unit?.unit === "instant"
   );
   ok(
     "and an instant has no symbol",
-    columnQuantity("start", Schema.time().type).unit?.symbol === undefined
+    columnQuantity("start", { HasUnit: Unit.time().type }).unit?.symbol === undefined
   );
   ok(
     "a Unit declares the unit",
@@ -396,8 +395,7 @@ console.log("# measure: a position offset joins in difference units");
   const date: Quantity = {
     name: "date",
     column: "date",
-    unit: INSTANT,
-    calendar: { zone: "UTC" },
+    unit: { ...INSTANT, zone: "UTC" },
   };
   const lag: Quantity = { name: "lag", column: "lag", unit: DURATION };
   const yOf = (node: GoFishNode) =>
@@ -438,13 +436,13 @@ console.log("# measure: a position offset joins in difference units");
   ok(
     "(c) a time position with a numeric offset: the offset is a duration",
     (spaceUnit(c1)!.unit as any).unit === "instant" &&
-      c1.measure?.calendar?.zone === "UTC"
+      c1.measure?.zone === "UTC"
   );
   const c2 = yOf(positionNode({ y: by(5, lag) }, [leaf("pinned", date)]));
   ok(
     "(c) a time position with a duration offset stays on its calendar",
     (spaceUnit(c2)!.unit as any).unit === "instant" &&
-      c2.measure?.calendar?.zone === "UTC"
+      c2.measure?.zone === "UTC"
   );
   const twoTimes = await errorOf(() =>
     positionNode({ y: by(5, date) }, [
@@ -456,7 +454,7 @@ console.log("# measure: a position offset joins in difference units");
   ok(
     "a duration hung at a time is a time on its calendar",
     (spaceUnit(hung)!.unit as any).unit === "instant" &&
-      hung.measure?.calendar?.zone === "UTC" &&
+      hung.measure?.zone === "UTC" &&
       JSON.stringify(hung.measure?.titles) === JSON.stringify(["date", "lag"])
   );
 }
@@ -580,14 +578,14 @@ const renders: [string, () => any][] = [
         ),
   ],
   [
-    "gantt: Schema.time start / end, no annotation",
+    "gantt: Unit.time() start / end, no annotation",
     () =>
       chart(
         [
           { task: "a", start: "2024-01-01", end: "2024-02-01" },
           { task: "b", start: "2024-01-15", end: "2024-03-01" },
         ],
-        { schema: { start: Schema.time(), end: Schema.time() } }
+        { schema: { start: Unit.time(), end: Unit.time() } }
       )
         .flow(
           spread({ by: "task", dir: "y" }),
@@ -900,9 +898,7 @@ console.log("# measure: titles are Quantity (unit)");
     price: i * 2,
   }));
   const timeSchema = {
-    // A time with a quantity has no user form (a column record takes no
-    // calendar), so this one is the record of classes, the wire form.
-    date: { HasCalendar: { zone: "UTC" }, HasQuantity: { name: "Sold" } },
+    date: { name: "Sold", unit: Unit.time() },
     price: Unit("USD"),
   };
   const byTime = (by: any, op: any = partition) =>
@@ -1037,7 +1033,7 @@ console.log("# measure: titles are Quantity (unit)");
         { day: "2024-03-01", price: 1 },
         { day: "2024-03-09", price: 3 },
       ],
-      { schema: { day: Schema.time() }, axes: true }
+      { schema: { day: Unit.time() }, axes: true }
     )
       .flow(scatter({ x: "day", y: "price" }))
       .mark(rect({ w: 4, h: 4 }))
@@ -1223,14 +1219,14 @@ console.log("# measure: CanAdd");
   );
 
   const time = await errorOf(() =>
-    stacked({ day: Schema.time() }, rect({ h: "day" }))
+    stacked({ day: Unit.time() }, rect({ h: "day" }))
   );
   ok(
-    "a Schema.time() column as a size throws, suggesting a difference",
+    "a Unit.time() column as a size throws, suggesting a difference",
     time !== undefined &&
       /"day"/.test(time) &&
-      /times cannot be summed/.test(time) &&
-      /duration/.test(time),
+      /in the unit "instant", which cannot be summed/.test(time) &&
+      /their difference, in "duration", does/.test(time),
     time
   );
 
@@ -1320,7 +1316,7 @@ console.log("# measure: CanAdd");
         { task: "a", start: "2024-03-01", end: "2024-03-05" },
         { task: "b", start: "2024-03-03", end: "2024-03-09" },
       ],
-      { schema: { start: Schema.time(), end: Schema.time() } }
+      { schema: { start: Unit.time(), end: Unit.time() } }
     )
       .flow(spread({ by: "task", dir: "y" }))
       .mark(rect({ x: "start", x2: "end", h: 10 }))
@@ -1328,8 +1324,9 @@ console.log("# measure: CanAdd");
   );
   ok("x/x2 spans of instants still render", spans === undefined, spans);
 
-  // A difference keeps its unit: °C − °C is in °C. Only an instant's
-  // difference has a unit of its own, a duration, on no calendar.
+  // A difference keeps its unit: °C − °C is in °C. A unit that names its
+  // difference unit (the instant names a duration) has that one, on no
+  // calendar, and so do its summands.
   const celsiusRecord = withUnits(new Units(), () => {
     const r = quantityUnits({
       name: "temp",
@@ -1347,18 +1344,18 @@ console.log("# measure: CanAdd");
       quantityUnits({
         name: "day",
         column: "day",
-        unit: INSTANT,
-        calendar: { zone: "UTC" },
+        unit: { ...INSTANT, zone: "UTC" },
       })!
     );
     return { unit: resolveUnit(r.unit!), r };
   });
   ok(
-    "an instant's difference units are a duration, on no calendar, which adds",
+    "an instant's difference units are its difference unit, a duration, on no calendar",
     timeDiff.unit.kind === "declared" &&
       timeDiff.unit.unit === DURATION.unit &&
-      timeDiff.r.calendar === undefined &&
-      timeDiff.r.summands === undefined
+      timeDiff.r.zone === undefined &&
+      timeDiff.r.summands?.length === 1 &&
+      timeDiff.r.summands[0].unit?.unit === DURATION.unit
   );
 
   // A stack checks only the columns it adds (#1197 review): a stack on one
@@ -1402,8 +1399,7 @@ console.log("# measure: CanAdd");
       new DatumValueImpl(5, {
         name: "day",
         column: "day",
-        unit: INSTANT,
-        calendar: { zone: "UTC" },
+        unit: { ...INSTANT, zone: "UTC" },
       })
     );
     return { unit: resolveUnit(space.measure!.unit!), space };
@@ -1412,12 +1408,12 @@ console.log("# measure: CanAdd");
     "a magnitude read from a time is a duration on no calendar",
     meanTime.unit.kind === "declared" &&
       meanTime.unit.unit === DURATION.unit &&
-      meanTime.space.measure?.calendar === undefined
+      meanTime.space.measure?.zone === undefined
   );
   const meanBar = await errorOf(async () => {
     const dl = await chart(
       sales.map((d) => ({ ...d, day: `${d.day}T00:00:00Z` })),
-      { schema: { day: Schema.time() } }
+      { schema: { day: Unit.time() } }
     )
       .flow(spread({ by: "region", dir: "x" }))
       .mark(rect({ h: field("day").mean() }))

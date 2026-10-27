@@ -114,7 +114,6 @@ export type {
   ColumnType,
   HasOrder,
   HasMidpoint,
-  HasCalendar,
   HasUnit,
   CanAdd,
   HasQuantity,

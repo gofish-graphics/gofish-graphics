@@ -100,7 +100,7 @@ export type ChartOptions = {
    * e.g. `{ response: Schema.ordered(LEVELS).diverging() }`. An ordered column
    * (`HasOrder`) splits in the order of its levels, and a value outside them
    * is an error where the order is used; a stack over a column with `HasMidpoint` puts its 0 at the
-   * midpoint of the order. A time column (`Schema.time()`, `HasCalendar`)
+   * midpoint of the order. A time column (in `Unit.time()`)
    * becomes epoch milliseconds and gets a calendar axis; a column of JS
    * `Date` values is a time column without a schema entry. See schema.ts.
    */

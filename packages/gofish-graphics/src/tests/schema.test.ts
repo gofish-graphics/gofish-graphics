@@ -29,6 +29,7 @@ import {
   setColumnTypes,
   stackOrigin,
   Schema as SrcSchema,
+  Unit as SrcUnit,
   type ColumnType,
 } from "../ast/schema";
 import { interval } from "../util/interval";
@@ -443,23 +444,34 @@ async function main() {
         message.includes(".diverging()"),
       message
     );
-    // The one-unit rule: a wire record's HasCalendar writes the instant unit,
-    // as `Schema.time()` does, so its HasUnit USD is a second unit.
-    const timeUnit = await errorOf(() =>
-      columnTypeOf("t", {
-        HasCalendar: { zone: "UTC" },
-        HasUnit: { unit: "USD" },
-      })
+    // A time is a column in a unit read on a calendar: Unit.time() writes
+    // the instant, its zone, and its difference unit, a duration.
+    check(
+      "Unit.time({ zone }) is the instant in that zone, differing by durations",
+      JSON.stringify(columnTypeOf("t", SrcUnit.time({ zone: "Asia/Tokyo" }))) ===
+        JSON.stringify({
+          HasUnit: {
+            unit: "instant",
+            classes: {},
+            difference: { unit: "duration", classes: { CanAdd: {} } },
+            zone: "Asia/Tokyo",
+          },
+        })
     );
     check(
-      "a time record with another unit is an error",
-      timeUnit === `schema: column "t" already has the unit "instant".`,
-      timeUnit
+      "a column record names a time column",
+      JSON.stringify(
+        columnTypeOf("t", { name: "Sold", unit: SrcUnit.time() })
+      ) ===
+        JSON.stringify({
+          HasQuantity: { name: "Sold" },
+          HasUnit: { ...SrcUnit.time().type },
+        })
     );
     check(
-      "a time record is read as Schema.time() wrote it",
-      columnTypeOf("t", { HasCalendar: { zone: "UTC" } }).HasUnit?.unit ===
-        "instant"
+      "Unit.duration adds up",
+      SrcUnit.duration.type.classes.CanAdd !== undefined &&
+        SrcUnit.duration.name === "duration"
     );
     // The levels-fit rule: text levels are not amounts, numbers are.
     const textUnit = await errorOf(() =>
@@ -764,7 +776,9 @@ async function main() {
           area: "km²",
           temp: { unit: Celsius },
           region: Schema.ordered(["n", "s"]).diverging(),
-          day: Schema.time({ zone: "UTC" }),
+          day: Unit.time({ zone: "UTC" }),
+          sold: { name: "Sold", unit: Unit.time({ zone: "America/New_York" }) },
+          wait: Unit.duration,
         },
       }).mark(rect({}))
     );

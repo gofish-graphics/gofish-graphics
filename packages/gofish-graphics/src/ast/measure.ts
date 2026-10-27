@@ -2,7 +2,7 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import type { ColumnType, HasCalendar, HasUnit, UnitClasses } from "./schema";
+import type { ColumnType, HasUnit, UnitClasses } from "./schema";
 
 /**
  * Measures: what the values along an axis are amounts of, and in what unit.
@@ -11,7 +11,7 @@ import type { ColumnType, HasCalendar, HasUnit, UnitClasses } from "./schema";
  * units of measure (and Siek and Vachharajani's gradual typing with
  * unification-based inference, 2008): a column whose
  * unit nobody declared has an UNKNOWN unit, a unit variable, which unifies
- * with anything. A declared unit (`Unit("USD")` or `"USD"` in a schema, `Schema.time()`'s
+ * with anything. A declared unit (`Unit("USD")` or `"USD"` in a schema, `Unit.time()`'s
  * "instant", the "count" of `.count()`) is concrete, and two different
  * concrete units on one shared axis are a type error ({@link MeasureClash};
  * the join itself is `joinUnits` in underlyingSpace.ts).
@@ -57,8 +57,6 @@ export type Quantity = {
   /** The column the values were read from, when they were read from one (a
    *  count or a share was not): what a schema declares a unit for. */
   column?: string;
-  /** The calendar the values read on, when they are instants. */
-  calendar?: HasCalendar;
 };
 
 // A declared unit is a `HasUnit` (schema.ts): its `unit` says which units
@@ -69,22 +67,28 @@ export type Quantity = {
 // already read as dates. The engine's units are definitions: their classes
 // are known.
 
-/** The unit of a time column, an instant, which `Schema.time()` writes
- *  beside `HasCalendar`. Its zone is a display parameter, kept in the
- *  calendar. */
-export const INSTANT: HasUnit = { unit: "instant", classes: {} };
+/** The unit of a difference of two instants, `Unit.duration`: a duration,
+ *  which adds up. */
+export const DURATION = {
+  unit: "duration",
+  classes: { CanAdd: {} },
+} satisfies HasUnit;
 
-/** The unit of a difference of two instants: a duration, which adds up. It
- *  is the only difference with a unit of its own: a difference of two
- *  amounts in any other unit is in that unit (`differenceUnits` in
- *  underlyingSpace.ts). */
-export const DURATION: HasUnit = { unit: "duration", classes: { CanAdd: {} } };
+/** The unit of a time column, an instant, without its zone: `Unit.time({
+ *  zone })` adds the zone, the calendar its values read on. Instants do not
+ *  add up, and their difference is a duration (`difference`, which
+ *  `differenceUnits` in underlyingSpace.ts reads). */
+export const INSTANT = {
+  unit: "instant",
+  classes: {},
+  difference: DURATION,
+} satisfies HasUnit;
 
 /** The unit `.count()` and `.distinct()` declare. Counts add up. */
 export const COUNT: HasUnit = { unit: "count", classes: { CanAdd: {} } };
 
 /** The {@link Quantity} of column `column`, whose type is `type`: its
- *  declared unit and its calendar. */
+ *  declared unit, with the unit's zone when its values are instants. */
 export const columnQuantity = (
   column: string,
   type: ColumnType | undefined
@@ -92,7 +96,6 @@ export const columnQuantity = (
   name: type?.HasQuantity?.name ?? column,
   column,
   ...(type?.HasUnit !== undefined ? { unit: type.HasUnit } : {}),
-  ...(type?.HasCalendar ? { calendar: type.HasCalendar } : {}),
 });
 
 /** `xs` quoted and joined, for a message: `"a", "b"`. */
@@ -109,8 +112,9 @@ export const addsUp = (q: Quantity): boolean =>
 /**
  * Check that `where` may sum values of quantity `q` ({@link addsUp}). Else
  * the loud error names the column (or, for values read from none, the
- * quantity) and the unit, and says how to fix it. A time (one on a
- * calendar) is summed by its difference, a duration.
+ * quantity) and the unit, and says how to fix it. A unit whose difference
+ * is in a unit of its own that adds up (an instant's, a duration) is summed
+ * by its differences: the error says to subtract a reference first.
  */
 export function checkSummable(q: Quantity | undefined, where: string): void {
   if (q === undefined || addsUp(q)) return;
@@ -118,15 +122,16 @@ export function checkSummable(q: Quantity | undefined, where: string): void {
     q.column !== undefined
       ? `the column ${quoteList([q.column])}`
       : `the values of ${quoteList([q.name])}`;
-  if (q.calendar !== undefined)
-    throw new Error(
-      `${where} sums ${what}, but it is a time (Schema.time()), and times ` +
-        `cannot be summed: two instants do not add up. Subtract a ` +
-        `reference first, e.g. derive a column ${q.column ?? "value"} - ` +
-        `start, which is a duration, or give the mark two positions ` +
-        `(x: "start", x2: "end").`
-    );
   const unit = q.unit!.unit; // declared, or it would add up
+  const difference = q.unit!.difference;
+  if (difference?.classes?.CanAdd !== undefined)
+    throw new Error(
+      `${where} sums ${what}, in the unit "${unit}", which cannot be ` +
+        `summed: two amounts in it do not add up, but their difference, in ` +
+        `"${difference.unit}", does. Subtract a reference first, e.g. ` +
+        `derive a column ${q.column ?? "value"} - start, or give the mark ` +
+        `two positions (x: "start", x2: "end").`
+    );
   throw new Error(
     `${where} sums ${what}, in the unit "${unit}", which cannot be ` +
       `summed: it has no CanAdd. If its amounts add up (money, counts, ` +

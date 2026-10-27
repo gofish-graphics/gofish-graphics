@@ -17,7 +17,23 @@
     "HasMidpoint": { "at": 1 }
   },
   "day": {
-    "HasCalendar": { "zone": "UTC" },
-    "HasUnit": { "unit": "instant", "classes": {} }
+    "HasUnit": {
+      "unit": "instant",
+      "classes": {},
+      "difference": { "unit": "duration", "classes": { "CanAdd": {} } },
+      "zone": "UTC"
+    }
+  },
+  "sold": {
+    "HasQuantity": { "name": "Sold" },
+    "HasUnit": {
+      "unit": "instant",
+      "classes": {},
+      "difference": { "unit": "duration", "classes": { "CanAdd": {} } },
+      "zone": "America/New_York"
+    }
+  },
+  "wait": {
+    "HasUnit": { "unit": "duration", "classes": { "CanAdd": {} } }
   }
 }

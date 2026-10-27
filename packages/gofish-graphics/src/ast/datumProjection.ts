@@ -420,7 +420,7 @@ function domainCells(
     chainCells(
       binStepsOf(binOps, where),
       domain,
-      columnType(d, name)?.HasCalendar?.zone,
+      columnType(d, name)?.HasUnit?.zone,
       where
     );
   return domain === undefined

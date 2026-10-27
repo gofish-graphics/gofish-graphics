@@ -1,5 +1,5 @@
 /**
- * Time (#1057): `Schema.time()` (HasCalendar), Calendar partitions, and the
+ * Time (#1057): `Unit.time()`, Calendar partitions, and the
  * time axis's rows. Covers the calendar math in UTC and across a daylight
  * saving change, steps aligned to the level above, week starts, the parsing
  * of time values, Date inference, the default rows for the three target
@@ -27,6 +27,7 @@ import {
   setColumnTypes,
   toEpochMs,
   Schema as SrcSchema,
+  Unit as SrcUnit,
 } from "../ast/schema";
 import { rowLabels } from "../ast/axes/timeRows";
 import { levelsFromOption } from "../ast/axes/levels";
@@ -37,14 +38,25 @@ import {
 } from "../ast/underlyingSpace";
 import { interval } from "../util/interval";
 
-/** `space` over instants read on `calendar`: a time column's measure. */
+/** `space` over instants read on the calendar of `zone`: a time column's
+ *  measure. */
 const withCalendar = (
   space: CONTINUOUS_TYPE,
-  calendar: { zone: string }
-): CONTINUOUS_TYPE => ({ ...space, measure: { titles: ["t"], calendar } });
+  { zone }: { zone: string }
+): CONTINUOUS_TYPE => ({ ...space, measure: { titles: ["t"], zone } });
 
-const { chart, scatter, spread, stack, rect, field, line, circle, Schema } =
-  GoFish as any;
+const {
+  chart,
+  scatter,
+  spread,
+  stack,
+  rect,
+  field,
+  line,
+  circle,
+  Schema,
+  Unit,
+} = GoFish as any;
 const DistCalendar = (GoFish as any).Calendar;
 
 declare const process: { exit(code: number): never };
@@ -292,7 +304,7 @@ async function main() {
       "a Date column is inferred as a UTC time",
       same(getColumnTypes(typed), {
         when: {
-          ...SrcSchema.time().type,
+          HasUnit: SrcUnit.time().type,
           HasDomain: { lo: Date.UTC(2024, 0, 1), hi: Date.UTC(2024, 0, 1) },
         },
         k: { HasDomain: { lo: 1, hi: 1 } },
@@ -309,7 +321,7 @@ async function main() {
       typeof (typed[0] as any).n === "string" && (typed[0] as any).k === 1
     );
     const declared = await applySchema(rows, {
-      n: SrcSchema.time({ zone: "Asia/Tokyo" }),
+      n: SrcUnit.time({ zone: "Asia/Tokyo" }),
     });
     check(
       "a declared string column parses in its zone",
@@ -357,7 +369,7 @@ async function main() {
       JSON.stringify(getColumnTypes(retyped))
     );
     const zoneErr = await errorOf(() =>
-      applySchema([{ t: 1 }], { t: SrcSchema.time({ zone: "Mars/Olympus" }) })
+      applySchema([{ t: 1 }], { t: SrcUnit.time({ zone: "Mars/Olympus" }) })
     );
     check(
       "an unknown zone is a loud error",
@@ -369,7 +381,7 @@ async function main() {
   console.log("\n# derive results are typed like chart data");
   {
     const input = await applySchema([{ day: "2024-01-01", n: 1 }], {
-      day: SrcSchema.time(),
+      day: SrcUnit.time(),
     });
     // Run a derive operator on `data` (default `input`) and return the rows
     // its mark gets.
@@ -397,8 +409,8 @@ async function main() {
       "a derive's Date column is a time, in epoch ms",
       fromJs[0].at === at &&
         same(withoutDomains(getColumnTypes(fromJs)), {
-          day: SrcSchema.time().type,
-          at: SrcSchema.time().type,
+          day: { HasUnit: SrcUnit.time().type },
+          at: { HasUnit: SrcUnit.time().type },
         }),
       JSON.stringify([fromJs[0], getColumnTypes(fromJs)])
     );
@@ -411,7 +423,7 @@ async function main() {
     const fromPython = await derived((rows) =>
       setColumnTypes(
         rows.map((r) => ({ ...r, at: new Date(at) })),
-        { at: { HasCalendar: { zone: "America/New_York" } } }
+        { at: { HasUnit: SrcUnit.time({ zone: "America/New_York" }).type } }
       )
     );
     const rewritten = await derived((rows) =>
@@ -425,12 +437,12 @@ async function main() {
     );
     const annotated = await derived(
       (rows) => rows.map((r) => ({ ...r, at: "2024-03-05" })),
-      { schema: { at: Schema.time({ zone: "America/New_York" }) } }
+      { schema: { at: Unit.time({ zone: "America/New_York" }) } }
     );
     check(
       "derive(fn, { schema }) converts ISO strings to instants in its zone",
       annotated[0].at === Date.UTC(2024, 2, 5, 5) &&
-        getColumnTypes(annotated)?.at?.HasCalendar?.zone === "America/New_York",
+        getColumnTypes(annotated)?.at?.HasUnit?.zone === "America/New_York",
       JSON.stringify([annotated[0], getColumnTypes(annotated)])
     );
     const months = await applySchema(
@@ -480,20 +492,20 @@ async function main() {
     check(
       "filter keeps its input's types",
       filtered[0].day === Date.UTC(2024, 0, 1) &&
-        getColumnTypes(filtered)?.day?.HasCalendar?.zone === "UTC"
+        getColumnTypes(filtered)?.day?.HasUnit?.zone === "UTC"
     );
     check(
       "a typed derive result keeps its own type for its columns",
       fromPython[0].at === at &&
-        getColumnTypes(fromPython)?.at?.HasCalendar?.zone ===
+        getColumnTypes(fromPython)?.at?.HasUnit?.zone ===
           "America/New_York" &&
-        getColumnTypes(fromPython)?.day?.HasCalendar?.zone === "UTC"
+        getColumnTypes(fromPython)?.day?.HasUnit?.zone === "UTC"
     );
 
     // A Date is an instant: a derive that turns a New York time's epoch ms
     // into Dates keeps the column's type, zone included.
     const ny = await applySchema([{ t: "2024-03-05T09:00", n: 1 }], {
-      t: SrcSchema.time({ zone: "America/New_York" }),
+      t: SrcUnit.time({ zone: "America/New_York" }),
     });
     const nyAt = Date.UTC(2024, 2, 5, 14);
     const asDates = await derived(
@@ -504,7 +516,7 @@ async function main() {
     check(
       "a derive returning Dates keeps the inherited zone, in epoch ms",
       asDates[0].t === nyAt &&
-        getColumnTypes(asDates)?.t?.HasCalendar?.zone === "America/New_York",
+        getColumnTypes(asDates)?.t?.HasUnit?.zone === "America/New_York",
       JSON.stringify([asDates[0], getColumnTypes(asDates)])
     );
     const asStrings = await derived(
@@ -531,13 +543,13 @@ async function main() {
     check(
       "a derive that mutates and returns its input is typed",
       inPlace[0].at === at &&
-        getColumnTypes(inPlace)?.at?.HasCalendar?.zone === "UTC",
+        getColumnTypes(inPlace)?.at?.HasUnit?.zone === "UTC",
       JSON.stringify([inPlace[0], getColumnTypes(inPlace)])
     );
     // filter's rows are its input's, so it carries the input's types as
     // they are, with no fit check (a derive would drop this one).
     const unfit = setColumnTypes([{ day: "not a time", n: 1 }], {
-      day: SrcSchema.time().type,
+      day: { HasUnit: SrcUnit.time().type },
     });
     let filteredUnfit: any;
     await (
@@ -821,7 +833,7 @@ async function main() {
       "a column whose first value is null is still inferred from its Dates",
       rows[1].d === at &&
         same(withoutDomains(getColumnTypes(rows)), {
-          d: SrcSchema.time().type,
+          d: { HasUnit: SrcUnit.time().type },
         }),
       JSON.stringify([rows, getColumnTypes(rows)])
     );
@@ -831,7 +843,7 @@ async function main() {
   {
     // What the widget's Arrow decode hands a chart for a naive timestamp, a
     // date, and a tz-aware timestamp (arrowDecode.ts): wall-clock strings
-    // and epoch ms, all typed HasCalendar.
+    // and epoch ms, all typed Unit.time().
     const decoded = setColumnTypes(
       [
         {
@@ -841,12 +853,12 @@ async function main() {
         },
       ],
       {
-        naive: SrcSchema.time().type,
-        day: SrcSchema.time().type,
-        aware: SrcSchema.time().type,
+        naive: { HasUnit: SrcUnit.time().type },
+        day: { HasUnit: SrcUnit.time().type },
+        aware: { HasUnit: SrcUnit.time().type },
       }
     );
-    const ny = SrcSchema.time({ zone: "America/New_York" });
+    const ny = SrcUnit.time({ zone: "America/New_York" });
     const rows = await applySchema(decoded, {
       naive: ny,
       day: ny,
@@ -882,7 +894,7 @@ async function main() {
           { t: null, v: 1 },
           { t: null, v: 2 },
         ],
-        { schema: { t: Schema.time() }, axes: true }
+        { schema: { t: Unit.time() }, axes: true }
       )
         .flow(scatter({ x: "t", y: "v" }))
         .mark(circle({ r: 2 }))
@@ -996,14 +1008,14 @@ async function main() {
       price: 100 + Math.sin(i / 20),
     }));
     const dl = await chart(prices, {
-      schema: { date: Schema.time() },
+      schema: { date: Unit.time() },
       axes: { x: { title: false }, y: false },
     })
       .flow(scatter({ by: "date", x: "date", y: "price" }))
       .mark(line())
       .toDisplayList({ w: 560, h: 200 });
     const weekDl = await chart(prices.slice(0, 10), {
-      schema: { date: Schema.time() },
+      schema: { date: Unit.time() },
       axes: { x: { title: false, levels: [DistCalendar.weekday] }, y: false },
     })
       .flow(scatter({ by: "date", x: "date", y: "price" }))
@@ -1024,7 +1036,7 @@ async function main() {
     const counts = textsOf(
       await chart(
         prices.map((p, i) => ({ ...p, month: p.date.slice(0, 7), k: i % 2 })),
-        { schema: { date: Schema.time() }, axes: true }
+        { schema: { date: Unit.time() }, axes: true }
       )
         .flow(spread({ by: "month", dir: "x" }), stack({ by: "k", dir: "y" }))
         .mark(rect({ h: field("date").count() }))
@@ -1066,7 +1078,7 @@ async function main() {
     );
 
     const rowsDl = await chart(prices, {
-      schema: { date: Schema.time() },
+      schema: { date: Unit.time() },
       axes: {
         x: {
           title: false,
@@ -1123,7 +1135,7 @@ async function main() {
     );
     const facetWords = textsOf(
       await chart(cities, {
-        schema: { date: Schema.time() },
+        schema: { date: Unit.time() },
         axes: { x: { levels: [DistCalendar.month, false, true] }, y: false },
       })
         .flow(
@@ -1144,7 +1156,7 @@ async function main() {
     // One date: the axis spans its day and shows the date, not seconds.
     const oneWords = textsOf(
       await chart([{ date: "2024-02-28", v: 1 }], {
-        schema: { date: Schema.time() },
+        schema: { date: Unit.time() },
         axes: { x: { title: false }, y: false },
       })
         .flow(scatter({ by: "date", x: "date", y: "v" }))

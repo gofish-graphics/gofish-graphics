@@ -940,7 +940,7 @@ export const CHART_OPTIONS: FieldGroup = group({
   },
   schema: {
     type: t.record(t.any),
-    doc: 'Column types, keyed by column name: a Unit (Unit("USD").summable()), a unit\'s name ("km²"), a column record { name, unit }, Schema.ordered(levels) or Schema.time().',
+    doc: 'Column types, keyed by column name: a Unit (Unit("USD").summable()), a unit\'s name ("km²"), a column record { name, unit }, Unit.time() for a time, or Schema.ordered(levels).',
   },
 });
 
@@ -1223,7 +1223,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       },
       schema: {
         type: t.record(t.any),
-        doc: "Column types of the result, keyed by column name, as in a chart's schema, e.g. Schema.ordered(levels) or Schema.time(). They override the types the result keeps from its input or infers, and convert values (an ISO string in a time column becomes an instant).",
+        doc: "Column types of the result, keyed by column name, as in a chart's schema, e.g. Schema.ordered(levels) or Unit.time(). They override the types the result keeps from its input or infers, and convert values (an ISO string in a time column becomes an instant).",
       },
     },
   }),

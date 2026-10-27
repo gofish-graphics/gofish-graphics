@@ -5,7 +5,12 @@
 import type { StackOrigin } from "./constraints/distribute";
 import { loadTemporal, temporal } from "./calendar";
 import { tagArray } from "./data";
-import { INSTANT, meetUnitClasses, type UnitOccurrence } from "./measure";
+import {
+  DURATION,
+  INSTANT,
+  meetUnitClasses,
+  type UnitOccurrence,
+} from "./measure";
 
 /**
  * Column types (#984): `chart(data, { schema })` declares, per column, the
@@ -21,12 +26,6 @@ import { INSTANT, meetUnitClasses, type UnitOccurrence } from "./measure";
  *    Declared with `.diverging()`, which exists only after `.ordered(...)`
  *    because a midpoint is a point along an order. A stack over the column
  *    puts its origin (its 0) at the midpoint.
- *  - {@link HasCalendar}: the column's values are instants that read on a
- *    calendar in a time zone. Declared with `Schema.time()`, or inferred from
- *    JS `Date` values. The values become epoch milliseconds (UTC) when the
- *    schema is applied, and an axis over them is a time axis whose ticks are
- *    calendar cells (calendar.ts). A time has no zero. `Schema.time()` also
- *    writes its unit, the instant, so two time columns may share an axis.
  *  - {@link HasUnit}: the column's values are amounts. Declared with a
  *    unit in the column's entry: a {@link Unit} definition (`Unit("USD")`),
  *    which says what unit the values are in and what the unit can do (its
@@ -36,7 +35,12 @@ import { INSTANT, meetUnitClasses, type UnitOccurrence } from "./measure";
  *    belong to the unit, not to the column: every occurrence of one unit's
  *    name is one unit, and their classes meet by one rule
  *    (`meetUnitClasses` in measure.ts), here among one chart's columns and
- *    in the type walk across the figure.
+ *    in the type walk across the figure. A time is a column in a unit read
+ *    on a calendar: `Unit.time({ zone })`, the instant, whose `zone` is a
+ *    parameter of the unit. A column of JS `Date` values is in it without a
+ *    schema entry. Its values become epoch milliseconds (UTC) when the
+ *    schema is applied, and an axis over them is a time axis whose ticks are
+ *    calendar cells (calendar.ts). An instant has no zero.
  *  - {@link HasQuantity}: what the column's values are amounts of, its
  *    quantity, when that is not the column's name. Declared with the
  *    `name` of a column record, `{ name: "Pay", unit: USD }`. The quantity
@@ -83,12 +87,6 @@ export type HasOrder = { levels: readonly Level[] };
  *  is even. It requires {@link HasOrder}, and `0 <= at <= n`. */
 export type HasMidpoint = { at: number };
 
-/** The class of a column whose values are instants (`Schema.time()`): epoch
- *  milliseconds, UTC, read on the calendar of the IANA time zone `zone`
- *  (`"UTC"` by default). The zone decides where calendar cells start (a day
- *  starts at local midnight) and how labels read. An instant has no zero. */
-export type HasCalendar = { zone: string };
-
 /** The class of a column whose values are integers. It has no options. */
 export type HasInteger = Record<string, never>;
 
@@ -108,8 +106,28 @@ export type HasInteger = Record<string, never>;
  *    can do is unknown, so a sum of it passes, as a sum of a column with no
  *    declared unit does, until an occurrence of the same name that knows it
  *    is met (`meetUnitClasses` in measure.ts).
+ *  - `zone`: set when the values are instants read on a calendar
+ *    (`Unit.time({ zone })`): epoch milliseconds, UTC, read on the calendar
+ *    of the IANA time zone `zone`. The zone decides where calendar cells
+ *    start (a day starts at local midnight) and how labels read. It is a
+ *    parameter of the unit, not part of its name: two time columns in
+ *    different zones are both in the instant, and one axis over both is an
+ *    error, since an axis reads one calendar (`joinZones` in
+ *    underlyingSpace.ts).
+ *  - `difference`: the unit of a difference of two amounts in this one, when
+ *    it is not this unit itself. A difference of two instants is a duration
+ *    (`Unit.duration`), which adds up although instants do not. Absent, a
+ *    difference is in the same unit: two amounts in USD differ by USD
+ *    (`differenceUnits` in underlyingSpace.ts). Only the engine's own units
+ *    set it today.
  */
-export type HasUnit = { unit: string; symbol?: string; classes?: UnitClasses };
+export type HasUnit = {
+  unit: string;
+  symbol?: string;
+  classes?: UnitClasses;
+  zone?: string;
+  difference?: HasUnit;
+};
 
 /** The class of a unit whose amounts can be added (`Unit(name).summable()`):
  *  a sum of them is an amount in the same unit, and it starts from 0. It has
@@ -137,7 +155,6 @@ export type HasDomain = { lo: number; hi: number };
 export type ColumnType = {
   HasOrder?: HasOrder;
   HasMidpoint?: HasMidpoint;
-  HasCalendar?: HasCalendar;
   HasUnit?: HasUnit;
   HasQuantity?: HasQuantity;
   HasDomain?: HasDomain;
@@ -153,16 +170,15 @@ const isEpochMs = (v: unknown): boolean =>
  *  them, given the class's own record. A missing value (null, undefined)
  *  fits every class.
  *
- *  - `HasCalendar`: an instant: epoch milliseconds (a finite number) or a
- *    valid `Date`. A `Date` is an instant, so turning it into epoch
- *    milliseconds reinterprets nothing; a string is not one, since reading
- *    it needs a zone (only a `schema` annotation converts strings).
  *  - `HasOrder`: text or numbers, the kinds its levels are. A value outside
  *    the levels still fits, so the order stays and its stray-level error
  *    fires where the order is used.
  *  - `HasMidpoint`: anything; its values are its order's.
- *  - `HasUnit`: numbers, the amounts the unit measures. In the instant
- *    unit, also a valid `Date`, which is an instant (see `HasCalendar`).
+ *  - `HasUnit`: numbers, the amounts the unit measures. In a unit read on a
+ *    calendar (one with a `zone`), an instant: epoch milliseconds (a finite
+ *    number) or a valid `Date`. A `Date` is an instant, so turning it into
+ *    epoch milliseconds reinterprets nothing; a string is not one, since
+ *    reading it needs a zone (only a `schema` annotation converts strings).
  *  - `HasQuantity`: anything; a name says nothing about the values.
  *  - `HasDomain`: numbers from `lo` to `hi`.
  *  - `HasInteger`: integers. */
@@ -172,11 +188,12 @@ const ACCEPTS: {
     c: NonNullable<ColumnType[K]>
   ) => boolean;
 } = {
-  HasCalendar: (v) => isEpochMs(v) || isDate(v),
   HasOrder: (v) => v == null || typeof v === "string" || typeof v === "number",
   HasMidpoint: () => true,
-  HasUnit: (v, { unit }) =>
-    v == null || typeof v === "number" || (unit === INSTANT.unit && isDate(v)),
+  HasUnit: (v, { zone }) =>
+    zone !== undefined
+      ? isEpochMs(v) || isDate(v)
+      : v == null || typeof v === "number",
   HasQuantity: () => true,
   HasDomain: (v, { lo, hi }) =>
     v == null || (typeof v === "number" && lo <= v && v <= hi),
@@ -247,17 +264,6 @@ export const Schema = {
   ordered(levels: readonly Level[]): ColumnSchema<{ HasOrder: HasOrder }> {
     return new ColumnSchema({ HasOrder: { levels: [...levels] } });
   },
-  /** A column whose values are instants (`HasCalendar`) in the instant unit
-   *  (`HasUnit`), read on the calendar of `zone` (an IANA time zone, `"UTC"`
-   *  by default). A value may be an ISO 8601 string ("2024-03-05" is the
-   *  start of that day in `zone`; a string without an offset is a wall-clock
-   *  time in `zone`), a `Date`, or epoch milliseconds. */
-  time({ zone = "UTC" }: { zone?: string } = {}): ColumnSchema<{
-    HasCalendar: HasCalendar;
-    HasUnit: HasUnit;
-  }> {
-    return new ColumnSchema({ HasCalendar: { zone }, HasUnit: INSTANT });
-  },
 };
 
 /** The classes of a unit, what its amounts can do, keyed by class name: a
@@ -266,21 +272,26 @@ export const Schema = {
 export type UnitClasses = { CanAdd?: CanAdd };
 
 /**
- * A unit definition (`Unit("USD")`): a unit's name and the classes every
- * column in the unit has. It is immutable: each chained method returns a new
- * definition with one more class, and a method that needs a class absent says
- * so in its `this` type, so `.summable().summable()` is a type error. One
- * definition is meant to be declared once and used by every column in the
- * unit.
+ * A unit definition (`Unit("USD")`, `Unit.time()`): the unit as every column
+ * in it writes it (`type`, the column's {@link HasUnit}), with the classes
+ * every column in the unit has. It is immutable: each chained method returns
+ * a new definition with one more class, and a method that needs a class
+ * absent says so in its `this` type, so `.summable().summable()` is a type
+ * error. One definition is meant to be declared once and used by every
+ * column in the unit.
  */
 export class UnitDefinition<C extends UnitClasses = UnitClasses> {
-  constructor(
-    readonly name: string,
-    readonly classes: C
-  ) {
-    if (typeof name !== "string")
-      throw new Error(`Unit: the name must be a string, got ${String(name)}.`);
+  constructor(readonly type: HasUnit & { classes: C }) {
+    if (typeof type.unit !== "string")
+      throw new Error(
+        `Unit: the name must be a string, got ${String(type.unit)}.`
+      );
     Object.freeze(this);
+  }
+
+  /** The unit's name: two units are the same when their names are equal. */
+  get name(): string {
+    return this.type.unit;
   }
 
   /** Say that amounts in the unit can be added (`CanAdd`): a sum of them
@@ -290,7 +301,10 @@ export class UnitDefinition<C extends UnitClasses = UnitClasses> {
   summable(
     this: UnitDefinition<C & { CanAdd?: never }>
   ): UnitDefinition<C & { CanAdd: CanAdd }> {
-    return new UnitDefinition(this.name, { ...this.classes, CanAdd: {} });
+    return new UnitDefinition({
+      ...this.type,
+      classes: { ...this.type.classes, CanAdd: {} },
+    });
   }
 }
 
@@ -299,10 +313,28 @@ export type Unit<C extends UnitClasses = UnitClasses> = UnitDefinition<C>;
 
 /** The unit named `name`, e.g. `"USD"` or `"mm"`, with no classes yet: chain
  *  `.summable()` when its amounts add up. Two units are the same when their
- *  names are equal. */
+ *  names are equal. A unit the user names has its name as its symbol, which
+ *  an axis title appends: "Pay (USD)". */
 export function Unit(name: string): UnitDefinition<Record<never, never>> {
-  return new UnitDefinition(name, {});
+  return new UnitDefinition({ unit: name, symbol: name, classes: {} });
 }
+
+/** The unit of instants read on the calendar of `zone`, an IANA time zone
+ *  (`"UTC"` by default). A column in it is a time: a value may be an ISO 8601
+ *  string ("2024-03-05" is the start of that day in `zone`; a string without
+ *  an offset is a wall-clock time in `zone`), a `Date`, or epoch
+ *  milliseconds, and an axis over it is a time axis. Instants do not add up;
+ *  a difference of two is in {@link Unit.duration}. A column of JS `Date`
+ *  values is in `Unit.time()` without a schema entry. */
+Unit.time = ({ zone = "UTC" }: { zone?: string } = {}): UnitDefinition<
+  Record<never, never>
+> => new UnitDefinition({ ...INSTANT, zone });
+
+/** The unit of a span of time, a difference of two instants
+ *  ({@link Unit.time}). Durations add up. */
+Unit.duration = new UnitDefinition(DURATION) as UnitDefinition<{
+  CanAdd: CanAdd;
+}>;
 
 /** A column record in `chart`'s `schema`: the quantity the column's values
  *  are amounts of (`name`, `HasQuantity`), and the unit they are in (`unit`,
@@ -313,7 +345,7 @@ export type ColumnRecord = { name?: string; unit?: Unit | string };
 const RECORD_KEYS: readonly string[] = ["name", "unit"];
 
 /** What `chart`'s `schema` option takes per column: a builder
- *  (`Schema.ordered(...)`, `Schema.time()`), a column record, or one of its
+ *  (`Schema.ordered(...)`), a column record, or one of its
  *  two shorthands: a {@link Unit} for `{ unit }`, and a unit's name for
  *  `{ unit: name }`. The engine also reads the record of classes every entry
  *  stands for (the wire form, which Python sends), which is not a user form.
@@ -326,13 +358,13 @@ export type SchemaEntry =
   | ColumnRecord
   | Omit<ColumnType, "HasDomain">;
 
-/** The classes of a column in `unit`: a definition's name and the unit's
- *  classes, or a name alone, whose classes are unknown. */
+/** The classes of a column in `unit`: a definition's unit, or a name alone,
+ *  whose classes are unknown. */
 const unitType = (unit: Unit | string): ColumnType => ({
   HasUnit:
     typeof unit === "string"
       ? { unit, symbol: unit }
-      : { unit: unit.name, symbol: unit.name, classes: { ...unit.classes } },
+      : structuredClone(unit.type),
 });
 
 /** The record of classes a schema entry stands for, before any check: a
@@ -389,11 +421,9 @@ export const schemaToWire = (
 
 /** The record a schema entry stands for ({@link classesOf}), checked for the
  *  rules the builders enforce (a record from the wire, as Python sends it,
- *  has no types): the record is read as the builders' writes, so
- *  `HasCalendar` writes the instant unit as `Schema.time()` does, and a
- *  different `HasUnit` is a second unit ({@link checkNoUnit}). Then its
- *  levels must fit ({@link checkLevelsFit}), and a midpoint needs an order
- *  and must lie on it, with the same check `.diverging()` runs. */
+ *  has no types): its levels must fit ({@link checkLevelsFit}), and a
+ *  midpoint needs an order and must lie on it, with the same check
+ *  `.diverging()` runs. */
 export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
   const who = `schema: column "${column}"`;
   const record = classesOf(who, entry);
@@ -404,15 +434,7 @@ export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
         `domain is computed from its values. Drop HasDomain from the ` +
         `schema.`
     );
-  const { HasUnit: unit, ...rest } = record;
-  const type: ColumnType =
-    rest.HasCalendar !== undefined
-      ? { ...Schema.time(rest.HasCalendar).type, ...rest }
-      : rest;
-  if (unit !== undefined && unit.unit !== type.HasUnit?.unit) {
-    checkNoUnit(who, type);
-    type.HasUnit = unit;
-  }
+  const type: ColumnType = { ...record };
   checkLevelsFit(who, type);
   if (type.HasMidpoint === undefined) return type;
   if (!type.HasOrder) {
@@ -424,17 +446,6 @@ export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
   }
   checkMidpointOnOrder(type.HasOrder.levels, type.HasMidpoint.at);
   return type;
-}
-
-/** The one-unit rule: a column has one unit, so a column type that already
- *  has `HasUnit` (`Schema.time()` writes the instant) takes no other. Only
- *  a record from the wire can break it: no builder adds a unit to another
- *  builder's column. */
-function checkNoUnit(who: string, type: ColumnType): void {
-  if (type.HasUnit === undefined) return;
-  throw new Error(
-    `${who} already has the unit ${JSON.stringify(type.HasUnit.unit)}.`
-  );
 }
 
 /** The rule that an order's levels fit the column's other classes: each
@@ -545,11 +556,11 @@ export function strayLevelsError(column: string, strays: unknown[]): Error {
  *  2. The types the array already carries, but their domains.
  *  3. `schema`'s.
  *
- * A column none of these type is a time column (`HasCalendar`, UTC) when its
- * first non-null value is a JS `Date` (a column is a key of the first row):
- * inference is local, from the value alone, and a missing value says nothing
- * about the column. Strings and numbers are never inferred as time; they need
- * `Schema.time()`. Every time column's values become epoch milliseconds (see
+ * A column none of these type is a time column (in `Unit.time()`, UTC) when
+ * its first non-null value is a JS `Date` (a column is a key of the first
+ * row): inference is local, from the value alone, and a missing value says
+ * nothing about the column. Strings and numbers are never inferred as time;
+ * they need `Unit.time()`. Every time column's values become epoch milliseconds (see
  * {@link toEpochMs}); the rows are copied only when some value is not one
  * already. The copy leaves the caller's array untagged, so one array can
  * feed charts with different schemas.
@@ -615,12 +626,13 @@ export async function applySchema<T>(
     for (const column of unresolved) {
       const v = r[column];
       if (v == null) continue;
-      if (v instanceof Date) types[column] = Schema.time().type;
+      if (v instanceof Date) types[column] = unitType(Unit.time());
       unresolved.delete(column);
     }
   }
-  const timeColumns = Object.entries(types).filter(
-    ([, t]) => t.HasCalendar !== undefined
+  // The columns in a unit read on a calendar, with its zone.
+  const timeColumns = Object.entries(types).flatMap(([column, t]) =>
+    t.HasUnit?.zone !== undefined ? [[column, t.HasUnit.zone] as const] : []
   );
   const isConverted = (row: T): boolean =>
     row == null ||
@@ -631,8 +643,7 @@ export async function applySchema<T>(
   let out: T[] = [...rows];
   if (timeColumns.length > 0) {
     await loadTemporal();
-    for (const [column, t] of timeColumns)
-      checkZone(column, t.HasCalendar!.zone);
+    for (const [column, zone] of timeColumns) checkZone(column, zone);
   }
   if (!rows.every(isConverted)) {
     // Long-format data repeats its dates, so each string is parsed once per
@@ -647,9 +658,9 @@ export async function applySchema<T>(
     out = rows.map((row) => {
       if (row == null || typeof row !== "object") return row;
       const copy = { ...(row as Record<string, unknown>) };
-      for (const [column, t] of timeColumns) {
+      for (const [column, zone] of timeColumns) {
         if (column in copy) {
-          copy[column] = epochMs(copy[column], t.HasCalendar!.zone, column);
+          copy[column] = epochMs(copy[column], zone, column);
         }
       }
       return copy as T;
@@ -776,7 +787,7 @@ export function toEpochMs(v: unknown, zone: string, column: string): unknown {
     }
   }
   throw new Error(
-    `schema: column "${column}" is a time (Schema.time()), but has the value ` +
+    `schema: column "${column}" is a time (Unit.time()), but has the value ` +
       `${typeof v === "string" ? JSON.stringify(v) : String(v)}, which is not ` +
       `an ISO 8601 date or date-time ("2024-03-05", "2024-03-05T14:30:00Z"), ` +
       `a Date, or epoch milliseconds.`
