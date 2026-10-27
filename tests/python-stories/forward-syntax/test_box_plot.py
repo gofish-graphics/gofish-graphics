@@ -1,6 +1,6 @@
 """Equivalent of BoxPlot.stories.tsx — Forward Syntax/Box Plot."""
 
-from gofish import chart, layer, rect, spread, Schema
+from gofish import chart, layer, rect, spread, Schema, Unit
 from python_stories.data import GENDER_PAY_GAP, PAY_GRADE
 
 
@@ -8,7 +8,7 @@ def story_gender_pay_gap():
     # Five columns on one y axis, all amounts of one quantity, Pay, in USD:
     # they share the axis and it is titled "Pay (USD)". (The dataset's
     # currency is not recorded; USD is illustrative.)
-    pay = Schema.quantity("Pay").unit("USD")
+    pay = {"name": "Pay", "unit": Unit("USD")}
     return (
         chart(
             GENDER_PAY_GAP,

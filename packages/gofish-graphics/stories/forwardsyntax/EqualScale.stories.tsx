@@ -1,14 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 
-import { chart, circle, scatter, Color, Schema } from "../../src/lib";
+import { chart, circle, scatter, Color } from "../../src/lib";
 
 /**
  * Shared-measure scale equality (#582). When the x and y channels carry the
  * **same unit of measure**, "1 unit on x" and "1 unit on y" are the same
  * quantity, so GoFish gives them one data→pixel scale — a circle in data space
  * stays a circle, never an ellipse. There is no `aspectRatio` knob: it follows
- * from the units matching (`Schema.unit("plane")` on both columns), the same way
+ * from the units matching (the unit `"plane"` on both columns), the same way
  * `circle({ r })` lowers to a `w`/`h` that share a unit and so can't distort.
  * The binding axis fills its dimension; the other centers in the leftover space.
  *
@@ -52,7 +52,7 @@ export const Sunflower: StoryObj<Args> = {
     chart(sunflower, {
       color: Color.gradient(["#fde725", "#21918c", "#440154"]),
       // Same unit on both axes ⇒ one shared scale ⇒ a true circle.
-      schema: { x: Schema.unit("plane"), y: Schema.unit("plane") },
+      schema: { x: "plane", y: "plane" },
     })
       .flow(scatter({ x: "x", y: "y" }))
       .mark(circle({ r: 4, fill: "i" }))

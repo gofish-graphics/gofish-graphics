@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, layer, rect, spread, Schema } from "../../src/lib";
+import { chart, layer, rect, spread, Schema, Unit } from "../../src/lib";
 import { genderPayGap, payGrade } from "../../src/data/genderPayGap";
 
 /**
@@ -27,7 +27,7 @@ export const GenderPayGap: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    const pay = Schema.quantity("Pay").unit("USD");
+    const pay = { name: "Pay", unit: Unit("USD") };
     chart(genderPayGap, {
       schema: {
         "Pay Grade": Schema.ordered(payGrade),
