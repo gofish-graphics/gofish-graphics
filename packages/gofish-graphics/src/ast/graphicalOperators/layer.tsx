@@ -571,9 +571,7 @@ export const layer = createNodeOperatorSequential(
           );
           const overhang = (i: number) => {
             const c = node.children[i];
-            return c instanceof GoFishNode && !c.inCoordinateSpace()
-              ? c.strokeOverhang
-              : 0;
+            return c instanceof GoFishNode ? c.claimedOverhang : 0;
           };
           // A node a nest sizes from its inner whose outline reaches past
           // its box: its claim is no longer its plot.

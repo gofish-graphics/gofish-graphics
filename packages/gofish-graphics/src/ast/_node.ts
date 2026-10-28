@@ -1252,12 +1252,8 @@ export class GoFishNode {
     // shape by its box. Inside a coordinate space a claim is in the space's
     // own units, not pixels, and the space holds its interior's outlines
     // itself (`coord`).
-    const o = this.strokeOverhang;
-    if (
-      o > 0 &&
-      extent.some((e) => e !== undefined) &&
-      !this.inCoordinateSpace()
-    ) {
+    const o = this.claimedOverhang;
+    if (o > 0 && extent.some((e) => e !== undefined)) {
       this._plotExtent ??= extent;
       this._extent = extent.map((e) =>
         e === undefined ? undefined : padExtent(e, o)
@@ -1268,12 +1264,12 @@ export class GoFishNode {
     return extent;
   }
 
-  /** Whether this node is inside a coordinate space (a `coord` above it),
-   *  whose interior is laid out in the space's own coordinates. */
-  public inCoordinateSpace(): boolean {
-    for (let n = this.parent; n !== undefined; n = n.parent)
-      if (n.type === "coord") return true;
-    return false;
+  /** The outline this node's claim reaches past its box by: its
+   *  {@link strokeOverhang}, or 0 inside a coordinate space (a `coord` above
+   *  it), whose interior is laid out in the space's own coordinates and which
+   *  holds its interior's outlines itself. */
+  public get claimedOverhang(): number {
+    return this.parent?.yFrame.inCoord === true ? 0 : this.strokeOverhang;
   }
 
   /** Whether the room this node is given on `axis` is a share: it is in a
