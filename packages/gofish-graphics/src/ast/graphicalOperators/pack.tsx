@@ -7,7 +7,10 @@ import { packSiblings } from "d3-hierarchy";
 import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
-import { Size } from "../dims";
+import { Size, displayTranslate } from "../dims";
+// PROTOTYPE #1221
+import { bakeChildren } from "../coordinateTransforms/bake";
+import { translateOutline } from "../geometry";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import {
   createOperator,
@@ -20,6 +23,8 @@ import { boxOfDims, enclosingCircle } from "../geometry";
 
 type PackProps = {
   key?: string;
+  // PROTOTYPE #1221 (#973): pixels between sibling circles.
+  padding?: number;
 };
 
 /**
@@ -36,6 +41,7 @@ type PackProps = {
 export const Pack = createNodeOperator(
   (opts: PackProps, children: GoFishAST[]) => {
     const { key } = opts;
+    const pad = (opts.padding ?? 0) / 2; // PROTOTYPE #1221 (#973)
     return new GoFishNode(
       {
         type: "pack",
@@ -62,11 +68,11 @@ export const Pack = createNodeOperator(
 
           // Circles in data order; packSiblings writes x, y relative to the
           // center of the circle enclosing them all.
-          const packed = packSiblings(local.map((c) => ({ r: c.r })));
+          const packed = packSiblings(local.map((c) => ({ r: c.r + pad })));
           // The enclosing radius about that center. Computed here rather than
           // re-running d3's enclose, so every child lies inside it exactly.
           const R = packed.reduce(
-            (m, c) => Math.max(m, Math.hypot(c.x, c.y) + c.r),
+            (m, c) => Math.max(m, Math.hypot(c.x, c.y) + c.r), // c.r includes pad
             0
           );
 
@@ -98,8 +104,27 @@ export const Pack = createNodeOperator(
               cy: box.min[1] + R,
               r: R,
             }),
+            // PROTOTYPE #1221: a pack's outline is its children's outlines
+            // (so an `enclose` over a pack hugs its circles, not its box).
+            outline: (tolerance: number) =>
+              _children.flatMap((child) => {
+                const t: [number, number] = [
+                  child.projectedTranslate(0) ?? 0,
+                  child.projectedTranslate(1) ?? 0,
+                ];
+                return child
+                  .geometry()
+                  .outline(tolerance)
+                  .map((o) => translateOutline(o, t));
+              }),
           };
         },
+        // PROTOTYPE #1221: a pack under a bake boundary (an `enclose` that
+        // holds it as a fresh child) lowers its children as `layer` does.
+        lower: ({ transform, coordinateTransform }, _c, node) =>
+          bakeChildren(node, displayTranslate(transform)).flatMap((d) =>
+            d.node.INTERNAL_lower(coordinateTransform, d.transform)
+          ),
       },
       children
     );
@@ -107,6 +132,8 @@ export const Pack = createNodeOperator(
 );
 
 export type PackOptions = {
+  /** PROTOTYPE #1221 (#973): pixels between sibling circles. */
+  padding?: number;
   /** Field to partition rows by (like `spread`/`scatter`); also accepts a
    *  `field(...)` accessor. Without `by`, one child per row. */
   by?: SplitBy;

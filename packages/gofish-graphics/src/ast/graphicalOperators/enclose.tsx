@@ -49,6 +49,10 @@ import type { Placement } from "../constraints/claimPlacement";
 import { Extent } from "../extent";
 import * as Monotonic from "../../util/monotonic";
 import { ringPathData } from "../geometry/plane";
+// PROTOTYPE #1221
+import { packEnclose } from "d3-hierarchy";
+import { boxOfDims } from "../geometry/box";
+import { outlinePaint, ringOutline } from "../geometry/outline";
 
 export type EncloseOptions = {
   /** Pixels between the members and the outline. Default 2. */
@@ -175,6 +179,28 @@ function Enclose(
           // The outline in the frame the children were read in, which is
           // the frame `local` maps from in `lower`.
           renderData: { loops, box: [minX, minY, maxX, maxY] },
+        };
+      },
+      // PROTOTYPE #1221: the outline is the node's geometry, so a `pack`
+      // that holds it packs the outline's own smallest circle (not its
+      // members'), and an outer `enclose` reads it as a ring (fill "none")
+      // or, filled, as its box (#1207).
+      geometry: ({ intrinsicDims, renderData }, _children, node) => {
+        const box = boxOfDims(intrinsicDims, node.type);
+        const loops = renderData?.loops as Pt[][] | undefined;
+        if (loops === undefined || loops.length === 0) return { box };
+        const d = node.yFrame.direction;
+        const paint = outlinePaint({ fill, stroke, strokeWidth });
+        return {
+          box,
+          outline: () => loops.map((l) => ringOutline(l, d, paint)),
+          enclosingCircle: () => {
+            const e = packEnclose(
+              loops.flat().map(([x, y]) => ({ x, y: d * y, r: 0 }))
+            );
+            const s = outlineOverhang(stroke, strokeWidth);
+            return { cx: e.x, cy: e.y, r: e.r + s };
+          },
         };
       },
       // The outline paints FIRST (under the content), then the children
