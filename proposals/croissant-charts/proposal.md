@@ -173,13 +173,16 @@ field("x").bin(Bin.quantiles([0.05, 0.25, 0.5, 0.75, 0.95]))
   0.1 °C, with many ties) can give two equal edges, so an empty or very thin
   cell. Polars errors unless `allow_duplicates=True`. See decision 3 and the
   ridgeline render below.
-- **The parametric case.** A croissant usually shows a distribution, not a
-  sample. Two ways in, neither needing more API:
-  - _Quantile rows_ (recommended): derive N rows at x = F⁻¹((i + ½)/N). Their
-    sample quantiles fall on the distribution's quantiles to within 1/N, and
-    the median of each cell is the conditional median. This is what quantile
-    dotplots do. With N = 1000 the edges are off by less than 0.003σ.
-  - _A large random sample_ works too but is noisier for the same N.
+- **Cutting a curve, not rows.** A croissant cuts the curve it draws, whether
+  that curve is a known distribution or a KDE of samples. Every example below
+  does this the same way: a `derive` helper turns the curve's grid rows
+  `{ x, pdf }` into N quantile rows at x = F⁻¹((i + ½)/N), and the plain
+  `Bin.quantiles(10)` and `median()` run over those. Their quantiles fall on
+  the curve's to within 1/N, and each cell's median is the curve's conditional
+  median. This is what quantile dotplots do. With N = 1000 the edges are off
+  by less than 0.003σ. `quantileRows` is a declared shortcut until first-class
+  distributions (#980), which would replace it; see "Rows or the drawn
+  density?".
   - A weighted form, `Bin.quantiles(10, { weight: "pdf" })` over a grid of
     density rows, would make the grid table do both jobs. Rejected: it adds an
     option that first-class distributions (#980) would make redundant. Quantile
@@ -192,6 +195,14 @@ Widen `cut` to sources that have an outline (a `ribbon`), and let its sizes
 come from cells.
 
 ```js
+const q = quantileRows(grid, { x: "x", density: "pdf", n: 1000 });
+const edges = range(1, 10).map((k) =>
+  quantile(
+    q.map((r) => r.x),
+    k / 10
+  )
+); // by hand
+
 chart(grid, { axes: { x: true, y: false } })
   .flow(scatter({ x: "x" }))
   .mark(
@@ -202,13 +213,16 @@ chart(grid, { axes: { x: true, y: false } })
       strokeWidth: 2,
     }).cut({
       dir: "x",
-      by: field("x").bin(Bin.thresholds(edges)), // NEW: cells; edges from quantile rows
+      by: field("x").bin(Bin.thresholds(edges)), // NEW: by on cut
       inset: 6,
     })
   );
 ```
 
 ```python
+q = quantile_rows(grid, x="x", density="pdf", n=1000)
+edges = [quantile([r["x"] for r in q], k / 10) for k in range(1, 10)]  # by hand
+
 (
     chart(grid, axes={"x": True, "y": False})
     .flow(scatter(x="x"))
@@ -240,20 +254,26 @@ chart(grid, { axes: { x: true, y: false } })
 
 ## Approach B: partition, then intersect (recommended)
 
-The cells come from a `partition` over the samples, so each cell has its rows
-and its place on the axis. In each cell, the slice is the density's area
-intersected with the cell's region.
+One dataset, the curve's grid rows, feeds both layers. The first draws the
+curve. The second turns it into quantile rows, so a `partition` gives each
+cell its rows and its place on the axis. In each cell, the slice is the
+density's area intersected with the cell's region, and the dot is the median
+of the cell's rows.
 
 ```js
 const grid = range(-3, 3.001, 0.02).map((x) => ({ x, pdf: normPdf(x) }));
-const rows = range(0, 1000).map((i) => ({ x: normInv((i + 0.5) / 1000) })); // quantile rows
 
 chart(grid, { axes: { x: true, y: false } })
   .flow(scatter({ x: "x" }))
   .mark(ribbon({ h: "pdf", fill: "none" }).name("density"))
   .layer(
-    chart(rows)
-      .flow(partition({ by: field("x").bin(Bin.quantiles(10)), dir: "x" })) // NEW: Bin.quantiles
+    chart(grid)
+      .flow(
+        derive((rows) =>
+          quantileRows(rows, { x: "x", density: "pdf", n: 1000 })
+        ), // NEW: helper
+        partition({ by: field("x").bin(Bin.quantiles(10)), dir: "x" }) // NEW: Bin.quantiles
+      )
       .mark(
         layer([
           intersect(
@@ -268,15 +288,17 @@ chart(grid, { axes: { x: true, y: false } })
 
 ```python
 grid = [{"x": x, "pdf": norm_pdf(x)} for x in frange(-3, 3.001, 0.02)]
-rows = [{"x": norm_inv((i + 0.5) / 1000)} for i in range(1000)]
 
 (
     chart(grid, axes={"x": True, "y": False})
     .flow(scatter(x="x"))
     .mark(ribbon(h="pdf", fill="none").name("density"))
     .layer(
-        chart(rows)
-        .flow(partition(by=field("x").bin(Bin.quantiles(10)), dir="x"))
+        chart(grid)
+        .flow(
+            derive(lambda rows: quantile_rows(rows, x="x", density="pdf", n=1000)),
+            partition(by=field("x").bin(Bin.quantiles(10)), dir="x"),
+        )
         .mark(
             layer(
                 [
@@ -301,20 +323,23 @@ rows = [{"x": norm_inv((i + 0.5) / 1000)} for i in range(1000)]
 ### Hard example: penguin body mass
 
 A skewed, two-humped sample (Gentoo penguins are heavier). This is the paper's
-own future work: croissants for distributions that are not normal. The data are
-samples, so the cells and dots come straight from the rows.
+own future work: croissants for distributions that are not normal. The
+samples become a curve (a KDE), and from there it is the same chart as the
+normal one.
 
 ```js
-chart(densityOf(penguins, "Body Mass (g)"), { axes: { x: true, y: false } })
+const density = densityOf(penguins, "Body Mass (g)"); // grid rows { x, pdf }
+
+chart(density, { axes: { x: true, y: false } })
   .flow(scatter({ x: "x" }))
   .mark(ribbon({ h: "pdf", fill: "none" }).name("density"))
   .layer(
-    chart(penguins)
+    chart(density)
       .flow(
-        partition({
-          by: field("Body Mass (g)").dropNulls().bin(Bin.quantiles(10)),
-          dir: "x",
-        })
+        derive((rows) =>
+          quantileRows(rows, { x: "x", density: "pdf", n: 1000 })
+        ),
+        partition({ by: field("x").bin(Bin.quantiles(10)), dir: "x" })
       )
       .mark(
         layer([
@@ -323,7 +348,7 @@ chart(densityOf(penguins, "Body Mass (g)"), { axes: { x: true, y: false } })
             region({ inset: 3 }),
           ]),
           circle({
-            cx: field("Body Mass (g)").median(),
+            cx: field("x").median(),
             cy: 6,
             r: 3,
             fill: "#467DA8",
@@ -333,11 +358,11 @@ chart(densityOf(penguins, "Body Mass (g)"), { axes: { x: true, y: false } })
   );
 ```
 
-![penguins](img/croissant--penguin-body-mass.png)
+![penguins](img/croissant--penguin-body-mass-density.png)
 
 _Target render, geometry computed by hand in the story. The slices are narrow
 under the Adelie and Chinstrap hump and wide in the Gentoo shoulder, and every
-dot is the median of its cell's penguins._
+dot is the curve's median within its cell._
 
 `densityOf` stands for the user's KDE (the ViolinPlot story uses `fast-kde`'s
 `density1d`). GoFish has no density transform, and this proposal does not add
@@ -346,7 +371,9 @@ one.
 ### Hard example: a ridgeline of croissants
 
 One croissant per month of Seattle daily highs. The spelling adds one outer
-`spread` to both layers, as in the Ridgeline story.
+`spread` to both layers, as in the Ridgeline story, and the `derive` runs
+inside each month's group (to verify: `derive` after a `spread` sees one
+group's rows).
 
 ```js
 chart(monthlyDensity, { axes: { x: true, y: false } })
@@ -361,7 +388,7 @@ chart(monthlyDensity, { axes: { x: true, y: false } })
   )
   .mark(ribbon({ h: "pdf", fill: "none" }).name("density"))
   .layer(
-    chart(seattleWeather)
+    chart(monthlyDensity)
       .flow(
         spread({
           by: field("month").sort(monthNames),
@@ -369,6 +396,9 @@ chart(monthlyDensity, { axes: { x: true, y: false } })
           anchor: "baseline",
           spacing: 24,
         }),
+        derive((rows) =>
+          quantileRows(rows, { x: "temp_max", density: "pdf", n: 1000 })
+        ),
         partition({ by: field("temp_max").bin(Bin.quantiles(10)), dir: "x" })
       )
       .mark(
@@ -388,14 +418,14 @@ chart(monthlyDensity, { axes: { x: true, y: false } })
   );
 ```
 
-![ridgeline](img/croissant--ridgeline-by-month.png)
+![ridgeline](img/croissant--ridgeline-by-month-density.png)
 
 _Target render. Two things this example found: (1) `ref("density")` must mean
 "this month's density", so the ref has to resolve inside the month's group,
-not across the whole chart (decision 5); (2) Seattle highs have many ties, so
-some quantile edges almost coincide and their slices shrink to slivers (April,
-October). A data-unit gap swallows such a slice; a pixel inset does too once
-the cell is narrower than the inset. This needs a rule (decision 3)._
+not across the whole chart (decision 5); (2) cutting the raw rows instead of
+the curve fails here: Seattle highs were recorded in whole °F, so edges land
+on tied values, some slices shrink to slivers and 65 of 120 dots fall in the
+gaps. See "Rows or the drawn density?"._
 
 ### General use: the same pieces beyond croissants
 
@@ -515,8 +545,11 @@ Illustrator's Divide, Paper.js `divide`, shapely `split`: one call that cuts a
 shape by a set of cells and returns all the pieces.
 
 ```js
-chart(rows, { axes: { x: true, y: false } })
-  .flow(partition({ by: field("x").bin(Bin.quantiles(10)), dir: "x" }))
+chart(grid, { axes: { x: true, y: false } })
+  .flow(
+    derive((rows) => quantileRows(rows, { x: "x", density: "pdf", n: 1000 })),
+    partition({ by: field("x").bin(Bin.quantiles(10)), dir: "x" })
+  )
   .mark(
     divide({ inset: 3, fill: "#D1E4F6", stroke: "#467DA8" }, [ref("density")])
   );
@@ -524,8 +557,11 @@ chart(rows, { axes: { x: true, y: false } })
 
 ```python
 (
-    chart(rows, axes={"x": True, "y": False})
-    .flow(partition(by=field("x").bin(Bin.quantiles(10)), dir="x"))
+    chart(grid, axes={"x": True, "y": False})
+    .flow(
+        derive(lambda rows: quantile_rows(rows, x="x", density="pdf", n=1000)),
+        partition(by=field("x").bin(Bin.quantiles(10)), dir="x"),
+    )
     .mark(divide([ref("density")], inset=3, fill="#D1E4F6", stroke="#467DA8"))
 )
 ```
