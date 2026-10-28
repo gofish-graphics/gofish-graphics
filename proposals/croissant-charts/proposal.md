@@ -256,7 +256,7 @@ chart(grid, { axes: { x: true, y: false } })
             { fill: "#D1E4F6", stroke: "#467DA8", strokeWidth: 2 }, // NEW: paint on the result
             [ref("density"), region({ inset: 3 })] // NEW: vector intersect; region inset
           ),
-          circle({ x: field("x").median(), y: 6, r: 3, fill: "#467DA8" }), // NEW: median()
+          circle({ cx: field("x").median(), cy: 6, r: 3, fill: "#467DA8" }), // NEW: median()
         ])
       )
   );
@@ -282,7 +282,7 @@ rows = [{"x": norm_inv((i + 0.5) / 1000)} for i in range(1000)]
                         stroke="#467DA8",
                         stroke_width=2,
                     ),
-                    circle(x=field("x").median(), y=6, r=3, fill="#467DA8"),
+                    circle(cx=field("x").median(), cy=6, r=3, fill="#467DA8"),
                 ]
             )
         )
@@ -319,8 +319,8 @@ chart(densityOf(penguins, "Body Mass (g)"), { axes: { x: true, y: false } })
             region({ inset: 3 }),
           ]),
           circle({
-            x: field("Body Mass (g)").median(),
-            y: 6,
+            cx: field("Body Mass (g)").median(),
+            cy: 6,
             r: 3,
             fill: "#467DA8",
           }),
@@ -374,8 +374,8 @@ chart(monthlyDensity, { axes: { x: true, y: false } })
             region({ inset: 2 }),
           ]),
           circle({
-            x: field("temp_max").median(),
-            y: 5,
+            cx: field("temp_max").median(),
+            cy: 5,
             r: 2,
             fill: "#467DA8",
           }),
@@ -608,7 +608,7 @@ row at 10% of the peak height. The numbers are the right tail dot's x, in σ.
   in tall thin slices its answer is anywhere along the middle line, so dots
   jump (see the fourth slice).
 
-**Recommendation: the conditional median, as data.** `x: field("x").median()`
+**Recommendation: the conditional median, as data.** `cx: field("x").median()`
 is a fold over the cell's rows, so no geometry rule is needed, it is the same
 for any distribution, and it says something true: half of the slice's mass is
 on each side of the dot. For skewed data (penguins) the geometric rules and the
@@ -697,7 +697,11 @@ Both still need vector slicing, so choice 3 stands either way.
    rows) enough, or do we also want `Bin.quantiles(n, { weight })` over a
    density grid?
 3. **Ties.** When quantile edges coincide, error (polars' default), merge the
-   cells, or keep an empty cell?
+   cells, or keep an empty cell? Ties also move dots: Seattle highs are
+   recorded in steps, so many days sit exactly on an edge value, and the
+   median of that cell lands on the edge (see the ridgeline). Should cells be
+   half-open `[a, b)` as now, or should rows tied at an edge be split between
+   the two cells?
 4. **Paint of a composite.** Does the result of `intersect` take its own
    `fill` and `stroke`, with operands giving shape only?
 5. **Ref scope in groups.** In the ridgeline, should `ref("density")` inside a
@@ -717,7 +721,7 @@ Bin.quantiles([0.05, 0.25, 0.5, 0.75, 0.95]);
 field("x").median(); // new fold
 region({ inset: 3 }); // new option, same meaning as rect.inset
 intersect({ fill, stroke, strokeWidth }, [a, b]); // new paint options; vector when a and b have outlines
-circle({ x: field("x").median() }); // x inside a partition cell (to verify)
+circle({ cx: field("x").median() }); // center at the cell median
 ```
 
 ```python
@@ -741,3 +745,9 @@ intersect([a, b], fill=..., stroke=..., stroke_width=...)
 - Pixel-space prototype detail: the target renders draw each slice with the
   data-bound `polygon` mark, which already lands on a real axis. That is a
   cheap way to prototype any vector-geometry proposal.
+- The dot spelling is `circle({ cx, cy })`, not `circle({ x, y })`. `x` and
+  `y` place a circle's left and bottom edge, like `rect`; `cx` and `cy` place
+  its center (#1099 made `cx` work). The first renders used `x` and every dot
+  sat one radius to the right of its median. A dot read as a point probably
+  wants its center by default; that question belongs to #542 (point geometry
+  in the box model), not to this proposal.

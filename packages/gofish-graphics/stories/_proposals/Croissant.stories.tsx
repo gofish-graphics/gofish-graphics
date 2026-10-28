@@ -237,7 +237,7 @@ function drawCroissant(
     })
   );
   for (const [x, y] of dots)
-    b = b.layer(circle({ x: datum(x), y: datum(y), r, fill: STROKE }));
+    b = b.layer(circle({ cx: datum(x), cy: datum(y), r, fill: STROKE }));
   b = extra(b);
   b.render(container);
 }
