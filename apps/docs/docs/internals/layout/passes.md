@@ -568,8 +568,11 @@ domain's `canvas / range` or a baseline-magnitude σ — is equated to the bindi
 `min(...)` so one data unit measures the same on both axes (circles stay circular,
 maps stay undistorted); the binding axis fills, the other gets a recentered
 posScale. Stage 6c makes this a named `recenterEqualMeasure` operation _on_ the
-scope registry rather than an inline rewrite, so it is the one post-solve σ
+scope registry rather than an inline rewrite, so it is a post-solve σ
 adjustment on the registry's books and `GOFISH_DUMP_SCOPES` records the final σ.
+A chart with a size of its own on both axes makes the same adjustment to its
+own scopes (`equalizeFixed`), shrinking the slack axis to its content where the
+root centers it.
 (After the scope dump, `GOFISH_DUMP_SHARING` prints each layer's sharing sets,
 see [Underlying Space](/internals/core/underlying-space). It only reads the tree.)
 It is type equality, not a knob, and a single-coordinate-space coupling

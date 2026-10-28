@@ -692,9 +692,10 @@ export async function layout(
   // from the measures matching, the same way `circle({ r })` lowers to a
   // `w`/`h` that share a measure and so cannot render as an ellipse. The
   // scope-level operation — take the binding (smaller) σ and equate both
-  // axes' scopes — lives on the registry (Stage 6c: the ONE post-solve σ
-  // adjustment, so every slope stays registry-sourced and the dump shows the
-  // FINAL σ). Silently skipped when an axis has no solved scope to equate.
+  // axes' scopes — lives on the registry (Stage 6c: a post-solve σ
+  // adjustment on the registry's books, so every slope stays
+  // registry-sourced and the dump shows the FINAL σ). Silently skipped when
+  // an axis has no solved scope to equate.
   //
   // Only a DECLARED unit counts (`sharesDeclaredMeasure`). A chart with a
   // size of its own recenters its own scopes the same way

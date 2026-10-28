@@ -393,11 +393,13 @@ export class ScopeRegistry {
    * (the claim at the shared σ) is centered in its canvas, and its `originPx`
    * follows from where that puts the claim's baseline.
    *
-   * This is the ONE place a post-solve σ adjustment happens, so it lives on the
-   * registry (not inlined in `gofish.tsx`): every slope a render produces is
-   * registry-sourced, and `GOFISH_DUMP_SCOPES` records the FINAL σ (a `recenter`
-   * entry per axis). Returns the recentered solutions; a no-op (undefined)
-   * unless both axes have a solved scope.
+   * This is the render root's post-solve σ adjustment; a node with a literal
+   * size on both axes makes its own ({@link equalizeFixed}), which shrinks
+   * the slack axis to its content instead of centering it. Both live on the
+   * registry (not inlined in `gofish.tsx` or `layer.tsx`): every slope a
+   * render produces is registry-sourced, and `GOFISH_DUMP_SCOPES` records the
+   * FINAL σ (a `recenter` entry per axis). Returns the recentered solutions;
+   * a no-op (undefined) unless both axes have a solved scope.
    */
   recenterEqualMeasure(
     rootKey: string,
