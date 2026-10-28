@@ -77,8 +77,10 @@ uses the union of the members' boxes grown by `padding`. An oval or a
 blob computes its outline in the same pass, in the frame the children's boxes
 were read in, and the node's box is the outline's box. The outline is also
 the node's geometry, stroke included: an enclose over fresh children answers
-`outline` with its loops and `enclosingCircle` with their smallest circle
-grown by half the stroke. So a `pack` that holds it packs the outline, and an
+`outline` with its loops, thinned to the tolerance asked for
+(`simplifyRing`), and `enclosingCircle` with the smallest circle around the
+loops (`ringsEnclosingCircle`, which `polygon` uses too) grown by half the
+stroke. So a `pack` that holds it packs the outline, and an
 outer `enclose` hugs it. A box shape's outline is its padded box, so its
 geometry is that box alone, and a `pack` packs the circle around the box. Both are kept in `renderData`, and
 `lower` maps them through `local` (the node's translate and y direction) and

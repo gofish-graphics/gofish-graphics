@@ -18,12 +18,14 @@ import {
   flattenPath,
   reflectOutlineY,
   translateOutline,
+  simplifyRing,
   type Circle,
   type Outline,
 } from "../ast/geometry";
 import { Text } from "../ast/shapes/text";
 import { membersOf } from "../ast/graphicalOperators/enclose/members";
 import { chart, line, live, ribbon, scatter, spread, stack, rect } from "../lib";
+import { segDist } from "../ast/geometry/plane";
 
 let passed = 0;
 let failed = 0;
@@ -582,6 +584,41 @@ console.log("# composites clipped to their first child claim its room");
         near(node.intrinsicDims![1].size!, 80)
     );
   }
+}
+
+console.log("# simplifyRing keeps a ring within the tolerance");
+{
+  // a circle of radius 50 sampled every 0.5 degrees, with a dent
+  const ring: [number, number][] = Array.from({ length: 720 }, (_, i) => {
+    const t = (i / 720) * 2 * Math.PI;
+    const r = i >= 100 && i < 110 ? 45 : 50;
+    return [r * Math.cos(t), r * Math.sin(t)];
+  });
+  const kept = simplifyRing(ring, 0.5);
+  const off = Math.max(
+    ...ring.map(([x, y]) =>
+      Math.min(
+        ...kept.map((a, k) => {
+          const b = kept[(k + 1) % kept.length];
+          return segDist(x, y, a[0], a[1], b[0], b[1]);
+        })
+      )
+    )
+  );
+  ok(
+    "every point stays within 0.5 of the thinned ring",
+    off <= 0.5 + 1e-9,
+    `farthest ${off}`
+  );
+  ok(
+    "it drops most of the points",
+    kept.length < 100 && kept.length > 8,
+    `${kept.length} kept`
+  );
+  ok(
+    "a tolerance of 0 keeps every point",
+    simplifyRing(ring, 0).length === ring.length
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

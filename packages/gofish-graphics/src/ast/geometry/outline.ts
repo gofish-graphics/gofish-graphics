@@ -3,6 +3,7 @@ import type { AxisDirection } from "../axisDirection";
 import type { Dimensions } from "../dims";
 import type { Box } from "./box";
 import type { Geometry } from "./index";
+import { segDist } from "./plane";
 
 /**
  * A point of an outline. Every outline, a shape's own and the box fallback
@@ -203,6 +204,48 @@ export const ringOutline = (
   closed: true,
   ...paint,
 });
+
+/**
+ * A closed ring with the points dropped that it can lose while staying within
+ * `tolerance` of every point it had (Douglas–Peucker, from its first point
+ * and the point farthest from it). A ring of three points or fewer, or a
+ * tolerance of 0, is kept whole.
+ */
+export function simplifyRing<P extends readonly [number, number]>(
+  ring: readonly P[],
+  tolerance: number
+): P[] {
+  const n = ring.length;
+  if (n <= 3 || !(tolerance > 0)) return ring.slice();
+  let far = 0;
+  let farD = -1;
+  for (let i = 1; i < n; i++) {
+    const d = Math.hypot(ring[i][0] - ring[0][0], ring[i][1] - ring[0][1]);
+    if (d > farD) [far, farD] = [i, d];
+  }
+  const keep = new Uint8Array(n);
+  keep[0] = keep[far] = 1;
+  // index n stands for ring[0] again, closing the ring
+  const stack: [number, number][] = [
+    [0, far],
+    [far, n],
+  ];
+  while (stack.length > 0) {
+    const [a, b] = stack.pop()!;
+    const [ax, ay] = ring[a];
+    const [bx, by] = ring[b % n];
+    let worst = -1;
+    let worstD = tolerance;
+    for (let i = a + 1; i < b; i++) {
+      const d = segDist(ring[i][0], ring[i][1], ax, ay, bx, by);
+      if (d > worstD) [worst, worstD] = [i, d];
+    }
+    if (worst < 0) continue;
+    keep[worst] = 1;
+    stack.push([a, worst], [worst, b]);
+  }
+  return ring.filter((_, i) => keep[i] === 1);
+}
 
 /** A path's outline: `path`, kept in a node's axis order, flattened to
  *  `tolerance` (see {@link flattenPath}) and closed or open as `closed`

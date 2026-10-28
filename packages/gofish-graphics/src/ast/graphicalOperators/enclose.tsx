@@ -55,8 +55,8 @@ import type { Placement } from "../constraints/claimPlacement";
 import { Extent } from "../extent";
 import * as Monotonic from "../../util/monotonic";
 import { ringPathData } from "../geometry/plane";
-import { outlinePaint, ringOutline } from "../geometry/outline";
-import { packEnclose } from "d3-hierarchy";
+import { outlinePaint, ringOutline, simplifyRing } from "../geometry/outline";
+import { ringsEnclosingCircle } from "../geometry/enclosingCircle";
 
 /** `Shape.arcs()`'s radius when it is given none, as the `Shape` family
  *  declares it. */
@@ -217,13 +217,13 @@ function Enclose(
         const paint = outlinePaint({ fill, stroke, strokeWidth });
         return {
           box,
-          outline: () => loops.map((l) => ringOutline(l, d, paint)),
+          // The painted loops, thinned to the tolerance asked for: an outer
+          // enclose reads this outline as members, one per piece.
+          outline: (tolerance) =>
+            loops.map((l) => ringOutline(simplifyRing(l, tolerance), d, paint)),
           enclosingCircle: () => {
-            const e = packEnclose(
-              loops.flat().map(([x, y]) => ({ x, y: d * y, r: 0 }))
-            );
-            const s = outlineOverhang(stroke, strokeWidth);
-            return { cx: e.x, cy: e.y, r: e.r + s };
+            const c = ringsEnclosingCircle(loops, d);
+            return { ...c, r: c.r + outlineOverhang(stroke, strokeWidth) };
           },
         };
       },
