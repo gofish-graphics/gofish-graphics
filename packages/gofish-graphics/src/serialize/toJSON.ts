@@ -86,15 +86,40 @@ function wireOpts(
         "table, so it has no IR form."
     );
   }
+  return wireFields(accepted, opts);
+}
+
+/** Of `opts`, the keys `accepted` declares, as the wire carries them: a
+ *  function value is dropped, and a field whose declared type holds nodes (a
+ *  blob's `avoiding`, inside `shape`) carries their references. */
+function wireFields(
+  accepted: Readonly<Record<string, { type: Frontend.FieldType }>>,
+  opts: AnyObject
+): AnyObject {
   const out: AnyObject = {};
   for (const [key, value] of Object.entries(opts)) {
-    if (Object.hasOwn(accepted, key) && typeof value !== "function") {
-      // A field whose declared type holds nodes (a blob's `avoiding`, inside
-      // `shape`) carries their references; every other field is as given.
+    if (Object.hasOwn(accepted, key) && typeof value !== "function")
       out[key] = Frontend.mapHeldNodes(accepted[key].type, value, nodesToIR);
-    }
   }
   return out;
+}
+
+/**
+ * A `.label()` chain as the wire carries it: each call's `accessor`, and of
+ * its options the keys `Frontend.LABEL_OPTIONS` declares (`wireFields`, as
+ * {@link wireOpts} keeps a construct's), with the nodes a label avoids
+ * written as their references.
+ */
+function wireLabels(
+  label: NonNullable<SerializeTag["label"]>
+): Frontend.LabelSpecIR[] {
+  return label.map(
+    ({ accessor, ...opts }) =>
+      ({
+        accessor,
+        ...wireFields(Frontend.LABEL_OPTIONS, opts),
+      }) as Frontend.LabelSpecIR
+  );
 }
 
 /**
@@ -337,7 +362,7 @@ function operatorToIR(op: Operator<any, any>): Frontend.OperatorIR {
   return {
     type: tag.type,
     ...wireOpts("operator", tag.type, tag.opts),
-    ...(tag.label !== undefined ? { label: tag.label } : {}),
+    ...(tag.label !== undefined ? { label: wireLabels(tag.label) } : {}),
     ...(tag.translate !== undefined ? { translate: tag.translate } : {}),
   } as Frontend.OperatorIR;
 }
@@ -394,7 +419,7 @@ async function markToIR(
   // Python's `to_dict()` shape).
   const chained: AnyObject = {};
   if (tag.name !== undefined) chained.name = tag.name;
-  if (tag.label !== undefined) chained.label = tag.label;
+  if (tag.label !== undefined) chained.label = wireLabels(tag.label);
 
   if (tag.__combinator) {
     const childrenResolved = await flatChildren(tag.children);

@@ -68,6 +68,7 @@ const CONSTRAINT_TYPES: Record<ConstraintSpec["type"], true> = {
   nest: true,
   grid: true,
   overlap: true,
+  labelPlace: true,
 };
 
 /** A constraint spec is a plain object built by a `Constraint.*` factory. A

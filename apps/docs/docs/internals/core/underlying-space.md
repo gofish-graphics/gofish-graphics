@@ -2394,8 +2394,9 @@ one `region` spans both axes (the cell's box) and holds the cell's outline,
 and no axis is left to align. The boxes make the axes' domains, and since a
 polygon cell is no cell of one axis alone, each axis is a plain continuous
 axis (`collectPositionDomains` collects only a cell of a line, a `Cell`). A
-`region` draws the outline; any other mark is placed in the box, so a circle
-or a text sits at a hexagon's center.
+`region` draws the outline, and answers it as its `outline` geometry query
+(see [Layout Calculation](/internals/layout/passes)); any other mark is placed
+in the box, so a circle or a text sits at a hexagon's center.
 
 **Expression evaluation is orthogonal to the channel's own aggregation.**
 `inferSize`/`inferPos`'s shared core (`inferNumeric` in `channels.ts`) always

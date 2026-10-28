@@ -1,5 +1,7 @@
 import { GoFishAST } from "../_ast";
-import { GoFishNode, type ToPixel } from "../_node";
+import { GoFishNode, defaultGeometry, type ToPixel } from "../_node";
+import { outlinePaint, pathOutline } from "../geometry";
+import { end } from "../../families/place";
 import { Size, displayTranslate } from "../dims";
 import type { DisplayList } from "gofish-ir";
 import {
@@ -61,9 +63,17 @@ export const arrow = createNodeOperator(
   (opts: ArrowOpts, children: GoFishAST[]) => {
     const props = { ...defaultArrowOpts, ...opts };
 
+    // Its body is an open path, stroked; the head is decoration on it.
+    const paint = outlinePaint({
+      fill: "none",
+      stroke: props.stroke,
+      strokeWidth: props.strokeWidth,
+    });
     return new GoFishNode(
       {
         type: "arrow",
+        // A path is labeled at its end.
+        labelPosition: end(),
         resolveUnderlyingSpace: (
           _childSpaces: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]
@@ -220,6 +230,30 @@ export const arrow = createNodeOperator(
           );
           return items;
         },
+        // Its outline is an open path from its start to the tip of its head:
+        // the body, then on through the head to its tip, as wide as its
+        // stroke. Its end is where the arrow's ink ends, so a label at its
+        // end clears the head.
+        geometry: (laidOut, layoutChildren, node) => ({
+          ...defaultGeometry(laidOut, layoutChildren, node),
+          outline: (tolerance) => {
+            if (laidOut.renderData === undefined) return [];
+            const { body, head } = laidOut.renderData as {
+              body: Path;
+              head: Point[];
+            };
+            const end = (body[body.length - 1] as BezierCurve).end;
+            return [
+              pathOutline(
+                [...body, segment(end, head[1])],
+                tolerance,
+                node.yFrame.direction,
+                false,
+                paint
+              ),
+            ];
+          },
+        }),
       },
       children
     );

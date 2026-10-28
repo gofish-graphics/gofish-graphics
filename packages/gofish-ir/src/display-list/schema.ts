@@ -165,6 +165,11 @@ export interface Style {
   strokeDasharray?: string;
   /** A `url(#id)` reference to a user-supplied filter def. */
   filter?: string;
+  /** SVG `paint-order`: `"stroke"` paints the stroke under the fill (a
+   *  text halo). */
+  paintOrder?: string;
+  /** SVG `stroke-linejoin`. */
+  strokeLinejoin?: string;
 }
 
 export const DISPLAY_ITEM_KINDS = [

@@ -7,6 +7,11 @@ covers:
   - packages/gofish-graphics/src/ast/labels/elaborate.tsx
   - packages/gofish-graphics/src/ast/labels/labelPlacement.ts
   - packages/gofish-graphics/src/ast/labels/autoLabelColor.ts
+  - packages/gofish-graphics/src/ast/labels/labelNode.tsx
+  - packages/gofish-graphics/src/ast/labels/strategies.ts
+  - packages/gofish-graphics/src/ast/labels/placeStep.ts
+  - packages/gofish-graphics/src/ast/labels/collide.ts
+  - packages/gofish-graphics/src/families/place.ts
 ---
 
 # Labels
@@ -14,8 +19,8 @@ covers:
 `.label(accessor, options?)` attaches a text label to a mark or an operator's
 groups. Like [axes](/internals/frontend/axes) and
 [legends](/internals/frontend/legends), a label is **not a privileged render-time
-overlay**. It is _elaborated_ into an ordinary `Text` shape, seated beside (or
-inside) the labeled node via a `ref()` stand-in and ordinary `align`/`distribute`
+overlay**. It is _elaborated_ into an ordinary shape, a `label` node (text,
+drawn as one mark; `labelNode.tsx`), seated beside (or inside) the labeled node via a `ref()` stand-in and ordinary `align`/`distribute`
 constraints, wrapped in a `Layer` tier at the labeled node's **parent** — the same
 technique `elaborateOrdinalAxis` uses for its ref-based tick labels. The layout
 engine has no label-specific code at all.
@@ -73,18 +78,32 @@ legend past it. It has two phases:
    array. It is what makes `.label()` on an **operator** (`spread`, `stack`,
    `group`, ...) label the group rather than every leaf mark inside it: the
    operator factory stamps `datum` on each group leaf it produces, so the push-down
-   stops there.
-2. **`elaborateLabelsWalk`** — a bottom-up recursion. At each node `P`, every
-   **direct child** still carrying a non-empty `_labels` (after step 1) is
-   collected as a target; if any exist, `P` is wrapped once in a `Layer`
-   holding its original content plus one `ref()` + `Text` pair per
-   (target × spec). A labeled ROOT (no parent to wrap it) gets one final
-   self-wrap in `elaborateLabels` itself.
+   stops there. A mark that draws its own ink between or around its
+   children keeps its label too: it says where its label goes
+   (`labelPosition`, below), as `arrow` and the `line` connector do, and it
+   is the thing labeled.
+2. **`holdLabels`** — a pre-pass that takes every node's `_labels` off it
+   into a map, `held`, keyed by the node that holds them. Each spec is
+   resolved once, here, to its position on its target (`positionOf`), and
+   each call's targets that the chooser places are counted. The target and
+   the position travel with the spec from then on.
+3. **`elaborateLabelsWalk`** — a bottom-up recursion. At each node `P`, every
+   **direct child** that still holds labels is collected. Its labels at a
+   position string are wrapped at
+   `P`: `P` is wrapped once in a `Layer` holding its original content plus
+   one `ref()` + `label` pair per (target × spec). Its labels that the
+   chooser places wait instead (`pending`), and so do the ones handed up
+   from below, until the walk reaches the nearest node that all of their
+   call's targets are under (by the counts from `holdLabels`); they are
+   wrapped there, so one call is placed in one run. A
+   labeled ROOT (no parent to wrap it) gets one final self-wrap in
+   `elaborateLabels` itself.
 
 ## The parent-tier wrap invariant
 
-The wrap happens at the labeled node's **parent**, never at the labeled node
-itself. This is deliberate and mirrors the axis gutter invariant exactly
+The wrap happens at the labeled node's **parent** (or, for the labels the
+chooser places, at the nearest node above all of their call's targets),
+never at the labeled node itself. This is deliberate and mirrors the axis gutter invariant exactly
 (labels must never shift the marks they describe, #493): wrapping a mark
 individually would fold the label's bbox into the mark's own box, and an
 outset label would then push stacked/box-driven siblings apart — a label on
@@ -106,7 +125,7 @@ label lowers under its mark's build-in animation (`INTERNAL_animate`), which it
 finds through `_attachedTo`, so it follows its mark's timing
 (`src/animation/paint.ts`).
 
-Concretely, `wrapWithLabelTexts` builds:
+Concretely, `wrapWithLabels` builds:
 
 ```
 wrap = Layer([ content.name("__labelContent"), ...refs, ...texts ])
@@ -122,15 +141,23 @@ placed):
    phase-1 baseline placement; this re-states that placement explicitly, the
    same pin every chrome ring uses for the same reason: the label wrap is built
    with the same `wrapRing` (in `elaborationUtils.ts`).
-2. Per target × spec, the constraints `buildLabelConstraints` derives from the
-   spec's `LabelPosition` (below), relating the spec's `Text` to a
-   `ref(target)` stand-in.
+2. Per target × spec at a position string, the constraints
+   `buildLabelConstraints` derives from it (below), relating the spec's label
+   to a `ref(target)` stand-in.
+3. When any label is placed by the chooser, one `labelPlace` constraint over
+   all of them, which the layer runs after its solve (see "Placement
+   strategies" below).
 
-If a node being wrapped **also** carries its own `_labels` (pending for its
-own parent), `elaborateLabelsWalk` hoists them onto the freshly built wrapper
-rather than leaving them on the now-replaced original node, so the parent's
-collection loop — which walks `node.children` by identity — sees them on the
-node that actually occupies that slot.
+If a node being wrapped **also** holds its own labels (pending for its own
+parent), `elaborateLabelsWalk` moves them in `held` to the freshly built
+wrapper, so the parent's collection loop — which walks `node.children` by
+identity — finds them on the node that actually occupies that slot. They
+keep their target and their position: an `arrow` whose children carry
+labels is still labeled at its end, through a `ref()` to the arrow itself,
+not to the wrapper.
+
+The wrapper hands up every label it seated, placed by the solve or by the
+chooser, so a chooser in a wrapper above keeps its labels off them.
 
 ## Position vocabulary → constraints
 
@@ -184,8 +211,123 @@ visual top, and an authored `align: "start"` on a left/right edge always means t
 visual top.
 
 A label's `rotate` option is authored as **literal screen-clockwise degrees**
-(Vega-Lite's convention), and `Text`'s `rotate` is SVG's rotation, so it passes
-through unchanged.
+(Vega-Lite's convention), and the label node draws it as SVG's rotation, so it
+passes through unchanged.
+
+## The label node
+
+The label node (`LabelText`, `labelNode.tsx`) measures its text the way `Text`
+does (`estimateTextDimensions`), and its box is the text's box rotated by its
+angle, centered on the node's local origin, so the box reads the same in either
+y direction. Unrotated, it draws exactly as a `Text` of the same font: the
+glyphs start at the box's left edge, on the baseline `ascent` below its top.
+Rotated, the text turns about the box's center. A `Text` turns about its glyph
+anchor instead, but once either box is placed the rotated text sits in the same
+spot, because a rectangle's center is the center of its rotated bounding box.
+
+It is its own node, not a `Text`, because a label holds state a placement may
+write after layout: the angle it is drawn at and whether it is hidden. A
+transition moves it rigidly, as it moves a `Text` (`RIGID_SHAPES` in
+`tween.tsx`).
+
+## Placement strategies
+
+`position` takes a position string, or a value of the `Place` family
+(`families/place.ts`): `Place.around()`, `Place.along({ at, side, orient })`,
+`Place.start()`, `Place.end()` and `Place.interior()`. A strategy reads the
+target's `outline` geometry (see
+[Layout Calculation](/internals/layout/passes)) and proposes candidate spots,
+best first (`strategies.ts`):
+
+- `around` takes the outline's extreme point in each of eight screen
+  directions (Imhof's order, upper right first), and puts the label's box
+  just past it, touching from the side the direction points to. Tied points
+  form runs along the outline; a run stands for its middle (a ring that ties
+  all the way round, like a bar thinner than the tie tolerance, has no ends,
+  so it stands for the middle of its span across the direction), and of several
+  runs (the two arm tips of a C facing right) the one nearest the middle of
+  that side of the box wins, then the upper one.
+- `along` takes spots on one outline: at `at` (a fraction of its length, its
+  start, middle or end, or a named part such as a box's `x-max` edge), then
+  sliding away by 3 px steps, nearest first, trying every listed side at a
+  spot before sliding on. A level label beside the outline is moved off it
+  along the side's normal until its box clears the outline; a sloped one is
+  turned to the chord across its width, and skipped where the outline
+  strays from the chord by more than 0.3 of its height. `above` and `below`
+  have no spot where the outline is steeper than about 75°.
+- `start` and `end` put a level label just past the first or last point of
+  an open path, on the side the path heads.
+- `interior` takes the spots inside a filled closed outline where the label's box
+  (with 2 px padding) can grow largest: the room at a point is the scale at
+  which the box centered there first touches the outline, its smallest
+  weighted L∞ distance to an edge. A coarse grid finds the best cells and
+  halving steps refine them. Only spots where the box fits at its own size
+  are candidates. The edges are filed in a grid of cells sized to the
+  label, and the room at a point reads the cells around it ring by ring,
+  stopping once no unread edge can be nearer.
+
+A strategy that needs geometry the target lacks is an error that names it
+(`Place.interior needs a filled region; connect has an open one`). A
+polygon with fill `"none"` has a closed outline but no filled region, so
+`interior` is an error on it too.
+
+`labelPlace` (`placeStep.ts`) is a private elaboration target like
+`overlap`: the solver never sees it, and `applyConstraints` runs it after the
+solve and after `overlap`, when the labeled marks are placed and their `ref()`
+stand-ins can be read. It reads and writes in pixels through each
+placeable's unoriented node (`rawPlaceable`), and reads a placed node's
+outlines with `placedOutlines`, as `enclose` does. The labels of one `.label()`
+call share one `group`: an identity made once per call, where the call is
+recorded (the mark modifier's `bind`, an operator's label state, so a call
+read back by `fromJSON` too), so two calls with the same accessor are two
+calls. They are placed in one run, in the layer of the nearest node all of
+their targets are under, so the area they keep to is that node's: the plot
+area below the axes when the call spans the plot. A call's `start` and `end`
+labels are placed first, each kind on its own (see below); the rest are
+taken in data order, and each takes its first candidate that stays
+inside the area the layer was given (`[0, size]` on each axis, so labels stay
+off the axes around the plot) and whose box, grown by 1 px, covers no
+obstacle. The strategies yield their candidates lazily, so the chooser stops
+computing at the first free one. The obstacles sit in a uniform grid (`collide.ts`): the labeled
+marks of the layer, as the ink each draws (the inside of a filled closed
+outline, and the band its stroke `width` draws along every outline, open or
+closed, so an unfilled closed outline is only its band), the label's own
+mark as its outline's band only (so a label may sit inside its
+region, and a label `"on"` a path may cover it), the labels placed so far
+(by this step, by the solve for a position string, or by the chooser in a
+wrapper below, read through refs; a hidden one takes no room), and the call's
+`avoiding` nodes, read through fresh refs made once per call (`nodeRefs.ts`,
+shared with `enclose`; a `selectAll` in `avoiding` is resolved where the
+call is recorded, against the chart's named layers). A label with no free candidate is hidden: it draws nothing and
+its box is empty at its mark's center. A `start` or `end` label has one
+spot, past its path's end: the labels of one call whose boxes overlap in x
+there slide apart vertically, a run at a time (`dodgeVertically`,
+directlabels' `last.qp`), and labels apart in x keep the heights their ends
+want. Each is then tested against the same obstacles as any label, and one
+that covers an obstacle is hidden and counted. The area the layer was given
+does not hold them: a path's end is where its label goes, often past the
+area (a line chart's end labels take the margin), and the labels join the
+layout's box. A seated label writes its
+angle to the label node and its box with `setExtent`, so a sloped label's
+box is its turned box. The render prints one `console.info` naming how many
+labels each call hid (`reportHiddenLabels`, from `gofish.tsx`).
+
+A position string never goes through the chooser, so it places exactly as
+before. With no `position`, the default comes from the target's node
+definition (`labelPosition`): `ellipse` gives `Place.around()` and `arrow`
+`Place.end()` by convention; a connector (`line`, `ribbon`) and a `polygon`
+give `"outline"`, which the chooser reads from the outline the mark draws
+(`placeByOutline`): `Place.end()` for an open path, `Place.interior()` for a
+filled region, `Place.around()` for a closed outline with no fill. Anything
+else gets `"outset"`. Inside a coordinate space that is not linear (a polar `coord`),
+outlines are not on the screen yet, so a default falls back to `"outset"` and
+a strategy written out is an error that cites #1201. Before that, a strategy
+is checked against the `Place` family with `checkStrategy` (an unknown kind,
+an undeclared param or a value out of bounds throws the validator's own
+message). The family's kinds and params are declared once in `STRATEGIES`
+(`descriptors.ts`), which also gives the wire form, the Python `Place`
+module, and the docs; a label's `avoiding`, `halo` and `background` are
+`LABEL_OPTIONS` fields (see [Frontend IR](/internals/frontend/serialization)).
 
 ## Auto-color
 
@@ -196,7 +338,12 @@ actually drawn (a categorical swatch, a continuous gradient's `scaleFn(value)`,
 or a literal string), not some approximation of it. The color math itself lives
 in `autoLabelColorForFill` (`autoLabelColor.ts`), and it runs on the color a
 renderer paints: the fill clipped to the sRGB gamut and rounded to 8 bits per
-channel. Inside the shape (`center` or any `inset-*` position), the fill's LUV
+channel. Whether the label is inside is read when it is drawn, from where it
+landed: its center is inside one of its target's filled closed outlines.
+Inside an unfilled one the page shows through, so it counts as outside. So a
+`"center"` label on a C-shaped polygon, whose box center falls in the C's
+opening, is colored for the page, and a `Place.interior()` label for the
+fill. Inside the shape, the fill's LUV
 lightness picks white text on a dark fill or a near-black tint of the fill's own
 hue (CIE LCh, D65) on a light one; a gray fill has no hue, so it gets a
 near-black neutral instead. Outside the shape, the label is a darkened tint of
@@ -209,14 +356,15 @@ with no resolvable fill, or a fill that is not a parseable color (`none`,
 ## Multi-label and typography options
 
 Repeated `.label()` calls on the same node **append**: `GoFishNode.label()`
-pushes onto an array (`(this._labels ??= []).push({ accessor, ...options })`),
+pushes onto an array (`(this._labels ??= []).push({ accessor, ...options, group: call })`),
 so `_labels` is genuinely a list of independent specs, each with its own
 accessor, position, and styling — not a single mutable slot. `LabelOptions`
 carries `fontFamily`/`fontWeight`/`fontStyle` alongside the older
 `position`/`fontSize`/`color`/`offset`/`rotate`; all three pass straight
-through to the elaborated `Text`, which already measures font family/weight/
-style for its own bbox, so no extra plumbing was needed to make them affect
-layout correctly. `minSpace` — the old overlay path's fit-heuristic knob for
+through to the elaborated label node, which measures font family/weight/
+style for its own bbox, so they affect layout correctly. `halo` (a white
+text outline, SVG `paint-order: stroke`) and `background` (a filled box) are
+drawn by the label node and count in its box. `minSpace` — the old overlay path's fit-heuristic knob for
 `shouldShowLabel` — has no elaboration-era equivalent and was dropped: a real
 `Text` node doesn't need a hint about whether it fits, it just occupies the
 space it measures.

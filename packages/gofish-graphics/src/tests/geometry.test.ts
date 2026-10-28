@@ -10,7 +10,19 @@ import { Ellipse } from "../ast/shapes/ellipse";
 import { Polygon } from "../ast/shapes/polygon";
 import { Pack } from "../ast/graphicalOperators/pack";
 import { defaultGeometry, GoFishNode } from "../ast/_node";
-import { enclosingCircle, translateCircle, type Circle } from "../ast/geometry";
+import {
+  enclosingCircle,
+  translateCircle,
+  boxOutline,
+  flattenPath,
+  reflectOutlineY,
+  translateOutline,
+  type Circle,
+  type Outline,
+} from "../ast/geometry";
+import { Text } from "../ast/shapes/text";
+import { membersOf } from "../ast/graphicalOperators/enclose/members";
+import { chart, line, live, ribbon, scatter, spread, stack, rect } from "../lib";
 
 let passed = 0;
 let failed = 0;
@@ -123,6 +135,326 @@ console.log("# geometry: polygon override");
     "offset square's circle is centered on it",
     sameCircle(s, { cx: 15, cy: 15, r: Math.SQRT2 * 5 }),
     show(s)
+  );
+}
+
+/** The largest distance from any point of `pts` to the circle or ellipse
+ *  `(x−cx)²/rx² + (y−cy)²/ry² = 1`, measured along the radius. */
+const ellipseStray = (
+  pts: [number, number][],
+  cx: number,
+  cy: number,
+  r: number
+): number =>
+  Math.max(...pts.map(([x, y]) => Math.abs(Math.hypot(x - cx, y - cy) - r)));
+
+/** The longest gap between consecutive points (closing the ring when
+ *  `closed`): a stand-in for "the samples follow the shape". */
+const longestStep = (o: Outline): number => {
+  let m = 0;
+  const n = o.points.length;
+  for (let i = 0; i + 1 < (o.closed ? n + 1 : n); i++) {
+    const a = o.points[i];
+    const b = o.points[(i + 1) % n];
+    m = Math.max(m, Math.hypot(b[0] - a[0], b[1] - a[1]));
+  }
+  return m;
+};
+
+console.log("# outline: box fallback");
+{
+  const rg = layOut(Rect({ w: 30, h: 40 })).geometry();
+  // A geometry with only a box: what a node with no outline of its own reads.
+  const g = { box: rg.box };
+  const [down] = [boxOutline(g.box, 1)];
+  ok(
+    "a node with no paint of its own is read as filling its box",
+    down.filled && down.width === undefined
+  );
+  ok(
+    "a filled rect's outline is the fallback's",
+    JSON.stringify(rg.outline(0.5)) === JSON.stringify([down])
+  );
+  ok("the fallback is one closed rect", down.closed && down.points.length === 4);
+  ok(
+    "the fallback gives its box exactly, in the same frame as its points",
+    JSON.stringify(down.box) === JSON.stringify(g.box)
+  );
+  ok(
+    "it runs clockwise from the top-left corner",
+    JSON.stringify(down.points) === "[[0,0],[30,0],[30,40],[0,40]]",
+    JSON.stringify(down.points)
+  );
+  const part = (o: Outline, name: string) =>
+    o.parts!.find((p) => p.name === name)!;
+  ok(
+    "a y that reads top-down names the top edge y-min",
+    part(down, "y-min").from === 0 && part(down, "y-min").to === 30
+  );
+  ok(
+    "the right edge is x-max, the left x-min",
+    part(down, "x-max").from === 30 &&
+      part(down, "x-max").to === 70 &&
+      part(down, "x-min").from === 100 &&
+      part(down, "x-min").to === 140
+  );
+  const [up] = [boxOutline(g.box, -1)];
+  ok(
+    "a y that grows upward names the top edge y-max",
+    part(up, "y-max").from === 0 && part(up, "y-min").from === 70
+  );
+}
+
+console.log("# outline: ellipse");
+{
+  const g = layOut(circle(20)).geometry();
+  for (const tol of [0.1, 1]) {
+    const [o] = (g).outline(tol);
+    ok(`circle outline is closed (tolerance ${tol})`, o.closed);
+    ok(
+      `circle samples lie on the circle (tolerance ${tol})`,
+      ellipseStray(o.points, 20, 20, 20) < 1e-9
+    );
+    // The sagitta of the longest chord is within the tolerance.
+    const step = longestStep(o);
+    const sagitta = 20 - Math.sqrt(20 * 20 - (step / 2) ** 2);
+    ok(
+      `circle chords stray at most the tolerance (${tol})`,
+      sagitta <= tol + 1e-9,
+      `${sagitta}`
+    );
+  }
+  const fine = (g).outline(0.1)[0].points.length;
+  const coarse = (g).outline(1)[0].points.length;
+  ok("a finer tolerance takes more samples", fine > coarse, `${fine} ${coarse}`);
+  const e = (g).outline(0.5)[0].ellipse;
+  ok(
+    "a circle's outline gives its ellipse exactly",
+    e !== undefined && e.cx === 20 && e.cy === 20 && e.rx === 20 && e.ry === 20,
+    JSON.stringify(e)
+  );
+}
+
+console.log("# outline: polygon and text");
+{
+  const ring: [number, number][] = [
+    [0, 0],
+    [30, 0],
+    [30, 10],
+    [10, 10],
+    [10, 30],
+    [0, 30],
+  ];
+  const [o] = (layOut(Polygon({ points: ring })).geometry()).outline(0.5);
+  ok(
+    "polygon outline is its ring, closed",
+    o.closed && JSON.stringify(o.points) === JSON.stringify(ring)
+  );
+  ok("a polygon is filled by default", o.filled && o.width === undefined);
+
+  const [u] = (layOut(
+      Polygon({ points: ring, fill: "none", stroke: "black", strokeWidth: 3 })
+    ).geometry()).outline(0.5);
+  ok(
+    "an unfilled polygon's outline is closed, not filled, as wide as its stroke",
+    u.closed && !u.filled && u.width === 3,
+    JSON.stringify({ closed: u.closed, filled: u.filled, width: u.width })
+  );
+  const [tr] = (layOut(Polygon({ points: ring, fill: "transparent" })).geometry()).outline(0.5);
+  ok("a transparent fill is not filled", tr.closed && !tr.filled);
+
+  const [ro] = (layOut(Rect({ w: 20, h: 10, fill: "none", stroke: "red", strokeWidth: 2 }))
+      .geometry()).outline(0.5);
+  ok(
+    "a rect's box outline carries its paint",
+    ro.closed && !ro.filled && ro.width === 2 && ro.box !== undefined
+  );
+
+  // enclose reads an unfilled closed outline as its loop: a ring of segments
+  // as wide as its stroke, closing back to its start.
+  const members = membersOf(
+    layOut(
+      Polygon({ points: ring, fill: "none", stroke: "black", strokeWidth: 3 })
+    )
+  );
+  ok(
+    "enclose reads an unfilled polygon as a ring of segments",
+    members.length === ring.length &&
+      members.every((m) => m.kind === "segment" && m.w === 3),
+    JSON.stringify(members.map((m) => m.kind))
+  );
+  const filledMembers = membersOf(layOut(Polygon({ points: ring })));
+  ok(
+    "enclose reads a filled polygon as its box",
+    filledMembers.length === 1 && filledMembers[0].kind === "box"
+  );
+
+  const t = layOut(Text({ text: "hello", fontSize: 10, rotate: 90 }));
+  const tg = t.geometry();
+  const [to] = (tg).outline(0.5);
+  ok("rotated text outline is a closed quad", to.closed && to.points.length === 4);
+  const xs = to.points.map((p) => p[0]);
+  const ys = to.points.map((p) => p[1]);
+  ok(
+    "rotated text outline fills its box",
+    near(Math.min(...xs), tg.box.min[0]) &&
+      near(Math.max(...xs), tg.box.max[0]) &&
+      near(Math.min(...ys), tg.box.min[1]) &&
+      near(Math.max(...ys), tg.box.max[1]),
+    JSON.stringify({ pts: to.points, box: tg.box })
+  );
+  const hi = layOut(Text({ text: "hi" })).geometry();
+  ok(
+    "unrotated text's outline is its box",
+    JSON.stringify(hi.outline(0.5)[0].box) === JSON.stringify(hi.box)
+  );
+}
+
+console.log("# outline: paths");
+{
+  const pts = flattenPath(
+    [
+      {
+        type: "bezier",
+        start: [0, 0],
+        control1: [0, 100],
+        control2: [100, 100],
+        end: [100, 0],
+      },
+    ],
+    0.25
+  );
+  // The bezier's own points at the sample parameters are exact; check the
+  // midpoints of the chords against the curve's points between them.
+  const bez = (t: number): [number, number] => {
+    const u = 1 - t;
+    return [
+      3 * u * t * t * 100 + t * t * t * 100,
+      3 * u * u * t * 100 + 3 * u * t * t * 100,
+    ];
+  };
+  const n = pts.length - 1;
+  let worst = 0;
+  for (let k = 0; k < n; k++) {
+    const m = bez((k + 0.5) / n);
+    const a = pts[k];
+    const b = pts[k + 1];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const d =
+      Math.abs((b[0] - a[0]) * (a[1] - m[1]) - (a[0] - m[0]) * (b[1] - a[1])) /
+      len;
+    worst = Math.max(worst, d);
+  }
+  ok("a flattened bezier stays within the tolerance", worst <= 0.25, `${worst}`);
+  ok(
+    "flattening keeps the ends",
+    pts[0][0] === 0 && pts[0][1] === 0 && pts[n][0] === 100 && pts[n][1] === 0
+  );
+  const r = reflectOutlineY({ points: [[1, 2]], closed: false, filled: false });
+  ok("reflecting flips y", r.points[0][0] === 1 && r.points[0][1] === -2);
+  const ex = reflectOutlineY(
+    translateOutline(
+      {
+        points: [],
+        closed: true,
+        filled: true,
+        ellipse: { cx: 1, cy: 2, rx: 3, ry: 4 },
+        box: { min: [0, 1], max: [5, 6] },
+      },
+      [10, 20]
+    )
+  );
+  ok(
+    "moving and reflecting an outline moves its exact forms with it",
+    JSON.stringify([ex.ellipse, ex.box]) ===
+      JSON.stringify([
+        { cx: 11, cy: -22, rx: 3, ry: 4 },
+        { min: [10, -26], max: [15, -21] },
+      ]),
+    JSON.stringify([ex.ellipse, ex.box])
+  );
+}
+
+/** Every node of a laid-out tree, depth first. */
+function* walk(node: GoFishNode): Generator<GoFishNode> {
+  yield node;
+  for (const c of node.children)
+    if (c instanceof GoFishNode) yield* walk(c);
+}
+
+console.log("# outline: line and ribbon connectors");
+{
+  const rows = [
+    { x: 0, y: 1, s: "a" },
+    { x: 1, y: 3, s: "a" },
+    { x: 2, y: 2, s: "a" },
+  ];
+  const lineChart = (await chart(rows)
+    .flow(scatter({ x: "x", y: "y" }))
+    .mark(line())
+    .resolve()) as GoFishNode;
+  await lineChart.toDisplayList({ w: 200, h: 100, axes: false });
+  const conn = [...walk(lineChart)].find((n) => n.type === "connect")!;
+  const lo = (conn.geometry()).outline(0.5);
+  ok("a line's outline is one open path", lo.length === 1 && !lo[0].closed);
+  ok("a line's outline samples its curve", lo[0].points.length > 3);
+  ok("a line's outline carries its stroke width", lo[0].width === 1, `${lo[0].width}`);
+  const g = conn.geometry();
+  ok(
+    "a line's outline lies in its box",
+    lo[0].points.every(
+      ([x, y]) =>
+        x >= g.box.min[0] - EPS &&
+        x <= g.box.max[0] + EPS &&
+        y >= g.box.min[1] - EPS &&
+        y <= g.box.max[1] + EPS
+    ),
+    JSON.stringify({ pts: lo[0].points, box: g.box })
+  );
+  // A larger y is higher on the screen: the middle row (y = 3) is above
+  // both ends, which are the first and last rows (y = 1 and y = 2).
+  const py = lo[0].points.map((p) => p[1]);
+  const top = Math.min(...py);
+  ok(
+    "the outline is in pixels, y down",
+    top < py[0] && top < py[py.length - 1] && py[0] > py[py.length - 1],
+    JSON.stringify(py)
+  );
+
+  const band = (await chart(rows)
+    .flow(spread({ by: "x", dir: "x", spacing: 20 }), stack({ by: "s", dir: "y" }))
+    .mark(rect({ h: "y", w: 0 }))
+    .layer(ribbon({ by: "s" }))
+    .resolve()) as GoFishNode;
+  await band.toDisplayList({ w: 200, h: 100, axes: false });
+  const rib = [...walk(band)].find((n) => n.type === "connect")!;
+  const ro = (rib.geometry()).outline(0.5);
+  ok("a ribbon's outline is one closed band", ro.length === 1 && ro[0].closed);
+  ok("a ribbon's band has no stroke width", ro[0].width === undefined);
+
+  // The outline's width is the stroke the line draws, with a live width
+  // too: the connector is built from its value when the chart resolves,
+  // and draws that value until the input changes.
+  const liveChart = (await chart(rows)
+    .flow(scatter({ x: "x", y: "y" }))
+    .mark(line({ strokeWidth: live(() => 4) }))
+    .resolve()) as GoFishNode;
+  const doc = await liveChart.toDisplayList({ w: 200, h: 100, axes: false });
+  const drawn: any[] = [];
+  const collect = (n: any): void => {
+    if (Array.isArray(n)) return n.forEach(collect);
+    if (n === null || typeof n !== "object") return;
+    if (n.kind === "path") drawn.push(n);
+    collect(n.items ?? []);
+    collect(n.children ?? []);
+  };
+  collect(doc.items);
+  const liveConn = [...walk(liveChart)].find((n) => n.type === "connect")!;
+  const [lw] = liveConn.geometry().outline(0.5);
+  ok(
+    "a live stroke width: the outline is as wide as the path drawn",
+    lw.width === 4 && drawn.length === 1 && drawn[0].style.strokeWidth === 4,
+    JSON.stringify({ outline: lw.width, drawn: drawn.map((d) => d.style) })
   );
 }
 

@@ -4,85 +4,72 @@
 
 /**
  * How `enclose` reads a placed node as blob geometry (internal; see
- * `blob.ts`). The result is in the enclosure's own frame: the frame its
- * children's `dims` are read in.
+ * `blob.ts`). It reads the node's outlines (`geometry/outline.ts`) in the
+ * enclosure's own frame, the frame its children's `dims` are read in, and
+ * takes each outline's exact form where it gives one:
  *
- *  - A circle is a disc. An ellipse that is not a circle is the disc of its
+ *  - An ellipse is a disc. One that is not a circle is the disc of its
  *    enclosing circle (its larger radius) and carries its semi-axes: the
  *    blob reads the disc, so it pads the ellipse a little more along its
  *    short axis, and the oval samples the ellipse itself.
- *  - A drawn line (a `line` connector) is its segments, each as wide as its
- *    stroke; a curved piece is cut into 8 straight ones.
- *  - Anything else is its bounding box.
+ *  - A box (a rect's outline, or that of a node with none of its own) is a
+ *    box.
+ *  - An open outline (a line, an arrow to its head's tip) is its pieces,
+ *    each as wide as its stroke.
+ *  - A closed outline that is not filled (a polygon with fill "none") is
+ *    its loop's pieces, each as wide as its stroke: a ring, whose inside is
+ *    not part of the member.
+ *  - A filled closed outline with no exact form (a polygon, a ribbon's band,
+ *    a rotated text's glyph box) is its bounding box.
+ *
+ * TODO(#1207): the last rule is a declared shortcut. A filled closed outline
+ * is a filled region, and the blob should hug it, but the blob has no
+ * filled-ring primitive. Reading the ring as its edges hugs the shape only
+ * through hole filling: with `holes: true` a large polygon's inside stays a
+ * hole, and an avoided polygon keeps out only a band along its edges. The
+ * fix is a filled-ring member kind in `blob.ts` (its distance, sites, link
+ * widths, keep-out polygon and avoidance pivots).
  */
-import type { GoFishAST } from "../../_ast";
-import { targetOf } from "../../constraints/relationalPaint";
-import type { Dimensions } from "../../dims";
-import type { Path, Point } from "../../../path";
-import type { BlobMember, Pt } from "./blob";
+import type { Placeable } from "../../_node";
+import {
+  outlineSegments,
+  placedOutlines,
+  ringExtent,
+  type Outline,
+} from "../../geometry";
+import type { BlobMember } from "./blob";
 
-/** A path's points, a curved piece cut into 8 straight ones. */
-const pathPoints = (path: Path): Point[] => {
-  const out: Point[] = [];
-  for (const seg of path) {
-    if (seg.type === "line") {
-      if (out.length === 0) out.push(seg.points[0]);
-      out.push(seg.points[1]);
-      continue;
-    }
-    if (out.length === 0) out.push(seg.start);
-    for (let k = 1; k <= 8; k++) {
-      const t = k / 8,
-        u = 1 - t;
-      out.push([
-        u * u * u * seg.start[0] +
-          3 * u * u * t * seg.control1[0] +
-          3 * u * t * t * seg.control2[0] +
-          t * t * t * seg.end[0],
-        u * u * u * seg.start[1] +
-          3 * u * u * t * seg.control1[1] +
-          3 * u * t * t * seg.control2[1] +
-          t * t * t * seg.end[1],
-      ]);
-    }
+/** How far the samples of a curved outline may stray from it, in pixels. */
+const TOLERANCE = 0.5;
+
+/** An outline as blob members. */
+function membersOfOutline(o: Outline): BlobMember[] {
+  if (o.ellipse !== undefined) {
+    const { cx, cy, rx, ry } = o.ellipse;
+    const disc: BlobMember = { kind: "disc", cx, cy, r: Math.max(rx, ry) };
+    return [rx === ry ? disc : { ...disc, axes: [rx, ry] }];
   }
-  return out;
-};
+  if (o.box !== undefined || (o.closed && o.filled)) {
+    const e = ringExtent(o.box ? [o.box.min, o.box.max] : o.points);
+    const [x, y] = [e.minX, e.minY];
+    return [{ kind: "box", x, y, w: e.maxX - x, h: e.maxY - y }];
+  }
+  // An open path, or the loop of an unfilled closed one: its pieces.
+  const w = o.width ?? 0;
+  return outlineSegments(o).map(
+    ([a, b]): BlobMember => ({
+      kind: "segment",
+      a,
+      b,
+      w,
+    })
+  );
+}
 
 /**
- * The blob members `child` stands for, given its placed `dims` in the
- * enclosure's frame.
+ * The blob members a placed child stands for. `placed` is the child as the
+ * enclosure's layout got it back (its view of the child), so its geometry
+ * and `dims` are both in the enclosure's frame.
  */
-export function membersOf(child: GoFishAST, dims: Dimensions): BlobMember[] {
-  const [x, y] = dims;
-  const x0 = x.min ?? 0,
-    y0 = y.min ?? 0,
-    w = x.size ?? 0,
-    h = y.size ?? 0;
-  const node = targetOf(child);
-  if (node?.type === "ellipse") {
-    const disc: BlobMember = {
-      kind: "disc",
-      cx: x0 + w / 2,
-      cy: y0 + h / 2,
-      r: Math.max(w, h) / 2,
-    };
-    return [w === h ? disc : { ...disc, axes: [w / 2, h / 2] }];
-  }
-  const width = node?.renderData?.centerline as number | undefined;
-  if (node && width !== undefined) {
-    // The paths are in the line's local frame, the frame of its own box; the
-    // placed box says where that frame sits in ours.
-    const local = node.intrinsicDims;
-    const dx = x0 - (local?.[0]?.min ?? 0),
-      dy = y0 - (local?.[1]?.min ?? 0);
-    const out: BlobMember[] = [];
-    for (const path of node.renderData.paths as Path[]) {
-      const pts = pathPoints(path).map(([px, py]): Pt => [px + dx, py + dy]);
-      for (let i = 1; i < pts.length; i++)
-        out.push({ kind: "segment", a: pts[i - 1], b: pts[i], w: width });
-    }
-    if (out.length > 0) return out;
-  }
-  return [{ kind: "box", x: x0, y: y0, w, h }];
-}
+export const membersOf = (placed: Placeable): BlobMember[] =>
+  placedOutlines(placed, TOLERANCE).flatMap(membersOfOutline);

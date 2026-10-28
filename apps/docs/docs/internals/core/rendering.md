@@ -218,8 +218,10 @@ A `DisplayListDocument` is:
 
 The item kinds are `rect`, `ellipse`, `path`, `text`, `image`, `group`, `composite`,
 and `mask`. The first five are leaf primitives in absolute pixels with resolved
-`style` (fill/stroke/opacity/…, already mapped through the color scales). The last
-three carry structure the flat-absolute fold cannot express on its own:
+`style` (fill/stroke/opacity/…, already mapped through the color scales; a
+label's halo sets `paintOrder: "stroke"` and `strokeLinejoin: "round"`, which
+both backends write as SVG attributes). The last three carry structure the
+flat-absolute fold cannot express on its own:
 
 - **`group`** — an affine transform group, for the rare `box`/`frame` `scale` a flat
   list can't fold away.

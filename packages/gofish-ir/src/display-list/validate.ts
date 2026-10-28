@@ -48,7 +48,13 @@ function checkStyle(
     if (s[k] !== undefined && !isNum(s[k]))
       errors.push({ path: `${path}.${k}`, message: `${k} must be a number` });
   }
-  for (const k of ["mixBlendMode", "strokeDasharray", "filter"] as const) {
+  for (const k of [
+    "mixBlendMode",
+    "strokeDasharray",
+    "filter",
+    "paintOrder",
+    "strokeLinejoin",
+  ] as const) {
     if (s[k] !== undefined && !isStr(s[k]))
       errors.push({ path: `${path}.${k}`, message: `${k} must be a string` });
   }
