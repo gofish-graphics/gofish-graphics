@@ -22,8 +22,10 @@
  */
 
 import type { GoFishNode } from "../_node";
-import type { RenderPass } from "../../interaction/renderTerminal";
-import type { View } from "../gofish";
+import {
+  renderWithInteraction,
+  type RenderPass,
+} from "../../interaction/renderTerminal";
 
 /** Options a terminal call carries through to the node method. */
 export type RenderOptions = Record<string, unknown>;
@@ -40,14 +42,6 @@ export type ResolveForRender = (
   pass?: RenderPass
 ) => Promise<ResolvedSurface>;
 
-/** How `render` drives a resolve. The default resolves and renders directly;
- *  the chart builders pass `renderWithInteraction`, which runs the resolve
- *  under the ambient interactive context so reactive reads can register. */
-export type RenderStrategy = (
-  resolve: (pass?: RenderPass) => Promise<ResolvedSurface>,
-  container: any
-) => Promise<View>;
-
 /** One export method: its name, where its options argument sits, and how to
  *  invoke it on a resolved node. */
 export type TerminalConfig = {
@@ -57,15 +51,16 @@ export type TerminalConfig = {
   optionsArg: number;
   /** Call the corresponding `GoFishNode` method with the prepared options. */
   invoke: (node: GoFishNode, args: any[], options: RenderOptions) => unknown;
-  /** `render` alone goes through the surface's {@link RenderStrategy}. */
-  viaRenderStrategy?: true;
+  /** `render` alone goes through the interactive render loop
+   *  (`renderWithInteraction`). */
+  viaRenderLoop?: true;
 };
 
 export const TERMINALS: TerminalConfig[] = [
   {
     name: "render",
     optionsArg: 1,
-    viaRenderStrategy: true,
+    viaRenderLoop: true,
     invoke: (n, a, o) => n.render(a[0], o as any),
   },
   { name: "toSVG", optionsArg: 0, invoke: (n, _a, o) => n.toSVG(o) },
@@ -103,11 +98,6 @@ export interface TerminalMethods<Extra = unknown> {
   ): ReturnType<GoFishNode["toDisplayList"]>;
 }
 
-const renderDirectly: RenderStrategy = async (resolve, container) => {
-  const { node, options } = await resolve();
-  return node.render(container, options as any);
-};
-
 /**
  * Attach every terminal in {@link TERMINALS} to `target`, for a surface that
  * resolves straight to a node (a mark called with `undefined`; a promise of a
@@ -125,14 +115,17 @@ export function attachTerminals(
 
 /**
  * Attach every terminal in {@link TERMINALS} to `target`, for a surface that
- * also prepares the render options (e.g. merging chart-level `axes`/`color`)
- * and optionally drives `render` through its own strategy. Every terminal
- * returns a Promise.
+ * also prepares the render options (e.g. merging chart-level `axes`/`color`).
+ * Every terminal returns a Promise. `render` goes through
+ * `renderWithInteraction`, so resolution runs under the ambient interactive
+ * context and the reactive surface (live() channels, input reads in
+ * derive()) can register, whatever the surface: a chart builder, or a
+ * combinator of charts (#1170). A surface where nothing registers renders
+ * down the static path untouched.
  */
 export function attachBuilderTerminals(
   target: object,
-  resolve: ResolveForRender,
-  render: RenderStrategy = renderDirectly
+  resolve: ResolveForRender
 ): void {
   for (const t of TERMINALS) {
     Object.defineProperty(target, t.name, {
@@ -152,8 +145,8 @@ export function attachBuilderTerminals(
           surface.node.rebuild = async () => (await resolveHere(pass)).node;
           return surface;
         };
-        return t.viaRenderStrategy
-          ? render(resolveHere, args[0])
+        return t.viaRenderLoop
+          ? renderWithInteraction(resolveHere, args[0])
           : resolveHere().then(({ node, options }) =>
               t.invoke(node, args, options)
             );

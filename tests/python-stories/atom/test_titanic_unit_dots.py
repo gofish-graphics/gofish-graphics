@@ -20,7 +20,12 @@ def story_default():
     titanic_passengers.loc[mask, "fare"] = titanic_passengers.loc[mask, "pclass"].map(tier_fare).fillna(1)
 
     return (
-        chart(titanic_passengers, color=Color.palette(["#2b8cbe", "#ff8408"]))
+        chart(
+            titanic_passengers,
+            color=Color.palette(["#2b8cbe", "#ff8408"]),
+            w=1000,
+            h=320,
+        )
         .facet(by="pclass", dir="x")
         .flow(
             treemap(
@@ -32,5 +37,5 @@ def story_default():
             )
         )
         .mark(circle(fill="survived", stroke="#ccc", stroke_width=1)),
-        {"w": 1000, "h": 320},
+        {},
     )

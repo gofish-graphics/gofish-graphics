@@ -421,6 +421,8 @@ type Arith<T> = {
   scale: (k: number, x: T) => T;
   /** The upper envelope of `xs`. */
   max: (xs: T[]) => T;
+  /** `−x`. */
+  negate: (x: T) => T;
 };
 
 const numbers: Arith<number> = {
@@ -429,6 +431,7 @@ const numbers: Arith<number> = {
   add: (...xs) => xs.reduce((sum, x) => sum + x, 0),
   scale: (k, x) => k * x,
   max: (xs) => Math.max(...xs),
+  negate: (x) => -x,
 };
 
 const monotonics: Arith<Monotonic.Monotonic> = {
@@ -437,6 +440,7 @@ const monotonics: Arith<Monotonic.Monotonic> = {
   add: Monotonic.add,
   scale: Monotonic.smul,
   max: Monotonic.envelope,
+  negate: Monotonic.negate,
 };
 
 /** How a chain lays its parts: where each part sits about its chain point
@@ -459,13 +463,12 @@ const STACK: ChainRule = {
 
 /** A spread chain (a non-glued distribute): `"edge"` lays each part's box
  *  `spacing` after the previous one's end; a fixed-pitch anchor lays each
- *  part's anchor `spacing` from the previous one's. A pitched chain's claim
- *  steps against its parts' own growth, as its rows read: content above the
- *  anchor (`start`, `baseline`) rises over the rows chained after it, and
- *  content below it (`end`) hangs under the rows chained before it. That is a
- *  ridgeline: a spread that reads top-down whose rows grow upward (see
- *  `axisDirection.ts`). A baseline-anchored part keeps its signed sides about
- *  its baseline; any other part is its box, seated by its anchor. */
+ *  part's anchor `spacing` from the previous one's. The parts' claims are in
+ *  the chain's axis order (`GoFishNode.resolveExtent` reads a part that
+ *  reads y the other way reflected), so content above a baseline in a row
+ *  that grows upward reaches back over the rows chained before it: a
+ *  ridgeline. A baseline-anchored part keeps its signed sides about its
+ *  baseline; any other part is its box, seated by its anchor. */
 const spreadRule = (anchor: AlignAnchor | "edge"): ChainRule => ({
   seat: (A, part) => {
     const w = box(A, part);
@@ -483,7 +486,7 @@ const spreadRule = (anchor: AlignAnchor | "edge"): ChainRule => ({
   step: (A, part, spacing) =>
     anchor === "edge"
       ? A.add(box(A, part), A.constant(spacing))
-      : A.constant(-spacing),
+      : A.constant(spacing),
 });
 
 /**
@@ -498,29 +501,58 @@ const spreadRule = (anchor: AlignAnchor | "edge"): ChainRule => ({
  * It runs in numbers (a data extent, or a claim at one σ) or in Monotonics
  * (a claim as a function of σ, exact and invertible while the parts are
  * linear or piecewise).
+ *
+ * With `reaches`, the chain is laid by every part but reaches only as far
+ * as each part's entry, in the part's own frame (undefined: that part
+ * reaches nothing): the plot of the chain (see
+ * `GoFishNode.resolvePlotExtent`), where each part reaches as far as its
+ * plot and a label it carries past it is dressing.
  */
 function chainFold<T>(
   A: Arith<T>,
   parts: Sides<T>[],
   rule: ChainRule,
   spacing: number,
-  origin: StackOrigin<number> = { part: 0, fraction: 0, mirrored: false }
+  origin: StackOrigin<number> = { part: 0, fraction: 0, mirrored: false },
+  reaches?: (Sides<T> | undefined)[]
 ): Sides<T> {
-  const up: T[] = [A.zero];
-  const down: T[] = [A.zero];
+  const up: T[] = reaches === undefined ? [A.zero] : [];
+  const down: T[] = reaches === undefined ? [A.zero] : [];
   let at = A.zero;
   let zero = A.zero;
   parts.forEach((part, k) => {
     const seat = rule.seat(A, part);
     const step = rule.step(A, part, spacing);
-    up.push(A.add(at, seat.ascent));
-    down.push(A.add(seat.descent, A.scale(-1, at)));
+    const reach =
+      reaches === undefined ? seat : seatedReach(A, part, seat, reaches[k]);
+    if (reach !== undefined) {
+      up.push(A.add(at, reach.ascent));
+      down.push(A.add(reach.descent, A.scale(-1, at)));
+    }
     if (k === origin.part) zero = A.add(at, A.scale(origin.fraction, step));
     at = A.add(at, step);
   });
+  if (up.length === 0) return { ascent: A.zero, descent: A.zero };
   return {
     ascent: A.add(A.max(up), A.scale(-1, zero)),
     descent: A.add(A.max(down), zero),
+  };
+}
+
+/** Where `reach`, in `part`'s own frame, sits about the part's chain point
+ *  when the part sits there as `seat`: moved as the part's origin is. */
+function seatedReach<T>(
+  A: Arith<T>,
+  part: Sides<T>,
+  seat: Sides<T>,
+  reach: Sides<T> | undefined
+): Sides<T> | undefined {
+  if (reach === undefined) return undefined;
+  if (reach === part) return seat;
+  if (seat === part) return reach;
+  return {
+    ascent: A.add(seat.ascent, A.negate(part.ascent), reach.ascent),
+    descent: A.add(seat.descent, A.negate(part.descent), reach.descent),
   };
 }
 
@@ -531,19 +563,20 @@ function chainClaim(
   parts: Extent[],
   rule: ChainRule,
   spacing: number,
-  origin?: StackOrigin<number>
+  origin?: StackOrigin<number>,
+  reaches?: (Extent | undefined)[]
 ): Extent {
-  if (
-    parts.every(
-      (p) => !Monotonic.isUnknown(p.ascent) && !Monotonic.isUnknown(p.descent)
-    )
-  ) {
+  const known = (p: Extent | undefined) =>
+    p === undefined ||
+    (!Monotonic.isUnknown(p.ascent) && !Monotonic.isUnknown(p.descent));
+  if (parts.every(known) && (reaches === undefined || reaches.every(known))) {
     const { ascent, descent } = chainFold(
       monotonics,
       parts,
       rule,
       spacing,
-      origin
+      origin,
+      reaches
     );
     return Extent(ascent, descent);
   }
@@ -556,7 +589,11 @@ function chainClaim(
       })),
       rule,
       spacing,
-      origin
+      origin,
+      reaches?.map(
+        (p) =>
+          p && { ascent: p.ascent.run(sigma), descent: p.descent.run(sigma) }
+      )
     );
   return Extent(
     Monotonic.unknown((sigma) => at(sigma).ascent),
@@ -590,20 +627,39 @@ export function distributeExtentFold(
   targetExtents: (Extent | undefined)[],
   targetSpaces: UnderlyingSpace[],
   space: UnderlyingSpace,
-  opts: DistributeFoldOptions
+  opts: DistributeFoldOptions,
+  // How far each part reaches, when that is not as far as the chain lays it
+  // (`chainFold`'s `reaches`), in the part's own frame: the whole part of a
+  // chain laid by its parts' plots, or, for the plot of a chain with a
+  // stand-in, the stand-ins only (undefined: that part reaches nothing).
+  reaches?: (Extent | undefined)[]
 ): Extent | undefined {
+  const tails = () =>
+    targetExtents.map((e, i) => tailClaim(targetSpaces[i], e!));
+  // Each part's reach in its tail's frame: a part that is its box
+  // (`tailClaim`) has its origin `descent` above the box's start.
+  const tailReaches = (parts: Extent[]) =>
+    reaches?.map((r, i) => {
+      const whole = targetExtents[i]!;
+      if (r === whole) return parts[i];
+      if (r === undefined || parts[i] === whole) return r;
+      return Extent(
+        Monotonic.add(whole.descent, r.ascent),
+        Monotonic.add(r.descent, Monotonic.negate(whole.descent))
+      );
+    });
   if (isCONTINUOUS(space)) {
     if (opts.size !== undefined && isValue(opts.size))
       return impliedExtent(space);
-    return chainClaim(
-      targetExtents.map((e, i) => tailClaim(targetSpaces[i], e!)),
-      STACK,
-      0,
-      opts.origin
-    );
+    const parts = tails();
+    return chainClaim(parts, STACK, 0, opts.origin, tailReaches(parts));
   }
+  // A stack whose parts are not all continuous with an origin is a spread
+  // (see `distributeSpaceFold`), but its layout still lays each part's tail
+  // on the previous part's head, whatever its anchor
+  // (`distributePlacementAnchors`): bands with no size of their own, each a
+  // share (`GoFishNode.sharesRoom`), lie end to end.
   if (
-    opts.glue ||
     targetSpaces.length === 0 ||
     !targetSpaces.every(
       (s, i) =>
@@ -612,9 +668,19 @@ export function distributeExtentFold(
     )
   )
     return undefined;
-  // The chain's type has no data coordinates, so its claim is a box.
-  return Extent(
-    chainClaim(targetExtents as Extent[], spreadRule(opts.anchor), opts.spacing)
-      .width
+  // The chain's type has no data coordinates, so its claim is measured from
+  // its origin, where layout seats its first part's anchor: an edge chain
+  // starts there, and a pitched chain reaches past it on both sides (its
+  // plot is measured from there too).
+  if (opts.glue) {
+    const parts = tails();
+    return chainClaim(parts, STACK, 0, opts.origin, tailReaches(parts));
+  }
+  return chainClaim(
+    targetExtents as Extent[],
+    spreadRule(opts.anchor),
+    opts.spacing,
+    undefined,
+    reaches
   );
 }

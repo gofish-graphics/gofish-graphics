@@ -17,8 +17,9 @@ def story_default():
     return (
         chart(
             movies,
-            # TODO(#1017): remove the label angle once "auto" is the default.
             axes={"x": {"label": {"angle": "auto"}}, "y": {"title": "Total Gross"}},
+            w=660,
+            h=300,
         )
         .flow(spread(by="Major Genre", dir="x"))
         .mark(
@@ -32,5 +33,5 @@ def story_default():
                 spacing=0,
             )
         ),
-        {"w": 600, "h": 300},
+        {},
     )

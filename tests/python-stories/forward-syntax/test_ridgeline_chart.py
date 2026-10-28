@@ -2,7 +2,7 @@
 
 import math
 
-from gofish import chart, spread, scatter, field, rect, text, layer, ribbon, Constraint, Unit
+from gofish import chart, spread, scatter, field, rect, datum, ribbon, Unit
 from python_stories.data import SEATTLE_WEATHER
 
 MONTH_NAMES = [
@@ -44,26 +44,20 @@ RIDGELINE_DATA = [
 # zero-count line; the rule), so the two chains solve to identical lines.
 ROW_PITCH = 24
 
-# Right-aligning the month labels (issue #757: `text` has no textAnchor —
-# it always anchors "start") is done with a constraint instead of a
-# hardcoded per-string pixel-width table: each row gets a zero-size
-# invisible anchor rect at the fixed x just left of the plot edge, and
-# `Constraint.align([label, anchor], x="end")` pins the label's END (using
-# the text mark's own LAYOUT-TIME measured width) to the anchor's end —
-# which, for a zero-width box, is just its `x`. This is the bottle-chart
-# pattern (`test_bottle.py` / `stories/piccl/Bottle.stories.tsx`); it uses
-# real measured glyph widths so JS and Python need no shared precomputed
-# table.
-LABEL_MARGIN_X = -6
+# Each month's section is a fixed height: the tallest ridge (the largest
+# count) is this many px, whatever the width, the pitch or the number of
+# months. The ridges overlap because it is far more than ROW_PITCH, and the
+# chart's height follows from the sections, so the chart sets no `h`.
+RIDGE_HEIGHT = 140
 
 
 def story_default():
-    w, h = 500, 330
     return (
         chart(
             RIDGELINE_DATA,
             axes={"x": True, "y": False},
             schema={"temp_max": {"name": "Max temperature", "unit": Unit("°C")}},
+            w=500,
         )
         .flow(
             spread(
@@ -71,12 +65,8 @@ def story_default():
                 dir="y",
                 anchor="baseline",
                 spacing=ROW_PITCH,
-                h=h,
             ),
-            scatter(
-                x="temp_max",
-                w=w,
-            ),
+            scatter(x="temp_max", h=RIDGE_HEIGHT),
         )
         .mark(
             ribbon(
@@ -89,28 +79,16 @@ def story_default():
             )
         )
         # Per-row baseline labeling, in the style of a ggridges ridgeline: a
-        # thin rule along each month's baseline with the month name sticking
-        # out to the LEFT of the plot (tick-label style), instead of a standard
-        # y axis that can't line up with 12 overlapping, unevenly-tall
-        # silhouettes. Two extra tiers:
-        #
-        #  - RULES: the same fixed-pitch baseline spread as the ridges, marking
-        #    a bare rect per month. The rect sits at its row's baseline anchor,
-        #    so it registers exactly on the ribbon's zero line. `.z_order(-1)`
-        #    on the tier paints the rules BEHIND the ribbons — visible only
-        #    outside the silhouettes, the classic look.
-        #  - LABELS: a datumless annotation overlay (a bare mark tier — no
-        #    flow), one text per month at literal frame coordinates. This is
-        #    deliberate: a spread-laid row normalizes away any extent above or
-        #    left of its baseline anchor, so a label can never overhang its own
-        #    row — but a bare tier shares the frame origin and CAN reach into
-        #    the canvas margin (the render's overhang reserve), exactly like
-        #    the ridge peaks reach above the first baseline. Each label's END
-        #    is constraint-aligned to a same-row invisible anchor rect fixed
-        #    at `LABEL_MARGIN_X` (6px left of the plot edge) — see
-        #    `LABEL_MARGIN_X`'s comment — and its bottom edge to the anchor,
-        #    which sits on the rule at y = k*pitch, so the label stands on
-        #    its rule.
+        # thin rule along each month's baseline with the month name to the
+        # LEFT of the plot (tick-label style), instead of a standard y axis
+        # that can't line up with 12 overlapping, unevenly-tall silhouettes.
+        # The rules are the same fixed-pitch baseline spread as the ridges, a
+        # bare rect per month, so each registers exactly on its ribbon's zero
+        # line. Each rule spans the ribbon's run, from the first bin's center
+        # to the last's, so the ribbon's white outline lies along the whole
+        # rule. Each rule carries its month as a label outside its left end,
+        # standing on the rule. `.z_order(-1)` paints the rules BEHIND the
+        # ribbons, visible only outside the silhouettes, the classic look.
         .layer(
             chart([{"month": month} for month in MONTH_NAMES])
             .flow(
@@ -119,36 +97,22 @@ def story_default():
                     dir="y",
                     anchor="baseline",
                     spacing=ROW_PITCH,
-                    h=h,
                 )
             )
-            .mark(rect(h=1, w=w, fill="#999"))
-            .z_order(-1)
-        )
-        .layer(
-            layer(
-                [
-                    mark
-                    for k, month in enumerate(MONTH_NAMES)
-                    for mark in (
-                        rect(w=0, h=0, x=LABEL_MARGIN_X, y=ROW_PITCH * k).name(
-                            f"anchor{k}"
-                        ),
-                        text(
-                            text=month,
-                            font_size=11,
-                            fill="#666",
-                        ).name(f"label{k}"),
-                    )
-                ]
-            ).relate(
-                lambda **refs: [
-                    Constraint.align(
-                        [refs[f"label{k}"], refs[f"anchor{k}"]], x="end", y="end"
-                    )
-                    for k in range(len(MONTH_NAMES))
-                ]
+            .mark(
+                rect(
+                    x=datum(BIN_CENTERS[0]),
+                    w=datum(BIN_CENTERS[BIN_COUNT - 1] - BIN_CENTERS[0]),
+                    h=1,
+                    fill="#999",
+                ).label(
+                    "month",
+                    position="outset-left-end",
+                    font_size=11,
+                    color="#666",
+                )
             )
+            .z_order(-1)
         ),
-        {"w": w, "h": h},
+        {},
     )

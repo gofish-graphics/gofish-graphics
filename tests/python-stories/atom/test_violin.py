@@ -30,9 +30,9 @@ def story_default():
         chart(
             aged_passengers,
             color=Color.palette(["#2b8cbe", "#ff8408"]),
-            # x = pclass (the violins) at the bottom (y-end); y is the dot-row
-            # index, so suppress it.
             axes={"x": {"side": "end"}, "y": False},
+            w=680,
+            h=260,
         )
         .flow(
             spread(by="pclass", dir="x", spacing=48, alignment="middle"),
@@ -49,5 +49,5 @@ def story_default():
             spread(dir="x", spacing=1, alignment="middle"),
         )
         .mark(circle(r=2, fill="survived")),
-        {"w": 680, "h": 260},
+        {},
     )

@@ -113,10 +113,14 @@ export const ContinuousYAxis: StoryObj<Args> = {
       ]).name(`t${i}`);
 
     layer([
-      // bars wrapped in a spread so the outer constraints address them as one
-      spread({ dir: "x", alignment: "start" }, bars()).name("bars"),
-      // axis line spanning the plot height (= the data range mapped to pixels)
-      rect({ w: 1, h: args.h, fill: "#999" }).name("axis"),
+      // bars wrapped in a spread so the outer constraints address them as
+      // one; their heights are counts, on the scale the ticks map through
+      spread(
+        { dir: "x", alignment: "start" },
+        HEIGHTS.map((h) => rect({ w: 40, h: datum(h), fill: BAR_FILL }))
+      ).name("bars"),
+      // axis line spanning the data range [0, yMax]
+      rect({ w: 1, h: datum(yMax), fill: "#999" }).name("axis"),
       ...tickValues.map(tick),
       text({ text: "count", fontSize: 13, fill: "#333" }).name("title"),
     ])
@@ -176,8 +180,8 @@ export const NonUniformYAxis: StoryObj<Args> = {
       ]).name(`t${i}`);
 
     layer([
-      // axis line spanning the plot height (the [0, 100] domain in pixels)
-      rect({ w: 1, h: args.h, fill: "#999" }).name("axis"),
+      // axis line spanning the [0, 100] domain
+      rect({ w: 1, h: datum(100), fill: "#999" }).name("axis"),
       ...tickValues.map(tick),
       text({ text: "score", fontSize: 13, fill: "#333" }).name("title"),
     ])

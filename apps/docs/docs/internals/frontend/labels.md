@@ -237,6 +237,16 @@ write after layout: the angle it is drawn at and whether it is hidden. A
 transition moves it rigidly, as it moves a `Text` (`RIGID_SHAPES` in
 `tween.tsx`).
 
+Its size is known before layout, so its claim (`resolveExtent`) is its box at
+its base angle, centered on its origin, as a `Text` claims its own box. A label
+a position string seats beside its mark therefore takes room in the layer that
+holds it, and a chart's box holds the labels that reach past its plot. A label
+the chooser places is ink instead (`inkOn` on both axes): the claim walk runs
+before the chooser, so it cannot know where that label lands. Ink takes no
+room; the render grows the canvas to hold it on an axis it gives no size, and
+warns when it draws past a canvas it does (see `drawnOverflow` in
+`gofish.tsx`).
+
 ## Placement strategies
 
 `position` takes a position string, or a value of the `Place` family

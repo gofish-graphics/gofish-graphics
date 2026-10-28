@@ -14,12 +14,12 @@ from vega_datasets import data as vega_data
 def story_default():
     barley = vega_data.barley()
     return (
-        chart(barley)
+        chart(barley, h=350)
         .flow(
-            spread(by="site", dir="x", spacing=110),
+            spread(by="site", dir="x", spacing=128),
             spread(by="year", dir="x", spacing=36),
             scatter(by="variety", y="yield"),
         )
         .mark(line(stroke="variety", stroke_width=2)),
-        {"w": 700, "h": 350},
+        {},
     )

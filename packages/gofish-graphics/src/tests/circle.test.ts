@@ -150,8 +150,10 @@ console.log("# circle: rendered");
     { k: "b", v: 2 },
     { k: "c", v: 3 },
   ];
+  // No axes: an axis titled by a field takes room an accessor's does not
+  // (#1032), and these checks are about the circles.
   const render = (mark: unknown) =>
-    chart(data)
+    chart(data, { axes: false })
       .flow(spread({ by: "k", dir: "x", spacing: 0 }))
       .mark(mark)
       .toDisplayList({ w: 300, h: 300 });

@@ -33,7 +33,6 @@ class GoFishChartWidget(anywidget.AnyWidget):
     # is a boolean or per-axis options (wire spelling), so it is untyped here.
     axes = traitlets.Any(None, allow_none=True).tag(sync=True)
     legend = traitlets.Bool(None, allow_none=True).tag(sync=True)
-    padding = traitlets.Float(None, allow_none=True).tag(sync=True)
     debug = traitlets.Bool(False).tag(sync=True)
     container_id = traitlets.Unicode().tag(sync=True)
 
@@ -50,6 +49,11 @@ class GoFishChartWidget(anywidget.AnyWidget):
     # {value: "<svg…>"}. Powers .svg / .to_svg() / .save(). See #571.
     svg_result = traitlets.Dict(allow_none=True, default_value=None).tag(sync=True)
 
+    # What the layout found and drew through anyway, reported by JS once the
+    # chart mounts: one dict per warning (`view.warnings` in JS). Powers
+    # `.warnings`.
+    layout_warnings = traitlets.List(traitlets.Dict()).tag(sync=True)
+
     # Python-only registry: lambda_id -> callback (`_Payload.callbacks`).
     # Never synced. A mark function's reply adds the callbacks it names.
     callbacks = traitlets.Dict().tag(sync=False)
@@ -62,7 +66,6 @@ class GoFishChartWidget(anywidget.AnyWidget):
         height: int = 600,
         axes: Optional[Any] = None,
         legend: Optional[bool] = None,
-        padding: Optional[float] = None,
         debug: bool = False,
         **kwargs,
     ):
@@ -86,7 +89,6 @@ class GoFishChartWidget(anywidget.AnyWidget):
             # wire, renamed (and checked) as `chart(axes=...)` does.
             axes=_to_wire(("ref", "AxesOptions"), axes, "axes"),
             legend=legend,
-            padding=padding,
             debug=debug,
             container_id=container_id,
             callbacks=callbacks or {},
@@ -195,6 +197,15 @@ class GoFishChartWidget(anywidget.AnyWidget):
             self._write_svg(path)
         else:
             self._pending_saves.append(path)
+
+    @property
+    def warnings(self) -> List[Dict[str, Any]]:
+        """The layout's warnings once the chart has rendered: fixed parts
+        larger than their slot, or a drawing past the canvas. Each is a dict
+        with ``kind``, ``node``, ``axis``, ``needed``, ``available``,
+        ``parts`` and ``message`` (the JS ``view.warnings``). The browser
+        console also prints each one, prefixed ``[gofish:layout]``."""
+        return list(self.layout_warnings)
 
     @property
     def result(self) -> bool:

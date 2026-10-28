@@ -43,5 +43,5 @@ def story_nested_pie_tree():
             ),
             sibling=alternate([slice_, dice]),
         ),
-        {"w": 640, "h": 420},
+        {},
     )

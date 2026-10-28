@@ -4,7 +4,7 @@
 
 import { color6, resolveColorChannel } from "../../color";
 import { path, transformPath } from "../../path";
-import { GoFishNode } from "../_node";
+import { GoFishNode, outlineOverhang } from "../_node";
 import { GoFishAST } from "../_ast";
 import { linear } from "../coordinateTransforms/linear";
 import {
@@ -28,6 +28,7 @@ import {
   positionOf,
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
+import { literalBoxExtents } from "../extent";
 import { boxOfDims, boxOutline, outlinePaint } from "../geometry";
 import { aesthetic, continuous, Domain, posFn, pxOf } from "../domain";
 import { computeAesthetic, computeSize } from "../../util";
@@ -134,6 +135,7 @@ export const Rect = ({
       },
       // Used to seed the unit color scale. Prefer whichever channel is data-driven.
       color: isValue(fill) ? fill : stroke,
+      strokeOverhang: outlineOverhang(stroke, strokeWidth),
       resolveUnderlyingSpace: (
         _children: Size<UnderlyingSpace>[],
         _childNodes: GoFishAST[]
@@ -179,6 +181,10 @@ export const Rect = ({
 
         return [resolveAxis(0), resolveAxis(1)];
       },
+      // A literal pixel size is the rect's own (#493): it claims it, so
+      // whatever composes it leaves it room.
+      resolveExtent: (_ce, _cs, spaces) =>
+        literalBoxExtents(spaces, [dims[0], dims[1]], aspectRatio),
       layout: (size, scales, children) => {
         const pos = [posFn(scales?.[0]?.map), posFn(scales?.[1]?.map)];
         // The box's pixel size on one axis.

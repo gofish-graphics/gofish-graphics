@@ -165,14 +165,15 @@ def story_continuous_yaxis():
         layer(
             [
                 # bars wrapped in a spread so the outer constraints address
-                # them as one unit named "bars"
+                # them as one; their heights are counts, on the scale the
+                # ticks map through
                 spread(
-                    _bars(["a", "b", "c"]),
+                    [rect(w=40, h=datum(h), fill=BAR_FILL) for h in HEIGHTS],
                     dir="x",
                     alignment="start",
                 ).name("bars"),
-                # axis line spanning the plot height (= the data range in pixels)
-                rect(w=1, h=300, fill="#999").name("axis"),
+                # axis line spanning the data range [0, yMax]
+                rect(w=1, h=datum(_Y_MAX), fill="#999").name("axis"),
                 *ticks,
                 text(text="count", font_size=13, fill="#333").name("title"),
             ]
@@ -225,8 +226,8 @@ def story_non_uniform_yaxis():
     return (
         layer(
             [
-                # axis line spanning the plot height (the [0, 100] domain in pixels)
-                rect(w=1, h=300, fill="#999").name("axis"),
+                # axis line spanning the [0, 100] domain
+                rect(w=1, h=datum(100), fill="#999").name("axis"),
                 *ticks,
                 text(text="score", font_size=13, fill="#333").name("title"),
             ]

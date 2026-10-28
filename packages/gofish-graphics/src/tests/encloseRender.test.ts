@@ -10,7 +10,7 @@ import * as GoFish from "../../dist/index.js";
 import { items } from "./testHelpers";
 
 declare const process: { exit(code: number): never };
-const { enclose, ellipse, Shape } = GoFish as any;
+const { enclose, ellipse, live, rect, Shape } = GoFish as any;
 
 let passed = 0;
 let failed = 0;
@@ -73,6 +73,28 @@ for (const [name, make] of [
     `${name}({ padding: 10 }) is an error naming padding`,
     /padding/.test(message),
     message || "no error"
+  );
+}
+
+console.log("# a live strokeWidth's outline takes room, as a literal one does");
+{
+  // A live channel is read at resolve time (`withLiveStatics`), so the
+  // node's outline is that number: the canvas holds half of it on each side.
+  const viewport = async (strokeWidth: unknown) =>
+    (
+      await enclose({ strokeWidth, padding: 0 }, [
+        rect({ w: 100, h: 50 }),
+      ]).toDisplayList()
+    ).viewport;
+  const literal = await viewport(8);
+  const fromLive = await viewport(live(() => 8));
+  check(
+    "enclose({ strokeWidth: live(() => 8) }) claims its outline",
+    literal.w === 108 &&
+      literal.h === 58 &&
+      fromLive.w === literal.w &&
+      fromLive.h === literal.h,
+    JSON.stringify([literal, fromLive])
   );
 }
 

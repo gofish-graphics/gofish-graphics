@@ -98,7 +98,7 @@ ownership of playback until the button resumes it.
 ```ts
 const day = timer({ domain: [1, 365], step: 1, duration: 10000 });
 
-const map = basemap({ padding: 0 }).layer(
+const map = basemap({ w: 600, h: 600 }).layer(
   chart(birds)
     .flow(
       // One keyframe per day. Day-of-year is cyclic, so early in January the
@@ -137,9 +137,9 @@ const playButton = button({
   onClick: () => (day.isPlaying() ? day.pause() : day.play()),
 });
 
-gofish(container, { w: 600, h: 660, legend: false }, () =>
+gofish(container, { legend: false }, () =>
   spreadY({ spacing: 12 }, [
-    frame({ w: 600, h: 600 }, [map]),
+    map,
     spreadX({ spacing: 8 }, [playButton, timeSlider]),
   ])
 );
@@ -153,12 +153,11 @@ Two things about that composition are worth copying:
 - A `chart(...)` builder — with or without `.layer(...)` tiers — is usable as a
   child of a low-level operator. It resolves to one node, which is what the
   operator stacks.
-- `legend: false` and the map's size are options of the **root render** here, not
-  of the chart. Once the chart is no longer the root, it is the enclosing
-  composition that decides how big the map box is and whether the canvas grows a
-  swatch column. Pass `padding: 0` to a chart you are composing: its padding is
-  drawn outside the node's box, so a padded child paints past the box its
-  siblings are stacked against.
+- `legend: false` is an option of the **root render** here, not of the chart.
+  Once the chart is no longer the root, it is the enclosing composition that
+  decides whether the canvas grows a swatch column. The map's size stays on the
+  chart, as in the other panels, and the canvas takes the composition's own
+  size.
 
 ## What the slider does with the pointer
 

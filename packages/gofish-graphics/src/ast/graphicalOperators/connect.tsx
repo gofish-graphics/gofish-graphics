@@ -10,7 +10,7 @@ import {
 } from "../../path";
 import { GoFishAST } from "../_ast";
 import { projectBy, type SplitBy } from "../datumProjection";
-import { GoFishNode, defaultGeometry } from "../_node";
+import { GoFishNode, defaultGeometry, outlineOverhang } from "../_node";
 import { outlinePaint, pathOutline } from "../geometry";
 import { resolveColorChannel } from "../../color";
 import type { DisplayList } from "gofish-ir";
@@ -285,6 +285,9 @@ export const connect = createNodeOperator(
         // resolved to `Value`s by `resolveGroupFill` (chart.ts), so
         // `isValue` distinguishes data-driven from a literal color.
         color: isValue(fill) ? fill : stroke,
+        // Its outline is drawn in the stroke, or else in its fill color
+        // (`lower`).
+        strokeOverhang: outlineOverhang(stroke ?? fill ?? "black", strokeWidth),
         resolveUnderlyingSpace: (
           children: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]

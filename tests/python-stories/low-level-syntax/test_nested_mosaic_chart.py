@@ -23,7 +23,7 @@ _CLASS_COLOR = {"First": _C6[0], "Second": _C6[1], "Third": _C6[2], "Crew": _C6[
 
 def story_default():
     return (
-        chart(TITANIC)
+        chart(TITANIC, w=500, h=500)
         .flow(
             stack(by="class", dir="y", size=field("count").normalize()),
             stack(by="sex", dir="x", size=field("count").normalize()),
@@ -36,5 +36,5 @@ def story_default():
                 stroke_width=1,
             )
         ),
-        {"w": 500, "h": 500},
+        {},
     )

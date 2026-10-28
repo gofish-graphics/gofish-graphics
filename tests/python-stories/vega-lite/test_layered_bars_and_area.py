@@ -52,7 +52,7 @@ def story_default():
                 ),
             ]
         ),
-        {"w": 400, "h": 400, "axes": True},
+        {"h": 400, "axes": True},
     )
 
 
@@ -77,7 +77,7 @@ def story_two_sites():
                 .mark(ribbon(opacity=0.7)),
             ]
         ),
-        {"w": 400, "h": 400, "axes": True},
+        {"h": 400, "axes": True},
     )
 
 
@@ -87,6 +87,7 @@ def story_hoisted_variety_spread():
         chart(
             barley,
             color=SITE_COLORS,
+            h=400,
         )
         .flow(spread(by="variety", dir="x", spacing=20))
         .mark(
@@ -109,5 +110,5 @@ def story_hoisted_variety_spread():
                 ]
             )
         ),
-        {"w": 400, "h": 400},
+        {},
     )

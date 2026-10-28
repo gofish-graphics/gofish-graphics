@@ -11,7 +11,7 @@ import {
   type NestConstraint,
 } from "./nest";
 import type { UnderlyingSpace } from "../underlyingSpace";
-import type { Extent } from "../extent";
+import { hullExtent, padExtent, type Extent } from "../extent";
 import { buildNameIndex, type NamedNode } from "./shared";
 
 export type NestPlanChild = NamedNode & {
@@ -138,30 +138,52 @@ export function applyNestSpacePlan(
 export function applyNestExtentPlan(
   childExtents: readonly Size<Extent | undefined>[],
   effectiveSpaces: readonly Size<UnderlyingSpace>[],
-  nestPlan: NestPlan | undefined
+  nestPlan: NestPlan | undefined,
+  // Whether child `i` fills the room it is given on `axis`
+  // (`GoFishNode.fillsRoom`): the nest that derives it sizes it, whatever
+  // share its own claim would take.
+  fills: (i: number, axis: 0 | 1) => boolean = () => false,
+  // For the claims (not the plots): the children's plot claims, and how far
+  // each child's outline is drawn past its box (`GoFishNode.strokeOverhang`).
+  // A derived node's box is its inner's box (its plot) with the padding, so
+  // its claim reaches its own outline past that, and as far as its inner's
+  // claim (which its padding usually holds).
+  outline?: {
+    plots: readonly Size<Extent | undefined>[];
+    overhang: (i: number) => number;
+  }
 ): Size<Extent | undefined>[] {
   if (nestPlan === undefined) return [...childExtents];
   const effective = childExtents.map(
+    (s) => [s[0], s[1]] as Size<Extent | undefined>
+  );
+  const plots = outline?.plots.map(
     (s) => [s[0], s[1]] as Size<Extent | undefined>
   );
   for (const i of nestPlan.order) {
     for (const e of nestPlan.byDerived.get(i) ?? []) {
       if (e.dir !== "in") continue;
       const src = e.sourceIdx;
-      if (e.padX !== undefined)
-        effective[i][0] = nestedExtent(
-          effective[i][0],
-          effectiveSpaces[src][0],
-          effective[src][0],
-          e.padX
-        );
-      if (e.padY !== undefined)
-        effective[i][1] = nestedExtent(
-          effective[i][1],
-          effectiveSpaces[src][1],
-          effective[src][1],
-          e.padY
-        );
+      const derive = (axis: 0 | 1, padding: number) => {
+        // A derived node that fills takes the size the nest gives it.
+        const own = fills(i, axis) ? undefined : effective[i][axis];
+        const space = effectiveSpaces[src][axis];
+        const claim = nestedExtent(own, space, effective[src][axis], padding);
+        if (plots === undefined || claim === own) {
+          effective[i][axis] = claim;
+          return;
+        }
+        const ownPlot = fills(i, axis) ? undefined : plots[i][axis];
+        const plot = nestedExtent(ownPlot, space, plots[src][axis], padding);
+        plots[i][axis] = plot;
+        const o = outline!.overhang(i);
+        effective[i][axis] =
+          claim === undefined || plot === undefined || o === 0
+            ? claim
+            : hullExtent(claim, padExtent(plot, o));
+      };
+      if (e.padX !== undefined) derive(0, e.padX);
+      if (e.padY !== undefined) derive(1, e.padY);
     }
   }
   return effective;

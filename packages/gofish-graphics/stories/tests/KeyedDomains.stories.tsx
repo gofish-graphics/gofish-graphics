@@ -34,8 +34,9 @@ const values = [
 
 // Every inner group is 150px tall. The groups share the y domain, 0 to 1.1,
 // so 1.1 maps to 150px in every group, and a bar of 0.55 is half as tall in
-// group A as the bar of 1.1 in group B. The chart is 150px tall too, so its
-// y axis lines up with the groups.
+// group A as the bar of 1.1 in group B. The render gives no size, so the
+// canvas holds the 150px groups and their chrome, and the y axis lines up
+// with the groups.
 export const GroupedBarsInnerHeight: StoryObj = {
   render: () => {
     const container = initializeContainer();
@@ -45,7 +46,7 @@ export const GroupedBarsInnerHeight: StoryObj = {
         stack({ by: "item", dir: "x", h: 150 })
       )
       .mark(rect({ w: 20, h: "value", fill: "item" }))
-      .render(container, { w: 300, h: 150 });
+      .render(container);
     return container;
   },
 };

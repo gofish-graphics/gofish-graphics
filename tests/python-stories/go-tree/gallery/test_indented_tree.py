@@ -27,5 +27,5 @@ def story_indented_tree():
             parent_child=layout,
             sibling=layout,
         ),
-        {"w": 640, "h": 420},
+        {},
     )

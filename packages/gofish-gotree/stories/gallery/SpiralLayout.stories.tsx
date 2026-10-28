@@ -88,7 +88,7 @@ export const SpiralLayout: StoryObj = {
         coord: Coord.clock(),
       },
       sampleTree
-    ).render(container, { w: 520, h: 520 });
+    ).render(container);
     return container;
   },
 };

@@ -22,9 +22,11 @@
  *      first, or a re-render of the chart already on screen; and before a
  *      re-render, stop what the previous render started (its build clock).
  *
- * Three callers share it: `ChartBuilder.render` and `LayerBuilder.render` (the
- * fluent chart pipeline) and the low-level `gofish()` terminal when handed a
- * COMPONENT THUNK (`() => node`) — a raw shape/operator composition with no
+ * Every `render` terminal shares it: `ChartBuilder.render` and
+ * `LayerBuilder.render` (the fluent chart pipeline), a mark's or a
+ * combinator's `.render` (`attachBuilderTerminals` in marks/terminals.ts, so
+ * a chart inside `spread([...])` re-runs its pipeline too, #1170), and the
+ * low-level `gofish()` terminal when handed a COMPONENT THUNK (`() => node`) — a raw shape/operator composition with no
  * `chart()` builder. The thunk is what lets a component re-run its spec: a raw
  * node is built once and cannot re-evaluate, so component-level pipeline
  * reactivity needs a thunk the scheduler can re-invoke, exactly like the

@@ -64,20 +64,28 @@ const YEARS: [number, number] = [1955, 2005];
  * over it; the key, the path tier and the clock are all inferred.
  */
 export const L0Sugar: StoryObj<Args> = {
-  args: { w: 500, h: 400 },
+  // Vega-Lite's size: continuous axes with no width or height make a
+  // 300 × 300 plot, Vega-Lite's default continuous size (its compiled
+  // point_2d example). Animated Vega-Lite's gapminder has no compiled
+  // render to check against, so this assumes the same default.
+  args: { w: 300, h: 300 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
     const gapminder = context.loaded.gapminder as any[];
 
-    chart(gapminder, { legend: false })
+    chart(gapminder, {
+      legend: false,
+      w: args.w,
+      h: args.h,
+    })
       .flow(
         time.sequence({ by: "year", duration: 5000, playing: false, at: AT }),
         scatter({ by: "country", x: "fertility", y: "life_expect" })
       )
       .mark(circle({ r: 4, fill: "country" }))
       .layer(time.transition())
-      .render(container, { w: args.w, h: args.h } as any);
+      .render(container);
 
     return container;
   },
@@ -91,13 +99,17 @@ export const L0Sugar: StoryObj<Args> = {
  * tier the same way that tier inherits the marks it connects.
  */
 export const L1ExplicitKey: StoryObj<Args> = {
-  args: { w: 500, h: 400 },
+  args: { w: 300, h: 300 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
     const gapminder = context.loaded.gapminder as any[];
 
-    chart(gapminder, { legend: false })
+    chart(gapminder, {
+      legend: false,
+      w: args.w,
+      h: args.h,
+    })
       .flow(
         time.sequence({ by: "year", duration: 5000, playing: false, at: AT }),
         scatter({ by: "country", x: "fertility", y: "life_expect" })
@@ -108,7 +120,7 @@ export const L1ExplicitKey: StoryObj<Args> = {
           .flow(group({ by: "country" }))
           .mark(time.transition({ along: "year" }))
       )
-      .render(container, { w: args.w, h: args.h } as any);
+      .render(container);
 
     return container;
   },
@@ -121,14 +133,18 @@ export const L1ExplicitKey: StoryObj<Args> = {
  * `timer` handed to the transition as `at`.
  */
 export const L2ExplicitClock: StoryObj<Args> = {
-  args: { w: 500, h: 400 },
+  args: { w: 300, h: 300 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
     const gapminder = context.loaded.gapminder as any[];
     const year = pausedClock(YEARS, 5000, AT);
 
-    chart(gapminder, { legend: false })
+    chart(gapminder, {
+      legend: false,
+      w: args.w,
+      h: args.h,
+    })
       .flow(
         group({ by: "year" }),
         scatter({ by: "country", x: "fertility", y: "life_expect" })
@@ -139,7 +155,7 @@ export const L2ExplicitClock: StoryObj<Args> = {
           .flow(group({ by: "country" }))
           .mark(time.transition({ along: "year", at: year }))
       )
-      .render(container, { w: args.w, h: args.h } as any);
+      .render(container);
 
     return container;
   },
@@ -159,14 +175,18 @@ export const L2ExplicitClock: StoryObj<Args> = {
  * layout and interpolating after it land in the same place.
  */
 export const L3DataSpace: StoryObj<Args> = {
-  args: { w: 500, h: 400 },
+  args: { w: 300, h: 300 },
   loaders: [async () => ({ gapminder: await data["gapminder.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
     const gapminder = context.loaded.gapminder as any[];
     const year = pausedClock(YEARS, 5000, AT);
 
-    chart(gapminder, { legend: false })
+    chart(gapminder, {
+      legend: false,
+      w: args.w,
+      h: args.h,
+    })
       .flow(
         group({ by: "year" }),
         scatter({ by: "country", x: "fertility", y: "life_expect" })
@@ -186,7 +206,7 @@ export const L3DataSpace: StoryObj<Args> = {
           )
           .mark(circle({ r: 4, fill: "country" }))
       )
-      .render(container, { w: args.w, h: args.h } as any);
+      .render(container);
 
     return container;
   },

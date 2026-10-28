@@ -6,9 +6,6 @@ import data from "vega-datasets";
 const meta: Meta = {
   title: "Forward Syntax/Slope Chart",
   argTypes: {
-    w: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
     h: {
       control: { type: "number", min: 100, max: 1000, step: 10 },
     },
@@ -16,7 +13,7 @@ const meta: Meta = {
 };
 export default meta;
 
-type Args = { w: number; h: number };
+type Args = { h: number };
 
 // Six site panels, each holding ten short two-point slopes (one per barley
 // variety) from the 1931 yield to the 1932 yield. No `by` on the line: the
@@ -26,7 +23,7 @@ type Args = { w: number; h: number };
 // That is exactly "one line per site-variety pair, walking from 1931 to
 // 1932" with no hand-written composite key.
 export const Default: StoryObj<Args> = {
-  args: { w: 700, h: 350 },
+  args: { h: 350 },
   tags: ["gallery"],
   loaders: [async () => ({ barley: await data["barley.json"]() })],
   parameters: {
@@ -40,17 +37,14 @@ export const Default: StoryObj<Args> = {
     const container = initializeContainer();
     const barley = context.loaded.barley as any[];
 
-    chart(barley)
+    chart(barley, { h: args.h })
       .flow(
-        spread({ by: "site", dir: "x", spacing: 110 }),
+        spread({ by: "site", dir: "x", spacing: 128 }),
         spread({ by: "year", dir: "x", spacing: 36 }),
         scatter({ by: "variety", y: "yield" })
       )
       .mark(line({ stroke: "variety", strokeWidth: 2 }))
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },

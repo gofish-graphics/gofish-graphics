@@ -17,7 +17,6 @@ import { initializeContainer } from "../helper";
 import { birds } from "../../src/data/birds";
 import { world110m } from "../../src/data/world110m";
 import {
-  frame,
   gofish,
   button,
   chart,
@@ -52,15 +51,20 @@ type Args = { w: number; h: number };
 
 /**
  * The Americas under Equal Earth — the basemap every panel shares (panel A
- * spells it out inline in BirdMigrationStatic.stories.tsx).
+ * spells it out inline in BirdMigrationStatic.stories.tsx). The window is the
+ * original's framing: every panel's spec fits the world into 1000 px and clips
+ * at x = 400 px, a straight line that is lon -180 at the equator on the left
+ * and passes through lon -58.7 at lat 84 on the right. Each panel sizes the
+ * chart, not the render, so the canvas ends at the map's right edge, that
+ * line, and Greenland is cut there in every panel as it is in the original.
  *
  * `legend: false`: the bird layers color by species, and a 72-entry swatch
  * column would take more of the canvas than the map. The colors still come
  * from the scale; only the chrome is dropped.
  */
-const basemap = (options: { padding?: number } = {}) =>
+const basemap = (options: { w: number; h: number }) =>
   chart(world110m, {
-    coord: Coord.geo("equalEarth", { lon: [-170, -30], lat: [-60, 75] }),
+    coord: Coord.geo("equalEarth", { lon: [-180, -58.7], lat: [-60, 84] }),
     legend: false,
     ...options,
   }).mark(polygon({ points: "ring", fill: "#f7f7f7", stroke: "#aaa" }));
@@ -83,7 +87,7 @@ export const B_HoverHighlight: StoryObj<Args> = {
     // any row gives its `species`.
     const hot = (d: any) => hover.datum()?.[0]?.species === d?.[0]?.species;
 
-    basemap()
+    basemap({ w: args.w, h: args.h })
       .layer(
         chart(birds)
           .flow(
@@ -110,7 +114,7 @@ export const B_HoverHighlight: StoryObj<Args> = {
           fill: "#333",
         })
       )
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },
@@ -133,7 +137,7 @@ export const C_Animated: StoryObj<Args> = {
     // wall time, read backward — so `day()` is a day number, not a tick count.
     const day = timer({ domain: [1, 365], step: 1, duration: 10000 });
 
-    basemap()
+    basemap({ w: args.w, h: args.h })
       .layer(
         chart(birds)
           .flow(
@@ -142,7 +146,7 @@ export const C_Animated: StoryObj<Args> = {
           )
           .mark(circle({ r: 3, fill: "species" }))
       )
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },
@@ -184,9 +188,7 @@ export const D_Trails: StoryObj<Args> = {
 
     const day = timer({ domain: [1, 365], step: 1, duration: 10000 });
 
-    basemap()
-      .layer(trails(day))
-      .render(container, { w: args.w, h: args.h });
+    basemap({ w: args.w, h: args.h }).layer(trails(day)).render(container);
 
     return container;
   },
@@ -210,9 +212,9 @@ const pausedPanel = (at: number): StoryObj<Args> => ({
   args: { w: 600, h: 600 },
   render: (args: Args) => {
     const container = initializeContainer();
-    basemap()
+    basemap({ w: args.w, h: args.h })
       .layer(trails(pausedDay(at)))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 });
@@ -225,7 +227,7 @@ export const D_TrailsPaused = pausedPanel(120);
 export const D_TrailsPausedDay5 = pausedPanel(5);
 
 export const E_Controls: StoryObj<Args> = {
-  args: { w: 600, h: 660 },
+  args: { w: 600, h: 600 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -239,12 +241,9 @@ export const E_Controls: StoryObj<Args> = {
 
     const day = timer({ domain: [1, 365], step: 1, duration: 10000 });
 
-    // `padding: 0`: the chart's 30px coord padding is drawn OUTSIDE the node's
-    // box, so a padded map would paint 30px past the box the `spreadY` stacks
-    // against — and the controls would sit inside the map. At the root (panels
-    // A–D) that padding is just canvas margin; in a composition it has to go,
-    // and the spacing below is the composition's own business.
-    const map = basemap({ padding: 0 }).layer(trails(day));
+    // The map is sized as in panels A–D, so the canvas ends at the same
+    // clip line and Greenland is cut where it is in every other panel.
+    const map = basemap({ w: args.w, h: args.h }).layer(trails(day));
 
     // The controls are ordinary marks, so they lay out under the map with the
     // ordinary operators. The timer stays the single source of truth: the
@@ -274,14 +273,13 @@ export const E_Controls: StoryObj<Args> = {
     // to be re-evaluable — which is what a thunk gives a composition with no
     // `chart()` builder at its root. The clock itself does not: the trails and
     // the slider's handle and readout follow it at paint.
-    // `legend: false` and the map's size are options of the ROOT render here,
-    // not of the chart: the chart is no longer the root, so it is the enclosing
-    // composition that decides how big the map box is and whether the canvas
-    // grows a swatch column. `frame({ w, h })` is the low-level "this child is
-    // this many pixels" wrapper.
-    gofish(container, { w: args.w, h: args.h, legend: false }, () =>
+    // `legend: false` is an option of the ROOT render here: the chart is no
+    // longer the root, so it is the enclosing composition that decides whether
+    // the canvas grows a swatch column. The canvas takes the composition's own
+    // size, the map above the controls.
+    gofish(container, { legend: false }, () =>
       spreadY({ spacing: 12 }, [
-        frame({ w: 600, h: 600 }, [map]),
+        map,
         spreadX({ spacing: 8 }, [playButton, timeSlider]),
       ])
     );

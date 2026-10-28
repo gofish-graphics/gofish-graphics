@@ -12,7 +12,7 @@ import {
 import { sales } from "./data";
 
 export default (container: HTMLElement, clock?: BuildClockOptions) =>
-  chart(sales)
+  chart(sales, { w: 400, h: 240 })
     .flow(
       spread({ by: "quarter", dir: "x" }),
       stack({ by: "product", dir: "y" })
@@ -26,4 +26,4 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
         )
         .mark(time.transition({ enter: Animation.wipe({ from: "bottom" }) }))
     )
-    .render(container, { w: 400, h: 240, ...clock });
+    .render(container, { ...clock });

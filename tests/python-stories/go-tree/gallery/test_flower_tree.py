@@ -37,5 +37,5 @@ def story_flower_tree():
             ),
             coord=Coord.clock(),
         ),
-        {"w": 520, "h": 520},
+        {},
     )

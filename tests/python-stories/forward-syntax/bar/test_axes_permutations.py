@@ -10,14 +10,14 @@ def _bar(axes):
     # `spread({ by, dir })`). A per-operator override on the spread would
     # claim the axes a second time and draw them twice.
     return (
-        chart(SEAFOOD, axes=axes)
+        chart(SEAFOOD, axes=axes, w=400, h=400)
         .flow(spread(by="lake", dir="x"))
         .mark(rect(h="count"))
     )
 
 
 def _story(axes):
-    return (_bar(axes), {"w": 400, "h": 400})
+    return (_bar(axes), {})
 
 
 def story_axes_true():
@@ -81,15 +81,15 @@ def _x_axis(angle):
     return {"x": {} if angle is None else {"label": {"angle": angle}}}
 
 
-def _grouped_bar(angle, w=300):
+def _grouped_bar(angle, w=300, h=210):
     return (
-        chart(CITY_YEAR, axes=_x_axis(angle))
+        chart(CITY_YEAR, axes=_x_axis(angle), w=w, h=h)
         .flow(
             spread(by="city", dir="x", spacing=24),
             spread(by="year", dir="x", spacing=0),
         )
         .mark(rect(h="visitors", fill="year")),
-        {"w": w, "h": 210},
+        {},
     )
 
 
@@ -135,15 +135,15 @@ REGION_PRODUCT = [
 ]
 
 
-def _grouped_products(w):
+def _grouped_products(w, h=210):
     return (
-        chart(REGION_PRODUCT, axes={"x": {"label": {"angle": "auto"}}})
+        chart(REGION_PRODUCT, axes={"x": {"label": {"angle": "auto"}}}, w=w, h=h)
         .flow(
             spread(by="region", dir="x", spacing=24),
             spread(by="product", dir="x", spacing=0),
         )
         .mark(rect(h="sales", fill="product")),
-        {"w": w, "h": 210},
+        {},
     )
 
 
@@ -168,24 +168,24 @@ def story_grouped_label_angle_auto_inner_hidden_outer0():
 # The same, colored by region, so no legend names the products (warns).
 def story_grouped_label_angle_auto_inner_hidden_no_legend():
     return (
-        chart(REGION_PRODUCT, axes={"x": {"label": {"angle": "auto"}}})
+        chart(REGION_PRODUCT, axes={"x": {"label": {"angle": "auto"}}}, w=90, h=210)
         .flow(
             spread(by="region", dir="x", spacing=24),
             spread(by="product", dir="x", spacing=0),
         )
         .mark(rect(h="sales", fill="region")),
-        {"w": 90, "h": 210},
+        {},
     )
 
 
 # Horizontal grouped bars: an ordinal y axis with "auto" (both rows 0 degrees).
 def story_grouped_horizontal_label_angle_auto0():
     return (
-        chart(REGION_PRODUCT, axes={"y": {"label": {"angle": "auto"}}})
+        chart(REGION_PRODUCT, axes={"y": {"label": {"angle": "auto"}}}, w=300, h=400)
         .flow(
             spread(by="region", dir="y", spacing=16),
             spread(by="product", dir="y", spacing=0),
         )
         .mark(rect(w="sales", fill="product")),
-        {"w": 300, "h": 400},
+        {},
     )

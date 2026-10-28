@@ -12,11 +12,11 @@ import { alphabet } from "./data";
 const growIn = Animation.grow({ duration: 600, ease: "cubicOut" });
 
 export default (container: HTMLElement, clock?: BuildClockOptions) =>
-  chart(alphabet)
+  chart(alphabet, { w: 480, h: 220 })
     .flow(
       spread({ by: "letter", dir: "x" }).transition({
         enter: time.stagger({ lag: 60 }),
       })
     )
     .mark(rect({ h: "frequency" }).transition({ enter: growIn }))
-    .render(container, { w: 480, h: 220, ...clock });
+    .render(container, { ...clock });

@@ -1,6 +1,6 @@
 import { color6, resolveColorChannel } from "../../color";
 import { path, transformPath } from "../../path";
-import { GoFishNode } from "../_node";
+import { GoFishNode, outlineOverhang } from "../_node";
 import { GoFishAST } from "../_ast";
 import { linear } from "../coordinateTransforms/linear";
 import { getValue, isValue, MaybeValue, Value } from "../data";
@@ -26,6 +26,7 @@ import { createMark } from "../withGoFish";
 import { MARK_CHANNELS } from "../markChannels.generated";
 import { boxOfDims, ellipseOutline, outlinePaint } from "../geometry";
 import { around } from "../../families/place";
+import { literalBoxExtents } from "../extent";
 import type { DisplayList } from "gofish-ir";
 import {
   lowerStyle,
@@ -65,6 +66,7 @@ export const Ellipse = ({
       args: { dims },
       // Used to seed the unit color scale. Prefer whichever channel is data-driven.
       color: isValue(fill) ? fill : stroke,
+      strokeOverhang: outlineOverhang(stroke, strokeWidth),
       resolveUnderlyingSpace: (
         _children: Size<UnderlyingSpace>[],
         _childNodes: GoFishAST[]
@@ -78,6 +80,9 @@ export const Ellipse = ({
         };
         return [axisSpace(0), axisSpace(1)];
       },
+      // A literal pixel size is the ellipse's own (#493), as a rect's is.
+      resolveExtent: (_ce, _cs, spaces) =>
+        literalBoxExtents(spaces, [dims[0], dims[1]], aspectRatio),
       layout: (size, scales, children) => {
         let w = isValue(dims[0].size)
           ? getValue(dims[0].size!) * scales[0]?.sigma!

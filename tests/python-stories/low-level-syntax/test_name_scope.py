@@ -59,6 +59,8 @@ def story_per_row_names():
                 {"k": "c", "v": 60},
             ],
             axes=False,
+            w=200,
+            h=120,
         )
         .flow(spread(by="k", dir="x", spacing=20, axes=False))
         .mark(
@@ -69,5 +71,5 @@ def story_per_row_names():
                 Constraint.align([bar, tick], x="middle", y="end"),
             ])
         ),
-        {"w": 200, "h": 120},
+        {},
     )

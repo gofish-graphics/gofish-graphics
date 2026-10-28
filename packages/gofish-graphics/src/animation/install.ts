@@ -36,6 +36,7 @@
 import { GoFishNode } from "../ast/_node";
 import type { GoFishAST } from "../ast/_ast";
 import { timer } from "../interaction/inputs";
+import type { RenderPass } from "../interaction/renderTerminal";
 import {
   DEFAULT_DURATION,
   fadeIn,
@@ -74,14 +75,25 @@ type Draft =
 type Leaf = { effects: TimedEffect[]; targets: GoFishNode[] };
 
 /** Read the timeline off `root`, solve it, and put every animated mark on
- *  one clock. A chart in which nothing enters is left as it is. Returns what
- *  stops the clock, when there is one. */
+ *  one clock. A chart in which nothing enters is left as it is.
+ *
+ *  `pass` is the render this is for, when it runs under the render loop
+ *  (`renderWithInteraction`). Every render terminal calls this with its pass:
+ *  a chart builder's, a mark's and a combinator's. The build plays on the
+ *  chart's first render only: a re-render (an input changed) draws the marks
+ *  at rest, which is the build's final frame, and the render loop stops the
+ *  first render's clock, which is registered with the pass here.
+ *  DECLARED SHORTCUT: marks that genuinely enter or exit on a re-render just
+ *  appear or vanish. The right fix is a keyed enter/update/exit join against
+ *  the previous render (#914). */
 export function installBuildIn(
   root: GoFishNode,
-  options: BuildClockOptions = {}
-): (() => void) | undefined {
+  options: BuildClockOptions = {},
+  pass?: RenderPass
+): void {
+  if (pass?.rerender) return;
   const draft = clipOf(root, false);
-  if (draft === undefined) return undefined;
+  if (draft === undefined) return;
   const schedule = solveSchedule(timeLeaves(draft));
   const { total } = schedule;
   const clock = timer<number>({
@@ -107,7 +119,7 @@ export function installBuildIn(
       }
     }
   }
-  return clock.pause;
+  pass?.onCleanup(clock.pause);
 }
 
 /** The longest value a field-valued duration reaches, which the shortcut

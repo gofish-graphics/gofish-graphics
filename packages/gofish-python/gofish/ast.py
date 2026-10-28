@@ -740,7 +740,6 @@ class Mark(_Root):
         h: int = 600,
         axes: Optional[Any] = None,
         legend: Optional[bool] = None,
-        padding: Optional[float] = None,
         debug: bool = False,
     ):
         """
@@ -748,13 +747,13 @@ class Mark(_Root):
         pattern `spread({...}, [marks]).render(container, {w, h})`.
 
         The options are the JS ``.render(container, options)`` options
-        (``w``, ``h``, ``axes``, ``legend``, ``padding``, ``debug``); one left
+        (``w``, ``h``, ``axes``, ``legend``, ``debug``); one left
         unset (``None``) takes its default.
 
         Returns a GoFishChartWidget; in a notebook this auto-displays.
         """
         return _render_widget(
-            self, w=w, h=h, axes=axes, legend=legend, padding=padding, debug=debug
+            self, w=w, h=h, axes=axes, legend=legend, debug=debug
         )
 
     def save(
@@ -764,12 +763,11 @@ class Mark(_Root):
         h: int = 600,
         axes: Optional[Any] = None,
         legend: Optional[bool] = None,
-        padding: Optional[float] = None,
         debug: bool = False,
     ):
         """Save this mark's render to ``path`` (see ``ChartBuilder.save``)."""
         widget = self.render(
-            w=w, h=h, axes=axes, legend=legend, padding=padding, debug=debug
+            w=w, h=h, axes=axes, legend=legend, debug=debug
         )
         widget.save(path)
         return widget
@@ -1567,7 +1565,6 @@ class ChartBuilder(_Root):
         h: int = 600,
         axes: Optional[Any] = None,
         legend: Optional[bool] = None,
-        padding: Optional[float] = None,
         debug: bool = False,
     ):
         """
@@ -1576,23 +1573,21 @@ class ChartBuilder(_Root):
         The options are the JS ``.render(container, options)`` options.
 
         Args:
-            w: Chart width in pixels
-            h: Chart height in pixels
+            w: Width of the whole graphic in pixels, axes and legend included
+            h: Height of the whole graphic in pixels, axes and legend included
             axes: Draw axes (the JS render option ``axes``). Leave unset to
                 use the chart's own ``axes`` option.
             legend: Draw the color legend (the JS render option ``legend``).
                 Leave unset for the default; a ``chart()`` ``legend`` option
                 wins over this one.
-            padding: Extra pixels between the drawing and the SVG edge (the JS
-                render option ``padding``). Leave unset for the default.
             debug: Whether to enable debug mode
 
         Returns:
             GoFishChartWidget instance that will display in Jupyter
 
         Note:
-            ``axes`` and ``padding`` can be given to ``chart(data, ...)`` or
-            here, as in JS. See ``chart`` for the full ``axes`` shape.
+            ``axes`` can be given to ``chart(data, ...)`` or here, as in
+            JS. See ``chart`` for the full ``axes`` shape.
 
         Example:
             >>> data = [{"x": 1, "y": 2}]
@@ -1602,7 +1597,7 @@ class ChartBuilder(_Root):
         if self._mark is None:
             raise ValueError("Chart must have a mark before rendering")
         return _render_widget(
-            self, w=w, h=h, axes=axes, legend=legend, padding=padding, debug=debug
+            self, w=w, h=h, axes=axes, legend=legend, debug=debug
         )
 
     def save(
@@ -1612,7 +1607,6 @@ class ChartBuilder(_Root):
         h: int = 600,
         axes: Optional[Any] = None,
         legend: Optional[bool] = None,
-        padding: Optional[float] = None,
         debug: bool = False,
     ):
         """Save the rendered chart to ``path`` (format inferred from the
@@ -1627,7 +1621,7 @@ class ChartBuilder(_Root):
             >>> chart(data).mark(rect(h="y")).save("chart.svg")
         """
         widget = self.render(
-            w=w, h=h, axes=axes, legend=legend, padding=padding, debug=debug
+            w=w, h=h, axes=axes, legend=legend, debug=debug
         )
         widget.save(path)
         return widget
@@ -1724,7 +1718,7 @@ def layer(
     The options are the JS ``layer(options, children)`` options (box dims,
     ``coord``, ``axes``, ``transform``, ``box``, ``key``), as keyword
     arguments: ``layer([chart1, chart2], coord=Coord.clock())``. Render
-    options such as ``padding`` go to ``.render(...)``, as in JS.
+    options such as ``legend`` go to ``.render(...)``, as in JS.
 
     Mirrors the JS ``layer([...])`` combinator, which is likewise universal
     over charts and marks.
@@ -3893,7 +3887,6 @@ def _render_widget(
     h: int,
     axes: Optional[Any],
     legend: Optional[bool],
-    padding: Optional[float],
     debug: bool,
 ):
     """Render ``root`` as a notebook widget: its document and the callbacks
@@ -3909,7 +3902,6 @@ def _render_widget(
         height=h,
         axes=axes,
         legend=legend,
-        padding=padding,
         debug=debug,
     )
 
@@ -3953,7 +3945,6 @@ class LayerBuilder(_Root):
         h: int = 600,
         axes: Optional[Any] = None,
         legend: Optional[bool] = None,
-        padding: Optional[float] = None,
         debug: bool = False,
     ):
         """
@@ -3962,22 +3953,20 @@ class LayerBuilder(_Root):
         The options are the JS ``.render(container, options)`` options.
 
         Args:
-            w: Chart width in pixels
-            h: Chart height in pixels
+            w: Width of the whole graphic in pixels, axes and legend included
+            h: Height of the whole graphic in pixels, axes and legend included
             axes: Draw axes (the JS render option ``axes``). Leave unset to
                 use the root tier's own ``axes`` option.
             legend: Draw the color legend (the JS render option ``legend``).
                 Leave unset for the default; a ``chart()`` ``legend`` option
                 wins over this one.
-            padding: Extra pixels between the drawing and the SVG edge (the JS
-                render option ``padding``). Leave unset for the default.
             debug: Whether to enable debug mode
 
         Returns:
             GoFishChartWidget instance that will display in Jupyter
         """
         return _render_widget(
-            self, w=w, h=h, axes=axes, legend=legend, padding=padding, debug=debug
+            self, w=w, h=h, axes=axes, legend=legend, debug=debug
         )
 
     def save(
@@ -3987,12 +3976,11 @@ class LayerBuilder(_Root):
         h: int = 600,
         axes: Optional[Any] = None,
         legend: Optional[bool] = None,
-        padding: Optional[float] = None,
         debug: bool = False,
     ):
         """Save the chain's render to ``path`` (see ``ChartBuilder.save``)."""
         widget = self.render(
-            w=w, h=h, axes=axes, legend=legend, padding=padding, debug=debug
+            w=w, h=h, axes=axes, legend=legend, debug=debug
         )
         widget.save(path)
         return widget

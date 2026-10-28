@@ -167,7 +167,14 @@ export const unknown = (run: (x: number) => number): Unknown => {
         lowerBound?: number;
         upperBoundGuess?: number;
       }
-    ) => findTargetMonotonic(y, run, options),
+    ) =>
+      // A σ can be far below 1 (a domain of millions of units), so the
+      // search runs to a tolerance well below any σ, not a fixed 1e-4.
+      findTargetMonotonic(y, run, {
+        tolerance: 1e-12,
+        maxIterations: 200,
+        ...options,
+      }),
   };
 };
 
@@ -186,13 +193,17 @@ export const add = (...args: Monotonic[]): Monotonic => {
   // (max_i aᵢ) + (max_j bⱼ) = max_{i,j}(aᵢ + bⱼ). Still convex PWL.
   const allPieces = args.map(piecesOf);
   if (allPieces.every((p): p is Piece[] => p !== undefined)) {
+    // Pruned after each operand, so a sum of many envelopes stays about as
+    // small as its distinct slopes, not the product of its piece counts.
     let acc: Piece[] = [{ slope: 0, intercept: 0 }];
     for (const ps of allPieces) {
-      acc = acc.flatMap((e) =>
-        ps.map((p) => ({
-          slope: e.slope + p.slope,
-          intercept: e.intercept + p.intercept,
-        }))
+      acc = pruneDominated(
+        acc.flatMap((e) =>
+          ps.map((p) => ({
+            slope: e.slope + p.slope,
+            intercept: e.intercept + p.intercept,
+          }))
+        )
       );
     }
     return piecewise(acc);
@@ -225,6 +236,11 @@ export const adds = (fn: Monotonic, scalar: number): Monotonic => {
   return unknown((x: number) => fn.run(x) + scalar);
 };
 
+/** `−f`: exact for a line; a closure for anything else, since the negation
+ *  of an envelope is no envelope (`smul` by −1 would negate each piece). */
+export const negate = (f: Monotonic): Monotonic =>
+  isLinear(f) ? smul(-1, f) : unknown((x: number) => -f.run(x));
+
 /** The upper envelope `max_i m_i(σ)` of claims, over σ ≥ 0. Unlike {@link
  *  max} it keeps lines with a negative slope or a zero line, which a union's
  *  lower reach needs (a pinned interval above 0 reaches down by a negative
@@ -236,6 +252,23 @@ export const envelope = (ms: Monotonic[]): Monotonic => {
     return piecewise(allPieces.flat());
   }
   return unknown((x: number) => Math.max(...ms.map((m) => m.run(x))));
+};
+
+/** The part of a claim that grows with σ, alone: the claim with its fixed
+ *  parts (the intercepts) taken out, `s·σ` for the steepest slope `s` of
+ *  its pieces, or undefined when none rises. Solving it against a slot the
+ *  fixed parts overfill gives the σ at which what scales fills the slot,
+ *  drawn as if the fixed parts took no room. An `unknown` closure has no
+ *  pieces to tell apart, so its slope is the one it tends to as σ grows,
+ *  read off two far points. */
+export const rising = (x: Monotonic): Linear | undefined => {
+  const ps = piecesOf(x);
+  const far = 1e6;
+  const slope =
+    ps === undefined
+      ? (x.run(2 * far) - x.run(far)) / far
+      : Math.max(0, ...ps.map((p) => p.slope));
+  return slope > 0 && Number.isFinite(slope) ? linear(slope, 0) : undefined;
 };
 
 /** The max of claims, ignoring zero claims: the {@link envelope} of the

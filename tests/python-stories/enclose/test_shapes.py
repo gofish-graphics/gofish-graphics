@@ -55,7 +55,7 @@ def story_planets_box():
             stroke="none",
             shape=Shape.box(rx=16),
         ),
-        {"w": 410, "h": 116},
+        {},
     )
 
 
@@ -87,7 +87,7 @@ def story_munkres_figure():
                 **outline,
             ),
         ]),
-        {"w": 400, "h": 150},
+        {},
     )
 
 
@@ -111,7 +111,7 @@ def story_ref_hull():
                 stroke_width=1.5,
             )
         ]),
-        {"w": 260, "h": 150},
+        {},
     )
 
 
@@ -126,7 +126,7 @@ BEAKS = [
 
 def _penguin_shapes(shape):
     return (
-        chart(BEAKS, axes=True)
+        chart(BEAKS, axes=True, w=420, h=320)
         .flow(scatter(x="Beak Length (mm)", y="Beak Depth (mm)"))
         .mark(circle(r=2.5, fill="Species").name("points"))
         .layer(
@@ -146,23 +146,23 @@ def _penguin_shapes(shape):
 
 
 def story_penguin_boxes():
-    return (_penguin_shapes(Shape.box()), {"w": 420, "h": 320})
+    return (_penguin_shapes(Shape.box()), {})
 
 
 def story_penguin_hulls():
-    return (_penguin_shapes(Shape.hull()), {"w": 420, "h": 320})
+    return (_penguin_shapes(Shape.hull()), {})
 
 
 def story_penguin_blobs():
-    return (_penguin_shapes(Shape.blob()), {"w": 420, "h": 320})
+    return (_penguin_shapes(Shape.blob()), {})
 
 
 def story_penguin_spines():
-    return (_penguin_shapes(Shape.spine()), {"w": 420, "h": 320})
+    return (_penguin_shapes(Shape.spine()), {})
 
 
 def story_penguin_ovals():
-    return (_penguin_shapes(Shape.oval()), {"w": 420, "h": 320})
+    return (_penguin_shapes(Shape.oval()), {})
 
 
 # ── 6. avoiding and holes ───────────────────────────────────────────────────
@@ -216,11 +216,11 @@ def _u_blob(holes):
 
 
 def story_holes_filled():
-    return (_u_blob(False), {"w": 240, "h": 190})
+    return (_u_blob(False), {})
 
 
 def story_holes_kept():
-    return (_u_blob(True), {"w": 240, "h": 190})
+    return (_u_blob(True), {})
 
 
 # ── 7. Hyperedges: graph edges as members ───────────────────────────────────
@@ -291,5 +291,5 @@ def story_hyperedges():
             )
             for s in SETS
         ]),
-        {"w": 360, "h": 230},
+        {},
     )

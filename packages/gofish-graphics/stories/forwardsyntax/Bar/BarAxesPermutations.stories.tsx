@@ -23,13 +23,10 @@ type Args = { w: number; h: number };
 function renderBar(args: Args, axes: AxesOptions): HTMLElement {
   const container = initializeContainer();
 
-  chart(seafood, { axes })
+  chart(seafood, { axes, w: args.w, h: args.h })
     .flow(spread({ by: "lake",  dir: "x" }))
     .mark(rect({ h: "count" }))
-    .render(container, {
-      w: args.w,
-      h: args.h,
-    });
+    .render(container);
 
   return container;
 }
@@ -111,13 +108,13 @@ type LabelAngle = AxisLabelOptions["angle"];
 function renderGroupedBar(args: Args, angle: LabelAngle): HTMLElement {
   const container = initializeContainer();
 
-  chart(cityYear, { axes: { x: { label: { angle } } } })
+  chart(cityYear, { axes: { x: { label: { angle } } }, w: args.w, h: args.h })
     .flow(
       spread({ by: "city", dir: "x", spacing: 24 }),
       spread({ by: "year", dir: "x", spacing: 0 })
     )
     .mark(rect({ h: "visitors", fill: "year" }))
-    .render(container, { w: args.w, h: args.h });
+    .render(container);
 
   return container;
 }
@@ -163,7 +160,7 @@ export const GroupedLabelAngleAuto0: StoryObj<Args> = {
   render: (args: Args) => renderGroupedBar(args, "auto"),
 };
 
-// Narrower than GroupedLabelAngleNone, so upright years would overlap, while
+// Narrower than GroupedLabelAngleAuto0, so upright years would overlap, while
 // the city names still fit: inner (year) 45°, outer (city) 0°.
 export const GroupedLabelAngleAutoInner45Outer0: StoryObj<Args> = {
   args: { w: 250, h: 210 },
@@ -183,13 +180,13 @@ const regionProduct = ["Laptops", "Smartphones", "Accessories", "Wearables"]
 function renderGroupedProducts(args: Args, angle: LabelAngle) {
   const container = initializeContainer();
 
-  chart(regionProduct, { axes: { x: { label: { angle } } } })
+  chart(regionProduct, { axes: { x: { label: { angle } } }, w: args.w, h: args.h })
     .flow(
       spread({ by: "region", dir: "x", spacing: 24 }),
       spread({ by: "product", dir: "x", spacing: 0 })
     )
     .mark(rect({ h: "sales", fill: "product" }))
-    .render(container, { w: args.w, h: args.h });
+    .render(container);
 
   return container;
 }
@@ -229,13 +226,13 @@ export const GroupedLabelAngleAutoInnerHiddenNoLegend: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(regionProduct, { axes: { x: { label: { angle: "auto" } } } })
+    chart(regionProduct, { axes: { x: { label: { angle: "auto" } } }, w: args.w, h: args.h })
       .flow(
         spread({ by: "region", dir: "x", spacing: 24 }),
         spread({ by: "product", dir: "x", spacing: 0 })
       )
       .mark(rect({ h: "sales", fill: "region" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },
@@ -248,13 +245,13 @@ export const GroupedHorizontalLabelAngleAuto0: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(regionProduct, { axes: { y: { label: { angle: "auto" } } } })
+    chart(regionProduct, { axes: { y: { label: { angle: "auto" } } }, w: args.w, h: args.h })
       .flow(
         spread({ by: "region", dir: "y", spacing: 16 }),
         spread({ by: "product", dir: "y", spacing: 0 })
       )
       .mark(rect({ w: "sales", fill: "product" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },

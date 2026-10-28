@@ -60,6 +60,8 @@ def story_default():
             _mosaic_passengers(),
             color=Color.palette(["#2b8cbe", "#ff8408"]),
             axes=False,
+            w=400,
+            h=300,
         )
         .flow(
             # pclass rows: 1st at the bottom, 3rd at the top
@@ -88,5 +90,5 @@ def story_default():
             )
             .mark(circle(r=3, fill="survived"))
         ),
-        {"w": 400, "h": 300},
+        {},
     )

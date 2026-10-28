@@ -1894,10 +1894,18 @@ async function main() {
         if (it.kind !== "group")
           out.push(
             Object.fromEntries(
-              Object.entries(it).filter(
-                ([k, v]) =>
-                  k !== "id" && (typeof v === "number" || typeof v === "string")
-              )
+              Object.entries(it)
+                .filter(
+                  ([k, v]) =>
+                    k !== "id" &&
+                    (typeof v === "number" || typeof v === "string")
+                )
+                // The two orders add the same offsets in another order, so
+                // they agree up to float rounding.
+                .map(([k, v]) => [
+                  k,
+                  typeof v === "number" ? Math.round(v * 1e6) / 1e6 : v,
+                ])
             )
           );
         for (const c of it.children ?? []) walk(c);

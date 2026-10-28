@@ -64,10 +64,10 @@ def _yearly_stocks():
 
 def story_scatter_point_labels():
     return (
-        chart(_countries())
+        chart(_countries(), w=640, h=440)
         .flow(scatter(by="country", x="fertility", y="life_expect"))
         .mark(circle(r=4).label("country")),
-        {"w": 640, "h": 440, "axes": True},
+        {"axes": True},
     )
 
 
@@ -75,12 +75,12 @@ def story_scatter_point_labels():
 
 def story_line_end_labels():
     return (
-        chart(_yearly_stocks(), schema={"date": Unit.time()})
+        chart(_yearly_stocks(), schema={"date": Unit.time()}, w=560, h=320)
         .flow(group(by="symbol"), scatter(by="date", x="date", y="price"))
         .mark(
             line(stroke="symbol", stroke_width=2).label("symbol", position=Place.end())
         ),
-        {"w": 560, "h": 320, "axes": True, "legend": False},
+        {"axes": True, "legend": False},
     )
 
 
@@ -88,7 +88,7 @@ def story_line_end_labels():
 
 def story_inline_sloped_labels():
     return (
-        chart(_yearly_stocks(), schema={"date": Unit.time()})
+        chart(_yearly_stocks(), schema={"date": Unit.time()}, w=560, h=320)
         .flow(group(by="symbol"), scatter(by="date", x="date", y="price"))
         .mark(
             line(stroke="symbol", stroke_width=2).label(
@@ -98,7 +98,7 @@ def story_inline_sloped_labels():
                 font_weight=600,
             )
         ),
-        {"w": 560, "h": 320, "axes": True, "legend": False},
+        {"axes": True, "legend": False},
     )
 
 
@@ -106,13 +106,13 @@ def story_inline_sloped_labels():
 
 def story_streamgraph_interior_labels():
     return (
-        chart(SEAFOOD)
+        chart(SEAFOOD, w=520, h=360)
         .flow(
             spread(by="lake", dir="x", spacing=64, alignment="middle"),
             stack(by="species", dir="y"),
         )
         .mark(ribbon(h="count", fill="species", opacity=0.8).label("species")),
-        {"w": 520, "h": 360, "legend": False},
+        {"legend": False},
     )
 
 
@@ -141,23 +141,23 @@ WINGS = [
 
 def story_polygon_interior_labels():
     return (
-        chart(WINGS, axes=False)
+        chart(WINGS, axes=False, w=640, h=150)
         .flow(group(by="name"))
         .mark(polygon(points="ring", fill="name", opacity=0.85).label("name")),
-        {"w": 640, "h": 150, "legend": False},
+        {"legend": False},
     )
 
 
 def story_polygon_center_labels():
     return (
-        chart(WINGS, axes=False)
+        chart(WINGS, axes=False, w=640, h=150)
         .flow(group(by="name"))
         .mark(
             polygon(points="ring", fill="name", opacity=0.85).label(
                 "name", position="center"
             )
         ),
-        {"w": 640, "h": 150, "legend": False},
+        {"legend": False},
     )
 
 
@@ -179,7 +179,7 @@ BUDGET = [
 
 def _budget_chart(side):
     return (
-        chart(BUDGET)
+        chart(BUDGET, w=360, h=220)
         .flow(group(by="series"), scatter(by="x", x="x", y="y"))
         .mark(
             line(stroke="series", stroke_width=2).label(
@@ -194,14 +194,14 @@ def _budget_chart(side):
 def story_side_above():
     return (
         _budget_chart("above"),
-        {"w": 360, "h": 220, "axes": True, "legend": False},
+        {"axes": True, "legend": False},
     )
 
 
 def story_side_above_or_below():
     return (
         _budget_chart(["above", "below"]),
-        {"w": 360, "h": 220, "axes": True, "legend": False},
+        {"axes": True, "legend": False},
     )
 
 
@@ -228,7 +228,7 @@ def _trend_scatter(countries):
         for f in (min(xs), max(xs))
     ]
     return (
-        chart(ends)
+        chart(ends, w=640, h=440)
         .flow(scatter(by="fertility", x="fertility", y="life_expect"))
         .mark(blank().name("ends"))
         .layer(
@@ -247,7 +247,7 @@ def _trend_scatter(countries):
 def story_avoiding_trend_line():
     return (
         _trend_scatter(_countries()),
-        {"w": 640, "h": 440, "axes": True},
+        {"axes": True},
     )
 
 
@@ -265,7 +265,7 @@ SALES = [
 
 def story_bar_values_above_or_inside():
     return (
-        chart(SALES)
+        chart(SALES, w=320, h=200)
         .flow(spread(by="month", dir="x"))
         .mark(
             rect(h="units", fill="#4e79a7").label(
@@ -273,7 +273,7 @@ def story_bar_values_above_or_inside():
                 position=Place.around(directions=["top"], side=["outset", "inset"]),
             )
         ),
-        {"w": 320, "h": 200, "axes": True},
+        {"axes": True},
     )
 
 
@@ -281,7 +281,7 @@ def story_bar_values_above_or_inside():
 
 def story_bar_end_part():
     return (
-        chart(SALES)
+        chart(SALES, w=320, h=200)
         .flow(spread(by="month", dir="y"))
         .mark(
             rect(w="units", fill="#59a14f").label(
@@ -289,7 +289,7 @@ def story_bar_end_part():
                 position=Place.along(at="x-max", side=["outset", "inset"]),
             )
         ),
-        {"w": 320, "h": 200, "axes": True},
+        {"axes": True},
     )
 
 
@@ -307,7 +307,7 @@ COUNTS = [
 
 def story_bar_values_inside_or_above():
     return (
-        chart(COUNTS)
+        chart(COUNTS, w=320, h=200)
         .flow(spread(by="k", dir="x"))
         .mark(
             rect(h="v", fill="#4e79a7").label(
@@ -315,13 +315,13 @@ def story_bar_values_inside_or_above():
                 position=Place.around(directions=["top"], side=["inset", "outset"]),
             )
         ),
-        {"w": 320, "h": 200, "axes": True},
+        {"axes": True},
     )
 
 
 def story_bar_values_inside_or_past_end():
     return (
-        chart(COUNTS)
+        chart(COUNTS, w=320, h=200)
         .flow(spread(by="k", dir="y"))
         .mark(
             rect(w="v", fill="#59a14f").label(
@@ -329,5 +329,5 @@ def story_bar_values_inside_or_past_end():
                 position=Place.along(at="x-max", side=["inset", "outset"]),
             )
         ),
-        {"w": 320, "h": 200, "axes": True},
+        {"axes": True},
     )

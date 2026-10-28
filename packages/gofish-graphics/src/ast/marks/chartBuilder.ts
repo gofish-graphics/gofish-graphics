@@ -16,12 +16,7 @@ import {
   type InferredRelational,
   type TimeTier,
 } from "../datumProjection";
-// The shared interactive render terminal lives in the interaction layer
-// (renderTerminal.ts) so the low-level `gofish()` terminal can reach it too.
-import {
-  renderWithInteraction,
-  type RenderPass,
-} from "../../interaction/renderTerminal";
+import type { RenderPass } from "../../interaction/renderTerminal";
 import {
   attachBuilderTerminals,
   type RenderOptions,
@@ -1365,18 +1360,10 @@ async function resolveForRender(
 ) {
   const node = await this.resolve();
   // The build-in: marks with enter transitions enter once, on one clock for
-  // the whole chart, which the render options `playing` / `at` can hold (see
-  // `src/animation/install.ts`). A chart with none is untouched. It plays on
-  // the chart's first render only: a re-render (an input changed) draws the
-  // marks at rest, which is the build's final frame, and the render loop
-  // stops the first render's clock.
-  // DECLARED SHORTCUT: marks that genuinely enter or exit on a re-render just
-  // appear or vanish. The right fix is a keyed enter/update/exit join against
-  // the previous render (#914).
-  if (!pass?.rerender) {
-    const stop = installBuildIn(node, options);
-    if (stop !== undefined) pass?.onCleanup(stop);
-  }
+  // the whole chart, which the render options `playing` / `at` can hold. A
+  // chart with none is untouched. It plays on the chart's first render only
+  // (see `src/animation/install.ts`).
+  installBuildIn(node, options, pass);
   const meta = this.renderMeta();
   return {
     node,
@@ -1390,13 +1377,6 @@ async function resolveForRender(
 }
 
 // Define the export terminals declared on `RenderableBuilder`, once, from the
-// shared registry, so both builder surfaces expose the same set. `render` goes
-// through `renderWithInteraction` so resolution runs under the ambient
-// interactive context and the reactive surface (live() channels, input reads in
-// derive()) can register; a chart where nothing registers renders down the
-// static path untouched. See terminals.ts.
-attachBuilderTerminals(
-  RenderableBuilder.prototype,
-  resolveForRender,
-  renderWithInteraction
-);
+// shared registry, so both builder surfaces expose the same set. See
+// terminals.ts.
+attachBuilderTerminals(RenderableBuilder.prototype, resolveForRender);

@@ -23,6 +23,7 @@ import {
   seatInScope,
   type FixedSolve,
   type ScopeRegistry,
+  type ScopeSolution,
 } from "../solver/scopes";
 import type { ConstraintSpec } from ".";
 import type { AlignConstraint } from "./align";
@@ -124,11 +125,12 @@ export function buildDistributeSliceMap(
 
   for (const segment of segments) {
     if (ambiguousAxes.has(segment.dAxis)) continue;
-    const slice = sliceExtent(
-      size[segment.dAxis],
-      segment.spacing,
-      segment.order.length
-    );
+    // Spacing larger than the budget leaves no room: the parts are then
+    // sliced as if it took none, so they stay visible and the chain
+    // overflows (the layer warns, `spacingOverflow`).
+    const n = segment.order.length;
+    const fitted = sliceExtent(size[segment.dAxis], segment.spacing, n);
+    const slice = fitted >= 0 ? fitted : size[segment.dAxis] / n;
     for (const name of segment.order) {
       const cur = out.get(name) ?? ([size[0], size[1]] as Size);
       cur[segment.dAxis] = slice;
@@ -295,8 +297,12 @@ export function placementConstraints(
  * Priority is explicit and single-owner:
  *   1. grid: each cell is proposed ITS (column, row) track's extent (resolved by
  *      the unified max rule in `resolveGridTracks`), keyed by name;
- *   2. distribute: owns only the named child axes it sliced;
- *   3. default layer box: unconstrained/fill proposal is the full layer size.
+ *   2. the child's own room in a share scope (`own`, where defined): its
+ *      claim at the layer's σ, when σ is the size of a share
+ *      (`GoFishNode.sharesRoom`), so a band is one σ and what hangs off it
+ *      keeps the room the scope solved for it;
+ *   3. distribute: owns only the named child axes it sliced;
+ *   4. default layer box: unconstrained/fill proposal is the full layer size.
  *
  * An interval position (`spanByName`) then owns the axes it spans: the pins
  * set the child's extent there, whatever else proposed one. So does the
@@ -311,7 +317,8 @@ export function childLayoutSizeProposal(
   gridCellByName: Map<string, Size> | undefined,
   sliceByName: Map<string, Size> | undefined,
   spanByName?: Map<string, Size<number | undefined>>,
-  region?: Region
+  region?: Region,
+  own: Size<number | undefined> = [undefined, undefined]
 ): Size {
   let proposal: Size = layerSize;
   if (
@@ -320,12 +327,15 @@ export function childLayoutSizeProposal(
     gridCellByName.has(childName)
   ) {
     proposal = gridCellByName.get(childName)!;
-  } else if (
-    sliceByName !== undefined &&
-    childName !== undefined &&
-    sliceByName.has(childName)
-  ) {
-    proposal = sliceByName.get(childName)!;
+  } else {
+    if (
+      sliceByName !== undefined &&
+      childName !== undefined &&
+      sliceByName.has(childName)
+    )
+      proposal = sliceByName.get(childName)!;
+    if (own[0] !== undefined || own[1] !== undefined)
+      proposal = [own[0] ?? proposal[0], own[1] ?? proposal[1]];
   }
   const span = childName !== undefined ? spanByName?.get(childName) : undefined;
   if (span !== undefined)
@@ -344,6 +354,9 @@ export type LayerScales = {
   frames: ConstraintPosScales;
   /** Per axis: the σ the layer hands its children. */
   sigmas: Size<number | undefined>;
+  /** Per axis: the scope the layer seats its children in (`seatInScope`):
+   *  the scope it solved there, or the frame it inherits. */
+  scopes: Size<ScopeSolution | undefined>;
   /** Axes whose solve was attempted and failed (a claim with no σ in it). */
   failedAxes: (0 | 1)[];
   /** Every solve, for the solver shadow hook. */
@@ -411,6 +424,10 @@ export function solveLayerScales(
     undefined,
   ];
   const sigmas: Size<number | undefined> = [handedSigmas[0], handedSigmas[1]];
+  const seatScopes: [ScopeSolution | undefined, ScopeSolution | undefined] = [
+    undefined,
+    undefined,
+  ];
   const failedAxes: (0 | 1)[] = [];
   const checks: LayerScales["checks"] = [];
 
@@ -441,7 +458,13 @@ export function solveLayerScales(
         );
         return (
           solution &&
-          nicedClaim && { key: undefined, solution, claim: nicedClaim }
+          nicedClaim && {
+            key: undefined,
+            solution,
+            claim: nicedClaim,
+            space,
+            box: layerSize[axis],
+          }
         );
       };
       const s = fixed[axis] ?? solve();
@@ -450,6 +473,7 @@ export function solveLayerScales(
       if (solved !== undefined) {
         sigmas[axis] = solved.sigma;
         frames[axis] = scopeFrame(solved);
+        seatScopes[axis] = solved;
         continue;
       }
       failedAxes.push(axis);
@@ -458,8 +482,9 @@ export function solveLayerScales(
       sigma: sigmas[axis],
       map: handedMaps[axis],
     });
+    seatScopes[axis] = frames[axis];
   }
-  return { frames, sigmas, failedAxes, checks };
+  return { frames, sigmas, scopes: seatScopes, failedAxes, checks };
 }
 
 /** Select the layer's single grid constraint, if any.
@@ -519,12 +544,21 @@ export function buildPositionTargetDims(
 export function childPosScalesFor(
   childSpace: Size<UnderlyingSpace> | undefined,
   targetDims: Set<0 | 1> | undefined,
-  ownsAxis: readonly [boolean, boolean],
-  frames: ConstraintPosScales
+  frames: ConstraintPosScales,
+  seats: readonly [number | undefined, number | undefined] = [
+    undefined,
+    undefined,
+  ]
 ): ConstraintPosScales {
   const pick = (dim: 0 | 1) => {
-    if (ownsAxis[dim] && targetDims?.has(dim)) return undefined;
-    return seatInScope(frames[dim], childSpace?.[dim]).childMap;
+    if (targetDims?.has(dim)) return undefined;
+    const map = seatInScope(frames[dim], childSpace?.[dim]).childMap;
+    // A child whose origin the layer pins at a literal pixel shares the
+    // frame from there: its own 0 is that pixel.
+    const seat = seats[dim];
+    return map === undefined || seat === undefined || seat === 0
+      ? map
+      : { ...map, originPx: map.originPx - seat };
   };
   return [pick(0), pick(1)];
 }

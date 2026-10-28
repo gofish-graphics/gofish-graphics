@@ -109,7 +109,7 @@ def story_labeled_file_tree():
             # Bottom-align siblings, so every leaf lands on one bottom row.
             sibling=distribute(dir="x", spacing=12, alignment="end"),
         ),
-        {"w": 760, "h": 460},
+        {},
     )
 
 

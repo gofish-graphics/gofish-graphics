@@ -564,9 +564,12 @@ async function main(): Promise<void> {
         .map((item, i) => ({ item, i }))
         .filter(({ item }) => item.kind === "ellipse")
         .filter(({ item }) => item.style?.opacity !== 0).length;
+    // Zero-radius circles: a circle on the domain's edge is drawn past the
+    // plot, and the canvas keeps that room (#493), which the lines below do
+    // not need.
     const dayCenters = items(
       await days(1, true, Infinity)
-        .mark(circle({ r: 4 }))
+        .mark(circle({ r: 0 }))
         .toDisplayList(OPTIONS)
     )
       .filter((item) => item.kind === "ellipse")

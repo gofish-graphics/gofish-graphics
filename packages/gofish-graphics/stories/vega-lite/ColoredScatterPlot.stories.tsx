@@ -2,6 +2,9 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { chart, layer, scatter, circle } from "../../src/lib";
 import data from "vega-datasets";
+
+// Mirrors: https://vega.github.io/vega-lite/examples/point_color_with_shape.html
+
 const meta: Meta = {
   title: "Vega-Lite/Colored Scatter Plot",
   argTypes: {
@@ -17,6 +20,9 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
+  // Vega-Lite's size: continuous axes with no width or height make a
+  // 300 × 300 plot, Vega-Lite's default (its compiled point_color_with_shape
+  // plot).
   args: { w: 300, h: 300 },
   loaders: [async () => ({ penguins: await data["penguins.json"]() })],
   tags: ["gallery"],
@@ -45,6 +51,7 @@ export const Default: StoryObj<Args> = {
       const bySpecies = (species: string) => penguins.filter((d) => d["Species"] === species);
 
     layer(
+      { w: args.w, h: args.h },
       speciesList.map((species) => () =>
         chart(bySpecies(species))
           .flow(
@@ -63,7 +70,7 @@ export const Default: StoryObj<Args> = {
           )
           .resolve()
       ) as any
-    ).render(container, { w: args.w, h: args.h, axes: true } as any);
+    ).render(container, { axes: true } as any);
     return container;
   },
 };

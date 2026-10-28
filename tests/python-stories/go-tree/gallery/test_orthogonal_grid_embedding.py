@@ -35,5 +35,5 @@ def story_orthogonal_grid_embedding():
             ),
             coord=Coord.clock(),
         ),
-        {"w": 480, "h": 480},
+        {},
     )

@@ -48,5 +48,5 @@ def story_icicle_plot():
             ),
             coord=Coord.clock(),
         ),
-        {"w": 560, "h": 560},
+        {},
     )

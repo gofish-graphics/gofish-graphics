@@ -77,7 +77,7 @@ export const FlowerTree: StoryObj = {
         }),
         coord: Coord.clock(),
       },
-      { w: 520, h: 520 },
+      {},
       sampleTree
     ),
 };

@@ -774,7 +774,7 @@ function chartFromIR(chartSpec: ChartSpec, ctx: IRContext): ChartBuilder<any> {
 /**
  * Render options a host supplies beside the IR document: the arguments of
  * the Python `.render(...)` call. A field left undefined lets the document
- * decide (a chart's own `axes` option, the default padding). These are the
+ * decide (a chart's own `axes` option). These are the
  * JS `.render(container, options)` options.
  */
 export interface RenderIROptions {
@@ -782,7 +782,6 @@ export interface RenderIROptions {
   h?: number;
   axes?: AxesOptions;
   legend?: boolean;
-  padding?: number;
   debug?: boolean;
 }
 

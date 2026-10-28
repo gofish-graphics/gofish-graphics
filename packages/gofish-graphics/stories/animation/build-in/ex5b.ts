@@ -11,7 +11,7 @@ import {
 import { seattle } from "./data";
 
 export default (container: HTMLElement, clock?: BuildClockOptions) =>
-  chart(seattle)
+  chart(seattle, { w: 480, h: 240 })
     .flow(
       spread({ by: "month", dir: "x" }).transition({
         enter: time.stagger({ lag: 80 }),
@@ -25,4 +25,4 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
         enter: Animation.grow({ duration: 200 }),
       })
     )
-    .render(container, { w: 480, h: 240, ...clock });
+    .render(container, { ...clock });

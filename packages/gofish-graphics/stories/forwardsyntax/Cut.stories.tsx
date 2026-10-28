@@ -49,7 +49,7 @@ export const ImageCut: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(bottleData)
+    chart(bottleData, { w: args.w, h: args.h })
       .flow(spread({ dir: "y", spacing: 4, reverse: true }))
       .mark(
         image({ href: bottlePng, w: 193, h: 600 }).cut({
@@ -58,11 +58,7 @@ export const ImageCut: StoryObj<Args> = {
           inset: 4,
         })
       )
-      .render(container, {
-        w: args.w,
-        h: args.h,
-        axes: false,
-      });
+      .render(container, { axes: false });
 
     return container;
   },
@@ -162,7 +158,7 @@ export const GroupedCut: StoryObj<Args> = {
       { vintage: "2021", category: "Other", amount: 15 },
     ];
 
-    chart(data)
+    chart(data, { w: args.w, h: args.h })
       .flow(
         spread({ by: "vintage", dir: "x", spacing: 40 }),
         spread({ dir: "y", spacing: 14, reverse: true })
@@ -174,7 +170,7 @@ export const GroupedCut: StoryObj<Args> = {
           inset: 4,
         })
       )
-      .render(container, { w: args.w, h: args.h, axes: false });
+      .render(container, { axes: false });
 
     return container;
   },
@@ -187,10 +183,10 @@ export const RectEqualSlices: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(abcdData)
+    chart(abcdData, { w: args.w, h: args.h })
       .flow(spread({ dir: "x", spacing: 4 }))
       .mark(rect({ w: 400, h: 80, fill: "steelblue" }).cut({ dir: "x" }))
-      .render(container, { w: args.w, h: args.h, axes: false });
+      .render(container, { axes: false });
 
     return container;
   },
@@ -212,7 +208,7 @@ export const RectFlushStack: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(abcdData)
+    chart(abcdData, { w: args.w, h: args.h })
       .flow(stack({ dir: "x" }))
       .mark(
         rect({
@@ -223,7 +219,7 @@ export const RectFlushStack: StoryObj<Args> = {
           strokeWidth: 3,
         }).cut({ dir: "x" })
       )
-      .render(container, { w: args.w, h: args.h, axes: false });
+      .render(container, { axes: false });
 
     return container;
   },
@@ -237,10 +233,10 @@ export const ImageEqualSlices: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart([{ k: "top" }, { k: "mid" }, { k: "bot" }])
+    chart([{ k: "top" }, { k: "mid" }, { k: "bot" }], { w: args.w, h: args.h })
       .flow(spread({ dir: "y", spacing: 14, reverse: true }))
       .mark(image({ href: bottlePng, w: 193, h: 600 }).cut({ dir: "y" }))
-      .render(container, { w: args.w, h: args.h, axes: false });
+      .render(container, { axes: false });
 
     return container;
   },
@@ -444,7 +440,7 @@ export const ImageHorizontalCut: StoryObj<Args> = {
       { label: "V", weight: 1 },
     ];
 
-    chart(data)
+    chart(data, { w: args.w, h: args.h })
       .flow(spread({ dir: "x", spacing: 12 }))
       .mark(
         image({ href: bottlePng, w: 193, h: 600 }).cut({
@@ -453,7 +449,7 @@ export const ImageHorizontalCut: StoryObj<Args> = {
           inset: 4,
         })
       )
-      .render(container, { w: args.w, h: args.h, axes: false });
+      .render(container, { axes: false });
 
     return container;
   },

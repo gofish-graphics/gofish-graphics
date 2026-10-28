@@ -83,7 +83,7 @@ export const NodeLinkTree: StoryObj = {
         }),
       },
       nodeLinkData
-    ).render(container, { w: 900, h: 560 });
+    ).render(container);
     return container;
   },
 };

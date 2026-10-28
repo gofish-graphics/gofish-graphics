@@ -107,7 +107,7 @@ once: the row of planets and the label's column.
 ## Drawing a box around the label
 
 To show that the label and Mercury go together, we can draw a box around them.
-That's another job for `background()`. This time we give it an outline and no
+That's another job for `enclose()`. This time we give it an outline and no
 fill:
 
 ::: gofish
@@ -197,7 +197,7 @@ gf.layer([
 
 Right now the red box holds the column, and the column holds Mercury and the
 label. Let's pull the box out so it stands on its own. We name the label, and
-we give `background()` references to Mercury and the label instead of the
+we give `enclose()` references to Mercury and the label instead of the
 column. The label was made inside `.relate()`, so it isn't one of the names
 `.relate()` hands us. `gf.ref("label")` refers to it by name instead:
 
@@ -238,7 +238,7 @@ gf.layer([
 
 :::
 
-The picture didn't change. `background()` doesn't have to hold its children
+The picture didn't change. `enclose()` doesn't have to hold its children
 itself. Given references, it draws a box around marks that were placed
 somewhere else.
 
@@ -281,8 +281,8 @@ gf.layer([
 
 :::
 
-`arrow()` has a lot in common with `background()`. Both are operators that draw a
-shape worked out from other marks. `background()` draws a box around its children,
+`arrow()` has a lot in common with `enclose()`. Both are operators that draw a
+shape worked out from other marks. `enclose()` draws a box around its children,
 and `arrow()` draws an arrow from one child to the other.
 
 ## Splitting the column into two rules

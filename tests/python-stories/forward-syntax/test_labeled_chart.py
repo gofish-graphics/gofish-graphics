@@ -17,7 +17,7 @@ LABELS = [
 
 def story_basic():
     return (
-        chart(NODES, axes=False)
+        chart(NODES, axes=False, w=500, h=300)
         .flow(scatter(by="id", x="grp", y="grp"))
         .mark(circle(r=16, fill="#59a14f").name("nodes"))
         .layer(
@@ -32,5 +32,5 @@ def story_basic():
                 )
             )
         ),
-        {"w": 500, "h": 300},
+        {},
     )
