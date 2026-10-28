@@ -206,7 +206,7 @@ chart(data).flow(
 ).mark(rect(h=field("rating").count()))
 
 # One bar per month of the year, all Junes in one bar
-chart(sales, schema={"date": Schema.time()}).flow(
+chart(sales, schema={"date": Unit.time()}).flow(
     spread(by=field("date").bin(Calendar.month), dir="x")
 ).mark(rect(h=field("value").sum()))
 

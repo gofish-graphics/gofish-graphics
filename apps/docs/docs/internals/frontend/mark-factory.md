@@ -98,17 +98,20 @@ own; `createMark` could grow a `"pos"` channel the same way if a future shape
 needs one.
 
 `inferSize` and `inferPos` are two instantiations of one numeric-inference
-factory, `inferNumeric(agg)` — they differ only in the aggregation (`sumOf`
-vs `meanOf`, `fieldExpr.ts`). Both skip a missing value (null or undefined,
+factory, `inferNumeric(agg)` — they differ only in the aggregation
+(`sumIn` vs `meanOf`, `fieldExpr.ts`). `agg` also gets the column's
+quantity, so `inferSize`'s sum checks that the column's unit can be summed
+(`sumIn`, #1197). When a pipeline op already folded the rows
+(`evalFieldValues` reports it as `folded`), the channel takes the op's value
+and applies no aggregation of its own. Both skip a missing value (null or undefined,
 `isMissing`, the rule `dropNulls` and the schema's classes use; NaN is a
 number). A mean divides by how many values there are, and over none it is
 undefined. A sum over no rows is 0, and over rows whose values are all
 missing it is undefined, as in SQL. An aggregation with no value makes the
 channel undefined, so a position read off a group with no rows has no
 value. A pipeline's fold with no value (`field(x).mean()` over no rows) is
-the singleton `[undefined]`, which the channel's own aggregation keeps (the
-sum of `[undefined]` is undefined), so a size read as a mean of no rows has
-no value either, while a size read as a sum of no rows is 0. A `count`
+the singleton `[undefined]`, which the channel takes as it is, so a size
+read as a mean of no rows has no value either, while a size read as a sum of no rows is 0. A `count`
 counts rows, missing values included. Both take an optional third argument, the accessor's
 resolved column (`ColumnInfo`, from `resolveColumn(data, accessor)`): its
 `Quantity` and its type in the chart's `schema`. A string/`field()` accessor's
@@ -124,7 +127,7 @@ an unknown unit.
 result down, since the accessor and what the data carries are loop-invariant
 across split entries. A value read from a column with a type also records
 that type (`DatumValueImpl.fieldType`) and the field it read, so a position
-over a `Schema.time()` column builds a space on that column's calendar (see
+over a `Unit.time()` column builds a space on that column's calendar (see
 [Underlying Space](/internals/core/underlying-space#column-types-the-chart-schema)).
 
 Inference is synchronous. A Python lambda reaches JS as an accessor with a
@@ -200,7 +203,9 @@ Walking `withGoFish.ts:431-477`:
      scale knows which field it maps; a function accessor records none. A
      `field(...)` with an aggregate (`field("a").count()`) is the
      exception: it folds all of `data` (`evalFieldValues`), as a size
-     channel does, and records no field, because the value is the fold's.
+     channel does, with the column's quantity, so a `.sum()` checks that
+     the column adds up, and records no field, because the value is the
+     fold's.
      A fold with no value (the mean of no rows) gives no color. A text
      (`"raw"`) channel folds the same way, and `DeriveMarkProps` types
      both kinds to accept a `FieldExpr`, as it does a size. It
@@ -434,7 +439,7 @@ Today's channels are `"size"` and `"color"`. To add (say) `"angle"`:
 2. If a numeric aggregation fits, instantiate the existing factory —
    `export const inferAngle = inferNumeric(meanOf)` (or whatever aggregation
    makes sense) — and measure tagging comes along for free. Otherwise write
-   `inferAngle(accessor, data, measure?)` next to it with the same signature.
+   `inferAngle(accessor, data, column?)` next to it with the same signature.
 3. Extend `DeriveMarkProps`'s conditional with the input type for `"angle"`.
 4. Extend the `if (channelType === "size") ... else if (channelType === "color")`
    chain in `withGoFish.ts` to handle it.

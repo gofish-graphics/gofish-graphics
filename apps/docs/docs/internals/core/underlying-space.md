@@ -21,6 +21,8 @@ covers:
   - packages/gofish-graphics/src/ast/structExpr.ts
   - packages/gofish-graphics/src/families/bin.ts
   - packages/gofish-graphics/src/families/calendar.ts
+  - packages/gofish-graphics/src/families/domain.ts
+  - packages/gofish-graphics/src/families/trait.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/partition.tsx
   - packages/gofish-graphics/src/ast/shapes/region.tsx
   - packages/gofish-graphics/src/ast/measure.ts
@@ -250,7 +252,7 @@ type CONTINUOUS_TYPE = {
   kind: "continuous";
   dataInterval: Interval; // signed data extent about the local origin
   origin: Origin; // where that origin sits
-  measure?: UnitRecord; // { unit?, calendar?, titles }
+  measure?: UnitRecord; // { unit?, titles, summands? }
   mirrored?: true;
   cells?: readonly Cell[]; // every region placed along the axis is a cell
 };
@@ -1397,7 +1399,7 @@ nices** (its domains map into a fixed coordinate range).
 
 A domain nices **to the ticks of the axis drawn over it** (`AxisTicks`): a tick
 count (10) on a numeric axis, rounded with `d3.nice`; on a **time** space
-(`calendar` set, see the column types below) the calendar partition of the
+(`zone` set, see the column types below) the calendar partition of the
 axis's inner row, rounded outward to its cells (`niceToCells` in
 `calendar.ts`), so both ends of the axis are ticks. Both read the domain and the
 axis options only, never pixels.
@@ -1575,8 +1577,8 @@ three things:
 // underlyingSpace.ts
 type UnitRecord = {
   unit?: UnitVar; // a declared unit or an unknown, a term of the render's union-find
-  calendar?: HasCalendar; // over instants: the calendar they read on
   titles: string[]; // the quantities on the axis: they title it
+  summands?: Quantity[]; // the quantities a fold that adds the space sums
 };
 export type CONTINUOUS_TYPE = { kind: "continuous"; dataInterval: Interval; origin: Origin; measure?: UnitRecord; ... };
 ```
@@ -1594,31 +1596,102 @@ a column whose unit nobody declared has an _unknown_ unit, a **unit variable**,
 which unifies with anything. A declared unit is concrete. Two different
 concrete units on one axis are a type error. The concrete units are:
 
-- a column's `Schema.unit(u)` (`HasUnit`, see
-  [column types](#column-types-the-chart-schema));
-- `"instant"`, which `Schema.time()` writes as the `HasUnit` of every time
-  column, so a start and an end time share an axis; the time zone stays in
-  the calendar, a display parameter;
+- a column's unit, a `Unit(u)` definition or the name `u` alone (`HasUnit`,
+  see [column types](#column-types-the-chart-schema));
+- `"instant"`, the unit `Unit.time({ zone })` declares for every time
+  column, so a start and an end time share an axis. The zone is a parameter
+  of the unit (`HasUnit.zone`), not part of its name, so it does not split
+  the unit: two instants in different zones unify as one unit, and the
+  one `HasUnit` their class is bound to (`meetUnits` in `unify`) can read
+  only one calendar, so two zones on one shared axis throw;
 - `"count"`, for `.count()` and `.distinct()`;
-- `"duration"`, for a size read from a time column: a difference of two
-  instants (`differenceUnits`, which `magnitude` applies; the calendar is
-  dropped too);
+- `"duration"` (`Unit.duration`), for a difference of two instants, such
+  as a size read from a time column. A unit names its own difference unit
+  (`HasUnit.difference`): the instant names the duration, and
+  `differenceUnits`, which `magnitude` applies, reads that property and
+  drops the zone. A unit that names none is its own difference, so USD − USD
+  is USD and °C − °C is °C. Only the engine's units name one today; it is
+  the mechanism a °C unit with a Δ°C difference will use (#1142);
 - `"<base> share by <by>"`, for `.normalize()` (`shareQuantity`), so a share
   axis never silently unions with its base's own axis.
 
 Each declared unit is a `HasUnit` (the column type, `schema.ts`): a `unit`
-name, which says which units are the same, and an optional **symbol**, which
-an axis title shows. `Schema.unit(u)` writes the symbol `u`. The engine's own
-units (`INSTANT`, `DURATION`, `COUNT` in `measure.ts`, a share) have none: a
-count or a share is a plain number, and a time axis's ticks already read as
-dates.
+name, which says which units are the same, an optional **symbol**, which
+an axis title shows, and the unit's **classes**, what its amounts can do,
+when they are known. A user's unit `u` has the symbol `u`. A `Unit(u)`
+definition writes its classes; a unit declared by its name alone writes
+none, so its classes are unknown. The engine's own units (`INSTANT`,
+`DURATION`, `COUNT` in `measure.ts`, a share) have no symbol, since a count
+or a share is a plain number and a time axis's ticks already read as
+dates, and their classes are known: a duration, a count and a share add
+up, and an instant does not.
+
+**Which amounts add up.** `CanAdd` (#1197) is a class of the unit, not of a
+column: `Unit(name, { traits: [Trait.summable()] })` defines it, and it rides on the unit
+(`HasUnit.classes`) into the `Quantity` read from a column. A unit is its
+name, so every occurrence of one name is one unit, and where two
+occurrences meet their classes meet by one rule, `meetUnitClasses`
+(`measure.ts`): unknown classes and known ones are the known ones, and two
+known definitions that disagree throw an error naming both columns. They
+meet in two places. When a chart's schema is applied, its columns of one
+unit name meet (`meetChartUnits`, `schema.ts`), so a column declared
+`"USD"` beside `Unit("USD", { traits: [Trait.summable()] })` adds up. In the type walk, every
+declared unit read (`unitOf`) meets the figure's other occurrences of its
+name in the walk's `Units`, wherever they are, so two charts that define
+one unit differently throw. `addsUp` (`measure.ts`) is the rule for one
+quantity: it adds up when its unit has `CanAdd`, when it has no declared
+unit, or when its unit's classes are unknown. Every place that adds values
+while a chart is built sums them with `sumIn` (`fieldExpr.ts`), which
+checks it with `checkSummable`: a size channel's sum over its rows
+(`inferNumeric`; when an aggregate op already folded the rows, the channel
+takes the op's value and sums nothing), `.sum()` in any channel or label
+(every caller of `evalFieldValues` passes the column's quantity), the
+total of `.normalize()`, and the total of the `normalize(rows, field)` data
+helper. A treemap's layout adds its tiles' weights on every pass, so the
+treemap checks its `size` channel with `checkSummable` once, where it is
+built. A cut's sizes are slices of a whole it adds up, so its per-row size
+channel (`inferEntrySize`) checks its column with `checkSummable` too. These sums read the unit as their
+chart knows it. A stack adds spaces, not values, in the type walk, so a
+space's `UnitRecord` carries `summands`, the quantities of its values in a
+declared unit (`quantityUnits`; a shared `joinUnits` unions them, each once),
+and `distributeSpaceFold` sums each free part's own list with `Units.sum`,
+which reads the unit's classes as the figure knows them. While they are
+unknown the sum waits, and it is checked when an occurrence that knows
+them is met, so a stack of `"USD"` in one chart throws beside a
+`Unit("USD")` in another, whichever the walk meets first. The stack reads
+the parts, not the unit class they joined, so a `start` point beside a
+stacked width is checked only for the width; a pinned part is not summed,
+since the stack adds only its width. Summing a declared unit without
+`CanAdd` throws an error that names the column and says to declare
+`Unit(name, { traits: [Trait.summable()] })`; for a unit whose difference unit adds up (a
+time), it says to subtract a reference first (`date - start` gives a
+duration, which adds up). That message reads the unit's `difference`, not
+a calendar. An unknown unit passes, as everywhere in gradual typing. The check
+reads the column's type, not the rows, so a group of one row is checked
+like any other: whether a chart type-checks never depends on how many rows
+a group holds. A bar of one date or one temperature is the missing zero
+(`HasZero`, #1051), not this check.
+
+One gap remains. A sum taken while a chart is built (a size channel,
+`.sum()`, a treemap, a cut, `.normalize()`) runs before the type walk, so
+it cannot see a definition of its unit in another chart: a bar chart of
+`"USD"` beside another chart's `Unit("USD")` sums its bars. Only the
+stack's sum, which the walk takes, sees the whole figure. Closing it needs
+the charts to be built inside the figure's walk scope (TODO in
+`meetChartUnits`).
+
+A size is never read on a calendar: `magnitude` takes its value's
+`differenceUnits`, so a size read from a time column (`h:
+field("day").mean()`) is a duration, not a bar on a time axis from 1970,
+and its `summands` become durations, which add up. A sum of a
+time column as a size still throws first, at the sum.
 
 A quantity whose unit is declared is that unit, a concrete term, and nothing
 more: two charts that each declare their own `"value"` column, one in USD and
 one in EUR, share nothing, and a column `"count"` declared in people is not
 the `"count"` of `.count()`. Only an unknown is a variable. A unit variable
 is named by its **quantity**: the column's declared quantity
-(`HasQuantity`, from `Schema.quantity(name)`), or, for a column a transform
+(`HasQuantity`, a column record's `name`), or, for a column a transform
 derived from another, the source column's quantity (`bin(field)`'s
 `start`/`end`/`size` are amounts of `field`), or else the column's name. The
 column name is a weak default: it makes no claim, so two columns with
@@ -1674,8 +1747,9 @@ of the measure-keyed domains design (#1114):
 | unknown x, unknown y   | x and y unify                         | forget: two units          |
 
 "Forget" records nothing and raises nothing, and the result keeps `a`'s
-record. A shared join unions the titles in order. Either way the calendars
-must agree (two time zones on one axis throw). Two errors remain, both
+record. A shared join unions the titles in order, and its calendars must
+agree (two time zones on one shared axis throw, where `unify` meets the two
+instants). Two errors remain, both
 `MeasureClash`: two declared units on one shared axis (a stack's parts in two
 units among them), and one unknown bound to two declared units (a column
 that meets `"count"` on one shared axis and `"mm"` on another).
@@ -1694,10 +1768,11 @@ pinned, it is the point and the offset is the difference that moves it.
 Otherwise the content is a difference (a magnitude, a width) and the offset
 is the point it hangs from. The difference must be in the point's difference
 units (`differenceUnits`), so the join is between `differenceUnits(point)`
-and the difference: a USD position moves by USD, and a time position moves
-by a duration, or by a plain number, which is bound to one. Two instants
-clash (`"instant"` against `"duration"`), since a time does not move a time.
-The result takes the point's unit and calendar, titled by both sides. An ordinal axis has titles and no unit, so it takes no part in the
+and the difference: a USD position moves by USD (whether or not its column
+is summable), a °C position by °C, and a time position by a
+duration, or by a plain number, which is bound to one. Two instants clash
+(`"instant"` against `"duration"`), since a time does not move a time.
+The result takes the point's unit and zone, titled by both sides. An ordinal axis has titles and no unit, so it takes no part in the
 join: a datum position beside a category spread on the same axis, or a
 spread whose targets mix a category spread with bars, unifies only the
 continuous units.
@@ -1722,7 +1797,7 @@ literal has no column, so no quantity: its value makes no claim.
 `inferSize`/`inferPos` tag the `value(...)` they emit with it, and a pipeline
 that determines its own quantity (`.count()`) overrides it; `.sum()` and
 `.mean()` keep the column's. The channel aggregators are a sum for size
-and a mean for position (`sumOf` and `meanOf` in `fieldExpr.ts`), and both
+and a mean for position (`sumIn` and `meanOf` in `fieldExpr.ts`), and both
 skip a missing value (null or undefined, `isMissing`, the rule `dropNulls`
 uses). The mean of no values has no value (see
 [Cells](#cells-a-binned-key)); so has the sum of values that are all
@@ -1787,7 +1862,7 @@ a grouped bar chart over a column declared in dollars and one in euros:
 > unit.
 > If they are the same kind of quantity, declare the same unit for their
 > columns in the chart's schema, e.g. schema: { "Worldwide Gross":
-> Schema.unit("EUR") }.
+> "EUR" }.
 > If they are different kinds of quantity, each needs its own axis: give the
 > inner chart its own w and h so it scales on its own.
 
@@ -1807,7 +1882,7 @@ names it on the way out (`GoFishNode.axisName`): `x` or `y`, or the name the
 innermost enclosing coordinate space gives it (`r`, `theta`, `lon`, `lat`). It
 reads the same axis scope the name pass uses (`axisScopeFor`), so a space that
 declares no names leaves `x` and `y` even inside a polar one.
-`Schema.unit` is spelled the same in Python, so one message serves both.
+A unit's name is spelled the same in Python, so one message serves both.
 
 The two remedies are the two escape hatches this essay already describes:
 declare that the units _are_ the same, or place the foreign region apart
@@ -1821,11 +1896,11 @@ quantities), joined with `", "` in the order the merge met them, then the
 symbol of the axis's unit in parentheses when that unit is declared and has
 a symbol. A histogram's edges title as their source column, an axis over
 `lo` and `hi` reads `"lo, hi"`, and the four summary columns of a box plot
-declared `Schema.quantity("Pay").unit("USD")` read `"Pay (USD)"`. A count, a
+declared `{ name: "Pay", unit: Unit("USD") }` read `"Pay (USD)"`. A count, a
 share, a time, and an unknown unit add nothing. The rule never reads the
 names, so a column named `"Flipper Length (mm)"` declared in `"mm"` titles
 `"Flipper Length (mm) (mm)"`. The clean title comes from declaring the
-quantity (`Schema.quantity("Flipper Length").unit("mm")`) or from the `axes`
+quantity (`{ name: "Flipper Length", unit: Unit("mm") }`) or from the `axes`
 option's `title`, which overrides all of this.
 
 **Stage 2.** This is Stage 1: one unit per axis, unified or refused. The
@@ -1836,36 +1911,78 @@ keyed by `spaceUnit` (cf. issues #452, #386).
 ## Column types: the chart schema
 
 `chart(data, { schema })` (`schema.ts`, #984) declares, per column, the
-classes the column's values have, in the style of typeclasses:
+classes the column's values have, in the style of typeclasses. A column's
+entry is a unit definition, a unit's name, or a column record
+`{ name, unit }`:
 
 ```ts
-chart(survey, { schema: { response: Schema.ordered(LEVELS).diverging() } });
+const Likert = Unit({
+  domain: Domain.ordered(LEVELS),
+  traits: [Trait.diverging()],
+});
+chart(survey, { schema: { response: Likert } });
 ```
 
-A column type is a record keyed by class name (`ColumnType`), and the engine
-reads only the classes, never the builder words. Six classes exist:
+A unit definition (`Unit(name?, { domain?, traits? })`, #1197) separates
+what its values are, its `domain`, from the capabilities they have, its
+`traits`, as Rust separates a type from the traits it implements. `Domain`
+and `Trait` are strategy families (`families/domain.ts`,
+`families/trait.ts`), but they are not in `STRATEGIES`: a domain and the
+traits are read when the `Unit` is made (`unitTypeOf`) and never reach the
+wire, which carries only the classes they expand into
+(`UnitDefinition.type`, a `UnitType`):
 
-- `HasOrder` (`Schema.ordered(levels)`): the values are the levels of a fixed
-  order. `splitEntries` groups a `by` over the column in that order instead
-  of first appearance, so every operator that splits (spread, stack, group,
-  scatter, ...) follows it, and `field(...).sort(...)` and `.reverse()` still
-  reorder from there. A value outside the levels is a loud error naming the
-  column and the stray values (`strayLevelsError`), checked where the order
-  is used (`orderByLevels`, at a split or a color scale), not when the chart
-  types its data, so a `filter` in the flow can drop the stray rows first.
-- `HasMidpoint` (`.diverging({ midpoint })`): the order has a midpoint, the
+| Definition                   | Classes                                   |
+| ---------------------------- | ----------------------------------------- |
+| a name `u`                   | `HasUnit { unit: u, symbol: u, classes }` |
+| `Domain.discrete(levels)`    | `HasLevels { levels }`                    |
+| `Domain.ordered(levels)`     | `HasLevels { levels }`, `HasOrder {}`     |
+| `Trait.diverging(midpoint?)` | `HasMidpoint { at }`                      |
+| `Trait.summable()`           | `CanAdd` in `HasUnit.classes`             |
+
+`unitTypeOf` checks the definition: a unit needs a name or a domain; a
+domain is a `Domain` value (a bare list or an interval is an error: an
+interval domain, `Domain.continuous`, is a follow-up); a domain lists at
+least one level and no level twice (`levelsDomain`, which the `Domain`
+factories call and `unitTypeOf` calls again on a domain written as a
+record); a trait appears once;
+`Trait.diverging` needs `Domain.ordered` (no domain, the reals, is "not
+supported yet"); `Trait.summable` needs a name, since adding up is a class
+of a unit and a unit is known by its name. A unit with no name writes no
+`HasUnit`, so its columns are typed one by one, as before the unit existed.
+Two units of one name with different domains are not compared yet.
+
+A column type is a record keyed by class name (`ColumnType`), and the engine
+reads only the classes, never the definition. Nine classes exist:
+
+- `HasLevels` (`{ levels }`, from a domain): the values are the levels of a
+  fixed list. `splitEntries` groups a `by` over the column in that order
+  instead of first appearance, so every operator that splits (spread,
+  stack, group, scatter, ...) follows it, and `field(...).sort(...)` and
+  `.reverse()` still reorder from there. A color legend lists its values in
+  the same order. A value outside the levels is a loud error naming the
+  column and the stray values (`strayLevelsError`), checked where the levels
+  are used (`orderByLevels`, at a split or a color scale), not when the
+  chart types its data, so a `filter` in the flow can drop the stray rows
+  first.
+- `HasOrder` (`{}`, from `Domain.ordered`): the levels are ordered. It is a
+  marker over `HasLevels`, which `columnTypeOf` requires. A split over the
+  column says its groups are ordered (`SplitGroups.hasOrder`), so an
+  ordinal axis starts an outer level's labels at their runs; over
+  `Domain.discrete` levels, which have no order, it centers them.
+- `HasMidpoint` (`{ at }`, from `Trait.diverging(midpoint)`): the order has a midpoint, the
   point `{ at }` along it in edge coordinates. Level `i` spans `[i, i + 1]`,
   so 0 is the first level's leading edge, `n` the last level's trailing
   edge, and 2.25 a quarter of the way into the third level (the `cutoff` of
-  ggstats' `gglikert`). `.diverging()` writes the default `n / 2` into the
+  ggstats' `gglikert`). `Unit` writes the default `n / 2` into the
   record, so the wire form always carries a number: the middle of the
   middle level when the count is odd, the boundary between the two middle
-  levels when it is even. It requires `HasOrder`; the builder's `this` type
-  makes `.diverging()` exist only after `.ordered(...)`, and `columnTypeOf`
+  levels when it is even. It requires `HasOrder`: `unitTypeOf` rejects
+  `Trait.diverging` without `Domain.ordered`, and `columnTypeOf`
   rejects a wire record that has one without the other. A midpoint that is
   not a finite number in `[0, n]` is an error from `checkMidpointOnOrder`,
-  which `.diverging()` calls at once and `columnTypeOf` calls on a wire
-  record; Python's `.diverging()` raises the same messages, word for word. A stack over the column takes the
+  which `Unit` calls at once and `columnTypeOf` calls on a wire
+  record; Python's `Unit` raises the same messages, word for word. A stack over the column takes the
   midpoint as its origin (`stackOrigin`, then the stack fold and the
   free-origin seat above): inside a present level, that fraction of its
   part; on a boundary, or inside a level the row lacks, the tail of the
@@ -1878,18 +1995,20 @@ reads only the classes, never the builder words. Six classes exist:
   (`orderEntries`), and `stackOrigin` reads the stack's direction off that,
   so a row with one part puts it where a full row does. A split order that
   is neither the order nor its reverse is an error.
-- `HasCalendar` (`Schema.time({ zone })`, #1057): the values are instants,
-  read on the calendar of the IANA zone `zone` (UTC by default). It is the
-  one class that changes the data: `applySchema` (now async, because it
+- A time (`Unit.time({ zone })`, #1057) is a `HasUnit` with a `zone`: the
+  values are instants, read on the calendar of the IANA zone `zone` (UTC by
+  default). There is no separate calendar class: the zone is a parameter of
+  the unit, and nothing needs a calendar without a unit. It is the one unit
+  that changes the data: `applySchema` (now async, because it
   loads Temporal; see `calendar.ts`) copies the rows and turns each value
   into epoch milliseconds (`toEpochMs`: an ISO date is the start of that day
   in the zone, a date-time without an offset is wall-clock time in the zone).
-  It is also the one class that is inferred, and only locally: a column
+  It is also the one unit that is inferred, and only locally: a column
   whose first non-null value is a JS `Date` is a UTC time. Strings and
   numbers never are. A pandas, polars or pyarrow datetime column crosses
   from Python as an Arrow timestamp or date column, unchanged, and the
-  widget's decode (`widget-src/arrowDecode.ts`) attaches `HasCalendar` to
-  the rows, as column types. A tz-aware timestamp is an instant: it decodes
+  widget's decode (`widget-src/arrowDecode.ts`) attaches `Unit.time({ zone })`
+  to the rows, as column types. A tz-aware timestamp is an instant: it decodes
   to epoch milliseconds, typed in its own zone. A naive timestamp or a date
   is a wall-clock value: it decodes to an ISO string without an offset,
   typed UTC, so `applySchema` reads it in the zone of a declared `schema`
@@ -1905,13 +2024,15 @@ reads only the classes, never the builder words. Six classes exist:
   class on its `DatumValueImpl` (`fieldType`, which `inferNumeric` now sets
   for any typed column, with `createOperator` passing the column it resolved
   from the whole input, quantity and type together, `resolveColumn`), and its
-  quantity carries the calendar, so the point space it builds has it in its
-  measure (`measure.calendar`, read with `spaceCalendar`). The one merge
+  quantity carries the unit, zone included, so the point space it builds
+  has the zone in the unit of its measure (read with `spaceZone`). The one merge
   (`joinUnits`) keeps it through every fold that builds a continuous
   space from parts (the overlay fold, a layer's datum-position domain in
   `compose.ts`, a rect's two ends, the `position` operator's offset), and
-  two parts on different zones are an error. `Schema.time()` also writes
-  the unit `"instant"` (`HasUnit`), so two time columns share an axis. A
+  two parts in different zones are an error (`unify`, which meets the
+  two units). Every time
+  column is in the unit `"instant"`, whatever its zone, so two time columns
+  share an axis. A
   time space
   is niced to the cells of its axis's inner row (`niceToCells`: the
   smallest run of whole cells that covers the domain, so a domain of one
@@ -1925,17 +2046,24 @@ reads only the classes, never the builder words. Six classes exist:
   The values a user writes are the `Calendar` strategy family
   (`families/calendar.ts`): each kind is a `CalendarPartition` used bare or
   called with its options (`Calendar.month({ every: 3 })`, #1133).
-- `HasUnit` (`{ unit, symbol? }`, #994, #955): the values are amounts in
-  the declared unit `unit`. Both `Schema.unit(u)` and `.unit(u)` (after
-  another builder) declare the unit `u` and write the symbol `u`. A column
+- `HasUnit` (`{ unit, symbol?, classes?, zone?, difference? }`, #994, #955,
+  #1197): the values
+  are amounts in the declared unit `unit`. A column's entry declares it with
+  a `Unit(u)` definition, which writes the unit's `classes` (`{ CanAdd: {} }`
+  with `Trait.summable()`, else `{}`), or with the name `u` alone, which writes
+  no `classes`: what the unit can do is unknown. Either writes the symbol
+  `u`. The engine's units are definitions too, with no symbol:
+  `Unit.time({ zone })` (the instant, with its `zone` and its `difference`,
+  a duration) and `Unit.duration`. A column
   without it has an unknown unit, a unit variable (see
-  [measures](#measures-units-are-types)). A column has one unit, and an
-  order's levels must fit its other classes, so a time or a text-level
-  column takes no other unit (`checkNoUnit` and `checkLevelsFit` in
-  `schema.ts`).
+  [measures](#measures-units-are-types)). A column's levels must fit its
+  other classes, so a text-level column takes no unit (`checkLevelsFit` in
+  `schema.ts`, which only a wire record can break).
+- `CanAdd` (`{}`, #1197) is not a column class: it is a class of the unit,
+  in `HasUnit.classes`. See [which units add up](#measures-units-are-types).
 - `HasQuantity` (`{ name }`, #955): the values are amounts of the quantity
-  `name` (`Schema.quantity(name)`, or `.quantity(name)` after another
-  builder), when it is not the column's own name. It titles the axis and
+  `name` (a column record's `name`, `{ name, unit }`), when it is not the
+  column's own name. It titles the axis and
   names the unit variable. A transform writes it for the columns it makes
   (`bin(field)`'s `start`/`end`/`size` are amounts of `field`'s quantity, in
   `field`'s declared unit if it has one; its `count` is in `"count"`).
@@ -1972,7 +2100,7 @@ of `Date`s keeps its inherited type, zone included, and its Dates become
 epoch milliseconds; a string needs a zone to read, so it does not fit. The
 inherited types never reinterpret or check values, so a date rewritten to
 "Mar" is plain text, not an error. Fitting reads values, not meanings: a
-derive that recodes a time to plain numbers (years) keeps `HasCalendar`,
+derive that recodes a time to plain numbers (years) keeps its time unit,
 since any finite number is epoch milliseconds (#1089), and
 `derive(fn, { schema })` is the fix. The result's own types override the
 inherited ones column by column, inference types a column of `Date`s as a
@@ -1999,8 +2127,11 @@ A column's unit is one of these classes, `HasUnit`, so a unit moves with
 the rest of the column's type, by the same rules: it survives a split, a
 `filter`, and a `derive` whose column still holds numbers, and a `schema`
 entry that names the column replaces it with the rest of the type (#994).
-`chart(data, { schema })` and `derive(fn, { schema })` declare it with
-`Schema.unit(u)`.
+`chart(data, { schema })` and `derive(fn, { schema })` declare it with a
+`Unit(u)` or the name `u`. `columnTypeOf` turns every entry (a builder, a
+column record `{ name, unit }`, a `Unit`, a unit's name) into its record of
+classes, the wire form, in one place (`classesOf`), which Python's `chart`
+mirrors before it serializes.
 
 A column's **domain** (`HasDomain`) moves with the rest of its type, by the
 rules above, with one difference: it is of the rows it was computed over.
@@ -2072,8 +2203,8 @@ error rather than silently doing the wrong thing:
   `floor(i / size)` (an operator with no `by` splits by `chunk(1)`, row
   identity), and the groups come in
   order of first appearance, or in the order of the column's levels when the
-  data declares the column ordered (`HasOrder`, see
-  [Column types](#column-types-the-chart-schema)). A binned key (`bin`, or a
+  data declares them (`HasLevels`, from `Domain.discrete` or
+  `Domain.ordered`, see [Column types](#column-types-the-chart-schema)). A binned key (`bin`, or a
   binned struct) instead keys each row by its **cell**, and its groups are the
   cells of its partition, in order, one entry per cell, empty cells included
   (`binEntries`; see [Cells](#cells-a-binned-key)). The same key function
@@ -2401,12 +2532,14 @@ in the box, so a circle or a text sits at a hexagon's center.
 **Expression evaluation is orthogonal to the channel's own aggregation.**
 `inferSize`/`inferPos`'s shared core (`inferNumeric` in `channels.ts`) always
 called a sum or a mean over the raw per-row values; it now instead calls
-`evalFieldValues(accessor, data)` first — running any pipeline ops (an
-aggregate, if the accessor carries one) — and only _then_ applies its own
-default aggregation to whatever that produced. Neither side knows about the
-other: when the pipeline already folded the rows to a singleton, the
-channel's own sum/mean is the identity over that singleton, so
-`rect({ h: field("weight").mean() })` reports the mean, not
+`evalFieldValues(accessor, data, column)` first — running any pipeline ops
+(an aggregate, if the accessor carries one). The rows are folded once: when
+the pipeline already folded them to a singleton (`evalFieldValues` reports
+`folded`, the one place that decides it), the channel takes that value
+as it is and applies no aggregation of its own (so a size channel sums
+nothing and checks no `CanAdd`); otherwise it applies its own sum or mean
+to the per-row values. So `rect({ h: field("weight").mean() })` reports the
+mean, not
 `mean-of-a-1-element-array`-nonsense. A bare string or plain function accessor
 carries no ops, so this is a strict superset of the pre-#700 behavior, not a
 new code path for the common case. The color and raw channels, which read

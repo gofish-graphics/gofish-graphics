@@ -2,7 +2,6 @@
 // @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
-import { sumBy } from "../../lib";
 import type { Curve } from "../../families/curve";
 import {
   connect as Connect,
@@ -18,7 +17,8 @@ import {
   type MaybeValue,
   type Value,
 } from "../data";
-import { predicateWire, type FieldExpr } from "../fieldExpr";
+import { predicateWire, sumIn, type FieldExpr } from "../fieldExpr";
+import { columnQuantity } from "../measure";
 import { GoFishRef } from "../_ref";
 import type { GoFishAST } from "../_ast";
 import type { Token } from "../createName";
@@ -91,8 +91,10 @@ import type { ChartOptions, RelationalFusable } from "./chartBuilder";
 import { projectByValues, projectPath, rowsReached } from "../datumProjection";
 import {
   applySchema,
+  columnType,
   copyColumnTypes,
   getColumnTypes,
+  schemaToWire,
   type SchemaEntry,
 } from "../schema";
 import { withWire } from "../wire";
@@ -168,10 +170,13 @@ export function derive<T, U>(
   // The function body is not serializable; the frontend-IR emitter sees
   // an opaque `{ type: "derive" }` (with its `schema`, if any). The
   // Python-bridge widget emits its own `{ type: "derive", lambdaId }` shape.
+  // The schema is kept in its wire form (`schemaToWire`), as Python's
+  // `derive` keeps it, so the tag serializes as it stands.
+  const wire = schema !== undefined ? schemaToWire(schema) : undefined;
   return mapOperator(
     fn,
-    { type: "derive", opts: schema !== undefined ? { schema } : {} },
-    typeLikeChartData(schema)
+    { type: "derive", opts: wire !== undefined ? { schema: wire } : {} },
+    typeLikeChartData(wire)
   );
 }
 
@@ -214,14 +219,23 @@ export const repeat = <T, K extends keyof T>(
   return Array.from({ length: d[field] as unknown as number }, () => d);
 };
 
+/** Each row of `data` with `field` divided by the column's total. The
+ *  total adds the column, so its unit must add up (`sumIn`), as for
+ *  `field(...).normalize()`. */
 export const normalize = <T, K extends keyof T>(
   data: T[],
   field: K & (T[K] extends number ? K : never)
 ): T[] => {
-  const total = sumBy(data, field as string);
+  const column = field as string;
+  const total = sumIn(
+    data.map((d) => d[field]),
+    columnQuantity(column, columnType(data, column)),
+    "normalize(...)"
+  );
+  // Over values all missing the total is unknown, and so is every share.
   return data.map((d) => ({
     ...d,
-    [field]: (d[field] as unknown as number) / total,
+    [field]: (d[field] as unknown as number) / (total ?? NaN),
   }));
 };
 

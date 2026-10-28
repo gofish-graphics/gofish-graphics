@@ -57,7 +57,7 @@ Each column of the returned rows is typed like chart data:
 - Any other column has no type. A `derive` that rewrites a date to `"Mar"`
   makes the column plain text.
 - A `schema` entry overrides these for its column and converts the values
-  as a chart's schema does: an ISO 8601 string in a `Schema.time()` column
+  as a chart's schema does: an ISO 8601 string in a `Unit.time()` column
   becomes an instant.
 
 Fitting reads the values, not what they mean: a `derive` that turns a time
@@ -68,7 +68,7 @@ Give the column its type with `derive(fn, schema={...})`.
 
 ```python
 # Monthly highs, months in calendar order
-derive(monthly_highs, schema={"month": Schema.ordered(MONTHS)})
+derive(monthly_highs, schema={"month": Unit(domain=Domain.ordered(MONTHS))})
 ```
 
 ## How it works
@@ -115,20 +115,20 @@ units to decide when two axes may share a scale. A column with no declared
 unit has an unknown unit, which shares an axis with any column, so the
 columns a `derive` computes (`lo`, `hi`, a box plot's quartiles) share an
 axis with no annotation. Two different declared units on one axis are an
-error. See [`Schema.unit`](/python/api/core/schema).
+error. See [`Unit`](/python/api/core/schema).
 
 A `derive` lambda can declare the unit of a column it makes with its
 `schema`:
 
 ```python
-from gofish import Schema, derive
+from gofish import Unit, derive
 
-derive(quartiles, schema={"lo": Schema.unit("USD"), "hi": Schema.unit("USD")})
+derive(quartiles, schema={"lo": Unit("USD"), "hi": Unit("USD")})
 ```
 
 An axis is titled by the quantities of its columns (each column's name,
 unless its schema declares a quantity), then a declared unit in parentheses:
-`"Pay (USD)"`. See [`Schema.quantity`](/python/api/core/schema).
+`"Pay (USD)"`. See [`Schema`](/python/api/core/schema).
 
 If an axis combines two different units, you have two remedies:
 

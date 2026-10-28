@@ -32,6 +32,7 @@ import { GoFishNode } from "../ast/_node";
 import { RelateOperand } from "../ast/constraints/relate";
 import { wireOf } from "../ast/wire";
 import { nodeSelectionOf } from "../ast/nodeSelection";
+import { schemaToWire } from "../ast/schema";
 
 // The widget IR uses these symbol-loose shapes; toJSON returns them as-is.
 // The validator in `gofish-ir` accepts these shapes in permissive mode.
@@ -312,7 +313,13 @@ async function chartBuilderToChartIR(
     ir.operators = operators.map(operatorToIR);
   }
   if (options && Object.keys(options).length > 0) {
-    ir.options = options as AnyObject;
+    // A schema crosses the wire as its records of classes, as Python writes
+    // it (`schemaToWire`).
+    ir.options = (
+      options.schema === undefined
+        ? options
+        : { ...options, schema: schemaToWire(options.schema) }
+    ) as AnyObject;
   }
   if (nodeZOrder !== undefined) {
     ir.zOrder = nodeZOrder;

@@ -15,14 +15,14 @@ import {
   type FieldAccessor,
   type LiteralValue,
 } from "./data";
-import { columnQuantity, type Quantity } from "./measure";
+import { checkSummable, columnQuantity, type Quantity } from "./measure";
 import { Frontend } from "gofish-ir";
 import {
   evalFieldValues,
   getFieldOps,
   isMissing,
   meanOf,
-  sumOf,
+  sumIn,
   type FieldExpr,
 } from "./fieldExpr";
 import { columnType, type ColumnType } from "./schema";
@@ -196,6 +196,9 @@ export const resolveColumn = (data: unknown, accessor: unknown): ColumnInfo => {
  * - `string` (field name): mapped per-row to `Number(d[field]) || 0`.
  * - function: called per-row.
  * - `undefined`: returns `undefined` (caller decides default — typically equal slices).
+ *
+ * Each row's value is a slice of a whole the mark divides by their total,
+ * so a named column must add up, as for any sum (`checkSummable`, #1197).
  */
 export const inferEntrySize = <T>(
   accessor: string | MaybeValue<number>[] | ((d: T) => number) | undefined,
@@ -207,6 +210,10 @@ export const inferEntrySize = <T>(
     return data.map((d) => value(accessor(d)));
   }
   if (typeof accessor === "string") {
+    checkSummable(
+      resolveColumn(data, accessor).quantity,
+      "A per-row size channel"
+    );
     return data.map((d) => value(Number((d as any)[accessor]) || 0));
   }
   return undefined;
@@ -214,7 +221,7 @@ export const inferEntrySize = <T>(
 
 /**
  * Shared core of {@link inferSize} / {@link inferPos}: they differ only in the
- * aggregation ({@link sumOf} vs {@link meanOf}), which both skip missing
+ * aggregation ({@link sumIn} vs {@link meanOf}), which both skip missing
  * values. An aggregation with no value (the mean of no rows, the sum of only
  * missing values) is no value: the channel is undefined. Resolves a numeric
  * value from a field name, field expression, function accessor, or literal number:
@@ -228,13 +235,18 @@ export const inferEntrySize = <T>(
  * ({@link resolveColumn}): its {@link Quantity}, so the underlying-space
  * layer can unify units and title axes, and the column's type from
  * the chart's schema, when it has one, so a position over a time column
- * (`HasCalendar`) builds a time space. A value with a column type also
+ * (in `Unit.time()`) builds a time space. A value with a column type also
  * records the field it was read from. The caller may pass the column
  * (createOperator resolves it once per channel from the array carrying the
  * column types); when omitted it is resolved locally from `d`.
+ *
+ * `agg` also takes the column's quantity, so a size channel's sum checks that
+ * its amounts add (`sumIn`, #1197). The check reads the column's type, never
+ * the rows, so a group of one row is checked as any other: the channel's
+ * operation is a sum whatever the group holds.
  */
 const inferNumeric =
-  (agg: (values: any[]) => number | undefined) =>
+  (agg: (values: any[], quantity?: Quantity) => number | undefined) =>
   <T>(
     accessor:
       | string
@@ -251,27 +263,31 @@ const inferNumeric =
     if (typeof accessor === "number") return accessor;
     if (isLiteral(accessor)) return accessor.value as number;
     if (isValue(accessor)) return accessor as MaybeValue<number>;
-    // Expression evaluation is orthogonal to this channel: the pipeline maps
-    // the rows to values, and an aggregate op (`.mean()`, `.count()`, ...)
-    // folds them to a singleton. The channel then applies its default
-    // aggregation exactly as it always did — over a folded singleton, sum and
-    // mean are both the identity, so neither side knows about the other.
-    const { values, quantity: pipelineQuantity } = evalFieldValues(
-      accessor,
-      data
-    );
-    const folded = agg(values as any[]);
-    if (folded === undefined) return undefined;
-    return columnValue(
+    // The pipeline maps the rows to values, and an aggregate op (`.mean()`,
+    // `.count()`, ...) folds them to a singleton. The rows are folded once:
+    // by the op when `evalFieldValues` says it `folded` them, else by the
+    // channel's own aggregation.
+    const {
+      values,
       folded,
+      quantity: pipelineQuantity,
+    } = evalFieldValues(accessor, data, column.quantity);
+    const result = folded
+      ? (values[0] as number | undefined)
+      : agg(values, column.quantity);
+    if (result === undefined) return undefined;
+    return columnValue(
+      result,
       { quantity: pipelineQuantity ?? column.quantity, type: column.type },
       fieldNameOf(accessor)
     );
   };
 
 /** Infer a size value (sums the field/function across the data array,
- *  missing values aside; see {@link sumOf}). */
-export const inferSize = inferNumeric(sumOf);
+ *  missing values aside; see {@link sumIn}). */
+export const inferSize = inferNumeric((values, quantity) =>
+  sumIn(values, quantity, "A size channel")
+);
 
 /** Infer a position value (averages the field/function across the data
  *  array, missing values aside). Over no rows, or only missing values, it
@@ -298,19 +314,26 @@ function firstRowValue<T extends Record<string, any>>(
   | { kind: "row"; value: unknown; field?: string }
   | { kind: "none" } {
   if (isLiteral(accessor)) return { kind: "literal", value: accessor.value };
-  if (isField(accessor) && getFieldOps(accessor).length > 0) {
-    // An expression pipeline folds the group's rows itself, as for a size
-    // channel (`evalFieldValues`): `.count()` is the number of rows, even
-    // when there are none. The value is the fold's, not a value of the
-    // field, so it records no field. A fold that has no value (the mean
-    // of nothing) is no value here either.
-    const [folded] = evalFieldValues(accessor, data).values;
-    return isMissing(folded)
-      ? { kind: "none" }
-      : { kind: "row", value: folded };
-  }
   const row = data.length > 0 && data[0] != null ? data[0] : undefined;
   if (isField(accessor)) {
+    // An expression pipeline with an aggregate folds the group's rows
+    // itself, as for a size channel (`evalFieldValues`): `.count()` is the
+    // number of rows, even when there are none, and `.sum()` checks that
+    // its column adds up. The value is the fold's, not a value of the
+    // field, so it records no field. A fold that has no value (the mean of
+    // nothing) is no value here either. A field with no ops reads the
+    // first row alone.
+    if (getFieldOps(accessor).length > 0) {
+      const { values, folded } = evalFieldValues(
+        accessor,
+        data,
+        resolveColumn(data, accessor).quantity
+      );
+      if (folded)
+        return isMissing(values[0])
+          ? { kind: "none" }
+          : { kind: "row", value: values[0] };
+    }
     return row === undefined
       ? { kind: "none" }
       : { kind: "row", value: row[accessor.name], field: accessor.name };

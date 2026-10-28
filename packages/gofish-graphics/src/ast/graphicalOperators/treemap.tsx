@@ -20,7 +20,7 @@ import {
   deferAxisDims,
   elaborateDims,
 } from "../dims";
-import { getValue, isValue, MaybeValue } from "../data";
+import { getQuantity, getValue, isValue, MaybeValue } from "../data";
 import { computeAesthetic, computeSize } from "../../util";
 import { posFn, pxOf } from "../domain";
 import { UnderlyingSpace, UNDEFINED, magnitude } from "../underlyingSpace";
@@ -28,6 +28,7 @@ import * as Interval from "../../util/interval";
 import { createOperator } from "../marks/createOperator";
 import { SplitBy, splitEntries } from "../datumProjection";
 import type { FieldExpr } from "../fieldExpr";
+import { checkSummable } from "../measure";
 import { squarify, type Tile } from "../../families/tile";
 import { Frontend } from "gofish-ir";
 
@@ -96,6 +97,13 @@ const Treemap = createNodeOperator(
     } = opts;
 
     const dims = elaborateDims(fancyDims);
+    // A tile's area is its entry's share of the total, so the treemap adds
+    // its entries: their unit must add up (`checkSummable`, #1197). It is
+    // checked once here, so the layout below sums the weights as they are.
+    checkSummable(
+      sizeChannel?.map(getQuantity).find((q) => q !== undefined),
+      "treemap({ size })"
+    );
 
     const node = new GoFishNode(
       {

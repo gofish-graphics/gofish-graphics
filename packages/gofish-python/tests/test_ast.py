@@ -26,8 +26,9 @@ from gofish import (
     text,
     image,
     Constraint,
-    Schema,
-    ColumnSchema,
+    Domain,
+    Trait,
+    Unit,
     Calendar,
     Bin,
     datum,
@@ -37,6 +38,7 @@ from gofish import (
     Coord,
 )
 import base64
+import pathlib
 import json
 
 from gofish.arrow_utils import arrow_to_records
@@ -85,20 +87,22 @@ class TestOperators:
     def test_derive_schema_round_trips(self):
         """`derive(fn, schema=...)` carries the result's column types in the
         wire form of a chart's schema, and keeps them through `.translate`."""
-        from gofish import Schema
-
         op = derive(
             lambda d: d,
             schema={
-                "month": Schema.ordered(["Jan", "Feb"]),
-                "at": Schema.time(zone="America/New_York"),
+                "month": Unit(domain=Domain.ordered(["Jan", "Feb"])),
+                "at": Unit.time(zone="America/New_York"),
             },
         )
         expected = {
-            "month": {"HasOrder": {"levels": ["Jan", "Feb"]}},
+            "month": {"HasLevels": {"levels": ["Jan", "Feb"]}, "HasOrder": {}},
             "at": {
-                "HasCalendar": {"zone": "America/New_York"},
-                "HasUnit": {"unit": "instant"},
+                "HasUnit": {
+                    "unit": "instant",
+                    "classes": {},
+                    "difference": {"unit": "duration", "classes": {"CanAdd": {}}},
+                    "zone": "America/New_York",
+                },
             },
         }
         assert ir(op)["schema"] == expected
@@ -952,64 +956,239 @@ class TestRelateCallback:
 
 
 class TestSchema:
-    """`Schema.ordered(levels).diverging(midpoint=...)` builds the column-type record
-    JS reads as is (#984)."""
+    """`Unit(name, domain=..., traits=[...])` builds the column-type record
+    JS reads as is (#984, #1197)."""
 
-    def test_ordered_is_has_order(self):
-        assert Schema.ordered(["a", "b"]) == {"HasOrder": {"levels": ["a", "b"]}}
-
-    def test_unit_is_has_unit(self):
-        assert Schema.unit("USD") == {"HasUnit": {"unit": "USD", "symbol": "USD"}}
-        with pytest.raises(TypeError):
-            Schema.unit(3)  # type: ignore[arg-type]
-
-    def test_quantity_is_has_quantity(self):
-        assert Schema.quantity("Pay") == {"HasQuantity": {"name": "Pay"}}
-        assert Schema.quantity("Pay").unit("USD") == {
-            "HasUnit": {"unit": "USD", "symbol": "USD"},
-            "HasQuantity": {"name": "Pay"},
+    def test_domains_are_levels(self):
+        assert Unit(domain=Domain.ordered(["a", "b"])).type == {
+            "HasLevels": {"levels": ["a", "b"]},
+            "HasOrder": {},
         }
-        # Either order gives the same column type.
-        assert Schema.quantity("Pay").unit("USD") == Schema.unit("USD").quantity(
-            "Pay"
-        )
-        with pytest.raises(TypeError, match=r"^name must be a string, got 3$"):
-            Schema.quantity(3)  # type: ignore[arg-type]
-        with pytest.raises(TypeError, match=r"^name must be a string, got 3$"):
-            Schema.unit("USD").quantity(3)  # type: ignore[arg-type]
-        with pytest.raises(TypeError, match=r"^unit must be a string, got 3$"):
-            Schema.unit(3)  # type: ignore[arg-type]
-        with pytest.raises(TypeError, match=r"^unit must be a string, got 3$"):
-            Schema.quantity("Pay").unit(3)  # type: ignore[arg-type]
+        # Domain.discrete is nominal: levels, no order.
+        party = Unit(domain=Domain.discrete(["Dem", "Rep", "Ind"]))
+        assert party.type == {"HasLevels": {"levels": ["Dem", "Rep", "Ind"]}}
+        assert party.name is None
+        assert repr(party) == "Unit(domain=Domain.discrete(['Dem', 'Rep', 'Ind']))"
+        stars = Unit("stars", domain=Domain.ordered([1, 2, 3, 4, 5]))
+        assert stars.type == {
+            "HasUnit": {"unit": "stars", "symbol": "stars", "classes": {}},
+            "HasLevels": {"levels": [1, 2, 3, 4, 5]},
+            "HasOrder": {},
+        }
+        assert repr(stars) == "Unit('stars', domain=Domain.ordered([1, 2, 3, 4, 5]))"
 
-    def test_a_column_has_one_unit(self):
-        # `Schema.time()` writes the instant, so a second unit raises.
+    def test_unit_is_a_definition(self):
+        usd = Unit("USD")
+        assert usd.name == "USD" and repr(usd) == "Unit('USD')"
+        summable = Unit("USD", traits=[Trait.summable()])
+        assert summable != usd
+        assert repr(summable) == "Unit('USD', traits=[Trait.summable()])"
+        likert = Unit(domain=Domain.ordered(["a", "b"]), traits=[Trait.diverging()])
+        assert (
+            repr(likert)
+            == "Unit(domain=Domain.ordered(['a', 'b']), traits=[Trait.diverging()])"
+        )
+        # Immutable, and `.type` is a copy.
+        with pytest.raises(AttributeError):
+            usd.name = "EUR"  # type: ignore[misc]
+        usd.type["HasUnit"]["unit"] = "EUR"
+        assert usd.name == "USD"
+        with pytest.raises(TypeError, match=r"^Unit: the name must be a string"):
+            Unit(3)  # type: ignore[arg-type]
+        # Equal units hash the same, so a set or dict keeps one of them.
+        assert Unit(
+            domain=Domain.ordered([1, 2, 3]), traits=[Trait.diverging(2)]
+        ) == Unit(domain=Domain.ordered([1.0, 2.0, 3.0]), traits=[Trait.diverging(2.0)])
+        assert hash(
+            Unit(domain=Domain.ordered([1, 2, 3]), traits=[Trait.diverging(2)])
+        ) == hash(
+            Unit(domain=Domain.ordered([1.0, 2.0, 3.0]), traits=[Trait.diverging(2.0)])
+        )
+
+    # The same literals as `errors` in the JS schema.test.ts.
+    @pytest.mark.parametrize(
+        "make, message",
+        [
+            (
+                lambda: Unit(traits=[Trait.diverging()]),
+                'Unit needs a name, a domain, or both: Unit("USD"), '
+                'Unit({ domain: Domain.discrete(["low", "high"]) }).',
+            ),
+            (
+                lambda: Unit("pp", traits=[Trait.summable(), Trait.diverging(0)]),
+                'Unit("pp"): Trait.diverging() needs an ordered domain: a '
+                "midpoint is a point along an order, so list the levels in "
+                "Domain.ordered(levels). A midpoint on a unit's amounts is not "
+                "supported yet.",
+            ),
+            (
+                lambda: Unit(
+                    domain=Domain.discrete(["SD", "D", "N", "A", "SA"]),
+                    traits=[Trait.diverging()],
+                ),
+                "Unit: Trait.diverging() needs an ordered domain, but "
+                "Domain.discrete(levels) is unordered. A midpoint is a point "
+                "along an order: use Domain.ordered(levels).",
+            ),
+            (
+                lambda: Unit(domain=Domain.discrete([1, 2]), traits=[Trait.summable()]),
+                "Unit: Trait.summable() needs a name. Whether amounts add up "
+                "belongs to their unit, which is known by its name: "
+                'Unit("USD", { traits: [Trait.summable()] }).',
+            ),
+            (
+                lambda: Unit("USD", traits=[Trait.summable(), Trait.summable()]),
+                'Unit("USD") lists Trait.summable() twice.',
+            ),
+            (
+                lambda: Unit(
+                    domain=Domain.ordered(["SD", "D", "N", "A", "SA"]),
+                    traits=[Trait.diverging(1), Trait.diverging(2)],
+                ),
+                "Unit lists Trait.diverging() twice.",
+            ),
+            (
+                lambda: Unit("pp", domain=[1, 2]),  # type: ignore[arg-type]
+                'Unit("pp"): domain must be a Domain: Domain.discrete(levels) '
+                "or Domain.ordered(levels), got [1,2]. A domain that is an "
+                "interval is not supported yet.",
+            ),
+            (
+                lambda: Unit("pp", domain={"lo": 0, "hi": 1}),
+                'Unit("pp"): domain must be a Domain: Domain.discrete(levels) '
+                'or Domain.ordered(levels), got {"lo":0,"hi":1}. A domain '
+                "that is an interval is not supported yet.",
+            ),
+            (
+                lambda: Unit("USD", traits=["summable"]),  # type: ignore[list-item]
+                'Unit("USD") has the trait "summable". A unit\'s traits are '
+                "Trait.diverging() and Trait.summable().",
+            ),
+            (
+                lambda: Unit("pts", domain=Domain.discrete(["low", "high"])),
+                'Unit("pts") has the level "low", which is not a value HasUnit '
+                "accepts.",
+            ),
+            (
+                lambda: Domain.ordered(["a", "b", "a"]),
+                'Domain.ordered: the level "a" is listed twice. Each level is '
+                "listed once, in its place.",
+            ),
+            (
+                lambda: Unit(domain={"kind": "discrete", "levels": [1, 2, 1]}),
+                "Domain.discrete: the level 1 is listed twice. Each level is "
+                "listed once, in its place.",
+            ),
+            (
+                lambda: Domain.ordered([]),
+                "Domain.ordered: levels must list at least one level, e.g. "
+                'Domain.ordered(["low", "mid", "high"]).',
+            ),
+            (
+                lambda: Unit(42),  # type: ignore[arg-type]
+                "Unit: the name must be a string, got 42",
+            ),
+        ],
+    )
+    def test_unit_definition_errors(self, make, message):
+        with pytest.raises((TypeError, ValueError)) as error:
+            make()
+        assert str(error.value) == message
+
+    def test_schema_entries_write_the_wire_form(self):
+        usd = Unit("USD", traits=[Trait.summable()])
+        schema_of = lambda **schema: ir(chart([], schema=schema).mark(rect()))[
+            "options"
+        ]["schema"]
+        # A Unit is `{ unit }` with the unit's classes, a name alone is a
+        # unit whose classes are unknown (no `classes`), and a record adds
+        # the quantity.
+        summable_usd = {"unit": "USD", "symbol": "USD", "classes": {"CanAdd": {}}}
+        assert schema_of(revenue=usd) == {"revenue": {"HasUnit": summable_usd}}
+        assert schema_of(area="km²") == {
+            "area": {"HasUnit": {"unit": "km²", "symbol": "km²"}}
+        }
+        assert schema_of(temp={"name": "Temperature", "unit": Unit("°C")}) == {
+            "temp": {
+                "HasQuantity": {"name": "Temperature"},
+                "HasUnit": {"unit": "°C", "symbol": "°C", "classes": {}},
+            }
+        }
+        assert schema_of(q1={"name": "Pay"}) == {"q1": {"HasQuantity": {"name": "Pay"}}}
+        # A derive's schema is written the same way.
+        assert ir(derive(lambda d: d, schema={"x": usd}))["schema"] == {
+            "x": {"HasUnit": summable_usd}
+        }
+
+    def test_schema_matches_the_js_wire_fixture(self):
+        # The same schema JS's schema.test.ts serializes: both compare with
+        # one fixture, so the two languages write the same wire form.
+        fixture = pathlib.Path(__file__).parents[2] / (
+            "gofish-graphics/src/tests/fixtures/schema-wire.json"
+        )
+        USD = Unit("USD", traits=[Trait.summable()])
+        Celsius = Unit("°C")
+        Stars = Unit("stars", domain=Domain.ordered([1, 2, 3, 4, 5]))
+        schema = ir(
+            chart(
+                [{"balance": 1}],
+                schema={
+                    "balance": {"name": "Balance", "unit": USD},
+                    "revenue": USD,
+                    "area": "km²",
+                    "temp": {"unit": Celsius},
+                    "region": Unit(domain=Domain.ordered(["n", "s"]), traits=[Trait.diverging()]),
+                    "party": Unit(domain=Domain.discrete(["Dem", "Rep", "Ind"])),
+                    "rating": {"name": "Rating", "unit": Stars},
+                    "day": Unit.time(zone="UTC"),
+                    "sold": {"name": "Sold", "unit": Unit.time(zone="America/New_York")},
+                    "wait": Unit.duration,
+                },
+            ).mark(rect())
+        )["options"]["schema"]
+        assert schema == json.loads(fixture.read_text(encoding="utf-8"))
+        # A derive's schema crosses the wire the same way, as JS's does.
+        derive_schema = ir(
+            derive(
+                lambda d: d,
+                schema={
+                    "balance": {"name": "Balance", "unit": USD},
+                    "revenue": USD,
+                    "area": "km²",
+                    "temp": {"unit": Celsius},
+                    "region": Unit(domain=Domain.ordered(["n", "s"]), traits=[Trait.diverging()]),
+                    "party": Unit(domain=Domain.discrete(["Dem", "Rep", "Ind"])),
+                    "rating": {"name": "Rating", "unit": Stars},
+                    "day": Unit.time(zone="UTC"),
+                    "sold": {"name": "Sold", "unit": Unit.time(zone="America/New_York")},
+                    "wait": Unit.duration,
+                },
+            )
+        )["schema"]
+        assert derive_schema == schema
+
+    def test_a_column_record_rejects_unknown_keys(self):
         with pytest.raises(
-            TypeError, match=r'^\.unit: the column already has the unit "instant"\.$'
+            TypeError,
+            match=r'^schema: column "pay" has the unknown key "entity"\. A column '
+            r"record takes name and unit",
         ):
-            Schema.time().unit("USD")
-        with pytest.raises(TypeError, match='already has the unit "USD"'):
-            Schema.unit("USD").unit("EUR")
-        assert Schema.time().quantity("When") == {
-            "HasCalendar": {"zone": "UTC"},
-            "HasUnit": {"unit": "instant"},
-            "HasQuantity": {"name": "When"},
-        }
+            chart([], schema={"pay": {"name": "Pay", "entity": "grade"}})
+        with pytest.raises(TypeError, match=r"which is neither a Unit nor"):
+            chart([], schema={"pay": {"unit": 3}})
+        with pytest.raises(TypeError, match=r"which is not text"):
+            chart([], schema={"pay": {"name": 3}})
+        with pytest.raises(TypeError, match=r"A column's entry is a Unit"):
+            chart([], schema={"pay": 3})
 
-    def test_levels_fit_the_column_classes(self):
-        # Text levels are not amounts; a Likert scale's numbers are.
-        message = (
-            r'^schema: the column has the level "low", which is not a value '
-            r"HasUnit accepts\.$"
-        )
-        with pytest.raises(TypeError, match=message):
-            Schema.ordered(["low", "mid", "high"]).unit("pts")
-        with pytest.raises(TypeError, match=message):
-            Schema.ordered(["low", "high"]).diverging().unit("pts")
-        assert Schema.ordered([1, 2, 3, 4, 5]).unit("pts") == {
-            "HasOrder": {"levels": [1, 2, 3, 4, 5]},
-            "HasUnit": {"unit": "pts", "symbol": "pts"},
-        }
+    def test_old_spellings_are_gone(self):
+        import gofish
+
+        for name in ("Schema", "ColumnSchema"):
+            assert not hasattr(gofish, name)
+        for method in ("unit", "quantity", "summable", "diverging"):
+            assert not hasattr(Unit(domain=Domain.ordered([1])), method)
+        assert not hasattr(Trait, "ordered")
 
     def test_field_takes_no_unit(self):
         # A column's unit lives in the schema, not on a channel.
@@ -1018,25 +1197,24 @@ class TestSchema:
             field("x", "plane")  # type: ignore[call-arg]
 
     def test_diverging_defaults_the_midpoint_to_half_the_levels(self):
-        assert Schema.ordered(["a", "b"]).diverging() == {
-            "HasOrder": {"levels": ["a", "b"]},
+        assert Unit(domain=Domain.ordered(["a", "b"]), traits=[Trait.diverging()]).type == {
+            "HasLevels": {"levels": ["a", "b"]},
+            "HasOrder": {},
             "HasMidpoint": {"at": 1},
         }
-        assert Schema.ordered(["a", "b", "c"]).diverging()["HasMidpoint"] == {
-            "at": 1.5
-        }
+        assert Unit(
+            domain=Domain.ordered(["a", "b", "c"]), traits=[Trait.diverging()]
+        ).type["HasMidpoint"] == {"at": 1.5}
 
     def test_diverging_midpoint(self):
         levels = ["SD", "D", "N", "A", "SA"]
-        assert Schema.ordered(levels).diverging(midpoint=2) == {
-            "HasOrder": {"levels": levels},
-            "HasMidpoint": {"at": 2},
-        }
-        assert Schema.ordered(levels).diverging(midpoint=2.25)["HasMidpoint"] == {
-            "at": 2.25
-        }
-        assert Schema.ordered(levels).diverging(midpoint=0)["HasMidpoint"] == {"at": 0}
-        assert Schema.ordered(levels).diverging(midpoint=5)["HasMidpoint"] == {"at": 5}
+        midpoint = lambda m: Unit(  # noqa: E731
+            domain=Domain.ordered(levels), traits=[Trait.diverging(m)]
+        ).type["HasMidpoint"]
+        assert midpoint(2) == {"at": 2}
+        assert midpoint(2.25) == {"at": 2.25}
+        assert midpoint(0) == {"at": 0}
+        assert midpoint(5) == {"at": 5}
 
     # The same literals as the JS schema.test.ts: the two languages raise the
     # same messages, word for word.
@@ -1060,16 +1238,12 @@ class TestSchema:
     )
     def test_diverging_midpoint_off_the_order(self, midpoint, message):
         with pytest.raises(ValueError) as error:
-            Schema.ordered(["SD", "D", "N", "A", "SA"]).diverging(midpoint=midpoint)
+            Unit(domain=Domain.ordered(["SD", "D", "N", "A", "SA"]), traits=[Trait.diverging(midpoint)])
         assert str(error.value) == message
-
-    def test_diverging_needs_has_order(self):
-        with pytest.raises(ValueError, match="HasMidpoint needs HasOrder"):
-            ColumnSchema({}).diverging()
 
     def test_schema_rides_chart_options(self):
         node = (
-            chart([{"r": "a"}], schema={"r": Schema.ordered(["a"]).diverging()})
+            chart([{"r": "a"}], schema={"r": Unit(domain=Domain.ordered(["a"]), traits=[Trait.diverging()])})
             .mark(rect(w=1))
             .to_ir()["root"]
         )
@@ -1077,19 +1251,42 @@ class TestSchema:
 
 
 class TestTime:
-    """`Schema.time()` (HasCalendar), `Calendar` partitions, and datetime
-    columns crossing the bridge (#1057)."""
+    """`Unit.time()`, `Calendar` partitions, and datetime columns crossing
+    the bridge (#1057)."""
 
-    def test_schema_time_record(self):
-        # A time's unit is the instant, the same INSTANT as JS measure.ts.
-        assert Schema.time() == {
-            "HasCalendar": {"zone": "UTC"},
-            "HasUnit": {"unit": "instant"},
+    def test_unit_time_record(self):
+        # A time's unit is the instant, the same INSTANT as JS measure.ts,
+        # in its zone, and its difference is a duration.
+        def schema_of(entry):
+            return ir(chart([], schema={"t": entry}).mark(rect()))["options"][
+                "schema"
+            ]["t"]
+
+        assert schema_of(Unit.time()) == {"HasUnit": {
+            "unit": "instant",
+            "classes": {},
+            "difference": {"unit": "duration", "classes": {"CanAdd": {}}},
+            "zone": "UTC",
+        }}
+        assert schema_of(Unit.time(zone="America/New_York")) == {
+            "HasUnit": {
+                "unit": "instant",
+                "classes": {},
+                "difference": {"unit": "duration", "classes": {"CanAdd": {}}},
+                "zone": "America/New_York",
+            }
         }
-        assert Schema.time(zone="America/New_York") == {
-            "HasCalendar": {"zone": "America/New_York"},
-            "HasUnit": {"unit": "instant"},
+        assert schema_of({"name": "Sold", "unit": Unit.time()})["HasQuantity"] == {
+            "name": "Sold"
         }
+        assert schema_of(Unit.duration) == {
+            "HasUnit": {"unit": "duration", "classes": {"CanAdd": {}}}
+        }
+        assert Unit.duration.name == "duration"
+        assert repr(Unit.time(zone="Asia/Tokyo")) == "Unit.time(zone='Asia/Tokyo')"
+        assert repr(Unit.duration) == "Unit.duration"
+        with pytest.raises(TypeError, match="Unit.time: zone must be"):
+            Unit.time(zone=3)
 
     def test_calendar_wire_form(self):
         assert Calendar.month == {"kind": "month"}
@@ -1160,7 +1357,7 @@ class TestTime:
         node = (
             chart(
                 [{"t": "2024-01-01", "v": 1}],
-                schema={"t": Schema.time()},
+                schema={"t": Unit.time()},
                 axes={"x": {"levels": [Calendar.month, False, True]}},
             )
             .flow(scatter(by="t", x="t", y="v"))
@@ -1213,12 +1410,17 @@ class TestTime:
         pd = pytest.importorskip("pandas")
         df = pd.DataFrame({"t": pd.to_datetime(["2024-02-28"]), "n": [1]})
         node = (
-            chart(df, schema={"t": Schema.time(zone="Asia/Tokyo")})
+            chart(df, schema={"t": Unit.time(zone="Asia/Tokyo")})
             .mark(rect(w=1))
             .to_ir()["root"]
         )
         assert node["options"]["schema"] == {
-            "t": {"HasCalendar": {"zone": "Asia/Tokyo"}, "HasUnit": {"unit": "instant"}}
+            "t": {"HasUnit": {
+                "unit": "instant",
+                "classes": {},
+                "difference": {"unit": "duration", "classes": {"CanAdd": {}}},
+                "zone": "Asia/Tokyo",
+            }}
         }
 
     def test_strings_are_never_inferred(self):

@@ -99,6 +99,13 @@ legend past it. It has two phases:
    labeled ROOT (no parent to wrap it) gets one final self-wrap in
    `elaborateLabels` itself.
 
+A label's text comes from `resolveLabelText` (`labelPlacement.ts`). A field
+expression is evaluated over the target's rows with `evalFieldValues`, given
+the column's quantity (`resolveColumn`), so `field(name).sum()` in a label
+checks that the column adds up, as it does in any channel: a column in a unit
+without `CanAdd` throws (#1197, see
+[Underlying Space](/internals/core/underlying-space)).
+
 ## The parent-tier wrap invariant
 
 The wrap happens at the labeled node's **parent** (or, for the labels the

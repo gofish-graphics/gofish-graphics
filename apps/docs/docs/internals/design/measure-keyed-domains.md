@@ -58,7 +58,7 @@ The maintainer approved each of these points. This note does not reopen them.
   - `field(name, measure)` and `datum(v, measure)`, which exist today;
   - `.count()` and `.distinct()`, which give `"count"`;
   - `.normalize()`, which gives `"<unit> share by <field>"`;
-  - `Schema.time()`, whose unit is "instant";
+  - `Unit.time()`, the unit "instant";
   - `bin()` provenance, where `count` is declared `"count"`.
 - An **unknown unit** is a unit nobody stated. A column read by its bare name
   has an unknown unit, and the column name identifies it across the whole
@@ -244,7 +244,7 @@ on one shared axis keep raising `MeasureClash` (question 2 in section 8).
 The measure design proposes one record per unit, `{ unit?, calendar?, titles }`:
 
 - `unit` is a declared unit or an unknown;
-- `calendar` is the time zone of a time unit, today's `HasCalendar`;
+- `zone` is the time zone of a time unit, the `zone` of `Unit.time({ zone })`;
 - `titles` is the set of column names, which titles the axis.
 
 One function joins two records. It takes the sharing fact as an argument:
@@ -439,7 +439,7 @@ chart(area, { schema })
   .layer(line({ stroke: "#222", strokeWidth: 1.5, curve: Curve.linear() }));
 ```
 
-x is `"date"`, declared "instant" by `Schema.time()`, in every tier. y is the
+x is `"date"`, declared "instant" by `Unit.time()`, in every tier. y is the
 column `"balance"` in both tiers, so it is one unknown. Expected result:
 unchanged.
 

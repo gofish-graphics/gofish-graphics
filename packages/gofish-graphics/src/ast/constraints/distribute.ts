@@ -21,6 +21,7 @@ import {
   hasOrigin,
 } from "../underlyingSpace";
 import { Extent, impliedExtent } from "../extent";
+import { currentUnits } from "../measure";
 import {
   inCoordinateSpace,
   yDirection,
@@ -344,6 +345,19 @@ export function distributeSpaceFold(
     // the middle of the 20 spans [−25, 75]. A part with no data baseline
     // lies from its start ({@link tailSides}). This is "shift each part's
     // data interval and pin the origin": a glued stack is a pinned space.
+    //
+    // A free part is an amount from its baseline, so the stack adds the
+    // amounts themselves, and the units they were read in must add up
+    // (#1197: a stack of temperatures or dates has no meaning). The check
+    // reads each part's own summands, not the unit class the parts joined,
+    // so a column that is only a position on the same axis is not checked.
+    // A pinned part is not summed: the stack adds only its width. The
+    // figure's units decide (`Units.sum`): a unit known only by its name
+    // here waits for a definition met elsewhere in the figure.
+    for (const t of targets)
+      if (t.origin === "free")
+        for (const q of t.measure?.summands ?? [])
+          currentUnits().sum(q, "stack");
     const { origin } = opts;
     const sides = targets.map(tailSides);
     sides.forEach(({ descent }, i) => {
@@ -355,7 +369,7 @@ export function distributeSpaceFold(
             `${keys[i] !== undefined ? `"${keys[i]}"` : `child ${i + 1}`} ` +
             `is negative. Its \`by\` column${by ? ` ${by}` : ""} has ` +
             `HasMidpoint (declared ` +
-            `with \`.diverging()\`), so the stack's 0 is the midpoint of its ` +
+            `with \`Trait.diverging()\`), so the stack's 0 is the midpoint of its ` +
             `order and each part lies on the side its level is on; a ` +
             `negative amount has no meaning there.`
         );

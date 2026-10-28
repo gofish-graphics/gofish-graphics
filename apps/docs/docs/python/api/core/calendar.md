@@ -2,7 +2,7 @@
 
 Partitions of the time line into calendar cells: seconds, minutes, hours,
 days, days of the week, weeks, months, quarters and years, over a time column (see
-[`Schema.time`](/python/api/core/schema)). A Calendar value has two uses. It
+[`Unit.time`](/python/api/core/schema)). A Calendar value has two uses. It
 bins a time column's rows into cells, as the partition of
 [`field(name).bin(...)`](/python/api/operators/spread#field-expression-pipeline).
 And it names a level of an axis, an entry of the `"levels"` of an axis in the
@@ -184,7 +184,7 @@ A week row over a month row:
 ```python
 chart(
     visits,
-    schema={"day": Schema.time()},
+    schema={"day": Unit.time()},
     axes={"x": {"levels": [Calendar.week, Calendar.month]}, "y": True},
 ).flow(scatter(by="day", x="day", y="visits")).mark(
     line(stroke="steelblue", stroke_width=2)
@@ -194,7 +194,7 @@ chart(
 Rain by month of the year, all Junes in one bar:
 
 ```python
-chart(weather, schema={"date": Schema.time()}, axes=True).flow(
+chart(weather, schema={"date": Unit.time()}, axes=True).flow(
     spread(by=field("date").bin(Calendar.month), dir="x")
 ).mark(rect(h=field("precipitation").mean()))
 ```

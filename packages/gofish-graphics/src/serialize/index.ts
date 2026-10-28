@@ -18,7 +18,7 @@ export {
 
 // Column types (schema.ts) a host attaches to the rows it decodes, the way a
 // chart's `schema` attaches them: the Python hosts' Arrow decode marks a
-// timestamp or date column as a time (`HasCalendar`) in the column's zone.
+// timestamp or date column as a time (`Unit.time({ zone })`) in its zone.
 export {
   getColumnTypes,
   setColumnTypes,

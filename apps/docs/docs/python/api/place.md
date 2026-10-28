@@ -12,10 +12,10 @@ spot by the mark's box. A place reads the mark's outline and tries spots in
 order.
 
 ```python
-from gofish import Place, Schema, chart, group, line, scatter
+from gofish import Place, Unit, chart, group, line, scatter
 
 (
-    chart(stocks, schema={"date": Schema.time()})
+    chart(stocks, schema={"date": Unit.time()})
     .flow(group(by="symbol"), scatter(by="date", x="date", y="price"))
     .mark(
         line(stroke="symbol", stroke_width=2).label(
