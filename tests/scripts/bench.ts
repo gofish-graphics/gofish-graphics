@@ -1255,7 +1255,8 @@ const DIST_BENCH = join(ROOT, "packages/gofish-graphics/dist-bench");
  * the build failed. We do NOT edit packages/ ourselves.
  */
 function ensureProdBuild(): boolean {
-  if (existsSync(join(DIST_BENCH, "index.js"))) return true;
+  // Always rebuild: an existing dist-bench may predate the source being
+  // measured, and benching it would report the old code's numbers.
   try {
     console.log("[prod] building instrumented dist-bench (build:bench) ...");
     execSync("pnpm --filter gofish-graphics build:bench", {
