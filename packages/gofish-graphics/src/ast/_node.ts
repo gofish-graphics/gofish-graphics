@@ -1264,7 +1264,8 @@ export class GoFishNode {
    *  it), whose interior is laid out in the space's own coordinates and which
    *  holds its interior's outlines itself. */
   public get claimedOverhang(): number {
-    return this.parent?.yFrame.inCoord === true ? 0 : this.strokeOverhang;
+    const o = this.strokeOverhang;
+    return o > 0 && this.parent?.yFrame.inCoord === true ? 0 : o;
   }
 
   /** Whether the room this node is given on `axis` is a share: it is in a
