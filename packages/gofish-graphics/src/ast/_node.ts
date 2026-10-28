@@ -551,10 +551,10 @@ export class GoFishNode {
   public renderData?: any;
   public coordinateTransform?: CoordinateTransform;
   public color?: MaybeValue<string>;
-  /** The alpha this node's fill is painted at, 0 to 1: its `opacity` times
-   *  its `fillOpacity`. Undefined is opaque. The color it scales is the
-   *  fill's own (an `rgba()` fill carries its own alpha on top). */
-  public alpha?: number;
+  /** The style of the first item this node painted itself when it last
+   *  lowered, before any paint-time animation; undefined until it paints.
+   *  Its labels lower after it and read it (see `autoLabelColorForFill`). */
+  public paintedStyle?: DisplayList.Style;
   public constraints: ConstraintSpec[] = [];
   public colorConfig?: ColorConfig;
   public _labels?: LabelSpec[];
@@ -685,7 +685,6 @@ export class GoFishNode {
       lower,
       geometry,
       color,
-      alpha,
       labelPosition,
     }: {
       key?: string;
@@ -698,8 +697,6 @@ export class GoFishNode {
       lower?: Lower;
       geometry?: GeometryFn;
       color?: MaybeValue<string>;
-      /** The alpha its fill is painted at (see the `alpha` field). */
-      alpha?: number;
       /** Where a `.label()` with no `position` goes on this node: a
        *  position or a `Place` strategy by convention (a dot is labeled
        *  around itself, an arrow at its end), or `"outline"`, read from the
@@ -728,7 +725,6 @@ export class GoFishNode {
     this.type = type;
     this.args = args;
     this.color = color;
-    this.alpha = alpha;
     this.labelPosition = labelPosition;
   }
 
@@ -2030,6 +2026,11 @@ export class GoFishNode {
     // through the children's own INTERNAL_lower, so descendants keep their own
     // ids; `??=` preserves any id a lower body sets itself. Zero-cost otherwise.
     for (const item of items) item.id ??= this.uid;
+    // A boundary's items include its children's, which carry their own ids.
+    // The animation and visibility rules below replace an item's style
+    // rather than mutate it, so this stays the style at rest.
+    const own = items.find((item) => item.id === this.uid);
+    if (own) this.paintedStyle = own.style ?? {};
     // Live channels (a `live()` value): bake a datum-bound thunk per channel
     // into the paint-time side table so paint re-evaluates it reactively. The
     // thunks are held OUTSIDE the display item (WeakMap) so the item stays pure

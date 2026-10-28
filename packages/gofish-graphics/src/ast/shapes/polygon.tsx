@@ -82,7 +82,6 @@ export const Polygon = ({
       // Used to seed the unit color scale. Prefer whichever channel is
       // data-driven — the same rule `rect` follows.
       color: isValue(fill) ? fill : stroke,
-      alpha: opacity,
       resolveUnderlyingSpace: (
         _children: Size<UnderlyingSpace>[],
         _childNodes: GoFishAST[]

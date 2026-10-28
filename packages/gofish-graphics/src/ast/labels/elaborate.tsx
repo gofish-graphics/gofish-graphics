@@ -20,8 +20,6 @@ import {
 import { avoidedRefs } from "../nodeRefs";
 import type { Place } from "../../families/place";
 import { wrapPreservingIdentity, wrapRing } from "../elaborationUtils";
-import { getValue, type MaybeValue } from "../data";
-import { resolveColorChannel } from "../../color";
 import { Frontend } from "gofish-ir";
 import {
   orientSide,
@@ -61,30 +59,6 @@ const CONTENT_NAME = "__labelContent";
 const LABEL_FONT_FAMILY = "source-sans-pro, sans-serif";
 
 /**
- * Resolve the fill color of a node to a CSS color string — the SAME resolution
- * the shape's own fill uses (`resolveColorChannel`), so a label contrasts
- * against the color actually drawn: a categorical swatch, a continuous gradient
- * `scaleFn(value)`, or a literal color. Falls back to a literal string value.
- */
-function resolveNodeFill(node: GoFishNode): string | null {
-  if (node.color == null) return null;
-
-  try {
-    const scaleContext = node.getRenderSession().scaleContext;
-    const resolved = resolveColorChannel(
-      node.color as MaybeValue<string>,
-      scaleContext?.unit
-    );
-    if (typeof resolved === "string") return resolved;
-  } catch {
-    // no session yet
-  }
-
-  const colorValue = getValue(node.color);
-  return typeof colorValue === "string" ? colorValue : null;
-}
-
-/**
  * Whether a placed label sits inside its mark: its center is inside one of
  * the mark's filled closed outlines. Inside an unfilled one, the page shows
  * through, so the label is read as outside. Both are read in the label layer's frame: the
@@ -116,20 +90,15 @@ function insideOutline(c: [number, number], o: Outline): boolean {
 
 /**
  * The auto label color (see `autoLabelColorForFill`), picked when the label
- * is drawn: contrast against the mark's fill, as seen at the alpha the mark
- * paints it at (`GoFishNode.alpha`), when the label sits inside its mark's
- * outline, and a darkened tint of the fill outside. Inside is read
- * from the outline, not the position, so a `"center"` label on a C-shaped
- * polygon, whose box center is outside the shape, is colored for the page.
+ * is drawn, from the style its mark painted: the mark lowers first, as the
+ * label layer paints its content before its labels. Inside is read from the
+ * outline, not the position, so a `"center"` label on a C-shaped polygon,
+ * whose box center is outside the shape, is colored for the page.
  */
 const autoLabelColor =
   (target: GoFishNode, stand: GoFishRef) =>
   (label: GoFishNode): string =>
-    autoLabelColorForFill(
-      resolveNodeFill(target),
-      target.alpha ?? 1,
-      sitsInside(label, stand)
-    );
+    autoLabelColorForFill(target.paintedStyle, sitsInside(label, stand));
 
 /** Where a label goes on its target: a position string, a `Place`
  *  strategy, or `"outline"`, a default the chooser reads from the target's

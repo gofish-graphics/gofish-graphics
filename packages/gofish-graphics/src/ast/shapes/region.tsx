@@ -66,7 +66,6 @@ export const Region = ({
       // Used to seed the unit color scale. Prefer whichever channel is
       // data-driven, as `rect` does.
       color: isValue(fill) ? fill : stroke,
-      alpha: opacity,
       resolveUnderlyingSpace: () => [UNDEFINED, UNDEFINED],
       layout: (size, _scales, _children, _node, region) => {
         const extent = (axis: 0 | 1) => {

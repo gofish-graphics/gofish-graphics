@@ -285,7 +285,6 @@ export const connect = createNodeOperator(
         // resolved to `Value`s by `resolveGroupFill` (chart.ts), so
         // `isValue` distinguishes data-driven from a literal color.
         color: isValue(fill) ? fill : stroke,
-        alpha: opacity,
         resolveUnderlyingSpace: (
           children: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]

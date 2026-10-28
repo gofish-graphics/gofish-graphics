@@ -134,7 +134,6 @@ export const Rect = ({
       },
       // Used to seed the unit color scale. Prefer whichever channel is data-driven.
       color: isValue(fill) ? fill : stroke,
-      alpha: opacity,
       resolveUnderlyingSpace: (
         _children: Size<UnderlyingSpace>[],
         _childNodes: GoFishAST[]

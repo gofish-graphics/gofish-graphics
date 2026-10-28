@@ -28,14 +28,7 @@ import {
 import { pointInRing } from "../ast/geometry/plane";
 import { boxOutline } from "../ast/geometry";
 import { autoLabelColorForFill } from "../ast/labels/autoLabelColor";
-import {
-  apcaContrast,
-  compositeOver,
-  formatHex,
-  paintedRgb,
-  parse,
-  type Rgb,
-} from "../colorModes";
+import { apcaContrast, paintedRgb, parse } from "../colorModes";
 import {
   arrow,
   chart,
@@ -53,6 +46,10 @@ import {
   spread,
   stack,
 } from "../lib";
+
+/** A CSS color as the 8-bit sRGB color a renderer paints. */
+const rgb = (css: string) => paintedRgb(parse(css)!);
+const WHITE = rgb("#ffffff");
 
 // The strategies yield their candidates lazily; these read them all.
 const aroundCandidates = (...a: Parameters<typeof aroundSpots>) => [
@@ -126,12 +123,18 @@ const circleShape = (cx: number, cy: number, r: number): TargetShape => {
     const t = (2 * Math.PI * i) / 64;
     points.push([cx + r * Math.cos(t), cy + r * Math.sin(t)]);
   }
-  return { outlines: [{ points, closed: true, filled: true }], type: "ellipse" };
+  return {
+    outlines: [{ points, closed: true, filled: true }],
+    type: "ellipse",
+  };
 };
 
 console.log("# Place family");
 {
-  ok("a bare kind is its value", JSON.stringify(Place.end) === '{"kind":"end"}');
+  ok(
+    "a bare kind is its value",
+    JSON.stringify(Place.end) === '{"kind":"end"}'
+  );
   ok(
     "calling a kind sets options",
     JSON.stringify(Place.along({ at: 0.6, orient: "sloped" })) ===
@@ -146,7 +149,13 @@ console.log("# Place family");
 console.log("# around");
 {
   const size = { hx: 20, hy: 6 };
-  const cands = aroundCandidates(circleShape(0, 0, 10), size, 0, Place.around(), 3);
+  const cands = aroundCandidates(
+    circleShape(0, 0, 10),
+    size,
+    0,
+    Place.around(),
+    3
+  );
   ok("eight candidates by default", cands.length === 8);
   // Top-right: the label's lower-left corner at the circle's 45° point, moved
   // 3 px out along the diagonal.
@@ -156,16 +165,16 @@ console.log("# around");
     near(cands[0].cx, d + 20, 1e-2) && near(cands[0].cy, -d - 6, 1e-2),
     JSON.stringify(cands[0])
   );
-  ok(
-    "Imhof order: top-left second",
-    cands[1].cx < 0 && cands[1].cy < 0
-  );
+  ok("Imhof order: top-left second", cands[1].cx < 0 && cands[1].cy < 0);
   ok(
     "right is centered vertically",
     near(cands[4].cy, 0) && near(cands[4].cx, 13 + 20)
   );
   const bars = aroundCandidates(
-    { outlines: [boxOutline({ min: [0, 0], max: [30, 100] }, 1)], type: "rect" },
+    {
+      outlines: [boxOutline({ min: [0, 0], max: [30, 100] }, 1)],
+      type: "rect",
+    },
     size,
     0,
     Place.around({ directions: ["top"], side: ["outset", "inset"] }),
@@ -193,13 +202,21 @@ console.log("# around");
     [0, 40],
   ];
   const p = extremePoint([{ points: C, closed: true, filled: true }], "right");
-  ok("C facing right: the upper arm tip, at its middle", near(p[0], 40) && near(p[1], 5), JSON.stringify(p));
+  ok(
+    "C facing right: the upper arm tip, at its middle",
+    near(p[0], 40) && near(p[1], 5),
+    JSON.stringify(p)
+  );
   // A box thinner than the tie tolerance ties all the way round; it still
   // stands for its top edge's middle, not a corner.
   for (const h of [0.275, 0]) {
     const thin = boxOutline({ min: [67, 100], max: [113, 100 + h] }, 1);
     const q = extremePoint([thin], "top");
-    ok(`46x${h} box: top is its top edge's middle`, near(q[0], 90) && near(q[1], 100), JSON.stringify(q));
+    ok(
+      `46x${h} box: top is its top edge's middle`,
+      near(q[0], 90) && near(q[1], 100),
+      JSON.stringify(q)
+    );
   }
 }
 
@@ -220,21 +237,43 @@ console.log("# along");
   };
   const size = { hx: 15, hy: 5 };
   const on = alongCandidates(flat, size, 0, Place.along({ at: 0.25 }), 3);
-  ok("on: the first spot is at 25% of the length", near(on[0].cx, 50) && near(on[0].cy, 50));
+  ok(
+    "on: the first spot is at 25% of the length",
+    near(on[0].cx, 50) && near(on[0].cy, 50)
+  );
   ok("on: the label may cover its own path", on[0].onOutline);
   ok(
     "spots slide away from at, nearest first",
     Math.abs(on[1].cx - 50) <= Math.abs(on[3].cx - 50) &&
       on.every((c) => c.cx >= 15 - 1e-9 && c.cx <= 185 + 1e-9)
   );
-  const above = alongCandidates(flat, size, 0, Place.along({ side: "above" }), 3);
-  ok("above: the box clears the path by the offset", near(above[0].cy, 50 - 3 - 5), JSON.stringify(above[0]));
+  const above = alongCandidates(
+    flat,
+    size,
+    0,
+    Place.along({ side: "above" }),
+    3
+  );
+  ok(
+    "above: the box clears the path by the offset",
+    near(above[0].cy, 50 - 3 - 5),
+    JSON.stringify(above[0])
+  );
   const left = alongCandidates(flat, size, 0, Place.along({ side: "left" }), 3);
   ok("left of rightward travel is up the screen", left[0].cy < 50);
-  const right = alongCandidates(flat, size, 0, Place.along({ side: "right" }), 3);
+  const right = alongCandidates(
+    flat,
+    size,
+    0,
+    Place.along({ side: "right" }),
+    3
+  );
   ok("right of rightward travel is down the screen", right[0].cy > 50);
   const start = alongCandidates(flat, size, 0, Place.along({ at: "start" }), 3);
-  ok("at start: the label's start is flush with the path's", near(start[0].cx, 15));
+  ok(
+    "at start: the label's start is flush with the path's",
+    near(start[0].cx, 15)
+  );
   const vertical: TargetShape = {
     outlines: [
       {
@@ -289,15 +328,27 @@ console.log("# along");
   ok(
     "sloped: no spot where the path strays from the chord",
     alongCandidates(
-      { outlines: [{ points: zigzag, closed: false, filled: false }], type: "connect" },
+      {
+        outlines: [{ points: zigzag, closed: false, filled: false }],
+        type: "connect",
+      },
       size,
       0,
       Place.along({ orient: "sloped" }),
       3
     ).length === 0
   );
-  const box = { outlines: [boxOutline({ min: [0, 0], max: [80, 20] }, 1)], type: "rect" };
-  const part = alongCandidates(box, size, 0, Place.along({ at: "x-max", side: "outset" }), 3);
+  const box = {
+    outlines: [boxOutline({ min: [0, 0], max: [80, 20] }, 1)],
+    type: "rect",
+  };
+  const part = alongCandidates(
+    box,
+    size,
+    0,
+    Place.along({ at: "x-max", side: "outset" }),
+    3
+  );
   ok(
     "a part: the label sits past the box's right edge, at its middle",
     near(part[0].cx, 80 + 3 + 15) && near(part[0].cy, 10),
@@ -306,7 +357,10 @@ console.log("# along");
   ok(
     "a part shorter than the label: no spot",
     alongCandidates(
-      { outlines: [boxOutline({ min: [0, 0], max: [80, 8] }, 1)], type: "rect" },
+      {
+        outlines: [boxOutline({ min: [0, 0], max: [80, 8] }, 1)],
+        type: "rect",
+      },
       size,
       0,
       Place.along({ at: "x-max", side: "outset" }),
@@ -324,7 +378,11 @@ console.log("# along");
   const partMsg = await errorOf(() =>
     alongCandidates(flat, size, 0, Place.along({ at: "y-max" }), 3)
   );
-  ok("an unknown part is an error", partMsg?.includes('no part "y-max"') ?? false, partMsg);
+  ok(
+    "an unknown part is an error",
+    partMsg?.includes('no part "y-max"') ?? false,
+    partMsg
+  );
 }
 
 console.log("# start, end, dodge");
@@ -354,7 +412,11 @@ console.log("# start, end, dodge");
     ],
     1
   );
-  ok("dodged boxes do not overlap", ys[1] - ys[0] >= 11 - 1e-9, JSON.stringify(ys));
+  ok(
+    "dodged boxes do not overlap",
+    ys[1] - ys[0] >= 11 - 1e-9,
+    JSON.stringify(ys)
+  );
   ok("a run centers on what its members want", near((ys[0] + ys[1]) / 2, 51));
   ok("a box with room stays put", near(ys[2], 100));
   const closedMsg = await errorOf(() =>
@@ -378,9 +440,16 @@ console.log("# interior");
     [100, 100],
     [0, 100],
   ];
-  const shape: TargetShape = { outlines: [{ points: L, closed: true, filled: true }], type: "polygon" };
+  const shape: TargetShape = {
+    outlines: [{ points: L, closed: true, filled: true }],
+    type: "polygon",
+  };
   const c = interiorCandidates(shape, { hx: 20, hy: 5 }, 0);
-  ok("an L: the label goes in the foot", c[0].cy > 80 && c[0].cx > 30, JSON.stringify(c[0]));
+  ok(
+    "an L: the label goes in the foot",
+    c[0].cy > 80 && c[0].cx > 30,
+    JSON.stringify(c[0])
+  );
   ok(
     "the label's box lies inside",
     corners(c[0], { hx: 20, hy: 5 }).every((p) => pointInRing(p, L))
@@ -410,7 +479,8 @@ console.log("# interior");
   );
   ok(
     "interior on an open path is an error naming it",
-    msg === "[gofish] Place.interior needs a filled region; connect has an open one.",
+    msg ===
+      "[gofish] Place.interior needs a filled region; connect has an open one.",
     msg
   );
 }
@@ -457,7 +527,11 @@ console.log("# the chooser, in a chart");
     }
   }
   ok("no label covers another label or a dot", clash === "", clash);
-  ok("some labels are hidden", texts.length < 12 && texts.length > 0, `${texts.length}`);
+  ok(
+    "some labels are hidden",
+    texts.length < 12 && texts.length > 0,
+    `${texts.length}`
+  );
   ok(
     "one note names how many were hidden, for which call",
     info.length === 1 &&
@@ -597,9 +671,12 @@ console.log("# defaults by geometry");
   const [bt] = textItems(bdoc);
   const r = items(bdoc).find((i) => i.kind === "rect");
   ok(
-    "a rect keeps \"outset\": centered above it",
-    near(bt.x + (bt.text.length * bt.fontSize * 0.6) / 2, r.x + r.w / 2, 1e-6) &&
-      bt.y < r.y,
+    'a rect keeps "outset": centered above it',
+    near(
+      bt.x + (bt.text.length * bt.fontSize * 0.6) / 2,
+      r.x + r.w / 2,
+      1e-6
+    ) && bt.y < r.y,
     JSON.stringify({ bt, r })
   );
 }
@@ -633,59 +710,70 @@ console.log("# the auto color reads where the label landed");
   const centered = await render("center");
   ok(
     '"center" outside a C takes the outside color',
-    centered.style.fill === autoLabelColorForFill(fill, 1, false),
+    centered.style.fill === autoLabelColorForFill({ fill }, false),
     centered.style.fill
   );
   const inside = await render();
   ok(
     "Place.interior inside it takes the inside color",
-    inside.style.fill === autoLabelColorForFill(fill, 1, true),
+    inside.style.fill === autoLabelColorForFill({ fill }, true),
     inside.style.fill
   );
 }
 
 console.log("# the inside color takes the larger APCA contrast");
 {
-  const rgb = (hex: string) => paintedRgb(parse(hex)!);
   const green = rgb("#59a14f");
-  const white = apcaContrast(rgb("#ffffff"), green);
+  const white = apcaContrast(WHITE, green);
   const black = apcaContrast(rgb("#000000"), green);
-  ok("white on Tableau green is Lc -64.0", Math.abs(white + 64.0) < 0.05, white);
-  ok("black on Tableau green is Lc 45.5", Math.abs(black - 45.5) < 0.05, black);
   ok(
-    "Tableau green gets white text",
-    autoLabelColorForFill("#59a14f", 1, true) === "white",
-    autoLabelColorForFill("#59a14f", 1, true)
+    "white on Tableau green is Lc -64.0",
+    Math.abs(white + 64.0) < 0.05,
+    `${white}`
   );
-  const yellow = autoLabelColorForFill("#edc948", 1, true);
+  ok(
+    "black on Tableau green is Lc 45.5",
+    Math.abs(black - 45.5) < 0.05,
+    `${black}`
+  );
+  const opaque = autoLabelColorForFill({ fill: "#59a14f" }, true);
+  ok("Tableau green gets white text", opaque === "white", opaque);
+  const yellow = autoLabelColorForFill({ fill: "#edc948" }, true);
   ok("Tableau yellow gets the dark tint", yellow !== "white", yellow);
 }
 
 console.log("# the inside color reads the fill as seen through its alpha");
 {
-  const white: Rgb = { mode: "rgb", r: 1, g: 1, b: 1 };
-  const seen = formatHex(compositeOver(parse("#59a14f")!, 0.5, white));
-  ok("#59a14f at alpha 0.5 over white is #acd0a7", seen === "#acd0a7", seen);
-  const own = formatHex(compositeOver(parse("#59a14f80")!, 1, white));
+  const inside = (style: {
+    fill: string;
+    opacity?: number;
+    fillOpacity?: number;
+  }) => autoLabelColorForFill(style, true);
+  const faint = inside({ fill: "#59a14f", opacity: 0.4 });
   ok(
-    "a color's own alpha composites too (#59a14f80 over white)",
-    own === formatHex(compositeOver(parse("#59a14f")!, 0x80 / 255, white)),
-    own
-  );
-  const green = autoLabelColorForFill("#59a14f", 1, true);
-  const faint = autoLabelColorForFill("#59a14f", 0.4, true);
-  ok("Tableau green at alpha 1 gets white text", green === "white", green);
-  ok(
-    "Tableau green at alpha 0.4 gets the dark tint",
+    "Tableau green at opacity 0.4 gets the dark tint",
     faint !== "white",
     faint
   );
-  const rgba = autoLabelColorForFill("rgba(89, 161, 79, 0.4)", 1, true);
-  ok("an rgba() fill at alpha 0.4 gets the same dark tint", rgba === faint, rgba);
+  ok(
+    "opacity times fillOpacity is the alpha",
+    inside({ fill: "#59a14f", opacity: 0.8, fillOpacity: 0.5 }) === faint
+  );
+  const rgba = inside({ fill: "rgba(89, 161, 79, 0.4)" });
+  ok(
+    "an rgba() fill at alpha 0.4 gets the same dark tint",
+    rgba === faint,
+    rgba
+  );
   ok(
     "the outside tint ignores alpha",
-    autoLabelColorForFill("#59a14f", 0.4, false) ===
-      autoLabelColorForFill("#59a14f", 1, false)
+    autoLabelColorForFill({ fill: "#59a14f", opacity: 0.4 }, false) ===
+      autoLabelColorForFill({ fill: "#59a14f" }, false)
+  );
+  ok(
+    "outside, a mark with no fill is tinted by its stroke",
+    autoLabelColorForFill({ fill: "none", stroke: "#59a14f" }, false) ===
+      autoLabelColorForFill({ fill: "#59a14f" }, false)
   );
 
   // End to end: a mark's `opacity` reaches the label's color.
@@ -704,7 +792,11 @@ console.log("# the inside color reads the fill as seen through its alpha");
   };
   const opaque = await render(1);
   const translucent = await render(0.4);
-  ok("an opaque green polygon's label is white", opaque.style.fill === "white", opaque.style.fill);
+  ok(
+    "an opaque green polygon's label is white",
+    opaque.style.fill === "white",
+    opaque.style.fill
+  );
   ok(
     "a green polygon at opacity 0.4 labels with the dark tint",
     translucent.style.fill === faint,
@@ -722,8 +814,14 @@ console.log("# unfilled regions");
     [100, 100],
     [0, 100],
   ];
-  const unfilled = outlineObstacles({ points: square, closed: true, filled: false, width: 4 }, "m");
-  const filled = outlineObstacles({ points: square, closed: true, filled: true, width: 4 }, "m");
+  const unfilled = outlineObstacles(
+    { points: square, closed: true, filled: false, width: 4 },
+    "m"
+  );
+  const filled = outlineObstacles(
+    { points: square, closed: true, filled: true, width: 4 },
+    "m"
+  );
   const inside = corners({ cx: 50, cy: 50, angle: 0 }, { hx: 10, hy: 5 });
   ok(
     "an unfilled closed outline is only its band: a label inside it is free",
@@ -739,9 +837,10 @@ console.log("# unfilled regions");
   ok(
     "the band is as wide as the stroke",
     unfilled.some((o) => covers(nearEdge, o)) &&
-      !outlineObstacles({ points: square, closed: true, filled: false }, "m").some((o) =>
-        covers(nearEdge, o)
-      )
+      !outlineObstacles(
+        { points: square, closed: true, filled: false },
+        "m"
+      ).some((o) => covers(nearEdge, o))
   );
 
   const ring: Pt[] = [
@@ -785,7 +884,9 @@ console.log("# unfilled regions");
   const defaultMsg = await errorOf(async () => {
     const node = (await chart([{ n: "a", ring }], { axes: false })
       .flow(group({ by: "n" }))
-      .mark(polygon({ points: "ring", fill: "none", stroke: "black" }).label("n"))
+      .mark(
+        polygon({ points: "ring", fill: "none", stroke: "black" }).label("n")
+      )
       .resolve()) as GoFishNode;
     await node.toDisplayList({ w: 100, h: 100 });
   });
@@ -816,7 +917,10 @@ console.log("# halo and background");
       t.style.paintOrder === "stroke"
   );
   const bg = all.filter((i) => i.kind === "rect" && i.style?.fill === "#eee");
-  ok("a background is a box behind the text", bg.length === 1 && all.indexOf(bg[0]) < all.indexOf(t));
+  ok(
+    "a background is a box behind the text",
+    bg.length === 1 && all.indexOf(bg[0]) < all.indexOf(t)
+  );
 }
 
 console.log("# errors");
@@ -833,7 +937,8 @@ console.log("# errors");
   });
   ok(
     "Place.interior on a line names the missing outline",
-    lineMsg === "[gofish] Place.interior needs a filled region; connect has an open one.",
+    lineMsg ===
+      "[gofish] Place.interior needs a filled region; connect has an open one.",
     lineMsg
   );
   const polarMsg = await errorOf(async () => {
@@ -861,7 +966,11 @@ console.log("# errors");
       .resolve()) as GoFishNode;
     await node.toDisplayList({ w: 100, h: 100 });
   });
-  ok("a default in polar coordinates falls back to \"outset\"", defaultPolar === undefined, defaultPolar);
+  ok(
+    'a default in polar coordinates falls back to "outset"',
+    defaultPolar === undefined,
+    defaultPolar
+  );
   const bad = await errorOf(async () => {
     const node = (await chart([{ c: "a", v: 3 }])
       .flow(spread({ by: "c", dir: "x" }))
@@ -869,7 +978,11 @@ console.log("# errors");
       .resolve()) as GoFishNode;
     await node.toDisplayList({ w: 100, h: 100 });
   });
-  ok("an unknown strategy is an error", bad?.includes("Make one with the Place family") ?? false, bad);
+  ok(
+    "an unknown strategy is an error",
+    bad?.includes("Make one with the Place family") ?? false,
+    bad
+  );
 }
 
 console.log("# a ribbon's label goes inside its band");
@@ -883,7 +996,10 @@ console.log("# a ribbon's label goes inside its band");
     { x: "c", s: "q", v: 4 },
   ];
   const node = (await chart(rows)
-    .flow(spread({ by: "x", dir: "x", spacing: 60 }), stack({ by: "s", dir: "y" }))
+    .flow(
+      spread({ by: "x", dir: "x", spacing: 60 }),
+      stack({ by: "s", dir: "y" })
+    )
     .mark(ribbon({ h: "v", fill: "s" }).label("s"))
     .resolve()) as GoFishNode;
   await node.toDisplayList({ w: 240, h: 200, axes: false });
@@ -919,10 +1035,15 @@ async function arrowDoc(childLabels: boolean) {
       : rect({ x, y: 40, w: 20, h: 20, fill: "#ccc" }).name(n === "A" ? a : b);
   const edge = (children: any[]) =>
     arrow(
-      { stroke: "black", strokeWidth: 2, straights: true, stretch: 0, padEnd: 40 },
+      {
+        stroke: "black",
+        strokeWidth: 2,
+        straights: true,
+        stretch: 0,
+        padEnd: 40,
+      },
       children
-    )
-      .label(() => "edge");
+    ).label(() => "edge");
   const node = childLabels
     ? layer([edge([box(0, "A"), box(200, "B")])])
     : layer([box(0, "A"), box(200, "B"), edge([ref(a), ref(b)])]);
@@ -981,7 +1102,8 @@ console.log("# labels placed lower down keep later calls off");
   const B = texts.find((t) => t.text === "BBBBBBBB");
   ok(
     "a label placed by the chooser in a lower tier is an obstacle above",
-    A !== undefined && (B === undefined || !boxesOverlap(textBox(A), textBox(B))),
+    A !== undefined &&
+      (B === undefined || !boxesOverlap(textBox(A), textBox(B))),
     JSON.stringify({ A: A && textBox(A), B: B && textBox(B) })
   );
 
@@ -1034,7 +1156,9 @@ console.log("# end labels dodge only labels they overlap");
     .mark(line({ strokeWidth: 2 }).label("s"))
     .resolve()) as GoFishNode;
   const doc = await node.toDisplayList({ w: 300, h: 100 });
-  const [ta, tb] = ["a", "b"].map((s) => textItems(doc).find((t) => t.text === s));
+  const [ta, tb] = ["a", "b"].map((s) =>
+    textItems(doc).find((t) => t.text === s)
+  );
   ok(
     "labels apart in x keep their ends' height",
     ta !== undefined && tb !== undefined && near(ta.y, tb.y, 1e-6),
@@ -1063,7 +1187,9 @@ console.log("# end labels dodge only labels they overlap");
   const bx = pathPoints(bPath.d)[0][0];
   ok(
     "an end label that would cover another mark is hidden",
-    ca === undefined || textBox(ca)[2][0] < bx - 1 || textBox(ca)[0][0] > bx + 1,
+    ca === undefined ||
+      textBox(ca)[2][0] < bx - 1 ||
+      textBox(ca)[0][0] > bx + 1,
     JSON.stringify({ ca: ca && textBox(ca), bx })
   );
   ok(

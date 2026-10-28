@@ -65,7 +65,6 @@ export const Ellipse = ({
       args: { dims },
       // Used to seed the unit color scale. Prefer whichever channel is data-driven.
       color: isValue(fill) ? fill : stroke,
-      alpha: opacity * (fillOpacity ?? 1),
       resolveUnderlyingSpace: (
         _children: Size<UnderlyingSpace>[],
         _childNodes: GoFishAST[]
