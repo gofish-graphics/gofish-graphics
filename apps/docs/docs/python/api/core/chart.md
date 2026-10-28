@@ -217,7 +217,8 @@ their scales must be equal — a circle stays circular. GoFish does this from th
 
 This is the same rule the `circle` mark obeys one level down: `circle(r=...)`
 lowers to a `w` and `h` that share a unit, so it can never distort. The
-binding axis fills its dimension; the other centers in the leftover space.
+binding axis fills its dimension; on the other, the chart keeps its size and
+its content sits at the start (left, or top), with the leftover space empty.
 Two columns with no declared unit (e.g. `bill_length` vs `bill_depth`) stay
 independent.
 

@@ -557,7 +557,7 @@ omitted dimension is resolved per axis from the root's size claim on it:
 
 `layout()` therefore computes the root's scope and size once per axis
 (`rootSizes`: its σ, and its claim at that σ), which the root scale factors,
-the equal-measure recentering and the root's frame in Pass 10 all read, and
+the equal-measure step and the root's frame in Pass 10 all read, and
 distinguishes it from the `layoutW`/`layoutH` it hands to `child.layout`
 (where a shrink-to-fit axis is left unsized). **Shared-measure
 equal scale** (#582) adds one reconciliation step here, after the per-axis scales
@@ -566,13 +566,15 @@ are built and before `child.layout`: when `spaceUnit(x).unit` and
 through overlays do not count), each axis's pixels-per-data-unit — a POSITION
 domain's `canvas / range` or a baseline-magnitude σ — is equated to the binding
 `min(...)` so one data unit measures the same on both axes (circles stay circular,
-maps stay undistorted); the binding axis fills, the other gets a recentered
-posScale. Stage 6c makes this a named `recenterEqualMeasure` operation _on_ the
-scope registry rather than an inline rewrite, so it is a post-solve σ
-adjustment on the registry's books and `GOFISH_DUMP_SCOPES` records the final σ.
-A chart with a size of its own on both axes makes the same adjustment to its
-own scopes (`equalizeFixed`), shrinking the slack axis to its content where the
-root centers it.
+maps stay undistorted); the binding axis fills, and on the other the box keeps
+its size and the content sits at its top-left, the leftover empty after it in
+screen terms (its claim takes the leftover at its far end, or at its start for a
+y that grows upward). Stage 6c makes this a named `equalizeMeasure` operation
+_on_ the scope registry rather than an inline rewrite, so it is the one
+post-solve σ adjustment on the registry's books and `GOFISH_DUMP_SCOPES` records
+the final σ. A chart with a size of its own on both axes makes the same
+adjustment to its own scopes through it (`equalizeFixed`). Where the leftover
+goes is provisional, to be revisited once real use suggests a preference.
 (After the scope dump, `GOFISH_DUMP_SHARING` prints each layer's sharing sets,
 see [Underlying Space](/internals/core/underlying-space). It only reads the tree.)
 It is type equality, not a knob, and a single-coordinate-space coupling
@@ -580,7 +582,9 @@ It is type equality, not a knob, and a single-coordinate-space coupling
 with a literal `w` and `h` (`chart(data, { w, h })`) is a sized node that solves
 its own scopes in the claim walk, so it applies the same equality there
 (`ScopeRegistry.equalizeFixed`): both axes take the smaller σ, and the chart
-claims its content at that σ, narrower than its size on the other axis.
+still claims its size, its content at that σ at the box's top-left. (Its layout
+box is still the hull of its content, so a chart rendered alone draws only the
+content's width.)
 After layout it
 reads the chart's _final_ extent back off the root via `child.dims[i].size`, so an
 unsized axis still yields a concrete SVG size (e.g. a no-width bar chart gets

@@ -27,10 +27,9 @@ import {
   isCONTINUOUS,
   isOneValue,
   originIs,
-  type CONTINUOUS_TYPE,
   type UnderlyingSpace,
 } from "../underlyingSpace";
-import type { Extent } from "../extent";
+import { Extent } from "../extent";
 import type { AxisMap } from "../domain";
 import { envFlag } from "../../util";
 import type { RenderSession } from "../_node";
@@ -121,15 +120,22 @@ export const seatInScope = (
 const originPxAt = (claim: Extent, sigma: number, offset = 0): number =>
   offset + claim.descent.run(sigma);
 
-/** One axis's contribution to the #582 equal-measure recentering: the
- *  scope's type and size claim, its box, and its solved σ (`unitPx`, the
- *  quantity the two axes must agree on when they share a measure). */
+/** One axis of a scope root that {@link ScopeRegistry.equalizeMeasure}
+ *  equalizes (#582): the scope's type and size claim, its box, the σ it
+ *  solved there (the quantity the two axes must agree on when they share a
+ *  measure), and the direction of its axis order (`1` when it starts at the
+ *  screen's left or top, `-1` when it starts at the bottom). */
 export type EqualMeasureAxis = {
-  space: CONTINUOUS_TYPE;
+  space: UnderlyingSpace | undefined;
   claim: Extent;
-  canvas: number;
-  unitPx: number;
+  box: number;
+  sigma: number;
+  direction: 1 | -1;
 };
+
+/** An axis {@link ScopeRegistry.equalizeMeasure} equalized: its solution
+ *  at the shared σ, and its claim with the box's leftover pixels in it. */
+export type EqualizedAxis = { solution: ScopeSolution; claim: Extent };
 
 /** Identity of the scope being solved — its root node label and the axis. */
 export interface ScopeMeta {
@@ -157,13 +163,14 @@ interface ScopeEntry extends ScopeMeta {
 }
 
 /** A scope a node with a literal size solved in the claim walk: the keyed
- *  domain it maps, the solution, and the type and widened, niced claim it
- *  solved. */
+ *  domain it maps, the solution, the type and widened, niced claim it
+ *  solved, and its box (the size it solved against). */
 export type FixedSolve = {
   key: string | undefined;
   solution: ScopeSolution;
   claim: Extent;
   space: UnderlyingSpace | undefined;
+  box: number;
 };
 
 /**
@@ -223,37 +230,36 @@ export class ScopeRegistry {
     solves[meta.axis] =
       solution === undefined || claim === undefined
         ? undefined
-        : { key, solution, claim, space };
+        : { key, solution, claim, space, box: allocated };
     return solution;
   }
 
   /**
    * Shared-measure scale equality (#582) at a node with a literal size on
-   * both axes, as {@link recenterEqualMeasure} does at the root: when the
-   * two scopes it solved in the claim walk share a declared unit, both take
-   * the binding (smaller) σ, so one data unit is the same length on x and
-   * y. The other axis's content then does not fill its size: its claim is
-   * its content at that σ, as a layer's box is its content's, so the chart
-   * is narrower than its size there. Call it after both axes'
-   * {@link solveFixed}; a no-op otherwise.
+   * both axes, by {@link equalizeMeasure}: the two scopes it solved in the
+   * claim walk are equalized, and their claims hold the leftover pixels, so
+   * the node still claims its size. `yDirection` is the direction of its
+   * axis order on y. Call it after both axes' {@link solveFixed}; a no-op
+   * unless both share a declared unit.
    */
-  equalizeFixed(node: object, rootKey: string): void {
+  equalizeFixed(node: object, rootKey: string, yDirection: 1 | -1): void {
     const solves = this.fixed.get(node);
-    const [sx, sy] = solves ?? [];
-    if (
-      solves === undefined ||
-      sx === undefined ||
-      sy === undefined ||
-      !sharesDeclaredMeasure(sx.space, sy.space)
-    )
-      return;
-    const shared = Math.min(sx.solution.sigma, sy.solution.sigma);
-    for (const axis of [0, 1] as const) {
-      const s = solves[axis]!;
-      const meta = { kind: "recenter", rootKey, axis } as const;
-      const solution = this.scopeAt(meta, s.space, s.claim, shared);
-      if (solution !== undefined) solves[axis] = { ...s, solution };
-    }
+    const axisOf = (axis: 0 | 1): EqualMeasureAxis | undefined => {
+      const s = solves?.[axis];
+      return (
+        s && {
+          space: s.space,
+          claim: s.claim,
+          box: s.box,
+          sigma: s.solution.sigma,
+          direction: axis === 0 ? 1 : yDirection,
+        }
+      );
+    };
+    const equalized = this.equalizeMeasure(rootKey, [axisOf(0), axisOf(1)]);
+    if (equalized === undefined) return;
+    for (const axis of [0, 1] as const)
+      solves![axis] = { ...solves![axis]!, ...equalized[axis] };
   }
 
   /** The scope a node with a literal size solved on `axis` in the claim walk
@@ -384,50 +390,70 @@ export class ScopeRegistry {
   }
 
   /**
-   * Equal-measure recentering, modeled as a named post-solve scope
-   * operation. When x and y carry the SAME unit of measure, "1 unit
-   * on x" and "1 unit on y" are the same quantity, so their data→pixel scales
-   * must be EQUAL — a circle stays circular. The two axes' independently-solved
-   * scopes are therefore collapsed into ONE shared σ (the binding, smaller
-   * `unitPx`); the other axis takes slack, centered by convention: its content
-   * (the claim at the shared σ) is centered in its canvas, and its `originPx`
-   * follows from where that puts the claim's baseline.
+   * Equal measure (#582), the one post-solve σ adjustment, for every scope
+   * root that solves both axes: the render root, and a node with a literal
+   * size on both ({@link equalizeFixed}). When x and y carry the SAME
+   * declared unit of measure, "1 unit on x" and "1 unit on y" are the same
+   * quantity, so their data→pixel scales must be EQUAL — a circle stays
+   * circular. Both axes take ONE shared σ, the binding (smaller) one.
    *
-   * This is the render root's post-solve σ adjustment; a node with a literal
-   * size on both axes makes its own ({@link equalizeFixed}), which shrinks
-   * the slack axis to its content instead of centering it. Both live on the
-   * registry (not inlined in `gofish.tsx` or `layer.tsx`): every slope a
-   * render produces is registry-sourced, and `GOFISH_DUMP_SCOPES` records the
-   * FINAL σ (a `recenter` entry per axis). Returns the recentered solutions;
-   * a no-op (undefined) unless both axes have a solved scope.
+   * A scope root's size is its box, and it reports that box whatever σ it
+   * maps its content at, so the other axis's content no longer fills its
+   * box. Its claim takes the leftover pixels after the content in screen
+   * terms, so the content sits at the box's top-left: on its axis order's
+   * far end when the order starts at the left or top, and at its start when
+   * a y-up order starts at the bottom. Its `originPx` follows from that
+   * claim. PROVISIONAL: where the leftover goes may be revisited once real
+   * use suggests a preference.
+   *
+   * It lives on the registry, so every slope a render produces is
+   * registry-sourced, and `GOFISH_DUMP_SCOPES` records the FINAL σ (a
+   * `recenter` entry per axis). Returns the equalized axes; a no-op
+   * (undefined) unless both axes are given and share a declared unit.
    */
-  recenterEqualMeasure(
+  equalizeMeasure(
     rootKey: string,
-    axisInfo: [EqualMeasureAxis | undefined, EqualMeasureAxis | undefined]
-  ): [ScopeSolution, ScopeSolution] | undefined {
-    const [ax, ay] = axisInfo;
-    if (ax === undefined || ay === undefined) return undefined;
-    const shared = Math.min(ax.unitPx, ay.unitPx); // binding axis wins
-    const solve = (info: EqualMeasureAxis, axis: 0 | 1): ScopeSolution => {
-      const offset = (info.canvas - info.claim.width.run(shared)) / 2; // center slack
+    axes: [EqualMeasureAxis | undefined, EqualMeasureAxis | undefined]
+  ): [EqualizedAxis, EqualizedAxis] | undefined {
+    const [ax, ay] = axes;
+    if (
+      ax === undefined ||
+      ay === undefined ||
+      !sharesDeclaredMeasure(ax.space, ay.space)
+    )
+      return undefined;
+    const shared = Math.min(ax.sigma, ay.sigma); // binding axis wins
+    const equalize = (info: EqualMeasureAxis, axis: 0 | 1): EqualizedAxis => {
+      const { claim, box, direction, space } = info;
+      const leftover = Math.max(0, box - claim.width.run(shared));
+      const filled =
+        leftover === 0
+          ? claim
+          : direction === 1
+            ? Extent(Monotonic.adds(claim.ascent, leftover), claim.descent)
+            : Extent(claim.ascent, Monotonic.adds(claim.descent, leftover));
       if (DUMP_SCOPES)
         this.entries.push({
           kind: "recenter",
           rootKey,
           axis,
-          allocated: info.canvas,
-          frame: `center(σ=${shared})`,
+          allocated: box,
+          frame: `equal(σ=${shared}) +${leftover}px`,
           sigma: shared,
-          hasMap: hasOrigin(info.space),
+          hasMap: space !== undefined && hasOrigin(space),
         });
       return {
-        sigma: shared,
-        originPx: hasOrigin(info.space)
-          ? originPxAt(info.claim, shared, offset)
-          : undefined,
+        claim: filled,
+        solution: {
+          sigma: shared,
+          originPx:
+            space !== undefined && hasOrigin(space)
+              ? originPxAt(filled, shared)
+              : undefined,
+        },
       };
     };
-    return [solve(ax, 0), solve(ay, 1)];
+    return [equalize(ax, 0), equalize(ay, 1)];
   }
 
   /** Print one line per scope: root kind/key, axis, allocated px, the frame

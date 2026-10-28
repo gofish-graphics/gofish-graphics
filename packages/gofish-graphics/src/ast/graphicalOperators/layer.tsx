@@ -772,7 +772,9 @@ export const layer = createNodeOperatorSequential(
           // A literal size on both axes over one declared unit keeps one
           // data unit the same length on x and y (#582): both scopes take
           // the binding σ (`equalizeFixed`), so both are solved before
-          // either claim is read.
+          // either claim is read. The node still claims its size: its
+          // content sits at the box's top-left, and the leftover stays
+          // empty.
           const session = node.tryGetRenderSession();
           const keyed: KeyedDomains | undefined = session?.keyedDomains;
           const scopes = getScopeRegistry(session);
@@ -804,7 +806,11 @@ export const layer = createNodeOperatorSequential(
             );
           }
           if (solvesDomain(0) && solvesDomain(1))
-            scopes.equalizeFixed(node, node.key ?? node.type);
+            scopes.equalizeFixed(
+              node,
+              node.key ?? node.type,
+              node.yFrame.direction
+            );
           const fixedClaim = (axis: 0 | 1, px: number): Extent | undefined => {
             if (!solvesDomain(axis)) return Extent(Monotonic.linear(0, px));
             const solved = scopes.fixedSolve(node, axis);

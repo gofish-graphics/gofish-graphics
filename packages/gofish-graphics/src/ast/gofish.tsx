@@ -25,7 +25,6 @@ import { resolveMarkResult } from "./marks/markResult";
 import type { Size } from "./dims";
 import {
   continuousInterval,
-  isCONTINUOUS,
   DEFAULT_AXIS_TICKS,
   type AxisTicks,
   type UnderlyingSpace,
@@ -75,7 +74,6 @@ import { Frontend } from "gofish-ir";
 import {
   getScopeRegistry,
   seatInScope,
-  sharesDeclaredMeasure,
   type EqualMeasureAxis,
   type ScopeSolution,
 } from "./solver/scopes";
@@ -685,37 +683,44 @@ export async function layout(
     console.log("width and height constraints:", layoutW, layoutH);
   }
 
+  // The root's axis order, which its scopes are solved in: the canvas hands
+  // them down in pixels, so a root whose y grows upward receives them
+  // reflected (and `layout()` reads them back in its own order). The root's
+  // order is its frame's: the chrome rings seat what they wrap at their own
+  // origin and only add chrome around it.
+  const rootYDirection = yDirection(root.chrome?.withAxes ?? root);
+
   // Shared-measure scale equality (#582): when x and y carry the SAME unit
   // of measure, "1 unit on x" and "1 unit on y" are the same quantity, so
   // their data→pixel scales must be equal — a circle stays circular, a 45°
   // line looks 45°. This is type equality, not an opt-in knob: it follows
   // from the measures matching, the same way `circle({ r })` lowers to a
-  // `w`/`h` that share a measure and so cannot render as an ellipse. The
-  // scope-level operation — take the binding (smaller) σ and equate both
-  // axes' scopes — lives on the registry (Stage 6c: a post-solve σ
-  // adjustment on the registry's books, so every slope stays
-  // registry-sourced and the dump shows the FINAL σ). Silently skipped when
-  // an axis has no solved scope to equate.
-  //
-  // Only a DECLARED unit counts (`sharesDeclaredMeasure`). A chart with a
-  // size of its own recenters its own scopes the same way
-  // (`ScopeRegistry.equalizeFixed`).
-  if (sharesDeclaredMeasure(niceUnderlyingSpaceX, niceUnderlyingSpaceY)) {
-    const axisInfo = ([0, 1] as const).map(
-      (axis): EqualMeasureAxis | undefined => {
-        const space = rootSpaces[axis];
-        const scope = rootScopes[axis];
-        return scope !== undefined && isCONTINUOUS(space)
-          ? {
-              space,
-              claim: rootClaims[axis]!,
-              canvas: canvas[axis],
-              unitPx: scope.sigma,
-            }
-          : undefined;
-      }
-    ) as [EqualMeasureAxis | undefined, EqualMeasureAxis | undefined];
-    rootScopes = scopes.recenterEqualMeasure("root", axisInfo) ?? rootScopes;
+  // `w`/`h` that share a measure and so cannot render as an ellipse. Only a
+  // DECLARED unit counts (`sharesDeclaredMeasure`). The root is equalized
+  // by the registry's one operation (`ScopeRegistry.equalizeMeasure`), as a
+  // chart with a size of its own is (`equalizeFixed`): its canvas stays its
+  // box, and the content sits at its top-left. Skipped when an axis has no
+  // solved scope to equate.
+  const equalized = scopes.equalizeMeasure(
+    "root",
+    ([0, 1] as const).map((axis): EqualMeasureAxis | undefined => {
+      const scope = rootScopes[axis];
+      const claim = rootClaims[axis];
+      return scope === undefined || claim === undefined
+        ? undefined
+        : {
+            space: rootSpaces[axis],
+            claim,
+            box: canvas[axis],
+            sigma: scope.sigma,
+            direction: axis === 0 ? 1 : rootYDirection,
+          };
+    }) as [EqualMeasureAxis | undefined, EqualMeasureAxis | undefined]
+  );
+  if (equalized !== undefined) {
+    rootScopes = [equalized[0].solution, equalized[1].solution];
+    rootClaims[0] = equalized[0].claim;
+    rootClaims[1] = equalized[1].claim;
   }
   const rootScaleFactors: Size<number | undefined> = [
     rootScopes[0]?.sigma,
@@ -751,12 +756,8 @@ export async function layout(
     axisScale(rootScaleFactors[1], rootMaps[1]),
   ];
 
-  // The root scales are solved in the root's own axis order; the canvas
-  // hands them down in pixels, so a root whose y grows upward receives them
-  // reflected (and `layout()` reads them back in its own order). The root's
-  // order is its frame's: the chrome rings seat what they wrap at their own
-  // origin and only add chrome around it.
-  const rootYDirection = yDirection(root.chrome?.withAxes ?? root);
+  // The root scales are solved in the root's own axis order
+  // (`rootYDirection`).
   const __tSolve = perfNow();
   root.layout([layoutW, layoutH], orientScales(rootScales, 1, rootYDirection));
   perfAdd("solve", perfNow() - __tSolve);

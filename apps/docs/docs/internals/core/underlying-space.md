@@ -161,7 +161,7 @@ distinct σ-scope solved once by the scope registry (below):
 `sigma` is the axis's **SIZE** scope (what a magnitude is scaled by), `map.sigma`
 is the axis's **POSITION** scope (what an anchored coordinate is mapped by). No
 site fabricates either — every scope root solves both from one call,
-`solveScope` (or the equal-measure recentering). Within any one scope there is therefore exactly
+`solveScope` (or the equal-measure step, `equalizeMeasure`). Within any one scope there is therefore exactly
 one slope, by construction. When both halves are present and `sigma ≠ map.sigma`, the axis
 genuinely carries **two scopes**, and each half is read by the channel it belongs
 to — magnitudes read `sigma`, anchored positions read `map`. That happens when a
@@ -1441,13 +1441,16 @@ The marginal histogram's layer prints as:
 ```
 
 The registry is the sole producer of every slope. A coord boundary hands down
-the one σ its scope solves, which its map shares, and the #582 equal-measure
-recentering (equating x and y when they share a declared unit) is a named
-`recenterEqualMeasure` operation _on_ the registry, so the dump records the
-FINAL σ. A chart with a literal size on both axes solves its two scopes in the
-claim walk (`solveFixed`) and equates them there (`equalizeFixed`) before
-either claim is read: both take the smaller σ, and on the other axis the
-chart claims its content at that σ, so it is narrower than its size there.
+the one σ its scope solves, which its map shares, and the #582 equal measure
+(equating x and y when they share a declared unit) is a named `equalizeMeasure`
+operation _on_ the registry, so the dump records the FINAL σ. The render root
+and a chart with a literal size on both axes both go through it. The chart
+solves its two scopes in the claim walk (`solveFixed`) and equalizes them
+there (`equalizeFixed`) before either claim is read. Both take the smaller σ,
+and on the other axis the scope root keeps its box: its claim takes the
+leftover pixels after the content in screen terms, so the content sits at the
+box's top-left and the root still claims its size. This placement is
+provisional.
 
 ### Nicing is a keyed-domain operation, applied on demand
 
@@ -1736,7 +1739,7 @@ unit replaced by its representative, a declared unit or the unknown its class
 stands for. It is THE accessor for "which domain is this": the titles (axis
 elaboration) read through it. Two unit variables are compared with
 `sameUnitVar` (one class, or two classes bound to one declared unit), which
-the #582 recentering and the embedding gate use. Read units after the walk,
+the #582 equal-measure step and the embedding gate use. Read units after the walk,
 when every binding is made.
 
 **Joining.** One function, `joinUnits(a, b, shared, site)`, joins the

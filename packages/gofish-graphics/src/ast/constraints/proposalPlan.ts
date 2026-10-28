@@ -463,6 +463,7 @@ export function solveLayerScales(
             solution,
             claim: nicedClaim,
             space,
+            box: layerSize[axis],
           }
         );
       };
