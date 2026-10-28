@@ -2,7 +2,7 @@
 // @wiki Labels — /internals/frontend/labels
 // </gofish-wiki>
 
-import { autoLabelColorForFill } from "./autoLabelColor";
+import { autoLabelColorForStyle, type LabelBackdrop } from "./autoLabelColor";
 import { GoFishNode } from "../_node";
 import type { GoFishAST } from "../_ast";
 import { GoFishRef } from "../_ref";
@@ -89,16 +89,23 @@ function insideOutline(c: [number, number], o: Outline): boolean {
 }
 
 /**
- * The auto label color (see `autoLabelColorForFill`), picked when the label
- * is drawn, from the style its mark painted: the mark lowers first, as the
- * label layer paints its content before its labels. Inside is read from the
- * outline, not the position, so a `"center"` label on a C-shaped polygon,
- * whose box center is outside the shape, is colored for the page.
+ * The auto label color (see `autoLabelColorForStyle`), picked when the label
+ * is drawn, from the style its mark painted and the paint the label draws
+ * behind its own glyphs. The mark lowers first: the label layer is a ring
+ * whose content, which holds the mark, paints before its labels, and nothing
+ * reorders a ring's children (the content's own z-order moves to the ring,
+ * see `wrapPreservingIdentity`). Inside is read from the outline, not the
+ * position, so a `"center"` label on a C-shaped polygon, whose box center is
+ * outside the shape, is colored for the page.
  */
 const autoLabelColor =
   (target: GoFishNode, stand: GoFishRef) =>
-  (label: GoFishNode): string =>
-    autoLabelColorForFill(target.paintedStyle, sitsInside(label, stand));
+  (label: GoFishNode, backdrop: LabelBackdrop): string =>
+    autoLabelColorForStyle(
+      target.paintedStyle,
+      sitsInside(label, stand),
+      backdrop
+    );
 
 /** Where a label goes on its target: a position string, a `Place`
  *  strategy, or `"outline"`, a default the chooser reads from the target's

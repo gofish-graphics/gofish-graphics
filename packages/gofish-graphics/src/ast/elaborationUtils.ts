@@ -8,8 +8,11 @@ import { Constraint } from "./constraints";
  * (_name/key) onto whatever `build` returns — so the parent (faceting/refs/
  * select) still resolves to this node. Its paint-time visibility rule moves
  * with it, so whatever the wrap adds beside the node (a label's `Text`, an
- * axis's ticks) shows and hides with it. Shared by the axis, legend and label
- * elaboration passes. */
+ * axis's ticks) shows and hides with it. Its `.zOrder()` moves with it too:
+ * the hint orders the node among its siblings, which are now the wrapper's,
+ * and left on the node it would instead reorder the node against the
+ * chrome beside it (a label would paint under its mark, and before it). Shared
+ * by the axis, legend and label elaboration passes. */
 export async function wrapPreservingIdentity(
   node: GoFishNode,
   build: (node: GoFishNode) => GoFishNode | Promise<GoFishNode>
@@ -17,13 +20,16 @@ export async function wrapPreservingIdentity(
   const origName = node._name;
   const origKey = node.key;
   const origVisible = node.__gfVisible;
+  const origZOrder = node._zOrder;
   node._name = undefined;
   node.key = undefined;
   node.__gfVisible = undefined;
+  node._zOrder = undefined;
   const root = await build(node);
   if (origName !== undefined) root._name = origName;
   if (origKey !== undefined) root.setKey(origKey);
   if (origVisible !== undefined) root.__gfVisible = origVisible;
+  if (origZOrder !== undefined) root._zOrder = origZOrder;
   return root;
 }
 

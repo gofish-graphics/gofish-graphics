@@ -1059,7 +1059,8 @@ node reaching it is either a leaf or a **bake boundary** (`coord`, `box`, `conne
 `arrow`, `enclose`, the compositors) that re-walks its own subtree with its absolute
 transform composed in. A node with no `lower()` throws. Each lowering also records,
 as `paintedStyle`, the style of the first item the node painted itself (not a
-child's), before any paint-time animation; a label lowers after its mark and reads it
+child's) that puts down paint (a fill or a stroke), before any paint-time animation.
+Every `layout()` clears it. A label lowers after its mark and reads it
 to pick its color (see [Labels](/internals/frontend/labels#auto-color)).
 
 **Nodes that draw nothing.** A node can take part in layout without contributing any

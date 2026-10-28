@@ -35,18 +35,27 @@ const toSpectral = (
 
 /**
  * Kubelka–Munk (paint-like) mix of `a` toward `b` by `t` in [0, 1], via
- * spectral.js. Takes any CSS color culori parses. Alpha interpolates linearly
- * in `t`, as in CSS `color-mix()`. (spectral.js would weight it by the
- * colors' luminance, like the paint.) Returns `#rrggbb` when the result is
- * opaque and `rgba(r, g, b, a)` otherwise. If either color cannot be parsed,
- * returns `a` unchanged.
+ * spectral.js. Takes any CSS color culori parses. As in CSS `color-mix()`,
+ * alpha interpolates linearly in `t` and the colors mix premultiplied: each
+ * color weighs in proportion to its alpha, so a transparent color adds no
+ * color of its own (`mix("transparent", c, t)` is `c` at alpha `t`). The
+ * color weight of `b` is `t * alphaB / ((1 - t) * alphaA + t * alphaB)`,
+ * which is `t` when the alphas are equal. (spectral.js would weight alpha by
+ * the colors' luminance, like the paint.) Returns `#rrggbb` when the result
+ * is opaque and `rgba(r, g, b, a)` otherwise. If either color cannot be
+ * parsed, returns `a` unchanged.
  */
 export const mix = (a: string, b: string, t: number): string => {
   const ca = toSpectral(a);
   const cb = toSpectral(b);
   if (!ca || !cb) return a;
-  const hex = spectralMix(ca, cb, t, HEX);
-  const alpha = Math.round((ca[3] + t * (cb[3] - ca[3])) * 1e4) / 1e4;
+  const [alphaA, alphaB] = [ca[3], cb[3]];
+  const weight = (1 - t) * alphaA + t * alphaB;
+  // Equal alphas cancel and leave `t` itself, exactly, so an opaque mix is
+  // the plain one; two transparent colors have no weights to compare.
+  const tColor = alphaA === alphaB || weight === 0 ? t : (t * alphaB) / weight;
+  const hex = spectralMix(ca, cb, tColor, HEX);
+  const alpha = Math.round((alphaA + t * (alphaB - alphaA)) * 1e4) / 1e4;
   if (alpha >= 1) return hex;
   const [r, g, bl] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
   return `rgba(${r}, ${g}, ${bl}, ${alpha})`;
@@ -69,6 +78,7 @@ const mixPalette = (a: string, b: string, size: number): string[] =>
  * `currentColor`) passes through unchanged.
  */
 export const applyColorOps = (color: string, ops: ColorOp[]): string => {
+  if (ops.length === 0) return color;
   const alpha = parse(color)?.alpha ?? 1;
   let out = color;
   for (const { op, amount } of ops) {

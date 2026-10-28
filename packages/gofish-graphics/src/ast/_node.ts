@@ -551,9 +551,12 @@ export class GoFishNode {
   public renderData?: any;
   public coordinateTransform?: CoordinateTransform;
   public color?: MaybeValue<string>;
-  /** The style of the first item this node painted itself when it last
-   *  lowered, before any paint-time animation; undefined until it paints.
-   *  Its labels lower after it and read it (see `autoLabelColorForFill`). */
+  /** The style of the first item this node painted itself that puts down
+   *  paint (a fill or a stroke), at rest, before any paint-time animation.
+   *  Cleared by every `layout()` and set by the node's first lowering after
+   *  it, so it is never stale; undefined while the node has painted nothing
+   *  (not yet lowered, silenced, or no own paint, as on a compositor). Its
+   *  labels lower after it and read it (see `autoLabelColorForStyle`). */
   public paintedStyle?: DisplayList.Style;
   public constraints: ConstraintSpec[] = [];
   public colorConfig?: ColorConfig;
@@ -579,7 +582,7 @@ export class GoFishNode {
   // in `graphicalOperators/layer.tsx`). Readers that need a numeric paint-
   // order key apply `?? 0` at the comparison site so unset behaves exactly
   // like an explicit 0 for sorting purposes.
-  private _zOrder: number | undefined = undefined;
+  public _zOrder: number | undefined = undefined;
   private renderSession?: RenderSession;
   // Axis state per dimension. Set by `resolveAxes` and consumed by the axis
   // elaboration pass (`elaborateChrome`), which wraps owning nodes in a Layer of
@@ -1474,6 +1477,7 @@ export class GoFishNode {
     this.transform = orientTransform(elaborateTransform(transform), direction);
     this.renderData = renderData;
     this._geometry = undefined;
+    this.paintedStyle = undefined;
 
     // Seed the per-axis ledger from this node's own layout: the `size` is
     // frame-invariant, and a self-placed node (`translate` defined) also records
@@ -2034,12 +2038,25 @@ export class GoFishNode {
     // field predates this and was unpopulated). Boundary nodes re-walk children
     // through the children's own INTERNAL_lower, so descendants keep their own
     // ids; `??=` preserves any id a lower body sets itself. Zero-cost otherwise.
-    for (const item of items) item.id ??= this.uid;
-    // A boundary's items include its children's, which carry their own ids.
-    // The animation and visibility rules below replace an item's style
-    // rather than mutate it, so this stays the style at rest.
-    const own = items.find((item) => item.id === this.uid);
-    if (own) this.paintedStyle = own.style ?? {};
+    //
+    // The same pass records the node's painted style: the style of its first
+    // own item that puts down paint (a fill or a stroke). A boundary's items
+    // include its children's, which carry their own ids, and an own item may
+    // carry no paint of its own (a scaled box's `group`, a compositor's
+    // `composite` or `mask`), so neither stands for the node's paint. The
+    // animation and visibility rules below replace an item's style rather
+    // than mutate it, so this stays the style at rest.
+    for (const item of items) {
+      item.id ??= this.uid;
+      const style = item.style;
+      if (
+        item.id === this.uid &&
+        style !== undefined &&
+        (style.fill !== undefined || style.stroke !== undefined)
+      ) {
+        this.paintedStyle ??= style;
+      }
+    }
     // Live channels (a `live()` value): bake a datum-bound thunk per channel
     // into the paint-time side table so paint re-evaluates it reactively. The
     // thunks are held OUTSIDE the display item (WeakMap) so the item stays pure

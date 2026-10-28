@@ -13,55 +13,90 @@ import {
   type Color,
   type Rgb,
 } from "../../colorModes";
+import { inks } from "../geometry/outline";
 
 /** The page behind every mark: white. */
 const PAGE: Rgb = { mode: "rgb", r: 1, g: 1, b: 1 };
 
+/** The paint a label draws behind its own glyphs, from bottom to top: its
+ *  background box's fill and its halo's color, each when it draws one. */
+export type LabelBackdrop = { background?: string; halo?: string };
+
+/**
+ * A CSS color as the paint it puts down, at `alpha` times its own alpha:
+ * undefined when it puts down none (`none`, `transparent`, alpha 0) or is
+ * not a parseable color (`currentColor`, `url(#…)`).
+ */
+function visiblePaint(css: string | undefined, alpha = 1): Color | undefined {
+  if (!css || !inks(css)) return undefined;
+  const parsed = parse(css);
+  if (parsed === undefined) return undefined;
+  const a = Math.min(1, alpha * (parsed.alpha ?? 1));
+  return a > 0 ? { ...paintedRgb(parsed), alpha: a } : undefined;
+}
+
 /**
  * Pick a label color for a shape that painted `style` (its lowered paint, see
- * `GoFishNode.paintedStyle`).
- * - Inside the shape: contrast against the color seen there. That is the
- *   fill composited over the white page (source-over, as SVG and CSS paint
- *   it) at the style's `opacity` times its `fillOpacity` times the fill's
- *   own alpha (an `rgba()` or `#rrggbbaa` fill). Overlapping marks under a
- *   translucent one are not composited; the page is the only background.
- *   The label is white or a near-black tint of the fill's own hue (a
- *   near-black neutral when the fill is a gray with no hue), whichever has
- *   the larger APCA contrast |Lc| against the seen color. A tie goes to the
- *   dark tint.
- * - Outside the shape: darken its ink (the fill, or the stroke when there is
- *   no fill, as on a line) to a fixed lightness, keeping its hue and chroma,
- *   for a readable tint on the white page. The tint reads the ink itself,
- *   not its composite: the label is opaque text, and the ink's hue and
- *   chroma name the shape's series at any alpha.
+ * `GoFishNode.paintedStyle`), for a label that sits inside the shape or
+ * outside it, and draws `backdrop` behind its own glyphs.
+ *
+ * The label is read against the color directly behind its glyphs: the white
+ * page, under the shape's fill when the label sits inside the shape, under
+ * the label's background box, under its halo, each composited over the ones
+ * below it (source-over, as SVG and CSS paint it). The shape's fill counts at
+ * the style's `opacity` times its `fillOpacity` times the fill's own alpha
+ * (an `rgba()` or `#rrggbbaa` fill). Overlapping marks under a translucent
+ * one are not composited, and the page is assumed white.
+ *
+ * The label is white or a dark color, whichever has the larger APCA contrast
+ * |Lc| against that backdrop. A tie goes to the dark color. The dark color
+ * depends on where the label sits:
+ * - Inside the shape: a near-black tint of the fill's own hue (a near-black
+ *   neutral when the fill is a gray with no hue).
+ * - Outside the shape: its ink (the fill, or the stroke when the fill puts
+ *   down no paint, as on a line) darkened to a fixed lightness, keeping its
+ *   hue and chroma, so the label names the shape's series. The tint reads the
+ *   ink itself, not its composite: the ink's hue and chroma name the series
+ *   at any alpha.
  *
  * The color math runs on the color actually painted: clipped to the sRGB
- * gamut and rounded to 8 bits per channel. A missing color, or one that is
- * not a parseable color (`none`, `currentColor`, `url(#…)`), gets a plain
- * fallback: `"black"` inside, `"#333333"` outside.
+ * gamut and rounded to 8 bits per channel. A fill or stroke that puts down
+ * no paint (`none`, `transparent`, alpha 0), or is not a parseable color
+ * (`currentColor`, `url(#…)`), is not there: the shape adds nothing to the
+ * backdrop, and with no ink the dark color is a plain `"black"` inside and
+ * `"#333333"` outside.
  */
-export function autoLabelColorForFill(
+export function autoLabelColorForStyle(
   style: DisplayList.Style | undefined,
-  isInside: boolean
+  isInside: boolean,
+  backdrop: LabelBackdrop = {}
 ): string {
-  const fill = style?.fill ? parse(style.fill) : undefined;
+  const opacity = style?.opacity ?? 1;
+  const fill = visiblePaint(style?.fill, opacity * (style?.fillOpacity ?? 1));
 
+  const layers = [
+    isInside ? fill : undefined,
+    visiblePaint(backdrop.background),
+    visiblePaint(backdrop.halo),
+  ].filter((c): c is Color => c !== undefined);
+  const seen = paintedRgb(blend([PAGE, ...layers]));
+
+  let dark: string;
   if (isInside) {
-    if (fill === undefined) return "black";
-    const alpha =
-      (style?.opacity ?? 1) * (style?.fillOpacity ?? 1) * (fill.alpha ?? 1);
-    const seen = paintedRgb(
-      blend([PAGE, { ...paintedRgb(fill), alpha: Math.min(1, alpha) }])
-    );
-    const { h } = toLch65(paintedRgb(fill));
-    const dark: Color = { mode: "lch65", l: 8, c: h === undefined ? 0 : 18, h };
-    const darkLc = apcaContrast(paintedRgb(dark), seen);
-    const whiteLc = apcaContrast(PAGE, seen);
-    return Math.abs(whiteLc) > Math.abs(darkLc) ? "white" : formatHex(dark);
+    const h = fill === undefined ? undefined : toLch65(fill).h;
+    dark =
+      fill === undefined
+        ? "black"
+        : formatHex({ mode: "lch65", l: 8, c: h === undefined ? 0 : 18, h });
+  } else {
+    const ink = fill ?? visiblePaint(style?.stroke, opacity);
+    if (ink === undefined) dark = "#333333";
+    else {
+      const { c, h } = toLch65(ink);
+      dark = formatHex({ mode: "lch65", l: 30, c, h });
+    }
   }
-
-  const ink = fill ?? (style?.stroke ? parse(style.stroke) : undefined);
-  if (ink === undefined) return "#333333";
-  const { c, h } = toLch65(paintedRgb(ink));
-  return formatHex({ mode: "lch65", l: 30, c, h });
+  const darkLc = apcaContrast(paintedRgb(parse(dark)!), seen);
+  const whiteLc = apcaContrast(PAGE, seen);
+  return Math.abs(whiteLc) > Math.abs(darkLc) ? "white" : dark;
 }

@@ -111,10 +111,16 @@ culori parses works: a named color, `hsl()`, `oklch()`, or `rgb(r g b / a)` as
 `tailwindColors` writes it.
 
 Alpha interpolates linearly in `t`, as in CSS `color-mix()`; `mix` computes it
-itself rather than taking spectral.js's luminance-weighted alpha. The result is
+itself rather than taking spectral.js's luminance-weighted alpha. The colors mix
+premultiplied, also as in `color-mix()`: spectral.js mixes at the color weight
+`t·αb / ((1 − t)·αa + t·αb)` rather than `t`, so a transparent color adds no
+color of its own. When the alphas are equal (every opaque mix, including the
+theme palettes) that weight is exactly `t`, and the result is spectral.js's own. The result is
 `#rrggbb` when its alpha is 1 and `rgba(r, g, b, a)` otherwise. A color op mixes toward a white or
 black with the color's own alpha, so it keeps the color's opacity. A color
-culori cannot parse (e.g. `currentColor`) passes through a color op unchanged.
+culori cannot parse (e.g. `currentColor`) passes through a color op unchanged. A color with no
+color ops returns at once, before any parsing, since every data-bound color goes through
+`applyColorOps`.
 
 ### Literal hex passthrough
 

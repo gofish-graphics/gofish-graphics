@@ -6,6 +6,7 @@
  */
 import { applyColorOps, mix, tailwindColors } from "../color";
 import { parse, toRgb } from "../colorModes";
+import { HEX, mix as spectralMix } from "spectral.js";
 
 let failed = 0;
 const check = (name: string, ok: boolean, detail = "") => {
@@ -105,7 +106,7 @@ check(
 // mix interpolates alpha linearly in t, as CSS color-mix() does.
 check(
   "mix interpolates alpha linearly in t",
-  mix("steelblue", "rgb(0 0 0 / 0.5)", 0.3) === "rgba(69, 120, 152, 0.85)",
+  alphaOf(mix("steelblue", "rgb(0 0 0 / 0.5)", 0.3)) === 0.85,
   `got ${mix("steelblue", "rgb(0 0 0 / 0.5)", 0.3)}`
 );
 check(
@@ -113,11 +114,35 @@ check(
   alphaOf(mix("rgb(0 0 0 / 0)", "#ffffff", 0.5)) === 0.5
 );
 
-// Opaque hex inputs keep today's output exactly: a 7-character hex string.
+// mix is premultiplied, as CSS color-mix() is: each color weighs in by its
+// alpha, so a transparent color adds no color of its own.
 check(
-  "opaque hex mixes to #rrggbb",
-  /^#[0-9a-f]{6}$/.test(mix("#4682b4", "#ffffff", 0.5))
+  "transparent red and blue at t = 0.5 is blue at alpha 0.5",
+  mix("rgba(255, 0, 0, 0)", "blue", 0.5) === "rgba(0, 0, 255, 0.5)",
+  `got ${mix("rgba(255, 0, 0, 0)", "blue", 0.5)}`
 );
+check(
+  'mix("transparent", c, 0.3) is c at alpha 0.3, not darker',
+  mix("transparent", "#4682b4", 0.3) === "rgba(70, 130, 180, 0.3)",
+  `got ${mix("transparent", "#4682b4", 0.3)}`
+);
+check(
+  "a half-transparent black darkens steelblue by its premultiplied weight",
+  same(
+      mix("steelblue", "rgb(0 0 0 / 0.5)", 0.3),
+      mix("steelblue", "black", (0.3 * 0.5) / (0.7 + 0.3 * 0.5)),
+      true
+    ),
+  `got ${mix("steelblue", "rgb(0 0 0 / 0.5)", 0.3)}`
+);
+
+// Opaque inputs mix exactly as spectral.js mixes them, byte for byte: a
+// 7-character hex string (the theme palettes are built this way).
+for (const t of [0, 1 / 7, 2 / 7, 0.3, 0.5, 5 / 7, 1]) {
+  const got = mix("#4682b4", "#ffffff", t);
+  const want = spectralMix("#4682b4", "#ffffff", t, HEX);
+  check(`opaque mix at t = ${t.toFixed(3)} is spectral.js's`, got === want, `${got} vs ${want}`);
+}
 
 // An unparseable color passes through a color op unchanged.
 check(

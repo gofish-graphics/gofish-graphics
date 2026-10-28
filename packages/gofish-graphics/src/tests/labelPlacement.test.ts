@@ -27,8 +27,12 @@ import {
 } from "../ast/labels/collide";
 import { pointInRing } from "../ast/geometry/plane";
 import { boxOutline } from "../ast/geometry";
-import { autoLabelColorForFill } from "../ast/labels/autoLabelColor";
+import { autoLabelColorForStyle } from "../ast/labels/autoLabelColor";
 import { apcaContrast, paintedRgb, parse } from "../colorModes";
+import { Rect } from "../ast/shapes/rect";
+import { layer as Layer } from "../ast/graphicalOperators/layer";
+import { toDisplayList } from "../ast/displayList/toDisplayList";
+import { UNDEFINED } from "../ast/underlyingSpace";
 import {
   arrow,
   chart,
@@ -710,13 +714,13 @@ console.log("# the auto color reads where the label landed");
   const centered = await render("center");
   ok(
     '"center" outside a C takes the outside color',
-    centered.style.fill === autoLabelColorForFill({ fill }, false),
+    centered.style.fill === autoLabelColorForStyle({ fill }, false),
     centered.style.fill
   );
   const inside = await render();
   ok(
     "Place.interior inside it takes the inside color",
-    inside.style.fill === autoLabelColorForFill({ fill }, true),
+    inside.style.fill === autoLabelColorForStyle({ fill }, true),
     inside.style.fill
   );
 }
@@ -736,9 +740,9 @@ console.log("# the inside color takes the larger APCA contrast");
     Math.abs(black - 45.5) < 0.05,
     `${black}`
   );
-  const opaque = autoLabelColorForFill({ fill: "#59a14f" }, true);
+  const opaque = autoLabelColorForStyle({ fill: "#59a14f" }, true);
   ok("Tableau green gets white text", opaque === "white", opaque);
-  const yellow = autoLabelColorForFill({ fill: "#edc948" }, true);
+  const yellow = autoLabelColorForStyle({ fill: "#edc948" }, true);
   ok("Tableau yellow gets the dark tint", yellow !== "white", yellow);
 }
 
@@ -748,7 +752,7 @@ console.log("# the inside color reads the fill as seen through its alpha");
     fill: string;
     opacity?: number;
     fillOpacity?: number;
-  }) => autoLabelColorForFill(style, true);
+  }) => autoLabelColorForStyle(style, true);
   const faint = inside({ fill: "#59a14f", opacity: 0.4 });
   ok(
     "Tableau green at opacity 0.4 gets the dark tint",
@@ -767,13 +771,13 @@ console.log("# the inside color reads the fill as seen through its alpha");
   );
   ok(
     "the outside tint ignores alpha",
-    autoLabelColorForFill({ fill: "#59a14f", opacity: 0.4 }, false) ===
-      autoLabelColorForFill({ fill: "#59a14f" }, false)
+    autoLabelColorForStyle({ fill: "#59a14f", opacity: 0.4 }, false) ===
+      autoLabelColorForStyle({ fill: "#59a14f" }, false)
   );
   ok(
     "outside, a mark with no fill is tinted by its stroke",
-    autoLabelColorForFill({ fill: "none", stroke: "#59a14f" }, false) ===
-      autoLabelColorForFill({ fill: "#59a14f" }, false)
+    autoLabelColorForStyle({ fill: "none", stroke: "#59a14f" }, false) ===
+      autoLabelColorForStyle({ fill: "#59a14f" }, false)
   );
 
   // End to end: a mark's `opacity` reaches the label's color.
@@ -801,6 +805,160 @@ console.log("# the inside color reads the fill as seen through its alpha");
     "a green polygon at opacity 0.4 labels with the dark tint",
     translucent.style.fill === faint,
     translucent.style.fill
+  );
+}
+
+console.log("# the label reads the color directly behind its glyphs");
+{
+  const navy = "#1f3a93";
+  const darkTint = autoLabelColorForStyle({ fill: navy }, true, {
+    background: "white",
+  });
+  ok(
+    "inside a navy mark, a white background box gets dark text",
+    darkTint !== "white",
+    darkTint
+  );
+  ok(
+    "a transparent background box shows the mark through",
+    autoLabelColorForStyle({ fill: navy }, true, {
+      background: "rgba(255, 255, 255, 0)",
+    }) === "white"
+  );
+  ok(
+    "a halo is what the glyphs are read against",
+    autoLabelColorForStyle({ fill: navy }, true, { halo: "white" }) ===
+      darkTint
+  );
+  ok(
+    "outside, a black background box gets white text",
+    autoLabelColorForStyle({ fill: navy }, false, { background: "black" }) ===
+      "white"
+  );
+  ok(
+    "outside, a white halo keeps the series tint",
+    autoLabelColorForStyle({ fill: navy }, false, { halo: "white" }) ===
+      autoLabelColorForStyle({ fill: navy }, false)
+  );
+
+  // End to end: the label's own background box drives its color.
+  const render = async (options: object) => {
+    const node = (await chart([{ c: "a", v: 100 }], { axes: false })
+      .flow(spread({ by: "c", dir: "x" }))
+      .mark(rect({ h: "v", fill: navy }).label("v", options))
+      .resolve()) as GoFishNode;
+    return textItems(await node.toDisplayList({ w: 200, h: 200 }))[0];
+  };
+  const boxed = await render({ position: "center", background: {} });
+  ok(
+    "a centered label with a default background box is not white on white",
+    boxed.style.fill !== "white" && boxed.style.fill === darkTint,
+    boxed.style.fill
+  );
+  const haloed = await render({ position: "center", halo: {} });
+  ok(
+    "a centered label with a default halo is not white on white",
+    haloed.style.fill !== "white" && haloed.style.fill === darkTint,
+    haloed.style.fill
+  );
+}
+
+console.log("# a fill that puts down no paint is no ink");
+{
+  const green = autoLabelColorForStyle({ fill: "#59a14f" }, false);
+  for (const style of [
+    { fill: "transparent", stroke: "#59a14f" },
+    { fill: "rgba(0, 0, 0, 0)", stroke: "#59a14f" },
+    { fill: "#e15759", fillOpacity: 0, stroke: "#59a14f" },
+  ]) {
+    ok(
+      `outside, ${JSON.stringify(style)} is tinted by its stroke`,
+      autoLabelColorForStyle(style, false) === green,
+      autoLabelColorForStyle(style, false)
+    );
+  }
+  const node = (await chart([{ c: "a", v: 100 }], { axes: false })
+    .flow(spread({ by: "c", dir: "x" }))
+    .mark(
+      rect({
+        h: "v",
+        fill: "transparent",
+        stroke: "#59a14f",
+        strokeWidth: 2,
+      }).label("v", { position: "center" })
+    )
+    .resolve()) as GoFishNode;
+  const [t] = textItems(await node.toDisplayList({ w: 200, h: 200 }));
+  ok(
+    'a "transparent" rect with a green stroke labels in the green tint',
+    t.style.fill === green,
+    t.style.fill
+  );
+}
+
+console.log("# the label's mark paints before it, whatever its z-order");
+{
+  // The label pass wraps the labeled mark's parent in a ring of [content,
+  // labels]. The parent's `.zOrder()` orders it among its own siblings, so
+  // it moves to the ring; left on the content, it would paint the content
+  // after its labels, over them, and the labels would lower before the mark
+  // they read their color from.
+  for (const z of [1, -1]) {
+    const mark = Rect({ x: 0, y: 0, w: 40, h: 40, fill: "#1f3a93" });
+    mark.label(() => "A", { position: "center" });
+    const parent = Layer([mark]).zOrder(z);
+    const sibling = Rect({ x: 100, y: 0, w: 40, h: 40, fill: "#e15759" });
+    const doc = await toDisplayList(Layer([parent, sibling]), {
+      w: 200,
+      h: 200,
+    });
+    const order = items(doc)
+      .filter((i) => i.kind === "text" || i.kind === "rect")
+      .map((i) => (i.kind === "text" ? "label" : i.style.fill));
+    const want =
+      z > 0
+        ? ["#e15759", "#1f3a93", "label"]
+        : ["#1f3a93", "label", "#e15759"];
+    ok(
+      `parent .zOrder(${z}): paints ${want.join(", ")}`,
+      order.join() === want.join(),
+      order.join()
+    );
+    ok(
+      `parent .zOrder(${z}): the label reads the navy it sits on`,
+      textItems(doc)[0]?.style.fill === "white",
+      textItems(doc)[0]?.style.fill
+    );
+  }
+}
+
+console.log("# the painted style is the first own item with paint");
+{
+  // An own item with no paint of its own (a scaled box's `group`, a
+  // compositor's `composite` or `mask`) does not stand for the node's paint.
+  const node = new GoFishNode(
+    {
+      type: "probe",
+      resolveUnderlyingSpace: () => [UNDEFINED, UNDEFINED],
+      layout: () => ({
+        intrinsicDims: [
+          { min: 0, size: 10 },
+          { min: 0, size: 10 },
+        ],
+        transform: { translate: [0, 0] },
+      }),
+      lower: () => [
+        { kind: "group", children: [] },
+        { kind: "rect", x: 0, y: 0, w: 10, h: 10, style: { fill: "#1f3a93" } },
+      ],
+    },
+    []
+  );
+  await toDisplayList(Layer([node]), { w: 100, h: 100 });
+  ok(
+    "a group before the painted rect is skipped",
+    node.paintedStyle?.fill === "#1f3a93",
+    JSON.stringify(node.paintedStyle)
   );
 }
 
