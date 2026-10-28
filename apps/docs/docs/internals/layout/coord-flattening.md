@@ -302,8 +302,9 @@ pixel box, and an explicit `w`/`h` sizes that box as it sizes a layer's (a
 `Frame` with a `coord` forwards its dims, #535). The box holds the outlines
 drawn inside it: a stroke is in pixels while the interior is laid out in the
 space's coordinates, so the box it measures from its content is widened by
-the largest outline inside it (`outline`; see
-[Overview](/internals/layout/passes)). The content box it widens must be exact
+the largest outline inside it (`outline`, read once per claim pass; see
+[Overview](/internals/layout/passes)). A space nested inside it already holds
+its own interior's outlines in its box, so the search stops there. The content box it widens must be exact
 for that to hold: the box is measured by sampling the warped edges of the
 content's coordinate box (`computeTransformedBoundingBox`), and samples fall
 between a curved edge's extremes (a disc sampled every 7.2° misses its leftmost

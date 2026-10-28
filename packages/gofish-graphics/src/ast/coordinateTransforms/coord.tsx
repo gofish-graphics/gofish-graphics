@@ -217,13 +217,20 @@ export const coord = createNodeOperator(
     // fits its content that much inside its box and widens the box it
     // measures by it, so its box holds every outline it draws. A space that
     // frames its own window (geo) clips what its window leaves out, as a map
-    // frame does, outlines included.
-    const outline = (): number => {
-      const largest = (n: GoFishAST): number =>
-        n instanceof GoFishNode
-          ? Math.max(n.strokeOverhang, ...n.children.map(largest))
-          : 0;
-      return framesOwnWindow ? 0 : Math.max(0, ...children.map(largest));
+    // frame does, outlines included. A space inside it already holds its
+    // own interior's outlines in its box. Read once per claim pass, in
+    // `resolveExtent`, which `layout` resolves first.
+    let outline = 0;
+    const largestOutline = (): number => {
+      if (framesOwnWindow) return 0;
+      let largest = 0;
+      const stack = [...children];
+      for (let n = stack.pop(); n !== undefined; n = stack.pop()) {
+        if (!(n instanceof GoFishNode)) continue;
+        largest = Math.max(largest, n.strokeOverhang);
+        if (n.type !== "coord") stack.push(...n.children);
+      }
+      return largest;
     };
 
     const coordNode = new GoFishNode(
@@ -265,6 +272,7 @@ export const coord = createNodeOperator(
         // size of its own), the box has a size of its own (#493): its content
         // transformed, which it claims. Otherwise it fills what it is given.
         resolveExtent: (childExtents, childSpaces) => {
+          outline = largestOutline();
           const resolved = spaceRef.current;
           if (
             resolved === null ||
@@ -294,10 +302,9 @@ export const coord = createNodeOperator(
             r.ascent.run(0),
             coordTransform
           );
-          const o = outline();
           return [
-            boxExtent(UNDEFINED, 0, box.maxX - box.minX + 2 * o),
-            boxExtent(UNDEFINED, 0, box.maxY - box.minY + 2 * o),
+            boxExtent(UNDEFINED, 0, box.maxX - box.minX + 2 * outline),
+            boxExtent(UNDEFINED, 0, box.maxY - box.minY + 2 * outline),
           ];
         },
         layout: (size, scales, children, node) => {
@@ -305,6 +312,8 @@ export const coord = createNodeOperator(
           // subtree. Derive through the render's one registry, shared with the
           // render root and every layer scope.
           const scopes = getScopeRegistry(node.tryGetRenderSession());
+          // The claim pass reads the outline inside the space (`outline`).
+          node.resolveExtent();
           /* TODO: need correct scale factors */
           // TODO: only works for polar-family transforms right now
           // An explicit `w`/`h` is the coord's box, as it is a layer's (#535).
@@ -552,12 +561,11 @@ export const coord = createNodeOperator(
             };
           }
           // The box holds the outlines drawn inside it (`outline`).
-          const o = outline();
           screenBbox = {
-            minX: screenBbox.minX - o,
-            maxX: screenBbox.maxX + o,
-            minY: screenBbox.minY - o,
-            maxY: screenBbox.maxY + o,
+            minX: screenBbox.minX - outline,
+            maxX: screenBbox.maxX + outline,
+            minY: screenBbox.minY - outline,
+            maxY: screenBbox.maxY + outline,
           };
 
           const {
