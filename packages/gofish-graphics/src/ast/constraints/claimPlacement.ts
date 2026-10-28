@@ -84,6 +84,20 @@ export type ClaimChild = {
   /** Its own data places it in the layer's frame (a continuous type with a
    *  data position in the layer's own set), as layout's `dataPositioned`. */
   dataPositioned: boolean;
+  /** It places itself at a literal pixel of its own (a shape's literal
+   *  start or center, a layer's literal start), so its claim is about the
+   *  layer's origin already. Layout pins it where it put itself unless a
+   *  `position` override owns the axis (`shouldPinSelfPlacement`), so the
+   *  solve does too. */
+  placesItself?: boolean;
+  /** Its plot on the axis, about its origin, where it is not its whole
+   *  claim (an outline, dressing or chrome around it): a chain lays it by
+   *  its plot, as layout's `localPlotSpan` does, so what dresses a part
+   *  never moves the parts (#1032). */
+  plot?: Extent;
+  /** It is chrome (a ring's shapes): no part of the plot, so a chain
+   *  places it past the whole box of what it dresses. */
+  chrome?: boolean;
 };
 
 export type ClaimPlacement = {
@@ -172,7 +186,8 @@ const claimPlaceable = (
   axis: 0 | 1,
   [lo, hi]: Box,
   space: UnderlyingSpace | undefined,
-  at: Pwl.Value | undefined
+  at: Pwl.Value | undefined,
+  plot?: Box
 ): SolvePlaceable<Pwl.Value> => {
   const box = {
     min: at === undefined ? undefined : Pwl.add(at, lo),
@@ -192,6 +207,8 @@ const claimPlaceable = (
             ? Pwl.scale(0.5, Pwl.add(lo, hi))
             : Pwl.ZERO;
     },
+    localPlotSpan: (a) =>
+      a === axis && plot !== undefined ? [plot[0], plot[1]] : undefined,
     spaceOn: (dir) => (dir === axis ? space : undefined),
   };
 };
@@ -389,6 +406,18 @@ export function placeByClaims(
   // across the span an interval pins. A datum maps through σ from the
   // layer's data 0.
   const seats = literalSeats(constraints);
+  // A `position` override owns its operands' place on the axis, so a child
+  // it names is not pinned where it placed itself.
+  const overridden = new Set<number>();
+  for (const c of onAxis)
+    if (c.type === "position" && c.override)
+      for (const r of c.children) {
+        const op = operands.get(r.name);
+        if (op?.direct) overridden.add(op.child);
+      }
+  // The parts a chain places past their whole box, not by their plots:
+  // what is no part of the plot (ink, dressing, chrome).
+  const apart = new Set<string>();
   const boxOf = (i: number): Box =>
     boxOfClaim(presetOf(i)?.extent ?? children[i].extent);
   const at = new Map<number, Box>();
@@ -404,13 +433,25 @@ export function placeByClaims(
     const preset =
       p !== undefined
         ? values.sub(p.lo, box[0])
-        : !constrained.has(i) || c.dataPositioned
+        : !constrained.has(i) ||
+            c.dataPositioned ||
+            (c.placesItself === true && !overridden.has(i))
           ? Pwl.ZERO
           : seat !== undefined
             ? Pwl.constant(seat)
             : undefined;
-    targets.set(key, claimPlaceable(axis, box, c.space, preset));
+    targets.set(
+      key,
+      claimPlaceable(
+        axis,
+        box,
+        c.space,
+        preset,
+        c.plot === undefined ? undefined : boxOfClaim(c.plot)
+      )
+    );
     indexOf.set(key, i);
+    if (ink.has(i) || dressing.has(i) || c.chrome === true) apart.add(key);
     if (preset !== undefined)
       at.set(i, [Pwl.add(preset, box[0]), Pwl.add(preset, box[1])]);
   }
@@ -436,7 +477,8 @@ export function placeByClaims(
     undefined,
     [new Set(), new Set()],
     undefined,
-    axis === 0 ? [Pwl.ZERO, undefined] : [undefined, Pwl.ZERO]
+    axis === 0 ? [Pwl.ZERO, undefined] : [undefined, Pwl.ZERO],
+    axis === 0 ? [apart, new Set()] : [new Set(), apart]
   )[axis].cells;
   for (const [name, cell] of cells) {
     const i = indexOf.get(name);

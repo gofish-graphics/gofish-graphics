@@ -809,7 +809,12 @@ report their size).
   next to its claim (`GoFishNode.resolvePlotExtent`): a layer composes its
   children's plot claims the way it composes their claims, its hull of what
   its constraints place leaves out the dressing (`placeByClaims`' plot
-  hull). A node that wears chrome has its content's plot as its plot: its
+  hull). A child may also hand `placeByClaims` a plot apart from its box
+  (`ClaimChild.plot`), which a chain lays it by as layout does
+  (`localPlotSpan`), say that it places itself at a literal pixel and stays
+  there (`placesItself`), or that it is a ring's chrome (`chrome`), which
+  a chain lays past its whole box; the plan in `solver/planShadow.ts` sets
+  them (#1176 step 3). A node that wears chrome has its content's plot as its plot: its
   rings are never plot, so a grouped bar chart's inner row of category
   labels adds around the outer chart's plot, as its own axes do. A chart's
   outer box is the exception (`GoFishNode.isChartBox`): the outermost ring

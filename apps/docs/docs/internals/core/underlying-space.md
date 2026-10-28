@@ -634,7 +634,16 @@ overlay, an alignment, a stack, a layer placing its children,
 is (`offset`, the `position` operator, a `ref`). (Temporarily, for #1176
 step 3, a layer under `GOFISH_PLAN_CHECK` also builds a plan of all its
 children in the claim walk and compares it with where layout lays them,
-in `solver/planShadow.ts`; step 3f removes it.) Every continuous axis has
+in `solver/planShadow.ts`; step 3f removes it. The plan reads three forms
+of each child: its box, which it places, its plot, which a chain lays it
+by, and all it draws, which takes room. A layer's forms are the envelopes
+of its children's where its plan places them, so an outline takes room
+only at the ends of the hull. Any other node's box is its own claim rule
+run over its children's boxes (`GoFishNode.composeExtent`). A child that
+places itself at a literal pixel stays there; a child whose y runs the
+other way is read reflected about its data 0; and a `transform.scale`
+scales the forms about data 0, reflecting them when it is negative.)
+Every continuous axis has
 exactly one claim; `resolveExtent()` checks this. Another axis has one when
 its content's room depends on σ, or when its content has a pixel size of its
 own (a claim with no σ in it); content that takes whatever room it is given

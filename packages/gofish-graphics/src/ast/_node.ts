@@ -253,8 +253,8 @@ export type ClaimWalk = {
     { node: GoFishAST; child: number; direct: boolean }
   >;
   /** Per axis, the literal pixel its own start places it at in its parent
-   *  (0 for none). */
-  literalStart: [number, number];
+   *  (undefined for none: its parent places it). */
+  literalStart: [number | undefined, number | undefined];
   /** How it seats its children, read by the placement walk through it
    *  (`placementIn`): a child's index, its name as a direct operand, and per
    *  axis the constraints that act on it there, by child index. */
@@ -1304,6 +1304,22 @@ export class GoFishNode {
   public get claimedOverhang(): number {
     const o = this.strokeOverhang;
     return o > 0 && this.parent?.yFrame.inCoord === true ? 0 : o;
+  }
+
+  /** This node's own claim rule over `childExtents` in place of its
+   *  children's claims, without the outline it adds: what it composes from
+   *  any form of its children. The plan (`solver/planShadow`) reads a
+   *  node's box this way, from its children's boxes. */
+  public composeExtent(
+    childExtents: Size<Extent | undefined>[]
+  ): Size<Extent | undefined> {
+    return this._resolveExtent(
+      childExtents,
+      this.children.map((c) => c.resolveUnderlyingSpace()),
+      this.resolveUnderlyingSpace(),
+      this.children,
+      this.constraints
+    );
   }
 
   /** Whether the room this node is given on `axis` is a share: it is in a

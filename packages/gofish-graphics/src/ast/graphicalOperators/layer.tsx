@@ -101,10 +101,10 @@ import {
 import { placementIn } from "../placementClaims";
 import {
   planCheckOn,
+  planClaimOn,
   planShadowCheck,
-  planSummary,
-  unoutlined,
-  type PlanShadow,
+  buildPlan,
+  type LayerPlan,
 } from "../solver/planShadow";
 import { isOverlapConstraint } from "../constraints/overlap";
 import {
@@ -405,7 +405,7 @@ export const layer = createNodeOperatorSequential(
     let constraintBudget: ComposeBudget | undefined;
     // TEMPORARY (#1176 step 3c): the layer's plan per axis, for the plan
     // shadow check (`planShadow.ts`) under GOFISH_PLAN_CHECK.
-    const planShadows: [PlanShadow | undefined, PlanShadow | undefined] = [
+    const planShadows: [LayerPlan | undefined, LayerPlan | undefined] = [
       undefined,
       undefined,
     ];
@@ -776,29 +776,28 @@ export const layer = createNodeOperatorSequential(
             for (const axis of [0, 1] as const) {
               planShadows[axis] = undefined;
               if (modes[axis] === "grid") continue;
-              const boxes = effectiveExtents.map((e, i) =>
-                e === undefined
-                  ? e
-                  : ([
-                      unoutlined(e[0], overhang(i)),
-                      unoutlined(e[1], overhang(i)),
-                    ] as Size<Extent | undefined>)
-              );
-              const placement = placeByClaims(
+              planShadows[axis] = buildPlan(
+                node,
                 axis,
-                claimChildren(axis, boxes, placedStandIns[axis]),
+                claimChildren(axis, effectiveExtents, placedStandIns[axis]),
                 node.constraints,
                 operands,
-                new Set(node.children.map((_, i) => i)),
-                nestedPlacement(axis)
+                nestedPlacement(axis),
+                ring,
+                scale[axis],
+                resolved[axis]
               );
-              planShadows[axis] = {
-                placement,
-                summary: planSummary(placement, () => true, overhang),
-                claim: resolved[axis],
-                extents: boxes.map((b) => b?.[axis]),
-                outline: overhang,
-              };
+              // TEMPORARY (#1176 step 3c): under GOFISH_PLAN_CLAIM the
+              // layer claims its plan's summary, as step 3d will, so a sweep
+              // can measure what 3d moves. Shadow only.
+              const shadow = planShadows[axis];
+              if (shadow !== undefined) shadow.plotClaim = plot[axis];
+              const sum = shadow?.summary;
+              if (sum !== undefined && planClaimOn()) {
+                if (plot !== resolved) plot[axis] = sum.plot;
+                resolved[axis] = sum.whole;
+                contentExtents[axis] = sum.whole;
+              }
             }
           // What the layer claims upward. A data-valued size claims its
           // magnitude. A literal size claims its own pixels: the box is a
@@ -1442,7 +1441,7 @@ export const layer = createNodeOperatorSequential(
                   axis,
                   p,
                   childPlaceables,
-                  childScaleFactors[axis],
+                  childScaleFactors[axis] ?? effectivePosScales[axis]?.sigma,
                   effectivePosScales[axis]?.originPx,
                   node.constraints.some(isOverlapConstraint)
                 );
@@ -1545,8 +1544,8 @@ export const layer = createNodeOperatorSequential(
       seating,
       literalStart: [0, 1].map((axis) => {
         const min = dims[axis].min;
-        return typeof min === "number" ? min : 0;
-      }) as [number, number],
+        return typeof min === "number" ? min : undefined;
+      }) as [number | undefined, number | undefined],
       ownScope: [dims[0].size !== undefined, dims[1].size !== undefined],
       placeChildren: (axis, extents) =>
         placeChildren(axis, extents, standInPlacements(axis)),
