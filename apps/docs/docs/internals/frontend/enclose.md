@@ -50,8 +50,12 @@ wraps the inner mark's result and reads the group's paint and `padding` with
 the same `resolveGroupPaint` the bag form uses. On the wire it is an
 operator, `{ type: "enclose", ...opts }` (`OPERATORS.enclose`, which shares
 its fields with the mark), and the deserializer builds it with the same
-`enclose` factory, so Python's `enclose(**opts)` needs no other channel: its
-mark carries the operator as `_flow_step`.
+`enclose` factory, so Python's `enclose(**opts)` needs no other channel: it
+returns a `_FlowStepMark`, whose IR is the same in both positions. A
+modifier (`.name()`, `.label()`, `.zOrder()`, `.translate()`) keeps the step
+in both languages, and applies to each group's outline: `.label("region")`
+labels each contour. On the wire the step then carries the mark's `name` and
+`zOrder` too (the descriptor's `base` fields).
 
 `padding` is a raw channel (`ch.raw("number")` in the descriptor table): a
 number, or a field name or accessor read once per group and used as pixels.
@@ -75,7 +79,8 @@ were read in, and the node's box is the outline's box. The outline is also
 the node's geometry, stroke included: an enclose over fresh children answers
 `outline` with its loops and `enclosingCircle` with their smallest circle
 grown by half the stroke. So a `pack` that holds it packs the outline, and an
-outer `enclose` hugs it. A box shape keeps the default geometry, its box. Both are kept in `renderData`, and
+outer `enclose` hugs it. A box shape's outline is its padded box, so its
+geometry is that box alone, and a `pack` packs the circle around the box. Both are kept in `renderData`, and
 `lower` maps them through `local` (the node's translate and y direction) and
 `toPixel`. A blob is one SVG `path` over all its loops. Its outer loops and
 its holes wind opposite ways, so the default nonzero fill rule leaves the

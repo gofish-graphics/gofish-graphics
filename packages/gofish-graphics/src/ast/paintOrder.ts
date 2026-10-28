@@ -14,7 +14,8 @@ import type { ZOrderConstraint } from "./constraints/zorder";
  * one rule behind every place that paints a node's children: the bake walks
  * (the root `bake`, `bakeChildren`, and the coord-local `flattenLayout`) and
  * the bake boundaries that lower their own children (`coord`, and `enclose`,
- * `offset` and `arrow` through `lowerChildrenOffset`), so z-order is honored
+ * `offset` and `arrow` through `lowerChildrenOffset`, which bakes them with
+ * `bakeChildren`), so z-order is honored
  * identically inside and outside a boundary. Each of them recurses one node at
  * a time, so a node's order never reaches past its own children (#982).
  *

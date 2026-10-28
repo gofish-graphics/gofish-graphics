@@ -258,8 +258,12 @@ whole `ChartIR`, or a `LayerChainIR`. The `__combinator` flag stays: `line`,
 operators and combinators, so their `type` alone does not say which.
 `enclose` is all three: a leaf mark (the bag form), a combinator, and an
 operator (the flow step, `OPERATORS.enclose`, whose fields are the mark's).
-The deserializer rebuilds the operator with the same `enclose` factory,
-whose result `.flow()` expands into its flow step. A mark
+The step keeps the mark's modifiers, so its node also carries the mark's
+`name` and `zOrder` (the descriptor's `base`, `FLOW_STEP_MARK_BASE_FIELDS`,
+in place of the operator kind's base fields). The deserializer rebuilds the
+operator with the same `enclose` factory, applies the modifiers as it does
+a mark's (`withMarkMeta`), and `.flow()` expands the result into its flow
+step. A mark
 position (a chart's `mark`, a combinator child, a chain tier, a `cut`
 source, a drawing `.relate(...)` clause, and the root) may hold a chart or a
 chain, by one rule, because JS allows one wherever a mark sits:
@@ -889,8 +893,10 @@ marks and operators calls `_label_opts`, built from `LABEL_OPTIONS` (the
 options of a `LabelSpecIR`, which the JSON Schema's `LabelIR` and the
 validator also read), and `line`/`ribbon`/`enclose` call `_line_opts`/`_ribbon_opts`/`_enclose_opts`.
 The operator form of `enclose` reuses `_enclose_opts`, since its fields are
-the mark's: a childless `enclose(**opts)` is a bag mark that also carries
-the operator as `_flow_step`, which `.flow()` and `compose()` expand.
+the mark's: a childless `enclose(**opts)` is a `_FlowStepMark`, a bag mark
+that `.flow()` and `compose()` keep as a step. Its IR is the mark's in both
+places, modifiers included, and every modifier returns the same class, so a
+chain such as `.name(...).label(...)` keeps the step.
 
 A nested option dict follows the same rule, by its declared type. The
 generator compiles a field's type into a small Python literal that records

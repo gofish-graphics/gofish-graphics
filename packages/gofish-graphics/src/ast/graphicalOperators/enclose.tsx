@@ -200,7 +200,10 @@ function Enclose(
       // The outline is the node's geometry: a `pack` that holds it packs the
       // outline's own smallest circle, stroke included (not its members'),
       // and an outer `enclose` reads it as a ring (fill "none") or, filled,
-      // as its box (#1207). A box shape keeps the default, its box.
+      // as its box (#1207). A box shape's outline is its padded box, so its
+      // geometry is that box alone, and its circle the one around the box
+      // (not the default's, around the members, which leaves out the
+      // padding).
       geometry: ({ intrinsicDims, renderData }, _children, node) => {
         const box = boxOfDims(intrinsicDims, node.type);
         const loops = renderData?.loops as Pt[][] | undefined;

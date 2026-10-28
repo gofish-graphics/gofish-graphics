@@ -2,13 +2,12 @@
 // @wiki Overview — /internals/layout/passes
 // </gofish-wiki>
 
-import { packSiblings } from "d3-hierarchy";
+import { packEnclose, packSiblings } from "d3-hierarchy";
 
-import { GoFishNode } from "../_node";
+import { GoFishNode, placedTranslate } from "../_node";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
-import { Size, displayTranslate } from "../dims";
-import { bakeChildren } from "../coordinateTransforms/bake";
+import { Size } from "../dims";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import {
   createOperator,
@@ -34,8 +33,9 @@ type PackProps = {
  * size they lay out at, and the pack's size follows from them. It packs each
  * child's enclosing circle with d3's front-chain algorithm (`packSiblings`,
  * Wang et al. 2006), each grown by `spacing / 2`, so neighbors keep `spacing`
- * pixels apart. There is one packing strategy, so there is no option to
- * choose one (#1013).
+ * pixels apart; the pack's circle is the smallest around the children
+ * themselves, so the gap is only between siblings. There is one packing
+ * strategy, so there is no option to choose one (#1013).
  *
  * Its outline is its children's outlines, so an `enclose` around a pack hugs
  * what it packed, not the pack's box. A group's outline in general is #974;
@@ -43,8 +43,13 @@ type PackProps = {
  */
 export const Pack = createNodeOperator(
   (opts: PackProps, children: GoFishAST[]) => {
-    const { key } = opts;
-    const pad = (opts.spacing ?? 0) / 2;
+    const { key, spacing = 0 } = opts;
+    if (typeof spacing !== "number" || !Number.isFinite(spacing) || spacing < 0)
+      throw new Error(
+        `[gofish] pack({ spacing }): ${JSON.stringify(spacing)} is not a ` +
+          `number of pixels at least 0.`
+      );
+    const pad = spacing / 2;
     return new GoFishNode(
       {
         type: "pack",
@@ -69,22 +74,29 @@ export const Pack = createNodeOperator(
               );
           }
 
-          // Circles in data order; packSiblings writes x, y relative to the
-          // center of the circle enclosing them all.
+          // Circles in data order, each grown by half the spacing, so
+          // neighbors keep `spacing` apart; packSiblings writes their x, y.
           const packed = packSiblings(local.map((c) => ({ r: c.r + pad })));
-          // The enclosing radius about that center. Computed here rather than
-          // re-running d3's enclose, so every child lies inside it exactly.
-          const R = packed.reduce(
-            (m, c) => Math.max(m, Math.hypot(c.x, c.y) + c.r), // c.r includes pad
+          // The smallest circle around the children themselves (not their
+          // grown circles), so the spacing is between siblings only: a pack
+          // carries no margin past its outermost children. Its radius is
+          // measured here about d3's center rather than taken from d3, so
+          // every child lies inside it exactly.
+          const at = packed.map((c, i) => ({ x: c.x, y: c.y, r: local[i].r }));
+          // (d3 encloses no circles in nothing; an empty pack is a point.)
+          const { x: ex, y: ey } = packEnclose(at) ?? { x: 0, y: 0 };
+          const R = at.reduce(
+            (m, c) => Math.max(m, Math.hypot(c.x - ex, c.y - ey) + c.r),
             0
           );
 
           placed.forEach((p, i) => {
             const box = p.geometry().box;
-            // Land the child's circle center at (R + x, R + y): place the
-            // child's box min at that point less the center's offset from it.
-            p.place(0, R + packed[i].x - (local[i].cx - box.min[0]), "min");
-            p.place(1, R + packed[i].y - (local[i].cy - box.min[1]), "min");
+            // Land the child's circle center at (R + x, R + y) about that
+            // center: place the child's box min at that point less the
+            // center's offset from it.
+            p.place(0, R + at[i].x - ex - (local[i].cx - box.min[0]), "min");
+            p.place(1, R + at[i].y - ey - (local[i].cy - box.min[1]), "min");
           });
 
           return {
@@ -111,10 +123,7 @@ export const Pack = createNodeOperator(
             // into the pack's frame.
             outline: (tolerance: number) =>
               _children.flatMap((child) => {
-                const t: [number, number] = [
-                  child.projectedTranslate(0) ?? 0,
-                  child.projectedTranslate(1) ?? 0,
-                ];
+                const t = placedTranslate(child, node);
                 return child
                   .geometry()
                   .outline(tolerance)
@@ -122,12 +131,6 @@ export const Pack = createNodeOperator(
               }),
           };
         },
-        // Under a bake boundary (an `enclose` that holds the pack as a fresh
-        // child), the pack lowers its children as `layer` does.
-        lower: ({ transform, coordinateTransform }, _c, node) =>
-          bakeChildren(node, displayTranslate(transform)).flatMap((d) =>
-            d.node.INTERNAL_lower(coordinateTransform, d.transform)
-          ),
       },
       children
     );

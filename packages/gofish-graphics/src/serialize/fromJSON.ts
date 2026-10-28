@@ -336,7 +336,10 @@ export function mapOperator(
   bridge?: DeriveBridge,
   resolveToken: TokenResolver = makeTokenResolver()
 ): Operator<any, any> | null {
-  const { type, translate, label, ...opts } = op as Record<string, any>;
+  const { type, translate, label, name, zOrder, ...opts } = op as Record<
+    string,
+    any
+  >;
   let operator = rebuild("operator", type as string, unwrapOpts(opts, bridge), {
     bridge,
   });
@@ -360,14 +363,16 @@ export function mapOperator(
       );
     }
   }
-  if (
-    operator &&
-    translate &&
-    typeof (operator as any).translate === "function"
-  ) {
-    return (operator as any).translate(translate);
-  }
-  return operator;
+  // `translate`, and a mark's `name` and `zOrder` (a flow step that is a
+  // mark, `enclose`, carries them: FLOW_STEP_MARK_BASE_FIELDS), as on a mark.
+  return withMarkMeta(
+    operator,
+    { translate, name, zOrder },
+    {
+      bridge,
+      resolveToken,
+    }
+  );
 }
 
 /**
@@ -453,7 +458,7 @@ export function mapMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
 function withMarkMeta<M>(
   mark: M,
   spec: { translate?: unknown; name?: unknown; zOrder?: unknown },
-  ctx: IRContext
+  ctx: Pick<IRContext, "bridge" | "resolveToken">
 ): M {
   let out: any = mark;
   if (spec.translate && typeof out.translate === "function") {

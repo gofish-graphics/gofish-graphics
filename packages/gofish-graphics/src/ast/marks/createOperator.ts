@@ -83,6 +83,7 @@ import {
   type OperatorTransition,
 } from "../../animation/transition";
 import { withWire, wireOf } from "../wire";
+import { flowStepOf, withFlowStep } from "./compose";
 import { isThenable } from "../../util";
 import { withKindValues } from "../strategyKind";
 import { resolveRefData } from "./resolveRefData";
@@ -292,70 +293,108 @@ function propagateSerialize(
   }
 }
 
+/**
+ * Give `wrapped`, a mark built over `base`, the flow step `base` has
+ * ({@link withFlowStep}), built over it by `wrap` the same way: the step's
+ * mark for each group gets the modifier `wrapped` adds, and the step's IR
+ * tag is `base`'s step's with `retag`'s fields. A mark with no flow step
+ * (every mark but `enclose(opts)`) is left as it is.
+ */
+function forwardFlowStep(
+  wrapped: Mark<any>,
+  base: Mark<any>,
+  wrap: (stepMark: Mark<any>) => Mark<any>,
+  retag: (step: Operator<any, any>, baseStep: Operator<any, any>) => void
+): void {
+  const baseStep = flowStepOf(base);
+  if (baseStep === undefined) return;
+  const step: Operator<any, any> = async (inner) =>
+    wrap((await baseStep(inner)) as Mark<any>);
+  retag(step, baseStep);
+  withFlowStep(wrapped, step);
+}
+
 /** Build a single chainable method from a modifier config. */
 function modifierMethod(
   base: Mark<any>,
   cfg: ModifierConfig,
   redecorate: (m: Mark<any>) => Mark<any>
 ): (...args: any[]) => Mark<any> {
-  return (...given: any[]) => {
-    const args = cfg.bind ? cfg.bind(...given) : given;
-    const resolveArgs = cfg.resolveArgs?.(...args);
-    const wrapped: Mark<any> = async (
-      d: any,
-      key?: string | number,
-      layerContext?: LayerContext
-    ) => {
-      const raw = await (base as any)(d, key, layerContext);
-      // Resolved once per input, however many nodes it produces.
-      const applied = resolveArgs ? await resolveArgs([d]) : args;
-      // Expand-kind marks return an array of nodes; per-item return one.
-      // Apply the modifier to each produced node either way.
-      if (getMarkKind(base) === "expand") {
-        const nodes = await Promise.all(
-          (raw as GoFishNode[]).map((r) => resolveMarkResult(r, layerContext))
-        );
-        for (const node of nodes)
-          await cfg.apply(node, layerContext, d, ...applied);
-        return nodes as unknown as GoFishNode;
-      }
-      const node = await resolveMarkResult(raw, layerContext);
-      await cfg.apply(node, layerContext, d, ...applied);
-      return node;
-    };
-    // The same chain with every link's arguments resolved over `inputs`
-    // (`inputsResolver`), so a batch accessor anywhere in it makes one
-    // call for all of them.
-    const resolveBase = inputsResolver(base);
-    if (resolveArgs || resolveBase) {
-      (wrapped as any)[RESOLVE_INPUTS] = async (inputs: readonly unknown[]) =>
-        modifierMethod(
-          resolveBase ? await resolveBase(inputs) : base,
-          cfg,
-          redecorate
-        )(...(resolveArgs ? await resolveArgs(inputs) : args));
+  return (...given: any[]) =>
+    applyModifier(base, cfg, redecorate, cfg.bind ? cfg.bind(...given) : given);
+}
+
+/** `base` with the modifier `cfg` applied with `args` (already bound). */
+function applyModifier(
+  base: Mark<any>,
+  cfg: ModifierConfig,
+  redecorate: (m: Mark<any>) => Mark<any>,
+  args: any[]
+): Mark<any> {
+  const resolveArgs = cfg.resolveArgs?.(...args);
+  const wrapped: Mark<any> = async (
+    d: any,
+    key?: string | number,
+    layerContext?: LayerContext
+  ) => {
+    const raw = await (base as any)(d, key, layerContext);
+    // Resolved once per input, however many nodes it produces.
+    const applied = resolveArgs ? await resolveArgs([d]) : args;
+    // Expand-kind marks return an array of nodes; per-item return one.
+    // Apply the modifier to each produced node either way.
+    if (getMarkKind(base) === "expand") {
+      const nodes = await Promise.all(
+        (raw as GoFishNode[]).map((r) => resolveMarkResult(r, layerContext))
+      );
+      for (const node of nodes)
+        await cfg.apply(node, layerContext, d, ...applied);
+      return nodes as unknown as GoFishNode;
     }
-    // Preserve the kind tag so applyMark dispatches correctly through the
-    // wrapped mark, then let the modifier stamp its own metadata.
-    withMarkKind(wrapped, getMarkKind(base));
-    // Preserve the blank-fusion descriptor (see chart.ts's
-    // `tagRelationalFusable`) through `.name()`/`.label()`/`.zOrder()`
-    // chaining, so `.mark(ribbon(opts).name("area"))` still fuses — the
-    // descriptor names the ORIGINAL opts, which this chaining never changes,
-    // and the connector tier ends up being `wrapped` itself (which still
-    // applies the name/label/zOrder when invoked).
-    if ((base as any).__relationalFusable) {
-      (wrapped as any).__relationalFusable = (base as any).__relationalFusable;
-    }
-    // Carry the stashed `.name(...)` forward the same way, so a mark named and
-    // then chained (`.name("dots").transition(...)`, `.name("bars").label(...)`)
-    // still reads as named. A `.name` further down the chain restashes it.
-    if ((base as any).__layerName !== undefined) {
-      stashLayerName(wrapped, (base as any).__layerName);
-    }
-    cfg.tag?.(wrapped, base, ...args);
-    return redecorate(wrapped);
+    const node = await resolveMarkResult(raw, layerContext);
+    await cfg.apply(node, layerContext, d, ...applied);
+    return node;
   };
+  // The same chain with every link's arguments resolved over `inputs`
+  // (`inputsResolver`), so a batch accessor anywhere in it makes one
+  // call for all of them.
+  const resolveBase = inputsResolver(base);
+  if (resolveArgs || resolveBase) {
+    (wrapped as any)[RESOLVE_INPUTS] = async (inputs: readonly unknown[]) =>
+      applyModifier(
+        resolveBase ? await resolveBase(inputs) : base,
+        cfg,
+        redecorate,
+        resolveArgs ? await resolveArgs(inputs) : args
+      );
+  }
+  // Preserve the kind tag so applyMark dispatches correctly through the
+  // wrapped mark, then let the modifier stamp its own metadata.
+  withMarkKind(wrapped, getMarkKind(base));
+  // Preserve the blank-fusion descriptor (see chart.ts's
+  // `tagRelationalFusable`) through `.name()`/`.label()`/`.zOrder()`
+  // chaining, so `.mark(ribbon(opts).name("area"))` still fuses — the
+  // descriptor names the ORIGINAL opts, which this chaining never changes,
+  // and the connector tier ends up being `wrapped` itself (which still
+  // applies the name/label/zOrder when invoked).
+  if ((base as any).__relationalFusable) {
+    (wrapped as any).__relationalFusable = (base as any).__relationalFusable;
+  }
+  // Carry the stashed `.name(...)` forward the same way, so a mark named and
+  // then chained (`.name("dots").transition(...)`, `.name("bars").label(...)`)
+  // still reads as named. A `.name` further down the chain restashes it.
+  if ((base as any).__layerName !== undefined) {
+    stashLayerName(wrapped, (base as any).__layerName);
+  }
+  cfg.tag?.(wrapped, base, ...args);
+  // A flow step (`enclose(opts)` in `.flow(...)`) keeps the modifier: each
+  // group's outline is named, labeled, ordered as the mark would be.
+  forwardFlowStep(
+    wrapped,
+    base,
+    (stepMark) => applyModifier(stepMark, cfg, redecorate, args),
+    (step, baseStep) => cfg.tag?.(step as any, baseStep as any, ...args)
+  );
+  return redecorate(wrapped);
 }
 
 export function translateMark<T>(
@@ -374,6 +413,15 @@ export function translateMark<T>(
   withMarkKind(wrapped, getMarkKind(base));
   forwardInputsResolver(wrapped, [base], ([m]) =>
     translateMark(m as Mark<T>, opts)
+  );
+  forwardFlowStep(
+    wrapped as Mark<any>,
+    base as Mark<any>,
+    (stepMark) => translateMark(stepMark, opts),
+    (step, baseStep) =>
+      propagateSerialize(baseStep, step, (tag) => {
+        tag.translate = opts;
+      })
   );
   return nameableMark(wrapped) as Mark<T>;
 }

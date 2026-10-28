@@ -275,6 +275,10 @@ export interface ConstructDescriptor {
   include?: FieldGroup[];
   /** This construct's own fields (in addition to any `include`d groups). */
   fields: FieldGroup;
+  /** The base fields its node carries beside its own fields, when they are
+   *  not its kind's (OPTIONS_BASE_FIELDS): a flow step that is a mark
+   *  (`enclose`) carries the mark's modifiers (FLOW_STEP_MARK_BASE_FIELDS). */
+  base?: FieldGroup;
 }
 
 /** Merge a descriptor's included groups and own fields into one flat map.
@@ -363,6 +367,16 @@ export const OPERATOR_BASE_FIELDS: FieldGroup = group({
     type: t.boolean,
     doc: "Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.",
   },
+});
+
+/** The base fields of a mark standing as a `.flow(...)` step (`enclose`):
+ *  an operator's, plus the mark modifiers an operator has no form of,
+ *  `.name()` and `.zOrder()`. Every group's node the step builds takes them
+ *  as the mark's node would. */
+export const FLOW_STEP_MARK_BASE_FIELDS: FieldGroup = group({
+  ...OPERATOR_BASE_FIELDS,
+  name: MARK_BASE_FIELDS.name,
+  zOrder: MARK_BASE_FIELDS.zOrder,
 });
 
 /** The base fields the Python generator exposes as kwargs on every operator
@@ -1716,6 +1730,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   enclose: operator("enclose", {
     doc: "Flow-step form of `enclose`: draw an outline around each group's subtree, as the combinator form draws it around its children. The outline is part of the layout, so the operator above packs or places the outlined group, and an outer `enclose` hugs this outline. The paint and `padding` are read once per group. In `.mark(...)` position, `enclose(opts)` is the bag form (LEAF_MARKS.enclose) instead.",
     fields: ENCLOSE_FIELDS,
+    base: FLOW_STEP_MARK_BASE_FIELDS,
   }),
 
   partition: operator("partition", {
@@ -2490,7 +2505,7 @@ export function acceptedFields(
   const table = DESCRIPTOR_TABLES[kind];
   if (!Object.hasOwn(table, type)) return undefined;
   const declared = {
-    ...OPTIONS_BASE_FIELDS[kind],
+    ...(table[type].base ?? OPTIONS_BASE_FIELDS[kind]),
     ...resolveFields(table[type]),
   };
   const fields: FieldGroup = {};

@@ -1504,3 +1504,36 @@ class TestAppliedMark:
     def test_ref_is_not_applied(self):
         with pytest.raises(TypeError, match="cannot be applied"):
             ref("a")(self.ROWS)
+
+
+class TestEncloseFlowStep:
+    """``enclose(...)`` in ``.flow(...)`` is a step, and stays one through
+    the mark's modifiers: each is written into the step's IR."""
+
+    ROWS = [{"g": "a", "r": 10}, {"g": "b", "r": 12}]
+
+    def test_modifiers_keep_the_step(self):
+        from gofish import Shape, enclose, pack
+
+        step = (
+            enclose(shape=Shape.arcs(), padding=4)
+            .name("region")
+            .label("g")
+            .z_order(-1)
+            .translate(x=5)
+        )
+        doc = chart(self.ROWS).flow(pack(by="g"), step, pack()).mark(circle(r=4))
+        op = doc.to_ir()["root"]["operators"][1]
+        assert op["type"] == "enclose"
+        assert op["padding"] == 4
+        assert op["name"] == "region"
+        assert op["zOrder"] == -1
+        assert op["translate"] == {"x": 5}
+        assert op["label"][0]["accessor"] == "g"
+
+    def test_in_compose(self):
+        from gofish import enclose, pack
+
+        frag = compose(pack(by="g"), enclose(padding=2).name("region"))
+        doc = chart(self.ROWS).flow(frag, pack()).mark(circle(r=4)).to_ir()
+        assert doc["root"]["operators"][1]["name"] == "region"

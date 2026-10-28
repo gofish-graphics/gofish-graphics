@@ -532,6 +532,12 @@ export interface EncloseOperator
     TranslatableIR,
     OperatorFlagsIR {
   type: "enclose";
+  /** The mark's modifiers, which the step keeps (FLOW_STEP_MARK_BASE_FIELDS
+   *  in descriptors.ts): each group's outline is named, labeled and ordered
+   *  as the mark's would be. */
+  name?: string;
+  label?: LabelIR;
+  zOrder?: number | BridgeLambdaSentinel;
   /** Pixels between the subtree and the outline, or a field read once per
    *  group. Default 2. */
   padding?: ChannelValue;

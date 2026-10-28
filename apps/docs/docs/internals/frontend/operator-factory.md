@@ -451,6 +451,12 @@ way, so `.name("dots").transition(...)` or `.name("bars").label(...)` still
 reads as named; without it, a tier that names its mark when the mark has no
 name (`ensureNamedMark`, for a later `.layer()` tier or a `time.sequence`'s
 transitions) would rename the mark and break `selectAll("dots")`.
+A mark that is also a flow step (`enclose(opts)`, `withFlowStep` in
+compose.ts) keeps its step the same way (`forwardFlowStep`): the wrapped
+mark's step is the base step with the same modifier applied to the mark it
+builds for each group, and its IR tag is the base step's with the modifier's
+fields. `translateMark` does the same. So `enclose(opts).label("region")` in
+`.flow(...)` labels each group's outline.
 The `transition` modifier (`transitionModifier`, in `nameableMark`'s set)
 tags nothing on the mark. It records the mark's effects on each produced node,
 and every reader finds them there: the build-in, and under a `time.sequence`

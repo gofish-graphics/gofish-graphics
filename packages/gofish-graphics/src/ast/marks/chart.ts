@@ -682,6 +682,26 @@ export type RelationalMark = Mark<any> &
     ): RelationalMark;
   };
 
+/**
+ * The mark `enclose(opts)` returns: a relational mark that is also a
+ * `.flow(...)` step (`withFlowStep`). Every modifier keeps the step (the
+ * flow step's mark for each group gets the modifier too), so each returns a
+ * `FlowStepMark`.
+ */
+export type FlowStepMark = Mark<any> &
+  Operator<any, any> &
+  Omit<RelationalMark, "name" | "label" | "zOrder" | "transition"> & {
+    name(...args: Parameters<NameableMark<any>["name"]>): FlowStepMark;
+    label(...args: Parameters<NameableMark<any>["label"]>): FlowStepMark;
+    zOrder(...args: Parameters<NameableMark<any>["zOrder"]>): FlowStepMark;
+    transition(
+      ...args: Parameters<NameableMark<any>["transition"]>
+    ): FlowStepMark;
+    translate(
+      ...args: Parameters<NameableMark<any>["translate"]>
+    ): NameableMark<any> & Operator<any, any>;
+  };
+
 export function createRelationalMark<O extends Record<string, unknown>>(
   type: string,
   produce: (
@@ -1111,15 +1131,13 @@ export function enclose(
   children: GoFishAST[]
 ): GoFishNode;
 /** The bag form in `.mark(...)`, the flow step in `.flow(...)`. */
-export function enclose(
-  options?: EncloseOptions
-): RelationalMark & Operator<any, any>;
+export function enclose(options?: EncloseOptions): FlowStepMark;
 export function enclose(
   options?: EncloseOptions,
   children?: GoFishAST[]
-): GoFishNode | (RelationalMark & Operator<any, any>) {
+): GoFishNode | FlowStepMark {
   return children === undefined
-    ? (encloseMark(options) as RelationalMark & Operator<any, any>)
+    ? (encloseMark(options) as unknown as FlowStepMark)
     : encloseMark(options, children);
 }
 

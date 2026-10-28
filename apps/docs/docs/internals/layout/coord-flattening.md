@@ -103,8 +103,8 @@ names a child itself means that whole child.
 The node where two operands part can be any node, not only a plain layer: a `coord`,
 an `enclose`, an `arrow`, or a `box` layer. So every place that paints a node's
 children gets their order from `orderChildrenForPaint`, never from the raw children
-array: the bake walks, `coord`'s own lowering, `lowerChildrenOffset` (behind `enclose`,
-`offset` and `arrow`), and `bakeChildren` (behind `box`). A constraint pushed down into
+array: the bake walks, `coord`'s own lowering, and `bakeChildren` (behind `box`, and
+behind `lowerChildrenOffset`, which `enclose`, `offset` and `arrow` share). A constraint pushed down into
 any of them takes effect there, and a boundary that declares its own constraints (a
 `box` layer's `.relate()`) resolves them when it orders its children. Before
 [#982](https://github.com/gofish-graphics/gofish-graphics/issues/982) settled this, a

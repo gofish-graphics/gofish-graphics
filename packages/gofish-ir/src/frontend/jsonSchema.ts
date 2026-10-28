@@ -161,6 +161,11 @@ function buildOperatorDefs(): Record<string, unknown> {
         origin: { $ref: "#/$defs/Origin" },
         meta: { $ref: "#/$defs/Meta" },
         debug: { type: "boolean" },
+        // A flow step that is a mark (`enclose`) also carries the mark's
+        // modifiers (`name`, `zOrder`): its descriptor's `base`.
+        ...(descriptor.base
+          ? fieldsToProperties(descriptor.base).properties
+          : {}),
       },
     };
     refs.push({ $ref: `#/$defs/${defName}` });

@@ -21,6 +21,14 @@ export function withFlowStep<V extends object>(
   return value;
 }
 
+/** @internal The flow step `value` carries ({@link withFlowStep}), if any.
+ *  A mark modifier that wraps such a mark (`.name()`, `.label()`,
+ *  `.zOrder()`, `.translate()`) gives the wrapped mark the step wrapped the
+ *  same way, so the step survives the chain (`createOperator.ts`). */
+export function flowStepOf(value: unknown): Operator<any, any> | undefined {
+  return (value as { [FLOW_STEP]?: Operator<any, any> } | null)?.[FLOW_STEP];
+}
+
 /** @internal The operators a `.flow(...)` argument stands for: a fragment's
  *  own operators, a value's flow step ({@link withFlowStep}), or the
  *  operator itself. Read at the ChartBuilder boundary, so the IR carries
@@ -28,7 +36,7 @@ export function withFlowStep<V extends object>(
 export function expandComposedOperator(
   operator: Operator<any, any>
 ): readonly Operator<any, any>[] {
-  const step = (operator as { [FLOW_STEP]?: Operator<any, any> })[FLOW_STEP];
+  const step = flowStepOf(operator);
   if (step !== undefined) return [step];
   return (
     (operator as Partial<ComposedOperator>)[COMPOSED_OPERATORS] ?? [operator]

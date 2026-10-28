@@ -170,15 +170,12 @@ class Composed:
         self.operators: tuple = tuple(operators)
 
 
-def _expand_composed(op: Union[Operator, Composed, "Mark"]) -> tuple:
+def _expand_composed(op: Union[Operator, Composed, "_FlowStepMark"]) -> tuple:
     """The operators a ``.flow(...)`` argument stands for: a fragment's own
-    operators, a mark's flow step (``enclose(...)``, whose ``_flow_step`` is
-    the operator it is in a flow), or the operator itself. Mirrors JS
+    operators, or the argument itself (an operator, or a mark that is also a
+    flow step, ``enclose(...)``: see ``_FlowStepMark``). Mirrors JS
     ``expandComposedOperator`` (ast/marks/compose.ts)."""
-    if isinstance(op, Composed):
-        return op.operators
-    step = getattr(op, "_flow_step", None)
-    return (step,) if step is not None else (op,)
+    return op.operators if isinstance(op, Composed) else (op,)
 
 
 def compose(*ops: Union[Operator, Composed]) -> Composed:
@@ -3470,10 +3467,18 @@ def enclose(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
     kwargs = _enclose_opts(**options)
     if children is not None:
         return Mark("enclose", _children=list(children), **kwargs)
-    mark = Mark("enclose", **kwargs)
-    # In `.flow(...)` (or `compose(...)`) the same call is the flow step.
-    mark._flow_step = Operator("enclose", **kwargs)
-    return mark
+    return _FlowStepMark("enclose", **kwargs)
+
+
+class _FlowStepMark(Mark):
+    """A mark that is also a ``.flow(...)`` step: ``enclose(...)``, the bag
+    form in ``.mark(...)`` and, in ``.flow(...)`` (or ``compose(...)``), a
+    step around each group's subtree. Its IR is the same in both places, the
+    mark's: in ``operators`` it carries the mark's modifiers (``name``,
+    ``label``, ``zOrder``, ``translate``), which each group's outline takes.
+    Every modifier returns a mark of the same class (``type(self)``), so a
+    chain keeps the step. Mirrors JS ``withFlowStep`` (ast/marks/compose.ts).
+    """
 
 
 # ─── cut: slice a source shape into N clipped sub-shapes ────────────────────

@@ -579,16 +579,25 @@ export function arcsOutline(
       runs.push(samples.map((x) => x.p));
       continue;
     }
-    // where validity changes between two samples, bisect on the exact curve
-    const cut = (a: Sample, b: Sample): Pt => {
-      if (a.c !== b.c) return (a.ok ? a : b).p;
-      let [sOk, sBad] = a.ok ? [a.s, b.s] : [b.s, a.s];
+    // Where validity changes between two samples, bisect on the exact curve
+    // between them. A curve's first sample is dropped (it is the previous
+    // curve's last), so the stretch from `prev` to `cur` runs along `cur`'s
+    // curve, from `prev` or from the curve's start; only the loop's first
+    // sample is a curve's start, and the stretch to it (the loop wrapping)
+    // runs along `prev`'s curve to its end.
+    const cut = (prev: Sample, cur: Sample): Pt => {
+      const [lo] = range(cur.c);
+      const [c, a, b] =
+        cur.s === lo
+          ? [prev.c, prev.s, range(prev.c)[1]]
+          : [cur.c, prev.c === cur.c ? prev.s : lo, cur.s];
+      let [sOk, sBad] = prev.ok ? [a, b] : [b, a];
       for (let it = 0; it < 50; it++) {
         const m = (sOk + sBad) / 2;
-        if (valid(at(a.c, m))) sOk = m;
+        if (valid(at(c, m))) sOk = m;
         else sBad = m;
       }
-      return at(a.c, sOk);
+      return at(c, sOk);
     };
     const n = samples.length;
     const first = samples.findIndex((x) => !x.ok);

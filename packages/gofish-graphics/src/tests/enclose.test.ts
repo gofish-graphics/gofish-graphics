@@ -757,6 +757,34 @@ console.log("\n# Shape.arcs() (enclose/arcs.ts)");
   }
 
   {
+    // Where a neck pinches the shrunk boundary off right after a joint of
+    // two of its curves, the cut is bisected on the curve the crossing is
+    // on, not snapped to the nearest sample: no chord of the outline is
+    // longer than the 4 px sampling step. (Found by fuzzing random discs.)
+    const necked: BlobMember[] = [
+      [31.3494, 88.86991, 17.78187],
+      [11.10857, 63.92406, 20.93944],
+      [83.17891, 85.1449, 4.81323],
+      [52.5148, 37.24622, 13.05148],
+      [90.87762, 35.05257, 15.0036],
+    ].map(([cx, cy, r]) => ({ kind: "disc", cx, cy, r }));
+    const loops = arcsOutline(necked, { padding: 2.70188, radius: 12.57987 });
+    const longest = Math.max(
+      ...loops.flatMap((L) =>
+        L.map((p, i) => {
+          const q = L[(i + 1) % L.length];
+          return Math.hypot(p[0] - q[0], p[1] - q[1]);
+        })
+      )
+    );
+    check(
+      "a cut next to a joint of two curves lies on the outline (no chord over 4 px)",
+      loops.length > 0 && longest <= 4 + 1e-6,
+      `longest chord ${longest.toFixed(3)} px`
+    );
+  }
+
+  {
     check(
       "the default radius is 12",
       ARCS_RADIUS === 12 && Frontend.STRATEGIES.Shape.kinds.arcs.params.radius.default === 12

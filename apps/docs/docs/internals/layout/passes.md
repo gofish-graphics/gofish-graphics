@@ -998,7 +998,10 @@ The `pack` operator (`graphicalOperators/pack.tsx`) is the first consumer. It
 lays out each child, reads `enclosingCircle(child.geometry())`, runs d3's
 `packSiblings`, and places each child so its circle lands where d3 put it.
 `spacing` grows each circle by half of it before packing, so it is the gap
-in pixels between siblings. A pack answers the queries itself: its outline is
+in pixels between siblings. The pack's own circle is the smallest around the
+children themselves, not their grown circles, so a pack carries no margin
+past its outermost children, and nested packs with the same `spacing` keep
+the same gap between groups. A pack answers the queries itself: its outline is
 its children's outlines, each moved to where the pack placed it, and its
 enclosing circle is the smallest circle around theirs. So an `enclose` around
 a pack hugs the circles, not the pack's box, and a pack of packs packs the

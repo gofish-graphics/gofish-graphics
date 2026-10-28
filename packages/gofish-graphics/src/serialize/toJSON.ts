@@ -366,9 +366,12 @@ function operatorToIR(op: Operator<any, any>): Frontend.OperatorIR {
   // mirroring how a chained mark `.label()` surfaces as a top-level field in
   // `markToIR` — see createOperator.ts's `attachLabelOption` /
   // `translateOperator`.
+  // A flow step that is a mark (`enclose(opts).name(n)`) also carries the
+  // mark's `.name()` in `tag.name`, as `markToIR` writes it.
   return {
     type: tag.type,
     ...wireOpts("operator", tag.type, tag.opts),
+    ...(tag.name !== undefined ? { name: tag.name } : {}),
     ...(tag.label !== undefined ? { label: wireLabels(tag.label) } : {}),
     ...(tag.translate !== undefined ? { translate: tag.translate } : {}),
   } as Frontend.OperatorIR;
