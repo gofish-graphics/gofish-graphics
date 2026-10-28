@@ -221,9 +221,11 @@ export const coord = createNodeOperator(
     // fits its content that much inside its box and widens the box it
     // measures by it, so its box holds every outline it draws. A space that
     // frames its own window (geo) clips what its window leaves out, as a map
-    // frame does, outlines included. A space inside it already holds its
-    // own interior's outlines in its box. Read once per claim pass, in
-    // `resolveExtent`, which `layout` resolves first.
+    // frame does, outlines included. The search goes into a space nested
+    // inside it too: the nested space's box is in this space's coordinates,
+    // not pixels, so the outlines it holds are not room in this box. Read
+    // once per claim pass, in `resolveExtent`, which `layout` resolves
+    // first.
     let outline = 0;
     const largestOutline = (): number => {
       if (framesOwnWindow) return 0;
@@ -232,7 +234,7 @@ export const coord = createNodeOperator(
       for (let n = stack.pop(); n !== undefined; n = stack.pop()) {
         if (!(n instanceof GoFishNode)) continue;
         largest = Math.max(largest, n.strokeOverhang);
-        if (n.type !== "coord") stack.push(...n.children);
+        stack.push(...n.children);
       }
       return largest;
     };

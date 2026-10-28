@@ -303,8 +303,8 @@ pixel box, and an explicit `w`/`h` sizes that box as it sizes a layer's (a
 drawn inside it: a stroke is in pixels while the interior is laid out in the
 space's coordinates, so the box it measures from its content is widened by
 the largest outline inside it (`outline`, read once per claim pass; see
-[Overview](/internals/layout/passes)). A space nested inside it already holds
-its own interior's outlines in its box, so the search stops there. The content box it widens must be exact
+[Overview](/internals/layout/passes)). The search goes into a space nested
+inside it too, whose box is in the outer space's coordinates, not pixels. The content box it widens must be exact
 for that to hold: the box is measured by sampling the warped edges of the
 content's coordinate box (`computeTransformedBoundingBox`), and samples fall
 between a curved edge's extremes (a disc sampled every 7.2° misses its leftmost
