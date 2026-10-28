@@ -7,6 +7,7 @@ import { Extent } from "../extent";
 import type { UnderlyingSpace } from "../underlyingSpace";
 import * as Pwl from "../solver/pwl";
 import { solvePlacementCells } from "./placementSolver";
+import { numbers } from "../solver/arith";
 import type { PlacementConstraint } from "./placementLowering";
 import { axisIndex, axisName, isPointAlign, type Axis } from "./shared";
 import { isPositionInterval } from "./position";
@@ -453,6 +454,7 @@ export function placeByClaims(
       c.children.every((r) => targets.has(r.name))
     );
     const cells = solvePlacementCells(
+      numbers,
       solvable as PlacementConstraint[],
       targets,
       [NaN, NaN],

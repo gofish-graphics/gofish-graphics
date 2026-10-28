@@ -6,6 +6,7 @@ import { UnderlyingSpace, isCONTINUOUS } from "../underlyingSpace";
 import { padExtent, type Extent } from "../extent";
 import type { ConstraintRef } from "./shared";
 import type { PlacementFactEmitter } from "./placementFacts";
+import type { Arith } from "../solver/arith";
 
 /**
  * Nesting relation between two named children of a layer.
@@ -67,10 +68,11 @@ export const isNestConstraint = (
   c: { type: string } | undefined
 ): c is NestConstraint => c !== undefined && c.type === "nest";
 
-export function lowerNestPlacement(
+export function lowerNestPlacement<T>(
+  A: Arith<T>,
   constraint: NestConstraint,
   owner: string,
-  emitter: PlacementFactEmitter
+  emitter: PlacementFactEmitter<T>
 ): void {
   const [outer, inner] = constraint.children;
   for (const axis of ["x", "y"] as const) {
@@ -79,7 +81,7 @@ export function lowerNestPlacement(
       axis,
       from: { name: outer.name, anchor: "middle" },
       to: { name: inner.name, anchor: "middle" },
-      gap: 0,
+      gap: A.zero,
       owner,
     });
   }

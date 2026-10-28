@@ -28,6 +28,7 @@ import {
   type FramedNode,
 } from "../axisDirection";
 import * as Pwl from "../solver/pwl";
+import { numbers, values, type Arith } from "../solver/arith";
 import * as Interval from "../../util/interval";
 
 export interface DistributeOptions {
@@ -199,16 +200,18 @@ export function distributePlacementAnchors({
     : { from: anchor, to: anchor };
 }
 
-export function lowerDistributePlacement(
+export function lowerDistributePlacement<T>(
   constraint: DistributeConstraint,
   owner: string,
   {
+    A,
     emitter,
     targets,
     isInitiallyPlaced,
   }: {
-    emitter: PlacementFactEmitter;
-    targets: Pick<Map<string, Placeable>, "has" | "get">;
+    A: Arith<T>;
+    emitter: PlacementFactEmitter<T>;
+    targets: Pick<Map<string, unknown>, "has" | "get">;
     isInitiallyPlaced: (axis: Axis, name: string) => boolean;
   }
 ): void {
@@ -230,7 +233,7 @@ export function lowerDistributePlacement(
       axis: constraint.dir,
       from: { name: ordered[i - 1].name, anchor: anchors.from },
       to: { name: ordered[i].name, anchor: anchors.to },
-      gap: constraint.spacing,
+      gap: A.constant(constraint.spacing),
       owner,
       chain: constraint.glue ? "stack" : "spread",
     });
@@ -410,38 +413,6 @@ const tailClaim = (space: UnderlyingSpace, extent: Extent): Extent =>
 /** A part's reach on each side of a point on the chain: above it and below
  *  it. Numbers for a data extent, values in σ for a claim. */
 type Sides<T> = { ascent: T; descent: T };
-
-/** The arithmetic {@link chainFold} runs in: plain numbers (a data extent, or
- *  a claim at one σ) or values in σ (a claim as a function of σ). */
-type Arith<T> = {
-  zero: T;
-  /** A σ-independent amount (a spacing, in pixels). */
-  constant: (c: number) => T;
-  add: (...xs: T[]) => T;
-  scale: (k: number, x: T) => T;
-  /** The upper envelope of `xs`. */
-  max: (xs: T[]) => T;
-  /** `−x`. */
-  negate: (x: T) => T;
-};
-
-const numbers: Arith<number> = {
-  zero: 0,
-  constant: (c) => c,
-  add: (...xs) => xs.reduce((sum, x) => sum + x, 0),
-  scale: (k, x) => k * x,
-  max: (xs) => Math.max(...xs),
-  negate: (x) => -x,
-};
-
-const values: Arith<Pwl.Value> = {
-  zero: Pwl.ZERO,
-  constant: (c) => Pwl.affine(0, c),
-  add: Pwl.add,
-  scale: Pwl.scale,
-  max: Pwl.envelope,
-  negate: Pwl.negate,
-};
 
 /** How a chain lays its parts: where each part sits about its chain point
  *  (its seat), and how far the next chain point is from this one (its step).

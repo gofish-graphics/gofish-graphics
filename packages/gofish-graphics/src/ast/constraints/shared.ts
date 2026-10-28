@@ -44,7 +44,10 @@ export type ConstraintRef = { readonly name: string };
  *  coordinate is mapped through the matching map via `pxOf`). An entry is
  *  `undefined` exactly when the axis is unanchored — the position half of the
  *  single {@link AxisScale} carrier. */
-export type ConstraintPosScales = [AxisMap | undefined, AxisMap | undefined];
+export type ConstraintPosScales<T = number> = [
+  AxisMap<T> | undefined,
+  AxisMap<T> | undefined,
+];
 
 /** Per-axis pixel at which a layer seats the baselines of its free (baseline
  *  magnitude) children (#773): the measure origin under the layer's data→pixel
@@ -53,7 +56,7 @@ export type ConstraintPosScales = [AxisMap | undefined, AxisMap | undefined];
  *  solver's free-origin fallback (`solveAxisProblem`) seats a floating
  *  component's shared free baseline there. `undefined` where the layer has no
  *  origin on the axis. */
-export type FreeOrigin = [number | undefined, number | undefined];
+export type FreeOrigin<T = number> = [T | undefined, T | undefined];
 
 /** Convert axis name to dimension index (0 = x, 1 = y) */
 export const axisIndex = (axis: Axis): 0 | 1 => (axis === "x" ? 0 : 1);

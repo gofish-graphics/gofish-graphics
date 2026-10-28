@@ -6,6 +6,7 @@ group: Scale Resolution
 status: draft
 covers:
   - packages/gofish-graphics/src/ast/solver/pwl.ts
+  - packages/gofish-graphics/src/ast/solver/arith.ts
 ---
 
 # Piecewise-Linear Values
@@ -137,6 +138,21 @@ is a line between breakpoints, so they agree everywhere when they agree at 0, 1,
 breakpoint of either, and once past the last. The `BBox` ledger uses it to detect an
 over-determined key now that `table`'s content-sized tracks push piecewise claims into
 cells.
+
+## Numbers and values
+
+Some computations run both in numbers and in values. The chain fold (`chainFold` in
+`constraints/distribute.ts`) lays a stack's data extent in numbers and its claim in
+values. The placement solve (`constraints/placementSolver.ts`) places a layer's children
+in numbers at layout, and runs in values too, where each box it places is a function of
+σ that agrees with the number solve at every σ. Each is written
+once over an `Arith<T>` (`solver/arith.ts`), the operations it needs on `T`: `add`,
+`sub`, `scale`, `negate`, `abs`, `max` (the upper envelope) and `near`, a test that two
+amounts agree within a tolerance. There are two instances. `numbers` is plain
+arithmetic. `values` is this module, where `near` is `approxEqual`, so a cycle in the
+placement solve closes only when its two sides agree at every σ. The `BBox` ledger holds
+values, so `toValue` and `fromValue` move an amount into and out of it, and a number is
+a constant there.
 
 ## Slope as a data-driven signal
 

@@ -15,6 +15,7 @@
 import * as GoFish from "../../dist/index.js";
 import { stackOrigin, type ColumnType } from "../ast/schema";
 import { solveAxisProblem } from "../ast/constraints/differenceGraph";
+import { numbers } from "../ast/solver/arith";
 import { anchorExpr, relationFact } from "../ast/constraints/placementFacts";
 
 const {
@@ -230,7 +231,7 @@ async function main() {
       participantFacts: [],
       participants: new Set(["a", "b", "r"]),
     };
-    const solved = solveAxisProblem("x", problem, {
+    const solved = solveAxisProblem(numbers, "x", problem, {
       value: 50,
       baselines: new Map([["r", 0]]),
     });

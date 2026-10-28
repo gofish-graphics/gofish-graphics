@@ -226,7 +226,7 @@ export function spanDatumInterval(
   return Interval.interval(Math.min(...vals), Math.max(...vals));
 }
 
-export function lowerPositionPlacement(
+export function lowerPositionPlacement<T>(
   constraint: PositionConstraint,
   owner: string,
   {
@@ -235,13 +235,10 @@ export function lowerPositionPlacement(
     isInitiallyPlaced,
     resolveCoordinate,
   }: {
-    emitter: PlacementFactEmitter;
+    emitter: PlacementFactEmitter<T>;
     targets: Map<string, unknown>;
     isInitiallyPlaced: (axis: Axis, name: string) => boolean;
-    resolveCoordinate: (
-      axis: Axis,
-      coordinate: PositionValue
-    ) => number | undefined;
+    resolveCoordinate: (axis: Axis, coordinate: PositionValue) => T | undefined;
   }
 ): void {
   // A region pins nothing: the layer handed the target its region in its

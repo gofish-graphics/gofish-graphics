@@ -19,6 +19,7 @@ import {
   lowerPlacementConstraints,
   solvePlacementConstraints,
 } from "../ast/constraints/placementSolver";
+import { numbers } from "../ast/solver/arith";
 import {
   anchorExpr,
   participantFact,
@@ -917,19 +918,25 @@ console.log("# constraint confluence: raw placement coordinates");
 {
   ok(
     "literal placement coordinate compiles directly to pixels",
-    compilePlacementCoordinate(5, undefined) === 5
+    compilePlacementCoordinate(numbers, 5, undefined) === 5
   );
   ok(
     "datum placement coordinate elaborates through posScale before raw facts",
-    compilePlacementCoordinate(value(5).offset(3), undefined) === undefined &&
-      compilePlacementCoordinate(value(5).offset(3), {
+    compilePlacementCoordinate(numbers, value(5).offset(3), undefined) ===
+      undefined &&
+      compilePlacementCoordinate(numbers, value(5).offset(3), {
         sigma: 10,
         originPx: 0,
       }) === 53
   );
   ok(
     "discrete placement coordinate resolves from containing axis size",
-    compilePlacementCoordinate(discretePosition(2, 6), undefined, 300) === 100
+    compilePlacementCoordinate(
+      numbers,
+      discretePosition(2, 6),
+      undefined,
+      300
+    ) === 100
   );
 }
 
@@ -964,6 +971,7 @@ console.log("# constraint confluence: placement constraint lowering");
     new Map(names.map((name) => [name, makePlaceable()] as const));
 
   const loweredPosition = lowerPlacementConstraints(
+    numbers,
     [position("A", 20)],
     targets("A"),
     [300, 200]
@@ -979,6 +987,7 @@ console.log("# constraint confluence: placement constraint lowering");
   );
 
   const loweredDiscretePosition = lowerPlacementConstraints(
+    numbers,
     [
       {
         type: "position",
@@ -1002,6 +1011,7 @@ console.log("# constraint confluence: placement constraint lowering");
   );
 
   const loweredAlign = lowerPlacementConstraints(
+    numbers,
     [{ type: "align", x: "middle", children: [A, B] }],
     targets("A", "B"),
     [300, 200]
@@ -1023,6 +1033,7 @@ console.log("# constraint confluence: placement constraint lowering");
   );
 
   const loweredDistribute = lowerPlacementConstraints(
+    numbers,
     [distribute(["A", "B", "C"])],
     targets("A", "B", "C"),
     [300, 200]
@@ -1047,6 +1058,7 @@ console.log("# constraint confluence: placement constraint lowering");
   );
 
   const loweredNest = lowerPlacementConstraints(
+    numbers,
     [{ type: "nest", x: 5, children: [A, B] }],
     targets("A", "B"),
     [300, 200]
@@ -1066,6 +1078,7 @@ console.log("# constraint confluence: placement constraint lowering");
   );
 
   const loweredSpan = lowerPlacementConstraints(
+    numbers,
     [span("C", 10, 30)],
     targets("C"),
     [300, 200]
@@ -1103,6 +1116,7 @@ console.log("# constraint confluence: placement constraint lowering");
     children: [child("C")],
   };
   const loweredMixed = lowerPlacementConstraints(
+    numbers,
     [mixed],
     targets("C"),
     [300, 200]

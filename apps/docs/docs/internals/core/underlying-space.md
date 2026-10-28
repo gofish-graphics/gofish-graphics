@@ -997,7 +997,10 @@ offset (`anchorOffset`; a stack part's `tail` is its free baseline's offset,
 or 0, and its `head` is `size − tail`). `position`, `align`,
 `distribute`, `nest`, and `grid` pins/relations over those reduced `min` values
 go through BFS components + pin offsets + free/distribute/normalized-origin
-fallbacks. Every solved cell writes back through **one path**: a size-strong
+fallbacks. The solve is written once over an `Arith` (see
+[Piecewise-Linear Values](/internals/core/pwl)): layout runs it in numbers, and it runs
+in values in σ too, where the targets are boxes read off claims and a datum maps through
+a symbolic σ. Every solved cell writes back through **one path**: a size-strong
 cell sets its extent (`setExtent({min, max})`), a position-only cell pins its
 `min` anchor, a rank-1 size-with-no-position cell (align `"size"`, above)
 sets its size only (`setSizeOnly`) — replacing the old three-way branch and

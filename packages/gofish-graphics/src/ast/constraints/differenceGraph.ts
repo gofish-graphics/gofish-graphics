@@ -3,6 +3,7 @@
 // </gofish-wiki>
 
 import type { Axis } from "./shared";
+import type { Arith } from "../solver/arith";
 import type {
   NodeId,
   PlacementParticipant,
@@ -17,7 +18,8 @@ import type {
  * distribute/normalized origin fallbacks. It is anchor-agnostic — the rank-2
  * solve reduces each fact to a `min` position (substituting anchor offsets from
  * the closed cell sizes) BEFORE handing it here, so the graph itself never sees
- * an anchor.
+ * an anchor. It runs in any {@link Arith}: numbers at layout, values in σ in
+ * the claim walk, where a cycle closes when its two sides agree at every σ.
  */
 
 export interface PlacementConflict {
@@ -28,31 +30,31 @@ export interface PlacementConflict {
   implied: number;
 }
 
-export type PlacementPinClaim = {
+export type PlacementPinClaim<T = number> = {
   node: NodeId;
-  value: number;
+  value: T;
   owner: string;
 };
 
-export type AxisProblem = {
-  relations: PlacementRelation[];
-  pins: PlacementPinClaim[];
+export type AxisProblem<T = number> = {
+  relations: PlacementRelation<T>[];
+  pins: PlacementPinClaim<T>[];
   participantFacts: PlacementParticipant[];
   participants: Set<NodeId>;
   /** For a member of a chain of baselines, the offset of its baseline from
    *  its `min`: such a chain starts at its first member's origin, not its
    *  edge (see the sequence origin in `solveAxisProblem`). */
-  chainAnchors?: Map<NodeId, number>;
+  chainAnchors?: Map<NodeId, T>;
 };
 
-type RelationEdge = {
+type RelationEdge<T> = {
   node: NodeId;
-  delta: number;
+  delta: T;
   owner: string;
 };
 
-type RelationComponents = {
-  relative: Map<NodeId, number>;
+type RelationComponents<T> = {
+  relative: Map<NodeId, T>;
   componentOf: Map<NodeId, number>;
   components: NodeId[][];
   conflicts: PlacementConflict[];
@@ -64,16 +66,17 @@ export const TOLERANCE = 1e-6;
  *  which a free node's baseline sits, and the baseline offset from `min` of
  *  each participant whose baseline nothing else places (a free participant,
  *  or the part of a stack that carries its origin). */
-export type FreeOriginInput = {
-  value: number;
-  baselines: Map<NodeId, number>;
+export type FreeOriginInput<T = number> = {
+  value: T;
+  baselines: Map<NodeId, T>;
 };
 
-function buildRelationGraph(
-  relations: PlacementRelation[]
-): Map<NodeId, RelationEdge[]> {
-  const adjacency = new Map<NodeId, RelationEdge[]>();
-  const addEdge = (from: NodeId, to: NodeId, delta: number, owner: string) => {
+function buildRelationGraph<T>(
+  A: Arith<T>,
+  relations: PlacementRelation<T>[]
+): Map<NodeId, RelationEdge<T>[]> {
+  const adjacency = new Map<NodeId, RelationEdge<T>[]>();
+  const addEdge = (from: NodeId, to: NodeId, delta: T, owner: string) => {
     const list = adjacency.get(from) ?? [];
     list.push({ node: to, delta, owner });
     adjacency.set(from, list);
@@ -89,7 +92,7 @@ function buildRelationGraph(
     addEdge(
       relation.to.node,
       relation.from.node,
-      -relation.offset,
+      A.negate(relation.offset),
       relation.owner
     );
   }
@@ -97,12 +100,13 @@ function buildRelationGraph(
   return adjacency;
 }
 
-function solveRelationComponents(
+function solveRelationComponents<T>(
+  A: Arith<T>,
   axis: Axis,
-  problem: AxisProblem
-): RelationComponents {
-  const adjacency = buildRelationGraph(problem.relations);
-  const relative = new Map<NodeId, number>();
+  problem: AxisProblem<T>
+): RelationComponents<T> {
+  const adjacency = buildRelationGraph(A, problem.relations);
+  const relative = new Map<NodeId, T>();
   const componentOf = new Map<NodeId, number>();
   const components: NodeId[][] = [];
   const conflicts: PlacementConflict[] = [];
@@ -113,25 +117,25 @@ function solveRelationComponents(
     const nodes: NodeId[] = [];
     const queue: NodeId[] = [start];
     let head = 0;
-    relative.set(start, 0);
+    relative.set(start, A.zero);
     componentOf.set(start, component);
     while (head < queue.length) {
       const current = queue[head++];
       nodes.push(current);
       for (const edge of adjacency.get(current) ?? []) {
-        const expected = relative.get(current)! + edge.delta;
+        const expected = A.add(relative.get(current)!, edge.delta);
         const prior = relative.get(edge.node);
         if (prior === undefined) {
           relative.set(edge.node, expected);
           componentOf.set(edge.node, component);
           queue.push(edge.node);
-        } else if (Math.abs(prior - expected) > TOLERANCE) {
+        } else if (!A.near(prior, expected, TOLERANCE)) {
           conflicts.push({
             axis,
             owner: edge.owner,
             priorOwner: "relation graph",
-            asserted: expected,
-            implied: prior,
+            asserted: A.report(expected),
+            implied: A.report(prior),
           });
         }
       }
@@ -152,30 +156,31 @@ function solveRelationComponents(
  * 0). This is the general half of
  * the placement solver.
  */
-export function solveAxisProblem(
+export function solveAxisProblem<T>(
+  A: Arith<T>,
   axis: Axis,
-  problem: AxisProblem,
-  freeOrigin?: FreeOriginInput
-): { positions: Map<NodeId, number>; conflicts: PlacementConflict[] } {
+  problem: AxisProblem<T>,
+  freeOrigin?: FreeOriginInput<T>
+): { positions: Map<NodeId, T>; conflicts: PlacementConflict[] } {
   const { relative, componentOf, components, conflicts } =
-    solveRelationComponents(axis, problem);
+    solveRelationComponents(A, axis, problem);
 
-  const offsets = new Map<number, { value: number; owner: string }>();
-  const applyPin = (node: NodeId, value: number, owner: string) => {
+  const offsets = new Map<number, { value: T; owner: string }>();
+  const applyPin = (node: NodeId, value: T, owner: string) => {
     const component = componentOf.get(node);
     const rel = relative.get(node);
     if (component === undefined || rel === undefined) return;
-    const assertedOffset = value - rel;
+    const assertedOffset = A.sub(value, rel);
     const prior = offsets.get(component);
     if (prior === undefined) {
       offsets.set(component, { value: assertedOffset, owner });
-    } else if (Math.abs(prior.value - assertedOffset) > TOLERANCE) {
+    } else if (!A.near(prior.value, assertedOffset, TOLERANCE)) {
       conflicts.push({
         axis,
         owner,
         priorOwner: prior.owner,
-        asserted: value,
-        implied: rel + prior.value,
+        asserted: A.report(value),
+        implied: A.report(A.add(rel, prior.value)),
       });
     }
   };
@@ -203,7 +208,7 @@ export function solveAxisProblem(
   // its members has a baseline, but seating it would move the whole spread
   // off its start). Only a determined baseline is returned; impossible places
   // like undefined.
-  const sharedFreeBaseline = (component: number): number | undefined => {
+  const sharedFreeBaseline = (component: number): T | undefined => {
     if (freeOrigin === undefined) return undefined;
     const holdsSpread = problem.relations.some(
       (relation) =>
@@ -211,13 +216,13 @@ export function solveAxisProblem(
         componentOf.get(relation.from.node) === component
     );
     if (holdsSpread) return undefined;
-    let shared: number | undefined;
+    let shared: T | undefined;
     for (const node of components[component]) {
       const offset = freeOrigin.baselines.get(node);
       if (offset === undefined) continue;
-      const at = relative.get(node)! + offset;
+      const at = A.add(relative.get(node)!, offset);
       if (shared === undefined) shared = at;
-      else if (Math.abs(shared - at) > TOLERANCE) return undefined;
+      else if (!A.near(shared, at, TOLERANCE)) return undefined;
     }
     return shared;
   };
@@ -233,7 +238,7 @@ export function solveAxisProblem(
     const baseline = sharedFreeBaseline(component);
     if (freeOrigin !== undefined && baseline !== undefined) {
       offsets.set(component, {
-        value: freeOrigin.value - baseline,
+        value: A.sub(freeOrigin.value, baseline),
         owner: "free-origin",
       });
       continue;
@@ -241,26 +246,29 @@ export function solveAxisProblem(
     const origin = distributeOriginFor(component);
     if (origin !== undefined) {
       offsets.set(component, {
-        value: -(
-          (relative.get(origin) ?? 0) + (problem.chainAnchors?.get(origin) ?? 0)
+        value: A.negate(
+          A.add(
+            relative.get(origin) ?? A.zero,
+            problem.chainAnchors?.get(origin) ?? A.zero
+          )
         ),
         owner: "sequence-origin",
       });
       continue;
     }
-    let min = Infinity;
-    for (const node of components[component])
-      min = Math.min(min, relative.get(node) ?? 0);
+    // The component's minimum at 0: its offset is `−min = max(−rel)`.
     offsets.set(component, {
-      value: -min,
+      value: A.max(
+        components[component].map((node) => A.negate(relative.get(node)!))
+      ),
       owner: "normalized-origin",
     });
   }
 
-  const positions = new Map<NodeId, number>();
+  const positions = new Map<NodeId, T>();
   for (const [node, rel] of relative) {
     const component = componentOf.get(node)!;
-    positions.set(node, rel + offsets.get(component)!.value);
+    positions.set(node, A.add(rel, offsets.get(component)!.value));
   }
   return { positions, conflicts };
 }

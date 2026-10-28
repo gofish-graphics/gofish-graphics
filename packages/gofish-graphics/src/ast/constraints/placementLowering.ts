@@ -2,7 +2,6 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import type { Placeable } from "../_node";
 import {
   getValue,
   getValueOffset,
@@ -18,7 +17,10 @@ import type { GridConstraint, TrackLayout } from "./grid";
 import { lowerGridPlacement } from "./grid";
 import type { NestConstraint } from "./nest";
 import { lowerNestPlacement } from "./nest";
-import { PlacementProgramLowerer } from "./placementProgramLowerer";
+import {
+  PlacementProgramLowerer,
+  type SolvePlaceable,
+} from "./placementProgramLowerer";
 import type { PositionConstraint } from "./position";
 import { isPositionInterval, lowerPositionPlacement } from "./position";
 import {
@@ -28,8 +30,9 @@ import {
   type Axis,
   type ConstraintPosScales,
 } from "./shared";
-import { pxOf, type AxisMap } from "../domain";
+import type { AxisMap } from "../domain";
 import type { AnchorProgram } from "./placementFacts";
+import type { Arith } from "../solver/arith";
 
 export type PlacementConstraint =
   | AlignConstraint
@@ -38,35 +41,41 @@ export type PlacementConstraint =
   | NestConstraint
   | GridConstraint;
 
-export interface LoweredPlacement {
+export interface LoweredPlacement<T = number> {
   /** The anchor program (#39 stage 5): facts that name a node anchor without a
    *  pre-evaluated `min` offset, consumed by the rank-2 solve. */
-  anchorProgram: AnchorProgram;
+  anchorProgram: AnchorProgram<T>;
 }
 
 /** A raw placement-system coordinate after datum values have been elaborated
  *  through the layer's data→pixel scale. Undefined means a datum coordinate had
  *  no scale in this scope, so the fact cannot be emitted. */
-export type PlacementCoordinate = number | undefined;
+export type PlacementCoordinate<T = number> = T | undefined;
 
 const AXIS_INDICES = [0, 1] as const;
 const POSITION_AXES = ["x", "y"] as const;
 
-export function compilePlacementCoordinate(
+export function compilePlacementCoordinate<T>(
+  A: Arith<T>,
   coordinate: PositionValue,
-  scale: AxisMap | undefined,
+  scale: AxisMap<T> | undefined,
   axisSize?: number
-): PlacementCoordinate {
+): PlacementCoordinate<T> {
   if (isDiscretePosition(coordinate)) {
     if (!Number.isFinite(axisSize) || coordinate.count <= 0) return undefined;
-    return (coordinate.index / coordinate.count) * axisSize!;
+    return A.constant((coordinate.index / coordinate.count) * axisSize!);
   }
-  if (!isValue(coordinate)) return coordinate;
+  if (!isValue(coordinate)) return A.constant(coordinate);
   if (scale === undefined) return undefined;
-  return pxOf(scale, getValue(coordinate)!) + getValueOffset(coordinate);
+  // `pxOf`, in `A`.
+  return A.add(
+    A.scale(getValue(coordinate)!, scale.sigma),
+    scale.originPx,
+    A.constant(getValueOffset(coordinate))
+  );
 }
 
-class PlacementOwnershipPlan {
+class PlacementOwnershipPlan<T> {
   private readonly authoritative = new Set<string>();
   private readonly initiallyPlaced = new Set<string>();
   private readonly positionPinned = new Set<string>();
@@ -74,9 +83,10 @@ class PlacementOwnershipPlan {
   private readonly sizes: [number, number];
 
   constructor(
-    targets: Map<string, Placeable>,
+    private readonly A: Arith<T>,
+    targets: Map<string, SolvePlaceable<T>>,
     constraints: PlacementConstraint[],
-    posScales: ConstraintPosScales | undefined,
+    posScales: ConstraintPosScales<T> | undefined,
     sizes: [number, number],
     dataPositioned?: [Set<string>, Set<string>]
   ) {
@@ -120,7 +130,7 @@ class PlacementOwnershipPlan {
 
   private notePositionConstraint(
     constraint: PositionConstraint,
-    posScales: ConstraintPosScales | undefined
+    posScales: ConstraintPosScales<T> | undefined
   ): void {
     for (const child of constraint.children) {
       if (constraint.override) {
@@ -140,11 +150,20 @@ class PlacementOwnershipPlan {
       // anchor. (A region pins nothing: its target placed itself in the
       // region it was handed at layout, so it is initially placed.)
       if (isPositionInterval(coordinate)) {
-        const min = compilePlacementCoordinate(coordinate[0], posScales?.[idx]);
-        const max = compilePlacementCoordinate(coordinate[1], posScales?.[idx]);
+        const min = compilePlacementCoordinate(
+          this.A,
+          coordinate[0],
+          posScales?.[idx]
+        );
+        const max = compilePlacementCoordinate(
+          this.A,
+          coordinate[1],
+          posScales?.[idx]
+        );
         if (min === undefined || max === undefined) continue;
       } else {
         const value = compilePlacementCoordinate(
+          this.A,
           coordinate,
           posScales?.[idx],
           this.sizes[idx]
@@ -158,14 +177,15 @@ class PlacementOwnershipPlan {
   }
 }
 
-export function lowerPlacementConstraints(
+export function lowerPlacementConstraints<T>(
+  A: Arith<T>,
   constraints: PlacementConstraint[],
-  targets: Map<string, Placeable>,
+  targets: Map<string, SolvePlaceable<T>>,
   sizes: [number, number],
-  posScales?: ConstraintPosScales,
+  posScales?: ConstraintPosScales<T>,
   gridTracks?: [TrackLayout, TrackLayout],
   dataPositioned?: [Set<string>, Set<string>]
-): LoweredPlacement {
+): LoweredPlacement<T> {
   // A `position` pin on a grid cell overrides that cell's track centering on the
   // pinned axis (the authoritative-pin pattern) — collect which (cell, axis) a
   // position constraint owns so the grid skips its center pin there.
@@ -181,6 +201,7 @@ export function lowerPlacementConstraints(
     }
   }
   const ownership = new PlacementOwnershipPlan(
+    A,
     targets,
     constraints,
     posScales,
@@ -191,7 +212,12 @@ export function lowerPlacementConstraints(
   const lowerer = new PlacementProgramLowerer(targets);
   const resolveAxisCoordinate = (axis: Axis, coordinate: PositionValue) => {
     const idx = axisIndex(axis);
-    return compilePlacementCoordinate(coordinate, posScales?.[idx], sizes[idx]);
+    return compilePlacementCoordinate(
+      A,
+      coordinate,
+      posScales?.[idx],
+      sizes[idx]
+    );
   };
   const isInitiallyPlaced = ownership.isInitiallyPlaced.bind(ownership);
   const isPinned = ownership.isPinned.bind(ownership);
@@ -229,6 +255,7 @@ export function lowerPlacementConstraints(
         return;
       case "align":
         lowerAlignPlacement(constraint, owner, {
+          A,
           emitter: lowerer,
           targets,
           posScales,
@@ -238,16 +265,18 @@ export function lowerPlacementConstraints(
         return;
       case "distribute":
         lowerDistributePlacement(constraint, owner, {
+          A,
           emitter: lowerer,
           targets,
           isInitiallyPlaced,
         });
         return;
       case "nest":
-        lowerNestPlacement(constraint, owner, lowerer);
+        lowerNestPlacement(A, constraint, owner, lowerer);
         return;
       case "grid":
         lowerGridPlacement(
+          A,
           constraint,
           owner,
           sizes,

@@ -6,6 +6,7 @@ import { type Size } from "../dims";
 import { isValue } from "../data";
 import { isPositionInterval, type PositionRegion } from "./position";
 import { compilePlacementCoordinate } from "./placementLowering";
+import { numbers } from "../solver/arith";
 import {
   hasSpan,
   rebaseRegion,
@@ -205,8 +206,8 @@ export function buildChildProposals(
     for (const axis of [0, 1] as const) {
       const coord = axis === 0 ? c.x : c.y;
       if (!isPositionInterval(coord)) continue;
-      const a = compilePlacementCoordinate(coord[0], posScales[axis]);
-      const b = compilePlacementCoordinate(coord[1], posScales[axis]);
+      const a = compilePlacementCoordinate(numbers, coord[0], posScales[axis]);
+      const b = compilePlacementCoordinate(numbers, coord[1], posScales[axis]);
       if (a === undefined || b === undefined) continue;
       for (const ref of c.children) {
         if (!ref) continue;
@@ -236,8 +237,8 @@ function cellRegion(
   const span = (axis: 0 | 1): Span | undefined => {
     const edges = cell.spans[axis];
     if (edges === undefined) return local?.spans[axis];
-    const a = compilePlacementCoordinate(edges[0], posScales[axis]);
-    const b = compilePlacementCoordinate(edges[1], posScales[axis]);
+    const a = compilePlacementCoordinate(numbers, edges[0], posScales[axis]);
+    const b = compilePlacementCoordinate(numbers, edges[1], posScales[axis]);
     if (a === undefined || b === undefined) return undefined;
     return [Math.min(a, b), Math.max(a, b)];
   };
@@ -245,8 +246,8 @@ function cellRegion(
   if (cell.outline !== undefined) {
     const points: Point[] = [];
     for (const [vx, vy] of cell.outline) {
-      const x = compilePlacementCoordinate(vx, posScales[0]);
-      const y = compilePlacementCoordinate(vy, posScales[1]);
+      const x = compilePlacementCoordinate(numbers, vx, posScales[0]);
+      const y = compilePlacementCoordinate(numbers, vy, posScales[1]);
       if (x === undefined || y === undefined) break;
       points.push([x, y]);
     }

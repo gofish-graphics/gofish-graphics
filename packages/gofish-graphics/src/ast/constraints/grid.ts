@@ -50,6 +50,7 @@ import {
 } from "../underlyingSpace";
 import type { ScopeRegistry } from "../solver/scopes";
 import type { PlacementFactEmitter } from "./placementFacts";
+import type { Arith } from "../solver/arith";
 
 export interface GridOptions {
   numCols: number;
@@ -342,11 +343,12 @@ export function gridCellPlacements(
 /** Emit the per-cell center pins for a grid. A cell whose center on an axis is
  *  claimed by a `position` pin is skipped on that axis — the explicit pin
  *  overrides the track centering (the authoritative-pin pattern). */
-export function lowerGridPlacement(
+export function lowerGridPlacement<T>(
+  A: Arith<T>,
   c: GridConstraint,
   owner: string,
   size: readonly [number, number],
-  emitter: PlacementFactEmitter,
+  emitter: PlacementFactEmitter<T>,
   tracks?: [TrackLayout, TrackLayout],
   pinnedByPosition?: Map<string, Set<0 | 1>>
 ): void {
@@ -356,14 +358,14 @@ export function lowerGridPlacement(
       emitter.pin({
         axis: "x",
         target: { name: child.name, anchor: "middle" },
-        value: center[0],
+        value: A.constant(center[0]),
         owner,
       });
     if (!overridden?.has(1))
       emitter.pin({
         axis: "y",
         target: { name: child.name, anchor: "middle" },
-        value: center[1],
+        value: A.constant(center[1]),
         owner,
       });
   }

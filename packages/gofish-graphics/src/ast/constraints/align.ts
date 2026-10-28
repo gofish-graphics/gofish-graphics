@@ -2,7 +2,6 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import type { Placeable } from "../_node";
 import type {
   AlignAnchor,
   AlignValue,
@@ -13,6 +12,8 @@ import type {
 import { axisIndex } from "./shared";
 import { isUNDEFINED } from "../underlyingSpace";
 import type { PlacementFactEmitter } from "./placementFacts";
+import type { SolvePlaceable } from "./placementProgramLowerer";
+import type { Arith } from "../solver/arith";
 
 /**
  * Value spec for one axis of an `align` constraint. A single anchor
@@ -79,26 +80,28 @@ function isDataPositionedAlignTarget(
   name: string,
   anchor: AlignAnchor,
   axis: 0 | 1,
-  posScales: ConstraintPosScales | undefined,
+  posScales: ConstraintPosScales<unknown> | undefined,
   isDataPositioned: (axis: 0 | 1, name: string) => boolean
 ): boolean {
   if (anchor === "middle" || posScales?.[axis] === undefined) return false;
   return isDataPositioned(axis, name);
 }
 
-export function lowerAlignPlacement(
+export function lowerAlignPlacement<T>(
   constraint: AlignConstraint,
   owner: string,
   {
+    A,
     emitter,
     targets,
     posScales,
     isPinned,
     isDataPositioned,
   }: {
-    emitter: PlacementFactEmitter;
-    targets: Map<string, Placeable>;
-    posScales: ConstraintPosScales | undefined;
+    A: Arith<T>;
+    emitter: PlacementFactEmitter<T>;
+    targets: Map<string, SolvePlaceable<T>>;
+    posScales: ConstraintPosScales<T> | undefined;
     isPinned: (axis: Axis, name: string) => boolean;
     isDataPositioned: (axis: 0 | 1, name: string) => boolean;
   }
@@ -161,7 +164,7 @@ export function lowerAlignPlacement(
         emitter.pin({
           axis,
           target: { name: child.name, anchor: "end" },
-          value: sourceMin + sourceSize,
+          value: A.add(sourceMin, sourceSize),
           owner,
         });
       } else {
@@ -242,7 +245,7 @@ export function lowerAlignPlacement(
           axis,
           from: { name: source.child.name, anchor: source.anchor },
           to: { name: target.child.name, anchor: target.anchor },
-          gap: 0,
+          gap: A.zero,
           owner,
         });
       }
@@ -254,7 +257,7 @@ export function lowerAlignPlacement(
         axis,
         from: { name: movable[0].child.name, anchor: movable[0].anchor },
         to: { name: movable[i].child.name, anchor: movable[i].anchor },
-        gap: 0,
+        gap: A.zero,
         owner,
       });
     }
