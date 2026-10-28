@@ -659,11 +659,47 @@ chart(grid)
 ```
 
 **Recommendation: (a).** It keeps one dataset for shape, cells and dots, and a
-weight is the usual way to say "these rows stand for a distribution" (numpy
-`quantile(weights=)`, ggdist's `weight` aesthetic). The unweighted
+weight says how much each grid row counts (numpy `quantile(weights=)`). It is
+a shortcut: ggdist's `weight` aesthetic is for weighted samples, and with a
+distribution object ggdist reads density and quantiles from the object, with
+no weight. The clean spelling is a first-class distribution (#980, design note
+#983); the weight stands in until then. The unweighted
 `Bin.quantiles(n)` over rows stays for when the rows really are the thing
 being cut. This folds the old decisions 2 (weighted quantiles) and 3 (ties)
 into one question.
+
+### Why the row median misses: one month up close
+
+January only, one x scale. Each small dot is one day, stacked at its recorded
+value.
+
+![January highs as stacked dots](img/croissant--ties-raw-steps.png)
+
+The data. Highs were recorded in whole °F, so in °C they land on steps 0.55°
+apart. Many days share each step. The smoothed curve has no steps.
+
+![Cut at the rows' quantiles](img/croissant--ties-cut-rows.png)
+
+Cut at the rows' quantiles. Each edge lands exactly on a step, so a whole
+column of days sits on the edge. Those days count toward the cell on the
+right, so that cell's median (orange) is the edge itself, in the gap. Two
+cells (red bands) are too thin to draw. In January, 6 of 10 medians miss.
+
+![Cut at the curve's quantiles](img/croissant--ties-cut-curve.png)
+
+Cut at the curve's quantiles. Edges fall between steps, and every median sits
+inside its slice.
+
+| Rule for the dot    | Dots outside their slice (of 120) |
+| ------------------- | --------------------------------- |
+| Median of the rows  | 65                                |
+| Mean of the rows    | 68                                |
+| Median of the curve | 0                                 |
+
+The mean does not help: any summary of the rows lands on or between a few
+steps. Cut at the rows, 24 of 120 cells are narrower than gap + dot + gap. The
+cause is stepped data, not the median. A first-class distribution (#980, #983)
+would be the clean spelling of "cut the curve", but the fix does not need it.
 
 ## Choice 5: the gap
 

@@ -457,3 +457,129 @@ export const HexInDisc: StoryObj<Args> = {
     return container;
   },
 };
+
+// ------------------------------------------------- ties explainer (January)
+
+/**
+ * Why the median of the rows misses. January Seattle highs, zoomed in: every
+ * day as a dot stacked at its recorded value (whole °F, so 0.55 °C steps),
+ * under the croissant cut from the rows or from the curve.
+ */
+type TiesPanel = "raw" | "rows" | "curve";
+const ORANGE = "#D9480F";
+const tiesStory = (panel: TiesPanel): StoryObj<Args> => ({
+  args: { w: 760, h: 0 },
+  render: (args) => {
+    const container = initializeContainer();
+    const lo = -2;
+    const hi = 18;
+    const xs = seattleWeather.filter((d) => new Date(d.date).getUTCMonth() === 0).map((d) => d.temp_max);
+    const sorted = [...xs].sort((a, b) => a - b);
+    const f = kde(xs, 1.2);
+    const peak = Math.max(...Array.from({ length: 300 }, (_, i) => f(lo + ((hi - lo) * i) / 299)));
+    const scale = 1 / peak; // curve peak is 1 unit tall
+    const gap = 0.18;
+    const pxPerY = 200; // curve band is 200 px tall
+    const dy = 7 / pxPerY; // one stacked day = 7 px
+    const counts = new Map<number, number>();
+    for (const v of sorted) counts.set(v, (counts.get(v) ?? 0) + 1);
+    const maxCount = Math.max(...counts.values());
+    const band = 0.12 + maxCount * dy; // depth of the dot band under the baseline
+    const h = Math.round(pxPerY * (1.2 + band));
+    const rData = 5 / ((args.w - 40) / (hi - lo)); // big dot radius in °C, for the fit test
+
+    const cut =
+      panel === "raw" ? undefined : cellsAndMedians(sorted, f, lo, hi, 10, panel === "rows" ? "rows" : "density");
+    const cellOf = (v: number) => {
+      if (!cut) return 0;
+      const i = cut.edges.findIndex((e, j) => j > 0 && v < e);
+      return i === -1 ? cut.edges.length - 2 : i - 1;
+    };
+    const thin = cut ? cut.edges.slice(0, -1).map((a, i) => cut.edges[i + 1] - a < 2 * (gap + rData)) : [];
+
+    const rows: { ring: Pt[] }[] = [];
+    const thinRows: { ring: Pt[] }[] = [];
+    const lines: { ring: Pt[] }[] = [];
+    if (cut) {
+      cut.edges.slice(0, -1).forEach((a, i) => {
+        const b = cut.edges[i + 1];
+        if (thin[i])
+          thinRows.push({
+            ring: [
+              [a, -band],
+              [b, -band],
+              [b, 1.02],
+              [a, 1.02],
+            ],
+          });
+        else rows.push({ ring: slice(f, a, b, gap, 0, scale) });
+      });
+      for (const e of cut.edges.slice(1, -1))
+        lines.push({
+          ring: [
+            [e - 0.006, -band],
+            [e + 0.006, -band],
+            [e + 0.006, 1.02],
+            [e - 0.006, 1.02],
+          ],
+        });
+    } else {
+      const top = Array.from({ length: 200 }, (_, i): Pt => {
+        const x = lo + ((hi - lo) * i) / 199;
+        return [x, scale * f(x)];
+      });
+      rows.push({ ring: [[lo, 0], ...top, [hi, 0]] });
+    }
+
+    // Base layer: an invisible frame so every panel has the same x and y extent.
+    const frame: Pt[] = [
+      [lo, -band],
+      [hi, -band],
+      [hi, 1.18],
+      [lo, 1.18],
+    ];
+    let b = chart([{ ring: frame }], { w: args.w, h, axes: { x: { title: "January daily high (°C)" }, y: false } }).mark(
+      polygon({ points: "ring", fill: "none", stroke: "none" })
+    );
+    if (thinRows.length) b = b.layer(chart(thinRows).mark(polygon({ points: "ring", fill: "#FBE3D9", stroke: "none" })));
+    b = b.layer(
+      chart(rows).mark(
+        polygon({
+          points: "ring",
+          fill: panel === "raw" ? "#EEF4FA" : FILL,
+          stroke: STROKE,
+          strokeWidth: panel === "raw" ? 1 : 2,
+        })
+      )
+    );
+    if (lines.length) b = b.layer(chart(lines).mark(polygon({ points: "ring", fill: "#9AA5B1", stroke: "none" })));
+
+    // The days, stacked down from the baseline at their recorded value.
+    const seen = new Map<number, number>();
+    for (const v of sorted) {
+      const k = seen.get(v) ?? 0;
+      seen.set(v, k + 1);
+      const cell = cellOf(v);
+      const fill = panel === "raw" ? STROKE : panel === "curve" ? "#B8C7D6" : cell % 2 ? "#7FA3C4" : "#2F5F86";
+      b = b.layer(circle({ cx: datum(v), cy: datum(-0.06 - (k + 0.5) * dy), r: 2.6, fill }));
+    }
+
+    // Each cell's median dot on the croissant row.
+    if (cut)
+      for (const m of cut.medians)
+        b = b.layer(circle({ cx: datum(m), cy: datum(0.07), r: 5, fill: ORANGE, stroke: "white", strokeWidth: 1.5 }));
+
+    const note =
+      panel === "raw"
+        ? "Each dot is one January day. Highs were recorded in whole °F, so they fall on 0.55 °C steps."
+        : panel === "rows"
+          ? "Cut at the rows' quantiles: edges land on the steps. Orange = each cell's row median. Red bands = cells too thin to hold a dot."
+          : "Cut at the curve's quantiles: edges fall between steps, and every median sits inside its slice.";
+    b = b.layer(text({ x: datum(lo + 0.1), y: datum(1.12), text: note, fontSize: 12, fill: "#333" }));
+    b.render(container);
+    return container;
+  },
+});
+export const TiesRawSteps = tiesStory("raw");
+export const TiesCutRows = tiesStory("rows");
+export const TiesCutCurve = tiesStory("curve");
