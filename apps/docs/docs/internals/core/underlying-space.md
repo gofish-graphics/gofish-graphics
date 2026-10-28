@@ -631,7 +631,10 @@ ones that add pixels (a spread's spacing or pitch, a nest's padding, a
 `transform.scale`), the ones that compose their children's claims (an
 overlay, an alignment, a stack, a layer placing its children,
 `placeByClaims`), and the pass-throughs that keep their child's claim as it
-is (`offset`, the `position` operator, a `ref`). Every continuous axis has
+is (`offset`, the `position` operator, a `ref`). (Temporarily, for #1176
+step 3, a layer under `GOFISH_PLAN_CHECK` also builds a plan of all its
+children in the claim walk and compares it with where layout lays them,
+in `solver/planShadow.ts`; step 3f removes it.) Every continuous axis has
 exactly one claim; `resolveExtent()` checks this. Another axis has one when
 its content's room depends on σ, or when its content has a pixel size of its
 own (a claim with no σ in it); content that takes whatever room it is given

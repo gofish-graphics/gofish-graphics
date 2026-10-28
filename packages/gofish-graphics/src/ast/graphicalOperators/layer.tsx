@@ -100,6 +100,14 @@ import {
 } from "../constraints/claimPlacement";
 import { placementIn } from "../placementClaims";
 import {
+  planCheckOn,
+  planShadowCheck,
+  planSummary,
+  unoutlined,
+  type PlanShadow,
+} from "../solver/planShadow";
+import { isOverlapConstraint } from "../constraints/overlap";
+import {
   guttersAroundPlot,
   guttersInSlot,
   seatPastGutters,
@@ -395,6 +403,12 @@ export const layer = createNodeOperatorSequential(
     // `resolveExtent` and consumed by `layout` to invert the composed SIZE
     // claim against the allotted size and propose per-child slices.
     let constraintBudget: ComposeBudget | undefined;
+    // TEMPORARY (#1176 step 3c): the layer's plan per axis, for the plan
+    // shadow check (`planShadow.ts`) under GOFISH_PLAN_CHECK.
+    const planShadows: [PlanShadow | undefined, PlanShadow | undefined] = [
+      undefined,
+      undefined,
+    ];
 
     // The layer's composed per-axis types: the types of its content. A pure
     // function of the children's types: the type hook computes it, reports it
@@ -756,6 +770,36 @@ export const layer = createNodeOperatorSequential(
           // its magnitude instead; the content's claim stays inside the box.
           contentExtents[0] = resolved[0];
           contentExtents[1] = resolved[1];
+          // TEMPORARY (#1176 step 3c): the plan beside the claim, one solve
+          // over every child by its box.
+          if (planCheckOn())
+            for (const axis of [0, 1] as const) {
+              planShadows[axis] = undefined;
+              if (modes[axis] === "grid") continue;
+              const boxes = effectiveExtents.map((e, i) =>
+                e === undefined
+                  ? e
+                  : ([
+                      unoutlined(e[0], overhang(i)),
+                      unoutlined(e[1], overhang(i)),
+                    ] as Size<Extent | undefined>)
+              );
+              const placement = placeByClaims(
+                axis,
+                claimChildren(axis, boxes, placedStandIns[axis]),
+                node.constraints,
+                operands,
+                new Set(node.children.map((_, i) => i)),
+                nestedPlacement(axis)
+              );
+              planShadows[axis] = {
+                placement,
+                summary: planSummary(placement, () => true, overhang),
+                claim: resolved[axis],
+                extents: boxes.map((b) => b?.[axis]),
+                outline: overhang,
+              };
+            }
           // What the layer claims upward. A data-valued size claims its
           // magnitude. A literal size claims its own pixels: the box is a
           // sized node, so its content's σ is its own, and the parent must
@@ -1386,6 +1430,23 @@ export const layer = createNodeOperatorSequential(
           }
 
           for (const i of relateOrder.afterSolve) layoutChild(i);
+
+          // TEMPORARY (#1176 step 3c): compare the plan with what layout
+          // laid.
+          if (planCheckOn())
+            for (const axis of [0, 1] as const) {
+              const p = planShadows[axis];
+              if (p !== undefined)
+                planShadowCheck(
+                  node,
+                  axis,
+                  p,
+                  childPlaceables,
+                  childScaleFactors[axis],
+                  effectivePosScales[axis]?.originPx,
+                  node.constraints.some(isOverlapConstraint)
+                );
+            }
 
           // Calculate the bounding box of all children (NaN-safe; see
           // foldFinite for why undefined extents are skipped). Each child's
