@@ -251,14 +251,14 @@ export const layer = createNodeOperatorSequential(
     // Where each child that is a `ref` stand-in has its target land in this
     // layer's frame on `axis` (`placementIn`), and where each child drawn
     // from refs lands (`GoFishNode.placedFromRefs`), by child index, its
-    // outline included (`GoFishNode.strokeOverhang`), as a claim includes it.
+    // outline included (`GoFishNode.claimedOverhang`), as a claim includes it.
     const standInPlacements = (axis: 0 | 1): (Placement | undefined)[] =>
       node.children.map((c) =>
         c instanceof GoFishRef
           ? c.targetNode !== undefined
             ? placementIn(c.targetNode, node, axis)
             : undefined
-          : outlined(c.placedFromRefs?.(node, axis), c.strokeOverhang)
+          : outlined(c.placedFromRefs?.(node, axis), c.claimedOverhang)
       );
     // What the claim walk knows of each child on `axis`, for
     // `placeByClaims`: its claim (`extents`), its type, whether it is a `ref`
