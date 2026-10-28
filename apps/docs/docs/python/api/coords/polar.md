@@ -39,7 +39,7 @@ is the same transform with 0 at 12 o'clock, going clockwise.
 
 The number 0 on the angular axis always sits at `baseline_angle`, whatever
 the θ range and `central_angle`. A range that starts at 0, like a pie's, starts at
-`baseline_angle`. A stack centered on 0 (a `Schema.ordered(...).diverging(...)`
+`baseline_angle`. A stack centered on 0 (a `Unit(domain=..., traits=[Trait.diverging(...)])`
 schema) is centered on `baseline_angle`, and its negative half runs back past it.
 
 ::: gofish-ref polar

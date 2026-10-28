@@ -22,7 +22,7 @@ from gofish import (
     spread,
     stack,
     Place,
-    Schema,
+    Unit,
 )
 from python_stories.data import SEAFOOD
 from python_stories.vega_data_urls import read_csv, read_json
@@ -75,7 +75,7 @@ def story_scatter_point_labels():
 
 def story_line_end_labels():
     return (
-        chart(_yearly_stocks(), schema={"date": Schema.time()})
+        chart(_yearly_stocks(), schema={"date": Unit.time()})
         .flow(group(by="symbol"), scatter(by="date", x="date", y="price"))
         .mark(
             line(stroke="symbol", stroke_width=2).label("symbol", position=Place.end())
@@ -88,7 +88,7 @@ def story_line_end_labels():
 
 def story_inline_sloped_labels():
     return (
-        chart(_yearly_stocks(), schema={"date": Schema.time()})
+        chart(_yearly_stocks(), schema={"date": Unit.time()})
         .flow(group(by="symbol"), scatter(by="date", x="date", y="price"))
         .mark(
             line(stroke="symbol", stroke_width=2).label(

@@ -86,9 +86,28 @@ and yields to either real source. See
 
 **Capabilities get plain names.** A capability is named `Has<Thing>` for a
 property and `Can<Verb>` for an operation: `HasZero`, `HasOrder`, `HasCycle`,
-`CanSum`, `CanNegate`. These read at a glance for someone who is not a
+`CanAdd`, `CanNegate`. These read at a glance for someone who is not a
 mathematician. Math names like monoid or torsor appear only in the docs, as
-analogies. Named types such as `Price` or `Revenue` are sugar over the
+analogies. The word that declares a capability names what the user gets,
+not the class: `Trait.summable()` declares `CanAdd`, as `Trait.diverging()`
+declares `HasMidpoint`. A capability of amounts sits on the unit, which is
+declared once and shared by its columns, so one unit cannot both add up and
+not.
+
+**A unit is a domain plus traits.** A unit definition,
+`Unit(name?, { domain?, traits? })`, keeps what its values are apart from
+what they can do. The `domain` says what the values are:
+`Domain.discrete(levels)` for levels with no order (nominal),
+`Domain.ordered(levels)` for levels in order (ordinal). Order is part of
+the domain, not a trait, because it says which values exist and how they
+line up; it has one spelling. The `traits` say what the values can do, as a
+list: `Trait.summable()`, `Trait.diverging(midpoint?)`. The word follows
+Rust, where a type declares the traits it implements. A trait may need a
+domain (a midpoint is a point along an order, so `Trait.diverging` needs
+`Domain.ordered`) or a name (`Trait.summable` belongs to a unit, and a unit
+is known by its name); a definition that breaks that is an error when it is
+made, not when it is drawn. `Domain` and `Trait` are families, but never
+reach the wire: the wire carries the classes they expand into. Named types such as `Price` or `Revenue` are sugar over the
 capabilities, like chart templates over operators, so design the capabilities
 first.
 

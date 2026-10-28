@@ -200,7 +200,7 @@ export interface DeriveOperator
   type: "derive";
   lambdaId?: string;
   /** The column types of the derive's result, keyed by column name, in the
-   *  wire form of a chart's `schema` (e.g. `{ HasOrder: { levels } }`). They
+   *  wire form of a chart's `schema` (e.g. `{ HasLevels: { levels } }`). They
    *  type the result over the types it keeps or infers, and convert values
    *  as a chart's schema does. A transform (e.g. Python's `bin`) writes the
    *  quantities of its output columns here (`{ HasQuantity: { name } }`), since the

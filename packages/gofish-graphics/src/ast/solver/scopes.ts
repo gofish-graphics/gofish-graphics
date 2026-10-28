@@ -79,11 +79,13 @@ export const frameOf = (
  *  and its own frame has that baseline at 0. A child with no data 0 sits at
  *  0 and has no frame.
  *
- *  TODO(#773 follow-up): data 0 is the additive identity of the measure's
- *  algebraic structure (an ordered additive group's 0). Measures don't carry
- *  their structure yet, so every measure is treated as a group with identity
- *  0. A torsor-valued measure (dates, temperatures) has no identity and
- *  should reject bars. */
+ *  TODO(#1051): data 0 is the additive identity of the measure's algebraic
+ *  structure (an ordered additive group's 0). Sums are checked now: a unit
+ *  without `CanAdd` (dates, temperatures) cannot be summed or stacked
+ *  (#1197, `checkSummable` in measure.ts). What is left is the zero itself
+ *  (`HasZero`): every measure is still seated as if it had one, so a bar of
+ *  a single date or temperature (`.mean()`, which sums nothing) still hangs
+ *  from 0 instead of being rejected. */
 export const seatInScope = (
   frame: AxisMap | undefined,
   child: UnderlyingSpace | undefined

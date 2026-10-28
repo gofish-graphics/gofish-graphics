@@ -190,7 +190,8 @@ export type SplitKey = string | number | KeyCell;
 
 /** The groups of a split, in order, keyed by their key, and whether the
  *  keys have an order (`HasOrder`): the column the key names is declared
- *  ordered, or the key is binned (cells are ordered by nature). An operator
+ *  ordered (`Domain.ordered`), or the key is binned (cells are ordered by
+ *  nature). An operator
  *  that folds the groups into an ordinal space reads the order here. */
 export type SplitGroups<T> = Map<SplitKey, T[]> & { readonly hasOrder?: true };
 
@@ -420,7 +421,7 @@ function domainCells(
     chainCells(
       binStepsOf(binOps, where),
       domain,
-      columnType(d, name)?.HasCalendar?.zone,
+      columnType(d, name)?.HasUnit?.zone,
       where
     );
   return domain === undefined
@@ -643,8 +644,8 @@ export const splitByOf = (by: SplitBy | undefined): SplitBy => by ?? chunk(1);
 
 /**
  * Group `d` by `by` (via {@link splitKeyFn}): in the order of the column's
- * levels when the data declares the column ordered (`HasOrder`, see
- * schema.ts), else in order of first appearance. A binned key (`bin`, or a
+ * levels when the data declares them (`HasLevels`, see schema.ts), else in
+ * order of first appearance. A binned key (`bin`, or a
  * binned struct) is grouped by its cells instead, over the column's domain,
  * keyed by cell, one entry per cell, in order, empty cells included (see
  * `binEntries`). Then apply any pipeline ops carried by a `field(...)`
@@ -683,19 +684,18 @@ export function splitEntries<T extends Record<string, any>>(
   // A binned key's groups are its cells, in order, empty ones included
   // (`binEntries`). Any other key's are its values, in order of first
   // appearance, or in the order of the column's levels when the chart's
-  // `schema` declares it ordered (HasOrder). The ops below reorder from
-  // there.
+  // `schema` declares them (HasLevels). The groups have an order when the
+  // levels are ordered (HasOrder). The ops below reorder from there.
   const binned = binKey(by, d);
   const column = fieldNameOf(by);
-  const ordered =
-    binned !== undefined || columnType(d, column)?.HasOrder !== undefined;
+  const type = columnType(d, column);
+  const ordered = binned !== undefined || type?.HasOrder !== undefined;
   let entries: Map<SplitKey, T[]>;
   if (binned !== undefined) entries = binEntries(binned, rows);
   else {
     entries = Map.groupBy(rows, splitKeyFn(by, d) as (r: T) => SplitKey);
-    const type = columnType(d, column);
-    if (type?.HasOrder) {
-      const keys = orderByLevels(column!, type.HasOrder, [...entries.keys()]);
+    if (type?.HasLevels) {
+      const keys = orderByLevels(column!, type.HasLevels, [...entries.keys()]);
       entries = new Map(keys.map((k) => [k, entries.get(k)!]));
     }
   }

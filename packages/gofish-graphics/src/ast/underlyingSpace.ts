@@ -18,22 +18,20 @@ import {
 } from "./data";
 import {
   declaredVar,
-  DURATION,
-  INSTANT,
   MeasureClash,
   resolveUnit,
+  rootUnit,
   unify,
   unionInOrder,
   unitOf,
   type MeasureSite,
   type Quantity,
-  type Unit,
+  type UnitTerm,
   type UnitVar,
 } from "./measure";
 
 export { MeasureClash, type MeasureSite } from "./measure";
 import { nice as d3Nice } from "d3-array";
-import type { HasCalendar } from "./schema";
 import { Cell, CycleCell, type AxisCell, type KeyCell } from "./cells";
 import { niceToCells, tickPartition, type CalendarPartition } from "./calendar";
 
@@ -92,14 +90,14 @@ export type CONTINUOUS_TYPE = {
   dataInterval: Interval;
   /** Where the local origin sits. See {@link Origin}. */
   origin: Origin;
-  /** What this axis measures: its unit, its titles, and, over instants, its
-   *  calendar ({@link UnitRecord}). Spaces join records with
-   *  {@link joinUnits}; read one with {@link spaceUnit}. Undefined = "no
-   *  claim" (permissive). The calendar is set when the data along this axis
-   *  are instants (`HasCalendar`, from a `Schema.time()` column): epoch
-   *  milliseconds read on the calendar of its zone. An axis over it is a time
-   *  axis: its ticks are calendar cells (axes/timeRows.ts), and its domain is
-   *  niced outward to the cells of its inner row ({@link niceContinuous}). */
+  /** What this axis measures: its unit and its titles ({@link UnitRecord}).
+   *  Spaces join records with {@link joinUnits}; read one with
+   *  {@link spaceUnit}. Undefined = "no claim" (permissive). When the data
+   *  along this axis are instants (from a column in `Unit.time({ zone })`),
+   *  its unit has a zone ({@link spaceZone}): epoch milliseconds read on the
+   *  calendar of the zone. An axis over it is a time axis: its ticks are
+   *  calendar cells (axes/timeRows.ts), and its domain is niced outward to
+   *  the cells of its inner row ({@link niceContinuous}). */
   measure?: UnitRecord;
   coordinateTransform?: CoordinateTransform;
   /** True when both sides of the 0 hold nonnegative amounts measured away from
@@ -184,8 +182,9 @@ export const isCONTINUOUS = (
  *  Free by default (its parent places its baseline); `"none"` when the mark's
  *  position is an aesthetic, so the magnitude has only a width. A size is
  *  never an instant (a span of time is a duration, and `.count()` over a
- *  time column is a count), so it reads on no calendar: only a position read
- *  from a time column does. */
+ *  time column is a count): it is in the difference unit of its values'
+ *  unit ({@link differenceUnits}), on no calendar. Only a position read
+ *  from a time column reads on one. */
 export const magnitude = (
   size: MaybeValue<number | undefined>,
   origin: "free" | "none" = "free"
@@ -198,15 +197,39 @@ export const magnitude = (
   );
 };
 
-/** The units of a difference of two values in units `r`: an instant's
- *  difference is a duration, on no calendar. Other units are unchanged. */
+/** The units of a difference of two values in units `r`: in the unit the
+ *  declared unit names as its `difference`, on no calendar. A difference of
+ *  two instants is a duration (`INSTANT.difference`), and a duration adds
+ *  up. A unit that names none is its own difference: two amounts in USD
+ *  differ by USD (#1197), and so does an unknown unit. The summands become
+ *  differences too, so a fold that adds them checks the difference unit. */
 export const differenceUnits = (r: UnitRecord): UnitRecord => {
-  const { calendar: _, ...rest } = r;
-  if (rest.unit === undefined) return rest;
-  const u = resolveUnit(rest.unit);
-  return u.kind === "declared" && u.unit === INSTANT.unit
-    ? { ...rest, unit: declaredVar(r.titles[0] ?? INSTANT.unit, DURATION) }
-    : rest;
+  const difference = r.unit && rootUnit(r.unit)?.difference;
+  if (difference === undefined) return r;
+  const { summands, ...rest } = r;
+  return {
+    ...rest,
+    unit: declaredVar(r.titles[0] ?? difference.unit, difference),
+    ...(summands !== undefined
+      ? { summands: summands.map(differenceQuantity) }
+      : {}),
+  };
+};
+
+/** The differences {@link differenceQuantity} has made, one per quantity. */
+const differenceQuantities = new WeakMap<Quantity, Quantity>();
+
+/** `q` as a difference of two of its values: in its unit's difference unit,
+ *  when the unit names one ({@link differenceUnits}). One object per `q`, so
+ *  the summands of many marks hold it once ({@link joinUnits}). */
+const differenceQuantity = (q: Quantity): Quantity => {
+  if (q.unit?.difference === undefined) return q;
+  let d = differenceQuantities.get(q);
+  if (d === undefined) {
+    d = { ...q, unit: q.unit.difference };
+    differenceQuantities.set(q, d);
+  }
+  return d;
 };
 
 /** The absolute `[min, max]` data domain of a PINNED space, or undefined for a
@@ -352,12 +375,12 @@ export const niceContinuous = <T extends UnderlyingSpace | undefined>(
   // interval means nothing, so it stays.
   const [lo, hi] =
     axis === "absolute"
-      ? spaceCalendar(s) !== undefined
+      ? spaceZone(s) !== undefined
         ? niceToCells(
             iv.min,
             iv.max,
             axisTickPartition(s, ticks),
-            spaceCalendar(s)!.zone
+            spaceZone(s)!
           )
         : d3Nice(iv.min, iv.max, ticks.count)
       : [iv.min, iv.min + d3Nice(0, iv.max - iv.min, ticks.count)[1]];
@@ -557,19 +580,24 @@ export const isPositioningSpace = (space: UnderlyingSpace): boolean =>
  *    a declared unit, or an unknown that unifies with anything. Two
  *    declared units that differ on one shared axis are a type error
  *    ({@link joinUnits}).
- *  - `calendar`: over instants, the calendar they read on (`HasCalendar`).
  *  - `titles`: the quantities that title the axis, in the order they met:
  *    each column's declared quantity (`HasQuantity`), else its name.
+ *  - `summands`: the quantities of the values in a declared unit, which a
+ *    fold that adds the space sums (`Units.sum` in measure.ts checks their
+ *    unit), so a stack checks the columns it adds, not every column its
+ *    unit has met (#1197). A quantity in no declared unit passes any sum,
+ *    so it is not listed.
  */
 export type UnitRecord = {
   unit?: UnitVar;
-  calendar?: HasCalendar;
   titles: string[];
+  summands?: Quantity[];
 };
 
 /** The units of values of quantity `q`: its unit (`unitOf`: its declared
- *  unit, else the variable of its name in the type walk's union-find), its
- *  calendar, and its name as the title. */
+ *  unit, zone and all, else the variable of its name in the type walk's
+ *  union-find), its name as the title, and `q` itself as a summand when its
+ *  unit is declared. */
 export const quantityUnits = (
   q: Quantity | undefined
 ): UnitRecord | undefined =>
@@ -577,8 +605,8 @@ export const quantityUnits = (
     ? undefined
     : {
         unit: unitOf(q),
-        ...(q.calendar ? { calendar: q.calendar } : {}),
         titles: [q.name],
+        ...(q.unit !== undefined ? { summands: [q] } : {}),
       };
 
 /** The units of a datum value: of the quantity it was read from; undefined
@@ -606,8 +634,9 @@ export const valueUnits = (v: MaybeValue<unknown>): UnitRecord | undefined =>
  * A binding holds for the whole render, so an unknown bound to two
  * different declared units is a {@link MeasureClash} too. "Forget" records
  * nothing and raises nothing: the result keeps `a`'s record. A shared join
- * unions the titles. Either way the calendars must agree: one axis reads one
- * calendar.
+ * unions the titles and the summands. Units of one name meet in `unify`
+ * (measure.ts), which also requires two instants to share a zone: one axis
+ * reads one calendar.
  */
 export const joinUnits = (
   a: UnitRecord | undefined,
@@ -617,16 +646,21 @@ export const joinUnits = (
 ): UnitRecord | undefined => {
   if (a === undefined) return b;
   if (b === undefined) return a;
-  const calendar = joinCalendars(a.calendar, b.calendar);
   if (shared && a.unit && b.unit) unify(a.unit, b.unit, site);
   const unit = shared ? (a.unit ?? b.unit) : a.unit;
   const titles = shared ? unionInOrder(a.titles, b.titles) : a.titles;
-  if (unit === a.unit && titles === a.titles && calendar === a.calendar)
+  const summands =
+    shared && b.summands
+      ? a.summands
+        ? unionInOrder(a.summands, b.summands)
+        : b.summands
+      : a.summands;
+  if (unit === a.unit && titles === a.titles && summands === a.summands)
     return a;
   return {
     ...(unit !== undefined ? { unit } : {}),
-    ...(calendar !== undefined ? { calendar } : {}),
     titles,
+    ...(summands !== undefined ? { summands } : {}),
   };
 };
 
@@ -641,30 +675,11 @@ export const joinAllUnits = (
     undefined
   );
 
-/** The calendar of one axis: the one its time parts share. A part with no
- *  calendar (a literal among times) makes no claim. Two parts on different
- *  zones are an error: one axis reads one calendar. */
-const joinCalendars = (
-  a: HasCalendar | undefined,
-  b: HasCalendar | undefined
-): HasCalendar | undefined => {
-  if (a === undefined) return b;
-  if (b === undefined) return a;
-  if (a.zone !== b.zone) {
-    throw new Error(
-      `Two time columns on one axis are read in different time zones, ` +
-        `"${a.zone}" and "${b.zone}". One axis reads one calendar: give ` +
-        `both columns the same zone in Schema.time({ zone }).`
-    );
-  }
-  return a;
-};
-
 /** A space's {@link UnitRecord} as {@link spaceUnit} reads it: the unit
- *  replaced by its representative in the render's union-find. */
+ *  replaced by its representative in the render's union-find, and no
+ *  `summands`, which only a fold that adds reads. */
 export type SpaceUnits = {
-  unit?: Unit;
-  calendar?: HasCalendar;
+  unit?: UnitTerm;
   titles: string[];
 };
 
@@ -681,15 +696,18 @@ export const spaceUnit = (
 ): SpaceUnits | undefined => {
   const r = space && isCONTINUOUS(space) ? space.measure : undefined;
   if (r === undefined) return undefined;
-  const { unit, ...rest } = r;
+  const { unit, summands: _, ...rest } = r;
   return unit === undefined ? rest : { ...rest, unit: resolveUnit(unit) };
 };
 
-/** The calendar of a space's axis, when its data are instants. */
-export const spaceCalendar = (
+/** The zone of the calendar of a space's axis, when its data are
+ *  instants: the zone of its unit. */
+export const spaceZone = (
   space: UnderlyingSpace | undefined
-): HasCalendar | undefined =>
-  space && isCONTINUOUS(space) ? space.measure?.calendar : undefined;
+): string | undefined => {
+  const unit = space && isCONTINUOUS(space) ? space.measure?.unit : undefined;
+  return unit && rootUnit(unit)?.zone;
+};
 
 /**
  * THE title a space gives its axis, in the SI style `Quantity (unit)`: its
@@ -698,7 +716,7 @@ export const spaceCalendar = (
  * symbol (a count, a share, an instant) adds nothing, and neither does an
  * unknown unit. The rule reads no names, so a column named "Flipper Length
  * (mm)" in "mm" titles "Flipper Length (mm) (mm)": declare its quantity
- * (`Schema.quantity("Flipper Length").unit("mm")`) or set the axis title.
+ * (`{ name: "Flipper Length", unit: Unit("mm") }`) or set the axis title.
  */
 export const spaceTitle = (
   space: UnderlyingSpace | undefined

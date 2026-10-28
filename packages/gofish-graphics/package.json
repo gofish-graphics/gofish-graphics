@@ -35,6 +35,10 @@
       "types": "./dist/families/curve.d.ts",
       "import": "./dist/curve.js"
     },
+    "./domain": {
+      "types": "./dist/families/domain.d.ts",
+      "import": "./dist/domain.js"
+    },
     "./overlap": {
       "types": "./dist/families/overlap.d.ts",
       "import": "./dist/overlap.js"
@@ -50,6 +54,10 @@
     "./tile": {
       "types": "./dist/families/tile.d.ts",
       "import": "./dist/tile.js"
+    },
+    "./trait": {
+      "types": "./dist/families/trait.d.ts",
+      "import": "./dist/trait.js"
     }
   },
   "files": [

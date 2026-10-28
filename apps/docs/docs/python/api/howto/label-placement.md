@@ -32,10 +32,10 @@ labels can replace a legend. Labels that would cover each other slide apart
 vertically. Use `Place.start()` to name the lines where they begin.
 
 ```python
-from gofish import Place, Schema, chart, group, line, scatter
+from gofish import Place, Unit, chart, group, line, scatter
 
 (
-    chart(stocks, schema={"date": Schema.time()})
+    chart(stocks, schema={"date": Unit.time()})
     .flow(group(by="symbol"), scatter(by="date", x="date", y="price"))
     .mark(line(stroke="symbol", stroke_width=2).label("symbol", position=Place.end()))
     .render(w=560, h=320, axes=True, legend=False)
@@ -54,10 +54,10 @@ own. `side` puts the label beside the line instead: `"above"`, `"below"`, or
 a list such as `["above", "below"]`, tried in order at each spot.
 
 ```python
-from gofish import Place, Schema, chart, group, line, scatter
+from gofish import Place, Unit, chart, group, line, scatter
 
 (
-    chart(stocks, schema={"date": Schema.time()})
+    chart(stocks, schema={"date": Unit.time()})
     .flow(group(by="symbol"), scatter(by="date", x="date", y="price"))
     .mark(
         line(stroke="symbol", stroke_width=2).label(

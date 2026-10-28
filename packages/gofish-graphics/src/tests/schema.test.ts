@@ -1,6 +1,8 @@
 /**
- * Column types (#984): `chart(data, { schema })` with `Schema.ordered(levels)`
- * (HasOrder) and `.diverging()` (HasMidpoint). Covers the midpoint of an
+ * Column types (#984): `chart(data, { schema })` with a unit's `domain`
+ * (`Domain.discrete`: HasLevels; `Domain.ordered`: HasLevels and HasOrder) and
+ * `Trait.diverging()` (HasMidpoint). Covers the unit definition's checks,
+ * nominal levels beside ordered ones, the midpoint of an
  * order (the default for odd and even orders, a set midpoint on a boundary,
  * inside a level, and at either end, a missing level), the midpoint's range
  * check, the centered stack's extent fold, the stray-level and signed-part
@@ -28,10 +30,11 @@ import {
   orderByLevels,
   setColumnTypes,
   stackOrigin,
-  Schema as SrcSchema,
+  Unit as SrcUnit,
   type ColumnType,
 } from "../ast/schema";
 import { interval } from "../util/interval";
+import schemaWireFixture from "./fixtures/schema-wire.json";
 import { textsOf } from "./testHelpers";
 import {
   distributeSpaceFold,
@@ -48,12 +51,16 @@ const {
   spread,
   stack,
   scatter,
+  layer,
   rect,
   circle,
   filter,
   derive,
   chunk,
-  Schema,
+  Unit,
+  Domain,
+  Trait,
+  Serialize,
   Color,
 } = GoFish as any;
 
@@ -100,7 +107,8 @@ const drawn = (dl: any): string =>
 const LEVELS5 = ["SD", "D", "N", "A", "SA"];
 const LEVELS4 = ["SD", "D", "A", "SA"];
 const centered = (levels: string[], at = levels.length / 2): ColumnType => ({
-  HasOrder: { levels },
+  HasLevels: { levels },
+  HasOrder: {},
   HasMidpoint: { at },
 });
 
@@ -186,8 +194,12 @@ async function main() {
     );
     check(
       "no HasMidpoint: the default origin",
-      stackOrigin("r", { HasOrder: { levels: LEVELS5 } }, LEVELS5, LEVELS5) ===
-        undefined
+      stackOrigin(
+        "r",
+        { HasLevels: { levels: LEVELS5 }, HasOrder: {} },
+        LEVELS5,
+        LEVELS5
+      ) === undefined
     );
     const shuffled = await errorOf(() =>
       stackOrigin(
@@ -267,7 +279,14 @@ async function main() {
           { r: "N", n: -5 },
           { r: "A", n: 20 },
         ],
-        { schema: { r: Schema.ordered(LEVELS5).diverging() } }
+        {
+          schema: {
+            r: Unit({
+              domain: Domain.ordered(LEVELS5),
+              traits: [Trait.diverging()],
+            }),
+          },
+        }
       )
         .flow(stack({ by: "r", dir: "x" }))
         .mark(rect({ w: "n" }))
@@ -311,7 +330,7 @@ async function main() {
       chart(
         rows.map((row) => ({ ...row, n: 1 })),
         {
-          schema: { r: Schema.ordered(LEVELS5) },
+          schema: { r: Unit({ domain: Domain.ordered(LEVELS5) }) },
         }
       )
         .flow(stack({ by: "r", dir: "x" }))
@@ -328,7 +347,7 @@ async function main() {
     const renamed = await errorOf(() =>
       chart(
         LEVELS5.map((r) => ({ r, n: 1 })),
-        { schema: { r: Schema.ordered(LEVELS5) } }
+        { schema: { r: Unit({ domain: Domain.ordered(LEVELS5) }) } }
       )
         .flow(
           derive((d: any[]) => d.map((row) => ({ ...row, r: `${row.r}!` }))),
@@ -365,20 +384,30 @@ async function main() {
 
   console.log("\n# HasMidpoint needs HasOrder and a midpoint on the order");
   {
-    check("Schema has no `diverging` factory", !("diverging" in Schema));
+    check("the Schema namespace is gone", !("Schema" in GoFish));
     check(
-      "`.diverging()` follows `.ordered(...)`, its midpoint n / 2",
-      JSON.stringify(Schema.ordered(["a", "b", "c"]).diverging()) ===
+      "Trait.diverging() implies the order, its midpoint n / 2",
+      JSON.stringify(
+        Unit({
+          domain: Domain.ordered(["a", "b", "c"]),
+          traits: [Trait.diverging()],
+        }).type
+      ) ===
         JSON.stringify({
-          HasOrder: { levels: ["a", "b", "c"] },
+          HasLevels: { levels: ["a", "b", "c"] },
+          HasOrder: {},
           HasMidpoint: { at: 1.5 },
         })
     );
     check(
-      "`.diverging({ midpoint })` writes the midpoint",
-      JSON.stringify(Schema.ordered(LEVELS5).diverging({ midpoint: 2 })) ===
+      "Trait.diverging(midpoint) writes the midpoint",
+      JSON.stringify(
+        Unit({ domain: Domain.ordered(LEVELS5), traits: [Trait.diverging(2)] })
+          .type
+      ) ===
         JSON.stringify({
-          HasOrder: { levels: LEVELS5 },
+          HasLevels: { levels: LEVELS5 },
+          HasOrder: {},
           HasMidpoint: { at: 2 },
         })
     );
@@ -398,16 +427,17 @@ async function main() {
     }
     for (const [at, expected] of offMessages) {
       const eager = await errorOf(() =>
-        Schema.ordered(LEVELS5).diverging({ midpoint: at })
+        Unit({ domain: Domain.ordered(LEVELS5), traits: [Trait.diverging(at)] })
       );
       check(
-        `.diverging({ midpoint: ${String(at)} }) throws at once`,
+        `Trait.diverging(${String(at)}) throws at once`,
         eager === expected,
         eager
       );
       const wire = await errorOf(() =>
         columnTypeOf("r", {
-          HasOrder: { levels: LEVELS5 },
+          HasLevels: { levels: LEVELS5 },
+          HasOrder: {},
           HasMidpoint: { at },
         } as any)
       );
@@ -431,43 +461,62 @@ async function main() {
       charted
     );
     const message = await errorOf(() =>
-      columnTypeOf("r", { HasMidpoint: { at: 1 } })
+      columnTypeOf("r", {
+        HasLevels: { levels: LEVELS5 },
+        HasMidpoint: { at: 1 },
+      })
     );
     check(
       "a HasMidpoint record without HasOrder is an error",
       message !== undefined &&
         message.includes("HasOrder") &&
-        message.includes(".diverging()"),
+        message.includes("Trait.diverging()"),
       message
     );
-    // The one-unit rule: a wire record's HasCalendar writes the instant unit,
-    // as `Schema.time()` does, so its HasUnit USD is a second unit.
-    const timeUnit = await errorOf(() =>
-      columnTypeOf("t", {
-        HasCalendar: { zone: "UTC" },
-        HasUnit: { unit: "USD" },
-      })
+    const noLevels = await errorOf(() => columnTypeOf("r", { HasOrder: {} }));
+    check(
+      "a HasOrder record without HasLevels is an error",
+      noLevels ===
+        `schema: column "r" has HasOrder but no HasLevels. An order is an ` +
+          `order of levels; declare them with a unit's domain: ` +
+          `Unit({ domain: Domain.ordered(levels) }).`,
+      noLevels
+    );
+    // A time is a column in a unit read on a calendar: Unit.time() writes
+    // the instant, its zone, and its difference unit, a duration.
+    check(
+      "Unit.time({ zone }) is the instant in that zone, differing by durations",
+      JSON.stringify(
+        columnTypeOf("t", SrcUnit.time({ zone: "Asia/Tokyo" }))
+      ) ===
+        JSON.stringify({
+          HasUnit: {
+            unit: "instant",
+            classes: {},
+            difference: { unit: "duration", classes: { CanAdd: {} } },
+            zone: "Asia/Tokyo",
+          },
+        })
     );
     check(
-      "a time record with another unit is an error",
-      timeUnit === `schema: column "t" already has the unit "instant".`,
-      timeUnit
+      "a column record names a time column",
+      JSON.stringify(
+        columnTypeOf("t", { name: "Sold", unit: SrcUnit.time() })
+      ) ===
+        JSON.stringify({
+          HasQuantity: { name: "Sold" },
+          ...SrcUnit.time().type,
+        })
     );
-    const builtTime = await errorOf(() => Schema.time().unit("USD"));
     check(
-      "and so is the builder's",
-      builtTime === `.unit: the column already has the unit "instant".`,
-      builtTime
-    );
-    check(
-      "a time record is read as Schema.time() wrote it",
-      columnTypeOf("t", { HasCalendar: { zone: "UTC" } }).HasUnit?.unit ===
-        "instant"
+      "Unit.duration adds up",
+      SrcUnit.duration.type.HasUnit?.classes?.CanAdd !== undefined &&
+        SrcUnit.duration.name === "duration"
     );
     // The levels-fit rule: text levels are not amounts, numbers are.
     const textUnit = await errorOf(() =>
       columnTypeOf("r", {
-        HasOrder: { levels: LEVELS5 },
+        HasLevels: { levels: LEVELS5 },
         HasUnit: { unit: "pts" },
       })
     );
@@ -477,22 +526,201 @@ async function main() {
         `schema: column "r" has the level "SD", which is not a value HasUnit accepts.`,
       textUnit
     );
-    const builtText = await errorOf(() =>
-      Schema.ordered(["low", "mid", "high"]).unit("pts")
-    );
-    check(
-      "and so is the builder's",
-      builtText ===
-        'schema: the column has the level "low", which is not a value HasUnit accepts.',
-      builtText
-    );
     check(
       "numeric levels take a unit",
-      Schema.ordered([1, 2, 3, 4, 5]).unit("pts").type.HasUnit.unit === "pts" &&
-        columnTypeOf("likert", {
-          HasOrder: { levels: [1, 2, 3, 4, 5] },
-          HasUnit: { unit: "pts" },
-        }).HasUnit?.unit === "pts"
+      columnTypeOf("likert", {
+        HasLevels: { levels: [1, 2, 3, 4, 5] },
+        HasUnit: { unit: "pts" },
+      }).HasUnit?.unit === "pts"
+    );
+  }
+
+  console.log("\n# a unit's domain and traits");
+  {
+    const Stars = SrcUnit("stars", { domain: Domain.ordered([1, 2, 3, 4, 5]) });
+    check(
+      "a named unit with a domain is a unit with levels",
+      JSON.stringify(Stars.type) ===
+        JSON.stringify({
+          HasUnit: { unit: "stars", symbol: "stars", classes: {} },
+          HasLevels: { levels: [1, 2, 3, 4, 5] },
+          HasOrder: {},
+        }) && Stars.name === "stars",
+      JSON.stringify(Stars.type)
+    );
+    check(
+      "a column record names a column in it",
+      JSON.stringify(
+        columnTypeOf("rating", { name: "Rating", unit: Stars })
+      ) === JSON.stringify({ HasQuantity: { name: "Rating" }, ...Stars.type })
+    );
+    const Party = Unit({ domain: Domain.discrete(["Dem", "Rep", "Ind"]) });
+    check(
+      "Domain.discrete is nominal: levels and no order",
+      JSON.stringify(Party.type) ===
+        JSON.stringify({ HasLevels: { levels: ["Dem", "Rep", "Ind"] } }) &&
+        Party.name === undefined,
+      JSON.stringify(Party.type)
+    );
+    check(
+      "Unit(name, { traits: [Trait.summable()] }) has CanAdd",
+      JSON.stringify(Unit("USD", { traits: [Trait.summable()] }).type) ===
+        JSON.stringify({
+          HasUnit: { unit: "USD", symbol: "USD", classes: { CanAdd: {} } },
+        })
+    );
+    check(
+      "a Unit is immutable",
+      Object.isFrozen(Stars) &&
+        Object.isFrozen(Stars.type) &&
+        Object.isFrozen(Stars.type.HasLevels!.levels)
+    );
+    // The same literals as `test_unit_definition_errors` in
+    // gofish-python/tests/test_ast.py.
+    const errors: [string, () => unknown, string][] = [
+      [
+        "a unit with neither a name nor a domain",
+        () => Unit({ traits: [Trait.diverging()] } as any),
+        `Unit needs a name, a domain, or both: Unit("USD"), ` +
+          `Unit({ domain: Domain.discrete(["low", "high"]) }).`,
+      ],
+      [
+        "a midpoint on a unit's amounts",
+        () => Unit("pp", { traits: [Trait.summable(), Trait.diverging(0)] }),
+        `Unit("pp"): Trait.diverging() needs an ordered domain: a midpoint ` +
+          `is a point along an order, so list the levels in ` +
+          `Domain.ordered(levels). A midpoint on a unit's amounts is not ` +
+          `supported yet.`,
+      ],
+      [
+        "a midpoint on unordered levels",
+        () =>
+          Unit({
+            domain: Domain.discrete(LEVELS5),
+            traits: [Trait.diverging()],
+          }),
+        `Unit: Trait.diverging() needs an ordered domain, but ` +
+          `Domain.discrete(levels) is unordered. A midpoint is a point ` +
+          `along an order: use Domain.ordered(levels).`,
+      ],
+      [
+        "a summable unit without a name",
+        () =>
+          Unit({ domain: Domain.discrete([1, 2]), traits: [Trait.summable()] }),
+        `Unit: Trait.summable() needs a name. Whether amounts add up ` +
+          `belongs to their unit, which is known by its name: ` +
+          `Unit("USD", { traits: [Trait.summable()] }).`,
+      ],
+      [
+        "a trait listed twice",
+        () => Unit("USD", { traits: [Trait.summable(), Trait.summable()] }),
+        `Unit("USD") lists Trait.summable() twice.`,
+      ],
+      [
+        "two midpoints",
+        () =>
+          Unit({
+            domain: Domain.ordered(LEVELS5),
+            traits: [Trait.diverging(1), Trait.diverging(2)],
+          }),
+        `Unit lists Trait.diverging() twice.`,
+      ],
+      [
+        "a bare list as a domain",
+        () => Unit("pp", { domain: [1, 2] } as any),
+        `Unit("pp"): domain must be a Domain: Domain.discrete(levels) or ` +
+          `Domain.ordered(levels), got [1,2]. A domain that is an interval ` +
+          `is not supported yet.`,
+      ],
+      [
+        "an interval domain",
+        () => Unit("pp", { domain: { lo: 0, hi: 1 } } as any),
+        `Unit("pp"): domain must be a Domain: Domain.discrete(levels) or ` +
+          `Domain.ordered(levels), got {"lo":0,"hi":1}. A domain that is an ` +
+          `interval is not supported yet.`,
+      ],
+      [
+        "a trait that is not one",
+        () => Unit("USD", { traits: ["summable"] } as any),
+        `Unit("USD") has the trait "summable". A unit's traits are ` +
+          `Trait.diverging() and Trait.summable().`,
+      ],
+      [
+        "an unknown option",
+        () => Unit("USD", { levels: [1] } as any),
+        `Unit("USD") has the unknown option "levels". A unit takes domain ` +
+          `and traits.`,
+      ],
+      [
+        "text levels in a named unit",
+        () => Unit("pts", { domain: Domain.discrete(["low", "high"]) }),
+        `Unit("pts") has the level "low", which is not a value HasUnit ` +
+          `accepts.`,
+      ],
+      [
+        "a level listed twice",
+        () => Domain.ordered(["a", "b", "a"]),
+        `Domain.ordered: the level "a" is listed twice. Each level is listed ` +
+          `once, in its place.`,
+      ],
+      [
+        "a level listed twice in a domain written as a record",
+        () => Unit({ domain: { kind: "discrete", levels: [1, 2, 1] } } as any),
+        `Domain.discrete: the level 1 is listed twice. Each level is listed ` +
+          `once, in its place.`,
+      ],
+      [
+        "a domain with no levels",
+        () => Domain.ordered([]),
+        `Domain.ordered: levels must list at least one level, e.g. ` +
+          `Domain.ordered(["low", "mid", "high"]).`,
+      ],
+      [
+        "a name that is not a string",
+        () => Unit(42 as any),
+        `Unit: the name must be a string, got 42`,
+      ],
+      [
+        "an undefined name",
+        () => Unit(undefined as any),
+        `Unit: the name must be a string, got undefined`,
+      ],
+    ];
+    for (const [name, fn, expected] of errors) {
+      const got = await errorOf(fn);
+      check(`${name} throws at once`, got === expected, got);
+    }
+
+    // Nominal levels lay groups out in the list's order and check strays,
+    // like ordered ones; only the order (an ordinal axis's alignment, a
+    // midpoint) differs.
+    const votes = [
+      { party: "Ind", n: 1 },
+      { party: "Rep", n: 2 },
+      { party: "Dem", n: 3 },
+    ];
+    const bars = (unit: unknown) =>
+      chart(votes, { schema: { party: unit }, axes: true })
+        .flow(spread({ by: "party", dir: "x" }))
+        .mark(rect({ h: "n", w: 10 }))
+        .toDisplayList({ w: 120, h: 100 });
+    const nominal = textsOf(await bars(Party)).filter((t) =>
+      ["Dem", "Rep", "Ind"].includes(t)
+    );
+    check(
+      "a nominal domain lays its groups out in the list's order",
+      nominal.join() === "Dem,Rep,Ind",
+      nominal.join()
+    );
+    const strays = await errorOf(() =>
+      bars(Unit({ domain: Domain.discrete(["Dem", "Rep"]) }))
+    );
+    check(
+      "a value outside a nominal domain is an error",
+      strays !== undefined &&
+        strays.includes('"Ind"') &&
+        strays.includes("HasLevels"),
+      strays
     );
   }
 
@@ -510,7 +738,12 @@ async function main() {
     // Shuffle so the order comes from the schema, not from the data.
     rows.reverse();
     const dl = await chart(rows, {
-      schema: { r: Schema.ordered(LEVELS5).diverging() },
+      schema: {
+        r: Unit({
+          domain: Domain.ordered(LEVELS5),
+          traits: [Trait.diverging()],
+        }),
+      },
     })
       .flow(spread({ by: "q", dir: "y" }), stack({ by: "r", dir: "x" }))
       .mark(rect({ w: "n" }))
@@ -544,7 +777,7 @@ async function main() {
       { start: edge, end: edge, count: { HasUnit: { unit: "count" } } }
     );
     const typed = await applySchema(binned, {
-      count: SrcSchema.ordered([0, 1, 2]),
+      count: SrcUnit({ domain: Domain.ordered([0, 1, 2]) }),
     });
     check(
       "a column's quantity survives a schema for another column",
@@ -555,14 +788,15 @@ async function main() {
       "a schema entry is the column's whole type, with its domain",
       JSON.stringify(getColumnTypes(typed)?.count) ===
         JSON.stringify({
-          HasOrder: { levels: [0, 1, 2] },
+          HasLevels: { levels: [0, 1, 2] },
+          HasOrder: {},
           HasDomain: { lo: 1, hi: 2 },
         }),
       JSON.stringify(getColumnTypes(typed)?.count)
     );
     check(
       "applySchema does not tag the caller's array",
-      getColumnTypes(binned)?.count?.HasOrder === undefined
+      getColumnTypes(binned)?.count?.HasLevels === undefined
     );
   }
 
@@ -574,7 +808,9 @@ async function main() {
       { r: "A", n: 1, q: "q2" },
     ];
     const filtered = await errorOf(() =>
-      chart(rows, { schema: { r: Schema.ordered(LEVELS5) } })
+      chart(rows, {
+        schema: { r: Unit({ domain: Domain.ordered(LEVELS5) }) },
+      })
         .flow(
           filter((row: any) => row.r !== "Refused"),
           stack({ by: "r", dir: "x" })
@@ -588,7 +824,9 @@ async function main() {
       filtered
     );
     const kept = await errorOf(() =>
-      chart(rows, { schema: { r: Schema.ordered(LEVELS5) } })
+      chart(rows, {
+        schema: { r: Unit({ domain: Domain.ordered(LEVELS5) }) },
+      })
         .flow(
           filter((row: any) => row.n > 0),
           stack({ by: "r", dir: "x" })
@@ -603,7 +841,7 @@ async function main() {
     );
     const colored = await errorOf(() =>
       chart(rows, {
-        schema: { r: Schema.ordered(LEVELS5) },
+        schema: { r: Unit({ domain: Domain.ordered(LEVELS5) }) },
         color: Color.palette(["red", "green", "blue", "cyan", "magenta"]),
       })
         .flow(spread({ by: "q", dir: "x" }))
@@ -617,6 +855,33 @@ async function main() {
     );
   }
 
+  console.log("\n# a legend over two columns with equal levels (#1197)");
+  {
+    // Two columns, each in its own unit with the same levels (as two columns
+    // read from the wire are: each has its own copy of the levels). The
+    // legend follows the levels, not the order the values are first seen.
+    const rows = [
+      { g1: "high", g2: "mid", a: 1, b: 3 },
+      { g1: "low", g2: "high", a: 2, b: 1 },
+    ];
+    const grade = () => Unit({ domain: Domain.ordered(["low", "mid", "high"]) });
+    const dl = await chart(rows, {
+      schema: { g1: grade(), g2: grade() },
+      color: Color.palette(["red", "green", "blue"]),
+    })
+      .flow(scatter({ x: "a", y: "b" }))
+      .mark(layer([circle({ r: 3, fill: "g1" }), circle({ r: 2, fill: "g2" })]))
+      .toDisplayList({ w: 100, h: 100 });
+    const legend = textsOf(dl).filter((t) =>
+      ["low", "mid", "high"].includes(t)
+    );
+    check(
+      "two columns whose levels are equal lists order the legend by the levels",
+      legend.join() === "low,mid,high",
+      legend.join()
+    );
+  }
+
   console.log("\n# a split with no `by` is a split by row identity (#998)");
   {
     const grades = [
@@ -626,7 +891,11 @@ async function main() {
     ];
     const dots = (by?: unknown) =>
       chart(grades, {
-        schema: { grade: Schema.ordered(["low", "mid", "high"]) },
+        schema: {
+          grade: Unit({
+            domain: Domain.ordered(["low", "mid", "high"]),
+          }),
+        },
         color: Color.palette(["red", "green", "blue"]),
       })
         .flow(scatter({ ...(by === undefined ? {} : { by }), x: "a", y: "b" }))
@@ -760,6 +1029,97 @@ async function main() {
       "a split never looks inside an item: an array item is one item, `[item]`",
       JSON.stringify(items) === JSON.stringify(nested.map((x) => [x])),
       JSON.stringify(items)
+    );
+  }
+
+  console.log("\n# units and column records cross the wire as classes");
+  {
+    // The same schema, spelled in Python, writes the same wire form: Python's
+    // test_ast.py compares its `to_ir()` against this one fixture.
+    const USD = Unit("USD", { traits: [Trait.summable()] });
+    const Celsius = Unit("°C");
+    const Stars = Unit("stars", {
+      domain: Domain.ordered([1, 2, 3, 4, 5]),
+    });
+    const doc = await Serialize.toJSON(
+      chart([{ balance: 1 }], {
+        schema: {
+          balance: { name: "Balance", unit: USD },
+          revenue: USD,
+          area: "km²",
+          temp: { unit: Celsius },
+          region: Unit({
+            domain: Domain.ordered(["n", "s"]),
+            traits: [Trait.diverging()],
+          }),
+          party: Unit({ domain: Domain.discrete(["Dem", "Rep", "Ind"]) }),
+          rating: { name: "Rating", unit: Stars },
+          day: Unit.time({ zone: "UTC" }),
+          sold: { name: "Sold", unit: Unit.time({ zone: "America/New_York" }) },
+          wait: Unit.duration,
+        },
+      }).mark(rect({}))
+    );
+    const sorted = (v: unknown): unknown =>
+      Array.isArray(v)
+        ? v.map(sorted)
+        : v !== null && typeof v === "object"
+          ? Object.fromEntries(
+              Object.entries(v)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([k, x]) => [k, sorted(x)])
+            )
+          : v;
+    const wire = JSON.stringify(sorted(doc.root.options?.schema));
+    const fixture = JSON.stringify(sorted(schemaWireFixture));
+    check(
+      "a schema of Units, names and records serializes to the shared fixture",
+      wire === fixture,
+      wire
+    );
+    // A derive's schema crosses the wire the same way (Python's test_ast.py
+    // checks its derive against the fixture too).
+    const deriveDoc = await Serialize.toJSON(
+      chart([{ balance: 1 }])
+        .flow(
+          derive((rows: any[]) => rows, {
+            schema: {
+              balance: { name: "Balance", unit: USD },
+              revenue: USD,
+              area: "km²",
+              temp: { unit: Celsius },
+              region: Unit({
+                domain: Domain.ordered(["n", "s"]),
+                traits: [Trait.diverging()],
+              }),
+              party: Unit({ domain: Domain.discrete(["Dem", "Rep", "Ind"]) }),
+              rating: { name: "Rating", unit: Stars },
+              day: Unit.time({ zone: "UTC" }),
+              sold: {
+                name: "Sold",
+                unit: Unit.time({ zone: "America/New_York" }),
+              },
+              wait: Unit.duration,
+            },
+          })
+        )
+        .mark(rect({}))
+    );
+    const deriveWire = JSON.stringify(
+      sorted(deriveDoc.root.operators?.[0]?.schema)
+    );
+    check(
+      "a derive's schema of Units, names and records serializes to the " +
+        "shared fixture",
+      deriveWire === fixture,
+      deriveWire
+    );
+    // A record of the wire form is read back to the same column types.
+    const back = await applySchema([{ balance: 1 }], schemaWireFixture as any);
+    check(
+      "and the wire form reads back with the area's unit name alone",
+      getColumnTypes(back)?.area?.HasUnit?.classes === undefined &&
+        getColumnTypes(back)?.revenue?.HasUnit?.classes?.CanAdd !== undefined
     );
   }
 

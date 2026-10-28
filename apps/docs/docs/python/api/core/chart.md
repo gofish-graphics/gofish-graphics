@@ -203,11 +203,11 @@ By default each axis resolves its data→pixel scale independently, so a circle 
 data space becomes an ellipse. But when **x and y are in the same unit**,
 their scales must be equal — a circle stays circular. GoFish does this from the
 **unit**, not a knob: declare both columns in the same unit with
-[`Schema.unit`](/python/api/core/schema) and the shared scale follows.
+[`Unit`](/python/api/core/schema) or a unit's name and the shared scale follows.
 
 ```python
 (
-    chart(data, schema={"x": Schema.unit("plane"), "y": Schema.unit("plane")})
+    chart(data, schema={"x": "plane", "y": "plane"})
     .flow(scatter(x="x", y="y"))
     .mark(circle(r=4))
     .render(w=640, h=380)  # a true circle, not an ellipse

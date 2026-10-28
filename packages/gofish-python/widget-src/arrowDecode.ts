@@ -16,8 +16,8 @@
  *    a list of structs is a list of rows, whose fields are its columns, so
  *    the list carries their column types (attached with
  *    `Serialize.setColumnTypes`, the way a chart's `schema` attaches types):
- *    a timestamp or a date field is a time, `HasCalendar` in the timestamp's
- *    `timezone` or in UTC, and an integer field is `HasInteger`, so the
+ *    a timestamp or a date field is a time, in `Unit.time({ zone })` in the
+ *    timestamp's `timezone` or in UTC, and an integer field is `HasInteger`, so the
  *    encode sends it back as integers. The list's records are read a field
  *    at a time, from the struct's child vectors;
  *  - a list becomes a plain JS array (nested lists nested arrays);
@@ -33,8 +33,8 @@
  * schema can name: a naive timestamp (no time zone) or a date there is a
  * wall-clock value, not an instant, so it becomes an ISO 8601 string without
  * an offset ("2024-02-28T13:00:00", or "2024-02-28" for a date), typed
- * `HasCalendar` in UTC. `applySchema` reads such a string in the zone of the
- * column's type, so a chart that declares `Schema.time({ zone })` for the
+ * in `Unit.time()` (UTC). `applySchema` reads such a string in the zone of the
+ * column's type, so a chart that declares `Unit.time({ zone })` for the
  * column reads it in that zone, exactly as it reads the same string from JS
  * data, and a reader that declares nothing reads it in UTC.
  *
@@ -47,7 +47,7 @@
  */
 
 import * as Arrow from "apache-arrow";
-import { Schema, Serialize } from "gofish-graphics";
+import { Serialize, Unit } from "gofish-graphics";
 
 /** Decode base64 Arrow IPC streams, one per table id, into each table's
  *  list (see the module comment): a shipped document's `tables`, and those
@@ -174,7 +174,7 @@ function fromArrow(f: Arrow.Field): Convert | undefined {
 }
 
 /** The column types of a list of records' `fields`: each timestamp or date
- *  field is a time, `Schema.time({ zone })`'s type in the timestamp's time
+ *  field is a time, in `Unit.time({ zone })` in the timestamp's time
  *  zone, or UTC for a naive one or a date, and each integer field is
  *  `HasInteger`. */
 function columnTypes(fields: Arrow.Field[]): Serialize.ColumnTypes {
@@ -182,7 +182,7 @@ function columnTypes(fields: Arrow.Field[]): Serialize.ColumnTypes {
   for (const { name, type } of fields) {
     if (Arrow.DataType.isTimestamp(type) || Arrow.DataType.isDate(type)) {
       const zone = (Arrow.DataType.isTimestamp(type) && type.timezone) || "UTC";
-      types[name] = Schema.time({ zone }).type;
+      types[name] = Unit.time({ zone }).type;
     } else if (Arrow.DataType.isInt(type)) {
       types[name] = { HasInteger: {} };
     }

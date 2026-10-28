@@ -521,7 +521,7 @@ console.log("# space: a measure clash says what to do");
   ok(
     "and suggests one declared unit or a chart placed apart",
     gross !== null &&
-      gross.includes('schema: { "Worldwide Gross": Schema.unit("EUR") }') &&
+      gross.includes('schema: { "Worldwide Gross": "EUR" }') &&
       gross.includes("place one chart apart from the other")
   );
   // A node names the axis from where it sits: inside a polar coord, the y

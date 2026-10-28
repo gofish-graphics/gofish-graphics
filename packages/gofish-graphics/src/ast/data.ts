@@ -193,7 +193,7 @@ export type FieldAccessor = {
  * recognize the tag and resolve it to a per-row value, identical to passing a
  * bare string. Use this when the field name could be confused with a literal
  * (e.g. `field("0.5")`), or to chain a pipeline (`field("v").mean()`). A
- * column's unit is declared in the chart's schema (`Schema.unit`), not here.
+ * column's unit is declared in the chart's schema (`Unit`), not here.
  */
 export const field = (name: string): FieldExpr<false, false> =>
   new FieldExpr<false, false>(name);

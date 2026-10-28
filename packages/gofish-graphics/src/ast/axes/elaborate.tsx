@@ -30,7 +30,7 @@ import {
   niceContinuous,
   originIs,
   spaceTitle,
-  spaceCalendar,
+  spaceZone,
   axisTickPartition,
   cellPartition,
   DEFAULT_AXIS_TICKS,
@@ -616,7 +616,7 @@ function elaborateTimeAxis(
   side: "start" | "end"
 ): AxisElaboration {
   const [lo, hi] = nice;
-  const zone = spaceCalendar(space)!.zone;
+  const zone = spaceZone(space)!;
   const rows = levels.filter((r) => !r.hidden).map((r) => r.level);
   const starts = rows.map((row) => rowLabels(row, lo, hi, zone));
   // A row that cuts the same cells as the cells the axis places names
@@ -1449,7 +1449,7 @@ function elaborationsFor(
   for (const dim of [0, 1] as (0 | 1)[]) {
     const s = wide[dim];
     if (axisOver(s) === "absolute") {
-      if (owns(dim) && isCONTINUOUS(s) && spaceCalendar(s)) {
+      if (owns(dim) && isCONTINUOUS(s) && spaceZone(s) !== undefined) {
         times[dim] = timeRows(s, entriesFor(dim), !hasOuterAxis(node, dim));
         node.axisDemand[dim] = {
           ...ticksFor(dim),
@@ -1541,7 +1541,7 @@ function elaborationsFor(
     const ticks = ticksFor(dim);
     const d = fold.dims[dim];
     const depth0 = d.names.length;
-    if (kind === "absolute" && isCONTINUOUS(s) && spaceCalendar(s)) {
+    if (kind === "absolute" && isCONTINUOUS(s) && spaceZone(s) !== undefined) {
       const rows = times[dim]!;
       // A time axis does not rotate its labels yet (see `elaborateTimeAxis`).
       rows.forEach((_, k) =>

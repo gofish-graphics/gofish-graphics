@@ -2,7 +2,7 @@
 
 import math
 
-from gofish import chart, spread, scatter, field, rect, text, layer, ribbon, Constraint, Schema
+from gofish import chart, spread, scatter, field, rect, text, layer, ribbon, Constraint, Unit
 from python_stories.data import SEATTLE_WEATHER
 
 MONTH_NAMES = [
@@ -63,7 +63,7 @@ def story_default():
         chart(
             RIDGELINE_DATA,
             axes={"x": True, "y": False},
-            schema={"temp_max": Schema.quantity("Max temperature").unit("°C")},
+            schema={"temp_max": {"name": "Max temperature", "unit": Unit("°C")}},
         )
         .flow(
             spread(

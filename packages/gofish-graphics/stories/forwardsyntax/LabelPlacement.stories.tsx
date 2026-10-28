@@ -18,7 +18,7 @@ import {
   ref,
   ribbon,
   scatter,
-  Schema,
+  Unit,
   selectAll,
   spread,
   stack,
@@ -103,7 +103,7 @@ export const LineEndLabels: StoryObj = {
   loaders: [async () => ({ stocks: await yearlyStocks() })],
   render: (_args: unknown, context: any) => {
     const container = initializeContainer();
-    chart(context.loaded.stocks, { schema: { date: Schema.time() } })
+    chart(context.loaded.stocks, { schema: { date: Unit.time() } })
       .flow(
         group({ by: "symbol" }),
         scatter({ by: "date", x: "date", y: "price" })
@@ -134,7 +134,7 @@ export const InlineSlopedLabels: StoryObj = {
   loaders: [async () => ({ stocks: await yearlyStocks() })],
   render: (_args: unknown, context: any) => {
     const container = initializeContainer();
-    chart(context.loaded.stocks, { schema: { date: Schema.time() } })
+    chart(context.loaded.stocks, { schema: { date: Unit.time() } })
       .flow(
         group({ by: "symbol" }),
         scatter({ by: "date", x: "date", y: "price" })

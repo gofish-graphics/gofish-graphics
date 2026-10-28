@@ -46,7 +46,7 @@ const offsetSpace = (
   // and the offset is the point it hangs from. Either way the difference
   // must be in the point's difference units (`differenceUnits`): a time
   // position moves by a duration (or a plain number, which becomes one), and
-  // a USD position by USD. The result takes the point's unit and calendar,
+  // a USD position by USD. The result takes the point's unit and zone,
   // titled by both sides.
   const offsetUnits = valueUnits(offset);
   const pinned = space.origin === "pinned";

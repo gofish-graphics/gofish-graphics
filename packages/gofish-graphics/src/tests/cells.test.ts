@@ -36,7 +36,7 @@ import {
   applySchema,
   copyColumnTypes,
   setColumnTypes,
-  Schema as SrcSchema,
+  Unit as SrcUnit,
 } from "../ast/schema";
 import { struct as srcStruct } from "../lib";
 
@@ -56,7 +56,9 @@ const {
   circle,
   line,
   selectAll,
-  Schema,
+  Domain,
+  Trait,
+  Unit,
 } = GoFish as any;
 const DistCalendar = (GoFish as any).Calendar;
 const distField = (GoFish as any).field;
@@ -157,7 +159,12 @@ async function main() {
       JSON.stringify(tenth.cells.map((c) => c.start))
     );
 
-    const count = binCells(Bin.thresholds(10), over([0, 37, 99]), undefined, "t");
+    const count = binCells(
+      Bin.thresholds(10),
+      over([0, 37, 99]),
+      undefined,
+      "t"
+    );
     check(
       "a count picks a round step from the domain, as axis ticks do",
       count.cells.length === 10 &&
@@ -199,8 +206,8 @@ async function main() {
     );
     check(
       "no values, no cells",
-      binCells(Bin.step(1), over([null, undefined]), undefined, "t").cells.length ===
-        0
+      binCells(Bin.step(1), over([null, undefined]), undefined, "t").cells
+        .length === 0
     );
   }
 
@@ -260,7 +267,8 @@ async function main() {
         jun.cycle.cells[5] === jun
     );
     const counts = (p: any) =>
-      binCells(p, over([t("2024-01-01"), t("2024-01-02")]), "UTC", "t").cells.length;
+      binCells(p, over([t("2024-01-01"), t("2024-01-02")]), "UTC", "t").cells
+        .length;
     check(
       "the parts of each level: 31 days of a month, 24 hours, 4 quarters, " +
         "60 minutes, months in steps of 3",
@@ -272,7 +280,9 @@ async function main() {
         counts(Calendar.hour({ every: 6 })) === 4
     );
     const labelsOf = (p: any) =>
-      binCells(p, over([t("2024-01-01")]), "UTC", "t").cells.map((c) => c.label);
+      binCells(p, over([t("2024-01-01")]), "UTC", "t").cells.map(
+        (c) => c.label
+      );
     check(
       "parts are labeled alone: Q1, 1 to 31, 12 AM, 05",
       same(labelsOf(Calendar.quarter), ["Q1", "Q2", "Q3", "Q4"]) &&
@@ -403,15 +413,7 @@ async function main() {
     );
     check(
       'Calendar.weekday({ start: "sunday" }) orders the days from Sunday',
-      same(labels(sunday), [
-        "Sun",
-        "Mon",
-        "Tue",
-        "Wed",
-        "Thu",
-        "Fri",
-        "Sat",
-      ]) &&
+      same(labels(sunday), ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]) &&
         sunday.cells[0].id === "7" &&
         sunday.cellOf(t("2024-01-01"))?.label === "Mon",
       labels(sunday).join(" ")
@@ -444,11 +446,9 @@ async function main() {
       "UTC",
       "t"
     );
-    check(
-      "a month of the year has no weekday",
-      !("weekday" in monthFields[0])
-    );
-    const line = binCells(Calendar.week, over(twoWeeks), "UTC", "t").cells as Cell[];
+    check("a month of the year has no weekday", !("weekday" in monthFields[0]));
+    const line = binCells(Calendar.week, over(twoWeeks), "UTC", "t")
+      .cells as Cell[];
     check(
       "a line cell's fields carry its ISO weekday",
       (line[0].calendar?.fields as any).weekday === 1
@@ -493,10 +493,7 @@ async function main() {
       labels(weekDays).slice(0, 3).join(" | ")
     );
     const mismatch = errorOf(() =>
-      checkBinStep(
-        [Calendar.week({ start: "sunday" }), Calendar.weekday],
-        "by"
-      )
+      checkBinStep([Calendar.week({ start: "sunday" }), Calendar.weekday], "by")
     );
     check(
       "a weekday of a week that starts on another day is an error",
@@ -594,7 +591,11 @@ async function main() {
       ["one level", [Calendar.month], "two or more"],
       ["a day of a year", [Calendar.year, Calendar.day], "a part of a month"],
       ["a week", [Calendar.year, Calendar.week], "part of no larger level"],
-      ["a stepped parent", [Calendar.year({ every: 5 }), Calendar.month], "5 years"],
+      [
+        "a stepped parent",
+        [Calendar.year({ every: 5 }), Calendar.month],
+        "5 years",
+      ],
       ["a numeric bin", [Bin.step(1), Bin.step(2)], "cannot be in a product"],
       [
         "a format",
@@ -812,9 +813,12 @@ async function main() {
     }
     check(
       "a field expression writes its partition's wire form",
-      same(field("d").bin(Calendar.month({ every: 3 })).toJSON().ops, [
-        { op: "bin", partition: { kind: "month", every: 3 } },
-      ]) &&
+      same(
+        field("d")
+          .bin(Calendar.month({ every: 3 }))
+          .toJSON().ops,
+        [{ op: "bin", partition: { kind: "month", every: 3 } }]
+      ) &&
         same(field("x").bin(Bin.step(0.5)).toJSON().ops, [
           { op: "bin", partition: { kind: "step", size: 0.5 } },
         ])
@@ -897,9 +901,12 @@ async function main() {
       "a threshold count picks its edges over the type's domain",
       same(
         [...count.keys()].map(String),
-        binCells(Bin.thresholds(3), { lo: 0, hi: 30 }, undefined, "t").cells.map(
-          String
-        )
+        binCells(
+          Bin.thresholds(3),
+          { lo: 0, hi: 30 },
+          undefined,
+          "t"
+        ).cells.map(String)
       ) && count.size > 1,
       [...count.keys()].map(String).join(" ")
     );
@@ -923,7 +930,7 @@ async function main() {
     );
     const times = await applySchema(
       [{ d: "2024-01-05" }, { d: "2024-03-20" }],
-      { d: SrcSchema.time() }
+      { d: SrcUnit.time() }
     );
     check(
       "a time column bins into calendar cells in its zone",
@@ -969,7 +976,7 @@ async function main() {
     );
     const render = async (by: any, x: any = { title: false }) =>
       await chart(daily, {
-        schema: { date: Schema.time() },
+        schema: { date: Unit.time() },
         axes: { x, y: false },
       })
         .flow(spread({ by, dir: "x" }))
@@ -1136,8 +1143,11 @@ async function main() {
       value: 1,
     }));
     const weekDl = await chart(weekDays, {
-      schema: { date: Schema.time() },
-      axes: { x: { title: false, levels: [true, DistCalendar.month] }, y: false },
+      schema: { date: Unit.time() },
+      axes: {
+        x: { title: false, levels: [true, DistCalendar.month] },
+        y: false,
+      },
     })
       .flow(spread({ by: distField("date").bin(DistCalendar.week), dir: "x" }))
       .mark(rect({ w: 20, h: distField("value").sum() }))
@@ -1187,7 +1197,7 @@ async function main() {
     const groupedBy = async (outer: any, x: any) =>
       await chart(
         daily.flatMap((d) => ["a", "b"].map((g) => ({ ...d, g }))),
-        { schema: { date: Schema.time() }, axes: { x, y: false } }
+        { schema: { date: Unit.time() }, axes: { x, y: false } }
       )
         .flow(spread({ by: outer, dir: "x" }), spread({ by: "g", dir: "x" }))
         .mark(rect({ w: 10, h: distField("value").sum() }))
@@ -1269,7 +1279,7 @@ async function main() {
     // Nested splits that bin the same column partition one value, as one
     // chained key does: the same dividers and the same row gaps.
     const split = await chart(daily, {
-      schema: { date: Schema.time() },
+      schema: { date: Unit.time() },
       axes: { x: { title: false }, y: false },
     })
       .flow(
@@ -1345,7 +1355,10 @@ async function main() {
       ],
       { axes: { x: { title: false }, y: false } }
     )
-      .flow(spread({ by: "lake", dir: "x" }), spread({ by: "species", dir: "x" }))
+      .flow(
+        spread({ by: "lake", dir: "x" }),
+        spread({ by: "species", dir: "x" })
+      )
       .mark(rect({ w: 20, h: 10 }))
       .toDisplayList({ w: 400, h: 100 });
     check(
@@ -1360,9 +1373,7 @@ async function main() {
     // or one past the last level, is an error that lists the levels.
     const facets = (x: any) =>
       chart(
-        ["a", "b", "c"].flatMap((g) =>
-          [1, 2].map((v) => ({ g, v, w: v * 2 }))
-        ),
+        ["a", "b", "c"].flatMap((g) => [1, 2].map((v) => ({ g, v, w: v * 2 }))),
         { axes: { x: { title: false, ...x }, y: false } }
       )
         .flow(
@@ -1384,8 +1395,7 @@ async function main() {
     check(
       "a divider entry at a numeric level's depth is an error listing the " +
         "levels",
-      facetsListed?.includes("axes.x.divider[0]: true cannot apply") ===
-        true &&
+      facetsListed?.includes("axes.x.divider[0]: true cannot apply") === true &&
         facetsListed.includes("[0] the numeric ticks, [1] the groups of"),
       facetsListed
     );
@@ -1458,7 +1468,7 @@ async function main() {
     };
     const cBars = rectsOf(centered).filter((r) => r.w === 30);
     check(
-      "label.align [true, \"center\"] centers the year level",
+      'label.align [true, "center"] centers the year level',
       Math.abs(cMid("2023") - (cBars[0].x + cBars[1].x + 30) / 2) < 0.5,
       `${cMid("2023")}`
     );
@@ -1484,12 +1494,25 @@ async function main() {
       Math.abs(plain.mid - (plain.bars[2].x + plain.bars[3].x + 20) / 2) < 0.5,
       JSON.stringify(plain.mid)
     );
-    const ordered = await outerX({ g: Schema.ordered(["p", "q"]) });
+    const ordered = await outerX({
+      g: Unit({ domain: Domain.ordered(["p", "q"]) }),
+    });
     check(
-      "an outer level over a Schema.ordered column starts its runs",
+      "an outer level over an ordered column starts its runs",
       ordered.left > ordered.bars[1].x + 20 &&
         ordered.left < ordered.bars[2].x + 3,
       JSON.stringify([ordered.left, ordered.bars[2].x])
+    );
+    // A Domain.discrete domain is nominal: its groups keep the
+    // list's order, but they are not ordered, so the level centers.
+    const nominal = await outerX({
+      g: Unit({ domain: Domain.discrete(["p", "q"]) }),
+    });
+    check(
+      "an outer level over a nominal domain centers",
+      Math.abs(nominal.mid - (nominal.bars[2].x + nominal.bars[3].x + 20) / 2) <
+        0.5,
+      JSON.stringify(nominal.mid)
     );
     const startErr = await errorOfAsync(() =>
       facets({ label: { align: ["start"] } })
@@ -1527,8 +1550,7 @@ async function main() {
     check(
       "the old flat labelAlign key is an error naming label",
       flatAlign?.includes('axes.x.labelAlign: unknown field "labelAlign"') ===
-        true &&
-        flatAlign.includes('"label"'),
+        true && flatAlign.includes('"label"'),
       flatAlign
     );
 
@@ -1540,7 +1562,7 @@ async function main() {
       v: 1,
     }));
     const tableDl = await chart(days, {
-      schema: { date: Schema.time() },
+      schema: { date: Unit.time() },
       axes: { x: { title: false }, y: { title: false } },
     })
       .flow(
@@ -1591,7 +1613,7 @@ async function main() {
     console.log("\n# partition over the parts of a cycle");
     const cycleErr = async (step: any) =>
       await errorOfAsync(() =>
-        chart(days, { schema: { date: Schema.time() }, axes: false })
+        chart(days, { schema: { date: Unit.time() }, axes: false })
           .flow(partition({ by: distField("date").bin(step), dir: "x" }))
           .mark(rect({ h: 10 }))
           .toDisplayList({ w: 200, h: 100 })
@@ -1617,14 +1639,16 @@ async function main() {
         monthErr.includes(
           'field("date").bin([Calendar.year, Calendar.month])'
         ) &&
-        monthErr.includes('field("date").bin(Calendar.year).bin(Calendar.month)'),
+        monthErr.includes(
+          'field("date").bin(Calendar.year).bin(Calendar.month)'
+        ),
       monthErr
     );
     // The error names the whole key, every bin of it, and its fixes keep
     // the user's levels, with the cycle's unit first.
     const keyErr = async (by: any) =>
       await errorOfAsync(() =>
-        chart(days, { schema: { date: Schema.time() }, axes: false })
+        chart(days, { schema: { date: Unit.time() }, axes: false })
           .flow(partition({ by, dir: "x" }))
           .mark(rect({ h: 10 }))
           .toDisplayList({ w: 200, h: 100 })
@@ -1663,7 +1687,7 @@ async function main() {
     const heat = async (fill: any) =>
       rectsOf(
         await chart(days, {
-          schema: { date: Schema.time() },
+          schema: { date: Unit.time() },
           axes: false,
           legend: false,
         })
@@ -1693,7 +1717,7 @@ async function main() {
         (await heat(distField("v").count())).length === 14
     );
     const placed = await chart(days, {
-      schema: { date: Schema.time() },
+      schema: { date: Unit.time() },
       axes: false,
       legend: false,
     })
@@ -1763,7 +1787,7 @@ async function main() {
       value: 1,
     }));
     const months = rectsOf(
-      await chart(daily, { schema: { date: Schema.time() }, ...noAxes })
+      await chart(daily, { schema: { date: Unit.time() }, ...noAxes })
         .flow(
           partition({
             by: distField("date").bin([DistCalendar.year, DistCalendar.month]),
@@ -1790,7 +1814,7 @@ async function main() {
       { date: "2024-03-10", region: "S", value: 3 },
     ];
     const stacked = rectsOf(
-      await chart(regions, { schema: { date: Schema.time() }, ...noAxes })
+      await chart(regions, { schema: { date: Unit.time() }, ...noAxes })
         .flow(
           partition({
             by: distField("date")
@@ -2208,8 +2232,7 @@ async function main() {
       "a sum skips missing values; over only missing ones it has no value",
       evalFieldValues(field("y").sum(), someMissing).values[0] === 6 &&
         num(inferSize(field("y").sum(), someMissing)) === 6 &&
-        evalFieldValues(field("y").sum(), allMissing).values[0] ===
-          undefined &&
+        evalFieldValues(field("y").sum(), allMissing).values[0] === undefined &&
         inferSize(field("y").sum(), allMissing) === undefined &&
         num(inferSize(field("y").sum(), [])) === 0,
       `${evalFieldValues(field("y").sum(), someMissing).values[0]} / ` +

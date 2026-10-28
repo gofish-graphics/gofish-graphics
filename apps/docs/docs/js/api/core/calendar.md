@@ -2,7 +2,7 @@
 
 Partitions of the time line into calendar cells: seconds, minutes, hours,
 days, days of the week, weeks, months, quarters and years, over a time column (see
-[`Schema.time`](/js/api/core/schema)). A Calendar value has two uses. It bins
+[`Unit.time`](/js/api/core/schema)). A Calendar value has two uses. It bins
 a time column's rows into cells, as the partition of
 [`field(name).bin(...)`](/js/api/operators/spread#field-expression-pipeline).
 And it names a level of an axis, an entry of the `levels` of an axis in the
@@ -219,7 +219,7 @@ holds days, `weekday`, `hour`, `minute` and `second`.
 
 ```ts
 chart(prices, {
-  schema: { date: Schema.time() },
+  schema: { date: Unit.time() },
   axes: {
     x: {
       levels: [
@@ -240,7 +240,7 @@ chart(prices, {
 ```
 
 ```ts
-chart(weather, { schema: { date: Schema.time() }, axes: true })
+chart(weather, { schema: { date: Unit.time() }, axes: true })
   .flow(spread({ by: field("date").bin(Calendar.month), dir: "x" }))
   .mark(rect({ h: field("precipitation").mean() }));
 ```

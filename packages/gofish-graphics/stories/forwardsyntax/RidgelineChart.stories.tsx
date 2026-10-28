@@ -10,7 +10,7 @@ import {
   text,
   layer,
   Constraint,
-  Schema,
+  Unit,
 } from "../../src/lib";
 import { ribbon } from "../../src/lib";
 
@@ -111,7 +111,7 @@ export const Default: StoryObj<Args> = {
 
     chart(ridgelineData, {
       axes: { x: true, y: false },
-      schema: { temp_max: Schema.quantity("Max temperature").unit("°C") },
+      schema: { temp_max: { name: "Max temperature", unit: Unit("°C") } },
     })
       .flow(
         spread({

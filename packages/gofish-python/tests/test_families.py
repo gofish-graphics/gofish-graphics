@@ -13,6 +13,8 @@ from gofish import Bin, Calendar, Coord, Curve, Overlap, Place, Tile, field, lin
 
 FAMILIES = {
     "Color": ("color", ["palette", "gradient"]),
+    "Domain": ("domain", ["discrete", "ordered"]),
+    "Trait": ("trait", ["diverging", "summable"]),
     "Coord": ("coord", ["polar", "clock", "wavy", "geo"]),
     "Curve": (
         "curve",
