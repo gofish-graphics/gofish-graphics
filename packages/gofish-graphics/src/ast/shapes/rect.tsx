@@ -415,9 +415,16 @@ export const Rect = ({
       // wide as `strokeWidth`.
       geometry: ({ intrinsicDims }, _children, node) => {
         const box = boxOfDims(intrinsicDims, node.type);
+        // Under rounded corners or an inset the box only bounds the ink.
+        const bounds = rx > 0 || ry > 0 || inset > 0;
         return {
           box,
-          outline: () => [boxOutline(box, node.yFrame.direction, paint)],
+          outline: () => [
+            {
+              ...boxOutline(box, node.yFrame.direction, paint),
+              ...(bounds && { bounds: true as const }),
+            },
+          ],
         };
       },
     },

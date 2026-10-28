@@ -41,6 +41,12 @@ export type OutlinePart = { name: string; from: number; to: number };
  * of `width` along its points. A closed outline that is not filled is ink
  * only along its band; what is behind its inside shows through.
  *
+ * An outline that only stands in for its shape says so with `bounds`: the
+ * box of a node whose definition gives no outline (an image, a group), a
+ * text's glyph box, a rect's box under rounded corners or an inset. It lies
+ * around the ink without tracing it. A path boolean (`intersect` with paint)
+ * reads only outlines that trace their shape.
+ *
  * An outline may also give its shape exactly, beside the samples, for a
  * consumer that reads a primitive in closed form (the blob in `enclose`):
  *  - `ellipse`, on a closed outline that is an axis-aligned ellipse (a circle
@@ -57,6 +63,8 @@ export interface Outline {
   closed: boolean;
   filled: boolean;
   width?: number;
+  /** True when the outline only bounds the ink, not traces it. */
+  bounds?: true;
   parts?: OutlinePart[];
   ellipse?: { cx: number; cy: number; rx: number; ry: number };
   box?: Box;

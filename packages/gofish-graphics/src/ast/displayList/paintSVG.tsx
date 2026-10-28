@@ -331,6 +331,7 @@ export function paintSVG(
               id={maskId}
               maskUnits="userSpaceOnUse"
               maskContentUnits="userSpaceOnUse"
+              style={item.mode === "alpha" ? "mask-type:alpha" : undefined}
             >
               <use href={`#${sourceId}`} />
             </mask>

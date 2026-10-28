@@ -243,7 +243,10 @@ flat-absolute fold cannot express on its own:
   additionally mask the source by the destination's alpha or inverse alpha.
   Only `over`/`atop`/`in` add a `mix-blend-mode` to the destination layer. A
   Canvas/WebGPU backend would map the operator to its own blend state instead.
-- **`mask`** — clip `content` by the alpha of `mask`.
+- **`mask`** — clip `content` by `mask`: by its luminance, as an SVG mask
+  does by default, or by its alpha when `mode` is `"alpha"`
+  (`mask-type: alpha`). A painted `intersect` with no exact outline fills the
+  overlap through two nested alpha masks, one per operand.
 
 Each item also carries optional **provenance** — `datum` (the source row(s) the
 primitive was elaborated from, the hit-testing / accessibility target) and `role`

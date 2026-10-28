@@ -16,6 +16,7 @@ covers:
   - packages/gofish-graphics/src/ast/perf.ts
   - packages/gofish-graphics/src/ast/geometry/index.ts
   - packages/gofish-graphics/src/ast/geometry/region.ts
+  - packages/gofish-graphics/src/ast/geometry/clip.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/pack.tsx
   - packages/gofish-graphics/src/ast/graphicalOperators/overlap.ts
   - packages/gofish-graphics/src/ast/constraints/overlap.ts
@@ -947,7 +948,12 @@ helper, which falls back to the box when the node does not answer.
   it, on an open or a closed outline, and absent when no stroke is drawn.
   The ink is the inside when filled, plus the band. An outline may also name
   `parts`, arc-length ranges for the mark's own pieces. A region with holes
-  (several loops under a fill rule) is not an outline yet (#1201). Every
+  (several loops under a fill rule) is not an outline yet (#1201). An
+  outline marked `bounds` stands in for the ink without tracing it: the box
+  fallback, a rotated text's glyph box, a `rect` with rounded corners or an
+  inset. A path boolean (a painted `intersect`) reads only outlines that are
+  not `bounds`, and clips them with `geometry/clip.ts` (Sutherland-Hodgman,
+  exact when one ring is convex; the general case is #1201). Every
   node answers it: `GoFishNode.geometry()` gives a node whose definition
   has no outline the box as a closed, filled rect (`boxOutline`) whose
   parts are its edges, `x-min`, `x-max`, `y-min` and `y-max`, named in the

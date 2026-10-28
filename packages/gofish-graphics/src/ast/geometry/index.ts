@@ -50,4 +50,11 @@ export type {
   HasOutline,
 } from "./outline";
 export { reflectRegionY, rebaseRegion, hasSpan } from "./region";
+export {
+  clipToConvex,
+  insetConvex,
+  intersectRings,
+  isConvex,
+  simplifyRing,
+} from "./clip";
 export type { Region, Span, Point } from "./region";

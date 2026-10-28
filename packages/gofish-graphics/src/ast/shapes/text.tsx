@@ -413,6 +413,8 @@ export const Text = ({
       geometry: ({ intrinsicDims, renderData }, _children, node) => {
         const box = boxOfDims(intrinsicDims, node.type);
         const layout = (renderData as { layout?: TextLayout })?.layout;
+        // Unrotated, it is read as its box (`GoFishNode.geometry`), which
+        // only bounds its glyphs, as the turned box below does.
         if (!rotate || layout === undefined) return { box };
         const glyphDy = (renderData as { glyphDy?: number }).glyphDy ?? 0;
         const { bbox, anchor } = layout;
@@ -429,7 +431,9 @@ export const Text = ({
         // Its glyphs are read as filling the turned box.
         return {
           box,
-          outline: () => [{ points: corners, closed: true, filled: true }],
+          outline: () => [
+            { points: corners, closed: true, filled: true, bounds: true },
+          ],
         };
       },
     },
