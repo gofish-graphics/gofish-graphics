@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { circle, ellipse, pack, polygon } from "../../src/lib";
+import { circle, enclose, ellipse, pack, polygon, Shape } from "../../src/lib";
 
 // `pack` places each child by its enclosing circle. Circles enclose
 // themselves, an ellipse encloses as the circle of its larger radius, and a
@@ -42,6 +42,28 @@ export const MixedShapes: StoryObj = {
       ]),
       circle({ r: 30, fill: colors[4] }),
     ]).render(container, { w: 420, h: 420 });
+
+    return container;
+  },
+};
+
+// A pack inside an enclose (it used to throw "node type pack has no
+// lower()"). The pack's outline is its children's outlines, so the blob hugs
+// the circles rather than the pack's box.
+export const Enclosed: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+
+    enclose({ shape: Shape.blob(), padding: 8, fill: "#eee", stroke: "#333" }, [
+      pack({ spacing: 4 }, [
+        circle({ r: 40, fill: colors[0] }),
+        circle({ r: 26, fill: colors[1] }),
+        circle({ r: 18, fill: colors[2] }),
+        circle({ r: 30, fill: colors[3] }),
+        circle({ r: 12, fill: colors[4] }),
+        circle({ r: 22, fill: colors[0] }),
+      ]),
+    ]).render(container, { w: 300, h: 300 });
 
     return container;
   },
