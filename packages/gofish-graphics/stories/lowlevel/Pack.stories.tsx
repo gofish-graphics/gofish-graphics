@@ -47,9 +47,8 @@ export const MixedShapes: StoryObj = {
   },
 };
 
-// A pack inside an enclose (it used to throw "node type pack has no
-// lower()"). The pack's outline is its children's outlines, so the blob hugs
-// the circles rather than the pack's box.
+// A pack inside an enclose. The pack's outline is its children's outlines, so
+// the blob hugs the circles rather than the pack's box.
 export const Enclosed: StoryObj = {
   render: () => {
     const container = initializeContainer();

@@ -35,13 +35,31 @@ function check(name: string, ok: boolean, detail?: string): void {
   }
 }
 
-/** The width and height of the first path's points. */
-const pathSize = (dl: any): [number, number] => {
-  const path = items(dl).find((it) => it.kind === "path");
+/** The width and height of a path item's points. */
+const pathSize = (path: any): [number, number] => {
   const nums = (path?.d ?? "").match(/-?[\d.]+(e-?\d+)?/g)!.map(Number);
   const xs = nums.filter((_: number, i: number) => i % 2 === 0),
     ys = nums.filter((_: number, i: number) => i % 2 === 1);
   return [Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
+};
+/** The width and height of a display list's first path. */
+const firstPathSize = (dl: any) =>
+  pathSize(items(dl).find((it) => it.kind === "path"));
+
+/** The centers of a display list's circles. */
+const circleCenters = (dl: any): [number, number][] =>
+  items(dl)
+    .filter((it) => it.kind === "ellipse" || it.kind === "circle")
+    .map((it) => [it.cx ?? it.x, it.cy ?? it.y] as [number, number]);
+
+/** The message `run` throws, or "" when it does not. */
+const errorOf = async (run: () => Promise<unknown>): Promise<string> => {
+  try {
+    await run();
+    return "";
+  } catch (e) {
+    return (e as Error).message;
+  }
 };
 
 console.log("# Shape.oval() around an ellipse member");
@@ -49,7 +67,7 @@ console.log("# Shape.oval() around an ellipse member");
   const dl = await enclose({ shape: Shape.oval(), padding: 4 }, [
     ellipse({ w: 200, h: 20 }),
   ]).toDisplayList({ w: 300, h: 100 });
-  const [w, h] = pathSize(dl);
+  const [w, h] = firstPathSize(dl);
   // The ellipse grown by 4 is blunter than an ellipse at its ends, so the
   // least ellipse around it is about 224 by 29 (not 208 by 28, which leaves
   // the grown ends outside, and not the 208 by 208 circle of its larger
@@ -70,14 +88,12 @@ for (const [name, make] of [
   ["Shape.hull", () => Shape.hull({ padding: 10 })],
   ["Shape.spine", () => Shape.spine({ padding: 10 })],
 ] as [string, () => unknown][]) {
-  let message = "";
-  try {
-    await enclose({ shape: make() }, [ellipse({ w: 20, h: 10 })]).toDisplayList(
-      { w: 100, h: 100 }
-    );
-  } catch (e) {
-    message = (e as Error).message;
-  }
+  const message = await errorOf(() =>
+    enclose({ shape: make() }, [ellipse({ w: 20, h: 10 })]).toDisplayList({
+      w: 100,
+      h: 100,
+    })
+  );
   check(
     `${name}({ padding: 10 }) is an error naming padding`,
     /padding/.test(message),
@@ -130,16 +146,6 @@ console.log(
       .toDisplayList({ w: 400, h: 400 });
     return items(dl);
   };
-  const sizeOf = (path: any): [number, number] => {
-    const nums = (path.d as string).match(/-?[\d.]+(e-?\d+)?/g)!.map(Number);
-    const xs = nums.filter((_, i) => i % 2 === 0),
-      ys = nums.filter((_, i) => i % 2 === 1);
-    return [
-      Math.max(...xs) - Math.min(...xs),
-      Math.max(...ys) - Math.min(...ys),
-    ];
-  };
-
   const constant = (await draw(4)).filter((it) => it.kind === "path");
   check(
     "a flow-step enclose draws one outline per group",
@@ -150,35 +156,27 @@ console.log(
   // Each group's outline sits its own `pad` from its circles: group b's is
   // 2 × (10 − 2) = 16 px wider than group a's.
   const fromField = (await draw("pad")).filter((it) => it.kind === "path");
-  const [wa] = sizeOf(fromField[0]);
-  const [wb] = sizeOf(fromField[1]);
+  const [wa] = pathSize(fromField[0]);
+  const [wb] = pathSize(fromField[1]);
   check(
     "padding: a field name is read once per group, in pixels",
     fromField.length === 2 && Math.abs(wb - wa - 16) < 0.01,
     `widths ${wa.toFixed(2)}, ${wb.toFixed(2)}`
   );
 
-  let message = "";
-  try {
-    await chart(rows)
+  let message = await errorOf(() =>
+    chart(rows)
       .flow(enclose({ padding: "pad" }), pack())
       .mark(circleOf)
-      .toDisplayList({ w: 400, h: 400 });
-  } catch (e) {
-    message = (e as Error).message;
-  }
+      .toDisplayList({ w: 400, h: 400 })
+  );
   check(
     "padding: a field that is not constant within the group is an error",
     /padding/.test(message) && /not constant/.test(message),
     message || "no error"
   );
 
-  message = "";
-  try {
-    await draw("nope");
-  } catch (e) {
-    message = (e as Error).message;
-  }
+  message = await errorOf(() => draw("nope"));
   check(
     "padding: a string that names no column is an error naming padding",
     /enclose\(\{ padding \}\)/.test(message),
@@ -187,14 +185,12 @@ console.log(
 
   // Two circles of radius 10 packed with spacing 6 are 26 px apart.
   const centers = async (spacing: number) =>
-    items(
+    circleCenters(
       await pack({ spacing }, [
         circle({ r: 10, fill: "#888" }),
         circle({ r: 10, fill: "#888" }),
       ]).toDisplayList({ w: 200, h: 200 })
-    )
-      .filter((it) => it.kind === "ellipse" || it.kind === "circle")
-      .map((it) => [it.cx ?? it.x, it.cy ?? it.y] as [number, number]);
+    );
   const [p, q] = await centers(6);
   const gap = Math.hypot(p[0] - q[0], p[1] - q[1]);
   check(
@@ -224,9 +220,8 @@ console.log("# enclose lowers any fresh subtree, as layer does");
     { g: "a", v: 1 },
     { g: "b", v: 2 },
   ];
-  let message = "";
   let kinds: string[] = [];
-  try {
+  const message = await errorOf(async () => {
     const dl = await chart(tree)
       .flow(
         spread({ by: "g", dir: "x", spacing: 10 }),
@@ -236,9 +231,7 @@ console.log("# enclose lowers any fresh subtree, as layer does");
       .mark(rect({ w: 40, h: 40, fill: "#888" }))
       .toDisplayList({ w: 300, h: 100 });
     kinds = items(dl).map((it) => it.kind);
-  } catch (e) {
-    message = (e as Error).message;
-  }
+  });
   check(
     "spread → enclose → treemap renders each group's outline and cells",
     message === "" && kinds.filter((k) => k === "rect").length === 5,
@@ -258,9 +251,7 @@ console.log("# nested pack spacing is between siblings only");
     .flow(pack({ by: "g", spacing: 4 }), pack({ spacing: 4 }))
     .mark((d: any[]) => circle({ r: d[0].r, fill: "#888" })(d))
     .toDisplayList({ w: 200, h: 200 });
-  const cs = items(dl)
-    .filter((it) => it.kind === "ellipse" || it.kind === "circle")
-    .map((it) => [it.cx ?? it.x, it.cy ?? it.y] as [number, number]);
+  const cs = circleCenters(dl);
   const gap = Math.hypot(cs[0][0] - cs[1][0], cs[0][1] - cs[1][1]);
   check(
     "pack({ spacing: 4 }) of packs keeps the circles 4 px apart, not 8",
@@ -277,12 +268,9 @@ console.log("# nested pack spacing is between siblings only");
 
 console.log("# pack({ spacing }) is checked");
 for (const spacing of [-1, NaN, "4"]) {
-  let message = "";
-  try {
-    await pack({ spacing }, [circle({ r: 10 })]).toDisplayList();
-  } catch (e) {
-    message = (e as Error).message;
-  }
+  const message = await errorOf(() =>
+    pack({ spacing }, [circle({ r: 10 })]).toDisplayList()
+  );
   check(
     `pack({ spacing: ${JSON.stringify(spacing)} }) is an error naming spacing`,
     /pack\(\{ spacing \}\)/.test(message),
@@ -311,13 +299,10 @@ console.log("# a flow-step enclose keeps its step through its modifiers");
     [".translate(...)", () => step().translate({ x: 5 })],
     [".name(n).label(f)", () => step().name("region").label("g")],
   ] as [string, () => unknown][]) {
-    let message = "";
     let drawn: any[] = [];
-    try {
+    const message = await errorOf(async () => {
       drawn = await draw(make());
-    } catch (e) {
-      message = (e as Error).message;
-    }
+    });
     const paths = drawn.filter((it) => it.kind === "path").length;
     check(
       `enclose(opts)${what} in .flow(...) is still the flow step`,
@@ -345,9 +330,7 @@ console.log("# a box-shape enclose is packed by the circle around its box");
     enclose({ padding: 10 }, [circle({ r: 10, fill: "#888" })]),
     enclose({ padding: 10 }, [circle({ r: 10, fill: "#888" })]),
   ]).toDisplayList({ w: 300, h: 300 });
-  const cs = items(dl)
-    .filter((it) => it.kind === "ellipse" || it.kind === "circle")
-    .map((it) => [it.cx ?? it.x, it.cy ?? it.y] as [number, number]);
+  const cs = circleCenters(dl);
   const gap = Math.hypot(cs[0][0] - cs[1][0], cs[0][1] - cs[1][1]);
   check(
     "pack of two box enclosures keeps the boxes' circles apart",
