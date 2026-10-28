@@ -683,5 +683,49 @@ console.log("# a re-render lands on the build's final frame (#914)");
   );
 }
 
+console.log("# a combinator's re-render lands on the build's final frame too");
+{
+  // The same rule through a combinator's `.render` (#1170): the chart inside
+  // `spread([...])` re-renders when its signal is set, and the build, which
+  // the combinator's terminal installs, plays on the first render only.
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const s = signal(1);
+  await spread({ dir: "x" }, [
+    chart(alphabet.slice(0, 4))
+      .flow(
+        derive((rows: any) => (s(), rows)),
+        spread({ by: "letter", dir: "x" })
+      )
+      .mark(
+        rect({ h: "frequency" }).transition({
+          enter: Animation.grow({ duration: 600 }),
+        })
+      ),
+  ]).render(container, { w: 200, h: 120, axes: false, playing: false });
+  const heights = () =>
+    [...container.querySelectorAll("rect")].map((r) =>
+      Number(r.getAttribute("height"))
+    );
+  const settle = async () => {
+    for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+  };
+  await settle();
+  const first = heights();
+  ok(
+    "the combinator's first render is held at the build's start",
+    first.length === 4 && first.every((h) => h === 0),
+    JSON.stringify(first)
+  );
+  s.set(2);
+  await settle();
+  const again = heights();
+  ok(
+    "the combinator's re-render draws every bar at rest",
+    again.length === 4 && again.every((h) => h > 0),
+    JSON.stringify(again)
+  );
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

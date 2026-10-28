@@ -72,7 +72,7 @@ export const Ladder: StoryObj = {
       container.appendChild(connected);
 
       const panel = (x: string, into: HTMLElement, w: number) =>
-        chart(drivingShifts)
+        chart(drivingShifts, { w, h: 240 })
           .flow(scatter({ by: "year", x, y: "gas" }))
           .mark(
             circle({ r: 2.5, fill: "white", stroke: "black", strokeWidth: 1 })
@@ -80,7 +80,7 @@ export const Ladder: StoryObj = {
           .layer(
             line({ along: "year", curve: Curve[curve](), stroke: "steelblue" })
           )
-          .render(into, { w, h: 240 });
+          .render(into);
       panel("year", byYear, 600);
       panel("miles", connected, 360);
     }

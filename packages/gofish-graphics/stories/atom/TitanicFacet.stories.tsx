@@ -36,7 +36,11 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     
-     chart(titanicPassengers, { color: Color.palette(["#2b8cbe", "#ff8408"]) })
+     chart(titanicPassengers, {
+       color: Color.palette(["#2b8cbe", "#ff8408"]),
+       w: args.w,
+       h: args.h,
+     })
         .flow(table({
                 by: {x: "pclass", y: "sex"},
                 // Content-sized tracks (σ-affine 6e) pack facets to their dot
@@ -62,7 +66,7 @@ export const Default: StoryObj<Args> = {
             )
             .mark(circle({ r: 4, fill: "survived" }))
         )
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },

@@ -33,13 +33,12 @@ CLOCK_TREE = {
     ],
 }
 
-BAND_UNIT = 26  # radial thickness unit; node height = (height + 1) * BAND_UNIT
-
-
+# The height is a radial WEIGHT too, so the coord fits the tallest node to the
+# band between the inner radius and the rim.
 def node(d):
     return rect(
         w=datum(1),
-        h=(d["height"] + 1) * BAND_UNIT,
+        h=datum(d["height"] + 1),
         em_x=True,
         em_y=True,
         fill=by_depth()(d),

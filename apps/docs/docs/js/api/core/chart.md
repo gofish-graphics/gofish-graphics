@@ -227,8 +227,9 @@ This is the same rule the `circle` mark already obeys one level down:
 unit and therefore one scale factor — so a circle can never distort into an
 ellipse. Equal scale at the chart level is exactly that, lifted to x and y.
 
-The binding (more constrained) axis fills its dimension; the other is centered in
-the leftover space. It applies to axes that carry a data-driven scale (a position
+The binding (more constrained) axis fills its dimension; on the other, the chart
+keeps its size and its content sits at the start (left, or top), with the
+leftover space empty after it. It applies to axes that carry a data-driven scale (a position
 scale over a data domain, or a data-driven size); an axis with nothing to scale
 (a category axis) leaves it a no-op. Two columns with no declared unit stay
 independent (`bill_length` and `bill_depth`), while `predicted` and `actual`,

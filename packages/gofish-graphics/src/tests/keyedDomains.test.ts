@@ -20,8 +20,6 @@ import {
 import { Units, withUnits } from "../ast/measure";
 import { DEFAULT_AXIS_TICKS } from "../ast/underlyingSpace";
 import { interval, type Interval } from "../util/interval";
-import { ScopeRegistry } from "../ast/solver/scopes";
-import { impliedExtent } from "../ast/extent";
 
 let failed = 0;
 let passed = 0;
@@ -210,29 +208,6 @@ withUnits(new Units(), () => {
     ok(
       "a category axis nices nothing",
       table.ticksOf(bars, 1, bars._underlyingSpace![1], true) === undefined
-    );
-  }
-
-  console.log("# keyed domains: a reset forgets the literal sizes' solves");
-  {
-    // A literal size solves its scope in the claim walk (`solveFixed`), and
-    // a render root with no size maps the keyed domain at that σ
-    // (`keyedSigma`). A reset starts a new claim walk, so a node's solve
-    // from before it must not be read: not by the node, and not by the root.
-    const scopes = new ScopeRegistry();
-    const space = pinned(0, 10);
-    const sized = {};
-    const meta = { kind: "sized", rootKey: "sized", axis: 1 } as const;
-    scopes.solveFixed(sized, "k", meta, space, impliedExtent(space), 100);
-    ok("a solve is read before a reset", scopes.keyedSigma("k", 1) === 10);
-    scopes.reset();
-    ok(
-      "a reset forgets the node's solve",
-      scopes.fixedSolve(sized, 1) === undefined
-    );
-    ok(
-      "a reset forgets the σ the root reads",
-      scopes.keyedSigma("k", 1) === undefined
     );
   }
 });

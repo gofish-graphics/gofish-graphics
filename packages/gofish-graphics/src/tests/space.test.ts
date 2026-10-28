@@ -337,19 +337,98 @@ console.log("# space: one seating rule");
   const pinned = seatInScope(frame, CONTINUOUS(interval(5, 9), "pinned"));
   const free = seatInScope(frame, CONTINUOUS(interval(0, 9), "free"));
   const none = seatInScope(frame, CONTINUOUS(interval(0, 9), "none"));
+  const ordinal = seatInScope(
+    { sigma: 2, originPx: undefined, startPx: 0 },
+    CONTINUOUS(interval(0, 9), "free")
+  );
   ok(
     "a pinned child sits at 0 and shares the frame",
-    pinned.seatPx === 0 && pinned.childMap === frame
+    pinned.seat.px === 0 &&
+      pinned.seat.anchor === "baseline" &&
+      pinned.childMap === frame
   );
   ok(
     "a free child sits at the pixel of data 0, in a frame of its own",
-    free.seatPx === 30 &&
+    free.seat.px === 30 &&
+      free.seat.anchor === "baseline" &&
       free.childMap?.sigma === 2 &&
       free.childMap?.originPx === 0
   );
   ok(
     "a child with no data 0 sits at 0 with no frame",
-    none.seatPx === 0 && none.childMap === undefined
+    none.seat.px === 0 && none.childMap === undefined
+  );
+  ok(
+    "a scope with no data 0 seats its content's box at its start edge",
+    ordinal.seat.px === 0 &&
+      ordinal.seat.anchor === "min" &&
+      ordinal.childMap === undefined
+  );
+}
+
+console.log("# space: equal measure seats the content at its box's top-left");
+{
+  // x and y share a declared unit, so both take the binding σ (x's, 100).
+  // y has 100 px left over. Its content has no data 0, so the scope seats
+  // its box: after the leftover where y grows upward (its start is the
+  // bottom), at the start where it reads top-down.
+  const scopes = new ScopeRegistry();
+  const u = declared("plane");
+  const x = CONTINUOUS(interval(0, 4), "pinned", u);
+  const y = CONTINUOUS(interval(0, 2), "none", u);
+  const yAt = (direction: 1 | -1) =>
+    scopes.equalizeMeasure("t", [
+      { space: x, claim: impliedExtent(x)!, box: 400, sigma: 100, direction: 1 },
+      { space: y, claim: impliedExtent(y)!, box: 300, sigma: 150, direction },
+    ])![1].solution;
+  const up = seatInScope(yAt(-1), y).seat;
+  const down = seatInScope(yAt(1), y).seat;
+  ok(
+    "a y-up content's box starts past the leftover, so it sits at the top",
+    yAt(-1).sigma === 100 && up.px === 100 && up.anchor === "min",
+    JSON.stringify(up)
+  );
+  ok(
+    "a top-down content's box starts at the start edge",
+    down.px === 0 && down.anchor === "min",
+    JSON.stringify(down)
+  );
+}
+
+console.log("# space: a one-value axis does not bind equal measure");
+{
+  // Points along x at one y, in one declared unit. y has no data width, so
+  // solveScope gives it σ = 0 and its value the middle of its box. Equal
+  // measure keeps x's σ, hands it to y, and keeps y's value at the middle.
+  const scopes = new ScopeRegistry();
+  const meta = { kind: "root" as const, rootKey: "t", axis: 1 as const };
+  const u = declared("plane");
+  const x = CONTINUOUS(interval(0, 10), "pinned", u);
+  const y = CONTINUOUS(interval(5, 5), "pinned", u);
+  // A circle of radius 3 at y = 5, measured from data 0.
+  const yClaim = Extent(M.linear(5, 3), M.linear(-5, 3));
+  const ySolved = scopes.solveScope(meta, y, yClaim, 200)!;
+  const [ex, ey] = scopes.equalizeMeasure("t", [
+    { space: x, claim: impliedExtent(x)!, box: 300, sigma: 30, direction: 1 },
+    { space: y, claim: yClaim, box: 200, sigma: ySolved.sigma, direction: -1 },
+  ])!;
+  ok(
+    "the axis with a data width keeps its σ, and the one-value axis takes it",
+    ySolved.sigma === 0 && ex.solution.sigma === 30 && ey.solution.sigma === 30,
+    `${ex.solution.sigma}, ${ey.solution.sigma}`
+  );
+  ok(
+    "the one value stays at the middle of its box",
+    Math.abs(pxOf({ sigma: 30, originPx: ey.solution.originPx! }, 5) - 100) <
+      1e-9,
+    String(ey.solution.originPx)
+  );
+  ok(
+    "two one-value axes leave both scopes as solved",
+    scopes.equalizeMeasure("t", [
+      { space: y, claim: yClaim, box: 300, sigma: 0, direction: 1 },
+      { space: y, claim: yClaim, box: 200, sigma: 0, direction: -1 },
+    ]) === undefined
   );
 }
 
@@ -416,17 +495,22 @@ console.log("# space: a scope solves σ from its claim, and the pixel of 0");
     one.sigma === 0 &&
       pxOf({ sigma: one.sigma, originPx: one.originPx! }, 5) === 200
   );
-  // Nicing widens only the data part.
+  // Nicing widens the claim to hold the niced domain: a claim is the hull
+  // of what the content draws, so each side reaches the farther of the
+  // claim and the domain's end. Content drawing 6 px past its top datum
+  // (a mark's size at it) needs those pixels while the niced top is closer
+  // than 6 px (σ = 2), and nothing more once it is farther (σ = 10).
   const [niced, nicedClaim] = niceScope(
     CONTINUOUS(interval(-3, 44), "pinned"),
-    Extent(M.linear(47, 100)),
+    Extent(M.linear(44, 6), M.linear(3, 0)),
     DEFAULT_AXIS_TICKS
   );
   ok(
-    "nicing widens the claim by σ·(nicedWidth − dataWidth)",
+    "nicing widens the claim to the hull of the claim and the niced domain",
     JSON.stringify(continuousInterval(niced!)) ===
       JSON.stringify(interval(-5, 45)) &&
-      nicedClaim!.width.run(2) === 2 * 50 + 100
+      nicedClaim!.width.run(2) === 2 * 44 + 6 + 2 * 5 &&
+      nicedClaim!.width.run(10) === 10 * 50
   );
   // A pinned child's claim reaches the union whole.
   const u = unionChildExtents(
@@ -617,8 +701,10 @@ console.log("# space: one fold for every origin");
   );
   // A fixed-pitch chain folds the parts' sides, not only their widths: a
   // baseline row keeps its descent below its anchor, and a tall middle row
-  // binds even when it is neither first nor last.
-  const pitched = (
+  // binds even when it is neither first nor last. The parts' claims are in
+  // the chain's axis order, and the claim is measured from its origin, the
+  // first part's anchor.
+  const pitchedClaim = (
     targets: CONTINUOUS_TYPE[],
     anchor: "baseline" | "middle"
   ) => {
@@ -628,17 +714,25 @@ console.log("# space: one fold for every origin");
       targets,
       distributeSpaceFold(targets, ["a", "b", "c"], opts),
       opts
-    )!.width.run(1);
+    )!;
   };
+  const pitched = (
+    targets: CONTINUOUS_TYPE[],
+    anchor: "baseline" | "middle"
+  ) => pitchedClaim(targets, anchor).width.run(1);
+  // Rows at 0 and 30: [−10, 20] and [30, 35].
+  const baselineChain = pitchedClaim(
+    [
+      CONTINUOUS(interval(-10, 20), "free"),
+      CONTINUOUS(interval(0, 5), "free"),
+    ],
+    "baseline"
+  );
   ok(
     "a baseline chain counts a row's descent below its anchor",
-    pitched(
-      [
-        CONTINUOUS(interval(-10, 20), "free"),
-        CONTINUOUS(interval(0, 5), "free"),
-      ],
-      "baseline"
-    ) === 50
+    baselineChain.width.run(1) === 45 &&
+      baselineChain.descent.run(1) === 10 &&
+      baselineChain.ascent.run(1) === 35
   );
   ok(
     "a middle chain's tallest row binds wherever it sits",

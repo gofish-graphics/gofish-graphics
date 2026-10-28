@@ -31,19 +31,16 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(data)
+    chart(data, { w: args.w, h: args.h })
       .flow(spread({ by: "cat", dir: "x" }))
       .mark(rect({ h: "count", fill: "#6b9bd1" }))
       // Threshold rule: a bare rect tier. `datum(60)` is a data-space count
-      // value, so it aligns with the bars' count scale; `w` spans the plot in
-      // pixels. (A serializable data-space constant — round-trips to Python.)
-      .layer(rect({ y: datum(60), h: 3, w: args.w, fill: "#333" }))
+      // value, so it aligns with the bars' count scale. With no `w` it fills
+      // the plot. (A serializable data-space constant — round-trips to Python.)
+      .layer(rect({ y: datum(60), h: 3, fill: "#333" }))
       // Caption: a bare text tier.
       .layer(text({ x: 20, y: 24, text: "threshold: 60", fill: "#333" }))
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },

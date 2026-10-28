@@ -70,7 +70,7 @@ export const TreemapOval: StoryObj = {
         sibling: alternate([slice, dice]),
       },
       sampleTree
-    ).render(container, { w: 640, h: 420 });
+    ).render(container);
     return container;
   },
 };

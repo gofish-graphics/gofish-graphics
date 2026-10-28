@@ -19,37 +19,47 @@ from python_stories.data import SEAFOOD, SCORES_DATA
 
 def story_palette_named_scheme():
     return (
-        chart(SEAFOOD, color=Color.palette("tableau10"))
+        chart(SEAFOOD, color=Color.palette("tableau10"), w=400, h=400)
         .flow(spread(by="species", dir="x"))
         .mark(rect(h="count", fill="species")),
-        {"w": 400, "h": 400},
+        {},
     )
 
 
 def story_palette_string_array():
     return (
-        chart(SEAFOOD, color=Color.palette(["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00"]))
+        chart(
+            SEAFOOD,
+            color=Color.palette(["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00"]),
+            w=400,
+            h=400,
+        )
         .flow(spread(by="species", dir="x"))
         .mark(rect(h="count", fill="species")),
-        {"w": 400, "h": 400},
+        {},
     )
 
 
 def story_gradient_named_scheme():
     return (
-        chart(SCORES_DATA, color=Color.gradient("blues"))
+        chart(SCORES_DATA, color=Color.gradient("blues"), w=400, h=400)
         .flow(spread(by="label", dir="x"))
         .mark(rect(h="value", fill="value")),
-        {"w": 400, "h": 400},
+        {},
     )
 
 
 def story_gradient_string_array():
     return (
-        chart(SCORES_DATA, color=Color.gradient(["#f7fbff", "#42c663", "#6b0808"]))
+        chart(
+            SCORES_DATA,
+            color=Color.gradient(["#f7fbff", "#42c663", "#6b0808"]),
+            w=400,
+            h=400,
+        )
         .flow(spread(by="label", dir="x"))
         .mark(rect(h="value", fill="value")),
-        {"w": 400, "h": 400},
+        {},
     )
 
 
@@ -80,21 +90,26 @@ def story_paired_palettes():
         return out
 
     return (
-        chart(_PAIRED_BARS)
+        chart(_PAIRED_BARS, w=400, h=400)
         .flow(
             derive(_assign_colors),
             spread(by="pair", dir="x"),
             stack(by="type", dir="x"),
         )
         .mark(rect(h="value", fill="color")),
-        {"w": 400, "h": 400},
+        {},
     )
 
 
 def story_nested_derive():
     lake_order = ["Lake A", "Lake B", "Lake C", "Lake D", "Lake E", "Lake F"]
     return (
-        chart(SEAFOOD, color=Color.palette({"salmon-highlight": "#e15759", "first-half": "#4e79a7"}))
+        chart(
+            SEAFOOD,
+            color=Color.palette({"salmon-highlight": "#e15759", "first-half": "#4e79a7"}),
+            w=400,
+            h=400,
+        )
         .flow(
             derive(lambda d: [
                 {
@@ -109,39 +124,39 @@ def story_nested_derive():
                 }
                 for item in d
             ]),
-            spread(by="lake", dir="x"),
+            spread(by="lake", dir="x", spacing=24),
             stack(by="species", dir="x"),
         )
         .mark(rect(h="count", fill="highlight")),
-        {"w": 400, "h": 400},
+        {},
     )
 
 
 def story_selective_derive():
     return (
-        chart(SEAFOOD, color=Color.palette({"highlighted": "#e15759"}))
+        chart(SEAFOOD, color=Color.palette({"highlighted": "#e15759"}), w=400, h=400)
         .flow(
             derive(lambda d: [
                 {**item, "highlight": "highlighted" if item["species"] == "Salmon" else ""}
                 for item in d
             ]),
-            spread(by="lake", dir="x"),
+            spread(by="lake", dir="x", spacing=24),
             stack(by="species", dir="x"),
         )
         .mark(rect(h="count", fill="highlight")),
-        {"w": 400, "h": 400},
+        {},
     )
 
 
 def story_selective_group():
     return (
-        chart(SEAFOOD, color=Color.palette({"Salmon": "#e15759"}))
+        chart(SEAFOOD, color=Color.palette({"Salmon": "#e15759"}), w=400, h=400)
         .flow(
-            spread(by="lake", dir="x"),
+            spread(by="lake", dir="x", spacing=24),
             stack(by="species", dir="x"),
         )
         .mark(rect(h="count", fill="species")),
-        {"w": 400, "h": 400},
+        {},
     )
 
 
@@ -160,13 +175,23 @@ _ROSE_DATA = [
 
 def story_rose_gradient():
     return (
-        chart(_ROSE_DATA, color=Color.gradient("blues"), coord=Coord.clock(), axes=True)
+        chart(
+            _ROSE_DATA,
+            color=Color.gradient("blues"),
+            coord=Coord.clock(),
+            axes=True,
+            # A wider polar inset, so the rotated radial title fits until
+            # the coord reserves what its axes draw (#1165).
+            padding=40,
+            w=400,
+            h=400,
+        )
         .flow(
             spread(by="sector", dir="x", spacing=0, axes=False),
             stack(by="ring", dir="y", axes=True),
         )
         .mark(rect(w=(math.pi * 2) / _NUM_SECTORS, em_x=True, h="value", fill="ring")),
-        {"w": 400, "h": 400},
+        {},
     )
 
 
@@ -175,6 +200,7 @@ def story_ribbon_highlight():
         chart(
             SEAFOOD,
             color=Color.palette({"Salmon": "#e15759", "Trout": "#4e79a7"}),
+            h=400,
         )
         .flow(
             spread(by="lake", dir="x", spacing=64),
@@ -182,5 +208,5 @@ def story_ribbon_highlight():
         )
         .mark(rect(h="count", fill="species"))
         .layer(ribbon(opacity=0.6)),
-        {"w": 400, "h": 400},
+        {},
     )

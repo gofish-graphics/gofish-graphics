@@ -74,7 +74,7 @@ export const Default: StoryObj = {
   render: () => {
     const container = initializeContainer();
     spreadX(
-      { spacing: 64, alignment: "start" },
+      { spacing: 96, alignment: "start" },
       map([barChart, heatmap, treeChart], (fn) => fn())
     ).render(container, { axes: true });
     return container;

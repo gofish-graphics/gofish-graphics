@@ -29,17 +29,24 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 400, h: 300 },
+  // Vega-Lite's size: its compiled bar_grouped plot is 240 × 300. Each of the
+  // three categories takes 80 px (three 20 px offset bars plus padding), and a
+  // continuous y is 300 px tall, Vega-Lite's default.
+  args: { w: 240, h: 300 },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(values, { color: Color.palette("tableau10") })
+    chart(values, {
+      color: Color.palette("tableau10"),
+      w: args.w,
+      h: args.h,
+    })
       .flow(
         spread({ by: "category",  dir: "x", spacing: 24 }),
         spread({ by: "group",  dir: "x", spacing: 0 })
       )
       .mark(rect({ h: "value", fill: "group" }))
-      .render(container, { h: args.h } as any);
+      .render(container);
 
     return container;
   },

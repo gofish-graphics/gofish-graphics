@@ -38,7 +38,7 @@ export const Default: StoryObj = {
     // old `normalize: true` layout hack reversed order via a y-flip
     // fallback that this `size`-claim mechanism doesn't need — an intended
     // fix, not a regression).
-    chart(titanic)
+    chart(titanic, { w: 500, h: 500 })
       .flow(
         stack({ by: "class", dir: "y", size: field("count").normalize() }),
         stack({ by: "sex", dir: "x", size: field("count").normalize() }),
@@ -51,7 +51,7 @@ export const Default: StoryObj = {
           strokeWidth: 1,
         })
       )
-      .render(container, { w: 500, h: 500 });
+      .render(container);
 
     return container;
   },

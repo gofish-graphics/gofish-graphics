@@ -887,7 +887,6 @@ console.log("# constraint confluence: child posScale forwarding");
   const seated = childPosScalesFor(
     [positionSpace, CONTINUOUS(interval(0, 3), "free")],
     undefined,
-    [false, false],
     [frameX, frameY]
   );
   ok(
@@ -899,7 +898,6 @@ console.log("# constraint confluence: child posScale forwarding");
   const seatedUndefined = childPosScalesFor(
     [UNDEFINED, UNDEFINED],
     undefined,
-    [false, false],
     [frameX, frameY]
   );
   ok(
@@ -910,7 +908,6 @@ console.log("# constraint confluence: child posScale forwarding");
   const ownedTarget = childPosScalesFor(
     [positionSpace, positionSpace],
     new Set<0 | 1>([0]),
-    [true, true],
     [frameX, frameY]
   );
   ok(

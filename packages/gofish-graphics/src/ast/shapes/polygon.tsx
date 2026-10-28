@@ -1,7 +1,7 @@
 import { getColumnTypes, setColumnTypes } from "../schema";
 import { datumOfInput } from "../marks/markResult";
 import { packEnclose } from "d3-hierarchy";
-import { GoFishNode } from "../_node";
+import { GoFishNode, outlineOverhang } from "../_node";
 import { boxOfDims, outlinePaint, ringExtent, ringOutline } from "../geometry";
 import { GoFishAST } from "../_ast";
 import { Size } from "../dims";
@@ -82,6 +82,7 @@ export const Polygon = ({
       // Used to seed the unit color scale. Prefer whichever channel is
       // data-driven — the same rule `rect` follows.
       color: isValue(fill) ? fill : stroke,
+      strokeOverhang: outlineOverhang(stroke, strokeWidth),
       resolveUnderlyingSpace: (
         _children: Size<UnderlyingSpace>[],
         _childNodes: GoFishAST[]

@@ -4,6 +4,8 @@ import { chart, circle, scatter, rect, v } from "../../src/lib";
 import data from "vega-datasets";
 import { uniq } from "lodash";
 
+// Mirrors: https://vega.github.io/vega-lite/examples/circle_binned.html
+
 const meta: Meta = {
   title: "Vega-Lite/2D Histogram Scatter Plot",
   argTypes: {
@@ -17,7 +19,9 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 600, h: 300 },
+  // Vega-Lite's size: binned continuous axes with no width or height make a
+  // 300 × 300 plot, Vega-Lite's default (its compiled circle_binned plot).
+  args: { w: 300, h: 300 },
   loaders: [async () => ({ movies: await data["movies.json"]() })],
   render: (args: Args, context: any) => {
 
@@ -62,7 +66,7 @@ export const Default: StoryObj<Args> = {
     });
     
 
-    chart(movieCounts)
+    chart(movieCounts, { w: args.w, h: args.h })
       .flow(scatter({ by: "id", x: "x", y: "y" }))
       // Size each cell by bucket count.
       .mark(
@@ -76,7 +80,7 @@ export const Default: StoryObj<Args> = {
           ry: 2,
         } as any)
       )
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   }

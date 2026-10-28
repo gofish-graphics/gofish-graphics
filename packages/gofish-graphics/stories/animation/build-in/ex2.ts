@@ -10,7 +10,7 @@ import {
 import { alphabet } from "./data";
 
 export default (container: HTMLElement, clock?: BuildClockOptions) =>
-  chart(alphabet)
+  chart(alphabet, { w: 480, h: 220 })
     .flow(
       spread({ by: "letter", dir: "x" }).transition({
         enter: time.stagger({ lag: 60 }),
@@ -21,4 +21,4 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
         enter: Animation.grow({ duration: 600 }),
       })
     )
-    .render(container, { w: 480, h: 220, ...clock });
+    .render(container, { ...clock });

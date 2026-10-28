@@ -437,6 +437,10 @@ async function wrapWithLabels(
         });
         continue;
       }
+      // The chooser places it after the solve, so the claim walk cannot
+      // know where it lands: it is ink, which takes no room, and the canvas
+      // grows to hold it where the render gives no size (#1032).
+      label.node.inkOn = [true, true];
       let avoidNames = avoided.get(spec.group);
       if (avoidNames === undefined) {
         avoidNames = avoidedRefs(

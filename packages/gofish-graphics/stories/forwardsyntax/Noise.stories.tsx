@@ -33,7 +33,7 @@ export const PenguinMass: StoryObj = {
   render: () => {
     const container = initializeContainer();
 
-    chart(weighed)
+    chart(weighed, { w: 560 })
       .flow(
         spread({ by: "Species", dir: "y", spacing: 16 }),
         scatter({
@@ -43,7 +43,7 @@ export const PenguinMass: StoryObj = {
         })
       )
       .mark(circle({ r: 3, fill: "Species" }))
-      .render(container, { w: 560, h: 320 });
+      .render(container);
 
     return container;
   },
@@ -61,7 +61,7 @@ export const PenguinMassSina: StoryObj = {
   render: () => {
     const container = initializeContainer();
 
-    chart(weighed)
+    chart(weighed, { w: 560 })
       .flow(
         spread({ by: "Species", dir: "y", spacing: 16 }),
         scatter({
@@ -71,7 +71,7 @@ export const PenguinMassSina: StoryObj = {
         })
       )
       .mark(circle({ r: 3, fill: "Species" }))
-      .render(container, { w: 560, h: 320 });
+      .render(container);
 
     return container;
   },
@@ -82,7 +82,7 @@ export const PenguinMassJitter: StoryObj = {
   render: () => {
     const container = initializeContainer();
 
-    chart(weighed)
+    chart(weighed, { w: 560 })
       .flow(
         spread({ by: "Species", dir: "y", spacing: 16 }),
         scatter({
@@ -92,7 +92,7 @@ export const PenguinMassJitter: StoryObj = {
         })
       )
       .mark(circle({ r: 3, fill: "Species" }))
-      .render(container, { w: 560, h: 320 });
+      .render(container);
 
     return container;
   },
@@ -101,13 +101,13 @@ export const PenguinMassJitter: StoryObj = {
 const denseStory = (overlap: Overlap.Overlap): StoryObj => ({
   render: () => {
     const container = initializeContainer();
-    chart(dense)
+    chart(dense, { w: 640 })
       .flow(
         spread({ by: "group", dir: "y", spacing: 16 }),
         scatter({ x: "mass", alignment: "middle", overlap })
       )
       .mark(circle({ r: 2, fill: "group" }))
-      .render(container, { w: 640, h: 420 });
+      .render(container);
     return container;
   },
 });

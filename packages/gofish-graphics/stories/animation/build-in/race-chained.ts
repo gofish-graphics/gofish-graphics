@@ -13,7 +13,7 @@ import {
 import { brands } from "./data";
 
 export default (container: HTMLElement, clock?: BuildClockOptions) =>
-  chart(brands, { legend: false })
+  chart(brands, { legend: false, w: 600, h: 600 })
     .flow(
       time.sequence({ by: "year", duration: 20000, loop: false, ...clock }),
       spread({
@@ -31,4 +31,4 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
           exit: Animation.fadeOut(),
         })
     )
-    .render(container, { w: 600, h: 600, axes: { x: true, y: false } });
+    .render(container, { axes: { x: true, y: false } });

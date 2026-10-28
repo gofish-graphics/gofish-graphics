@@ -66,12 +66,18 @@ const offsetSpace = (
 /** The claim of {@link offsetSpace}'s result: a claim is measured from data
  *  0, so moving the content up by a datum `value` moves `value·σ` from below
  *  0 to above it. The content keeps its own σ-affine width (pixel overhead
- *  included), so it sizes as before. */
+ *  included), so it sizes as before. A pixel offset moves the content's box
+ *  that many pixels (its `translate`), so it moves the claim by them too. */
 const offsetExtent = (
   space: UnderlyingSpace,
   extent: Extent | undefined,
   offset: MaybeValue<number> | undefined
 ): Extent | undefined => {
+  if (extent !== undefined && typeof offset === "number")
+    return Extent(
+      Monotonic.adds(extent.ascent, offset),
+      Monotonic.adds(extent.descent, -offset)
+    );
   if (extent === undefined || !isValue(offset) || !isCONTINUOUS(space))
     return extent;
   const value = getValue(offset);

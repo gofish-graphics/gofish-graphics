@@ -37,7 +37,7 @@ export const Default: StoryObj<Args> = {
     const container = initializeContainer();
     const moviesRaw = context.loaded.movies as Movie[];
 
-    chart(moviesRaw, { axes: false })
+    chart(moviesRaw, { axes: false, w: args.w, h: args.h })
       .flow(
         treemap({
           by: field("Major Genre").dropNulls(),
@@ -57,7 +57,7 @@ export const Default: StoryObj<Args> = {
           ry: 2,
         }).label("Major Genre", { position: "center", color: "white", fontSize: 12 })
       )
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },

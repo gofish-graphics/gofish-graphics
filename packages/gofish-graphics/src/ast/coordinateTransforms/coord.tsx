@@ -31,20 +31,53 @@ import {
   CONTINUOUS,
   spaceTitle,
 } from "../underlyingSpace";
-import { impliedExtent } from "../extent";
+import { boxExtent, Extent, hullExtent, impliedExtent } from "../extent";
+import * as Monotonic from "../../util/monotonic";
 import {
   unionChildExtents,
   unionChildSpaces,
 } from "../graphicalOperators/alignment";
-import { axisScale, type AxisMap } from "../domain";
+import { axisScale } from "../domain";
 import { reflectInterval } from "../axisDirection";
 import { shadowCheckScaleRoot } from "../solver/shadow";
-import { getScopeRegistry, scopeFrame, seatInScope } from "../solver/scopes";
+import {
+  getScopeRegistry,
+  seatInScope,
+  type ScopeSolution,
+} from "../solver/scopes";
 import { axisTitle, TITLE_COLOR, TITLE_FONT_SIZE } from "../axes/elaborate";
 import { createNodeOperator } from "../withGoFish";
 import { computeTransformedBoundingBox } from "./coordUtils";
 import { empty, union } from "../../util/bbox";
 import type { AxesOptions } from "../gofish";
+
+/**
+ * The classes one axis of a coordinate space's domain has: a record keyed by
+ * class name, in the style of a column type (`ColumnType` in schema.ts, whose
+ * `HasZero` and `HasCycle` these anticipate; whether columns get them too is
+ * #1195). Each class is a fact that says what the coord's fit (`fitAxis`)
+ * must preserve on that axis, and each is optional and independent of the
+ * others. An axis with none of them (identity, wavy and geo axes) may shift
+ * and scale: its content fits the budget as at the root, so its claim, pixel
+ * offsets included, starts at the start of the budget.
+ */
+export type AxisClasses = {
+  /**
+   * Coordinate 0 is a fixed point (the polar center, radius 0). The
+   * content's data starts there, whatever value it starts at, and a literal
+   * pixel offset stays a distance from it, so a ring moved out with
+   * `.translate()` keeps its gap. No content reaches below 0, so an offset
+   * inward is taken up as on an axis with no classes.
+   */
+  HasZero?: Record<string, never>;
+  /**
+   * The axis is periodic: one `period`, in coordinate units, is one full
+   * turn (2π for a polar angle). Coordinate 0 is a fixed angle (the polar
+   * baseline angle), and data 0 sits there, whatever the data range, so a
+   * centered stack centers on the baseline angle.
+   */
+  HasCycle?: { period: number };
+};
 
 /**
  * A coordinate space. Its `transform` is MATH-HANDED: it maps a point of the
@@ -74,14 +107,12 @@ export type CoordinateTransform = {
    */
   polar?: true;
   /**
-   * The axes whose data 0 is the start of their budget, whatever the data
-   * range: the polar family's angular axis puts data 0 at θ = 0 of the
-   * transform, its baseline angle, so a centered stack stays centered on
-   * the baseline angle, full circle or partial arc. The coord's scope on
-   * such an axis seats data 0 there (`ScopeMeta.dataZero`); every other axis
-   * seats it by the claim, as the root does.
+   * The classes each axis of the space's domain has ({@link AxisClasses}),
+   * the one thing that decides how the coord fits its content to that axis.
+   * Absent ⇒ neither axis has any. The polar family declares θ
+   * `{ HasCycle: { period: 2π } }` and r `{ HasZero: {} }`.
    */
-  dataZeroAtStart?: [boolean, boolean];
+  axisClasses?: [AxisClasses, AxisClasses];
   /**
    * Donut-hole radius as a fraction [0,1) of the outer radius (polar family).
    * Default 0 (filled disc). `coord.layout` insets the radial range by this.
@@ -183,6 +214,30 @@ export const coord = createNodeOperator(
     // (one that declares its own window — see `cull` in `lower`). Null for the
     // polar family, whose budget is the content, not a frame.
     const frameRef: { current: [number, number] | null } = { current: null };
+    // The outlines drawn inside the space (`GoFishNode.strokeOverhang`) are
+    // in pixels, while the space lays its interior out in its own
+    // coordinates, so the claim walk cannot tell which shape reaches the
+    // space's edge. The largest outline inside bounds them all: the space
+    // fits its content that much inside its box and widens the box it
+    // measures by it, so its box holds every outline it draws. A space that
+    // frames its own window (geo) clips what its window leaves out, as a map
+    // frame does, outlines included. The search goes into a space nested
+    // inside it too: the nested space's box is in this space's coordinates,
+    // not pixels, so the outlines it holds are not room in this box. Read
+    // once per claim pass, in `resolveExtent`, which `layout` resolves
+    // first.
+    let outline = 0;
+    const largestOutline = (): number => {
+      if (framesOwnWindow) return 0;
+      let largest = 0;
+      const stack = [...children];
+      for (let n = stack.pop(); n !== undefined; n = stack.pop()) {
+        if (!(n instanceof GoFishNode)) continue;
+        largest = Math.max(largest, n.strokeOverhang);
+        stack.push(...n.children);
+      }
+      return largest;
+    };
 
     const coordNode = new GoFishNode(
       {
@@ -218,11 +273,53 @@ export const coord = createNodeOperator(
           spaceRef.current = [axisSpace(0), axisSpace(1)];
           return [UNDEFINED, UNDEFINED];
         },
+        // To its parent a coord is a pixel box. When nothing in it scales with
+        // the box it is given (a polar glyph of literal radius, no axes, no
+        // size of its own), the box has a size of its own (#493): its content
+        // transformed, which it claims. Otherwise it fills what it is given.
+        resolveExtent: (childExtents, childSpaces) => {
+          outline = largestOutline();
+          const resolved = spaceRef.current;
+          if (
+            resolved === null ||
+            framesOwnWindow ||
+            axes ||
+            dims[0].size !== undefined ||
+            dims[1].size !== undefined ||
+            (coordTransform.innerRadius ?? 0) > 0
+          )
+            return [undefined, undefined];
+          const claim = (axis: 0 | 1) =>
+            unionChildExtents(childExtents, childSpaces, axis, resolved[axis]);
+          const r = claim(1);
+          const theta = claim(0);
+          if (r === undefined || !Monotonic.isConstant(r.width) || !theta)
+            return [undefined, undefined];
+          // The angle fills the angular budget, as `layout` fits it.
+          const budget = coordTransform.domain[0].size ?? 2 * Math.PI;
+          const sigma = Monotonic.isConstant(theta.width)
+            ? 0
+            : theta.width.inverse(budget);
+          if (sigma === undefined) return [undefined, undefined];
+          const box = computeTransformedBoundingBox(
+            -theta.descent.run(sigma),
+            theta.ascent.run(sigma),
+            -r.descent.run(0),
+            r.ascent.run(0),
+            coordTransform
+          );
+          return [
+            boxExtent(UNDEFINED, 0, box.maxX - box.minX + 2 * outline),
+            boxExtent(UNDEFINED, 0, box.maxY - box.minY + 2 * outline),
+          ];
+        },
         layout: (size, scales, children, node) => {
           // Stage 6b: a coord boundary is a σ-scope root — it re-roots σ for its
           // subtree. Derive through the render's one registry, shared with the
           // render root and every layer scope.
           const scopes = getScopeRegistry(node.tryGetRenderSession());
+          // The claim pass reads the outline inside the space (`outline`).
+          node.resolveExtent();
           /* TODO: need correct scale factors */
           // TODO: only works for polar-family transforms right now
           // An explicit `w`/`h` is the coord's box, as it is a layer's (#535).
@@ -316,7 +413,7 @@ export const coord = createNodeOperator(
           const fitAxis = (
             axis: 0 | 1,
             budget: number
-          ): [number | undefined, AxisMap | undefined] => {
+          ): [number | undefined, ScopeSolution | undefined] => {
             // The coord roots its axis's scope like the chart root: one σ
             // from the coord's own type and claim against its budget, and,
             // when the type has an origin, the frame its children sit in.
@@ -324,7 +421,7 @@ export const coord = createNodeOperator(
             // type overlays their data, or, on an axis pinned to a declared
             // window, the window's own data width.
             const resolved = spaceRef.current?.[axis];
-            const claim =
+            const content =
               resolved === undefined
                 ? undefined
                 : coordTransform.dataWindow?.[axis] !== undefined
@@ -335,14 +432,34 @@ export const coord = createNodeOperator(
                       axis,
                       resolved
                     );
+            // The axis's classes decide the fit (`AxisClasses`). An axis
+            // with none fits the content's claim alone. One with `HasZero`
+            // fits the hull of that claim and the point where the content's
+            // data starts (its type's low end, which no pixel offset moves):
+            // seated by the hull, the data start is coordinate 0, a pixel
+            // offset outward is a gap inside the budget, and one inward is
+            // taken up. One with `HasCycle` seats data 0 at its start
+            // (`dataZero` below).
+            const classes = coordTransform.axisClasses?.[axis] ?? {};
+            const claim =
+              classes.HasZero === undefined ||
+              content === undefined ||
+              resolved === undefined ||
+              !isCONTINUOUS(resolved)
+                ? content
+                : hullExtent(
+                    content,
+                    Extent(
+                      Monotonic.linear(resolved.dataInterval.min, 0),
+                      Monotonic.linear(-resolved.dataInterval.min, 0)
+                    )
+                  );
             const scope = scopes.solveScope(
               {
                 kind: "coord",
                 rootKey: node.key ?? node.type,
                 axis,
-                dataZero: coordTransform.dataZeroAtStart?.[axis]
-                  ? "start"
-                  : "claim",
+                dataZero: classes.HasCycle === undefined ? "claim" : "start",
               },
               resolved,
               claim,
@@ -354,25 +471,26 @@ export const coord = createNodeOperator(
             // unless GOFISH_SOLVER_CHECK is set.
             shadowCheckScaleRoot(claim, budget, scope?.sigma, axis);
             if (scope === undefined) return [1, undefined];
-            return [scope.sigma, scopeFrame(scope)];
+            return [scope.sigma, scope];
           };
-          const [sfX, frameX] = fitAxis(0, budget[0]);
-          const [sfY, frameY] = fitAxis(1, budget[1]);
-          // Each child sits in the coord's frame by the one seating rule
+          const [sfX, scopeX] = fitAxis(0, budget[0]);
+          const [sfY, scopeY] = fitAxis(1, budget[1]);
+          // Each child sits in the coord's scope by the one seating rule
           // (`seatInScope`): a pinned child shares the frame and its map
           // places it; a free child's baseline sits at the frame's pixel of
-          // data 0; a child with no 0 sits at 0. The coord and its interior
-          // share one axis order, the coordinate space's upward y.
+          // data 0; a child with no 0 sits at 0; and in a scope with no
+          // data 0 a child's box sits at the start. The coord and its
+          // interior share one axis order, the coordinate space's upward y.
           const childPlaceables = children.map((child) => {
             const space = child.resolveUnderlyingSpace();
-            const x = seatInScope(frameX, space[0]);
-            const y = seatInScope(frameY, space[1]);
+            const x = seatInScope(scopeX, space[0]);
+            const y = seatInScope(scopeY, space[1]);
             const placeable = child.layout(size, [
               axisScale(sfX, x.childMap),
               axisScale(sfY, y.childMap),
             ]);
-            placeable.place("x", x.seatPx, "baseline");
-            placeable.place("y", y.seatPx, "baseline");
+            placeable.place("x", x.seat.px, x.seat.anchor);
+            placeable.place("y", y.seat.px, y.seat.anchor);
             return placeable;
           });
 
@@ -449,6 +567,13 @@ export const coord = createNodeOperator(
               maxY: fittedExtent!.height,
             };
           }
+          // The box holds the outlines drawn inside it (`outline`).
+          screenBbox = {
+            minX: screenBbox.minX - outline,
+            maxX: screenBbox.maxX + outline,
+            minY: screenBbox.minY - outline,
+            maxY: screenBbox.maxY + outline,
+          };
 
           const {
             minX: screenBboxMinX,

@@ -91,7 +91,7 @@ chart(seafood, { axes: true })
   )
   .mark(rect({ h: "count", fill: "species" }))
   .layer(ribbon({ opacity: 0.8 }))
-  .render(container, { w: 400, h: 400 });
+  .render(container, { h: 400 });
 ```
 
 No `by` needed: the `stack({ by: "species" })` tier already told the flow how

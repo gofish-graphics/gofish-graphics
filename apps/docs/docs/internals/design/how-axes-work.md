@@ -100,11 +100,14 @@ known gap tracked by #984.
 
 ## 2. Chrome and size
 
-**Built** today: a node's `w`/`h` and the render `w`/`h` both mean the plot. Chrome
-hangs outside the plot, and the SVG grows to fit it (see "Chrome Reservation" in
-[Layout and Render Passes](/internals/layout/passes)).
-
-**Decided** in the design review of #1032, not built yet: the split below.
+**Built** (#1032, #493): the split below. Each chart claims its chrome around
+its content in the claim walk (every chrome shape claims its size), so a parent
+lays out the whole graphic in one layout, and the SVG is exactly the render's
+`w`/`h` (see "Chrome gutters" in
+[Layout and Render Passes](/internals/layout/passes#chrome-gutters)). Ink placed from a band of a category axis (a label below the last bar of a
+vertical spread) is not fitted inside a given size yet, a declared shortcut. Case 2 below
+(only the plot's size given) works for a chart with a size of its own; a root
+with no size anywhere still falls back to the default canvas (#494).
 
 The question is what `w` and `h` mean when a node has chrome. There are two boxes. The
 **plot** is the area the data is drawn in. The **whole graphic** is the plot plus its
@@ -166,7 +169,9 @@ the axes off. Each chart's `axes` applies at that chart: a chart used as a mark 
 its own, and draws only the axes of the domains it owns. An axis a chart turns off is
 hidden, not drawn by a chart inside it. A render's own `axes` overrides only the
 outermost chart's. The render root is an implicit chart, and a bare node rendered
-without a chart still draws no axes by default. A coordinate frame's own axes (the
+without a chart still draws no axes by default. **Built** in #1170: that default is no
+decision rather than `axes: false`, so a bare render or a combinator of charts claims no
+axis, and each chart inside it draws and titles its own axes, as it would rendered alone. A coordinate frame's own axes (the
 polar rings and angle ticks) still need an explicit `axes: true`; that is a declared
 shortcut until the frame reads its chart's setting (reading the default there would
 draw rings on every pie glyph and reject every geo map).

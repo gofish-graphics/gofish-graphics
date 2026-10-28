@@ -22,7 +22,7 @@ import {
   originIs,
 } from "../underlyingSpace";
 import { unionInOrder } from "../measure";
-import { Extent } from "../extent";
+import { Extent, hullExtent } from "../extent";
 import * as Monotonic from "../../util/monotonic";
 import type { Size } from "../dims";
 import * as Interval from "../../util/interval";
@@ -196,46 +196,68 @@ export function resolveAlignmentSpace(
  * The claim of an {@link overlay} with result type `space`: the children's
  * claims seated as their types are. Every claim is measured from data 0, so a
  * child at its own data coordinates reaches its own ascent above the shared 0
- * and its own descent below it; any other child is its box, `[0, width]`.
- * So the pixel overhead the children carry (spacing, padding) stays in the
- * claim even though it is no part of the data interval. The result keeps the
- * larger reach on each side of 0, so a parent can σ-solve it with every
- * intercept intact.
+ * and its own descent below it; a continuous child placed elsewhere is its
+ * box, `[0, width]`; and a child with no data coordinates (a text, a box of
+ * literal size) sits at the overlay's origin, so it reaches its own ascent
+ * and descent about it. So the pixel overhead the children carry (spacing,
+ * padding) stays in the claim even though it is no part of the data
+ * interval. The result keeps the larger reach on each side of 0, so a parent
+ * can σ-solve it with every intercept intact.
  *
  * A result with no data coordinates (ordinal or undefined) still claims when
- * a child with no data coordinates does (a spread of magnitudes: its type is
- * a sequence of separate spaces, its room is σ-dependent): each such child is
- * its box, so the claim is the envelope of their widths. A continuous child
+ * a child with no data coordinates does (a spread of magnitudes, whose room is
+ * σ-dependent, or a box with a pixel size of its own): each such child sits at
+ * the origin, so the claim is the envelope of their reaches. A continuous child
  * of such a result is no part of it on this axis (the type folded no
  * continuous space from it), so neither is its claim. With no such child
  * there is no claim.
+ *
+ * The plot's claim (`GoFishNode.resolvePlotExtent`) folds the same way,
+ * given each child's plot claim as `plot`: a child seated at its own data or
+ * at the origin sits where it does whatever its box, so it reaches as far as
+ * its plot (undefined: it has none, and reaches nothing). A child seated by
+ * its box is placed by the whole of it, so it counts whole, as a chain's
+ * parts do.
  */
 function overlayClaim(
-  children: { space: UnderlyingSpace; extent: Extent | undefined }[],
+  children: {
+    space: UnderlyingSpace;
+    extent: Extent | undefined;
+    plot?: Extent | undefined;
+  }[],
   seat: Seat,
-  space: UnderlyingSpace
+  space: UnderlyingSpace,
+  plots: boolean = false
 ): Extent | undefined {
-  const claiming = children.filter(
-    (c): c is { space: UnderlyingSpace; extent: Extent } =>
-      c.extent !== undefined
-  );
+  // How far a child seated where it does whatever its box reaches.
+  const reach = (c: { extent?: Extent; plot?: Extent }) =>
+    plots ? c.plot : c.extent;
   if (!isCONTINUOUS(space)) {
-    const boxes = claiming.filter((c) => !isCONTINUOUS(c.space));
-    return boxes.length === 0
-      ? undefined
-      : Extent(Monotonic.envelope(boxes.map((c) => c.extent.width)));
+    const boxes = children
+      .filter((c) => c.extent !== undefined && !isCONTINUOUS(c.space))
+      .map(reach)
+      .filter((e): e is Extent => e !== undefined);
+    return boxes.length === 0 ? undefined : hullExtent(...boxes);
   }
   const above: Monotonic.Monotonic[] = [];
   const below: Monotonic.Monotonic[] = [];
-  for (const { space: s, extent } of claiming) {
-    if (isCONTINUOUS(s) && atOwnData(s, seat)) {
-      above.push(extent.ascent);
-      below.push(extent.descent);
-    } else {
+  for (const c of children) {
+    const { space: s, extent } = c;
+    if (extent === undefined) continue;
+    if (isCONTINUOUS(s) && !atOwnData(s, seat)) {
       above.push(extent.width);
       below.push(Monotonic.ZERO);
+      continue;
     }
+    // A child at its own data reaches its own ascent above the shared 0
+    // and its descent below; a box with no data sits at the overlay's
+    // origin and reaches the same about it.
+    const r = reach(c);
+    if (r === undefined) continue;
+    above.push(r.ascent);
+    below.push(r.descent);
   }
+  if (plots && above.length === 0) return undefined;
   return Extent(Monotonic.envelope(above), Monotonic.envelope(below));
 }
 
@@ -258,16 +280,23 @@ export function unionChildExtents(
 }
 
 /** The size claim of a {@link resolveAlignmentSpace} result `space`
- *  ({@link overlayClaim}). */
+ *  ({@link overlayClaim}), or its plot's claim given the children's plot
+ *  claims `childPlots`. */
 export function resolveAlignmentExtent(
   childExtents: (Extent | undefined)[],
   childSpaces: UnderlyingSpace[],
   alignment: Alignment,
-  space: UnderlyingSpace
+  space: UnderlyingSpace,
+  childPlots?: (Extent | undefined)[]
 ): Extent | undefined {
   return overlayClaim(
-    childSpaces.map((s, i) => ({ space: s, extent: childExtents[i] })),
+    childSpaces.map((s, i) => ({
+      space: s,
+      extent: childExtents[i],
+      plot: childPlots?.[i],
+    })),
     alignment === "baseline" ? "baseline" : "box",
-    space
+    space,
+    childPlots !== undefined
   );
 }

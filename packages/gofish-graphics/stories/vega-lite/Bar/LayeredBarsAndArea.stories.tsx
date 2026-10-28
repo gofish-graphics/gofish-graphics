@@ -18,20 +18,19 @@ import data from "vega-datasets";
 const meta: Meta = {
   title: "Vega-Lite/Layered Bars and Area",
   argTypes: {
-    w: { control: { type: "number", min: 100, max: 1000, step: 10 } },
     h: { control: { type: "number", min: 100, max: 1000, step: 10 } },
   },
 };
 
 export default meta;
 
-type Args = { w: number; h: number };
+type Args = { h: number };
 
 const isEmphasized = (site: unknown) =>
   site === "Morris" || site === "Grand Rapids";
 
 export const Default: StoryObj<Args> = {
-  args: { w: 400, h: 400 },
+  args: { h: 400 },
   loaders: [async () => ({ barley: await data["barley.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
@@ -57,7 +56,7 @@ export const Default: StoryObj<Args> = {
             isEmphasized(project(d, "site")) ? 1 : 0
           )
         ),
-    ]).render(container, { w: args.w, h: args.h, axes: true });
+    ]).render(container, { h: args.h, axes: true });
 
     return container;
   },
@@ -66,7 +65,7 @@ export const Default: StoryObj<Args> = {
 // A variant that filters down to just the two emphasized sites, isolating the
 // Morris/Grand Rapids comparison.
 export const TwoSites: StoryObj<Args> = {
-  args: { w: 400, h: 400 },
+  args: { h: 400 },
   loaders: [async () => ({ barley: await data["barley.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
@@ -87,7 +86,7 @@ export const TwoSites: StoryObj<Args> = {
       chart(selectAll("bars"))
         .flow(group({ by: "variety" }), group({ by: "site" }))
         .mark(ribbon({ opacity: 0.7 })),
-    ]).render(container, { w: args.w, h: args.h, axes: true });
+    ]).render(container, { h: args.h, axes: true });
 
     return container;
   },
@@ -98,7 +97,7 @@ export const TwoSites: StoryObj<Args> = {
 // `selectAll("bars")` is scoped per cell (the layer shares one name context per
 // variety), so the area only needs to group by site — not by variety.
 export const HoistedVarietySpread: StoryObj<Args> = {
-  args: { w: 400, h: 400 },
+  args: { h: 400 },
   loaders: [async () => ({ barley: await data["barley.json"]() })],
   tags: ["gallery"],
   parameters: {
@@ -113,7 +112,7 @@ export const HoistedVarietySpread: StoryObj<Args> = {
     const barley = context.loaded.barley as any[];
 
     chart(barley, {
-      color: Color.palette({ Morris: "#e15759", "Grand Rapids": "#4e79a7" }),
+      color: Color.palette({ Morris: "#e15759", "Grand Rapids": "#4e79a7" }), h: args.h,
       // `axes: true` on the OUTER chart unions the inner cells' yield spaces, so
       // it renders ONE global yield (y) axis plus the variety (x) axis — not a
       // per-cell y axis. Set it here on the topmost chart, not in `.render(...)`:
@@ -138,7 +137,7 @@ export const HoistedVarietySpread: StoryObj<Args> = {
             ),
         ])
       )
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },

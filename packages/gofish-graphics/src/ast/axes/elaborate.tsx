@@ -122,10 +122,12 @@ export type AxisElaboration = {
   nodes: GoFishNode[];
   /** Builds this axis's constraints from the layer's name→ref map. */
   constraints: (g: Record<string, any>) => any[];
-  /** The node the axis's title centers on — the axis line. Position-like
-   *  axes (continuous/difference) set it; ordinal axes leave it unset (they're
-   *  just a label row, with no spanning line to center on, so the title
-   *  centers on the owner's content box). */
+  /** The node the axis's title centers on: the axis's own span. A
+   *  position-like axis (continuous/difference) sets its line; an ordinal
+   *  axis sets the span from its first slot to its last (`axisSpan`), so
+   *  the title centers on the plot and not on the other axis's gutter. An
+   *  ordinal axis with no slots leaves it unset, and the title centers on
+   *  the owner's content box. */
   anchor?: GoFishNode;
   /** Where the content's baseline sits along this axis, in the axis's own
    *  data frame: a delta axis has no data 0, so its frame is its own, and it
@@ -1042,6 +1044,19 @@ function elaborateOrdinalAxis(
     (ref(s.node) as any).name(sName(i)) as GoFishNode,
   ]);
   const nodes: GoFishNode[] = [];
+  // The axis's own span, from its first slot's start to its last slot's
+  // end: what its title centers on, as a continuous axis's title centers on
+  // its line. It draws nothing.
+  const span =
+    slots.length === 0
+      ? undefined
+      : axisSpan({
+          dim,
+          from: { node: slots[0].node, edge: "start" },
+          to: { node: slots[slots.length - 1].node, edge: "end" },
+          cross: 0,
+        }).name(`${prefix}oa`);
+  if (span !== undefined) nodes.push(span);
 
   // Dividers. The rows of the dim, nearest the plot first: the inner axes'
   // rows (a group of an inner axis never crosses this axis's slots, so they
@@ -1185,7 +1200,14 @@ function elaborateOrdinalAxis(
     // LABEL at its own rotation pivot (`"baseline"`) while what it tracks
     // stays "middle"-anchored, via `Constraint.align`'s anchor-array form.
     // A start-aligned label's box is its own rotated box, so it centers its
-    // bbox on it at any angle.
+    // bbox on it at any angle. A label centered on one slot is placed where
+    // the claim walk places its slot's ref (a band is a share, #493 piece
+    // 3), and a ring's claim is the hull of its labels, so one wider than its
+    // band overdraws its neighbors (#1115) instead of pushing the bands
+    // apart, and only its overhang past the ends of the axis takes room. A
+    // span over several slots reads them only at layout, so a label centered
+    // on it is ink along the axis. Across the axis a label is seated past the
+    // content, and takes room there.
     for (const { label, on, k } of pairs) {
       const anchors: AlignAnchor[] =
         aligns[k] === "center" &&
@@ -1202,7 +1224,11 @@ function elaborateOrdinalAxis(
   };
 
   return {
-    elaboration: { nodes: [...slotNodes.flat(), ...nodes], constraints },
+    elaboration: {
+      nodes: [...slotNodes.flat(), ...nodes],
+      constraints,
+      anchor: span,
+    },
     names: levels.map((l) => l.name),
     issues,
     rowEnd,
@@ -1351,11 +1377,11 @@ function elaborationsFor(
 ): {
   constrained: AxisElaboration[];
   refBased: AxisElaboration[];
-  /** Per-dim [x, y] title anchor (the axis line) for the constrained axes this
-   *  node owns; undefined where the node owns no position-like axis on that dim. */
+  /** Per-dim [x, y] title anchor (the axis's span, `AxisElaboration.anchor`)
+   *  for the axes this node owns; undefined where it owns none on that dim. */
   anchors: [GoFishNode | undefined, GoFishNode | undefined];
   /** Per-dim [x, y]: did this node own (and elaborate) an axis on that dim at
-   *  all — including an ordinal one, which contributes no `anchors` entry. */
+   *  all, an ordinal one included. */
   owned: [boolean, boolean];
   /** Per-dim [x, y]: the edge each owned axis seats on, in the node's axis
    *  order; undefined on a dim the node owns no axis on. */
@@ -1626,6 +1652,7 @@ function elaborationsFor(
         d
       );
       refBased.push(axis.elaboration);
+      anchors[dim] = axis.elaboration.anchor;
       d.rowEnd = axis.rowEnd;
       d.column = axis.column;
       d.names.push(...axis.names);
@@ -1767,6 +1794,7 @@ export async function elaborateChrome(
   }
 
   let withAxes: GoFishNode = node;
+  const rings: GoFishNode[] = [];
   const root = await wrapPreservingIdentity(node, async (content) => {
     let ring: GoFishNode = content;
 
@@ -1799,6 +1827,7 @@ export async function elaborateChrome(
         },
         { x: contentAt(0), y: contentAt(1) }
       );
+      rings.push(ring);
     }
 
     // Category label rows: ordinal labels track their keys via `ref(...)`, so
@@ -1812,6 +1841,7 @@ export async function elaborateChrome(
         nodes: refBased.flatMap((e) => e.nodes),
         constraints: (g) => refBased.flatMap((e) => e.constraints(g)),
       });
+      rings.push(ring);
     }
     withAxes = ring;
 
@@ -1826,15 +1856,17 @@ export async function elaborateChrome(
           sides
         )
       );
+      rings.push(ring);
     }
 
     // The legend, beside everything inside it, titles included.
     if (legend !== undefined) {
       ring = await wrapRing(ring, LEGEND_CONTENT_NAME, legend);
+      rings.push(ring);
     }
     return ring;
   });
-  root.chrome = { content: node, withAxes };
+  root.chrome = { content: node, withAxes, rings };
 
   return { node: root, changed: true, fold };
 }
@@ -1842,10 +1874,11 @@ export async function elaborateChrome(
 // ── Axis titles ──────────────────────────────────────────────────────────────
 //
 // A title names an axis its owner draws. It is placed RELATIVE TO the axis
-// shape it describes — the axis line for that dim, which may span less than
-// the whole plot (a difference axis spans the data width) — and falls back to
-// the owner's content box for an axis with no spanning line (a row of
-// category labels).
+// shape it describes: the axis's own span. That is the axis line for a
+// continuous axis, which may span less than the whole plot (a difference
+// axis spans the data width), and the run from the first slot to the last
+// for a row of category labels. It falls back to the owner's content box only
+// for a category axis with no slots.
 
 export const TITLE_FONT_SIZE = 11;
 export const TITLE_COLOR = "gray";
@@ -1908,7 +1941,8 @@ export function yAxisTitle(text: string): GoFishNode {
 
 /**
  * The title ring: up to two axis titles, each centered on the node it
- * describes (`anchors[dim]`: the axis line, or the owner's content box) and
+ * describes (`anchors[dim]`: the axis's span, its line or the run of its
+ * slots, or the owner's content box for an axis with neither) and
  * seated past the box inside the ring on the same edge as its axis
  * (`sides[dim]`, in the owner's axis order: a title BEFORE the box seats on
  * the start edge, AFTER it on the end edge).

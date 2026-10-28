@@ -64,29 +64,26 @@ export const Default: StoryObj<Args> = {
 
     const bins = wheel({ range: [3, 40], initial: 12, round: true });
 
-    chart(penguins)
-      .flow(
-        // regime 2: reading bins() in derive() makes it a pipeline dependency,
-        // so a wheel tick re-bins the real rows and re-runs resolve → layout →
-        // paint.
-        derive((rows) => binRows(rows, bins())),
-        spread({ by: "bin", dir: "x" })
-      )
-      .mark(rect({ h: "count" }))
-      // regime 0: a component-level annotation tier — live text content patches
-      // at paint time only.
-      .layer(
-        text({
-          x: 20,
-          y: 290,
-          text: live(() => `bins: ${bins()} (scroll to re-bin)`),
-          fill: "#333",
-        })
-      )
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+    // The caption sits above the histogram, a part of the graphic laid out
+    // beside the chart (regime 0: its live text patches at paint time only).
+    spread({ dir: "y", spacing: 8 }, [
+      text({
+        text: live(() => `bins: ${bins()} (scroll to re-bin)`),
+        fill: "#333",
+      }),
+      chart(penguins)
+        .flow(
+          // regime 2: reading bins() in derive() makes it a pipeline
+          // dependency, so a wheel tick re-bins the real rows and re-runs
+          // resolve → layout → paint.
+          derive((rows) => binRows(rows, bins())),
+          spread({ by: "bin", dir: "x" })
+        )
+        .mark(rect({ h: "count" })),
+    ]).render(container, {
+      w: args.w,
+      h: args.h,
+    });
 
     return container;
   },

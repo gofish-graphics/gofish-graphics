@@ -13,7 +13,7 @@ import {
   ringItem,
   roleFor,
 } from "../displayList/lowerHelpers";
-import { GoFishNode } from "../_node";
+import { GoFishNode, outlineOverhang } from "../_node";
 import { UNDEFINED } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import { MARK_CHANNELS } from "../markChannels.generated";
@@ -66,6 +66,7 @@ export const Region = ({
       // Used to seed the unit color scale. Prefer whichever channel is
       // data-driven, as `rect` does.
       color: isValue(fill) ? fill : stroke,
+      strokeOverhang: outlineOverhang(stroke, strokeWidth),
       resolveUnderlyingSpace: () => [UNDEFINED, UNDEFINED],
       layout: (size, _scales, _children, _node, region) => {
         const extent = (axis: 0 | 1) => {

@@ -15,16 +15,13 @@ export default meta;
 type Args = { w: number; h: number };
 
 const DOCS_GROUPED_BAR_CODE = `
-chart(seafood)
+chart(seafood, { w, h })
   .flow(
-    spread({ by: "lake",  dir: "x" }),
+    spread({ by: "lake", dir: "x", spacing: 24 }),
     stack({ by: "species",  dir: "x", label: false })
   )
   .mark(rect({ h: "count", fill: "species" }))
-  .render(root, {
-    w,
-    h,
-  });
+  .render(root);
 `;
 
 type ChartApi = {
@@ -74,16 +71,13 @@ const runDirectStorybookVersion = (container: HTMLElement, w: number, h: number)
   root.style.margin = "8px";
   container.appendChild(root);
 
-  chart(seafood)
+  chart(seafood, { w, h })
     .flow(
-      spread({ by: "lake",  dir: "x" }),
+      spread({ by: "lake", dir: "x", spacing: 24 }),
       stack({ by: "species",  dir: "x" })
     )
     .mark(rect({ h: "count", fill: "species" }))
-    .render(root, {
-      w,
-      h,
-    });
+    .render(root);
 
   return root;
 };

@@ -20,7 +20,7 @@ def _passengers():
 
 def story_default():
     return (
-        chart(_passengers(), color=Color.palette(["#2b8cbe", "#ff8408"]))
+        chart(_passengers(), color=Color.palette(["#2b8cbe", "#ff8408"]), w=520, h=420)
         .flow(
             # columns by class — width ∝ each class's passenger count (marginal)
             stack(by="pclass", dir="x", size="count"),
@@ -28,5 +28,5 @@ def story_default():
             stack(by="survived", dir="y", size=field("count").normalize()),
         )
         .mark(rect(fill="survived", stroke="white", stroke_width=1)),
-        {"w": 520, "h": 420},
+        {},
     )

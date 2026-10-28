@@ -1,5 +1,10 @@
 import { GoFishAST } from "../_ast";
-import { GoFishNode, defaultGeometry, type ToPixel } from "../_node";
+import {
+  GoFishNode,
+  defaultGeometry,
+  outlineOverhang,
+  type ToPixel,
+} from "../_node";
 import { outlinePaint, pathOutline } from "../geometry";
 import { end } from "../../families/place";
 import { Size, displayTranslate } from "../dims";
@@ -72,6 +77,7 @@ export const arrow = createNodeOperator(
     return new GoFishNode(
       {
         type: "arrow",
+        strokeOverhang: outlineOverhang(props.stroke, props.strokeWidth),
         // A path is labeled at its end.
         labelPosition: end(),
         resolveUnderlyingSpace: (

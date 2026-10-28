@@ -19,7 +19,7 @@ from gofish import (
     ribbon,
 )
 
-SIZE = {"w": 280, "h": 220}
+SIZE = {}
 
 
 def _blob(members):

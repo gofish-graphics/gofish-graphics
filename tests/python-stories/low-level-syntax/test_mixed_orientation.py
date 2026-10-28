@@ -106,7 +106,7 @@ def story_default():
         spread(
             [_bar_chart(), _heatmap(), _tree_chart()],
             dir="x",
-            spacing=64,
+            spacing=96,
             alignment="start",
         ),
         {"axes": True},

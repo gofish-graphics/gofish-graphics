@@ -18,7 +18,7 @@
  *  - bag `chart(selectAll(name)).mark(enclose(opts))`: the refs are the
  *    members, one outline per group when the flow groups them.
  */
-import { GoFishNode, placeUnplacedChild } from "../_node";
+import { GoFishNode, outlineOverhang, placeUnplacedChild } from "../_node";
 
 import { Frontend, type DisplayList } from "gofish-ir";
 import {
@@ -42,6 +42,12 @@ import { membersOf } from "./enclose/members";
 import { ovalOutline } from "./enclose/oval";
 import { targetOf } from "../constraints/relationalPaint";
 import { ringExtent } from "../geometry/box";
+import { RelateOperand } from "../constraints/relate";
+import { nodeSelectionOf } from "../nodeSelection";
+import { placementIn } from "../placementClaims";
+import type { Placement } from "../constraints/claimPlacement";
+import { Extent } from "../extent";
+import * as Monotonic from "../../util/monotonic";
 import { ringPathData } from "../geometry/plane";
 
 export type EncloseOptions = {
@@ -96,18 +102,19 @@ function Enclose(
   const { fill = "none", stroke = gray, strokeWidth = 1 } = o;
   const { strokeDasharray, opacity = 1, fillOpacity } = o;
   const memberCount = members.length;
-  return new GoFishNode(
+  const node = new GoFishNode(
     {
       type: "enclose",
       color: isValue(fill) ? fill : stroke,
+      strokeOverhang: outlineOverhang(stroke, strokeWidth),
       resolveUnderlyingSpace: (): [UnderlyingSpace, UnderlyingSpace] => [
         UNDEFINED,
         UNDEFINED,
       ],
       layout: (size, scales, children) => {
-        // Child placement mirrors `layer`'s own rule (`placeUnplacedChild`):
-        // a FRESH child reports an undefined translate until placed, so it
-        // gets `layer`'s baseline-origin placement. An already-placed operand
+        // Child placement (`placeUnplacedChild`): a FRESH child reports an
+        // undefined translate until placed, so its baseline is placed at the
+        // origin. An already-placed operand
         // (a `ref(...)`, which reconciles its own translate against its LCA
         // in `GoFishRef.layout`) must not be re-placed: `GoFishRef.place()`
         // has no ledger to make that a no-op.
@@ -227,6 +234,55 @@ function Enclose(
     },
     [...members, ...avoided]
   );
+  // Around placed members, the outline is placed from its refs, as a label
+  // beside a ref is: the claim walk knows where it lands when it knows where
+  // every member does (#493 placement claims). Its claim is the members'
+  // padded box. That is exact for `Shape.box()`, and a blob lies inside it;
+  // an oval may reach past it, and that reach is ink.
+  // TODO(#1032): an outline over fresh children has no claim yet (the claim
+  // walk reads no size for it); it should claim their union grown by the
+  // padding.
+  if (memberCount > 0 && members.every((m) => m instanceof GoFishRef))
+    node.placedFromRefs = (frame, axis) =>
+      paddedPlacement(
+        node.children.slice(0, memberCount),
+        frame,
+        axis,
+        padding
+      );
+  return node;
+}
+
+/** The box of `members` (refs) in `frame`'s frame on `axis`, grown by
+ *  `padding` on each side, with the enclosure's origin at the frame's: where
+ *  the claim walk places the outline. Undefined when it does not know where
+ *  a member lands. */
+function paddedPlacement(
+  members: GoFishAST[],
+  frame: GoFishNode,
+  axis: 0 | 1,
+  padding: number
+): Placement | undefined {
+  const boxes: Placement[] = [];
+  for (const m of members) {
+    const target = m instanceof GoFishRef ? m.targetNode : undefined;
+    const p = target && placementIn(target, frame, axis);
+    if (p === undefined) return undefined;
+    boxes.push(p);
+  }
+  const ascent = Monotonic.adds(
+    Monotonic.envelope(boxes.map((b) => b.hi)),
+    padding
+  );
+  const descent = Monotonic.adds(
+    Monotonic.envelope(boxes.map((b) => Monotonic.negate(b.lo))),
+    padding
+  );
+  return {
+    lo: Monotonic.negate(descent),
+    hi: ascent,
+    extent: Extent(ascent, descent),
+  };
 }
 
 /**

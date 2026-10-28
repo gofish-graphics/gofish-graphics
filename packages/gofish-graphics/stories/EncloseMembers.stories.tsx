@@ -39,7 +39,7 @@ const at = ([x, y]: P, node: any) => position({ x, y }, [node]);
 
 const show = (node: any) => {
   const container = initializeContainer();
-  node.render(container, { w: 280, h: 220 });
+  node.render(container);
   return container;
 };
 

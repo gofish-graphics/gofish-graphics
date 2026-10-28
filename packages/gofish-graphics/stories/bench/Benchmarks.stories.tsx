@@ -208,7 +208,7 @@ export const Asymptotics: StoryObj<Args> = {
         "log₁₀ solve ms": log10(p.passes.solve?.median ?? 0.001),
       }));
 
-    chart(pts, { color: Color.palette(FAMILY_COLORS) })
+    chart(pts, { color: Color.palette(FAMILY_COLORS), w: args.w, h: args.h })
       .flow(scatter({ by: "id", x: "log₁₀ nodes", y: "log₁₀ solve ms" }))
       .mark(circle({ r: 2.5, fill: "family" }))
       .layer(
@@ -216,7 +216,7 @@ export const Asymptotics: StoryObj<Args> = {
           .flow(group({ by: "family" }))
           .mark(line({ strokeWidth: 2 }))
       )
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     caption(
       container,
@@ -251,7 +251,7 @@ export const PassBreakdown: StoryObj<Args & { family: string }> = {
         }))
       );
 
-    chart(pts, { color: Color.palette(PASS_COLORS) })
+    chart(pts, { color: Color.palette(PASS_COLORS), w: args.w, h: args.h })
       .flow(scatter({ by: "id", x: "log₁₀ nodes", y: "log₁₀ pass ms" }))
       .mark(circle({ r: 2.5, fill: "pass" }))
       .layer(
@@ -259,7 +259,7 @@ export const PassBreakdown: StoryObj<Args & { family: string }> = {
           .flow(group({ by: "pass" }))
           .mark(line({ strokeWidth: 2 }))
       )
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     caption(
       container,
@@ -295,10 +295,12 @@ export const Ecological: StoryObj<Args> = {
         "PY load": "#f28e2b",
         "PY RPC": "#e15759",
       }),
+      w: args.w,
+      h: args.h,
     })
       .flow(spread({ by: "stage", dir: "x", spacing: 36 }))
       .mark(rect({ h: "ms", w: 64, fill: "stage" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     caption(
       container,
@@ -380,7 +382,7 @@ export const Trend: StoryObj<Args> = {
       index: run.ecologicalIndex?.total ?? 1,
     }));
 
-    chart(idxPts, { color: Color.palette(PASS_COLORS) })
+    chart(idxPts, { color: Color.palette(PASS_COLORS), w: args.w, h: args.h })
       .flow(scatter({ by: "id", x: "run", y: "index" }))
       .mark(circle({ r: 2, fill: "pass" }))
       .layer(
@@ -398,7 +400,7 @@ export const Trend: StoryObj<Args> = {
           .flow(group({ by: "pass" }))
           .mark(line({ strokeWidth: 3 }))
       )
-      .render(panel1, { w: args.w, h: args.h });
+      .render(panel1);
 
     // --- Panel 2: fitted solve exponent b per family over runs --------------
     const panel2 = document.createElement("div");
@@ -415,7 +417,7 @@ export const Trend: StoryObj<Args> = {
       }))
     );
 
-    chart(expPts, { color: Color.palette(FAMILY_COLORS) })
+    chart(expPts, { color: Color.palette(FAMILY_COLORS), w: args.w, h: args.h })
       .flow(scatter({ by: "id", x: "run", y: "b" }))
       .mark(circle({ r: 2, fill: "family" }))
       .layer(
@@ -423,7 +425,7 @@ export const Trend: StoryObj<Args> = {
           .flow(group({ by: "family" }))
           .mark(line({ strokeWidth: 1.5 }))
       )
-      .render(panel2, { w: args.w, h: args.h });
+      .render(panel2);
 
     caption(
       container,
@@ -471,7 +473,11 @@ export const Envelope: StoryObj<Args> = {
         "log₁₀ engine ms": log10(e.totalMs.median),
       }));
 
-    const base = chart(synPts, { color: Color.palette(FAMILY_COLORS) })
+    const base = chart(synPts, {
+      color: Color.palette(FAMILY_COLORS),
+      w: args.w,
+      h: args.h,
+    })
       .flow(scatter({ by: "id", x: "log₁₀ nodes", y: "log₁₀ engine ms" }))
       .mark(circle({ r: 2, fill: "family" }))
       .layer(
@@ -489,7 +495,7 @@ export const Envelope: StoryObj<Args> = {
         )
       : base;
 
-    final.render(container, { w: args.w, h: args.h });
+    final.render(container);
 
     caption(
       container,

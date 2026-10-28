@@ -107,7 +107,7 @@ gf.chart(
     })
   )
   .mark(gf.circle({ r: 3, fill: "Species" }))
-  .render(root, { w: 560, h: 320 });
+  .render(root, { w: 560 });
 ```
 
 :::
@@ -137,7 +137,7 @@ gf.chart(
     })
   )
   .mark(gf.circle({ r: 3, fill: "Species" }))
-  .render(root, { w: 560, h: 320 });
+  .render(root, { w: 560 });
 ```
 
 :::
@@ -160,7 +160,7 @@ gf.chart(
     })
   )
   .mark(gf.circle({ r: 3, fill: "Species" }))
-  .render(root, { w: 560, h: 320 });
+  .render(root, { w: 560 });
 ```
 
 :::

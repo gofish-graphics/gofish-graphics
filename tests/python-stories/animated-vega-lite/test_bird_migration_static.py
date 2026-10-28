@@ -12,8 +12,10 @@ def story_a_static_lines():
     return (
         chart(
             WORLD_110M,
-            coord=Coord.geo("equalEarth", lon=(-170, -30), lat=(-60, 75)),
+            coord=Coord.geo("equalEarth", lon=(-180, -58.7), lat=(-60, 84)),
             legend=False,
+            w=600,
+            h=600,
         )
         .mark(polygon(points="ring", fill="#f7f7f7", stroke="#aaa"))
         .layer(
@@ -21,5 +23,5 @@ def story_a_static_lines():
             .flow(group(by="species"), scatter(by="day", x="lon", y="lat"))
             .mark(line(stroke="species", stroke_width=1, opacity=0.5))
         ),
-        {"w": 600, "h": 600},
+        {},
     )

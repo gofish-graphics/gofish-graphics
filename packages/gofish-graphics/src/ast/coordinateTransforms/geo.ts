@@ -128,7 +128,7 @@ export const geo = (
 
       // The projected extent of the window. A projection curves in both axes,
       // so it takes a LATTICE over the window rather than its four corners or
-      // its boundary — see `sampleBoundingBoxPoints`'s `gridSamples`. This is
+      // its boundary — see `computeTransformedBoundingBox`'s `gridSamples`. This is
       // the space's one measurement of its own window: it is handed back as
       // `extent` (scaled to pixels) so coord.tsx frames the space against the
       // same box the scale factor came from, instead of re-measuring it with

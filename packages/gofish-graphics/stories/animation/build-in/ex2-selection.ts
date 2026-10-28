@@ -11,7 +11,7 @@ import {
 import { alphabet } from "./data";
 
 export default (container: HTMLElement, clock?: BuildClockOptions) =>
-  chart(alphabet)
+  chart(alphabet, { w: 480, h: 220 })
     .flow(spread({ by: "letter", dir: "x" }))
     .mark(rect({ h: "frequency" }).name("bars"))
     .layer(
@@ -19,4 +19,4 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
         .flow(time.stagger({ by: "letter", lag: 60 }))
         .mark(time.transition({ enter: Animation.grow({ duration: 600 }) }))
     )
-    .render(container, { w: 480, h: 220, ...clock });
+    .render(container, { ...clock });

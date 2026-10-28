@@ -536,7 +536,7 @@ async function main() {
     ];
     const lines = (fill: unknown) =>
       renderDisplayList(
-        chart(data, { w: 200, h: 200 })
+        chart(data)
           .flow(group({ by: "g" }), scatter({ by: "x", x: "x", y: "y" }))
           .mark(line({ fill } as any)),
         { w: 200, h: 200 }

@@ -43,5 +43,5 @@ def story_spiral_layout():
             ),
             coord=Coord.clock(),
         ),
-        {"w": 520, "h": 520},
+        {},
     )

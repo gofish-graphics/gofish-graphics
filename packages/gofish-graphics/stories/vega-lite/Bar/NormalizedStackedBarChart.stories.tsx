@@ -18,7 +18,10 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 500, h: 300 },
+  // Vega-Lite's size: `width: {step: 17}` over the 19 age groups, and a
+  // continuous y is 300 px tall, Vega-Lite's default (its compiled
+  // stacked_bar_normalize plot is 323 × 300).
+  args: { w: 19 * 17, h: 300 },
   loaders: [async () => ({ population: await data["population.json"]() })],
   tags: ["gallery"],
   parameters: {
@@ -32,6 +35,8 @@ export const Default: StoryObj<Args> = {
 
     chart(context.loaded.population.filter((row) => row.year === 2000) as any[], {
       color: Color.palette({ Female: "#675193", Male: "#ca8861" }),
+      w: args.w,
+      h: args.h,
     })
       .flow(
         derive((d) =>
@@ -41,7 +46,7 @@ export const Default: StoryObj<Args> = {
         stack({ by: "sex", dir: "y", size: field("people").normalize() })
       )
       .mark(rect({ fill: "sex" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },

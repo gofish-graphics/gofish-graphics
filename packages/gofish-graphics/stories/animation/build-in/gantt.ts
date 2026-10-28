@@ -12,7 +12,7 @@ import {
 import { tasks } from "./data";
 
 export default (container: HTMLElement, clock?: BuildClockOptions) =>
-  chart(tasks)
+  chart(tasks, { w: 480, h: 220 })
     .flow(
       spread({ by: field("task").sort("start"), dir: "y" }).transition({
         enter: time.stagger({ spacing: 0 }),
@@ -23,4 +23,4 @@ export default (container: HTMLElement, clock?: BuildClockOptions) =>
         enter: Animation.wipe({ from: "left", duration: "days" }),
       })
     )
-    .render(container, { w: 480, h: 220, ...clock });
+    .render(container, { ...clock });

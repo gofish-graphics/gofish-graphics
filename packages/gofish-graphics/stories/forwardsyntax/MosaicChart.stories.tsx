@@ -42,7 +42,7 @@ export const Default: StoryObj<Args> = {
       { origin: "USA", cylinders: "8", count: 108 },
     ];
 
-    chart(data)
+    chart(data, { w: args.w, h: args.h })
       .flow(
         // Column widths ∝ each region's total (marginal): `size: "count"`
         // sizes each column by its raw Σcount. Stacked segments fill the
@@ -55,10 +55,7 @@ export const Default: StoryObj<Args> = {
         stack({ by: "cylinders", dir: "y", size: field("count").normalize() })
       )
       .mark(rect({ fill: "origin", stroke: "white", strokeWidth: 2 }))
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },

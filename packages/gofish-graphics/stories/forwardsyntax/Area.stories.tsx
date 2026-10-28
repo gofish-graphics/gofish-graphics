@@ -8,9 +8,6 @@ import { ribbon, group } from "../../src/lib";
 const meta: Meta = {
   title: "Forward Syntax/Area",
   argTypes: {
-    w: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
     h: {
       control: { type: "number", min: 100, max: 1000, step: 10 },
     },
@@ -18,10 +15,10 @@ const meta: Meta = {
 };
 export default meta;
 
-type Args = { w: number; h: number };
+type Args = { h: number };
 
 export const Basic: StoryObj<Args> = {
-  args: { w: 500, h: 300 },
+  args: { h: 300 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -32,24 +29,17 @@ export const Basic: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    // An area chart has no intrinsic width, so it fills the container: the
-    // six lakes are spread to span `args.w` (five gaps between them) instead of
-    // a fixed pixel spacing, which would leave the canvas partly empty.
-    const lakes = 6;
-    chart(seafood)
-      .flow(spread({ by: "lake", dir: "x", spacing: args.w / (lakes - 1) }))
+    chart(seafood, { h: args.h })
+      .flow(spread({ by: "lake", dir: "x", spacing: 96 }))
       .mark(ribbon({ h: "count", opacity: 0.8 }))
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },
 };
 
 export const Stacked: StoryObj<Args> = {
-  args: { w: 400, h: 400 },
+  args: { h: 400 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -60,23 +50,20 @@ export const Stacked: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood)
+    chart(seafood, { h: args.h })
       .flow(
         spread({ by: "lake", dir: "x", spacing: 64 }),
         stack({ by: "species", dir: "y" })
       )
       .mark(ribbon({ h: "count", fill: "species", opacity: 0.8 }))
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
+      .render(container);
 
     return container;
   },
 };
 
 export const Layered: StoryObj<Args> = {
-  args: { w: 500, h: 300 },
+  args: { h: 300 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -86,13 +73,10 @@ export const Layered: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(streamgraphData)
+    chart(streamgraphData, { h: args.h })
       .flow(spread({ by: "x", dir: "x", spacing: 50 }), group({ by: "c" }))
       .mark(ribbon({ h: "y", fill: "c", opacity: 0.7 }))
-      .render(container, {
-        w: 500,
-        h: 300,
-      });
+      .render(container);
 
     return container;
   }

@@ -82,7 +82,7 @@ export const PerRowNames: StoryObj = {
         { k: "b", v: 90 },
         { k: "c", v: 60 },
       ],
-      { axes: false }
+      { axes: false, w: 200, h: 120 }
     )
       .flow(spread({ by: "k", dir: "x", spacing: 20, axes: false }))
       .mark(
@@ -93,7 +93,7 @@ export const PerRowNames: StoryObj = {
           Constraint.align({ x: "middle", y: "end" }, [bar, tick]),
         ])
       )
-      .render(container, { w: 200, h: 120 });
+      .render(container);
     return container;
   },
 };

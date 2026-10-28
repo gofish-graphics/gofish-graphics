@@ -23,8 +23,8 @@ TASKS = [
 
 def story_spaced_size_axis():
     return (
-        chart(TASKS)
+        chart(TASKS, w=520, h=220)
         .flow(spread(by="task", dir="x", spacing=30))
         .mark(rect(w="hours", h=80, fill="task")),
-        {"w": 520, "h": 220},
+        {},
     )

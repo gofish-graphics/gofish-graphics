@@ -53,10 +53,12 @@ export const Sunflower: StoryObj<Args> = {
       color: Color.gradient(["#fde725", "#21918c", "#440154"]),
       // Same unit on both axes ⇒ one shared scale ⇒ a true circle.
       schema: { x: "plane", y: "plane" },
+      w: args.w,
+      h: args.h,
     })
       .flow(scatter({ x: "x", y: "y" }))
       .mark(circle({ r: 4, fill: "i" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },
@@ -69,10 +71,14 @@ export const Uncoupled: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(sunflower, { color: Color.gradient(["#fde725", "#21918c", "#440154"]) })
+    chart(sunflower, {
+      color: Color.gradient(["#fde725", "#21918c", "#440154"]),
+      w: args.w,
+      h: args.h,
+    })
       .flow(scatter({ x: "x", y: "y" }))
       .mark(circle({ r: 4, fill: "i" }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
 
     return container;
   },

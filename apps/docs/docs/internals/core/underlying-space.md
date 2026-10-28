@@ -163,7 +163,7 @@ distinct σ-scope solved once by the scope registry (below):
 `sigma` is the axis's **SIZE** scope (what a magnitude is scaled by), `map.sigma`
 is the axis's **POSITION** scope (what an anchored coordinate is mapped by). No
 site fabricates either — every scope root solves both from one call,
-`solveScope` (or the equal-measure recentering). Within any one scope there is therefore exactly
+`solveScope` (or the equal-measure step, `equalizeMeasure`). Within any one scope there is therefore exactly
 one slope, by construction. When both halves are present and `sigma ≠ map.sigma`, the axis
 genuinely carries **two scopes**, and each half is read by the channel it belongs
 to — magnitudes read `sigma`, anchored positions read `map`. That happens when a
@@ -309,7 +309,9 @@ the two sides:
 - An overlay of free children (`unionChildSpaces`) is the union of their free
   intervals, so it takes the larger data extent on each side, and its claim
   (`unionChildExtents`) takes the larger claim on each side, which keeps the
-  σ-affine intercepts. So a `group` of signed bars keeps both sides.
+  σ-affine intercepts. So a `group` of signed bars keeps both sides. A child
+  with no data coordinates (a text, a box of literal size) sits at the
+  overlay's origin, so it reaches its own ascent and descent about 0.
 - Under `baseline` alignment, `resolveAlignmentSpace` (spread's cross axis)
   unions the children's intervals about the shared baseline, so a signed bar
   chart is pinned over a domain that includes its negative values. Under
@@ -354,7 +356,10 @@ the two sides:
   with a different step: an edge chain lays each part's box after the
   previous one's end plus the spacing, and a fixed-pitch chain lays each
   part's anchor one pitch from the previous one's. A baseline-pitched part
-  keeps its signed sides about its baseline; any other part is a box.
+  keeps its signed sides about its baseline; any other part is a box. A
+  stack of parts with no data in common (bands, text) folds no data
+  interval, but it still claims its parts by the stack's step, whatever its
+  `anchor`, since its layout lays them head to tail.
 
 With every descent 0, all of this reduces to a single width.
 
@@ -496,8 +501,18 @@ each inherent to what the origin states are:
   has a frame of its own whose 0 is its baseline (`{σ, 0}`, `frameOf`), so
   its parent places that baseline at the frame's `originPx`; a child with no
   data 0 sits at 0 and has no frame. This is the split between "a constraint
-  fixes the baseline" and "the parent sets it". A scope root's frame is its
-  solved scope (`scopeFrame`), whatever its type's origin.
+  fixes the baseline" and "the parent sets it". A scope root seats its
+  content in its solved scope, whatever its type's origin. A scope with no
+  data 0 (a spread of magnitudes) has no frame to seat its content, so the
+  rule's seat there is the content's box at the scope's start edge, as the
+  render root places its box. The rule returns that seat (a `Seat`: a
+  baseline or a box start, at a pixel), and every scope root reads it: the
+  render root (`placeRoot`), a coord, a layer's `seatChild`, and the claim
+  of a node with a literal size (`fixedClaim`), which runs from the start
+  edge exactly where the content is seated by its box. So a sized node
+  starts at its start edge on every axis, whatever reaches before its
+  content's 0 (a label hanging before the first bar, or below the bars'
+  baseline).
 - **Seating in a fold**: a pinned child sits at its own data coordinates; a
   free child sits there too when the fold seats children on their baselines
   (an overlay, a baseline alignment), and is a box from the aligned edge
@@ -516,6 +531,32 @@ each inherent to what the origin states are:
   ordinal or undefined type; a spread of pinned frames (facet panels) claims
   nothing, and each panel roots its own scope in its slice. A marimekko is a
   stack, so its widths still add up to one axis.
+- **A share is a claim** (#493 piece 3): on an axis where nothing in a scope
+  is sized or placed by data (`GoFishNode.carriesData`), σ has no data unit,
+  and it is the room a node with no size of its own takes
+  (`GoFishNode.sharesRoom`). Such a leaf in a slot, or inside a node in a
+  slot, claims one σ, so a spread of `n`
+  bands with spacing `g` claims `n·σ + (n − 1)·g`, and whatever hangs off a
+  band (a value label, the half of a category label past the last band)
+  takes room in the same claim, which narrows the bands. A scope whose axis
+  mixes data with bands of no size keeps them as before: the bands claim
+  nothing and share what the data leaves. A leaf in no slot (a rule laid
+  over a bar chart) claims nothing, and fills the room of what holds it.
+- **A plot claim beside the claim**: the claim folds also compute the
+  claim of the plot, which leaves out dressing (a label placed beside a
+  `ref` stand-in for its mark), a shape's outline (half its stroke past its
+  box, which its claim reaches and its plot leaves out; a node a `nest`
+  derives reaches its own outline past the padded inner's plot,
+  `applyNestExtentPlan`) and the chrome rings of a nested node, short of
+  a node whose plot is its whole box (a node with a size of its own, or
+  the outermost ring of a `chart()`: a parent lays a chart out whole,
+  `GoFishNode.plotIsBox`). A chain of parts of the plot lays them by their plots, so dressing never
+  moves the parts it dresses: it reaches past the chain, or sits in the gaps
+  (`composePlanExtents`' `parts`, `chainFold`'s `reaches`). The plot of a
+  chain with a stand-in reaches only as far as its stand-ins; an align
+  counts the plot of a child it seats at its own data or origin. A chart with a size of its own maps its plot
+  into that size (see
+  [Chrome gutters](/internals/layout/passes#chrome-gutters)).
 - **Alignment establishes a baseline; it does not pin**: aligning or
   overlaying free children gives a free result with one shared baseline
   (`overlayOrigin`: pinned only when a child is pinned, none when a child has
@@ -582,14 +623,19 @@ split removes.
 
 **Most nodes write only the type hook.** The claim hook is optional. A node
 without one claims what its types imply (`impliedExtents`): each side of a
-continuous axis is its data extent times σ, with no pixel overhead. That is
-every leaf mark. The nodes that write a claim hook are the ones whose claim
-is more than their data: the ones that add pixels (a spread's spacing or
-pitch, a nest's padding, a `transform.scale`), the ones that compose their
-children's claims (an overlay, an alignment, a stack), and the pass-throughs
-that keep their child's claim as it is (`offset`, the `position` operator,
-a `ref`). Every continuous axis has exactly one claim, and no other axis
-has one; `resolveExtent()` checks this.
+continuous axis is its data extent times σ, with no pixel overhead. The
+nodes that write a claim hook are the ones whose claim is more than their
+data: a shape with a pixel size of its own (a text, measured when the claims
+are resolved, or a rect or ellipse of literal size, `boxExtent`; #493), the
+ones that add pixels (a spread's spacing or pitch, a nest's padding, a
+`transform.scale`), the ones that compose their children's claims (an
+overlay, an alignment, a stack, a layer placing its children,
+`placeByClaims`), and the pass-throughs that keep their child's claim as it
+is (`offset`, the `position` operator, a `ref`). Every continuous axis has
+exactly one claim; `resolveExtent()` checks this. Another axis has one when
+its content's room depends on σ, or when its content has a pixel size of its
+own (a claim with no σ in it); content that takes whatever room it is given
+(a rect with no size) has none.
 
 The `constraints` argument lets constraints participate in space resolution —
 each positioning-constraint kind carries a **space fold**, a typing rule that
@@ -601,7 +647,14 @@ composes its targets' spaces into the layer's claim on that axis:
   (Literal-pixel coordinates are not data and don't contribute; neither do
   discrete scatter slots, which resolve directly from the already-known layer
   size.) That domain is what the layer later turns into a data→pixel scale to
-  resolve those constraints.
+  resolve those constraints. Only a constraint whose targets are in the
+  layer's own set on that axis contributes (see Sharing sets below). A chrome
+  ring's ticks are each a set of their own (`wrapRing`), so their datums
+  place them in the ring's frame but are no part of the type the ring
+  reports: a chart's box reports its content's type, and its chrome never
+  re-types it (#1170). A bar chart beside a caption is still a free magnitude
+  to the spread that holds them, so the spread gives it the room its bars
+  claim.
 - `Constraint.distribute` contributes the stack fold, as a type fold
   (`distributeSpaceFold`, `constraints/distribute.ts`) and a claim fold
   (`distributeExtentFold`). The chain moves every target to its place, so it
@@ -731,7 +784,9 @@ which child. The covered-axis type fold — UNDEFINED included — is what
 `composePlanExtents` reads those operands back (it does not fold the types
 again) and reports their claim and the layout budget. At layout time the layer then **solves the budget**:
 a fold-produced claim (of any origin) is inverted against the layer's allotted size to
-derive a local scale factor, and distribute-covered fill children are
+derive a local scale factor. In a share scope each child is proposed its
+claim at that σ (a band is one σ, `childLayoutSizeProposal`'s `own`);
+elsewhere distribute-covered fill children are
 proposed slices from the shared proposal plan (`buildDistributeSliceMap`,
 `constraints/proposalPlan.ts`, using `sliceExtent` from
 `constraints/folds.ts`). When distribute segments overlap on the same child
@@ -796,11 +851,14 @@ fixed-pitch siblings reusing the same anchor vocabulary `align` already uses
 about its chain point by a seat, the next chain point is one step on, and the
 claim is the highest reach above the chain's start plus the lowest reach
 below it, over every part. Only the seat and the step differ. A pitched
-chain's claim steps its anchors against its parts' growth one pitch at a
-time, as a ridgeline reads (rows chained down a y that reads top-down, each
-growing upward from its anchor, see
-[Axis direction](/internals/layout/passes#axis-direction)), and each part
-sits about its anchor:
+chain's claim steps its anchors one pitch at a time in the chain's axis
+order, and reads each part's claim in that order too: the layer reflects
+the claim of a part that reads y the other way about its origin
+(`composePlanExtents`' `reflected`), as its view in the layer's order
+(`orientView`) places it. So a ridgeline's rows (chained down a y that reads
+top-down, each growing upward from its anchor, see
+[Axis direction](/internals/layout/passes#axis-direction)) reach back over
+the rows chained before them. Each part sits about its anchor:
 
 - `"middle"`: half its width above the anchor, half below.
 - `"baseline"`: its own signed sides, ascent above and descent below.
@@ -808,9 +866,10 @@ sits about its anchor:
 - `"end"`: its whole width below the anchor.
 
 So with one-sided parts the claim is `(n−1)·s` plus the tallest reach past
-the chain's end rows: `max_k(h_k − k·s)⁺ + (n−1)·s` for `"start"` (k in
-chain order, the binding row being whichever peak clears the rows chained
-above it; for a ridgeline that's usually the first row). A `"middle"` row
+the chain's end rows: `max_k(h_k − k·s)⁺ + (n−1)·s` for rows that reach
+back over the rows before them, as a ridgeline's do (k in chain order, the
+binding row being whichever peak clears the rows chained above it; usually
+the first row). A `"middle"` row
 taller than both end rows binds too, and a `"baseline"` row's descent counts
 below its anchor. The fold runs in Monotonics, so an all-linear chain's
 claim is an exact envelope that a scope inverts exactly (before, a pitched
@@ -820,7 +879,10 @@ its box by a fraction of a pixel). The fold's child order is the chain order
 
 The type fold has no data part of the chain: a spread separates, so its type
 is ordinal (or undefined) whatever its pitch, and the chain lives only in the
-claim.
+claim. That claim is measured from the chain's origin, where layout seats the
+first part's anchor, as its parent overlays it: an edge chain starts there,
+and a pitched chain reaches past it on both sides (a ridgeline's first peak
+rises above its first baseline).
 
 A spread chain on y needs no paint-side handshake. The chain places each
 target's anchor in the spread's own axis order, and the target is read through
@@ -1264,13 +1326,14 @@ story is the case that needs it: its rows are bars 25 px apart, pinned by a
 baseline alignment, so the root's claim is `137σ + 100` and σ leaves exactly
 100 px for the spacing.
 
-Nicing widens only the data part of a claim: the niced claim is the claim
-plus `σ·(nicedWidth − dataWidth)`, both widths in data units from the type
-(`niceScope`). The widths are lengths, so this holds for a signed domain and
-for a delta axis alike. The overhead keeps its pixels. Where the widening
-goes follows the axis: an absolute axis's claim is measured from data 0, so
-each side widens by its own niced end, while a delta axis centers its content
-in the niced width, so half goes on each side.
+Nicing widens a claim to hold the niced domain (`niceScope`, `widenTo`), and
+so does widening it to a keyed domain. How follows the axis. An absolute
+axis's claim is measured from data 0 and is the hull of what the content
+draws, so each side reaches the farther of the claim and the domain's niced
+end: pixels drawn past the data (a mark's size at its datum, a tick label
+past the last tick) take room only where the domain does not already reach
+past them. A delta axis centers its content in the niced width, so it widens
+by `σ·(nicedWidth − dataWidth)`, half on each side.
 
 Leaf shapes never need to compute their own scale factors — they receive the
 per-axis `AxisScale` via the `scales` parameter and read its `sigma` in
@@ -1380,10 +1443,20 @@ The marginal histogram's layer prints as:
 ```
 
 The registry is the sole producer of every slope. A coord boundary hands down
-the one σ its scope solves, which its map shares, and the #582 equal-measure
-recentering (equating x and y when they share a declared unit) is a named
-`recenterEqualMeasure` operation _on_ the registry, so the dump records the
-FINAL σ.
+the one σ its scope solves, which its map shares, and the #582 equal measure
+(equating x and y when they share a declared unit) is a named `equalizeMeasure`
+operation _on_ the registry, so the dump records the FINAL σ. The render root
+and a chart with a literal size on both axes both go through it. The chart
+solves its two scopes in the claim walk (`solveFixed`) and equalizes them
+there (`equalizeFixed`) before either claim is read. Both take the smaller σ,
+and on the other axis the scope root keeps its box: its claim takes the
+leftover pixels after the content in screen terms, so the content sits at the
+box's top-left and the root still claims its size. The content sits past the
+leftover before it by its seat (`seatInScope`): its data 0 where the scope has
+one, else its box, which starts `startPx` from the scope's start edge. This
+placement is provisional. Only an axis with a data width binds: a one-value
+axis (a one-point chart) has no width for σ to scale, so it takes the other
+axis's σ and keeps its value at the middle of its box.
 
 ### Nicing is a keyed-domain operation, applied on demand
 
@@ -1499,7 +1572,20 @@ Values with no unit (literals) are keyed by their set. So two facet panels
 that plot one column share one domain, and a count histogram placed beside a
 scatter of millimeters keeps its own. Chrome never decides a domain, it only
 reads one: a ring or a label wrapper added later reads the seat of the content
-it wraps. The axes drawn over each domain are recorded once `resolveAxes` has
+it wraps. Chrome does take room, as pixels: every chrome shape claims its size,
+and a ring's claim is the hull of what it wraps and of its shapes where its
+constraints place them (`placeByClaims`). A layer that wears chrome hands its
+content its slot less its gutters (never less than 0), read off those claims, and a chart with a
+size of its own adds the gutters its claims give around a plot of that size
+(#1032; see [Chrome gutters](/internals/layout/passes#chrome-gutters)). A child
+placed beside a node inside another child (a label on its mark's ref) takes
+room where the claim walk knows that node lands (`placementIn`), a band of
+a category axis included (a share is a claim), and is ink where it does not
+(inside a coordinate space, or beside a band in a scope that mixes data and
+bands): left out of its layer's claim and box. A pinned child a layer pins at a literal pixel (a chart's
+content, seated past its chrome's start gutter) shares the layer's frame from
+that pixel (`childPosScalesFor`): its map's `originPx` is the frame's less
+the pin. The axes drawn over each domain are recorded once `resolveAxes` has
 assigned them (`refreshDemand`, which `layout()` calls once, after the axes
 are stamped: nothing reads the demand before then). A time axis adds its rows
 to its stamp when it is elaborated, since its levels depend on the axes below
@@ -1519,8 +1605,11 @@ A **literal** `w`/`h` carries no data, so the node reports its content's type
 upward unchanged, and its keyed domain is shared as the sharing sets say. Its
 claim, though, is its own pixels: the box solves its own σ, so its content's σ
 claim is not room its parent can scale. The node claims the content's claim
-at the σ it solves, which keeps the content's split about data 0 and sums to
-the size (`fixedClaim` in `layer.tsx`). It solves that σ once, through the
+at the σ it solves, which sums to the size (`fixedClaim` in `layer.tsx`).
+Where its scope has a data 0, the claim keeps the content's split about it,
+since the node reports its content's type upward and a parent reads that
+type's claim from its data 0. Where the scope has none, the node places its
+content's box at its start edge (#1032), so the claim runs from there. It solves that σ once, through the
 registry (`solveFixed`), and its layout reuses the solution. A claim that is only pixels over
 a type wider than one value maps no domain (`mapsDomain` in `extent.ts`): it
 needs no canvas at the root, and a sized node has nothing to solve from it. A **data-valued** `w`/`h` (a field name, a `field(...)`
@@ -1727,7 +1816,7 @@ unit replaced by its representative, a declared unit or the unknown its class
 stands for. It is THE accessor for "which domain is this": the titles (axis
 elaboration) read through it. Two unit variables are compared with
 `sameUnitVar` (one class, or two classes bound to one declared unit), which
-the #582 recentering and the embedding gate use. Read units after the walk,
+the #582 equal-measure step and the embedding gate use. Read units after the walk,
 when every binding is made.
 
 **Joining.** One function, `joinUnits(a, b, shared, site)`, joins the

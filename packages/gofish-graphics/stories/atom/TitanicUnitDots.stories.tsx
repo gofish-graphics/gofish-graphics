@@ -30,10 +30,14 @@ export const Default: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(titanicPassengers, { color: Color.palette(["#2b8cbe", "#ff8408"]) }).facet({by: "pclass", dir: "x"})
+    chart(titanicPassengers, {
+      color: Color.palette(["#2b8cbe", "#ff8408"]),
+      w: args.w,
+      h: args.h,
+    }).facet({by: "pclass", dir: "x"})
       .flow(treemap({ h: "fare", size: "fare", spacing: args.spacing, tile: Tile.squarify({ ratio: 1 }), sort: "desc" }))
       .mark(circle({ fill: "survived", stroke: "#ccc", strokeWidth: 1 }))
-      .render(container, { w: args.w, h: args.h });
+      .render(container);
     return container;
   },
 };

@@ -70,7 +70,7 @@ export const CascadedTreemap: StoryObj = {
         sibling: alternate([dice, slice]),
       },
       sampleTree
-    ).render(container, { w: 640, h: 420 });
+    ).render(container);
     return container;
   },
 };
