@@ -38,8 +38,8 @@ type PackProps = {
  * strategy, so there is no option to choose one (#1013).
  *
  * Its outline is its children's outlines, so an `enclose` around a pack hugs
- * what it packed, not the pack's box. A group's outline in general is #974;
- * only pack answers it so far.
+ * what it packed, not the pack's box. TODO(#1233): every node with children
+ * should answer its outline this way; only pack does so far.
  */
 export const Pack = createNodeOperator(
   (opts: PackProps, children: GoFishAST[]) => {

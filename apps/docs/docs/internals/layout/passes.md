@@ -1006,7 +1006,7 @@ its children's outlines, each moved to where the pack placed it, and its
 enclosing circle is the smallest circle around theirs. So an `enclose` around
 a pack hugs the circles, not the pack's box, and a pack of packs packs the
 inner packs' circles. A group with children answers only `enclosingCircle`
-in general, and its outline is still its box (#974): labels and enclose
+in general, and its outline is still its box (#1233): labels and enclose
 members read outlines, so the general rule would move existing renders, and
 only `pack` answers its outline so far.
 Geometry exists only after layout, so a parent cannot yet read it while sizing.
