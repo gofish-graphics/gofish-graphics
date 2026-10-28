@@ -84,9 +84,9 @@ import {
   ChartBuilder,
   LayerBuilder,
   chart,
-  resolveRefData,
   PREVIOUS_LAYER_MARKS,
 } from "./chartBuilder";
+import { resolveRefData } from "./resolveRefData";
 import type { ChartOptions, RelationalFusable } from "./chartBuilder";
 import { projectByValues, projectPath, rowsReached } from "../datumProjection";
 import {

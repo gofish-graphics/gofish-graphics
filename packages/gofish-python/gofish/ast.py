@@ -95,7 +95,8 @@ class Operator:
         if self._translate:
             d["translate"] = self._translate
         if self._labels:
-            d["label"] = self._labels
+            # A mark a label avoids (`avoiding=select_all(...)`) is its IR.
+            d["label"] = [_marks_in_options(s, payload) for s in self._labels]
         return d
 
 
@@ -714,7 +715,8 @@ class Mark(_Root):
         else:
             d = {"type": self.mark_type, **serialized_kwargs}
         if self._labels:
-            d["label"] = self._labels
+            # A mark a label avoids (`avoiding=select_all(...)`) is its IR.
+            d["label"] = [_marks_in_options(s, payload) for s in self._labels]
         # Only RelatableMark carries _relate, but reading via getattr keeps
         # the base class oblivious to the subclass extension.
         relate = getattr(self, "_relate", None)

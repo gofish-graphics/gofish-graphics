@@ -211,6 +211,7 @@ export type {
 export * as Overlap from "./families/overlap";
 export type { EncloseOptions } from "./ast/graphicalOperators/enclose";
 export * as Shape from "./families/shape";
+export * as Place from "./families/place";
 export { Frame as frame } from "./ast/graphicalOperators/frame";
 export { group } from "./ast/graphicalOperators/group";
 export { position } from "./ast/graphicalOperators/position";
@@ -302,7 +303,9 @@ export type {
   LabelSpec,
   LabelOptions,
   LabelAccessor,
+  LabelPosition,
 } from "./ast/labels/labelPlacement";
+export type { LabelHalo, LabelBackground } from "./ast/labels/labelNode";
 
 // Reactive interaction layer (JS-only; no Python/IR bridge). Signals live
 // OUTSIDE the layout pipeline — see src/interaction/ and the reactivity docs.

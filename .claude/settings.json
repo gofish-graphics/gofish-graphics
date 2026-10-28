@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'in=$(cat); case \"$in\" in *\"gh pr\"*) printf %s \"$in\" | python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/pr-gate.py\";; esac'",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

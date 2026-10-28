@@ -85,6 +85,8 @@ import {
 import { withWire, wireOf } from "../wire";
 import { isThenable } from "../../util";
 import { withKindValues } from "../strategyKind";
+import { resolveRefData } from "./resolveRefData";
+import { GoFishRef } from "../_ref";
 
 export type { LayerContext } from "./markResult";
 export { resolveMarkResult } from "./markResult";
@@ -196,6 +198,10 @@ export type ModifierConfig<Args extends any[] = any[]> = {
     ...args: Args
   ) => void | Promise<void>;
   tag?: (wrapped: Mark<any>, base: Mark<any>, ...args: Args) => void;
+  /** Called once per chained call, with the arguments it was given; what
+   *  it returns is what `apply` and `resolveArgs` receive, for every node
+   *  the call reaches (`.label()` adds the one call identity they share). */
+  bind?: (...args: Args) => Args;
   /**
    * For a modifier whose argument may be a batch accessor (a Python
    * callback, `RESOLVE_ROWS` in channels.ts): given the args, the function
@@ -292,7 +298,8 @@ function modifierMethod(
   cfg: ModifierConfig,
   redecorate: (m: Mark<any>) => Mark<any>
 ): (...args: any[]) => Mark<any> {
-  return (...args: any[]) => {
+  return (...given: any[]) => {
+    const args = cfg.bind ? cfg.bind(...given) : given;
     const resolveArgs = cfg.resolveArgs?.(...args);
     const wrapped: Mark<any> = async (
       d: any,
@@ -450,7 +457,9 @@ function labelIRField(
   if (typeof accessor === "string") {
     return {
       accessor,
-      ...(options && typeof options === "object" ? options : {}),
+      ...(options && typeof options === "object"
+        ? withKindValues(options)
+        : {}),
     };
   }
   if (
@@ -462,7 +471,9 @@ function labelIRField(
     const wire = accessor instanceof FieldExpr ? accessor.toJSON() : accessor;
     return {
       accessor: wire,
-      ...(options && typeof options === "object" ? options : {}),
+      ...(options && typeof options === "object"
+        ? withKindValues(options)
+        : {}),
     };
   }
   if (
@@ -496,18 +507,40 @@ function pushLabelField(
   tag.label = [...existing, field];
 }
 
-/** `.label(accessor, options?)` — defers label placement on each node. */
+/**
+ * A `.label()` call's options as its nodes take them: a `selectAll(name)` in
+ * `avoiding` resolved to that layer's nodes, here, where the chart's named
+ * layers are known.
+ */
+const labelOptionsIn = (
+  options: LabelOptions | undefined,
+  layerContext: LayerContext | undefined
+): LabelOptions | undefined => {
+  const avoiding = options?.avoiding;
+  return avoiding instanceof GoFishRef &&
+    avoiding.multiplicity === "all" &&
+    layerContext !== undefined
+    ? { ...options, avoiding: resolveRefData(avoiding, layerContext) }
+    : options;
+};
+
+/** `.label(accessor, options?)` — defers label placement on each node. One
+ *  call labels every node the mark makes, as one call (`call`, made once
+ *  per `.label()` by `bind`). */
 export const labelModifier = {
   name: "label",
-  apply: (node, _layerContext, _datum, accessor, options) => {
-    node.label(accessor, options);
+  bind: (accessor, options, call = {}) => [accessor, options, call],
+  apply: (node, layerContext, _datum, accessor, options, call) => {
+    node.label(accessor, labelOptionsIn(options, layerContext), call);
   },
   tag: (wrapped, base, accessor, options) => {
     propagateSerialize(base, wrapped, (tag) => {
       pushLabelField(tag, labelIRField(accessor, options));
     });
   },
-} satisfies ModifierConfig<[accessor: LabelAccessor, options?: LabelOptions]>;
+} satisfies ModifierConfig<
+  [accessor: LabelAccessor, options?: LabelOptions, call?: object]
+>;
 
 /**
  * `.zOrder(value)` — sets the node's paint-order hint. `value` is either a
@@ -1184,8 +1217,12 @@ export function createOperator<Datum, Options extends Record<string, any>>(
     // per-leaf stamp below and `attachLabelOption` at the bottom. Repeated
     // `.label()` calls append, so every leaf's produced node(s) get one
     // deferred label per call.
-    let labelState: Array<{ accessor: LabelAccessor; options?: LabelOptions }> =
-      [];
+    let labelState: Array<{
+      accessor: LabelAccessor;
+      options?: LabelOptions;
+      /** The call, one per `.label()`, shared by every node it labels. */
+      call: object;
+    }> = [];
     // `.transition(spec)` chained after `dual(opts)`: read at execution time
     // like `labelState`, and recorded on the node `layout` builds.
     let transitionState: OperatorTransition | undefined;
@@ -1304,8 +1341,12 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             if (labelState.length > 0) {
               for (const node of leafNodes) {
                 if (node.datum === undefined) node.datum = leaf;
-                for (const { accessor, options } of labelState) {
-                  node.label(accessor, options);
+                for (const { accessor, options, call } of labelState) {
+                  node.label(
+                    accessor,
+                    labelOptionsIn(options, layerContext),
+                    call
+                  );
                 }
               }
             }
@@ -1360,7 +1401,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
       translateOperator(operator, translateOpts)
     ) as TranslatableOperator<Datum[], Datum[]>;
     attachLabelOption(withTranslate, (accessor, options) => {
-      labelState = [...labelState, { accessor, options }];
+      labelState = [...labelState, { accessor, options, call: {} }];
       const tag = wireOf(operator);
       if (tag) {
         pushLabelField(tag, labelIRField(accessor, options));

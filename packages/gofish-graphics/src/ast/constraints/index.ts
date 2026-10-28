@@ -35,6 +35,11 @@ import {
   isOverlapConstraint,
   type OverlapConstraint,
 } from "./overlap";
+import {
+  applyLabelPlacement,
+  isLabelPlaceConstraint,
+  type LabelPlaceConstraint,
+} from "../labels/placeStep";
 import { resolveScopedName, visibleNodes } from "../_ref";
 import {
   childNameKey,
@@ -79,6 +84,10 @@ export type { GridConstraint } from "./grid";
 // option), not part of the public authoring surface: no `Constraint.overlap`.
 export type { OverlapConstraint } from "./overlap";
 export { isOverlapConstraint } from "./overlap";
+// Like overlap, `labelPlace` is a private elaboration target (`.label()` with
+// a `Place` strategy), with no `Constraint.labelPlace`.
+export type { LabelPlaceConstraint } from "../labels/placeStep";
+export { isLabelPlaceConstraint } from "../labels/placeStep";
 export { isZOrderConstraint } from "./zorder";
 export { isNestConstraint, nestedSpace } from "./nest";
 export {
@@ -108,7 +117,8 @@ export type ConstraintSpec =
   | ZBelowConstraint
   | NestConstraint
   | GridConstraint
-  | OverlapConstraint;
+  | OverlapConstraint
+  | LabelPlaceConstraint;
 
 // --- Factory ---
 
@@ -386,7 +396,9 @@ export function applyConstraints(
       | PositionConstraint
       | NestConstraint
       | GridConstraint =>
-      !isZOrderConstraint(constraint) && !isOverlapConstraint(constraint)
+      !isZOrderConstraint(constraint) &&
+      !isOverlapConstraint(constraint) &&
+      !isLabelPlaceConstraint(constraint)
   );
 
   // Solver shadow (observe→assert): snapshot each child's
@@ -421,6 +433,12 @@ export function applyConstraints(
   for (const constraint of constraints)
     if (isOverlapConstraint(constraint))
       applyOverlapPlacement(constraint, nameToPlaceable, posScales);
+
+  // A label placement reads where everything else in the layer landed (the
+  // labeled marks, the labels the solve placed), so it runs last.
+  for (const constraint of constraints)
+    if (isLabelPlaceConstraint(constraint))
+      applyLabelPlacement(constraint, nameToPlaceable, sizes);
 
   if (prePlaced) {
     for (const constraint of placement) {

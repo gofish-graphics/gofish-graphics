@@ -37,17 +37,17 @@ expansion and elaboration. Three consumers:
 
 ## What ships in v0
 
-| Artifact                                                                                                | Path                                                                                     |
-| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Construct descriptor table (single-source field lists)                                                  | `packages/gofish-ir/src/frontend/descriptors.ts`                                         |
-| Schema types + validator + canonical examples                                                           | `packages/gofish-ir/src/frontend/`                                                       |
-| JSON Schema (Draft 2020-12)                                                                             | `packages/gofish-ir/dist/frontend/v0.json` (build artifact)                              |
-| JS-side emitter (`Serialize.toJSON`, `ChartBuilder.toJSON()`)                                           | `packages/gofish-graphics/src/serialize/toJSON.ts`                                       |
-| JS-side deserializer (`Serialize.renderIR`, `buildIR`, `mapMark`, …)                                    | `packages/gofish-graphics/src/serialize/fromJSON.ts`                                     |
-| Deserializer factory table, keyed by the descriptor table                                               | `packages/gofish-graphics/src/serialize/registry.ts`                                     |
-| Generated Python factory layer (checked in, CI freshness-checked)                                       | `packages/gofish-python/gofish/_generated.py` (from `scripts/generate.ts`)               |
-| Generated Python strategy families (checked in, CI freshness-checked)                                   | `packages/gofish-python/gofish/{tile,overlap,curve,bin,calendar,shape}.py` (same script) |
-| Hand-written Python residue (dispatch, bridge, DataFrame conversion), emits IR validated against schema | `packages/gofish-python/gofish/ast.py`                                                   |
+| Artifact                                                                                                | Path                                                                                           |
+| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Construct descriptor table (single-source field lists)                                                  | `packages/gofish-ir/src/frontend/descriptors.ts`                                               |
+| Schema types + validator + canonical examples                                                           | `packages/gofish-ir/src/frontend/`                                                             |
+| JSON Schema (Draft 2020-12)                                                                             | `packages/gofish-ir/dist/frontend/v0.json` (build artifact)                                    |
+| JS-side emitter (`Serialize.toJSON`, `ChartBuilder.toJSON()`)                                           | `packages/gofish-graphics/src/serialize/toJSON.ts`                                             |
+| JS-side deserializer (`Serialize.renderIR`, `buildIR`, `mapMark`, …)                                    | `packages/gofish-graphics/src/serialize/fromJSON.ts`                                           |
+| Deserializer factory table, keyed by the descriptor table                                               | `packages/gofish-graphics/src/serialize/registry.ts`                                           |
+| Generated Python factory layer (checked in, CI freshness-checked)                                       | `packages/gofish-python/gofish/_generated.py` (from `scripts/generate.ts`)                     |
+| Generated Python strategy families (checked in, CI freshness-checked)                                   | `packages/gofish-python/gofish/{tile,overlap,curve,bin,calendar,shape,place}.py` (same script) |
+| Hand-written Python residue (dispatch, bridge, DataFrame conversion), emits IR validated against schema | `packages/gofish-python/gofish/ast.py`                                                         |
 
 v0 matches the existing widget wire format exactly — lowercase `type`
 discriminators, `__combinator` flag on combinator-form marks, channel
@@ -198,7 +198,15 @@ a list have no wire form and throw, naming the fix. The reader's converter
 relational mark's combinator form carries its IR tag (`tagCombinator`), and
 a ref child is written as a `RefMarkIR`, so an `enclose(opts, [ref("a")])`
 inside a chart serializes. JS does not serialize a `.relate()` callback (it
-is a closure), so a relate clause's IR comes from Python. The families are namespaces in the two surfaces only; the
+is a closure), so a relate clause's IR comes from Python. A label's
+`position` takes a position string or a strategy of the `Place` family
+(`{ "kind": "along", "at": 0.6, "orient": "sloped" }`), and its `avoiding`
+is a `NodeSelectionIR` like a blob's. A `.label()` chain is not a construct
+with a descriptor, so the emitter writes it with `wireLabels` in `toJSON.ts`:
+each call's `accessor`, and of its options only the keys `LABEL_OPTIONS`
+declares, kept by the same `wireFields` that `wireOpts` uses, with the nodes
+in them converted by the same `mapHeldNodes` walk. The reader rebuilds them
+with the same `resolveHeldNodes` over `LABEL_OPTIONS` in `fromJSON.ts`. The families are namespaces in the two surfaces only; the
 wire carries the plain objects. Their kinds and params are declared once, in
 the `STRATEGIES` table (below). Note `join`
 inlines its right-hand table as JSON rows, so unlike `derive` it round-trips
@@ -585,13 +593,13 @@ the Python generator builds `_chart_opts` from `CHART_OPTIONS`, and the docs
 build the chart options table from it (`::: gofish-ref ChartOptions`).
 
 `STRATEGIES` declares the strategy families whose values cross the wire:
-`Tile`, `Overlap`, `Curve`, `Bin`, `Calendar` and `Shape`. For each it lists the kinds, each with its
+`Tile`, `Overlap`, `Curve`, `Bin`, `Calendar`, `Shape` and `Place`. For each it lists the kinds, each with its
 params (types, defaults and docs), and the presets: a factory that makes a
 kind with some params already set, such as `Overlap.sina()`, which is
 `noise` with `smoothing: "silverman"`. Each family derives its
 `OPTION_TYPES` entry, a union of one object per kind with a literal `kind`,
 so the strategy options are `t.ref("Tile")`, `t.ref("Overlap")`,
-`t.ref("Curve")` and `t.ref("Shape")`. A kind may take a param by position
+`t.ref("Curve")`, `t.ref("Shape")` and `t.ref("Place")`. A kind may take a param by position
 (`positional: "size"`): `Bin.step(0.5)` in JS, `Bin.step(0.5)` with a
 positional-only parameter in Python, and `{ kind: "step", size: 0.5 }` on
 the wire either way. A construct descriptor has the same field: `COORDS.geo`
@@ -668,7 +676,7 @@ functions, rebuilt from a `type`-tagged config (`COORDS`), and a color scale
 is tagged by `_tag` and takes its one argument by position.
 
 `schema.ts` keeps the TypeScript types of the strategies, `TileIR`,
-`OverlapIR`, `CurveIR`, `BinIR`, `CalendarPartitionIR` and `ShapeIR`, by hand, and each family's JS type is one of them
+`OverlapIR`, `CurveIR`, `BinIR`, `CalendarPartitionIR`, `ShapeIR` and `PlaceIR`, by hand, and each family's JS type is one of them
 (`Curve.Curve` is `CurveIR`; `Shape.Shape` is `ShapeIR` with `avoiding`
 holding nodes). `descriptors.test.ts` checks that their kinds
 and params agree with `STRATEGIES`. Every family is closed: there is no

@@ -36,6 +36,7 @@ import type {
   CalendarPartitionIR,
   CurveIR,
   ShapeIR,
+  PlaceIR,
   LabelSpecIR,
   OverlapIR,
   TileIR,
@@ -234,6 +235,9 @@ console.log("\n# LABEL_OPTIONS agree with schema.ts LabelSpecIR");
 {
   const schemaKeys = Object.keys({
     position: true,
+    avoiding: true,
+    halo: true,
+    background: true,
     fontSize: true,
     color: true,
     offset: true,
@@ -325,10 +329,17 @@ const SCHEMA_STRATEGY_KEYS: Record<
       clearance: true,
     },
   } satisfies StrategyKeys<ShapeIR>,
+  Place: {
+    around: { directions: true, side: true, offset: true },
+    along: { at: true, side: true, orient: true, offset: true },
+    start: { offset: true },
+    end: { offset: true },
+    interior: {},
+  } satisfies StrategyKeys<PlaceIR>,
 };
 
 console.log(
-  "\n# STRATEGIES agree with schema.ts TileIR / OverlapIR / CurveIR / BinIR / CalendarPartitionIR / ShapeIR"
+  "\n# STRATEGIES agree with schema.ts TileIR / OverlapIR / CurveIR / BinIR / CalendarPartitionIR / ShapeIR / PlaceIR"
 );
 for (const [family, kinds] of Object.entries(SCHEMA_STRATEGY_KEYS)) {
   const table = STRATEGIES[family as keyof typeof STRATEGIES].kinds as Record<

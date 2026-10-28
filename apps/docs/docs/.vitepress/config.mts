@@ -493,6 +493,7 @@ export default defineConfig({
               text: "Name and scope",
               link: "/js/api/howto/naming-and-scoping",
             },
+            { text: "Place labels", link: "/js/api/howto/label-placement" },
           ],
         },
         {
@@ -588,6 +589,11 @@ export default defineConfig({
               items: [{ text: "Shape", link: "/js/api/shape" }],
             },
             {
+              text: "Place",
+              collapsed: true,
+              items: [{ text: "Place", link: "/js/api/place" }],
+            },
+            {
               text: "Reactivity",
               collapsed: true,
               items: [
@@ -628,6 +634,7 @@ export default defineConfig({
               text: "Name and scope",
               link: "/python/api/howto/naming-and-scoping",
             },
+            { text: "Place labels", link: "/python/api/howto/label-placement" },
           ],
         },
         {
@@ -708,6 +715,11 @@ export default defineConfig({
               text: "Shape",
               collapsed: true,
               items: [{ text: "Shape", link: "/python/api/shape" }],
+            },
+            {
+              text: "Place",
+              collapsed: true,
+              items: [{ text: "Place", link: "/python/api/place" }],
             },
             {
               text: "GoTree",

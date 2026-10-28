@@ -166,3 +166,11 @@ packages/gofish-graphics/stories/forwardsyntax/TimeBenchmarkPorts.stories.tsx::C
 # cannot cross the derive bridge. The other Enclose/Shapes stories are ported.
 packages/gofish-graphics/stories/EncloseShapes.stories.tsx::PenguinsFourShapes
 packages/gofish-graphics/stories/EncloseShapes.stories.tsx::ChartAccentSubSaharanAfrica
+
+# Label placement: the three arrow-label stories label each edge with a JS
+# function accessor (`.label(() => e.label)`), which has no wire form (a
+# Python label accessor is a field name or a field(...) aggregate, and an arrow
+# has no row to read one from). The other Label Placement stories are ported.
+packages/gofish-graphics/stories/forwardsyntax/LabelPlacement.stories.tsx::ArrowLabelsLeft
+packages/gofish-graphics/stories/forwardsyntax/LabelPlacement.stories.tsx::ArrowLabelsOnBackground
+packages/gofish-graphics/stories/forwardsyntax/LabelPlacement.stories.tsx::ArrowLabelsAbove

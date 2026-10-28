@@ -647,6 +647,55 @@ export type ShapeIR =
       clearance?: number;
     };
 
+/** A screen direction from a mark, for `Place.around`. */
+export type PlaceDirectionIR =
+  | "top-right"
+  | "top-left"
+  | "bottom-right"
+  | "bottom-left"
+  | "right"
+  | "left"
+  | "top"
+  | "bottom";
+
+/** A side of an outline, for `Place.along`. */
+export type PlaceSideIR =
+  | "on"
+  | "above"
+  | "below"
+  | "left"
+  | "right"
+  | "inset"
+  | "outset";
+
+/** Where a label goes on the mark it labels, made by a call in the `Place`
+ *  family: a value of a label's `position` beside the position strings. */
+export type PlaceIR =
+  | {
+      kind: "around";
+      directions?: PlaceDirectionIR[];
+      side?: "outset" | "inset" | ("outset" | "inset")[];
+      offset?: number;
+    }
+  | {
+      kind: "along";
+      at?:
+        | number
+        | "start"
+        | "middle"
+        | "end"
+        | "x-min"
+        | "x-max"
+        | "y-min"
+        | "y-max";
+      side?: PlaceSideIR | PlaceSideIR[];
+      orient?: "horizontal" | "sloped";
+      offset?: number;
+    }
+  | { kind: "start"; offset?: number }
+  | { kind: "end"; offset?: number }
+  | { kind: "interior" };
+
 // ---------------------------------------------------------------------------
 // Marks
 // ---------------------------------------------------------------------------
@@ -955,7 +1004,14 @@ export interface BridgeLambdaSentinel {
  */
 export interface LabelSpecIR {
   accessor: string | FieldAccessor;
-  position?: string;
+  /** A position string (`"outset-top"`), or a `Place` strategy. */
+  position?: string | PlaceIR;
+  /** Nodes a `Place` label keeps off. */
+  avoiding?: NodeSelectionIR;
+  /** An outline behind the glyphs. */
+  halo?: { color?: string; width?: number };
+  /** A filled box behind the text. */
+  background?: { fill?: string; padding?: number | [number, number] };
   fontSize?: number;
   color?: string;
   offset?: number;
