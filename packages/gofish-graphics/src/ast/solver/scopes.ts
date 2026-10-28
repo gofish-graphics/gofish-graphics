@@ -412,6 +412,12 @@ export class ScopeRegistry {
    * (`startPx`). PROVISIONAL: where the leftover goes may be revisited once real
    * use suggests a preference.
    *
+   * Only an axis with a data width binds. A one-value axis (a one-point
+   * chart, every mark at one `datum`) has no width for σ to scale: it takes
+   * the other axis's σ, so data-sized marks on it keep that scale, and its
+   * value stays at the middle of its box, as {@link solveScope} maps it.
+   * When both axes are one value, nothing binds and neither changes.
+   *
    * It lives on the registry, so every slope a render produces is
    * registry-sourced, and `GOFISH_DUMP_SCOPES` records the FINAL σ (a
    * `recenter` entry per axis). Returns the equalized axes; a no-op
@@ -428,18 +434,30 @@ export class ScopeRegistry {
       !sharesDeclaredMeasure(ax.space, ay.space)
     )
       return undefined;
-    const shared = Math.min(ax.sigma, ay.sigma); // binding axis wins
+    // Only an axis with a data width binds: a one-value axis (`isOneValue`)
+    // has no width for σ to scale, so any σ fits it.
+    const binding = [ax, ay].filter((a) => !isOneValue(a.space));
+    if (binding.length === 0) return undefined;
+    const shared = Math.min(...binding.map((a) => a.sigma)); // binding axis wins
     const equalize = (info: EqualMeasureAxis, axis: 0 | 1): EqualizedAxis => {
       const { claim, box, direction, space } = info;
       const leftover = Math.max(0, box - claim.width.run(shared));
-      // The leftover pixels before the content along the axis order.
-      const before = direction === 1 ? 0 : leftover;
+      // The leftover pixels before the content along the axis order: none
+      // when the order starts at the left or top, all of them when a y-up
+      // order starts at the bottom, and half of them on a one-value axis,
+      // whose value stays at the middle of its box (`solveScope`).
+      const before = isOneValue(space)
+        ? leftover / 2
+        : direction === 1
+          ? 0
+          : leftover;
       const filled =
         leftover === 0
           ? claim
-          : direction === 1
-            ? Extent(Monotonic.adds(claim.ascent, leftover), claim.descent)
-            : Extent(claim.ascent, Monotonic.adds(claim.descent, leftover));
+          : Extent(
+              Monotonic.adds(claim.ascent, leftover - before),
+              Monotonic.adds(claim.descent, before)
+            );
       if (DUMP_SCOPES)
         this.entries.push({
           kind: "recenter",

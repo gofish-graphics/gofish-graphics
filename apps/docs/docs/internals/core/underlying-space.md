@@ -1452,7 +1452,9 @@ leftover pixels after the content in screen terms, so the content sits at the
 box's top-left and the root still claims its size. The content sits past the
 leftover before it by its seat (`seatInScope`): its data 0 where the scope has
 one, else its box, which starts `startPx` from the scope's start edge. This
-placement is provisional.
+placement is provisional. Only an axis with a data width binds: a one-value
+axis (a one-point chart) has no width for σ to scale, so it takes the other
+axis's σ and keeps its value at the middle of its box.
 
 ### Nicing is a keyed-domain operation, applied on demand
 

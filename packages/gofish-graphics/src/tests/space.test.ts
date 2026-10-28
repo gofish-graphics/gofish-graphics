@@ -395,6 +395,43 @@ console.log("# space: equal measure seats the content at its box's top-left");
   );
 }
 
+console.log("# space: a one-value axis does not bind equal measure");
+{
+  // Points along x at one y, in one declared unit. y has no data width, so
+  // solveScope gives it σ = 0 and its value the middle of its box. Equal
+  // measure keeps x's σ, hands it to y, and keeps y's value at the middle.
+  const scopes = new ScopeRegistry();
+  const meta = { kind: "root" as const, rootKey: "t", axis: 1 as const };
+  const u = declared("plane");
+  const x = CONTINUOUS(interval(0, 10), "pinned", u);
+  const y = CONTINUOUS(interval(5, 5), "pinned", u);
+  // A circle of radius 3 at y = 5, measured from data 0.
+  const yClaim = Extent(M.linear(5, 3), M.linear(-5, 3));
+  const ySolved = scopes.solveScope(meta, y, yClaim, 200)!;
+  const [ex, ey] = scopes.equalizeMeasure("t", [
+    { space: x, claim: impliedExtent(x)!, box: 300, sigma: 30, direction: 1 },
+    { space: y, claim: yClaim, box: 200, sigma: ySolved.sigma, direction: -1 },
+  ])!;
+  ok(
+    "the axis with a data width keeps its σ, and the one-value axis takes it",
+    ySolved.sigma === 0 && ex.solution.sigma === 30 && ey.solution.sigma === 30,
+    `${ex.solution.sigma}, ${ey.solution.sigma}`
+  );
+  ok(
+    "the one value stays at the middle of its box",
+    Math.abs(pxOf({ sigma: 30, originPx: ey.solution.originPx! }, 5) - 100) <
+      1e-9,
+    String(ey.solution.originPx)
+  );
+  ok(
+    "two one-value axes leave both scopes as solved",
+    scopes.equalizeMeasure("t", [
+      { space: y, claim: yClaim, box: 300, sigma: 0, direction: 1 },
+      { space: y, claim: yClaim, box: 200, sigma: 0, direction: -1 },
+    ]) === undefined
+  );
+}
+
 console.log("# space: a scope solves σ from its claim, and the pixel of 0");
 {
   const scopes = new ScopeRegistry();
