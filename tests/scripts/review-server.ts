@@ -13,8 +13,7 @@ import { join } from "path";
 import { exec } from "child_process";
 import {
   collectReviewDiffs,
-  acceptStory,
-  removeBaselineStory,
+  applyEntries,
   formatDomDiff,
   escapeHtml,
   ROOT,
@@ -24,7 +23,7 @@ import { computePixelDiff, type PixelDiffResult } from "./pixel-diff.js";
 import {
   getSnapshotBranchName,
   pullSnapshots,
-  commitAndPushSnapshots,
+  commitToSnapshotBranch,
 } from "./snapshot-branch.js";
 
 const PORT = 3005;
@@ -187,11 +186,7 @@ function handleAccept(res: ServerResponse, path: string): void {
   const entry = findEntry(path);
   if (!entry) return respondError(res, 404, "Not found");
   try {
-    if (entry.kind === "removed") {
-      removeBaselineStory(path);
-    } else {
-      acceptStory(path);
-    }
+    applyEntries([entry]);
     entry.status = "accepted";
     respondJson(res, { ok: true });
   } catch (e) {
@@ -211,11 +206,7 @@ function handleAcceptAll(res: ServerResponse): void {
   for (const entry of diffs) {
     if (entry.status === "pending") {
       try {
-        if (entry.kind === "removed") {
-          removeBaselineStory(entry.path);
-        } else {
-          acceptStory(entry.path);
-        }
+        applyEntries([entry]);
         entry.status = "accepted";
       } catch (e) {
         errors.push(`${entry.path}: ${String(e)}`);
@@ -232,11 +223,15 @@ function handleCommitToBranch(res: ServerResponse): void {
     return;
   }
   try {
+    // Commit only the accepted stories, on top of the branch's baselines as
+    // origin has them now: replacing the whole tree with the local cache
+    // would record every baseline as changed on the branch.
     const snapBranch = getSnapshotBranchName();
-    commitAndPushSnapshots(
+    commitToSnapshotBranch(
       snapBranch,
-      join(ROOT, "__snapshots__"),
-      `Accept ${accepted.length} visual diff(s)`
+      `Accept ${accepted.length} visual diff(s)`,
+      (checkoutDir) => applyEntries(accepted, { baselineDir: checkoutDir }),
+      { retryOnMovedBranch: true }
     );
     respondJson(res, {
       ok: true,
