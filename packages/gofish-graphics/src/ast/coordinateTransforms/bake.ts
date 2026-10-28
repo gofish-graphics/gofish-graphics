@@ -152,6 +152,9 @@ const BAKE_BOUNDARY_TYPES = new Set([
   "axisSpan",
   "enclose",
   "box",
+  // Its shift is render-only (not a translate), so flattening through it
+  // would drop the shift: it lowers its child itself (`lowerChildrenOffset`).
+  "offset",
 ]);
 
 /** A node is *transparent* to the root bake (flattened through, contributing only

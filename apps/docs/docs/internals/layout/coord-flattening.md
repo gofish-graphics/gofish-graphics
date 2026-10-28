@@ -198,7 +198,10 @@ which the render entry maps over directly.
 children-flatten (the z-order resolution + transform composition) is factored into an
 exported `bakeChildren(node, translate, scale)`, which runs `bakeSubtree(child,
 translate, scale)` on each child in paint order. A compositor bakes each of its two
-operands with `bakeSubtree` alone. A pure translate-only boundary
+operands with `bakeSubtree` alone. Both flatten through every node that only places
+its children, so a node whose lowering does more is a boundary
+(`BAKE_BOUNDARY_TYPES`): an `offset`, whose pixel shift is no translate, lowers its
+child itself, or a `cut` slice's source would lose its shift. A pure translate-only boundary
 (`box`/`frame`) calls it on its _own_ subtree, seeded at the
 boundary's absolute translate, and lowers each returned entry at its baked absolute
 transform. This is stage 6d of [#39](https://github.com/gofish-graphics/gofish-graphics/issues/39):
