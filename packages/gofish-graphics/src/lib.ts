@@ -145,8 +145,8 @@ export type {
 } from "./ast/calendar";
 export type { LevelOption } from "./ast/axes/levels";
 // Cells (#1058): what `field(x).bin(partition)` maps each value to. A
-// partition is a Calendar value, `Bin.step(size)`, or
-// `Bin.thresholds(countOrEdges)`; a list of Calendar values is a product
+// partition is a Calendar value, `Bin.step(size)`,
+// `Bin.thresholds(countOrEdges)`, or `Bin.quantiles(countOrProbabilities)`; a list of Calendar values is a product
 // (`[Calendar.year, Calendar.month]`). A level that is a part of a larger
 // one (`Calendar.month`, the month of the year) gives parts of a cycle.
 export type {
@@ -255,6 +255,10 @@ export {
   mask,
 } from "./ast/marks/chart";
 export type { RelatableMark, DeriveOptions } from "./ast/marks/chart";
+// A data helper for derive: the grid rows of a density curve to rows at its
+// quantiles. A shortcut until first-class distributions (#980).
+export { quantileRows } from "./ast/quantileRows";
+export type { QuantileRowsOptions } from "./ast/quantileRows";
 export { compose } from "./ast/marks/compose";
 // Animation (JS-only, like the rest of the reactive layer: a sequence owns a
 // clock, which is a live signal and does not cross the Python bridge).

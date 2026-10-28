@@ -3000,7 +3000,7 @@ class FieldAccessor(dict):
 
     - DOMAIN ops (`sort`/`reverse`/`bin`/`drop_nulls`) apply to a `by`
       grouping key, e.g. `spread(by=field("site").sort("yield"))`.
-    - AGGREGATE ops (`sum`/`mean`/`count`/`distinct`) fold a value channel's
+    - AGGREGATE ops (`sum`/`mean`/`median`/`count`/`distinct`) fold a value channel's
       rows to a single value, e.g. `rect(h=field("price").mean())`.
     - `normalize()` is valid only on an operator's (`spread`/`stack`)
       entry-flagged `size` channel — `size=field("count").normalize()` turns
@@ -3057,9 +3057,11 @@ class FieldAccessor(dict):
           ``.bin([Calendar.year, Calendar.month])``, one cell where one cell
           of each level meet, each level a part of the one before it (the
           June of 2015, labeled "Jun 2015").
-        - cells of one width (``.bin(Bin.step(0.5))``), or
+        - cells of one width (``.bin(Bin.step(0.5))``),
           ``Bin.thresholds(...)``, a cell count or a list of edges
-          (``.bin(Bin.thresholds(20))``). About 10 cells when none is given.
+          (``.bin(Bin.thresholds(20))``), or ``Bin.quantiles(...)``, a cell
+          count or a list of probabilities (``.bin(Bin.quantiles(10))``).
+          About 10 cells when none is given.
 
         A second ``.bin(...)`` splits each cell of the first, a chain:
         ``.bin(Calendar.year).bin(Calendar.month)`` gives the months of each
@@ -3112,6 +3114,12 @@ class FieldAccessor(dict):
         """Fold the group's rows to the mean of this field. Valid only in a
         value (size/pos) slot."""
         return self._with_op({"op": "mean"})
+
+    def median(self) -> "FieldAccessor":
+        """Fold the group's rows to the median of this field (the type-7
+        quantile at 0.5: the mean of the two middle values when there is an
+        even number). Valid only in a value (size/pos) slot."""
+        return self._with_op({"op": "median"})
 
     def count(self) -> "FieldAccessor":
         """Fold the group's rows to the row count (ignores the field's own
@@ -3234,7 +3242,8 @@ def chunk(size: int) -> ChunkKey:
 def _check_bin(key: str, value: Any, where: str) -> Dict[str, Any]:
     """The cells a key is binned into, in their wire form, on the key that
     takes them: ``"field"`` for ``field(x).bin(...)``, which takes a Calendar
-    value, ``Bin.step`` and ``Bin.thresholds``, and ``"struct"`` for
+    value, ``Bin.step``, ``Bin.thresholds`` and ``Bin.quantiles``, and
+    ``"struct"`` for
     ``struct(x=..., y=...).bin(...)``, which takes ``Bin.hex`` and
     ``Bin.voronoi``. A kind of the other key is a TypeError naming the key
     that takes it. The kinds of each key are the ``Partition`` and
@@ -3253,7 +3262,7 @@ def _check_bin(key: str, value: Any, where: str) -> Dict[str, Any]:
                 f"{where}: Bin.{kind} bins two fields together into cells of "
                 f"the plane. Bin them with struct(x=..., y=...).bin(Bin.{kind}(...)); "
                 "field(x).bin takes Bin.step(size), Bin.thresholds(count_or_edges), "
-                "or a Calendar value."
+                "Bin.quantiles(count_or_probabilities), or a Calendar value."
             )
         raise TypeError(
             f"{where}: Bin.{kind} bins one field. Bin each field with "
@@ -3262,8 +3271,9 @@ def _check_bin(key: str, value: Any, where: str) -> Dict[str, Any]:
         )
     if kind not in _OPTION_TYPES[own][2]:
         expected = (
-            "a Calendar value (Calendar.month, ...), Bin.step(size), or "
-            "Bin.thresholds(count_or_edges)"
+            "a Calendar value (Calendar.month, ...), Bin.step(size), "
+            "Bin.thresholds(count_or_edges), or "
+            "Bin.quantiles(count_or_probabilities)"
             if key == "field"
             else "a call in the Bin family, Bin.hex(radius=...) or "
             "Bin.voronoi(seeds=...)"
@@ -3367,6 +3377,69 @@ def repeat(row: dict, field: str) -> List[dict]:
     """
     n = int(row[field])
     return [row] * n
+
+
+def quantile_rows(rows: List[dict], *, x: str, density: str, n: int) -> List[dict]:
+    """
+    ``n`` rows at the quantiles of the density that ``rows`` sample, one at
+    each probability ``(i + 0.5) / n``, so ``Bin.quantiles`` and
+    ``field(x).median()`` over them read the curve, not the grid. Mirrors JS
+    ``quantileRows``.
+
+    The rows are a grid of the curve, in any order. The density is taken to
+    be linear between grid points, integrated by the trapezoid rule, and each
+    quantile is read off the result by linear interpolation. Each row made
+    holds ``x`` and every other column whose value is the same in all rows
+    (a group's ``month``); columns that vary are dropped.
+
+    A shortcut until first-class distributions (#980) replace it.
+
+    Args:
+        rows: The grid rows, each a dict with ``x`` and ``density``.
+        x: The column of the grid's positions.
+        density: The column of the density, finite and 0 or more. It need
+            not integrate to 1.
+        n: How many rows to make, a whole number, 1 or more.
+    """
+    where = "quantile_rows(...)"
+    if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+        raise ValueError(f"{where}: n must be a whole number, 1 or more, got {n!r}.")
+    grid = []
+    for r in rows:
+        at, d = r.get(x), r.get(density)
+        if isinstance(at, bool) or not isinstance(at, (int, float)) or not math.isfinite(at):
+            raise ValueError(f'{where}: the column "{x}" must hold finite numbers, got {at!r}.')
+        if isinstance(d, bool) or not isinstance(d, (int, float)) or not math.isfinite(d) or d < 0:
+            raise ValueError(
+                f'{where}: the column "{density}" must hold finite numbers, 0 or more, got {d!r}.'
+            )
+        grid.append((float(at), float(d)))
+    grid.sort(key=lambda p: p[0])
+    cdf = [0.0]
+    for i in range(1, len(grid)):
+        cdf.append(cdf[-1] + (grid[i][0] - grid[i - 1][0]) * (grid[i][1] + grid[i - 1][1]) / 2)
+    total = cdf[-1]
+    if not total > 0:
+        raise ValueError(
+            f'{where}: the density "{density}" has no area over "{x}", so it has '
+            f"no quantiles. It needs two or more grid points with some density."
+        )
+    first = rows[0]
+    constant = {
+        k: v
+        for k, v in first.items()
+        if k not in (x, density) and all(k in r and r[k] == v for r in rows)
+    }
+    out = []
+    j = 0
+    for i in range(n):
+        target = (i + 0.5) / n * total
+        while cdf[j + 1] < target:
+            j += 1
+        span = cdf[j + 1] - cdf[j]
+        t = (target - cdf[j]) / span if span > 0 else 0.0
+        out.append({**constant, x: grid[j][0] + t * (grid[j + 1][0] - grid[j][0])})
+    return out
 
 
 # Mark factory functions
