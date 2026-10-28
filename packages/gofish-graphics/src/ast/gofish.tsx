@@ -848,7 +848,7 @@ export async function layout(
   // is not
   // fitted inside the canvas, and it overflows it. A label placed beside a
   // node takes room wherever the claim walk knows where the node lands
-  // (`placementIn`), bands of a category axis included (#493 piece 3:
+  // (`planPlacement`), bands of a category axis included (#493 piece 3:
   // `sharesRoom`), so the ink left is what the claim walk cannot place:
   // inside a coordinate space, under a node with a size of its own or one
   // that reads y the other way, a label centered on a run of several slots,

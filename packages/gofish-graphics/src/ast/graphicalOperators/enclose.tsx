@@ -44,7 +44,7 @@ import { targetOf } from "../constraints/relationalPaint";
 import { ringExtent } from "../geometry/box";
 import { RelateOperand } from "../constraints/relate";
 import { nodeSelectionOf } from "../nodeSelection";
-import { placementIn } from "../placementClaims";
+import { planPlacement } from "../solver/plan";
 import type { Placement } from "../constraints/claimPlacement";
 import { Extent } from "../extent";
 import * as Pwl from "../solver/pwl";
@@ -280,7 +280,7 @@ function paddedPlacement(
   const boxes: Placement[] = [];
   for (const m of members) {
     const target = m instanceof GoFishRef ? m.targetNode : undefined;
-    const p = target && placementIn(target, frame, axis);
+    const p = target && planPlacement(target, frame, axis);
     if (p === undefined) return undefined;
     boxes.push(p);
   }

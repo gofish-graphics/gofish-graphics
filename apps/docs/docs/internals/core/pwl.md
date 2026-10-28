@@ -138,13 +138,11 @@ cells.
 
 ## Numbers and values
 
-Some computations run both in numbers and in values. The chain fold (`chainFold` in
-`constraints/distribute.ts`) lays a stack's data extent in numbers and its claim in
-values. The placement solve (`constraints/placementSolver.ts`) places a layer's children
-in numbers at layout, and in values in the claim walk (`placeByClaims` in
-`constraints/claimPlacement.ts`), where each box it places is a function of σ that
-agrees with the number solve at every σ. Each is written
-once over an `Arith<T>` (`solver/arith.ts`), the operations it needs on `T`: `add`,
+Some computations run both in numbers and in values. The placement solve
+(`constraints/placementSolver.ts`) places a layer's children in numbers at layout, and
+in values in the claim walk (`placeByClaims` in `constraints/claimPlacement.ts`, which a
+layer's plan runs), where each box it places is a function of σ that agrees with the
+number solve at every σ. It is written once over an `Arith<T>` (`solver/arith.ts`), the operations it needs on `T`: `add`,
 `sub`, `scale`, `negate`, `abs`, `max` (the upper envelope) and `near`, a test that two
 amounts agree within a tolerance. There are two instances. `numbers` is plain
 arithmetic. `values` is this module, where `near` is `approxEqual`, so a cycle in the

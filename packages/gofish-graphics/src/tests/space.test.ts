@@ -30,7 +30,6 @@ import {
 import * as Pwl from "../ast/solver/pwl";
 import { interval } from "../util/interval";
 import {
-  distributeExtentFold,
   distributeSpaceFold,
 } from "../ast/constraints/distribute";
 import { nestedExtent, nestedSpace } from "../ast/constraints/nest";
@@ -38,7 +37,6 @@ import { positionNode } from "../ast/graphicalOperators/positionNode";
 import { value } from "../ast/data";
 import { declared } from "./testHelpers";
 import {
-  resolveLayerAxisExtent,
   resolveLayerBaseSpaces,
 } from "../ast/constraints/compose";
 
@@ -722,70 +720,7 @@ console.log("# space: one fold for every origin");
       "ordinal" &&
       distributeSpaceFold(freeTargets, ["a", "b"], chainOpts).kind === "ordinal"
   );
-  // Its room: a spread of magnitudes shares the enclosing scope's σ, so it
-  // claims its targets' claims chained with the spacing; a spread of frames
-  // (pinned panels) claims nothing (each panel roots its own scope).
-  const freeChain = distributeSpaceFold(freeTargets, ["a", "b"], chainOpts);
-  const freeClaim = distributeExtentFold(
-    freeTargets.map(impliedExtent),
-    freeTargets,
-    freeChain,
-    chainOpts
-  );
-  ok(
-    "a spread of magnitudes claims their chained claims plus spacing",
-    freeClaim !== undefined && Pwl.at(freeClaim.width, 2) === 4 * 2 + 3 * 2 + 10
-  );
-  // A fixed-pitch chain folds the parts' sides, not only their widths: a
-  // baseline row keeps its descent below its anchor, and a tall middle row
-  // binds even when it is neither first nor last. The parts' claims are in
-  // the chain's axis order, and the claim is measured from its origin, the
-  // first part's anchor.
-  const pitchedClaim = (
-    targets: CONTINUOUS_TYPE[],
-    anchor: "baseline" | "middle"
-  ) => {
-    const opts = { ...chainOpts, anchor, spacing: 30 };
-    return distributeExtentFold(
-      targets.map(impliedExtent),
-      targets,
-      distributeSpaceFold(targets, ["a", "b", "c"], opts),
-      opts
-    )!;
-  };
-  const pitched = (targets: CONTINUOUS_TYPE[], anchor: "baseline" | "middle") =>
-    Pwl.at(pitchedClaim(targets, anchor).width, 1);
-  // Rows at 0 and 30: [−10, 20] and [30, 35].
-  const baselineChain = pitchedClaim(
-    [CONTINUOUS(interval(-10, 20), "free"), CONTINUOUS(interval(0, 5), "free")],
-    "baseline"
-  );
-  ok(
-    "a baseline chain counts a row's descent below its anchor",
-    Pwl.at(baselineChain.width, 1) === 45 &&
-      Pwl.at(baselineChain.descent, 1) === 10 &&
-      Pwl.at(baselineChain.ascent, 1) === 35
-  );
-  ok(
-    "a middle chain's tallest row binds wherever it sits",
-    pitched(
-      [
-        CONTINUOUS(interval(0, 2), "free"),
-        CONTINUOUS(interval(0, 100), "free"),
-        CONTINUOUS(interval(0, 2), "free"),
-      ],
-      "middle"
-    ) === 100
-  );
-  ok(
-    "a spread of pinned frames claims nothing",
-    distributeExtentFold(
-      pinnedTargets.map(impliedExtent),
-      pinnedTargets,
-      distributeSpaceFold(pinnedTargets, ["a", "b"], chainOpts),
-      chainOpts
-    ) === undefined
-  );
+  // Its room is its layer's plan's (claimLayout.test.ts).
   // A stack lays out pinned and free parts alike.
   const mixed = distributeSpaceFold(
     [
@@ -831,7 +766,7 @@ console.log("# space: one fold for every origin");
   const [, withDatum] = resolveLayerBaseSpaces(
     [[UNDEFINED, CONTINUOUS(interval(-20, 40), "free")]],
     { y: interval(10, 15) }
-  ).spaces;
+  );
   ok(
     "a datum domain is unioned with a free child union",
     JSON.stringify(continuousInterval(withDatum)) ===
@@ -869,23 +804,6 @@ console.log("# space: one fold for every origin");
     "a spread's unit check skips an ordinal target's grouping field",
     stackOfGenre === null,
     stackOfGenre ?? ""
-  );
-  // transform.scale is a pixel operation on every claim.
-  const pinnedLayer = CONTINUOUS(interval(0, 10), "pinned");
-  ok(
-    "transform.scale scales a pinned claim",
-    Pwl.at(
-      resolveLayerAxisExtent(
-        [[undefined, impliedExtent(pinnedLayer)]],
-        [[UNDEFINED, pinnedLayer]],
-        1,
-        2,
-        undefined,
-        pinnedLayer,
-        pinnedLayer
-      )!.width,
-      1
-    ) === 20
   );
 }
 

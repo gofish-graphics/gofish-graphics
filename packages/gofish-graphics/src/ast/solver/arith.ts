@@ -5,10 +5,10 @@
 /**
  * The arithmetic a layout computation runs in: plain numbers (pixels at one
  * σ), or values in σ ({@link Pwl.Value}, a claim as a function of σ). The
- * chain fold (`chainFold` in constraints/distribute.ts) and the placement
- * solve (constraints/placementSolver.ts, constraints/differenceGraph.ts) are
- * written once over an `Arith`, so the claim walk and layout run the same
- * code: the claim walk in values, layout in numbers.
+ * placement solve (constraints/placementSolver.ts,
+ * constraints/differenceGraph.ts) is written once over an `Arith`, so the
+ * claim walk and layout run the same code: the claim walk in values, layout
+ * in numbers.
  */
 import * as Pwl from "./pwl";
 

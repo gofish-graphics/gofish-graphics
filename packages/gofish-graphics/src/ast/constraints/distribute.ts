@@ -12,7 +12,6 @@ import {
   type OrdinalKey,
   UNDEFINED,
   UnderlyingSpace,
-  originIs,
   joinAllUnits,
   isCONTINUOUS,
   mirrored,
@@ -20,15 +19,13 @@ import {
   magnitude,
   hasOrigin,
 } from "../underlyingSpace";
-import { Extent, impliedExtent } from "../extent";
 import { currentUnits } from "../measure";
 import {
   inCoordinateSpace,
   yDirection,
   type FramedNode,
 } from "../axisDirection";
-import * as Pwl from "../solver/pwl";
-import { numbers, values, type Arith } from "../solver/arith";
+import type { Arith } from "../solver/arith";
 import * as Interval from "../../util/interval";
 
 export interface DistributeOptions {
@@ -293,8 +290,8 @@ export type DistributeFoldOptions = {
  *  - non-glue (a spread) SEPARATES: the result is a sequence of separate
  *    spaces, ORDINAL(keys) when any target is keyed (anonymous for positional
  *    keys), else UNDEFINED, whatever its spacing or pitch. Each target keeps
- *    its own continuous space inside; the room the chain takes is its claim
- *    ({@link distributeExtentFold}), not a data extent.
+ *    its own continuous space inside; the room the chain takes is its
+ *    layer's claim (its plan, `solver/plan.ts`), not a data extent.
  *  - A stack whose parts are not all continuous with an origin is a spread.
  *
  * Measures unify as types (a clash is an error). `keys` are the targets'
@@ -378,7 +375,7 @@ export function distributeSpaceFold(
         );
       }
     });
-    const { ascent, descent } = chainFold(numbers, sides, STACK, 0, origin);
+    const { ascent, descent } = chainFold(sides, origin);
     return mirrored(
       CONTINUOUS(Interval.interval(-descent, ascent), "pinned", childMeasure),
       origin.mirrored
@@ -398,233 +395,40 @@ export function distributeSpaceFold(
  *  and a negative part reaches back. A pinned or origin-less part has no data
  *  baseline for placement, so its tail is its start and it lies above it as a
  *  box. */
-function tailSides(space: CONTINUOUS_TYPE): Sides<number> {
+function tailSides(space: CONTINUOUS_TYPE): Sides {
   const { min, max } = space.dataInterval;
   return space.origin === "free"
     ? { ascent: max, descent: -min }
     : { ascent: max - min, descent: 0 };
 }
 
-/** {@link tailSides} for a part's claim: a free part's claim is measured from
- *  its data 0, its tail; any other part is its box. */
-const tailClaim = (space: UnderlyingSpace, extent: Extent): Extent =>
-  originIs(space, "free") ? extent : Extent(extent.width);
-
 /** A part's reach on each side of a point on the chain: above it and below
- *  it. Numbers for a data extent, values in σ for a claim. */
-type Sides<T> = { ascent: T; descent: T };
-
-/** How a chain lays its parts: where each part sits about its chain point
- *  (its seat), and how far the next chain point is from this one (its step).
- *  Only the step differs between a stack and a spread. */
-type ChainRule = {
-  seat: <T>(A: Arith<T>, part: Sides<T>) => Sides<T>;
-  step: <T>(A: Arith<T>, part: Sides<T>, spacing: number) => T;
-};
-
-const box = <T>(A: Arith<T>, part: Sides<T>): T =>
-  A.add(part.ascent, part.descent);
-
-/** A stack lays each part's tail on the previous part's head, the tail moved
- *  by `ascent − descent` (its parts are {@link tailSides}). */
-const STACK: ChainRule = {
-  seat: (_A, part) => part,
-  step: (A, part) => A.add(part.ascent, A.scale(-1, part.descent)),
-};
-
-/** A spread chain (a non-glued distribute): `"edge"` lays each part's box
- *  `spacing` after the previous one's end; a fixed-pitch anchor lays each
- *  part's anchor `spacing` from the previous one's. The parts' claims are in
- *  the chain's axis order (`GoFishNode.resolveExtent` reads a part that
- *  reads y the other way reflected), so content above a baseline in a row
- *  that grows upward reaches back over the rows chained before it: a
- *  ridgeline. A baseline-anchored part keeps its signed sides about its
- *  baseline; any other part is its box, seated by its anchor. */
-const spreadRule = (anchor: AlignAnchor | "edge"): ChainRule => ({
-  seat: (A, part) => {
-    const w = box(A, part);
-    switch (anchor) {
-      case "baseline":
-        return part;
-      case "middle":
-        return { ascent: A.scale(0.5, w), descent: A.scale(0.5, w) };
-      case "end":
-        return { ascent: A.zero, descent: w };
-      default: // "start", "edge"
-        return { ascent: w, descent: A.zero };
-    }
-  },
-  step: (A, part, spacing) =>
-    anchor === "edge"
-      ? A.add(box(A, part), A.constant(spacing))
-      : A.constant(spacing),
-});
+ *  it. */
+type Sides = { ascent: number; descent: number };
 
 /**
- * The one chain fold behind a stack's type and claim and a spread's claim:
- * lay `parts` along the axis by `rule`, from a first chain point at 0, and
- * return the highest reach above `origin` and the lowest reach below it, over
- * every part's seat (and the 0 the chain starts at). `origin` is the point
- * `fraction` of the way from its part's chain point to the next one (a
- * stack's tail to head, {@link StackOrigin}); omitted, it is the chain's
- * start.
- *
- * It runs in numbers (a data extent) or in values in σ (a claim as a
- * function of σ, exact and invertible).
- *
- * With `reaches`, the chain is laid by every part but reaches only as far
- * as each part's entry, in the part's own frame (undefined: that part
- * reaches nothing): the plot of the chain (see
- * `GoFishNode.resolvePlotExtent`), where each part reaches as far as its
- * plot and a label it carries past it is dressing.
+ * The chain fold behind a stack's type: lay each part's tail on the previous
+ * part's head (the tail moved by `ascent − descent`, its parts are
+ * {@link tailSides}), from a first tail at 0, and return the highest reach
+ * above `origin` and the lowest reach below it, over every part (and the 0
+ * the chain starts at). `origin` is the point `fraction` of the way from its
+ * part's tail to its head ({@link StackOrigin}). (A claim is its layer's
+ * plan's, `solver/plan.ts`, which lays a chain by the placement solve.)
  */
-function chainFold<T>(
-  A: Arith<T>,
-  parts: Sides<T>[],
-  rule: ChainRule,
-  spacing: number,
-  origin: StackOrigin<number> = { part: 0, fraction: 0, mirrored: false },
-  reaches?: (Sides<T> | undefined)[]
-): Sides<T> {
-  const up: T[] = reaches === undefined ? [A.zero] : [];
-  const down: T[] = reaches === undefined ? [A.zero] : [];
-  let at = A.zero;
-  let zero = A.zero;
+function chainFold(parts: Sides[], origin: StackOrigin<number>): Sides {
+  const up = [0];
+  const down = [0];
+  let at = 0;
+  let zero = 0;
   parts.forEach((part, k) => {
-    const seat = rule.seat(A, part);
-    const step = rule.step(A, part, spacing);
-    const reach =
-      reaches === undefined ? seat : seatedReach(A, part, seat, reaches[k]);
-    if (reach !== undefined) {
-      up.push(A.add(at, reach.ascent));
-      down.push(A.add(reach.descent, A.scale(-1, at)));
-    }
-    if (k === origin.part) zero = A.add(at, A.scale(origin.fraction, step));
-    at = A.add(at, step);
+    const step = part.ascent - part.descent;
+    up.push(at + part.ascent);
+    down.push(part.descent - at);
+    if (k === origin.part) zero = at + origin.fraction * step;
+    at += step;
   });
-  if (up.length === 0) return { ascent: A.zero, descent: A.zero };
   return {
-    ascent: A.add(A.max(up), A.scale(-1, zero)),
-    descent: A.add(A.max(down), zero),
+    ascent: Math.max(...up) - zero,
+    descent: Math.max(...down) + zero,
   };
-}
-
-/** Where `reach`, in `part`'s own frame, sits about the part's chain point
- *  when the part sits there as `seat`: moved as the part's origin is. */
-function seatedReach<T>(
-  A: Arith<T>,
-  part: Sides<T>,
-  seat: Sides<T>,
-  reach: Sides<T> | undefined
-): Sides<T> | undefined {
-  if (reach === undefined) return undefined;
-  if (reach === part) return seat;
-  if (seat === part) return reach;
-  return {
-    ascent: A.add(seat.ascent, A.negate(part.ascent), reach.ascent),
-    descent: A.add(seat.descent, A.negate(part.descent), reach.descent),
-  };
-}
-
-/** {@link chainFold} over claims, as one Extent. */
-function chainClaim(
-  parts: Extent[],
-  rule: ChainRule,
-  spacing: number,
-  origin?: StackOrigin<number>,
-  reaches?: (Extent | undefined)[]
-): Extent {
-  const { ascent, descent } = chainFold(
-    values,
-    parts,
-    rule,
-    spacing,
-    origin,
-    reaches
-  );
-  return Extent(ascent, descent);
-}
-
-/**
- * The size claim of a {@link distributeSpaceFold} result `space`, given the
- * targets' claims. It composes the targets' claims the way the type fold
- * composes their data extents, so pixel overhead stays in the claim:
- *  - an explicit size claims what its type implies;
- *  - a glued stack lays its parts' claims end to end, and a spread chain of
- *    free targets lays their claims with the spacing or pitch added, both by
- *    the one chain fold ({@link chainFold}), so a parent can solve a
- *    scale factor via `Pwl.solve` (auto-fit). Its type is ordinal
- *    (the targets are separate spaces), but its room is still σ-dependent,
- *    so the claim is there for the enclosing scope to solve against.
- *
- * A spread chain claims only when every target is a magnitude: free, or
- * itself a spread of magnitudes (a claim with no continuous type, as in a
- * sunburst's nested rings). That distinction is inherent to the origin
- * states: a magnitude has no position of its own, so it can only be measured
- * in the enclosing scope, and a chain of them shares that scope's σ (bar
- * widths stay comparable). A pinned target carries its own data coordinates,
- * a frame (a facet panel), so a chain of them takes its slices and each panel
- * roots its own scope. An origin-less target is lined up by its middle, not
- * measured from a baseline. Any other result has no claim.
- */
-export function distributeExtentFold(
-  targetExtents: (Extent | undefined)[],
-  targetSpaces: UnderlyingSpace[],
-  space: UnderlyingSpace,
-  opts: DistributeFoldOptions,
-  // How far each part reaches, when that is not as far as the chain lays it
-  // (`chainFold`'s `reaches`), in the part's own frame: the whole part of a
-  // chain laid by its parts' plots, or, for the plot of a chain with a
-  // stand-in, the stand-ins only (undefined: that part reaches nothing).
-  reaches?: (Extent | undefined)[]
-): Extent | undefined {
-  const tails = () =>
-    targetExtents.map((e, i) => tailClaim(targetSpaces[i], e!));
-  // Each part's reach in its tail's frame: a part that is its box
-  // (`tailClaim`) has its origin `descent` above the box's start.
-  const tailReaches = (parts: Extent[]) =>
-    reaches?.map((r, i) => {
-      const whole = targetExtents[i]!;
-      if (r === whole) return parts[i];
-      if (r === undefined || parts[i] === whole) return r;
-      return Extent(
-        Pwl.add(whole.descent, r.ascent),
-        Pwl.add(r.descent, Pwl.negate(whole.descent))
-      );
-    });
-  if (isCONTINUOUS(space)) {
-    if (opts.size !== undefined && isValue(opts.size))
-      return impliedExtent(space);
-    const parts = tails();
-    return chainClaim(parts, STACK, 0, opts.origin, tailReaches(parts));
-  }
-  // A stack whose parts are not all continuous with an origin is a spread
-  // (see `distributeSpaceFold`), but its layout still lays each part's tail
-  // on the previous part's head, whatever its anchor
-  // (`distributePlacementAnchors`): bands with no size of their own, each a
-  // share (`GoFishNode.sharesRoom`), lie end to end.
-  if (
-    targetSpaces.length === 0 ||
-    !targetSpaces.every(
-      (s, i) =>
-        targetExtents[i] !== undefined &&
-        (originIs(s, "free") || !isCONTINUOUS(s))
-    )
-  )
-    return undefined;
-  // The chain's type has no data coordinates, so its claim is measured from
-  // its origin, where layout seats its first part's anchor: an edge chain
-  // starts there, and a pitched chain reaches past it on both sides (its
-  // plot is measured from there too).
-  if (opts.glue) {
-    const parts = tails();
-    return chainClaim(parts, STACK, 0, opts.origin, tailReaches(parts));
-  }
-  return chainClaim(
-    targetExtents as Extent[],
-    spreadRule(opts.anchor),
-    opts.spacing,
-    undefined,
-    reaches
-  );
 }

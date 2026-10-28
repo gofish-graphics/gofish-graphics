@@ -8,7 +8,8 @@ covers:
   - packages/gofish-graphics/src/ast/gofish.tsx
   - packages/gofish-graphics/src/ast/chromeGutters.ts
   - packages/gofish-graphics/src/ast/constraints/claimPlacement.ts
-  - packages/gofish-graphics/src/ast/placementClaims.ts
+  - packages/gofish-graphics/src/ast/solver/plan.ts
+  - packages/gofish-graphics/src/ast/solver/planCheck.ts
   - packages/gofish-graphics/src/ast/layoutWarnings.ts
   - packages/gofish-graphics/src/ast/_node.ts
   - packages/gofish-graphics/src/ast/axisDirection.ts
@@ -717,9 +718,9 @@ report their size).
   legend around what it wraps, and so does a scatter's around its marks.
 - **Placement claims.** A `ref` stand-in, or an operand nested in a child,
   stands where its node lands in the layer's frame. The claim walk knows
-  that (`placementIn` in `placementClaims.ts`): it takes the node's box and
+  that (`planPlacement` in `solver/plan.ts`): it takes the node's box and
   moves it by each ancestor's place in the next, where each layer places its
-  children by the same solve (`GoFishNode.claimWalk.childBoxes`). The step into the
+  children by its plan (`GoFishNode.claimWalk.plan`). The step into the
   node the two share reads only where that node seats its child (its origin,
   or a literal pin), since its own claim may be the one being computed. So a
   `.label()` text beside its bar, or a text in a spread beside a `ref`,
@@ -728,7 +729,8 @@ report their size).
   stand-in claims the hull of its solve, not the fold that starts its
   children at its origin. A region (a `partition` cell) places a child
   that fills across its datum span, as an interval does, and a child with
-  a size of its own in the middle of it, as layout does. A child with no
+  a size of its own in the middle of it, as layout does; either way the
+  cell is the room it takes (`ClaimPlacement.rooms`). A child with no
   claim (a filler) takes no room: the solve places it as a point, so what
   a relation ties to it stays placed, and the hull holds that point only
   where a datum position puts it. A child its own data places is not moved
@@ -737,7 +739,7 @@ report their size).
   members (`.relate()` operands, `ref(...)` children, or a `selectAll` in the
   chart form) is placed from its refs the same way
   (`GoFishNode.placedFromRefs`): its box is its members' boxes, each where
-  `placementIn` lands it in the layer that holds the outline, grown by the
+  `planPlacement` lands it in the layer that holds the outline, grown by the
   padding. So the outline takes room where it draws and never moves its
   members. The box is exact for `Shape.box()`, and a blob lies inside it; an
   oval can reach past it, and that reach is ink.
@@ -819,7 +821,7 @@ report their size).
   (`ClaimChild.plot`), which a chain lays it by as layout does
   (`localPlotSpan`), say that it places itself at a literal pixel and stays
   there (`placesItself`), or that it is a ring's chrome (`chrome`), which
-  a chain lays past its whole box; the plan in `solver/planShadow.ts` sets
+  a chain lays past its whole box; the plan in `solver/plan.ts` sets
   them (#1176 step 3). A node that wears chrome has its content's plot as its plot: its
   rings are never plot, so a grouped bar chart's inner row of category
   labels adds around the outer chart's plot, as its own axes do. A chart's
@@ -831,8 +833,8 @@ report their size).
 - **Dressing never moves the parts it dresses.** Labels are a layer applied
   after the spread: they take room in the chart, but do not change how the
   spread lays out its parts. A chain of parts of the plot lays them by their
-  plots, in its claim (`composePlanExtents` lays each dressed part's plot
-  claim, and the whole part only reaches) and in its layout (a chain edge
+  plots, in its claim (the plan lays each dressed part by its plot, and
+  the whole part only reaches) and in its layout (a chain edge
   reads each part's anchors off `GoFishNode.localPlotSpan`, which is a
   ring's box less its gutters, or the hull of a layer's children that are
   no dressing, in the node's own pixels; a chain that reads y the other way
@@ -846,9 +848,7 @@ report their size).
   part that is no part of the plot (dressing, ink, a ring's chrome, a
   stand-in) clears that part's whole box, so a ring still seats its title
   past its tick labels. The plot of a chain with a stand-in reaches only as
-  far as its stand-ins (`chainFold`'s `reaches`). An align counts the plot of a child it seats at its own
-  data or at its origin, and the whole of a child it places by its box
-  (`overlayClaim`). A child that reads y the other
+  far as its stand-ins. A child that reads y the other
   way has its plot read reflected within its box. The gutters of a chart
   are its claim past the plot claim of its content (`claims` in
   `chromeGutters.ts`), so a chart with a size of its own maps that plot into

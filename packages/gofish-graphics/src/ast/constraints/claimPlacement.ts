@@ -33,7 +33,7 @@ import type { ConstraintSpec } from ".";
  *
  * A `ref` stand-in, or an operand nested in a child, stands where its node
  * lands in this layer's frame, which the claim walk knows through the
- * layers between them (a placement claim, `placementIn`): a value label
+ * layers between them (a placement claim, `planPlacement`): a value label
  * beside its bar takes room where it draws, while the bar stays where its
  * own layout puts it. A band of a category axis is a share, which is a
  * claim too (`GoFishNode.sharesRoom`), so a label beside a band is placed
@@ -75,7 +75,7 @@ export type ClaimChild = {
   fromRefs: boolean;
   /** For a stand-in, where its target lands in the layer's frame, and for a
    *  node drawn from refs, where it lands, when the claim walk knows
-   *  (`placementIn`). */
+   *  (`planPlacement`). */
   placed?: Placement;
   /** It reads its place from refs and the claim walk does not know where
    *  it lands (`GoFishNode.inkOn`, or a node drawn from refs with no
@@ -116,6 +116,9 @@ export type ClaimPlacement = {
    *  (a child whose size or place depends on a share of the layer's room,
    *  or on a node only layout places, has none). Built when first read. */
   boxes: () => Map<number, BoxForm>;
+  /** The cell of each child a region's cell places with a size of its
+   *  own: the room it takes, which it sits in the middle of. */
+  rooms: Map<number, BoxForm>;
 };
 
 /** Whether `c` acts on `axis` (for a position, at a point or over a span). */
@@ -261,7 +264,7 @@ export function constrainedOn(
  * Where a layer's constraints place its children on `axis`, from their
  * claims, and the hull of the `candidates` (see the module comment).
  * `nested` is where an operand nested in a child lands in the layer's frame,
- * when the claim walk knows (`placementIn`).
+ * when the claim walk knows (`planPlacement`).
  */
 export function placeByClaims(
   axis: 0 | 1,
@@ -497,6 +500,9 @@ export function placeByClaims(
     axis === 0 ? [Pwl.ZERO, undefined] : [undefined, Pwl.ZERO],
     axis === 0 ? [apart, new Set()] : [new Set(), apart]
   )[axis].cells;
+  // The room a child in a region's cell takes: its cell, which a child with
+  // a size of its own sits in the middle of, and may overhang.
+  const rooms = new Map<number, BoxForm>();
   for (const [name, cell] of cells) {
     const i = indexOf.get(name);
     if (i === undefined) continue;
@@ -510,6 +516,8 @@ export function placeByClaims(
       ? Pwl.add(cell.min, Pwl.scale(0.5, values.sub(cell.size!, own)))
       : cell.min;
     at.set(i, [min, Pwl.add(min, size)]);
+    if (centered)
+      rooms.set(i, { lo: cell.min, hi: Pwl.add(cell.min, cell.size!) });
   }
   // A child the solve leaves unplaced sits at the layer's origin.
   for (const i of solved) if (!at.has(i)) at.set(i, boxOf(i));
@@ -539,11 +547,16 @@ export function placeByClaims(
         boxes.set(i, { lo: form(i, 0, 1), hi: form(i, 1, 1) });
     return boxes;
   };
-  if (hullOf.length === 0) return { ink, dressing, boxes: boxesOf };
+  if (hullOf.length === 0) return { ink, dressing, boxes: boxesOf, rooms };
+  const roomEdges = (is: number[], end: 0 | 1): Pwl.Value[] =>
+    is.flatMap((i) => {
+      const r = rooms.get(i);
+      return r === undefined ? [] : [end === 1 ? r.hi : Pwl.negate(r.lo)];
+    });
   const hullOver = (is: number[]): Extent =>
     Extent(
-      Pwl.envelope(is.map((i) => form(i, 1, 1))),
-      Pwl.envelope(is.map((i) => form(i, 0, -1)))
+      Pwl.envelope([...is.map((i) => form(i, 1, 1)), ...roomEdges(is, 1)]),
+      Pwl.envelope([...is.map((i) => form(i, 0, -1)), ...roomEdges(is, 0)])
     );
   const hull = hullOver(hullOf);
   const plotOf = hullOf.filter((i) => !dressing.has(i));
@@ -551,6 +564,7 @@ export function placeByClaims(
     ink,
     dressing,
     boxes: boxesOf,
+    rooms,
     hull,
     plot:
       plotOf.length === hullOf.length

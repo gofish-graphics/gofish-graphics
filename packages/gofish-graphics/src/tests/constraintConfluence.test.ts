@@ -37,7 +37,6 @@ import {
 } from "../ast/constraints/nestPlan";
 import {
   planConstraintComposition,
-  resolveLayerAxisExtent,
   resolveLayerBaseSpaces,
 } from "../ast/constraints/compose";
 import {
@@ -618,7 +617,7 @@ console.log("# constraint confluence: nest size dependency planning");
 
   // The child is placed by the datum position on y, so its own extent (in
   // its own unit, "child") stays out of the layer's y domain.
-  const { union, spaces: resolved } = resolveLayerBaseSpaces(
+  const resolved = resolveLayerBaseSpaces(
     [
       [
         CONTINUOUS(interval(0, 10), "free"),
@@ -631,26 +630,6 @@ console.log("# constraint confluence: nest size dependency planning");
   ok(
     "transform.scale leaves the free magnitude's data extent alone",
     originIs(resolved[0], "free") && dataWidth(resolved[0]) === 10
-  );
-  ok(
-    "transform.scale scales the free magnitude's claim",
-    Pwl.at(
-      resolveLayerAxisExtent(
-        [[Extent(Pwl.affine(10, 0)), undefined]],
-        [
-          [
-            CONTINUOUS(interval(0, 10), "free"),
-            CONTINUOUS(interval(5, 15), "pinned", declared("child")),
-          ],
-        ],
-        0,
-        3,
-        undefined,
-        union[0],
-        resolved[0]
-      )!.width,
-      1
-    ) === 30
   );
   const pinned = continuousInterval(resolved[1]);
   ok(

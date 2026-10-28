@@ -78,11 +78,8 @@ import {
 } from "./underlyingSpace";
 import { impliedExtents, Extent, padExtent } from "./extent";
 import * as Pwl from "./solver/pwl";
-import type {
-  BoxForm,
-  ClaimPlacement,
-  Placement,
-} from "./constraints/claimPlacement";
+import type { ClaimPlacement, Placement } from "./constraints/claimPlacement";
+import type { LayerPlan } from "./solver/plan";
 import { toJSON } from "../util/interval";
 import type { AxisScale } from "./domain";
 import { envFlag } from "../util";
@@ -221,18 +218,15 @@ type ClaimMemo = {
   /** Per axis, whether the node fills the room it is given
    *  ({@link GoFishNode.fillsRoom}); set with its claim. */
   fills?: [boolean, boolean];
-  /** A layer's {@link ClaimWalk.childBoxes}, per axis; `"busy"` while they
-   *  are computed (a ref inside the layer that reads the layer itself). */
-  childBoxes: [
-    Map<number, BoxForm> | "busy" | undefined,
-    Map<number, BoxForm> | "busy" | undefined,
-  ];
+  /** A layer's plan per axis ({@link ClaimWalk.plan}); set with its
+   *  claim. */
+  plans: [LayerPlan | undefined, LayerPlan | undefined];
 };
 
 const freshClaimMemo = (): ClaimMemo => ({
   carriesData: [undefined, undefined],
   sharesRoom: [undefined, undefined],
-  childBoxes: [undefined, undefined],
+  plans: [undefined, undefined],
 });
 
 /** What the claim walk reads of a layer (`GoFishNode.claimWalk`). */
@@ -243,10 +237,11 @@ export type ClaimWalk = {
   /** Per axis, the indices of its children that are dressing there
    *  (`placeByClaims`): they take room, but are no part of its plot. */
   dressing: [Set<number>, Set<number>];
-  /** Per axis, where the claim walk places each of its children in its
-   *  frame (`placeByClaims`), for a node deep inside it that a ref or a
-   *  label reads (`placementIn`). */
-  childBoxes: (axis: 0 | 1) => Map<number, BoxForm> | undefined;
+  /** Its plan on `axis` (`buildPlan`): where its constraints place each
+   *  of its children in its frame, and its claim, the envelope of them.
+   *  Undefined on a grid's track axis. A node deep inside it that a ref or
+   *  a label reads lands where the plans compose (`planPlacement`). */
+  plan: (axis: 0 | 1) => LayerPlan | undefined;
   /** Its constraints' operands, resolved. */
   operands: () => Map<
     string,
@@ -256,7 +251,7 @@ export type ClaimWalk = {
    *  (undefined for none: its parent places it). */
   literalStart: [number | undefined, number | undefined];
   /** How it seats its children, read by the placement walk through it
-   *  (`placementIn`): a child's index, its name as a direct operand, and per
+   *  (`planPlacement`): a child's index, its name as a direct operand, and per
    *  axis the constraints that act on it there, by child index. */
   seating: () => {
     indexOf: (child: GoFishAST) => number;
@@ -799,7 +794,7 @@ export class GoFishNode {
   /** Set on a node whose box is read off other nodes it holds as refs (an
    *  `enclose` around placed members): where it lands in `frame`'s frame on
    *  `axis`, when the claim walk knows where the refs' targets land there
-   *  (`placementIn`), else undefined. Known, it takes room in the layer it
+   *  (`planPlacement`), else undefined. Known, it takes room in the layer it
    *  sits in, as a label beside a ref does, and it is dressing there: no part
    *  of the plot. Unknown, it is ink, as {@link inkOn} is (see
    *  `placeByClaims`). */
@@ -1308,7 +1303,7 @@ export class GoFishNode {
 
   /** This node's own claim rule over `childExtents` in place of its
    *  children's claims, without the outline it adds: what it composes from
-   *  any form of its children. The plan (`solver/planShadow`) reads a
+   *  any form of its children. The plan (`solver/plan.ts`) reads a
    *  node's box this way, from its children's boxes. */
   public composeExtent(
     childExtents: Size<Extent | undefined>[]

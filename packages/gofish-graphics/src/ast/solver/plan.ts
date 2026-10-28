@@ -1,17 +1,14 @@
-// TEMPORARY (#1176 step 3c): the plan shadow check. The plan half
-// (`buildPlan`) is what step 3d promotes to the layer's claim; the check half
-// (`planShadowCheck`) is removed in step 3f, once layout seats children from
-// the plan (step 3e).
-//
-// Under GOFISH_PLAN_CHECK, each layer builds a plan in the claim walk beside
-// its claim: one solve in values in σ over every child, with the solver's own
-// fallbacks for whatever no constraint pins. Layout then compares the plan's
-// box for each child, at the σ it hands its children, with where it laid the
-// child, and logs each difference with the cause it falls under (the causes
-// are listed in the step 3 plan and in the 3c sweep notes).
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Overview — /internals/layout/passes
+// </gofish-wiki>
+
+// A layer's plan (#1176): one solve in values in σ over every child, by its
+// box, with the solver's own fallbacks for whatever no constraint pins. The
+// envelopes of the children where the solve places them are the layer's
+// claim, its box and its plot. A node deep inside a layer lands where the
+// plans of the layers between compose (`planPlacement`).
 
 import { GoFishNode } from "../_node";
-import { GoFishRef } from "../_ref";
 import type { GoFishAST } from "../_ast";
 import { Extent } from "../extent";
 import type { Size } from "../dims";
@@ -24,13 +21,6 @@ import {
   type Placement,
 } from "../constraints/claimPlacement";
 import type { ConstraintSpec } from "../constraints";
-import { envFlag } from "../../util";
-
-export const planCheckOn = (): boolean => envFlag("GOFISH_PLAN_CHECK");
-/** Whether a layer claims its plan's summary (`GOFISH_PLAN_CLAIM`, with
- *  the check on): a preview of step 3d's claims. */
-export const planClaimOn = (): boolean =>
-  planCheckOn() && envFlag("GOFISH_PLAN_CLAIM");
 
 /** What a child is to its parent's plan on one axis, about its data 0, in
  *  the parent's axis order. */
@@ -54,15 +44,17 @@ export type LayerPlan = {
   /** Each child's forms (undefined for a child with no claim). */
   forms: (ChildForms | undefined)[];
   /** The envelopes of the placed children: the layer's own forms, about
-   *  its data 0. `whole` is its summary (its claim in step 3d). */
+   *  its data 0. `whole` is its claim. Undefined when no child takes room
+   *  (they all fill the room the layer is given). */
   summary: ChildForms | undefined;
-  /** The claim the layer reports today, to compare with the summary. */
-  claim: Extent | undefined;
-  /** The plot claim the layer reports today, to compare with the plan's. */
-  plotClaim?: Extent;
 };
 
-const plans = new WeakMap<GoFishNode, [LayerPlan?, LayerPlan?]>();
+/** `c`'s plan on `axis`, when it is a layer that is no scope of its own
+ *  there (a size of its own is its claim). */
+const planOf = (c: GoFishAST, axis: 0 | 1): LayerPlan | undefined =>
+  c instanceof GoFishNode && c.claimWalk?.ownScope[axis] === false
+    ? c.claimWalk.plan(axis)
+    : undefined;
 
 const sub = (a: Pwl.Value, b: Pwl.Value): Pwl.Value =>
   Pwl.add(a, Pwl.negate(b));
@@ -126,9 +118,7 @@ const boxOf = (c: GoFishAST): Size<Extent | undefined> => {
   let box: Size<Extent | undefined>;
   if (c.claimWalk !== undefined)
     box = ([0, 1] as const).map((axis) => {
-      const rec = c.claimWalk!.ownScope[axis]
-        ? undefined
-        : plans.get(c)?.[axis]?.summary;
+      const rec = planOf(c, axis)?.summary;
       return rec === undefined
         ? bare(claim[axis])
         : shifted(rec.box, zeroOf(c, rec, axis));
@@ -178,8 +168,7 @@ const formsOf = (
 ): ChildForms => {
   let forms: ChildForms;
   const own = c instanceof GoFishNode && c.claimWalk?.ownScope[axis] === true;
-  const rec =
-    c instanceof GoFishNode && !own ? plans.get(c)?.[axis]?.summary : undefined;
+  const rec = planOf(c, axis)?.summary;
   if (c instanceof GoFishNode && rec !== undefined) {
     const zero = zeroOf(c, rec, axis);
     const o = Pwl.constant(c.claimedOverhang);
@@ -246,8 +235,7 @@ export function buildPlan(
   operands: Map<string, { child: number; direct: boolean }>,
   nested: (name: string) => Placement | undefined,
   ring: boolean,
-  scale: number,
-  claim: Extent | undefined
+  scale: number
 ): LayerPlan {
   const forms = children.map((c, i) =>
     c.extent === undefined
@@ -278,6 +266,14 @@ export function buildPlan(
     const f = forms[i];
     box[0].push(b.hi);
     box[1].push(Pwl.negate(b.lo));
+    // A child in a region's cell takes its cell as room.
+    const room = placement.rooms.get(i);
+    const roomOn = (to: [Pwl.Value[], Pwl.Value[]]) => {
+      if (room === undefined) return;
+      to[0].push(room.hi);
+      to[1].push(Pwl.negate(room.lo));
+    };
+    roomOn(box);
     // A child placed where its refs land (a stand-in, an enclose) is placed
     // by what it draws: all of it is its box.
     const preset = children[i].standIn || children[i].fromRefs;
@@ -291,6 +287,7 @@ export function buildPlan(
     const [wHi, wLo] = reach(f?.whole);
     whole[0].push(wHi);
     whole[1].push(wLo);
+    roomOn(whole);
     if (placement.dressing.has(i) || placement.ink.has(i) || (ring && i > 0))
       continue;
     // A child that is all dressing (a layer of outlines around refs) has no
@@ -299,6 +296,7 @@ export function buildPlan(
     const [pHi, pLo] = reach(f?.plot);
     plot[0].push(pHi);
     plot[1].push(pLo);
+    roomOn(plot);
   }
   const env = ([up, down]: [Pwl.Value[], Pwl.Value[]]) =>
     up.length === 0 ? undefined : Extent(Pwl.envelope(up), Pwl.envelope(down));
@@ -315,269 +313,7 @@ export function buildPlan(
             plot[0].length === 0 ? undefined : scaledExtent(env(plot)!, scale),
           zero: Pwl.ZERO,
         };
-  // A layer that claims today but whose plan places nothing: a child with
-  // no claim fills the room it is given, and whatever a relation ties to it
-  // lands where it does (cause 12 in the check).
-  if (planCheckOn() && summary === undefined && claim !== undefined)
-    console.log(
-      `[plan-nosummary] ${pathOf(node)} axis=${axis} unclaimed=` +
-        children
-          .flatMap((c, i) =>
-            c.extent === undefined && !c.standIn && !c.inkOn
-              ? [`${i}:${node.children[i].type}`]
-              : []
-          )
-          .join(",")
-    );
-  const plan: LayerPlan = { placement, forms, summary, claim };
-  const rec = plans.get(node) ?? [undefined, undefined];
-  rec[axis] = plan;
-  plans.set(node, rec);
-  return plan;
-}
-
-/** What a layer recorded about itself in the check, for its parent to read:
- *  the cause of its first difference, where layout put its plan's frame,
- *  and how far layout's data 0 of the layer sits from its plan's data 0
- *  (what a parent that seats it by its data 0 sees, cause 4). */
-type Record = {
-  cause?: string;
-  frame: number;
-  drift: number;
-};
-const records = new WeakMap<GoFishAST, [Record?, Record?]>();
-
-const TOL = 0.01;
-const near = (a: number, b: number) => Math.abs(a - b) <= TOL;
-const fmt = (x: number) => (Math.abs(x) < 1e-9 ? "0" : x.toFixed(2));
-
-/** A short path to `node`, for the log. */
-const pathOf = (node: GoFishAST): string => {
-  const parts: string[] = [];
-  for (let n: GoFishAST | undefined = node; n !== undefined; n = n.parent)
-    parts.push((n instanceof GoFishNode ? n.key : undefined) ?? n.type);
-  return parts.reverse().slice(-4).join(">");
-};
-
-/** Whether a layer in `c` (short of a node with a size of its own) has a
- *  claim today but no plan summary on `axis`: its plan places nothing, as
- *  a child with no claim fills its room (cause 12). */
-const unsummarized = (c: GoFishAST, axis: 0 | 1): boolean => {
-  if (!(c instanceof GoFishNode) || c.claimWalk?.ownScope[axis] === true)
-    return false;
-  const p = plans.get(c)?.[axis];
-  if (
-    p !== undefined &&
-    p.summary === undefined &&
-    p.claim !== undefined &&
-    p.forms.some(
-      (f, i) =>
-        f === undefined &&
-        !p.placement.ink.has(i) &&
-        !(c.children[i] instanceof GoFishRef)
-    )
-  )
-    return true;
-  return c.children.some((k) => unsummarized(k, axis));
-};
-
-/** Whether `c` holds a ref, or a node drawn from refs (an `enclose`, a
- *  `connect`), whose place the claim walk reads only as ink (cause 7). */
-const refsWithin = (c: GoFishAST): boolean =>
-  c instanceof GoFishRef ||
-  (c instanceof GoFishNode &&
-    (c.placedFromRefs !== undefined ||
-      c.type === "connect" ||
-      c.children.some(refsWithin)));
-
-/** Whether `c` has a size of its own on `axis`. */
-const sized = (c: GoFishAST, axis: 0 | 1): boolean =>
-  c instanceof GoFishNode && c.claimWalk?.ownScope[axis] === true;
-
-type Laid = {
-  dims: { min?: number; size?: number }[];
-  localAnchor?: (
-    axis: "x" | "y",
-    anchor: "min" | "baseline"
-  ) => number | undefined;
-};
-
-/**
- * Compare a layer's plan on `axis` with where layout laid its children.
- * `sigma` is the σ the layer hands its children and `origin` the pixel its
- * frame puts data 0 at. A seat is a child's data 0 (its baseline), which is
- * what layout will read off the plan (step 3e); a leaf is compared by its
- * box, as its claim is about its parent's origin. Logs one `[plan-check]`
- * line per difference, and one `[plan-summary]` line where the plan's
- * summary differs from the claim.
- */
-export function planShadowCheck(
-  node: GoFishNode,
-  axis: 0 | 1,
-  plan: LayerPlan,
-  laid: (Laid | undefined)[],
-  sigma: number | undefined,
-  origin: number | undefined,
-  layoutOnly: boolean
-): void {
-  const s = sigma !== undefined && Number.isFinite(sigma) ? sigma : 0;
-  const off = origin ?? 0;
-  const name = axis === 0 ? "x" : "y";
-  const rows: {
-    i: number;
-    dSeat: number;
-    dLo: number;
-    planSize: number;
-    laidSize: number;
-  }[] = [];
-  for (const [i, b] of plan.placement.boxes()) {
-    const lo = Pwl.at(b.lo, s);
-    const hi = Pwl.at(b.hi, s);
-    const cp = laid[i];
-    const d = cp?.dims[axis];
-    if (d?.min === undefined || d.size === undefined) continue;
-    if (!Number.isFinite(d.min) || !Number.isFinite(d.size)) continue;
-    const laidLo = Math.min(d.min, d.min + d.size) - off;
-    const laidHi = Math.max(d.min, d.min + d.size) - off;
-    const c = node.children[i];
-    const walk = c instanceof GoFishNode ? c.claimWalk : undefined;
-    const f = plan.forms[i];
-    const base = cp!.localAnchor?.(name, "baseline");
-    const min = cp!.localAnchor?.(name, "min");
-    // A child that reads y the other way has its data 0 that far from its
-    // far end in this layer's axis order.
-    const flip = axis === 1 && c.yFrame.direction !== node.yFrame.direction;
-    const dSeat =
-      walk !== undefined &&
-      f !== undefined &&
-      base !== undefined &&
-      min !== undefined
-        ? (flip ? laidHi - (base - min) : laidLo + (base - min)) -
-          (lo + Pwl.at(f.box.descent, s) + Pwl.at(f.zero, s))
-        : laidLo - lo;
-    rows.push({
-      i,
-      dSeat,
-      dLo: laidLo - lo,
-      planSize: hi - lo,
-      laidSize: laidHi - laidLo,
-    });
-  }
-  // The shift that moves the most children onto the plan: where layout
-  // puts the frame of the plan.
-  const votes = new Map<string, number>();
-  const driftOf = (i: number) =>
-    records.get(node.children[i])?.[axis]?.drift ?? 0;
-  for (const r of rows) {
-    const k = (r.dSeat - driftOf(r.i)).toFixed(2);
-    votes.set(k, (votes.get(k) ?? 0) + 1);
-  }
-  let frame = 0;
-  let best = -1;
-  for (const [k, n] of votes)
-    if (n > best || (n === best && Math.abs(+k) < Math.abs(frame))) {
-      best = n;
-      frame = +k;
-    }
-  const own: Record = { frame, drift: 0 };
-  const sum = plan.summary?.whole;
-  const claim = plan.claim;
-  if (sum !== undefined && claim !== undefined)
-    own.drift = Pwl.at(sum.descent, s) - Pwl.at(claim.descent, s) - frame;
-  const where = `${pathOf(node)} axis=${axis} σ=${sigma === undefined || !Number.isFinite(sigma) ? "?" : fmt(s)}`;
-  const found: { r: (typeof rows)[number]; cause: string }[] = [];
-  for (const r of rows) {
-    const c = node.children[r.i];
-    const sizeOff = r.laidSize - r.planSize;
-    const seatOff = r.dSeat - frame;
-    const boxOff = r.dLo - frame;
-    if (envFlag("GOFISH_PLAN_DEBUG"))
-      console.log(
-        `[plan-debug] ${where} child=${r.i}:${c.type} plan=[${fmt(r.dLo)}+${fmt(r.planSize)}] laid=${fmt(r.laidSize)} seat=${fmt(seatOff)} box=${fmt(boxOff)} dressing=${plan.placement.dressing.has(r.i)} fromRefs=${c instanceof GoFishNode && c.placedFromRefs !== undefined} sumBox=${plan.summary === undefined ? "-" : fmt(Pwl.at(plan.summary.box.width, s))}`
-      );
-    if (near(sizeOff, 0) && near(seatOff, 0) && near(boxOff, 0)) continue;
-    const childRec = records.get(c)?.[axis];
-    let cause: string;
-    if (
-      c instanceof GoFishRef ||
-      (c instanceof GoFishNode && c.placedFromRefs !== undefined)
-    )
-      cause = "7";
-    else if (layoutOnly) cause = "5";
-    else if (
-      near(sizeOff, 0) &&
-      childRec !== undefined &&
-      !near(childRec.drift, 0) &&
-      near(seatOff, childRec.drift)
-    )
-      cause = "4<inherited";
-    else if (c instanceof GoFishNode && !near(sizeOff, 0) && c.fillsRoom(axis))
-      cause = "6";
-    else if (sized(c, axis) && !near(sizeOff, 0)) cause = "2";
-    else if (sized(c, axis)) cause = "3";
-    else if (childRec?.cause !== undefined)
-      cause = `${childRec.cause.split("<")[0]}<inherited`;
-    else if (unsummarized(c, axis)) cause = "12";
-    else if (refsWithin(c)) cause = "7";
-    else if (near(sizeOff, 0) && near(boxOff, 0)) cause = "4";
-    else if (near(sizeOff, 0) && near(seatOff, 0)) cause = "3";
-    else cause = "8";
-    found.push({ r, cause });
-  }
-  // A child that differs only because a sibling it is placed against does
-  // takes the sibling's cause.
-  const sibling = found.find((f) => !f.cause.startsWith("8"))?.cause;
-  for (const f of found) {
-    if (f.cause === "8" && sibling !== undefined)
-      f.cause = `${sibling.split("<")[0]}<sibling`;
-    own.cause ??= f.cause;
-    const c = node.children[f.r.i];
-    const label = c instanceof GoFishNode ? (c.key ?? c.type) : c.type;
-    const fm = plan.forms[f.r.i];
-    const kids =
-      c instanceof GoFishNode ? c.children.map((k) => k.type).join(",") : "";
-    console.log(
-      `[plan-check] cause=${f.cause} ${where} child=${f.r.i}:${label} ` +
-        `seat=${fmt(f.r.dSeat - frame)} box=${fmt(f.r.dLo - frame)} ` +
-        `size=${fmt(f.r.laidSize - f.r.planSize)} ` +
-        `plan=${fmt(f.r.planSize)} laid=${fmt(f.r.laidSize)}` +
-        (fm === undefined
-          ? ""
-          : ` whole=${fmt(Pwl.at(fm.whole.width, s))} type=${c.type}[${kids}]`)
-    );
-  }
-  if (!near(frame, 0))
-    console.log(
-      `[plan-check] cause=4 ${where} frame=${fmt(frame)} children=${rows.length}`
-    );
-  // The summary the plan gives against the claim the layer reports today:
-  // what step 3d changes.
-  if (sum !== undefined && claim !== undefined) {
-    const dw = Pwl.at(sum.width, s) - Pwl.at(claim.width, s);
-    const dd = Pwl.at(sum.descent, s) - Pwl.at(claim.descent, s);
-    if (!near(dw, 0) || !near(dd, 0))
-      console.log(
-        `[plan-summary] ${where} width=${fmt(dw)} descent=${fmt(dd)} ` +
-          `claim=${fmt(Pwl.at(claim.width, s))} plan=${fmt(Pwl.at(sum.width, s))}`
-      );
-    const pc = plan.plotClaim;
-    const ps = plan.summary?.plot;
-    if (pc !== undefined && ps !== undefined) {
-      const pw = Pwl.at(ps.width, s) - Pwl.at(pc.width, s);
-      const pd = Pwl.at(ps.descent, s) - Pwl.at(pc.descent, s);
-      if (!near(pw, 0) || !near(pd, 0))
-        console.log(
-          `[plan-plot] ${where} width=${fmt(pw)} descent=${fmt(pd)} ` +
-            `claim=${fmt(Pwl.at(pc.width, s))} plan=${fmt(Pwl.at(ps.width, s))}`
-        );
-    }
-  } else if ((sum === undefined) !== (claim === undefined))
-    console.log(
-      `[plan-summary] ${where} only=${sum === undefined ? "claim" : "plan"}`
-    );
-  const rec = records.get(node) ?? [undefined, undefined];
-  rec[axis] = own;
-  records.set(node, rec);
+  return { placement, forms, summary };
 }
 
 /** Where `parent` seats `child`'s data 0 on `axis` without solving its own
@@ -669,8 +405,7 @@ export function planPlacement(
     while (n.parent !== shared) {
       const p = n.parent!;
       if (!composes(p, axis)) return undefined;
-      p.resolveExtent();
-      const plan = plans.get(p)?.[axis];
+      const plan = p.claimWalk!.plan(axis);
       const i = p.claimWalk!.seating().indexOf(n);
       const box = plan?.placement.boxes().get(i);
       const f = plan?.forms[i];

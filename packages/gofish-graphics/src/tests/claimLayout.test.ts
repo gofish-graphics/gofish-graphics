@@ -22,12 +22,23 @@ import { GoFishNode } from "../ast/_node";
 import { Rect } from "../ast/shapes/rect";
 import { layer } from "../ast/graphicalOperators/layer";
 import { Constraint } from "../ast/constraints";
-import { placementIn } from "../ast/placementClaims";
+import { planPlacement } from "../ast/solver/plan";
 import { check, items, report } from "./testHelpers";
 
 /** Every node of the tree under `node`, `node` included. */
 const close = (a: number | undefined, b: number, eps = 1e-6) =>
   a !== undefined && Math.abs(a - b) <= eps;
+
+/** The node under `n` that holds a chain (a `distribute`). */
+const chainOf = (n: GoFishNode): GoFishNode => {
+  const walk = (m: GoFishNode): GoFishNode[] => [
+    m,
+    ...m.children.flatMap((c) => (c instanceof GoFishNode ? walk(c) : [])),
+  ];
+  return walk(n).find((m) =>
+    m.constraints.some((c) => c.type === "distribute")
+  )!;
+};
 
 async function main() {
   console.log("\n# an over-full root draws what scales as if the fixed parts took no room");
@@ -112,7 +123,7 @@ async function main() {
       close(bNode.dims[0].center, 110),
       bNode.dims[0]
     );
-    const p = placementIn(mNode, data.child, 0);
+    const p = planPlacement(mNode, data.child, 0);
     check(
       "the claim walk places m where the layout does",
       p !== undefined && close(Pwl.at(p.lo, 1), 100) && close(Pwl.at(p.hi, 1), 120),
@@ -149,6 +160,63 @@ async function main() {
         [-Pwl.at(claim.descent, 1), Pwl.at(claim.ascent, 1), chain.dims[0].size]
       );
     }
+  }
+
+  console.log("\n# a spread claims its parts chained with the spacing");
+  {
+    // A spread of magnitudes shares the enclosing scope's σ: two bars of 4
+    // and 3 data units, 10 px apart, claim 7σ + 10.
+    const node = await chart(
+      [
+        { k: "a", v: 4 },
+        { k: "b", v: 3 },
+      ],
+      { axes: false }
+    )
+      .flow(spread({ by: "k", dir: "x", spacing: 10 }))
+      .mark(rect({ w: "v", h: 10 }))
+      .resolve();
+    const data = await runLayout({}, node);
+    const claim = chainOf(data.child).resolveExtent()[0]!;
+    check(
+      "the claim is 7σ + 10",
+      close(Pwl.at(claim.width, 2), 24) && close(Pwl.at(claim.width, 5), 45),
+      [Pwl.at(claim.width, 2), Pwl.at(claim.width, 5)]
+    );
+  }
+
+  console.log("\n# a pitched chain's tallest part binds wherever it sits");
+  {
+    // Parts 30 px apart by their middles: at σ = 1, a 100 px part in the
+    // middle reaches past both of its neighbors, so the claim is its 100 px.
+    const node = await chart(
+      [2, 100, 2].map((h, i) => ({ k: `${i}`, h })),
+      { axes: false }
+    )
+      .flow(spread({ by: "k", dir: "y", spacing: 30, anchor: "middle" }))
+      .mark(rect({ w: 10, h: "h" }))
+      .resolve();
+    const data = await runLayout({}, node);
+    const claim = chainOf(data.child).resolveExtent()[1]!;
+    check(
+      "the claim is the middle part's 100 px",
+      close(Pwl.at(claim.width, 1), 100),
+      Pwl.at(claim.width, 1)
+    );
+  }
+
+  console.log("\n# transform.scale scales a layer's claim");
+  {
+    const node = (layer as any)({ transform: { scale: { x: 2 } } }, [
+      (Rect as any)({ w: 10, h: 10 }),
+    ]);
+    const data = await runLayout({}, node);
+    const claim = data.child.resolveExtent()[0]!;
+    check(
+      "a 10 px rect scaled by 2 claims 20 px",
+      close(Pwl.at(claim.width, 1), 20),
+      Pwl.at(claim.width, 1)
+    );
   }
 
   console.log("\n# a sized chart's plot leaves out the nested label rows");
