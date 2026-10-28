@@ -49,7 +49,6 @@
     "markdown-it-container": "^4.0.0",
     "monaco-editor": "^0.52.2",
     "sandpack-vue3": "^3.1.12",
-    "spectral.js": "2.0.2",
     "vega": "^5.30.0",
     "vega-embed": "^6.26.0",
     "vega-lite": "^5.21.0",

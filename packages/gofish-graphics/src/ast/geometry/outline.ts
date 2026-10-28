@@ -68,7 +68,7 @@ export type OutlinePaint = Pick<Outline, "filled" | "width">;
 
 /** Whether a color draws ink: any color but `"none"` or `"transparent"`. A
  *  data-driven color, and no color at all (SVG fills black by default), do. */
-const inks = (color: unknown): boolean =>
+export const inks = (color: unknown): boolean =>
   color !== "none" && color !== "transparent";
 
 /**

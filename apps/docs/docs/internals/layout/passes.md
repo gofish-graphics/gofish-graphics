@@ -1248,7 +1248,11 @@ The display list is the **concatenation of every node's `DisplayItem[]` fragment
 Unlike the old `INTERNAL_render`, `INTERNAL_lower` does not pre-recurse children: a
 node reaching it is either a leaf or a **bake boundary** (`coord`, `box`, `connect`,
 `arrow`, `enclose`, the compositors) that re-walks its own subtree with its absolute
-transform composed in. A node with no `lower()` throws.
+transform composed in. A node with no `lower()` throws. Each lowering also records,
+as `paintedStyle`, the style of the first item the node painted itself (not a
+child's) that puts down paint (a fill or a stroke), before any paint-time animation.
+Every `layout()` clears it. A label lowers after its mark and reads it
+to pick its color (see [Labels](/internals/frontend/labels#auto-color)).
 
 **Nodes that draw nothing.** A node can take part in layout without contributing any
 pixels: it keeps its dims, its datum and its role as a `selectAll` anchor, and emits

@@ -166,7 +166,6 @@ const ALLOWED_BARE = new Set([
   "gofish-graphics",
   "lodash",
   "vega-datasets",
-  "spectral.js",
   "fast-kde",
   "solid-js",
 ]);

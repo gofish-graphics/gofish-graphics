@@ -2,7 +2,7 @@
 // @wiki Labels — /internals/frontend/labels
 // </gofish-wiki>
 
-import { autoLabelColorForFill } from "./autoLabelColor";
+import { autoLabelColorForStyle, type LabelBackdrop } from "./autoLabelColor";
 import { GoFishNode } from "../_node";
 import type { GoFishAST } from "../_ast";
 import { GoFishRef } from "../_ref";
@@ -20,8 +20,6 @@ import {
 import { avoidedRefs } from "../nodeRefs";
 import type { Place } from "../../families/place";
 import { wrapPreservingIdentity, wrapRing } from "../elaborationUtils";
-import { getValue, type MaybeValue } from "../data";
-import { resolveColorChannel } from "../../color";
 import { Frontend } from "gofish-ir";
 import {
   orientSide,
@@ -61,30 +59,6 @@ const CONTENT_NAME = "__labelContent";
 const LABEL_FONT_FAMILY = "source-sans-pro, sans-serif";
 
 /**
- * Resolve the fill color of a node to a CSS color string — the SAME resolution
- * the shape's own fill uses (`resolveColorChannel`), so a label contrasts
- * against the color actually drawn: a categorical swatch, a continuous gradient
- * `scaleFn(value)`, or a literal color. Falls back to a literal string value.
- */
-function resolveNodeFill(node: GoFishNode): string | null {
-  if (node.color == null) return null;
-
-  try {
-    const scaleContext = node.getRenderSession().scaleContext;
-    const resolved = resolveColorChannel(
-      node.color as MaybeValue<string>,
-      scaleContext?.unit
-    );
-    if (typeof resolved === "string") return resolved;
-  } catch {
-    // no session yet
-  }
-
-  const colorValue = getValue(node.color);
-  return typeof colorValue === "string" ? colorValue : null;
-}
-
-/**
  * Whether a placed label sits inside its mark: its center is inside one of
  * the mark's filled closed outlines. Inside an unfilled one, the page shows
  * through, so the label is read as outside. Both are read in the label layer's frame: the
@@ -115,16 +89,23 @@ function insideOutline(c: [number, number], o: Outline): boolean {
 }
 
 /**
- * The auto label color (see `autoLabelColorForFill`), picked when the label
- * is drawn: contrast against the mark's fill when the label sits inside its
- * mark's outline, and a darkened tint of the fill outside. Inside is read
- * from the outline, not the position, so a `"center"` label on a C-shaped
- * polygon, whose box center is outside the shape, is colored for the page.
+ * The auto label color (see `autoLabelColorForStyle`), picked when the label
+ * is drawn, from the style its mark painted and the paint the label draws
+ * behind its own glyphs. The mark lowers first: the label layer is a ring
+ * whose content, which holds the mark, paints before its labels, and nothing
+ * reorders a ring's children (the content's own z-order moves to the ring,
+ * see `wrapPreservingIdentity`). Inside is read from the outline, not the
+ * position, so a `"center"` label on a C-shaped polygon, whose box center is
+ * outside the shape, is colored for the page.
  */
 const autoLabelColor =
   (target: GoFishNode, stand: GoFishRef) =>
-  (label: GoFishNode): string =>
-    autoLabelColorForFill(resolveNodeFill(target), sitsInside(label, stand));
+  (label: GoFishNode, backdrop: LabelBackdrop): string =>
+    autoLabelColorForStyle(
+      target.paintedStyle,
+      sitsInside(label, stand),
+      backdrop
+    );
 
 /** Where a label goes on its target: a position string, a `Place`
  *  strategy, or `"outline"`, a default the chooser reads from the target's
