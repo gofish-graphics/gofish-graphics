@@ -69,7 +69,8 @@ const runGofish = async (): Promise<LayoutData> => {
 
 The chart builders do one thing between resolving a chart and handing it to
 `gofish()`: they install the build-in (`installBuildIn` in
-`src/animation/install.ts`, called from `resolveForRender`). It reads the
+`src/animation/install.ts`, called from `resolveForRender` and from a mark's or
+a combinator's render terminal alike, on the first render only). It reads the
 transitions off the resolved tree, checks each one's phases against the clock
 that plays it, solves the enter timing, and puts every animated mark on one
 clock for the chart. The timing depends on the tree's structure and data, not on

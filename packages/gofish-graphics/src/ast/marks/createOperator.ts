@@ -398,9 +398,9 @@ export function attachModifiers<T>(
   // resolves to a node as a root (`resolveMarkResult`), and plays its own
   // `.transition({ enter })` as a chart does (`installBuildIn`, which the
   // render options `playing` / `at` can hold). See terminals.ts.
-  attachBuilderTerminals(base, async (options) => {
+  attachBuilderTerminals(base, async (options, pass) => {
     const node = await resolveMarkResult(base as Mark<any>);
-    installBuildIn(node, options);
+    installBuildIn(node, options, pass);
     return { node, options };
   });
   return base;

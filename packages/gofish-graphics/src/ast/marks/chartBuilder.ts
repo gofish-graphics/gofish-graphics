@@ -1408,18 +1408,10 @@ async function resolveForRender(
 ) {
   const node = await this.resolve();
   // The build-in: marks with enter transitions enter once, on one clock for
-  // the whole chart, which the render options `playing` / `at` can hold (see
-  // `src/animation/install.ts`). A chart with none is untouched. It plays on
-  // the chart's first render only: a re-render (an input changed) draws the
-  // marks at rest, which is the build's final frame, and the render loop
-  // stops the first render's clock.
-  // DECLARED SHORTCUT: marks that genuinely enter or exit on a re-render just
-  // appear or vanish. The right fix is a keyed enter/update/exit join against
-  // the previous render (#914).
-  if (!pass?.rerender) {
-    const stop = installBuildIn(node, options);
-    if (stop !== undefined) pass?.onCleanup(stop);
-  }
+  // the whole chart, which the render options `playing` / `at` can hold. A
+  // chart with none is untouched. It plays on the chart's first render only
+  // (see `src/animation/install.ts`).
+  installBuildIn(node, options, pass);
   const meta = this.renderMeta();
   return {
     node,
