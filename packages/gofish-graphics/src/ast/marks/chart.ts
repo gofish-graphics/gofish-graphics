@@ -100,6 +100,7 @@ import {
 import { withWire } from "../wire";
 import { withKindValues } from "../strategyKind";
 import { datumOfInput } from "./markResult";
+import { withFlowStep } from "./compose";
 export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
 
@@ -582,27 +583,30 @@ function tagRelationalFusable(
 }
 
 /**
- * The paint channels of a relational mark (`fill`, `stroke`): the color
- * channels of its channel map, generated from its descriptor. They are the
- * keys the connector reads per group, so the only ones resolved.
+ * The channels a relational mark reads once per group: the color channels
+ * of its channel map (`fill`, `stroke`) and its raw ones (`enclose`'s
+ * `padding`), generated from its descriptor. They are the keys the connector
+ * reads per group, so the only ones resolved.
  */
-const paintChannelsOf = (type: string): Record<string, "color"> =>
+const groupChannelsOf = (type: string): Record<string, "color" | "raw"> =>
   Object.fromEntries(
     Object.entries(
       (MARK_CHANNELS as Record<string, Record<string, string>>)[type] ?? {}
-    ).filter(([, kind]) => kind === "color")
-  ) as Record<string, "color">;
+    ).filter(([, kind]) => kind === "color" || kind === "raw")
+  ) as Record<string, "color" | "raw">;
 
 /**
- * Resolve a connector's paint over the `group` it threads (its refs, an edge
- * row, or its operands' data): one color per connector, the way a mark's
- * color channel gives one color per mark.
+ * Resolve a connector's paint (and its other per-group channels) over the
+ * `group` it threads (its refs, an edge row, its operands' data, or a flow
+ * step's rows): one color per connector, the way a mark's color channel
+ * gives one color per mark.
  *
  * A field name is shorthand for an accessor (`"species"` is
  * `(d) => d.species`), so both read a value off each row of the group with
  * `projectByValues`, the projection `by` uses. One distinct value is the
- * connector's color, through the shared color scale (`colorValue`). Several
- * is a loud error, never a silent first-row pick (mirrors the
+ * connector's: a color channel's goes through the shared color scale
+ * (`colorValue`), a raw channel's (`enclose`'s `padding`) is used as it is.
+ * Several is a loud error, never a silent first-row pick (mirrors the
  * homogeneity-collapse error `resolveLabelText` throws for `.label(field)`).
  * None passes a string through unchanged (it names no field, so it is a
  * literal color) and drops an accessor (a group with no rows has nothing for
@@ -617,7 +621,7 @@ async function resolveGroupPaint<O extends Record<string, unknown>>(
   opts: O,
   group: unknown
 ): Promise<O> {
-  const paint = paintChannelsOf(type);
+  const paint = groupChannelsOf(type);
   const pending = resolveChannelAccessors(opts, paint, () =>
     rowsReached(group)
   );
@@ -640,12 +644,16 @@ async function resolveGroupPaint<O extends Record<string, unknown>>(
         `[gofish] ${type}({ ${key} }): ${what} is not constant across the ` +
           `connected group; make sure the flow this ${type} fuses over ` +
           `groups by that value (or one it agrees with) — or, over a refs ` +
-          `bag, add \`flow(group({ by }))\` — or pass an explicit color.`
+          `bag, add \`flow(group({ by }))\` — or pass an explicit ` +
+          `${paint[key] === "raw" ? "value" : "color"}.`
       );
     }
     resolved = {
       ...resolved,
-      [key]: colorValue(values[0], typeof raw === "string" ? raw : undefined),
+      [key]:
+        paint[key] === "raw"
+          ? values[0]
+          : colorValue(values[0], typeof raw === "string" ? raw : undefined),
     } as O;
   }
   return resolved;
@@ -694,6 +702,10 @@ export function createRelationalMark<O extends Record<string, unknown>>(
      *  `applyDefaultRelational` resolves `along` from the time tier and hands
      *  the clock down through `inferred.time`. */
     temporal?: boolean;
+    /** The mark is also a `.flow(...)` step (`enclose`): there, each
+     *  group's subtree is its one fresh child, as in the combinator form,
+     *  and its per-group channels are read off the group's rows. */
+    flowStep?: boolean;
   } = {}
 ) {
   function relational(
@@ -926,6 +938,29 @@ export function createRelationalMark<O extends Record<string, unknown>>(
     };
     const result = withWire(nameableMark(mark), { type, opts });
     tagRelationalFusable(result, type, opts, inferred, config.temporal);
+    if (config.flowStep) {
+      // Flow-step form: `.flow(..., enclose(opts), ...)`. The step wraps the
+      // node the rest of the flow builds for each group, so the outline is
+      // part of the layout the operator above it arranges.
+      const step: Operator<any, any> = async (inner) =>
+        (async (d: unknown[], key, layerContext) => {
+          const child = await resolveMarkResult(inner, layerContext, d, key);
+          const groupOpts = await resolveGroupPaint(type, opts, d);
+          const datum = datumOfInput(d);
+          return finish(
+            (await produce(
+              resolveLive(groupOpts, datum),
+              [child],
+              inferred,
+              undefined,
+              layerContext
+            )) as GoFishNode,
+            [child],
+            datum
+          );
+        }) as Mark<any>;
+      withFlowStep(result, withWire(step, { type, opts }));
+    }
     return result;
   }
   return relational;
@@ -1053,21 +1088,40 @@ export const ribbon = createRelationalMark<RibbonOptions>(
 /**
  * Draw an outline around nodes, under them: their padded bounding box
  * (`Shape.box()`, the default), the smallest ellipse around them
- * (`Shape.oval()`), or a smooth region (`Shape.blob()`, `Shape.hull()`,
- * `Shape.spine()`). The node is built in
- * `graphicalOperators/enclose.tsx`.
+ * (`Shape.oval()`), the padded members with arc corners (`Shape.arcs()`), or
+ * a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). The node
+ * is built in `graphicalOperators/enclose.tsx`.
  *
  * - `enclose(opts, children)`: around the children. Fresh children are laid
  *   out as `layer` lays them out; `ref(...)` children and `.relate()`
  *   operands are enclosed where they are.
  * - `chart(selectAll(name)).mark(enclose(opts))`: around the selected nodes,
  *   one outline per group when the flow groups them.
+ * - `chart(rows).flow(..., enclose(opts), ...)`: around each group's subtree,
+ *   laid out with it, so the operator above packs or places the outline.
  */
-export const enclose = createRelationalMark<EncloseOptions>(
+const encloseMark = createRelationalMark<EncloseOptions>(
   "enclose",
   (o, children, _inferred, _key, layerContext) =>
-    encloseNode(o as EncloseResolved, children, layerContext)
+    encloseNode(o as EncloseResolved, children, layerContext),
+  { flowStep: true }
 );
+export function enclose(
+  options: EncloseOptions | undefined,
+  children: GoFishAST[]
+): GoFishNode;
+/** The bag form in `.mark(...)`, the flow step in `.flow(...)`. */
+export function enclose(
+  options?: EncloseOptions
+): RelationalMark & Operator<any, any>;
+export function enclose(
+  options?: EncloseOptions,
+  children?: GoFishAST[]
+): GoFishNode | (RelationalMark & Operator<any, any>) {
+  return children === undefined
+    ? (encloseMark(options) as RelationalMark & Operator<any, any>)
+    : encloseMark(options, children);
+}
 
 /**
  * `blank()` — an invisible positioning guide. It takes part in layout, carries

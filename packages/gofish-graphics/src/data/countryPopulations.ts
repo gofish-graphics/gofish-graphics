@@ -1,9 +1,13 @@
-// Throwaway data for the #1221 bubble treemap proposal: countries grouped by
-// continent, then by region, with a rough 2023 population in millions. The
-// `uncertainty` column is made up: a per-region spread (in percent) that the
-// proposal uses to drive contour width, as the paper does with standard
-// deviation.
-export type Country = {
+/**
+ * Seventy countries grouped by continent, then by region, with a rough
+ * 2023 population in millions. Used by the bubble treemap stories (#1221).
+ *
+ * The `uncertainty` column is MADE UP for illustration: a per-region spread,
+ * in percent, standing in for the standard deviation the bubble treemap paper
+ * (Görtler et al., TVCG 2018) draws as contour distance. It is not a real
+ * measure of anything.
+ */
+export type CountryPopulation = {
   continent: string;
   region: string;
   country: string;
@@ -88,7 +92,7 @@ const rows: [string, string, string, number][] = [
   ["Americas", "South America", "Chile", 20],
 ];
 
-// A made-up spread per region, in percent of population.
+// A made-up spread per region, in percent of population (see above).
 const regionUncertainty: Record<string, number> = {
   "East Asia": 1,
   "South Asia": 4,
@@ -105,7 +109,7 @@ const regionUncertainty: Record<string, number> = {
   "South America": 4,
 };
 
-export const countries: Country[] = rows.map(
+export const countryPopulations: CountryPopulation[] = rows.map(
   ([continent, region, country, pop]) => ({
     continent,
     region,

@@ -6,17 +6,22 @@
  * `enclose`: an outline drawn around a set of nodes, under them. The outline
  * is a value of the `Shape` family (`families/shape.ts`): the padded bounding
  * box (`Shape.box()`, the default), the minimum-area enclosing ellipse
- * (`Shape.oval()`; `enclose/oval.ts`), or a smooth region
- * (`Shape.blob()` and its presets `Shape.hull()`, `Shape.spine()`; the
- * geometry is in `enclose/blob.ts`).
+ * (`Shape.oval()`; `enclose/oval.ts`), the padded members closed by a disc
+ * (`Shape.arcs()`; `enclose/arcs.ts`), or a smooth region (`Shape.blob()`
+ * and its presets `Shape.hull()`, `Shape.spine()`; `enclose/blob.ts`).
  *
  * It is a relational mark (`createRelationalMark`), so it has the forms
- * `line` and `ribbon` have:
+ * `line` and `ribbon` have, and one more:
  *  - combinator `enclose(opts, children)`: fresh children are laid out as
  *    `layer` lays them out, and `ref(...)` children (or `.relate()`
  *    operands) are enclosed where they already are;
  *  - bag `chart(selectAll(name)).mark(enclose(opts))`: the refs are the
- *    members, one outline per group when the flow groups them.
+ *    members, one outline per group when the flow groups them;
+ *  - flow step `.flow(..., enclose(opts), ...)`: each group's subtree is the
+ *    one fresh child, as in the combinator form.
+ *
+ * The node's geometry is its outline, so a parent that reads geometry
+ * (`pack`) lays out the outline, and an outer `enclose` hugs it.
  */
 import { GoFishNode, outlineOverhang, placeUnplacedChild } from "../_node";
 
@@ -40,9 +45,9 @@ import { avoidedRefs } from "../nodeRefs";
 import { blobOutline, type BlobMember, type Pt } from "./enclose/blob";
 import { membersOf } from "./enclose/members";
 import { ovalOutline } from "./enclose/oval";
-import { arcsOutline, ARCS_RADIUS } from "./enclose/arcs"; // PROTOTYPE #1221
+import { arcsOutline, ARCS_RADIUS } from "./enclose/arcs";
 import { targetOf } from "../constraints/relationalPaint";
-import { ringExtent } from "../geometry/box";
+import { boxOfDims, ringExtent } from "../geometry/box";
 import { RelateOperand } from "../constraints/relate";
 import { nodeSelectionOf } from "../nodeSelection";
 import { placementIn } from "../placementClaims";
@@ -50,14 +55,13 @@ import type { Placement } from "../constraints/claimPlacement";
 import { Extent } from "../extent";
 import * as Monotonic from "../../util/monotonic";
 import { ringPathData } from "../geometry/plane";
-// PROTOTYPE #1221
-import { packEnclose } from "d3-hierarchy";
-import { boxOfDims } from "../geometry/box";
 import { outlinePaint, ringOutline } from "../geometry/outline";
+import { packEnclose } from "d3-hierarchy";
 
 export type EncloseOptions = {
-  /** Pixels between the members and the outline. Default 2. */
-  padding?: number;
+  /** Pixels between the members and the outline, or a field name or
+   *  accessor read once per enclosed group (constant within it). Default 2. */
+  padding?: number | string | ((d: any) => number);
   /** The outline: a call in the Shape family. Default `Shape.box()`. */
   shape?: Shape;
   fill?: MaybeValue<string> | LiveValue;
@@ -104,6 +108,12 @@ function Enclose(
   avoided: GoFishRef[]
 ): GoFishNode {
   const padding = o.padding ?? 2;
+  if (typeof padding !== "number" || !Number.isFinite(padding) || padding < 0)
+    throw new Error(
+      `[gofish] enclose({ padding }): ${JSON.stringify(padding)} is not a ` +
+        `number of pixels at least 0. A field name must name a column of ` +
+        `the enclosed rows, whose value is such a number.`
+    );
   const { fill = "none", stroke = gray, strokeWidth = 1 } = o;
   const { strokeDasharray, opacity = 1, fillOpacity } = o;
   const memberCount = members.length;
@@ -166,7 +176,6 @@ function Enclose(
           });
         else if (shape.kind === "oval")
           loops = ovalOutline(geometry(0, memberCount), padding);
-        // PROTOTYPE #1221
         else if (shape.kind === "arcs")
           loops = arcsOutline(geometry(0, memberCount), {
             padding,
@@ -188,10 +197,10 @@ function Enclose(
           renderData: { loops, box: [minX, minY, maxX, maxY] },
         };
       },
-      // PROTOTYPE #1221: the outline is the node's geometry, so a `pack`
-      // that holds it packs the outline's own smallest circle (not its
-      // members'), and an outer `enclose` reads it as a ring (fill "none")
-      // or, filled, as its box (#1207).
+      // The outline is the node's geometry: a `pack` that holds it packs the
+      // outline's own smallest circle, stroke included (not its members'),
+      // and an outer `enclose` reads it as a ring (fill "none") or, filled,
+      // as its box (#1207). A box shape keeps the default, its box.
       geometry: ({ intrinsicDims, renderData }, _children, node) => {
         const box = boxOfDims(intrinsicDims, node.type);
         const loops = renderData?.loops as Pt[][] | undefined;

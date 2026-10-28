@@ -43,8 +43,7 @@ export type BlobShape = Omit<BlobIR, "avoiding"> & { avoiding?: Nodes };
 /** `oval()`: the minimum-area enclosing ellipse. See {@link oval}. */
 export type OvalShape = Extract<Frontend.ShapeIR, { kind: "oval" }>;
 
-/** `arcs()`: the padded members, closed by a disc. See {@link arcs}.
- *  PROTOTYPE #1221 */
+/** `arcs()`: the padded members, closed by a disc. See {@link arcs}. */
 export type ArcsShape = Extract<Frontend.ShapeIR, { kind: "arcs" }>;
 
 /** Every built-in outline: the value of `enclose`'s `shape`. */
@@ -84,7 +83,6 @@ export const oval = bareKind(
   })
 );
 
-// PROTOTYPE #1221
 /**
  * The members grown by `enclose`'s `padding`, with every gap a disc of
  * `radius` cannot reach into filled: the morphological closing of the padded

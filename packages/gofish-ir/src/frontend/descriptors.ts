@@ -885,9 +885,8 @@ export const STRATEGIES = {
         doc: "The smallest-area ellipse that holds every member grown by `padding`. It may be rotated: it follows the members, not the axes.",
         params: {},
       },
-      // PROTOTYPE #1221
       arcs: {
-        doc: "The members grown by `padding`, with every gap narrower than about 2 × `radius` filled and every concave corner a circular arc of `radius`: the morphological closing of the padded members by a disc of `radius`, with holes filled. Around circles it is made of circular arcs only, as in bubble treemaps.",
+        doc: "The members grown by `padding`, closed by a disc of `radius`: every gap the disc cannot pass through is filled, every concave corner is a circular arc of `radius`, and holes are always filled. Around circles it is made of circular arcs only, the contour of a bubble treemap (Görtler et al. 2018). Two discs of radius a with a gap g between their padded edges join only when 2·a·radius ≥ a·g + g²/4; otherwise they stay separate pieces.",
         params: {
           radius: {
             type: t.num({ min: 0, finite: true }),
@@ -1361,6 +1360,47 @@ const spreadBoxFields: FieldGroup = group({
   ),
 });
 
+/** The options of `enclose`, shared by its three forms: the flow step
+ *  (OPERATORS.enclose), the bag form (LEAF_MARKS.enclose) and the
+ *  combinator form (COMBINATOR_MARKS.enclose). */
+const ENCLOSE_FIELDS: FieldGroup = group({
+  padding: {
+    ...ch.raw(
+      "number",
+      "Pixels between the members and the outline: a number, or a field name or accessor read once per enclosed group (constant within the group). For a blob or arcs, the distance from each member's own outline (around a line's whole length)."
+    ),
+    default: 2,
+  },
+  shape: {
+    type: t.ref("Shape"),
+    doc: "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.arcs({radius}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset.",
+  },
+  fill: ch.color(
+    "Fill color of the outline, or a field name or accessor for a color scale (constant within the enclosed group)."
+  ),
+  stroke: ch.color(
+    "Stroke color of the outline, or a field name or accessor for a color scale (constant within the enclosed group). Default a light gray."
+  ),
+  strokeWidth: {
+    type: t.number,
+    default: 1,
+    doc: "Stroke width in pixels.",
+  },
+  strokeDasharray: {
+    type: t.string,
+    doc: 'Raw SVG stroke-dasharray (e.g. "4 2") for a dashed outline.',
+  },
+  opacity: {
+    type: t.number,
+    default: 1,
+    doc: "Opacity of the whole outline, fill and stroke, 0 to 1.",
+  },
+  fillOpacity: {
+    type: t.number,
+    doc: "Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`, so a tinted region can keep a full-strength outline.",
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Operators (all 9) — grounded in schema.ts interfaces + validate.ts's
 // per-type checks + the fluent factories in graphicalOperators/ and marks/chart.ts.
@@ -1665,7 +1705,17 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       by: splitBy(
         "Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
       ),
+      spacing: {
+        type: t.num({ min: 0, finite: true }),
+        default: 0,
+        doc: "Gap between sibling circles, in pixels: each child's enclosing circle is packed as if its radius were `spacing / 2` larger.",
+      },
     },
+  }),
+
+  enclose: operator("enclose", {
+    doc: "Flow-step form of `enclose`: draw an outline around each group's subtree, as the combinator form draws it around its children. The outline is part of the layout, so the operator above packs or places the outlined group, and an outer `enclose` hugs this outline. The paint and `padding` are read once per group. In `.mark(...)` position, `enclose(opts)` is the bag form (LEAF_MARKS.enclose) instead.",
+    fields: ENCLOSE_FIELDS,
   }),
 
   partition: operator("partition", {
@@ -2059,42 +2109,8 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   enclose: leafMark("enclose", {
-    doc: "Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.oval()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs.",
-    fields: {
-      padding: {
-        type: t.number,
-        default: 2,
-        doc: "Pixels between the members and the outline. For a blob, the distance from each member's own outline (around a line's whole length).",
-      },
-      shape: {
-        type: t.ref("Shape"),
-        doc: "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset.",
-      },
-      fill: ch.color(
-        "Fill color of the outline, or a field name or accessor for a color scale (constant within the enclosed group)."
-      ),
-      stroke: ch.color(
-        "Stroke color of the outline, or a field name or accessor for a color scale (constant within the enclosed group). Default a light gray."
-      ),
-      strokeWidth: {
-        type: t.number,
-        default: 1,
-        doc: "Stroke width in pixels.",
-      },
-      strokeDasharray: {
-        type: t.string,
-        doc: 'Raw SVG stroke-dasharray (e.g. "4 2") for a dashed outline.',
-      },
-      opacity: {
-        type: t.number,
-        default: 1,
-        doc: "Opacity of the whole outline, fill and stroke, 0 to 1.",
-      },
-      fillOpacity: {
-        type: t.number,
-        doc: "Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`, so a tinted region can keep a full-strength outline.",
-      },
-    },
+    doc: "Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.oval()`), the padded members with arc corners (`Shape.arcs()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs. Flow-step form `.flow(..., enclose(opts), ...)`: an outline around each group's subtree, laid out with it (OPERATORS.enclose).",
+    fields: ENCLOSE_FIELDS,
   }),
 
   "mark-fn": leafMark("mark-fn", {

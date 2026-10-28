@@ -8,9 +8,7 @@ import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
 import { Size, displayTranslate } from "../dims";
-// PROTOTYPE #1221
 import { bakeChildren } from "../coordinateTransforms/bake";
-import { translateOutline } from "../geometry";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import {
   createOperator,
@@ -19,12 +17,12 @@ import {
 } from "../marks/createOperator";
 import type { MarkChild } from "../types";
 import { SplitBy, splitEntries } from "../datumProjection";
-import { boxOfDims, enclosingCircle } from "../geometry";
+import { boxOfDims, enclosingCircle, translateOutline } from "../geometry";
 
 type PackProps = {
   key?: string;
-  // PROTOTYPE #1221 (#973): pixels between sibling circles.
-  padding?: number;
+  /** Pixels between sibling circles. Default 0. */
+  spacing?: number;
 };
 
 /**
@@ -35,13 +33,18 @@ type PackProps = {
  * geometry, runs d3, and `place()`s each child. The children keep the pixel
  * size they lay out at, and the pack's size follows from them. It packs each
  * child's enclosing circle with d3's front-chain algorithm (`packSiblings`,
- * Wang et al. 2006). There is one packing strategy, so there is no option to
- * choose one (#1013); a gap between circles is #973.
+ * Wang et al. 2006), each grown by `spacing / 2`, so neighbors keep `spacing`
+ * pixels apart. There is one packing strategy, so there is no option to
+ * choose one (#1013).
+ *
+ * Its outline is its children's outlines, so an `enclose` around a pack hugs
+ * what it packed, not the pack's box. A group's outline in general is #974;
+ * only pack answers it so far.
  */
 export const Pack = createNodeOperator(
   (opts: PackProps, children: GoFishAST[]) => {
     const { key } = opts;
-    const pad = (opts.padding ?? 0) / 2; // PROTOTYPE #1221 (#973)
+    const pad = (opts.spacing ?? 0) / 2;
     return new GoFishNode(
       {
         type: "pack",
@@ -104,8 +107,8 @@ export const Pack = createNodeOperator(
               cy: box.min[1] + R,
               r: R,
             }),
-            // PROTOTYPE #1221: a pack's outline is its children's outlines
-            // (so an `enclose` over a pack hugs its circles, not its box).
+            // Its children's outlines, each moved by the child's translate
+            // into the pack's frame.
             outline: (tolerance: number) =>
               _children.flatMap((child) => {
                 const t: [number, number] = [
@@ -119,8 +122,8 @@ export const Pack = createNodeOperator(
               }),
           };
         },
-        // PROTOTYPE #1221: a pack under a bake boundary (an `enclose` that
-        // holds it as a fresh child) lowers its children as `layer` does.
+        // Under a bake boundary (an `enclose` that holds the pack as a fresh
+        // child), the pack lowers its children as `layer` does.
         lower: ({ transform, coordinateTransform }, _c, node) =>
           bakeChildren(node, displayTranslate(transform)).flatMap((d) =>
             d.node.INTERNAL_lower(coordinateTransform, d.transform)
@@ -132,8 +135,8 @@ export const Pack = createNodeOperator(
 );
 
 export type PackOptions = {
-  /** PROTOTYPE #1221 (#973): pixels between sibling circles. */
-  padding?: number;
+  /** Pixels between sibling circles. Default 0. */
+  spacing?: number;
   /** Field to partition rows by (like `spread`/`scatter`); also accepts a
    *  `field(...)` accessor. Without `by`, one child per row. */
   by?: SplitBy;

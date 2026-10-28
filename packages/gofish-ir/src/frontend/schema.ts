@@ -186,6 +186,7 @@ export type OperatorIR =
   | LogOperator
   | TreemapOperator
   | PackOperator
+  | EncloseOperator
   | PartitionOperator;
 
 /**
@@ -514,6 +515,33 @@ export interface PackOperator
   label?: LabelIR;
   /** Field to partition rows by. Without `by`, one child per row. */
   by?: string | FieldAccessor | ChunkKeyIR;
+  /** Gap between sibling circles, in pixels. Default 0. */
+  spacing?: number;
+}
+
+/**
+ * `enclose({...})` as a `.flow()` step: an outline around each group's
+ * subtree, laid out with it. The same options as the `enclose` mark
+ * (`LeafMarkType`'s `"enclose"`, its bag form, and `CombinatorMarkType`'s
+ * `"enclose"`); its place in the chart (`operators` or `mark`) tells the
+ * forms apart. Mirrors JS's `EncloseOptions`
+ * (`graphicalOperators/enclose.tsx`).
+ */
+export interface EncloseOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
+  type: "enclose";
+  /** Pixels between the subtree and the outline, or a field read once per
+   *  group. Default 2. */
+  padding?: ChannelValue;
+  shape?: ShapeIR;
+  fill?: ChannelValue;
+  stroke?: ChannelValue;
+  strokeWidth?: number;
+  strokeDasharray?: string;
+  opacity?: number;
+  fillOpacity?: number;
 }
 
 /**
@@ -637,7 +665,6 @@ export type NodeSelectionIR = RefMarkIR[] | (SelectRefIR & { mode: "all" });
 export type ShapeIR =
   | { kind: "box"; rx?: number; ry?: number }
   | { kind: "oval" }
-  // PROTOTYPE #1221
   | { kind: "arcs"; radius?: number }
   | {
       kind: "blob";
@@ -1134,6 +1161,7 @@ export const OPERATOR_TYPES = [
   "log",
   "treemap",
   "pack",
+  "enclose",
   "partition",
 ] as const;
 

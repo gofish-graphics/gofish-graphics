@@ -1,15 +1,35 @@
 import type { Mark, Operator } from "../types";
 
 const COMPOSED_OPERATORS = Symbol("gofish.composedOperators");
+const FLOW_STEP = Symbol("gofish.flowStep");
 
 type ComposedOperator = Operator<any, any> & {
   [COMPOSED_OPERATORS]: readonly Operator<any, any>[];
 };
 
-/** @internal Expands a fragment at the ChartBuilder boundary for serialization. */
+/**
+ * @internal Give `value`, a mark, the operator it is when it stands in a
+ * `.flow(...)` (or `compose(...)`) instead of a mark position. `enclose(opts)`
+ * is the one such value: a bag-form mark in `.mark(...)`, and a step that
+ * wraps each group's subtree in `.flow(...)`. Returns `value`.
+ */
+export function withFlowStep<V extends object>(
+  value: V,
+  step: Operator<any, any>
+): V {
+  Object.defineProperty(value, FLOW_STEP, { value: step });
+  return value;
+}
+
+/** @internal The operators a `.flow(...)` argument stands for: a fragment's
+ *  own operators, a value's flow step ({@link withFlowStep}), or the
+ *  operator itself. Read at the ChartBuilder boundary, so the IR carries
+ *  them. */
 export function expandComposedOperator(
   operator: Operator<any, any>
 ): readonly Operator<any, any>[] {
+  const step = (operator as { [FLOW_STEP]?: Operator<any, any> })[FLOW_STEP];
+  if (step !== undefined) return [step];
   return (
     (operator as Partial<ComposedOperator>)[COMPOSED_OPERATORS] ?? [operator]
   );
@@ -60,6 +80,8 @@ export function compose<T1, T2, T3, T4, T5, T6, T7, T8>(
   op6: Operator<T6, T7>,
   op7: Operator<T7, T8>
 ): Operator<T1, T8>;
+/** A list of steps of any length (`compose(...steps)`), untyped between them. */
+export function compose(...operators: Operator<any, any>[]): Operator<any, any>;
 export function compose(
   ...operators: Operator<any, any>[]
 ): Operator<any, any> {

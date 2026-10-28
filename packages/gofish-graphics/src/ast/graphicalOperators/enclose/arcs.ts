@@ -2,15 +2,17 @@
 // @wiki Enclose and the Shape Family — /internals/frontend/enclose
 // </gofish-wiki>
 
-// PROTOTYPE #1221
 /**
  * The outline of `Shape.arcs({ radius })`: pure geometry, no GoFish nodes.
  *
  * The region is the morphological closing, by a disc of `radius`, of the
  * union of the members each grown by `padding`, with its holes filled (the
- * bubble treemap contour of Görtler et al., TVCG 2018). Gaps narrower than
- * 2 × radius fill, each concave corner becomes a circular arc of `radius`,
- * and the convex parts are the padded members' own boundaries.
+ * bubble treemap contour of Görtler et al., TVCG 2018). Every gap the disc
+ * cannot pass through fills, each concave corner becomes a circular arc of
+ * `radius`, and the convex parts are the padded members' own boundaries.
+ * Between flat members that is a gap narrower than 2 × radius; two padded
+ * discs of radius a with a gap g between them join only when
+ * 2·a·radius ≥ a·g + g²/4, and otherwise stay separate pieces.
  *
  * The construction is exact up to sampling:
  *  1. Grow every member by padding + radius. Each grown member is convex and
@@ -424,8 +426,9 @@ export type ArcsOutlineOptions = {
 
 /**
  * The outline of `Shape.arcs()` around `members`: its closed loops, in the
- * members' frame, all winding one way (it has no holes). A gap wider than
- * 2 × radius leaves the pieces apart, one loop each. No members, no outline.
+ * members' frame, all winding one way (it has no holes). A gap the closing
+ * disc passes through leaves the pieces apart, one loop each. No members, no
+ * outline.
  */
 export function arcsOutline(
   members: BlobMember[],
@@ -450,8 +453,8 @@ export function arcsOutline(
       const [lo, hi] = range(e);
       const cuts = [lo, hi];
       const eb = edgeBB[i][ei];
-      const near = others.filter((j) => overlaps(eb, prims[j].bb));
-      for (const j of near)
+      const touching = others.filter((j) => overlaps(eb, prims[j].bb));
+      for (const j of touching)
         prims[j].edges.forEach((f, fi) => {
           if (overlaps(eb, edgeBB[j][fi])) crossings(e, f, cuts);
         });
@@ -468,7 +471,7 @@ export function arcsOutline(
         if (s1 - s0 < 1e-12) continue;
         const [mx, my] = at(e, (s0 + s1) / 2);
         if (lastCover >= 0 && covers(lastCover, mx, my)) continue;
-        lastCover = near.find((j) => covers(j, mx, my)) ?? -1;
+        lastCover = touching.find((j) => covers(j, mx, my)) ?? -1;
         if (lastCover >= 0) continue;
         const last = pieces.at(-1);
         if (last && last.e === e && Math.abs(last.s1 - s0) < 1e-12)
