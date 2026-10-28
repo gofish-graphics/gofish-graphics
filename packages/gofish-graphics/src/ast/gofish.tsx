@@ -554,6 +554,8 @@ export async function layout(
   // as every node does with the slot its parent gives it. Every chrome
   // shape claims its size, so the root's claim already holds its chrome
   // (`placeByClaims`), and the layout fits it to the slot.
+  // The root's claim walk and scope solve, up to `solve` (`claims`).
+  const __tClaims = perfNow();
   const root = child;
   // The layout of the root at the render's slot: solve its scopes, lay it
   // out, and place it on the canvas.
@@ -759,6 +761,7 @@ export async function layout(
 
   // The root scales are solved in the root's own axis order
   // (`rootYDirection`).
+  perfAdd("claims", perfNow() - __tClaims);
   const __tSolve = perfNow();
   root.layout([layoutW, layoutH], orientScales(rootScales, 1, rootYDirection));
   perfAdd("solve", perfNow() - __tSolve);

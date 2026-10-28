@@ -1472,9 +1472,10 @@ labeled phase is bracketed in `runLayout()` / `layout()` (and the paint path in
 `render()`) with `perfNow()` / `perfAdd(label, …)`, accumulating per-pass
 durations under the labels `resolve` (Passes 2–6: color/name/label/alias/space
 resolution = domain inference), `axes` (Pass 7 + title/legend elaboration),
-`embed` (the `resolveEmbedding` pass), `solve` (Pass 9 constraint solve),
-`lower` (display-list lowering) and `paint` (display-item → SVG), plus `fonts`
-(the webfont-readiness await).
+`embed` (the `resolveEmbedding` pass), `claims` (the root's claim walk,
+`root.resolveExtent()`, and the root's scope solve against the render's slot),
+`solve` (Pass 9 constraint solve), `lower` (display-list lowering) and `paint`
+(display-item → SVG), plus `fonts` (the webfont-readiness await).
 
 Alongside the per-pass **timings** (`current.labels`), the same run records
 scene-graph **size counters** (`current.counts`) via `perfSetCount(name, value)`:
