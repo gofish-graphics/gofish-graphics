@@ -843,17 +843,14 @@ export const layer = createNodeOperatorSequential(
             if (px !== undefined) return at(axis, fixedClaim(axis, px));
             return at(axis, resolved[axis]);
           }) as [Extent | undefined, Extent | undefined];
-          // A node with a size of its own, and a chart's outer box, are a
-          // part of their parent's plot, chrome and dressing included
-          // (`GoFishNode.plotIsBox`). Any other ring has its content's plot.
+          // A ring has its content's plot. (Where its plot is its whole box,
+          // `GoFishNode.resolvePlotExtent` reads its claim instead.)
           const chromeContent = node.chrome?.content.resolvePlotExtent();
           node._plotExtent =
-            (plotIsClaim && chromeContent === undefined) || node.isChartBox()
+            plotIsClaim && chromeContent === undefined
               ? undefined
               : (([0, 1] as const).map((axis) =>
-                  dims[axis].size !== undefined
-                    ? claims[axis]
-                    : at(axis, (chromeContent ?? plot)[axis])
+                  at(axis, (chromeContent ?? plot)[axis])
                 ) as [Extent | undefined, Extent | undefined]);
           return claims;
         },

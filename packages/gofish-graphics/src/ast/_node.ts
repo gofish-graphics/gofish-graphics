@@ -1298,10 +1298,17 @@ export class GoFishNode {
    * with a size of its own maps its plot into that size, and its dressing,
    * like its chrome, adds around it (#1032). A layer computes it with its
    * claim (`placeByClaims`' plot hull); any other node's plot is its claim.
+   * On an axis where its plot is its whole box ({@link plotIsBox}), it is
+   * its claim.
    */
   public resolvePlotExtent(): Size<Extent | undefined> {
     const extent = this.resolveExtent();
-    return this._plotExtent ?? extent;
+    const plot = this._plotExtent;
+    if (plot === undefined) return extent;
+    const box = [this.plotIsBox(0), this.plotIsBox(1)];
+    if (box[0] && box[1]) return extent;
+    if (!box[0] && !box[1]) return plot;
+    return box[0] ? [extent[0], plot[1]] : [plot[0], extent[1]];
   }
 
   /**
