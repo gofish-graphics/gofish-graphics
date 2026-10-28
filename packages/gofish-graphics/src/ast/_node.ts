@@ -624,6 +624,14 @@ export class GoFishNode {
   /** Set by a node's claim hook when its plot claim differs from its claim
    *  (see {@link resolvePlotExtent}); cleared with the claims. */
   public _plotExtent?: Size<Extent | undefined> = undefined;
+  /** {@link resolvePlotExtent}'s answer where the plot is the box on one
+   *  axis only, a new array, with the claim and plot it was read from, so
+   *  every read returns the same array while those stay the same. */
+  private _mixedPlot?: {
+    extent: Size<Extent | undefined>;
+    plot: Size<Extent | undefined>;
+    mixed: Size<Extent | undefined>;
+  };
   /** The claim walk's memos of this node, cleared with the claims. */
   public _claimMemo: ClaimMemo = freshClaimMemo();
   private _layout: Layout;
@@ -1306,10 +1314,22 @@ export class GoFishNode {
     const extent = this.resolveExtent();
     const plot = this._plotExtent;
     if (plot === undefined) return extent;
-    const box = [this.plotIsBox(0), this.plotIsBox(1)];
-    if (box[0] && box[1]) return extent;
-    if (!box[0] && !box[1]) return plot;
-    return box[0] ? [extent[0], plot[1]] : [plot[0], extent[1]];
+    const picked = ([0, 1] as const).map((axis) =>
+      this.plotIsBox(axis) ? extent[axis] : plot[axis]
+    );
+    // A reader asks whether the plot differs from the claim by identity
+    // (`plot !== claim`: a dressed child, `plotIn`), so the answer is
+    // the claim or the plot itself where it is one of them, and otherwise
+    // one array per claim and plot.
+    const same = (of: Size<Extent | undefined>) =>
+      picked[0] === of[0] && picked[1] === of[1];
+    if (same(extent)) return extent;
+    if (same(plot)) return plot;
+    const memo = this._mixedPlot;
+    if (memo?.extent === extent && memo.plot === plot) return memo.mixed;
+    const mixed: Size<Extent | undefined> = [picked[0], picked[1]];
+    this._mixedPlot = { extent, plot, mixed };
+    return mixed;
   }
 
   /**
