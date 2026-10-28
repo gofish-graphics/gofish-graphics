@@ -45,6 +45,9 @@ Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 ```python
 # Outlined cells
 .mark(region(fill="none", stroke="white", stroke_width=1))
+
+# Cells drawn in by 2 pixels on each side, leaving a 4 pixel gap
+.mark(region(fill="steelblue", inset=2))
 ```
 
 A region is the space a parent hands a child. See

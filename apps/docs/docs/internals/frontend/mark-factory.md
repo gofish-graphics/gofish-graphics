@@ -400,8 +400,12 @@ rides along. `.name()`
 defers its layer registration via a `__layerRegistration` tag collected in a
 single post-resolve DFS walk (`collectLayerRegistrations`), so registry order
 follows parent-iteration order, not async-completion order. The same factory
-backs `makeRelatableMark` (which adds `.relate()`) and the combinator
-marks — one wiring, not three copies.
+backs `makeRelatableMark` (which adds `.relate()`, and hands the rows the mark
+was called with to `GoFishNode.relate`, so a drawing clause binds them) and the
+combinator marks — one wiring, not three copies. The region-compositing
+combinators share one factory (`makePorterDuffCombinator`), typed by their
+options: only `intersect` takes paint (`fill`, `stroke`, `strokeWidth`,
+`opacity`).
 
 `.translate()` is structural: `attachModifiers` maps the base mark to a new mark
 whose produced node is wrapped by a translation node. This keeps the modifier

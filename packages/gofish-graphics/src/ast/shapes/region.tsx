@@ -6,7 +6,15 @@ import type { DisplayList } from "gofish-ir";
 import { color6, resolveColorChannel } from "../../color";
 import { isValue, type MaybeValue } from "../data";
 import { displayDims } from "../dims";
-import { boxOfDims, outlinePaint, ringOutline, type Point } from "../geometry";
+import {
+  boxOfDims,
+  boxOutline,
+  insetConvex,
+  isConvex,
+  outlinePaint,
+  ringOutline,
+  type Point,
+} from "../geometry";
 import {
   lowerStyle,
   rectItemFromBox,
@@ -20,9 +28,16 @@ import { MARK_CHANNELS } from "../markChannels.generated";
 
 const DEFAULT_SIZE = 16;
 
-/** What a region takes: paint only. Its shape is the space it is given. */
+/** What a region takes: paint, and how far it is drawn in from its cell's
+ *  sides. Its shape is the space it is given. */
 export type RegionProps = {
   key?: string;
+  /** Pixels drawn in from each side of the cell: each side its parent
+   *  gives it, on an axis where it has a span (both axes of a hexagon, the
+   *  two ends of a 1D partition's cell). Paint only: its box, which layout
+   *  reads, stays the cell. A cell thinner than twice the inset draws
+   *  nothing. */
+  inset?: number;
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
@@ -41,8 +56,9 @@ export type RegionProps = {
  *
  * It draws the region's outline when the region has one (a hexagon, a
  * Voronoi cell, from a `partition` over `struct({ x, y }).bin(b)`), and its box
- * otherwise. Under a nonlinear coordinate space either one is resampled, so
- * a cell of a polar partition draws as the wedge it is.
+ * otherwise, drawn in by `inset` from each side the region gives it. Under a
+ * nonlinear coordinate space either one is resampled, so a cell of a polar
+ * partition draws as the wedge it is. Its outline is what it draws.
  */
 export const Region = ({
   key,
@@ -51,10 +67,19 @@ export const Region = ({
   strokeWidth = 0,
   opacity = 1,
   filter,
+  inset = 0,
 }: RegionProps): GoFishNode => {
+  if (!(Number.isFinite(inset) && inset >= 0))
+    throw new Error(
+      `region: inset must be a number of pixels, 0 or more, got ${inset}.`
+    );
   // The outline in the node's local frame and axis order, as `layout` placed
-  // it (the region's outline less the node's translate), or none.
+  // it (the region's outline less the node's translate, drawn in by
+  // `inset`), or none for a box. Empty when the inset leaves nothing.
   let outline: Point[] | undefined;
+  // Per axis, how far its box is drawn in at each end: `inset` where the
+  // region gives a span, else 0.
+  let boxInset: [number, number] = [0, 0];
 
   // How it paints its outline, read once.
   const paint = outlinePaint({ fill, stroke, strokeWidth });
@@ -62,7 +87,7 @@ export const Region = ({
     {
       key,
       type: "region",
-      args: { key, fill, stroke, strokeWidth, opacity, filter },
+      args: { key, fill, stroke, strokeWidth, opacity, filter, inset },
       // Used to seed the unit color scale. Prefer whichever channel is
       // data-driven, as `rect` does.
       color: isValue(fill) ? fill : stroke,
@@ -88,12 +113,31 @@ export const Region = ({
           throw new Error(
             "region: an outline needs a span on both axes (geometry/region.ts)."
           );
-        outline =
+        boxInset = [
+          x.translate === undefined ? 0 : inset,
+          y.translate === undefined ? 0 : inset,
+        ];
+        const ring =
           region?.outline === undefined
             ? undefined
             : region.outline.map(
                 ([px, py]) => [px - x.translate!, py - y.translate!] as const
               );
+        if (
+          ring !== undefined &&
+          inset > 0 &&
+          !isConvex(ring as [number, number][])
+        )
+          // TODO(#1201): drawing in a ring that is not convex needs a
+          // general polygon offset. Every partition cell is convex.
+          throw new Error(
+            "region: inset needs a convex cell; this cell's outline is not " +
+              "convex (#1201)."
+          );
+        outline =
+          ring === undefined || inset === 0
+            ? ring
+            : insetConvex(ring as [number, number][], inset);
         return {
           intrinsicDims: [
             { min: x.min, size: x.size },
@@ -121,7 +165,23 @@ export const Region = ({
         const linear =
           coordinateTransform === undefined ||
           coordinateTransform.type === "linear";
-        const [dx, dy] = displayDims(intrinsicDims, transform);
+        const [fx, fy] = displayDims(intrinsicDims, transform);
+        // The box drawn in by its inset (`boxInset`), about its center.
+        const shrink = (d: typeof fx, by: number) => {
+          const size = Math.max(0, Math.abs(d.max - d.min) - 2 * by);
+          const mid = (d.min + d.max) / 2;
+          return { min: mid - size / 2, max: mid + size / 2, size };
+        };
+        const dx = shrink(fx, boxInset[0]);
+        const dy = shrink(fy, boxInset[1]);
+        // A cell thinner than twice the inset draws nothing.
+        if (
+          outline !== undefined
+            ? outline.length < 3
+            : (boxInset[0] > 0 && dx.size === 0) ||
+              (boxInset[1] > 0 && dy.size === 0)
+        )
+          return [];
         if (outline === undefined && linear)
           return [
             rectItemFromBox(dx.min, dx.max, dy.min, dy.max, toPixel, {
@@ -147,15 +207,30 @@ export const Region = ({
           ringItem(points, coordinateTransform, toPixel, node.datum, style),
         ];
       },
-      // Its outline is the region's outline when it has one, and its box
-      // otherwise.
+      // Its outline is what it draws: the region's outline when it has one,
+      // and its box otherwise, drawn in by its inset. It traces the region
+      // exactly, so `intersect` can cut it.
       geometry: ({ intrinsicDims }, _children, node) => {
         const box = boxOfDims(intrinsicDims, node.type);
         const ring = outline;
-        if (ring === undefined) return { box };
+        const direction = node.yFrame.direction;
+        if (ring !== undefined)
+          return {
+            box,
+            outline: () =>
+              ring.length < 3 ? [] : [ringOutline(ring, direction, paint)],
+          };
+        const [ix, iy] = boxInset;
+        const drawn = {
+          min: [box.min[0] + ix, box.min[1] + iy] as [number, number],
+          max: [box.max[0] - ix, box.max[1] - iy] as [number, number],
+        };
         return {
           box,
-          outline: () => [ringOutline(ring, node.yFrame.direction, paint)],
+          outline: () =>
+            drawn.max[0] < drawn.min[0] || drawn.max[1] < drawn.min[1]
+              ? []
+              : [boxOutline(drawn, direction, paint)],
         };
       },
     },

@@ -179,6 +179,11 @@ export type ChildProposals = {
  * cells. That is the intersection of the two regions, since each one bounds
  * a different axis.
  *
+ * On an axis where the layer shares its parent's frame (`shared`: it holds
+ * data-placed content, such as `layer([region(), circle({ cx })])` in a
+ * cell), its frame is its parent's, so the region stays as it came there,
+ * and the layer sits at 0 instead of being centered in the span.
+ *
  * Every other child gets the region the layer was given, in the layer's
  * frame, outline and all (`passedOn`), unless the layer's constraints place
  * it: a `layer([region(...), text(...)])` in a hexagon gives the hexagon to
@@ -195,9 +200,10 @@ export type ChildProposals = {
 export function buildChildProposals(
   constraints: readonly ConstraintSpec[],
   posScales: ConstraintPosScales,
-  received: Region | undefined
+  received: Region | undefined,
+  shared: readonly [boolean, boolean] = [false, false]
 ): ChildProposals {
-  const local = hasSpan(received) ? rebaseRegion(received) : undefined;
+  const local = hasSpan(received) ? rebaseRegion(received, shared) : undefined;
   const spanByName = new Map<string, Size<number | undefined>>();
   const regionByName = new Map<string, Region>();
   for (const c of constraints) {

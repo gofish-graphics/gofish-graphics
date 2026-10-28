@@ -2516,7 +2516,15 @@ and a `text` as a partition's mark gives each cell to both: the region
 draws it, and the text sits at its center. A layer passes the region it was
 handed on in its own frame, each span starting at 0 (`rebaseRegion`), and
 `GoFishNode.layout` places the layer itself in the region it was handed, as
-it places any node.
+it places any node. A layer that shares its parent's frame on an axis (its
+position scale there is the one it inherited, as a layer of marks in a
+partition's cell does) keeps the region in the parent's frame on that axis
+and reports a translate of 0 there (`sharedInSpan` in `layer.tsx`): its
+children read the same scale as the parent, so a span rebased to 0 would
+put a child that reads a datum position (a curve, a dot at a median) at the
+wrong place. A region composite (`intersect` and the others) has no frame of
+its own either: it hands its operands the region as it came and places
+neither (`layoutComposite` in `porterDuff.tsx`).
 
 The region holds its cell (a `RegionCell`, cells.ts: an id, a label when it
 has one, a span per axis, and an outline when it is not a box) and the
@@ -2623,7 +2631,12 @@ polygon cell is no cell of one axis alone, each axis is a plain continuous
 axis (`collectPositionDomains` collects only a cell of a line, a `Cell`). A
 `region` draws the outline, and answers it as its `outline` geometry query
 (see [Layout Calculation](/internals/layout/passes)); any other mark is placed
-in the box, so a circle or a text sits at a hexagon's center.
+in the box, so a circle or a text sits at a hexagon's center. `region({ inset })`
+draws the cell in by `inset` pixels on each axis where the region has a span
+(`insetConvex` for an outline, a smaller box otherwise). The inset is paint
+only: the region's box, which layout reads, stays the cell, and its `outline`
+query answers what it draws, so `intersect` cuts the drawn-in cell. A cell
+thinner than twice the inset draws nothing.
 
 **Expression evaluation is orthogonal to the channel's own aggregation.**
 `inferSize`/`inferPos`'s shared core (`inferNumeric` in `channels.ts`) always

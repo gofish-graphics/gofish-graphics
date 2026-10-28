@@ -1894,10 +1894,17 @@ export class GoFishNode {
         this
       );
       // A node whose definition gives no outline is read as its box, its
-      // edges named in its own axis order. Its samples are kept per
-      // tolerance, for every reader of this layout.
+      // edges named in its own axis order. The box only bounds its ink
+      // (`Outline.bounds`). Its samples are kept per tolerance, for every
+      // reader of this layout.
       const outline =
-        g.outline ?? (() => [boxOutline(g.box, this.yFrame.direction)]);
+        g.outline ??
+        (() => [
+          {
+            ...boxOutline(g.box, this.yFrame.direction),
+            bounds: true as const,
+          },
+        ]);
       const sampled = new Map<number, Outline[]>();
       this._geometry = {
         ...g,
@@ -2670,9 +2677,12 @@ export class GoFishNode {
    * becomes a child of this layer (flagged `_relateClause`), and the layer
    * lays it out after the clauses that write the positions it reads (see
    * `scheduleRelate` in `constraints/relate.ts`). A later call replaces the
-   * clauses of an earlier one.
+   * clauses of an earlier one. `rows` are the rows the layer was drawn for,
+   * when it is a mark: a drawing clause is a mark position over them, so an
+   * empty-scope `chart()` in it binds them, as one among the layer's
+   * children does.
    */
-  public async relate(fn: RelateFn): Promise<this> {
+  public async relate(fn: RelateFn, rows?: unknown): Promise<this> {
     // Only a layer schedules clauses around its solve (layer.tsx).
     if (this.type !== "layer" && this.type !== "box") {
       throw new Error(
@@ -2683,7 +2693,11 @@ export class GoFishNode {
     // A later call replaces the drawing clauses of an earlier one.
     this.children = this.children.filter((c) => !isRelateClause(c));
     const env = relateEnv(this);
-    const { constraints, nodes } = await resolveRelateClauses(fn(env), env);
+    const { constraints, nodes } = await resolveRelateClauses(
+      fn(env),
+      env,
+      rows
+    );
     // The relate's constraints replace an earlier relate's, and the layer's
     // paint-order defaults for its own relational-mark children stay.
     this.constraints = [...(this._paintDefaults ?? []), ...constraints];

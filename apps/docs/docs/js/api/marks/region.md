@@ -17,7 +17,7 @@ drawn as a rectangle.
 ## Signature
 
 ```ts
-region({ fill?, stroke?, strokeWidth?, opacity?, filter?, debug? })
+region({ fill?, stroke?, strokeWidth?, opacity?, filter?, inset?, debug? })
 ```
 
 ## Parameters
@@ -42,6 +42,9 @@ chart(movies, { color: Color.gradient("blues"), axes: true })
 
 // Outlined cells
 .mark(region({ fill: "none", stroke: "white", strokeWidth: 1 }))
+
+// Cells drawn in by 2 pixels on each side, leaving a 4 pixel gap
+.mark(region({ fill: "steelblue", inset: 2 }))
 ```
 
 A region is the space a parent hands a child. See

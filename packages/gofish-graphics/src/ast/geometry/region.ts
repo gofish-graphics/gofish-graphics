@@ -69,17 +69,28 @@ export function reflectRegionY(region: Region): Region {
  * was handed `region` passes on to its children, in its own frame. The node
  * itself is placed in `region` by `GoFishNode.layout`, which centers it in
  * each span, so a child that fills the rebased span fills the original one.
+ *
+ * On an axis where the node shares its parent's frame (`shared`: a layer of
+ * data-placed content in a partition's cell, which sits at 0 in its parent),
+ * its frame is its parent's, so the region is passed on as it came there.
  */
-export function rebaseRegion(region: Region): Region {
+export function rebaseRegion(
+  region: Region,
+  shared: readonly [boolean, boolean] = [false, false]
+): Region {
   const [x, y] = region.spans;
-  const at = (s: Span | undefined): Span | undefined =>
-    s === undefined ? undefined : [0, s[1] - s[0]];
+  const at = (s: Span | undefined, axis: 0 | 1): Span | undefined =>
+    s === undefined || shared[axis] ? s : [0, s[1] - s[0]];
+  const start = (s: Span | undefined, axis: 0 | 1): number =>
+    s === undefined || shared[axis] ? 0 : s[0];
   return {
-    spans: [at(x), at(y)],
+    spans: [at(x, 0), at(y, 1)],
     outline:
       x === undefined || y === undefined
         ? undefined
-        : region.outline?.map(([px, py]) => [px - x[0], py - y[0]] as const),
+        : region.outline?.map(
+            ([px, py]) => [px - start(x, 0), py - start(y, 1)] as const
+          ),
   };
 }
 

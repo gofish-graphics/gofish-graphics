@@ -2606,6 +2606,11 @@ for the API.
           "type": "string",
           "description": "Raw SVG filter attribute."
         },
+        "inset": {
+          "$ref": "#/$defs/Number",
+          "description": "Pixels drawn in from each side of the region its parent gives it, on each axis where the region has a span. Paint only: layout still reads the whole region. A region thinner than twice the inset draws nothing.",
+          "default": 0
+        },
         "debug": {
           "type": "boolean"
         },

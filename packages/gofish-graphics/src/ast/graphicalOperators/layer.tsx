@@ -1008,10 +1008,23 @@ export const layer = createNodeOperatorSequential(
           // given; or, for a child with no cell that no constraint places,
           // the region this layer was given. A child is laid out in its
           // region's length, and places itself in it.
+          // On an axis where this layer was handed a span and shares its
+          // parent's frame (it is pinned: its frame is the map it was
+          // handed), its children's data positions are in its parent's
+          // frame, so the region stays in that frame too, and the layer sits
+          // at 0 there (see `translate` below) instead of being centered in
+          // the span.
+          const sharedInSpan = ([0, 1] as const).map(
+            (axis) =>
+              region?.spans[axis] !== undefined &&
+              inheritedPosScales[axis] !== undefined &&
+              effectivePosScales[axis] === inheritedPosScales[axis]
+          ) as [boolean, boolean];
           const proposals = buildChildProposals(
             node.constraints,
             effectivePosScales,
-            region
+            region,
+            sharedInSpan
           );
 
           // Where a child's baseline goes on each axis (#773), by the one
@@ -1419,7 +1432,11 @@ export const layer = createNodeOperatorSequential(
           const scaleY = options.transform?.scale?.y ?? 1;
 
           const translate = (axis: 0 | 1, min: number): number | undefined =>
-            dims[axis].min !== undefined ? dims[axis].min - min : undefined;
+            dims[axis].min !== undefined
+              ? dims[axis].min - min
+              : sharedInSpan[axis]
+                ? 0
+                : undefined;
 
           return {
             // Store only the local box `(min, size)`; the `dims` getter derives

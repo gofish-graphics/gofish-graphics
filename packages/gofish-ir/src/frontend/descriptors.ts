@@ -1943,6 +1943,11 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
     doc: "Draws the region its parent gives it, such as a partition's cell. It has no size or position of its own: it fills the space it is given on both axes. It draws the region's outline when the region has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.",
     include: [paint],
     fields: {
+      inset: {
+        type: t.number,
+        default: 0,
+        doc: "Pixels drawn in from each side of the region its parent gives it, on each axis where the region has a span. Paint only: layout still reads the whole region. A region thinner than twice the inset draws nothing.",
+      },
       debug: {
         type: t.boolean,
         doc: "Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.",
@@ -2294,12 +2299,28 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
   }),
   inside: combinatorMark("inside", {
     pyName: "intersect",
-    doc: "Draw only where both regions overlap: A ∩ B. Binary only.",
+    doc: "Draw only where both regions overlap: A ∩ B. Binary only. With no `fill` or `stroke`, it draws the operands' own paint where they overlap. With either, it draws the overlap as one shape in its own paint: an exact path when both operands trace their outlines and one of them is convex, and with no exact path a fill of the overlapping ink, while a stroke is then an error.",
     fields: {
       blendMode: {
         type: t.enum("color", "multiply", "screen", "overlay", "luminosity"),
         default: "color",
-        doc: "Blend used where the two regions combine.",
+        doc: "Blend used where the two regions combine. Unused when the result is painted.",
+      },
+      fill: ch.color(
+        "Fill color of the overlap, or a field name or accessor for a color scale. Default none when `stroke` is given."
+      ),
+      stroke: ch.color(
+        "Stroke color of the overlap's outline, or a field name or accessor for a color scale. Default none. It needs an exact outline: an operand with no outline (an image, text, a rounded rect) makes it an error."
+      ),
+      strokeWidth: {
+        type: t.number,
+        default: 1,
+        doc: "Stroke width in pixels.",
+      },
+      opacity: {
+        type: t.number,
+        default: 1,
+        doc: "Opacity of the painted overlap, fill and stroke, 0 to 1.",
       },
     },
   }),

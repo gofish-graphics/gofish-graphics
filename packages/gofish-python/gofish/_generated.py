@@ -471,7 +471,7 @@ def blank(*, debug: Optional[bool] = None, em_x: Optional[bool] = None, em_y: Op
             _kw[_k] = _v
     return Mark("blank", **_kw)
 
-def region(*, debug: Optional[bool] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None) -> Mark:
+def region(*, debug: Optional[bool] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None, inset: Optional[float] = None) -> Mark:
     """Draws the region its parent gives it, such as a partition's cell. It has no size or position of its own: it fills the space it is given on both axes. It draws the region's outline when the region has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.
 
     Args:
@@ -481,6 +481,7 @@ def region(*, debug: Optional[bool] = None, fill: Optional[str] = None, stroke: 
         stroke_width: Stroke width in pixels. Default 0.
         opacity: Opacity, 0 to 1. Default 1.
         filter: Raw SVG filter attribute.
+        inset: Pixels drawn in from each side of the region its parent gives it, on each axis where the region has a span. Paint only: layout still reads the whole region. A region thinner than twice the inset draws nothing. Default 0.
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
@@ -490,6 +491,7 @@ def region(*, debug: Optional[bool] = None, fill: Optional[str] = None, stroke: 
         ("strokeWidth", stroke_width),
         ("opacity", opacity),
         ("filter", filter),
+        ("inset", inset),
     ]:
         if _v is not None:
             _kw[_k] = _v
@@ -512,15 +514,23 @@ def over(children: List["Mark"], *, blend_mode: Optional[str] = None) -> Mark:
             kwargs[_k] = _v
     return Mark("over", _children=list(children), **kwargs)
 
-def intersect(children: List["Mark"], *, blend_mode: Optional[str] = None) -> Mark:
-    """Draw only where both regions overlap: A ∩ B. Binary only.
+def intersect(children: List["Mark"], *, blend_mode: Optional[str] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
+    """Draw only where both regions overlap: A ∩ B. Binary only. With no `fill` or `stroke`, it draws the operands' own paint where they overlap. With either, it draws the overlap as one shape in its own paint: an exact path when both operands trace their outlines and one of them is convex, and with no exact path a fill of the overlapping ink, while a stroke is then an error.
 
     Args:
-        blend_mode: Blend used where the two regions combine. Default "color".
+        blend_mode: Blend used where the two regions combine. Unused when the result is painted. Default "color".
+        fill: Fill color of the overlap, or a field name or accessor for a color scale. Default none when `stroke` is given.
+        stroke: Stroke color of the overlap's outline, or a field name or accessor for a color scale. Default none. It needs an exact outline: an operand with no outline (an image, text, a rounded rect) makes it an error.
+        stroke_width: Stroke width in pixels. Default 1.
+        opacity: Opacity of the painted overlap, fill and stroke, 0 to 1. Default 1.
     """
     kwargs: Dict[str, Any] = {}
     for _k, _v in [
         ("blendMode", blend_mode),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
+        ("strokeWidth", stroke_width),
+        ("opacity", opacity),
     ]:
         if _v is not None:
             kwargs[_k] = _v

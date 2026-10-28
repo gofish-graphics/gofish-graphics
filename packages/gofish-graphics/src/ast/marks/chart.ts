@@ -72,6 +72,7 @@ import {
   subtract as Subtract,
   paint as Paint,
   mask as Mask,
+  type CompositePaint,
 } from "../graphicalOperators/porterDuff";
 import type { RelateFn } from "../constraints";
 import { splitByTiers, type InferredRelational } from "../datumProjection";
@@ -1150,8 +1151,8 @@ export type RelatableMark<T> = Mark<T> & {
  */
 const relateModifier = {
   name: "relate",
-  apply: async (node, _layerContext, _datum, fn) => {
-    await node.relate(fn);
+  apply: async (node, _layerContext, datum, fn) => {
+    await node.relate(fn, datum);
   },
 } satisfies ModifierConfig<[fn: RelateFn]>;
 
@@ -1216,17 +1217,14 @@ export function layer<T>(
   return tagCombinator(makeRelatableMark(base), "layer", opts, marks);
 }
 
-function makePorterDuffCombinator(
+function makePorterDuffCombinator<O extends PdOptions = PdOptions>(
   lowLevel: (opts: any, children: any) => any,
   irType: string
 ) {
   function fn<T>(marks: [MarkChild, MarkChild]): NameableMark<T>;
+  function fn<T>(opts: O, marks: [MarkChild, MarkChild]): NameableMark<T>;
   function fn<T>(
-    opts: PdOptions,
-    marks: [MarkChild, MarkChild]
-  ): NameableMark<T>;
-  function fn<T>(
-    optsOrMarks: PdOptions | [MarkChild, MarkChild],
+    optsOrMarks: O | [MarkChild, MarkChild],
     maybeMarks?: [MarkChild, MarkChild]
   ): NameableMark<T> {
     const opts = Array.isArray(optsOrMarks) ? {} : optsOrMarks;
@@ -1259,7 +1257,11 @@ function makePorterDuffCombinator(
 export const paint = makePorterDuffCombinator(Paint, "atop");
 // `over` combinator is internal (deserializer only) — not exported from lib.
 export const over = makePorterDuffCombinator(Over, "over");
-export const intersect = makePorterDuffCombinator(Intersect, "inside");
+// Only `intersect` paints its result (fill, stroke): see `compositeNode`.
+export const intersect = makePorterDuffCombinator<PdOptions & CompositePaint>(
+  Intersect,
+  "inside"
+);
 export const exclude = makePorterDuffCombinator(Exclude, "xor");
 export const subtract = makePorterDuffCombinator(Subtract, "out");
 export const mask = makePorterDuffCombinator(Mask, "mask");
