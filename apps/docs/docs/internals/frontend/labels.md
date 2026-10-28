@@ -348,26 +348,62 @@ module, and the docs; a label's `avoiding`, `halo` and `background` are
 
 ## Auto-color
 
-When a spec omits `color`, `autoLabelColor` picks one by resolving the target
-node's own fill via `resolveColorChannel` — the identical resolution the
-shape's own fill channel uses, so the label contrasts against the color
-actually drawn (a categorical swatch, a continuous gradient's `scaleFn(value)`,
-or a literal string), not some approximation of it. The color math itself lives
-in `autoLabelColorForFill` (`autoLabelColor.ts`), and it runs on the color a
-renderer paints: the fill clipped to the sRGB gamut and rounded to 8 bits per
-channel. Whether the label is inside is read when it is drawn, from where it
-landed: its center is inside one of its target's filled closed outlines.
-Inside an unfilled one the page shows through, so it counts as outside. So a
-`"center"` label on a C-shaped polygon, whose box center falls in the C's
-opening, is colored for the page, and a `Place.interior()` label for the
-fill. Inside the shape, the fill's LUV
-lightness picks white text on a dark fill or a near-black tint of the fill's own
-hue (CIE LCh, D65) on a light one; a gray fill has no hue, so it gets a
-near-black neutral instead. Outside the shape, the label is a darkened tint of
-the fill's hue and chroma at a fixed lightness (a readable color on the white
-page background, distinct from but related to the shape it labels). A target
-with no resolvable fill, or a fill that is not a parseable color (`none`,
-`currentColor`, `url(#…)`), falls back to a plain `"black"` (inside) or
+When a spec omits `color`, `autoLabelColor` picks one when the label is drawn,
+from the style its target painted. The label layer is a ring whose content, which
+holds the target, paints before its labels, so the target has lowered by then. Nothing
+reorders a ring's children: the content's own `.zOrder()` moves to the ring with its
+name and key (`wrapPreservingIdentity`), since it orders the content among its own
+siblings, and the label's names are not ones a z constraint can reach. Each lowering
+records, as `GoFishNode.paintedStyle`, the style of the node's first own item that
+puts down paint (a fill or a stroke). An own item with no paint of its own, such as a
+scaled box's `group` or a compositor's `composite` or `mask`, is skipped, so a label
+on a compositor gets the plain fallback below. Every `layout()` clears it, so it is
+never left over from an earlier render. The label reads the drawn style (a
+categorical swatch, a gradient's `scaleFn(value)`, a literal, at the opacity it was
+drawn with), not a re-resolution of it.
+
+The color is chosen once, at lowering, from that style at rest. A `live()` fill or
+opacity that changes at paint time is not followed, and neither is a paint-time
+animation's fade: the label fades with its mark. The page is assumed white, whatever
+background the chart is shown or exported on. The color math lives in
+`autoLabelColorForStyle` (`autoLabelColor.ts`) and runs on the color a renderer
+paints: clipped to the sRGB gamut and rounded to 8 bits per channel.
+
+Whether the label is inside is read from where it landed: its center is inside
+one of its target's filled closed outlines. Inside an unfilled one the page shows
+through, so it counts as outside. So a `"center"` label on a C-shaped polygon,
+whose box center falls in the C's opening, is colored for the page, and a
+`Place.interior()` label for the fill.
+
+The label is read against the color directly behind its glyphs. That is the white
+page, under the target's fill when the label is inside, under the label's
+`background` box when it draws one, under its `halo` when it draws one, each
+composited over the ones below it (culori's `blend`). The halo counts because it is
+the stroke the glyphs sit in: the text is read against it, whatever lies under it.
+The fill counts at the style's `opacity` times its `fillOpacity` times the fill's own
+alpha, so a streamgraph's ribbons at `opacity: 0.8` are read at their lighter seen
+colors. Overlapping marks under a translucent one are not composited.
+
+The label is white or a dark color, whichever has the larger APCA contrast |Lc|
+against that backdrop. A tie goes to the dark color. Inside the shape, the dark color
+is a near-black tint of the fill's own hue (CIE LCh, D65; a gray fill has no hue, so
+its tint is a near-black neutral). Outside, it is a darkened tint, at a fixed
+lightness, of the hue and chroma of the target's ink: its fill, or its stroke when
+the fill puts down no paint (a line, or a `"transparent"` fill). That names the
+series the label belongs to; on the bare page white has no contrast, so the tint
+always wins there. The tint reads the ink itself, not its composite: the ink's hue
+and chroma name the shape's series at any alpha.
+
+The contrast is APCA (APCA-W3 0.0.98G, the WCAG 3 candidate), as `apcaContrast` in
+`colorModes.ts`: colorjs.io's implementation, vendored so the library does not pull
+in the rest of colorjs.io. APCA rather than a lightness cutoff or a WCAG 2 ratio,
+because mid-tone fills are where the two candidates are close, and there APCA tracks
+readability better: Tableau green `#59a14f` scores Lc 64 with white text and 45 with
+black, while WCAG 2 would pick black.
+
+A fill or stroke that puts down no paint (`none`, `transparent`, alpha 0) or is not
+a parseable color (`currentColor`, `url(#…)`) is not there: it adds nothing to the
+backdrop, and with no ink the dark color is a plain `"black"` (inside) or
 `"#333333"` (outside).
 
 ## Multi-label and typography options

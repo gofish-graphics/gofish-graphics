@@ -12,9 +12,9 @@ import {
   tailwindColors,
   tailwindColorsVivid,
   white,
+  mix,
 } from "../color";
 import { titanic } from "../data/titanic";
-import { mix } from "spectral.js";
 import { map, rect, stackX, stackY } from "../lib";
 
 const data = [

@@ -13,7 +13,6 @@ import _ from "lodash";
 import { spreadX } from "../ast/graphicalOperators/spreadX";
 import { frame } from "../ast/graphicalOperators/frame";
 import { ref } from "../ast/shapes/ref";
-import { mix } from "spectral.js";
 import { enclose } from "../lib";
 const fishColors = {
   Bass: color.blue[5],

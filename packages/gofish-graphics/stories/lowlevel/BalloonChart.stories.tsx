@@ -2,8 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood, catchLocations } from "../../src/data/catch";
 import { layer, ellipse, rect, Coord } from "../../src/lib";
-import { color, color6 } from "../../src/color";
-import { mix } from "spectral.js";
+import { color, color6, mix } from "../../src/color";
 import _ from "lodash";
 
 const meta: Meta = {

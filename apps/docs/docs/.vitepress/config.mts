@@ -551,6 +551,7 @@ export default defineConfig({
                   text: "assignGradientColor",
                   link: "/js/api/color/assign-gradient-color",
                 },
+                { text: "mix", link: "/js/api/color/mix" },
               ],
             },
             {

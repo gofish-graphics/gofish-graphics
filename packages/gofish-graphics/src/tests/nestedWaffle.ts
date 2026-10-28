@@ -13,7 +13,6 @@ import {
   gray,
 } from "../color";
 import { titanic } from "../data/titanic";
-import { mix } from "spectral.js";
 import { seafood } from "../data/catch";
 import { ellipse } from "../ast/shapes/ellipse";
 import { enclose } from "../lib";

@@ -1,7 +1,6 @@
-import { mix } from "spectral.js";
 import { chart } from "../lib";
 import { seafood } from "../data/catch";
-import { color6_old, map, groupBy, rect, spreadX, stackX, stackY, v } from "../lib";
+import { color6_old, map, mix, groupBy, rect, spreadX, stackX, stackY, v } from "../lib";
 import _ from "lodash";
 
 // export const testIcicleForwardChartAPI = () => {

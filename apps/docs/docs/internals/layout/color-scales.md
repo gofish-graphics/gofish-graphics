@@ -99,6 +99,29 @@ title reads it yet; `label.angle: "auto"` uses it to decide whether a hidden
 category row is still named somewhere (see
 [Axes](/internals/frontend/axes#automatic-label-angle-label-angle-auto)).
 
+### Color ops and spectral mixing (`color.ts` `mix()`)
+
+`lighten(t)` and `darken(t)` mix the resolved color `t` toward white or black
+with spectral.js, a Kubelka–Munk (paint-like) mix. The theme palettes in
+`color.ts` are built with the same mix. spectral.js parses only `#hex` and
+comma-separated `rgb()`, and reads any other color as black or NaN. So every
+mix goes through `mix`, the library's one public mixing function. It parses
+both colors with culori and hands spectral.js `[r, g, b, a]` arrays. Any color
+culori parses works: a named color, `hsl()`, `oklch()`, or `rgb(r g b / a)` as
+`tailwindColors` writes it.
+
+Alpha interpolates linearly in `t`, as in CSS `color-mix()`; `mix` computes it
+itself rather than taking spectral.js's luminance-weighted alpha. The colors mix
+premultiplied, also as in `color-mix()`: spectral.js mixes at the color weight
+`t·αb / ((1 − t)·αa + t·αb)` rather than `t`, so a transparent color adds no
+color of its own. When the alphas are equal (every opaque mix, including the
+theme palettes) that weight is exactly `t`, and the result is spectral.js's own. The result is
+`#rrggbb` when its alpha is 1 and `rgba(r, g, b, a)` otherwise. A color op mixes toward a white or
+black with the color's own alpha, so it keeps the color's opacity. A color
+culori cannot parse (e.g. `currentColor`) passes through a color op unchanged. A color with no
+color ops returns at once, before any parsing, since every data-bound color goes through
+`applyColorOps`.
+
 ### Literal hex passthrough
 
 Fill values that are pre-computed hex strings (e.g. from `derive`) pass through the color map directly — if the value is not found in the map, the value itself is used as the color.
@@ -112,15 +135,15 @@ already recorded the subtree's color encodings in the render session.
 
 ## Files
 
-| File                      | Role                                                                                                     |
-| ------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `src/ast/colorSchemes.ts` | Types, constructors, `assignPaletteColor`, `assignGradientColor`, `createGradientScale`, scheme registry |
-| `src/ast/_node.ts`        | `collectColorValues`, `resolveColorScale` two-pass dispatch (categorical map vs continuous scaleFn)      |
-| `src/color.ts`            | `resolveColorChannel` — shared categorical/continuous lookup + color ops for mark fills                  |
-| `src/colorModes.ts`       | Registers the culori color modes (`culori/fn`) and exports the parse/convert/hex helpers                 |
-| `src/ast/shapes/rect.tsx` | Resolves fill/stroke via `resolveColorChannel`                                                           |
-| `src/ast/marks/chart.ts`  | `ChartOptions.color?: ColorConfig`; passes `colorConfig` to render                                       |
-| `src/lib.ts`              | Exports `palette`, `gradient`, `assignGradientColor`, `ColorConfig`, `PaletteScale`, `GradientScale`     |
+| File                      | Role                                                                                                                               |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `src/ast/colorSchemes.ts` | Types, constructors, `assignPaletteColor`, `assignGradientColor`, `createGradientScale`, scheme registry                           |
+| `src/ast/_node.ts`        | `collectColorValues`, `resolveColorScale` two-pass dispatch (categorical map vs continuous scaleFn)                                |
+| `src/color.ts`            | `resolveColorChannel` — shared categorical/continuous lookup + color ops for mark fills; the public `mix` (see above)              |
+| `src/colorModes.ts`       | Registers the culori color modes (`culori/fn`) and exports the parse/convert/hex helpers, `blend`, and `apcaContrast` (colorjs.io) |
+| `src/ast/shapes/rect.tsx` | Resolves fill/stroke via `resolveColorChannel`                                                                                     |
+| `src/ast/marks/chart.ts`  | `ChartOptions.color?: ColorConfig`; passes `colorConfig` to render                                                                 |
+| `src/lib.ts`              | Exports `palette`, `gradient`, `assignGradientColor`, `ColorConfig`, `PaletteScale`, `GradientScale`                               |
 
 ---
 

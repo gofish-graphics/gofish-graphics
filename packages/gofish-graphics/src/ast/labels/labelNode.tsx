@@ -16,6 +16,7 @@ import {
   turnedCorners,
 } from "../geometry/plane";
 import type { HalfSize } from "./collide";
+import type { LabelBackdrop } from "./autoLabelColor";
 
 /** A text outline painted behind the glyphs (SVG `paint-order: stroke`),
  *  so a label stays legible over lines and fills. */
@@ -69,8 +70,9 @@ export type LabelNodeOptions = {
   fontWeight?: number | string;
   fontStyle?: string;
   /** The text color, or a function that picks it when the label is lowered
-   *  (the auto color reads where the label landed). */
-  fill: string | ((node: GoFishNode) => string);
+   *  (the auto color reads where the label landed), given the paint the
+   *  label draws behind its own glyphs. */
+  fill: string | ((node: GoFishNode, backdrop: LabelBackdrop) => string);
   /** A fixed rotation in degrees, clockwise on screen. */
   rotate?: number;
   halo?: LabelHalo;
@@ -180,8 +182,18 @@ export function LabelText(opts: LabelNodeOptions): LabelNode {
         const deg = state.angle;
         const { w, h, ascent, pad } = metrics;
         const items: DisplayList.DisplayItem[] = [];
-        if (opts.background !== undefined) {
-          const fill = opts.background.fill ?? BACKGROUND.fill;
+        const backdrop: LabelBackdrop = {
+          background:
+            opts.background === undefined
+              ? undefined
+              : (opts.background.fill ?? BACKGROUND.fill),
+          halo:
+            opts.halo === undefined
+              ? undefined
+              : (opts.halo.color ?? HALO.color),
+        };
+        if (backdrop.background !== undefined) {
+          const fill = backdrop.background;
           const bw = w / 2 + pad[0];
           const bh = h / 2 + pad[1];
           const style = lowerStyle({ fill });
@@ -214,13 +226,10 @@ export function LabelText(opts: LabelNodeOptions): LabelNode {
         // The glyph anchor: the start of the baseline.
         const [gx, gy] = turnPoint([-w / 2, -h / 2 + ascent], deg, [cx, cy]);
         const fill =
-          typeof opts.fill === "string" ? opts.fill : opts.fill(self);
+          typeof opts.fill === "string" ? opts.fill : opts.fill(self, backdrop);
         const style = lowerStyle({
           fill,
-          stroke:
-            opts.halo === undefined
-              ? undefined
-              : (opts.halo.color ?? HALO.color),
+          stroke: backdrop.halo,
           strokeWidth:
             opts.halo === undefined ? 0 : (opts.halo.width ?? HALO.width),
         });

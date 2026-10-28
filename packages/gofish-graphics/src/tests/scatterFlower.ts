@@ -13,7 +13,6 @@ import { polar_DEPRECATED } from "../ast/coordinateTransforms/polar_DEPRECATED";
 import { layer } from "../ast/graphicalOperators/layer";
 import { petal } from "../ast/shapes/petal";
 import _ from "lodash";
-import { mix } from "spectral.js";
 import { seafood } from "../data/catch";
 import { catchLocations } from "../data/catch";
 import { polar } from "../ast/coordinateTransforms/polar";
