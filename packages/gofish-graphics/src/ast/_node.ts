@@ -316,28 +316,23 @@ export type Placeable = {
   spaceOn?: (dir: Direction) => UnderlyingSpace | undefined;
 };
 
-/** Place a child at `at` (default `(0, 0)`; layer passes its free-child
- *  origin, #773) on whichever axes it hasn't already resolved a
- *  position for — the "fresh vs. already-placed" child rule shared by every
+/** Place a child's baseline at `(0, 0)` on whichever axes it hasn't already
+ *  resolved a position for — the "fresh vs. already-placed" child rule of an
  *  operator that lays out already-placed operands (e.g. a `ref` whose
  *  translate was reconciled against its LCA during its own `layout()`)
- *  alongside fresh ones. `dims[axis].min === undefined` IS that placed/unplaced
+ *  alongside fresh ones, with no frame to seat them in (`enclose`,
+ *  `position`). `dims[axis].min === undefined` IS that placed/unplaced
  *  signal (see `combineDims`): a fresh node reports an undefined translate
  *  until placed, while an already-placed node (a ref, or any other
  *  initially-placed target — see `isInitiallyPlaced` in
  *  `constraints/placementLowering.ts`, the same rule) already has a
  *  determined `min`, so re-placing it here would be a no-op-that-should-be —
  *  except `GoFishRef.place()` has no ledger to make that a true no-op, so it
- *  must not be called at all in that case. This is `layer`'s own
- *  unplaced-child finalization (its constrained-children branch); `enclose`
- *  reuses it verbatim rather than re-deriving the rule. */
-export function placeUnplacedChild(
-  child: Placeable,
-  anchor: Anchor = "baseline",
-  at: [number, number] = [0, 0]
-): void {
-  if (child.dims[0].min === undefined) child.place("x", at[0], anchor);
-  if (child.dims[1].min === undefined) child.place("y", at[1], anchor);
+ *  must not be called at all in that case. `layer` applies the same test
+ *  when it seats the children its constraints left unplaced (`seatChild`). */
+export function placeUnplacedChild(child: Placeable): void {
+  if (child.dims[0].min === undefined) child.place("x", 0, "baseline");
+  if (child.dims[1].min === undefined) child.place("y", 0, "baseline");
 }
 
 // `scales` is the per-axis data→pixel affine scale handed down (the single
@@ -2164,8 +2159,8 @@ export class GoFishNode {
    * Write ONLY this axis's size (align `"size"`) — no bbox ledger, no
    * translate write. Overwrites whatever the node's own layout computed for
    * `size` (e.g. a bare rect's baked `DEFAULT_RECT_SIZE`) in place, so a
-   * subsequent position write (a companion align, or the parent-seed
-   * `placeUnplacedChild` fallback) still lands normally — this genuinely does
+   * subsequent position write (a companion align, or the parent's seat for
+   * a child its constraints left unplaced) still lands normally — this genuinely does
    * not participate in position resolution at all.
    */
   public setSizeOnly(

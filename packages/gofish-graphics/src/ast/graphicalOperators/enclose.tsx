@@ -157,9 +157,9 @@ function Enclose(
         UNDEFINED,
       ],
       layout: (size, scales, children) => {
-        // Child placement mirrors `layer`'s own rule (`placeUnplacedChild`):
-        // a FRESH child reports an undefined translate until placed, so it
-        // gets `layer`'s baseline-origin placement. An already-placed operand
+        // Child placement (`placeUnplacedChild`): a FRESH child reports an
+        // undefined translate until placed, so its baseline is placed at the
+        // origin. An already-placed operand
         // (a `ref(...)`, which reconciles its own translate against its LCA
         // in `GoFishRef.layout`) must not be re-placed: `GoFishRef.place()`
         // has no ledger to make that a no-op.
