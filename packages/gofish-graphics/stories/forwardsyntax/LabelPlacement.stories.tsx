@@ -526,3 +526,50 @@ export const BarEndPart: StoryObj = {
     return container;
   },
 };
+
+// ─── boxes: inside first ─────────────────────────────────────────────────────
+// Counts that span three orders of magnitude. Each bar's value goes just
+// inside its top, or above it when the bar is too short to hold it.
+const counts = [
+  { k: "A", v: 2 },
+  { k: "B", v: 6 },
+  { k: "C", v: 14 },
+  { k: "D", v: 35 },
+  { k: "E", v: 120 },
+  { k: "F", v: 1450 },
+];
+
+export const BarValuesInsideOrAbove: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(counts)
+      .flow(spread({ by: "k", dir: "x" }))
+      .mark(
+        rect({ h: "v", fill: "#4e79a7" }).label("v", {
+          position: Place.around({
+            directions: ["top"],
+            side: ["inset", "outset"],
+          }),
+        })
+      )
+      .render(container, { w: 320, h: 200, axes: true });
+    return container;
+  },
+};
+
+// The same counts across: each value goes just inside the end of its bar,
+// or just past the end when the bar is too short to hold it.
+export const BarValuesInsideOrPastEnd: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(counts)
+      .flow(spread({ by: "k", dir: "y" }))
+      .mark(
+        rect({ w: "v", fill: "#59a14f" }).label("v", {
+          position: Place.along({ at: "x-max", side: ["inset", "outset"] }),
+        })
+      )
+      .render(container, { w: 320, h: 200, axes: true });
+    return container;
+  },
+};

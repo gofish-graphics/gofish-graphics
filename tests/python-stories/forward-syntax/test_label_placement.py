@@ -291,3 +291,43 @@ def story_bar_end_part():
         ),
         {"w": 320, "h": 200, "axes": True},
     )
+
+
+# ─── boxes: inside first ─────────────────────────────────────────────────────
+
+COUNTS = [
+    {"k": "A", "v": 2},
+    {"k": "B", "v": 6},
+    {"k": "C", "v": 14},
+    {"k": "D", "v": 35},
+    {"k": "E", "v": 120},
+    {"k": "F", "v": 1450},
+]
+
+
+def story_bar_values_inside_or_above():
+    return (
+        chart(COUNTS)
+        .flow(spread(by="k", dir="x"))
+        .mark(
+            rect(h="v", fill="#4e79a7").label(
+                "v",
+                position=Place.around(directions=["top"], side=["inset", "outset"]),
+            )
+        ),
+        {"w": 320, "h": 200, "axes": True},
+    )
+
+
+def story_bar_values_inside_or_past_end():
+    return (
+        chart(COUNTS)
+        .flow(spread(by="k", dir="y"))
+        .mark(
+            rect(w="v", fill="#59a14f").label(
+                "v",
+                position=Place.along(at="x-max", side=["inset", "outset"]),
+            )
+        ),
+        {"w": 320, "h": 200, "axes": True},
+    )
