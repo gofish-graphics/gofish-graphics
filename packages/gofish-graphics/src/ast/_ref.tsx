@@ -457,31 +457,47 @@ function scopeRootOf(from: GoFishNode): GoFishNode {
 }
 
 /**
- * The CLOSEST nodes named `name` inside `level`: a breadth-first search over
- * the nodes visible inside `level` (not `level` itself; nested `createMark`
- * components are visited but not entered) that returns every match at the
- * smallest depth below `level`, or `[]`. `searched` is a child subtree an
- * earlier, narrower level already searched without a match: its root is still
- * checked (a level never matches itself, so it was not), but its inside is
- * not walked again.
+ * The CLOSEST nodes with each name inside `level`, looked up one name at a
+ * time: a breadth-first search over the nodes visible inside `level` (not
+ * `level` itself; nested `createMark` components are visited but not entered)
+ * that answers a name with every match at the smallest depth below `level`,
+ * or `[]`. `searched` is a child subtree an earlier, narrower level already
+ * searched without a match: its root is still checked (a level never matches
+ * itself, so it was not), but its inside is not walked again.
+ *
+ * The search goes one depth at a time and only as deep as a name needs, and
+ * it keeps every name it has passed with its matches at their depth. So the
+ * first lookup walks no deeper than the old one-name search did, and later
+ * lookups reuse the depths already walked: resolving many names inside one
+ * level walks it at most once (#1175).
  */
-function closestAtLevel(
+function closestNames(
   level: GoFishNode,
-  name: string,
   searched: GoFishNode | undefined
-): GoFishAST[] {
+): (name: string) => GoFishAST[] {
+  const closest = new Map<string, GoFishAST[]>();
   let frontier: GoFishAST[] = level.children;
-  while (frontier.length > 0) {
-    const matches = frontier.filter((n) => childNameKey(n) === name);
-    if (matches.length > 0) return matches;
-    const next: GoFishAST[] = [];
-    for (const n of frontier) {
-      if (n === searched) continue;
-      if (n instanceof GoFishNode && !n._isComponent) next.push(...n.children);
+  return (name) => {
+    while (!closest.has(name) && frontier.length > 0) {
+      // The names first met at this depth, with all their matches here.
+      const atDepth = new Map<string, GoFishAST[]>();
+      const next: GoFishAST[] = [];
+      for (const n of frontier) {
+        const key = childNameKey(n);
+        if (key !== undefined && !closest.has(key)) {
+          const matches = atDepth.get(key);
+          if (matches) matches.push(n);
+          else atDepth.set(key, [n]);
+        }
+        if (n === searched) continue;
+        if (n instanceof GoFishNode && !n._isComponent)
+          for (const c of n.children) next.push(c);
+      }
+      for (const [key, matches] of atDepth) closest.set(key, matches);
+      frontier = next;
     }
-    frontier = next;
-  }
-  return [];
+    return closest.get(name) ?? [];
+  };
 }
 
 /**
@@ -506,32 +522,49 @@ export function resolveScopedName(
   name: string,
   what: string
 ): GoFishAST {
+  return scopedNames(from)(name, what);
+}
+
+/**
+ * The lookup of {@link resolveScopedName} from `from`, for many names: each
+ * level's search is kept between calls (`closestNames`), so resolving every
+ * name a layer's constraints use walks each level once in all, not once per
+ * name (#1175).
+ */
+export function scopedNames(
+  from: GoFishNode
+): (name: string, what: string) => GoFishAST {
   const boundary = scopeRootOf(from);
-  let level = from;
-  let searched: GoFishNode | undefined;
-  for (;;) {
-    const matches = closestAtLevel(level, name, searched);
-    if (matches.length === 1) return matches[0];
-    if (matches.length > 1) {
-      throw new Error(
-        `${what}: the name "${name}" is ambiguous — ${matches.length} nodes ` +
-          `named "${name}" are equally close to the use site. Give them ` +
-          `distinct names, or wrap each repeated part in its own createMark ` +
-          `component.`
-      );
+  // Each level's search, from `from` outward, made when a name first needs it.
+  const levels: ((name: string) => GoFishAST[])[] = [];
+  return (name, what) => {
+    let level = from;
+    let searched: GoFishNode | undefined;
+    for (let i = 0; ; i++) {
+      levels[i] ??= closestNames(level, searched);
+      const matches = levels[i](name);
+      if (matches.length === 1) return matches[0];
+      if (matches.length > 1) {
+        throw new Error(
+          `${what}: the name "${name}" is ambiguous — ${matches.length} nodes ` +
+            `named "${name}" are equally close to the use site. Give them ` +
+            `distinct names, or wrap each repeated part in its own createMark ` +
+            `component.`
+        );
+      }
+      if (level === boundary || !level.parent) break;
+      searched = level;
+      level = level.parent;
     }
-    if (level === boundary || !level.parent) break;
-    searched = level;
-    level = level.parent;
-  }
-  const where = boundary._isComponent
-    ? "the enclosing createMark component"
-    : "this diagram";
-  throw new Error(
-    `${what}: no node named "${name}" in ${where}. String names are ` +
-      `visible up to the nearest createMark boundary; to reach across one, ` +
-      `use createName("${name}") and a ref path.`
-  );
+    const where = boundary._isComponent
+      ? "the enclosing createMark component"
+      : "this diagram";
+    throw new Error(
+      `${what}: no node named "${name}" in ${where}. String names are ` +
+        `visible up to the nearest createMark boundary; to reach across one, ` +
+        `use createName("${name}") and a ref path.`
+    );
+  };
 }
 
 export const findPathToRoot = (node: GoFishAST): GoFishAST[] => {

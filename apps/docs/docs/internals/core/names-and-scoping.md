@@ -61,9 +61,17 @@ Inside the level where the search stops, the closest match wins. Distance is
 the number of steps down from that level's node, so a direct child is at
 distance 1. A layer's direct child `x` therefore beats an `x` nested deeper
 inside another child, and a deeply nested name is still reachable when nothing
-closer has it. `closestAtLevel` does this with a breadth-first search that
+closer has it. `closestNames` does this with a breadth-first search that
 stops at the first depth with a match. When the search moves up a level, it
 does not walk the subtree it just searched again.
+
+A layer's constraints can name many operands, one per point in a scatter, so
+the lookup is built to resolve many names from one start. `scopedNames(from)`
+keeps each level's search between names: the search remembers every name it
+has passed, with its matches at their depth, and goes deeper only when a name
+is not among them. So resolving all of a layer's operand names walks each
+level once in all, not once per name (#1175). `resolveScopedName` is the same
+lookup for one name.
 
 The search has one hard boundary, the `createMark` component. It never goes
 above the nearest component that contains the start, and it never looks inside

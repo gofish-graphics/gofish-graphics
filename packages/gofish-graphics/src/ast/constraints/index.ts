@@ -40,7 +40,7 @@ import {
   isLabelPlaceConstraint,
   type LabelPlaceConstraint,
 } from "../labels/placeStep";
-import { resolveScopedName, visibleNodes } from "../_ref";
+import { scopedNames, visibleNodes } from "../_ref";
 import {
   childNameKey,
   isPlacedOn,
@@ -218,7 +218,8 @@ export type ResolvedOperand = {
 /**
  * Resolve every placement operand of `layer`'s constraints to a node inside
  * the layer, once per distinct name, with the same lookup `ref("name")` uses
- * (`resolveScopedName`: missing or ambiguous names throw). Every operand must
+ * (`resolveScopedName`: missing or ambiguous names throw), kept across the
+ * names so the layer is walked once, not once per name (`scopedNames`). Every operand must
  * lie inside the layer (a layer can only place what it contains). z-order
  * constraints are excluded: they relate SETS of nodes at paint time
  * (`paintOrder.ts`), not single placeables.
@@ -227,16 +228,14 @@ export function resolveConstraintOperands(
   layer: GoFishNode
 ): Map<string, ResolvedOperand> {
   const out = new Map<string, ResolvedOperand>();
+  const resolve = scopedNames(layer);
+  const childOf = directChildIndex(layer);
   for (const c of layer.constraints) {
     if (isZOrderConstraint(c)) continue;
     for (const ref of c.children) {
       if (out.has(ref.name)) continue;
-      const node = resolveScopedName(
-        layer,
-        ref.name,
-        `Constraint.${c.type} operand`
-      );
-      const child = directChildIndex(layer, node);
+      const node = resolve(ref.name, `Constraint.${c.type} operand`);
+      const child = childOf(node);
       if (child < 0) {
         throw new Error(
           `Constraint.${c.type}: operand "${ref.name}" is not inside the ` +

@@ -191,11 +191,20 @@ function directChildOf(
   return cur;
 }
 
-/** The index of `layer`'s direct child that is or contains `node`, or -1 when
- *  `node` is not inside `layer`. */
-export function directChildIndex(layer: GoFishNode, node: GoFishAST): number {
-  const child = directChildOf(layer, node);
-  return child ? layer.children.indexOf(child) : -1;
+/** The index of `layer`'s direct child that is or contains a node, or -1
+ *  when the node is not inside `layer`. The children are indexed once, so
+ *  looking up many nodes does not scan them once per node (#1175). */
+export function directChildIndex(
+  layer: GoFishNode
+): (node: GoFishAST) => number {
+  const childIndex = new Map<GoFishAST, number>();
+  layer.children.forEach((c, i) => {
+    if (!childIndex.has(c)) childIndex.set(c, i);
+  });
+  return (node) => {
+    const child = directChildOf(layer, node);
+    return child ? (childIndex.get(child) ?? -1) : -1;
+  };
 }
 
 /** The order of one layer's relate steps (see {@link scheduleRelate}). */
@@ -241,15 +250,7 @@ export function scheduleRelate(
   // deps.get(u) = the steps u waits for.
   const deps = new Map<number, Set<number>>([[SOLVE, new Set()]]);
   for (const i of clauses) deps.set(i, new Set());
-  const childIndex = new Map<GoFishAST, number>();
-  layer.children.forEach((c, i) => {
-    if (!childIndex.has(c)) childIndex.set(c, i);
-  });
-  // `directChildIndex`, with the index looked up once per child.
-  const childOf = (node: GoFishAST): number => {
-    const child = directChildOf(layer, node);
-    return child ? (childIndex.get(child) ?? -1) : -1;
-  };
+  const childOf = directChildIndex(layer);
 
   for (const op of operands.values()) {
     if (clauses.has(op.child)) deps.get(SOLVE)!.add(op.child);
