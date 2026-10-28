@@ -242,7 +242,9 @@ best first (`strategies.ts`):
 - `around` takes the outline's extreme point in each of eight screen
   directions (Imhof's order, upper right first), and puts the label's box
   just past it, touching from the side the direction points to. Tied points
-  form runs along the outline; a run stands for its middle, and of several
+  form runs along the outline; a run stands for its middle (a ring that ties
+  all the way round, like a bar thinner than the tie tolerance, has no ends,
+  so it stands for the middle of its span across the direction), and of several
   runs (the two arm tips of a C facing right) the one nearest the middle of
   that side of the box wins, then the upper one.
 - `along` takes spots on one outline: at `at` (a fraction of its length, its

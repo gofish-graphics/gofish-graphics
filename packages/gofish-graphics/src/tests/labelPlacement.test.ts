@@ -186,6 +186,13 @@ console.log("# around");
   ];
   const p = extremePoint([{ points: C, closed: true, filled: true }], "right");
   ok("C facing right: the upper arm tip, at its middle", near(p[0], 40) && near(p[1], 5), JSON.stringify(p));
+  // A box thinner than the tie tolerance ties all the way round; it still
+  // stands for its top edge's middle, not a corner.
+  for (const h of [0.275, 0]) {
+    const thin = boxOutline({ min: [67, 100], max: [113, 100 + h] }, 1);
+    const q = extremePoint([thin], "top");
+    ok(`46x${h} box: top is its top edge's middle`, near(q[0], 90) && near(q[1], 100), JSON.stringify(q));
+  }
 }
 
 console.log("# along");

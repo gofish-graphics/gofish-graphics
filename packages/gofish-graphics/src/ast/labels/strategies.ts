@@ -177,7 +177,11 @@ export function extremePoint(outlines: Outline[], dir: Direction): Pt {
     let first = 0;
     if (o.closed) {
       const free = tied.findIndex((t) => !t);
-      first = free < 0 ? 0 : free;
+      if (free < 0) {
+        runs.push(ringMiddle(pts, d, max));
+        continue;
+      }
+      first = free;
     }
     let run: Pt[] = [];
     const flush = () => {
@@ -208,6 +212,25 @@ export function extremePoint(outlines: Outline[], dir: Direction): Pt {
     }
   }
   return best;
+}
+
+/**
+ * The point a ring stands for when it ties all the way round, as a ring
+ * thinner than the tie tolerance does (a bar 0.3 px tall). Such a run has
+ * no ends to be halfway between, so it stands for the middle of the ring's
+ * span across `d`, on the extreme line `max`.
+ */
+function ringMiddle(pts: Pt[], d: Pt, max: number): Pt {
+  const e: Pt = [-d[1], d[0]];
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const p of pts) {
+    const t = dot(p, e);
+    if (t < lo) lo = t;
+    if (t > hi) hi = t;
+  }
+  const mid = (lo + hi) / 2;
+  return [mid * e[0] + max * d[0], mid * e[1] + max * d[1]];
 }
 
 /** The point halfway along a run of points, by arc length. */
