@@ -22,6 +22,11 @@ SEATTLE_WEATHER = load_json("seatle_weather")
 # from it).
 CATEGORY_BRANDS = load_json("category_brands")
 
+# Seventy countries (continent, region, country, pop in millions, a made-up
+# uncertainty), the bubble treemap data. Mirrors
+# packages/gofish-graphics/src/data/countryPopulations.ts (dumped from it).
+COUNTRY_POPULATIONS = load_json("country_populations")
+
 # Resolved color values (color6 palette, gray/neutral, and the spectral.js
 # mix() results the stories compute at runtime — precomputed so Python emits
 # byte-identical fills).
