@@ -4,7 +4,7 @@
 
 import { lerp, rybHsl2rgb } from "rybitten";
 import { ColorCoords, cubes } from "rybitten/cubes";
-import { mix, palette } from "spectral.js";
+import { HEX, mix as spectralMix } from "spectral.js";
 import {
   type ColorOp,
   getValue,
@@ -13,8 +13,48 @@ import {
   type MaybeValue,
 } from "./ast/data";
 import type { Scale } from "./ast/gofish";
+import { parse, to8Bit, toRgb } from "./colorModes";
 export const rgbToString = (rgb: ColorCoords) =>
   `rgb(${rgb.map((x) => Math.round(x * 255)).join(", ")})`;
+
+/**
+ * A CSS color as spectral.js's `[r, g, b, a]` input: 0-255 channels clipped to
+ * the sRGB gamut, alpha in [0, 1]. Undefined when culori cannot parse it.
+ * spectral.js's own parser reads only `#hex` and comma-separated `rgb()`, and
+ * reads anything else (a named color, `hsl()`, `oklch()`, `rgb(r g b / a)`)
+ * as black or NaN, so every color goes through culori first.
+ */
+const toSpectral = (
+  color: string
+): [number, number, number, number] | undefined => {
+  const parsed = parse(color);
+  if (!parsed) return undefined;
+  const { r, g, b, alpha } = toRgb(parsed);
+  return [to8Bit(r), to8Bit(g), to8Bit(b), alpha ?? 1];
+};
+
+/**
+ * Kubelka–Munk (paint-like) mix of `a` toward `b` by `t` in [0, 1], via
+ * spectral.js. Takes any CSS color culori parses. Alpha interpolates linearly
+ * in `t`, as in CSS `color-mix()`. (spectral.js would weight it by the
+ * colors' luminance, like the paint.) Returns `#rrggbb` when the result is
+ * opaque and `rgba(r, g, b, a)` otherwise. If either color cannot be parsed,
+ * returns `a` unchanged.
+ */
+export const mix = (a: string, b: string, t: number): string => {
+  const ca = toSpectral(a);
+  const cb = toSpectral(b);
+  if (!ca || !cb) return a;
+  const hex = spectralMix(ca, cb, t, HEX);
+  const alpha = Math.round((ca[3] + t * (cb[3] - ca[3])) * 1e4) / 1e4;
+  if (alpha >= 1) return hex;
+  const [r, g, bl] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return `rgba(${r}, ${g}, ${bl}, ${alpha})`;
+};
+
+/** `size` evenly spaced {@link mix} steps from `a` to `b`, inclusive. */
+const mixPalette = (a: string, b: string, size: number): string[] =>
+  Array.from({ length: size }, (_, i) => mix(a, b, i / (size - 1)));
 
 /**
  * Apply a datum value's post-scale color transforms (`.lighten` / `.darken`)
@@ -23,11 +63,17 @@ export const rgbToString = (rgb: ColorCoords) =>
  * by hand (`mix(c, white, 0.5)`), now expressed as a reusable color op. The
  * color analog of a datum's pixel `offset`; see {@link ColorOp} and
  * `getValueColorOps` in ast/data.ts.
+ *
+ * The white or black carries the color's own alpha, so a color op changes the
+ * color and keeps its opacity. A color culori cannot parse (e.g.
+ * `currentColor`) passes through unchanged.
  */
 export const applyColorOps = (color: string, ops: ColorOp[]): string => {
+  const alpha = parse(color)?.alpha ?? 1;
   let out = color;
   for (const { op, amount } of ops) {
-    out = mix(out, op === "lighten" ? "#ffffff" : "#000000", amount);
+    const v = op === "lighten" ? 255 : 0;
+    out = mix(out, `rgb(${v} ${v} ${v} / ${alpha})`, amount);
   }
   return out;
 };
@@ -120,9 +166,9 @@ const createPalette = (
 
   // slice off values that are either pure white/black or too close to the pure color
 
-  const lighterShades = palette(white, color, 8).slice(0, -3);
+  const lighterShades = mixPalette(white, color, 8).slice(0, -3);
 
-  const darkerShades = palette(color, black, 8).slice(2, -2);
+  const darkerShades = mixPalette(color, black, 8).slice(2, -2);
 
   return [...lighterShades, color, ...darkerShades];
 };

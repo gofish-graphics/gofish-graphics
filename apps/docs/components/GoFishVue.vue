@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import * as gf from "gofish-graphics";
-import { mix } from "spectral.js";
 import _ from "lodash";
 import { streamgraphData } from "./data/streamgraphData";
 import { titanic } from "./data/titanic";
@@ -65,7 +64,7 @@ onMounted(() => {
       density1d,
       genderPayGap,
       payGrade,
-      mix,
+      gf.mix,
       seafood,
       lakeLocations
     );

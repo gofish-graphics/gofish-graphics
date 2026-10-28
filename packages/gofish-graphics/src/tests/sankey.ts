@@ -8,7 +8,6 @@ import { layer } from "../ast/graphicalOperators/layer";
 import { ribbon, Curve } from "../lib";
 import { ref } from "../ast/shapes/ref";
 import { color10Order } from "./color10";
-import { mix } from "spectral.js";
 import { cubes } from "rybitten/cubes";
 import { rybHsl2rgb } from "rybitten";
 

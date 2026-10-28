@@ -13,7 +13,6 @@ import {
   white,
 } from "../color";
 import { titanic } from "../data/titanic";
-import { mix } from "spectral.js";
 import { stackY } from "../lib";
 
 const data = [

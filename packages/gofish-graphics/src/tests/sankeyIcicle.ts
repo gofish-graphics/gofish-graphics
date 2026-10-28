@@ -11,9 +11,9 @@ import {
   neutral,
   tailwindColors,
   white,
+  mix,
 } from "../color";
 import { titanic } from "../data/titanic";
-import { mix } from "spectral.js";
 import { layer } from "../ast/graphicalOperators/layer";
 import { ref } from "../ast/shapes/ref";
 import { frame } from "../ast/graphicalOperators/frame";
