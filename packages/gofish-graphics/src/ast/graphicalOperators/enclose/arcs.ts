@@ -36,11 +36,17 @@
  * strays at most TOL px from its arc. An ellipse member is read, as the blob
  * reads it, as the disc of its larger radius (`members.ts`).
  */
-import { signedArea2, pointInRing } from "../../geometry/plane";
-import type { BlobMember, Pt } from "./blob";
+import { signedArea2, pointInRing, segDist } from "../../geometry/plane";
+import { ringExtent } from "../../geometry/box";
+import {
+  boxGrid,
+  grownPrim,
+  primD,
+  type BlobMember,
+  type Prim,
+  type Pt,
+} from "./blob";
 
-/** The default radius of `Shape.arcs()`, in pixels. */
-export const ARCS_RADIUS = 12;
 /** How far a chord may stray from the arc it samples, in pixels. */
 const TOL = 0.2;
 /** The longest straight run between two samples, in pixels (the cut search
@@ -50,101 +56,81 @@ const EPS = 1e-7;
 const TAU = 2 * Math.PI;
 
 /** An edge of a grown member, run so the member is on its left (angle
- *  increasing on an arc). */
-type Edge =
-  | { t: "arc"; cx: number; cy: number; R: number; a0: number; a1: number }
-  | { t: "line"; ax: number; ay: number; bx: number; by: number };
-
-type Prim = {
-  edges: Edge[];
-  sdf: (x: number, y: number) => number;
-  bb: number[];
+ *  increasing on an arc). A curve of the shrunk boundary is one too (an arc
+ *  there may run backward). */
+type Line = { t: "line"; ax: number; ay: number; bx: number; by: number };
+type Arc = {
+  t: "arc";
+  cx: number;
+  cy: number;
+  R: number;
+  a0: number;
+  a1: number;
 };
+type Edge = Line | Arc;
 
-const segDist = (
-  x: number,
-  y: number,
+/** A grown member: its exact primitive (the blob's, whose signed distance
+ *  `primD` reads) and its boundary as edges. */
+type Grown = { prim: Prim; edges: Edge[] };
+
+/** The edges of a capsule of radius R around segment ab (a disc when a = b). */
+function capsuleEdges(
   ax: number,
   ay: number,
   bx: number,
-  by: number
-) => {
-  const ex = bx - ax,
-    ey = by - ay,
-    L = ex * ex + ey * ey;
-  const t =
-    L > 0 ? Math.max(0, Math.min(1, ((x - ax) * ex + (y - ay) * ey) / L)) : 0;
-  return Math.hypot(x - ax - t * ex, y - ay - t * ey);
-};
-
-/** A capsule of radius R around segment ab (a disc when a = b). */
-function capsule(a: Pt, b: Pt, R: number): Prim {
-  const [ax, ay] = a,
-    [bx, by] = b;
+  by: number,
+  R: number
+): Edge[] {
   const L = Math.hypot(bx - ax, by - ay);
-  const bb = [
-    Math.min(ax, bx) - R,
-    Math.min(ay, by) - R,
-    Math.max(ax, bx) + R,
-    Math.max(ay, by) + R,
-  ];
-  if (L < 1e-9)
-    return {
-      edges: [{ t: "arc", cx: ax, cy: ay, R, a0: 0, a1: TAU }],
-      sdf: (x, y) => Math.hypot(x - ax, y - ay) - R,
-      bb,
-    };
+  if (L < 1e-9) return [{ t: "arc", cx: ax, cy: ay, R, a0: 0, a1: TAU }];
   const ux = (bx - ax) / L,
     uy = (by - ay) / L;
   const phi = Math.atan2(uy, ux);
   // right of the direction (uy, -ux) runs a → b with the capsule on the left
   const [nx, ny] = [uy, -ux];
-  return {
-    edges: [
-      {
-        t: "line",
-        ax: ax + R * nx,
-        ay: ay + R * ny,
-        bx: bx + R * nx,
-        by: by + R * ny,
-      },
-      {
-        t: "arc",
-        cx: bx,
-        cy: by,
-        R,
-        a0: phi - Math.PI / 2,
-        a1: phi + Math.PI / 2,
-      },
-      {
-        t: "line",
-        ax: bx - R * nx,
-        ay: by - R * ny,
-        bx: ax - R * nx,
-        by: ay - R * ny,
-      },
-      {
-        t: "arc",
-        cx: ax,
-        cy: ay,
-        R,
-        a0: phi + Math.PI / 2,
-        a1: phi + (3 * Math.PI) / 2,
-      },
-    ],
-    sdf: (x, y) => segDist(x, y, ax, ay, bx, by) - R,
-    bb,
-  };
+  return [
+    {
+      t: "line",
+      ax: ax + R * nx,
+      ay: ay + R * ny,
+      bx: bx + R * nx,
+      by: by + R * ny,
+    },
+    {
+      t: "arc",
+      cx: bx,
+      cy: by,
+      R,
+      a0: phi - Math.PI / 2,
+      a1: phi + Math.PI / 2,
+    },
+    {
+      t: "line",
+      ax: bx - R * nx,
+      ay: by - R * ny,
+      bx: ax - R * nx,
+      by: ay - R * ny,
+    },
+    {
+      t: "arc",
+      cx: ax,
+      cy: ay,
+      R,
+      a0: phi + Math.PI / 2,
+      a1: phi + (3 * Math.PI) / 2,
+    },
+  ];
 }
 
-/** Box [x0, x1] × [y0, y1] grown by g: a rounded box (sharp when g = 0). */
-function roundedBox(
+/** The edges of box [x0, x1] × [y0, y1] grown by g: a rounded box (sharp
+ *  when g = 0). */
+function roundedBoxEdges(
   x0: number,
   y0: number,
   x1: number,
   y1: number,
   g: number
-): Prim {
+): Edge[] {
   const edges: Edge[] = [];
   const line = (ax: number, ay: number, bx: number, by: number) => {
     if (Math.hypot(bx - ax, by - ay) > 1e-9)
@@ -161,153 +147,181 @@ function roundedBox(
   arc(x0, y1, Math.PI / 2);
   line(x0 - g, y1, x0 - g, y0);
   arc(x0, y0, Math.PI);
-  return {
-    edges,
-    sdf: (x, y) => {
-      const dx = Math.max(x0 - x, 0, x - x1),
-        dy = Math.max(y0 - y, 0, y - y1);
-      if (dx > 0 || dy > 0) return Math.hypot(dx, dy) - g;
-      return Math.max(x0 - x, x - x1, y0 - y, y - y1) - g;
-    },
-    bb: [x0 - g, y0 - g, x1 + g, y1 + g],
-  };
+  return edges;
 }
 
-const grown = (m: BlobMember, g: number): Prim =>
-  m.kind === "disc"
-    ? capsule([m.cx, m.cy], [m.cx, m.cy], m.r + g)
-    : m.kind === "segment"
-      ? capsule(m.a, m.b, m.w / 2 + g)
-      : roundedBox(m.x, m.y, m.x + m.w, m.y + m.h, g);
+/** Member `m` grown by g: the blob's primitive for it (a disc, a capsule or
+ *  a rounded box), and the exact edges of that primitive's boundary. */
+function grown(m: BlobMember, g: number): Grown {
+  const p = grownPrim(m, g);
+  const edges =
+    p.k === 0
+      ? [{ t: "arc", cx: p.x1, cy: p.y1, R: p.r, a0: 0, a1: TAU } as Edge]
+      : p.k === 1
+        ? capsuleEdges(p.x1, p.y1, p.x2, p.y2, p.r)
+        : roundedBoxEdges(p.x1, p.y1, p.x2, p.y2, p.r);
+  return { prim: p, edges };
+}
 
 // ── Edges as curves ─────────────────────────────────────────────────────────
 
 /** The point at parameter s of an edge (t in [0, 1] on a line, the angle on
- *  an arc). */
-const at = (e: Edge, s: number): Pt =>
-  e.t === "line"
-    ? [e.ax + (e.bx - e.ax) * s, e.ay + (e.by - e.ay) * s]
-    : [e.cx + e.R * Math.cos(s), e.cy + e.R * Math.sin(s)];
+ *  an arc), one coordinate at a time. */
+const atX = (e: Edge, s: number): number =>
+  e.t === "line" ? e.ax + (e.bx - e.ax) * s : e.cx + e.R * Math.cos(s);
+const atY = (e: Edge, s: number): number =>
+  e.t === "line" ? e.ay + (e.by - e.ay) * s : e.cy + e.R * Math.sin(s);
+const at = (e: Edge, s: number): Pt => [atX(e, s), atY(e, s)];
 const range = (e: Edge): [number, number] =>
   e.t === "line" ? [0, 1] : [e.a0, e.a1];
 /** The angle `a` as the parameter of arc e, or NaN when it is off the arc. */
-const onArc = (e: Edge & { t: "arc" }, a: number) => {
+const onArc = (e: Arc, a: number) => {
   let s = a;
   while (s < e.a0) s += TAU;
   while (s >= e.a0 + TAU) s -= TAU;
   return s <= e.a1 ? s : NaN;
 };
+/** The parameter on line l of (x, y) projected onto it. */
+const lineParam = (l: Line, x: number, y: number): number => {
+  const ex = l.bx - l.ax,
+    ey = l.by - l.ay;
+  return ((x - l.ax) * ex + (y - l.ay) * ey) / (ex * ex + ey * ey);
+};
 
-/** The parameter on edge e of a point on it, or NaN when it is off e. */
-function paramOn(e: Edge, p: Pt): number {
+/** The parameter on edge e of a point (x, y) on it, or NaN when it is off e. */
+function paramOn(e: Edge, x: number, y: number): number {
   if (e.t === "arc") {
-    const d = Math.hypot(p[0] - e.cx, p[1] - e.cy);
+    const d = Math.hypot(x - e.cx, y - e.cy);
     if (Math.abs(d - e.R) > 1e-9) return NaN;
-    return onArc(e, Math.atan2(p[1] - e.cy, p[0] - e.cx));
+    return onArc(e, Math.atan2(y - e.cy, x - e.cx));
   }
-  const ex = e.bx - e.ax,
-    ey = e.by - e.ay,
-    L = ex * ex + ey * ey;
-  const t = ((p[0] - e.ax) * ex + (p[1] - e.ay) * ey) / L;
+  const t = lineParam(e, x, y);
   if (t < 0 || t > 1) return NaN;
-  const [x, y] = at(e, t);
-  return Math.hypot(x - p[0], y - p[1]) <= 1e-9 ? t : NaN;
+  return Math.hypot(atX(e, t) - x, atY(e, t) - y) <= 1e-9 ? t : NaN;
 }
 
-/** The parameters on edge e where edge f crosses it, and where f ends on it
- *  (so an arc that shares a circle with another, as two lines' joined ends
- *  do, or a line that runs along another, is cut where the other stops). */
-function crossings(e: Edge, f: Edge, out: number[]): number[] {
-  for (const s of range(f)) {
-    const t = paramOn(e, at(f, s));
-    if (!Number.isNaN(t)) out.push(t);
-  }
-  const onF = (p: Pt) =>
-    f.t === "line"
-      ? (() => {
-          const ex = f.bx - f.ax,
-            ey = f.by - f.ay,
-            L = ex * ex + ey * ey;
-          const t = ((p[0] - f.ax) * ex + (p[1] - f.ay) * ey) / L;
-          return t >= -1e-12 && t <= 1 + 1e-12;
-        })()
-      : !Number.isNaN(onArc(f, Math.atan2(p[1] - f.cy, p[0] - f.cx)));
-  if (e.t === "line") {
-    const dx = e.bx - e.ax,
-      dy = e.by - e.ay;
-    if (f.t === "line") {
-      const fx = f.bx - f.ax,
-        fy = f.by - f.ay;
-      const den = dx * fy - dy * fx;
-      if (Math.abs(den) < 1e-14) return out;
-      const t = ((f.ax - e.ax) * fy - (f.ay - e.ay) * fx) / den;
-      const u = ((f.ax - e.ax) * dy - (f.ay - e.ay) * dx) / den;
-      if (t > 0 && t < 1 && u >= 0 && u <= 1) out.push(t);
-      return out;
-    }
-    // line × circle
-    const ox = e.ax - f.cx,
-      oy = e.ay - f.cy;
-    const A = dx * dx + dy * dy,
-      B = 2 * (ox * dx + oy * dy),
-      C = ox * ox + oy * oy - f.R * f.R;
-    const disc = B * B - 4 * A * C;
-    if (disc <= 0) return out;
-    const q = Math.sqrt(disc);
-    for (const t of [(-B - q) / (2 * A), (-B + q) / (2 * A)])
-      if (t > 0 && t < 1 && onF(at(e, t))) out.push(t);
-    return out;
-  }
-  // e is an arc
-  if (f.t === "line") {
-    const dx = f.bx - f.ax,
-      dy = f.by - f.ay;
-    const ox = f.ax - e.cx,
-      oy = f.ay - e.cy;
-    const A = dx * dx + dy * dy,
-      B = 2 * (ox * dx + oy * dy),
-      C = ox * ox + oy * oy - e.R * e.R;
-    const disc = B * B - 4 * A * C;
-    if (disc <= 0) return out;
-    const q = Math.sqrt(disc);
-    for (const u of [(-B - q) / (2 * A), (-B + q) / (2 * A)]) {
-      if (u < 0 || u > 1) continue;
-      const s = onArc(e, Math.atan2(oy + u * dy, ox + u * dx));
-      if (!Number.isNaN(s)) out.push(s);
-    }
-    return out;
-  }
-  // circle × circle
+/** Whether a point on the line or circle of edge f lies within f's run. */
+const onEdge = (f: Edge, x: number, y: number): boolean =>
+  f.t === "line"
+    ? (() => {
+        const t = lineParam(f, x, y);
+        return t >= -1e-12 && t <= 1 + 1e-12;
+      })()
+    : !Number.isNaN(onArc(f, Math.atan2(y - f.cy, x - f.cx)));
+
+/** The parameters on line l where it meets the circle of arc c, in order
+ *  along l; none when it misses or touches the circle. */
+function lineCircle(l: Line, c: Arc): number[] {
+  const dx = l.bx - l.ax,
+    dy = l.by - l.ay;
+  const ox = l.ax - c.cx,
+    oy = l.ay - c.cy;
+  const A = dx * dx + dy * dy,
+    B = 2 * (ox * dx + oy * dy),
+    C = ox * ox + oy * oy - c.R * c.R;
+  const disc = B * B - 4 * A * C;
+  if (disc <= 0) return [];
+  const q = Math.sqrt(disc);
+  return [(-B - q) / (2 * A), (-B + q) / (2 * A)];
+}
+
+/** Cut e (onto `out`) where an end of f lies on it, so an arc that shares a
+ *  circle with another, as two lines' joined ends do, or a line that runs
+ *  along another, is cut where the other stops. */
+function endsOn(e: Edge, f: Edge, out: number[]): void {
+  const [s0, s1] = f.t === "line" ? [0, 1] : [f.a0, f.a1];
+  const t0 = paramOn(e, atX(f, s0), atY(f, s0));
+  if (!Number.isNaN(t0)) out.push(t0);
+  const t1 = paramOn(e, atX(f, s1), atY(f, s1));
+  if (!Number.isNaN(t1)) out.push(t1);
+}
+
+/** The parameters on arc e (onto `out`) where the circle of arc f crosses
+ *  it within f's run. */
+function arcArc(e: Arc, f: Arc, out: number[]): void {
   const ddx = f.cx - e.cx,
     ddy = f.cy - e.cy,
     d = Math.hypot(ddx, ddy);
-  if (d < 1e-12 || d >= e.R + f.R || d <= Math.abs(e.R - f.R)) return out;
+  if (d < 1e-12 || d >= e.R + f.R || d <= Math.abs(e.R - f.R)) return;
   const al = Math.acos(
     Math.max(-1, Math.min(1, (e.R * e.R + d * d - f.R * f.R) / (2 * e.R * d)))
   );
   const base = Math.atan2(ddy, ddx);
   for (const a of [base - al, base + al]) {
     const s = onArc(e, a);
-    if (!Number.isNaN(s) && onF(at(e, s))) out.push(s);
+    if (!Number.isNaN(s) && onEdge(f, atX(e, s), atY(e, s))) out.push(s);
   }
-  return out;
 }
 
-/** A box that holds an edge (an arc's whole circle), a little grown. */
-const boxOfEdge = (e: Edge): number[] =>
-  e.t === "arc"
-    ? [
-        e.cx - e.R - 1e-6,
-        e.cy - e.R - 1e-6,
-        e.cx + e.R + 1e-6,
-        e.cy + e.R + 1e-6,
-      ]
-    : [
-        Math.min(e.ax, e.bx) - 1e-6,
-        Math.min(e.ay, e.by) - 1e-6,
-        Math.max(e.ax, e.bx) + 1e-6,
-        Math.max(e.ay, e.by) + 1e-6,
-      ];
+/**
+ * Where edges e and f cross, as cut parameters on each: onto `ce` the
+ * parameters on e where f crosses it or ends on it, onto `cf` the same on f.
+ * Each crossing is solved once for the pair.
+ */
+function crossPair(e: Edge, f: Edge, ce: number[], cf: number[]): void {
+  endsOn(e, f, ce);
+  endsOn(f, e, cf);
+  if (e.t === "arc" && f.t === "arc") {
+    arcArc(e, f, ce);
+    arcArc(f, e, cf);
+    return;
+  }
+  if (e.t === "line" && f.t === "line") {
+    const dx = e.bx - e.ax,
+      dy = e.by - e.ay;
+    const fx = f.bx - f.ax,
+      fy = f.by - f.ay;
+    const den = dx * fy - dy * fx;
+    if (Math.abs(den) < 1e-14) return;
+    const t = ((f.ax - e.ax) * fy - (f.ay - e.ay) * fx) / den;
+    const u = ((f.ax - e.ax) * dy - (f.ay - e.ay) * dx) / den;
+    if (t > 0 && t < 1 && u >= 0 && u <= 1) ce.push(t);
+    if (u > 0 && u < 1 && t >= 0 && t <= 1) cf.push(u);
+    return;
+  }
+  // a line × an arc
+  const [l, c, cl, cc] =
+    e.t === "line" ? [e, f as Arc, ce, cf] : [f as Line, e as Arc, cf, ce];
+  const dx = l.bx - l.ax,
+    dy = l.by - l.ay;
+  for (const u of lineCircle(l, c)) {
+    if (u > 0 && u < 1 && onEdge(c, atX(l, u), atY(l, u))) cl.push(u);
+    if (u < 0 || u > 1) continue;
+    const s = onArc(c, Math.atan2(l.ay - c.cy + u * dy, l.ax - c.cx + u * dx));
+    if (!Number.isNaN(s)) cc.push(s);
+  }
+}
+
+/** A box that holds an edge (an arc's own angular run), a little grown. */
+function boxOfEdge(e: Edge): number[] {
+  if (e.t === "line")
+    return [
+      Math.min(e.ax, e.bx) - 1e-6,
+      Math.min(e.ay, e.by) - 1e-6,
+      Math.max(e.ax, e.bx) + 1e-6,
+      Math.max(e.ay, e.by) + 1e-6,
+    ];
+  const lo = Math.min(e.a0, e.a1),
+    hi = Math.max(e.a0, e.a1);
+  let x0 = Math.min(Math.cos(lo), Math.cos(hi)),
+    x1 = Math.max(Math.cos(lo), Math.cos(hi)),
+    y0 = Math.min(Math.sin(lo), Math.sin(hi)),
+    y1 = Math.max(Math.sin(lo), Math.sin(hi));
+  // the axis extremes the run passes
+  for (let k = Math.ceil(lo / (Math.PI / 2)); k * (Math.PI / 2) <= hi; k++) {
+    const q = ((k % 4) + 4) % 4;
+    if (q === 0) x1 = 1;
+    else if (q === 1) y1 = 1;
+    else if (q === 2) x0 = -1;
+    else y0 = -1;
+  }
+  return [
+    e.cx + e.R * x0 - 1e-6,
+    e.cy + e.R * y0 - 1e-6,
+    e.cx + e.R * x1 + 1e-6,
+    e.cy + e.R * y1 + 1e-6,
+  ];
+}
 
 /** A piece of an edge from parameter s0 to s1. */
 type Piece = { e: Edge; s0: number; s1: number };
@@ -342,39 +356,18 @@ function pieceDist(p: Pt, q: Piece): number {
   );
 }
 
-/** A uniform grid over boxes, for candidate lookups. */
-function grid(bbs: number[][], cell: number) {
-  const m = new Map<string, number[]>();
-  const key = (i: number, j: number) => `${i},${j}`;
-  bbs.forEach((b, k) => {
-    for (let i = Math.floor(b[0] / cell); i <= Math.floor(b[2] / cell); i++)
-      for (let j = Math.floor(b[1] / cell); j <= Math.floor(b[3] / cell); j++) {
-        const l = m.get(key(i, j));
-        if (l) l.push(k);
-        else m.set(key(i, j), [k]);
-      }
-  });
-  return (b: number[]): number[] => {
-    const seen = new Set<number>();
-    for (let i = Math.floor(b[0] / cell); i <= Math.floor(b[2] / cell); i++)
-      for (let j = Math.floor(b[1] / cell); j <= Math.floor(b[3] / cell); j++)
-        for (const k of m.get(key(i, j)) ?? []) seen.add(k);
-    return [...seen];
-  };
-}
-
 const overlaps = (a: number[], b: number[]) =>
   a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
 
-/** Link curve runs end to start (nearest start first) into closed loops. */
+/** Link curve runs end to start into closed loops: after each run, the run
+ *  whose start is nearest its end (the first such on a tie), among the
+ *  starts within 1 px, or among them all when none is that near. */
 function link<T>(runs: T[], start: (r: T) => Pt, end: (r: T) => Pt): T[][] {
   const used = new Array(runs.length).fill(false);
   const loops: T[][] = [];
   const starts = runs.map(start);
-  const near = grid(
-    starts.map(([x, y]) => [x, y, x, y]),
-    4
-  );
+  const near = boxGrid(starts.map(([x, y]) => [x, y, x, y]));
+  const all = runs.map((_, k) => k);
   for (let s0 = 0; s0 < runs.length; s0++) {
     if (used[s0]) continue;
     const loop: T[] = [];
@@ -383,13 +376,17 @@ function link<T>(runs: T[], start: (r: T) => Pt, end: (r: T) => Pt): T[][] {
       used[i] = true;
       loop.push(runs[i]);
       const [ex, ey] = end(runs[i]);
+      const dist = (k: number) =>
+        Math.hypot(starts[k][0] - ex, starts[k][1] - ey);
       let next = -1,
         best = Infinity;
-      let cands = near([ex - 1, ey - 1, ex + 1, ey + 1]);
-      if (cands.length === 0) cands = runs.map((_, k) => k);
-      for (const k of cands) {
+      const within = near
+        .query(ex - 1, ey - 1, ex + 1, ey + 1)
+        .filter((k) => dist(k) <= 1);
+      // in index order, so a tie goes to the first
+      for (const k of within.length > 0 ? within : all) {
         if (used[k] && k !== s0) continue;
-        const d = Math.hypot(starts[k][0] - ex, starts[k][1] - ey);
+        const d = dist(k);
         if (d < best) [best, next] = [d, k];
       }
       if (next === s0) break;
@@ -437,37 +434,48 @@ export function arcsOutline(
   if (members.length === 0) return [];
   const r = Math.max(0, o.radius);
   const prims = members.map((m) => grown(m, Math.max(0, o.padding) + r));
+  const sdf = (j: number, x: number, y: number) =>
+    primD(prims[j].prim, x, y, false);
 
   // 2. The union's boundary.
-  const near = grid(
-    prims.map((p) => p.bb),
-    Math.max(8, 2 * (o.padding + r))
-  );
-  const pieces: Piece[] = [];
+  const near = boxGrid(prims.map((p) => p.prim.bb));
+  const others = prims.map((P, i) => {
+    const [xa, ya, xb, yb] = P.prim.bb;
+    return near
+      .query(xa, ya, xb, yb)
+      .filter((j) => j !== i && overlaps(P.prim.bb, prims[j].prim.bb));
+  });
   const edgeBB = prims.map((P) => P.edges.map(boxOfEdge));
+  // Every edge's cut parameters: its ends, and where another member's edge
+  // crosses it or ends on it, each crossing solved once for its pair.
+  const cuts = prims.map((P) => P.edges.map(range));
   prims.forEach((P, i) => {
-    const others = near(P.bb).filter(
-      (j) => j !== i && overlaps(P.bb, prims[j].bb)
-    );
-    P.edges.forEach((e, ei) => {
-      const [lo, hi] = range(e);
-      const cuts = [lo, hi];
-      const eb = edgeBB[i][ei];
-      const touching = others.filter((j) => overlaps(eb, prims[j].bb));
-      for (const j of touching)
+    for (const j of others[i]) {
+      if (j < i) continue;
+      P.edges.forEach((e, ei) => {
+        const eb = edgeBB[i][ei];
         prims[j].edges.forEach((f, fi) => {
-          if (overlaps(eb, edgeBB[j][fi])) crossings(e, f, cuts);
+          if (overlaps(eb, edgeBB[j][fi]))
+            crossPair(e, f, cuts[i][ei], cuts[j][fi]);
         });
-      cuts.sort((a, b) => a - b);
+      });
+    }
+  });
+  const pieces: Piece[] = [];
+  prims.forEach((P, i) => {
+    P.edges.forEach((e, ei) => {
+      const eb = edgeBB[i][ei];
+      const touching = others[i].filter((j) => overlaps(eb, prims[j].prim.bb));
+      const cs = cuts[i][ei].sort((a, b) => a - b);
       // covered by another member; on a tie (two equal members) the first
       // keeps it. The member that covered the last part is tried first.
       const covers = (j: number, x: number, y: number) => {
-        const d = prims[j].sdf(x, y);
+        const d = sdf(j, x, y);
         return d < -EPS || (d <= EPS && j < i);
       };
       let lastCover = -1;
-      for (let k = 0; k + 1 < cuts.length; k++) {
-        const [s0, s1] = [cuts[k], cuts[k + 1]];
+      for (let k = 0; k + 1 < cs.length; k++) {
+        const [s0, s1] = [cs[k], cs[k + 1]];
         if (s1 - s0 < 1e-12) continue;
         const [mx, my] = at(e, (s0 + s1) / 2);
         if (lastCover >= 0 && covers(lastCover, mx, my)) continue;
@@ -500,10 +508,9 @@ export function arcsOutline(
   const boundary = kept.flatMap((L) => L.loop);
 
   // 3. Shrink by r: offset each piece inward, with an arc of r at each corner.
-  // A curve of the shrunk boundary, as an edge (an arc may run backward).
-  type Curve = Edge;
-  const shrunk: Curve[][] = kept.map(({ loop }) => {
-    const out: Curve[] = [];
+  // A curve of the shrunk boundary is an edge (an arc may run backward).
+  const shrunk: Edge[][] = kept.map(({ loop }) => {
+    const out: Edge[] = [];
     loop.forEach((q, k) => {
       const e = q.e;
       if (e.t === "arc") {
@@ -539,26 +546,19 @@ export function arcsOutline(
 
   // 4. Keep the points a full radius from the boundary.
   const pieceBB = boundary.map((q) => {
-    const pts = sampleParams(q.e, q.s0, q.s1).map((s) => at(q.e, s));
-    const xs = pts.map((p) => p[0]),
-      ys = pts.map((p) => p[1]);
-    return [
-      Math.min(...xs) - 1,
-      Math.min(...ys) - 1,
-      Math.max(...xs) + 1,
-      Math.max(...ys) + 1,
-    ];
+    const e = ringExtent(sampleParams(q.e, q.s0, q.s1).map((s) => at(q.e, s)));
+    return [e.minX - 1, e.minY - 1, e.maxX + 1, e.maxY + 1];
   });
-  const nearPiece = grid(pieceBB, Math.max(8, r));
+  const nearPiece = boxGrid(pieceBB);
   const valid = (p: Pt) => {
     if (r <= 0) return true;
-    for (const k of nearPiece([p[0] - r, p[1] - r, p[0] + r, p[1] + r]))
+    for (const k of nearPiece.query(p[0] - r, p[1] - r, p[0] + r, p[1] + r))
       if (pieceDist(p, boundary[k]) < r - 1e-6) return false;
     return true;
   };
 
   // The samples of each curve, in loop order.
-  type Sample = { p: Pt; c: Curve; s: number; ok: boolean };
+  type Sample = { p: Pt; c: Edge; s: number; ok: boolean };
   const runs: Pt[][] = [];
   for (const curves of shrunk) {
     const samples: Sample[] = [];

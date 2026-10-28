@@ -39,11 +39,10 @@ import {
   paddedHull,
   type Ellipse,
 } from "../ast/graphicalOperators/enclose/oval";
-import { arcsOutline, ARCS_RADIUS } from "../ast/graphicalOperators/enclose/arcs";
+import { arcsOutline } from "../ast/graphicalOperators/enclose/arcs";
 import { penguins } from "../data/penguins";
 import { countryPopulations } from "../data/countryPopulations";
 import { packSiblings } from "d3-hierarchy";
-import { Frontend } from "gofish-ir";
 
 declare const process: { exit(code: number): never };
 
@@ -785,10 +784,6 @@ console.log("\n# Shape.arcs() (enclose/arcs.ts)");
   }
 
   {
-    check(
-      "the default radius is 12",
-      ARCS_RADIUS === 12 && Frontend.STRATEGIES.Shape.kinds.arcs.params.radius.default === 12
-    );
     check("no members, no outline", arcsOutline([], { padding: 4, radius: 12 }).length === 0);
   }
 }

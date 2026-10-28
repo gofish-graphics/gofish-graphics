@@ -45,7 +45,7 @@ import { avoidedRefs } from "../nodeRefs";
 import { blobOutline, type BlobMember, type Pt } from "./enclose/blob";
 import { membersOf } from "./enclose/members";
 import { ovalOutline } from "./enclose/oval";
-import { arcsOutline, ARCS_RADIUS } from "./enclose/arcs";
+import { arcsOutline } from "./enclose/arcs";
 import { targetOf } from "../constraints/relationalPaint";
 import { boxOfDims, ringExtent } from "../geometry/box";
 import { RelateOperand } from "../constraints/relate";
@@ -57,6 +57,11 @@ import * as Monotonic from "../../util/monotonic";
 import { ringPathData } from "../geometry/plane";
 import { outlinePaint, ringOutline } from "../geometry/outline";
 import { packEnclose } from "d3-hierarchy";
+
+/** `Shape.arcs()`'s radius when it is given none, as the `Shape` family
+ *  declares it. */
+const ARCS_RADIUS = Frontend.STRATEGIES.Shape.kinds.arcs.params.radius
+  .default as number;
 
 export type EncloseOptions = {
   /** Pixels between the members and the outline, or a field name or

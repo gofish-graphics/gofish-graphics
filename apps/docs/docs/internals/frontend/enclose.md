@@ -271,9 +271,12 @@ preset is within half a pixel of the true padded convex hull.
 Görtler et al. (2018). The region is the morphological closing, by a disc of
 `radius`, of the members grown by `padding`, with holes filled. Each member
 is grown by padding + radius into a convex shape bounded by arcs and lines (a
-disc, a capsule for a segment, a rounded box for a box). The union's boundary
+disc, a capsule for a segment, a rounded box for a box): the blob's own
+primitive for it (`grownPrim`), whose signed distance (`primD`) is the cover
+test, with its boundary as exact edges. The union's boundary
 is traced exactly, by cutting every edge where another shape's edge crosses
-it and keeping the parts no other shape covers. Only the outer loops are kept.
+it (each crossing solved once for the pair) and keeping the parts no other
+shape covers. Only the outer loops are kept.
 That boundary is then shrunk by radius: arcs keep their centers, lines move
 inward, and each corner becomes an arc of `radius`. Where the shrunk boundary
 crosses itself, only the points a full radius from the union's boundary are
