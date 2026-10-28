@@ -1952,7 +1952,6 @@ export class GoFishNode {
       const shift = min - (c.localAnchor?.(axis, "min") ?? 0);
       return [plot[0] + shift, plot[1] + shift];
     };
-    const plotOf = (c: GoFishNode) => inFrame(c, c.localPlotSpan(axis));
     if (this.chrome !== undefined) {
       // Its box less its chrome's gutters, which its layout read off its
       // claims (`chromeGutters`), in its axis order.
@@ -1975,7 +1974,7 @@ export class GoFishNode {
     let hi = -Infinity;
     this.children.forEach((c, i) => {
       if (out(i) || !(c instanceof GoFishNode)) return;
-      const span = plotOf(c);
+      const span = inFrame(c, own[i]);
       if (span === undefined) return;
       lo = Math.min(lo, span[0]);
       hi = Math.max(hi, span[1]);

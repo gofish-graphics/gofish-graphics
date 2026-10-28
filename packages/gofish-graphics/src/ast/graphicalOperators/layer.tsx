@@ -730,9 +730,7 @@ export const layer = createNodeOperatorSequential(
           const plotIsClaim =
             !outlinedNest &&
             node.children.every(
-              (c) =>
-                c instanceof GoFishNode &&
-                c.resolvePlotExtent() === c.resolveExtent()
+              (_, i) => !parts.standIn[i] && !parts.dressed[i]
             ) &&
             placements.every((p) => p === undefined || p.plot === p.hull);
           const plotOf = () => {
@@ -863,6 +861,9 @@ export const layer = createNodeOperatorSequential(
           // This layer's y direction: its children and constraints are read
           // in this axis order (see `axisDirection.ts`).
           const direction = node.yFrame.direction;
+          // Whether this layer is a ring of chrome, whose shapes are no part
+          // of its plot.
+          const ring = isRing(node);
           // Split the incoming single-carrier scale into its two half-channels
           // for the proposal planning below: σ (size slope) feeds sizing and the
           // child σ forwarding; the anchored map feeds `position` constraints and
@@ -1174,7 +1175,7 @@ export const layer = createNodeOperatorSequential(
               slice !== undefined &&
               v === slice[axis] &&
               v !== size[axis] &&
-              !isRing(node) &&
+              !ring &&
               child instanceof GoFishNode &&
               !child.plotIsBox(axis as 0 | 1)
                 ? v + sum(guttersAroundPlot(child, axis as 0 | 1, v))
@@ -1362,7 +1363,6 @@ export const layer = createNodeOperatorSequential(
             // chrome; a ring's plot is the ring inside it). A chain lays
             // the parts of the plot by their plots, and places one of these
             // past the whole box of what it dresses (#1032).
-            const ring = isRing(node);
             const apart: [Set<string>, Set<string>] = [new Set(), new Set()];
             for (const [name] of nameToPlaceable) {
               const i = childOfName.get(name)!;
