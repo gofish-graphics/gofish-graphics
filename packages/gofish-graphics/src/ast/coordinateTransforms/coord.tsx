@@ -37,10 +37,14 @@ import {
   unionChildExtents,
   unionChildSpaces,
 } from "../graphicalOperators/alignment";
-import { axisScale, type AxisMap } from "../domain";
+import { axisScale } from "../domain";
 import { reflectInterval } from "../axisDirection";
 import { shadowCheckScaleRoot } from "../solver/shadow";
-import { getScopeRegistry, scopeFrame, seatInScope } from "../solver/scopes";
+import {
+  getScopeRegistry,
+  seatInScope,
+  type ScopeSolution,
+} from "../solver/scopes";
 import { axisTitle, TITLE_COLOR, TITLE_FONT_SIZE } from "../axes/elaborate";
 import { createNodeOperator } from "../withGoFish";
 import { computeTransformedBoundingBox } from "./coordUtils";
@@ -407,7 +411,7 @@ export const coord = createNodeOperator(
           const fitAxis = (
             axis: 0 | 1,
             budget: number
-          ): [number | undefined, AxisMap | undefined] => {
+          ): [number | undefined, ScopeSolution | undefined] => {
             // The coord roots its axis's scope like the chart root: one σ
             // from the coord's own type and claim against its budget, and,
             // when the type has an origin, the frame its children sit in.
@@ -465,25 +469,26 @@ export const coord = createNodeOperator(
             // unless GOFISH_SOLVER_CHECK is set.
             shadowCheckScaleRoot(claim, budget, scope?.sigma, axis);
             if (scope === undefined) return [1, undefined];
-            return [scope.sigma, scopeFrame(scope)];
+            return [scope.sigma, scope];
           };
-          const [sfX, frameX] = fitAxis(0, budget[0]);
-          const [sfY, frameY] = fitAxis(1, budget[1]);
-          // Each child sits in the coord's frame by the one seating rule
+          const [sfX, scopeX] = fitAxis(0, budget[0]);
+          const [sfY, scopeY] = fitAxis(1, budget[1]);
+          // Each child sits in the coord's scope by the one seating rule
           // (`seatInScope`): a pinned child shares the frame and its map
           // places it; a free child's baseline sits at the frame's pixel of
-          // data 0; a child with no 0 sits at 0. The coord and its interior
-          // share one axis order, the coordinate space's upward y.
+          // data 0; a child with no 0 sits at 0; and in a scope with no
+          // data 0 a child's box sits at the start. The coord and its
+          // interior share one axis order, the coordinate space's upward y.
           const childPlaceables = children.map((child) => {
             const space = child.resolveUnderlyingSpace();
-            const x = seatInScope(frameX, space[0]);
-            const y = seatInScope(frameY, space[1]);
+            const x = seatInScope(scopeX, space[0]);
+            const y = seatInScope(scopeY, space[1]);
             const placeable = child.layout(size, [
               axisScale(sfX, x.childMap),
               axisScale(sfY, y.childMap),
             ]);
-            placeable.place("x", x.seatPx, "baseline");
-            placeable.place("y", y.seatPx, "baseline");
+            placeable.place("x", x.seat.px, x.seat.anchor);
+            placeable.place("y", y.seat.px, y.seat.anchor);
             return placeable;
           });
 

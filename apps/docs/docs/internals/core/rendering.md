@@ -79,9 +79,9 @@ bottom for a continuous y. A given dimension is a fixed slot, and the root's box
 sits at its top-left (#1032): the root's axis order starts at the start edge of the
 root's own frame, which is the slot when the root scope solves σ against it, or the
 root's own box when it has a size of its own (a chart's literal `w`/`h`). In that
-frame the root's baseline is seated by `seatInScope` (a free root's baseline at the
-scope's `originPx`, `descent·σ` from the start edge, #773; a pinned root at 0, its
-map carrying `originPx`). A shrink-to-fit dimension
+frame the root is seated by `seatInScope` (a free root's baseline at the
+scope's `originPx`, `descent·σ` from the start edge, #773; a pinned root's at 0, its
+map carrying `originPx`; and in a scope with no data 0, its box at the start edge). A shrink-to-fit dimension
 pins the root's start edge to the frame's start, which already includes any descent,
 so adding it would count it twice (#574). See
 [Underlying Space](/internals/core/underlying-space).

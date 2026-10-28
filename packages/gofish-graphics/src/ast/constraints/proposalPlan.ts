@@ -23,6 +23,7 @@ import {
   seatInScope,
   type FixedSolve,
   type ScopeRegistry,
+  type ScopeSolution,
 } from "../solver/scopes";
 import type { ConstraintSpec } from ".";
 import type { AlignConstraint } from "./align";
@@ -353,11 +354,9 @@ export type LayerScales = {
   frames: ConstraintPosScales;
   /** Per axis: the σ the layer hands its children. */
   sigmas: Size<number | undefined>;
-  /** Per axis: the layer solved a scope there that has no data 0 (a
-   *  spread of magnitudes), so no frame seats its children: it places their
-   *  boxes at its start edge, as the render root places its box
-   *  (`placeRoot` in gofish.tsx). */
-  boxSeated: Size<boolean>;
+  /** Per axis: the scope the layer seats its children in (`seatInScope`):
+   *  the scope it solved there, or the frame it inherits. */
+  scopes: Size<ScopeSolution | undefined>;
   /** Axes whose solve was attempted and failed (a claim with no σ in it). */
   failedAxes: (0 | 1)[];
   /** Every solve, for the solver shadow hook. */
@@ -425,7 +424,10 @@ export function solveLayerScales(
     undefined,
   ];
   const sigmas: Size<number | undefined> = [handedSigmas[0], handedSigmas[1]];
-  const boxSeated: Size<boolean> = [false, false];
+  const seatScopes: [ScopeSolution | undefined, ScopeSolution | undefined] = [
+    undefined,
+    undefined,
+  ];
   const failedAxes: (0 | 1)[] = [];
   const checks: LayerScales["checks"] = [];
 
@@ -470,7 +472,7 @@ export function solveLayerScales(
       if (solved !== undefined) {
         sigmas[axis] = solved.sigma;
         frames[axis] = scopeFrame(solved);
-        boxSeated[axis] = frames[axis] === undefined;
+        seatScopes[axis] = solved;
         continue;
       }
       failedAxes.push(axis);
@@ -479,8 +481,9 @@ export function solveLayerScales(
       sigma: sigmas[axis],
       map: handedMaps[axis],
     });
+    seatScopes[axis] = frames[axis];
   }
-  return { frames, sigmas, boxSeated, failedAxes, checks };
+  return { frames, sigmas, scopes: seatScopes, failedAxes, checks };
 }
 
 /** Select the layer's single grid constraint, if any.

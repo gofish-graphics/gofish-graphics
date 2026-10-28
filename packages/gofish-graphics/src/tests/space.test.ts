@@ -337,19 +337,32 @@ console.log("# space: one seating rule");
   const pinned = seatInScope(frame, CONTINUOUS(interval(5, 9), "pinned"));
   const free = seatInScope(frame, CONTINUOUS(interval(0, 9), "free"));
   const none = seatInScope(frame, CONTINUOUS(interval(0, 9), "none"));
+  const ordinal = seatInScope(
+    { sigma: 2, originPx: undefined },
+    CONTINUOUS(interval(0, 9), "free")
+  );
   ok(
     "a pinned child sits at 0 and shares the frame",
-    pinned.seatPx === 0 && pinned.childMap === frame
+    pinned.seat.px === 0 &&
+      pinned.seat.anchor === "baseline" &&
+      pinned.childMap === frame
   );
   ok(
     "a free child sits at the pixel of data 0, in a frame of its own",
-    free.seatPx === 30 &&
+    free.seat.px === 30 &&
+      free.seat.anchor === "baseline" &&
       free.childMap?.sigma === 2 &&
       free.childMap?.originPx === 0
   );
   ok(
     "a child with no data 0 sits at 0 with no frame",
-    none.seatPx === 0 && none.childMap === undefined
+    none.seat.px === 0 && none.childMap === undefined
+  );
+  ok(
+    "a scope with no data 0 seats its content's box at its start edge",
+    ordinal.seat.px === 0 &&
+      ordinal.seat.anchor === "min" &&
+      ordinal.childMap === undefined
   );
 }
 

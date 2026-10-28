@@ -499,14 +499,18 @@ each inherent to what the origin states are:
   has a frame of its own whose 0 is its baseline (`{σ, 0}`, `frameOf`), so
   its parent places that baseline at the frame's `originPx`; a child with no
   data 0 sits at 0 and has no frame. This is the split between "a constraint
-  fixes the baseline" and "the parent sets it". A scope root's frame is its
-  solved scope (`scopeFrame`), whatever its type's origin. A scope with no
+  fixes the baseline" and "the parent sets it". A scope root seats its
+  content in its solved scope, whatever its type's origin. A scope with no
   data 0 (a spread of magnitudes) has no frame to seat its content, so the
-  scope places the content's box at its start edge, as the render root
-  places its box (`placeRoot`; `boxSeated` in `solveLayerScales`,
-  `seatChild` in `layer.tsx`). So a sized node starts at its start edge on
-  every axis, whatever reaches before its content's 0 (a label hanging
-  before the first bar, or below the bars' baseline).
+  rule's seat there is the content's box at the scope's start edge, as the
+  render root places its box. The rule returns that seat (a `Seat`: a
+  baseline or a box start, at a pixel), and every scope root reads it: the
+  render root (`placeRoot`), a coord, a layer's `seatChild`, and the claim
+  of a node with a literal size (`fixedClaim`), which runs from the start
+  edge exactly where the content is seated by its box. So a sized node
+  starts at its start edge on every axis, whatever reaches before its
+  content's 0 (a label hanging before the first bar, or below the bars'
+  baseline).
 - **Seating in a fold**: a pinned child sits at its own data coordinates; a
   free child sits there too when the fold seats children on their baselines
   (an overlay, a baseline alignment), and is a box from the aligned edge

@@ -71,14 +71,28 @@ export const frameOf = (
   return sigma === undefined ? undefined : { sigma, originPx: 0 };
 };
 
+/** Where a child sits in its parent on one axis: its `anchor`, its
+ *  baseline or its box's start edge (`min`), at the pixel `px`. */
+export type Seat = { px: number; anchor: "baseline" | "min" };
+
 /** The one seating rule: where a child with type `child` sits in its
- *  parent's `frame` on one axis (`seatPx`, the pixel its baseline is placed
- *  at), and the map it is handed (`childMap`, its own frame, {@link
- *  frameOf}). A pinned child shares the frame: it sits at 0 and places its
- *  data through the frame's map. A free child's position is set by its
- *  parent: its baseline sits at the frame's `originPx`, the pixel of data 0,
- *  and its own frame has that baseline at 0. A child with no data 0 sits at
- *  0 and has no frame.
+ *  parent's `scope` on one axis (`seat`), and the map it is handed
+ *  (`childMap`, its own frame, {@link frameOf}). The scope is one the parent
+ *  solved, or the frame it inherited (an {@link AxisMap} is a scope with a
+ *  data 0), or undefined when it has neither.
+ *
+ *  Where the scope has a data 0 (its `originPx`), its map is the frame its
+ *  children sit in. A pinned child shares the frame: its baseline sits at 0
+ *  and it places its data through the frame's map. A free child's position
+ *  is set by its parent: its baseline sits at the frame's `originPx`, the
+ *  pixel of data 0, and its own frame has that baseline at 0. A child with
+ *  no data 0 sits at 0 and has no frame. A parent with no scope seats a
+ *  child's baseline at 0, its own origin, which its parent places.
+ *
+ *  A solved scope with no data 0 (a spread of magnitudes) has no frame to
+ *  seat its content in: the content's box sits at the scope's start edge, as
+ *  the render root places its box (`placeRoot` in gofish.tsx). So a sized
+ *  node starts at its start edge on every axis.
  *
  *  TODO(#773 follow-up): data 0 is the additive identity of the measure's
  *  algebraic structure (an ordered additive group's 0). Measures don't carry
@@ -86,12 +100,20 @@ export const frameOf = (
  *  0. A torsor-valued measure (dates, temperatures) has no identity and
  *  should reject bars. */
 export const seatInScope = (
-  frame: AxisMap | undefined,
+  scope: ScopeSolution | undefined,
   child: UnderlyingSpace | undefined
-): { seatPx: number; childMap: AxisMap | undefined } => ({
-  seatPx: originIs(child, "free") ? (frame?.originPx ?? 0) : 0,
-  childMap: frameOf(child, { map: frame }),
-});
+): { seat: Seat; childMap: AxisMap | undefined } => {
+  if (scope !== undefined && scope.originPx === undefined)
+    return { seat: { px: 0, anchor: "min" }, childMap: undefined };
+  const frame = scope as AxisMap | undefined;
+  return {
+    seat: {
+      px: originIs(child, "free") ? (frame?.originPx ?? 0) : 0,
+      anchor: "baseline",
+    },
+    childMap: frameOf(child, { map: frame }),
+  };
+};
 
 /** The pixel of data 0 in a box whose claim starts `offset` px above its low
  *  edge: a claim is measured from data 0, so data 0 sits `claim.descent(σ)`

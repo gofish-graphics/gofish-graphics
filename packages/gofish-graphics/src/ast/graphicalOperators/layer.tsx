@@ -809,15 +809,16 @@ export const layer = createNodeOperatorSequential(
             if (!solvesDomain(axis)) return Extent(Monotonic.linear(0, px));
             const solved = scopes.fixedSolve(node, axis);
             if (solved === undefined) return resolved[axis];
-            const { claim, solution } = solved;
+            const { claim, solution, space } = solved;
             const ascent = claim.ascent.run(solution.sigma);
             const descent = claim.descent.run(solution.sigma);
-            // A scope with a data 0 keeps the content's split about it: the
-            // node reports its content's type upward, and a parent reads
-            // the claim of a type with a data 0 from there. A scope with
-            // none places its content's box at the start edge (`seatChild`
-            // in `layout`), so its claim runs from there.
-            return solution.originPx !== undefined
+            // Where the scope seats its content (`seatInScope`, as `layout`
+            // does): by its baseline, the content keeps its split about its
+            // data 0, as the node reports its content's type upward and a
+            // parent reads the claim of a type with a data 0 from there. By
+            // its box, the content starts at the start edge, so its claim
+            // runs from there.
+            return seatInScope(solution, space).seat.anchor === "baseline"
               ? Extent(
                   Monotonic.linear(0, ascent),
                   Monotonic.linear(0, descent)
@@ -1031,53 +1032,46 @@ export const layer = createNodeOperatorSequential(
             effectivePosScales[1]?.originPx,
           ];
           //
+          // Place a child no constraint places (`unplacedOnly`: on the axes
+          // the constraints left it unplaced) at its seat in this layer's
+          // scope (`seatInScope`): its baseline, or, where this layer solved
+          // a scope with no data 0, its box at this layer's start edge. So a
+          // node with a size of its own starts at its start edge on every
+          // axis: a frame with a data 0 seats its content there (`originPx`
+          // counts what reaches below data 0), and one without places the
+          // box. A label hanging before a chart's first bar then sits inside
+          // the chart's box, as one below its bars does (#1032).
+          //
           // A seat is a position along this layer's axis order. A child whose
-          // y grows upward inside this layer that reads top-down is seated
-          // from the bottom of the band this layer allocated it
-          // (`childFrames`, else its own box): its axis starts there, as the
-          // root's starts at the bottom of the canvas (`placeRoot` in
+          // y grows upward inside this layer that reads top-down has its
+          // baseline seated from the bottom of the band this layer allocated
+          // it (`childFrames`, else its own box): its axis starts there, as
+          // the root's starts at the bottom of the canvas (`placeRoot` in
           // gofish.tsx). A child that reads top-down hangs from its origin,
           // which is its top, in either kind of layer.
           const childFrames: number[] = new Array(children.length);
-          const baselineFor = (
-            cp: (typeof childPlaceables)[number],
-            i: number
-          ): [number, number] => {
-            const [bx, by] = [0, 1].map(
-              (axis) =>
-                seatInScope(
-                  effectivePosScales[axis],
-                  cp.spaceOn?.(axis as 0 | 1)
-                ).seatPx
-            );
-            if (direction === -1 || children[i].yFrame.direction === 1)
-              return [bx, by];
-            const frame = Number.isFinite(childFrames[i])
-              ? childFrames[i]
-              : (cp.dims[1].size ?? 0);
-            return [bx, by + frame];
-          };
-          // Place a child no constraint places (`unplacedOnly`: on the axes
-          // the constraints left it unplaced): its baseline at its seat
-          // (`baselineFor`), or, on an axis where this layer solved a scope
-          // with no data 0 (`boxSeated`), its box at this layer's start
-          // edge. So a node with a size of its own starts at its start edge
-          // on every axis: a frame with a data 0 seats its content there
-          // (`originPx` counts what reaches below data 0), and one without
-          // places the box, as the render root places its box (`placeRoot`
-          // in gofish.tsx). A label hanging before a chart's first bar then
-          // sits inside the chart's box, as one below its bars does (#1032).
           const seatChild = (
             cp: (typeof childPlaceables)[number],
             i: number,
             unplacedOnly = false
           ) => {
-            const seat = baselineFor(cp, i);
             for (const axis of [0, 1] as const) {
               if (unplacedOnly && cp.dims[axis].min !== undefined) continue;
-              const name = axis === 0 ? "x" : "y";
-              if (layerScales.boxSeated[axis]) cp.place(name, 0, "min");
-              else cp.place(name, seat[axis], "baseline");
+              const { seat } = seatInScope(
+                layerScales.scopes[axis],
+                cp.spaceOn?.(axis)
+              );
+              const fromBand =
+                axis === 1 &&
+                seat.anchor === "baseline" &&
+                direction === 1 &&
+                children[i].yFrame.direction !== 1;
+              const band = !fromBand
+                ? 0
+                : Number.isFinite(childFrames[i])
+                  ? childFrames[i]
+                  : (cp.dims[1].size ?? 0);
+              cp.place(axis === 0 ? "x" : "y", seat.px + band, seat.anchor);
             }
           };
 

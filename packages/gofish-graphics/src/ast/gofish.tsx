@@ -74,7 +74,6 @@ import {
 import { Frontend } from "gofish-ir";
 import {
   getScopeRegistry,
-  scopeFrame,
   seatInScope,
   sharesDeclaredMeasure,
   type EqualMeasureAxis,
@@ -736,7 +735,7 @@ export async function layout(
   // two origin states: a pinned extent's position is fixed by its data, a
   // free extent's is set by its parent.
   const rootSeats = ([0, 1] as const).map((axis) =>
-    seatInScope(scopeFrame(rootScopes[axis]), rootSpaces[axis])
+    seatInScope(rootScopes[axis], rootSpaces[axis])
   );
   const rootMaps: Size<AxisMap | undefined> = [
     rootSeats[0].childMap,
@@ -777,24 +776,24 @@ export async function layout(
   // y, which grows upward from there (`fromFrameStart`). A position `p`
   // along the root's axis order is the pixel `p` from that edge, inward.
   //
-  // Where a scope solved against the render's slot places the root's data
-  // (a given dimension that maps a domain with a data 0), the root is
-  // seated by the one seating rule (`seatInScope`): a free
-  // (baseline-magnitude) root's baseline at the scope's `originPx` (#773:
-  // `descent·σ` from the frame's start edge, plus any overhead, the
-  // chrome's start gutter included), and a pinned root at 0. The frame is
-  // the root's own size (`rootSizes`), so a root that does not fill the
-  // slot sits at its top-left rather than at its bottom.
+  // Where a scope solved against the render's slot places the root (a
+  // given dimension that maps a domain), the root sits at its seat by the
+  // one seating rule (`seatInScope`): a free (baseline-magnitude) root's
+  // baseline at the scope's `originPx` (#773: `descent·σ` from the frame's
+  // start edge, plus any overhead, the chrome's start gutter included), a
+  // pinned root's at 0, and, where the scope has no data 0 (a spread of
+  // magnitudes, whose rows may reach past its origin on either side), its
+  // box at the frame's start. The frame is the root's own size
+  // (`rootSizes`), so a root that does not fill the slot sits at its
+  // top-left rather than at its bottom.
   //
-  // Anywhere else no data places the root, so its box is placed: its start
-  // edge at the frame's start, at the top-left for either y direction
-  // (#1032). That is a shrink-to-fit dimension, whose box is the canvas,
-  // a given dimension whose σ is a share (`sharesRoom`, a category axis
-  // whose bands the slot sizes), a given dimension whose scope has no
-  // data 0 (a spread of magnitudes, whose rows may reach past its origin
-  // on either side), and a given dimension the root does not map a domain
-  // into (a chart with a size of its own), whose box sits at the slot's
-  // top-left. The box is the whole graphic, its chrome included. The pin
+  // Anywhere else no scope places the root in a slot, so its box is placed
+  // too: its start edge at the frame's start, at the top-left for either y
+  // direction (#1032). That is a shrink-to-fit dimension, whose box is the
+  // canvas, a given dimension whose σ is a share (`sharesRoom`, a category
+  // axis whose bands the slot sizes), and a given dimension the root does
+  // not map a domain into (a chart with a size of its own), whose box sits
+  // at the slot's top-left. The box is the whole graphic, its chrome included. The pin
   // uses `pinAnchor`, not the write-once `place()`, so it lands even when
   // the root self-placed (a diagram with its own root transform). Returns
   // whether data seated the root.
@@ -802,19 +801,16 @@ export async function layout(
     const name = axisName(axis);
     const offset = (axis === 0 ? x : y) ?? transform?.[name] ?? 0;
     const direction = axis === 0 ? 1 : rootYDirection;
+    const { seat } = rootSeats[axis];
     if (
       given[axis] !== undefined &&
-      rootScopes[axis]?.originPx !== undefined &&
-      !root.sharesRoom(axis)
+      rootScopes[axis] !== undefined &&
+      !root.sharesRoom(axis) &&
+      seat.anchor === "baseline"
     ) {
       root.place(
         name,
-        edge +
-          fromFrameStart(
-            offset + rootSeats[axis].seatPx,
-            rootSizes[axis].px,
-            direction
-          ),
+        edge + fromFrameStart(offset + seat.px, rootSizes[axis].px, direction),
         "baseline"
       );
       return true;
