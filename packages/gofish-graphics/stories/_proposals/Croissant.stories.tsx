@@ -64,6 +64,36 @@ function kde(values: number[], adjust = 1) {
   return (x: number) => values.reduce((s, v) => s + normPdf(x, v, bw), 0) / n;
 }
 
+/**
+ * Quantiles of the drawn density itself (not of the rows): integrate `f` over
+ * [lo, hi] and invert the running total. What `derive` of quantile rows from
+ * the density, then `Bin.quantiles` and `median()` over those rows, computes.
+ */
+function densityQuantiles(f: (x: number) => number, lo: number, hi: number, ps: number[], steps = 4000) {
+  const xs = Array.from({ length: steps + 1 }, (_, i) => lo + ((hi - lo) * i) / steps);
+  const cdf = [0];
+  for (let i = 1; i <= steps; i++) cdf.push(cdf[i - 1] + ((f(xs[i - 1]) + f(xs[i])) / 2) * (xs[i] - xs[i - 1]));
+  const total = cdf[steps];
+  return ps.map((p) => {
+    const i = cdf.findIndex((c) => c >= p * total);
+    const t = (p * total - cdf[i - 1]) / (cdf[i] - cdf[i - 1]);
+    return xs[i - 1] + t * (xs[i] - xs[i - 1]);
+  });
+}
+
+/** Cell edges (window ends included) and each cell's median: from the rows, or from the drawn density. */
+function cellsAndMedians(sorted: number[], f: (x: number) => number, lo: number, hi: number, n: number, from: "rows" | "density") {
+  if (from === "density") {
+    const qs = densityQuantiles(f, lo, hi, Array.from({ length: 2 * n - 1 }, (_, k) => (k + 1) / (2 * n)));
+    return { edges: [lo, ...qs.filter((_, k) => k % 2 === 1), hi], medians: qs.filter((_, k) => k % 2 === 0) };
+  }
+  const edges = [lo, ...Array.from({ length: n - 1 }, (_, k) => quantile(sorted, (k + 1) / n)), hi];
+  const medians = edges
+    .slice(0, -1)
+    .map((a, i) => quantile(sorted.filter((v) => v >= a && (i === n - 1 ? v <= edges[i + 1] : v < edges[i + 1])), 0.5));
+  return { edges, medians };
+}
+
 // ---------------------------------------------------------------- geometry
 
 /**
@@ -289,22 +319,16 @@ export const DotChord = dotStory("chord");
 export const DotPolylabel = dotStory("polylabel");
 
 /** Example 2 (hard): penguin body mass, skewed and lumpy, from samples. */
-export const PenguinBodyMass: StoryObj<Args> = {
+const penguinStory = (from: "rows" | "density"): StoryObj<Args> => ({
   args: { w: 520, h: 220 },
   render: (args) => {
     const container = initializeContainer();
     const xs = penguins.map((p) => p["Body Mass (g)"]).filter((v): v is number => v != null);
     const sorted = [...xs].sort((a, b) => a - b);
-    const n = 10;
     const f = kde(xs);
     const lo = 2500;
     const hi = 6500;
-    const inner = Array.from({ length: n - 1 }, (_, k) => quantile(sorted, (k + 1) / n));
-    const edges = [lo, ...inner, hi];
-    const medians = edges.slice(0, -1).map((a, i) => {
-      const inCell = sorted.filter((v) => v >= a && (i === n - 1 ? v <= edges[i + 1] : v < edges[i + 1]));
-      return quantile(inCell, 0.5);
-    });
+    const { edges, medians } = cellsAndMedians(sorted, f, lo, hi, 10, from);
     const peak = Math.max(...Array.from({ length: 200 }, (_, i) => f(lo + ((hi - lo) * i) / 199)));
     drawCroissant(
       container,
@@ -314,10 +338,12 @@ export const PenguinBodyMass: StoryObj<Args> = {
     );
     return container;
   },
-};
+});
+export const PenguinBodyMass = penguinStory("rows");
+export const PenguinBodyMassDensity = penguinStory("density");
 
 /** Example 3 (hard): a ridgeline of croissants, Seattle highs by month. */
-export const RidgelineByMonth: StoryObj<Args> = {
+const ridgelineStory = (from: "rows" | "density"): StoryObj<Args> => ({
   args: { w: 520, h: 600 },
   render: (args) => {
     const container = initializeContainer();
@@ -337,11 +363,8 @@ export const RidgelineByMonth: StoryObj<Args> = {
       const f = kde(xs, 1.2);
       const peak = Math.max(...Array.from({ length: 200 }, (_, i) => f(lo + ((hi - lo) * i) / 199)));
       const base = (months.length - 1 - m) * pitch;
-      const inner = Array.from({ length: n - 1 }, (_, k) => quantile(sorted, (k + 1) / n));
-      const edges = [Math.max(lo, sorted[0] - 4), ...inner, Math.min(hi, sorted[sorted.length - 1] + 4)];
-      const medians = edges.slice(0, -1).map((a, i) =>
-        quantile(sorted.filter((v) => v >= a && (i === n - 1 ? v <= edges[i + 1] : v < edges[i + 1])), 0.5)
-      );
+      const [a, b] = [Math.max(lo, sorted[0] - 4), Math.min(hi, sorted[sorted.length - 1] + 4)];
+      const { edges, medians } = cellsAndMedians(sorted, f, a, b, n, from);
       const { rings, dots } = croissant({ f, edges, medians, gap: 0.18, dotY: 0.08, base, scale: 0.92 / peak });
       allRings.push(...rings);
       allDots.push(...dots);
@@ -364,7 +387,10 @@ export const RidgelineByMonth: StoryObj<Args> = {
     );
     return container;
   },
-};
+});
+export const RidgelineByMonth = ridgelineStory("rows");
+export const RidgelineByMonthDensity = ridgelineStory("density");
+
 
 /** Example 4a (generality): a smoothed daily series divided by month cells. */
 export const AreaByMonth: StoryObj<Args> = {

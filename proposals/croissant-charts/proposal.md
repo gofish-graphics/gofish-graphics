@@ -12,7 +12,8 @@ be stroked, and have no dots.
 them on a real axis. In each cell, `intersect([ref("density"), region()])`
 keeps the part of the density inside the cell, and `intersect` becomes a
 vector operation when both sides have an outline, so the piece can be filled
-and stroked. The dot is a `circle` at the median of the cell's rows. The gap is
+and stroked. The dot is a `circle` at the median of the drawn density within the cell
+(a weighted median over the density's grid rows; see "Rows or the drawn density?"). The gap is
 `region({ inset })`, drawn in like `rect.inset`. No new operator.
 
 Prototype stories: `packages/gofish-graphics/stories/_proposals/Croissant.stories.tsx`
@@ -616,6 +617,54 @@ median disagree more, and the median is the one with a meaning. A user who
 wants the hand look can still place a dot by geometry with `.label()` and a
 `Place` strategy; no new dot family is needed.
 
+### Rows or the drawn density?
+
+The median of the cell's rows breaks on rounded data. Seattle highs are
+recorded in steps, so most quantile edges land exactly on a temperature that
+many days share. Those days all fall in the cell that starts there, and that
+cell's median is the edge itself. The dot then sits in the gap: 65 of the
+ridgeline's 120 dots are not fully inside their slice. Penguin masses are
+recorded in 25 g steps and show the same effect more mildly (11 of the 31
+birds in one cell weigh exactly 3700 g, so that dot sits a quarter of the
+slice left of center).
+
+The cause is a mismatch, not ties as such: the shape is drawn from a smoothed
+density, but the edges and dots came from the raw rows. Taking both from the
+density that is drawn fixes it. Every dot is then strictly inside its slice,
+and no two edges can meet. It is also what the parametric case already does
+(quantile rows from F⁻¹).
+
+| From the rows (first version)                                     | From the drawn density                                      |
+| ----------------------------------------------------------------- | ----------------------------------------------------------- |
+| ![](img/croissant--ridgeline-by-month.png) 65 of 120 dots outside | ![](img/croissant--ridgeline-by-month-density.png) 0 of 120 |
+| ![](img/croissant--penguin-body-mass.png)                         | ![](img/croissant--penguin-body-mass-density.png)           |
+
+Two spellings read the density (both new; the renders compute the same
+numbers by hand):
+
+```js
+// (a) Weighted quantiles over the density's own grid rows: one dataset draws
+//     the shape, makes the cells and places the dots.
+chart(grid) // rows { x, pdf }
+  .flow(partition({ by: field("x").bin(Bin.quantiles(10, { weight: "pdf" })) }))
+  .mark(circle({ cx: field("x").median({ weight: "pdf" }), cy: 6, r: 3 }));
+
+// (b) Derive quantile rows from the density first, then the unweighted forms.
+chart(grid)
+  .flow(
+    derive((rows) => quantileRows(rows, { x: "x", weight: "pdf", n: 1000 }))
+  )
+  .flow(partition({ by: field("x").bin(Bin.quantiles(10)) }))
+  .mark(circle({ cx: field("x").median(), cy: 6, r: 3 }));
+```
+
+**Recommendation: (a).** It keeps one dataset for shape, cells and dots, and a
+weight is the usual way to say "these rows stand for a distribution" (numpy
+`quantile(weights=)`, ggdist's `weight` aesthetic). The unweighted
+`Bin.quantiles(n)` over rows stays for when the rows really are the thing
+being cut. This folds the old decisions 2 (weighted quantiles) and 3 (ties)
+into one question.
+
 ## Choice 5: the gap
 
 - **Ink only.** The gap encodes nothing, so it must not move the cells or
@@ -693,15 +742,13 @@ Both still need vector slicing, so choice 3 stands either way.
 1. **Vector intersect.** Should `intersect`, `subtract` and `exclude` compute
    path booleans whenever every operand has an outline, and keep pixel
    compositing only for images?
-2. **Weighted quantiles.** Is `Bin.quantiles(n)` over samples (or quantile
-   rows) enough, or do we also want `Bin.quantiles(n, { weight })` over a
-   density grid?
-3. **Ties.** When quantile edges coincide, error (polars' default), merge the
-   cells, or keep an empty cell? Ties also move dots: Seattle highs are
-   recorded in steps, so many days sit exactly on an edge value, and the
-   median of that cell lands on the edge (see the ridgeline). Should cells be
-   half-open `[a, b)` as now, or should rows tied at an edge be split between
-   the two cells?
+2. **Quantiles of what?** Should a croissant take its edges and dots from the
+   drawn density (`Bin.quantiles(n, { weight: "pdf" })` and
+   `median({ weight: "pdf" })` over the density's grid rows), as the
+   renders now do? Rows give dots in the gaps on rounded data (65 of 120 in
+   the ridgeline).
+3. **Ties over rows.** When `Bin.quantiles(n)` runs over rows and edges
+   coincide: error (polars' default), merge the cells, or keep an empty cell?
 4. **Paint of a composite.** Does the result of `intersect` take its own
    `fill` and `stroke`, with operands giving shape only?
 5. **Ref scope in groups.** In the ridgeline, should `ref("density")` inside a
