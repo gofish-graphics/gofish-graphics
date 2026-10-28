@@ -394,20 +394,26 @@ async function main() {
         await dots({ x: "name", y: "angle" })
       )
     );
-    // A non-numeric span has no data interval, so the chart's x axis has no
-    // domain to map: the render may fail. Both spellings must still agree,
-    // on the dots or on the error.
-    const outcome = (opts: any) =>
-      dots(opts).catch((e: Error) => `error: ${e.message}`);
-    const minDims = await outcome({
-      dims: { x: { min: "name", max: "name" } },
-      y: "angle",
-    });
-    const minTop = await outcome({ xMin: "name", xMax: "name", y: "angle" });
+    // A non-numeric span is not discrete either: it has no data interval, so
+    // the chart's x axis has no position scale to place it with, and both
+    // spellings throw the same error.
+    const spanErrors: string[] = [];
+    for (const [spelling, opts] of [
+      ["dims {x: {min, max}}", { dims: { x: { min: "name", max: "name" } } }],
+      ["xMin/xMax", { xMin: "name", xMax: "name" }],
+    ] as const) {
+      const err = await errorOf(() => dots({ ...opts, y: "angle" }));
+      spanErrors.push(err);
+      check(
+        `${spelling} over a non-numeric field throws: its axis has no position scale`,
+        err.includes("no position scale"),
+        err
+      );
+    }
     check(
-      "dims {x: {min: <non-numeric>}} ≡ xMin (neither discrete)",
-      same(minDims, minTop),
-      JSON.stringify([minDims, minTop])
+      "dims {x: {min, max}} and xMin/xMax throw the same error",
+      spanErrors[0] === spanErrors[1],
+      JSON.stringify(spanErrors)
     );
 
     const mixed = await errorOf(() =>

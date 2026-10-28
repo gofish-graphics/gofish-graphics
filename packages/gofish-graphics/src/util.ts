@@ -1,4 +1,10 @@
-import { getValue, getValueOffset, isValue, MaybeValue } from "./ast/data";
+import {
+  getValue,
+  getValueField,
+  getValueOffset,
+  isValue,
+  MaybeValue,
+} from "./ast/data";
 
 /** Whether `v` is a promise or another thenable. */
 export const isThenable = <T>(v: T | PromiseLike<T>): v is PromiseLike<T> =>
@@ -127,10 +133,15 @@ export const computeAesthetic = (
 ): number | undefined => {
   // Every axis a data value is placed on has a position scale: a scope
   // solves one for any domain, a one-value domain included (#1107).
-  if (isValue(input) && scale === undefined)
+  if (isValue(input) && scale === undefined) {
+    const field = getValueField(input);
     throw new Error(
-      "[gofish] a data value was placed on an axis with no position scale"
+      `[gofish] the value ${String(getValue(input))}` +
+        (field === undefined ? "" : ` of field "${field}"`) +
+        " was placed on an axis with no position scale: the axis has no " +
+        "numeric interval to map, as when its values are not numbers."
     );
+  }
   // A datum's pixel offset applies AFTER the scale mapping — "this data
   // position, plus pixels" (`datum(v).offset(px)`).
   return isValue(input)
