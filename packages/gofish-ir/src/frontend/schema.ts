@@ -637,6 +637,8 @@ export type NodeSelectionIR = RefMarkIR[] | (SelectRefIR & { mode: "all" });
 export type ShapeIR =
   | { kind: "box"; rx?: number; ry?: number }
   | { kind: "oval" }
+  // PROTOTYPE #1221
+  | { kind: "arcs"; radius?: number }
   | {
       kind: "blob";
       convexity?: number;

@@ -7,6 +7,7 @@ covers:
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose.tsx
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/blob.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/oval.ts
+  - packages/gofish-graphics/src/ast/graphicalOperators/enclose/arcs.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/members.ts
   - packages/gofish-graphics/src/families/shape.ts
 ---
@@ -229,6 +230,21 @@ holes. `roundness` changes only curvature and `neck` only how far the outline
 pulls in; neither changes the pieces or the holes. `src/tests/enclose.test.ts`
 checks this over sweeps of both on two point sets, and checks that the hull
 preset is within half a pixel of the true padded convex hull.
+
+## How arcs are built (PROTOTYPE #1221)
+
+`arcs.ts` builds `Shape.arcs({ radius })`, the bubble treemap contour of
+Görtler et al. (2018). The region is the morphological closing, by a disc of
+`radius`, of the members grown by `padding`, with holes filled. Each member
+is grown by padding + radius into a convex shape bounded by arcs and lines (a
+disc, a capsule for a segment, a rounded box for a box). The union's boundary
+is traced exactly, by cutting every edge where another shape's edge crosses
+it and keeping the parts no other shape covers. Only the outer loops are kept.
+That boundary is then shrunk by radius: arcs keep their centers, lines move
+inward, and each corner becomes an arc of `radius`. Where the shrunk boundary
+crosses itself, only the points a full radius from the union's boundary are
+kept, and the cut points are found by bisection on the exact curves. Every
+output point lies on the exact curve.
 
 ## The `Shape` family
 

@@ -320,6 +320,7 @@ const SCHEMA_STRATEGY_KEYS: Record<
   Shape: {
     box: { rx: true, ry: true },
     oval: {},
+    arcs: { radius: true }, // PROTOTYPE #1221
     blob: {
       convexity: true,
       holes: true,

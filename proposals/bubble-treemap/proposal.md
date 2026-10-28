@@ -11,8 +11,9 @@ it) needs two internal changes and pack padding (#973), with no new operator.
 over it. `enclose` reports its outline as its geometry, so a `pack` that holds
 it packs the contour and an outer `enclose` hugs it. This already has a
 spelling, the combinator form `enclose(opts, [child])`. The one new spelling to
-decide is `enclose(opts)` as a step in `.flow()`. Keep `Shape.blob` as the
-contour; do not add the paper's circular-arc construction now.
+decide is `enclose(opts)` as a step in `.flow()`. The paper's look comes from
+one new `Shape` member, `Shape.arcs({ radius })` (chosen by Josh on 2026-10-28,
+prototyped in `enclose/arcs.ts`).
 
 Review page: https://claude.ai/artifact/PNXx7RNpxwJ9yR5UG62W3M
 
@@ -184,29 +185,22 @@ hugs the inner ones. The combinator form spells this today:
 pack(
   { padding: 4 },
   continents.map((cont) =>
-    enclose(
-      { shape: Shape.blob({ convexity: 0.1 }), padding: 4, fill: "none" },
-      [
-        pack(
-          { padding: 4 },
-          regions(cont).map((reg) =>
-            enclose(
-              {
-                shape: Shape.blob({ convexity: 0.1 }),
-                padding: 4,
-                fill: "none",
-              },
-              [
-                pack(
-                  { padding: 1 },
-                  reg.map((d) => circle({ r: d.r }))
-                ),
-              ]
-            )
+    enclose({ shape: Shape.arcs({ radius: 12 }), padding: 4, fill: "none" }, [
+      pack(
+        { padding: 4 },
+        regions(cont).map((reg) =>
+          enclose(
+            { shape: Shape.arcs({ radius: 8 }), padding: 4, fill: "none" },
+            [
+              pack(
+                { padding: 1 },
+                reg.map((d) => circle({ r: d.r }))
+              ),
+            ]
           )
-        ),
-      ]
-    )
+        )
+      ),
+    ])
   )
 );
 ```
@@ -216,45 +210,42 @@ it wraps. With no `by`, a flow step that is not a split wraps each group's
 subtree, as its combinator form wraps its children:
 
 ```js
-const contour = (padding) =>
-  enclose({ shape: Shape.blob({ convexity: 0.1 }), padding, fill: "none" });
-
 chart(countries)
   .flow(
     pack({ by: "continent", padding: 4 }),
-    contour(4),
+    enclose({ shape: Shape.arcs({ radius: 12 }), padding: 4, fill: "none" }),
     pack({ by: "region", padding: 4 }),
-    contour("uncertainty"), // contour distance per group, from data (decision 3)
+    enclose({
+      shape: Shape.arcs({ radius: 8 }),
+      padding: "uncertainty", // per-group distance from data (decision 3)
+      fill: "none",
+    }),
     pack()
   )
   .mark(circle({ r: "pop", fill: "continent" }));
 ```
 
 ```python
-def contour(padding):
-    return enclose(shape=Shape.blob(convexity=0.1), padding=padding, fill="none")
-
-
 (
     chart(countries)
     .flow(
         pack(by="continent", padding=4),
-        contour(4),
+        enclose(shape=Shape.arcs(radius=12), padding=4, fill="none"),
         pack(by="region", padding=4),
-        contour("uncertainty"),
+        enclose(shape=Shape.arcs(radius=8), padding="uncertainty", fill="none"),
         pack(),
     )
     .mark(circle(r="pop", fill="continent"))
 )
 ```
 
-| `Shape.blob()` (default convexity 0.5) | `Shape.blob({ convexity: 0.1 })`              |
-| -------------------------------------- | --------------------------------------------- |
-| ![nested blob](img/c2-nested-blob.png) | ![nested tight](img/c2-nested-blob-tight.png) |
+| `Shape.arcs`, radius 12 / 8         | region `padding` = 2 + uncertainty                 |
+| ----------------------------------- | -------------------------------------------------- |
+| ![arcs nested](img/arcs-nested.png) | ![arcs from data](img/arcs-nested-uncertainty.png) |
 
-| `Shape.hull()`                         | region distance = 2 + uncertainty          |
-| -------------------------------------- | ------------------------------------------ |
-| ![nested hull](img/c2-nested-hull.png) | ![from data](img/c4-padding-from-data.png) |
+| `Shape.blob({ convexity: 0.1 })`              | `Shape.blob()` (default convexity 0.5) |
+| --------------------------------------------- | -------------------------------------- |
+| ![nested tight](img/c2-nested-blob-tight.png) | ![nested blob](img/c2-nested-blob.png) |
 
 _Rendered from the combinator form with the prototype changes; the flow
 spelling is not wired yet and would build the same tree._
@@ -301,28 +292,59 @@ overlap: every `enclose` option would need a twin. As sugar it is fine later,
 as a chart template (#35) that expands to Approach B. Not recommended as an
 operator.
 
-## Choice 2: the contour's shape
+## Choice 2: the contour's shape, `Shape.arcs({ radius })` (decided 2026-10-28)
+
+Josh chose a new `Shape` member over keeping only blob. It is a separate
+member, not a blob preset, because its one radius both fills gaps and rounds
+corners, and blob keeps those apart (`convexity` fills; `roundness` only
+bends).
+
+```js
+enclose({ shape: Shape.arcs({ radius: 12 }), padding: 6 }, members);
+```
+
+```python
+enclose(members, shape=Shape.arcs(radius=12), padding=6)
+```
+
+![arcs radius sweep](img/arcs-radius-sweep.png)
+
+_`Shape.arcs` at radius 0, 6, 12, 24, 48, 200 on Africa's leaves, with the
+paper's construction overlaid as a dashed red line._
+
+- **What it draws:** the members, each grown by `padding`, then closed by a
+  disc of `radius`: grow by `radius`, keep the outer boundary, shrink back by
+  `radius`. Convex parts are the padded members' own edges; each concave corner
+  becomes an arc of `radius`. Holes are always filled, as in the paper.
+  `radius: 0` is exactly the padded union; a very large radius approaches the
+  convex hull.
+- **Accuracy:** on discs it matches the paper's construction to within 0.17 px
+  at every radius tried. Boxes are exact; rings and lines are capsules around
+  their pieces; an ellipse that is not a circle is read as its larger disc, as
+  blob reads it.
+- **Name and default:** `radius` follows ggforce's `radius`; the paper says
+  smoothness _s_, the reference JS `curvature`. Default 12 px.
+- **Accepted trade:** the outline is made only of circular arcs, so curvature
+  jumps at each joint. That is the paper's look; blob keeps its
+  curvature-continuous rule.
+- **Cost:** about 120 ms for the nested treemap's 17 outlines, against about
+  55 ms for `Shape.blob()` on the same members.
+- **Correction:** "gaps narrower than 2·radius fill" holds only for flat or
+  large members. Two discs of radius _a_ with gap _g_ join only when
+  2*a*·radius ≥ _a_·_g_ + *g*²/4 (discs of radius 10, 30 px apart, need radius
+  26). Below that, `arcs` returns separate pieces, where blob always joins
+  them. In a bubble treemap the padded leaves already touch, so this does not
+  come up.
+
+![shape grid with arcs](img/shape-grid-arcs.png)
+
+_One level, every shape: box, oval, hull, blob(), blob({ convexity: 0.1 }),
+arcs({ radius: 12 })._
 
 ![arcs vs blob](img/c3-arcs-vs-blob.png)
 
-_Top: the paper's construction (closing of the grown union), computed exactly
-in the story, at s = 0, 12, 40. Bottom: `Shape.blob()`, `Shape.blob({ convexity: 0.2 })`, `Shape.hull()`._
-
-- No `Shape.blob` setting reproduces the paper. `convexity` fills a share of
-  the hull by area, smallest gaps first; closing fills every gap narrower than
-  2*s*. Blob rounds by Gaussian smoothing; the paper uses arcs.
-- The paper's outline is G1, made of arcs, so curvature jumps where a leaf arc
-  meets a tangent arc. The enclose design chose a curvature-continuous outline
-  on purpose (no curvature change where a circle meets a link). Matching the
-  paper would add a member that breaks that rule.
-- Recommendation: keep `Shape.blob`. If fidelity to the paper matters, a
-  `Shape` member parameterized by a radius is a clean addition later through
-  #1167 / #1101, and `Shape.blob`'s own knobs do not change.
-
-![shape grid](img/shape-grid.png)
-
-_One level, every shape. When the leaves touch, every blob variant comes out
-near the padded union; only box, oval and hull differ._
+_Why blob could not do it: the paper's construction (top, s = 0, 12, 40)
+against `Shape.blob()`, `Shape.blob({ convexity: 0.2 })`, `Shape.hull()`._
 
 ## Choice 3: what pack packs against
 
@@ -342,9 +364,11 @@ no change to `enclose`. Defer until a real example needs the tighter packing.
   its box until #1207 (a filled-ring member) lands.
   ![band](img/c4-band.png)
 - **Propagation**: data-side (`derive`), root sum of squares; no layout change.
-- **Waves, dashes, blur**: stroke styles on any outline, not part of this
-  proposal. Dashes exist (`strokeDasharray`); waves and blur would be their own
-  issue.
+- **On the line itself**: the paper puts uncertainty on how the contour is
+  drawn (width, blur, waves, dashes), not on where it sits. Those are line
+  styles for any outline or line, left for later (2026-10-28).
+  `strokeDasharray` exists; a thicker or wavier line would reserve its own room
+  through the rule that already counts half the stroke width.
 
 ## Related issues
 
@@ -388,8 +412,9 @@ and the gaps stay hand-computed.
    spelling, wrapping each group's subtree? Or stay combinator-only for now?
 3. **Per-group padding.** May `enclose`'s `padding` be a field read once per
    group (constant within the group, in pixels), like `fill`?
-4. **Paper fidelity.** Is `Shape.blob({ convexity })` close enough, or do you
-   want a closing-by-radius `Shape` member despite its G1 arcs?
+4. **`Shape.arcs` details.** `Shape.arcs({ radius })` is chosen. Is the 12 px
+   default right? Should holes always be filled (no `holes` option, as in the
+   paper), unlike blob?
 5. **Tighter packing.** Defer packing against outlines (the paper's force step)
    to a later `pack` strategy?
 

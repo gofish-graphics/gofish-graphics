@@ -40,6 +40,7 @@ import { avoidedRefs } from "../nodeRefs";
 import { blobOutline, type BlobMember, type Pt } from "./enclose/blob";
 import { membersOf } from "./enclose/members";
 import { ovalOutline } from "./enclose/oval";
+import { arcsOutline, ARCS_RADIUS } from "./enclose/arcs"; // PROTOTYPE #1221
 import { targetOf } from "../constraints/relationalPaint";
 import { ringExtent } from "../geometry/box";
 import { RelateOperand } from "../constraints/relate";
@@ -165,6 +166,12 @@ function Enclose(
           });
         else if (shape.kind === "oval")
           loops = ovalOutline(geometry(0, memberCount), padding);
+        // PROTOTYPE #1221
+        else if (shape.kind === "arcs")
+          loops = arcsOutline(geometry(0, memberCount), {
+            padding,
+            radius: shape.radius ?? ARCS_RADIUS,
+          });
         // A computed outline's box is the outline's own.
         const pts = loops?.flat() ?? [];
         if (pts.length > 0) ({ minX, maxX, minY, maxY } = ringExtent(pts));

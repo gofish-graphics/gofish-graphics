@@ -885,6 +885,17 @@ export const STRATEGIES = {
         doc: "The smallest-area ellipse that holds every member grown by `padding`. It may be rotated: it follows the members, not the axes.",
         params: {},
       },
+      // PROTOTYPE #1221
+      arcs: {
+        doc: "The members grown by `padding`, with every gap narrower than about 2 × `radius` filled and every concave corner a circular arc of `radius`: the morphological closing of the padded members by a disc of `radius`, with holes filled. Around circles it is made of circular arcs only, as in bubble treemaps.",
+        params: {
+          radius: {
+            type: t.num({ min: 0, finite: true }),
+            default: 12,
+            doc: "The radius of the closing disc, in pixels: the radius of every concave arc. 0 is the padded union; a large radius nears the padded convex hull.",
+          },
+        },
+      },
       blob: {
         doc: "A smooth region around the members: each member grown by `padding`, the links of a spanning tree between them (routed around avoided nodes, so the set stays in one piece), and the Delaunay triangles of their points, filled smallest gaps first up to `convexity` of their convex hull. The outline is rounded so its curvature never jumps.",
         params: {

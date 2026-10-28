@@ -200,7 +200,13 @@ const groupBy = <T, K extends keyof T>(rows: T[], key: K) => {
   return [...m.values()];
 };
 
-type Level = { padding: number; stroke: string; strokeWidth: number };
+/** One level's outline; `shape` overrides `nested`'s for this level. */
+type Level = {
+  padding: number;
+  stroke: string;
+  strokeWidth: number;
+  shape?: Shape.Shape;
+};
 
 /** The bubble treemap as nested combinators; `inner` and `outer` style the
  *  region and continent outlines, `regionPadding(rows)` the region distance. */
@@ -449,7 +455,13 @@ const svgPanel = (title: string, contour: [number, number][]) => {
   return [title, svg] as const;
 };
 
-const blobPanel = (title: string, shape: Shape.Shape) => {
+/** GoFish's outline of `shape` around the Africa discs; `paper`, if given,
+ *  is overlaid as a dashed red ring in the same pixels. */
+const blobPanel = (
+  title: string,
+  shape: Shape.Shape,
+  paper?: [number, number][]
+) => {
   const cell = document.createElement("div");
   layer([
     // An invisible anchor at the origin, so the panel keeps the SVG panels'
@@ -475,6 +487,20 @@ const blobPanel = (title: string, shape: Shape.Shape) => {
       ),
     ])
     .render(cell, { w: 340, h: 340 });
+  if (paper) {
+    const [, overlay] = svgPanel("", paper);
+    const ring = overlay.querySelector("path")!;
+    overlay.replaceChildren(ring);
+    ring.setAttribute("fill", "none");
+    ring.setAttribute("stroke", "#e00");
+    ring.setAttribute("stroke-width", "1");
+    ring.setAttribute("stroke-dasharray", "3 3");
+    overlay.style.position = "absolute";
+    overlay.style.left = "0";
+    overlay.style.top = "0";
+    cell.style.position = "relative";
+    cell.append(overlay);
+  }
   return [title, cell] as const;
 };
 
@@ -532,3 +558,76 @@ export const C4ChartFormFunctionMark = show((c) =>
     )
     .render(c)
 );
+
+// ── D. Shape.arcs({ radius }) (PROTOTYPE #1221) ─────────────────────────────
+// The paper's contour as an enclose shape: the padded members closed by a
+// disc of `radius`. Each panel overlays C3's exact paper construction
+// (dashed red) on GoFish's outline (black).
+
+export const ArcsRadiusSweep: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    container.style.display = "grid";
+    container.style.gridTemplateColumns = "repeat(3, 350px)";
+    const padded = africa.map((d) => ({ ...d, r: d.r + P3 }));
+    for (const radius of [0, 6, 12, 24, 48, 200]) {
+      const [title, el] = blobPanel(
+        `Shape.arcs({ radius: ${radius} })`,
+        Shape.arcs({ radius }),
+        arcContour(padded, Math.max(radius, 0.01))
+      );
+      const cell = document.createElement("div");
+      const h = document.createElement("div");
+      h.textContent = title;
+      h.style.font = "600 12px sans-serif";
+      cell.append(h, el);
+      container.append(cell);
+    }
+    return container;
+  },
+};
+
+// The bubble treemap with the paper's contours: a smaller radius at the
+// region level than at the continent level.
+const REGION_ARCS: Level = { ...INNER, shape: Shape.arcs({ radius: 8 }) };
+
+export const ArcsNested = show((c) =>
+  nested(Shape.arcs({ radius: 12 }), REGION_ARCS, OUTER).render(c, SIZE)
+);
+
+// The same, with each region's contour distance from its uncertainty.
+export const ArcsNestedUncertainty = show((c) =>
+  nested(
+    Shape.arcs({ radius: 12 }),
+    REGION_ARCS,
+    OUTER,
+    uncertainPadding
+  ).render(c, SIZE)
+);
+
+// One level (regions) with each outline shape, side by side.
+export const ShapeGridArcs: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    const shapes: [string, Shape.Shape][] = [
+      ["Shape.box()", Shape.box()],
+      ["Shape.oval()", Shape.oval()],
+      ["Shape.hull()", Shape.hull()],
+      ["Shape.blob()", Shape.blob()],
+      ["Shape.blob({ convexity: 0.1 })", Shape.blob({ convexity: 0.1 })],
+      ["Shape.arcs({ radius: 12 })", Shape.arcs({ radius: 12 })],
+    ];
+    container.style.display = "grid";
+    container.style.gridTemplateColumns = "repeat(3, 312px)";
+    for (const [title, shape] of shapes) {
+      const cell = document.createElement("div");
+      const heading = document.createElement("div");
+      heading.textContent = title;
+      heading.style.font = "600 12px sans-serif";
+      cell.append(heading);
+      container.append(cell);
+      oneLevel(shape, 6).render(cell, { legend: false });
+    }
+    return container;
+  },
+};
