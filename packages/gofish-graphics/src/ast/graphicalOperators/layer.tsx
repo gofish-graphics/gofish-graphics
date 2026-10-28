@@ -793,10 +793,10 @@ export const layer = createNodeOperatorSequential(
               const shadow = planShadows[axis];
               if (shadow !== undefined) shadow.plotClaim = plot[axis];
               const sum = shadow?.summary;
-              if (sum !== undefined && planClaimOn()) {
-                if (plot !== resolved) plot[axis] = sum.plot;
-                resolved[axis] = sum.whole;
-                contentExtents[axis] = sum.whole;
+              if (planClaimOn()) {
+                if (plot !== resolved) plot[axis] = sum?.plot;
+                resolved[axis] = sum?.whole;
+                contentExtents[axis] = sum?.whole;
               }
             }
           // What the layer claims upward. A data-valued size claims its
@@ -1542,11 +1542,18 @@ export const layer = createNodeOperatorSequential(
       dressing: dressingChildren,
       operands: constraintOperands,
       seating,
-      literalStart: [0, 1].map((axis) => {
-        const min = dims[axis].min;
-        return typeof min === "number" ? min : undefined;
-      }) as [number | undefined, number | undefined],
-      ownScope: [dims[0].size !== undefined, dims[1].size !== undefined],
+      // Both read live: a `dims` option names its axes only once the scopes
+      // around the layer are known (`deferAxisDims`), and then sets them.
+      get literalStart(): [number | undefined, number | undefined] {
+        const at = (axis: 0 | 1) => {
+          const min = dims[axis].min;
+          return typeof min === "number" ? min : undefined;
+        };
+        return [at(0), at(1)];
+      },
+      get ownScope(): [boolean, boolean] {
+        return [dims[0].size !== undefined, dims[1].size !== undefined];
+      },
       placeChildren: (axis, extents) =>
         placeChildren(axis, extents, standInPlacements(axis)),
       // Memoized with the claims it reads. The claim hook's own placement

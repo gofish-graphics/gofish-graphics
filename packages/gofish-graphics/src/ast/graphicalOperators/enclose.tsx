@@ -111,6 +111,23 @@ function Enclose(
         UNDEFINED,
         UNDEFINED,
       ],
+      // Over fresh members, each laid at the outline's origin, the outline
+      // claims their union grown by the padding. Around refs it is placed
+      // from them (`placedFromRefs` below), and claims nothing of its own.
+      resolveExtent: (childExtents) =>
+        ([0, 1] as const).map((axis) => {
+          const own = childExtents.slice(0, memberCount).map((e) => e[axis]);
+          if (
+            own.length === 0 ||
+            members.some((m) => m instanceof GoFishRef) ||
+            own.some((e) => e === undefined)
+          )
+            return undefined;
+          return Extent(
+            Pwl.addConstant(Pwl.envelope(own.map((e) => e!.ascent)), padding),
+            Pwl.addConstant(Pwl.envelope(own.map((e) => e!.descent)), padding)
+          );
+        }) as [Extent | undefined, Extent | undefined],
       layout: (size, scales, children) => {
         // Child placement (`placeUnplacedChild`): a FRESH child reports an
         // undefined translate until placed, so its baseline is placed at the
@@ -239,9 +256,6 @@ function Enclose(
   // every member does (#493 placement claims). Its claim is the members'
   // padded box. That is exact for `Shape.box()`, and a blob lies inside it;
   // an oval may reach past it, and that reach is ink.
-  // TODO(#1032): an outline over fresh children has no claim yet (the claim
-  // walk reads no size for it); it should claim their union grown by the
-  // padding.
   if (memberCount > 0 && members.every((m) => m instanceof GoFishRef))
     node.placedFromRefs = (frame, axis) =>
       paddedPlacement(

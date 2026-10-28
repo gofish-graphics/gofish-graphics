@@ -642,7 +642,13 @@ only at the ends of the hull. Any other node's box is its own claim rule
 run over its children's boxes (`GoFishNode.composeExtent`). A child that
 places itself at a literal pixel stays there; a child whose y runs the
 other way is read reflected about its data 0; and a `transform.scale`
-scales the forms about data 0, reflecting them when it is negative.)
+scales the forms about data 0, reflecting them when it is negative. A
+layer that is a scope of its own on an axis (a `dims` size, which a
+spread's size option sets once the scopes around it are known) is read by
+its claim there, not its plan. Under `GOFISH_PLAN_CLAIM` a node nested in a
+child is placed by composing plans (`planPlacement`): its box in its
+parent's plan, moved by each ancestor's data 0 in the next one's,
+reflected where y runs the other way.)
 Every continuous axis has
 exactly one claim; `resolveExtent()` checks this. Another axis has one when
 its content's room depends on σ, or when its content has a pixel size of its

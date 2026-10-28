@@ -5,6 +5,7 @@
 import type { GoFishNode } from "./_node";
 import * as Pwl from "./solver/pwl";
 import { literalSeats, type Placement } from "./constraints/claimPlacement";
+import { planClaimOn, planPlacement } from "./solver/planShadow";
 
 /**
  * Placement claims (#493): where a node lands in another node's frame, as a
@@ -65,6 +66,8 @@ export function placementIn(
   frame: GoFishNode,
   axis: 0 | 1
 ): Placement | undefined {
+  // TEMPORARY (#1176 step 3c): under GOFISH_PLAN_CLAIM, compose plans.
+  if (planClaimOn()) return planPlacement(target, frame, axis);
   const extent = target.resolveExtent()[axis];
   if (extent === undefined) return undefined;
   const up = new Set<GoFishNode>();

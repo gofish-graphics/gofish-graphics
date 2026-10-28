@@ -17,6 +17,7 @@ import { Extent } from "../extent";
 import type { Size } from "../dims";
 import * as Pwl from "./pwl";
 import {
+  literalSeats,
   placeByClaims,
   type ClaimChild,
   type ClaimPlacement,
@@ -577,4 +578,136 @@ export function planShadowCheck(
   const rec = records.get(node) ?? [undefined, undefined];
   rec[axis] = own;
   records.set(node, rec);
+}
+
+/** Where `parent` seats `child`'s data 0 on `axis` without solving its own
+ *  plan (it may be the plan being built): 0 for a child no constraint acts
+ *  on there, the pixel a literal position pins it at, else undefined. A
+ *  child with a literal start of its own is not seated at its data 0, and
+ *  is left to the solve. */
+function seatOf(
+  parent: GoFishNode,
+  child: GoFishAST,
+  axis: 0 | 1
+): number | undefined {
+  const seating = parent.claimWalk?.seating();
+  if (seating === undefined) return undefined;
+  if (
+    child instanceof GoFishNode &&
+    child.claimWalk?.literalStart[axis] !== undefined
+  )
+    return undefined;
+  const i = seating.indexOf(child);
+  const acting = seating.acting[axis].get(i) ?? [];
+  if (acting.length === 0) return 0;
+  const name = seating.operandName.get(i);
+  return name === undefined
+    ? undefined
+    : literalSeats(acting).get(name)?.[axis];
+}
+
+/** `x ↦ at + sign·x`: where a point of a node's frame lands in an
+ *  ancestor's. */
+type Frame = { at: Pwl.Value; sign: 1 | -1 };
+
+/** Whether `child` reads `axis` the other way from `parent`. */
+const flips = (parent: GoFishNode, child: GoFishAST, axis: 0 | 1): boolean =>
+  axis === 1 && child.yFrame.direction !== parent.yFrame.direction;
+
+/** Whether plans compose through `n` on `axis`: a layer that is not a
+ *  scope of its own there. */
+const composes = (n: GoFishNode, axis: 0 | 1): boolean =>
+  n.claimWalk !== undefined && !n.claimWalk.ownScope[axis];
+
+/** `[lo, hi]` and a point `zero` moved by the frame map `m`, the box kept
+ *  in order. */
+const moved = (
+  m: Frame,
+  lo: Pwl.Value,
+  hi: Pwl.Value,
+  zero: Pwl.Value
+): [Pwl.Value, Pwl.Value, Pwl.Value] => {
+  const f = (x: Pwl.Value) => Pwl.add(m.at, m.sign === 1 ? x : Pwl.negate(x));
+  return m.sign === 1 ? [f(lo), f(hi), f(zero)] : [f(hi), f(lo), f(zero)];
+};
+
+/**
+ * Where `target` lands in `frame`'s frame on `axis`, by composing plans
+ * (a plan's port): the target's box in its parent's plan, moved by each
+ * ancestor's data 0 in the next ancestor's plan (reflected where y runs the
+ * other way), up to the nearest node it shares with `frame`, which seats
+ * both sides without solving (`seatOf`); then down to `frame`. Undefined
+ * where no plan reaches: a node that is not a layer, or a scope of its own.
+ */
+export function planPlacement(
+  target: GoFishNode,
+  frame: GoFishNode,
+  axis: 0 | 1
+): Placement | undefined {
+  if (target.resolveExtent()[axis] === undefined) return undefined;
+  const up = new Set<GoFishNode>();
+  for (let n: GoFishNode | undefined = frame; n; n = n.parent) up.add(n);
+  let shared: GoFishNode | undefined = target.parent;
+  while (shared !== undefined && !up.has(shared)) shared = shared.parent;
+  if (shared === undefined || !composes(shared, axis)) return undefined;
+
+  // The target's box and data 0 in the frame of `n`, the child of `shared`
+  // that holds it.
+  let n: GoFishNode = target;
+  let lo: Pwl.Value;
+  let hi: Pwl.Value;
+  let zero: Pwl.Value;
+  if (target.parent === shared) {
+    const b = boxOf(target)[axis];
+    if (b === undefined) return undefined;
+    lo = Pwl.negate(b.descent);
+    hi = b.ascent;
+    zero = Pwl.ZERO;
+  } else {
+    let first = true;
+    lo = hi = zero = Pwl.ZERO;
+    while (n.parent !== shared) {
+      const p = n.parent!;
+      if (!composes(p, axis)) return undefined;
+      p.resolveExtent();
+      const plan = plans.get(p)?.[axis];
+      const i = p.claimWalk!.seating().indexOf(n);
+      const box = plan?.placement.boxes().get(i);
+      const f = plan?.forms[i];
+      if (box === undefined || f === undefined) return undefined;
+      const base = Pwl.add(Pwl.add(box.lo, f.box.descent), f.zero);
+      if (first) {
+        [lo, hi, zero] = [box.lo, box.hi, base];
+        first = false;
+      } else {
+        const m: Frame = { at: base, sign: flips(p, n, axis) ? -1 : 1 };
+        [lo, hi, zero] = moved(m, lo, hi, zero);
+      }
+      n = p;
+    }
+  }
+  const seat = seatOf(shared, n, axis);
+  if (seat === undefined) return undefined;
+  [lo, hi, zero] = moved(
+    { at: Pwl.constant(seat), sign: flips(shared, n, axis) ? -1 : 1 },
+    lo,
+    hi,
+    zero
+  );
+
+  // Then into `frame`'s frame: x_shared = at + sign·x_frame, inverted.
+  let at: Pwl.Value = Pwl.ZERO;
+  let sign: 1 | -1 = 1;
+  const chain: GoFishNode[] = [];
+  for (let m = frame; m !== shared; m = m.parent!) chain.push(m);
+  for (const m of chain.reverse()) {
+    const p = m.parent!;
+    if (p !== shared && !composes(p, axis)) return undefined;
+    const s = seatOf(p, m, axis);
+    if (s === undefined) return undefined;
+    at = Pwl.add(at, Pwl.constant(sign * s));
+    if (flips(p, m, axis)) sign = -sign as 1 | -1;
+  }
+  [lo, hi, zero] = moved({ at: Pwl.scale(-sign, at), sign }, lo, hi, zero);
+  return { lo, hi, extent: Extent(sub(hi, zero), sub(zero, lo)) };
 }

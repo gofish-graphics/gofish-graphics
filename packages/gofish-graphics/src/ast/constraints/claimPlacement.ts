@@ -272,14 +272,33 @@ export function placeByClaims(
   nested: (name: string) => Placement | undefined
 ): ClaimPlacement {
   const onAxis = constraintsOn(constraints, axis);
-  // A child an interval pins (across a span, or a region's cell) has a
-  // size from it, whatever its own claim.
+  // The children a region's cell places on the axis: each lays itself out
+  // in the cell, as layout hands it the cell (`GoFishNode.layout`). One
+  // with no size of its own fills it, and any other keeps its size in the
+  // middle of it.
+  const celled = new Set<number>();
+  for (const c of constraints)
+    if (
+      c.type === "position" &&
+      c[axisName(axis)] === undefined &&
+      c.region?.spans[axis] !== undefined
+    )
+      for (const r of c.children) {
+        const op = operands.get(r.name);
+        if (op?.direct) celled.add(op.child);
+      }
+  // A child an interval pins (across a span, or a region's cell it fills)
+  // has a size from it, whatever its own claim.
   const spanned = new Set<number>();
   for (const c of onAxis)
     if (c.type === "position" && isPositionInterval(c[axisName(axis)]!))
       for (const r of c.children) {
         const op = operands.get(r.name);
-        if (op?.direct) spanned.add(op.child);
+        if (
+          op?.direct &&
+          !(celled.has(op.child) && children[op.child].extent !== undefined)
+        )
+          spanned.add(op.child);
       }
 
   // An operand only layout places, unless the claim walk knows where it
@@ -302,30 +321,15 @@ export function placeByClaims(
     const c = children[op.child];
     return c.inkOn || (c.standIn && c.placed === undefined);
   };
-  // A child that fills the room it is given has no size the claim walk
-  // knows, so neither does the place of whatever is seated beside it.
-  const sizeless = (name: string): boolean => {
-    const op = operands.get(name);
-    if (op === undefined || !op.direct) return false;
-    const c = children[op.child];
-    return (
-      !c.standIn &&
-      !c.inkOn &&
-      presetOf(op.child) === undefined &&
-      c.extent === undefined &&
-      !spanned.has(op.child)
-    );
-  };
-  // What is unknown spreads through the relations on this axis: whatever
-  // is aligned or seated against an operand lands where it does. A child a
-  // position pins on its own stays known.
+  // Ink spreads through the relations on this axis: whatever is aligned
+  // or seated against an operand only layout places lands where it does. A
+  // child a position pins on its own stays known.
   const pinned = new Set<number>();
   for (const c of onAxis)
     if (c.type === "position")
       for (const r of c.children) {
         const op = operands.get(r.name);
-        if (op?.direct && !inkName(r.name) && !sizeless(r.name))
-          pinned.add(op.child);
+        if (op?.direct && !inkName(r.name)) pinned.add(op.child);
       }
   const parent = new Map<string, string>();
   const find = (a: string): string => {
@@ -344,15 +348,25 @@ export function placeByClaims(
     }
   }
   const inkRoots = new Set([...parent.keys()].filter(inkName).map(find));
-  const sizelessRoots = new Set([...parent.keys()].filter(sizeless).map(find));
   const ink = new Set<number>();
-  const unplaced = new Set<number>();
   for (const n of parent.keys()) {
     const op = operands.get(n);
     if (op === undefined || !op.direct || pinned.has(op.child)) continue;
     if (inkRoots.has(find(n))) ink.add(op.child);
-    if (sizelessRoots.has(find(n))) unplaced.add(op.child);
   }
+  // A filler (a child with no claim, which takes whatever room it is
+  // given) takes no room here: the solve places it as a point, so what a
+  // relation ties to it stays placed. Where a datum position puts it, the
+  // point is data, and the hull holds it; anywhere else it lands only
+  // where layout gives it room, and the hull leaves it out.
+  const atDatum = new Set<number>();
+  for (const c of onAxis)
+    if (c.type === "position" && typeof c[axisName(axis)] !== "number")
+      for (const r of c.children) {
+        const op = operands.get(r.name);
+        if (op?.direct) atDatum.add(op.child);
+      }
+  const unplaced = new Set<number>();
   children.forEach((c, i) => {
     if (c.inkOn) ink.add(i);
     if (c.standIn) ink.delete(i);
@@ -360,7 +374,8 @@ export function placeByClaims(
       c.extent === undefined &&
       !c.standIn &&
       presetOf(i) === undefined &&
-      !spanned.has(i)
+      !spanned.has(i) &&
+      !atDatum.has(i)
     )
       unplaced.add(i);
   });
@@ -418,6 +433,9 @@ export function placeByClaims(
   // The parts a chain places past their whole box, not by their plots:
   // what is no part of the plot (ink, dressing, chrome).
   const apart = new Set<string>();
+  // The children their own data places (layout's `dataPositioned`): an
+  // align by an end or a baseline leaves them where their data puts them.
+  const dataPositioned = new Set<string>();
   const boxOf = (i: number): Box =>
     boxOfClaim(presetOf(i)?.extent ?? children[i].extent);
   const at = new Map<number, Box>();
@@ -433,9 +451,7 @@ export function placeByClaims(
     const preset =
       p !== undefined
         ? values.sub(p.lo, box[0])
-        : !constrained.has(i) ||
-            c.dataPositioned ||
-            (c.placesItself === true && !overridden.has(i))
+        : !constrained.has(i) || (c.placesItself === true && !overridden.has(i))
           ? Pwl.ZERO
           : seat !== undefined
             ? Pwl.constant(seat)
@@ -451,6 +467,7 @@ export function placeByClaims(
       )
     );
     indexOf.set(key, i);
+    if (c.dataPositioned) dataPositioned.add(key);
     if (ink.has(i) || dressing.has(i) || c.chrome === true) apart.add(key);
     if (preset !== undefined)
       at.set(i, [Pwl.add(preset, box[0]), Pwl.add(preset, box[1])]);
@@ -475,7 +492,7 @@ export function placeByClaims(
     [NaN, NaN],
     axis === 0 ? [map, undefined] : [undefined, map],
     undefined,
-    [new Set(), new Set()],
+    axis === 0 ? [dataPositioned, new Set()] : [new Set(), dataPositioned],
     undefined,
     axis === 0 ? [Pwl.ZERO, undefined] : [undefined, Pwl.ZERO],
     axis === 0 ? [apart, new Set()] : [new Set(), apart]
@@ -484,10 +501,15 @@ export function placeByClaims(
     const i = indexOf.get(name);
     if (i === undefined) continue;
     const [lo, hi] = boxOf(i);
-    const size = cell.sizeStrong
-      ? (cell.size ?? values.sub(hi, lo))
-      : values.sub(hi, lo);
-    at.set(i, [cell.min, Pwl.add(cell.min, size)]);
+    const own = values.sub(hi, lo);
+    // A child with a size of its own in a region's cell sits in its middle.
+    const centered =
+      celled.has(i) && !spanned.has(i) && cell.size !== undefined;
+    const size = cell.sizeStrong && !centered ? (cell.size ?? own) : own;
+    const min = centered
+      ? Pwl.add(cell.min, Pwl.scale(0.5, values.sub(cell.size!, own)))
+      : cell.min;
+    at.set(i, [min, Pwl.add(min, size)]);
   }
   // A child the solve leaves unplaced sits at the layer's origin.
   for (const i of solved) if (!at.has(i)) at.set(i, boxOf(i));

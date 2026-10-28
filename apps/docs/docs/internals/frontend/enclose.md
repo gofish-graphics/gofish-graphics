@@ -62,9 +62,8 @@ around it, and its members never move for it. The box is exact for
 `Shape.box()`, and a blob lies inside it. An oval can reach past it, and that
 reach is ink. Where the claim walk cannot place a member (it is in a
 coordinate space, or under a node with a size of its own), the whole outline
-is ink. An outline over fresh children has no claim yet: the claim walk
-reads no size for it. It should claim its children's union grown by
-`padding`, as a part of the plot.
+is ink. An outline over fresh children, each laid at the outline's origin,
+claims their union grown by `padding`, as a part of the plot.
 
 The outline paints under its members. Among a layer's children that is the
 default `zBelow` every relational mark gets; as a `.relate()` clause it is

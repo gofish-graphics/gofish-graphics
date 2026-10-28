@@ -726,8 +726,14 @@ report their size).
   takes room where it draws, and σ is solved with it, while the mark it
   describes stays where its own layout puts it. A layer that places such a
   stand-in claims the hull of its solve, not the fold that starts its
-  children at its origin. A region (a `partition` cell) places its child
-  across its datum span, as an interval does. An `enclose` around placed
+  children at its origin. A region (a `partition` cell) places a child
+  that fills across its datum span, as an interval does, and a child with
+  a size of its own in the middle of it, as layout does. A child with no
+  claim (a filler) takes no room: the solve places it as a point, so what
+  a relation ties to it stays placed, and the hull holds that point only
+  where a datum position puts it. A child its own data places is not moved
+  by an align by an end or a baseline, as layout does not move it
+  (`isDataPositionedAlignTarget`). An `enclose` around placed
   members (`.relate()` operands, `ref(...)` children, or a `selectAll` in the
   chart form) is placed from its refs the same way
   (`GoFishNode.placedFromRefs`): its box is its members' boxes, each where
