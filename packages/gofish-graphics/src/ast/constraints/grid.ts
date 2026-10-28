@@ -191,8 +191,7 @@ function resolveAxisTracks(
           scopes.solveSize(
             { kind: "grid", rootKey: meta.rootKey, axis: meta.axis },
             gridClaim,
-            allocated,
-            { upperBoundGuess: allocated }
+            allocated
           ) ?? 0;
       }
     }

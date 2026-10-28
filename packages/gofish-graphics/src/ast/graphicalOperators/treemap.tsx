@@ -154,11 +154,7 @@ const Treemap = createNodeOperator(
           const localScaleFactor = (dir: Direction): number | undefined => {
             const extent = myExtent[dir];
             if (extent !== undefined) {
-              return (
-                Pwl.solve(extent.width, size[dir], {
-                  upperBoundGuess: size[dir],
-                }) ?? 0
-              );
+              return Pwl.solve(extent.width, size[dir]) ?? 0;
             }
             return undefined;
           };

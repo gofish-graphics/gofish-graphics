@@ -13,13 +13,7 @@
  *
  * Ported from the symbolic layout kernel (layout-engine-prototype `affine.ts`
  * and `piecewise.ts`, #1176), whose layout solve works in the same values.
- *
- * A {@link Closure} is the one value outside the algebra: an opaque function
- * of σ, from a probe solve that re-solves a placement at each σ it is read at
- * (`placeByClaims` in constraints/claimPlacement.ts). Anything combined with a
- * closure is a closure. TODO(#1176 step 3): symbolic placement removes it.
  */
-import { findTargetMonotonic } from "../../util";
 
 /** The line `slope·σ + intercept`. */
 export type Affine = {
@@ -47,13 +41,7 @@ export type Piecewise = {
 
 export type Pwl = Affine | Piecewise;
 
-/** An opaque function of σ (see the module comment). */
-export type Closure = {
-  readonly kind: "closure";
-  readonly run: (sigma: number) => number;
-};
-
-export type Value = Pwl | Closure;
+export type Value = Pwl;
 
 export const affine = (slope: number, intercept: number): Affine => ({
   kind: "affine",
@@ -68,14 +56,7 @@ export const constant = (value: number): Affine => affine(0, value);
  *  extent that sits wholly above its baseline). */
 export const ZERO: Affine = constant(0);
 
-export const closure = (run: (sigma: number) => number): Closure => ({
-  kind: "closure",
-  run,
-});
-
 export const isAffine = (v: Value): v is Affine => v.kind === "affine";
-
-export const isClosure = (v: Value): v is Closure => v.kind === "closure";
 
 /** The rounding error a sum of numbers can carry, per unit of the sum of
  *  their sizes: a few ulps, allowing for sums of sums. */
@@ -141,8 +122,6 @@ export function at(v: Value, x: number): number {
       const s = segmentAt(v.segments, x);
       return s.slope * x + s.intercept;
     }
-    case "closure":
-      return v.run(x);
   }
 }
 
@@ -191,8 +170,6 @@ export function add(...vs: Value[]): Value {
     }
     return affine(cancel(slope, magnitude), intercept);
   }
-  if (vs.some(isClosure))
-    return closure((x) => vs.reduce((sum, v) => sum + at(v, x), 0));
   return (vs as Pwl[]).reduce<Pwl>(sum2, ZERO);
 }
 
@@ -205,8 +182,6 @@ export function addConstant(v: Value, c: number): Value {
       return fromSegments(
         v.segments.map((s) => ({ ...s, intercept: s.intercept + c }))
       );
-    case "closure":
-      return closure((x) => v.run(x) + c);
   }
 }
 
@@ -223,8 +198,6 @@ export function scale(k: number, v: Value): Value {
           intercept: k * s.intercept,
         }))
       );
-    case "closure":
-      return closure((x) => k * v.run(x));
   }
 }
 
@@ -273,8 +246,6 @@ function hull(lines: readonly Segment[], lo: number, hi: number): Segment[] {
 export function envelope(vs: readonly Value[]): Value {
   if (vs.length === 1) return vs[0];
   if (vs.length === 0) return constant(-Infinity);
-  if (vs.some(isClosure))
-    return closure((x) => Math.max(...vs.map((v) => at(v, x))));
   const inputs = (vs as Pwl[]).map(segmentsOf);
   if (vs.every(isAffine))
     return fromSegments(
@@ -325,21 +296,9 @@ export const isZero = (v: Value): boolean =>
  * claims that dips and then rises, it is where it rises through the target.
  * `target − intercept` follows the cancellation rule ({@link cancel}), so a
  * value that reaches the target at σ = 0 up to rounding solves 0, not a σ
- * just below it. A closure is solved by bisection (`opts` tune the search).
+ * just below it.
  */
-export function solve(
-  v: Value,
-  target: number,
-  opts?: { tolerance?: number; lowerBound?: number; upperBoundGuess?: number }
-): number | undefined {
-  if (v.kind === "closure")
-    // A σ can be far below 1 (a domain of millions of units), so the
-    // search runs to a tolerance well below any σ, not a fixed 1e-4.
-    return findTargetMonotonic(target, v.run, {
-      tolerance: 1e-12,
-      maxIterations: 200,
-      ...opts,
-    });
+export function solve(v: Value, target: number): number | undefined {
   const segments = segmentsOf(v);
   for (let k = segments.length - 1; k >= 0; k--) {
     const s = segments[k];
@@ -364,13 +323,10 @@ export function solve(
  *  it tends to as σ grows (its last segment's), or undefined when that does
  *  not rise. Solving it against a slot the fixed parts overfill gives the σ
  *  at which what scales fills the slot, drawn as if the fixed parts took no
- *  room. A closure's slope is read off two far points. */
+ *  room. */
 export const rising = (v: Value): Affine | undefined => {
-  const far = 1e6;
-  const slope =
-    v.kind === "closure"
-      ? (v.run(2 * far) - v.run(far)) / far
-      : segmentsOf(v)[segmentsOf(v).length - 1].slope;
+  const segments = segmentsOf(v);
+  const slope = segments[segments.length - 1].slope;
   return slope > 0 && Number.isFinite(slope) ? affine(slope, 0) : undefined;
 };
 
@@ -379,14 +335,12 @@ export const rising = (v: Value): Affine | undefined => {
  * `tolerance`. Two lines agree everywhere when they agree at σ = 0 and 1.
  * Their difference is a line between breakpoints, so two piecewise values
  * agree everywhere when they agree at 0, 1, every breakpoint of either, and
- * once past the last. A closure is probed at a spread of points.
+ * once past the last.
  */
 export const approxEqual = (a: Value, b: Value, tolerance = 1e-6): boolean => {
   const close = (x: number): boolean =>
     Math.abs(at(a, x) - at(b, x)) <= tolerance;
   if (a.kind === "affine" && b.kind === "affine") return close(0) && close(1);
-  if (a.kind === "closure" || b.kind === "closure")
-    return [0, 0.5, 1, 2, 10].every(close);
   const breaks = [...segmentsOf(a), ...segmentsOf(b)]
     .map((s) => s.to)
     .filter(Number.isFinite);
@@ -396,7 +350,7 @@ export const approxEqual = (a: Value, b: Value, tolerance = 1e-6): boolean => {
 
 /** `v` as the equation it is: `40σ + 16`; `max(160σ + 16, 90)` for a
  *  piecewise value that bends upward (the max of its lines), else its
- *  segments, `{2σ on [0, 5], 15 − σ on [5, ∞)}`; `f(σ)` for a closure. */
+ *  segments, `{2σ on [0, 5], 15 − σ on [5, ∞)}`. */
 export const print = (v: Value): string => {
   const line = (s: { slope: number; intercept: number }): string => {
     if (s.slope === 0) return `${s.intercept}`;
@@ -409,8 +363,6 @@ export const print = (v: Value): string => {
   switch (v.kind) {
     case "affine":
       return line(v);
-    case "closure":
-      return "f(σ)";
     case "piecewise": {
       const s = v.segments;
       const convex = s.every(

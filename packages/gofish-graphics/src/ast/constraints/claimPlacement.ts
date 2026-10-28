@@ -2,12 +2,12 @@
 // @wiki Overview — /internals/layout/passes
 // </gofish-wiki>
 
-import type { Placeable } from "../_node";
 import { Extent } from "../extent";
 import type { UnderlyingSpace } from "../underlyingSpace";
 import * as Pwl from "../solver/pwl";
 import { solvePlacementCells } from "./placementSolver";
-import { numbers } from "../solver/arith";
+import { values } from "../solver/arith";
+import type { SolvePlaceable } from "./placementProgramLowerer";
 import type { PlacementConstraint } from "./placementLowering";
 import { axisIndex, axisName, isPointAlign, type Axis } from "./shared";
 import { isPositionInterval } from "./position";
@@ -26,13 +26,10 @@ import type { ConstraintSpec } from ".";
  * The claim walk places them with the same solve the layout runs (the
  * placement solver), on boxes that are the children's claims instead of
  * their laid-out boxes: data maps through σ from data 0, and every claim is
- * measured from data 0. The solve is linear in σ and in the sides of the
- * boxes, so a few solves give each box's edges as an affine form in σ and
- * in the sides of the claims that are not lines in σ (a nested spread's
- * envelope). An edge whose form only adds those sides is exact
- * (`Pwl.add` keeps envelopes), and the hull is the envelope of the
- * edges. An edge that subtracts one (a box centered on a ring inside it) is
- * evaluated at each σ it is read at.
+ * measured from data 0. It is the one solve, run once in values in σ
+ * (`values` in arith.ts) instead of numbers: each box's edges come out as
+ * piecewise-linear functions of σ, exact at every σ, and the hull is the
+ * envelope of the edges.
  *
  * A `ref` stand-in, or an operand nested in a child, stands where its node
  * lands in this layer's frame, which the claim walk knows through the
@@ -156,31 +153,34 @@ export const literalSeats = (
   return seats;
 };
 
-/** One child's box on the axis at σ: `[lo, hi]` about its origin. */
-const boxAt = (extent: Extent | undefined, sigma: number): [number, number] =>
+/** One child's box on the axis: `[lo, hi]` about its origin, in σ. */
+type Box = readonly [Pwl.Value, Pwl.Value];
+
+/** The box `[−descent, ascent]` of a claim about its origin. */
+const boxOfClaim = (extent: Extent | undefined): Box =>
   extent === undefined
-    ? [0, 0]
-    : [-Pwl.at(extent.descent, sigma), Pwl.at(extent.ascent, sigma)];
+    ? [Pwl.ZERO, Pwl.ZERO]
+    : [Pwl.negate(extent.descent), extent.ascent];
 
 /**
- * A placeable whose box on `axis` is `[lo, hi]` about its origin, placed at
- * `at` (its origin's pixel) when given, else for the solve to place. Only
- * `axis` is solved; the other axis has no size, so no fact on it resolves.
+ * What the solve reads of a child whose box on `axis` is `[lo, hi]` about
+ * its origin, placed at `at` (its origin's pixel) when given, else for the
+ * solve to place. Only `axis` is solved; the other axis has no size, so no
+ * fact on it resolves.
  */
 const claimPlaceable = (
   axis: 0 | 1,
-  [lo, hi]: [number, number],
+  [lo, hi]: Box,
   space: UnderlyingSpace | undefined,
-  at: number | undefined
-): Placeable => {
-  const size = hi - lo;
-  const box = { min: at === undefined ? undefined : at + lo, size };
+  at: Pwl.Value | undefined
+): SolvePlaceable<Pwl.Value> => {
+  const box = {
+    min: at === undefined ? undefined : Pwl.add(at, lo),
+    size: values.sub(hi, lo),
+  };
   const none = { min: undefined, size: undefined };
   return {
     dims: axis === 0 ? [box, none] : [none, box],
-    geometry: () => {
-      throw new Error("[gofish] a claim placeable has no geometry");
-    },
     localAnchor: (a, anchor) => {
       if (axisIndex(typeof a === "number" ? axisName(a) : (a as Axis)) !== axis)
         return undefined;
@@ -189,12 +189,11 @@ const claimPlaceable = (
         : anchor === "max"
           ? hi
           : anchor === "center"
-            ? (lo + hi) / 2
-            : 0;
+            ? Pwl.scale(0.5, Pwl.add(lo, hi))
+            : Pwl.ZERO;
     },
-    place: () => {},
     spaceOn: (dir) => (dir === axis ? space : undefined),
-  } as Placeable;
+  };
 };
 
 /** The constraints that act on `axis`, each as it acts on that axis alone
@@ -240,9 +239,6 @@ export function constrainedOn(
   }
   return out;
 }
-
-const isAffineExtent = (e: Extent): boolean =>
-  Pwl.isAffine(e.ascent) && Pwl.isAffine(e.descent);
 
 /**
  * Where a layer's constraints place its children on `axis`, from their
@@ -388,150 +384,78 @@ export function placeByClaims(
   // seated at data 0, and a shared child's claim is measured from it).
   const constrained = constrainedOn(axis, constraints, operands);
 
-  // The claims that are not lines in σ: the solve reads each of their two
-  // sides as a value of its own. Placed operands are read at σ.
-  const curved = solved.filter((i) => {
-    const e = children[i].extent;
-    return presetOf(i) === undefined && e !== undefined && !isAffineExtent(e);
-  });
-  const presets = [
-    ...solved.flatMap((i) => presetOf(i) ?? []),
-    ...nestedPlaced.values(),
-  ];
-  // The affine forms below hold when every placed operand's box is a line
-  // in σ; otherwise each σ is solved when read.
-  const exact = presets.every(
-    (p) => Pwl.isAffine(p.lo) && Pwl.isAffine(p.hi) && isAffineExtent(p.extent)
-  );
-  type Box = readonly [number, number];
-
-  // Each child's box, `[lo, hi]`, where the solve places it at σ, with the
-  // curved claims' sides `sides` (`[ascent, descent]`): a box sits about its
-  // origin, or across the span an interval pins.
+  // One solve, with σ unknown: each child's box, `[lo, hi]`, where the
+  // solve places it, as a function of σ. A box sits about its origin, or
+  // across the span an interval pins. A datum maps through σ from the
+  // layer's data 0.
   const seats = literalSeats(constraints);
-  const isCurved = new Set(curved);
-  const solve = (sigma: number, sides: Map<number, Box>): Map<number, Box> => {
-    const boxOf = (i: number): [number, number] => {
-      const side = sides.get(i);
-      if (side !== undefined) return [-side[1], side[0]];
-      const p = presetOf(i);
-      if (p !== undefined) return boxAt(p.extent, sigma);
-      return isCurved.has(i) ? [0, 0] : boxAt(children[i].extent, sigma);
-    };
-    const at = new Map<number, Box>();
-    const targets = new Map<string, Placeable>();
-    const indexOf = new Map<string, number>();
-    for (const i of solved) {
-      const c = children[i];
-      const box = boxOf(i);
-      const p = presetOf(i);
-      // A child with no name no constraint reads: it sits at its origin.
-      const key = c.name ?? `\u0000child:${i}`;
-      const seat = seats.get(key)?.[axis];
-      const preset =
-        p !== undefined
-          ? Pwl.at(p.lo, sigma) - box[0]
-          : !constrained.has(i) || c.dataPositioned
-            ? 0
-            : seat !== undefined
-              ? seat
-              : undefined;
-      targets.set(key, claimPlaceable(axis, box, c.space, preset));
-      indexOf.set(key, i);
-      if (preset !== undefined) at.set(i, [preset + box[0], preset + box[1]]);
-    }
-    for (const [name, p] of nestedPlaced) {
-      const box = boxAt(p.extent, sigma);
-      targets.set(
-        name,
-        claimPlaceable(axis, box, undefined, Pwl.at(p.lo, sigma) - box[0])
-      );
-    }
-    const map = { sigma, originPx: 0 };
-    // A relation with an operand the solve leaves out (ink) places nothing
-    // here.
-    const solvable = onAxis.filter((c) =>
-      c.children.every((r) => targets.has(r.name))
-    );
-    const cells = solvePlacementCells(
-      numbers,
-      solvable as PlacementConstraint[],
-      targets,
-      [NaN, NaN],
-      axis === 0 ? [map, undefined] : [undefined, map],
-      undefined,
-      [new Set(), new Set()],
-      undefined,
-      axis === 0 ? [0, undefined] : [undefined, 0]
-    )[axis].cells;
-    for (const [name, cell] of cells) {
-      const i = indexOf.get(name);
-      if (i === undefined) continue;
-      const [lo, hi] = boxOf(i);
-      const size = cell.sizeStrong ? (cell.size ?? hi - lo) : hi - lo;
-      at.set(i, [cell.min, cell.min + size]);
-    }
-    // A child the solve leaves unplaced sits at the layer's origin.
-    for (const i of solved) if (!at.has(i)) at.set(i, boxOf(i));
-    return at;
-  };
-
-  // Each edge (0 = lo, 1 = hi) of child `i`, times `sign`, as a function of
-  // σ (`sign` −1 reads a low edge as a reach below 0, a descent).
-  let edge: (i: number, end: 0 | 1, sign: 1 | -1) => Pwl.Value;
-  if (exact) {
-    // At σ = 0 with every side 0, then one more solve per variable (σ, and
-    // each side of each curved claim), each the change it makes.
-    const none = new Map<number, Box>();
-    const base = solve(0, none);
-    const variables: { m: Pwl.Value; boxes: Map<number, Box> }[] = [
-      { m: Pwl.affine(1, 0), boxes: solve(1, none) },
-      ...curved.flatMap((k) => {
-        const e = children[k].extent!;
-        return [
-          { m: e.ascent, boxes: solve(0, new Map([[k, [1, 0] as const]])) },
-          {
-            m: e.descent,
-            boxes: solve(0, new Map([[k, [0, 1] as const]])),
-          },
-        ];
-      }),
-    ];
-    edge = (i, end, sign) => {
-      const c0 = sign * base.get(i)![end];
-      const terms = variables
-        .map((v) => ({
-          m: v.m,
-          c: sign * (v.boxes.get(i)![end] - base.get(i)![end]),
-        }))
-        .filter((t) => Math.abs(t.c) >= 1e-9);
-      return Pwl.add(
-        Pwl.affine(0, c0),
-        ...terms.map((t) => Pwl.scale(t.c, t.m))
-      );
-    };
-  } else {
-    // Solve at each σ read, with every claim's sides at that σ.
-    let memo: { sigma: number; boxes: Map<number, Box> } | undefined;
-    const at = (sigma: number) => {
-      if (memo?.sigma !== sigma)
-        memo = {
-          sigma,
-          boxes: solve(
-            sigma,
-            new Map(
-              curved.map((k) => {
-                const e = children[k].extent!;
-                return [k, [Pwl.at(e.ascent, sigma), Pwl.at(e.descent, sigma)]];
-              })
-            )
-          ),
-        };
-      return memo.boxes;
-    };
-    edge = (i, end, sign) =>
-      Pwl.closure((sigma) => sign * at(sigma).get(i)![end]);
+  const boxOf = (i: number): Box =>
+    boxOfClaim(presetOf(i)?.extent ?? children[i].extent);
+  const at = new Map<number, Box>();
+  const targets = new Map<string, SolvePlaceable<Pwl.Value>>();
+  const indexOf = new Map<string, number>();
+  for (const i of solved) {
+    const c = children[i];
+    const box = boxOf(i);
+    const p = presetOf(i);
+    // A child with no name no constraint reads: it sits at its origin.
+    const key = c.name ?? `\u0000child:${i}`;
+    const seat = seats.get(key)?.[axis];
+    const preset =
+      p !== undefined
+        ? values.sub(p.lo, box[0])
+        : !constrained.has(i) || c.dataPositioned
+          ? Pwl.ZERO
+          : seat !== undefined
+            ? Pwl.constant(seat)
+            : undefined;
+    targets.set(key, claimPlaceable(axis, box, c.space, preset));
+    indexOf.set(key, i);
+    if (preset !== undefined)
+      at.set(i, [Pwl.add(preset, box[0]), Pwl.add(preset, box[1])]);
   }
+  for (const [name, p] of nestedPlaced) {
+    const box = boxOfClaim(p.extent);
+    targets.set(
+      name,
+      claimPlaceable(axis, box, undefined, values.sub(p.lo, box[0]))
+    );
+  }
+  const map = { sigma: Pwl.affine(1, 0), originPx: Pwl.ZERO };
+  // A relation with an operand the solve leaves out (ink) places nothing
+  // here.
+  const solvable = onAxis.filter((c) =>
+    c.children.every((r) => targets.has(r.name))
+  );
+  const cells = solvePlacementCells(
+    values,
+    solvable as PlacementConstraint[],
+    targets,
+    [NaN, NaN],
+    axis === 0 ? [map, undefined] : [undefined, map],
+    undefined,
+    [new Set(), new Set()],
+    undefined,
+    axis === 0 ? [Pwl.ZERO, undefined] : [undefined, Pwl.ZERO]
+  )[axis].cells;
+  for (const [name, cell] of cells) {
+    const i = indexOf.get(name);
+    if (i === undefined) continue;
+    const [lo, hi] = boxOf(i);
+    const size = cell.sizeStrong
+      ? (cell.size ?? values.sub(hi, lo))
+      : values.sub(hi, lo);
+    at.set(i, [cell.min, Pwl.add(cell.min, size)]);
+  }
+  // A child the solve leaves unplaced sits at the layer's origin.
+  for (const i of solved) if (!at.has(i)) at.set(i, boxOf(i));
+
+  // Each edge (0 = lo, 1 = hi) of child `i`, times `sign` (−1 reads a low
+  // edge as a reach below 0, a descent).
+  const edge = (i: number, end: 0 | 1, sign: 1 | -1): Pwl.Value => {
+    const v = at.get(i)![end];
+    return sign === 1 ? v : Pwl.negate(v);
+  };
 
   // Each edge's form, built once: the boxes and both hulls read the same
   // edges.

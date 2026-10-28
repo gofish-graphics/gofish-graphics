@@ -469,9 +469,8 @@ const spreadRule = (anchor: AlignAnchor | "edge"): ChainRule => ({
  * stack's tail to head, {@link StackOrigin}); omitted, it is the chain's
  * start.
  *
- * It runs in numbers (a data extent, or a claim at one σ) or in values in σ
- * (a claim as a function of σ, exact and invertible while no part is a
- * closure).
+ * It runs in numbers (a data extent) or in values in σ (a claim as a
+ * function of σ, exact and invertible).
  *
  * With `reaches`, the chain is laid by every part but reaches only as far
  * as each part's entry, in the part's own frame (undefined: that part
@@ -527,9 +526,7 @@ function seatedReach<T>(
   };
 }
 
-/** {@link chainFold} over claims, as one Extent. With no part a closure
- *  it is exact; otherwise the fold runs in numbers at each σ, so a
- *  closure walks the parts once per evaluation. */
+/** {@link chainFold} over claims, as one Extent. */
 function chainClaim(
   parts: Extent[],
   rule: ChainRule,
@@ -537,41 +534,15 @@ function chainClaim(
   origin?: StackOrigin<number>,
   reaches?: (Extent | undefined)[]
 ): Extent {
-  const known = (p: Extent | undefined) =>
-    p === undefined || (!Pwl.isClosure(p.ascent) && !Pwl.isClosure(p.descent));
-  if (parts.every(known) && (reaches === undefined || reaches.every(known))) {
-    const { ascent, descent } = chainFold(
-      values,
-      parts,
-      rule,
-      spacing,
-      origin,
-      reaches
-    );
-    return Extent(ascent, descent);
-  }
-  const at = (sigma: number) =>
-    chainFold(
-      numbers,
-      parts.map((p) => ({
-        ascent: Pwl.at(p.ascent, sigma),
-        descent: Pwl.at(p.descent, sigma),
-      })),
-      rule,
-      spacing,
-      origin,
-      reaches?.map(
-        (p) =>
-          p && {
-            ascent: Pwl.at(p.ascent, sigma),
-            descent: Pwl.at(p.descent, sigma),
-          }
-      )
-    );
-  return Extent(
-    Pwl.closure((sigma) => at(sigma).ascent),
-    Pwl.closure((sigma) => at(sigma).descent)
+  const { ascent, descent } = chainFold(
+    values,
+    parts,
+    rule,
+    spacing,
+    origin,
+    reaches
   );
+  return Extent(ascent, descent);
 }
 
 /**

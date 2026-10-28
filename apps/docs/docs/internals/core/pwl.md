@@ -27,7 +27,7 @@ older `Monotonic` module, whose piecewise case was the max of lines.
 A bar of value 30 claims `30σ` pixels. A spread of three such bars with 8 px between them
 claims `(30 + 50 + 20)σ + 16`. A label beside a bar claims a constant. The root
 solves `claim(σ) = allocated` once, and every node then reads its size off its claim at
-that σ. If the claims were opaque `number => number` closures, the solve would have to
+that σ. If the claims were opaque `number => number` functions, the solve would have to
 search, and nothing could tell whether a subtree depends on the data at all. With
 closed forms, both questions are answered by looking at slopes.
 
@@ -44,10 +44,7 @@ type Segment = { from: number; to: number; slope: number; intercept: number };
 // order, start at 0, meet end to end, and run to ∞.
 type Piecewise = { kind: "piecewise"; segments: Segment[] };
 
-// An opaque function of σ, from a probe solve (see "Closures" below).
-type Closure = { kind: "closure"; run: (sigma: number) => number };
-
-type Value = Affine | Piecewise | Closure;
+type Value = Affine | Piecewise;
 ```
 
 Values are plain data, and the operations are free functions: `at(v, σ)` evaluates,
@@ -144,8 +141,9 @@ cells.
 Some computations run both in numbers and in values. The chain fold (`chainFold` in
 `constraints/distribute.ts`) lays a stack's data extent in numbers and its claim in
 values. The placement solve (`constraints/placementSolver.ts`) places a layer's children
-in numbers at layout, and runs in values too, where each box it places is a function of
-σ that agrees with the number solve at every σ. Each is written
+in numbers at layout, and in values in the claim walk (`placeByClaims` in
+`constraints/claimPlacement.ts`), where each box it places is a function of σ that
+agrees with the number solve at every σ. Each is written
 once over an `Arith<T>` (`solver/arith.ts`), the operations it needs on `T`: `add`,
 `sub`, `scale`, `negate`, `abs`, `max` (the upper envelope) and `near`, a test that two
 amounts agree within a tolerance. There are two instances. `numbers` is plain
@@ -159,18 +157,6 @@ a constant there.
 A subtree is data-driven only if its claim has a non-zero slope. `isConstant(v)` is that
 test: every segment's slope is 0. Because the cancellation rule zeroes slopes that are
 only noise, the test is exact for claims built from the algebra.
-
-## Closures
-
-A `Closure` is the one value outside the algebra. `placeByClaims`
-(`constraints/claimPlacement.ts`) places a layer's children by a probe solve. When every
-operand placed from outside the layer is a line in σ, it reads each child's edges as an
-affine form in σ and in the sides of its children's bent claims, so the result stays in
-the algebra. When an operand's box bends (a stand-in or a `placedFromRefs` box), it
-re-solves the placement at each σ it is read at, and that edge is a closure. Anything
-combined with a closure is a closure (`add`, `envelope`, and `chainClaim` in
-`constraints/distribute.ts` fall back to evaluating at each σ), and a closure is solved
-by bisection. Symbolic placement in the layout kernel removes this case (#1176, step 3).
 
 ## What comes next
 

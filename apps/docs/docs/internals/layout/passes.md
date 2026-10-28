@@ -711,10 +711,9 @@ report their size).
   them** (`placeByClaims` in `constraints/claimPlacement.ts`). The children
   its own union leaves out (a literal pin, a datum pin, a seat beside a
   sibling) are placed by the same placement solver layout runs, on boxes
-  that are their claims at σ, with data mapped through σ from data 0. When
-  every claim is a line in σ, two solves give each box's edges as lines, and
-  the hull is their envelope; otherwise the hull is solved at each σ it is
-  read at. A ring is such a layer, so its claim holds its axis, titles or
+  that are their claims, with data mapped through σ from data 0. The solve
+  runs once in values in σ, so each box's edges are piecewise-linear in σ,
+  and the hull is their envelope. A ring is such a layer, so its claim holds its axis, titles or
   legend around what it wraps, and so does a scatter's around its marks.
 - **Placement claims.** A `ref` stand-in, or an operand nested in a child,
   stands where its node lands in the layer's frame. The claim walk knows

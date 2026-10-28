@@ -302,10 +302,9 @@ export class ScopeRegistry {
   solveSize(
     meta: ScopeMeta,
     frame: Pwl.Value,
-    allocated: number,
-    opts?: { tolerance?: number; lowerBound?: number; upperBoundGuess?: number }
+    allocated: number
   ): number | undefined {
-    const sigma = Pwl.solve(frame, allocated, opts);
+    const sigma = Pwl.solve(frame, allocated);
     if (DUMP_SCOPES)
       this.entries.push({
         ...meta,
@@ -348,9 +347,7 @@ export class ScopeRegistry {
     allocated: number
   ): ScopeSolution | undefined {
     if (space === undefined || claim === undefined) return undefined;
-    const solved = Pwl.solve(claim.width, allocated, {
-      upperBoundGuess: allocated,
-    });
+    const solved = Pwl.solve(claim.width, allocated);
     const oneValue = solved === undefined && isOneValue(space);
     const sigma = oneValue ? 0 : solved;
     if (DUMP_SCOPES)

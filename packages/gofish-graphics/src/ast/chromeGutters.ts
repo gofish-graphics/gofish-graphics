@@ -94,7 +94,7 @@ const solveFor = (m: Pwl.Value, target: number): number => {
   const x =
     Pwl.at(m, 0) > target + 0.5
       ? grows && Pwl.solve(grows, target)
-      : Pwl.solve(m, target, { upperBoundGuess: target });
+      : Pwl.solve(m, target);
   return x !== undefined && Number.isFinite(x) ? Math.max(0, x) : 0;
 };
 
