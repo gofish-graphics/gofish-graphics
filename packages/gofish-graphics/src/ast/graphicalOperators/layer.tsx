@@ -1014,6 +1014,8 @@ export const layer = createNodeOperatorSequential(
           // frame, so the region stays in that frame too, and the layer sits
           // at 0 there (see `translate` below) instead of being centered in
           // the span.
+          // TODO(#1234): shortcut; the composite repeats this rule. Decide it
+          // once in GoFishNode.layout when a node's frame is known pre-layout.
           const sharedInSpan = ([0, 1] as const).map(
             (axis) =>
               region?.spans[axis] !== undefined &&

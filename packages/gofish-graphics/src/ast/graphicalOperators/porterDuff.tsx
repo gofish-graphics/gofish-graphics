@@ -101,6 +101,8 @@ function layoutComposite(
       : child.layout(size, scales)
   );
   placed.forEach(placeUnplacedChild);
+  // TODO(#1234): shortcut; the same "shared frame sits at 0" rule as layer's
+  // `sharedInSpan`.
   const at = (axis: 0 | 1) =>
     region?.spans[axis] !== undefined ? 0 : undefined;
   return { placed, translate: [at(0), at(1)] };
