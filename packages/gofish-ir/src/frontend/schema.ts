@@ -200,7 +200,7 @@ export interface DeriveOperator
   type: "derive";
   lambdaId?: string;
   /** The column types of the derive's result, keyed by column name, in the
-   *  wire form of a chart's `schema` (e.g. `{ HasOrder: { levels } }`). They
+   *  wire form of a chart's `schema` (e.g. `{ HasLevels: { levels } }`). They
    *  type the result over the types it keeps or infers, and convert values
    *  as a chart's schema does. A transform (e.g. Python's `bin`) writes the
    *  quantities of its output columns here (`{ HasQuantity: { name } }`), since the
@@ -647,6 +647,55 @@ export type ShapeIR =
       clearance?: number;
     };
 
+/** A screen direction from a mark, for `Place.around`. */
+export type PlaceDirectionIR =
+  | "top-right"
+  | "top-left"
+  | "bottom-right"
+  | "bottom-left"
+  | "right"
+  | "left"
+  | "top"
+  | "bottom";
+
+/** A side of an outline, for `Place.along`. */
+export type PlaceSideIR =
+  | "on"
+  | "above"
+  | "below"
+  | "left"
+  | "right"
+  | "inset"
+  | "outset";
+
+/** Where a label goes on the mark it labels, made by a call in the `Place`
+ *  family: a value of a label's `position` beside the position strings. */
+export type PlaceIR =
+  | {
+      kind: "around";
+      directions?: PlaceDirectionIR[];
+      side?: "outset" | "inset" | ("outset" | "inset")[];
+      offset?: number;
+    }
+  | {
+      kind: "along";
+      at?:
+        | number
+        | "start"
+        | "middle"
+        | "end"
+        | "x-min"
+        | "x-max"
+        | "y-min"
+        | "y-max";
+      side?: PlaceSideIR | PlaceSideIR[];
+      orient?: "horizontal" | "sloped";
+      offset?: number;
+    }
+  | { kind: "start"; offset?: number }
+  | { kind: "end"; offset?: number }
+  | { kind: "interior" };
+
 // ---------------------------------------------------------------------------
 // Marks
 // ---------------------------------------------------------------------------
@@ -955,7 +1004,14 @@ export interface BridgeLambdaSentinel {
  */
 export interface LabelSpecIR {
   accessor: string | FieldAccessor;
-  position?: string;
+  /** A position string (`"outset-top"`), or a `Place` strategy. */
+  position?: string | PlaceIR;
+  /** Nodes a `Place` label keeps off. */
+  avoiding?: NodeSelectionIR;
+  /** An outline behind the glyphs. */
+  halo?: { color?: string; width?: number };
+  /** A filled box behind the text. */
+  background?: { fill?: string; padding?: number | [number, number] };
   fontSize?: number;
   color?: string;
   offset?: number;

@@ -64,7 +64,7 @@ import {
 } from "./data";
 import { color6 } from "../color";
 import { hasUnits, Units, withUnits } from "./measure";
-import { orderByLevels, type HasOrder } from "./schema";
+import { orderByLevels, type HasLevels } from "./schema";
 import {
   isCONTINUOUS,
   isORDINAL,
@@ -129,14 +129,20 @@ import {
   type LabelOptions,
   type LabelSpec,
 } from "./labels/labelPlacement";
+import type { HiddenLabels } from "./labels/placeStep";
+import type { Place } from "../families/place";
+import type { LabelPosition } from "./labels/labelPlacement";
+import { withKindValues } from "./strategyKind";
 import { packEnclose } from "d3-hierarchy";
 import type { KeyCell } from "./cells";
 import {
   boxOfDims,
+  boxOutline,
   enclosingCircle,
   reflectRegionY,
   translateCircle,
   type Geometry,
+  type Outline,
   type Region,
 } from "./geometry";
 
@@ -163,6 +169,9 @@ export type RenderSession = {
    *  elaborated; the rewrites read it and never rebuild it. Its demand half
    *  is refreshed once the axes are assigned. */
   keyedDomains?: KeyedDomains;
+  /** Labels the label chooser hid in this render, per `.label()` call, for
+   *  the one note the render prints (`labels/placeStep.ts`). */
+  hiddenLabels?: HiddenLabels;
   /** What layout found and drew through anyway (`layoutWarnings.ts`):
    *  fixed parts larger than their slot, a drawing past the canvas. */
   warnings?: LayoutWarning[];
@@ -417,7 +426,7 @@ export type GeometryFn = (
   },
   children: GoFishAST[],
   node: GoFishNode
-) => Geometry;
+) => Omit<Geometry, "outline"> & Partial<Pick<Geometry, "outline">>;
 
 /** The geometry a node has when its definition supplies none. A leaf answers
  *  only `box`. A node with children also answers `enclosingCircle`, lazily: the
@@ -665,6 +674,8 @@ export class GoFishNode {
   public constraints: ConstraintSpec[] = [];
   public colorConfig?: ColorConfig;
   public _labels?: LabelSpec[];
+  /** Where a `.label()` with no `position` goes (see the constructor). */
+  public labelPosition?: LabelPosition | Place | "outline";
   /** Nodes that belong to this node as a mark but live OUTSIDE its subtree:
    *  today the label `Text`s the label pass seats for it in the tier above
    *  (`labels/elaborate.tsx`), which stay out of the subtree so they never
@@ -843,6 +854,7 @@ export class GoFishNode {
       geometry,
       color,
       strokeOverhang,
+      labelPosition,
     }: {
       key?: string;
       type: string;
@@ -856,6 +868,14 @@ export class GoFishNode {
       color?: MaybeValue<string>;
       /** See {@link GoFishNode.strokeOverhang}. */
       strokeOverhang?: number;
+      /** Where a `.label()` with no `position` goes on this node: a
+       *  position or a `Place` strategy by convention (a dot is labeled
+       *  around itself, an arrow at its end), or `"outline"`, read from the
+       *  outline the node draws when the label is placed: at the end of an
+       *  open path, around a closed outline with no fill, inside a filled
+       *  one. Default `"outset"` (above its box). A node that sets it draws
+       *  its own ink and is itself the target of a `.label()` on it. */
+      labelPosition?: LabelPosition | Place | "outline";
     },
     children: GoFishAST[]
   ) {
@@ -877,6 +897,7 @@ export class GoFishNode {
     this.args = args;
     this.color = color;
     this.strokeOverhang = strokeOverhang ?? 0;
+    this.labelPosition = labelPosition;
   }
 
   /** This node's sharing plan: its rule ({@link ResolveSharing}) applied to
@@ -900,14 +921,14 @@ export class GoFishNode {
 
   /** Collect the distinct color values in this subtree, in first-seen order.
    *  `seen` is the membership index for `out` (which keeps the order).
-   *  `orders` collects the order of the column each value was read from
-   *  (`HasOrder`, from the chart's `schema`), or `undefined` for a value from
-   *  an unordered column. */
+   *  `orders` collects the levels of the column each value was read from
+   *  (`HasLevels`, from the chart's `schema`), or `undefined` for a value
+   *  from a column without declared levels. */
   private collectColorValues(
     out: any[],
     seen: Set<any> = new Set(),
     fields?: Set<string>,
-    orders?: Set<HasOrder | undefined>
+    orders?: Set<HasLevels | undefined>
   ): void {
     if (this.color !== undefined && isValue(this.color)) {
       const val = getValue(this.color);
@@ -917,7 +938,7 @@ export class GoFishNode {
       }
       const field = getValueField(this.color);
       if (field !== undefined) fields?.add(field);
-      orders?.add(getValueFieldType(this.color)?.HasOrder);
+      orders?.add(getValueFieldType(this.color)?.HasLevels);
     }
     this.children.forEach((child) => {
       if (child instanceof GoFishNode)
@@ -1014,7 +1035,7 @@ export class GoFishNode {
       delete unit.color;
     } else {
       const seenKeys: any[] = [];
-      const orders = new Set<HasOrder | undefined>();
+      const orders = new Set<HasLevels | undefined>();
       this.collectColorValues(
         seenKeys,
         new Set(),
@@ -1022,14 +1043,23 @@ export class GoFishNode {
         orders
       );
       // The domain lists its values in first-seen order, or in the order of
-      // their column when every value comes from one ordered column, so the
-      // legend follows the order the schema declares.
+      // their columns' levels when every value comes from a column with
+      // declared levels and those levels are the same list, so the legend
+      // follows the order the schema declares. Levels compare by value: each
+      // column read from the wire has its own copy of its unit's levels.
       // TODO(#996): a diverging palette driven by HasMidpoint.
       const [order] = orders;
-      const orderedKeys =
-        orders.size === 1 && order !== undefined
-          ? orderByLevels([...unit.fields].join(", "), order, seenKeys)
-          : seenKeys;
+      const oneOrder =
+        order !== undefined &&
+        [...orders].every(
+          (o) =>
+            o !== undefined &&
+            o.levels.length === order.levels.length &&
+            o.levels.every((level, i) => level === order.levels[i])
+        );
+      const orderedKeys = oneOrder
+        ? orderByLevels([...unit.fields].join(", "), order, seenKeys)
+        : seenKeys;
       if (!(unit.color instanceof Map)) unit.color = new Map();
       const color = unit.color;
       orderedKeys.forEach((key, i) => {
@@ -1845,15 +1875,32 @@ export class GoFishNode {
       throw new Error(
         `[gofish] geometry() called on ${this.type} before it was laid out`
       );
-    return (this._geometry ??= (this._geometryFn ?? defaultGeometry)(
-      {
-        intrinsicDims: this.intrinsicDims,
-        transform: this.transform,
-        renderData: this.renderData,
-      },
-      this.children,
-      this
-    ));
+    if (this._geometry === undefined) {
+      const g = (this._geometryFn ?? defaultGeometry)(
+        {
+          intrinsicDims: this.intrinsicDims,
+          transform: this.transform,
+          renderData: this.renderData,
+        },
+        this.children,
+        this
+      );
+      // A node whose definition gives no outline is read as its box, its
+      // edges named in its own axis order. Its samples are kept per
+      // tolerance, for every reader of this layout.
+      const outline =
+        g.outline ?? (() => [boxOutline(g.box, this.yFrame.direction)]);
+      const sampled = new Map<number, Outline[]>();
+      this._geometry = {
+        ...g,
+        outline: (tolerance) => {
+          let o = sampled.get(tolerance);
+          if (o === undefined) sampled.set(tolerance, (o = outline(tolerance)));
+          return o;
+        },
+      };
+    }
+    return this._geometry;
   }
 
   public get dims(): Dimensions {
@@ -2562,8 +2609,23 @@ export class GoFishNode {
     return this;
   }
 
-  public label(accessor: LabelAccessor, options?: LabelOptions): this {
-    (this._labels ??= []).push({ accessor, ...options });
+  /**
+   * Label this node (see `labels/elaborate.tsx`). `call` stands for the
+   * `.label()` call the label comes from, and the labels of one call are
+   * placed together: a mark's or an operator's `.label()` passes the one
+   * `call` it made to every node it labels. Called on a node directly, it
+   * is a call of its own.
+   */
+  public label(
+    accessor: LabelAccessor,
+    options?: LabelOptions,
+    call: object = {}
+  ): this {
+    (this._labels ??= []).push({
+      accessor,
+      ...withKindValues(options),
+      group: call,
+    });
     return this;
   }
 

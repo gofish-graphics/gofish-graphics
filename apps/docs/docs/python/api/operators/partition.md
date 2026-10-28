@@ -16,9 +16,9 @@ the plane into hexagons or Voronoi cells.
 :::
 
 ```python
-from gofish import Calendar, Schema, chart, field, partition, rect
+from gofish import Calendar, Unit, chart, field, partition, rect
 
-chart(daily, schema={"date": Schema.time()}, axes=True).flow(
+chart(daily, schema={"date": Unit.time()}, axes=True).flow(
     partition(by=field("date").bin([Calendar.year, Calendar.month]), dir="x")
 ).mark(rect(h=field("value").sum(), inset=1)).render(w=560, h=200)
 ```
@@ -79,7 +79,7 @@ groups inside the cell, so February's group is narrower than March's.
 :::
 
 ```python
-chart(daily, schema={"date": Schema.time()}, axes=True).flow(
+chart(daily, schema={"date": Unit.time()}, axes=True).flow(
     partition(by=field("date").bin([Calendar.year, Calendar.month]), dir="x"),
     spread(by="region", dir="x"),
 ).mark(rect(h=field("value").sum(), fill="region"))

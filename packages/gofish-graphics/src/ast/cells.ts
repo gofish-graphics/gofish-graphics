@@ -854,7 +854,7 @@ export function chainCells(
   if (calendar && zone === undefined) {
     throw new Error(
       `${where}: a Calendar partition bins times, but the column is not a ` +
-        `time. Declare it with \`Schema.time()\` in the chart's schema, or ` +
+        `time. Declare its unit as \`Unit.time()\` in the chart's schema, or ` +
         `pass JS Date values.`
     );
   }

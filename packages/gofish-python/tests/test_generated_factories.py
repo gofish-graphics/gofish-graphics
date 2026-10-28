@@ -20,7 +20,8 @@ import pytest
 
 from gofish import (
     Calendar,
-    Schema,
+    Domain,
+    Unit,
     blank,
     chart,
     circle,
@@ -539,7 +540,7 @@ def test_data_keyed_dicts_are_untouched():
         chart(
             [{"myCategory": "fooBar", "v": 1}],
             color=Color.palette(colors),
-            schema={"myCategory": Schema.ordered(["fooBar", "baz_qux"])},
+            schema={"myCategory": Unit(domain=Domain.ordered(["fooBar", "baz_qux"]))},
         )
         .flow(
             join([{"myCategory": "fooBar", "otherCol": 2}], on="myCategory"),

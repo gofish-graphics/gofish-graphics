@@ -12,7 +12,7 @@ import {
   blank,
   Color,
   Curve,
-  Schema,
+  Unit,
 } from "../../src/lib";
 
 // Ports of the three reference programs of the authoring benchmark (#941,
@@ -119,7 +119,7 @@ export const StackedArea: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(quarterlySales, { schema: { date: Schema.time() }, w: args.w, h: args.h })
+    chart(quarterlySales, { schema: { date: Unit.time() }, w: args.w, h: args.h })
       .flow(
         scatter({ by: "date", x: "date" }),
         stack({ by: "category", dir: "y" })
@@ -150,7 +150,7 @@ export const CircleTimeline: StoryObj<Args> = {
     }));
     // A data-driven `r` would be a size in data units, scaled with the axes,
     // so each circle gets a literal pixel `r`.
-    chart(rows, { schema: { date: Schema.time() }, w: args.w })
+    chart(rows, { schema: { date: Unit.time() }, w: args.w })
       .flow(
         spread({ by: "category", dir: "y", spacing: 60 }),
         scatter({ by: "date", x: "date", alignment: "middle" })
@@ -196,7 +196,7 @@ export const SurplusDeficitLine: StoryObj<Args> = {
       { date: d.date, side: "Surplus", balance: Math.max(d.balance, 0) },
       { date: d.date, side: "Deficit", balance: Math.min(d.balance, 0) },
     ]);
-    const schema = { date: Schema.time() };
+    const schema = { date: Unit.time() };
     chart(area, {
       schema,
       color: Color.palette({ Surplus: "#2a9d8f", Deficit: "#e76f51" }),

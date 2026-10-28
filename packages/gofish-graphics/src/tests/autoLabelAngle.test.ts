@@ -17,7 +17,7 @@ import {
   field,
   scatter,
   line,
-  Schema,
+  Unit,
 } from "../lib";
 import * as Serialize from "../serialize";
 import { inferColor } from "../ast/channels";
@@ -426,7 +426,7 @@ console.log("end to end");
         { date: "2024-01-01", v: 1 },
         { date: "2024-06-01", v: 2 },
       ],
-      { schema: { date: Schema.time() } }
+      { schema: { date: Unit.time() } }
     )
       .flow(scatter({ by: "date", x: "date", y: "v" }))
       .mark(line());

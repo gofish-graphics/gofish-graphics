@@ -2,7 +2,7 @@ import { getColumnTypes, setColumnTypes } from "../schema";
 import { datumOfInput } from "../marks/markResult";
 import { packEnclose } from "d3-hierarchy";
 import { GoFishNode, outlineOverhang } from "../_node";
-import { boxOfDims, ringExtent } from "../geometry";
+import { boxOfDims, outlinePaint, ringExtent, ringOutline } from "../geometry";
 import { GoFishAST } from "../_ast";
 import { Size } from "../dims";
 import { UNDEFINED, UnderlyingSpace, CONTINUOUS } from "../underlyingSpace";
@@ -72,9 +72,13 @@ export const Polygon = ({
   // what layout measured.
   const localRef: { current: Ring } = { current: ring };
 
+  // How it paints its outline, read once.
+  const paint = outlinePaint({ fill, stroke, strokeWidth });
   return new GoFishNode(
     {
       type: "polygon",
+      // Labeled by its outline: inside it when filled, around it when not.
+      labelPosition: "outline",
       // Used to seed the unit color scale. Prefer whichever channel is
       // data-driven — the same rule `rect` follows.
       color: isValue(fill) ? fill : stroke,
@@ -157,9 +161,12 @@ export const Polygon = ({
       },
       // The smallest circle through the ring's vertices (Welzl, via d3's
       // `packEnclose` over zero-radius circles), in the local frame `layout`
-      // resolved the ring into.
+      // resolved the ring into. Its outline is the ring.
       geometry: ({ intrinsicDims }, _children, node) => ({
         box: boxOfDims(intrinsicDims, node.type),
+        outline: () => [
+          ringOutline(localRef.current, node.yFrame.direction, paint),
+        ],
         enclosingCircle: () => {
           const d = node.yFrame.direction;
           const e = packEnclose(

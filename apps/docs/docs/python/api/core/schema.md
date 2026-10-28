@@ -7,13 +7,13 @@ Declares the types of a chart's columns. Pass a dict of column types as the
 :::
 
 ```python
-from gofish import chart, spread, stack, rect, Schema
+from gofish import chart, spread, stack, rect, Unit, Domain, Trait
 
 LEVELS = ["Strongly disagree", "Disagree", "Neutral", "Agree", "Strongly agree"]
 
 chart(
     survey,
-    schema={"response": Schema.ordered(LEVELS).diverging()},
+    schema={"response": Unit(domain=Domain.ordered(LEVELS), traits=[Trait.diverging()])},
     axes=True,
 ).flow(
     spread(by="question", dir="y"),
@@ -24,44 +24,99 @@ chart(
 ## Signature
 
 ```python
-Schema.ordered(levels)               # HasOrder
-Schema.ordered(levels).diverging()   # HasOrder and HasMidpoint
-Schema.ordered(levels).diverging(midpoint=m)   # HasOrder and HasMidpoint
-Schema.time()                        # HasCalendar and HasUnit (the instant), in UTC
-Schema.time(zone=zone)               # the same, in the time zone `zone`
-Schema.unit(unit)                    # HasUnit, in the unit `unit`
-Schema.quantity(name)                # HasQuantity, amounts of the quantity `name`
-Schema.quantity(name).unit(unit)     # HasUnit and HasQuantity
+Unit(name)                              # a unit
+Unit(name, domain=..., traits=[...])    # a unit with a domain and traits
+Unit(domain=..., traits=[...])          # a unit with no name: a type of levels
+
+Domain.discrete(levels)                 # levels with no order (nominal): HasLevels
+Domain.ordered(levels)                  # levels in order (ordinal): HasLevels and HasOrder
+
+Trait.diverging()                       # the order has a midpoint (HasMidpoint), at n / 2
+Trait.diverging(midpoint)               # the same, at `midpoint`
+Trait.summable()                        # the unit's amounts add up (CanAdd)
+
+Unit.time()                             # the unit of instants (a time), read in UTC
+Unit.time(zone=zone)                    # the same, read in the time zone `zone`
+Unit.duration                           # the unit of a span of time, which adds up
+
+{"name": name, "unit": unit}            # a column record: HasQuantity and the unit's classes
+unit                                    # a Unit: the same as {"unit": unit}
+"km²"                                   # a unit's name: the same as {"unit": "km²"}
 ```
 
-A column type is a set of classes. Each builder method adds the classes its
-row below lists, and `.diverging()` needs the order that `.ordered(...)`
-gives, because a midpoint is a point along an order. `.quantity(name)` and
-`.unit(unit)` may follow any builder, but a column has one unit, so
-`.unit(unit)` after `Schema.time()` raises a `TypeError`, and an ordered
-column takes a unit only when its levels are numbers.
+A column type is a set of classes. A unit definition separates what its
+values are, its `domain`, from the capabilities they have, its `traits`.
+`Domain` and `Trait` are families: a unit takes one domain and a list of
+traits. A `Unit` is declared once and used by every column in it, so its
+columns agree on what it can do:
 
-| Builder                                     | Class                    | Meaning                                                 |
-| ------------------------------------------- | ------------------------ | ------------------------------------------------------- |
-| `Schema.ordered(levels)`                    | `HasOrder`               | The column's values are `levels`, in this order.        |
-| `.diverging()`                              | `HasMidpoint`            | The order has a midpoint, a point along it. See below.  |
-| `Schema.time()`                             | `HasCalendar`, `HasUnit` | The column's values are instants, read on a calendar.   |
-| `Schema.unit(unit)` / `.unit(unit)`         | `HasUnit`                | The column's values are amounts in the unit `unit`.     |
-| `Schema.quantity(name)` / `.quantity(name)` | `HasQuantity`            | The column's values are amounts of the quantity `name`. |
+```python
+from gofish import Unit, Domain, Trait
+
+Likert = Unit(
+    domain=Domain.ordered(["SD", "D", "N", "A", "SA"]),
+    traits=[Trait.diverging()],
+)
+Stars = Unit("stars", domain=Domain.ordered([1, 2, 3, 4, 5]))
+Party = Unit(domain=Domain.discrete(["Dem", "Rep", "Ind"]))
+USD = Unit("USD", traits=[Trait.summable()])
+
+chart(
+    survey,
+    schema={
+        "answer": Likert,
+        "rating": {"name": "Rating", "unit": Stars},
+        "party": Party,
+        "cost": USD,
+        "area": "km²",
+    },
+)
+```
+
+A column record takes the keys `"name"` and `"unit"`. Any other key raises a
+`TypeError`. `"unit"` is a `Unit` or a unit's name.
+
+| Entry                         | Class                   | Meaning                                                 |
+| ----------------------------- | ----------------------- | ------------------------------------------------------- |
+| `Domain.discrete(levels)`     | `HasLevels`             | The column's values are `levels`, listed in this order. |
+| `Domain.ordered(levels)`      | `HasLevels`, `HasOrder` | The same, and the levels are ordered, first to last.    |
+| `Trait.diverging(midpoint)`   | `HasMidpoint`           | The order has a midpoint, a point along it. See below.  |
+| `Unit(name)`, `{"unit": ...}` | `HasUnit`               | The column's values are amounts in the unit.            |
+| `Unit.time()`                 | `HasUnit`               | The column's values are instants, read on a calendar.   |
+| `Unit.duration`               | `HasUnit`, `CanAdd`     | The column's values are spans of time.                  |
+| `Trait.summable()`            | `CanAdd`                | The unit's amounts add up. See below.                   |
+| `{"unit": ...}`, a name       | `HasUnit`               | The same, with no word on whether the amounts add up.   |
+| `{"name": ...}`               | `HasQuantity`           | The column's values are amounts of the quantity `name`. |
 
 ## Parameters
 
-| Parameter  | Type               | Description                                                                                                        |
-| ---------- | ------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| `levels`   | `list[str \| int]` | Every value the column takes, first to last.                                                                       |
-| `midpoint` | `float`            | Where the midpoint lies along the order, from 0 (before the first level) to `n` (after the last). Default `n / 2`. |
-| `zone`     | `str`              | The IANA time zone the column's instants are read in, e.g. `"America/New_York"`. Default `"UTC"`.                  |
-| `unit`     | `str`              | The name of the unit, e.g. `"USD"` or `"mm"`. Two units are the same when their names are equal.                   |
-| `name`     | `str`              | The name of the quantity, e.g. `"Pay"`. It titles the axis in place of the column's name.                          |
+| Parameter  | Type               | Description                                                                                                                                                                                       |
+| ---------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`     | `str`              | `Unit`'s name, e.g. `"USD"` or `"mm"`. Two units are the same when their names are equal. A record's `"name"` is its quantity, e.g. `"Pay"`, which titles the axis in place of the column's name. |
+| `domain`   | `Domain`           | What the unit's values are: `Domain.discrete(levels)` or `Domain.ordered(levels)`. Without it, a named unit's values are amounts (numbers).                                                       |
+| `traits`   | `list[Trait]`      | The capabilities of the unit's values. Each trait appears at most once.                                                                                                                           |
+| `levels`   | `list[str \| int]` | Every value the column takes, in the order to lay them out in.                                                                                                                                    |
+| `midpoint` | `float`            | Where the midpoint lies along the order, from 0 (before the first level) to `n` (after the last). Default `n / 2`.                                                                                |
+| `zone`     | `str`              | The IANA time zone the column's instants are read in, e.g. `"America/New_York"`. Default `"UTC"`.                                                                                                 |
+| `unit`     | `Unit \| str`      | A record's unit: a `Unit`, or a unit's name.                                                                                                                                                      |
 
 ## Behavior
 
-**`HasOrder`.**
+**`Unit`.**
+
+- A unit needs a name, a domain, or both. A unit with a domain and no name
+  types its columns' levels and adds no unit to an axis title. Two such
+  units are not compared with each other.
+- A named unit with a domain is a unit whose amounts are its levels, so its
+  levels must be numbers: `Unit("stars", domain=Domain.ordered([1, 2, 3]))`.
+  Text levels in a named unit are an error.
+- `domain` takes a `Domain` value. A bare list, or an interval, is an error.
+  A domain that is an interval of numbers is not supported yet.
+- A trait listed twice is an error. `Trait.diverging()` needs a
+  `Domain.ordered` domain, and `Trait.summable()` needs a name. Each is
+  checked when the `Unit` is made, with the same messages as in JS.
+
+**`HasLevels`.**
 
 - Every `by` split over the column (`spread`, `stack`, `group`, `scatter`, ...)
   lays its groups out in the order of `levels`, not in order of first
@@ -73,6 +128,13 @@ column takes a unit only when its levels are numbers.
   value. Add it to the levels, filter those rows out, or, if a `derive`
   changed the values, give the column its type with `derive(fn, schema={...})`.
 
+**`HasOrder`.**
+
+- The groups of a split over the column are ordered. An outer level of an
+  ordinal axis over them starts each label at its run. Over the levels of
+  `Domain.discrete`, which are not ordered, it centers each label.
+- Only an ordered column can have a midpoint.
+
 **`HasMidpoint`.**
 
 - `midpoint` counts levels from the start of the order. Level `i` (counting
@@ -82,8 +144,8 @@ column takes a unit only when its levels are numbers.
   levels is odd, and the boundary between the two middle levels when it is
   even.
 - A `midpoint` that is not a finite number, or that is below 0 or above `n`,
-  is an error from `.diverging()`. The message names the midpoint, the range
-  `0..n`, and the levels. `chart` checks a column-type record passed as is
+  is an error from `Unit`. The message names the midpoint, the range `0..n`,
+  and the levels. `chart` checks a column-type record passed as is
   (the wire form) the same way, with the same message.
 - A [`stack`](/python/api/operators/stack) whose `by` column has `HasMidpoint` puts its 0 at
   the midpoint instead of at its first part's start. A stack laid out in the
@@ -100,7 +162,7 @@ column takes a unit only when its levels are numbers.
 - The parts must follow the column's order, or its reverse. Reordering them
   some other way is an error.
 
-**`HasCalendar`.**
+**`Unit.time()`.**
 
 - Each value becomes epoch milliseconds (UTC) when the chart applies its
   schema. A value may be an ISO 8601 string, a datetime, or epoch
@@ -113,7 +175,7 @@ column takes a unit only when its levels are numbers.
   schema entry. A tz-aware datetime is an instant, read in its own time
   zone. A naive datetime or a date is a wall-clock time, like a string
   without an offset: it is read in the `zone` of the column's
-  `Schema.time()` entry, or in UTC without one. Strings and numbers are
+  `Unit.time()` entry, or in UTC without one. Strings and numbers are
   never taken as times.
 - An instant has no zero.
 - An axis over the column is a time axis. Its ticks and labels are
@@ -122,8 +184,12 @@ column takes a unit only when its levels are numbers.
   cells of its first row. See [`Calendar`](/python/api/core/calendar) for the rows.
 - An unknown `zone` is an error. Two time columns on one axis must have the
   same zone.
-- The unit of a time column is an instant, so two time columns (a start and
-  an end) share an axis.
+- Every time column is in one unit, the instant, whatever its zone, so two
+  time columns (a start and an end) share an axis. The zone is a parameter
+  of the unit.
+- A time column is named with a column record, as any column of amounts:
+  `{"name": "Sold", "unit": Unit.time()}`.
+- The difference of two instants is in `Unit.duration`, which adds up.
 
 **`HasUnit`.**
 
@@ -135,18 +201,51 @@ column takes a unit only when its levels are numbers.
   for the whole chart, so meeting another unit anywhere else is an error.
 - A column's unit is the same everywhere in a chart: columns with the same
   name have the same unit.
+- A `Unit` and a unit's name are the same unit when their names are equal.
 - When x and y have the same unit, they get one scale: one data unit is the
   same length on both axes.
 - An axis title shows a declared unit after its quantities, in
   parentheses: `"Production Budget (USD)"`. The rule does not read the
   names, so a column named `"Flipper Length (mm)"` in `"mm"` titles
   `"Flipper Length (mm) (mm)"`. Declare its quantity
-  (`Schema.quantity("Flipper Length").unit("mm")`) or set the axis `title`
+  (`{"name": "Flipper Length", "unit": Unit("mm")}`) or set the axis `title`
   for `"Flipper Length (mm)"`.
 - `.count()` and `.distinct()` are in the unit `"count"`. The cells of
   `field(x).bin(...)` are amounts of `x`: a `partition` over them titles its
   axis as `x` does and shares its unit. Counts, `.normalize()` shares, and
   times add no unit to an axis title.
+
+**`CanAdd`.**
+
+- A `size` channel (`w`, `h`, ...), a [`stack`](/python/api/operators/stack), a
+  [`treemap`](/python/api/operators/treemap) `size`, `field(x).sum()` and
+  `field(x).normalize()` add up their values. Adding up values in a declared
+  unit needs `CanAdd`: without it, it is an error that names the column and
+  the unit, and says to declare the unit with `Unit(name, traits=[Trait.summable()])`, or,
+  for a unit whose differences add up (a time), to subtract a reference
+  first.
+- A time column never has `CanAdd`: two instants do not add up. Its
+  difference does (`end - start` is a duration), and a mark with two
+  positions (`x="start", x2="end"`) adds nothing.
+- A column with no declared unit adds up without `Trait.summable()`, and so does
+  a column whose unit is a name alone (`"km²"`), since that says nothing
+  about whether the amounts add up.
+- A size channel adds up its rows whenever it reads a column, even when a
+  group has one row. A pipeline op that folds the rows first
+  (`field(x).mean()`, `.count()`) adds nothing.
+- `.count()`, `.distinct()` and `.normalize()` shares add up.
+- The difference of two amounts is in their unit (USD − USD is USD, °C − °C
+  is °C), except the difference of two times, which is a duration
+  (`Unit.duration`). A size
+  read from a time column is a duration too, never a time.
+- `CanAdd` is the unit's, not the column's. A unit is its name, so two
+  `Unit`s of one name in one chart's schema, or in the columns two charts
+  of one figure draw, must agree on `Trait.summable()`: a disagreement is an
+  error that names both columns. A column whose unit is a name alone takes the `CanAdd` of a
+  `Unit` of that name in the same chart; a stack of it also takes the
+  `CanAdd` of a `Unit` of that name in another chart of the figure.
+- A stack checks only the columns it adds, so a `start` column in days may
+  share an axis with a stacked width in days.
 
 **`HasQuantity`.**
 
@@ -170,7 +269,7 @@ both sides:
 ```python
 chart(
     population,
-    schema={"sex": Schema.ordered(["Women", "Men"]).diverging()},
+    schema={"sex": Unit(domain=Domain.ordered(["Women", "Men"]), traits=[Trait.diverging()])},
 ).flow(
     spread(by=field("age").reverse(), dir="y", spacing=1),
     stack(by="sex", dir="x"),
@@ -186,17 +285,17 @@ data stays a circle:
 ```python
 chart(
     sunflower,
-    schema={"x": Schema.unit("plane"), "y": Schema.unit("plane")},
+    schema={"x": "plane", "y": "plane"},
 ).flow(scatter(x="x", y="y")).mark(circle(r=4, fill="i"))
 ```
 
-A column of date strings is a time with `Schema.time()`:
+A column of date strings is a time in `Unit.time()`:
 
 ::: gofish example:daily-price-line hidden
 :::
 
 ```python
-chart(prices, schema={"date": Schema.time()}, axes=True).flow(
+chart(prices, schema={"date": Unit.time()}, axes=True).flow(
     scatter(by="date", x="date", y="price")
 ).mark(line(stroke="steelblue", stroke_width=2))
 ```
@@ -204,7 +303,7 @@ chart(prices, schema={"date": Schema.time()}, axes=True).flow(
 Five summary columns of one quantity title their axis once:
 
 ```python
-pay = Schema.quantity("Pay").unit("USD")
+pay = {"name": "Pay", "unit": Unit("USD")}
 
 chart(
     boxes,

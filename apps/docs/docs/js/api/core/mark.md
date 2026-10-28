@@ -99,7 +99,12 @@ Calling `.label()` more than once appends rather than overwrites — each call
 adds its own label (e.g. a value centered inside a bar plus a category name
 above it), and all of them round-trip through the IR as an array. See the
 [labels guide](/js/guides/labels#multiple-labels-per-mark) for the full
-options list, including `fontFamily`/`fontWeight`/`fontStyle`.
+options list, including `fontFamily`/`fontWeight`/`fontStyle`. A label's
+`position` may also be a value of the [`Place`](/js/api/place) family, which
+reads the mark's outline and keeps the labels of one call off the marks, off
+each other, and off the nodes in `avoiding`; `halo` and `background` draw an
+outline or a box behind the text. See
+[How to place labels](/js/api/howto/label-placement).
 
 ### `.zOrder(value)` — paint order {#zorder}
 

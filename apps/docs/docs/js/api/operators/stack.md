@@ -79,12 +79,19 @@ stacked bar), group by sign first, so each stack holds one sign:
 ## Centered stacks
 
 When the chart's `schema` gives the `by` column a midpoint
-([`Schema.ordered(levels).diverging()`](/js/api/core/schema)), the stack's 0 is
+([`Unit({ domain: Domain.ordered(levels), traits: [Trait.diverging()] })`](/js/api/core/schema)), the stack's 0 is
 the midpoint of that order instead of the start of its first part. The parts
 must be nonnegative. This draws Likert charts and population pyramids:
 
 ```ts
-chart(survey, { schema: { response: Schema.ordered(LEVELS).diverging() } })
+chart(survey, {
+  schema: {
+    response: Unit({
+      domain: Domain.ordered(LEVELS),
+      traits: [Trait.diverging()],
+    }),
+  },
+})
   .flow(
     spread({ by: "question", dir: "y" }),
     stack({ by: "response", dir: "x" })

@@ -386,15 +386,50 @@ export const COMBINATOR_OPTIONS_BASE_FIELDS: FieldGroup = group({
  *  generator (`_label_opts`) all read this group. */
 export const LABEL_OPTIONS: FieldGroup = group({
   position: {
-    type: t.string,
-    doc: 'Label position, e.g. "center", "outset-top", "inset-bottom-start".',
+    type: t.union(t.string, t.ref("Place")),
+    doc: 'Where the label goes: a position string, one spot by the mark\'s box ("center", "outset", "outset-top", "inset-bottom-start", ...), or a Place strategy, which reads the mark\'s outline and tries spots in order (Place.around(), Place.along({at}), Place.start(), Place.end(), Place.interior()). The labels of one .label() call that a Place strategy places take, in data order, their first spot that covers no labeled mark, no label already placed and no node in `avoiding`; a label with no free spot is hidden. Omitted, by the mark: Place.around() for a dot, Place.end() for an arrow; for a line, a band or a polygon, by the outline it draws, Place.end() for an open path, Place.interior() for a filled region and Place.around() for one with no fill; and "outset" for anything else. In a polar or other curved coordinate space a Place strategy is an error, and the default is "outset".',
+  },
+  avoiding: {
+    type: t.ref("NodeSelectionIR"),
+    doc: "Nodes a Place label keeps off, beside the labeled marks and the other labels: a list of nodes or refs, or a `selectAll(name)` selection. A position string ignores it.",
+  },
+  halo: {
+    type: t.object({
+      color: { type: t.string, default: "white", doc: "The outline's color." },
+      width: {
+        type: t.num({ min: 0, finite: true }),
+        default: 3,
+        doc: "The outline's width in pixels.",
+      },
+    }),
+    doc: "An outline drawn behind the glyphs, so a line under the label does not run through the text. An empty object draws the default halo.",
+  },
+  background: {
+    type: t.object({
+      fill: { type: t.string, default: "white", doc: "The box's fill." },
+      padding: {
+        type: t.union(
+          t.num({ min: 0, finite: true }),
+          t.tuple(
+            t.num({ min: 0, finite: true }),
+            t.num({ min: 0, finite: true })
+          )
+        ),
+        default: [2, 1],
+        doc: "Pixels between the text and the box's edge: one number for both axes, or [x, y].",
+      },
+    }),
+    doc: "A filled box drawn behind the text. An empty object draws the default box. A Place label counts the box as part of the label when it looks for a free spot.",
   },
   fontSize: { type: t.number, doc: "Font size in pixels." },
   color: {
     type: t.string,
     doc: "Label color. Omitted, it is chosen to contrast with the mark.",
   },
-  offset: { type: t.number, doc: "Offset from the shape's edge in pixels." },
+  offset: {
+    type: t.number,
+    doc: "Pixels between the mark and the label. At a position string it is the distance from the shape's edge, 6 when omitted. A Place strategy's own `offset` overrides it; omitted in both, a Place label is 3 pixels from the outline (4 for Place.start and Place.end).",
+  },
   rotate: { type: t.number, doc: "Rotation in degrees, clockwise on screen." },
   fontFamily: {
     type: t.string,
@@ -526,6 +561,36 @@ const weekStart: FieldSpec = {
 const calendarKind = (doc: string): StrategyKind => ({
   doc,
   params: { every: calendarEvery },
+});
+
+/** The screen directions of `Place.around`, in its default order (Imhof's
+ *  order for point labels). */
+const PLACE_DIRECTIONS = [
+  "top-right",
+  "top-left",
+  "bottom-right",
+  "bottom-left",
+  "right",
+  "left",
+  "top",
+  "bottom",
+] as const;
+
+/** The sides of `Place.along`. */
+const PLACE_SIDES = [
+  "on",
+  "above",
+  "below",
+  "left",
+  "right",
+  "inset",
+  "outset",
+] as const;
+
+/** Pixels between a mark's outline and a `Place` label beside it. */
+const placeOffset = (fallback: number): FieldSpec => ({
+  type: t.num({ finite: true }),
+  doc: `Pixels between the outline and the label. Default: the label's \`offset\`, or ${fallback}.`,
 });
 
 /**
@@ -867,10 +932,81 @@ export const STRATEGIES = {
       },
     },
   },
+  Place: {
+    doc: "Where a label goes on the mark it labels: the value of `.label()`'s `position` option, beside the position strings. Each kind reads one kind of geometry from the mark's outline and proposes spots in order. The labels of one `.label()` call take, in data order, their first spot that covers no labeled mark, no label already placed and no node in `avoiding`; a label with no free spot is hidden.",
+    kinds: {
+      around: {
+        doc: "Around a mark, by screen direction: each spot is at the point of the mark's outline farthest in one direction (on a circle, the circle itself, not its box), just outside it. The default for a dot.",
+        params: {
+          directions: {
+            type: t.array(t.enum(...PLACE_DIRECTIONS)),
+            default: [...PLACE_DIRECTIONS],
+            doc: "The directions to try, in order.",
+          },
+          side: {
+            type: t.union(
+              t.enum("outset", "inset"),
+              t.array(t.enum("outset", "inset"))
+            ),
+            default: "outset",
+            doc: 'Outside the outline ("outset") or inside it ("inset"), or a list tried in order at each direction: ["outset", "inset"] with directions ["top"] puts a bar\'s value above it, or inside its top when there is no room above.',
+          },
+          offset: placeOffset(3),
+        },
+      },
+      along: {
+        doc: "Along an outline: an open path (a line, an arrow) or a region's boundary. Spots start at `at` and slide along the outline, nearest first; at each spot every side in `side` is tried before sliding on.",
+        params: {
+          at: {
+            type: t.union(
+              t.num({ min: 0, max: 1 }),
+              t.enum(
+                "start",
+                "middle",
+                "end",
+                "x-min",
+                "x-max",
+                "y-min",
+                "y-max"
+              )
+            ),
+            default: "middle",
+            doc: 'Where along the outline: a fraction of its length, 0 to 1 (the label is centered there); "start" or "end" (the label\'s start or end is flush with the path\'s); "middle"; or an edge of a box, "x-min", "x-max", "y-min" or "y-max", named by axis in the mark\'s own frame (the label stays within that edge, or is hidden).',
+          },
+          side: {
+            type: t.union(
+              t.enum(...PLACE_SIDES),
+              t.array(t.enum(...PLACE_SIDES))
+            ),
+            default: "on",
+            doc: 'Which side of the outline: "on" straddles it. On an open path, "above" and "below" are the screen\'s (a stretch steeper than about 75 degrees has neither, so it gives no spot), and "left" and "right" are the path\'s own, of its direction of travel. On a closed outline, "inset" and "outset" are inside and outside. A list is tried in order at each spot.',
+          },
+          orient: {
+            type: t.enum("horizontal", "sloped"),
+            default: "horizontal",
+            doc: '"horizontal" keeps the label level. "sloped" turns it to the chord of the outline across the label\'s width, kept upright, and skips a spot where the outline bends away from the chord by more than about a third of the text\'s height, so it suits smooth lines.',
+          },
+          offset: placeOffset(3),
+        },
+      },
+      start: {
+        doc: "Just before the first point of an open path, level: on a line chart, left of where each series starts. Labels of one `.label()` call that would cover each other slide apart vertically; one that still covers a mark or a label is hidden.",
+        params: { offset: placeOffset(4) },
+      },
+      end: {
+        doc: "Just past the last point of an open path, level: on a line chart, right of where each series ends. Labels of one `.label()` call that would cover each other slide apart vertically; one that still covers a mark or a label is hidden. The default for a line and an arrow.",
+        params: { offset: placeOffset(4) },
+      },
+      interior: {
+        doc: "Inside a region, where the label's own box can grow largest: the middle of a streamgraph band where it is thickest, or the middle of the widest arm of an L. The label is hidden when its box does not fit at its font size. The default for a band (`ribbon`, `area`) and a `polygon`.",
+        params: {},
+      },
+    },
+  },
 } satisfies Record<string, StrategyFamily>;
 
 /** The name of a strategy family: `"Tile"`, `"Overlap"`, `"Curve"`,
- *  `"Bin"`, `"Calendar"` or `"Shape"`. */
+ *  `"Bin"`, `"Calendar"`, `"Shape"` or `"Place"`. */
 export type StrategyFamilyName = keyof typeof STRATEGIES;
 
 /** The `Bin` kinds by the key they bin: one field, `field(x).bin(b)`, whose
@@ -947,7 +1083,7 @@ export const CHART_OPTIONS: FieldGroup = group({
   },
   schema: {
     type: t.record(t.any),
-    doc: "Column types, keyed by column name, e.g. Schema.ordered(levels) or Schema.time().",
+    doc: 'Column types, keyed by column name: a Unit (Unit("USD", { traits: [Trait.summable()] }), Unit({ domain: Domain.ordered(levels) }), Unit.time() for a time), a unit\'s name ("km²"), or a column record { name, unit }.',
   },
 });
 
@@ -1230,7 +1366,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       },
       schema: {
         type: t.record(t.any),
-        doc: "Column types of the result, keyed by column name, as in a chart's schema, e.g. Schema.ordered(levels) or Schema.time(). They override the types the result keeps from its input or infers, and convert values (an ISO string in a time column becomes an instant).",
+        doc: "Column types of the result, keyed by column name, as in a chart's schema, e.g. Unit({ domain: Domain.ordered(levels) }) or Unit.time(). They override the types the result keeps from its input or infers, and convert values (an ISO string in a time column becomes an instant).",
       },
     },
   }),

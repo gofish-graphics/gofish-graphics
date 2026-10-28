@@ -79,6 +79,7 @@ import {
 } from "./solver/scopes";
 import { legendRing } from "./legends/elaborate";
 import { elaborateLabels } from "./labels/elaborate";
+import { reportHiddenLabels } from "./labels/placeStep";
 
 export type CategoricalScale = {
   color: Map<any, string>;
@@ -761,9 +762,10 @@ export async function layout(
   const __tSolve = perfNow();
   root.layout([layoutW, layoutH], orientScales(rootScales, 1, rootYDirection));
   perfAdd("solve", perfNow() - __tSolve);
-  // Scope dump (#39 Stage 6b): every σ-scope solved during the layout pass
-  // just above, as printable frame equations. No-op unless
-  // GOFISH_DUMP_SCOPES is set.
+  // One note for the labels the label chooser hid in this layout.
+  reportHiddenLabels(contexts.session.hiddenLabels);
+  // Scope dump (#39 Stage 6b): every σ-scope solved during the layout pass just
+  // above, as printable frame equations. No-op unless GOFISH_DUMP_SCOPES is set.
   scopes.dump();
   dumpKeyedDomains(keyedDomains);
   // Sharing dump (#1114 step 3): every layer's sharing sets, from its

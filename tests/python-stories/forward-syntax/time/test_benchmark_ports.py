@@ -5,7 +5,7 @@ CircleTimeline is exempt: it sizes each circle in a JS function mark.
 
 from datetime import datetime, timezone
 
-from gofish import chart, scatter, stack, group, ribbon, line, blank, Schema, Color, Curve
+from gofish import chart, scatter, stack, group, ribbon, line, blank, Unit, Color, Curve
 
 # A synthetic store's sales per category and quarter (the benchmark's
 # `quarterly-sales.json`).
@@ -86,7 +86,7 @@ def _epoch_ms(date):
 
 def story_stacked_area():
     return (
-        chart(QUARTERLY_SALES, schema={"date": Schema.time()}, w=520, h=330)
+        chart(QUARTERLY_SALES, schema={"date": Unit.time()}, w=520, h=330)
         .flow(scatter(by="date", x="date"), stack(by="category", dir="y"))
         .mark(ribbon(h="sales", fill="category", curve=Curve.linear())),
         {},
@@ -119,7 +119,7 @@ def story_surplus_deficit_line():
             {"date": d["date"], "side": "Deficit", "balance": min(d["balance"], 0)},
         )
     ]
-    schema = {"date": Schema.time()}
+    schema = {"date": Unit.time()}
     return (
         chart(
             area,

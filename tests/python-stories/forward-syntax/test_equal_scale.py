@@ -2,7 +2,7 @@
 
 import math
 
-from gofish import chart, circle, scatter, Color, Schema
+from gofish import chart, circle, scatter, Color
 
 GOLDEN_ANGLE = math.pi * (3 - math.sqrt(5))  # ≈ 137.5°
 
@@ -23,7 +23,7 @@ def story_sunflower():
         chart(
             SUNFLOWER,
             color=Color.gradient(["#fde725", "#21918c", "#440154"]),
-            schema={"x": Schema.unit("plane"), "y": Schema.unit("plane")},
+            schema={"x": "plane", "y": "plane"},
             w=640,
             h=380,
         )

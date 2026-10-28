@@ -137,13 +137,14 @@ export type TweenOptions = {
 
 /** The leaves a transition can move, by how each one moves. A BOX shape's
  *  extent is one of its channels, so its whole box is interpolated. A TEXT's
- *  extent is the measure of its string, which is not something to blend, so
- *  it moves RIGIDLY: its position is interpolated and it keeps the source
+ *  extent (a `text`, or the `label` a `.label()` elaborates into) is the
+ *  measure of its string, which is not something to blend, so it moves
+ *  RIGIDLY: its position is interpolated and it keeps the source
  *  keyframe's own drawing (string, font, paint), the way a box leaf keeps the
  *  source keyframe's color. A build-in `grow` collapses the same box shapes
  *  (`src/animation/effects.ts`). */
 export const BOX_SHAPES = new Set(["ellipse", "rect", "blank"]);
-const RIGID_SHAPES = new Set(["text"]);
+const RIGID_SHAPES = new Set(["text", "label"]);
 
 /**
  * The leaves of one keyframe mark, in structural order: the leaves of its own

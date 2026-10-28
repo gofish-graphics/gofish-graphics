@@ -29,6 +29,7 @@ import {
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
 import { literalBoxExtents } from "../extent";
+import { boxOfDims, boxOutline, outlinePaint } from "../geometry";
 import { aesthetic, continuous, Domain, posFn, pxOf } from "../domain";
 import { computeAesthetic, computeSize } from "../../util";
 import {
@@ -115,6 +116,8 @@ export const Rect = ({
   const fills = (axis: 0 | 1): boolean =>
     dims[axis].size === undefined &&
     !(dims[axis].min !== undefined && dims[axis].max !== undefined);
+  // How it paints its outline, read once.
+  const paint = outlinePaint({ fill, stroke, strokeWidth });
   const node = new GoFishNode(
     {
       key,
@@ -406,6 +409,16 @@ export const Rect = ({
             }),
           },
         ];
+      },
+      // Its outline is its box (see `boxOutline`), painted as it is drawn:
+      // filled unless its fill is "none" or "transparent", and stroked as
+      // wide as `strokeWidth`.
+      geometry: ({ intrinsicDims }, _children, node) => {
+        const box = boxOfDims(intrinsicDims, node.type);
+        return {
+          box,
+          outline: () => [boxOutline(box, node.yFrame.direction, paint)],
+        };
       },
     },
     []

@@ -25,7 +25,7 @@ Two distinct mechanisms sit nearby and must not be confused — only the first i
   measure**, their _data→pixel scales_ are equated so one data unit measures the
   same on both axes — circles stay circular, a 45° line looks 45°. This is **not**
   an `aspectRatio` knob: it follows from unit equality
-  (`Schema.unit(u)` on both columns), the same type rule the circle mark uses.
+  (the unit `u` on both columns), the same type rule the circle mark uses.
   It is the "scale-level coupling" of
   [design: what may set a size](/internals/design/size-claims#aspect-ratio-three-candidate-homes-open)
   (option 3), implemented at the root scope in `gofish.tsx` (see

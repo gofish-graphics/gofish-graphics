@@ -6,7 +6,9 @@ import {
   stack,
   rect,
   field,
-  Schema,
+  Unit,
+  Domain,
+  Trait,
   Color,
 } from "../../../src/lib";
 
@@ -26,8 +28,8 @@ export default meta;
 type Args = { w: number; h: number };
 
 // A 200-person developer survey. Every count is a number of respondents, so
-// no value is negative: the schema's `.diverging()` puts each stack's 0 at the
-// center of the response order.
+// no value is negative: the schema's `Trait.diverging()` puts each stack's 0
+// at the center of the response order.
 const LEVELS = [
   "Strongly disagree",
   "Disagree",
@@ -70,7 +72,12 @@ export const Likert: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(survey, {
-      schema: { response: Schema.ordered(LEVELS).diverging() },
+      schema: {
+        response: Unit({
+          domain: Domain.ordered(LEVELS),
+          traits: [Trait.diverging()],
+        }),
+      },
       color: likertColors,
       axes: { x: { title: "Respondents" }, y: true },
       w: args.w,
@@ -108,7 +115,12 @@ export const LikertEven: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(forcedChoice, {
-      schema: { response: Schema.ordered(LEVELS4).diverging() },
+      schema: {
+        response: Unit({
+          domain: Domain.ordered(LEVELS4),
+          traits: [Trait.diverging()],
+        }),
+      },
       color: likertColors,
       axes: { x: { title: "Respondents" }, y: true },
       w: args.w,
@@ -165,7 +177,12 @@ export const PopulationPyramid: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(population, {
-      schema: { sex: Schema.ordered(["Women", "Men"]).diverging() },
+      schema: {
+        sex: Unit({
+          domain: Domain.ordered(["Women", "Men"]),
+          traits: [Trait.diverging()],
+        }),
+      },
       color: Color.palette({ Women: "#c05780", Men: "#3b75af" }),
       axes: { x: { title: "People (millions)" }, y: true },
       w: args.w,

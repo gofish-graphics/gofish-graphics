@@ -652,8 +652,72 @@ for the API.
                 ]
               },
               "position": {
-                "type": "string",
-                "description": "Label position, e.g. \"center\", \"outset-top\", \"inset-bottom-start\"."
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/Place"
+                  }
+                ],
+                "description": "Where the label goes: a position string, one spot by the mark's box (\"center\", \"outset\", \"outset-top\", \"inset-bottom-start\", ...), or a Place strategy, which reads the mark's outline and tries spots in order (Place.around(), Place.along({at}), Place.start(), Place.end(), Place.interior()). The labels of one .label() call that a Place strategy places take, in data order, their first spot that covers no labeled mark, no label already placed and no node in `avoiding`; a label with no free spot is hidden. Omitted, by the mark: Place.around() for a dot, Place.end() for an arrow; for a line, a band or a polygon, by the outline it draws, Place.end() for an open path, Place.interior() for a filled region and Place.around() for one with no fill; and \"outset\" for anything else. In a polar or other curved coordinate space a Place strategy is an error, and the default is \"outset\"."
+              },
+              "avoiding": {
+                "$ref": "#/$defs/NodeSelectionIR",
+                "description": "Nodes a Place label keeps off, beside the labeled marks and the other labels: a list of nodes or refs, or a `selectAll(name)` selection. A position string ignores it."
+              },
+              "halo": {
+                "type": "object",
+                "properties": {
+                  "color": {
+                    "type": "string",
+                    "description": "The outline's color.",
+                    "default": "white"
+                  },
+                  "width": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "The outline's width in pixels.",
+                    "default": 3
+                  }
+                },
+                "description": "An outline drawn behind the glyphs, so a line under the label does not run through the text. An empty object draws the default halo."
+              },
+              "background": {
+                "type": "object",
+                "properties": {
+                  "fill": {
+                    "type": "string",
+                    "description": "The box's fill.",
+                    "default": "white"
+                  },
+                  "padding": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "array",
+                        "minItems": 2,
+                        "maxItems": 2,
+                        "prefixItems": [
+                          {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          {
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        ]
+                      }
+                    ],
+                    "description": "Pixels between the text and the box's edge: one number for both axes, or [x, y].",
+                    "default": [2, 1]
+                  }
+                },
+                "description": "A filled box drawn behind the text. An empty object draws the default box. A Place label counts the box as part of the label when it looks for a free spot."
               },
               "fontSize": {
                 "$ref": "#/$defs/Number",
@@ -665,7 +729,7 @@ for the API.
               },
               "offset": {
                 "$ref": "#/$defs/Number",
-                "description": "Offset from the shape's edge in pixels."
+                "description": "Pixels between the mark and the label. At a position string it is the distance from the shape's edge, 6 when omitted. A Place strategy's own `offset` overrides it; omitted in both, a Place label is 3 pixels from the outline (4 for Place.start and Place.end)."
               },
               "rotate": {
                 "$ref": "#/$defs/Number",
@@ -865,7 +929,7 @@ for the API.
         "schema": {
           "type": "object",
           "additionalProperties": {},
-          "description": "Column types of the result, keyed by column name, as in a chart's schema, e.g. Schema.ordered(levels) or Schema.time(). They override the types the result keeps from its input or infers, and convert values (an ISO string in a time column becomes an instant)."
+          "description": "Column types of the result, keyed by column name, as in a chart's schema, e.g. Unit({ domain: Domain.ordered(levels) }) or Unit.time(). They override the types the result keeps from its input or infers, and convert values (an ISO string in a time column becomes an instant)."
         },
         "label": {
           "$ref": "#/$defs/LabelIR"
@@ -3139,7 +3203,7 @@ for the API.
         "schema": {
           "type": "object",
           "additionalProperties": {},
-          "description": "Column types, keyed by column name, e.g. Schema.ordered(levels) or Schema.time()."
+          "description": "Column types, keyed by column name: a Unit (Unit(\"USD\", { traits: [Trait.summable()] }), Unit({ domain: Domain.ordered(levels) }), Unit.time() for a time), a unit's name (\"km²\"), or a column record { name, unit }."
         }
       },
       "description": "Chart-level options: chart(data, {...}) in JS, chart(data, **options) in Python."
@@ -3956,6 +4020,171 @@ for the API.
         }
       ],
       "description": "The outline `enclose` draws around its members: the value of its `shape` option. `padding` and the paint stay on `enclose`."
+    },
+    "Place": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "around"
+            },
+            "directions": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "top-right",
+                  "top-left",
+                  "bottom-right",
+                  "bottom-left",
+                  "right",
+                  "left",
+                  "top",
+                  "bottom"
+                ]
+              },
+              "description": "The directions to try, in order.",
+              "default": [
+                "top-right",
+                "top-left",
+                "bottom-right",
+                "bottom-left",
+                "right",
+                "left",
+                "top",
+                "bottom"
+              ]
+            },
+            "side": {
+              "anyOf": [
+                {
+                  "enum": ["outset", "inset"]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": ["outset", "inset"]
+                  }
+                }
+              ],
+              "description": "Outside the outline (\"outset\") or inside it (\"inset\"), or a list tried in order at each direction: [\"outset\", \"inset\"] with directions [\"top\"] puts a bar's value above it, or inside its top when there is no room above.",
+              "default": "outset"
+            },
+            "offset": {
+              "type": "number",
+              "description": "Pixels between the outline and the label. Default: the label's `offset`, or 3."
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "along"
+            },
+            "at": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                {
+                  "enum": [
+                    "start",
+                    "middle",
+                    "end",
+                    "x-min",
+                    "x-max",
+                    "y-min",
+                    "y-max"
+                  ]
+                }
+              ],
+              "description": "Where along the outline: a fraction of its length, 0 to 1 (the label is centered there); \"start\" or \"end\" (the label's start or end is flush with the path's); \"middle\"; or an edge of a box, \"x-min\", \"x-max\", \"y-min\" or \"y-max\", named by axis in the mark's own frame (the label stays within that edge, or is hidden).",
+              "default": "middle"
+            },
+            "side": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "on",
+                    "above",
+                    "below",
+                    "left",
+                    "right",
+                    "inset",
+                    "outset"
+                  ]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "on",
+                      "above",
+                      "below",
+                      "left",
+                      "right",
+                      "inset",
+                      "outset"
+                    ]
+                  }
+                }
+              ],
+              "description": "Which side of the outline: \"on\" straddles it. On an open path, \"above\" and \"below\" are the screen's (a stretch steeper than about 75 degrees has neither, so it gives no spot), and \"left\" and \"right\" are the path's own, of its direction of travel. On a closed outline, \"inset\" and \"outset\" are inside and outside. A list is tried in order at each spot.",
+              "default": "on"
+            },
+            "orient": {
+              "enum": ["horizontal", "sloped"],
+              "description": "\"horizontal\" keeps the label level. \"sloped\" turns it to the chord of the outline across the label's width, kept upright, and skips a spot where the outline bends away from the chord by more than about a third of the text's height, so it suits smooth lines.",
+              "default": "horizontal"
+            },
+            "offset": {
+              "type": "number",
+              "description": "Pixels between the outline and the label. Default: the label's `offset`, or 3."
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "start"
+            },
+            "offset": {
+              "type": "number",
+              "description": "Pixels between the outline and the label. Default: the label's `offset`, or 4."
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "end"
+            },
+            "offset": {
+              "type": "number",
+              "description": "Pixels between the outline and the label. Default: the label's `offset`, or 4."
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "interior"
+            }
+          },
+          "required": ["kind"]
+        }
+      ],
+      "description": "Where a label goes on the mark it labels: the value of `.label()`'s `position` option, beside the position strings. Each kind reads one kind of geometry from the mark's outline and proposes spots in order. The labels of one `.label()` call take, in data order, their first spot that covers no labeled mark, no label already placed and no node in `avoiding`; a label with no free spot is hidden."
     }
   }
 }

@@ -220,8 +220,8 @@ callback's result the way an operator treats its children (with the shared
 `flattenAndAwaitPromises`; it also awaits any thenable and drops `false`, and
 it skips the awaiting when the result holds no promise). It splits the result
 into constraints (plain objects built by a `Constraint.*` factory, or one of
-the private elaboration targets `grid` and `overlap` that `table` and
-`scatter` build) and terms,
+the private elaboration targets `grid`, `overlap` and `labelPlace` that
+`table`, `scatter` and `.label()` build) and terms,
 checks the constraints' operands, and resolves each term to its node, one at a
 time. `GoFishNode.relate` appends those nodes to the layer's children, each
 flagged `_relateClause` with its position in the list. A later `.relate()` call replaces the clauses

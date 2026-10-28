@@ -8,7 +8,7 @@ import {
   spread,
   stack,
   partition,
-  Schema,
+  Unit,
   Calendar,
   Bin,
   table,
@@ -100,7 +100,7 @@ export const MonthlyBars: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(daily, { schema: { date: Schema.time() }, axes: true, w: args.w, h: args.h })
+    chart(daily, { schema: { date: Unit.time() }, axes: true, w: args.w, h: args.h })
       .flow(spread({ by: field("date").bin(Calendar.year).bin(Calendar.month), dir: "x" }))
       .mark(rect({ h: field("value").sum(), fill: "steelblue" }))
       .render(container);
@@ -120,7 +120,7 @@ export const StackedMonthlyBars: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(allDaily, { schema: { date: Schema.time() }, axes: true, w: args.w, h: args.h })
+    chart(allDaily, { schema: { date: Unit.time() }, axes: true, w: args.w, h: args.h })
       .flow(
         spread({ by: field("date").bin(Calendar.year).bin(Calendar.month), dir: "x" }),
         stack({ by: "region", dir: "y" })
@@ -163,7 +163,7 @@ export const MonthBarsTrueWidths: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(allDaily, { schema: { date: Schema.time() }, axes: true, w: args.w, h: args.h })
+    chart(allDaily, { schema: { date: Unit.time() }, axes: true, w: args.w, h: args.h })
       .flow(partition({ by: field("date").bin([Calendar.year, Calendar.month]), dir: "x" }))
       .mark(rect({ h: field("value").sum(), fill: "steelblue", inset: 1 }))
       .render(container);
@@ -183,7 +183,7 @@ export const StackedMonthBarsTrueWidths: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(daily, { schema: { date: Schema.time() }, axes: true, w: args.w, h: args.h })
+    chart(daily, { schema: { date: Unit.time() }, axes: true, w: args.w, h: args.h })
       .flow(
         partition({ by: field("date").bin(Calendar.year).bin(Calendar.month), dir: "x" }),
         stack({ by: "region", dir: "y" })
@@ -206,7 +206,7 @@ export const GroupedMonthBarsTrueWidths: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(allDaily, { schema: { date: Schema.time() }, axes: true, w: args.w, h: args.h })
+    chart(allDaily, { schema: { date: Unit.time() }, axes: true, w: args.w, h: args.h })
       .flow(
         partition({ by: field("date").bin([Calendar.year, Calendar.month]), dir: "x" }),
         spread({ by: "region", dir: "x" })
@@ -236,7 +236,7 @@ export const SeasonalPrecipitation: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(weather, { schema: { date: Schema.time() }, axes: true, w: args.w, h: args.h })
+    chart(weather, { schema: { date: Unit.time() }, axes: true, w: args.w, h: args.h })
       .flow(spread({ by: field("date").bin(Calendar.month), dir: "x" }))
       .mark(rect({ h: field("precipitation").mean(), fill: "steelblue" }))
       .render(container);
@@ -257,7 +257,7 @@ export const MonthBarsProduct: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(between("2014-07-01", "2015-07-01"), {
-      schema: { date: Schema.time() },
+      schema: { date: Unit.time() },
       axes: { x: { label: { angle: "auto" } }, y: true },
       w: args.w,
       h: args.h,
@@ -284,7 +284,7 @@ export const MonthBarsChained: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(between("2014-01-01", "2016-01-01"), {
-      schema: { date: Schema.time() },
+      schema: { date: Unit.time() },
       axes: true,
       w: args.w,
       h: args.h,
@@ -320,7 +320,7 @@ export const GroupedMonthBars: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(winter, {
-      schema: { date: Schema.time() },
+      schema: { date: Unit.time() },
       axes: { x: { label: { angle: "auto" } }, y: true },
       w: args.w,
       h: args.h,
@@ -344,7 +344,7 @@ export const GroupedMonthBarsHiddenInner: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(winter, {
-      schema: { date: Schema.time() },
+      schema: { date: Unit.time() },
       axes: { x: { levels: [false, true] }, y: true },
       w: args.w,
       h: args.h,
@@ -376,7 +376,7 @@ export const MonthBarsProductTrueWidths: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(between("2014-01-01", "2016-01-01"), {
-      schema: { date: Schema.time() },
+      schema: { date: Unit.time() },
       axes: true,
       w: args.w,
       h: args.h,
@@ -407,7 +407,7 @@ export const WeekdayTemperature: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(weather, { schema: { date: Schema.time() }, axes: true, w: args.w, h: args.h })
+    chart(weather, { schema: { date: Unit.time() }, axes: true, w: args.w, h: args.h })
       .flow(spread({ by: field("date").bin(Calendar.weekday), dir: "x" }))
       .mark(rect({ h: field("temp_max").mean(), fill: "steelblue" }))
       .render(container);
@@ -428,7 +428,7 @@ export const CalendarHeatmap: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(weather, {
-      schema: { date: Schema.time() },
+      schema: { date: Unit.time() },
       color: Color.gradient(["#fee8c8", "#fd8d3c", "#bd0026"]),
       axes: {
         x: { title: false, levels: [false, Calendar.month, Calendar.year] },

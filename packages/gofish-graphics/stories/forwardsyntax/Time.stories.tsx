@@ -8,7 +8,8 @@ import {
   rect,
   derive,
   spread,
-  Schema,
+  Domain,
+  Unit,
   Calendar,
 } from "../../src/lib";
 
@@ -62,7 +63,7 @@ export const DailyLine: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(prices, { schema: { date: Schema.time() }, w: args.w, h: args.h })
+    chart(prices, { schema: { date: Unit.time() }, w: args.w, h: args.h })
       .flow(scatter({ by: "date", x: "date", y: "price" }))
       .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
       .render(container);
@@ -123,7 +124,7 @@ export const DaylightSavingZone: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(newYork, {
-      schema: { time: Schema.time({ zone: "America/New_York" }) },
+      schema: { time: Unit.time({ zone: "America/New_York" }) },
       w: args.w,
       h: args.h,
     })
@@ -155,7 +156,7 @@ export const EventTimeline: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(releases, {
-      schema: { date: Schema.time() },
+      schema: { date: Unit.time() },
       axes: { x: true, y: false },
       w: args.w,
       h: args.h,
@@ -184,7 +185,7 @@ export const WeekOverMonthRows: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(visits, {
-      schema: { day: Schema.time() },
+      schema: { day: Unit.time() },
       axes: { x: { levels: [Calendar.week, Calendar.month] }, y: true },
       w: args.w,
       h: args.h,
@@ -216,7 +217,7 @@ export const QuarterlyBars: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(revenue, {
-      schema: { start: Schema.time(), end: Schema.time() },
+      schema: { start: Unit.time(), end: Unit.time() },
       axes: {
         x: {
           title: false,
@@ -249,7 +250,7 @@ export const VerticalDailyDots: StoryObj<Args> = {
   args: { w: 300, h: 480 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(prices, { schema: { date: Schema.time() }, w: args.w, h: args.h })
+    chart(prices, { schema: { date: Unit.time() }, w: args.w, h: args.h })
       .flow(scatter({ by: "date", x: "price", y: "date" }))
       .mark(circle({ r: 1.5, fill: "steelblue" }))
       .render(container);
@@ -292,7 +293,11 @@ export const MonthlyHighs: StoryObj<Args> = {
               .map(([month, price]) => ({ month, price }))
               .sort((a, b) => b.price - a.price);
           },
-          { schema: { month: Schema.ordered(MONTHS) } }
+          {
+            schema: {
+              month: Unit({ domain: Domain.ordered(MONTHS) }),
+            },
+          }
         ),
         spread({ by: "month", dir: "x" })
       )

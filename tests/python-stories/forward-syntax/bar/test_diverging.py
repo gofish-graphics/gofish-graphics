@@ -1,6 +1,6 @@
 """Equivalent of Diverging.stories.tsx — Forward Syntax/Bar/Diverging."""
 
-from gofish import chart, spread, stack, rect, field, Schema, Color
+from gofish import chart, spread, stack, rect, field, Unit, Domain, Trait, Color
 
 LEVELS = [
     "Strongly disagree",
@@ -80,7 +80,7 @@ def story_likert():
     return (
         chart(
             SURVEY,
-            schema={"response": Schema.ordered(LEVELS).diverging()},
+            schema={"response": Unit(domain=Domain.ordered(LEVELS), traits=[Trait.diverging()])},
             color=LIKERT_COLORS,
             axes={"x": {"title": "Respondents"}, "y": True},
             w=640,
@@ -99,7 +99,7 @@ def story_likert_even():
     return (
         chart(
             FORCED_CHOICE,
-            schema={"response": Schema.ordered(LEVELS4).diverging()},
+            schema={"response": Unit(domain=Domain.ordered(LEVELS4), traits=[Trait.diverging()])},
             color=LIKERT_COLORS,
             axes={"x": {"title": "Respondents"}, "y": True},
             w=640,
@@ -118,7 +118,7 @@ def story_population_pyramid():
     return (
         chart(
             POPULATION,
-            schema={"sex": Schema.ordered(["Women", "Men"]).diverging()},
+            schema={"sex": Unit(domain=Domain.ordered(["Women", "Men"]), traits=[Trait.diverging()])},
             color=Color.palette({"Women": "#c05780", "Men": "#3b75af"}),
             axes={"x": {"title": "People (millions)"}, "y": True},
             w=480,

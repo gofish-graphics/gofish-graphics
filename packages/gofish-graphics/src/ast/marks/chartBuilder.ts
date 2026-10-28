@@ -23,6 +23,7 @@ import {
   type TerminalMethods,
 } from "./terminals";
 import { expandComposedOperator } from "./compose";
+import { resolveRefData } from "./resolveRefData";
 import { nameableMark } from "./createOperator";
 import type { RelationalMark } from "./chart";
 import {
@@ -92,10 +93,11 @@ export type ChartOptions = {
   padding?: number;
   /**
    * Column types, keyed by column name: the classes each column has (#984),
-   * e.g. `{ response: Schema.ordered(LEVELS).diverging() }`. An ordered column
-   * (`HasOrder`) splits in the order of its levels, and a value outside them
-   * is an error where the order is used; a stack over a column with `HasMidpoint` puts its 0 at the
-   * midpoint of the order. A time column (`Schema.time()`, `HasCalendar`)
+   * e.g. `{ response: Unit({ domain: Domain.ordered(LEVELS), traits: [Trait.diverging()] }) }`.
+   * A column with levels (`HasLevels`, a unit's `domain`) splits in the
+   * order of its levels, and a value outside them is an error where the
+   * levels are used; a stack over a column with `HasMidpoint` puts its 0 at the
+   * midpoint of the order. A time column (in `Unit.time()`)
    * becomes epoch milliseconds and gets a calendar axis; a column of JS
    * `Date` values is a time column without a schema entry. See schema.ts.
    */
@@ -148,56 +150,6 @@ function collectLayerRegistrations(
   for (const n of visibleNodes(node)) {
     if (n instanceof GoFishNode) registerLayerNode(n, layerContext);
   }
-}
-
-/**
- * Resolve a `GoFishRef` used as chart data against the layer registry, the
- * node-unit way: NO flattening of array data, NO datum spreading, NO `__ref`
- * on plain objects.
- *
- * Either way the result is a list of refs, as all data is a list:
- *
- * - A non-string selection (token / path-array / node-backed ref) is a direct
- *   reference: the list of that one ref (and `selectAll` over one is an
- *   error — it requires a string layer name).
- * - A string selection looks up the named layer. `multiplicity === "all"`
- *   (from `selectAll`) yields a ref per matching node; the singular `ref`
- *   yields the list of the one matching ref, throwing if the layer matched
- *   zero or more than one node. Being singular is a check on how many nodes
- *   match, not a different data shape.
- */
-export function resolveRefData(
-  r: GoFishRef,
-  layerContext: LayerContext
-): GoFishRef[] {
-  if (typeof r.selection !== "string") {
-    if (r.multiplicity === "all") {
-      throw new Error("selectAll requires a string layer name");
-    }
-    return [r];
-  }
-
-  const layer = layerContext[r.selection];
-  if (!layer) {
-    throw new Error(
-      `Layer "${r.selection}" not found. Make sure to call .name("${r.selection}") on the mark first.`
-    );
-  }
-
-  const refs = layer.nodes.map((node) => ref({ __ref: node }));
-
-  if (r.multiplicity === "all") return refs;
-
-  // Singular: exactly one node expected.
-  if (refs.length === 0) {
-    throw new Error(`ref("${r.selection}") matched no nodes.`);
-  }
-  if (refs.length > 1) {
-    throw new Error(
-      `ref("${r.selection}") matched ${refs.length} nodes; use selectAll("${r.selection}").`
-    );
-  }
-  return refs;
 }
 
 /* ---- Default grouping for relational marks in a flow (issue #752) ----

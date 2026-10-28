@@ -10,7 +10,8 @@ import {
 } from "../../path";
 import { GoFishAST } from "../_ast";
 import { projectBy, type SplitBy } from "../datumProjection";
-import { GoFishNode, outlineOverhang } from "../_node";
+import { GoFishNode, defaultGeometry, outlineOverhang } from "../_node";
+import { outlinePaint, pathOutline } from "../geometry";
 import { resolveColorChannel } from "../../color";
 import type { DisplayList } from "gofish-ir";
 import {
@@ -254,10 +255,28 @@ export const connect = createNodeOperator(
     // A curve that is not a Curve-family object fails here, where the
     // connector is made.
     curveName(curve, "line/ribbon({ curve })");
+    // What it draws: a closed band per run for a ribbon (edge mode), and an
+    // open path per run for a line (center mode, or a connector between two
+    // anchors).
+    const closed =
+      mode !== "center" &&
+      resolvedSource === undefined &&
+      resolvedTarget === undefined;
+    // How it paints its paths, from its fill color (its first child's when
+    // it sets none) and its stroke color: a ribbon is filled, a line never,
+    // and either is stroked with its stroke, or its fill when it sets none.
+    // `lower` reads it with the colors resolved, `geometry` as given.
+    const paintOf = <C,>(color: C | undefined, strokeColor: C | undefined) => ({
+      fill: mode === "center" ? "none" : (color ?? "none"),
+      stroke: strokeColor ?? color ?? "black",
+      strokeWidth: strokeWidth ?? 0,
+    });
 
     return new GoFishNode(
       {
         type: "connect",
+        // Labeled by its outline: a line at its end, a band inside itself.
+        labelPosition: "outline",
         // The domain-building walk (`GoFishNode.resolveColorScale`) only
         // reads a node's single `color` property to register a field-valued
         // paint into the shared discrete-color scale. Prefer whichever
@@ -883,14 +902,10 @@ export const connect = createNodeOperator(
             // The box above is the WHOLE run's, cut or not: the room a line
             // uses over its run, the way a transition claims its whole
             // trajectory, so the window moving changes nothing above it.
-            // `centerline`: the paths are a stroked line (center mode) of
-            // this width, not a band's outline. `enclose` reads a line
-            // operand as its segments by it.
             renderData: {
               paths: mergedPaths,
               defaultColor,
               timeRun,
-              centerline: mode === "center" ? (strokeWidth ?? 1) : undefined,
             },
           };
         },
@@ -917,9 +932,7 @@ export const connect = createNodeOperator(
           );
 
           const style = lowerStyle({
-            fill: mode === "center" ? "none" : (resolvedFill ?? "none"),
-            stroke: resolvedStroke ?? resolvedFill ?? "black",
-            strokeWidth: strokeWidth ?? 0,
+            ...paintOf(resolvedFill, resolvedStroke),
             strokeDasharray,
             opacity: opacity ?? 1,
             // Normal by default for both modes; a ribbon that wants overlaps to
@@ -963,6 +976,27 @@ export const connect = createNodeOperator(
           const item = toItem(readLive(drawnOver));
           setLiveSlots(item, { d: drawnOver });
           return [item];
+        },
+        // Its outline is what it draws, over its whole run, painted as
+        // `lower` paints it (`paintOf`). The paths are kept in axis order;
+        // the outline is in pixels.
+        geometry: (laidOut, layoutChildren, node) => {
+          const paint = outlinePaint(
+            paintOf(fill ?? laidOut.renderData?.defaultColor, stroke)
+          );
+          return {
+            ...defaultGeometry(laidOut, layoutChildren, node),
+            outline: (tolerance) =>
+              ((laidOut.renderData?.paths ?? []) as Path[]).map((path) =>
+                pathOutline(
+                  path,
+                  tolerance,
+                  node.yFrame.direction,
+                  closed,
+                  paint
+                )
+              ),
+          };
         },
       },
       children

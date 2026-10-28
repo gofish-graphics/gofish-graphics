@@ -17,8 +17,19 @@ import { stackOrigin, type ColumnType } from "../ast/schema";
 import { solveAxisProblem } from "../ast/constraints/differenceGraph";
 import { anchorExpr, relationFact } from "../ast/constraints/placementFacts";
 
-const { chart, spread, stack, rect, layer, Constraint, Schema, field, v } =
-  GoFish as any;
+const {
+  chart,
+  spread,
+  stack,
+  rect,
+  layer,
+  Constraint,
+  Unit,
+  Domain,
+  Trait,
+  field,
+  v,
+} = GoFish as any;
 
 declare const process: { exit(code: number): never };
 
@@ -57,12 +68,15 @@ const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
 
 const LEVELS5 = ["SD", "D", "N", "A", "SA"];
 const centered: ColumnType = {
-  HasOrder: { levels: LEVELS5 },
+  HasLevels: { levels: LEVELS5 },
+  HasOrder: {},
   HasMidpoint: { at: 2.5 },
 };
 
 async function main() {
-  console.log("\n# a level's side of the midpoint comes from the split's order");
+  console.log(
+    "\n# a level's side of the midpoint comes from the split's order"
+  );
   {
     // The split reverses the order, so the stack lays SA first. A row with
     // only "D" puts it past the center, as a row with every level does.
@@ -95,7 +109,12 @@ async function main() {
       ["field(...).reverse()", field("r").reverse()],
     ] as const) {
       const dl = await chart(rows, {
-        schema: { r: Schema.ordered(LEVELS5).diverging() },
+        schema: {
+          r: Unit({
+            domain: Domain.ordered(LEVELS5),
+            traits: [Trait.diverging()],
+          }),
+        },
       })
         .flow(spread({ by: "q", dir: "y" }), stack({ by, dir: "x" }))
         .mark(rect({ w: "n" }))
@@ -122,7 +141,14 @@ async function main() {
           { q: "q1", r: "D", n: 1 },
           { q: "q1", r: "N", n: 2 },
         ],
-        { schema: { r: Schema.ordered(LEVELS5).diverging() } }
+        {
+          schema: {
+            r: Unit({
+              domain: Domain.ordered(LEVELS5),
+              traits: [Trait.diverging()],
+            }),
+          },
+        }
       )
         .flow(stack({ by: field("r").sort(), dir: "x" }))
         .mark(rect({ w: "n" }))
@@ -149,7 +175,12 @@ async function main() {
       { q: "q2", r: "SA", n: 5 },
     ];
     const dl = await chart(rows, {
-      schema: { r: Schema.ordered(LEVELS5).diverging({ midpoint: 2.25 }) },
+      schema: {
+        r: Unit({
+          domain: Domain.ordered(LEVELS5),
+          traits: [Trait.diverging(2.25)],
+        }),
+      },
     })
       .flow(
         spread({ by: "q", dir: "y" }),
@@ -218,7 +249,9 @@ async function main() {
         Constraint.distribute({ dir: "x", spacing: 8 }, [g.a, g.b]),
         ...(withR ? [Constraint.align({ x: "start" }, [g.b, g.r])] : []),
       ]);
-    const [alone] = rectsOf(await bars(false).toDisplayList({ w: 300, h: 100 }));
+    const [alone] = rectsOf(
+      await bars(false).toDisplayList({ w: 300, h: 100 })
+    );
     const [a] = rectsOf(await bars(true).toDisplayList({ w: 300, h: 100 }));
     check(
       "a rendered spread starts where it does without the aligned node",
@@ -235,9 +268,10 @@ async function main() {
     const stacked = (strong: boolean) =>
       layer([
         rect({ x: v(0), w: v(10), y: 0, h: 5 }).name("src"),
-        (strong ? rect({ h: 20, y: 30 }) : rect({ w: v(10), h: 20, y: 30 })).name(
-          "a"
-        ),
+        (strong
+          ? rect({ h: 20, y: 30 })
+          : rect({ w: v(10), h: 20, y: 30 })
+        ).name("a"),
         rect({ w: v(20), h: 20, y: 30 }).name("b"),
       ]).relate((g: any) => [
         ...(strong ? [Constraint.align({ x: "size" }, [g.src, g.a])] : []),

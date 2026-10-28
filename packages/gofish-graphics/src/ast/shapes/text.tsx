@@ -14,6 +14,9 @@ import {
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
 import { boxExtent } from "../extent";
+import { boxOfDims } from "../geometry";
+import { turnedBox, turnedCorners } from "../geometry/plane";
+import type { BoundingBox } from "../../util/bbox";
 import { FALLBACK_FONT_FAMILY } from "./fontUtils";
 import { createMark } from "../withGoFish";
 import { MARK_CHANNELS } from "../markChannels.generated";
@@ -87,39 +90,6 @@ type TextLayout = {
   dims: TextDimensions;
   bbox: { minX: number; minY: number; maxX: number; maxY: number };
   anchor: { x: number; y: number };
-};
-
-type RelBBox = { minX: number; minY: number; maxX: number; maxY: number };
-
-/**
- * Rotate an anchor-relative pixel bbox (y-down) by `deg` degrees, clockwise on
- * screen (SVG's `rotate`), about the anchor and return the axis-aligned
- * min/max of the rotated corners. Standard rotation matrix in y-down pixels:
- * x' = x·cosθ − y·sinθ, y' = x·sinθ + y·cosθ.
- *
- * Sanity for rotate:−90 — x∈[0,w], y∈[−ascent,−descent] (the unrotated box,
- * anchor at the start baseline) maps to x∈[−ascent,−descent], y∈[−w,0]: a
- * narrow strip left of the anchor extending up — exactly the footprint a
- * conventional y-axis title occupies in the left gutter.
- */
-const rotateRelBBox = (b: RelBBox, deg: number): RelBBox => {
-  const rad = (deg * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-  const corners: [number, number][] = [
-    [b.minX, b.minY],
-    [b.maxX, b.minY],
-    [b.maxX, b.maxY],
-    [b.minX, b.maxY],
-  ];
-  const xs = corners.map(([x, y]) => x * cos - y * sin);
-  const ys = corners.map(([x, y]) => x * sin + y * cos);
-  return {
-    minX: Math.min(...xs),
-    minY: Math.min(...ys),
-    maxX: Math.max(...xs),
-    maxY: Math.max(...ys),
-  };
 };
 
 const resolveTextLayout = (
@@ -221,7 +191,7 @@ export const Text = ({
   // claim walk and layout read the same box): in x about the `textAnchor`
   // point, in y from the box's start edge. When rotated, its footprint is
   // the rotated box.
-  let measured: { layout: TextLayout; rel: RelBBox } | undefined;
+  let measured: { layout: TextLayout; rel: BoundingBox } | undefined;
   const measure = () => {
     if (measured !== undefined) return measured;
     const layout = resolveTextLayout(
@@ -233,7 +203,7 @@ export const Text = ({
       fontStyle,
       fontWeight
     );
-    const relRaw: RelBBox = {
+    const relRaw: BoundingBox = {
       minX: layout.bbox.minX - layout.anchor.x,
       maxX: layout.bbox.maxX - layout.anchor.x,
       minY: layout.bbox.minY - layout.anchor.y,
@@ -241,7 +211,7 @@ export const Text = ({
     };
     return (measured = {
       layout,
-      rel: rotate ? rotateRelBBox(relRaw, rotate) : relRaw,
+      rel: rotate ? turnedBox(relRaw, rotate) : relRaw,
     });
   };
 
@@ -388,7 +358,7 @@ export const Text = ({
             maxX: layout.bbox.maxX - layout.anchor.x,
             maxY: layout.bbox.maxY - layout.anchor.y,
           };
-          const relRot = rotate ? rotateRelBBox(relRaw, rotate) : relRaw;
+          const relRot = rotate ? turnedBox(relRaw, rotate) : relRaw;
           if (Number.isFinite(relRot.minX) && Number.isFinite(relRot.minY)) {
             items.push(
               rectItemFromBox(
@@ -435,6 +405,32 @@ export const Text = ({
         if (rotate) textItem.rotate = rotate;
         items.push(textItem);
         return items;
+      },
+      // A rotated text's outline is its turned glyph box: the box about the
+      // glyph anchor, turned by `rotate` about it. The anchor sits at the
+      // local x origin, `glyphDy` pixels down from the local y origin.
+      // Unrotated, the glyph box is the box itself.
+      geometry: ({ intrinsicDims, renderData }, _children, node) => {
+        const box = boxOfDims(intrinsicDims, node.type);
+        const layout = (renderData as { layout?: TextLayout })?.layout;
+        if (!rotate || layout === undefined) return { box };
+        const glyphDy = (renderData as { glyphDy?: number }).glyphDy ?? 0;
+        const { bbox, anchor } = layout;
+        const corners = turnedCorners(
+          {
+            minX: bbox.minX - anchor.x,
+            maxX: bbox.maxX - anchor.x,
+            minY: bbox.minY - anchor.y,
+            maxY: bbox.maxY - anchor.y,
+          },
+          rotate,
+          [0, glyphDy]
+        );
+        // Its glyphs are read as filling the turned box.
+        return {
+          box,
+          outline: () => [{ points: corners, closed: true, filled: true }],
+        };
       },
     },
     []

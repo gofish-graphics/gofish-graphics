@@ -52,9 +52,10 @@ operator works both inside `.flow(...)` and as a combinator over marks, and a
 `createMark` resolves whatever its body returns the same way a combinator
 resolves a child. The async map over a collection, once the capitalized
 `For`, is now the lowercase `map`, so a capital letter now means only a
-namespace: the factory namespaces `Constraint` (constraints) and `Schema`
-(column types for `chart`'s `schema` option), and the strategy
-families described below. The fluent
+namespace or a class: the factory namespaces `Constraint` (constraints) and
+`Schema` (column types for `chart`'s `schema` option), the strategy
+families described below, and `Unit`, which makes a unit definition, a
+class instance. The fluent
 surface also carries the
 operators used inside `.flow(...)` — `spread`, `stack`, `scatter`, `group`,
 `treemap`, `pack`, `derive`, `resolve`, and `join` (`treemap` takes a tiling

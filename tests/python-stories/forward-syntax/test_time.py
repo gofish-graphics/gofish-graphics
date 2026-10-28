@@ -6,7 +6,7 @@ QuarterlyBars is exempt: its row labels come from a JS format function.
 import math
 from datetime import datetime, timedelta, timezone
 
-from gofish import chart, scatter, spread, derive, line, circle, rect, Schema, Calendar
+from gofish import chart, scatter, spread, derive, line, circle, rect, Domain, Unit, Calendar
 
 DAY = timedelta(days=1)
 
@@ -94,7 +94,7 @@ VISITS = _visits()
 
 def story_daily_line():
     return (
-        chart(PRICES, schema={"date": Schema.time()}, w=560, h=200)
+        chart(PRICES, schema={"date": Unit.time()}, w=560, h=200)
         .flow(scatter(by="date", x="date", y="price"))
         .mark(line(stroke="steelblue", stroke_width=2)),
         {},
@@ -114,7 +114,7 @@ def story_daylight_saving_zone():
     return (
         chart(
             NEW_YORK,
-            schema={"time": Schema.time(zone="America/New_York")},
+            schema={"time": Unit.time(zone="America/New_York")},
             w=560,
             h=200,
         )
@@ -128,7 +128,7 @@ def story_event_timeline():
     return (
         chart(
             RELEASES,
-            schema={"date": Schema.time()},
+            schema={"date": Unit.time()},
             axes={"x": True, "y": False},
             w=560,
             h=80,
@@ -143,7 +143,7 @@ def story_week_over_month_rows():
     return (
         chart(
             VISITS,
-            schema={"day": Schema.time()},
+            schema={"day": Unit.time()},
             axes={"x": {"levels": [Calendar.week, Calendar.month]}, "y": True},
             w=560,
             h=200,
@@ -156,7 +156,7 @@ def story_week_over_month_rows():
 
 def story_vertical_daily_dots():
     return (
-        chart(PRICES, schema={"date": Schema.time()}, w=300, h=480)
+        chart(PRICES, schema={"date": Unit.time()}, w=300, h=480)
         .flow(scatter(by="date", x="price", y="date"))
         .mark(circle(r=1.5, fill="steelblue")),
         {},
@@ -180,7 +180,7 @@ def story_monthly_highs():
     return (
         chart([p for p in PRICES if p["date"].startswith("2024")], w=480, h=200)
         .flow(
-            derive(_monthly_highs, schema={"month": Schema.ordered(MONTHS)}),
+            derive(_monthly_highs, schema={"month": Unit(domain=Domain.ordered(MONTHS))}),
             spread(by="month", dir="x"),
         )
         .mark(rect(h="price", fill="steelblue")),

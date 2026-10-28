@@ -260,7 +260,7 @@ A `size` or `pos` channel resolves its column (`resolveColumn`: its quantity
 and its type from the chart's `schema`) off the whole input once, and passes
 it to every entry's inference, since a split entry's slice may not carry
 the column types. The value then records the type (`fieldType`), which is
-how a scatter's `x` over a `Schema.time()` column puts its points on a
+how a scatter's `x` over a `Unit.time()` column puts its points on a
 calendar. Which axis `theta` means is
 not known here: the scatter defers the constraints that need it to the
 [axis-name pass](/internals/layout/passes#pass-5-5-axis-name-resolution).
@@ -357,7 +357,10 @@ returned). Instead:
 - In the per-leaf loop (where `applyMark` turns one split leaf into node(s)),
   if `labelState` is set, every node the leaf produced gets `node.datum ??=
 leaf` (the leaf's own subdata — usually the rows array `split` handed it)
-  and `node.label(labelState.accessor, labelState.options)`. Stamping
+  and `node.label(labelState.accessor, labelState.options, layerContext)`
+  (the chart's named layers, where a `selectAll(name)` in the label's
+  `avoiding` is found; the mark-side `labelModifier` passes it the same
+  way). Stamping
   `datum` here is what makes the label-elaboration pass's `resolveLabelTargets`
   gate ("a node with its own datum keeps its own label instead of propagating
   it to children") fire at the group level — the same effect the pre-#702 manual workaround achieved
@@ -391,7 +394,10 @@ leaf` (the leaf's own subdata — usually the rows array `split` handed it)
   serializes via its own `.toJSON()` (the `FieldExprWire` shape) into
   `tag.label = {accessor: {type: "field", name, ops?}, ...options}`;
   a function accessor warns and is dropped from the emitted IR (functions
-  aren't serializable). `.translate()`'s wrapper has no tag of its own by
+  aren't serializable). The options are read through `withKindValues`, so a
+  bare `Place` kind (`position: Place.end`) is stored as its value; the
+  emitter keeps only the `LABEL_OPTIONS` keys (`wireLabels` in `toJSON.ts`).
+  `.translate()`'s wrapper has no tag of its own by
   default (the wrapped function is new), so `translateOperator` copies the
   base operator's wire tag (`wireOf`) onto the wrapper and stamps
   `tag.translate` — without that copy, a translated operator would silently

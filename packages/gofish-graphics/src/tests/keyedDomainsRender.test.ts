@@ -24,7 +24,8 @@ import {
   stack,
   Coord,
   rect as rectMark,
-  Schema,
+  Unit,
+  Trait,
 } from "../lib";
 import { check, items, report, type Item } from "./testHelpers";
 
@@ -94,10 +95,11 @@ async function main() {
       { id: "a", start: 10, width: 2 },
       { id: "b", start: 20, width: 4 },
     ];
+    const Day = Unit("day", { traits: [Trait.summable()] });
     // No axes, so the plot is the whole canvas (#1032).
     const dl = await chart(tasks, {
       axes: false,
-      schema: { start: Schema.unit("day"), width: Schema.unit("day") },
+      schema: { start: Day, width: Day },
     })
       .flow(scatter({ by: "id", x: "start" }))
       .mark(rectMark({ w: "width", h: 10, fill: "green" }))

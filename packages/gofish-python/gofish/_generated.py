@@ -43,6 +43,7 @@ _OPTION_TYPES: Dict[str, Any] = {
     "Bin": ("tagged", "kind", {"step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)}), "hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),
     "Calendar": ("tagged", "kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)})}),
     "Shape": ("tagged", "kind", {"box": ("object", {"kind": ("kind", None), "rx": ("rx", None), "ry": ("ry", None)}), "oval": ("object", {"kind": ("kind", None)}), "blob": ("object", {"kind": ("kind", None), "convexity": ("convexity", None), "holes": ("holes", None), "roundness": ("roundness", None), "neck": ("neck", None), "avoiding": ("avoiding", None), "clearance": ("clearance", None)})}),
+    "Place": ("tagged", "kind", {"around": ("object", {"kind": ("kind", None), "directions": ("directions", None), "side": ("side", None), "offset": ("offset", None)}), "along": ("object", {"kind": ("kind", None), "at": ("at", None), "side": ("side", None), "orient": ("orient", None), "offset": ("offset", None)}), "start": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "end": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "interior": ("object", {"kind": ("kind", None)})}),
 }
 
 
@@ -1005,14 +1006,17 @@ def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optiona
             opts[_k] = _v
     return opts
 
-def _label_opts(*, position: Optional[str] = None, font_size: Optional[float] = None, color: Optional[str] = None, offset: Optional[float] = None, rotate: Optional[float] = None, font_family: Optional[str] = None, font_weight: Optional[float | str] = None, font_style: Optional[str] = None) -> Dict[str, Any]:
+def _label_opts(*, position: Optional[str | dict] = None, avoiding: Optional[Any] = None, halo: Optional[dict] = None, background: Optional[dict] = None, font_size: Optional[float] = None, color: Optional[str] = None, offset: Optional[float] = None, rotate: Optional[float] = None, font_family: Optional[str] = None, font_weight: Optional[float | str] = None, font_style: Optional[str] = None) -> Dict[str, Any]:
     """Options of one .label(accessor, **options) call.
 
     Args:
-        position: Label position, e.g. "center", "outset-top", "inset-bottom-start".
+        position: Where the label goes: a position string, one spot by the mark's box ("center", "outset", "outset-top", "inset-bottom-start", ...), or a Place strategy, which reads the mark's outline and tries spots in order (Place.around(), Place.along({at}), Place.start(), Place.end(), Place.interior()). The labels of one .label() call that a Place strategy places take, in data order, their first spot that covers no labeled mark, no label already placed and no node in `avoiding`; a label with no free spot is hidden. Omitted, by the mark: Place.around() for a dot, Place.end() for an arrow; for a line, a band or a polygon, by the outline it draws, Place.end() for an open path, Place.interior() for a filled region and Place.around() for one with no fill; and "outset" for anything else. In a polar or other curved coordinate space a Place strategy is an error, and the default is "outset".
+        avoiding: Nodes a Place label keeps off, beside the labeled marks and the other labels: a list of nodes or refs, or a `selectAll(name)` selection. A position string ignores it.
+        halo: An outline drawn behind the glyphs, so a line under the label does not run through the text. An empty object draws the default halo.
+        background: A filled box drawn behind the text. An empty object draws the default box. A Place label counts the box as part of the label when it looks for a free spot.
         font_size: Font size in pixels.
         color: Label color. Omitted, it is chosen to contrast with the mark.
-        offset: Offset from the shape's edge in pixels.
+        offset: Pixels between the mark and the label. At a position string it is the distance from the shape's edge, 6 when omitted. A Place strategy's own `offset` overrides it; omitted in both, a Place label is 3 pixels from the outline (4 for Place.start and Place.end).
         rotate: Rotation in degrees, clockwise on screen.
         font_family: Font family of the label's text node. Omitted, the elaborator's own font family.
         font_weight: Font weight, e.g. "bold" or a numeric weight.
@@ -1020,7 +1024,10 @@ def _label_opts(*, position: Optional[str] = None, font_size: Optional[float] = 
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
-        ("position", position),
+        ("position", _to_wire(("ref", "Place"), position, "position")),
+        ("avoiding", avoiding),
+        ("halo", _to_wire(("object", {"color": ("color", None), "width": ("width", None)}), halo, "halo")),
+        ("background", _to_wire(("object", {"fill": ("fill", None), "padding": ("padding", None)}), background, "background")),
         ("fontSize", font_size),
         ("color", color),
         ("offset", offset),
@@ -1206,7 +1213,7 @@ def _chart_opts(*, w: Optional[float] = None, h: Optional[float] = None, coord: 
         axes: Draw this chart's axes: a boolean for both axes, or per-axis options {x?, y?}. It applies at this chart: a nested chart reads its own, and draws only the axes of the domains it owns. A chart that turns an axis off hides it; no chart inside it draws that axis instead. Default true.
         legend: Draw the color legend. Turned off, the marks keep their colors and only the legend is dropped. Default true.
         padding: Room in pixels between a non-linear coordinate space's drawing (a polar disc, a map) and the edge of the chart's box. It has no effect on a chart in linear coordinates. Default 30.
-        schema: Column types, keyed by column name, e.g. Schema.ordered(levels) or Schema.time().
+        schema: Column types, keyed by column name: a Unit (Unit("USD", { traits: [Trait.summable()] }), Unit({ domain: Domain.ordered(levels) }), Unit.time() for a time), a unit's name ("km²"), or a column record { name, unit }.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [

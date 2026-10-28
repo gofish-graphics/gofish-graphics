@@ -69,8 +69,8 @@ wrapper that carries the value and an optional quantity
 (`packages/gofish-graphics/src/ast/data.ts`, `DatumValue` for the wire shape and
 `DatumValueImpl` for the class). A quantity is a name and an optional declared unit
 (`Quantity` in `ast/measure.ts`). It comes from the column's type in the chart's schema.
-`Schema.quantity(name)` (`HasQuantity`) names it, and otherwise the column's name does.
-`Schema.unit(u)` (`HasUnit`) declares its unit. The cells of `field(x).bin(p)` keep
+A column record's `name` (`HasQuantity`) names it, and otherwise the column's name does.
+Its `unit` (`HasUnit`, a `Unit(u)` or a unit's name) declares its unit. The cells of `field(x).bin(p)` keep
 `x`'s quantity and unit, since their ends are read from `x`. `columnQuantity`
 (`measure.ts`) reads them, and `resolveColumn` (`ast/channels.ts`) applies it to a
 channel's column. A column with no declared unit has an unknown unit, which unifies

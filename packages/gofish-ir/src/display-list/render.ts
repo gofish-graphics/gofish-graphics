@@ -45,6 +45,10 @@ const styleAttrs = (style: Style | undefined): string => {
   if (style.mixBlendMode !== undefined)
     parts.push(`style="mix-blend-mode:${esc(style.mixBlendMode)}"`);
   if (style.filter !== undefined) parts.push(`filter="${esc(style.filter)}"`);
+  if (style.paintOrder !== undefined)
+    parts.push(`paint-order="${esc(style.paintOrder)}"`);
+  if (style.strokeLinejoin !== undefined)
+    parts.push(`stroke-linejoin="${esc(style.strokeLinejoin)}"`);
   return parts.length ? " " + parts.join(" ") : "";
 };
 

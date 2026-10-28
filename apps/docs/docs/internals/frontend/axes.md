@@ -555,8 +555,8 @@ difference axis), never off the size claim:
   edge, a row that divides the row before it (it partitions that row's
   value, or `divider` says so; see below) `ROW_GAP` past that row, and any
   other row `ORDINAL_LABEL_GAP` past it, so spacing and dividers always
-  agree, each by its depth as rotated (the box `rotatedExtent` in
-  `autoLabelAngle.ts` measures). So one chained key and the same levels as
+  agree, each by its depth as rotated (the box `turnedBox` in
+  `geometry/plane.ts` measures). So one chained key and the same levels as
   nested splits stack alike, and a lake row sits past its species row as any
   axis sits past the content inside it. An outer
   axis learns how deep the rows inside it reach from the fold

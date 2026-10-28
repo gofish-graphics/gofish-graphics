@@ -73,19 +73,35 @@ the same default installed by name (see
 
 ## Reading members
 
-`members.ts` reads a placed node as outline geometry, in the enclosure's
-frame:
+`members.ts` reads a placed node as blob geometry through its outlines
+(the `outline` geometry query; see
+[Layout Calculation](/internals/layout/passes)). It reads them with
+`placedOutlines` from the view of the child that the enclosure's layout got
+back, so the geometry and the child's `dims` are both in the enclosure's
+frame, and it reads each outline by its exact form where it has one:
 
-- A circle (a node of type `ellipse` with equal sides) is a disc.
-- An ellipse that is not a circle is the disc of its larger radius, carrying
-  its two semi-axes as well. The blob reads only the disc, so it pads the
-  ellipse a little more along its short axis (a declared shortcut, below).
-  The oval reads the semi-axes and samples the ellipse itself.
-- A `line` is its segments, each a tube as wide as its stroke. The connector
-  records its stroke width in `renderData.centerline`; a `ribbon`, whose
-  paths are a band's outline, does not, so it is read as a box.
-- Anything else is its bounding box. The blob measures the distance to it
+- An outline that gives an `ellipse` (an `ellipse` node) is a disc. An
+  ellipse that is not a circle is the disc of its larger radius, carrying its
+  two semi-axes as well. The blob reads only the disc, so it pads the ellipse
+  a little more along its short axis (a declared shortcut, below). The oval
+  reads the semi-axes and samples the ellipse itself.
+- An outline that gives a `box` (a `rect`'s, or the fallback of a node with
+  no outline of its own) is its box. The blob measures the distance to it
   exactly, as a rectangle.
+- An open outline (a `line`, an `arrow` to the tip of its head) is its
+  pieces, each a tube as wide as the stroke `width` the outline carries. A curve is cut into
+  pieces that stray at most 0.5 px from it.
+- A closed outline that is not `filled` (a `polygon` with fill `"none"`) is
+  the pieces of its loop, each a tube as wide as its stroke: a ring. Its
+  inside is not ink, so it is not part of the member.
+- Any other closed outline, which is filled (a `polygon`, a `ribbon`'s band,
+  a rotated `text`'s glyph box), is its bounding box, a declared shortcut
+  (below).
+
+The blob needs these exact forms. A disc is one Delaunay site and links to
+its neighbors by its radius, and a stroke is a tube of its width. A disc read
+as its sampled edges would be many sites with no width, which changes every
+blob around circles. The `Enclose/Members` stories show one blob per kind.
 
 This reader is internal. There is no `members` option and no public geometry
 protocol for it yet.
@@ -239,7 +255,9 @@ Settled:
 - `avoiding` takes a list of nodes or refs, or one `selectAll(name)` as the
   whole value, in JS as on the wire (`NodeSelectionIR`): a single ref and a
   `selectAll` inside a list are errors. A listed node that is also a member
-  is ignored, so the user never computes a set difference.
+  is ignored, so the user never computes a set difference. The value is read
+  into fresh refs by `avoidedRefs` (`ast/nodeRefs.ts`), which `.label()`'s
+  `avoiding` shares (see [Labels](/internals/frontend/labels)).
 - `neck` is above 0 and at most 1. At 0 a link would have no width: its two
   pulled-in sides meet, the crossing check gives the pull back, and the
   outline comes out fuller than at a small `neck`. Any value above 0 is
@@ -250,7 +268,14 @@ Shortcuts, each a known approximation:
 - In a blob, an ellipse that is not a circle is read as its enclosing
   circle (its larger radius), so it gets a little more padding along its
   short axis. The oval samples the ellipse itself.
-- A curved `line` piece (a Bezier segment) is cut into 8 straight segments.
+- A curved `line` piece (a Bezier segment) is cut into straight segments
+  that stray at most 0.5 px from it.
+- A filled closed outline with no exact form (a polygon, a ribbon's band) is
+  read as its bounding box, so the blob hugs the box, not the shape. Reading it
+  as its edges at no width hugs the shape, but only through hole filling:
+  with `holes: true` a large polygon's inside stays a hole, and an avoided
+  polygon keeps out only a band along its edges. The fix is a filled-ring
+  member kind in `blob.ts` (#1207).
 - A segment member keeps its own padding band at every `convexity`: a filled
   triangle's side along a member edge is that edge's band, and only the
   enclosure's own links thin under `neck`.
@@ -258,5 +283,3 @@ Shortcuts, each a known approximation:
   plain corners, not snapped to arcs.
 - There is no `members` option and no list-taking `resolve` yet; members are
   the children or the refs of the chart's data.
-- The paths of a `line` member are assumed to share the axis order of its
-  placed box; this has only been exercised in canvas-oriented frames.

@@ -277,6 +277,17 @@ export function resolveNodeRefs(
 ): Record<string, any> {
   const accepted = Frontend.acceptedFields(kind, type);
   if (accepted === undefined) return opts;
+  return resolveHeldNodes(accepted, opts, resolveToken);
+}
+
+/** `opts` with the nodes held by the fields `accepted` declares rebuilt as
+ *  refs: a construct's options ({@link resolveNodeRefs}), or one `.label()`
+ *  call's (`Frontend.LABEL_OPTIONS`). */
+function resolveHeldNodes(
+  accepted: Readonly<Record<string, { type: Frontend.FieldType }>>,
+  opts: Record<string, any>,
+  resolveToken: TokenResolver
+): Record<string, any> {
   const nodes = (v: any): any =>
     Array.isArray(v)
       ? v.map((r) => ref(resolveRefSelection(r.selection, resolveToken)))
@@ -322,7 +333,8 @@ export function resolveOptions(raw: Record<string, any>): Record<string, any> {
  *  `undefined`/`{}`, reproducing the pre-array-form suppression behavior. */
 export function mapOperator(
   op: OperatorSpec,
-  bridge?: DeriveBridge
+  bridge?: DeriveBridge,
+  resolveToken: TokenResolver = makeTokenResolver()
 ): Operator<any, any> | null {
   const { type, translate, label, ...opts } = op as Record<string, any>;
   let operator = rebuild("operator", type as string, unwrapOpts(opts, bridge), {
@@ -342,7 +354,9 @@ export function mapOperator(
       >;
       operator = (operator as any).label(
         accessor,
-        Object.keys(labelOpts).length > 0 ? labelOpts : undefined
+        Object.keys(labelOpts).length > 0
+          ? resolveHeldNodes(Frontend.LABEL_OPTIONS, labelOpts, resolveToken)
+          : undefined
       );
     }
   }
@@ -652,7 +666,9 @@ function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
       const { accessor, ...labelOpts } = labelObj;
       mark = (mark as any).label(
         accessor,
-        Object.keys(labelOpts).length > 0 ? labelOpts : undefined
+        Object.keys(labelOpts).length > 0
+          ? resolveHeldNodes(Frontend.LABEL_OPTIONS, labelOpts, resolveToken)
+          : undefined
       );
     }
   }
@@ -712,7 +728,7 @@ function dataFromIR(data: Frontend.DataIR, ctx: IRContext): unknown {
 function chartFromIR(chartSpec: ChartSpec, ctx: IRContext): ChartBuilder<any> {
   const operators: Operator<any, any>[] = [];
   for (const opSpec of (chartSpec.operators ?? []) as OperatorSpec[]) {
-    const op = mapOperator(opSpec, ctx.bridge);
+    const op = mapOperator(opSpec, ctx.bridge, ctx.resolveToken);
     if (op) operators.push(op);
   }
   const mark = mapMark(chartSpec.mark, ctx);

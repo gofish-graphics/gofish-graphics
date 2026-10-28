@@ -14,7 +14,7 @@
  * bigint Int64, and a ref (`Serialize.BridgeRef`, in a bridge call) the
  * extension type `gofish.ref` (see `inferField`). A number's type comes
  * from its column's declared type, never from its values: a column typed
- * `HasCalendar` is a millisecond timestamp in its zone, a column typed `HasInteger` (it arrived as integers) is
+ * in a unit read on a calendar (`Unit.time({ zone })`) is a millisecond timestamp in its zone, a column typed `HasInteger` (it arrived as integers) is
  * Int64, and any other number column is Float64, because JS has one number
  * type. A JS `Date` is an instant: a millisecond timestamp in its column's
  * zone, or UTC. The declared types are the ones the list carries
@@ -128,7 +128,7 @@ function inferType(
     case "string":
       return new Arrow.Utf8();
     case "number":
-      if (type?.HasCalendar) return instant(type);
+      if (type?.HasUnit?.zone !== undefined) return instant(type);
       return type?.HasInteger ? new Arrow.Int64() : new Arrow.Float64();
     case "date":
       return instant(type);
@@ -178,9 +178,9 @@ const REF_EXTENSION = new Map([
 ]);
 
 /** An instant's Arrow type: a millisecond timestamp in the zone of its
- *  column's calendar, or UTC. */
+ *  column's unit, or UTC. */
 const instant = (type?: ColumnType): Arrow.DataType =>
-  new Arrow.TimestampMillisecond(type?.HasCalendar?.zone ?? "UTC");
+  new Arrow.TimestampMillisecond(type?.HasUnit?.zone ?? "UTC");
 
 /**
  * Reshape a value to exactly match `type` before handing it to
