@@ -20,7 +20,8 @@ import { layer as Layer } from "../ast/graphicalOperators/layer";
 import { Constraint } from "../ast/constraints";
 import { enclose, line } from "../lib";
 import { ref } from "../ast/shapes/ref";
-import { intersect } from "../ast/graphicalOperators/porterDuff";
+import { intersect, mask } from "../ast/graphicalOperators/porterDuff";
+import { pack } from "../ast/graphicalOperators/pack";
 import { toDisplayList } from "../ast/displayList/toDisplayList";
 
 let passed = 0;
@@ -93,7 +94,9 @@ async function lowerOrder(node: any, m: Record<string, any>): Promise<string> {
   const visit = (item: any): void => {
     const k = byUid.get(item.id);
     if (k !== undefined && !order.includes(k)) order.push(k);
-    for (const c of item.children ?? []) visit(c);
+    // A group's children, and a compositor's operands.
+    for (const key of ["children", "source", "dest", "mask", "content"])
+      for (const c of item[key] ?? []) visit(c);
   };
   items.forEach(visit);
   return order.join(",");
@@ -380,6 +383,30 @@ console.log("# a z constraint between a compositor's operands is an error");
     ]),
     "zAbove(a, b)",
     "composites"
+  );
+}
+
+console.log("# a compositor's operand that only places its children lowers");
+{
+  // A pack has no lowering of its own: its leaves lower where it put them,
+  // so a compositor bakes each operand's subtree (`bakeSubtree`).
+  const A = Rect({ w: 40, h: 40 });
+  const B = Rect({ w: 40, h: 40 });
+  const C = Rect({ x: 0, y: 0, w: 100, h: 40 });
+  await expectLowerOrder(
+    "intersect over a pack operand lowers its leaves",
+    Layer([intersect([pack({}, [A, B]), C])]),
+    { A, B, C },
+    "A,B,C"
+  );
+  const D = Rect({ w: 40, h: 40 });
+  const E = Rect({ w: 40, h: 40 });
+  const F = Rect({ x: 0, y: 0, w: 100, h: 40 });
+  await expectLowerOrder(
+    "mask over a pack operand lowers its leaves",
+    Layer([mask([pack({}, [D, E]), F])]),
+    { D, E, F },
+    "D,E,F"
   );
 }
 

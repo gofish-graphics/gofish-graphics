@@ -216,22 +216,21 @@ export const bake = (root: GoFishAST): DisplayObject[] => {
 };
 
 /**
- * Flatten a node's CHILDREN into absolute-transform `DisplayObject`s at an
- * already-composed `translate`/`scale` — the shared body for a translate-only
- * barrier (a `box`/`layer` coordinate-transform barrier). The boundary lowers each returned entry at its baked absolute transform (via
- * `INTERNAL_lower(coord, d.transform)`) — the same mechanism the root bake
- * uses — so a translate-only boundary
- * needs no per-container `toPixel` closure (#39 stage 6d). z-order is
- * resolved identically to {@link bake} via the shared
- * {@link orderChildrenForPaint}.
+ * Flatten one subtree, `child` and what it holds, into absolute-transform
+ * `DisplayObject`s at an already-composed `translate`/`scale`: `child` itself
+ * when it lowers on its own, else its leaves (and boundaries) where it put
+ * them, in paint order ({@link orderChildrenForPaint}). The caller lowers each
+ * entry at its baked absolute transform (`INTERNAL_lower(coord,
+ * d.transform)`), the mechanism the root bake uses, so a node that only
+ * places its children (a `pack`, a `treemap`) needs no lowering of its own. A
+ * compositor bakes each operand this way (`porterDuff.tsx`).
  */
-export const bakeChildren = (
-  node: GoFishAST,
+export const bakeSubtree = (
+  child: GoFishAST,
   translate: [number, number] = [0, 0],
   scale: [number, number] = [1, 1]
 ): DisplayObject[] => {
   const items: DisplayObject[] = [];
-
   const walkNode = (
     n: GoFishAST,
     transform: [number, number],
@@ -255,21 +254,34 @@ export const bakeChildren = (
       return;
     }
 
-    for (const child of orderChildrenForPaint(n)) {
-      walkNode(child, composedTranslate, composedScale);
+    for (const c of orderChildrenForPaint(n)) {
+      walkNode(c, composedTranslate, composedScale);
     }
   };
-
-  // Always descend into `node`'s CHILDREN, never `node` itself — `node` here is
-  // the boundary/barrier (a `box`/`layer` type in `BAKE_BOUNDARY_TYPES`), which
-  // `isTransparent` correctly reports as opaque; walking it through `walkNode`
-  // directly would re-emit `node` as its own leaf DisplayObject and infinitely
-  // recurse when the caller lowers that entry (its `lower` body calls
-  // `bakeChildren(node, ...)` again). Iterating `node`'s children up front,
-  // exactly like the root `bake`'s own top-level fold, is what makes this a
-  // CHILDREN flatten rather than a whole-subtree one.
-  for (const child of orderChildrenForPaint(node)) {
-    walkNode(child, translate, scale);
-  }
+  walkNode(child, translate, scale);
   return items;
 };
+
+/**
+ * Flatten a node's CHILDREN into absolute-transform `DisplayObject`s at an
+ * already-composed `translate`/`scale`, each child's subtree through
+ * {@link bakeSubtree}, in paint order: the shared body for a translate-only
+ * barrier (a `box`/`layer` coordinate-transform barrier, and the boundaries
+ * that lower through `lowerChildrenOffset`), so a translate-only boundary
+ * needs no per-container `toPixel` closure (#39 stage 6d). z-order is
+ * resolved identically to {@link bake} via the shared
+ * {@link orderChildrenForPaint}.
+ *
+ * It descends into `node`'s CHILDREN, never `node` itself: `node` is the
+ * boundary, which `isTransparent` reports as opaque, so baking it as a
+ * subtree would re-emit `node` as its own entry and recurse forever when the
+ * caller lowers that entry.
+ */
+export const bakeChildren = (
+  node: GoFishAST,
+  translate: [number, number] = [0, 0],
+  scale: [number, number] = [1, 1]
+): DisplayObject[] =>
+  orderChildrenForPaint(node).flatMap((child) =>
+    bakeSubtree(child, translate, scale)
+  );

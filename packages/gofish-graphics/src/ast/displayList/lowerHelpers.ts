@@ -10,6 +10,7 @@
 
 import type { DisplayList } from "gofish-ir";
 import type { GoFishNode, ToPixel } from "../_node";
+import type { GoFishAST } from "../_ast";
 import type { CoordinateTransform } from "../coordinateTransforms/coord";
 import { displayTranslate, type Transform } from "../dims";
 import {
@@ -19,7 +20,7 @@ import {
   type Point,
   pathToSVGPath,
 } from "../../path";
-import { bakeChildren } from "../coordinateTransforms/bake";
+import { bakeChildren, bakeSubtree } from "../coordinateTransforms/bake";
 
 /**
  * The display-list `role` of a lowered item, derived from whether it is
@@ -186,3 +187,17 @@ export const lowerChildrenOffset = (
     d.node.INTERNAL_lower(coordinateTransform, d.transform)
   );
 };
+
+/** Lower one subtree, `child` and what it holds, at `translate`: flattened
+ *  by `bakeSubtree`, each entry lowered at its baked absolute transform
+ *  under the session's `toPixel`. A compositor lowers each of its operands
+ *  this way, so an operand that only places its children (a `pack`) needs
+ *  no lowering of its own. */
+export const lowerSubtree = (
+  child: GoFishAST,
+  translate: [number, number],
+  coordinateTransform: CoordinateTransform | undefined
+): DisplayList.DisplayItem[] =>
+  bakeSubtree(child, translate).flatMap((d) =>
+    d.node.INTERNAL_lower(coordinateTransform, d.transform)
+  );
