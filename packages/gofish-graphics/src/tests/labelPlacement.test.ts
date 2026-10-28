@@ -28,6 +28,7 @@ import {
 import { pointInRing } from "../ast/geometry/plane";
 import { boxOutline } from "../ast/geometry";
 import { autoLabelColorForFill } from "../ast/labels/autoLabelColor";
+import { apcaContrast, paintedRgb, parse } from "../colorModes";
 import {
   arrow,
   chart,
@@ -634,6 +635,23 @@ console.log("# the auto color reads where the label landed");
     inside.style.fill === autoLabelColorForFill(fill, true),
     inside.style.fill
   );
+}
+
+console.log("# the inside color takes the larger APCA contrast");
+{
+  const rgb = (hex: string) => paintedRgb(parse(hex)!);
+  const green = rgb("#59a14f");
+  const white = apcaContrast(rgb("#ffffff"), green);
+  const black = apcaContrast(rgb("#000000"), green);
+  ok("white on Tableau green is Lc -64.0", Math.abs(white + 64.0) < 0.05, white);
+  ok("black on Tableau green is Lc 45.5", Math.abs(black - 45.5) < 0.05, black);
+  ok(
+    "Tableau green gets white text",
+    autoLabelColorForFill("#59a14f", true) === "white",
+    autoLabelColorForFill("#59a14f", true)
+  );
+  const yellow = autoLabelColorForFill("#edc948", true);
+  ok("Tableau yellow gets the dark tint", yellow !== "white", yellow);
 }
 
 console.log("# unfilled regions");

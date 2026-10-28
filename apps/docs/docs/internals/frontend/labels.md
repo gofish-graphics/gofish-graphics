@@ -343,10 +343,15 @@ landed: its center is inside one of its target's filled closed outlines.
 Inside an unfilled one the page shows through, so it counts as outside. So a
 `"center"` label on a C-shaped polygon, whose box center falls in the C's
 opening, is colored for the page, and a `Place.interior()` label for the
-fill. Inside the shape, the fill's LUV
-lightness picks white text on a dark fill or a near-black tint of the fill's own
-hue (CIE LCh, D65) on a light one; a gray fill has no hue, so it gets a
-near-black neutral instead. Outside the shape, the label is a darkened tint of
+fill. Inside the shape, the label is either white or a near-black tint of the
+fill's own hue (CIE LCh, D65); a gray fill has no hue, so its tint is a
+near-black neutral. Of the two, the label takes the one with the larger APCA
+contrast against the fill (`apcaContrast` in `colorModes.ts`, APCA-W3 0.0.98G,
+the WCAG 3 candidate), measured on the tint as painted, and a tie goes to the
+tint. APCA rather than a lightness cutoff or a WCAG 2 ratio because mid-tone
+fills are where the two candidates are close, and there APCA tracks
+readability better: Tableau green `#59a14f` scores Lc 64 with white text and
+45 with black, while WCAG 2 would pick black. Outside the shape, the label is a darkened tint of
 the fill's hue and chroma at a fixed lightness (a readable color on the white
 page background, distinct from but related to the shape it labels). A target
 with no resolvable fill, or a fill that is not a parseable color (`none`,

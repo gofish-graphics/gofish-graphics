@@ -2,13 +2,24 @@
 // @wiki Labels — /internals/frontend/labels
 // </gofish-wiki>
 
-import { formatHex, paintedRgb, parse, toLch65, toLuv } from "../../colorModes";
+import {
+  apcaContrast,
+  formatHex,
+  paintedRgb,
+  parse,
+  toLch65,
+  type Color,
+  type Rgb,
+} from "../../colorModes";
+
+const WHITE: Rgb = { mode: "rgb", r: 1, g: 1, b: 1 };
 
 /**
  * Pick a label color for a shape painted with `fill` (a CSS color string).
- * - Inside the shape: contrast against the fill. A dark fill (CIELUV lightness
- *   below 60) gets white text; a light fill gets a near-black tint of its own
- *   hue, or a near-black neutral when the fill is a gray with no hue.
+ * - Inside the shape: contrast against the fill. The label is white or a
+ *   near-black tint of the fill's own hue (a near-black neutral when the fill
+ *   is a gray with no hue), whichever has the larger APCA contrast |Lc|
+ *   against the fill. A tie goes to the dark tint.
  * - Outside the shape: darken the fill to a fixed lightness, keeping its hue
  *   and chroma, for a readable tint on a white background.
  *
@@ -28,8 +39,15 @@ export function autoLabelColorForFill(
   const { c, h } = toLch65(painted);
 
   if (isInside) {
-    if (toLuv(painted).l < 60) return "white";
-    return formatHex({ mode: "lch65", l: 8, c: h === undefined ? 0 : 18, h });
+    const dark: Color = {
+      mode: "lch65",
+      l: 8,
+      c: h === undefined ? 0 : 18,
+      h,
+    };
+    const darkLc = apcaContrast(paintedRgb(dark), painted);
+    const whiteLc = apcaContrast(WHITE, painted);
+    return Math.abs(whiteLc) > Math.abs(darkLc) ? "white" : formatHex(dark);
   }
   return formatHex({ mode: "lch65", l: 30, c, h });
 }

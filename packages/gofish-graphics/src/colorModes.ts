@@ -54,3 +54,27 @@ export function paintedRgb(color: Color): Rgb {
     b: to8Bit(b) / 255,
   };
 }
+
+/** An sRGB color's screen luminance, soft-clamped near black (APCA-W3). */
+function apcaLuminance({ r, g, b }: Rgb): number {
+  const y = 0.2126729 * r ** 2.4 + 0.7151522 * g ** 2.4 + 0.072175 * b ** 2.4;
+  return y > 0.022 ? y : y + (0.022 - y) ** 1.414;
+}
+
+/**
+ * The APCA lightness contrast Lc of `text` on `background` (APCA-W3 0.0.98G,
+ * the WCAG 3 candidate), roughly -108 to 106. Positive Lc is dark text on a
+ * light background, negative Lc is light text on a dark one; |Lc| measures
+ * readability. Contrast below |Lc| 10 reads as 0.
+ */
+export function apcaContrast(text: Rgb, background: Rgb): number {
+  const t = apcaLuminance(text);
+  const bg = apcaLuminance(background);
+  if (Math.abs(bg - t) < 0.0005) return 0;
+  if (bg > t) {
+    const s = (bg ** 0.56 - t ** 0.57) * 1.14;
+    return s < 0.1 ? 0 : (s - 0.027) * 100;
+  }
+  const s = (bg ** 0.65 - t ** 0.62) * 1.14;
+  return s > -0.1 ? 0 : (s + 0.027) * 100;
+}
