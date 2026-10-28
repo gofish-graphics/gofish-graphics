@@ -117,32 +117,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      # The baselines are pulled into __snapshots__/ by compare.ts (PRs) and
+      # update-baselines.ts (main push), through pullSnapshots in
+      # tests/scripts/snapshot-branch.ts, which holds the rule for which
+      # baselines a branch gets. The LFS filters must be installed first so
+      # that its checkout downloads the PNGs.
       - name: Setup Git LFS
         run: git lfs install
-
-      - name: Fetch snapshot baselines
-        run: |
-          SNAP_BRANCH="snapshots/${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
-          FOUND=""
-          if git ls-remote --exit-code origin "$SNAP_BRANCH" 2>/dev/null; then
-            FOUND="$SNAP_BRANCH"
-          elif git ls-remote --exit-code origin "snapshots/main" 2>/dev/null; then
-            FOUND="snapshots/main"
-          fi
-          mkdir -p __snapshots__/dom __snapshots__/screenshots
-          if [ -n "$FOUND" ]; then
-            git fetch origin "$FOUND"
-            FETCH_SHA=$(git rev-parse FETCH_HEAD)
-            git worktree add --detach /tmp/snap-baselines "$FETCH_SHA"
-            cd /tmp/snap-baselines && git lfs pull && cd -
-            # Copy SRC contents (SRC/.) into existing DEST so a pre-existing
-            # __snapshots__/dom doesn't end up nested as __snapshots__/dom/dom.
-            [ -d /tmp/snap-baselines/dom ] && cp -r /tmp/snap-baselines/dom/. __snapshots__/dom/
-            [ -d /tmp/snap-baselines/screenshots ] && cp -r /tmp/snap-baselines/screenshots/. __snapshots__/screenshots/
-            git worktree remove --force /tmp/snap-baselines
-          else
-            echo "No snapshot branch found; starting with empty baselines."
-          fi
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6

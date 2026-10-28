@@ -24,7 +24,7 @@ import { computePixelDiff, type PixelDiffResult } from "./pixel-diff.js";
 import {
   getSnapshotBranchName,
   pullSnapshots,
-  commitAndPushSnapshots,
+  commitToSnapshotBranch,
 } from "./snapshot-branch.js";
 
 const PORT = 3005;
@@ -232,11 +232,23 @@ function handleCommitToBranch(res: ServerResponse): void {
     return;
   }
   try {
+    // Commit only the accepted stories, on top of the branch's baselines as
+    // origin has them now: replacing the whole tree with the local cache
+    // would record every baseline as changed on the branch.
     const snapBranch = getSnapshotBranchName();
-    commitAndPushSnapshots(
+    commitToSnapshotBranch(
       snapBranch,
-      join(ROOT, "__snapshots__"),
-      `Accept ${accepted.length} visual diff(s)`
+      `Accept ${accepted.length} visual diff(s)`,
+      (checkoutDir) => {
+        for (const entry of accepted) {
+          if (entry.kind === "removed") {
+            removeBaselineStory(entry.path, checkoutDir);
+          } else {
+            acceptStory(entry.path, { baselineDir: checkoutDir });
+          }
+        }
+      },
+      { retryOnMovedBranch: true }
     );
     respondJson(res, {
       ok: true,

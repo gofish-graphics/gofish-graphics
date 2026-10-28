@@ -17,6 +17,7 @@ import {
 import {
   getSnapshotBranchName,
   commitAndPushSnapshots,
+  pullSnapshots,
 } from "./snapshot-branch.js";
 
 /** Recursively list files under a directory. */
@@ -68,6 +69,9 @@ function main() {
     console.error("No JS snapshots found in tmp/js/. Run capture first.");
     process.exit(1);
   }
+
+  // Start from the current baselines, so the pruning below sees them.
+  pullSnapshots(getSnapshotBranchName(), join(ROOT, "__snapshots__"));
 
   const files = listFiles(JS_DIR);
   let count = 0;
