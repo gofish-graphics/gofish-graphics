@@ -40,7 +40,7 @@ The two consumers that solve σ read each kind like this:
 | `POSITION`   | `width(domain) · σ`           | `size / width(domain)`               |
 | `DIFFERENCE` | `width · σ`                   | `size / width`                       |
 
-A [`Monotonic`](/internals/core/monotonic) `linear(slope, intercept)` has
+A [`Monotonic`](/internals/core/pwl) `linear(slope, intercept)` has
 `run(σ) = slope·σ + intercept` and `inverse(y) = (y − intercept)/slope`. So a
 `POSITION([a,b])` is `linear(b−a, 0)` and a `DIFFERENCE(w)` is `linear(w, 0)` —
 substitute and both rows reproduce exactly. **All three are the same Monotonic

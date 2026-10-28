@@ -53,7 +53,7 @@ each of its two axes (x and y):
   for a continuous axis the data interval it covers. A type says what the
   axis _means_. It has no σ in it.
 - its **size claim** (an `Extent`): how much room the node's content needs
-  on that axis, as Monotonic functions of the scale factor σ. A claim says
+  on that axis, as piecewise-linear functions of the scale factor σ. A claim says
   how big the content _is_.
 
 The types form an intermediate representation called the **underlying space
@@ -139,7 +139,7 @@ different stage of the pipeline:
   a **derived read**, never stored state.
 
 A false friend to never conflate with that intercept: a claim's `width`
-Monotonic carries its _own_ intercept — the σ-independent pixel part of an _extent_
+value carries its _own_ intercept — the σ-independent pixel part of an _extent_
 (spacing, fixed chrome), the intercept of the size-vs-σ line `size = slope·σ +
 intercept`. That is an intercept of the size equation, not of the data→screen
 map; the two never mean the same thing.
@@ -294,7 +294,7 @@ spacing read as if it were data.
 **Ascent and descent (#773).** An extent is measured from its data 0 on both
 sides, like a font's ascent and descent. In the type the two sides are the two
 ends of the interval: the ascent is `max` and the descent is `−min`. In the
-claim they are two Monotonics. A rect of value 30 has data ascent 30 and
+claim they are two values in σ. A rect of value 30 has data ascent 30 and
 claims ascent `30σ`; a rect of value −20 has data descent 20 and claims
 descent `20σ` (a rect length is signed, while a text, image, or treemap size
 is a nonnegative magnitude). Most extents sit wholly above their data 0 and
@@ -615,7 +615,7 @@ types: a pinned overlay's claim is the width of the union of its children's
 spans, and where a pinned child sits in that union is a type fact. So the
 claim walk runs second and reads the types, and the type walk never sees a
 claim. The direction is enforced, not just followed. `UnderlyingSpace` holds
-no Monotonic and `underlyingSpace.ts` does not import `extent.ts`, the type
+no claim value and `underlyingSpace.ts` does not import `extent.ts`, the type
 hook's arguments carry no claim, and `resolveExtent()` throws if it is called
 while a type hook is running. One walk returning a pair would have let a type
 fold reach into the claim half next to it, which is exactly the coupling the
@@ -688,7 +688,7 @@ composes its targets' spaces into the layer's claim on that axis:
   padding). Only the **inside-out** direction folds here: outer's type is
   inner's type, whatever its origin (padding is pixels, so it is no part of
   the type), and outer's claim is inner's padded on both sides of its
-  baseline, a `Monotonic.adds`, which stays monotone
+  baseline, a `Pwl.addConstant`, which stays exact
   (hence invertible), so a nested pair participates in auto-fit exactly like a
   stack — a parent spread/layer solving a scale factor sees outer as inner
   shifted up by the constant padding. The layer derives these outer spaces in dependency order
@@ -871,7 +871,7 @@ back over the rows before them, as a ridgeline's do (k in chain order, the
 binding row being whichever peak clears the rows chained above it; usually
 the first row). A `"middle"` row
 taller than both end rows binds too, and a `"baseline"` row's descent counts
-below its anchor. The fold runs in Monotonics, so an all-linear chain's
+below its anchor. The fold runs in values in σ, so an all-linear chain's
 claim is an exact envelope that a scope inverts exactly (before, a pitched
 chain's claim was a closure, solved by a numeric search that could overshoot
 its box by a fraction of a pixel). The fold's child order is the chain order
@@ -926,8 +926,8 @@ Grid is a **track equation** under the same unified sizing rule, not a separate
 layout regime (Stage 6e). Per axis, `resolveGridTracks` sets
 
 ```
-track claim = Monotonic.max(claims of the cells in that track)      (max, +)
-grid claim  = Monotonic.add(track claims) + gaps                    (the σ-frame)
+track claim = Pwl.max(claims of the cells in that track)      (max, +)
+grid claim  = Pwl.add(track claims) + gaps                    (the σ-frame)
 ```
 
 A claim-less ("fill") cell contributes nothing, so an all-fill grid has no track
@@ -1177,7 +1177,7 @@ the one its type implies.
 **Compositional operators** (`spread`, `stack`, `layer`, `enclose`)
 combine children's spaces. `spread({ glue: false })` keeps the magnitude
 along the stack direction so a parent can solve for shared scale factors
-via `Monotonic.inverse`. `spread({ glue: true })` (i.e. `stack`) lays
+via `Pwl.solve`. `spread({ glue: true })` (i.e. `stack`) lays
 children's extents end to end into a `POSITION` over their running sums
 (`[0, sum]` for positive parts) — the operator commits the data-driven
 magnitudes to an anchored axis. Since the operator/constraint
@@ -1191,7 +1191,7 @@ overlay fold: the union of the children's seated intervals (each on its
 baseline for an overlay), with the result's origin pinned when any child is,
 free when every child is, and none otherwise; its claim half,
 `unionChildExtents`, overlays the claims the same way, keeping the symbolic
-Monotonics (the per-side max of the ascent and descent claims) for a free
+values in σ (the per-side max of the ascent and descent claims) for a free
 result. UNDEFINED children carry no opinion and are ignored throughout, so a
 fixed-pixel (UNDEFINED) sibling never vetoes the magnitude-preserving path.
 
@@ -1290,7 +1290,7 @@ After both walks, layout proceeds on a single principle:
 **a continuous extent's scale factor is its claim's `width.inverse(size)`, and
 a pinned one _also_ builds a position scale** from its type. Before the [#586
 collapse](#the-three-space-kinds) this was a three-way switch on the kind
-(`SIZE` inverted a Monotonic, `POSITION` divided by an interval width,
+(`SIZE` inverted a claim value, `POSITION` divided by an interval width,
 `DIFFERENCE` divided by a width); a pinned or origin-less claim with no pixel
 overhead is just `linear(dataWidth, 0)`, so `width.inverse(size) = size /
 dataWidth` reproduces both divisions, and the switch folds away:
@@ -1357,7 +1357,7 @@ once you know the kind, you know which arithmetic applies.
 ## The one solve site: the σ-scope registry
 
 Every scale above resolves the same frame equation — `content(σ) = allocated`,
-inverted once by `Monotonic.inverse` — and one registry does the inversion. A
+inverted once by `Pwl.solve` — and one registry does the inversion. A
 `ScopeRegistry` (`ast/solver/scopes.ts`), created once per render on the
 `RenderSession`, is the one place σ / posScale is derived: `solveScope(space,
 claim, allocated)` solves a sized node's σ and its `originPx`, and
@@ -1499,7 +1499,7 @@ narrowly construed: a domain (the sibling weights) mapped onto a range (the
 container box) so the pieces sum to the whole.
 
 This is precisely SIZE resolution. A row of `datum(n)`-sized children under a
-shared size scale composes into a Monotonic whose inverse against the
+shared size scale composes into a claim value whose inverse against the
 available extent solves for the scale factor that makes the siblings fill it
 (see [Layout dispatch](#layout-dispatch)). `claim.width.inverse(size)` is
 the normalization step; the `datum(n)` weights are the flex factors. The
@@ -2766,7 +2766,7 @@ display spaces, from before the tree was built, is kept in
 - Overlay union helpers: `src/ast/graphicalOperators/alignment.ts`.
 - Constraint space folds + the shared slice allocator:
   `src/ast/constraints/{distribute,align,folds}.ts`.
-- The Monotonic algebra used by continuous-extent composition: `src/util/monotonic.ts`.
+- The piecewise-linear value algebra used by claim composition: `src/ast/solver/pwl.ts`.
 - Layout consumption: `gofish.tsx`'s `layout()` for root-level dispatch;
   `layer.tsx`'s `layout` for the per-scope scale-factor solve and the
   constraint budget inversion (`spread`/`stack` elaborate to `layer`, so they

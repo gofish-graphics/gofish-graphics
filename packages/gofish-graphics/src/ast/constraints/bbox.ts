@@ -2,7 +2,7 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import * as Monotonic from "../../util/monotonic";
+import * as Pwl from "../solver/pwl";
 
 /**
  * A per-axis linear-system bounding box (#39), modeled on Bluefish's
@@ -37,17 +37,18 @@ import * as Monotonic from "../../util/monotonic";
  *
  * **σ-affine key values** (see
  * apps/docs/docs/internals/design/unified-propagation.md). A key's value
- * is a {@link Monotonic} — `slope·σ + intercept` — not just a number, so the
+ * is a piecewise-linear value in σ (`Pwl.Value`, `slope·σ + intercept` for a
+ * line) — not just a number, so the
  * ledger can hold a claim that still depends on its scope's scale factor σ (a
  * bar's `size = count·σ`) and resolve it once σ is solved. A plain `number` is
  * accepted and coerced to a constant (`slope 0`); {@link read} evaluates at σ
  * (default 0), so a constant reads back as its number. The σ-aware value is
- * {@link readMono}. Equations stay printable via `Monotonic.print`.
+ * {@link readMono}. Equations stay printable via `Pwl.print`.
  */
 export type BBoxKey = "min" | "max" | "center" | "size";
 
 /** A box-key value: a σ-affine claim, or a plain number (a constant claim). */
-export type BBoxValue = number | Monotonic.Monotonic;
+export type BBoxValue = number | Pwl.Value;
 
 const COEFFS: Record<BBoxKey, [number, number]> = {
   min: [1, 0],
@@ -56,18 +57,15 @@ const COEFFS: Record<BBoxKey, [number, number]> = {
   size: [0, 1],
 };
 
-/** Coerce a number to a constant Monotonic; pass a Monotonic through. */
-const asMono = (v: BBoxValue): Monotonic.Monotonic =>
-  typeof v === "number" ? Monotonic.linear(0, v) : v;
+/** Coerce a number to a constant value; pass a value through. */
+const asMono = (v: BBoxValue): Pwl.Value =>
+  typeof v === "number" ? Pwl.affine(0, v) : v;
 
-/** Equality of two σ-affine claims. Linear claims are pinned exactly by two
+/** Equality of two σ-affine claims. Lines are pinned exactly by two
  *  probes; piecewise claims (a grid's `max`-composed track claims) are
- *  compared structurally at every breakpoint. See `Monotonic.approxEqual`. */
-const monoEqual = (
-  a: Monotonic.Monotonic,
-  b: Monotonic.Monotonic,
-  tolerance: number
-): boolean => Monotonic.approxEqual(a, b, tolerance);
+ *  compared at every breakpoint. See `Pwl.approxEqual`. */
+const monoEqual = (a: Pwl.Value, b: Pwl.Value, tolerance: number): boolean =>
+  Pwl.approxEqual(a, b, tolerance);
 
 export interface BBoxConflict {
   key: BBoxKey;
@@ -81,12 +79,12 @@ export interface BBoxConflict {
 
 interface Equation {
   key: BBoxKey;
-  value: Monotonic.Monotonic;
+  value: Pwl.Value;
   owner: string | undefined;
 }
 
 /** Solved unknowns `[min, size]` (σ-affine), or undefined when rank < 2. */
-type Solution = [Monotonic.Monotonic, Monotonic.Monotonic] | undefined;
+type Solution = [Pwl.Value, Pwl.Value] | undefined;
 
 export class BBox {
   /** Independent equations retained (at most 2 drive the solve). */
@@ -114,8 +112,8 @@ export class BBox {
       if (!monoEqual(implied, mono, tolerance)) {
         return {
           key,
-          asserted: mono.run(0),
-          implied: implied.run(0),
+          asserted: Pwl.at(mono, 0),
+          implied: Pwl.at(implied, 0),
           owner,
           priorOwner: this.eqs[0]?.owner,
         };
@@ -129,8 +127,8 @@ export class BBox {
       if (!monoEqual(existing.value, mono, tolerance)) {
         return {
           key,
-          asserted: mono.run(0),
-          implied: existing.value.run(0),
+          asserted: Pwl.at(mono, 0),
+          implied: Pwl.at(existing.value, 0),
           owner,
           priorOwner: existing.owner,
         };
@@ -150,14 +148,14 @@ export class BBox {
     const [b0, b1] = COEFFS[b.key];
     const det = a0 * b1 - a1 * b0;
     if (Math.abs(det) < 1e-12) return; // dependent (shouldn't happen for distinct keys)
-    // min  = (a·b1 − b·a1) / det,  size = (a0·b − b0·a) / det — as Monotonics.
-    const min = Monotonic.add(
-      Monotonic.smul(b1 / det, a.value),
-      Monotonic.smul(-a1 / det, b.value)
+    // min  = (a·b1 − b·a1) / det,  size = (a0·b − b0·a) / det — as values in σ.
+    const min = Pwl.add(
+      Pwl.scale(b1 / det, a.value),
+      Pwl.scale(-a1 / det, b.value)
     );
-    const size = Monotonic.add(
-      Monotonic.smul(a0 / det, b.value),
-      Monotonic.smul(-b0 / det, a.value)
+    const size = Pwl.add(
+      Pwl.scale(a0 / det, b.value),
+      Pwl.scale(-b0 / det, a.value)
     );
     this.solution = [min, size];
   }
@@ -169,11 +167,11 @@ export class BBox {
 
   /** Read a box key as a σ-affine claim: from the solve when determined, else
    *  from a direct pin, else undefined (under-determined). */
-  readMono(key: BBoxKey): Monotonic.Monotonic | undefined {
+  readMono(key: BBoxKey): Pwl.Value | undefined {
     if (this.solution !== undefined) {
       const [min, size] = this.solution;
       const [c0, c1] = COEFFS[key];
-      return Monotonic.add(Monotonic.smul(c0, min), Monotonic.smul(c1, size));
+      return Pwl.add(Pwl.scale(c0, min), Pwl.scale(c1, size));
     }
     return this.eqs.find((e) => e.key === key)?.value;
   }
@@ -182,6 +180,7 @@ export class BBox {
    *  (all-numeric) key reads back as its number — the path every caller uses
    *  today. */
   read(key: BBoxKey, sigma = 0): number | undefined {
-    return this.readMono(key)?.run(sigma);
+    const value = this.readMono(key);
+    return value === undefined ? undefined : Pwl.at(value, sigma);
   }
 }

@@ -10,7 +10,7 @@
  */
 
 import { BBox } from "../ast/constraints/bbox";
-import * as Monotonic from "../util/monotonic";
+import * as Pwl from "../ast/solver/pwl";
 import { localAnchorPoint } from "../ast/dims";
 
 let passed = 0;
@@ -129,11 +129,11 @@ console.log("# bbox: σ-affine (Monotonic) keys");
   // A σ-valued size + a numeric min → max = min + count·σ (a bar's edge).
   const b = new BBox();
   b.add("min", 100); // a pinned pixel position (constant)
-  b.add("size", Monotonic.linear(10, 0)); // 10·σ
+  b.add("size", Pwl.affine(10, 0)); // 10·σ
   const max = b.readMono("max");
   ok(
     "numeric min + σ size ⇒ σ-affine max",
-    max !== undefined && near(max.run(0), 100) && near(max.run(1), 110)
+    max !== undefined && near(Pwl.at(max, 0), 100) && near(Pwl.at(max, 1), 110)
   );
   // read() evaluates at σ: at σ=2 the box top is 100 + 10·2 = 120.
   ok("read(max, σ=2) evaluates", near(b.read("max", 2), 120));
@@ -144,12 +144,12 @@ console.log("# bbox: σ-affine (Monotonic) keys");
   // A consistent σ-valued 3rd key is absorbed; a contradicting one conflicts.
   const b = new BBox();
   b.add("min", 0);
-  b.add("max", Monotonic.linear(10, 0)); // size now implied = 10σ
+  b.add("max", Pwl.affine(10, 0)); // size now implied = 10σ
   ok(
     "consistent σ 3rd key absorbed",
-    b.add("size", Monotonic.linear(10, 0)) === undefined
+    b.add("size", Pwl.affine(10, 0)) === undefined
   );
-  const c = b.add("size", Monotonic.linear(20, 0)); // 20σ ≠ 10σ
+  const c = b.add("size", Pwl.affine(20, 0)); // 20σ ≠ 10σ
   ok(
     "contradicting σ key reports conflict",
     c !== undefined && c.key === "size"

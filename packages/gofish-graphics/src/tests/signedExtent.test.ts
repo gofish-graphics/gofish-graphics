@@ -28,7 +28,7 @@ import { anchorExpr, relationFact } from "../ast/constraints/placementFacts";
 import { ref } from "../ast/shapes/ref";
 import { createName } from "../ast/createName";
 import { GoFishRef } from "../ast/_ref";
-import * as M from "../util/monotonic";
+import * as Pwl from "../ast/solver/pwl";
 import { interval } from "../util/interval";
 
 const { chart, scatter, stack, spread, rect } = GoFish as any;
@@ -103,16 +103,16 @@ async function main() {
         JSON.stringify((inner as CONTINUOUS_TYPE).dataInterval)
     );
     const claim = nestedExtent(
-      Extent(M.ZERO),
+      Extent(Pwl.ZERO),
       inner,
-      Extent(M.linear(10, 0), M.linear(4, 0)),
+      Extent(Pwl.affine(10, 0), Pwl.affine(4, 0)),
       2
     )!;
     check(
       "claim: ascent + padding and descent + padding",
-      claim.ascent.run(1) === 12 && claim.descent.run(1) === 6
+      Pwl.at(claim.ascent, 1) === 12 && Pwl.at(claim.descent, 1) === 6
     );
-    check("claim width is inner width + 2·padding", claim.width.run(1) === 18);
+    check("claim width is inner width + 2·padding", Pwl.at(claim.width, 1) === 18);
   }
 
   console.log("\n# a chain seats only the baselines it leaves free");

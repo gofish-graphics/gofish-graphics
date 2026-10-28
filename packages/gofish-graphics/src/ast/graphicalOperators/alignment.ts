@@ -23,7 +23,7 @@ import {
 } from "../underlyingSpace";
 import { unionInOrder } from "../measure";
 import { Extent, hullExtent } from "../extent";
-import * as Monotonic from "../../util/monotonic";
+import * as Pwl from "../solver/pwl";
 import type { Size } from "../dims";
 import * as Interval from "../../util/interval";
 
@@ -239,14 +239,14 @@ function overlayClaim(
       .filter((e): e is Extent => e !== undefined);
     return boxes.length === 0 ? undefined : hullExtent(...boxes);
   }
-  const above: Monotonic.Monotonic[] = [];
-  const below: Monotonic.Monotonic[] = [];
+  const above: Pwl.Value[] = [];
+  const below: Pwl.Value[] = [];
   for (const c of children) {
     const { space: s, extent } = c;
     if (extent === undefined) continue;
     if (isCONTINUOUS(s) && !atOwnData(s, seat)) {
       above.push(extent.width);
-      below.push(Monotonic.ZERO);
+      below.push(Pwl.ZERO);
       continue;
     }
     // A child at its own data reaches its own ascent above the shared 0
@@ -258,7 +258,7 @@ function overlayClaim(
     below.push(r.descent);
   }
   if (plots && above.length === 0) return undefined;
-  return Extent(Monotonic.envelope(above), Monotonic.envelope(below));
+  return Extent(Pwl.envelope(above), Pwl.envelope(below));
 }
 
 /** The size claim of a {@link unionChildSpaces} overlay, given the overlay's

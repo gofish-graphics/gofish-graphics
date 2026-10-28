@@ -9,7 +9,7 @@
  * These are analytic ground truths (the geometry a bar/stack/scatter must have);
  * Phase 2 adds the live cross-story shadow assertion against the real engine.
  */
-import * as M from "../util/monotonic";
+import * as Pwl from "../ast/solver/pwl";
 import { SolverBox, AxisScope } from "../ast/solver";
 
 let passed = 0;
@@ -26,7 +26,7 @@ function ok(name: string, cond: boolean, detail?: string): void {
 const near = (a: number | undefined, b: number) =>
   a !== undefined && Math.abs(a - b) < 1e-9;
 /** size = magnitude·σ (a data-driven extent). */
-const dataSize = (magnitude: number) => M.linear(magnitude, 0);
+const dataSize = (magnitude: number) => Pwl.affine(magnitude, 0);
 
 console.log("# solver: SolverBox algebra (unknowns = baseline, size)");
 {
@@ -83,7 +83,7 @@ console.log("# solver: case 2 — stacked bars (origins chain symbolically in σ
   const values = [30, 50, 20];
   // bar0 from 0; each next bar's baseline = previous bar's max — emitted as a
   // σ-affine Monotonic BEFORE σ is known, so the chain stays symbolic.
-  let prevMax: M.Monotonic = M.linear(0, 0);
+  let prevMax: Pwl.Value = Pwl.affine(0, 0);
   values.forEach((v, i) => {
     const id = `bar${i}`;
     s.box(id).add("baseline", prevMax);
@@ -103,7 +103,7 @@ console.log("# solver: case 3 — grouped bars (one shared σ across sub-structu
   const s = new AxisScope();
   const groups = { A: [30, 50], B: [40, 20] };
   for (const [g, values] of Object.entries(groups)) {
-    let prevMax: M.Monotonic = M.linear(0, 0);
+    let prevMax: Pwl.Value = Pwl.affine(0, 0);
     values.forEach((v, i) => {
       const id = `${g}${i}`;
       s.box(id).add("baseline", prevMax);
@@ -148,7 +148,7 @@ console.log("# solver: case 5 — POSITION scatter (origin=intercept, σ=range/d
   // domain [0,100] → screen [0,200]: σ=2, data-0 maps to screen 0 (intercept 0).
   s.resolveSigma(dataSize(100), 200);
   for (const d of [10, 50, 90]) {
-    s.box(`p${d}`).add("baseline", M.linear(d, 0)); // position = 0 + σ·d
+    s.box(`p${d}`).add("baseline", Pwl.affine(d, 0)); // position = 0 + σ·d
     s.box(`p${d}`).add("size", 0);
   }
   ok("points map d→σ·d: 10→20, 50→100, 90→180",

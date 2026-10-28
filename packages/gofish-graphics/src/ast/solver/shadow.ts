@@ -16,7 +16,7 @@
  * layer axis (`layer.tsx`), and a coord boundary (`coord.tsx` fitAxis). A clean
  * run means "every covered case agrees", not "everything".
  */
-import * as M from "../../util/monotonic";
+import * as Pwl from "./pwl";
 import type { Placeable } from "../_node";
 import { axisIndex, isPlacedOn, type Axis } from "../constraints/shared";
 import { getValue, isValue, type MaybeValue } from "../data";
@@ -380,7 +380,7 @@ function shadowCheckPosition(
 /**
  * Check the σ-SCOPE solve — the heart of the affine model. A `scaleRoot` (a
  * `shared` layer axis) resolves σ from its box by the frame equation
- * `content(σ) = allocated`: the engine solves it backward (`width.inverse(size)`
+ * `content(σ) = allocated`: the engine solves it backward (`Pwl.solve(width, size)`
  * for every continuous extent; `layer.tsx`). The shadow
  * checks it FORWARD — evaluate the scope's σ-affine content at the engine's
  * solved σ and assert it equals the allocated box. This validates the frame
@@ -397,9 +397,9 @@ export function shadowCheckScaleRoot(
   if (!SOLVER_CHECK || sigma === undefined || !Number.isFinite(allocated))
     return;
   // Every continuous σ-scope closes the same frame equation: the extent at σ is
-  // its claim's `width.run(σ)` (pinned or not — a pinned or difference claim is
-  // just `linear(dataWidth, 0)`, so `run(σ) = dataWidth·σ`).
-  const content = extent?.width.run(sigma);
+  // its claim's width at σ (pinned or not — a pinned or difference claim is
+  // just `affine(dataWidth, 0)`, so its width at σ is `dataWidth·σ`).
+  const content = extent && Pwl.at(extent.width, sigma);
   if (content === undefined) return;
   if (Math.abs(content - allocated) > 1e-6) {
     report(`scaleRoot.frame axis=${axisIdx}`, content, allocated);

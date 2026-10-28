@@ -27,7 +27,7 @@ import {
   yDirection,
   type FramedNode,
 } from "../axisDirection";
-import * as Monotonic from "../../util/monotonic";
+import * as Pwl from "../solver/pwl";
 import * as Interval from "../../util/interval";
 
 export interface DistributeOptions {
@@ -408,11 +408,11 @@ const tailClaim = (space: UnderlyingSpace, extent: Extent): Extent =>
   originIs(space, "free") ? extent : Extent(extent.width);
 
 /** A part's reach on each side of a point on the chain: above it and below
- *  it. Numbers for a data extent, Monotonics for a claim. */
+ *  it. Numbers for a data extent, values in σ for a claim. */
 type Sides<T> = { ascent: T; descent: T };
 
 /** The arithmetic {@link chainFold} runs in: plain numbers (a data extent, or
- *  a claim at one σ) or Monotonics (a claim as a function of σ). */
+ *  a claim at one σ) or values in σ (a claim as a function of σ). */
 type Arith<T> = {
   zero: T;
   /** A σ-independent amount (a spacing, in pixels). */
@@ -434,13 +434,13 @@ const numbers: Arith<number> = {
   negate: (x) => -x,
 };
 
-const monotonics: Arith<Monotonic.Monotonic> = {
-  zero: Monotonic.ZERO,
-  constant: (c) => Monotonic.linear(0, c),
-  add: Monotonic.add,
-  scale: Monotonic.smul,
-  max: Monotonic.envelope,
-  negate: Monotonic.negate,
+const values: Arith<Pwl.Value> = {
+  zero: Pwl.ZERO,
+  constant: (c) => Pwl.affine(0, c),
+  add: Pwl.add,
+  scale: Pwl.scale,
+  max: Pwl.envelope,
+  negate: Pwl.negate,
 };
 
 /** How a chain lays its parts: where each part sits about its chain point
@@ -498,9 +498,9 @@ const spreadRule = (anchor: AlignAnchor | "edge"): ChainRule => ({
  * stack's tail to head, {@link StackOrigin}); omitted, it is the chain's
  * start.
  *
- * It runs in numbers (a data extent, or a claim at one σ) or in Monotonics
- * (a claim as a function of σ, exact and invertible while the parts are
- * linear or piecewise).
+ * It runs in numbers (a data extent, or a claim at one σ) or in values in σ
+ * (a claim as a function of σ, exact and invertible while no part is a
+ * closure).
  *
  * With `reaches`, the chain is laid by every part but reaches only as far
  * as each part's entry, in the part's own frame (undefined: that part
@@ -556,8 +556,8 @@ function seatedReach<T>(
   };
 }
 
-/** {@link chainFold} over claims, as one Extent. With every part linear or
- *  piecewise it is exact; otherwise the fold runs in numbers at each σ, so a
+/** {@link chainFold} over claims, as one Extent. With no part a closure
+ *  it is exact; otherwise the fold runs in numbers at each σ, so a
  *  closure walks the parts once per evaluation. */
 function chainClaim(
   parts: Extent[],
@@ -567,11 +567,10 @@ function chainClaim(
   reaches?: (Extent | undefined)[]
 ): Extent {
   const known = (p: Extent | undefined) =>
-    p === undefined ||
-    (!Monotonic.isUnknown(p.ascent) && !Monotonic.isUnknown(p.descent));
+    p === undefined || (!Pwl.isClosure(p.ascent) && !Pwl.isClosure(p.descent));
   if (parts.every(known) && (reaches === undefined || reaches.every(known))) {
     const { ascent, descent } = chainFold(
-      monotonics,
+      values,
       parts,
       rule,
       spacing,
@@ -584,20 +583,23 @@ function chainClaim(
     chainFold(
       numbers,
       parts.map((p) => ({
-        ascent: p.ascent.run(sigma),
-        descent: p.descent.run(sigma),
+        ascent: Pwl.at(p.ascent, sigma),
+        descent: Pwl.at(p.descent, sigma),
       })),
       rule,
       spacing,
       origin,
       reaches?.map(
         (p) =>
-          p && { ascent: p.ascent.run(sigma), descent: p.descent.run(sigma) }
+          p && {
+            ascent: Pwl.at(p.ascent, sigma),
+            descent: Pwl.at(p.descent, sigma),
+          }
       )
     );
   return Extent(
-    Monotonic.unknown((sigma) => at(sigma).ascent),
-    Monotonic.unknown((sigma) => at(sigma).descent)
+    Pwl.closure((sigma) => at(sigma).ascent),
+    Pwl.closure((sigma) => at(sigma).descent)
   );
 }
 
@@ -609,7 +611,7 @@ function chainClaim(
  *  - a glued stack lays its parts' claims end to end, and a spread chain of
  *    free targets lays their claims with the spacing or pitch added, both by
  *    the one chain fold ({@link chainFold}), so a parent can solve a
- *    scale factor via `Monotonic.inverse` (auto-fit). Its type is ordinal
+ *    scale factor via `Pwl.solve` (auto-fit). Its type is ordinal
  *    (the targets are separate spaces), but its room is still σ-dependent,
  *    so the claim is there for the enclosing scope to solve against.
  *
@@ -644,8 +646,8 @@ export function distributeExtentFold(
       if (r === whole) return parts[i];
       if (r === undefined || parts[i] === whole) return r;
       return Extent(
-        Monotonic.add(whole.descent, r.ascent),
-        Monotonic.add(r.descent, Monotonic.negate(whole.descent))
+        Pwl.add(whole.descent, r.ascent),
+        Pwl.add(r.descent, Pwl.negate(whole.descent))
       );
     });
   if (isCONTINUOUS(space)) {

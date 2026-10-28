@@ -5,7 +5,7 @@
 import type { Placeable } from "../_node";
 import { Extent } from "../extent";
 import type { UnderlyingSpace } from "../underlyingSpace";
-import * as Monotonic from "../../util/monotonic";
+import * as Pwl from "../solver/pwl";
 import { solvePlacementCells } from "./placementSolver";
 import type { PlacementConstraint } from "./placementLowering";
 import { axisIndex, axisName, isPointAlign, type Axis } from "./shared";
@@ -29,7 +29,7 @@ import type { ConstraintSpec } from ".";
  * boxes, so a few solves give each box's edges as an affine form in σ and
  * in the sides of the claims that are not lines in σ (a nested spread's
  * envelope). An edge whose form only adds those sides is exact
- * (`Monotonic.add` keeps envelopes), and the hull is the envelope of the
+ * (`Pwl.add` keeps envelopes), and the hull is the envelope of the
  * edges. An edge that subtracts one (a box centered on a ring inside it) is
  * evaluated at each σ it is read at.
  *
@@ -54,8 +54,8 @@ import type { ConstraintSpec } from ".";
 /** A box's two edges along one axis, `[lo, hi]`, each a function of σ: where
  *  the claim walk knows a node lands in some layer's frame. */
 export type BoxForm = {
-  lo: Monotonic.Monotonic;
-  hi: Monotonic.Monotonic;
+  lo: Pwl.Value;
+  hi: Pwl.Value;
 };
 
 /** Where the claim walk knows a node lands: its box, and its own claim (so
@@ -159,7 +159,7 @@ export const literalSeats = (
 const boxAt = (extent: Extent | undefined, sigma: number): [number, number] =>
   extent === undefined
     ? [0, 0]
-    : [-extent.descent.run(sigma), extent.ascent.run(sigma)];
+    : [-Pwl.at(extent.descent, sigma), Pwl.at(extent.ascent, sigma)];
 
 /**
  * A placeable whose box on `axis` is `[lo, hi]` about its origin, placed at
@@ -240,8 +240,8 @@ export function constrainedOn(
   return out;
 }
 
-const isLinearExtent = (e: Extent): boolean =>
-  Monotonic.isLinear(e.ascent) && Monotonic.isLinear(e.descent);
+const isAffineExtent = (e: Extent): boolean =>
+  Pwl.isAffine(e.ascent) && Pwl.isAffine(e.descent);
 
 /**
  * Where a layer's constraints place its children on `axis`, from their
@@ -391,7 +391,7 @@ export function placeByClaims(
   // sides as a value of its own. Placed operands are read at σ.
   const curved = solved.filter((i) => {
     const e = children[i].extent;
-    return presetOf(i) === undefined && e !== undefined && !isLinearExtent(e);
+    return presetOf(i) === undefined && e !== undefined && !isAffineExtent(e);
   });
   const presets = [
     ...solved.flatMap((i) => presetOf(i) ?? []),
@@ -400,10 +400,7 @@ export function placeByClaims(
   // The affine forms below hold when every placed operand's box is a line
   // in σ; otherwise each σ is solved when read.
   const exact = presets.every(
-    (p) =>
-      Monotonic.isLinear(p.lo) &&
-      Monotonic.isLinear(p.hi) &&
-      isLinearExtent(p.extent)
+    (p) => Pwl.isAffine(p.lo) && Pwl.isAffine(p.hi) && isAffineExtent(p.extent)
   );
   type Box = readonly [number, number];
 
@@ -432,7 +429,7 @@ export function placeByClaims(
       const seat = seats.get(key)?.[axis];
       const preset =
         p !== undefined
-          ? p.lo.run(sigma) - box[0]
+          ? Pwl.at(p.lo, sigma) - box[0]
           : !constrained.has(i) || c.dataPositioned
             ? 0
             : seat !== undefined
@@ -446,7 +443,7 @@ export function placeByClaims(
       const box = boxAt(p.extent, sigma);
       targets.set(
         name,
-        claimPlaceable(axis, box, undefined, p.lo.run(sigma) - box[0])
+        claimPlaceable(axis, box, undefined, Pwl.at(p.lo, sigma) - box[0])
       );
     }
     const map = { sigma, originPx: 0 };
@@ -479,14 +476,14 @@ export function placeByClaims(
 
   // Each edge (0 = lo, 1 = hi) of child `i`, times `sign`, as a function of
   // σ (`sign` −1 reads a low edge as a reach below 0, a descent).
-  let edge: (i: number, end: 0 | 1, sign: 1 | -1) => Monotonic.Monotonic;
+  let edge: (i: number, end: 0 | 1, sign: 1 | -1) => Pwl.Value;
   if (exact) {
     // At σ = 0 with every side 0, then one more solve per variable (σ, and
     // each side of each curved claim), each the change it makes.
     const none = new Map<number, Box>();
     const base = solve(0, none);
-    const variables: { m: Monotonic.Monotonic; boxes: Map<number, Box> }[] = [
-      { m: Monotonic.linear(1, 0), boxes: solve(1, none) },
+    const variables: { m: Pwl.Value; boxes: Map<number, Box> }[] = [
+      { m: Pwl.affine(1, 0), boxes: solve(1, none) },
       ...curved.flatMap((k) => {
         const e = children[k].extent!;
         return [
@@ -506,15 +503,9 @@ export function placeByClaims(
           c: sign * (v.boxes.get(i)![end] - base.get(i)![end]),
         }))
         .filter((t) => Math.abs(t.c) >= 1e-9);
-      // An envelope weighed by a negative number is no envelope (`smul`
-      // keeps one only for a positive weight): read such a form at each σ.
-      if (terms.some((t) => t.c < 0 && !Monotonic.isLinear(t.m)))
-        return Monotonic.unknown(
-          (sigma) => c0 + terms.reduce((a, t) => a + t.c * t.m.run(sigma), 0)
-        );
-      return Monotonic.add(
-        Monotonic.linear(0, c0),
-        ...terms.map((t) => Monotonic.smul(t.c, t.m))
+      return Pwl.add(
+        Pwl.affine(0, c0),
+        ...terms.map((t) => Pwl.scale(t.c, t.m))
       );
     };
   } else {
@@ -529,7 +520,7 @@ export function placeByClaims(
             new Map(
               curved.map((k) => {
                 const e = children[k].extent!;
-                return [k, [e.ascent.run(sigma), e.descent.run(sigma)]];
+                return [k, [Pwl.at(e.ascent, sigma), Pwl.at(e.descent, sigma)]];
               })
             )
           ),
@@ -537,13 +528,13 @@ export function placeByClaims(
       return memo.boxes;
     };
     edge = (i, end, sign) =>
-      Monotonic.unknown((sigma) => sign * at(sigma).get(i)![end]);
+      Pwl.closure((sigma) => sign * at(sigma).get(i)![end]);
   }
 
   // Each edge's form, built once: the boxes and both hulls read the same
   // edges.
-  const forms = new Map<number, Monotonic.Monotonic>();
-  const form = (i: number, end: 0 | 1, sign: 1 | -1): Monotonic.Monotonic => {
+  const forms = new Map<number, Pwl.Value>();
+  const form = (i: number, end: 0 | 1, sign: 1 | -1): Pwl.Value => {
     const key = 4 * i + 2 * end + (sign === 1 ? 1 : 0);
     let f = forms.get(key);
     if (f === undefined) forms.set(key, (f = edge(i, end, sign)));
@@ -561,8 +552,8 @@ export function placeByClaims(
   if (hullOf.length === 0) return { ink, dressing, boxes: boxesOf };
   const hullOver = (is: number[]): Extent =>
     Extent(
-      Monotonic.envelope(is.map((i) => form(i, 1, 1))),
-      Monotonic.envelope(is.map((i) => form(i, 0, -1)))
+      Pwl.envelope(is.map((i) => form(i, 1, 1))),
+      Pwl.envelope(is.map((i) => form(i, 0, -1)))
     );
   const hull = hullOver(hullOf);
   const plotOf = hullOf.filter((i) => !dressing.has(i));

@@ -37,7 +37,7 @@ import {
   type LayoutWarning,
 } from "./layoutWarnings";
 import { axisName } from "./constraints/shared";
-import * as Monotonic from "../util/monotonic";
+import * as Pwl from "./solver/pwl";
 import { room } from "../util";
 import { KeyedDomains } from "./keyedDomains";
 import {
@@ -627,16 +627,17 @@ export async function layout(
     const overfull =
       given[axis] !== undefined &&
       claim !== undefined &&
-      claim.width.run(0) > allocated + 0.5;
+      Pwl.at(claim.width, 0) > allocated + 0.5;
     if (overfull) warnLayout(root, fixedOverflow(root, axis, allocated));
     const fitted =
       overfull || (given[axis] === undefined && keyed !== undefined)
         ? undefined
         : scopes.solveScope(meta, space, claim, allocated);
-    const grows =
-      claim === undefined ? undefined : Monotonic.rising(claim.width);
+    const grows = claim === undefined ? undefined : Pwl.rising(claim.width);
     const below =
-      fitted !== undefined ? undefined : (keyed ?? grows?.inverse(allocated));
+      fitted !== undefined
+        ? undefined
+        : (keyed ?? (grows && Pwl.solve(grows, allocated)));
     const scope =
       below === undefined ? fitted : scopes.scopeAt(meta, space, claim, below);
     // A scope solved against the box fills it (a one-value domain's claim
@@ -647,9 +648,9 @@ export async function layout(
         : scope !== undefined
           ? below === undefined
             ? allocated
-            : claim.width.run(scope.sigma)
-          : Monotonic.isConstant(claim.width)
-            ? claim.width.run(0)
+            : Pwl.at(claim.width, scope.sigma)
+          : Pwl.isConstant(claim.width)
+            ? Pwl.at(claim.width, 0)
             : undefined;
     return {
       scope,

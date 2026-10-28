@@ -28,7 +28,7 @@ import {
   mapsDomain,
   padExtent,
 } from "../extent";
-import * as Monotonic from "../../util/monotonic";
+import * as Pwl from "../solver/pwl";
 import type { KeyedDomains } from "../keyedDomains";
 import { isValue } from "../data";
 import { computeSize, foldFinite } from "../../util";
@@ -124,8 +124,8 @@ const outlined = (
   p === undefined || o === 0
     ? p
     : {
-        lo: Monotonic.adds(p.lo, -o),
-        hi: Monotonic.adds(p.hi, o),
+        lo: Pwl.addConstant(p.lo, -o),
+        hi: Pwl.addConstant(p.hi, o),
         extent: padExtent(p.extent, o),
       };
 
@@ -151,7 +151,7 @@ const plotIn = (
   const [f, p] = [full[1], plot[1]];
   if (f === undefined || p === undefined || f === p) return plot;
   // Reflected about the box `[−d, a]`: x ↦ (a − d) − x.
-  const { add, negate } = Monotonic;
+  const { add, negate } = Pwl;
   const span = add(f.ascent, negate(f.descent));
   return [plot[0], Extent(add(span, p.descent), add(negate(span), p.ascent))];
 };
@@ -812,12 +812,12 @@ export const layer = createNodeOperatorSequential(
               node.yFrame.direction
             );
           const fixedClaim = (axis: 0 | 1, px: number): Extent | undefined => {
-            if (!solvesDomain(axis)) return Extent(Monotonic.linear(0, px));
+            if (!solvesDomain(axis)) return Extent(Pwl.affine(0, px));
             const solved = scopes.fixedSolve(node, axis);
             if (solved === undefined) return resolved[axis];
             const { claim, solution, space } = solved;
-            const ascent = claim.ascent.run(solution.sigma);
-            const descent = claim.descent.run(solution.sigma);
+            const ascent = Pwl.at(claim.ascent, solution.sigma);
+            const descent = Pwl.at(claim.descent, solution.sigma);
             // Where the scope seats its content (`seatInScope`, as `layout`
             // does): by its baseline, the content keeps its split about its
             // data 0, as the node reports its content's type upward and a
@@ -825,11 +825,8 @@ export const layer = createNodeOperatorSequential(
             // its box, the content starts at the start edge, so its claim
             // runs from there.
             return seatInScope(solution, space).seat.anchor === "baseline"
-              ? Extent(
-                  Monotonic.linear(0, ascent),
-                  Monotonic.linear(0, descent)
-                )
-              : Extent(Monotonic.linear(0, ascent + descent));
+              ? Extent(Pwl.affine(0, ascent), Pwl.affine(0, descent))
+              : Extent(Pwl.affine(0, ascent + descent));
           };
           // A literal start places the layer that many pixels from its
           // parent's origin (`translate` in `layout`), so its claim moves
@@ -839,8 +836,8 @@ export const layer = createNodeOperatorSequential(
             return claim === undefined || typeof min !== "number" || min === 0
               ? claim
               : Extent(
-                  Monotonic.adds(claim.ascent, min),
-                  Monotonic.adds(claim.descent, -min)
+                  Pwl.addConstant(claim.ascent, min),
+                  Pwl.addConstant(claim.descent, -min)
                 );
           };
           const claims = ([0, 1] as const).map((axis) => {
@@ -1137,7 +1134,7 @@ export const layer = createNodeOperatorSequential(
                 sigma !== undefined &&
                 Number.isFinite(sigma) &&
                 node.sharesRoom(axis)
-                ? claim.width.run(sigma)
+                ? Pwl.at(claim.width, sigma)
                 : undefined;
             }) as Size<number | undefined>;
             const proposedParts = applyNestLayoutProposal(

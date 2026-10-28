@@ -38,7 +38,7 @@ import { niceToCells, tickPartition, type CalendarPartition } from "./calendar";
 // This module is the TYPE half of an axis: what the axis means, with no σ in
 // it. The SIZE CLAIM half (how much room the content needs, as functions of
 // σ) is the `Extent` record in `./extent.ts`, computed by a separate, later
-// walk that may read these types. This module must not import `Monotonic` or
+// walk that may read these types. This module must not import `solver/pwl` or
 // `./extent`. That is what keeps type inference from ever reading a claim.
 
 export type UnderlyingSpaceKind = "continuous" | "ordinal" | "undefined";

@@ -27,7 +27,7 @@ import {
   unionChildExtents,
   unionChildSpaces,
 } from "../ast/graphicalOperators/alignment";
-import * as M from "../util/monotonic";
+import * as Pwl from "../ast/solver/pwl";
 import { interval } from "../util/interval";
 import {
   distributeExtentFold,
@@ -164,8 +164,8 @@ console.log("# space: a free extent keeps its ascent and descent (#773)");
   // σ-affine sides, pixel intercepts intact.
   const up = CONTINUOUS(interval(0, 30), "free");
   const down = CONTINUOUS(interval(-20, 0), "free");
-  const upClaim = Extent(M.linear(30, 4));
-  const downClaim = Extent(M.ZERO, M.linear(20, 6));
+  const upClaim = Extent(Pwl.affine(30, 4));
+  const downClaim = Extent(Pwl.ZERO, Pwl.affine(20, 6));
   const u = unionChildSpaces([onY(up), onY(down)], 1) as CONTINUOUS_TYPE;
   ok("signed overlay stays a free baseline magnitude", originIs(u, "free"));
   ok(
@@ -186,9 +186,9 @@ console.log("# space: a free extent keeps its ascent and descent (#773)");
   )!;
   ok(
     "the claim's ascent is the max of the ascents, descent the max of the descents",
-    claim.ascent.run(2) === 64 && claim.descent.run(2) === 46
+    Pwl.at(claim.ascent, 2) === 64 && Pwl.at(claim.descent, 2) === 46
   );
-  ok("the claim's width is ascent + descent", claim.width.run(2) === 110);
+  ok("the claim's width is ascent + descent", Pwl.at(claim.width, 2) === 110);
   const span = CONTINUOUS(interval(0, -20), "free") as CONTINUOUS_TYPE;
   ok(
     "baselineSpan of a negative length is all descent",
@@ -206,11 +206,11 @@ console.log("# space: a type implies a claim with no pixel overhead");
   const implied = impliedExtent(CONTINUOUS(interval(0, -20), "free"))!;
   ok(
     "a free type's implied claim is its data sides times σ",
-    implied.ascent.run(3) === 0 && implied.descent.run(3) === 60
+    Pwl.at(implied.ascent, 3) === 0 && Pwl.at(implied.descent, 3) === 60
   );
   ok(
     "a pinned type's implied claim is its data width times σ",
-    impliedExtent(CONTINUOUS(interval(5, 9), "pinned"))!.width.run(2) === 8
+    Pwl.at(impliedExtent(CONTINUOUS(interval(5, 9), "pinned"))!.width, 2) === 8
   );
   ok(
     "an ordinal type implies no claim",
@@ -254,7 +254,7 @@ console.log("# space: a type hook cannot read a claim");
   );
   ok(
     "the claim walk runs after the types",
-    leaf.resolveExtent()[0]!.width.run(2) === 10
+    Pwl.at(leaf.resolveExtent()[0]!.width, 2) === 10
   );
 }
 
@@ -286,8 +286,8 @@ console.log("# space: position moves a claim with its data");
     "the claim reaches 10σ above and below data 0",
     JSON.stringify((space as CONTINUOUS_TYPE).dataInterval) ===
       JSON.stringify(interval(-10, 10)) &&
-      claim!.ascent.run(1) === 10 &&
-      claim!.descent.run(1) === 10
+      Pwl.at(claim!.ascent, 1) === 10 &&
+      Pwl.at(claim!.descent, 1) === 10
   );
   const point = CONTINUOUS(interval(5, 5), "pinned");
   const overlay = unionChildSpaces([onY(space), onY(point)], 1);
@@ -302,8 +302,8 @@ console.log("# space: position moves a claim with its data");
   )!;
   ok(
     "overlaid with a pinned point at 5 it claims 20σ",
-    overlayClaim.width.run(1) === 20,
-    `${overlayClaim.width.run(1)}`
+    Pwl.at(overlayClaim.width, 1) === 20,
+    `${Pwl.at(overlayClaim.width, 1)}`
   );
 }
 
@@ -378,7 +378,13 @@ console.log("# space: equal measure seats the content at its box's top-left");
   const y = CONTINUOUS(interval(0, 2), "none", u);
   const yAt = (direction: 1 | -1) =>
     scopes.equalizeMeasure("t", [
-      { space: x, claim: impliedExtent(x)!, box: 400, sigma: 100, direction: 1 },
+      {
+        space: x,
+        claim: impliedExtent(x)!,
+        box: 400,
+        sigma: 100,
+        direction: 1,
+      },
       { space: y, claim: impliedExtent(y)!, box: 300, sigma: 150, direction },
     ])![1].solution;
   const up = seatInScope(yAt(-1), y).seat;
@@ -406,7 +412,7 @@ console.log("# space: a one-value axis does not bind equal measure");
   const x = CONTINUOUS(interval(0, 10), "pinned", u);
   const y = CONTINUOUS(interval(5, 5), "pinned", u);
   // A circle of radius 3 at y = 5, measured from data 0.
-  const yClaim = Extent(M.linear(5, 3), M.linear(-5, 3));
+  const yClaim = Extent(Pwl.affine(5, 3), Pwl.affine(-5, 3));
   const ySolved = scopes.solveScope(meta, y, yClaim, 200)!;
   const [ex, ey] = scopes.equalizeMeasure("t", [
     { space: x, claim: impliedExtent(x)!, box: 300, sigma: 30, direction: 1 },
@@ -432,6 +438,23 @@ console.log("# space: a one-value axis does not bind equal measure");
   );
 }
 
+console.log("# space: solveScope centers a one-value domain despite float noise");
+{
+  // #1176 comment 2: a slope of ~1e-15 used to solve σ ≈ 1e16.
+  const scopes = new ScopeRegistry();
+  const meta = { kind: "root" as const, rootKey: "t", axis: 1 as const };
+  const y = CONTINUOUS(interval(16.000000000000004, 16.000000000000004), "pinned");
+  const claim = Extent(Pwl.affine(16.000000000000004, 3), Pwl.affine(-16, 3));
+  const solved = scopes.solveScope(meta, y, claim, 200);
+  ok(
+    "σ is 0 and the value sits at the middle of the box",
+    solved?.sigma === 0 &&
+      solved.originPx !== undefined &&
+      Math.abs(solved.originPx - 100) < 1e-9,
+    JSON.stringify(solved)
+  );
+}
+
 console.log("# space: a scope solves σ from its claim, and the pixel of 0");
 {
   const scopes = new ScopeRegistry();
@@ -449,7 +472,7 @@ console.log("# space: a scope solves σ from its claim, and the pixel of 0");
   const spaced = scopes.solveScope(
     meta,
     pinned,
-    Extent(M.linear(147, 100), M.linear(-10, 0)),
+    Extent(Pwl.affine(147, 100), Pwl.affine(-10, 0)),
     400
   )!;
   const map = { sigma: spaced.sigma, originPx: spaced.originPx! };
@@ -463,7 +486,7 @@ console.log("# space: a scope solves σ from its claim, and the pixel of 0");
   const free = scopes.solveScope(
     meta,
     CONTINUOUS(interval(-20, 30), "free"),
-    Extent(M.linear(30, 0), M.linear(20, 5)),
+    Extent(Pwl.affine(30, 0), Pwl.affine(20, 5)),
     105
   )!;
   ok(
@@ -487,7 +510,7 @@ console.log("# space: a scope solves σ from its claim, and the pixel of 0");
   const one = scopes.solveScope(
     meta,
     CONTINUOUS(interval(5, 5), "pinned"),
-    Extent(M.linear(5, 3), M.linear(-5, 3)),
+    Extent(Pwl.affine(5, 3), Pwl.affine(-5, 3)),
     400
   )!;
   ok(
@@ -502,30 +525,32 @@ console.log("# space: a scope solves σ from its claim, and the pixel of 0");
   // than 6 px (σ = 2), and nothing more once it is farther (σ = 10).
   const [niced, nicedClaim] = niceScope(
     CONTINUOUS(interval(-3, 44), "pinned"),
-    Extent(M.linear(44, 6), M.linear(3, 0)),
+    Extent(Pwl.affine(44, 6), Pwl.affine(3, 0)),
     DEFAULT_AXIS_TICKS
   );
   ok(
     "nicing widens the claim to the hull of the claim and the niced domain",
     JSON.stringify(continuousInterval(niced!)) ===
       JSON.stringify(interval(-5, 45)) &&
-      nicedClaim!.width.run(2) === 2 * 44 + 6 + 2 * 5 &&
-      nicedClaim!.width.run(10) === 10 * 50
+      Pwl.at(nicedClaim!.width, 2) === 2 * 44 + 6 + 2 * 5 &&
+      Pwl.at(nicedClaim!.width, 10) === 10 * 50
   );
   // A pinned child's claim reaches the union whole.
   const u = unionChildExtents(
-    [[Extent(M.linear(10, 25)), undefined]],
+    [[Extent(Pwl.affine(10, 25)), undefined]],
     [[CONTINUOUS(interval(2, 12), "pinned"), UNDEFINED]],
     0,
     CONTINUOUS(interval(2, 12), "pinned")
   )!;
   ok(
     "a pinned child spans its data min then its whole claim",
-    u.width.run(1) === 10 + 25
+    Pwl.at(u.width, 1) === 10 + 25
   );
 }
 
-console.log("# space: the type walk's root owns its units, and layout reads them");
+console.log(
+  "# space: the type walk's root owns its units, and layout reads them"
+);
 {
   // An unknown unit "lo" read in the type hook and again in the layout
   // hook, of a node with no render session: both reads are one variable.
@@ -567,10 +592,16 @@ console.log("# space: the type walk's root owns its units, and layout reads them
     root.resolveUnderlyingSpace();
     root.layout([100, 100], [undefined, undefined]);
   });
-  ok("a standalone walk and layout need no session", standalone === null, standalone ?? "");
+  ok(
+    "a standalone walk and layout need no session",
+    standalone === null,
+    standalone ?? ""
+  );
   ok(
     "layout reads the type walk's unit variables",
-    inType !== undefined && inLayout !== undefined && sameUnitVar(inType, inLayout)
+    inType !== undefined &&
+      inLayout !== undefined &&
+      sameUnitVar(inType, inLayout)
   );
   const log = console.log;
   const group = console.group;
@@ -586,7 +617,13 @@ console.log("# space: a measure clash says what to do");
   const gross = throws(() =>
     unionChildSpaces(
       [
-        onY(CONTINUOUS(interval(0, 10), "free", declared("Worldwide Gross", "USD"))),
+        onY(
+          CONTINUOUS(
+            interval(0, 10),
+            "free",
+            declared("Worldwide Gross", "USD")
+          )
+        ),
         onY(CONTINUOUS(interval(0, 5), "free", declared("Revenue", "EUR"))),
       ],
       1
@@ -697,7 +734,7 @@ console.log("# space: one fold for every origin");
   );
   ok(
     "a spread of magnitudes claims their chained claims plus spacing",
-    freeClaim !== undefined && freeClaim.width.run(2) === 4 * 2 + 3 * 2 + 10
+    freeClaim !== undefined && Pwl.at(freeClaim.width, 2) === 4 * 2 + 3 * 2 + 10
   );
   // A fixed-pitch chain folds the parts' sides, not only their widths: a
   // baseline row keeps its descent below its anchor, and a tall middle row
@@ -716,23 +753,18 @@ console.log("# space: one fold for every origin");
       opts
     )!;
   };
-  const pitched = (
-    targets: CONTINUOUS_TYPE[],
-    anchor: "baseline" | "middle"
-  ) => pitchedClaim(targets, anchor).width.run(1);
+  const pitched = (targets: CONTINUOUS_TYPE[], anchor: "baseline" | "middle") =>
+    Pwl.at(pitchedClaim(targets, anchor).width, 1);
   // Rows at 0 and 30: [−10, 20] and [30, 35].
   const baselineChain = pitchedClaim(
-    [
-      CONTINUOUS(interval(-10, 20), "free"),
-      CONTINUOUS(interval(0, 5), "free"),
-    ],
+    [CONTINUOUS(interval(-10, 20), "free"), CONTINUOUS(interval(0, 5), "free")],
     "baseline"
   );
   ok(
     "a baseline chain counts a row's descent below its anchor",
-    baselineChain.width.run(1) === 45 &&
-      baselineChain.descent.run(1) === 10 &&
-      baselineChain.ascent.run(1) === 35
+    Pwl.at(baselineChain.width, 1) === 45 &&
+      Pwl.at(baselineChain.descent, 1) === 10 &&
+      Pwl.at(baselineChain.ascent, 1) === 35
   );
   ok(
     "a middle chain's tallest row binds wherever it sits",
@@ -777,9 +809,9 @@ console.log("# space: one fold for every origin");
   const padded = nestedExtent(undefined, inner, impliedExtent(inner), 3)!;
   ok(
     "and pads its claim on both sides, measured from data 0",
-    padded.width.run(1) === 10 &&
-      padded.ascent.run(1) === 12 &&
-      padded.descent.run(1) === -2
+    Pwl.at(padded.width, 1) === 10 &&
+      Pwl.at(padded.ascent, 1) === 12 &&
+      Pwl.at(padded.descent, 1) === -2
   );
   // An origin-less child has no data coordinates to add to a pinned overlay.
   const overlaid = unionChildSpaces(
@@ -808,10 +840,10 @@ console.log("# space: one fold for every origin");
   // An ordinal's measure is its grouping field, not a unit: a datum position
   // in dollars beside a category spread by "genre" is no measure clash.
   const genreThenDollars = throws(() =>
-    resolveLayerBaseSpaces(
-      [[UNDEFINED, ORDINAL(["a", "b"], "genre")]],
-      { y: interval(0, 5), yMeasure: declared("dollars") }
-    )
+    resolveLayerBaseSpaces([[UNDEFINED, ORDINAL(["a", "b"], "genre")]], {
+      y: interval(0, 5),
+      yMeasure: declared("dollars"),
+    })
   );
   ok(
     "a datum measure does not clash with an ordinal's grouping field",
@@ -842,15 +874,18 @@ console.log("# space: one fold for every origin");
   const pinnedLayer = CONTINUOUS(interval(0, 10), "pinned");
   ok(
     "transform.scale scales a pinned claim",
-    resolveLayerAxisExtent(
-      [[undefined, impliedExtent(pinnedLayer)]],
-      [[UNDEFINED, pinnedLayer]],
-      1,
-      2,
-      undefined,
-      pinnedLayer,
-      pinnedLayer
-    )!.width.run(1) === 20
+    Pwl.at(
+      resolveLayerAxisExtent(
+        [[undefined, impliedExtent(pinnedLayer)]],
+        [[UNDEFINED, pinnedLayer]],
+        1,
+        2,
+        undefined,
+        pinnedLayer,
+        pinnedLayer
+      )!.width,
+      1
+    ) === 20
   );
 }
 
@@ -858,29 +893,29 @@ console.log("# space: nicing is gated on an axis over the interval");
 {
   const [delta, deltaClaim] = niceScope(
     CONTINUOUS(interval(0, 137), "none"),
-    Extent(M.linear(137, 0)),
+    Extent(Pwl.affine(137, 0)),
     DEFAULT_AXIS_TICKS
   );
   ok(
     "a delta axis nices its width, its claim widening by half on each side",
     JSON.stringify(delta!.dataInterval) === JSON.stringify(interval(0, 140)) &&
-      deltaClaim!.width.run(1) === 140 &&
-      deltaClaim!.descent.run(1) === 1.5
+      Pwl.at(deltaClaim!.width, 1) === 140 &&
+      Pwl.at(deltaClaim!.descent, 1) === 1.5
   );
   // A free magnitude renders the absolute axis of the scope that places its
   // baseline, so it nices as that axis does, about its own 0, and each side
   // of its claim widens by its own niced end.
   const [free, freeClaim] = niceScope(
     CONTINUOUS(interval(-28, 137), "free"),
-    Extent(M.linear(137, 0), M.linear(28, 0)),
+    Extent(Pwl.affine(137, 0), Pwl.affine(28, 0)),
     DEFAULT_AXIS_TICKS
   );
   ok(
     "a free magnitude nices about its 0, each side by its own end",
     JSON.stringify(free!.dataInterval) === JSON.stringify(interval(-40, 140)) &&
       free!.origin === "free" &&
-      freeClaim!.ascent.run(1) === 140 &&
-      freeClaim!.descent.run(1) === 40
+      Pwl.at(freeClaim!.ascent, 1) === 140 &&
+      Pwl.at(freeClaim!.descent, 1) === 40
   );
 }
 

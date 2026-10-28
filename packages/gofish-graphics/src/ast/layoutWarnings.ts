@@ -6,6 +6,7 @@ import type { GoFishNode } from "./_node";
 import type { DistributeConstraint } from "./constraints/distribute";
 import { axisIndex, axisName } from "./constraints/shared";
 import { room } from "../util";
+import * as Pwl from "./solver/pwl";
 
 /**
  * A problem layout found and drew through anyway (#493): the render keeps
@@ -76,7 +77,8 @@ function describeNode(node: GoFishNode): string {
 
 /** The fixed pixels of `node`'s claim on `axis`: its claim at σ = 0. */
 const fixedPx = (node: GoFishNode, axis: 0 | 1): number => {
-  return room(node.resolveExtent()[axis]?.width.run(0) ?? 0);
+  const claim = node.resolveExtent()[axis];
+  return room(claim === undefined ? 0 : Pwl.at(claim.width, 0));
 };
 
 /** The children whose claims compose into `node`'s on `axis`: not ink,

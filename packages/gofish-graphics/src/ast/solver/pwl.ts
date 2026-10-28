@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Piecewise-Linear Values — /internals/core/pwl
+// </gofish-wiki>
+
 /**
  * Piecewise-linear values in one variable, the algebra size claims are written
  * in. A claim's side is a function of its scope's scale factor σ ≥ 0: a line

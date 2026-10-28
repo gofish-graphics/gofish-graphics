@@ -5,7 +5,7 @@
  */
 
 import type { Placeable } from "../ast/_node";
-import * as Monotonic from "../util/monotonic";
+import * as Pwl from "../ast/solver/pwl";
 import type { AlignConstraint } from "../ast/constraints/align";
 import type { DistributeConstraint } from "../ast/constraints/distribute";
 import type { GridConstraint, TrackLayout } from "../ast/constraints/grid";
@@ -60,12 +60,7 @@ import {
   originIs,
   DEFAULT_AXIS_TICKS,
 } from "../ast/underlyingSpace";
-import {
-  Extent,
-  impliedExtent,
-  niceScope,
-  widenScope,
-} from "../ast/extent";
+import { Extent, impliedExtent, niceScope, widenScope } from "../ast/extent";
 import { ScopeRegistry } from "../ast/solver/scopes";
 import { interval } from "../util/interval";
 
@@ -603,15 +598,15 @@ console.log("# constraint confluence: nest size dependency planning");
   const foldedClaims = applyNestExtentPlan(
     [
       [undefined, undefined],
-      [Extent(Monotonic.linear(10, 0)), Extent(Monotonic.linear(4, 0))],
+      [Extent(Pwl.affine(10, 0)), Extent(Pwl.affine(4, 0))],
     ],
     folded,
     insideOutPlan
   );
   ok(
     "inside-out nest claim fold pads the inner claim (padding is pixels)",
-    foldedClaims[0][0]!.width.run(1) === 16 &&
-      foldedClaims[0][1]!.width.run(1) === 8
+    Pwl.at(foldedClaims[0][0]!.width, 1) === 16 &&
+      Pwl.at(foldedClaims[0][1]!.width, 1) === 8
   );
   ok(
     "nest space fold copies child spaces instead of mutating input",
@@ -638,20 +633,23 @@ console.log("# constraint confluence: nest size dependency planning");
   );
   ok(
     "transform.scale scales the free magnitude's claim",
-    resolveLayerAxisExtent(
-      [[Extent(Monotonic.linear(10, 0)), undefined]],
-      [
+    Pwl.at(
+      resolveLayerAxisExtent(
+        [[Extent(Pwl.affine(10, 0)), undefined]],
         [
-          CONTINUOUS(interval(0, 10), "free"),
-          CONTINUOUS(interval(5, 15), "pinned", declared("child")),
+          [
+            CONTINUOUS(interval(0, 10), "free"),
+            CONTINUOUS(interval(5, 15), "pinned", declared("child")),
+          ],
         ],
-      ],
-      0,
-      3,
-      undefined,
-      union[0],
-      resolved[0]
-    )!.width.run(1) === 30
+        0,
+        3,
+        undefined,
+        union[0],
+        resolved[0]
+      )!.width,
+      1
+    ) === 30
   );
   const pinned = continuousInterval(resolved[1]);
   ok(
@@ -895,11 +893,10 @@ console.log("# constraint confluence: child posScale forwarding");
       seated[1]?.sigma === frameY.sigma &&
       seated[1]?.originPx === 0
   );
-  const seatedUndefined = childPosScalesFor(
-    [UNDEFINED, UNDEFINED],
-    undefined,
-    [frameX, frameY]
-  );
+  const seatedUndefined = childPosScalesFor([UNDEFINED, UNDEFINED], undefined, [
+    frameX,
+    frameY,
+  ]);
   ok(
     "a child with no data 0 gets no frame",
     seatedUndefined[0] === undefined && seatedUndefined[1] === undefined
@@ -1298,7 +1295,7 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
   const unscaled = solve(
     [false, false],
     [UNDEFINED, UNDEFINED],
-    [Extent(Monotonic.linear(10, 0)), Extent(Monotonic.linear(0, 10))],
+    [Extent(Pwl.affine(10, 0)), Extent(Pwl.affine(0, 10))],
     [undefined, undefined],
     [undefined, undefined]
   );

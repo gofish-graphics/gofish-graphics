@@ -4,7 +4,7 @@
  * The model: a measure's data→screen map on one axis is affine,
  * `screen(d) = origin + σ·d`, with two parameters — **σ = slope** (px per data
  * unit) and **origin/baseline = intercept** (screen position of data-0). Layout is equations in these; key values are σ-affine
- * (`Monotonic` = `slope·σ + intercept`, reused from `util/monotonic`), so the
+ * (`Pwl.Value`, `slope·σ + intercept`, reused from `solver/pwl`), so the
  * system propagates with σ symbolic and resolves it once per scope at the frame
  * equation.
  *
@@ -13,7 +13,7 @@
  * — the baseline as a first-class unknown — exercised by the paper cases in
  * `tests/solver.test.ts`.
  */
-import * as M from "../../util/monotonic";
+import * as Pwl from "./pwl";
 
 /** A named box key. `baseline` is the origin (intercept); the anchors
  *  (min/center/max) are free-space guidelines at offsets from it; `size` is the
@@ -51,8 +51,8 @@ const coeffs = (key: BoxKey, minCoeff: number): [number, number] => {
   }
 };
 
-const asMono = (v: M.Monotonic | number): M.Monotonic =>
-  typeof v === "number" ? M.linear(0, v) : v;
+const asMono = (v: Pwl.Value | number): Pwl.Value =>
+  typeof v === "number" ? Pwl.affine(0, v) : v;
 
 /** A box-key equation that contradicts the already-solved system. */
 export interface BoxConflict {
@@ -63,13 +63,13 @@ export interface BoxConflict {
 
 /**
  * A node's per-axis box: a 2-unknown linear system in `(baseline, size)` whose
- * key values are σ-affine `Monotonic`s. Two independent keys determine the
+ * key values are σ-affine `Pwl.Value`s. Two independent keys determine the
  * box; a consistent third is checked, a contradictory third reported (mirrors
  * `BBox`'s named-conflict contract). Reads evaluate at a given σ.
  */
 export class SolverBox {
-  private eqs: { key: BoxKey; value: M.Monotonic }[] = [];
-  private sol?: [M.Monotonic, M.Monotonic]; // (baseline, size)
+  private eqs: { key: BoxKey; value: Pwl.Value }[] = [];
+  private sol?: [Pwl.Value, Pwl.Value]; // (baseline, size)
 
   constructor(public readonly minCoeff = 0) {}
 
@@ -77,20 +77,24 @@ export class SolverBox {
    *  descriptor when inconsistent with the determined system, else undefined. */
   add(
     key: BoxKey,
-    value: M.Monotonic | number,
+    value: Pwl.Value | number,
     tolerance = 1e-6
   ): BoxConflict | undefined {
     const mono = asMono(value);
     if (this.sol) {
       const implied = this.keyMono(key)!;
       if (!this.monoEqual(implied, mono, tolerance))
-        return { key, asserted: mono.run(0), implied: implied.run(0) };
+        return { key, asserted: Pwl.at(mono, 0), implied: Pwl.at(implied, 0) };
       return undefined;
     }
     const existing = this.eqs.find((e) => e.key === key);
     if (existing) {
       if (!this.monoEqual(existing.value, mono, tolerance))
-        return { key, asserted: mono.run(0), implied: existing.value.run(0) };
+        return {
+          key,
+          asserted: Pwl.at(mono, 0),
+          implied: Pwl.at(existing.value, 0),
+        };
       return undefined;
     }
     this.eqs.push({ key, value: mono });
@@ -98,11 +102,11 @@ export class SolverBox {
     return undefined;
   }
 
-  private monoEqual(a: M.Monotonic, b: M.Monotonic, tol: number): boolean {
+  private monoEqual(a: Pwl.Value, b: Pwl.Value, tol: number): boolean {
     // Two points pin a line: probe at σ=0 (intercept) and σ=1.
     return (
-      Math.abs(a.run(0) - b.run(0)) <= tol &&
-      Math.abs(a.run(1) - b.run(1)) <= tol
+      Math.abs(Pwl.at(a, 0) - Pwl.at(b, 0)) <= tol &&
+      Math.abs(Pwl.at(a, 1) - Pwl.at(b, 1)) <= tol
     );
   }
 
@@ -113,28 +117,32 @@ export class SolverBox {
     const det = a0 * b1 - a1 * b0;
     if (Math.abs(det) < 1e-12)
       throw new Error("dependent keys — system underdetermined");
-    // (baseline, size) = M⁻¹ · (e1, e2), as σ-affine Monotonics.
-    const baseline = M.add(
-      M.smul(b1 / det, e1.value),
-      M.smul(-a1 / det, e2.value)
+    // (baseline, size) = M⁻¹ · (e1, e2), as σ-affine values.
+    const baseline = Pwl.add(
+      Pwl.scale(b1 / det, e1.value),
+      Pwl.scale(-a1 / det, e2.value)
     );
-    const size = M.add(M.smul(a0 / det, e2.value), M.smul(-b0 / det, e1.value));
+    const size = Pwl.add(
+      Pwl.scale(a0 / det, e2.value),
+      Pwl.scale(-b0 / det, e1.value)
+    );
     this.sol = [baseline, size];
   }
 
   /** A box key as a σ-affine claim: from the solve when determined, else a direct
    *  pin, else undefined. */
-  keyMono(key: BoxKey): M.Monotonic | undefined {
+  keyMono(key: BoxKey): Pwl.Value | undefined {
     if (this.sol) {
       const [c0, c1] = coeffs(key, this.minCoeff);
-      return M.add(M.smul(c0, this.sol[0]), M.smul(c1, this.sol[1]));
+      return Pwl.add(Pwl.scale(c0, this.sol[0]), Pwl.scale(c1, this.sol[1]));
     }
     return this.eqs.find((e) => e.key === key)?.value;
   }
 
   /** A box key evaluated at scale factor `sigma` (default 0 → the intercept). */
   read(key: BoxKey, sigma = 0): number | undefined {
-    return this.keyMono(key)?.run(sigma);
+    const value = this.keyMono(key);
+    return value === undefined ? undefined : Pwl.at(value, sigma);
   }
 
   get solved(): boolean {
@@ -144,7 +152,7 @@ export class SolverBox {
 
 /**
  * One axis of one σ-scope: a set of node boxes sharing a single σ, resolved once
- * from the scope's frame equation (`content(σ) = allocated` → `Monotonic.inverse`,
+ * from the scope's frame equation (`content(σ) = allocated` → `Pwl.solve`,
  * which is already how the engine finds σ — just deferred to the boundary). A
  * nested scope (`coord`, or an escape-hatch operator) inherits or re-resolves σ.
  */
@@ -160,8 +168,8 @@ export class AxisScope {
   }
 
   /** Resolve σ so the scope's σ-affine content extent equals `allocated` px. */
-  resolveSigma(content: M.Monotonic, allocated: number): number {
-    const s = content.inverse(allocated);
+  resolveSigma(content: Pwl.Value, allocated: number): number {
+    const s = Pwl.solve(content, allocated);
     if (s === undefined)
       throw new Error("frame equation does not determine σ (slope 0)");
     return (this._sigma = s);

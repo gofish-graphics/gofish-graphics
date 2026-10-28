@@ -95,7 +95,7 @@ export function lowerNestPlacement(
  * When inner's space is continuous, outer has inner's type: padding is
  * pixels, so it is no part of the data extent, whatever the origin. It goes on
  * the claim instead ({@link nestedExtent}): the inner claim with `padding` on
- * both sides of its baseline, a `Monotonic.adds`, which stays invertible, so a
+ * both sides of its baseline, a `Pwl.addConstant`, which stays invertible, so a
  * parent spread/layer solving a scale factor sees `outer = inner + 2·padding`.
  * Chained nests compose: the layer feeds an already-derived outer back in as
  * the next nest's inner.

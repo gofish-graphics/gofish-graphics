@@ -17,6 +17,7 @@ import {
   layer as layerOf,
 } from "../lib";
 import { runLayout } from "../ast/gofish";
+import * as Pwl from "../ast/solver/pwl";
 import { GoFishNode } from "../ast/_node";
 import { Rect } from "../ast/shapes/rect";
 import { layer } from "../ast/graphicalOperators/layer";
@@ -114,8 +115,8 @@ async function main() {
     const p = placementIn(mNode, data.child, 0);
     check(
       "the claim walk places m where the layout does",
-      p !== undefined && close(p.lo.run(1), 100) && close(p.hi.run(1), 120),
-      p && [p.lo.run(1), p.hi.run(1)]
+      p !== undefined && close(Pwl.at(p.lo, 1), 100) && close(Pwl.at(p.hi, 1), 120),
+      p && [Pwl.at(p.lo, 1), Pwl.at(p.hi, 1)]
     );
   }
 
@@ -142,10 +143,10 @@ async function main() {
       const claim = chain.resolveExtent()[0]!;
       check(
         `anchor "${anchor}": the claim is the laid-out 0..60`,
-        close(-claim.descent.run(1), 0) &&
-          close(claim.ascent.run(1), 60) &&
+        close(-Pwl.at(claim.descent, 1), 0) &&
+          close(Pwl.at(claim.ascent, 1), 60) &&
           close(chain.dims[0].size, 60),
-        [-claim.descent.run(1), claim.ascent.run(1), chain.dims[0].size]
+        [-Pwl.at(claim.descent, 1), Pwl.at(claim.ascent, 1), chain.dims[0].size]
       );
     }
   }

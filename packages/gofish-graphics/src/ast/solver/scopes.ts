@@ -4,7 +4,7 @@
  * Every continuous axis is one affine map per σ-scope, `px(d) = σ·d +
  * originPx` (an {@link AxisMap}), and σ is solved once per scope from its size
  * claim at the frame equation `claim.width(σ) = allocated`
- * (`Monotonic.inverse`). The scope's type fixes whether it has an `originPx`.
+ * (`Pwl.solve`). The scope's type fixes whether it has an `originPx`.
  * One mechanism covers every site:
  *
  *   - **sized nodes solve** (#1114) — the render root, a coord boundary, and
@@ -21,7 +21,7 @@
  * Behind `GOFISH_DUMP_SCOPES` the registry also prints every scope's frame
  * equation.
  */
-import * as Monotonic from "../../util/monotonic";
+import * as Pwl from "./pwl";
 import {
   hasOrigin,
   isCONTINUOUS,
@@ -127,7 +127,7 @@ export const seatInScope = (
  *  edge: a claim is measured from data 0, so data 0 sits `claim.descent(σ)`
  *  above that. */
 const originPxAt = (claim: Extent, sigma: number, offset = 0): number =>
-  offset + claim.descent.run(sigma);
+  offset + Pwl.at(claim.descent, sigma);
 
 /** One axis of a scope root that {@link ScopeRegistry.equalizeMeasure}
  *  equalizes (#582): the scope's type and size claim, its box, the σ it
@@ -164,7 +164,7 @@ export interface ScopeMeta {
 
 interface ScopeEntry extends ScopeMeta {
   allocated: number;
-  /** The frame equation LHS, printed (`Monotonic.print`), or a POSITION map's
+  /** The frame equation LHS, printed (`Pwl.print`), or a POSITION map's
    *  `[min,max]→[0,alloc]` shape. */
   frame: string;
   sigma: number | undefined;
@@ -295,22 +295,22 @@ export class ScopeRegistry {
 
   /**
    * Solve σ for a SIZE frame at a scope root: invert `content(σ) = allocated`.
-   * `frame` is the σ-affine width `Monotonic` (a space's `width`, or a composed
-   * distribute size domain). Returns the slope, or `undefined` when the frame
-   * cannot determine σ (slope 0) — the caller applies its own fallback.
+   * `frame` is the width in σ (a space's `width`, or a composed
+   * distribute size domain). Returns the slope, or `undefined` when no σ ≥ 0
+   * determines it (`Pwl.solve`) — the caller applies its own fallback.
    */
   solveSize(
     meta: ScopeMeta,
-    frame: Monotonic.Monotonic,
+    frame: Pwl.Value,
     allocated: number,
     opts?: { tolerance?: number; lowerBound?: number; upperBoundGuess?: number }
   ): number | undefined {
-    const sigma = frame.inverse(allocated, opts);
+    const sigma = Pwl.solve(frame, allocated, opts);
     if (DUMP_SCOPES)
       this.entries.push({
         ...meta,
         allocated,
-        frame: Monotonic.print(frame),
+        frame: Pwl.print(frame),
         sigma,
         hasMap: false,
       });
@@ -334,9 +334,12 @@ export class ScopeRegistry {
    * has no width for σ to scale, so no σ fits its claim to the box. Its value
    * maps to the middle of the box, as d3 and Vega-Lite map a zero-width
    * linear domain to the middle of the range: σ is 0 and the claim (only
-   * pixels) is centered in the box. Returns undefined when there is no claim
-   * or it cannot determine σ for any other reason (a claim that is only
-   * pixels over a wider type).
+   * pixels) is centered in the box. Whether the claim's width depends on σ
+   * is decided where it is summed: σ parts that cancel to within rounding are
+   * 0 (`Pwl.cancel`), so float noise in a one-value domain's claim does not
+   * solve a σ near 1e16. Returns undefined when there is no claim or no σ ≥ 0
+   * fits it for any other reason (a claim that is only pixels over a wider
+   * type, or pixels that alone are larger than the box).
    */
   solveScope(
     meta: ScopeMeta,
@@ -345,7 +348,7 @@ export class ScopeRegistry {
     allocated: number
   ): ScopeSolution | undefined {
     if (space === undefined || claim === undefined) return undefined;
-    const solved = claim.width.inverse(allocated, {
+    const solved = Pwl.solve(claim.width, allocated, {
       upperBoundGuess: allocated,
     });
     const oneValue = solved === undefined && isOneValue(space);
@@ -354,13 +357,13 @@ export class ScopeRegistry {
       this.entries.push({
         ...meta,
         allocated,
-        frame: `${isCONTINUOUS(space) ? `${space.origin}[${space.dataInterval.min},${space.dataInterval.max}]` : space.kind} ${Monotonic.print(claim.width)}${meta.dataZero === "start" ? " (0 at start)" : ""}`,
+        frame: `${isCONTINUOUS(space) ? `${space.origin}[${space.dataInterval.min},${space.dataInterval.max}]` : space.kind} ${Pwl.print(claim.width)}${meta.dataZero === "start" ? " (0 at start)" : ""}`,
         sigma,
         hasMap: hasOrigin(space),
       });
     if (sigma === undefined) return undefined;
     // Centering slack: 0 when σ fits the claim to the box.
-    const offset = oneValue ? (allocated - claim.width.run(0)) / 2 : 0;
+    const offset = oneValue ? (allocated - Pwl.at(claim.width, 0)) / 2 : 0;
     if (!hasOrigin(space)) return { sigma, originPx: undefined, startPx: 0 };
     return {
       sigma,
@@ -385,8 +388,8 @@ export class ScopeRegistry {
     if (DUMP_SCOPES)
       this.entries.push({
         ...meta,
-        allocated: claim.width.run(sigma),
-        frame: `at(σ=${sigma}) ${Monotonic.print(claim.width)}`,
+        allocated: Pwl.at(claim.width, sigma),
+        frame: `at(σ=${sigma}) ${Pwl.print(claim.width)}`,
         sigma,
         hasMap: hasOrigin(space),
       });
@@ -443,7 +446,7 @@ export class ScopeRegistry {
     const shared = Math.min(...binding.map((a) => a.sigma)); // binding axis wins
     const equalize = (info: EqualMeasureAxis, axis: 0 | 1): EqualizedAxis => {
       const { claim, box, direction, space } = info;
-      const leftover = Math.max(0, box - claim.width.run(shared));
+      const leftover = Math.max(0, box - Pwl.at(claim.width, shared));
       // The leftover pixels before the content along the axis order: none
       // when the order starts at the left or top, all of them when a y-up
       // order starts at the bottom, and half of them on a one-value axis,
@@ -457,8 +460,8 @@ export class ScopeRegistry {
         leftover === 0
           ? claim
           : Extent(
-              Monotonic.adds(claim.ascent, leftover - before),
-              Monotonic.adds(claim.descent, before)
+              Pwl.addConstant(claim.ascent, leftover - before),
+              Pwl.addConstant(claim.descent, before)
             );
       if (DUMP_SCOPES)
         this.entries.push({

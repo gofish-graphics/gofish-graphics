@@ -3,7 +3,7 @@
 // </gofish-wiki>
 
 import type { GoFishNode } from "./_node";
-import * as Monotonic from "../util/monotonic";
+import * as Pwl from "./solver/pwl";
 import { literalSeats, type Placement } from "./constraints/claimPlacement";
 
 /**
@@ -94,7 +94,7 @@ export function placementIn(
   }
 
   // The target's box, in each ancestor's frame in turn.
-  let lo = Monotonic.negate(extent.descent);
+  let lo = Pwl.negate(extent.descent);
   let hi = extent.ascent;
   let n = target;
   while (n.parent !== shared) {
@@ -111,17 +111,17 @@ export function placementIn(
       // claim's descent, and past a literal start of its own.
       const claim = n.resolveExtent()[axis];
       if (claim === undefined) return undefined;
-      const origin = Monotonic.adds(
-        Monotonic.add(box.lo, claim.descent),
+      const origin = Pwl.addConstant(
+        Pwl.add(box.lo, claim.descent),
         n.claimWalk?.literalStart[axis] ?? 0
       );
-      lo = Monotonic.add(lo, origin);
-      hi = Monotonic.add(hi, origin);
+      lo = Pwl.add(lo, origin);
+      hi = Pwl.add(hi, origin);
     }
     n = p;
   }
   const seat = seatIn(shared, n, axis);
   if (seat === undefined) return undefined;
   const by = seat - frameAt;
-  return { lo: Monotonic.adds(lo, by), hi: Monotonic.adds(hi, by), extent };
+  return { lo: Pwl.addConstant(lo, by), hi: Pwl.addConstant(hi, by), extent };
 }

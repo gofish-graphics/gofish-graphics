@@ -5,7 +5,7 @@
 import type { GoFishNode } from "./_node";
 import type { Size } from "./dims";
 import { Extent, hullExtent } from "./extent";
-import * as Monotonic from "../util/monotonic";
+import * as Pwl from "./solver/pwl";
 import { room } from "../util";
 import { childNameKey } from "./constraints/shared";
 import { isLiteralSeat } from "./constraints/claimPlacement";
@@ -37,7 +37,7 @@ import { originIs } from "./underlyingSpace";
  *  wraps with its shapes placed around it. Undefined when a ring cannot
  *  place its shapes in the claim walk (it is not a layer). */
 function ringsAround(chart: GoFishNode, axis: 0 | 1): Extent | undefined {
-  let inner: Extent = Extent(Monotonic.linear(1, 0));
+  let inner: Extent = Extent(Pwl.affine(1, 0));
   for (const ring of chart.chrome?.rings ?? []) {
     const place = ring.claimWalk?.placeChildren;
     if (place === undefined) return undefined;
@@ -74,26 +74,27 @@ const guttersAt = (
   c: { chart: Extent; plot: Extent },
   sigma: number
 ): [number, number] => [
-  room(c.chart.descent.run(sigma) - c.plot.descent.run(sigma)),
-  room(c.chart.ascent.run(sigma) - c.plot.ascent.run(sigma)),
+  room(Pwl.at(c.chart.descent, sigma) - Pwl.at(c.plot.descent, sigma)),
+  room(Pwl.at(c.chart.ascent, sigma) - Pwl.at(c.plot.ascent, sigma)),
 ];
 
 /** The gutters of the rings `r` around a plot of size `x`. */
 const ringGutters = (r: Extent, x: number): [number, number] => [
-  room(r.descent.run(x)),
-  room(r.ascent.run(x) - x),
+  room(Pwl.at(r.descent, x)),
+  room(Pwl.at(r.ascent, x) - x),
 ];
 
 /** The X ≥ 0 at which `m` reaches `target` (`m` never decreases), solved
  *  as the root's σ is: where the fixed parts of `m` alone are larger than
  *  the target, no X reaches it, and X is where the part that grows with X,
- *  alone, reaches it (`Monotonic.rising`): drawn as if the fixed parts took
+ *  alone, reaches it (`Pwl.rising`): drawn as if the fixed parts took
  *  no room. */
-const solveFor = (m: Monotonic.Monotonic, target: number): number => {
+const solveFor = (m: Pwl.Value, target: number): number => {
+  const grows = Pwl.rising(m);
   const x =
-    m.run(0) > target + 0.5
-      ? Monotonic.rising(m)?.inverse(target)
-      : m.inverse(target, { upperBoundGuess: target });
+    Pwl.at(m, 0) > target + 0.5
+      ? grows && Pwl.solve(grows, target)
+      : Pwl.solve(m, target, { upperBoundGuess: target });
   return x !== undefined && Number.isFinite(x) ? Math.max(0, x) : 0;
 };
 

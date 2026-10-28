@@ -32,7 +32,7 @@ import {
   spaceTitle,
 } from "../underlyingSpace";
 import { boxExtent, Extent, hullExtent, impliedExtent } from "../extent";
-import * as Monotonic from "../../util/monotonic";
+import * as Pwl from "../solver/pwl";
 import {
   unionChildExtents,
   unionChildSpaces,
@@ -293,19 +293,19 @@ export const coord = createNodeOperator(
             unionChildExtents(childExtents, childSpaces, axis, resolved[axis]);
           const r = claim(1);
           const theta = claim(0);
-          if (r === undefined || !Monotonic.isConstant(r.width) || !theta)
+          if (r === undefined || !Pwl.isConstant(r.width) || !theta)
             return [undefined, undefined];
           // The angle fills the angular budget, as `layout` fits it.
           const budget = coordTransform.domain[0].size ?? 2 * Math.PI;
-          const sigma = Monotonic.isConstant(theta.width)
+          const sigma = Pwl.isConstant(theta.width)
             ? 0
-            : theta.width.inverse(budget);
+            : Pwl.solve(theta.width, budget);
           if (sigma === undefined) return [undefined, undefined];
           const box = computeTransformedBoundingBox(
-            -theta.descent.run(sigma),
-            theta.ascent.run(sigma),
-            -r.descent.run(0),
-            r.ascent.run(0),
+            -Pwl.at(theta.descent, sigma),
+            Pwl.at(theta.ascent, sigma),
+            -Pwl.at(r.descent, 0),
+            Pwl.at(r.ascent, 0),
             coordTransform
           );
           return [
@@ -450,8 +450,8 @@ export const coord = createNodeOperator(
                 : hullExtent(
                     content,
                     Extent(
-                      Monotonic.linear(resolved.dataInterval.min, 0),
-                      Monotonic.linear(-resolved.dataInterval.min, 0)
+                      Pwl.affine(resolved.dataInterval.min, 0),
+                      Pwl.affine(-resolved.dataInterval.min, 0)
                     )
                   );
             const scope = scopes.solveScope(

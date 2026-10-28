@@ -12,8 +12,8 @@
 // **The unified sizing rule.** Per axis, a track's extent is set by
 // ONE rule — the (max, +) fold every other operator already uses:
 //
-//   track claim   = Monotonic.max(claims of the cells in that track)
-//   grid claim    = Monotonic.add(track claims) + gaps          (the σ-frame LHS)
+//   track claim   = Pwl.max(claims of the cells in that track)
+//   grid claim    = Pwl.add(track claims) + gaps          (the σ-frame LHS)
 //
 // A claim-less ("fill") cell contributes nothing to its track. This subsumes
 // equal-flex box-division: an all-fill grid has no track claims, so the leftover
@@ -36,7 +36,7 @@
 // the grid's size claim is consumed at layout time (track resolution) rather than
 // reported as the axis space.
 
-import * as Monotonic from "../../util/monotonic";
+import * as Pwl from "../solver/pwl";
 import { GoFishNode } from "../_node";
 import type { GoFishAST } from "../_ast";
 import { type ConstraintRef } from "./shared";
@@ -114,13 +114,13 @@ const numRowsOf = (c: GridConstraint): number =>
  *  center a cell in track `i` pins to. */
 export type TrackLayout = { starts: number[]; extents: number[] };
 
-/** A cell's size claim on `axis`: the SIZE-magnitude width Monotonic it reports,
+/** A cell's size claim on `axis`: the SIZE-magnitude width value it reports,
  *  or undefined when the cell fills (no size claim — a plain `rect({fill})`, a
  *  literal-pixel cell, or an ORDINAL/POSITION axis). */
 const cellClaim = (
   cell: GoFishAST | undefined,
   axis: 0 | 1
-): Monotonic.Monotonic | undefined => {
+): Pwl.Value | undefined => {
   if (!(cell instanceof GoFishNode)) return undefined;
   const sp = cell._underlyingSpace?.[axis];
   return originIs(sp, "free") ? cell.resolveExtent()[axis]!.width : undefined;
@@ -132,23 +132,23 @@ const cellClaim = (
 export function gridTrackClaims(
   c: GridConstraint,
   cells: readonly GoFishAST[]
-): [(Monotonic.Monotonic | undefined)[], (Monotonic.Monotonic | undefined)[]] {
+): [(Pwl.Value | undefined)[], (Pwl.Value | undefined)[]] {
   const numRows = numRowsOf(c);
   const colClaims = Array.from({ length: c.numCols }, (_, col) => {
-    const claims: Monotonic.Monotonic[] = [];
+    const claims: Pwl.Value[] = [];
     for (let row = 0; row < numRows; row++) {
       const claim = cellClaim(cells[row * c.numCols + col], 0);
       if (claim !== undefined) claims.push(claim);
     }
-    return claims.length > 0 ? Monotonic.max(...claims) : undefined;
+    return claims.length > 0 ? Pwl.max(...claims) : undefined;
   });
   const rowClaims = Array.from({ length: numRows }, (_, row) => {
-    const claims: Monotonic.Monotonic[] = [];
+    const claims: Pwl.Value[] = [];
     for (let col = 0; col < c.numCols; col++) {
       const claim = cellClaim(cells[row * c.numCols + col], 1);
       if (claim !== undefined) claims.push(claim);
     }
-    return claims.length > 0 ? Monotonic.max(...claims) : undefined;
+    return claims.length > 0 ? Pwl.max(...claims) : undefined;
   });
   return [colClaims, rowClaims];
 }
@@ -163,7 +163,7 @@ export function gridTrackClaims(
  *    σ-dependent, σ is solved by inverting `Σ claims + gaps = allocated` through
  *    the scope registry (the same frame equation as any other size scope). */
 function resolveAxisTracks(
-  claims: (Monotonic.Monotonic | undefined)[],
+  claims: (Pwl.Value | undefined)[],
   allocated: number,
   spacing: number,
   scopes?: ScopeRegistry,
@@ -183,11 +183,9 @@ function resolveAxisTracks(
     // irrelevant (read back the intercept at σ=0).
     let sigma = 0;
     if (nFill === 0 && scopes !== undefined && meta !== undefined) {
-      const claimed = claims.filter(
-        (c): c is Monotonic.Monotonic => c !== undefined
-      );
-      const gridClaim = Monotonic.adds(Monotonic.add(...claimed), gaps);
-      if (!Monotonic.isConstant(gridClaim)) {
+      const claimed = claims.filter((c): c is Pwl.Value => c !== undefined);
+      const gridClaim = Pwl.addConstant(Pwl.add(...claimed), gaps);
+      if (!Pwl.isConstant(gridClaim)) {
         sigma =
           scopes.solveSize(
             { kind: "grid", rootKey: meta.rootKey, axis: meta.axis },
@@ -198,7 +196,7 @@ function resolveAxisTracks(
       }
     }
     const claimedExtents = claims.map((c) =>
-      c === undefined ? undefined : Math.max(0, c.run(sigma))
+      c === undefined ? undefined : Math.max(0, Pwl.at(c, sigma))
     );
     const claimedTotal =
       claimedExtents.reduce((s: number, e) => s + (e ?? 0), 0) + gaps;

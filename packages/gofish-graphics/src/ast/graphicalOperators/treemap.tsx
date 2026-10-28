@@ -25,6 +25,7 @@ import { computeAesthetic, computeSize } from "../../util";
 import { posFn, pxOf } from "../domain";
 import { UnderlyingSpace, UNDEFINED, magnitude } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
+import * as Pwl from "../solver/pwl";
 import { createOperator } from "../marks/createOperator";
 import { SplitBy, splitEntries } from "../datumProjection";
 import type { FieldExpr } from "../fieldExpr";
@@ -154,7 +155,7 @@ const Treemap = createNodeOperator(
             const extent = myExtent[dir];
             if (extent !== undefined) {
               return (
-                extent.width.inverse(size[dir], {
+                Pwl.solve(extent.width, size[dir], {
                   upperBoundGuess: size[dir],
                 }) ?? 0
               );

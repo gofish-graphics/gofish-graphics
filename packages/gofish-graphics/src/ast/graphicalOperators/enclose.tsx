@@ -47,7 +47,7 @@ import { nodeSelectionOf } from "../nodeSelection";
 import { placementIn } from "../placementClaims";
 import type { Placement } from "../constraints/claimPlacement";
 import { Extent } from "../extent";
-import * as Monotonic from "../../util/monotonic";
+import * as Pwl from "../solver/pwl";
 import { ringPathData } from "../geometry/plane";
 
 export type EncloseOptions = {
@@ -270,16 +270,13 @@ function paddedPlacement(
     if (p === undefined) return undefined;
     boxes.push(p);
   }
-  const ascent = Monotonic.adds(
-    Monotonic.envelope(boxes.map((b) => b.hi)),
-    padding
-  );
-  const descent = Monotonic.adds(
-    Monotonic.envelope(boxes.map((b) => Monotonic.negate(b.lo))),
+  const ascent = Pwl.addConstant(Pwl.envelope(boxes.map((b) => b.hi)), padding);
+  const descent = Pwl.addConstant(
+    Pwl.envelope(boxes.map((b) => Pwl.negate(b.lo))),
     padding
   );
   return {
-    lo: Monotonic.negate(descent),
+    lo: Pwl.negate(descent),
     hi: ascent,
     extent: Extent(ascent, descent),
   };

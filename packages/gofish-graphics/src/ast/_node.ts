@@ -77,7 +77,7 @@ import {
   type AxisTicks,
 } from "./underlyingSpace";
 import { impliedExtents, Extent, padExtent } from "./extent";
-import * as Monotonic from "../util/monotonic";
+import * as Pwl from "./solver/pwl";
 import type {
   BoxForm,
   ClaimPlacement,
@@ -1270,7 +1270,7 @@ export class GoFishNode {
         );
       const fills = extent[dim] === undefined && this.inkOn?.[dim] !== true;
       if (fills && this.sharesRoom(dim) && this.inShare(dim))
-        extent[dim] = Extent(Monotonic.linear(1, 0));
+        extent[dim] = Extent(Pwl.affine(1, 0));
       return fills;
     }) as [boolean, boolean];
     for (const dim of [0, 1] as const) {

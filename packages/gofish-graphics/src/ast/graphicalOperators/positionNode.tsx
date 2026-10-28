@@ -14,7 +14,7 @@ import {
 } from "../underlyingSpace";
 import { GoFishAST } from "../_ast";
 import { Extent } from "../extent";
-import * as Monotonic from "../../util/monotonic";
+import * as Pwl from "../solver/pwl";
 
 export type PositionNodeOptions = {
   key?: string;
@@ -75,16 +75,16 @@ const offsetExtent = (
 ): Extent | undefined => {
   if (extent !== undefined && typeof offset === "number")
     return Extent(
-      Monotonic.adds(extent.ascent, offset),
-      Monotonic.adds(extent.descent, -offset)
+      Pwl.addConstant(extent.ascent, offset),
+      Pwl.addConstant(extent.descent, -offset)
     );
   if (extent === undefined || !isValue(offset) || !isCONTINUOUS(space))
     return extent;
   const value = getValue(offset);
   if (value === undefined) return extent;
   return Extent(
-    Monotonic.add(extent.ascent, Monotonic.linear(value, 0)),
-    Monotonic.add(extent.descent, Monotonic.linear(-value, 0))
+    Pwl.add(extent.ascent, Pwl.affine(value, 0)),
+    Pwl.add(extent.descent, Pwl.affine(-value, 0))
   );
 };
 

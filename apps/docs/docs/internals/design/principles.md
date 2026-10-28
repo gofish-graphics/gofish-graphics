@@ -206,7 +206,7 @@ and the Python surface, are collected in [API Design](/internals/design/api-desi
 The compiler-pipeline framing is the spine of this pillar, but not all of it. Other
 programming-languages ideas thread through GoFish and deserve their own treatment:
 **hygienic scoping** for [names](/internals/core/names-and-scoping), by analogy to
-hygienic macros; the [monotonic algebra](/internals/core/monotonic) as a form of
+hygienic macros; the [piecewise-linear value algebra](/internals/core/pwl) as a form of
 abstract interpretation; and a categorical reading of the frontend. They are
 flagged here and expanded elsewhere as the wiki grows.
 
