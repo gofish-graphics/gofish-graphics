@@ -13,7 +13,7 @@ them on a real axis. In each cell, `intersect([ref("density"), region()])`
 keeps the part of the density inside the cell, and `intersect` becomes a
 vector operation when both sides have an outline, so the piece can be filled
 and stroked. The dot is a `circle` at the median of the drawn density within the cell
-(a weighted median over the density's grid rows; see "Rows or the drawn density?"). The gap is
+(the density is first turned into quantile rows by a `derive` helper; see "Rows or the drawn density?"). The gap is
 `region({ inset })`, drawn in like `rect.inset`. No new operator.
 
 Prototype stories: `packages/gofish-graphics/stories/_proposals/Croissant.stories.tsx`
@@ -181,8 +181,10 @@ field("x").bin(Bin.quantiles([0.05, 0.25, 0.5, 0.75, 0.95]))
     dotplots do. With N = 1000 the edges are off by less than 0.003σ.
   - _A large random sample_ works too but is noisier for the same N.
   - A weighted form, `Bin.quantiles(10, { weight: "pdf" })` over a grid of
-    density rows, would make the grid table do both jobs. Left as a question
-    (decision 2), since quantile rows already work.
+    density rows, would make the grid table do both jobs. Rejected: it adds an
+    option that first-class distributions (#980) would make redundant. Quantile
+    rows are a rough stand-in for a distribution that lives in data prep and
+    goes away cleanly when `Dist` lands.
 
 ## Approach A: `cut` takes any shape
 
@@ -200,7 +202,7 @@ chart(grid, { axes: { x: true, y: false } })
       strokeWidth: 2,
     }).cut({
       dir: "x",
-      by: field("x").bin(Bin.quantiles(10, { weight: "pdf" })), // NEW: cells, not weights
+      by: field("x").bin(Bin.thresholds(edges)), // NEW: cells; edges from quantile rows
       inset: 6,
     })
   );
@@ -213,17 +215,18 @@ chart(grid, { axes: { x: true, y: false } })
     .mark(
         ribbon(h="pdf", fill="#D1E4F6", stroke="#467DA8", stroke_width=2).cut(
             dir="x",
-            by=field("x").bin(Bin.quantiles(10, weight="pdf")),
+            by=field("x").bin(Bin.thresholds(edges)),
             inset=6,
         )
     )
 )
 ```
 
-- New: `.cut` on a relational mark, `by` on `cut`, the weighted quantile form,
-  and vector slicing inside `cut`.
-- The ribbon's rows are the density grid, not the samples, so the cells must
-  come from a weighted quantile of the grid. The samples cannot drive the cut.
+- New: `.cut` on a relational mark, `by` on `cut`, and vector slicing inside
+  `cut`.
+- The ribbon's rows are the density grid, not the samples, so the cells cannot
+  come from the ribbon's own rows. The edges have to be computed elsewhere
+  (from quantile rows) and passed in, a second dataset that B does not need.
 - Axes: `cut` returns an array that a `stack` puts back together, which has
   only a size space. To get an axis, `cut` would need to keep the source's
   position space, which is what `partition` already does.
@@ -639,34 +642,38 @@ and no two edges can meet. It is also what the parametric case already does
 | ![](img/croissant--ridgeline-by-month.png) 65 of 120 dots outside | ![](img/croissant--ridgeline-by-month-density.png) 0 of 120 |
 | ![](img/croissant--penguin-body-mass.png)                         | ![](img/croissant--penguin-body-mass-density.png)           |
 
-Two spellings read the density (both new; the renders compute the same
-numbers by hand):
+Two spellings read the density (the renders compute the same numbers by
+hand):
 
 ```js
-// (a) Weighted quantiles over the density's own grid rows: one dataset draws
-//     the shape, makes the cells and places the dots.
+// (b) Recommended: turn the drawn curve into quantile rows, then the plain
+//     Bin.quantiles and median. quantileRows is a data helper (shortcut until
+//     first-class distributions, #980).
 chart(grid) // rows { x, pdf }
-  .flow(partition({ by: field("x").bin(Bin.quantiles(10, { weight: "pdf" })) }))
-  .mark(circle({ cx: field("x").median({ weight: "pdf" }), cy: 6, r: 3 }));
-
-// (b) Derive quantile rows from the density first, then the unweighted forms.
-chart(grid)
   .flow(
-    derive((rows) => quantileRows(rows, { x: "x", weight: "pdf", n: 1000 }))
+    derive((rows) => quantileRows(rows, { x: "x", density: "pdf", n: 1000 }))
   )
   .flow(partition({ by: field("x").bin(Bin.quantiles(10)) }))
   .mark(circle({ cx: field("x").median(), cy: 6, r: 3 }));
+
+// (a) Rejected: weighted forms over the grid rows. Adds options Dist would
+//     make redundant.
+chart(grid)
+  .flow(partition({ by: field("x").bin(Bin.quantiles(10, { weight: "pdf" })) }))
+  .mark(circle({ cx: field("x").median({ weight: "pdf" }), cy: 6, r: 3 }));
 ```
 
-**Recommendation: (a).** It keeps one dataset for shape, cells and dots, and a
-weight says how much each grid row counts (numpy `quantile(weights=)`). It is
-a shortcut: ggdist's `weight` aesthetic is for weighted samples, and with a
-distribution object ggdist reads density and quantiles from the object, with
-no weight. The clean spelling is a first-class distribution (#980, design note
-#983); the weight stands in until then. The unweighted
-`Bin.quantiles(n)` over rows stays for when the rows really are the thing
-being cut. This folds the old decisions 2 (weighted quantiles) and 3 (ties)
-into one question.
+**Recommendation: (b), as a declared shortcut.** The clean spelling is a
+first-class distribution (#980, design note #983): hand the chart
+`kde(samples)` or `normal(0, 1)`, and `Bin.quantiles` and `median` read the
+curve. Until then, `quantileRows` is a rough stand-in for one: 1000 rows at
+the curve's quantiles behave like the distribution to within 0.003σ. It adds
+no option to `Bin.quantiles` or `median`, and it lives in data prep, so
+`Dist` replaces it without removing anything from the core API. (a) would add
+`weight` options that `Dist` makes half redundant. (ggdist is no precedent for
+(a): its `weight` aesthetic is for weighted samples, and with a distribution
+object it reads density and quantiles from the object.) TODO when this
+lands: open a follow-up on #980 to replace `quantileRows` with `Dist`.
 
 ### Why the row median misses: one month up close
 
@@ -778,11 +785,11 @@ Both still need vector slicing, so choice 3 stands either way.
 1. **Vector intersect.** Should `intersect`, `subtract` and `exclude` compute
    path booleans whenever every operand has an outline, and keep pixel
    compositing only for images?
-2. **Quantiles of what?** Should a croissant take its edges and dots from the
-   drawn density (`Bin.quantiles(n, { weight: "pdf" })` and
-   `median({ weight: "pdf" })` over the density's grid rows), as the
-   renders now do? Rows give dots in the gaps on rounded data (65 of 120 in
-   the ridgeline).
+2. **Quantile rows helper.** Decided: edges and dots come from the drawn
+   curve, through a `derive` helper that turns it into quantile rows, as a
+   shortcut until first-class distributions (#980). Open: the helper's name
+   and signature (`quantileRows(rows, { x, density, n })`?), and its Python
+   spelling.
 3. **Ties over rows.** When `Bin.quantiles(n)` runs over rows and edges
    coincide: error (polars' default), merge the cells, or keep an empty cell?
 4. **Paint of a composite.** Does the result of `intersect` take its own
@@ -805,6 +812,7 @@ field("x").median(); // new fold
 region({ inset: 3 }); // new option, same meaning as rect.inset
 intersect({ fill, stroke, strokeWidth }, [a, b]); // new paint options; vector when a and b have outlines
 circle({ cx: field("x").median() }); // center at the cell median
+derive((rows) => quantileRows(rows, { x: "x", density: "pdf", n: 1000 })); // new data helper (shortcut until Dist, #980)
 ```
 
 ```python
@@ -813,6 +821,7 @@ Bin.quantiles([0.05, 0.25, 0.5, 0.75, 0.95])
 field("x").median()
 region(inset=3)
 intersect([a, b], fill=..., stroke=..., stroke_width=...)
+derive(lambda rows: quantile_rows(rows, x="x", density="pdf", n=1000))
 ```
 
 ## Found along the way
