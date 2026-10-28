@@ -48,6 +48,7 @@ export {
   COMBINATOR_OPTIONS_BASE_FIELDS,
   DESCRIPTOR_TABLES,
   acceptedFields,
+  isFlowStepMark,
   carriesChannel,
   carriesNodes,
   mapHeldNodes,

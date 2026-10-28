@@ -165,9 +165,15 @@ function buildOperatorDefs(): Record<string, unknown> {
     };
     refs.push({ $ref: `#/$defs/${defName}` });
   }
+  // A leaf mark that may stand as a `.flow(...)` step (`enclose`) is its own
+  // mark's IR in `operators`.
+  for (const descriptor of Object.values(LEAF_MARKS)) {
+    if (descriptor.flowStep)
+      refs.push({ $ref: `#/$defs/${pascalCase(descriptor.type)}Mark` });
+  }
   defs.OperatorIR = {
     description:
-      "A pipeline operator — a discriminated union, one member per operator type. See validate.ts and schema.ts for the same field shapes.",
+      "A pipeline operator — a discriminated union, one member per operator type, plus each leaf mark that may stand as a flow step. See validate.ts and schema.ts for the same field shapes.",
     oneOf: refs,
   };
   return defs;

@@ -7,17 +7,16 @@ import {
 } from "../_node";
 import { outlinePaint, pathOutline } from "../geometry";
 import { end } from "../../families/place";
-import { Size, displayTranslate } from "../dims";
+import { Size } from "../dims";
 import type { DisplayList } from "gofish-ir";
 import {
   lowerStyle,
   pathToPixelSVG,
-  withToPixel,
+  lowerChildrenOffset,
 } from "../displayList/lowerHelpers";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { axisScale } from "../domain";
 import { createNodeOperator } from "../withGoFish";
-import { orderChildrenForPaint } from "../paintOrder";
 import type { ArrowOptions } from "perfect-arrows";
 import { bbox, union } from "../../util/bbox";
 import {
@@ -183,12 +182,10 @@ export const arrow = createNodeOperator(
         ): DisplayList.DisplayItem[] => {
           const data = renderData!;
           const sw = props.strokeWidth ?? 0;
-          const [tx, ty] = displayTranslate(transform);
           const session = node.getRenderSession();
           const outer = session.toPixel!;
-          // Children are placed in pixels under the arrow's translate; the
-          // arrow's own points are in its axis order, placed by `local`.
-          const composed: ToPixel = ([cx, cy]) => outer([tx + cx, ty + cy]);
+          // Children are placed under the arrow's translate; the arrow's own
+          // points are in its axis order, placed by `local`.
           const own: ToPixel = (p) => outer(local(p));
           const px = (x: number, y: number) => own([x, y]).join(",");
 
@@ -228,11 +225,7 @@ export const arrow = createNodeOperator(
           // order (#982). Which child is the source and which the target is
           // read from `node.children` by index; paint order does not change it.
           items.push(
-            ...withToPixel(node, composed, () =>
-              orderChildrenForPaint(node).flatMap((c) =>
-                c.INTERNAL_lower(coordinateTransform)
-              )
-            )
+            ...lowerChildrenOffset(node, transform, coordinateTransform)
           );
           return items;
         },

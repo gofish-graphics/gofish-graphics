@@ -199,7 +199,10 @@ How the re-walk lands descendants in absolute coordinates splits by boundary kin
 Whatever its kind, a boundary that paints its children in turn (`coord`, `box`,
 `enclose`, `offset`, `arrow`) takes their order from `orderChildrenForPaint`, the same
 rule the bake uses, so a z constraint that parts inside a boundary takes effect there.
-A compositor paints one result from a source and a destination child, so it has no
+A compositor lowers each of its two operands as a subtree (`lowerSubtree`, over
+`bakeSubtree` in `bake.ts`, the one-child walk `bakeChildren` runs per child), so an
+operand that only places its children, a `pack` or a `treemap`, lowers its leaves.
+It paints one result from a source and a destination child, so it has no
 order to take: it calls `assertNoPaintOrder`, which throws if a z constraint parts at
 it (see [How a layer orders its children](/internals/layout/coord-flattening#how-a-layer-orders-its-children)).
 

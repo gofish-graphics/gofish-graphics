@@ -4,7 +4,7 @@ import { GoFishNode } from "../_node";
 import type { Placeable, ToPixel } from "../_node";
 import { Size, displayTranslate } from "../dims";
 import type { Extent } from "../extent";
-import { pixelBox } from "../displayList/lowerHelpers";
+import { pixelBox, lowerSubtree } from "../displayList/lowerHelpers";
 import { UnderlyingSpace } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
 import { unionChildExtents, unionChildSpaces } from "./alignment";
@@ -150,8 +150,11 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
             // `paintSVG`'s / `render.ts`'s `composite` case), so child
             // coordinates must start near the bbox's own origin rather than
             // the document's. We reproduce that by subtracting the bbox origin.
-            const composed: ToPixel = ([cx, cy]) => {
-              const [ax, ay] = outer([tx + cx, ty + cy]);
+            // Each operand's subtree is baked under the node's translate
+            // (`lowerSubtree`), so an operand that only places its children
+            // (a `pack`) lowers its leaves, through this shift.
+            const composed: ToPixel = (p) => {
+              const [ax, ay] = outer(p);
               return [ax - bx, ay - by];
             };
 
@@ -160,8 +163,16 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
             let source: DisplayList.DisplayItem[];
             let dest: DisplayList.DisplayItem[];
             try {
-              source = node.children[0].INTERNAL_lower(coordinateTransform);
-              dest = node.children[1].INTERNAL_lower(coordinateTransform);
+              source = lowerSubtree(
+                node.children[0],
+                [tx, ty],
+                coordinateTransform
+              );
+              dest = lowerSubtree(
+                node.children[1],
+                [tx, ty],
+                coordinateTransform
+              );
             } finally {
               session.toPixel = outer;
             }
@@ -299,20 +310,22 @@ export const mask = createNodeOperator(
           node
         ): DisplayList.DisplayItem[] => {
           const [tx, ty] = displayTranslate(transform);
-          const session = node.getRenderSession();
-          const outer = session.toPixel!;
-          const composed: ToPixel = ([cx, cy]) => outer([tx + cx, ty + cy]);
+          const outer = node.getRenderSession().toPixel!;
 
+          // Each operand's subtree is baked under the node's translate
+          // (`lowerSubtree`), so an operand that only places its children
+          // (a `pack`) lowers its leaves.
           assertNoPaintOrder(node);
-          session.toPixel = composed;
-          let maskItems: DisplayList.DisplayItem[];
-          let content: DisplayList.DisplayItem[];
-          try {
-            maskItems = node.children[0].INTERNAL_lower(coordinateTransform);
-            content = node.children[1].INTERNAL_lower(coordinateTransform);
-          } finally {
-            session.toPixel = outer;
-          }
+          const maskItems = lowerSubtree(
+            node.children[0],
+            [tx, ty],
+            coordinateTransform
+          );
+          const content = lowerSubtree(
+            node.children[1],
+            [tx, ty],
+            coordinateTransform
+          );
 
           const minX = intrinsicDims?.[0]?.min ?? 0;
           const minY = intrinsicDims?.[1]?.min ?? 0;

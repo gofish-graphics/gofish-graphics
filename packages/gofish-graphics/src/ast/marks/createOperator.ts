@@ -83,6 +83,7 @@ import {
   type OperatorTransition,
 } from "../../animation/transition";
 import { withWire, wireOf } from "../wire";
+import { isFlowStep, withFlowStep } from "./compose";
 import { isThenable } from "../../util";
 import { withKindValues } from "../strategyKind";
 import { resolveRefData } from "./resolveRefData";
@@ -336,8 +337,11 @@ function modifierMethod(
         )(...(resolveArgs ? await resolveArgs(inputs) : args));
     }
     // Preserve the kind tag so applyMark dispatches correctly through the
-    // wrapped mark, then let the modifier stamp its own metadata.
+    // wrapped mark, and the flow-step tag so a chained `enclose(opts)`
+    // still stands in `.flow(...)`; then let the modifier stamp its own
+    // metadata.
     withMarkKind(wrapped, getMarkKind(base));
+    withFlowStep(wrapped, isFlowStep(base));
     // Preserve the blank-fusion descriptor (see chart.ts's
     // `tagRelationalFusable`) through `.name()`/`.label()`/`.zOrder()`
     // chaining, so `.mark(ribbon(opts).name("area"))` still fuses — the
@@ -372,6 +376,7 @@ export function translateMark<T>(
     return positionNode(opts, [node]);
   };
   withMarkKind(wrapped, getMarkKind(base));
+  withFlowStep(wrapped, isFlowStep(base));
   forwardInputsResolver(wrapped, [base], ([m]) =>
     translateMark(m as Mark<T>, opts)
   );

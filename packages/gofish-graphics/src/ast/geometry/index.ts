@@ -26,6 +26,7 @@ export {
   enclosingCircle,
   circleAroundBox,
   translateCircle,
+  ringsEnclosingCircle,
 } from "./enclosingCircle";
 export type { Circle, HasEnclosingCircle } from "./enclosingCircle";
 export {
@@ -39,6 +40,7 @@ export {
   openRing,
   outlineSegments,
   ringOutline,
+  simplifyRing,
   pathOutline,
   orderToPixel,
 } from "./outline";

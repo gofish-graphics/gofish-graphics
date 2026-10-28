@@ -25,6 +25,7 @@ const {
   group,
   Shape,
   Serialize,
+  pack,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -262,10 +263,7 @@ console.log("# nested children, rendered and serialized alike");
 console.log("# a single ref is not a node list, in JS as on the wire");
 {
   const message = await errorOf(() =>
-    layer([
-      circle({ r: 5 }).name("a"),
-      circle({ r: 5 }).name("b"),
-    ])
+    layer([circle({ r: 5 }).name("a"), circle({ r: 5 }).name("b")])
       .relate(({ a, b }: any) => [
         enclose({ shape: Shape.spine({ avoiding: b }) }, [a]),
       ])
@@ -289,6 +287,53 @@ console.log("# a single ref is not a node list, in JS as on the wire");
     },
   });
   check("the validator rejects it too", !wire.valid);
+}
+
+console.log("# a flow-step enclose's modifiers, through JS toJSON and back");
+{
+  const rows = [
+    { g: "a", r: 10 },
+    { g: "a", r: 14 },
+    { g: "b", r: 12 },
+  ];
+  const build = () =>
+    chart(rows)
+      .flow(
+        pack({ by: "g", spacing: 4 }),
+        enclose({ shape: Shape.arcs(), padding: 4 })
+          .name("region")
+          .label("g")
+          .zOrder(-1),
+        pack()
+      )
+      .mark(circle({ r: 12, fill: "#888" }));
+  const doc = await build().toJSON();
+  check("the IR validates", valid(doc) === "", valid(doc));
+  const step = (doc.root as any).operators[1];
+  // JS toJSON writes no mark's zOrder (a leaf mark's neither); Python
+  // writes it, so the step's IR holds one as a mark's does.
+  check(
+    "the step's IR carries its name and label",
+    step.type === "enclose" &&
+      step.name === "region" &&
+      step.label?.[0]?.accessor === "g",
+    JSON.stringify(step)
+  );
+  const withZ = JSON.parse(JSON.stringify(doc));
+  withZ.root.operators[1].zOrder = -1;
+  check("a step's zOrder validates", valid(withZ) === "", valid(withZ));
+  const js = await svgOf((el) => build().render(el, { w: 300, h: 300 }));
+  const ir = await svgOf((el) =>
+    Serialize.renderIR(JSON.parse(JSON.stringify(doc)), el, {
+      w: 300,
+      h: 300,
+    })
+  );
+  check(
+    "fromJSON renders the same labeled outlines",
+    ir === js && js.includes("<path") && js.includes(">a<"),
+    `${ir.length} vs ${js.length} chars`
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

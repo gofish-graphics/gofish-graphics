@@ -31,6 +31,7 @@ import { GoFishRef } from "../ast/_ref";
 import { GoFishNode } from "../ast/_node";
 import { RelateOperand } from "../ast/constraints/relate";
 import { wireOf } from "../ast/wire";
+import { flowStepMarkOf } from "../ast/marks/compose";
 import { nodeSelectionOf } from "../ast/nodeSelection";
 import { schemaToWire } from "../ast/schema";
 
@@ -310,7 +311,17 @@ async function chartBuilderToChartIR(
   // round-trip through fromJSON → toJSON doesn't gain a spurious
   // `operators: []` on the second pass when none were specified.
   if (operators.length > 0) {
-    ir.operators = operators.map(operatorToIR);
+    // A flow step that is a mark (`enclose(opts)`) is that mark's own IR.
+    // In order, so table ids are minted in walk order.
+    ir.operators = [];
+    for (const op of operators) {
+      const stepMark = flowStepMarkOf(op);
+      ir.operators.push(
+        stepMark !== undefined
+          ? ((await markToIR(stepMark, tables)) as Frontend.FlowStepMarkIR)
+          : operatorToIR(op)
+      );
+    }
   }
   if (options && Object.keys(options).length > 0) {
     // A schema crosses the wire as its records of classes, as Python writes

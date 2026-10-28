@@ -997,6 +997,18 @@ helper, which falls back to the box when the node does not answer.
 The `pack` operator (`graphicalOperators/pack.tsx`) is the first consumer. It
 lays out each child, reads `enclosingCircle(child.geometry())`, runs d3's
 `packSiblings`, and places each child so its circle lands where d3 put it.
+`spacing` grows each circle by half of it before packing, so it is the gap
+in pixels between siblings. The pack's own circle is the smallest around the
+children themselves, not their grown circles, so a pack carries no margin
+past its outermost children, and nested packs with the same `spacing` keep
+the same gap between groups. A pack answers the queries itself: its outline is
+its children's outlines, each moved to where the pack placed it, and its
+enclosing circle is the smallest circle around theirs. So an `enclose` around
+a pack hugs the circles, not the pack's box, and a pack of packs packs the
+inner packs' circles. A group with children answers only `enclosingCircle`
+in general, and its outline is still its box (#1233): labels and enclose
+members read outlines, so the general rule would move existing renders, and
+only `pack` answers its outline so far.
 Geometry exists only after layout, so a parent cannot yet read it while sizing.
 That is why `pack` keeps its children at their pixel size and does not fit
 itself to the space it is given (#967). The design note is

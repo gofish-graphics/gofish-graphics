@@ -42,6 +42,7 @@ import {
   LABEL_OPTIONS,
   OPTION_TYPES,
   acceptedFields,
+  isFlowStepMark,
   MARK_BASE_FIELDS,
   t,
   type FieldGroup,
@@ -578,6 +579,9 @@ export const isAxisInterval = (v: unknown): v is Record<string, unknown> =>
   !("type" in v) &&
   !("__gofish_lambda" in v);
 
+/** The leaf marks that may stand in `operators` (`isFlowStepMark`). */
+const FLOW_STEP_MARK_TYPES = LEAF_MARK_TYPES.filter(isFlowStepMark);
+
 /** Resolve a `t.ref(name)`: a named option type (`OPTION_TYPES`) walks with
  *  the generic field-type interpreter; any other name is one of the authored
  *  envelope shapes validated elsewhere in this file. */
@@ -668,13 +672,18 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
     ctx.errors.push({ path, message: "expected object" });
     return;
   }
+  // A flow step that is a mark (`enclose`) is the mark's own IR.
+  if (isFlowStepMark(node.type)) {
+    walkLeafMark(node, path, ctx);
+    return;
+  }
   if (
     typeof node.type !== "string" ||
     !(OPERATOR_TYPES as readonly string[]).includes(node.type)
   ) {
     ctx.errors.push({
       path: `${path}.type`,
-      message: `operator type must be one of ${OPERATOR_TYPES.join(", ")}, got ${JSON.stringify(
+      message: `operator type must be one of ${[...OPERATOR_TYPES, ...FLOW_STEP_MARK_TYPES].join(", ")}, got ${JSON.stringify(
         node.type
       )}`,
     });

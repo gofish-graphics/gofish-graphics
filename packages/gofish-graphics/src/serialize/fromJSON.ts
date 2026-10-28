@@ -728,6 +728,12 @@ function dataFromIR(data: Frontend.DataIR, ctx: IRContext): unknown {
 function chartFromIR(chartSpec: ChartSpec, ctx: IRContext): ChartBuilder<any> {
   const operators: Operator<any, any>[] = [];
   for (const opSpec of (chartSpec.operators ?? []) as OperatorSpec[]) {
+    // A flow-step mark (`enclose`) is its own mark's IR in `operators`, and
+    // `.flow(...)` makes the step of the mark it rebuilds.
+    if (Frontend.isFlowStepMark(opSpec.type)) {
+      operators.push(mapMark(opSpec as MarkSpec, ctx) as any);
+      continue;
+    }
     const op = mapOperator(opSpec, ctx.bridge, ctx.resolveToken);
     if (op) operators.push(op);
   }

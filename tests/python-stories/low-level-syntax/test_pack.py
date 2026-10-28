@@ -7,7 +7,7 @@ circle around its own children. Uses pack's combinator form
 (``pack([marks])``); the normalized DOM should match the JS MixedShapes story.
 """
 
-from gofish import circle, ellipse, pack, polygon
+from gofish import Shape, circle, ellipse, enclose, pack, polygon
 
 COLORS = ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f"]
 
@@ -31,4 +31,30 @@ def story_mixed_shapes():
             circle(r=30, fill=COLORS[4]),
         ]),
         {"w": 420, "h": 420},
+    )
+
+
+def story_enclosed():
+    # A pack inside an enclose: the blob hugs the circles, not the pack's box.
+    return (
+        enclose(
+            [
+                pack(
+                    [
+                        circle(r=40, fill=COLORS[0]),
+                        circle(r=26, fill=COLORS[1]),
+                        circle(r=18, fill=COLORS[2]),
+                        circle(r=30, fill=COLORS[3]),
+                        circle(r=12, fill=COLORS[4]),
+                        circle(r=22, fill=COLORS[0]),
+                    ],
+                    spacing=4,
+                )
+            ],
+            shape=Shape.blob(),
+            padding=8,
+            fill="#eee",
+            stroke="#333",
+        ),
+        {"w": 300, "h": 300},
     )

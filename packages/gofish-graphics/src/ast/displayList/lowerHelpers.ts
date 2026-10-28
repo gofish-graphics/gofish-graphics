@@ -10,6 +10,7 @@
 
 import type { DisplayList } from "gofish-ir";
 import type { GoFishNode, ToPixel } from "../_node";
+import type { GoFishAST } from "../_ast";
 import type { CoordinateTransform } from "../coordinateTransforms/coord";
 import { displayTranslate, type Transform } from "../dims";
 import {
@@ -19,7 +20,7 @@ import {
   type Point,
   pathToSVGPath,
 } from "../../path";
-import { orderChildrenForPaint } from "../paintOrder";
+import { bakeChildren, bakeSubtree } from "../coordinateTransforms/bake";
 
 /**
  * The display-list `role` of a lowered item, derived from whether it is
@@ -165,30 +166,15 @@ export const fadeItem = (
   style: { ...item.style, opacity: (item.style?.opacity ?? 1) * alpha },
 });
 
-/** Run `run` with the render session's `toPixel` swapped to `next`, restoring it
- *  afterward — the boundary-lowering primitive (a boundary maps its subtree into
- *  a shifted/warped pixel frame for the duration of the child walk). */
-export const withToPixel = <T>(
-  node: GoFishNode,
-  next: ToPixel,
-  run: () => T
-): T => {
-  const session = node.getRenderSession();
-  const outer = session.toPixel!;
-  session.toPixel = next;
-  try {
-    return run();
-  } finally {
-    session.toPixel = outer;
-  }
-};
-
-/** Lower a boundary's children under its own translate (the legacy
- *  `<g transform>`), plus an optional extra `(dx, dy)` pixel shift — the shared
- *  body of the simple translate-only boundaries (offset, enclose, arrow). The
- *  children lower under the composed `toPixel`, so this also works inside a
- *  compositor (`mask`/`over`/`box`) that remapped `toPixel` to a bbox-local
- *  frame. */
+/** Lower a boundary's children under its own translate, plus an optional
+ *  extra `(dx, dy)` shift — the shared body of the simple translate-only
+ *  boundaries (offset, enclose, arrow). Their subtree is flattened as the
+ *  root bake and `layer` flatten it (`bakeChildren`), so a fresh child that
+ *  only positions its children (a `treemap`, a `pack`, a `spread`) needs no
+ *  lowering of its own, and each leaf lowers at its baked absolute
+ *  transform. The leaves lower under the session's `toPixel`, so this also
+ *  works inside a compositor (`mask`/`over`/`box`) that remapped it to a
+ *  bbox-local frame. */
 export const lowerChildrenOffset = (
   node: GoFishNode,
   transform: Transform | undefined,
@@ -197,12 +183,21 @@ export const lowerChildrenOffset = (
   dy = 0
 ): DisplayList.DisplayItem[] => {
   const [tx, ty] = displayTranslate(transform);
-  const outerToPixel = node.getRenderSession().toPixel!;
-  const composed: ToPixel = ([cx, cy]) =>
-    outerToPixel([tx + dx + cx, ty + dy + cy]);
-  return withToPixel(node, composed, () =>
-    orderChildrenForPaint(node).flatMap((c) =>
-      c.INTERNAL_lower(coordinateTransform)
-    )
+  return bakeChildren(node, [tx + dx, ty + dy]).flatMap((d) =>
+    d.node.INTERNAL_lower(coordinateTransform, d.transform)
   );
 };
+
+/** Lower one subtree, `child` and what it holds, at `translate`: flattened
+ *  by `bakeSubtree`, each entry lowered at its baked absolute transform
+ *  under the session's `toPixel`. A compositor lowers each of its operands
+ *  this way, so an operand that only places its children (a `pack`) needs
+ *  no lowering of its own. */
+export const lowerSubtree = (
+  child: GoFishAST,
+  translate: [number, number],
+  coordinateTransform: CoordinateTransform | undefined
+): DisplayList.DisplayItem[] =>
+  bakeSubtree(child, translate).flatMap((d) =>
+    d.node.INTERNAL_lower(coordinateTransform, d.transform)
+  );
