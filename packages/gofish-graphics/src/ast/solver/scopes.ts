@@ -40,9 +40,15 @@ export type ScopeKind = "root" | "sized" | "coord" | "grid" | "recenter";
 /** A solved σ-scope on one axis: its slope `sigma` (px per data unit) and,
  *  when the scope's type has an origin, `originPx`, the pixel of data 0 (the
  *  baseline) in the scope's box. The map of the scope is
- *  `px(d) = sigma·d + originPx`. An origin-less (`none`) scope has only
- *  differences, so it has a slope and no `originPx`. */
-export type ScopeSolution = { sigma: number; originPx: number | undefined };
+ *  `px(d) = sigma·d + originPx`. A scope with no data 0 (an origin-less
+ *  `none` scope has only differences; an ordinal one has no data
+ *  coordinates) has a slope and no `originPx`: it places its content's box
+ *  instead, which starts `startPx` from the scope's start edge. That is 0
+ *  where the content fills the box; equal measure can leave it short of the
+ *  box ({@link ScopeRegistry.equalizeMeasure}). */
+export type ScopeSolution =
+  | { sigma: number; originPx: number }
+  | { sigma: number; originPx: undefined; startPx: number };
 
 /** The frame a solved scope places its content in, `px(d) = sigma·d +
  *  originPx`, or undefined for an unsolved scope or one with no origin (only
@@ -89,9 +95,10 @@ export type Seat = { px: number; anchor: "baseline" | "min" };
  *  child's baseline at 0, its own origin, which its parent places.
  *
  *  A solved scope with no data 0 (a spread of magnitudes) has no frame to
- *  seat its content in: the content's box sits at the scope's start edge, as
- *  the render root places its box (`placeRoot` in gofish.tsx). So a sized
- *  node starts at its start edge on every axis.
+ *  seat its content in: the content's box sits at the scope's `startPx`, its
+ *  start edge where the content fills the box, as the render root places its
+ *  box (`placeRoot` in gofish.tsx). So a sized node starts at its start edge
+ *  on every axis.
  *
  *  TODO(#773 follow-up): data 0 is the additive identity of the measure's
  *  algebraic structure (an ordered additive group's 0). Measures don't carry
@@ -103,7 +110,7 @@ export const seatInScope = (
   child: UnderlyingSpace | undefined
 ): { seat: Seat; childMap: AxisMap | undefined } => {
   if (scope !== undefined && scope.originPx === undefined)
-    return { seat: { px: 0, anchor: "min" }, childMap: undefined };
+    return { seat: { px: scope.startPx, anchor: "min" }, childMap: undefined };
   const frame = scope as AxisMap | undefined;
   return {
     seat: {
@@ -352,13 +359,11 @@ export class ScopeRegistry {
     if (sigma === undefined) return undefined;
     // Centering slack: 0 when σ fits the claim to the box.
     const offset = oneValue ? (allocated - claim.width.run(0)) / 2 : 0;
+    if (!hasOrigin(space)) return { sigma, originPx: undefined, startPx: 0 };
     return {
       sigma,
-      originPx: !hasOrigin(space)
-        ? undefined
-        : meta.dataZero === "start"
-          ? 0
-          : originPxAt(claim, sigma, offset),
+      originPx:
+        meta.dataZero === "start" ? 0 : originPxAt(claim, sigma, offset),
     };
   }
 
@@ -383,10 +388,9 @@ export class ScopeRegistry {
         sigma,
         hasMap: hasOrigin(space),
       });
-    return {
-      sigma,
-      originPx: hasOrigin(space) ? originPxAt(claim, sigma) : undefined,
-    };
+    return hasOrigin(space)
+      ? { sigma, originPx: originPxAt(claim, sigma) }
+      : { sigma, originPx: undefined, startPx: 0 };
   }
 
   /**
@@ -402,8 +406,10 @@ export class ScopeRegistry {
    * box. Its claim takes the leftover pixels after the content in screen
    * terms, so the content sits at the box's top-left: on its axis order's
    * far end when the order starts at the left or top, and at its start when
-   * a y-up order starts at the bottom. Its `originPx` follows from that
-   * claim. PROVISIONAL: where the leftover goes may be revisited once real
+   * a y-up order starts at the bottom. The content sits past the leftover
+   * before it by its seat (`seatInScope`): its `originPx` follows from that
+   * claim, and a scope with no data 0 starts its content's box there
+   * (`startPx`). PROVISIONAL: where the leftover goes may be revisited once real
    * use suggests a preference.
    *
    * It lives on the registry, so every slope a render produces is
@@ -426,6 +432,8 @@ export class ScopeRegistry {
     const equalize = (info: EqualMeasureAxis, axis: 0 | 1): EqualizedAxis => {
       const { claim, box, direction, space } = info;
       const leftover = Math.max(0, box - claim.width.run(shared));
+      // The leftover pixels before the content along the axis order.
+      const before = direction === 1 ? 0 : leftover;
       const filled =
         leftover === 0
           ? claim
@@ -444,13 +452,12 @@ export class ScopeRegistry {
         });
       return {
         claim: filled,
-        solution: {
-          sigma: shared,
-          originPx:
-            space !== undefined && hasOrigin(space)
-              ? originPxAt(filled, shared)
-              : undefined,
-        },
+        // The content sits after `before` by its seat (`seatInScope`): its
+        // data 0 at the claim's descent where the scope has one, else its
+        // box.
+        solution: hasOrigin(space)
+          ? { sigma: shared, originPx: originPxAt(filled, shared) }
+          : { sigma: shared, originPx: undefined, startPx: before },
       };
     };
     return [equalize(ax, 0), equalize(ay, 1)];

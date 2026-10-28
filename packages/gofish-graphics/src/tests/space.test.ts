@@ -338,7 +338,7 @@ console.log("# space: one seating rule");
   const free = seatInScope(frame, CONTINUOUS(interval(0, 9), "free"));
   const none = seatInScope(frame, CONTINUOUS(interval(0, 9), "none"));
   const ordinal = seatInScope(
-    { sigma: 2, originPx: undefined },
+    { sigma: 2, originPx: undefined, startPx: 0 },
     CONTINUOUS(interval(0, 9), "free")
   );
   ok(
@@ -363,6 +363,35 @@ console.log("# space: one seating rule");
     ordinal.seat.px === 0 &&
       ordinal.seat.anchor === "min" &&
       ordinal.childMap === undefined
+  );
+}
+
+console.log("# space: equal measure seats the content at its box's top-left");
+{
+  // x and y share a declared unit, so both take the binding σ (x's, 100).
+  // y has 100 px left over. Its content has no data 0, so the scope seats
+  // its box: after the leftover where y grows upward (its start is the
+  // bottom), at the start where it reads top-down.
+  const scopes = new ScopeRegistry();
+  const u = declared("plane");
+  const x = CONTINUOUS(interval(0, 4), "pinned", u);
+  const y = CONTINUOUS(interval(0, 2), "none", u);
+  const yAt = (direction: 1 | -1) =>
+    scopes.equalizeMeasure("t", [
+      { space: x, claim: impliedExtent(x)!, box: 400, sigma: 100, direction: 1 },
+      { space: y, claim: impliedExtent(y)!, box: 300, sigma: 150, direction },
+    ])![1].solution;
+  const up = seatInScope(yAt(-1), y).seat;
+  const down = seatInScope(yAt(1), y).seat;
+  ok(
+    "a y-up content's box starts past the leftover, so it sits at the top",
+    yAt(-1).sigma === 100 && up.px === 100 && up.anchor === "min",
+    JSON.stringify(up)
+  );
+  ok(
+    "a top-down content's box starts at the start edge",
+    down.px === 0 && down.anchor === "min",
+    JSON.stringify(down)
   );
 }
 

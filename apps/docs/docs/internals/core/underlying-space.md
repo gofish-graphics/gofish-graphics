@@ -1449,8 +1449,10 @@ solves its two scopes in the claim walk (`solveFixed`) and equalizes them
 there (`equalizeFixed`) before either claim is read. Both take the smaller σ,
 and on the other axis the scope root keeps its box: its claim takes the
 leftover pixels after the content in screen terms, so the content sits at the
-box's top-left and the root still claims its size. This placement is
-provisional.
+box's top-left and the root still claims its size. The content sits past the
+leftover before it by its seat (`seatInScope`): its data 0 where the scope has
+one, else its box, which starts `startPx` from the scope's start edge. This
+placement is provisional.
 
 ### Nicing is a keyed-domain operation, applied on demand
 
