@@ -994,15 +994,9 @@ export const layer = createNodeOperatorSequential(
               spacingOverflow(node, node.axisDir, size[node.axisDir])
             );
 
-          // `position` constraints with a datum coordinate contribute a data
-          // domain on their axis (see collectPositionDomains), and resolve
-          // against the layer's frame. A child such a constraint places gets
-          // no map on that axis (`childPosScalesFor`).
-          const constraintDomains = collectPositionDomains(node.constraints);
-          const ownsAxis: [boolean, boolean] = [
-            constraintDomains.x !== undefined,
-            constraintDomains.y !== undefined,
-          ];
+          // `position` constraints with a datum coordinate resolve against
+          // the layer's frame. A child such a constraint places at a datum
+          // point gets no map on that axis (`childPosScalesFor`).
           const effectivePosScales = layerScales.frames;
           // Which children share this layer's domain on each axis. A
           // detached child is placed elsewhere, so the placement solve does
@@ -1200,7 +1194,6 @@ export const layer = createNodeOperatorSequential(
             const childMaps = childPosScalesFor(
               (children[i] as GoFishNode)._underlyingSpace,
               targetDims,
-              ownsAxis,
               effectivePosScales,
               seats
             );

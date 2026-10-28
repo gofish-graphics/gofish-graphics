@@ -544,7 +544,6 @@ export function buildPositionTargetDims(
 export function childPosScalesFor(
   childSpace: Size<UnderlyingSpace> | undefined,
   targetDims: Set<0 | 1> | undefined,
-  ownsAxis: readonly [boolean, boolean],
   frames: ConstraintPosScales,
   seats: readonly [number | undefined, number | undefined] = [
     undefined,
@@ -552,7 +551,7 @@ export function childPosScalesFor(
   ]
 ): ConstraintPosScales {
   const pick = (dim: 0 | 1) => {
-    if (ownsAxis[dim] && targetDims?.has(dim)) return undefined;
+    if (targetDims?.has(dim)) return undefined;
     const map = seatInScope(frames[dim], childSpace?.[dim]).childMap;
     // A child whose origin the layer pins at a literal pixel shares the
     // frame from there: its own 0 is that pixel.
