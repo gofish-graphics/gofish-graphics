@@ -683,10 +683,9 @@ export type RelationalMark = Mark<any> &
   };
 
 /**
- * The mark `enclose(opts)` returns: a relational mark that is also a
- * `.flow(...)` step (`withFlowStep`). Every modifier keeps the step (the
- * flow step's mark for each group gets the modifier too), so each returns a
- * `FlowStepMark`.
+ * The mark `enclose(opts)` returns: a relational mark that may also stand in
+ * `.flow(...)` (`withFlowStep`). Every modifier keeps the tag, so each
+ * returns a `FlowStepMark`.
  */
 export type FlowStepMark = Mark<any> &
   Operator<any, any> &
@@ -699,7 +698,7 @@ export type FlowStepMark = Mark<any> &
     ): FlowStepMark;
     translate(
       ...args: Parameters<NameableMark<any>["translate"]>
-    ): NameableMark<any> & Operator<any, any>;
+    ): FlowStepMark;
   };
 
 export function createRelationalMark<O extends Record<string, unknown>>(
@@ -722,9 +721,10 @@ export function createRelationalMark<O extends Record<string, unknown>>(
      *  `applyDefaultRelational` resolves `along` from the time tier and hands
      *  the clock down through `inferred.time`. */
     temporal?: boolean;
-    /** The mark is also a `.flow(...)` step (`enclose`): there, each
-     *  group's subtree is its one fresh child, as in the combinator form,
-     *  and its per-group channels are read off the group's rows. */
+    /** The bag mark may also stand in `.flow(...)` (`enclose`, its
+     *  descriptor's `flowStep`): there it is applied to each group's
+     *  subtree as its one fresh operand (`flowStepOperator` in compose.ts),
+     *  and reads its per-group channels off that operand's rows. */
     flowStep?: boolean;
   } = {}
 ) {
@@ -795,6 +795,32 @@ export function createRelationalMark<O extends Record<string, unknown>>(
         (node as any).__gfLive = { ...(node as any).__gfLive, ...liveChannels };
       return node;
     };
+    /** Build one connector over `operands` from `o`: its paint (and other
+     *  per-group channels) read off the rows `group` reaches, its live
+     *  channels at `datum`, tagged by `finish`. */
+    const build = async (
+      o: O,
+      group: unknown,
+      operands: GoFishAST[],
+      datum: unknown,
+      key?: string,
+      layerContext?: LayerContext
+    ): Promise<GoFishNode> =>
+      finish(
+        (await produce(
+          resolveLive(await resolveGroupPaint(type, o, group), datum),
+          operands,
+          inferred,
+          key,
+          layerContext
+        )) as GoFishNode,
+        operands,
+        datum
+      );
+    /** The rows a bag of operands reaches: each operand's datum (a ref's is
+     *  its node's, a node's its own). */
+    const rowsOf = (operands: GoFishAST[]): unknown[] =>
+      operands.map((o) => (o as any).datum);
 
     // Low-level combinator form: connect the given children directly.
     if (children !== undefined) {
@@ -811,21 +837,12 @@ export function createRelationalMark<O extends Record<string, unknown>>(
           // The same child list every combinator takes: marks, promises and
           // nested arrays reify to nodes (`reifyChildren`).
           const operands = await reifyChildren(children);
-          const datum = groupDatumOf(operands);
           // The connector's paint is read off its operands' data.
-          const paintOpts = await resolveGroupPaint(
-            type,
+          return build(
             opts,
-            operands.map((o) => (o as any).datum).filter((v) => v !== undefined)
-          );
-          return finish(
-            (await produce(
-              resolveLive(paintOpts, datum),
-              operands,
-              inferred
-            )) as GoFishNode,
+            rowsOf(operands),
             operands,
-            datum
+            groupDatumOf(operands)
           );
         })()
       );
@@ -868,18 +885,7 @@ export function createRelationalMark<O extends Record<string, unknown>>(
             // An edge's paint is read off its own row; its datum is the
             // one-row list `[row]`.
             const datum = [row];
-            const rowOpts = await resolveGroupPaint(type, opts, datum);
-            return finish(
-              (await produce(
-                resolveLive(rowOpts, datum),
-                [a, b],
-                inferred,
-                undefined,
-                layerContext
-              )) as GoFishNode,
-              [a, b],
-              datum
-            );
+            return build(opts, datum, [a, b], datum, undefined, layerContext);
           })
         );
         return Layer({}, segments);
@@ -917,70 +923,34 @@ export function createRelationalMark<O extends Record<string, unknown>>(
       if (split !== undefined) {
         const entries = splitByTiers(split, d);
         const nodes = await Promise.all(
-          [...entries].map(async ([key, groupRefs]) => {
-            const groupOpts = await resolveGroupPaint(
-              type,
+          [...entries].map(([key, groupRefs]) =>
+            build(
               baseOpts,
-              groupRefs
-            );
-            const datum = groupDatumOf(groupRefs);
-            return finish(
-              (await produce(
-                resolveLive(groupOpts, datum),
-                groupRefs,
-                inferred,
-                key,
-                layerContext
-              )) as GoFishNode,
+              rowsOf(groupRefs),
               groupRefs,
-              datum
-            );
-          })
+              groupDatumOf(groupRefs),
+              key,
+              layerContext
+            )
+          )
         );
         return Layer({}, nodes);
       }
 
       // Unsplit: one connector through the whole bag, treated as a single
       // group for `resolveGroupPaint`.
-      const groupOpts = await resolveGroupPaint(type, baseOpts, d);
-      const datum = groupDatumOf(d);
-      return finish(
-        (await produce(
-          resolveLive(groupOpts, datum),
-          d,
-          inferred,
-          undefined,
-          layerContext
-        )) as GoFishNode,
+      return build(
+        baseOpts,
+        rowsOf(d),
         d,
-        datum
+        groupDatumOf(d),
+        undefined,
+        layerContext
       );
     };
     const result = withWire(nameableMark(mark), { type, opts });
     tagRelationalFusable(result, type, opts, inferred, config.temporal);
-    if (config.flowStep) {
-      // Flow-step form: `.flow(..., enclose(opts), ...)`. The step wraps the
-      // node the rest of the flow builds for each group, so the outline is
-      // part of the layout the operator above it arranges.
-      const step: Operator<any, any> = async (inner) =>
-        (async (d: unknown[], key, layerContext) => {
-          const child = await resolveMarkResult(inner, layerContext, d, key);
-          const groupOpts = await resolveGroupPaint(type, opts, d);
-          const datum = datumOfInput(d);
-          return finish(
-            (await produce(
-              resolveLive(groupOpts, datum),
-              [child],
-              inferred,
-              undefined,
-              layerContext
-            )) as GoFishNode,
-            [child],
-            datum
-          );
-        }) as Mark<any>;
-      withFlowStep(result, withWire(step, { type, opts }));
-    }
+    withFlowStep(result, config.flowStep);
     return result;
   }
   return relational;

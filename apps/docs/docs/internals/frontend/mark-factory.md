@@ -485,11 +485,11 @@ forms:
   group** (e.g. `ribbon({})` fused over `stack({ by: "species" })` draws one
   band per species; see "Default grouping" below). A refs-bag chart spells
   the same split structurally instead, via an upstream `group()`.
-- **Flow-step form** (`enclose` only, `flowStep: true`): the bag mark also
-  carries a flow step (`withFlowStep` in compose.ts), which `.flow()` and
-  `compose()` take in its place. The step wraps each group's subtree as the
-  one fresh child of a combinator-form connector, with its paint resolved
-  per group. Position alone tells the two meanings apart; see
+- **Flow-step form** (`enclose` only, `flowStep: true`): the bag mark is
+  tagged as one that may stand in `.flow()` (`withFlowStep` in compose.ts),
+  and `.flow()` and `compose()` wrap it in one generic step
+  (`flowStepOperator`) that applies it to each group's subtree as its one
+  fresh operand, with its paint resolved off that operand's rows. Position alone tells the two meanings apart; see
   [Enclose and the Shape Family](/internals/frontend/enclose).
 
 ### A connector's datum, and its `live()` channels

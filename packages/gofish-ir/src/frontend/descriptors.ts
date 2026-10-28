@@ -275,10 +275,10 @@ export interface ConstructDescriptor {
   include?: FieldGroup[];
   /** This construct's own fields (in addition to any `include`d groups). */
   fields: FieldGroup;
-  /** The base fields its node carries beside its own fields, when they are
-   *  not its kind's (OPTIONS_BASE_FIELDS): a flow step that is a mark
-   *  (`enclose`) carries the mark's modifiers (FLOW_STEP_MARK_BASE_FIELDS). */
-  base?: FieldGroup;
+  /** A leaf mark that may also stand in a chart's `operators`, as a
+   *  `.flow(...)` step (`enclose`): there its IR is the mark's own, and the
+   *  step applies the mark to each group's subtree. */
+  flowStep?: boolean;
 }
 
 /** Merge a descriptor's included groups and own fields into one flat map.
@@ -367,16 +367,6 @@ export const OPERATOR_BASE_FIELDS: FieldGroup = group({
     type: t.boolean,
     doc: "Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.",
   },
-});
-
-/** The base fields of a mark standing as a `.flow(...)` step (`enclose`):
- *  an operator's, plus the mark modifiers an operator has no form of,
- *  `.name()` and `.zOrder()`. Every group's node the step builds takes them
- *  as the mark's node would. */
-export const FLOW_STEP_MARK_BASE_FIELDS: FieldGroup = group({
-  ...OPERATOR_BASE_FIELDS,
-  name: MARK_BASE_FIELDS.name,
-  zOrder: MARK_BASE_FIELDS.zOrder,
 });
 
 /** The base fields the Python generator exposes as kwargs on every operator
@@ -1374,9 +1364,8 @@ const spreadBoxFields: FieldGroup = group({
   ),
 });
 
-/** The options of `enclose`, shared by its three forms: the flow step
- *  (OPERATORS.enclose), the bag form (LEAF_MARKS.enclose) and the
- *  combinator form (COMBINATOR_MARKS.enclose). */
+/** The options of `enclose`, shared by its bag form and flow step
+ *  (LEAF_MARKS.enclose) and its combinator form (COMBINATOR_MARKS.enclose). */
 const ENCLOSE_FIELDS: FieldGroup = group({
   padding: {
     ...ch.raw(
@@ -1725,12 +1714,6 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Gap between sibling circles, in pixels: each child's enclosing circle is packed as if its radius were `spacing / 2` larger.",
       },
     },
-  }),
-
-  enclose: operator("enclose", {
-    doc: "Flow-step form of `enclose`: draw an outline around each group's subtree, as the combinator form draws it around its children. The outline is part of the layout, so the operator above packs or places the outlined group, and an outer `enclose` hugs this outline. The paint and `padding` are read once per group. In `.mark(...)` position, `enclose(opts)` is the bag form (LEAF_MARKS.enclose) instead.",
-    fields: ENCLOSE_FIELDS,
-    base: FLOW_STEP_MARK_BASE_FIELDS,
   }),
 
   partition: operator("partition", {
@@ -2124,8 +2107,9 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   enclose: leafMark("enclose", {
-    doc: "Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.oval()`), the padded members with arc corners (`Shape.arcs()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs. Flow-step form `.flow(..., enclose(opts), ...)`: an outline around each group's subtree, laid out with it (OPERATORS.enclose).",
+    doc: "Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.oval()`), the padded members with arc corners (`Shape.arcs()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs. Flow-step form `.flow(..., enclose(opts), ...)`: an outline around each group's subtree, laid out with it, so the operator above packs or places the outlined group and an outer `enclose` hugs this outline; in a chart's `operators`, its IR is this mark's.",
     fields: ENCLOSE_FIELDS,
+    flowStep: true,
   }),
 
   "mark-fn": leafMark("mark-fn", {
@@ -2486,6 +2470,16 @@ const OPTIONS_BASE_FIELDS: Readonly<Record<NodeKind, FieldGroup>> = {
 
 const acceptedFieldsCache = new Map<string, FieldGroup>();
 
+/** Whether `type` is a leaf mark that may stand in a chart's `operators`
+ *  as a `.flow(...)` step (its descriptor's `flowStep`). */
+export function isFlowStepMark(type: unknown): boolean {
+  return (
+    typeof type === "string" &&
+    Object.hasOwn(LEAF_MARKS, type) &&
+    LEAF_MARKS[type].flowStep === true
+  );
+}
+
 /**
  * The fields the options object of a `kind` construct with wire type `type`
  * accepts, keyed by wire key: its descriptor's fields plus the base fields
@@ -2505,7 +2499,7 @@ export function acceptedFields(
   const table = DESCRIPTOR_TABLES[kind];
   if (!Object.hasOwn(table, type)) return undefined;
   const declared = {
-    ...(table[type].base ?? OPTIONS_BASE_FIELDS[kind]),
+    ...OPTIONS_BASE_FIELDS[kind],
     ...resolveFields(table[type]),
   };
   const fields: FieldGroup = {};

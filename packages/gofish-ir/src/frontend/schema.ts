@@ -186,8 +186,8 @@ export type OperatorIR =
   | LogOperator
   | TreemapOperator
   | PackOperator
-  | EncloseOperator
-  | PartitionOperator;
+  | PartitionOperator
+  | FlowStepMarkIR;
 
 /**
  * `derive(fn)` — opaque user transformation. Function bodies are not
@@ -520,35 +520,13 @@ export interface PackOperator
 }
 
 /**
- * `enclose({...})` as a `.flow()` step: an outline around each group's
- * subtree, laid out with it. The same options as the `enclose` mark
- * (`LeafMarkType`'s `"enclose"`, its bag form, and `CombinatorMarkType`'s
- * `"enclose"`); its place in the chart (`operators` or `mark`) tells the
- * forms apart. Mirrors JS's `EncloseOptions`
- * (`graphicalOperators/enclose.tsx`).
+ * A leaf mark standing in `operators` as a `.flow()` step: `enclose({...})`,
+ * an outline around each group's subtree, laid out with it. Its IR is the
+ * mark's own (`LeafMarkIR` with type `"enclose"`); its place in the chart
+ * (`operators` or `mark`) tells the forms apart. The descriptor's
+ * `flowStep` (`isFlowStepMark`) says which leaf marks may stand here.
  */
-export interface EncloseOperator
-  extends BaseIRNode,
-    TranslatableIR,
-    OperatorFlagsIR {
-  type: "enclose";
-  /** The mark's modifiers, which the step keeps (FLOW_STEP_MARK_BASE_FIELDS
-   *  in descriptors.ts): each group's outline is named, labeled and ordered
-   *  as the mark's would be. */
-  name?: string;
-  label?: LabelIR;
-  zOrder?: number | BridgeLambdaSentinel;
-  /** Pixels between the subtree and the outline, or a field read once per
-   *  group. Default 2. */
-  padding?: ChannelValue;
-  shape?: ShapeIR;
-  fill?: ChannelValue;
-  stroke?: ChannelValue;
-  strokeWidth?: number;
-  strokeDasharray?: string;
-  opacity?: number;
-  fillOpacity?: number;
-}
+export type FlowStepMarkIR = LeafMarkIR & { type: "enclose" };
 
 /**
  * `partition({ by, dir })` — divide the space along `dir` into the cells of
@@ -1167,7 +1145,6 @@ export const OPERATOR_TYPES = [
   "log",
   "treemap",
   "pack",
-  "enclose",
   "partition",
 ] as const;
 

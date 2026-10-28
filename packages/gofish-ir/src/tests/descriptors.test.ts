@@ -137,16 +137,6 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "size",
   ],
   pack: ["by", "spacing"],
-  enclose: [
-    "padding",
-    "shape",
-    "fill",
-    "stroke",
-    "strokeWidth",
-    "strokeDasharray",
-    "opacity",
-    "fillOpacity",
-  ],
   partition: ["by", "dir", "alignment", "axes"],
 };
 

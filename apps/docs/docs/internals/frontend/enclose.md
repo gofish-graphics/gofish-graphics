@@ -43,19 +43,21 @@ becomes the one fresh child of a combinator-form enclose, so the operator
 above lays out the outlined group. The same call is a bag mark in
 `.mark(...)` and a flow step in `.flow(...)`, and only its position tells
 them apart. `createRelationalMark` takes `flowStep: true` for `enclose`
-alone: the bag mark it returns also carries a step (`withFlowStep`,
-`marks/compose.ts`), which `.flow()` and `compose()` take in place of the
-value when they expand their arguments (`expandComposedOperator`). The step
-wraps the inner mark's result and reads the group's paint and `padding` with
-the same `resolveGroupPaint` the bag form uses. On the wire it is an
-operator, `{ type: "enclose", ...opts }` (`OPERATORS.enclose`, which shares
-its fields with the mark), and the deserializer builds it with the same
-`enclose` factory, so Python's `enclose(**opts)` needs no other channel: it
-returns a `_FlowStepMark`, whose IR is the same in both positions. A
-modifier (`.name()`, `.label()`, `.zOrder()`, `.translate()`) keeps the step
-in both languages, and applies to each group's outline: `.label("region")`
-labels each contour. On the wire the step then carries the mark's `name` and
-`zOrder` too (the descriptor's `base` fields).
+alone, and tags the bag mark it returns as one that may stand in
+`.flow(...)` (`withFlowStep`, `marks/compose.ts`). Every modifier carries the
+tag, as it carries the mark's kind. When `.flow()` and `compose()` expand
+their arguments (`expandComposedOperator`), a tagged mark becomes one
+generic step (`flowStepOperator`): for each group, it builds the inner node,
+gives it the group's rows as its datum when it has none, and applies the
+final mark, modifiers and all, to that one node. So the step is the bag form
+over one fresh operand, and its paint and `padding` are read off the
+operand's rows with the same `resolveGroupPaint`. A `.label("region")` labels
+each contour. On the wire the step is the mark's own IR in `operators`
+(`LEAF_MARKS.enclose` has `flowStep: true`, which the validator and the JSON
+Schema read), and the deserializer hands it to `mapMark`, so Python's
+`enclose(**opts)` sends the same IR in both positions. A `.zOrder(fn)`
+callback on a step gets the mark's input, the one operand, as the bag form's
+gets its refs.
 
 `padding` is a raw channel (`ch.raw("number")` in the descriptor table): a
 number, or a field name or accessor read once per group and used as pixels.
