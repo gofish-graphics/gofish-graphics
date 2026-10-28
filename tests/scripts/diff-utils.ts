@@ -312,6 +312,21 @@ export function removeBaselineStory(
   });
 }
 
+/**
+ * Accepts each entry into a baseline directory: a "removed" entry deletes its
+ * baseline (`removeBaselineStory`), any other copies the capture in
+ * (`acceptStory`). Same defaults as `acceptStory`.
+ */
+export function applyEntries(
+  entries: Iterable<Pick<DiffEntry, "kind" | "path">>,
+  dirs: { captureDir?: string; baselineDir?: string } = {}
+): void {
+  for (const { kind, path } of entries) {
+    if (kind === "removed") removeBaselineStory(path, dirs.baselineDir);
+    else acceptStory(path, dirs);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // DOM diff formatting
 // ---------------------------------------------------------------------------

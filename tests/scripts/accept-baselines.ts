@@ -45,12 +45,7 @@ import {
 import { tmpdir } from "os";
 import { join } from "path";
 import { promisify } from "util";
-import {
-  acceptStory,
-  listHtmlFiles,
-  removeBaselineStory,
-  type DiffEntry,
-} from "./diff-utils.js";
+import { applyEntries, listHtmlFiles, type DiffEntry } from "./diff-utils.js";
 import { commitToSnapshotBranch } from "./snapshot-branch.js";
 
 const VISUAL_TESTS_WORKFLOW = ".github/workflows/visual-tests.yml";
@@ -278,12 +273,14 @@ const message = [
 commitToSnapshotBranch(
   `snapshots/${branch}`,
   message,
-  (checkoutDir) => {
-    for (const p of accepts) {
-      acceptStory(p, { captureDir, baselineDir: checkoutDir });
-    }
-    for (const p of removals) removeBaselineStory(p, checkoutDir);
-  },
+  (checkoutDir) =>
+    applyEntries(
+      [
+        ...accepts.map((path) => ({ kind: "new" as const, path })),
+        ...removals.map((path) => ({ kind: "removed" as const, path })),
+      ],
+      { captureDir, baselineDir: checkoutDir }
+    ),
   // Accepting specific files is still right on top of a newer head.
   { retryOnMovedBranch: true, dryRun }
 );
