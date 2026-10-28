@@ -7,10 +7,11 @@ order: 75
 Draws an outline around a set of nodes, under them. The outline is a member of
 the [`Shape`](/python/api/shape) family: the padded bounding box
 (`Shape.box()`, the default), the smallest ellipse around them
-(`Shape.oval()`), or a smooth region (`Shape.blob()`,
-`Shape.hull()`, `Shape.spine()`). Like [`line`](/python/api/marks/line) and
-[`ribbon`](/python/api/marks/ribbon), it reads geometry from nodes that are
-already placed, and it has a combinator form and a bag form.
+(`Shape.oval()`), the padded members with arc corners (`Shape.arcs()`), or a
+smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Like
+[`line`](/python/api/marks/line) and [`ribbon`](/python/api/marks/ribbon), it
+reads geometry from nodes that are already placed, and it has a combinator form
+and a bag form. It also has a flow-step form.
 
 ```python
 from gofish import Shape, chart, circle, enclose, group, scatter, select_all
@@ -39,6 +40,9 @@ enclose(children, *, padding=None, shape=None, fill=None, stroke=None,
 
 # Bag form: around the refs a chart's data holds.
 chart(select_all(name)).mark(enclose(**options))
+
+# Flow-step form: around each group's subtree.
+chart(data).flow(op1, enclose(**options), op2).mark(mark)
 ```
 
 In the combinator form, a fresh child (a mark or an operator) is laid out the
@@ -48,8 +52,24 @@ outline is drawn around it. A `ref(...)` child, or an operand of a
 already is, without being moved.
 
 In the bag form, the members are the refs of the chart's data. A
-`flow(group(by=...))` before the mark draws one outline per group, and `fill`
-or `stroke` may name a field that is constant within each group.
+`flow(group(by=...))` before the mark draws one outline per group, and `fill`,
+`stroke` or `padding` may name a field that is constant within each group.
+
+In the flow-step form, `enclose(**options)` sits between two operators in
+`.flow(...)`. Each group's subtree is its one fresh child, so the operator
+before it lays out the outlined group: a `pack` packs the outline, and an outer
+`enclose` hugs it. The paint and `padding` are read once per group, as in the
+bag form. The same call is the bag form in `.mark(...)`.
+
+```python
+from gofish import Shape, chart, circle, enclose, pack
+
+chart(seafood).flow(
+    pack(by="lake", spacing=6),
+    enclose(shape=Shape.arcs(), padding=4, fill="none"),
+    pack(spacing=2),
+).mark(circle(r=12, fill="species")).render(w=420, h=420)
+```
 
 ```python
 # Fresh children: the box is laid out with them.

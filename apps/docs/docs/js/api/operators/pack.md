@@ -25,8 +25,8 @@ gf.chart(seafood)
 ## Signature
 
 ```ts
-pack({ by? })
-pack({}, marks)
+pack({ by?, spacing? })
+pack({ spacing? }, marks)
 ```
 
 ## Combinator form
@@ -68,6 +68,11 @@ Each child is packed by its enclosing circle, which depends on its shape.
 - A polygon uses the smallest circle through its vertices.
 - A rect or text uses the circle through the corners of its box.
 - A nested `pack` uses the smallest circle around its own children.
+- An [`enclose`](./enclose) around fresh children uses the smallest circle
+  around its outline, stroke included.
+
+`spacing` adds half of itself to each child's circle before packing, so it is
+the gap in pixels between two touching siblings.
 
 ## Limits
 
@@ -76,4 +81,3 @@ Each child is packed by its enclosing circle, which depends on its shape.
   So give each child a size in pixels, e.g., `circle({ r: 12 })`, not
   `circle({ r: "count" })`. See
   [#967](https://github.com/gofish-graphics/gofish-graphics/issues/967).
-- There is no padding between circles yet.

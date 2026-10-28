@@ -16,10 +16,11 @@ covers:
 
 `enclose` draws an outline around a set of nodes, under them. The outline is a
 value of the `Shape` strategy family: the padded bounding box (`Shape.box()`),
-the minimum-area enclosing ellipse (`Shape.oval()`), or a smooth region
-(`Shape.blob()` and its two presets, `Shape.hull()` and `Shape.spine()`). This
-essay explains how the node is built, how an oval's and a blob's outlines
-are computed, and which decisions and shortcuts the design rests on.
+the minimum-area enclosing ellipse (`Shape.oval()`), the padded members with
+arc corners (`Shape.arcs()`), or a smooth region (`Shape.blob()` and its two
+presets, `Shape.hull()` and `Shape.spine()`). This essay explains how the
+node is built, how an oval's, a blob's and an arcs outline are computed, and
+which decisions and shortcuts the design rests on.
 The user-facing reference is [`enclose`](/js/api/operators/enclose) and
 [`Shape`](/js/api/shape).
 
@@ -32,8 +33,32 @@ So it has their forms for free:
 - the combinator form `enclose(opts, children)`, over fresh children,
   `ref(...)` children, or the operands of a `.relate()` clause;
 - the bag form `chart(selectAll(name)).mark(enclose(opts))`, where a
-  `flow(group({ by }))` draws one outline per group and `fill` or `stroke`
-  may name a field that is constant within the group.
+  `flow(group({ by }))` draws one outline per group and `fill`, `stroke` or
+  `padding` may name a field that is constant within the group.
+
+It has one form of its own, the flow step: `enclose(opts)` between two
+operators in `.flow(...)`, as in
+`.flow(pack({ by: "region" }), enclose(opts), pack())`. Each group's subtree
+becomes the one fresh child of a combinator-form enclose, so the operator
+above lays out the outlined group. The same call is a bag mark in
+`.mark(...)` and a flow step in `.flow(...)`, and only its position tells
+them apart. `createRelationalMark` takes `flowStep: true` for `enclose`
+alone: the bag mark it returns also carries a step (`withFlowStep`,
+`marks/compose.ts`), which `.flow()` and `compose()` take in place of the
+value when they expand their arguments (`expandComposedOperator`). The step
+wraps the inner mark's result and reads the group's paint and `padding` with
+the same `resolveGroupPaint` the bag form uses. On the wire it is an
+operator, `{ type: "enclose", ...opts }` (`OPERATORS.enclose`, which shares
+its fields with the mark), and the deserializer builds it with the same
+`enclose` factory, so Python's `enclose(**opts)` needs no other channel: its
+mark carries the operator as `_flow_step`.
+
+`padding` is a raw channel (`ch.raw("number")` in the descriptor table): a
+number, or a field name or accessor read once per group and used as pixels.
+`resolveGroupPaint` passes a raw channel's value through as it is, where it
+maps a color channel through the color scale. `encloseNode` then checks that
+`padding` is a finite number at least 0, so a field that names no column, or
+holds no number, is an error naming `padding`.
 
 `createRelationalMark` hands `produce` the members, and `encloseNode`
 (`graphicalOperators/enclose.tsx`) builds the node. Its children are the
@@ -46,7 +71,11 @@ Layout places a fresh member the way `layer` places a child
 (`placeUnplacedChild`), and leaves a ref where its target is. The box shape
 uses the union of the members' boxes grown by `padding`. An oval or a
 blob computes its outline in the same pass, in the frame the children's boxes
-were read in, and the node's box is the outline's box. Both are kept in `renderData`, and
+were read in, and the node's box is the outline's box. The outline is also
+the node's geometry, stroke included: an enclose over fresh children answers
+`outline` with its loops and `enclosingCircle` with their smallest circle
+grown by half the stroke. So a `pack` that holds it packs the outline, and an
+outer `enclose` hugs it. A box shape keeps the default geometry, its box. Both are kept in `renderData`, and
 `lower` maps them through `local` (the node's translate and y direction) and
 `toPixel`. A blob is one SVG `path` over all its loops. Its outer loops and
 its holes wind opposite ways, so the default nonzero fill rule leaves the
@@ -231,7 +260,7 @@ pulls in; neither changes the pieces or the holes. `src/tests/enclose.test.ts`
 checks this over sweeps of both on two point sets, and checks that the hull
 preset is within half a pixel of the true padded convex hull.
 
-## How arcs are built (PROTOTYPE #1221)
+## How arcs are built
 
 `arcs.ts` builds `Shape.arcs({ radius })`, the bubble treemap contour of
 Görtler et al. (2018). The region is the morphological closing, by a disc of
@@ -245,6 +274,15 @@ inward, and each corner becomes an arc of `radius`. Where the shrunk boundary
 crosses itself, only the points a full radius from the union's boundary are
 kept, and the cut points are found by bisection on the exact curves. Every
 output point lies on the exact curve.
+
+At radius 0 the outline is the padded union, and as radius grows it nears
+the padded convex hull. Two members join when the disc cannot pass between
+them: two discs of radius a whose padded edges are g apart join only when
+2·a·radius ≥ a·g + g²/4, and two flat members join when g < 2·radius. The
+default radius is 12. Holes are always filled, as the paper's contours have
+none, so `Shape.arcs` has no `holes` option. `src/tests/enclose.test.ts`
+checks these, and checks the outline against an independent version of the
+paper's construction on packed discs.
 
 ## The `Shape` family
 
@@ -268,6 +306,13 @@ Settled:
   the shape.
 - `Shape.oval()` is the minimum-area enclosing ellipse, not a mark drawn
   in the bounding box (see above). No `curve` option, no plot-area rule.
+- The flow step and the bag mark are one call, `enclose(opts)`, told apart
+  by position: in `.flow(...)` it wraps each group's subtree, in `.mark(...)`
+  it outlines each group of refs. An enclose over fresh children is a layout
+  node whose geometry is its outline (#1221).
+- `padding` may be a field, read once per group in pixels, as `fill` and
+  `stroke` are, in the flow step and the bag form alike.
+- `Shape.arcs({ radius })` always fills holes.
 - `avoiding` takes a list of nodes or refs, or one `selectAll(name)` as the
   whole value, in JS as on the wire (`NodeSelectionIR`): a single ref and a
   `selectAll` inside a list are errors. A listed node that is also a member
