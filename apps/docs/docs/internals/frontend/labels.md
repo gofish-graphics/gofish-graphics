@@ -346,14 +346,24 @@ opening, is colored for the page, and a `Place.interior()` label for the
 fill. Inside the shape, the label is either white or a near-black tint of the
 fill's own hue (CIE LCh, D65); a gray fill has no hue, so its tint is a
 near-black neutral. Of the two, the label takes the one with the larger APCA
-contrast against the fill (`apcaContrast` in `colorModes.ts`, APCA-W3 0.0.98G,
+contrast against the fill as seen. A translucent fill shows the page through
+it, so the color seen is the fill composited over the white page
+(`compositeOver` in `colorModes.ts`, a straight alpha blend of the 8-bit
+channels, as SVG and CSS paint it). Its alpha is the mark's `alpha` (its
+`opacity` times its `fillOpacity`, which each shape records on its node beside
+`color`) times the fill color's own alpha (an `rgba()` or `#rrggbbaa` fill).
+So a streamgraph's ribbons at `opacity: 0.8` are read at their lighter seen
+colors. Overlapping marks under a translucent one are not composited; the page
+is the only background. The contrast is APCA (`apcaContrast` in `colorModes.ts`, APCA-W3 0.0.98G,
 the WCAG 3 candidate), measured on the tint as painted, and a tie goes to the
 tint. APCA rather than a lightness cutoff or a WCAG 2 ratio because mid-tone
 fills are where the two candidates are close, and there APCA tracks
 readability better: Tableau green `#59a14f` scores Lc 64 with white text and
 45 with black, while WCAG 2 would pick black. Outside the shape, the label is a darkened tint of
 the fill's hue and chroma at a fixed lightness (a readable color on the white
-page background, distinct from but related to the shape it labels). A target
+page background, distinct from but related to the shape it labels). The tint
+reads the fill itself, not its composite: the label is opaque text, and the
+fill's hue and chroma name the shape's series at any alpha. A target
 with no resolvable fill, or a fill that is not a parseable color (`none`,
 `currentColor`, `url(#…)`), falls back to a plain `"black"` (inside) or
 `"#333333"` (outside).

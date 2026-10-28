@@ -112,15 +112,15 @@ already recorded the subtree's color encodings in the render session.
 
 ## Files
 
-| File                      | Role                                                                                                        |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `src/ast/colorSchemes.ts` | Types, constructors, `assignPaletteColor`, `assignGradientColor`, `createGradientScale`, scheme registry    |
-| `src/ast/_node.ts`        | `collectColorValues`, `resolveColorScale` two-pass dispatch (categorical map vs continuous scaleFn)         |
-| `src/color.ts`            | `resolveColorChannel` — shared categorical/continuous lookup + color ops for mark fills                     |
-| `src/colorModes.ts`       | Registers the culori color modes (`culori/fn`) and exports the parse/convert/hex helpers and `apcaContrast` |
-| `src/ast/shapes/rect.tsx` | Resolves fill/stroke via `resolveColorChannel`                                                              |
-| `src/ast/marks/chart.ts`  | `ChartOptions.color?: ColorConfig`; passes `colorConfig` to render                                          |
-| `src/lib.ts`              | Exports `palette`, `gradient`, `assignGradientColor`, `ColorConfig`, `PaletteScale`, `GradientScale`        |
+| File                      | Role                                                                                                                         |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `src/ast/colorSchemes.ts` | Types, constructors, `assignPaletteColor`, `assignGradientColor`, `createGradientScale`, scheme registry                     |
+| `src/ast/_node.ts`        | `collectColorValues`, `resolveColorScale` two-pass dispatch (categorical map vs continuous scaleFn)                          |
+| `src/color.ts`            | `resolveColorChannel` — shared categorical/continuous lookup + color ops for mark fills                                      |
+| `src/colorModes.ts`       | Registers the culori color modes (`culori/fn`) and exports the parse/convert/hex helpers, `compositeOver` and `apcaContrast` |
+| `src/ast/shapes/rect.tsx` | Resolves fill/stroke via `resolveColorChannel`                                                                               |
+| `src/ast/marks/chart.ts`  | `ChartOptions.color?: ColorConfig`; passes `colorConfig` to render                                                           |
+| `src/lib.ts`              | Exports `palette`, `gradient`, `assignGradientColor`, `ColorConfig`, `PaletteScale`, `GradientScale`                         |
 
 ---
 

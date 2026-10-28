@@ -100,6 +100,7 @@ function Enclose(
     {
       type: "enclose",
       color: isValue(fill) ? fill : stroke,
+      alpha: opacity * (fillOpacity ?? 1),
       resolveUnderlyingSpace: (): [UnderlyingSpace, UnderlyingSpace] => [
         UNDEFINED,
         UNDEFINED,

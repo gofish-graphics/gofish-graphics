@@ -55,6 +55,30 @@ export function paintedRgb(color: Color): Rgb {
   };
 }
 
+/**
+ * The sRGB color seen where `color` is painted at `alpha` over `background`:
+ * the painted color (see {@link paintedRgb}) blended with the background by
+ * straight alpha, channel by channel, then rounded to 8 bits, the way SVG and
+ * CSS composite. The alpha is `alpha` times the color's own alpha (an
+ * `rgba()` or `#rrggbbaa` color carries one), clamped to [0, 1].
+ */
+export function compositeOver(
+  color: Color,
+  alpha: number,
+  background: Rgb
+): Rgb {
+  const a = Math.max(0, Math.min(1, alpha * (color.alpha ?? 1)));
+  const fg = paintedRgb(color);
+  const bg = paintedRgb(background);
+  const blend = (f: number, b: number) => to8Bit(a * f + (1 - a) * b) / 255;
+  return {
+    mode: "rgb",
+    r: blend(fg.r, bg.r),
+    g: blend(fg.g, bg.g),
+    b: blend(fg.b, bg.b),
+  };
+}
+
 /** An sRGB color's screen luminance, soft-clamped near black (APCA-W3). */
 function apcaLuminance({ r, g, b }: Rgb): number {
   const y = 0.2126729 * r ** 2.4 + 0.7151522 * g ** 2.4 + 0.072175 * b ** 2.4;

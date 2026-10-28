@@ -28,7 +28,14 @@ import {
 import { pointInRing } from "../ast/geometry/plane";
 import { boxOutline } from "../ast/geometry";
 import { autoLabelColorForFill } from "../ast/labels/autoLabelColor";
-import { apcaContrast, paintedRgb, parse } from "../colorModes";
+import {
+  apcaContrast,
+  compositeOver,
+  formatHex,
+  paintedRgb,
+  parse,
+  type Rgb,
+} from "../colorModes";
 import {
   arrow,
   chart,
@@ -626,13 +633,13 @@ console.log("# the auto color reads where the label landed");
   const centered = await render("center");
   ok(
     '"center" outside a C takes the outside color',
-    centered.style.fill === autoLabelColorForFill(fill, false),
+    centered.style.fill === autoLabelColorForFill(fill, 1, false),
     centered.style.fill
   );
   const inside = await render();
   ok(
     "Place.interior inside it takes the inside color",
-    inside.style.fill === autoLabelColorForFill(fill, true),
+    inside.style.fill === autoLabelColorForFill(fill, 1, true),
     inside.style.fill
   );
 }
@@ -647,11 +654,62 @@ console.log("# the inside color takes the larger APCA contrast");
   ok("black on Tableau green is Lc 45.5", Math.abs(black - 45.5) < 0.05, black);
   ok(
     "Tableau green gets white text",
-    autoLabelColorForFill("#59a14f", true) === "white",
-    autoLabelColorForFill("#59a14f", true)
+    autoLabelColorForFill("#59a14f", 1, true) === "white",
+    autoLabelColorForFill("#59a14f", 1, true)
   );
-  const yellow = autoLabelColorForFill("#edc948", true);
+  const yellow = autoLabelColorForFill("#edc948", 1, true);
   ok("Tableau yellow gets the dark tint", yellow !== "white", yellow);
+}
+
+console.log("# the inside color reads the fill as seen through its alpha");
+{
+  const white: Rgb = { mode: "rgb", r: 1, g: 1, b: 1 };
+  const seen = formatHex(compositeOver(parse("#59a14f")!, 0.5, white));
+  ok("#59a14f at alpha 0.5 over white is #acd0a7", seen === "#acd0a7", seen);
+  const own = formatHex(compositeOver(parse("#59a14f80")!, 1, white));
+  ok(
+    "a color's own alpha composites too (#59a14f80 over white)",
+    own === formatHex(compositeOver(parse("#59a14f")!, 0x80 / 255, white)),
+    own
+  );
+  const green = autoLabelColorForFill("#59a14f", 1, true);
+  const faint = autoLabelColorForFill("#59a14f", 0.4, true);
+  ok("Tableau green at alpha 1 gets white text", green === "white", green);
+  ok(
+    "Tableau green at alpha 0.4 gets the dark tint",
+    faint !== "white",
+    faint
+  );
+  const rgba = autoLabelColorForFill("rgba(89, 161, 79, 0.4)", 1, true);
+  ok("an rgba() fill at alpha 0.4 gets the same dark tint", rgba === faint, rgba);
+  ok(
+    "the outside tint ignores alpha",
+    autoLabelColorForFill("#59a14f", 0.4, false) ===
+      autoLabelColorForFill("#59a14f", 1, false)
+  );
+
+  // End to end: a mark's `opacity` reaches the label's color.
+  const square = [
+    [0, 0],
+    [4, 0],
+    [4, 4],
+    [0, 4],
+  ];
+  const render = async (opacity: number) => {
+    const node = (await chart([{ n: "S", ring: square }], { axes: false })
+      .flow(group({ by: "n" }))
+      .mark(polygon({ points: "ring", fill: "#59a14f", opacity }).label("n"))
+      .resolve()) as GoFishNode;
+    return textItems(await node.toDisplayList({ w: 200, h: 200 }))[0];
+  };
+  const opaque = await render(1);
+  const translucent = await render(0.4);
+  ok("an opaque green polygon's label is white", opaque.style.fill === "white", opaque.style.fill);
+  ok(
+    "a green polygon at opacity 0.4 labels with the dark tint",
+    translucent.style.fill === faint,
+    translucent.style.fill
+  );
 }
 
 console.log("# unfilled regions");

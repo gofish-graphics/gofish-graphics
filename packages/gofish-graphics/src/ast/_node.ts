@@ -551,6 +551,10 @@ export class GoFishNode {
   public renderData?: any;
   public coordinateTransform?: CoordinateTransform;
   public color?: MaybeValue<string>;
+  /** The alpha this node's fill is painted at, 0 to 1: its `opacity` times
+   *  its `fillOpacity`. Undefined is opaque. The color it scales is the
+   *  fill's own (an `rgba()` fill carries its own alpha on top). */
+  public alpha?: number;
   public constraints: ConstraintSpec[] = [];
   public colorConfig?: ColorConfig;
   public _labels?: LabelSpec[];
@@ -681,6 +685,7 @@ export class GoFishNode {
       lower,
       geometry,
       color,
+      alpha,
       labelPosition,
     }: {
       key?: string;
@@ -693,6 +698,8 @@ export class GoFishNode {
       lower?: Lower;
       geometry?: GeometryFn;
       color?: MaybeValue<string>;
+      /** The alpha its fill is painted at (see the `alpha` field). */
+      alpha?: number;
       /** Where a `.label()` with no `position` goes on this node: a
        *  position or a `Place` strategy by convention (a dot is labeled
        *  around itself, an arrow at its end), or `"outline"`, read from the
@@ -721,6 +728,7 @@ export class GoFishNode {
     this.type = type;
     this.args = args;
     this.color = color;
+    this.alpha = alpha;
     this.labelPosition = labelPosition;
   }
 

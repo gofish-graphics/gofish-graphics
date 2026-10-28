@@ -116,15 +116,20 @@ function insideOutline(c: [number, number], o: Outline): boolean {
 
 /**
  * The auto label color (see `autoLabelColorForFill`), picked when the label
- * is drawn: contrast against the mark's fill when the label sits inside its
- * mark's outline, and a darkened tint of the fill outside. Inside is read
+ * is drawn: contrast against the mark's fill, as seen at the alpha the mark
+ * paints it at (`GoFishNode.alpha`), when the label sits inside its mark's
+ * outline, and a darkened tint of the fill outside. Inside is read
  * from the outline, not the position, so a `"center"` label on a C-shaped
  * polygon, whose box center is outside the shape, is colored for the page.
  */
 const autoLabelColor =
   (target: GoFishNode, stand: GoFishRef) =>
   (label: GoFishNode): string =>
-    autoLabelColorForFill(resolveNodeFill(target), sitsInside(label, stand));
+    autoLabelColorForFill(
+      resolveNodeFill(target),
+      target.alpha ?? 1,
+      sitsInside(label, stand)
+    );
 
 /** Where a label goes on its target: a position string, a `Place`
  *  strategy, or `"outline"`, a default the chooser reads from the target's
