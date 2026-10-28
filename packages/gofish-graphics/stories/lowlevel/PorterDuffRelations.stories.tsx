@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import bottlePng from "../assets/wilsonblanco.png";
-import { paint, image, intersect, mask as maskOp, subtract, rect, exclude, type MarkChild } from "../../src/lib";
+import { circle, paint, image, intersect, mask as maskOp, subtract, rect, exclude, type MarkChild } from "../../src/lib";
 // `over` is internal (conceptually `layer`, #196) — imported from source for
 // the low-level Union demo only; it is not part of the public lib surface.
 import { over } from "../../src/ast/marks/chart";
@@ -102,4 +102,35 @@ export const mask: StoryObj<Args> = {
   name: "Mask (none)",
   args: DEFAULT_ARGS,
   render: (args: Args) => renderMask(args),
+};
+
+// `intersect` with paint draws the overlap itself, as one shape: a circle and
+// a square cut to the lens they share, filled and stroked.
+export const IntersectPainted: StoryObj = {
+  name: "Intersect, painted",
+  render: () => {
+    const container = initializeContainer();
+    container.innerHTML = "";
+    intersect({ fill: "#D1E4F6", stroke: "#467DA8", strokeWidth: 2 }, [
+      circle({ cx: 90, cy: 90, r: 70 }),
+      rect({ x: 80, y: 30, w: 120, h: 120 }),
+    ]).render(container, { w: 220, h: 180 });
+    return container;
+  },
+};
+
+// An image has no outline, so a painted `intersect` fills its overlap with a
+// mask: the bottle's ink, cut by the rect, in one color. A stroke here would
+// be an error.
+export const IntersectImageFill: StoryObj = {
+  name: "Intersect, image filled",
+  render: () => {
+    const container = initializeContainer();
+    container.innerHTML = "";
+    intersect({ fill: "#467DA8" }, [
+      image({ href: bottlePng, x: 0, y: 0, w: 193, h: 678 }),
+      rect({ x: 0, y: 339, w: 193, h: 339 }),
+    ]).render(container, { w: 193, h: 678 });
+    return container;
+  },
 };

@@ -10,7 +10,7 @@ captured DOM is byte-identical.
 
 import os
 
-from gofish import exclude, image, intersect, mask, over, paint, rect, subtract
+from gofish import circle, exclude, image, intersect, mask, over, paint, rect, subtract
 
 # The Vite-served URL of the bottle image. JS storybook imports it via
 # `import bottlePng from "../assets/wilsonblanco.png"`, which Vite resolves
@@ -71,3 +71,30 @@ def story_paint():
 def story_mask():
     # Mirrors the JS `MaskOp(buildChildren(args))` (no blendMode passed).
     return mask(_build_children()), {"w": W, "h": H}
+
+
+def story_intersect_painted():
+    # A circle and a square cut to the lens they share, filled and stroked.
+    return (
+        intersect(
+            [circle(cx=90, cy=90, r=70), rect(x=80, y=30, w=120, h=120)],
+            fill="#D1E4F6",
+            stroke="#467DA8",
+            stroke_width=2,
+        ),
+        {"w": 220, "h": 180},
+    )
+
+
+def story_intersect_image_fill():
+    # An image has no outline, so the overlap is filled through a mask.
+    return (
+        intersect(
+            [
+                image(href=BOTTLE_PNG, x=0, y=0, w=193, h=678),
+                rect(x=0, y=339, w=193, h=339),
+            ],
+            fill="#467DA8",
+        ),
+        {"w": 193, "h": 678},
+    )

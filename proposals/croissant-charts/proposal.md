@@ -16,10 +16,10 @@ and stroked. The dot is a `circle` at the median of the drawn density within the
 (the density is first turned into quantile rows by a `derive` helper; see "Rows or the drawn density?"). The gap is
 `region({ inset })`, drawn in like `rect.inset`. No new operator.
 
-Prototype stories: `packages/gofish-graphics/stories/_proposals/Croissant.stories.tsx`
-(throwaway). Every "target render" below has its slice geometry computed by
-hand in the story and drawn with the data-bound `polygon` mark, because vector
-intersect does not exist yet. Images are in `img/`.
+Implemented in `packages/gofish-graphics/stories/forwardsyntax/Croissant.stories.tsx`.
+The throwaway prototype stories are gone. Every "target render" below had its slice geometry computed by
+hand in a prototype story and drawn with the data-bound `polygon` mark, because vector
+intersect did not exist yet. Images are in `img/`.
 
 ## Terms
 
