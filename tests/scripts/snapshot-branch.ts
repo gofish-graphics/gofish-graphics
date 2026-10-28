@@ -22,6 +22,12 @@
  * snapshots/B is a branch of snapshots/main (its first commit has
  * snapshots/main's head as parent), which is what gives it a fork point.
  *
+ * Snapshot branches made before parents were recorded share no history with
+ * snapshots/main. For them the fork point is the snapshots/main commit that
+ * was current when the branch's first commit was made (the tree it was copied
+ * from), or the empty tree when there was none yet. The writer's next commit
+ * on such a branch records snapshots/main as a parent, which migrates it.
+ *
  * The remote is the source of truth: both reading (`pullSnapshots`) and
  * writing (`commitToSnapshotBranch`) apply that rule to what origin has now.
  */
@@ -176,23 +182,16 @@ function fetchHeads({ main, branch }: Heads): void {
 /**
  * The baseline files `branch` changed since it forked from `main`, under
  * dom/ and screenshots/: the ones it added or modified (`write`) and the
- * ones it deleted (`remove`). Also returns the fork point.
+ * ones it deleted (`remove`). Also returns the fork point: the merge base,
+ * or for a branch that has none, the rule at the top of this file.
  */
 function branchChanges(
-  snapshotBranch: string,
   main: string,
   branch: string
 ): { fork: string; write: string[]; remove: string[] } {
-  const fork = git(`git merge-base ${main} ${branch}`, { ignoreError: true });
-  if (!fork) {
-    throw new Error(
-      `${snapshotBranch} shares no history with ${MAIN_SNAPSHOT_BRANCH}, so ` +
-        "the baselines it changed cannot be told apart from the ones " +
-        `${MAIN_SNAPSHOT_BRANCH} changed since. (Older versions of this ` +
-        "script created snapshot branches without a parent.) Delete " +
-        `${snapshotBranch} on origin and accept its diffs again.`
-    );
-  }
+  const fork =
+    git(`git merge-base ${main} ${branch}`, { ignoreError: true }) ||
+    unrelatedForkPoint(main, branch);
   const fields = git(
     `git diff --name-status --no-renames -z ${fork} ${branch} -- dom screenshots`
   )
@@ -207,9 +206,25 @@ function branchChanges(
 }
 
 /**
+ * The fork point of a branch that shares no history with `main`: the last
+ * `main` commit made no later than the branch's first commit, or the empty
+ * tree when `main` has none that old.
+ */
+function unrelatedForkPoint(main: string, branch: string): string {
+  const root = git(`git rev-list --max-parents=0 ${branch}`).split("\n").pop();
+  const date = git(`git log -1 --format=%cI ${root}`);
+  return (
+    git(`git rev-list -1 --before="${date}" ${main}`) ||
+    git("git hash-object -t tree --stdin", { input: "" })
+  );
+}
+
+/**
  * Checks out a snapshot branch's baselines (the rule at the top of this
- * file) in a new detached worktree at `wtPath`, with the overlay staged.
- * PNGs stay LFS pointers (GIT_LFS_SKIP_SMUDGE).
+ * file) in a new detached worktree at `wtPath`, whose HEAD holds exactly
+ * those files: for an overlay, a temporary commit on no ref, so that
+ * `git lfs pull` there downloads the overlaid PNGs too. PNGs stay LFS
+ * pointers (GIT_LFS_SKIP_SMUDGE).
  *
  * Returns what the checkout holds, in words, and the parents a new commit of
  * the branch should have: the branch's head, plus snapshots/main's head when
@@ -235,7 +250,7 @@ function checkoutBaselines(
     };
   }
 
-  const { fork, write, remove } = branchChanges(snapshotBranch, main, branch);
+  const { fork, write, remove } = branchChanges(main, branch);
   // Pathspecs on stdin: there can be more files than a command line holds.
   const pathspecs = (files: string[]) => ({
     cwd: wtPath,
@@ -249,11 +264,24 @@ function checkoutBaselines(
     );
   }
   if (remove.length > 0) {
+    // --ignore-unmatch: snapshots/main may have deleted the file too.
     git(
-      "git --literal-pathspecs rm --quiet --pathspec-from-file=- --pathspec-file-nul",
+      "git --literal-pathspecs rm --quiet --ignore-unmatch --pathspec-from-file=- --pathspec-file-nul",
       pathspecs(remove)
     );
   }
+  // The reader may run where no git identity is configured.
+  const identity = {
+    GIT_AUTHOR_NAME: "snapshot-branch.ts",
+    GIT_AUTHOR_EMAIL: "snapshot-branch@localhost",
+    GIT_COMMITTER_NAME: "snapshot-branch.ts",
+    GIT_COMMITTER_EMAIL: "snapshot-branch@localhost",
+  };
+  const overlay = git(
+    `git commit-tree ${git("git write-tree", { cwd: wtPath })} -m "Baselines of ${snapshotBranch}"`,
+    { cwd: wtPath, env: identity }
+  );
+  git(`git checkout --quiet --detach ${overlay}`, { cwd: wtPath, env });
   return {
     parents: fork === main ? [branch] : [branch, main],
     description:
@@ -330,7 +358,7 @@ export function pullSnapshots(snapshotBranch: string, targetDir: string): void {
   try {
     const { description } = checkoutBaselines(wtPath, snapshotBranch, heads);
 
-    // Download the final PNGs, which the checkout left as LFS pointers.
+    // Download the PNGs of the checkout's HEAD, left as LFS pointers.
     try {
       git("git lfs pull", { cwd: wtPath });
     } catch {
@@ -401,7 +429,7 @@ export function commitToSnapshotBranch(
         heads
       );
       console.log(`Committing to ${snapshotBranch} on ${description}.`);
-      const before = git("git write-tree", { cwd: wtPath });
+      const before = git("git rev-parse HEAD^{tree}", { cwd: wtPath });
       apply(wtPath);
 
       // Stage only the data dirs, never anything else in the checkout.
