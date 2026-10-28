@@ -13,8 +13,7 @@ import { join } from "path";
 import { exec } from "child_process";
 import {
   collectReviewDiffs,
-  acceptStory,
-  removeBaselineStory,
+  applyEntries,
   formatDomDiff,
   escapeHtml,
   ROOT,
@@ -187,11 +186,7 @@ function handleAccept(res: ServerResponse, path: string): void {
   const entry = findEntry(path);
   if (!entry) return respondError(res, 404, "Not found");
   try {
-    if (entry.kind === "removed") {
-      removeBaselineStory(path);
-    } else {
-      acceptStory(path);
-    }
+    applyEntries([entry]);
     entry.status = "accepted";
     respondJson(res, { ok: true });
   } catch (e) {
@@ -211,11 +206,7 @@ function handleAcceptAll(res: ServerResponse): void {
   for (const entry of diffs) {
     if (entry.status === "pending") {
       try {
-        if (entry.kind === "removed") {
-          removeBaselineStory(entry.path);
-        } else {
-          acceptStory(entry.path);
-        }
+        applyEntries([entry]);
         entry.status = "accepted";
       } catch (e) {
         errors.push(`${entry.path}: ${String(e)}`);
@@ -239,15 +230,7 @@ function handleCommitToBranch(res: ServerResponse): void {
     commitToSnapshotBranch(
       snapBranch,
       `Accept ${accepted.length} visual diff(s)`,
-      (checkoutDir) => {
-        for (const entry of accepted) {
-          if (entry.kind === "removed") {
-            removeBaselineStory(entry.path, checkoutDir);
-          } else {
-            acceptStory(entry.path, { baselineDir: checkoutDir });
-          }
-        }
-      },
+      (checkoutDir) => applyEntries(accepted, { baselineDir: checkoutDir }),
       { retryOnMovedBranch: true }
     );
     respondJson(res, {

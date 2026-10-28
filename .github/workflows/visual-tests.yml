@@ -117,11 +117,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      # The baselines are pulled into __snapshots__/ by compare.ts (PRs) and
-      # update-baselines.ts (main push), through pullSnapshots in
-      # tests/scripts/snapshot-branch.ts, which holds the rule for which
-      # baselines a branch gets. The LFS filters must be installed first so
-      # that its checkout downloads the PNGs.
+      # LFS must be installed before pullSnapshots checks out PNGs.
       - name: Setup Git LFS
         run: git lfs install
 

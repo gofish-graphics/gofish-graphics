@@ -1,23 +1,23 @@
 /**
  * Accept current JS DOM snapshots and screenshots as the new baselines.
  *
- * Copies tmp/js/ → __snapshots__/dom/ and __snapshots__/screenshots/.
+ * Copies tmp/js/ into the baselines' dom/ and screenshots/, and prunes the
+ * baselines of stories the capture no longer has. In CI that is one commit to
+ * snapshots/main; locally it is the __snapshots__/ cache.
  */
 
-import { readdirSync, existsSync, rmSync } from "fs";
+import { readdirSync, existsSync } from "fs";
 import { join } from "path";
 import {
   acceptStory,
+  removeBaselineStory,
   JS_DIR,
-  ROOT,
-  BASELINE_DOM,
-  BASELINE_SCREENSHOTS,
+  BASELINE_DIR,
   listHtmlFiles,
 } from "./diff-utils.js";
 import {
-  getSnapshotBranchName,
-  commitAndPushSnapshots,
-  pullSnapshots,
+  MAIN_SNAPSHOT_BRANCH,
+  commitToSnapshotBranch,
 } from "./snapshot-branch.js";
 
 /** Recursively list files under a directory. */
@@ -47,19 +47,36 @@ function listFiles(dir: string, prefix = ""): string[] {
  * forever, and compare.ts would re-report the same removal on every future
  * PR.
  */
-function pruneRemovedBaselines(currentHtmlFiles: Set<string>): string[] {
+function pruneRemovedBaselines(
+  currentHtmlFiles: Set<string>,
+  baselineDir: string
+): string[] {
   // An empty capture means something went wrong upstream, not that every
   // story was deleted — never mass-prune on it.
   if (currentHtmlFiles.size === 0) return [];
   const pruned: string[] = [];
-  for (const file of listHtmlFiles(BASELINE_DOM)) {
+  for (const file of listHtmlFiles(join(baselineDir, "dom"))) {
     if (currentHtmlFiles.has(file)) continue;
-    rmSync(join(BASELINE_DOM, file), { force: true });
-    const pngPath = join(BASELINE_SCREENSHOTS, file.replace(/\.html$/, ".png"));
-    if (existsSync(pngPath)) rmSync(pngPath, { force: true });
+    removeBaselineStory(file, baselineDir);
     pruned.push(file);
   }
   return pruned;
+}
+
+/** Accepts every capture into `baselineDir`, then prunes it. */
+function updateBaselines(htmlFiles: string[], baselineDir: string): void {
+  for (const file of htmlFiles) acceptStory(file, { baselineDir });
+  console.log(`Updated ${htmlFiles.length} story baseline(s).`);
+
+  const pruned = pruneRemovedBaselines(new Set(htmlFiles), baselineDir);
+  if (pruned.length > 0) {
+    console.log(
+      `Pruned ${pruned.length} stale baseline(s) for removed stories:`
+    );
+    for (const file of pruned) {
+      console.log(`    - ${file}`);
+    }
+  }
 }
 
 function main() {
@@ -70,53 +87,32 @@ function main() {
     process.exit(1);
   }
 
-  // Start from the current baselines, so the pruning below sees them.
-  pullSnapshots(getSnapshotBranchName(), join(ROOT, "__snapshots__"));
-
-  const files = listFiles(JS_DIR);
-  let count = 0;
-  const currentHtmlFiles = new Set<string>();
-
-  for (const file of files) {
-    if (file.endsWith(".html")) {
-      acceptStory(file);
-      currentHtmlFiles.add(file);
-      count++;
-    }
+  const htmlFiles = listFiles(JS_DIR).filter((file) => file.endsWith(".html"));
+  if (htmlFiles.length === 0) {
+    console.log("No story captures found; nothing to update.");
+    return;
   }
 
-  console.log(`Updated ${count} story baseline(s).`);
-
-  const pruned = pruneRemovedBaselines(currentHtmlFiles);
-  if (pruned.length > 0) {
-    console.log(
-      `Pruned ${pruned.length} stale baseline(s) for removed stories:`
+  // Push the accepted baselines to snapshots/main ONLY in CI: that branch is
+  // what CI fetches as its baseline, and CI renders on Linux. A local (macOS)
+  // run must never publish its captures there — text metrics differ and
+  // every text-bearing story would falsely regress. Locally the accept is
+  // still useful: __snapshots__/dom feeds the local regression compare
+  // (compare.ts).
+  if (process.env.CI) {
+    commitToSnapshotBranch(
+      MAIN_SNAPSHOT_BRANCH,
+      `Accept ${htmlFiles.length} visual diff(s)`,
+      (checkoutDir) => updateBaselines(htmlFiles, checkoutDir),
+      // Every baseline is replaced: never redo that on a newer head.
+      { retryOnMovedBranch: false }
     );
-    for (const file of pruned) {
-      console.log(`    - ${file}`);
-    }
-  }
-
-  // Push the accepted baselines to the shared snapshots/<branch> ref ONLY in
-  // CI: that branch is what CI fetches as its baseline, and CI renders on
-  // Linux. A local (macOS) run must never publish its captures there — text
-  // metrics differ and every text-bearing story would falsely regress.
-  // Locally the accept is still useful: __snapshots__/dom feeds the local
-  // regression compare (compare.ts).
-  if (count > 0) {
-    if (process.env.CI) {
-      const snapBranch = getSnapshotBranchName();
-      commitAndPushSnapshots(
-        snapBranch,
-        join(ROOT, "__snapshots__"),
-        `Accept ${count} visual diff(s)`
-      );
-    } else {
-      console.log(
-        "Local run: accepted baselines were NOT pushed to the snapshots " +
-          "branch (CI-only). They live in __snapshots__/ for local compares."
-      );
-    }
+  } else {
+    updateBaselines(htmlFiles, BASELINE_DIR);
+    console.log(
+      "Local run: accepted baselines were NOT pushed to the snapshots " +
+        "branch (CI-only). They live in __snapshots__/ for local compares."
+    );
   }
 }
 

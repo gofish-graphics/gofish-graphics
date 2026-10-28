@@ -35,7 +35,7 @@ export const ROOT = join(import.meta.dirname, "../..");
 const GITATTRIBUTES_CONTENT =
   "screenshots/**/*.png filter=lfs diff=lfs merge=lfs -text\n";
 
-const MAIN_SNAPSHOT_BRANCH = "snapshots/main";
+export const MAIN_SNAPSHOT_BRANCH = "snapshots/main";
 const PUSH_ATTEMPTS = 5;
 const NETWORK_ATTEMPTS = 3;
 
@@ -115,9 +115,9 @@ function gitNetwork(cmd: string, opts: GitOptions = {}): string {
 }
 
 /**
- * The head commits of snapshots/main and of a code branch's snapshot branch.
- * `branch` is null when the snapshot branch does not exist, or when it is
- * snapshots/main itself.
+ * The head commits of snapshots/main and of a snapshot branch (the same
+ * commit when the branch is snapshots/main). Null when that branch does not
+ * exist.
  */
 interface Heads {
   main: string | null;
@@ -128,11 +128,7 @@ function headsOf(
   snapshotBranch: string,
   lookup: (branch: string) => string | null
 ): Heads {
-  return {
-    main: lookup(MAIN_SNAPSHOT_BRANCH),
-    branch:
-      snapshotBranch === MAIN_SNAPSHOT_BRANCH ? null : lookup(snapshotBranch),
-  };
+  return { main: lookup(MAIN_SNAPSHOT_BRANCH), branch: lookup(snapshotBranch) };
 }
 
 /** The heads on origin, in one ls-remote. */
@@ -166,12 +162,13 @@ function localHeads(snapshotBranch: string): Heads {
 /**
  * Fetches exactly the commits `ls-remote` reported, so a push that lands in
  * between cannot change what we build on. The fetch takes their whole
- * history, also in a shallow clone (as CI checkouts are), because finding
- * where the branch forked from snapshots/main needs it. Snapshot commits
- * hold only DOM files and LFS pointers, so that history is small.
+ * history, also in a shallow clone (as the accept workflow's checkout is),
+ * because finding where the branch forked from snapshots/main needs it.
+ * Snapshot commits hold only DOM files and LFS pointers, so that history is
+ * small.
  */
 function fetchHeads({ main, branch }: Heads): void {
-  const shas = [main, branch].filter((sha) => sha !== null);
+  const shas = [...new Set([main, branch])].filter((sha) => sha !== null);
   if (shas.length === 0) return;
   gitNetwork(`git fetch --quiet --no-tags origin ${shas.join(" ")}`);
 }
@@ -210,27 +207,32 @@ function branchChanges(
 }
 
 /**
- * Checks out a snapshot branch's baselines (see the rule at the top of this
+ * Checks out a snapshot branch's baselines (the rule at the top of this
  * file) in a new detached worktree at `wtPath`, with the overlay staged.
+ * PNGs stay LFS pointers (GIT_LFS_SKIP_SMUDGE).
  *
- * Returns the number of overlaid files, and the parents a new commit of the
- * branch should have: the branch's head, plus snapshots/main's head when it
- * is not in the branch's history yet, so the fork point moves up to the
+ * Returns what the checkout holds, in words, and the parents a new commit of
+ * the branch should have: the branch's head, plus snapshots/main's head when
+ * it is not in the branch's history yet, so the fork point moves up to the
  * snapshots/main the commit was built on. A branch that does not exist yet
  * gets snapshots/main's head as its only parent.
  */
 function checkoutBaselines(
   wtPath: string,
   snapshotBranch: string,
-  { main, branch }: Heads,
-  env?: Record<string, string>
-): { parents: string[]; overlaid: number } {
+  { main, branch }: Heads
+): { parents: string[]; description: string } {
+  const env = { GIT_LFS_SKIP_SMUDGE: "1" };
   const start = main ?? branch;
   git(`git worktree add --detach "${wtPath}" ${start ?? emptyBaseCommit()}`, {
     env,
   });
-  if (main === null || branch === null) {
-    return { parents: start ? [start] : [], overlaid: 0 };
+  if (start === null) return { parents: [], description: "empty baselines" };
+  if (main === null || branch === null || branch === main) {
+    return {
+      parents: [start],
+      description: main === null ? snapshotBranch : MAIN_SNAPSHOT_BRANCH,
+    };
   }
 
   const { fork, write, remove } = branchChanges(snapshotBranch, main, branch);
@@ -254,7 +256,9 @@ function checkoutBaselines(
   }
   return {
     parents: fork === main ? [branch] : [branch, main],
-    overlaid: write.length + remove.length,
+    description:
+      `${MAIN_SNAPSHOT_BRANCH} with the ${write.length + remove.length} ` +
+      `file(s) ${snapshotBranch} changed`,
   };
 }
 
@@ -286,9 +290,9 @@ export function getSnapshotBranchName(codeBranch?: string): string {
 
 /**
  * Populates targetDir (__snapshots__/) with the baselines of `snapshotBranch`
- * on origin, by the rule at the top of this file. Uses a temporary git
+ * on origin (the rule at the top of this file). Uses a temporary git
  * worktree so that LFS objects are resolved. When origin cannot be reached,
- * applies the same rule to the local snapshot branches.
+ * reads the local snapshot branches instead.
  *
  * Starts with empty baselines if no snapshot branch exists anywhere (fresh
  * repo). Skipped if targetDir/dom already has content: a local cache from an
@@ -303,13 +307,11 @@ export function pullSnapshots(snapshotBranch: string, targetDir: string): void {
   // Read origin; when it cannot be reached (offline, no `origin`), fall back
   // to the local snapshot branches.
   let heads: Heads;
-  let where = "origin";
   try {
     heads = remoteHeads(snapshotBranch);
     fetchHeads(heads);
   } catch (e) {
     heads = localHeads(snapshotBranch);
-    where = "local branches";
     console.warn(
       `Warning: cannot read snapshot branches from origin (${stderrOf(e).trim().split("\n")[0]}); ` +
         "using the local ones."
@@ -326,10 +328,9 @@ export function pullSnapshots(snapshotBranch: string, targetDir: string): void {
   if (existsSync(wtPath)) removeWorktree(wtPath);
 
   try {
-    // The LFS smudge filter downloads the PNGs both checkouts write.
-    const { overlaid } = checkoutBaselines(wtPath, snapshotBranch, heads);
+    const { description } = checkoutBaselines(wtPath, snapshotBranch, heads);
 
-    // Resolve any LFS objects the checkouts left as pointers.
+    // Download the final PNGs, which the checkout left as LFS pointers.
     try {
       git("git lfs pull", { cwd: wtPath });
     } catch {
@@ -344,14 +345,7 @@ export function pullSnapshots(snapshotBranch: string, targetDir: string): void {
     syncDir(join(wtPath, "dom"), join(targetDir, "dom"));
     syncDir(join(wtPath, "screenshots"), join(targetDir, "screenshots"));
 
-    console.log(
-      heads.main === null
-        ? `Pulled baselines from ${snapshotBranch} (${where}; no ${MAIN_SNAPSHOT_BRANCH}).`
-        : heads.branch === null
-          ? `Pulled baselines from ${MAIN_SNAPSHOT_BRANCH} (${where}).`
-          : `Pulled baselines from ${MAIN_SNAPSHOT_BRANCH} (${where}), with ` +
-            `the ${overlaid} file(s) ${snapshotBranch} changed since it forked.`
-    );
+    console.log(`Pulled the baselines of ${snapshotBranch}: ${description}.`);
   } finally {
     removeWorktree(wtPath);
   }
@@ -361,23 +355,19 @@ export function pullSnapshots(snapshotBranch: string, targetDir: string): void {
  * The one writer of snapshot branches. Checks out the branch's baselines as
  * origin has them now (the same files `pullSnapshots` reads), lets `apply`
  * change `dom/` and `screenshots/` in that checkout, and pushes the result as
- * ONE commit.
+ * ONE commit, with the parents `checkoutBaselines` gives.
  *
- * - The commit's parents are the branch's head and, when the branch has not
- *   seen it yet, snapshots/main's head (see `checkoutBaselines`). A branch
- *   that does not exist yet starts as a child of snapshots/main's head, so it
- *   has a fork point and inherits every other baseline.
  * - The push never forces. When it is rejected because the branch moved
  *   (non-fast-forward), `retryOnMovedBranch` decides what happens:
  *   - true: start over on the new head, running `apply` again, up to 5
  *     attempts. Only for an `apply` that changes specific files (accepting
  *     some stories), which is still right on top of someone else's commit.
- *   - false: fail. Required for an `apply` that replaces the whole of dom/
- *     and screenshots/ (commitAndPushSnapshots), because redoing it on a
- *     newer head would let older captures overwrite newer baselines.
+ *   - false: fail. Required for an `apply` that replaces every baseline
+ *     (update-baselines.ts), because redoing it on a newer head would let
+ *     older captures overwrite newer baselines.
  *   Any other push failure (auth, branch protection) fails at once.
- * - PNG baselines stay LFS pointers in the checkout (GIT_LFS_SKIP_SMUDGE):
- *   only the PNGs `apply` writes are uploaded, by object id. The push itself
+ * - PNG baselines stay LFS pointers in the checkout: only the PNGs `apply`
+ *   changes are uploaded, by object id. The push itself
  *   sets GIT_LFS_SKIP_PUSH, because the LFS pre-push hook would try to upload
  *   every object the tree references, most of which are not downloaded here
  *   (and it does not run at all when husky has moved core.hooksPath).
@@ -401,23 +391,16 @@ export function commitToSnapshotBranch(
   for (let attempt = 1; attempt <= attempts; attempt++) {
     const heads = remoteHeads(snapshotBranch);
     fetchHeads(heads);
-    if (heads.main === null && heads.branch === null) {
-      console.log(`Creating ${snapshotBranch} with empty baselines.`);
-    } else if (
-      heads.branch === null &&
-      snapshotBranch !== MAIN_SNAPSHOT_BRANCH
-    ) {
-      console.log(
-        `${snapshotBranch} does not exist; starting it from ${MAIN_SNAPSHOT_BRANCH}.`
-      );
-    }
 
     const wtPath = `/tmp/gofish-snap-push-${process.pid}`;
     if (existsSync(wtPath)) removeWorktree(wtPath);
     try {
-      const { parents } = checkoutBaselines(wtPath, snapshotBranch, heads, {
-        GIT_LFS_SKIP_SMUDGE: "1",
-      });
+      const { parents, description } = checkoutBaselines(
+        wtPath,
+        snapshotBranch,
+        heads
+      );
+      console.log(`Committing to ${snapshotBranch} on ${description}.`);
       const before = git("git write-tree", { cwd: wtPath });
       apply(wtPath);
 
@@ -487,30 +470,6 @@ export function commitToSnapshotBranch(
     sleep(attempt * 2000);
   }
   throw new Error(`could not push to ${snapshotBranch}`);
-}
-
-/**
- * Commits sourceDir's `dom/` and `screenshots/` as the whole content of the
- * snapshot branch and pushes it. Fails, without retrying, if the branch
- * moved since it was read (see commitToSnapshotBranch). Meant for
- * snapshots/main: on another branch every baseline would count as changed
- * there, so later changes to snapshots/main would never reach it. Commit
- * only the accepted stories there instead (accept-baselines.ts).
- */
-export function commitAndPushSnapshots(
-  snapshotBranch: string,
-  sourceDir: string,
-  message: string
-): void {
-  commitToSnapshotBranch(
-    snapshotBranch,
-    message,
-    (checkoutDir) => {
-      syncDir(join(sourceDir, "dom"), join(checkoutDir, "dom"));
-      syncDir(join(sourceDir, "screenshots"), join(checkoutDir, "screenshots"));
-    },
-    { retryOnMovedBranch: false }
-  );
 }
 
 /** A parentless commit holding only .gitattributes (no snapshots/main yet). */
