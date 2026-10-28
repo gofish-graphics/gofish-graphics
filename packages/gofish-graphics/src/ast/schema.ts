@@ -164,8 +164,17 @@ export type HasQuantity = { name: string };
  *  it; a split leaf and a `filter`'s result keep it with the rest of the
  *  column's type ({@link copyColumnTypes}), and a `derive` computes its
  *  result's own. A binned key's cells cover it (cells.ts), so every group
- *  of a split over the column has the same cells, whatever rows it holds. */
-export type HasDomain = { lo: number; hi: number };
+ *  of a split over the column has the same cells, whatever rows it holds.
+ *  `sorted` gives the same values in order, for the cells of
+ *  `Bin.quantiles`, which are quantiles of them: it sorts on its first call
+ *  only, so a column no quantile reads is never sorted. */
+export type HasDomain = {
+  lo: number;
+  hi: number;
+  /** The column's values in the data it was typed with, ascending,
+   *  missing values aside. */
+  sorted: () => readonly number[];
+};
 
 /** A column's type: the classes it has, keyed by class name. */
 export type ColumnType = {
@@ -866,13 +875,23 @@ function columnDomains(rows: readonly unknown[]): Map<string, HasDomain> {
       if (d === null) continue;
       if (typeof v !== "number" || !Number.isFinite(v))
         domains.set(column, null);
-      else if (d === undefined) domains.set(column, { lo: v, hi: v });
+      else if (d === undefined)
+        domains.set(column, { lo: v, hi: v, sorted: () => [] });
       else if (v < d.lo) d.lo = v;
       else if (v > d.hi) d.hi = v;
     }
   }
   return new Map(
-    [...domains].filter((e): e is [string, HasDomain] => e[1] !== null)
+    [...domains].flatMap(([column, d]): [string, HasDomain][] => {
+      if (d === null) return [];
+      let sorted: number[] | undefined;
+      d.sorted = () =>
+        (sorted ??= rows
+          .map((r) => (r as Record<string, unknown> | null)?.[column])
+          .filter((v): v is number => v != null)
+          .sort((a, b) => a - b));
+      return [[column, d]];
+    })
   );
 }
 

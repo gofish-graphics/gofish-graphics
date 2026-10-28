@@ -667,6 +667,7 @@ function describeType(type: FieldType): string {
         type.min !== undefined ? ` >= ${type.min}` : "",
         type.exclusiveMin !== undefined ? ` > ${type.exclusiveMin}` : "",
         type.max !== undefined ? ` <= ${type.max}` : "",
+        type.exclusiveMax !== undefined ? ` < ${type.exclusiveMax}` : "",
       ]
         .filter((b) => b !== "")
         .join(" and")}`;
@@ -756,6 +757,12 @@ function pyValueChecks(
           : []),
         ...(type.max !== undefined
           ? fail(`${v} > ${type.max}`, `must be <= ${type.max}`)
+          : []),
+        ...(type.exclusiveMax !== undefined
+          ? fail(
+              `${v} >= ${type.exclusiveMax}`,
+              `must be < ${type.exclusiveMax}`
+            )
           : []),
       ];
     case "array":

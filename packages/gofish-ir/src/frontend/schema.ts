@@ -601,7 +601,8 @@ export type CurveIR =
     };
 
 /** The cells a key is binned into, made by a call in the `Bin` family.
- *  `Bin.step(size)` and `Bin.thresholds(countOrEdges)` bin one field
+ *  `Bin.step(size)`, `Bin.thresholds(countOrEdges)` and
+ *  `Bin.quantiles(countOrProbabilities)` bin one field
  *  (`field(x).bin(...)`, {@link FieldBinIR}); `Bin.hex({ radius })` and
  *  `Bin.voronoi({ seeds })` bin two together (`struct({ x, y }).bin(...)`,
  *  {@link StructBinIR}). */
@@ -610,7 +611,8 @@ export type BinIR = FieldBinIR | StructBinIR;
 /** The `Bin` kinds that cut the line of one field into intervals. */
 export type FieldBinIR =
   | { kind: "step"; size: number }
-  | { kind: "thresholds"; thresholds: number | number[] };
+  | { kind: "thresholds"; thresholds: number | number[] }
+  | { kind: "quantiles"; quantiles: number | number[] };
 
 /** The `Bin` kinds that divide the plane of two fields into polygons. */
 export type StructBinIR =
@@ -908,11 +910,12 @@ export type AxisDims = Record<string, ChannelValue | AxisInterval>;
  *  `fieldExpr.ts` (`FieldOp`), which this mirrors exactly. Two disjoint
  *  slots consume it: a `by` (grouping key) slot accepts the domain ops
  *  (`sort`/`reverse`/`bin`); a value (size/pos) channel slot accepts the
- *  aggregate ops (`sum`/`mean`/`count`/`distinct`) and, only on an
+ *  aggregate ops (`sum`/`mean`/`median`/`count`/`distinct`) and, only on an
  *  operator's entry-flagged `size` channel, `normalize`. */
 /** A partition's wire form (`field(x).bin(p)`): a Calendar value, or a
  *  `Bin` kind that bins one field (`Bin.step(size)`,
- *  `Bin.thresholds(countOrEdges)`). One tagged union, told apart by `kind`
+ *  `Bin.thresholds(countOrEdges)`, `Bin.quantiles(countOrProbabilities)`).
+ *  One tagged union, told apart by `kind`
  *  (`OPTION_TYPES.Partition`). */
 export type PartitionIR = CalendarPartitionIR | FieldBinIR;
 
@@ -953,7 +956,8 @@ export type FieldOpIR =
   | {
       op: "bin";
       /** The partition each value is binned into: a Calendar value,
-       *  `Bin.step(size)` or `Bin.thresholds(countOrEdges)`, or a product of
+       *  `Bin.step(size)`, `Bin.thresholds(countOrEdges)` or
+       *  `Bin.quantiles(countOrProbabilities)`, or a product of
        *  Calendar values (`[year, month]`: one cell where they meet).
        *  Absent: about 10 cells. A second `bin` op splits the cells of the
        *  one before it (`.bin(Calendar.year).bin(Calendar.month)`). */
@@ -963,6 +967,7 @@ export type FieldOpIR =
   | { op: "normalize" }
   | { op: "sum" }
   | { op: "mean" }
+  | { op: "median" }
   | { op: "count" }
   | { op: "distinct" };
 

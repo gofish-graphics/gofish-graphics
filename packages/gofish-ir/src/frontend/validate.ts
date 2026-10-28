@@ -335,6 +335,8 @@ function walkFieldType(
         fail(`expected a number above ${type.exclusiveMin}, got ${n}`);
       else if (type.max !== undefined && !(n <= type.max))
         fail(`expected a number of at most ${type.max}, got ${n}`);
+      else if (type.exclusiveMax !== undefined && !(n < type.exclusiveMax))
+        fail(`expected a number below ${type.exclusiveMax}, got ${n}`);
       else if (type.integer && !Number.isInteger(n))
         fail(`expected a whole number, got ${n}`);
       return;
@@ -544,6 +546,7 @@ export function checkPartition(v: unknown, where: string): void {
       `[gofish] ${where}: Bin.${kind} bins two fields together into cells ` +
         `of the plane. Bin them with struct({ x, y }).bin(Bin.${kind}(...)); ` +
         `field(x).bin takes Bin.step(size), Bin.thresholds(countOrEdges), ` +
+        `Bin.quantiles(countOrProbabilities), ` +
         `or a Calendar value.`
     );
   walkOrThrow(
@@ -551,8 +554,8 @@ export function checkPartition(v: unknown, where: string): void {
     v,
     where,
     `Make one with a Calendar value (Calendar.month, ` +
-      `Calendar.hour({ every: 6 }), ...), Bin.step(size), or ` +
-      `Bin.thresholds(countOrEdges).`
+      `Calendar.hour({ every: 6 }), ...), Bin.step(size), ` +
+      `Bin.thresholds(countOrEdges), or Bin.quantiles(countOrProbabilities).`
   );
 }
 
@@ -933,6 +936,7 @@ const FIELD_OP_NAMES = [
   "normalize",
   "sum",
   "mean",
+  "median",
   "count",
   "distinct",
 ] as const;
@@ -991,7 +995,7 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
         walkPartition(value.partition, `${path}.partition`, ctx);
       return;
     default:
-      // reverse/dropNulls/normalize/sum/mean/count/distinct carry no extra fields.
+      // reverse/dropNulls/normalize/sum/mean/median/count/distinct carry no extra fields.
       return;
   }
 }

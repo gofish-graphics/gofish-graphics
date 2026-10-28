@@ -303,6 +303,7 @@ const SCHEMA_STRATEGY_KEYS: Record<
   Bin: {
     step: { size: true },
     thresholds: { thresholds: true },
+    quantiles: { quantiles: true },
     hex: { radius: true },
     voronoi: { seeds: true },
   } satisfies StrategyKeys<BinIR>,

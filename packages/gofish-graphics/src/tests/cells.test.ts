@@ -109,6 +109,7 @@ const over = (values: readonly unknown[]) => {
     : {
         lo: ns.reduce((a, b) => Math.min(a, b)),
         hi: ns.reduce((a, b) => Math.max(a, b)),
+        sorted: () => [...ns].sort((a, b) => a - b),
       };
 };
 const edges = (cells: readonly Cell[]) => cells.map((c) => [c.start, c.end]);
@@ -208,6 +209,95 @@ async function main() {
       "no values, no cells",
       binCells(Bin.step(1), over([null, undefined]), undefined, "t").cells
         .length === 0
+    );
+
+    // Bin.quantiles: inner edges at type-7 quantiles of the values, outer
+    // edges at the domain's ends.
+    const oneToNine = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    const quartiles = binCells(
+      Bin.quantiles(4),
+      over(oneToNine),
+      undefined,
+      "t"
+    );
+    check(
+      "Bin.quantiles(n) cuts at the i/n quantiles, the domain's ends outside",
+      same(edges(quartiles.cells), [
+        [1, 3],
+        [3, 5],
+        [5, 7],
+        [7, 9],
+      ]) && quartiles.cellOf(9)?.start === 7,
+      JSON.stringify(edges(quartiles.cells))
+    );
+    const interpolated = binCells(
+      Bin.quantiles([0.5, 0.1]),
+      over([0, 10, 20, 30]),
+      undefined,
+      "t"
+    );
+    check(
+      "Bin.quantiles([p...]) interpolates between values, in order (type 7)",
+      same(
+        edges(interpolated.cells).map((e) => e.map((v) => +v.toFixed(9))),
+        [
+          [0, 3],
+          [3, 15],
+          [15, 30],
+        ]
+      ),
+      JSON.stringify(edges(interpolated.cells))
+    );
+    check(
+      "Bin.quantiles(n) gives n cells holding about as many values each",
+      binCells(
+        Bin.quantiles(10),
+        over(Array.from({ length: 1000 }, (_, i) => i ** 2)),
+        undefined,
+        "t"
+      ).cells.length === 10
+    );
+    const tied = (() => {
+      try {
+        binCells(
+          Bin.quantiles(4),
+          over([1, 2, 2, 2, 2, 2, 2, 3]),
+          undefined,
+          'field("x").bin(...)'
+        );
+        return "no error";
+      } catch (e) {
+        return (e as Error).message;
+      }
+    })();
+    check(
+      "Bin.quantiles throws when two edges meet, naming the field",
+      tied.includes('field("x")') &&
+        tied.includes("Bin.quantiles(4)") &&
+        tied.includes("fewer cells"),
+      tied
+    );
+    check(
+      "Bin.quantiles has its wire form, and reads it back",
+      same(Bin.quantiles([0.25, 0.75]).toJSON(), {
+        kind: "quantiles",
+        quantiles: [0.25, 0.75],
+      }) &&
+        checkPartition({ kind: "quantiles", quantiles: 5 }, "t").toString() ===
+          "Bin.quantiles(5)"
+    );
+    const badP = (() => {
+      try {
+        checkPartition({ kind: "quantiles", quantiles: [0.5, 1] }, "t");
+        return "no error";
+      } catch (e) {
+        return (e as Error).message;
+      }
+    })();
+    check(
+      "a probability of 1 is an error",
+      badP.includes("below 1"),
+      badP
     );
   }
 
@@ -2247,6 +2337,16 @@ async function main() {
         `${evalFieldValues(field("y").sum(), allMissing).values[0]}`
     );
     check(
+      "a median skips missing values; over none it has no value",
+      evalFieldValues(field("y").median(), someMissing).values[0] === 3 &&
+        evalFieldValues(field("y").median(), [{ y: 5 }, { y: 1 }, { y: 2 }])
+          .values[0] === 2 &&
+        evalFieldValues(field("y").median(), allMissing).values[0] ===
+          undefined &&
+        num(inferPos(field("y").median(), [{ y: 1 }, { y: 2 }, { y: 9 }])) ===
+          2
+    );
+    check(
       "a count counts rows, missing values included",
       evalFieldValues(field("y").count(), someMissing).values[0] === 4
     );
@@ -2428,6 +2528,50 @@ async function main() {
       derived === ownCells && ownCells !== 10,
       `${derived} / ${ownCells}`
     );
+
+    // Bin.quantiles reads the values of the data the column was typed with:
+    // the chart's, in every group, or a derive's, in each group it runs in.
+    const cellXs = async (flow: unknown[]) =>
+      chart(ages, { axes: false })
+        .flow(
+          spread({ by: "group", dir: "y" }),
+          ...flow,
+          partition({
+            by: distField("age").bin(DistBin.quantiles(4)),
+            dir: "x",
+          })
+        )
+        .mark(rect({}))
+        .toDisplayList({ w: 400, h: 200 })
+        .then((dl: any) => {
+          const out: any[] = [];
+          const walk = (it: any) => {
+            if (it.kind === "rect") out.push(it);
+            for (const c of it.children ?? []) walk(c);
+          };
+          dl.items.forEach(walk);
+          // The rects of each row of the spread, by their y, as their x's.
+          const rows = new Map<number, number[]>();
+          for (const r of out)
+            rows.set(r.y, [...(rows.get(r.y) ?? []), Math.round(r.x)]);
+          return [...rows.values()].map((xs) => xs.sort((a, b) => a - b));
+        });
+    const shared = await cellXs([]);
+    check(
+      "Bin.quantiles gives every group the cells of the chart's data",
+      shared.length === 2 &&
+        shared[0].length === 4 &&
+        same(shared[0], shared[1]),
+      JSON.stringify(shared)
+    );
+    const own = await cellXs([GoFish.derive((rows: any[]) => rows)]);
+    check(
+      "Bin.quantiles after a derive in each group gives each group its own",
+      own.length === 2 &&
+        own.every((xs) => xs.length === 4) &&
+        !same(own[0], own[1]),
+      JSON.stringify(own)
+    );
   }
 
   console.log("\n# a union of cells");
@@ -2504,6 +2648,7 @@ export function partitionKeyTypes(): void {
   // @ts-expect-error a product divides both axes, so it takes no dir
   srcPartition({ by: { x: field("a").bin(), y: field("b").bin() }, dir: "x" });
   field("a").bin(Bin.thresholds([0, 5, 10]).format((c) => String(c.start)));
+  srcPartition({ by: field("a").bin(Bin.quantiles(10)), dir: "x" });
   // @ts-expect-error a month of the year has no one region on the time line
   srcPartition({ by: field("d").bin(Calendar.month), dir: "x" });
   srcPartition({ by: field("d").bin(Calendar.year), dir: "x" });

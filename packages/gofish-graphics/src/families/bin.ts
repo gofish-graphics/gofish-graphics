@@ -4,8 +4,9 @@
 
 /**
  * The `Bin` family: the cells a key is binned into (#1058, #1059, #48).
- * `Bin.step(size)` and `Bin.thresholds(countOrEdges)` cut the line of one
- * field into intervals, the value of `field(x).bin(...)`; `Bin.hex({ radius })`
+ * `Bin.step(size)`, `Bin.thresholds(countOrEdges)` and
+ * `Bin.quantiles(countOrProbabilities)` cut the line of one field into
+ * intervals, the value of `field(x).bin(...)`; `Bin.hex({ radius })`
  * and `Bin.voronoi({ seeds })` divide the plane of two fields into polygons,
  * the value of `struct({ x, y }).bin(...)`. A kind is valid only on its key.
  * A Calendar value (`Calendar.month`) is the other value `field(x).bin(...)`
@@ -16,15 +17,16 @@
  * its wire form, `{ kind, ...params }`, so it crosses the Python bridge as
  * IR. The kinds and their params are declared once, in gofish-ir's
  * `STRATEGIES` table, which checks a strategy where `.bin` reads it
- * (`Frontend.checkPartition`, `Frontend.checkStructBin`). `Bin.step` and `Bin.thresholds` are objects of a
- * class (`StepBin`, `ThresholdsBin`, ast/cells.ts) for their `.format(fn)`,
+ * (`Frontend.checkPartition`, `Frontend.checkStructBin`). `Bin.step`,
+ * `Bin.thresholds` and `Bin.quantiles` are objects of a class (`StepBin`,
+ * `ThresholdsBin`, `QuantilesBin`, ast/cells.ts) for their `.format(fn)`,
  * which labels their cells; the cells themselves are made in `ast/cells.ts`
  * (a line) and `ast/polygonCells.ts` (the plane).
  */
 import type { Frontend } from "gofish-ir";
-import { StepBin, ThresholdsBin } from "../ast/cells";
+import { QuantilesBin, StepBin, ThresholdsBin } from "../ast/cells";
 
-export type { StepBin, ThresholdsBin } from "../ast/cells";
+export type { QuantilesBin, StepBin, ThresholdsBin } from "../ast/cells";
 
 /** `hex()`: a grid of hexagons. See {@link hex}. */
 export type HexBin = Extract<Frontend.StructBinIR, { kind: "hex" }>;
@@ -34,7 +36,7 @@ export type VoronoiBin = Extract<Frontend.StructBinIR, { kind: "voronoi" }>;
 
 /** The kinds that cut the line of one field: the `Bin` value of
  *  `field(x).bin(...)`. */
-export type FieldBin = StepBin | ThresholdsBin;
+export type FieldBin = StepBin | ThresholdsBin | QuantilesBin;
 
 /** The kinds that divide the plane of two fields: the value of
  *  `struct({ x, y }).bin(...)`. */
@@ -67,6 +69,23 @@ export function step(size: number): StepBin {
  */
 export function thresholds(countOrEdges: number | number[]): ThresholdsBin {
   return new ThresholdsBin(countOrEdges);
+}
+
+/**
+ * Cells whose inner edges are quantiles of the field's values in the chart's
+ * data (type 7, the default of numpy and d3), with the domain's ends as the
+ * outer edges, as in polars' and pandas' `qcut`. Two edges at one value, as
+ * many equal values can give, are an error: ask for fewer cells.
+ * `.format(fn)` labels the cells by a function of the cell.
+ *
+ * @param countOrProbabilities A count: that many cells, each holding about
+ *   the same number of values. Or a list of probabilities, each above 0 and
+ *   below 1: the inner edges are the quantiles at them.
+ */
+export function quantiles(
+  countOrProbabilities: number | number[]
+): QuantilesBin {
+  return new QuantilesBin(countOrProbabilities);
 }
 
 /**

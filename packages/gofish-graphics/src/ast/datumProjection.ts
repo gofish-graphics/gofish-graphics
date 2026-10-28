@@ -711,6 +711,7 @@ export function splitEntries<T extends Record<string, any>>(
         break;
       case "sum":
       case "mean":
+      case "median":
       case "count":
       case "distinct":
         throw new Error(

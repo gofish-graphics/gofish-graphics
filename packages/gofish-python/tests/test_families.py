@@ -33,7 +33,7 @@ FAMILIES = {
     "Overlap": ("overlap", ["separate", "noise", "sina", "jitter"]),
     "Place": ("place", ["around", "along", "start", "end", "interior"]),
     "Tile": ("tile", ["squarify", "slice", "dice", "binary", "slice_dice"]),
-    "Bin": ("bin", ["step", "thresholds", "hex", "voronoi"]),
+    "Bin": ("bin", ["step", "thresholds", "quantiles", "hex", "voronoi"]),
     "Calendar": (
         "calendar",
         ["second", "minute", "hour", "day", "weekday", "week", "month", "quarter", "year"],
@@ -141,6 +141,9 @@ BAD_VALUES = [
     (lambda: Curve.perfect_arrows(bow=float("nan")), "Curve.perfect_arrows(bow=...)"),
     (lambda: Bin.thresholds(0), "Bin.thresholds(thresholds) must be >= 1, got 0"),
     (lambda: Bin.thresholds([]), "Bin.thresholds(thresholds) must have at least 1 item, got []"),
+    (lambda: Bin.quantiles(0), "Bin.quantiles(quantiles) must be >= 1, got 0"),
+    (lambda: Bin.quantiles([0.5, 1]), "Bin.quantiles(quantiles) item must be < 1, got 1"),
+    (lambda: Bin.quantiles([0, 0.5]), "Bin.quantiles(quantiles) item must be > 0, got 0"),
     (lambda: Coord.geo("robinson"), 'Coord.geo(projection) must be one of "equalEarth", "mercator"'),
     (lambda: Coord.polar(center=(1, 2, 3)), "Coord.polar(center=...) must have 2 items"),
     (lambda: Coord.geo("mercator", lat=(0, float("nan"))), "Coord.geo(lat=...)[1] must not be NaN"),

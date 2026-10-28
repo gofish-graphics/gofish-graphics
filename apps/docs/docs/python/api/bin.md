@@ -4,8 +4,8 @@ title: Bin
 
 # Bin
 
-The `Bin` family holds the ways to bin a key into cells. `Bin.step` and
-`Bin.thresholds` cut the line of one field into intervals: they are the
+The `Bin` family holds the ways to bin a key into cells. `Bin.step`,
+`Bin.thresholds` and `Bin.quantiles` cut the line of one field into intervals: they are the
 argument of `field(x).bin(...)`. `Bin.hex` and `Bin.voronoi` divide the plane
 of two fields into polygons: they are the argument of
 `struct(x=..., y=...).bin(...)`, a key that reads two fields at once.
@@ -32,11 +32,13 @@ struct(*, x, y).bin(b)
 
 Bin.step(size, /)
 Bin.thresholds(count_or_edges, /)
+Bin.quantiles(count_or_probabilities, /)
 Bin.hex(*, radius)
 Bin.voronoi(*, seeds)
 ```
 
-A kind is valid only on its key: `Bin.step` and `Bin.thresholds` on
+A kind is valid only on its key: `Bin.step`, `Bin.thresholds` and
+`Bin.quantiles` on
 `field(x).bin`, `Bin.hex` and `Bin.voronoi` on `struct(x=..., y=...).bin`. The
 other way round raises a `TypeError` that names the right key.
 `field(x).bin` also takes a [Calendar](/python/api/core/calendar) value, for a
@@ -64,12 +66,13 @@ from gofish.bin import hex  # the same function as Bin.hex
 
 ## Members
 
-| Member                           | Key                    | Its cells                                                       |
-| -------------------------------- | ---------------------- | --------------------------------------------------------------- |
-| `Bin.step(size)`                 | `field(x)`             | Intervals `size` wide, starting at multiples of `size`.         |
-| `Bin.thresholds(count_or_edges)` | `field(x)`             | About `count` intervals with round edges, or the given edges.   |
-| `Bin.hex(radius=...)`            | `struct(x=..., y=...)` | A grid of hexagons that covers the domain of the two fields.    |
-| `Bin.voronoi(seeds=...)`         | `struct(x=..., y=...)` | One cell per seed: the points nearer to it than to other seeds. |
+| Member                                  | Key                    | Its cells                                                          |
+| --------------------------------------- | ---------------------- | ------------------------------------------------------------------ |
+| `Bin.step(size)`                        | `field(x)`             | Intervals `size` wide, starting at multiples of `size`.            |
+| `Bin.thresholds(count_or_edges)`        | `field(x)`             | About `count` intervals with round edges, or the given edges.      |
+| `Bin.quantiles(count_or_probabilities)` | `field(x)`             | `count` intervals holding about as many values each, or the given. |
+| `Bin.hex(radius=...)`                   | `struct(x=..., y=...)` | A grid of hexagons that covers the domain of the two fields.       |
+| `Bin.voronoi(seeds=...)`                | `struct(x=..., y=...)` | One cell per seed: the points nearer to it than to other seeds.    |
 
 The cells are those of the domain of the key's columns in the chart's data, so
 every group of a nested split sees the same cells, and an empty cell is kept.
@@ -117,6 +120,27 @@ spread(by=field("age").bin(Bin.thresholds([18, 30, 50])), dir="x")
 ```
 
 Custom cell labels (`.format`) are JS-only for now.
+
+## Bin.quantiles
+
+```python
+Bin.quantiles(count_or_probabilities, /)
+```
+
+| Param                    | Type                 | Description                                                                                                                   |
+| ------------------------ | -------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `count_or_probabilities` | `int \| list[float]` | A count, 1 or more: that many cells, each holding about as many values. Or a list of probabilities, each above 0 and below 1. |
+
+The inner edges are quantiles of the field's values in the chart's data
+(type 7, the default of numpy and d3), and the domain's ends are the outer
+edges, as in polars' and pandas' `qcut`. A count `n` puts the inner edges at
+the probabilities `1/n, 2/n, ...`. Two edges at one value, as many equal
+values can give, are an error: ask for fewer cells.
+
+```python
+partition(by=field("x").bin(Bin.quantiles(10)), dir="x")
+partition(by=field("x").bin(Bin.quantiles([0.05, 0.25, 0.5, 0.75, 0.95])), dir="x")
+```
 
 ## Bin.hex
 

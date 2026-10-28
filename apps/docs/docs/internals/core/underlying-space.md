@@ -2156,12 +2156,14 @@ reads only the classes, never the definition. Nine classes exist:
   names the unit variable. A transform writes it for the columns it makes
   (`bin(field)`'s `start`/`end`/`size` are amounts of `field`'s quantity, in
   `field`'s declared unit if it has one; its `count` is in `"count"`).
-- `HasDomain` (`{ lo, hi }`, #1059): the interval the column's values span,
+- `HasDomain` (`{ lo, hi, sorted }`, #1059): the interval the column's values span,
   from the least to the greatest, in the data it was typed with. Nothing
   declares it: `applySchema` computes it for every column whose
   values are all finite numbers (missing values aside; a time's values are
   epoch milliseconds by then), after the other classes. It is what a binned
-  key's cells cover (see [Cells](#cells-a-binned-key)).
+  key's cells cover (see [Cells](#cells-a-binned-key)). `sorted()` gives
+  the same values in order, sorted on its first call only, for the cells of
+  `Bin.quantiles`.
 - `HasInteger` (`{}`): the values are integers. JS has one number type, so
   no JS column has it and no builder writes it: the Python hosts' Arrow
   decode attaches it to a column that arrived as integers, and their encode
@@ -2308,7 +2310,7 @@ error rather than silently doing the wrong thing:
   named field over each group's rows; `reverse` reverses the entries. An
   aggregate op or `normalize` reaching a `by` slot throws — a domain op
   describes _which groups exist_, not _what a group's value is_.
-- **Aggregate ops** (`.sum()`, `.mean()`, `.count()`, `.distinct()`) apply to
+- **Aggregate ops** (`.sum()`, `.mean()`, `.median()`, `.count()`, `.distinct()`) apply to
   a _value_ channel slot (a mark's `h`/`w`/`x`/`y`, or an operator's
   entry-flagged `size`) and fold a group's rows to a single value —
   `evalFieldValues` in `fieldExpr.ts`. A domain op or a second aggregate
@@ -2337,10 +2339,10 @@ never in the expression's `ops`, so the three slots stay as they are.
 
 `field(x).bin(p)` (#1058) is a value transform: it maps each value of `x` to
 its **cell** in the partition `p` (`cells.ts`). A partition is a Calendar
-value (`calendar.ts`), `Bin.step(size)`, or `Bin.thresholds(countOrEdges)`
-(a count, or a list of edges), the two `Bin` kinds that bin one field
-(`families/bin.ts`). Those two are objects of a class, `StepBin` and
-`ThresholdsBin`, whose own keys are their wire form (`{ kind: "step", size }`)
+value (`calendar.ts`), `Bin.step(size)`, `Bin.thresholds(countOrEdges)`
+(a count, or a list of edges), or `Bin.quantiles(countOrProbabilities)`, the
+three `Bin` kinds that bin one field (`families/bin.ts`). Those three are
+objects of a class, `StepBin`, `ThresholdsBin` and `QuantilesBin`, whose own keys are their wire form (`{ kind: "step", size }`)
 and whose `.format(fn)` is held off those keys, as a Calendar value's is. The
 wire form of the op is `{ op: "bin", partition? }` with the partition's own
 wire form, a Calendar value's `{ kind: "month", every: 1 }` or a `Bin` kind's,
@@ -2395,7 +2397,12 @@ puts a value in the cell that holds it whatever the domain (March 1 is in
 March). A `Bin.thresholds` partition is fitted to the domain, so it covers
 the closed domain: the count's step is the one a numeric axis with that many
 ticks uses (`tickIncrement`), and the largest value falls in the last cell
-when it sits on an edge, as in numpy's `histogram` and d3's `bin`.
+when it sits on an edge, as in numpy's `histogram` and d3's `bin`. A
+`Bin.quantiles` partition is fitted the same way, with its inner edges at
+type-7 quantiles (`quantileSorted`) of the column's values in the data it
+was typed with (`HasDomain.sorted`), so it too reads no group's rows. Two
+edges at one value, as many equal values give, throw rather than merge, as
+polars' `qcut` does.
 
 **Cycles, products and chains.** A calendar level binned alone is a part
 of the next larger level (`CalendarPartition.cycle`): `Calendar.month` is

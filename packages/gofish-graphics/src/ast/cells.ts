@@ -14,9 +14,13 @@
  *  - `Bin.thresholds(n)`: about `n` cells, with the step a numeric axis with
  *    `n` ticks would use, so the edges are round numbers;
  *  - `Bin.thresholds([t1, t2, ...])`: cells that end and start at the given
- *    edges, with the domain's ends as the outer edges.
+ *    edges, with the domain's ends as the outer edges;
+ *  - `Bin.quantiles(n)` / `Bin.quantiles([p1, p2, ...])`: cells whose inner
+ *    edges are quantiles of the column's values, with the domain's ends as
+ *    the outer edges.
  *
- * The two `Bin` kinds are {@link StepBin} and {@link ThresholdsBin}: each is
+ * The three `Bin` kinds are {@link StepBin}, {@link ThresholdsBin} and
+ * {@link QuantilesBin}: each is
  * its Bin strategy object, `{ kind, ...params }`, with a `.format(fn)` for
  * its cells' labels, as a Calendar value has one.
  *
@@ -28,7 +32,8 @@
  * column type carries (`HasDomain` in schema.ts, computed once when the data
  * is typed), so each group of a split sees the same cells, in the same order,
  * empty cells included. A count-based partition (`Bin.thresholds(20)`) picks
- * its step from that domain too.
+ * its step from that domain too, and `Bin.quantiles` reads the column's
+ * values in the data it was typed with, which the domain carries.
  *
  * A cell holds its start and not its end. A Calendar value or a `Bin.step`
  * puts every value in the cell that holds it, whatever the domain: March 1
@@ -37,7 +42,7 @@
  * a cell boundary, it falls in the cell that ends there rather than in a new
  * cell of its own, as numpy's `histogram` and d3's `bin` do.
  */
-import { tickIncrement } from "d3-array";
+import { quantileSorted, tickIncrement } from "d3-array";
 import { Frontend } from "gofish-ir";
 import type { Temporal as TemporalNS } from "temporal-polyfill";
 import type { HasDomain } from "./schema";
@@ -157,9 +162,39 @@ export class ThresholdsBin extends NumberBin {
   }
 }
 
-/** A partition of the number line: `Bin.step(size)` or
- *  `Bin.thresholds(countOrEdges)`. */
-export type NumberPartition = StepBin | ThresholdsBin;
+/** `Bin.quantiles(countOrProbabilities)`: `count` cells holding about the
+ *  same number of values, or the cells between the quantiles at the given
+ *  probabilities. */
+export class QuantilesBin extends NumberBin {
+  readonly kind = "quantiles" as const;
+  readonly quantiles: number | number[];
+
+  constructor(quantiles: number | number[], format?: NumberCellFormat) {
+    super(format);
+    this.quantiles = quantiles;
+  }
+
+  /** The same cells, labeled by `fn`, a function of the cell. JS only: a
+   *  partition with a format has no wire form. */
+  format(fn: NumberCellFormat): QuantilesBin {
+    return new QuantilesBin(
+      this.quantiles,
+      checkFormat<NumberCellFormat>(this, fn)
+    );
+  }
+
+  protected wire(): Frontend.FieldBinIR {
+    return { kind: "quantiles", quantiles: this.quantiles };
+  }
+
+  protected spelling(): string {
+    return `Bin.quantiles(${describe(this.quantiles)})`;
+  }
+}
+
+/** A partition of the number line: `Bin.step(size)`,
+ *  `Bin.thresholds(countOrEdges)` or `Bin.quantiles(countOrProbabilities)`. */
+export type NumberPartition = StepBin | ThresholdsBin | QuantilesBin;
 
 /** What `field(x).bin(p)` takes: a Calendar value or a numeric partition. */
 export type Partition = CalendarPartition | NumberPartition;
@@ -320,13 +355,20 @@ export function checkPartition(given: unknown, where: string): Partition {
   const p = kindValue(given);
   if (p instanceof CalendarPartition) return p;
   Frontend.checkPartition(p, where);
-  if (p instanceof StepBin || p instanceof ThresholdsBin) return p;
+  if (
+    p instanceof StepBin ||
+    p instanceof ThresholdsBin ||
+    p instanceof QuantilesBin
+  )
+    return p;
   const wire = p as PartitionJSON;
   switch (wire.kind) {
     case "step":
       return new StepBin(wire.size);
     case "thresholds":
       return new ThresholdsBin(wire.thresholds);
+    case "quantiles":
+      return new QuantilesBin(wire.quantiles);
     default:
       return fromWire(wire);
   }
@@ -488,7 +530,7 @@ export function checkChain(steps: readonly BinStep[], where: string): void {
     if (cal[0] !== cal[1])
       throw new Error(
         `${say}: a chain bins one column, but a Calendar value bins times ` +
-          `and Bin.step and Bin.thresholds bin numbers.`
+          `and Bin.step, Bin.thresholds and Bin.quantiles bin numbers.`
       );
     const finer =
       prev instanceof CalendarPartition && p instanceof CalendarPartition
@@ -529,11 +571,17 @@ export const round12 = (x: number): number => +x.toPrecision(12);
 const numberLabel = (start: number, end: number): string =>
   `${round12(start)}–${round12(end)}`;
 
-/** The edges of the cells over `[lo, hi]` for a numeric partition: ascending,
+/** The edges of the cells over `domain` for a numeric partition: ascending,
  *  the first at or below `lo`. A step's last edge is above `hi` (the cell
- *  holding `hi` holds its start, not its end); a thresholds partition's last
- *  edge is `hi` or above (it covers the closed domain). */
-function numberEdges(p: NumberPartition, lo: number, hi: number): number[] {
+ *  holding `hi` holds its start, not its end); a thresholds or quantiles
+ *  partition's last edge is `hi` or above (it covers the closed domain). */
+function numberEdges(
+  p: NumberPartition,
+  domain: HasDomain,
+  where: string
+): number[] {
+  const { lo, hi } = domain;
+  if (p.kind === "quantiles") return quantileEdges(p, domain, where);
   if (p.kind === "thresholds" && Array.isArray(p.thresholds)) {
     // Explicit edges: the domain's ends are the outer edges, and an edge
     // outside the domain cuts nothing.
@@ -567,16 +615,49 @@ function numberEdges(p: NumberPartition, lo: number, hi: number): number[] {
   return edges;
 }
 
+/** The edges of `Bin.quantiles` over `domain`: the domain's ends, and
+ *  between them the type-7 quantiles (d3's `quantileSorted`, numpy's
+ *  default) of the column's values at `p`'s probabilities, `i / n` for a
+ *  count `n`. Two edges at one value (many equal values there, or an empty
+ *  cell) throw, as polars' `qcut` does: merging them would give fewer
+ *  cells than asked for, and an empty cell has no place on the axis. */
+function quantileEdges(
+  p: QuantilesBin,
+  domain: HasDomain,
+  where: string
+): number[] {
+  const given = p.quantiles;
+  const ps = Array.isArray(given)
+    ? [...given].sort((a, b) => a - b)
+    : Array.from({ length: given - 1 }, (_, i) => (i + 1) / given);
+  const sorted = domain.sorted() as number[];
+  const edges = [
+    domain.lo,
+    ...ps.map((q) => quantileSorted(sorted, q)!),
+    domain.hi,
+  ];
+  for (let i = 1; i < edges.length; i++) {
+    if (edges[i] > edges[i - 1]) continue;
+    throw new Error(
+      `${where}: ${String(p)} puts two cell edges at the same value, ` +
+        `${round12(edges[i])}, so a cell between them would be empty: the ` +
+        `column has many values equal to it. Ask for fewer cells.`
+    );
+  }
+  return edges;
+}
+
 /** The cells of one bin step over `[lo, hi]` on the line: a Calendar
  *  value's cells (as the time line holds them: a month is a month of its
  *  year), a product's (its finest level's cells, labeled by every level), or
  *  a numeric partition's. */
 function lineCells(
   step: BinStep,
-  lo: number,
-  hi: number,
-  zone: string | undefined
+  domain: HasDomain,
+  zone: string | undefined,
+  where: string
 ): Cell[] {
+  const { lo, hi } = domain;
   const bin = spell(step);
   if (Array.isArray(step) || step instanceof CalendarPartition) {
     const levels: Product = Array.isArray(step) ? step : [step];
@@ -598,7 +679,7 @@ function lineCells(
       );
   }
   const p = step as NumberPartition;
-  const edges = numberEdges(p, lo, hi);
+  const edges = numberEdges(p, domain, where);
   return edges
     .slice(0, -1)
     .map((start, i) => numberCell(p, start, edges[i + 1], bin));
@@ -635,11 +716,11 @@ function numberCell(
 function refine(
   parents: readonly Cell[],
   p: Partition,
-  lo: number,
-  hi: number,
-  zone: string | undefined
+  domain: HasDomain,
+  zone: string | undefined,
+  where: string
 ): Cell[] {
-  const children = lineCells(p, lo, hi, zone);
+  const children = lineCells(p, domain, zone, where);
   const bin = spell(p);
   const out: Cell[] = [];
   let j = 0;
@@ -859,9 +940,9 @@ export function chainCells(
     );
   }
   if (isCycleStep(steps[0])) return cycleCells(steps, lo, hi, zone!);
-  let cells = lineCells(steps[0], lo, hi, zone);
+  let cells = lineCells(steps[0], domain, zone, where);
   for (const step of steps.slice(1))
-    cells = refine(cells, step as Partition, lo, hi, zone);
+    cells = refine(cells, step as Partition, domain, zone, where);
   return { cells, cellOf: lineCellOf(cells, lo, hi) };
 }
 
