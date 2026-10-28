@@ -53,10 +53,10 @@ export const ScatterPointLabels: StoryObj = {
   ],
   render: (_args: unknown, context: any) => {
     const container = initializeContainer();
-    chart(context.loaded.countries)
+    chart(context.loaded.countries, { w: 640, h: 440 })
       .flow(scatter({ by: "country", x: "fertility", y: "life_expect" }))
       .mark(circle({ r: 4 }).label("country"))
-      .render(container, { w: 640, h: 440, axes: true });
+      .render(container, { axes: true });
     return container;
   },
 };
@@ -103,7 +103,7 @@ export const LineEndLabels: StoryObj = {
   loaders: [async () => ({ stocks: await yearlyStocks() })],
   render: (_args: unknown, context: any) => {
     const container = initializeContainer();
-    chart(context.loaded.stocks, { schema: { date: Unit.time() } })
+    chart(context.loaded.stocks, { schema: { date: Unit.time() }, w: 560, h: 320 })
       .flow(
         group({ by: "symbol" }),
         scatter({ by: "date", x: "date", y: "price" })
@@ -113,7 +113,7 @@ export const LineEndLabels: StoryObj = {
           position: Place.end(),
         })
       )
-      .render(container, { w: 560, h: 320, axes: true, legend: false });
+      .render(container, { axes: true, legend: false });
     return container;
   },
 };
@@ -134,7 +134,7 @@ export const InlineSlopedLabels: StoryObj = {
   loaders: [async () => ({ stocks: await yearlyStocks() })],
   render: (_args: unknown, context: any) => {
     const container = initializeContainer();
-    chart(context.loaded.stocks, { schema: { date: Unit.time() } })
+    chart(context.loaded.stocks, { schema: { date: Unit.time() }, w: 560, h: 320 })
       .flow(
         group({ by: "symbol" }),
         scatter({ by: "date", x: "date", y: "price" })
@@ -146,7 +146,7 @@ export const InlineSlopedLabels: StoryObj = {
           fontWeight: 600,
         })
       )
-      .render(container, { w: 560, h: 320, axes: true, legend: false });
+      .render(container, { axes: true, legend: false });
     return container;
   },
 };
@@ -165,7 +165,7 @@ export const StreamgraphInteriorLabels: StoryObj = {
   },
   render: () => {
     const container = initializeContainer();
-    chart(seafood)
+    chart(seafood, { w: 520, h: 360 })
       .flow(
         spread({ by: "lake", dir: "x", spacing: 64, alignment: "middle" }),
         stack({ by: "species", dir: "y" })
@@ -173,7 +173,7 @@ export const StreamgraphInteriorLabels: StoryObj = {
       .mark(
         ribbon({ h: "count", fill: "species", opacity: 0.8 }).label("species")
       )
-      .render(container, { w: 520, h: 360, legend: false });
+      .render(container, { legend: false });
     return container;
   },
 };
@@ -237,12 +237,12 @@ const wings = [
 export const PolygonInteriorLabels: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    chart(wings, { axes: false })
+    chart(wings, { axes: false, w: 640, h: 150 })
       .flow(group({ by: "name" }))
       .mark(
         polygon({ points: "ring", fill: "name", opacity: 0.85 }).label("name")
       )
-      .render(container, { w: 640, h: 150, legend: false });
+      .render(container, { legend: false });
     return container;
   },
 };
@@ -253,14 +253,14 @@ export const PolygonInteriorLabels: StoryObj = {
 export const PolygonCenterLabels: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    chart(wings, { axes: false })
+    chart(wings, { axes: false, w: 640, h: 150 })
       .flow(group({ by: "name" }))
       .mark(
         polygon({ points: "ring", fill: "name", opacity: 0.85 }).label("name", {
           position: "center",
         })
       )
-      .render(container, { w: 640, h: 150, legend: false });
+      .render(container, { legend: false });
     return container;
   },
 };
@@ -334,7 +334,7 @@ const stateDiagram = (side: "left" | "above" | "on") => {
 export const ArrowLabelsLeft: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    stateDiagram("left").render(container, { w: 600, h: 240 });
+    stateDiagram("left").render(container);
     return container;
   },
 };
@@ -344,7 +344,7 @@ export const ArrowLabelsLeft: StoryObj = {
 export const ArrowLabelsOnBackground: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    stateDiagram("on").render(container, { w: 600, h: 240 });
+    stateDiagram("on").render(container);
     return container;
   },
 };
@@ -352,7 +352,7 @@ export const ArrowLabelsOnBackground: StoryObj = {
 export const ArrowLabelsAbove: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    stateDiagram("above").render(container, { w: 600, h: 240 });
+    stateDiagram("above").render(container);
     return container;
   },
 };
@@ -378,7 +378,7 @@ const budget = [
   })),
 ];
 const budgetChart = (side: "above" | ("above" | "below")[]) =>
-  chart(budget)
+  chart(budget, { w: 360, h: 220 })
     .flow(group({ by: "series" }), scatter({ by: "x", x: "x", y: "y" }))
     .mark(
       line({ stroke: "series", strokeWidth: 2 }).label("series", {
@@ -391,8 +391,6 @@ export const SideAbove: StoryObj = {
   render: () => {
     const container = initializeContainer();
     budgetChart("above").render(container, {
-      w: 360,
-      h: 220,
       axes: true,
       legend: false,
     });
@@ -404,8 +402,6 @@ export const SideAboveOrBelow: StoryObj = {
   render: () => {
     const container = initializeContainer();
     budgetChart(["above", "below"]).render(container, {
-      w: 360,
-      h: 220,
       axes: true,
       legend: false,
     });
@@ -433,7 +429,7 @@ const trendScatter = (countries: any[]) => {
   }));
   // The trend line is drawn first, so it is placed when the labels look
   // for it.
-  return chart(ends)
+  return chart(ends, { w: 640, h: 440 })
     .flow(scatter({ by: "fertility", x: "fertility", y: "life_expect" }))
     .mark(blank().name("ends"))
     .layer(
@@ -469,11 +465,7 @@ export const AvoidingTrendLine: StoryObj = {
   ],
   render: (_args: unknown, context: any) => {
     const container = initializeContainer();
-    trendScatter(context.loaded.countries).render(container, {
-      w: 640,
-      h: 440,
-      axes: true,
-    });
+    trendScatter(context.loaded.countries).render(container, { axes: true });
     return container;
   },
 };
@@ -493,7 +485,7 @@ const sales = [
 export const BarValuesAboveOrInside: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    chart(sales)
+    chart(sales, { w: 320, h: 200 })
       .flow(spread({ by: "month", dir: "x" }))
       .mark(
         rect({ h: "units", fill: "#4e79a7" }).label("units", {
@@ -503,7 +495,7 @@ export const BarValuesAboveOrInside: StoryObj = {
           }),
         })
       )
-      .render(container, { w: 320, h: 200, axes: true });
+      .render(container, { axes: true });
     return container;
   },
 };
@@ -515,14 +507,14 @@ export const BarValuesAboveOrInside: StoryObj = {
 export const BarEndPart: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    chart(sales)
+    chart(sales, { w: 320, h: 200 })
       .flow(spread({ by: "month", dir: "y" }))
       .mark(
         rect({ w: "units", fill: "#59a14f" }).label("units", {
           position: Place.along({ at: "x-max", side: ["outset", "inset"] }),
         })
       )
-      .render(container, { w: 320, h: 200, axes: true });
+      .render(container, { axes: true });
     return container;
   },
 };
@@ -542,7 +534,7 @@ const counts = [
 export const BarValuesInsideOrAbove: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    chart(counts)
+    chart(counts, { w: 320, h: 200 })
       .flow(spread({ by: "k", dir: "x" }))
       .mark(
         rect({ h: "v", fill: "#4e79a7" }).label("v", {
@@ -552,7 +544,7 @@ export const BarValuesInsideOrAbove: StoryObj = {
           }),
         })
       )
-      .render(container, { w: 320, h: 200, axes: true });
+      .render(container, { axes: true });
     return container;
   },
 };
@@ -562,14 +554,14 @@ export const BarValuesInsideOrAbove: StoryObj = {
 export const BarValuesInsideOrPastEnd: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    chart(counts)
+    chart(counts, { w: 320, h: 200 })
       .flow(spread({ by: "k", dir: "y" }))
       .mark(
         rect({ w: "v", fill: "#59a14f" }).label("v", {
           position: Place.along({ at: "x-max", side: ["inset", "outset"] }),
         })
       )
-      .render(container, { w: 320, h: 200, axes: true });
+      .render(container, { axes: true });
     return container;
   },
 };
