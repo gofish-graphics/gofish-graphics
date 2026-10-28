@@ -42,9 +42,8 @@ export type OutlinePart = { name: string; from: number; to: number };
  * only along its band; what is behind its inside shows through.
  *
  * An outline that only stands in for its shape says so with `bounds`: the
- * box of a node whose definition gives no outline (an image, a group), a
- * text's glyph box, a rect's box under rounded corners or an inset. It lies
- * around the ink without tracing it. A path boolean (`intersect` with paint)
+ * box of a node whose definition gives no outline (an image, a group), or a
+ * text's glyph box. It lies around the ink without tracing it. A path boolean (`intersect` with paint)
  * reads only outlines that trace their shape.
  *
  * An outline may also give its shape exactly, beside the samples, for a
@@ -254,6 +253,84 @@ export function ellipseOutline(
     points.push([cx + rx * Math.cos(t), cy + ry * Math.sin(t)]);
   }
   return { points, closed: true, ...paint, ellipse: { cx, cy, rx, ry } };
+}
+
+/**
+ * A box with rounded corners, sampled: a rect with `rx` and `ry`, each
+ * corner a quarter of an ellipse sampled as {@link ellipseOutline} samples
+ * one. The radii are cut to half the box's width and height, as SVG cuts
+ * them. It runs as {@link boxOutline} runs, from the top edge, and its parts
+ * are the straight pieces of the four edges, by the same names. A box with
+ * no rounding is {@link boxOutline}.
+ */
+export function roundedBoxOutline(
+  box: Box,
+  rx: number,
+  ry: number,
+  direction: AxisDirection,
+  tolerance: number,
+  paint: OutlinePaint = { filled: true }
+): Outline {
+  const x0 = Math.min(box.min[0], box.max[0]);
+  const x1 = Math.max(box.min[0], box.max[0]);
+  const y0 = Math.min(box.min[1], box.max[1]);
+  const y1 = Math.max(box.min[1], box.max[1]);
+  const a = Math.min(rx, (x1 - x0) / 2);
+  const b = Math.min(ry, (y1 - y0) / 2);
+  if (!(a > 0 && b > 0)) return boxOutline(box, direction, paint);
+  const steps = Math.max(
+    2,
+    Math.ceil(circleSteps(Math.max(a, b), tolerance) / 4)
+  );
+  const points: OutlinePoint[] = [];
+  // Each edge's straight piece as [from, to] indices into `points`.
+  const edges: [number, number][] = [];
+  // Per corner: its center, the angle it starts at (it turns a quarter),
+  // and the points it starts and ends at, exactly.
+  const corners: [number, number, number, OutlinePoint, OutlinePoint][] = [
+    [x1 - a, y0 + b, -Math.PI / 2, [x1 - a, y0], [x1, y0 + b]],
+    [x1 - a, y1 - b, 0, [x1, y1 - b], [x1 - a, y1]],
+    [x0 + a, y1 - b, Math.PI / 2, [x0 + a, y1], [x0, y1 - b]],
+    [x0 + a, y0 + b, Math.PI, [x0, y0 + b], [x0 + a, y0]],
+  ];
+  points.push([x0 + a, y0]);
+  for (const [cx, cy, t0, from, to] of corners) {
+    // The straight piece up to this corner (none when the corners meet, at
+    // a radius half the side), then the corner.
+    const start = points.length - 1;
+    const last = points[start];
+    if (from[0] !== last[0] || from[1] !== last[1]) points.push(from);
+    edges.push([start, points.length - 1]);
+    for (let i = 1; i < steps; i++) {
+      const t = t0 + (i / steps) * (Math.PI / 2);
+      points.push([cx + a * Math.cos(t), cy + b * Math.sin(t)]);
+    }
+    points.push(to);
+  }
+  // The last corner ends where the outline starts.
+  points.pop();
+  const along: number[] = [0];
+  for (let i = 1; i < points.length; i++)
+    along.push(
+      along[i - 1] +
+        Math.hypot(
+          points[i][0] - points[i - 1][0],
+          points[i][1] - points[i - 1][1]
+        )
+    );
+  const top = direction === 1 ? "y-min" : "y-max";
+  const bottom = direction === 1 ? "y-max" : "y-min";
+  const names = [top, "x-max", bottom, "x-min"];
+  return {
+    points,
+    closed: true,
+    ...paint,
+    parts: edges.map(([from, to], i) => ({
+      name: names[i],
+      from: along[from],
+      to: along[to],
+    })),
+  };
 }
 
 /**

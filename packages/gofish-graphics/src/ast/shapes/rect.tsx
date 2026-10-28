@@ -29,7 +29,12 @@ import {
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
 import { literalBoxExtents } from "../extent";
-import { boxOfDims, boxOutline, outlinePaint } from "../geometry";
+import {
+  boxOfDims,
+  insetBox,
+  outlinePaint,
+  roundedBoxOutline,
+} from "../geometry";
 import { aesthetic, continuous, Domain, posFn, pxOf } from "../domain";
 import { computeAesthetic, computeSize } from "../../util";
 import {
@@ -54,21 +59,6 @@ import {
 } from "../displayList/lowerHelpers";
 
 const DEFAULT_RECT_SIZE = 16;
-
-/** A drawn extent moved in by `inset` pixels at each end, about the same
- *  center, and never below zero size. */
-const insetBy = (
-  d: { min: number; size: number; center: number; max: number },
-  inset: number
-) => {
-  const size = Math.max(0, Math.abs(d.size) - 2 * inset);
-  return {
-    min: d.center - size / 2,
-    max: d.center + size / 2,
-    center: d.center,
-    size,
-  };
-};
 
 /* TODO: what should default embedding behavior be when all values are aesthetic? */
 export const Rect = ({
@@ -116,6 +106,12 @@ export const Rect = ({
   const fills = (axis: 0 | 1): boolean =>
     dims[axis].size === undefined &&
     !(dims[axis].min !== undefined && dims[axis].max !== undefined);
+  // How far it is drawn in at each end of each axis: `inset` on an axis it
+  // fills, else 0.
+  const insets = (): [number, number] => [
+    fills(0) ? inset : 0,
+    fills(1) ? inset : 0,
+  ];
   // How it paints its outline, read once.
   const paint = outlinePaint({ fill, stroke, strokeWidth });
   const node = new GoFishNode(
@@ -271,10 +267,21 @@ export const Rect = ({
         const space = coordinateTransform ?? linear();
         const isXEmbedded = intrinsicDims![0].embedded;
         const isYEmbedded = intrinsicDims![1].embedded;
-        const displayDims = displayDimsOf(intrinsicDims, transform).map(
-          (d, axis) =>
-            inset > 0 && fills(axis as 0 | 1) ? insetBy(d, inset) : d
+        // Its box where its parent placed it, drawn in by its insets.
+        const by = insets();
+        const placed = displayDimsOf(intrinsicDims, transform);
+        const { box: drawn } = insetBox(
+          {
+            min: [placed[0].min, placed[1].min],
+            max: [placed[0].max, placed[1].max],
+          },
+          by
         );
+        const displayDims = placed.map((d, axis) => {
+          if (by[axis] === 0) return d;
+          const [min, max] = [drawn.min[axis], drawn.max[axis]];
+          return { min, max, center: (min + max) / 2, size: max - min };
+        });
 
         const unitScale = node.getRenderSession().scaleContext?.unit;
         const resolvedFill = resolveColorChannel(fill, unitScale);
@@ -410,20 +417,24 @@ export const Rect = ({
           },
         ];
       },
-      // Its outline is its box (see `boxOutline`), painted as it is drawn:
-      // filled unless its fill is "none" or "transparent", and stroked as
-      // wide as `strokeWidth`.
+      // Its outline is what it draws: its box drawn in by its insets, with
+      // its corners rounded (see `roundedBoxOutline`), painted as it is
+      // drawn: filled unless its fill is "none" or "transparent", and
+      // stroked as wide as `strokeWidth`.
       geometry: ({ intrinsicDims }, _children, node) => {
         const box = boxOfDims(intrinsicDims, node.type);
-        // Under rounded corners or an inset the box only bounds the ink.
-        const bounds = rx > 0 || ry > 0 || inset > 0;
+        const { box: drawn } = insetBox(box, insets());
         return {
           box,
-          outline: () => [
-            {
-              ...boxOutline(box, node.yFrame.direction, paint),
-              ...(bounds && { bounds: true as const }),
-            },
+          outline: (tolerance) => [
+            roundedBoxOutline(
+              drawn,
+              rx,
+              ry,
+              node.yFrame.direction,
+              tolerance,
+              paint
+            ),
           ],
         };
       },

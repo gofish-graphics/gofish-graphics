@@ -864,33 +864,42 @@ function meetChartUnits(types: ColumnTypes): void {
  *  neither has a scan to fold it into (about 0.5 ms for 10,000 rows of six
  *  columns). */
 function columnDomains(rows: readonly unknown[]): Map<string, HasDomain> {
-  // A column whose values are not all finite numbers maps to null.
-  const domains = new Map<string, HasDomain | null>();
+  // A column whose values are not all finite numbers maps to null; any other
+  // to its values so far and their range.
+  type Scan = { lo: number; hi: number; values: number[] };
+  const scans = new Map<string, Scan | null>();
   for (const row of rows) {
     if (row == null || typeof row !== "object") continue;
     for (const column in row) {
       const v = (row as Record<string, unknown>)[column];
       if (v == null) continue;
-      const d = domains.get(column);
+      const d = scans.get(column);
       if (d === null) continue;
-      if (typeof v !== "number" || !Number.isFinite(v))
-        domains.set(column, null);
+      if (typeof v !== "number" || !Number.isFinite(v)) scans.set(column, null);
       else if (d === undefined)
-        domains.set(column, { lo: v, hi: v, sorted: () => [] });
-      else if (v < d.lo) d.lo = v;
-      else if (v > d.hi) d.hi = v;
+        scans.set(column, { lo: v, hi: v, values: [v] });
+      else {
+        d.values.push(v);
+        if (v < d.lo) d.lo = v;
+        else if (v > d.hi) d.hi = v;
+      }
     }
   }
   return new Map(
-    [...domains].flatMap(([column, d]): [string, HasDomain][] => {
+    [...scans].flatMap(([column, d]): [string, HasDomain][] => {
       if (d === null) return [];
-      let sorted: number[] | undefined;
-      d.sorted = () =>
-        (sorted ??= rows
-          .map((r) => (r as Record<string, unknown> | null)?.[column])
-          .filter((v): v is number => v != null)
-          .sort((a, b) => a - b));
-      return [[column, d]];
+      const { lo, hi, values } = d;
+      let sorted = false;
+      const domain: HasDomain = {
+        lo,
+        hi,
+        sorted: () => {
+          if (!sorted) values.sort((a, b) => a - b);
+          sorted = true;
+          return values;
+        },
+      };
+      return [[column, domain]];
     })
   );
 }

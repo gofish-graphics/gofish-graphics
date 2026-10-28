@@ -950,8 +950,9 @@ helper, which falls back to the box when the node does not answer.
   `parts`, arc-length ranges for the mark's own pieces. A region with holes
   (several loops under a fill rule) is not an outline yet (#1201). An
   outline marked `bounds` stands in for the ink without tracing it: the box
-  fallback, a rotated text's glyph box, a `rect` with rounded corners or an
-  inset. A path boolean (a painted `intersect`) reads only outlines that are
+  fallback and a rotated text's glyph box. A `rect`'s outline is what it
+  draws: its box drawn in by its `inset` (`insetBox`, which `region` uses
+  too), with its rounded corners sampled (`roundedBoxOutline`). A path boolean (a painted `intersect`) reads only outlines that are
   not `bounds`, and clips them with `geometry/clip.ts` (Sutherland-Hodgman,
   exact when one ring is convex; the general case is #1201). Every
   node answers it: `GoFishNode.geometry()` gives a node whose definition

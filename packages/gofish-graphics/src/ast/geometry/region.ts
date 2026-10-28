@@ -79,18 +79,18 @@ export function rebaseRegion(
   shared: readonly [boolean, boolean] = [false, false]
 ): Region {
   const [x, y] = region.spans;
-  const at = (s: Span | undefined, axis: 0 | 1): Span | undefined =>
-    s === undefined || shared[axis] ? s : [0, s[1] - s[0]];
+  // How far each axis moves: to the span's start, unless it is shared.
   const start = (s: Span | undefined, axis: 0 | 1): number =>
     s === undefined || shared[axis] ? 0 : s[0];
+  const [dx, dy] = [start(x, 0), start(y, 1)];
+  const at = (s: Span | undefined, d: number): Span | undefined =>
+    s === undefined ? undefined : [s[0] - d, s[1] - d];
   return {
-    spans: [at(x, 0), at(y, 1)],
+    spans: [at(x, dx), at(y, dy)],
     outline:
       x === undefined || y === undefined
         ? undefined
-        : region.outline?.map(
-            ([px, py]) => [px - start(x, 0), py - start(y, 1)] as const
-          ),
+        : region.outline?.map(([px, py]) => [px - dx, py - dy] as const),
   };
 }
 

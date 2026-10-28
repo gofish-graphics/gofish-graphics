@@ -65,6 +65,36 @@ const kde = (values: number[]) => {
   };
 };
 
+/**
+ * The croissant chart of one density's grid rows `{ x, pdf }`: the curve,
+ * unseen, then in each of its ten equal-probability cells the curve's area
+ * intersected with the cell's region, drawn in by 3 pixels, and a dot at the
+ * cell's median.
+ */
+const croissant = (grid: { x: number; pdf: number }[]) =>
+  layer([
+    chart(grid)
+      .flow(scatter({ x: "x" }))
+      .mark(ribbon({ h: "pdf", fill: "none" }).name("density")),
+  ]).relate(({ density }) => [
+    chart(grid)
+      .flow(
+        derive((rows) =>
+          quantileRows(rows, { x: "x", density: "pdf", n: 1000 })
+        ),
+        partition({ by: field("x").bin(Bin.quantiles(10)), dir: "x" })
+      )
+      .mark(
+        layer([
+          intersect({ fill: FILL, stroke: STROKE, strokeWidth: 2 }, [
+            density,
+            region({ inset: 3 }),
+          ]),
+          circle({ cx: field("x").median(), cy: 6, r: 3, fill: STROKE }),
+        ])
+      ),
+  ]);
+
 // The standard normal on [-4, 4]: wide enough that the outer quantile rows
 // are accurate (on [-3, 3] the missing tails move the outer cells' medians).
 const normalGrid = gridOf((x) => normPdf(x), -4, 4, 401);
@@ -81,34 +111,11 @@ export const Croissant: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    layer([
-      chart(normalGrid)
-        .flow(scatter({ x: "x" }))
-        .mark(ribbon({ h: "pdf", fill: "none" }).name("density")),
-    ])
-      .relate(({ density }) => [
-        chart(normalGrid)
-          .flow(
-            derive((rows) =>
-              quantileRows(rows, { x: "x", density: "pdf", n: 1000 })
-            ),
-            partition({ by: field("x").bin(Bin.quantiles(10)), dir: "x" })
-          )
-          .mark(
-            layer([
-              intersect({ fill: FILL, stroke: STROKE, strokeWidth: 2 }, [
-                density,
-                region({ inset: 3 }),
-              ]),
-              circle({ cx: field("x").median(), cy: 6, r: 3, fill: STROKE }),
-            ])
-          ),
-      ])
-      .render(container, {
-        w: args.w,
-        h: args.h,
-        axes: { x: true, y: false },
-      });
+    croissant(normalGrid).render(container, {
+      w: args.w,
+      h: args.h,
+      axes: { x: true, y: false },
+    });
     return container;
   },
 };
@@ -132,34 +139,11 @@ export const PenguinBodyMass: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    layer([
-      chart(massGrid)
-        .flow(scatter({ x: "x" }))
-        .mark(ribbon({ h: "pdf", fill: "none" }).name("density")),
-    ])
-      .relate(({ density }) => [
-        chart(massGrid)
-          .flow(
-            derive((rows) =>
-              quantileRows(rows, { x: "x", density: "pdf", n: 1000 })
-            ),
-            partition({ by: field("x").bin(Bin.quantiles(10)), dir: "x" })
-          )
-          .mark(
-            layer([
-              intersect({ fill: FILL, stroke: STROKE, strokeWidth: 2 }, [
-                density,
-                region({ inset: 3 }),
-              ]),
-              circle({ cx: field("x").median(), cy: 6, r: 3, fill: STROKE }),
-            ])
-          ),
-      ])
-      .render(container, {
-        w: args.w,
-        h: args.h,
-        axes: { x: { title: "Body mass (g)" }, y: false },
-      });
+    croissant(massGrid).render(container, {
+      w: args.w,
+      h: args.h,
+      axes: { x: { title: "Body mass (g)" }, y: false },
+    });
     return container;
   },
 };
@@ -223,6 +207,8 @@ export const Ridgeline: StoryObj<Args> = {
         layer([
           // An empty-scope chart() reads the month's rows and draws no
           // anchors of its own, so the ribbon connects explicit blanks.
+          // TODO(#1232): plain .mark(ribbon({ h })) once fusion is decided at
+          // resolve time.
           chart()
             .flow(scatter({ x: "temp_max", h: 34 }))
             .mark(blank({ h: "pdf" }))

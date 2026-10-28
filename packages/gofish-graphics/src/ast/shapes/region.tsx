@@ -5,14 +5,15 @@
 import type { DisplayList } from "gofish-ir";
 import { color6, resolveColorChannel } from "../../color";
 import { isValue, type MaybeValue } from "../data";
-import { displayDims } from "../dims";
+import { displayTranslate, type Dimensions } from "../dims";
 import {
   boxOfDims,
   boxOutline,
+  insetBox,
   insetConvex,
-  isConvex,
   outlinePaint,
   ringOutline,
+  type OutlinePoint,
   type Point,
 } from "../geometry";
 import {
@@ -80,6 +81,9 @@ export const Region = ({
   // Per axis, how far its box is drawn in at each end: `inset` where the
   // region gives a span, else 0.
   let boxInset: [number, number] = [0, 0];
+  // Without an outline, the box it draws: its box drawn in by `boxInset`.
+  const drawnBox = (intrinsicDims: Dimensions, type: string) =>
+    insetBox(boxOfDims(intrinsicDims, type), boxInset);
 
   // How it paints its outline, read once.
   const paint = outlinePaint({ fill, stroke, strokeWidth });
@@ -117,27 +121,18 @@ export const Region = ({
           x.translate === undefined ? 0 : inset,
           y.translate === undefined ? 0 : inset,
         ];
-        const ring =
-          region?.outline === undefined
-            ? undefined
-            : region.outline.map(
-                ([px, py]) => [px - x.translate!, py - y.translate!] as const
-              );
-        if (
-          ring !== undefined &&
-          inset > 0 &&
-          !isConvex(ring as [number, number][])
-        )
+        const ring = region?.outline?.map(
+          ([px, py]): OutlinePoint => [px - x.translate!, py - y.translate!]
+        );
+        outline =
+          ring === undefined || inset === 0 ? ring : insetConvex(ring, inset);
+        if (outline === undefined && ring !== undefined)
           // TODO(#1201): drawing in a ring that is not convex needs a
           // general polygon offset. Every partition cell is convex.
           throw new Error(
             "region: inset needs a convex cell; this cell's outline is not " +
               "convex (#1201)."
           );
-        outline =
-          ring === undefined || inset === 0
-            ? ring
-            : insetConvex(ring as [number, number][], inset);
         return {
           intrinsicDims: [
             { min: x.min, size: x.size },
@@ -165,26 +160,16 @@ export const Region = ({
         const linear =
           coordinateTransform === undefined ||
           coordinateTransform.type === "linear";
-        const [fx, fy] = displayDims(intrinsicDims, transform);
-        // The box drawn in by its inset (`boxInset`), about its center.
-        const shrink = (d: typeof fx, by: number) => {
-          const size = Math.max(0, Math.abs(d.max - d.min) - 2 * by);
-          const mid = (d.min + d.max) / 2;
-          return { min: mid - size / 2, max: mid + size / 2, size };
-        };
-        const dx = shrink(fx, boxInset[0]);
-        const dy = shrink(fy, boxInset[1]);
         // A cell thinner than twice the inset draws nothing.
-        if (
-          outline !== undefined
-            ? outline.length < 3
-            : (boxInset[0] > 0 && dx.size === 0) ||
-              (boxInset[1] > 0 && dy.size === 0)
-        )
-          return [];
+        const drawn = drawnBox(intrinsicDims!, node.type);
+        if (outline !== undefined ? outline.length < 3 : drawn.empty) return [];
+        // The drawn box where its parent placed it.
+        const [tx, ty] = displayTranslate(transform);
+        const [x0, x1] = [drawn.box.min[0] + tx, drawn.box.max[0] + tx];
+        const [y0, y1] = [drawn.box.min[1] + ty, drawn.box.max[1] + ty];
         if (outline === undefined && linear)
           return [
-            rectItemFromBox(dx.min, dx.max, dy.min, dy.max, toPixel, {
+            rectItemFromBox(x0, x1, y0, y1, toPixel, {
               rx: 0,
               ry: 0,
               style,
@@ -198,10 +183,10 @@ export const Region = ({
           outline !== undefined
             ? outline.map(([px, py]) => local([px, py]))
             : [
-                [dx.min, dy.min],
-                [dx.max, dy.min],
-                [dx.max, dy.max],
-                [dx.min, dy.max],
+                [x0, y0],
+                [x1, y0],
+                [x1, y1],
+                [x0, y1],
               ];
         return [
           ringItem(points, coordinateTransform, toPixel, node.datum, style),
@@ -220,17 +205,11 @@ export const Region = ({
             outline: () =>
               ring.length < 3 ? [] : [ringOutline(ring, direction, paint)],
           };
-        const [ix, iy] = boxInset;
-        const drawn = {
-          min: [box.min[0] + ix, box.min[1] + iy] as [number, number],
-          max: [box.max[0] - ix, box.max[1] - iy] as [number, number],
-        };
+        const drawn = drawnBox(intrinsicDims, node.type);
         return {
           box,
           outline: () =>
-            drawn.max[0] < drawn.min[0] || drawn.max[1] < drawn.min[1]
-              ? []
-              : [boxOutline(drawn, direction, paint)],
+            drawn.empty ? [] : [boxOutline(drawn.box, direction, paint)],
         };
       },
     },

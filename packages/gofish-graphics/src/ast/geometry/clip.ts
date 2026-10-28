@@ -14,24 +14,9 @@
  * polygon boolean and outlines with several loops.
  */
 import type { OutlinePoint } from "./outline";
+import { cross, signedArea2 } from "./plane";
 
 type Pt = OutlinePoint;
-
-/** Twice the signed area of a ring: positive when it winds counterclockwise
- *  in a y-up frame. */
-const signedArea2 = (ring: readonly Pt[]): number => {
-  let a = 0;
-  for (let i = 0; i < ring.length; i++) {
-    const [x0, y0] = ring[i];
-    const [x1, y1] = ring[(i + 1) % ring.length];
-    a += x0 * y1 - x1 * y0;
-  }
-  return a;
-};
-
-/** The cross product of `b − a` and `c − a`. */
-const cross = (a: Pt, b: Pt, c: Pt): number =>
-  (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
 
 /** A ring with repeated points and straight-through points dropped. */
 export function simplifyRing(ring: readonly Pt[], eps = 1e-9): Pt[] {
@@ -74,7 +59,11 @@ export function simplifyRing(ring: readonly Pt[], eps = 1e-9): Pt[] {
 /** Whether a ring is convex: every turn goes the same way. A ring of fewer
  *  than three points is not. */
 export function isConvex(ring: readonly Pt[]): boolean {
-  const pts = simplifyRing(ring);
+  return isConvexSimplified(simplifyRing(ring));
+}
+
+/** {@link isConvex} of a ring {@link simplifyRing} has already simplified. */
+function isConvexSimplified(pts: readonly Pt[]): boolean {
   if (pts.length < 3) return false;
   let sign = 0;
   for (let i = 0; i < pts.length; i++) {
@@ -89,6 +78,12 @@ export function isConvex(ring: readonly Pt[]): boolean {
     else if (s !== sign) return false;
   }
   return sign !== 0;
+}
+
+/** A clipped ring simplified, or an empty list when it has no area left. */
+function nonDegenerate(ring: Pt[]): Pt[] {
+  const out = simplifyRing(ring);
+  return out.length >= 3 && Math.abs(signedArea2(out)) > 1e-9 ? out : [];
 }
 
 /** The part of `subject` on the inside of the line through `a` and `b`,
@@ -124,14 +119,17 @@ export function clipToConvex(
   subject: readonly Pt[],
   clip: readonly Pt[]
 ): Pt[] {
-  const c = simplifyRing(clip);
-  let out = simplifyRing(subject);
-  if (c.length < 3 || out.length < 3) return [];
-  const side = Math.sign(signedArea2(c));
-  for (let i = 0; i < c.length && out.length > 0; i++)
-    out = clipByEdge(out, c[i], c[(i + 1) % c.length], side);
-  out = simplifyRing(out);
-  return out.length >= 3 && Math.abs(signedArea2(out)) > 1e-9 ? out : [];
+  return clipSimplified(simplifyRing(subject), simplifyRing(clip));
+}
+
+/** {@link clipToConvex} of two rings already simplified. */
+function clipSimplified(subject: Pt[], clip: readonly Pt[]): Pt[] {
+  if (clip.length < 3 || subject.length < 3) return [];
+  const side = Math.sign(signedArea2(clip));
+  let out = subject;
+  for (let i = 0; i < clip.length && out.length > 0; i++)
+    out = clipByEdge(out, clip[i], clip[(i + 1) % clip.length], side);
+  return nonDegenerate(out);
 }
 
 /**
@@ -143,18 +141,23 @@ export function intersectRings(
   a: readonly Pt[],
   b: readonly Pt[]
 ): Pt[] | undefined {
-  if (isConvex(b)) return clipToConvex(a, b);
-  if (isConvex(a)) return clipToConvex(b, a);
+  const sa = simplifyRing(a);
+  const sb = simplifyRing(b);
+  if (isConvexSimplified(sb)) return clipSimplified(sa, sb);
+  if (isConvexSimplified(sa)) return clipSimplified(sb, sa);
   return undefined;
 }
 
 /**
  * A convex ring drawn in by `d` on every side: the ring clipped by each of
- * its edges moved `d` inward. Empty when the ring is too thin for it.
+ * its edges moved `d` inward. Empty when the ring is too thin for it, and
+ * undefined when the ring is not convex: drawing in any ring needs a general
+ * polygon offset (#1201).
  */
-export function insetConvex(ring: readonly Pt[], d: number): Pt[] {
+export function insetConvex(ring: readonly Pt[], d: number): Pt[] | undefined {
   const pts = simplifyRing(ring);
-  if (d <= 0 || pts.length < 3) return pts;
+  if (!isConvexSimplified(pts)) return undefined;
+  if (d <= 0) return pts;
   const side = Math.sign(signedArea2(pts));
   let out = pts;
   for (let i = 0; i < pts.length && out.length > 0; i++) {
@@ -171,6 +174,5 @@ export function insetConvex(ring: readonly Pt[], d: number): Pt[] {
       side
     );
   }
-  out = simplifyRing(out);
-  return out.length >= 3 && Math.abs(signedArea2(out)) > 1e-9 ? out : [];
+  return nonDegenerate(out);
 }

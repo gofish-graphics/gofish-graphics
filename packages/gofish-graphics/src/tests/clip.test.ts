@@ -41,7 +41,11 @@ const near = (a: number, b: number, eps = 1e-9) => Math.abs(a - b) <= eps;
 console.log("# clipToConvex and intersectRings");
 {
   const r = clipToConvex(box(0, 0, 10, 10), box(5, 5, 15, 15));
-  check("two overlapping squares meet in a 5 by 5 square", near(area(r), 25), r);
+  check(
+    "two overlapping squares meet in a 5 by 5 square",
+    near(area(r), 25),
+    r
+  );
 }
 {
   // An L shape (not convex) clipped by a square over its corner.
@@ -113,7 +117,10 @@ console.log("# intersect with paint");
 {
   const dl = await intersect(
     { fill: "#D1E4F6", stroke: "#467DA8", strokeWidth: 2 },
-    [rect({ x: 0, y: 0, w: 100, h: 100 }), rect({ x: 50, y: 50, w: 100, h: 100 })]
+    [
+      rect({ x: 0, y: 0, w: 100, h: 100 }),
+      rect({ x: 50, y: 50, w: 100, h: 100 }),
+    ]
   ).toDisplayList({ w: 200, h: 200 });
   const drawn = items(dl);
   const paths = drawn.filter((it) => it.kind === "path");
@@ -153,6 +160,31 @@ console.log("# intersect with paint");
     /intersect/.test(message) && /stroke/.test(message),
     message
   );
+}
+{
+  // A rect's outline is what it draws: its box drawn in by its inset, with
+  // its corners rounded, so a stroke over either one has an exact path.
+  for (const [what, drawnRect] of [
+    ["an inset rect", rect({ x: 50, w: 100, inset: 10 })],
+    ["a rounded rect", rect({ x: 50, y: 50, w: 100, h: 100, rx: 20 })],
+  ] as const) {
+    let message = "";
+    let paths: unknown[] = [];
+    try {
+      const dl = await intersect({ fill: "#eee", stroke: "black" }, [
+        rect({ x: 0, y: 0, w: 100, h: 100 }),
+        drawnRect,
+      ]).toDisplayList({ w: 200, h: 200 });
+      paths = items(dl).filter((it) => it.kind === "path");
+    } catch (e) {
+      message = e instanceof Error ? e.message : String(e);
+    }
+    check(
+      `a stroke over ${what} is one exact path`,
+      message === "" && paths.length === 1,
+      message || paths
+    );
+  }
 }
 {
   // Unpainted, a composite draws as before: its operands under a mask.

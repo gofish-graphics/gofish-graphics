@@ -33,7 +33,7 @@
  */
 import { Delaunay } from "d3-delaunay";
 import { ringExtent } from "../../geometry/box";
-import { pointInRing, signedArea2 } from "../../geometry/plane";
+import { cross, pointInRing, signedArea2 } from "../../geometry/plane";
 
 /** A point in pixels. */
 export type Pt = [number, number];
@@ -76,9 +76,6 @@ const samples = (m: Exclude<Member, { kind: "disc" }>, pad: number): Pt[] => {
     }
   return out;
 };
-
-const cross = (o: Pt, a: Pt, b: Pt) =>
-  (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
 
 /** Andrew's monotone chain. */
 export const convexHull = (pts: Pt[]): Pt[] => {

@@ -355,12 +355,7 @@ export function checkPartition(given: unknown, where: string): Partition {
   const p = kindValue(given);
   if (p instanceof CalendarPartition) return p;
   Frontend.checkPartition(p, where);
-  if (
-    p instanceof StepBin ||
-    p instanceof ThresholdsBin ||
-    p instanceof QuantilesBin
-  )
-    return p;
+  if (p instanceof NumberBin) return p as NumberPartition;
   const wire = p as PartitionJSON;
   switch (wire.kind) {
     case "step":

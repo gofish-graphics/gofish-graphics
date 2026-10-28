@@ -30,6 +30,7 @@ import {
 import { inks } from "../geometry/outline";
 import type { Region } from "../geometry/region";
 import type { AxisScale } from "../domain";
+import type { CoordinateTransform } from "../coordinateTransforms/coord";
 
 type BlendMode = "color" | "multiply" | "screen" | "overlay" | "luminosity";
 type CompositeOperator = "over" | "in" | "xor" | "out" | "atop";
@@ -152,6 +153,30 @@ const noExactGeometry = (what: string) =>
   );
 
 /**
+ * Lower a composite's two children, a bake boundary, through `toPixel`
+ * (the composite's own pixel map), in source order: the first child, then
+ * the second.
+ */
+function lowerOperands(
+  node: GoFishNode,
+  coordinateTransform: CoordinateTransform | undefined,
+  toPixel: ToPixel
+): [DisplayList.DisplayItem[], DisplayList.DisplayItem[]] {
+  const session = node.getRenderSession();
+  const outer = session.toPixel!;
+  assertNoPaintOrder(node);
+  session.toPixel = toPixel;
+  try {
+    return [
+      node.children[0].INTERNAL_lower(coordinateTransform),
+      node.children[1].INTERNAL_lower(coordinateTransform),
+    ];
+  } finally {
+    session.toPixel = outer;
+  }
+}
+
+/**
  * A composite node: `operator` over two children, as the SVG backends draw
  * it. With `paint` (only `intersect` takes it), the result is the region
  * `A ∩ B` drawn in that paint, and the operands give shape only: one exact
@@ -175,12 +200,23 @@ function compositeNode(
   // The children as laid out, in this node's frame; read again in `lower`
   // and `geometry`, after every node is placed.
   let placed: Placeable[] = [];
+  // The exact outline of `A ∩ B` (`exactIntersection`), worked out on its
+  // first read after layout.
+  let exact: { ring: OutlinePoint[] | undefined } | undefined;
+  const exactRing = () => (exact ??= { ring: exactIntersection(placed) }).ring;
   const painted =
     paint !== undefined &&
     (paint.fill !== undefined || paint.stroke !== undefined);
-  const stroke = paint?.stroke;
   const strokeWidth = paint?.strokeWidth ?? 1;
-  const strokes = stroke !== undefined && inks(stroke) && strokeWidth > 0;
+  const strokes =
+    paint?.stroke !== undefined && inks(paint.stroke) && strokeWidth > 0;
+  // The paint the result is drawn in, read by `lower` and `geometry`: no
+  // fill unless one is given, and a stroke width only where the stroke inks.
+  const drawn = {
+    fill: paint?.fill ?? "none",
+    stroke: paint?.stroke,
+    strokeWidth: strokes ? strokeWidth : undefined,
+  };
   const node = new GoFishNode(
     {
       type,
@@ -201,16 +237,16 @@ function compositeNode(
       layout: (size, scales, layoutChildren, _node, region) => {
         const laid = layoutComposite(size, scales, layoutChildren, region);
         placed = laid.placed;
-        const childPlaceables = placed;
+        exact = undefined;
 
         const { minX, maxX, minY, maxY } = isAtop
           ? {
-              minX: childPlaceables[0].dims[0].min ?? 0,
-              maxX: childPlaceables[0].dims[0].max ?? 0,
-              minY: childPlaceables[0].dims[1].min ?? 0,
-              maxY: childPlaceables[0].dims[1].max ?? 0,
+              minX: placed[0].dims[0].min ?? 0,
+              maxX: placed[0].dims[0].max ?? 0,
+              minY: placed[0].dims[1].min ?? 0,
+              maxY: placed[0].dims[1].max ?? 0,
             }
-          : maxChildBounds(childPlaceables);
+          : maxChildBounds(placed);
         return {
           intrinsicDims: [
             {
@@ -263,13 +299,13 @@ function compositeNode(
         if (painted) {
           const unit = session.scaleContext?.unit;
           const style = lowerStyle({
-            fill: resolveColorChannel(paint!.fill, unit) ?? "none",
-            stroke: resolveColorChannel(stroke, unit),
-            strokeWidth: strokes ? strokeWidth : undefined,
+            fill: resolveColorChannel(drawn.fill, unit) ?? "none",
+            stroke: resolveColorChannel(drawn.stroke, unit),
+            strokeWidth: drawn.strokeWidth,
             opacity: paint!.opacity,
           });
           // One exact path, painted as the composite says.
-          const ring = exactIntersection(placed);
+          const ring = exactRing();
           if (ring !== undefined) {
             if (ring.length === 0) return [];
             return [
@@ -285,17 +321,9 @@ function compositeNode(
           if (strokes) throw noExactGeometry("a stroke");
           // No exact outline: fill the overlap of the two operands' ink, an
           // alpha mask of each over a fill of the box.
-          const composed: ToPixel = ([cx, cy]) => outer([tx + cx, ty + cy]);
-          assertNoPaintOrder(node);
-          session.toPixel = composed;
-          let a: DisplayList.DisplayItem[];
-          let b: DisplayList.DisplayItem[];
-          try {
-            a = node.children[0].INTERNAL_lower(coordinateTransform);
-            b = node.children[1].INTERNAL_lower(coordinateTransform);
-          } finally {
-            session.toPixel = outer;
-          }
+          const [a, b] = lowerOperands(node, coordinateTransform, ([cx, cy]) =>
+            outer([tx + cx, ty + cy])
+          );
           const bbox = { x: bx, y: by, w: bw, h: bh };
           const fillRect = rectItemFromBox(bx, bx + bw, by, by + bh, (p) => p, {
             rx: 0,
@@ -329,21 +357,14 @@ function compositeNode(
         // `paintSVG`'s / `render.ts`'s `composite` case), so child
         // coordinates must start near the bbox's own origin rather than
         // the document's. We reproduce that by subtracting the bbox origin.
-        const composed: ToPixel = ([cx, cy]) => {
-          const [ax, ay] = outer([tx + cx, ty + cy]);
-          return [ax - bx, ay - by];
-        };
-
-        assertNoPaintOrder(node);
-        session.toPixel = composed;
-        let source: DisplayList.DisplayItem[];
-        let dest: DisplayList.DisplayItem[];
-        try {
-          source = node.children[0].INTERNAL_lower(coordinateTransform);
-          dest = node.children[1].INTERNAL_lower(coordinateTransform);
-        } finally {
-          session.toPixel = outer;
-        }
+        const [source, dest] = lowerOperands(
+          node,
+          coordinateTransform,
+          ([cx, cy]) => {
+            const [ax, ay] = outer([tx + cx, ty + cy]);
+            return [ax - bx, ay - by];
+          }
+        );
 
         return [
           {
@@ -362,15 +383,11 @@ function compositeNode(
       ...(painted && {
         geometry: ({ intrinsicDims }, _children, node) => {
           const box = boxOfDims(intrinsicDims, node.type);
-          const outlinePaintOf = outlinePaint({
-            fill: paint!.fill ?? "none",
-            stroke,
-            strokeWidth: strokes ? strokeWidth : 0,
-          });
+          const outlinePaintOf = outlinePaint(drawn);
           return {
             box,
             outline: () => {
-              const ring = exactIntersection(placed);
+              const ring = exactRing();
               if (ring === undefined)
                 throw noExactGeometry("reading its outline");
               return ring.length === 0
@@ -437,19 +454,10 @@ export const intersect = createNodeOperator(
   (
     {
       blendMode = "color",
-      fill,
-      stroke,
-      strokeWidth,
-      opacity,
+      ...paint
     }: { blendMode?: BlendMode } & CompositePaint,
     children: GoFishAST[]
-  ) =>
-    compositeNode("in", "in", blendMode, children, {
-      fill,
-      stroke,
-      strokeWidth,
-      opacity,
-    })
+  ) => compositeNode("in", "in", blendMode, children, paint)
 );
 
 /**
@@ -538,20 +546,12 @@ export const mask = createNodeOperator(
           node
         ): DisplayList.DisplayItem[] => {
           const [tx, ty] = displayTranslate(transform);
-          const session = node.getRenderSession();
-          const outer = session.toPixel!;
-          const composed: ToPixel = ([cx, cy]) => outer([tx + cx, ty + cy]);
-
-          assertNoPaintOrder(node);
-          session.toPixel = composed;
-          let maskItems: DisplayList.DisplayItem[];
-          let content: DisplayList.DisplayItem[];
-          try {
-            maskItems = node.children[0].INTERNAL_lower(coordinateTransform);
-            content = node.children[1].INTERNAL_lower(coordinateTransform);
-          } finally {
-            session.toPixel = outer;
-          }
+          const outer = node.getRenderSession().toPixel!;
+          const [maskItems, content] = lowerOperands(
+            node,
+            coordinateTransform,
+            ([cx, cy]) => outer([tx + cx, ty + cy])
+          );
 
           const minX = intrinsicDims?.[0]?.min ?? 0;
           const minY = intrinsicDims?.[1]?.min ?? 0;
