@@ -174,7 +174,13 @@ def _expand_composed(op: Union[Operator, Composed, "_FlowStepMark"]) -> tuple:
     """The operators a ``.flow(...)`` argument stands for: a fragment's own
     operators, or the argument itself (an operator, or a mark that is also a
     flow step, ``enclose(...)``: see ``_FlowStepMark``). Mirrors JS
-    ``expandComposedOperator`` (ast/marks/compose.ts)."""
+    ``expandComposedOperator`` (ast/marks/compose.ts). Any other mark is an
+    error: it belongs in ``.mark(...)``."""
+    if isinstance(op, Mark) and not isinstance(op, _FlowStepMark):
+        raise TypeError(
+            f"{op.mark_type}(...) is a mark, not a flow step: pass it to "
+            f".mark(...), not .flow(...) or compose(...)"
+        )
     return op.operators if isinstance(op, Composed) else (op,)
 
 

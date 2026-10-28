@@ -1537,3 +1537,14 @@ class TestEncloseFlowStep:
         frag = compose(pack(by="g"), enclose(padding=2).name("region"))
         doc = chart(self.ROWS).flow(frag, pack()).mark(circle(r=4)).to_ir()
         assert doc["root"]["operators"][1]["name"] == "region"
+
+    def test_other_marks_are_not_steps(self):
+        from gofish import enclose, pack, rect
+
+        with pytest.raises(TypeError, match=r"rect\(\.\.\.\) is a mark"):
+            chart(self.ROWS).flow(pack(by="g"), rect(w=4))
+        with pytest.raises(TypeError, match=r"rect\(\.\.\.\) is a mark"):
+            compose(rect(w=4).name("bars"))
+        # a combinator-form enclose is a mark too
+        with pytest.raises(TypeError, match=r"enclose\(\.\.\.\) is a mark"):
+            chart(self.ROWS).flow(enclose([circle(r=4)]))
