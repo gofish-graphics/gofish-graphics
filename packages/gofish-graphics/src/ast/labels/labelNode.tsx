@@ -6,6 +6,7 @@ import { Frontend, type DisplayList } from "gofish-ir";
 import { GoFishNode } from "../_node";
 import { displayTranslate } from "../dims";
 import { UNDEFINED } from "../underlyingSpace";
+import { boxExtent } from "../extent";
 import { lowerStyle, roleFor } from "../displayList/lowerHelpers";
 import { estimateTextDimensions } from "../shapes/text";
 import {
@@ -146,6 +147,14 @@ export function LabelText(opts: LabelNodeOptions): LabelNode {
       type: "label",
       color: typeof opts.fill === "string" ? opts.fill : undefined,
       resolveUnderlyingSpace: () => [UNDEFINED, UNDEFINED],
+      // A label has a size of its own, known before layout: its box at its
+      // base angle, centered on its origin, as `layout` lays it out. So a
+      // label a position string seats beside its mark takes room, as a
+      // `Text` does (#493).
+      resolveExtent: (_ce, _cs, spaces) => {
+        const { hx, hy } = halfSize(baseAngle);
+        return [boxExtent(spaces[0], hx, hx), boxExtent(spaces[1], hy, hy)];
+      },
       layout: () => {
         state.angle = baseAngle;
         state.hidden = false;
