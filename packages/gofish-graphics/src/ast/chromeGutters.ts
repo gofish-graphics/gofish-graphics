@@ -35,10 +35,18 @@ import { originIs } from "./underlyingSpace";
 /** The claim of `chart`'s rings on `axis` around a plot of size X, as a
  *  function of X: the plot is `[0, X]`, and each ring's claim is what it
  *  wraps with its shapes placed around it. Undefined when a ring cannot
- *  place its shapes in the claim walk (it is not a layer). */
+ *  place its shapes in the claim walk (it is not a layer). The rings are
+ *  its own, or, for a chart with a size of its own, its content's: it
+ *  wears its chrome inside its frame, on its one child (`frameChart`).
+ *  Part of the step 5 shortcut (`guttersInSlot`). */
 function ringsAround(chart: GoFishNode, axis: 0 | 1): Extent | undefined {
+  const rings =
+    chart.chrome?.rings ??
+    (chart._chartBox !== undefined
+      ? (chart.children[0] as GoFishNode | undefined)?.chrome?.rings
+      : undefined);
   let inner: Extent = Extent(Pwl.affine(1, 0));
-  for (const ring of chart.chrome?.rings ?? []) {
+  for (const ring of rings ?? []) {
     const place = ring.claimWalk?.placeChildren;
     if (place === undefined) return undefined;
     const extents = ring.children.map((c, i): Size<Extent | undefined> => {
@@ -57,38 +65,62 @@ function ringsAround(chart: GoFishNode, axis: 0 | 1): Extent | undefined {
 export type ChromeForms = { whole: Extent; plot: Extent };
 
 /**
- * `node`'s chrome forms on `axis`, or undefined where its plot fills its
- * room (it has no plot claim there). They are read off its claims alone, so
- * they are memoized with them (`ClaimMemo.chrome`, cleared with the claim:
- * the auto label angle lays out twice). The plot is the content without
- * its dressing (a value label beside its bar): like chrome, dressing adds
- * around the plot (#1032). Both are widened as a scope widens its claim
- * (`KeyedDomains.scope`), so a tick label past a niced domain end reaches
- * only where the domain does not.
+ * `node`'s chrome forms on `axis` for what it draws, `whole`, and its plot,
+ * both widened as a scope widens its claim (`KeyedDomains.scope`), so a
+ * tick label past a niced domain end reaches only where the domain does
+ * not; undefined where its plot fills its room (it has no plot claim
+ * there). They are memoized with its claim (`ClaimMemo.chrome`, cleared
+ * with it: the auto label angle lays out twice).
+ */
+export function setChromeForms(
+  node: GoFishNode,
+  axis: 0 | 1,
+  whole: Extent | undefined,
+  plot: Extent | undefined,
+  // How the node's scope widens a claim: by its own type, unless it is a
+  // node with a size of its own, which widens its content's.
+  wide: (claim: Extent) => Extent = (claim) =>
+    node
+      .tryGetRenderSession()
+      ?.keyedDomains?.scope(
+        node,
+        axis,
+        node._underlyingSpace?.[axis],
+        claim
+      )[1] ?? claim
+): ChromeForms | undefined {
+  const forms =
+    whole !== undefined && plot !== undefined
+      ? { whole: wide(whole), plot: wide(plot) }
+      : undefined;
+  node._claimMemo.chrome[axis] = forms ?? null;
+  return forms;
+}
+
+/**
+ * `node`'s chrome forms on `axis` (`setChromeForms`). A node with a size of
+ * its own sets them from its content as it claims (its claim is its own
+ * pixels); any other node's are its claim and its plot's, read when first
+ * asked. The plot is the content without its dressing (a value label
+ * beside its bar): like chrome, dressing adds around the plot (#1032).
  */
 export function chromeForms(
   node: GoFishNode,
   axis: 0 | 1
 ): ChromeForms | undefined {
-  const memo = node._claimMemo.chrome;
-  const hit = memo[axis];
-  if (hit !== undefined) return hit ?? undefined;
+  // Its own claim hook may be asking (a node with a size of its own sets
+  // its forms before it reads them), so the memo is read first.
+  const seeded = node._claimMemo.chrome[axis];
+  if (seeded !== undefined) return seeded ?? undefined;
   const whole = node.resolveExtent()[axis];
+  const hit = node._claimMemo.chrome[axis];
+  if (hit !== undefined) return hit ?? undefined;
   const plot = (node.chrome?.content ?? node).resolvePlotExtent()[axis];
-  let forms: ChromeForms | undefined;
-  if (whole !== undefined && plot !== undefined) {
-    const keyed = node.tryGetRenderSession()?.keyedDomains;
-    const space = node._underlyingSpace?.[axis];
-    const wide = (claim: Extent): Extent =>
-      keyed?.scope(node, axis, space, claim)[1] ?? claim;
-    forms = { whole: wide(whole), plot: wide(plot) };
-  }
-  memo[axis] = forms ?? null;
-  return forms;
+  return setChromeForms(node, axis, whole, plot);
 }
 
 /** How far `f.whole` reaches past `f.plot` at σ, `[start, end]`. */
-const reachAt = (f: ChromeForms, sigma: number): [number, number] => [
+export const reachAt = (f: ChromeForms, sigma: number): [number, number] => [
   room(Pwl.at(f.whole.descent, sigma) - Pwl.at(f.plot.descent, sigma)),
   room(Pwl.at(f.whole.ascent, sigma) - Pwl.at(f.plot.ascent, sigma)),
 ];
@@ -175,17 +207,22 @@ export function contentSeat(
 }
 
 /**
- * `chart`'s gutters on `axis` around a plot `plot` pixels long: a chart with
- * a size of its own, whose own `w`/`h` is its plot (#1032). Its σ is the one
- * at which its plot fills that size.
+ * The whole of `node` on `axis` around a plot `plot` pixels long: the plot
+ * and what its chrome and dressing reach past it, at the σ at which its plot
+ * fills `plot` (#1032). A node's own `w`/`h` is its plot, so a node with a
+ * size of its own is this around its size, and so is a part a chain hands
+ * a slice as its plot (a facet panel).
  */
-export function guttersAroundPlot(
-  chart: GoFishNode,
+export function aroundPlot(
+  node: GoFishNode,
   axis: 0 | 1,
   plot: number
-): [number, number] {
-  const f = chromeForms(chart, axis);
-  if (f !== undefined) return reachAt(f, solveFor(f.plot.width, plot));
-  const r = ringsAround(chart, axis);
-  return r === undefined ? [0, 0] : ringGutters(r, plot);
+): number {
+  const f = chromeForms(node, axis);
+  const [start, end] =
+    f !== undefined
+      ? reachAt(f, solveFor(f.plot.width, plot))
+      : // TODO(#1176 step 5): a plot that fills its room (see `guttersInSlot`).
+        ringGutters(ringsAround(node, axis) ?? Extent(Pwl.affine(1, 0)), plot);
+  return plot + start + end;
 }

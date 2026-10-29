@@ -90,9 +90,11 @@ import {
 } from "../solver/plan";
 import { evaluate } from "../solver/formula";
 import {
+  aroundPlot,
+  chromeForms,
   contentSeat,
-  guttersAroundPlot,
   guttersInSlot,
+  setChromeForms,
 } from "../chromeGutters";
 
 // ── Z-order resolution ────────────────────────────────────────────────────
@@ -144,19 +146,6 @@ const plotIn = (
   const { add, negate } = Pwl;
   const span = add(f.ascent, negate(f.descent));
   return [plot[0], Extent(add(span, p.descent), add(negate(span), p.ascent))];
-};
-
-/** The pixels a chart's chrome adds around its plot on `axis`, for a chart
- *  with a size of its own `px` there. A chart's own `w`/`h` is its plot
- *  without chrome (#1032), and its chrome dresses its content, the chart
- *  frame's one child (`frameChart`), so the chart is that size plus the
- *  gutters its content's claims give around a plot of that size. 0 for any
- *  other node. */
-const chartChrome = (node: GoFishNode, axis: 0 | 1, px: number): number => {
-  const content = node.children[0];
-  return node._chartBox?.[axis] === true && content instanceof GoFishNode
-    ? sum(guttersAroundPlot(content, axis, px))
-    : 0;
 };
 
 export const layer = createNodeOperatorSequential(
@@ -619,15 +608,18 @@ export const layer = createNodeOperatorSequential(
           // magnitude. A literal size claims its own pixels: the box is a
           // sized node, so its content's σ is its own, and the parent must
           // not solve against the content as if it were data-scaled room.
-          // Its content is widened to its keyed domain and niced, and
-          // solved once against the literal size through the registry
-          // (`solveFixed`), whose solution `layout` reuses. The box's 0 is
-          // its start edge, as its parent lays it out whole (#1032): the
-          // scope seats the content past it, so the claim is the content's
-          // at that σ, from the start edge. Content that maps no domain
-          // (`mapsDomain`) is laid out in the box, which claims its pixels
-          // from its start edge too (#493: fixed-size nodes report their
-          // size).
+          // A node's own size is its plot (#1032): its content's chrome
+          // and dressing add around it. So its chrome forms are its
+          // content's claim and plot, widened to its keyed domain and
+          // niced (`setChromeForms`), and the literal size is solved once
+          // as the plot through the registry (`solveFixed`), whose
+          // solution `layout` reuses; the node claims the whole at that σ.
+          // The box's 0 is its start edge, as its parent lays it out whole:
+          // the scope seats the content past it, so the claim is the
+          // content's at that σ, from the start edge. Content that maps no
+          // domain (`mapsDomain`) is laid out in the box, which claims its
+          // size and the reach of what dresses it, from its start edge too
+          // (`aroundPlot`; #493: fixed-size nodes report their size).
           // A literal size on both axes over one declared unit keeps one
           // data unit the same length on x and y (#582): both scopes take
           // the binding σ (`equalizeFixed`), so both are solved before
@@ -636,11 +628,25 @@ export const layer = createNodeOperatorSequential(
           // empty.
           const keyed: KeyedDomains | undefined = session?.keyedDomains;
           const scopes = getScopeRegistry(session);
+          for (const axis of [0, 1] as const)
+            if (dims[axis].size !== undefined)
+              setChromeForms(
+                node,
+                axis,
+                resolved[axis],
+                plot[axis],
+                (claim) =>
+                  keyed?.scope(
+                    node,
+                    axis,
+                    t.resolved[axis],
+                    claim,
+                    !isValue(dims[axis].size)
+                  )[1] ?? claim
+              );
           const fixedPx = ([0, 1] as const).map((axis) => {
             const size = dims[axis].size;
-            return typeof size === "number"
-              ? size + chartChrome(node, axis, size)
-              : undefined;
+            return typeof size === "number" ? size : undefined;
           });
           const solvesDomain = (axis: 0 | 1) =>
             fixedPx[axis] !== undefined &&
@@ -648,18 +654,15 @@ export const layer = createNodeOperatorSequential(
           for (const axis of [0, 1] as const) {
             const px = fixedPx[axis];
             if (px === undefined || !solvesDomain(axis)) continue;
-            const [space, wide] = keyed?.scope(
-              node,
-              axis,
-              t.resolved[axis],
-              resolved[axis]!
-            ) ?? [t.resolved[axis], resolved[axis]];
+            const space =
+              keyed?.scope(node, axis, t.resolved[axis], resolved[axis]!)[0] ??
+              t.resolved[axis];
             scopes.solveFixed(
               node,
               keyed?.axisKey(node, axis, t.resolved[axis]),
               { kind: "sized", rootKey: node.key ?? node.type, axis },
               space,
-              wide,
+              chromeForms(node, axis),
               px
             );
           }
@@ -670,7 +673,8 @@ export const layer = createNodeOperatorSequential(
               node.yFrame.direction
             );
           const fixedClaim = (axis: 0 | 1, px: number): Extent | undefined => {
-            if (!solvesDomain(axis)) return Extent(Pwl.affine(0, px));
+            if (!solvesDomain(axis))
+              return Extent(Pwl.affine(0, aroundPlot(node, axis, px)));
             const solved = scopes.fixedSolve(node, axis);
             if (solved === undefined) return resolved[axis];
             const { claim, solution, space } = solved;
@@ -736,17 +740,21 @@ export const layer = createNodeOperatorSequential(
             scales?.[1]?.map,
           ];
           // Compute size using dims (w and h) before passing to children. A
-          // chart's own size is its plot's: its chrome adds around it.
-          size = ([0, 1] as const).map((axis) => {
-            const own = computeSize(
-              dims[axis].size,
-              inheritedScaleFactors[axis]!,
-              size[axis]
-            );
-            return own === undefined
+          // node's own size is its plot's: what dresses its content adds
+          // around it (`aroundPlot`).
+          size = ([0, 1] as const).map((axis) =>
+            dims[axis].size === undefined
               ? size[axis]
-              : own + chartChrome(node, axis, own);
-          }) as Size;
+              : aroundPlot(
+                  node,
+                  axis,
+                  computeSize(
+                    dims[axis].size,
+                    inheritedScaleFactors[axis]!,
+                    size[axis]
+                  )
+                )
+          ) as Size;
 
           // Grid budget (Stage 6e): resolve the tracks under the unified max rule
           // from the cells' pre-layout size claims — each track sizes to the max
@@ -1020,7 +1028,7 @@ export const layer = createNodeOperatorSequential(
               !ring &&
               child instanceof GoFishNode &&
               !child.plotIsBox(axis as 0 | 1)
-                ? v + sum(guttersAroundPlot(child, axis as 0 | 1, v))
+                ? aroundPlot(child, axis as 0 | 1, v)
                 : v
             ) as Size;
             // A node dressed in chrome hands its content (its first child)

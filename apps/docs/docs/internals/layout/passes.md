@@ -824,12 +824,18 @@ report their size).
   content's data 0 and layout from its plot's start, `wide(plot).descent`
   apart; which of the two a pinned node's constants are about is open
   (TODO(#1176) at `contentSeat`).
-- **A chart with a size of its own.** Its chrome dresses its content inside
-  the chart's frame (`frameChart`), so the frame's literal size is the plot:
-  the frame adds the gutters its content's claims give around a plot of that
-  size (`guttersAroundPlot`), and claims that total. Its content need not
+- **A node with a size of its own.** Its own `w`/`h` is its plot, for a
+  chart and a plain layer alike. Its chrome forms are its content's claim
+  and plot, widened to its keyed domain (`setChromeForms`), and the size
+  is solved as the plot: σ fits the plot to the size, and the node claims
+  the whole at that σ (`ScopeRegistry.solveFixed`), its data 0 past the
+  start reach. Content that maps no domain claims the size and the reach
+  of what dresses it (`aroundPlot`), and layout lays the node out in the
+  same whole. A chart's chrome dresses its content inside the chart's frame
+  (`frameChart`), so the chrome is in those forms; its content need not
   wear chrome of its own: a label hanging off the first bar is dressing, so
-  it too adds around the plot.
+  it too adds around the plot. Labels beside a plain layer's content (and
+  the outlines of its shapes) add around it the same way.
 - **The plot leaves out dressing.** Dressing is what is placed beside a node
   the claim walk places elsewhere: a value label beside its bar's `ref`, a
   tier of texts seated beside the bars of another tier, an `enclose` drawn
@@ -864,14 +870,14 @@ report their size).
   overlaps where it does not fit (#1171); a label past the first or last
   row reaches past the chain, into the chart's margin. A chain that slices
   its room (facet panels) gives each part its slice as its plot, and the
-  part's chrome adds around it (`guttersAroundPlot`), except a part whose
+  part's chrome adds around it (`aroundPlot`, the same helper), except a part whose
   plot is its whole box (a chart, below): its chrome is in its slice. A chain edge to a
   part that is no part of the plot (dressing, ink, a ring's chrome, a
   stand-in) clears that part's whole box, so a ring still seats its title
   past its tick labels. The plot of a chain with a stand-in reaches only as
   far as its stand-ins. A child that reads y the other
   way has its plot read reflected within its box. The gutters of a chart
-  are its claim past the plot claim of its content (`claims` in
+  are its claim past the plot claim of its content (`chromeForms` in
   `chromeGutters.ts`), so a chart with a size of its own maps that plot into
   its size, and its labels, like its chrome, add around it (#1032). A node
   with a size of its own, and a chart's outer box, are a part of their

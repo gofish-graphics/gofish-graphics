@@ -35,6 +35,7 @@ import { envFlag } from "../../util";
 import type { GoFishNode, RenderSession } from "../_node";
 import { fixedOverflow, warnLayout } from "../layoutWarnings";
 import { resolveUnit, sameUnitVar } from "../measure";
+import { reachAt, type ChromeForms } from "../chromeGutters";
 
 export type ScopeKind = "root" | "sized" | "coord" | "grid" | "recenter";
 
@@ -219,28 +220,46 @@ export class ScopeRegistry {
 
   /**
    * Solve the scope of a node with a literal size on one axis (#1114): its
-   * content's type and claim, widened to the keyed domain it maps and niced,
-   * against its size. A literal size does not depend on σ, so the claim walk
-   * solves it once, here, to compute the pixels the node claims upward, and
-   * its layout reuses the solution ({@link fixedSolve}). `key` names the keyed
-   * domain the node maps (`KeyedDomains.axisKey`), so a render root with no
-   * size of its own can map that domain at the same σ ({@link keyedSigma}).
+   * content's type and chrome forms (`chromeForms`: what it draws and its
+   * plot, widened to the keyed domain it maps and niced), with its size as
+   * its plot (#1032). σ fits the plot to the size ({@link fit}), and the
+   * scope's box is the whole at that σ: the size and what the content's
+   * chrome and dressing reach past it (`reachAt`), with data 0 that far
+   * further from the box's start. A literal size does not depend on σ, so
+   * the claim walk solves it once, here, to compute the pixels the node
+   * claims upward, and its layout reuses the solution ({@link fixedSolve}).
+   * `key` names the keyed domain the node maps (`KeyedDomains.axisKey`), so
+   * a render root with no size of its own can map that domain at the same σ
+   * ({@link keyedSigma}).
    */
   solveFixed(
     node: GoFishNode,
     key: string | undefined,
     meta: ScopeMeta,
     space: UnderlyingSpace | undefined,
-    claim: Extent | undefined,
-    allocated: number
+    forms: ChromeForms | undefined,
+    plot: number
   ): ScopeSolution | undefined {
-    const solution = this.fit(meta, node, space, claim, allocated);
+    const fitted = forms && this.fit(meta, node, space, forms.plot, plot);
+    const reach = fitted && reachAt(forms!, fitted.sigma);
+    const solution: ScopeSolution | undefined =
+      fitted === undefined
+        ? undefined
+        : fitted.originPx === undefined
+          ? fitted
+          : { sigma: fitted.sigma, originPx: fitted.originPx + reach![0] };
     let solves = this.fixed.get(node);
     if (solves === undefined) this.fixed.set(node, (solves = []));
     solves[meta.axis] =
-      solution === undefined || claim === undefined
+      solution === undefined
         ? undefined
-        : { key, solution, claim, space, box: allocated };
+        : {
+            key,
+            solution,
+            claim: forms!.whole,
+            space,
+            box: plot + reach![0] + reach![1],
+          };
     return solution;
   }
 
