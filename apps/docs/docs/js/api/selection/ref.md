@@ -127,10 +127,7 @@ component-boundary rule that string-name `ref` resolution always followed
 inline, so the inline-layout and chart-data lookup paths now share one scoping
 rule.
 
-Within that boundary the two positions differ in reach. As chart data, a name
-selects every node it was given in the chart, so a mark repeated per row can
-carry one name. Inline, a string `ref` (and a `.relate()` operand) takes the
-nearest match to the layer that relates it; see the [`ref`](/js/api/marks/ref) mark.
+Within that boundary, chart data follows the same widening rule as inline `ref`: the lookup starts at the scope the chart is built in, searches the scopes nested in it, nearest first, then widens one enclosing scope at a time. Every `layer` is a scope. The nearest scopes that have the name all contribute, so a mark repeated per row or per cell carries one name: a `selectAll` outside a `spread` gathers every cell's marks, and one inside a cell finds its own. The singular form reports how many marks it matched when there is more than one. Inline, a string `ref` (and a `.relate()` operand) takes the nearest match to the layer that relates it; see the [`ref`](/js/api/marks/ref) mark.
 
 ## Inline `selectAll` is not supported yet
 

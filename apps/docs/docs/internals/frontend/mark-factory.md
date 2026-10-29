@@ -404,7 +404,10 @@ method's result with the same set so chains stay extensible and the mark-kind ta
 rides along. `.name()`
 defers its layer registration via a `__layerRegistration` tag collected in a
 single post-resolve DFS walk (`collectLayerRegistrations`), so registry order
-follows parent-iteration order, not async-completion order. The same factory
+follows parent-iteration order, not async-completion order. The registries
+nest: a `layer([...])` combinator's is a child of the one it is built in, and
+`resolveRefData` reads a name with the widening lookup `lookupLayerName` (see
+[Name Resolution & Scoping](/internals/core/names-and-scoping)). The same factory
 backs `makeRelatableMark` (which adds `.relate()`, and hands the rows the mark
 was called with to `GoFishNode.relate`, so a drawing clause binds them; the
 `layer([...])` combinator keeps the registry it resolved its children in as

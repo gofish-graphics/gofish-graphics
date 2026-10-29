@@ -152,9 +152,24 @@ in `createMark` so each copy is its own scope, or rename. The
 
 Chart-tier names are a different lookup. `.name("bars")` on a mark in a chart
 also registers every node it produces in the chart's layer registry, and
-`selectAll("bars")` (or `ref("bars")` as chart data) reads that registry. There
-a name is a set, by design. The inline lookup on this page never reads the
-registry.
+`selectAll("bars")` (or `ref("bars")` as chart data) reads the registries.
+There a name is a set, by design. The inline lookup on this page never reads
+the registries.
+
+The registries follow the same widening rule as the tree lookup
+(`lookupLayerName` in `marks/markResult.ts`). Each `layer([...])` combinator
+has a registry of its own, nested in the registry of the place it is built
+(`childLayerContext`): a chart, an operator's cell, another layer. A chart
+shares the registry it is built in. A top-level render and a `createMark`
+body start a root, which no lookup crosses. A lookup searches its registry
+and the ones nested in it, nearest depth first, then its parent's, one level
+at a time, and stops at the first level that has the name. Every registry at
+that depth contributes. So a `layer` repeated per `spread` cell finds its own
+cell's `bars`, and a `selectAll("bars")` outside the spread gathers the bars
+of every cell. A name a split repeats is plural: `selectAll` gathers it, and
+the singular `ref` reports how many marks it matched. Before #1236 each
+`layer` combinator's registry was flat and private, so a name declared
+inside a cell was invisible outside it.
 
 ## Constraint operands
 

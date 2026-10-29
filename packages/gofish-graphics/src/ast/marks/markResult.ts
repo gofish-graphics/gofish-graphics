@@ -37,6 +37,71 @@ export function layerKey(name: unknown): string | symbol | undefined {
   return undefined;
 }
 
+/** The scope tree the registries form: a `layer([...])` combinator's
+ *  registry is a child of the registry of the place it is built in (a chart,
+ *  an operator's cell, another layer). A registry with no parent is a root:
+ *  a top-level render, or the body of a `createMark` component, which is the
+ *  boundary of every name lookup. Kept beside the registries, not in them,
+ *  because a registry's keys are names. */
+const scopeTree = new WeakMap<
+  LayerContext,
+  { parent?: LayerContext; children: LayerContext[] }
+>();
+
+function scopeLinks(ctx: LayerContext) {
+  let links = scopeTree.get(ctx);
+  if (!links) scopeTree.set(ctx, (links = { children: [] }));
+  return links;
+}
+
+/** A fresh registry nested in `parent`'s scope (a root when `parent` is
+ *  `undefined`). */
+export function childLayerContext(parent?: LayerContext): LayerContext {
+  const ctx: LayerContext = {};
+  if (parent) {
+    scopeLinks(parent).children.push(ctx);
+    scopeLinks(ctx).parent = parent;
+  }
+  return ctx;
+}
+
+/**
+ * The marks a name (a registry key) stands for, seen from the registry
+ * `from`, by the same widening lookup `ref("x")` uses over the tree: search
+ * `from`'s scope and the scopes nested in it, then its parent's, one level at
+ * a time, and stop at the first level that has the name. Inside that level
+ * the nearest depth wins, and every registry at that depth that has the name
+ * contributes its marks, in scope order: a name a split repeats (one
+ * `layer` per cell) is plural, so `selectAll` gathers all its marks and the
+ * singular `ref` reports how many it found. Never crosses a root.
+ * `undefined` when no level has the name.
+ */
+export function lookupLayerName(
+  from: LayerContext,
+  key: string | symbol
+): { data: any[]; nodes: GoFishNode[] } | undefined {
+  let level: LayerContext | undefined = from;
+  let searched: LayerContext | undefined;
+  while (level) {
+    let frontier: LayerContext[] = [level];
+    while (frontier.length > 0) {
+      const hits = frontier.filter((c) => c[key] !== undefined);
+      if (hits.length === 1) return hits[0][key];
+      if (hits.length > 1)
+        return {
+          data: hits.flatMap((c) => c[key].data),
+          nodes: hits.flatMap((c) => c[key].nodes),
+        };
+      frontier = frontier.flatMap((c) =>
+        (scopeTree.get(c)?.children ?? []).filter((k) => k !== searched)
+      );
+    }
+    searched = level;
+    level = scopeTree.get(level)?.parent;
+  }
+  return undefined;
+}
+
 /**
  * Stash the chained `.name(...)` value directly on a mark function, so a
  * user-chained name can be detected without relying on the `__serialize` tag

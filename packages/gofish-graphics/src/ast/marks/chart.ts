@@ -100,7 +100,7 @@ import {
 } from "../schema";
 import { withWire } from "../wire";
 import { withKindValues } from "../strategyKind";
-import { datumOfInput } from "./markResult";
+import { childLayerContext, datumOfInput } from "./markResult";
 import { withFlowStep } from "./compose";
 export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
@@ -1233,17 +1233,15 @@ export function layer<T>(
   const withChildren =
     (children: readonly MarkChild[]): Mark<T> =>
     async (d, key, _layerContext) => {
-      // A layer establishes its OWN local name context: `.name(...)` registrations
-      // and the `ref(name)`/`selectAll(name)` that read them are scoped to *this*
-      // layer's children. We deliberately do NOT inherit the enclosing
-      // `_layerContext` — otherwise a layer nested inside an operator (e.g. one
-      // `layer([bars, area])` per `spread` cell) would share a single context
-      // across every cell, so each cell's `selectAll("bars")` would match every
-      // other cell's bars too (and reference siblings not yet laid out). Names are
-      // local to their layer, mirroring `LayerBuilder.resolve`. Resolve
+      // A layer establishes its OWN name scope: `.name(...)` registrations of
+      // its children go into a registry nested in the enclosing one
+      // (`childLayerContext`). A `ref(name)`/`selectAll(name)` reads the
+      // nearest scope that has the name (`lookupLayerName`), so a layer
+      // repeated per `spread` cell finds its own cell's `bars`, while a
+      // `selectAll("bars")` outside the spread gathers every cell's. Resolve
       // sequentially so a child referencing a name sees earlier siblings'
       // registrations.
-      const sharedContext: LayerContext = {};
+      const sharedContext = childLayerContext(_layerContext);
       const resolved: GoFishNode[] = [];
       for (const m of children) {
         // Each child is a mark position over this layer's rows: an empty-scope

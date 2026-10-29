@@ -985,6 +985,71 @@ async function main() {
     );
   }
 
+  console.log("\n# selectAll widens like ref, nearer scope first (#1236)");
+  {
+    const rows = [
+      { g: "a", v: 1 },
+      { g: "b", v: 2 },
+      { g: "c", v: 3 },
+    ];
+    // One `layer` per spread cell, each naming its dot "dot".
+    const cells = (inCell: () => any[]) =>
+      gf
+        .chart(rows, { axes: false })
+        .flow(gf.spread({ by: "g", dir: "x", spacing: 20 }))
+        .mark(
+          gf.layer([
+            gf.chart().mark(gf.circle({ r: 4, fill: "#c00" }).name("dot")),
+            ...inCell(),
+          ])
+        );
+    const lines = (out: any[], stroke: string) =>
+      out.filter((i: any) => i.kind === "path" && i.style?.stroke === stroke);
+
+    // From outside the spread, the cells are the nearest scopes with "dot":
+    // selectAll gathers all three.
+    const across = await items(
+      gf.layer([
+        cells(() => []),
+        gf
+          .chart(gf.selectAll("dot"))
+          .mark(gf.line({ stroke: "#00c" }).zOrder(1)),
+      ])
+    );
+    const path = lines(across, "#00c")[0]?.d ?? "";
+    check(
+      "selectAll outside a spread gathers every cell's marks",
+      (path.match(/[ML]/g) ?? []).length === 3 ||
+        (path.match(/C/g) ?? []).length === 2,
+      path
+    );
+
+    // Inside a cell, its own scope has "dot": each cell's selectAll finds
+    // only its own dot.
+    let msg = "";
+    try {
+      await items(
+        cells(() => [
+          gf.chart(gf.ref("dot")).mark(gf.circle({ r: 1, fill: "#0c0" })),
+        ])
+      );
+    } catch (e: any) {
+      msg = String(e?.message);
+    }
+    check("ref inside a cell finds only its own cell's mark", msg === "", msg);
+
+    // The singular ref, from outside, sees the plural name and says so.
+    await rejects(
+      "ref of a name a split repeats reports how many it found",
+      () =>
+        gf.layer([
+          cells(() => []),
+          gf.chart(gf.ref("dot")).mark(gf.circle({ r: 1 })),
+        ]),
+      /matched 3 nodes/
+    );
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }
