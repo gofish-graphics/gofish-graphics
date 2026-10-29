@@ -44,7 +44,11 @@ The note uses a few terms of art. Each one is defined here once.
 - **Elimination form.** A construct that takes a value apart, e.g., pattern
   matching or field access.
 
-## 1. The current rules
+## 1. The rules before #1236
+
+This section describes the code as it was when this note was written; the
+names and line numbers it cites (`resolveScopedName`, `_relateClause`) are
+from then. Section 7 describes what replaced them.
 
 GoFish has three name mechanisms. They share the `createMark` boundary, but
 otherwise they are separate tables with separate rules.

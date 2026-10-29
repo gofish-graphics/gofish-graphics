@@ -130,10 +130,7 @@ export class LayerContext {
       if (at && at.depth < depth) return;
       if (!at || depth < at.depth) {
         s.nearest.set(key, { depth, scopes: [this] });
-      } else {
-        const i = at.scopes.findIndex((o) => treeOrder(this, o) < 0);
-        at.scopes.splice(i < 0 ? at.scopes.length : i, 0, this);
-      }
+      } else insertInScopeOrder(at.scopes, this);
     }
   }
 
@@ -159,6 +156,25 @@ export class LayerContext {
     }
     return undefined;
   }
+}
+
+/** Insert `scope` into `scopes`, which is in scope order. Registries mostly
+ *  register in tree order (a split's cells, in sequence), so the common case
+ *  appends; one that registers early is placed by binary search. */
+function insertInScopeOrder(scopes: LayerContext[], scope: LayerContext): void {
+  const last = scopes[scopes.length - 1];
+  if (last === undefined || treeOrder(last, scope) < 0) {
+    scopes.push(scope);
+    return;
+  }
+  let lo = 0;
+  let hi = scopes.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (treeOrder(scopes[mid], scope) < 0) lo = mid + 1;
+    else hi = mid;
+  }
+  scopes.splice(lo, 0, scope);
 }
 
 /** Scope order for two registries at the same depth: the creation order of

@@ -246,11 +246,10 @@ export type ClaimWalk = {
    *  (0 for none). */
   literalStart: [number, number];
   /** How it seats its children, read by the placement walk through it
-   *  (`placementIn`): a child's index, its key as a direct operand, per
-   *  axis the constraints that act on it there, by child index, and the
-   *  literal seats its constraints pin, by key (`literalSeats`). */
+   *  (`placementIn`): by child index (`indexOfChild`), each child's key as a
+   *  direct operand and per axis the constraints that act on it there, and
+   *  the literal seats its constraints pin, by key (`literalSeats`). */
   seating: () => {
-    indexOf: (child: GoFishAST) => number;
     operandKey: Map<number, string>;
     acting: [Map<number, ConstraintSpec[]>, Map<number, ConstraintSpec[]>];
     seats: Map<string, [number | undefined, number | undefined]>;
@@ -601,8 +600,8 @@ export class GoFishNode {
    *  inside such a clause, and the layer schedules the clause after the
    *  clauses that place what it reads. The list is the layer's, not a flag on
    *  the child, so another layer's `.relate()` never mistakes it for its own,
-   *  and a pass that wraps a clause in its slot (axis elaboration replaces
-   *  `children[i]`) leaves it a clause. */
+   *  and a pass that wraps a clause in its slot (axis elaboration's
+   *  `replaceChild`) leaves it a clause. */
   public _relateClauses: Map<number, number> = new Map();
   /** The name registry this layer's children were resolved in (the
    *  `layer([...])` combinator's own context). Its `.relate()` clauses are
@@ -686,6 +685,22 @@ export class GoFishNode {
   public set constraints(constraints: readonly ConstraintSpec[]) {
     this._constraints = constraints;
     this._version++;
+  }
+  /** The memo of {@link indexOfChild}, for one {@link _version}. */
+  private _childIndex?: { version: number; index: Map<GoFishAST, number> };
+  /** The slot of `child` among this node's children, or undefined when it
+   *  is not one of them. A node listed twice is at its first slot. The
+   *  index is built once per change to the children. */
+  public indexOfChild(child: GoFishAST): number | undefined {
+    let memo = this._childIndex;
+    if (memo === undefined || memo.version !== this._version) {
+      const index = new Map<GoFishAST, number>();
+      this._children.forEach((c, i) => {
+        if (!index.has(c)) index.set(c, i);
+      });
+      memo = this._childIndex = { version: this._version, index };
+    }
+    return memo.index.get(child);
   }
   /** Put `child` in slot `i` in place of the node there (an elaboration
    *  pass's wrapper), as a new children array. */
@@ -1194,7 +1209,7 @@ export class GoFishNode {
   public inSlot(dim: 0 | 1): boolean {
     const p = this.parent;
     if (p === undefined) return false;
-    return childRole(p.sharing(), p.children.indexOf(this), dim) === "slot";
+    return childRole(p.sharing(), p.indexOfChild(this) ?? -1, dim) === "slot";
   }
 
   /** One of this node's axis spaces on `dim` as the axis machinery sees it:

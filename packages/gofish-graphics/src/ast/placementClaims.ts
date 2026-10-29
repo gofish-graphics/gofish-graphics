@@ -41,7 +41,7 @@ function seatIn(
 ): number | undefined {
   const seating = parent.claimWalk?.seating();
   if (seating === undefined) return undefined;
-  const i = seating.indexOf(child);
+  const i = parent.indexOfChild(child) ?? -1;
   const acting = seating.acting[axis].get(i) ?? [];
   const start = child.claimWalk?.literalStart[axis] ?? 0;
   if (acting.length === 0) return start;
@@ -100,7 +100,7 @@ export function placementIn(
     const p = n.parent!;
     if (!passable(p, axis, direction)) return undefined;
     const walk = p.claimWalk!;
-    const box = walk.childBoxes(axis)?.get(walk.seating().indexOf(n));
+    const box = walk.childBoxes(axis)?.get(p.indexOfChild(n) ?? -1);
     if (box === undefined) return undefined;
     if (n === target) {
       lo = box.lo;

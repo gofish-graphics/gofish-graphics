@@ -1,7 +1,8 @@
 /**
  * String-name resolution: `ref("x")` and `.relate()` operands share one
- * lookup (nearest level, then closest match) bounded by `createMark` (`resolveScopedName` in
- * `_ref.tsx`; essay: /internals/core/names-and-scoping).
+ * lookup (nearest level, then closest match) bounded by `createMark`
+ * (`lookupName` and `namesIn` in `_ref.tsx`; essay:
+ * /internals/core/names-and-scoping).
  *
  * Run: `pnpm build && tsx src/tests/nameScope.test.ts` (wired as
  * `pnpm test:name-scope`). Imports from `dist` for the same lodash-ESM reason
@@ -884,9 +885,7 @@ async function main() {
     }
   }
 
-  console.log(
-    "\n# relate() — an operand is bound when .relate() runs (#1236)"
-  );
+  console.log("\n# relate() — an operand is bound when .relate() runs (#1236)");
 
   // (a) #1235: the axes' own `.relate()` calls on other layers cannot drop
   //     this layer's clause, whichever axes are drawn.
@@ -1223,7 +1222,11 @@ async function main() {
     } catch (e: any) {
       detail = String(e?.message);
     }
-    check("a line over token refs paints over the box that holds them", ok, detail);
+    check(
+      "a line over token refs paints over the box that holds them",
+      ok,
+      detail
+    );
   }
 
   // A clause's paint-order default follows a named ref (an alias) to the

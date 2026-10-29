@@ -1,4 +1,4 @@
-import type { GoFishNode, Placeable } from "../_node";
+import { GoFishNode, type Placeable } from "../_node";
 import type { GoFishAST } from "../_ast";
 import type { AxisMap } from "../domain";
 import { isToken, type Token } from "../createName";
@@ -50,11 +50,21 @@ export interface ConstraintRef {
   means(layer: GoFishNode): readonly GoFishAST[];
 }
 
+/** What a user's reference sees of `node`: `node`, or, for a ring an
+ *  elaboration pass inserted (`_transparent`, built by `wrapRing`), its
+ *  content, slot 0. A ring is its content: it takes no name, adds no
+ *  depth, and its shapes (an axis, a label) are invisible to a lookup. */
+export function contentOf(node: GoFishAST): GoFishAST {
+  let cur = node;
+  while (cur instanceof GoFishNode && cur._transparent) cur = cur.children[0];
+  return cur;
+}
+
 /**
  * A macro's handle on a child of the layer it built: the child in slot
  * `slot` of `layer`. It resolves to whatever fills the slot, so a pass that
- * wraps the child in place (`children[i] = wrapper`) keeps it pointing at
- * the wrapper, as a slot of `_relateClauses` does.
+ * wraps the child in place (`replaceChild`) keeps it pointing at the
+ * wrapper, as a slot of `_relateClauses` does.
  */
 export class SlotOperand implements ConstraintRef {
   constructor(
@@ -76,27 +86,27 @@ export class SlotOperand implements ConstraintRef {
   means(layer: GoFishNode): readonly GoFishAST[] {
     return [this.child(layer)];
   }
-  /** How the operand reads in a message: the child's name, or its slot. */
+  /** How the operand reads in a message: the name of the child's content
+   *  (a ring a pass put in the slot takes no name), or its slot. */
   get name(): string {
     const child = this.layer.children[this.slot];
-    return (child && childNameKey(child)) ?? `child ${this.slot + 1}`;
+    return (
+      (child && childNameKey(contentOf(child))) ?? `child ${this.slot + 1}`
+    );
   }
 }
 
 /** A finder of slot operands of `layer`: the handle on the slot each of its
- *  children fills, from one index of the children built once. Throws on a
- *  node that is not one of them. */
-export const slotOf = (
-  layer: GoFishNode
-): ((node: GoFishAST) => SlotOperand) => {
-  const index = new Map(layer.children.map((c, i) => [c, i]));
-  return (node) => {
-    const i = index.get(node);
+ *  children fills (`indexOfChild`). Throws on a node that is not one of
+ *  them. */
+export const slotOf =
+  (layer: GoFishNode): ((node: GoFishAST) => SlotOperand) =>
+  (node) => {
+    const i = layer.indexOfChild(node);
     if (i === undefined)
       throw new Error("[gofish] slotOf: the node is not a child of the layer");
     return new SlotOperand(layer, i);
   };
-};
 
 /** A slot operand for every child of `layer`, in order. */
 export const childSlots = (layer: GoFishNode): SlotOperand[] =>

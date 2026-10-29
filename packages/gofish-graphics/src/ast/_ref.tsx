@@ -28,6 +28,7 @@ type DisplayListItem = DisplayList.DisplayItem;
 import { isToken, Token } from "./createName";
 import {
   childNameKey,
+  contentOf,
   SlotOperand,
   type ConstraintRef,
   type KeyOf,
@@ -530,16 +531,6 @@ function scopeRootOf(from: GoFishNode): GoFishNode {
   return top;
 }
 
-/** What a user's reference sees of `node`: `node`, or, for a ring an
- *  elaboration pass inserted (`_transparent`, built by `wrapRing`), its
- *  content, slot 0. A ring is its content: it takes no name, adds no
- *  depth, and its shapes (an axis, a label) are invisible to a lookup. */
-export function contentOf(node: GoFishAST): GoFishAST {
-  let cur = node;
-  while (cur instanceof GoFishNode && cur._transparent) cur = cur.children[0];
-  return cur;
-}
-
 /**
  * Every name inside `layer`, with the nodes it means from `layer`: the
  * matches at the closest depth below it, as {@link lookupName} finds them
@@ -819,17 +810,6 @@ function resolveConstraints(layer: GoFishNode): ResolvedConstraints {
   const operands = new Map<string, ResolvedOperand>();
   const keys = new Map<ConstraintRef, string>();
   const z = new Map<ConstraintRef, GoFishAST[]>();
-  // Each direct child's index, built once, the first time a nested name
-  // operand needs it (a handle knows its slot).
-  let childIndex: Map<GoFishAST, number> | undefined;
-  const indexOfChild = (child: GoFishAST): number => {
-    if (childIndex === undefined) {
-      childIndex = new Map();
-      for (const [i, c] of layer.children.entries())
-        if (!childIndex.has(c)) childIndex.set(c, i);
-    }
-    return childIndex.get(child) ?? -1;
-  };
   const place = (ref: ConstraintRef, what: string) => {
     if (keys.has(ref)) return;
     const nodes = operandNodes(layer, ref);
@@ -839,12 +819,10 @@ function resolveConstraints(layer: GoFishNode): ResolvedConstraints {
     const child =
       ref instanceof SlotOperand
         ? ref.slot
-        : node.parent === layer
-          ? indexOfChild(node)
-          : (() => {
-              const c = directChildOf(layer, node);
-              return c === undefined ? -1 : indexOfChild(c);
-            })();
+        : (() => {
+            const c = directChildOf(layer, node);
+            return c === undefined ? -1 : (layer.indexOfChild(c) ?? -1);
+          })();
     if (child < 0)
       throw new Error(
         `${what}: operand "${ref.name}" is not inside the layer this ` +

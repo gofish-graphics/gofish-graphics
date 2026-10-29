@@ -169,12 +169,11 @@ export function orderChildrenForPaint(node: GoFishAST): readonly GoFishAST[] {
   const zKey = children.map(zOf);
   if (edges.length === 0 && zKey.every((z) => z === 0)) return children;
 
-  const index = new Map(children.map((child, i) => [child, i]));
   const adj: (Set<number> | undefined)[] = new Array(n);
   const inDegree = new Array<number>(n).fill(0);
   for (const { from, to } of edges) {
-    const i = index.get(from)!;
-    const j = index.get(to)!;
+    const i = node.indexOfChild(from)!;
+    const j = node.indexOfChild(to)!;
     const out = (adj[i] ??= new Set());
     if (!out.has(j)) {
       out.add(j);
@@ -229,7 +228,7 @@ export function orderChildrenForPaint(node: GoFishAST): readonly GoFishAST[] {
 
   if (result.length < n) {
     // A child left with a positive in-degree was never emitted.
-    const stuck = (child: GoFishAST) => inDegree[index.get(child)!] > 0;
+    const stuck = (child: GoFishAST) => inDegree[node.indexOfChild(child)!] > 0;
     const involved = new Set(
       edges
         .filter(({ from, to }) => stuck(from) && stuck(to))

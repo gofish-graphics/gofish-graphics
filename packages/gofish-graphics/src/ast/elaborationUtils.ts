@@ -89,11 +89,10 @@ export async function wrapRing(
   // awaiting it again gives the same node, so each entry is matched to its
   // child by identity, and a shape the layer did not keep is an error, not
   // a shifted slot.
-  const slotOfChild = new Map(root.children.map((c, k) => [c as unknown, k]));
   const slots = new Map<unknown, number>();
   for (const entry of ring.nodes) {
     const node = await entry;
-    const k = slotOfChild.get(node);
+    const k = root.indexOfChild(node);
     if (k === undefined || k === 0)
       throw new Error(
         "[gofish] wrapRing: a shape of the ring is not a child of its layer"

@@ -172,7 +172,9 @@ parent's, one level at a time, and stops at the first level that has the
 name. Every registry at that depth contributes. A registry links only to its
 parent. When a registry first gets a name, it records the name in its own
 index and in each ancestor's: the nearest depth below that ancestor that has
-the name, and the registries at that depth. So a lookup reads one index
+the name, and the registries at that depth, kept in scope order. Cells
+mostly register in that order, so a new one is appended; one that registers
+early is placed by binary search. So a lookup reads one index
 entry per ancestor and never walks down. The tree lookup has no such index,
 because elaboration renames and wraps nodes after they are built, so it
 searches each level breadth first. A registry that is thrown away (the one
@@ -233,7 +235,11 @@ operand's key, the uid of its node, and whether that node is a direct child.
 A node's `children` and `constraints` are replaced, never edited in place
 (`replaceChild` swaps one child), and each replacement bumps the node's
 `_version`. The resolution records the version it was made at, so
-`resolution` tells a stale one in constant time and throws.
+`resolution` tells a stale one in constant time and throws. The same
+version keys the one index of a node's children by slot
+(`GoFishNode.indexOfChild`, a node listed twice at its first slot), which
+the operand resolver, the clause schedule, the placement walk, paint order
+and the chrome macros all read.
 A round looks each (level, name) of a `ref("x")` up once. The operand object
 itself holds no resolution, so one operand may serve several layers. The
 placement solve reads only the key (`keyOf`). The name is kept for error
@@ -356,7 +362,7 @@ earlier one.
 
 The list belongs to the layer, not to the child, so no other layer can read
 it (#1235), and a pass that wraps a child replaces it in its slot
-(`children[i] = wrapper`), so the wrapper stays a clause. Only `.relate()`
+(`replaceChild`), so the wrapper stays a clause. Only `.relate()`
 appends children to a layer after it is built, so slots do not move. `.relate()` is a layer method: it throws on any other node,
 because only `layer.tsx` knows how to schedule clauses.
 

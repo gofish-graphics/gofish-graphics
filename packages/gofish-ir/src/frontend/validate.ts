@@ -1345,8 +1345,9 @@ function walkRelateOperand(node: unknown, path: string, ctx: Context): void {
     });
     return;
   }
+  // `walkRefMark` checks `scope` where it is given; an operand must give it.
   walkRefMark(node, path, ctx);
-  expectField(node, "scope", path, ctx, expectString);
+  expectField(node, "scope", path, ctx, () => {});
   if (Array.isArray(node.selection))
     ctx.errors.push({
       path: `${path}.selection`,

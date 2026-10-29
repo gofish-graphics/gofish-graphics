@@ -354,15 +354,7 @@ export const layer = createNodeOperatorSequential(
             else list.push(c);
           }
         }
-      let index = new Map(node.children.map((c, i) => [c, i]));
-      const indexOf = (child: GoFishAST): number => {
-        const i = index.get(child);
-        if (i !== undefined && node.children[i] === child) return i;
-        index = new Map(node.children.map((c, j) => [c, j]));
-        return index.get(child) ?? -1;
-      };
       const fresh = {
-        indexOf,
         operandKey,
         acting,
         seats: literalSeats(node.constraints, keyOf),

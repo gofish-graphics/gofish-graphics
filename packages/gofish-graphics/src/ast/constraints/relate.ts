@@ -258,14 +258,10 @@ export function scheduleRelate(
   // deps.get(u) = the steps u waits for.
   const deps = new Map<number, Set<number>>([[SOLVE, new Set()]]);
   for (const i of clauses) deps.set(i, new Set());
-  const childIndex = new Map<GoFishAST, number>();
-  layer.children.forEach((c, i) => {
-    if (!childIndex.has(c)) childIndex.set(c, i);
-  });
   // The direct child of `layer` that is or holds `node`, by its index.
   const childOf = (node: GoFishAST): number => {
     const child = directChildOf(layer, node);
-    return child ? (childIndex.get(child) ?? -1) : -1;
+    return child ? (layer.indexOfChild(child) ?? -1) : -1;
   };
 
   for (const op of operands.values()) {
