@@ -56,6 +56,7 @@ import {
 import {
   composePlanSpaces,
   planConstraintComposition,
+  handedRegions,
   planSharing,
   type LayerSharingPlan,
   resolveLayerBaseSpaces,
@@ -445,6 +446,9 @@ export const layer = createNodeOperatorSequential(
               childNodes.forEach((_, i) => plan.nested[axis].add(i));
           return plan;
         },
+        // The regions its layout hands its children (`childRegion`).
+        resolveHanded: (childNodes, constraints) =>
+          handedRegions(constraints, childNodes),
         resolveUnderlyingSpace: (
           children: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[],
@@ -861,6 +865,7 @@ export const layer = createNodeOperatorSequential(
           // a fixed reference into its container, which stays where its own
           // placement puts it unless the container is named too (then the
           // two move together — see `NestedOperand`).
+          const handedTo = node.handed()!;
           const constrainedChildren = new Set<number>();
           for (const name of layoutPlan.constrainedNames) {
             const op = operands.get(name);
@@ -902,14 +907,13 @@ export const layer = createNodeOperatorSequential(
             // proposal, so nest composes with — and wins on its derived axes
             // over — any other proposal.
             // Its cell, or the region this layer was handed, which it
-            // passes on (`SharingPlan.handed`).
-            const childRegion =
-              (childName !== undefined
-                ? proposals.regionByName.get(childName)
-                : undefined) ??
-              (node.sharing().handed?.[0].get(i) === "passed"
+            // passes on (`GoFishNode.handed`).
+            const handed = [handedTo[0].get(i), handedTo[1].get(i)];
+            const childRegion = handed.includes("cell")
+              ? proposals.regionByName.get(childName!)
+              : handed.includes("passed")
                 ? proposals.passedOn
-                : undefined);
+                : undefined;
             // In a share scope (`sharesRoom`) a child is laid out at its
             // claim at σ: a band is one σ, and a node that holds bands is
             // what its claim says at the σ the scope solved. So is a share

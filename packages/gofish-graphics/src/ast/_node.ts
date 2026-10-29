@@ -111,7 +111,11 @@ import {
 } from "./axisDirection";
 import { isToken, Token } from "./createName";
 import type { ConstraintSpec } from "./constraints";
-import { childRole, type SharingPlan } from "./constraints/compose";
+import {
+  childRole,
+  type HandedRegions,
+  type SharingPlan,
+} from "./constraints/compose";
 import type { KeyedDomains } from "./keyedDomains";
 import {
   chainOn,
@@ -489,6 +493,13 @@ export type ResolveSharing = (
   constraints: ConstraintSpec[]
 ) => SharingPlan;
 
+/** A node kind's rule for the regions its layout hands its children
+ *  ({@link GoFishNode.handed}). */
+export type ResolveHanded = (
+  childNodes: (GoFishNode | GoFishRef)[],
+  constraints: ConstraintSpec[]
+) => HandedRegions;
+
 /** Every child in the own set on both axes, nothing nested. */
 export const shareAll: ResolveSharing = (childNodes) => ({
   sets: [childNodes.map(() => 0), childNodes.map(() => 0)],
@@ -639,6 +650,8 @@ export class GoFishNode {
   private _resolveUnderlyingSpace: ResolveUnderlyingSpace;
   private _resolveSharing: ResolveSharing;
   private _sharing?: SharingPlan;
+  private _resolveHanded?: ResolveHanded;
+  private _handed?: HandedRegions;
   private _resolveExtent: ResolveExtent;
   public _underlyingSpace?: Size<UnderlyingSpace> = undefined;
   public _extent?: Size<Extent | undefined> = undefined;
@@ -882,6 +895,7 @@ export class GoFishNode {
       resolveUnderlyingSpace,
       resolveExtent,
       resolveSharing,
+      resolveHanded,
       layout,
       lower,
       geometry,
@@ -895,6 +909,9 @@ export class GoFishNode {
       resolveUnderlyingSpace: ResolveUnderlyingSpace;
       resolveExtent?: ResolveExtent;
       resolveSharing?: ResolveSharing;
+      /** The regions its layout hands its children (a layer's
+       *  `handedRegions`); none when absent. */
+      resolveHanded?: ResolveHanded;
       layout: Layout;
       lower?: Lower;
       geometry?: GeometryFn;
@@ -915,6 +932,7 @@ export class GoFishNode {
     this.uid = `node-${GoFishNode.uidCounter++}`;
     this._resolveUnderlyingSpace = resolveUnderlyingSpace;
     this._resolveSharing = resolveSharing ?? shareAll;
+    this._resolveHanded = resolveHanded;
     this._resolveExtent =
       resolveExtent ?? ((_ce, _cs, spaces) => impliedExtents(spaces));
     this._layout = layout;
@@ -939,6 +957,16 @@ export class GoFishNode {
    *  Callers must not mutate it. */
   public sharing(): SharingPlan {
     return (this._sharing ??= this._resolveSharing(
+      this.children,
+      this.constraints
+    ));
+  }
+
+  /** The regions this node's layout hands its children
+   *  ({@link HandedRegions}), or undefined when it hands none. Memoized and
+   *  cleared as {@link sharing} is. */
+  public handed(): HandedRegions | undefined {
+    return (this._handed ??= this._resolveHanded?.(
       this.children,
       this.constraints
     ));
@@ -1429,10 +1457,10 @@ export class GoFishNode {
   }
 
   /** Whether layout hands this node's `child`-th child a region on `axis`
-   *  (`SharingPlan.handed`): its cell, or the region this node was handed,
-   *  which it passes on. */
+   *  ({@link handed}): its cell, or the region this node was handed, which
+   *  it passes on. */
   public handsRegion(child: number, axis: 0 | 1): boolean {
-    const h = this.sharing().handed?.[axis].get(child);
+    const h = this.handed()?.[axis].get(child);
     const p = this.parent;
     return (
       h === "cell" ||
@@ -1867,6 +1895,7 @@ export class GoFishNode {
     this._plotExtent = undefined;
     this._claimMemo = freshClaimMemo();
     this._sharing = undefined;
+    this._handed = undefined;
     this.children.forEach((c) => {
       if (c instanceof GoFishNode) c.clearUnderlyingSpace();
     });
