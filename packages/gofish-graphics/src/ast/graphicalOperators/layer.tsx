@@ -84,9 +84,7 @@ import {
   type Placement,
 } from "../constraints/claimPlacement";
 import { buildPlan, planPlacement, type LayerPlan } from "../solver/plan";
-import { planCheck, planCheckOn } from "../solver/planCheck";
 import { evaluate } from "../solver/formula";
-import { isOverlapConstraint } from "../constraints/overlap";
 import {
   guttersAroundPlot,
   guttersInSlot,
@@ -1285,23 +1283,6 @@ export const layer = createNodeOperatorSequential(
           }
 
           for (const i of relateOrder.afterSolve) layoutChild(i);
-
-          // TEMPORARY (#1176 step 3c): compare the plan with what layout
-          // laid.
-          if (planCheckOn())
-            for (const axis of [0, 1] as const) {
-              const p = node._claimMemo.plans[axis];
-              if (p !== undefined)
-                planCheck(
-                  node,
-                  axis,
-                  p,
-                  childPlaceables,
-                  childScaleFactors[axis] ?? effectivePosScales[axis]?.sigma,
-                  effectivePosScales[axis]?.originPx,
-                  node.constraints.some(isOverlapConstraint)
-                );
-            }
 
           // Calculate the bounding box of all children (NaN-safe; see
           // foldFinite for why undefined extents are skipped). Each child's

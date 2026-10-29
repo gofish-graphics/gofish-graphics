@@ -633,9 +633,9 @@ overlay, an alignment, a stack, a layer placing its children,
 `placeByClaims`), and the pass-throughs that keep their child's claim as it
 is (`offset`, the `position` operator, a `ref`). A layer claims its
 plan (`buildPlan` in `solver/plan.ts`): one solve over all its children
-in values in σ, by their boxes. (Temporarily, for #1176 step 3, a layer
-under `GOFISH_PLAN_CHECK` also compares its plan with where layout lays
-its children, in `solver/planCheck.ts`; step 3f removes it.) The plan reads three forms
+in values in σ, by their boxes. Layout seats each child from the same
+plan, evaluated at the σ it lays out at (`solver/formula.ts`, see
+[Piecewise-Linear Values](/internals/core/pwl)). The plan reads three forms
 of each child: its box, which it places, its plot, which a chain lays it
 by, and all it draws, which takes room. A layer's forms are the envelopes
 of its children's where its plan places them, so an outline takes room
@@ -1012,16 +1012,22 @@ or 0, and its `head` is `size − tail`). `position`, `align`,
 `distribute`, `nest`, and `grid` pins/relations over those reduced `min` values
 go through BFS components + pin offsets + free/distribute/normalized-origin
 fallbacks. The solve is written once over an `Arith` (see
-[Piecewise-Linear Values](/internals/core/pwl)): layout runs it in numbers, and it runs
-in values in σ too, where the targets are boxes read off claims and a datum maps through
-a symbolic σ. Every solved cell writes back through **one path**: a size-strong
+[Piecewise-Linear Values](/internals/core/pwl)). It runs once, in the claim walk, where
+the targets are boxes read off claims and a datum maps through a symbolic σ, and its
+results are formulas that layout evaluates at the solved σ with what it measured: the
+laid boxes, the pixel of data 0, and the place of each child that places itself (a
+shape at a literal pixel or a data position, an axis span or a `connect`, which set
+`placedByLayout`). A datum that is not a number has no pixel, so it emits no fact.
+Every solved cell writes back through **one path**: a size-strong
 cell sets its extent (`setExtent({min, max})`), a position-only cell pins its
 `min` anchor, a rank-1 size-with-no-position cell (align `"size"`, above)
 sets its size only (`setSizeOnly`) — replacing the old three-way branch and
-the size side-channel. `solvePlacementConstraints` throws on a bbox conflict
-(both intervals' owners named in the message) rather than the silent
-last-writer-wins an ungoverned second write would otherwise produce
-(#725/#726) — align `"span"`/`"size"` reuse this exact path for their
+the size side-channel. A bbox conflict throws (both intervals' owners named
+in the message) rather than the silent last-writer-wins an ungoverned second
+write would otherwise produce (#725/#726). The solve runs in the claim walk,
+where the boxes are formulas, so it records each over-determined box as a
+check (`Arith.agree`), and layout makes the check at σ when it seats the
+children. Align `"span"`/`"size"` reuse this exact path for their
 unbound-target check, and `lowerAlignPlacement` separately warns (not
 throws) when a constraint ends up with nothing movable — every listed
 operand already placed — except the deliberate `isDataPositionedAlignTarget`
@@ -1038,7 +1044,7 @@ out-of-layer operand throws (#819), so a constraint can no longer bind nothing
 in silence. An operand that is a direct child is its child's placeable, as
 before. An operand nested inside a direct child is a `NestedOperand`
 (`constraints/nestedOperand.ts`): its box is the container's box plus the
-constant offset the container's own layout gave it, and the solve adds one
+constant offset the container's own layout gave it (the plan input `gap:@n`), and the solve adds one
 rigid `anchor-relation` (container `start` → operand `start`) per axis the
 operand takes part in. Only a directly named child skips phase-1 baseline
 placement, so an unnamed container stays put and the nested operand is a

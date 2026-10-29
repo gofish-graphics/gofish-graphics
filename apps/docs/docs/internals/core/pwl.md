@@ -7,6 +7,8 @@ status: draft
 covers:
   - packages/gofish-graphics/src/ast/solver/pwl.ts
   - packages/gofish-graphics/src/ast/solver/arith.ts
+  - packages/gofish-graphics/src/ast/solver/formula.ts
+  - packages/gofish-graphics/src/ast/constraints/bbox.ts
 ---
 
 # Piecewise-Linear Values
@@ -138,17 +140,31 @@ cells.
 
 ## Numbers and values
 
-Some computations run both in numbers and in values. The placement solve
-(`constraints/placementSolver.ts`) places a layer's children in numbers at layout, and
-in values in the claim walk (`placeByClaims` in `constraints/claimPlacement.ts`, which a
-layer's plan runs), where each box it places is a function of σ that agrees with the
-number solve at every σ. It is written once over an `Arith<T>` (`solver/arith.ts`), the operations it needs on `T`: `add`,
-`sub`, `scale`, `negate`, `abs`, `max` (the upper envelope) and `near`, a test that two
-amounts agree within a tolerance. There are two instances. `numbers` is plain
-arithmetic. `values` is this module, where `near` is `approxEqual`, so a cycle in the
-placement solve closes only when its two sides agree at every σ. The `BBox` ledger holds
-values, so `toValue` and `fromValue` move an amount into and out of it, and a number is
-a constant there.
+Some computations run in more than one arithmetic. The placement solve
+(`constraints/placementSolver.ts`) runs once per layer and axis, in the claim walk
+(`placeByClaims` in `constraints/claimPlacement.ts`, which a layer's plan runs). Layout
+does not solve again: it evaluates the plan at the σ it lays out at. The solve is written
+once over an `Arith<T>` (`solver/arith.ts`), the operations it needs on `T`: `add`,
+`sub`, `scale`, `negate`, `abs`, `max` (the upper envelope), `near`, a test that two
+amounts agree within a tolerance, and `agree`, the same test where a constraint
+over-determines a box. `numbers` is plain arithmetic, which the layout `BBox` of a node
+and the grid tracks still use. `values` is this module, where `near` and `agree` are
+`approxEqual`, so a cycle in the solve closes only when its two sides agree at every σ.
+The `BBox` ledger is generic in its arithmetic, so `toValue` and `fromValue` move an
+amount into and out of it, and a number is a constant there.
+
+The plan's arithmetic is a formula `Tape` (`solver/formula.ts`). Each of its values is a
+node: a sum, a scaling, a max or an absolute value of earlier nodes, a value in σ, or an
+input. An input is something only layout measures, keyed by name: a child's laid box
+(`lo:i`, `hi:i`), its plot, where a child that places itself landed (`at:i`), its seat
+when nothing constrains it (`seat:i`), a nested operand's offset in its container
+(`gap:@n`), the pixel of data 0 (`origin`) and the layer's box (`size`), which a discrete
+position divides. Every node also carries its value in σ with each input at its claim,
+which is what the claim walk reads and which makes the solve's choices. A node that reads
+no input folds into a value in σ. `agree` on a tape keeps the test as a check
+(`Tape.checks`) and answers yes; layout evaluates both sides at σ and throws the
+conflict, naming both owners, when they differ. `evaluate` reads a node at σ with
+layout's inputs.
 
 ## Slope as a data-driven signal
 

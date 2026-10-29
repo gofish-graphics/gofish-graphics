@@ -1,4 +1,5 @@
 // <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Piecewise-Linear Values — /internals/core/pwl
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 

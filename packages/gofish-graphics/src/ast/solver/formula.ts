@@ -1,3 +1,8 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Piecewise-Linear Values — /internals/core/pwl
+// @wiki Overview — /internals/layout/passes
+// </gofish-wiki>
+
 /**
  * A layer's plan as formulas (#1176 step 3e). The claim walk runs the
  * placement solve once per layer and axis in an {@link Arith} whose values

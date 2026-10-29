@@ -9,7 +9,7 @@ covers:
   - packages/gofish-graphics/src/ast/chromeGutters.ts
   - packages/gofish-graphics/src/ast/constraints/claimPlacement.ts
   - packages/gofish-graphics/src/ast/solver/plan.ts
-  - packages/gofish-graphics/src/ast/solver/planCheck.ts
+  - packages/gofish-graphics/src/ast/solver/formula.ts
   - packages/gofish-graphics/src/ast/layoutWarnings.ts
   - packages/gofish-graphics/src/ast/_node.ts
   - packages/gofish-graphics/src/ast/axisDirection.ts
