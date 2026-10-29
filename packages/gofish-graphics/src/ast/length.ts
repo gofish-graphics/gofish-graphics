@@ -188,7 +188,7 @@ const takesLength = (type: Frontend.FieldType): boolean => {
 
 /** The length `v` holds, at its top or as an item of a list (a table's
  *  `[x, y]` spacing), if any. */
-const heldLength = (v: unknown): Length | LengthValue | undefined =>
+export const heldLength = (v: unknown): Length | LengthValue | undefined =>
   isLength(v)
     ? v
     : Array.isArray(v)

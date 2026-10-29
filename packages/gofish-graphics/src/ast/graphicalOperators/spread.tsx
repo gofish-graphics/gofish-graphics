@@ -1,5 +1,6 @@
 import { axisOverrideOf, GoFishNode } from "../_node";
-import type { LengthValue } from "../length";
+import { checkLengths, type LengthValue } from "../length";
+import { Frontend } from "gofish-ir";
 import type { AxisOptions } from "../gofish";
 import { fieldNameOf, MaybeValue } from "../data";
 import { AxisName, Direction, FancyDims, resolveAxisName } from "../dims";
@@ -317,6 +318,13 @@ export function stack(
   opts: StackOptions,
   marks?: MarkChild[]
 ): ReturnType<typeof spread> | Operator<any[], any[]> {
+  // A stack glues its parts, so its spacing takes no length: checked
+  // against its own descriptor, not the spread's it forwards to.
+  checkLengths(
+    Frontend.acceptedFields("operator", "stack"),
+    "stack",
+    opts as Record<string, unknown>
+  );
   const stackOpts: SpreadOptions = { ...opts, glue: true };
   const result =
     marks !== undefined ? spread(stackOpts, marks) : spread(stackOpts);

@@ -34,6 +34,14 @@ def test_fr_takes_no_offset():
         fr(1) + 3
 
 
+def test_pixels_must_be_finite():
+    for px in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(TypeError):
+            percent(30) + px
+        with pytest.raises(TypeError):
+            percent(30).offset(px)
+
+
 def test_bad_values():
     with pytest.raises(TypeError):
         percent(float("nan"))

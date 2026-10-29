@@ -1015,5 +1015,31 @@ console.log("# a label is a text on its chart, whatever groups its mark");
   );
 }
 
+console.log("# a chosen label keeps off the labels of a chart inside");
+{
+  // The inner chart's label sits on the inner chart's content; the outer
+  // dot, just under its center, is labeled by the chooser on the render
+  // root. The chooser keeps the dot's label off the inner chart's label, as
+  // it keeps off a label at a position string beside it.
+  const doc = await layer([
+    chart([{ n: "INNER LABEL" }], { axes: false, w: 120, h: 40 }).mark(
+      rect({ w: 120, h: 40, fill: "#eee" }).label("n", { position: "center" })
+    ),
+    rect({ x: 59, y: 28, w: 2, h: 2 }).label(() => "OUTER", {
+      position: Place.around(),
+    }),
+  ]).toDisplayList({ w: 200, h: 100 });
+  const texts = textItems(doc);
+  const inner = texts.find((t) => t.text === "INNER LABEL");
+  const outer = texts.find((t) => t.text === "OUTER");
+  ok(
+    "the outer label does not cover the inner chart's label",
+    inner !== undefined &&
+      outer !== undefined &&
+      !convexOverlap(textBox(inner), textBox(outer)),
+    JSON.stringify(texts.map((t) => [t.text, t.x, t.y]))
+  );
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

@@ -3,6 +3,7 @@ import { type MaybeValue } from "./data";
 import { computeAesthetic } from "../util";
 import {
   bindLengths,
+  heldLength,
   rejectLength,
   takeLengths,
   type LengthNode,
@@ -260,12 +261,28 @@ export const elaborateOwnDims = <T>(
 };
 
 /**
+ * Whether a slot of an interval holds a construct's own length (`w:
+ * percent(30)`, `w: fr(2)`): a getter on its size ({@link bindLengths}),
+ * read only once its room is known, and set even where it reads as none (an
+ * `fr` weight).
+ */
+const holdsLength = (iv: Interval<any>, key: IntervalKey): boolean =>
+  Object.getOwnPropertyDescriptor(iv, key)?.get !== undefined;
+
+/** Whether a slot of an interval is set, read without laying out a length
+ *  ({@link holdsLength}). */
+const isSet = (iv: Interval<any>, key: IntervalKey): boolean =>
+  holdsLength(iv, key) || iv[key] !== undefined;
+
+/**
  * Merge a `dims` bag into the per-axis intervals `into`, which already hold
  * the top-level options, resolving each name against `scope`. Each (axis,
- * anchor) slot may be set once: a slot that a top-level option or an earlier
- * `dims` entry already set is an error. `into` is mutated by reassigning its
- * elements (not their fields), so closures that captured the same array
- * observe the result. Returns the option that set each slot, for messages.
+ * anchor) slot may be set once: a slot that a top-level option (a length
+ * included) or an earlier `dims` entry already set is an error. A `dims`
+ * entry takes pixels and data values, not a length: a construct's own
+ * length is its `w` or `h`. `into`'s intervals are written in place, so a
+ * length's getter stays, and closures that captured them observe the
+ * result. Returns the option that set each slot, for messages.
  */
 export const mergeAxisDims = (
   into: Interval<any>[],
@@ -281,19 +298,22 @@ export const mergeAxisDims = (
     const where = `${form.where}.${name}`;
     const axis = resolveAxisName(scope, name, where);
     const iv = toAxisInterval(name, entry, form);
-    const next: Interval<any> = { ...into[axis] };
+    const slots = into[axis];
     for (const key of AXIS_INTERVAL_KEYS) {
       if (iv[key] === undefined) continue;
-      if (next[key] !== undefined) {
+      rejectLength(
+        isAxisInterval(entry) ? `${where}.${key}` : where,
+        heldLength(iv[key])
+      );
+      if (isSet(slots, key)) {
         throw new Error(
           `${where}: the ${key} of axis ${axis} is set twice, here and ` +
             `by ${origin(key, axis)}. Set each axis anchor once.`
         );
       }
-      next[key] = iv[key];
+      slots[key] = iv[key];
       setBy[`${key}:${axis}`] = where;
     }
-    into[axis] = next;
   }
   return origin;
 };
@@ -311,9 +331,15 @@ export const applyAxisDims = (
   mergeAxisDims(into, entries, scope, MARK_DIMS);
   for (const axis of [0, 1] as const) {
     const d = into[axis];
-    if (d.min === undefined && d.center !== undefined && d.size !== undefined) {
-      into[axis] = { ...d, min: deriveMin(d.center, d.size) };
-    }
+    // A length's size is laid out only once its room is known: its box is
+    // placed by its center then, as with top-level `cx` and a length `w`.
+    if (
+      !holdsLength(d, "size") &&
+      d.min === undefined &&
+      d.center !== undefined &&
+      d.size !== undefined
+    )
+      d.min = deriveMin(d.center, d.size);
   }
 };
 

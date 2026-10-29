@@ -18,6 +18,7 @@ import {
   ellipse,
   treemap,
   table,
+  image,
 } from "../lib";
 import { runLayout } from "../ast/gofish";
 import * as Pwl from "../ast/solver/pwl";
@@ -358,11 +359,83 @@ async function main() {
         .mark(rect({}))
         .toDisplayList()
     );
+    await throws("a rect's dims.x.size", () =>
+      rect({ h: 10, dims: { x: { size: percent(30) } } } as any).toDisplayList(
+        {}
+      )
+    );
+    await throws("a rect's bare dims.x", () =>
+      rect({ w: 10, h: 10, dims: { x: percent(30) } } as any).toDisplayList({})
+    );
+    await throws("a rect's inset of a negative percent", () =>
+      rect({ w: 10, h: 10, inset: percent(-10) }).toDisplayList({})
+    );
+    await throws("a rect's inset with a negative offset", () =>
+      rect({ w: 10, h: 10, inset: percent(10).offset(-2) }).toDisplayList({})
+    );
+    await throws("a stack's spacing", () =>
+      chart(rows, { w: 200, h: 200 })
+        .flow(stack({ by: "k", dir: "y", spacing: percent(10) } as any))
+        .mark(rect({ h: "v", w: 10 }))
+        .toDisplayList()
+    );
     await throws("a table's fr spacing", () =>
       chart(grid, { w: 200, h: 200 })
         .flow(table({ by: { x: "c", y: "r" }, spacing: fr(1) as any }))
         .mark(rect({}))
         .toDisplayList()
+    );
+  }
+
+  console.log("\n# a size given as a length and in dims is set twice");
+  {
+    let message = "";
+    try {
+      await spread({ dir: "x", spacing: 0 }, [
+        rect({ w: fr(1), h: 10, dims: { x: { size: 50 } } } as any),
+        rect({ w: fr(1), h: 10 }),
+      ]).toDisplayList({ w: 500, h: 50 });
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    check(
+      "an fr w and a dims.x.size is an error",
+      message.includes("set twice"),
+      message
+    );
+    // A dims entry on the axis of a length leaves the length to be laid
+    // out in its room.
+    const rects = rectsOf(
+      await layer({ w: 300, h: 40 }, [
+        rect({ w: percent(50), h: 10, dims: { x: { min: 0 } } } as any),
+      ]).toDisplayList({ w: 600, h: 50 })
+    );
+    check(
+      "a percent w with a dims.x.min is 50% of 300 px",
+      rects.length === 1 && close(rects[0].w, 150),
+      rects.map((r) => r.w)
+    );
+  }
+
+  console.log("\n# an image at a percent of a band");
+  {
+    const svg =
+      "data:image/svg+xml;utf8," +
+      encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"></svg>'
+      );
+    const images = items(
+      await chart(rows, { axes: false, w: 400, h: 100 })
+        .flow(spread({ by: "k", dir: "x", spacing: 0 }))
+        .mark(() =>
+          layer([rect({ h: 10 }), image({ href: svg, w: percent(40), h: 5 })])
+        )
+        .toDisplayList()
+    ).filter((i) => i.kind === "image");
+    check(
+      "each image is 40% of its 100 px band",
+      images.length === 4 && images.every((i) => close(i.w, 40)),
+      images.map((i) => [i.w, i.h])
     );
   }
 

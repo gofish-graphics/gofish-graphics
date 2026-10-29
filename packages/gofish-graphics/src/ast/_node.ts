@@ -227,8 +227,8 @@ type ClaimMemo = {
    *  none, it has no claim there). */
   chrome: [ChromeForms | null | undefined, ChromeForms | null | undefined];
   /** Per axis, its own size as a length laid out in its room
-   *  ({@link GoFishNode.ownLength}; `null`: it has none). */
-  lengths: [Pwl.Value | null | undefined, Pwl.Value | null | undefined];
+   *  ({@link GoFishNode.ownLength}), once read. */
+  lengths: [Pwl.Value | undefined, Pwl.Value | undefined];
 };
 
 const freshClaimMemo = (): ClaimMemo => ({
@@ -1470,7 +1470,7 @@ export class GoFishNode {
     const len = this.ownLengths?.[axis];
     if (len === undefined) return undefined;
     const memo = this._claimMemo.lengths[axis];
-    if (memo !== undefined) return memo ?? undefined;
+    if (memo !== undefined) return memo;
     const v = lengthIn(len, () =>
       this.parent === undefined
         ? this.canvasRoom(axis)

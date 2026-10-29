@@ -1766,7 +1766,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       inset: {
         type: t.union(t.number, t.ref("Length")),
         default: 0,
-        doc: "Pixels drawn in from each side of the space the rect fills, on an axis where it has no size or span of its own (a bar's width in a spread or a partition cell), so neighbors are drawn apart. A side the rect sizes itself, such as a bar's data height, is never inset. It changes only what is drawn: the rect's box stays the space it was given. Also `percent(n)`, n percent of that space on each axis: `percent(10)` draws a bar at 80% of its band.",
+        doc: "Pixels drawn in from each side of the space the rect fills, on an axis where it has no size or span of its own (a bar's width in a spread or a partition cell), so neighbors are drawn apart. A side the rect sizes itself, such as a bar's data height, is never inset. It changes only what is drawn: the rect's box stays the space it was given. Also `percent(n)`, n percent of that space on each axis: `percent(10)` draws a bar at 80% of its band. The percent and any pixels added to it are each 0 or more.",
       },
       // A fluent-factory-wide dev flag (`FACTORY_ONLY_KEYS` in
       // marks/createOperator.ts strips `by`/`debug` before layout, generically

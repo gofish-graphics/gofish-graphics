@@ -49,7 +49,7 @@ from gofish import percent, fr
 | -------------------------------------------------------- | ------ | -------------------------------- | ------- |
 | `w`, `h` of `chart`, `layer`, `rect`, `ellipse`, `image` | yes    | the parent's room                | yes     |
 | `w`, `h` of `spread`, `stack`, `treemap`, `blank`        | yes    | the parent's room                | yes     |
-| `spacing` of `spread` and `stack`                        | yes    | the operator's room              | yes     |
+| `spacing` of `spread`                                    | yes    | the operator's room              | yes     |
 | `spacing` of `table`                                     | yes    | the operator's room              | no      |
 | `inset` of `rect`                                        | yes    | the rect's own box, on each side | no      |
 
@@ -129,4 +129,6 @@ layer([
 - A percent `padding` on `chart` or a coordinate transform raises an error
   ([#852](https://github.com/gofish-graphics/gofish-graphics/issues/852),
   [#1238](https://github.com/gofish-graphics/gofish-graphics/issues/1238)).
-- `treemap`'s `spacing` and `padding` take pixels only.
+- `treemap`'s `spacing` and `padding`, and `stack`'s `spacing`, take pixels
+  only.
+- A percent `inset` and its offset are each 0 or more.

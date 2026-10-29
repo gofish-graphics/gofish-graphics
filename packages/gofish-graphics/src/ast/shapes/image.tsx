@@ -10,7 +10,7 @@ import {
   Transform,
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
-import { isFr, type LengthValue } from "../length";
+import { type LengthValue } from "../length";
 import { createMark } from "../withGoFish";
 import { MARK_CHANNELS } from "../markChannels.generated";
 import { attachCut } from "../graphicalOperators/cut";
@@ -234,7 +234,7 @@ export const Image = ({
   // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
   // Its size as its type reads it (`dataSize`): a length is never data.
   const own = elaborateOwnDims<number>(fancyDims);
-  const { dims, lengths, dataSize } = own;
+  const { dims, dataSize } = own;
 
   const node = new GoFishNode(
     {
@@ -267,9 +267,9 @@ export const Image = ({
             const map = scales?.[dim]?.map;
             return map ? pxOf(map, dataSize) - pxOf(map, 0) : dataSize;
           }
-          // An `fr` size is the share it is given.
-          const len = lengths[dim];
-          if (len !== undefined && isFr(len)) return size[dim];
+          // A length that is a share of its scope (`fr`, or a percent of a
+          // band) is the room it is given, as a rect's is.
+          if (node.shareOf(dim) !== undefined) return size[dim];
           return raw;
         };
         const requestedWidth = pixelSize(0);

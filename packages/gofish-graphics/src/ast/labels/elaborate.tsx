@@ -356,16 +356,20 @@ let labelUid = 0;
  * position string is placed by the solve, by the constraints
  * `buildLabelConstraints` derives from it; a label the chooser places is
  * placed after the solve, by one `labelPlace` constraint over all of them,
- * which also keeps them off the labels at a position string.
+ * which also keeps them off the labels at a position string and the labels
+ * of the charts inside `node` (`inside`, placed before it, read through
+ * refs). Returns the wrapper and every label it seated.
  */
 async function wrapWithLabels(
   node: GoFishNode,
-  pairs: LabelPair[]
-): Promise<GoFishNode> {
+  pairs: LabelPair[],
+  inside: LabelNode[]
+): Promise<{ node: GoFishNode; labels: LabelNode[] }> {
   // The label constraints run in the wrapper's axis order, which is the
   // wrapped node's: the wrapper's spaces are the node's.
   const yDirection = wrapperDirection(node);
-  return wrapPreservingIdentity(node, async (content) => {
+  const seated: LabelNode[] = [];
+  const root = await wrapPreservingIdentity(node, async (content) => {
     const refs: GoFishAST[] = [];
     const texts: GoFishNode[] = [];
     // Labels at a position string, placed by the solve.
@@ -412,6 +416,7 @@ async function wrapWithLabels(
       });
       label.node.name(textName);
       texts.push(label.node);
+      seated.push(label);
       // The label is part of its target as a mark, though it lives out of
       // the target's subtree; record that, so whatever takes the mark over
       // (a `time.transition()`) takes the label with it, and the label
@@ -454,6 +459,17 @@ async function wrapWithLabels(
         node: label,
       });
     }
+    // The labels of the charts inside, which the chooser keeps its labels
+    // off as it does those at a position string here.
+    const insideNames =
+      placed.length === 0
+        ? []
+        : inside.map((label) => {
+            const name = `__linside${labelUid++}`;
+            refs.push(ref(label.node).name(name));
+            return { name, label };
+          });
+
     // The content is seated at its own origin first, so every label
     // constraint (which reads a target via its `ref()`) sees it already
     // placed and only moves the label. The chooser runs after the solve.
@@ -485,8 +501,14 @@ async function wrapWithLabels(
                     call: callName(p.spec.accessor),
                   })
                 ),
-                fixed.map(({ textName, label }) => ({
-                  ref: g[textName] as ConstraintRef,
+                [
+                  ...fixed.map(({ textName, label }) => ({
+                    name: textName,
+                    label,
+                  })),
+                  ...insideNames,
+                ].map(({ name, label }) => ({
+                  ref: g[name] as ConstraintRef,
                   label,
                 })),
                 yDirection
@@ -495,6 +517,7 @@ async function wrapWithLabels(
       ],
     });
   });
+  return { node: root, labels: seated };
 }
 
 /**
@@ -554,15 +577,34 @@ export async function elaborateLabels(
     if (here === undefined) homes.set(home, [p]);
     else here.push(p);
   }
+  // A chart is wrapped after the charts inside it, so its chooser keeps its
+  // labels off theirs, already placed.
+  const depth = (n: GoFishNode) => {
+    let d = 0;
+    for (let p = n.parent; p; p = p.parent) d++;
+    return d;
+  };
+  const order = [...homes].sort(([a], [b]) => depth(b) - depth(a));
+  const done: { node: GoFishNode; labels: LabelNode[] }[] = [];
   let out = node;
-  for (const [home, here] of homes) {
+  for (const [home, here] of order) {
     const parent = home.parent;
-    const wrapped = await wrapWithLabels(home, here);
-    if (home === node) out = wrapped;
+    const inside = done
+      .filter((d) => isInside(d.node, home))
+      .flatMap((d) => d.labels);
+    const wrapped = await wrapWithLabels(home, here, inside);
+    done.push(wrapped);
+    if (home === node) out = wrapped.node;
     else {
-      parent!.children[parent!.children.indexOf(home)] = wrapped;
-      wrapped.parent = parent;
+      parent!.children[parent!.children.indexOf(home)] = wrapped.node;
+      wrapped.node.parent = parent;
     }
   }
   return { node: out, changed: true };
+}
+
+/** Whether `n` is in `home`'s subtree, below it. */
+function isInside(n: GoFishNode, home: GoFishNode): boolean {
+  for (let p = n.parent; p; p = p.parent) if (p === home) return true;
+  return false;
 }

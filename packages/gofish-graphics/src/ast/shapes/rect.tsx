@@ -111,7 +111,8 @@ export const Rect = ({
    *  a `partition` cell), so neighbors are drawn apart. A side the rect sizes
    *  itself (a bar's data height) is never inset. Paint only: the rect's
    *  box, which layout and refs read, stays the space it was given. A
-   *  percent is a percent of that box (#1176 step 6). */
+   *  percent is a percent of that box (#1176 step 6); it and any pixels
+   *  added to it are each 0 or more. */
   inset?: number | LengthValue;
 } & FancyDims<MaybeValue<number> | LengthValue>) => {
   // A length for its own size (`w: percent(30)`, `w: fr(2)`) is laid out in
@@ -121,10 +122,21 @@ export const Rect = ({
   const own = elaborateOwnDims<MaybeValue<number>>(fancyDims);
   const { dims } = own;
   const { rx, ry } = cornerRadii(rxGiven, ryGiven, 0);
+  // An inset is never negative. A percent's box is known only at layout, so
+  // it is checked here by its parts: a percent and pixels, each 0 or more.
   if (isLength(inset)) {
     if (isFr(inset))
       throw new Error(
         `rect: inset takes pixels or a percent of the rect's box, not ` +
+          `${printLength(inset)}.`
+      );
+    const { percent: p = 0, px = 0 } = inset as {
+      percent?: number;
+      px?: number;
+    };
+    if (!(p >= 0 && px >= 0))
+      throw new Error(
+        `rect: inset must be a percent and pixels, each 0 or more, got ` +
           `${printLength(inset)}.`
       );
   } else if (!(Number.isFinite(inset) && inset >= 0))

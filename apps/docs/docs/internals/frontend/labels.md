@@ -97,7 +97,9 @@ legend past it. It has three phases:
    draws over its marks (`time.transition()`) are outside it. Each home is
    wrapped once (`wrapWithLabels`) in a `Layer` holding its original
    content plus one `ref()` + `label` pair per (target × spec), and the
-   wrapper takes the home's place in its parent.
+   wrapper takes the home's place in its parent. A home is wrapped after
+   the homes inside it, so its chooser reads their labels, already placed,
+   through refs.
 
 A label's text comes from `resolveLabelText` (`labelPlacement.ts`). A field
 expression is evaluated over the target's rows with `evalFieldValues`, given
@@ -308,7 +310,7 @@ closed, so an unfilled closed outline is only its band), the label's own
 mark as its outline's band only (so a label may sit inside its
 region, and a label `"on"` a path may cover it), the labels placed so far
 (by this step, or by the solve for a position string; a hidden one takes no
-room), and the call's
+room), the labels of the charts inside the layer's chart, and the call's
 `avoiding` nodes, read through fresh refs made once per call (`nodeRefs.ts`,
 shared with `enclose`; a `selectAll` in `avoiding` is resolved where the
 call is recorded, against the chart's named layers). A label with no free candidate is hidden: it draws nothing and

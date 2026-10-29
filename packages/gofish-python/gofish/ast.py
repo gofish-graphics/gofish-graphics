@@ -2997,6 +2997,8 @@ class LengthValue(dict):
             return NotImplemented
         if "fr" in self:
             raise TypeError(f"fr({self['fr']}) + px: an fr weight takes no offset")
+        if not math.isfinite(px):
+            raise TypeError(f"percent(...) + px: px must be a finite number, got {px!r}")
         px = self.get("px", 0) + px
         out = LengthValue({"type": "length", "percent": self["percent"]})
         if px != 0:
