@@ -214,11 +214,11 @@ const PartitionNode = createNodeOperator(
       const regions = cells.map(
         (cell) => new PositionRegion(cell, along, enclosing)
       );
-      // The children are aligned on each axis where nothing gives them a
-      // cell.
+      // The children are aligned on each axis where their region gives them
+      // no cell. Every region here spans the same axes (they differ only in
+      // the cell), so the first one says which.
       const free = ([0, 1] as const).filter(
-        (axis) =>
-          along[axis] === undefined && enclosing?.spans[axis] === undefined
+        (axis) => regions[0]?.spans[axis] === undefined
       );
       await node.relate((g) => {
         const refs = names.map((name) => g[name]);

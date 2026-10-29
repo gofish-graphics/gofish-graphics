@@ -2504,7 +2504,14 @@ keeps its own size and sits in the middle of the cell. An interval would pin
 both edges instead, which sets the child's size and would stretch a circle
 into an ellipse. A child placed by its data in the layer's frame is not
 pinned (`isDataPositioned`), and neither is one that placed itself: they are
-where they are.
+where they are. The ownership plan (`PlacementOwnershipPlan`,
+`constraints/placementLowering.ts`) records a cell's axes as pinned for its
+children, as it does an interval's, so an `align` on that axis defers to the
+cell: it moves only children with no cell there, to the first child that has
+one. (The layer's type fold does not yet agree: an align on an axis that a
+cell or an interval places replaces the layer's position frame there, so end
+to end the cell loses its map; an expected failure in `region.test.ts`.
+`partition` aligns only on axes where its children have no cell.)
 
 **A `region` is placed by its data.** The `region` mark reads its cell from
 the partition around it (`enclosingCell`, `constraints/position.ts`: the
@@ -2514,7 +2521,12 @@ and `pinned`, so it shares the frame of the layer it is in, as a rect with a
 data `x` and `x2` does, and the partition hands it the map of its scale
 through the one seating rule (`childPosScalesFor`, `seatInScope`,
 `frameOf`). It maps the cell's edges, and the outline of a cell of the
-plane, through that map. A layer of marks in a cell (a `region` and a curve,
+plane, through that map. Since its type claimed the cell, its parent
+leaves it where its data puts it, so a datum it cannot map (no map on that
+axis, as under a `spread` on the cell's axis, or a corner that is not a
+number) is an error that names the axis, not a box at the size it is
+offered. Only on an axis with no cell is it as long as its proposed size.
+A layer of marks in a cell (a `region` and a curve,
 or a dot at a median) is pinned too, so every mark in it reads the same
 scale. Such a layer is not pinned to the cell's middle, and nothing places
 a mark in it that has no position of its own: a text in a layer beside a

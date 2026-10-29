@@ -252,6 +252,131 @@ async function main() {
       );
   }
 
+  console.log("# a region its parent cannot place by its data is an error");
+  {
+    // A spread on x inside an x partition's cell places its children on x
+    // in slots of its own, so it hands a region no map for its cell's data
+    // there. The region claimed the cell on x, so its parent leaves it where
+    // its data puts it: with no map that is nowhere, and it says so rather
+    // than drawing at the size it is offered.
+    const { spread } = await import("../lib");
+    const rows = [
+      { v: 0.5, g: "a" },
+      { v: 1.5, g: "b" },
+      { v: 1.5, g: "c" },
+    ];
+    const spreadOn = (dir: "x" | "y") =>
+      chart(rows, { axes: false })
+        .flow(
+          partition({ by: field("v").bin(Bin.step(1)), dir: "x" }),
+          spread({ by: "g", dir })
+        )
+        .mark(region())
+        .toDisplayList({ w: 200, h: 100 });
+    let error = "";
+    try {
+      await spreadOn("x");
+    } catch (e) {
+      error = (e as Error).message;
+    }
+    check(
+      "a region with a cell on x and no map on x throws, naming the axis",
+      error.startsWith("region: its cell's first edge on x does not map") &&
+        error.includes("no map for its cell's data on x"),
+      error
+    );
+    // On the axis with no cell it takes the size it is offered, as before.
+    const rects = items(await spreadOn("y")).filter(
+      (it) => it.kind === "rect"
+    );
+    check(
+      "a spread on the axis the cell does not span still lays regions out",
+      rects.length === 3 && rects.every((r) => near(r.w, 100)),
+      JSON.stringify(rects)
+    );
+  }
+
+  console.log("# a region's outline corner that does not map is an error");
+  {
+    // A cell whose box maps but one of whose corners is not a number: the
+    // region throws rather than put NaN in the path it draws.
+    class BadCell extends RegionCell {
+      readonly id = "bad";
+      readonly label = undefined;
+      readonly outline = [
+        [0, 0],
+        [NaN, 1],
+        [1, 1],
+      ] as const;
+      span(): readonly [number, number] {
+        return [0, 1];
+      }
+    }
+    const r = Region({});
+    r.name("r");
+    const node = (await layer({}, [r])) as GoFishNode;
+    await node.relate((g: any) => [
+      Constraint.position(
+        { region: new PositionRegion(new BadCell(), [value, value]) },
+        [g.r]
+      ),
+    ]);
+    let error = "";
+    try {
+      await node.toDisplayList({ w: 100, h: 100 });
+    } catch (e) {
+      error = (e as Error).message;
+    }
+    check(
+      "a corner that maps to NaN throws",
+      error.startsWith("region: its cell's outline on x does not map") &&
+        error.includes("NaN"),
+      error
+    );
+  }
+
+  console.log("# an align on a cell's axis defers to the cell");
+  {
+    // Two rects in the cells [0, 1) and [1, 2) on x, and an align of their
+    // starts on x. The cells pin their middles, and the ownership plan
+    // records them pinned, so the align moves neither (constraint
+    // confluence covers the solve). EXPECTED FAILURE end to end: the
+    // layer's type fold (`axisFragments` in compose.ts) lets the align fold
+    // replace the layer's position frame on x, so the cells have no map
+    // and both rects land at 0. An interval position under an align on its
+    // own axis loses its frame the same way.
+    const { Rect } = await import("../ast/shapes/rect");
+    const a = Rect({ w: 20, h: 20 });
+    a.name("a");
+    const b = Rect({ w: 40, h: 20 });
+    b.name("b");
+    const node = (await layer({}, [a, b])) as GoFishNode;
+    const cols = [value, undefined] as const;
+    await node.relate((g: any) => [
+      Constraint.position(
+        { region: new PositionRegion(new Cell(0, 1, "0"), cols) },
+        [g.a]
+      ),
+      Constraint.position(
+        { region: new PositionRegion(new Cell(1, 2, "1"), cols) },
+        [g.b]
+      ),
+      Constraint.align({ x: "start" }, [g.a, g.b]),
+    ]);
+    const rects = items(await node.toDisplayList({ w: 200, h: 100 }))
+      .filter((it) => it.kind === "rect")
+      .map((it) => it.x);
+    if (near(rects[0], 40) && near(rects[1], 130))
+      check(
+        "an align on a cell's axis now leaves the cells in place: drop the expected failure",
+        false
+      );
+    else
+      console.log(
+        `  xfail an align on a cell's axis leaves the cells in place — ${JSON.stringify(rects)}`
+      );
+  }
+
   report();
 }
 

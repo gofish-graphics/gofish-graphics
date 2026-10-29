@@ -34,6 +34,7 @@ import {
   type PositionRegion,
 } from "../constraints/position";
 import { compilePlacementCoordinate } from "../constraints/placementLowering";
+import { axisName } from "../constraints/shared";
 import { createMark } from "../withGoFish";
 import { MARK_CHANNELS } from "../markChannels.generated";
 
@@ -65,7 +66,8 @@ export type RegionProps = {
  * its space is the cell's interval, pinned, and it maps the cell's edges
  * (and the outline of a cell of the plane) through the map its parent hands
  * it, the frame of the partition, which a child placed by its data shares.
- * On an axis where it is in no cell, it is as long as the size it is
+ * A datum of the cell it cannot map there is an error, since its parent
+ * leaves it where its data puts it. On an axis where it is in no cell, it is as long as the size it is
  * proposed, and its parent places it there, as it places a rect with no
  * size.
  *
@@ -128,14 +130,31 @@ export const Region = ({
         return [axisSpace(0), axisSpace(1)];
       },
       layout: (size, scales) => {
-        // A datum of the cell through the map its parent hands it.
-        const px = (axis: 0 | 1, v: PositionInterval[number]) =>
-          compilePlacementCoordinate(v, scales[axis]?.map);
+        // A datum of the cell through the map its parent hands it. Its space
+        // claimed the cell on this axis, pinned, so its parent treats it as
+        // placed by its data there: a datum it cannot map would leave it
+        // nowhere, so that is an error, not a guess.
+        const px = (axis: 0 | 1, v: PositionInterval[number], what: string) => {
+          const p = compilePlacementCoordinate(v, scales[axis]?.map);
+          if (p === undefined || !Number.isFinite(p))
+            throw new Error(
+              `region: its cell's ${what} on ${axisName(axis)} does not map ` +
+                `to pixels: ${
+                  scales[axis]?.map === undefined
+                    ? `the region's parent gives it no map for its cell's data on ${axisName(axis)}`
+                    : `it maps to ${p}`
+                }. A region is placed by its cell's data, so it must share ` +
+                `the frame of the partition that gives it the cell (an ` +
+                `operator between them that places its children on ` +
+                `${axisName(axis)}, such as a spread, takes that frame away).`
+            );
+          return p;
+        };
         const extent = (axis: 0 | 1) => {
           const span = cell?.spans[axis];
-          const a = span && px(axis, span[0]);
-          const b = span && px(axis, span[1]);
-          if (a !== undefined && b !== undefined) {
+          if (span !== undefined) {
+            const a = px(axis, span[0], "first edge");
+            const b = px(axis, span[1], "second edge");
             const min = Math.min(a, b);
             return { min: 0, size: Math.max(a, b) - min, translate: min };
           }
@@ -151,17 +170,15 @@ export const Region = ({
           x.translate === undefined ? 0 : inset,
           y.translate === undefined ? 0 : inset,
         ];
-        // The cell's outline in the node's local frame, when it is placed by
-        // the cell on both axes.
-        const ring =
-          x.translate === undefined || y.translate === undefined
-            ? undefined
-            : cell?.outline?.map(
-                ([vx, vy]): OutlinePoint => [
-                  px(0, vx)! - x.translate!,
-                  px(1, vy)! - y.translate!,
-                ]
-              );
+        // The cell's outline in the node's local frame. A cell has one only
+        // when it is placed along both axes (`PositionRegion`), so both
+        // edges mapped above, and each corner maps or throws.
+        const ring = cell?.outline?.map(
+          ([vx, vy]): OutlinePoint => [
+            px(0, vx, "outline") - x.translate!,
+            px(1, vy, "outline") - y.translate!,
+          ]
+        );
         outline =
           ring === undefined || inset === 0 ? ring : insetConvex(ring, inset);
         if (outline === undefined && ring !== undefined)

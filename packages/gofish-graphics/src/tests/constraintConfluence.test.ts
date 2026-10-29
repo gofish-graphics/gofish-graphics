@@ -25,6 +25,11 @@ import {
   relationFact,
 } from "../ast/constraints/placementFacts";
 import type { PositionConstraint } from "../ast/constraints/position";
+import {
+  createPositionConstraint,
+  PositionRegion,
+} from "../ast/constraints/position";
+import { Cell } from "../ast/cells";
 import type { ZAboveConstraint } from "../ast/constraints/zorder";
 import type { Anchor, Dimensions, FancyDirection } from "../ast/dims";
 import { elaborateDirection, localAnchorPoint } from "../ast/dims";
@@ -1148,6 +1153,41 @@ console.log("# constraint confluence: interval position + align");
     {
       A: { min: 10, center: 20, max: 30 },
       B: { min: 15, center: 20, max: 25 },
+    }
+  );
+}
+
+console.log("# constraint confluence: region cell + align on the cell's axis");
+{
+  // A region's cell pins its target's middle at the cell's middle, as an
+  // interval pins its edges, so the ownership plan records it pinned there:
+  // an align on that axis defers to it. A and B sit in the cells [10, 30]
+  // and [50, 90] on x (pixel literals: a column that reads a value as
+  // itself); an align of their starts cannot move either, so both stay in
+  // their cells, and C, which has no cell, aligns to the first.
+  const regionOf = (lo: number, hi: number) =>
+    new PositionRegion(new Cell(lo, hi, `${lo}`), [(v) => v, undefined]);
+  const inCell = (name: string, lo: number, hi: number): PositionConstraint =>
+    createPositionConstraint({ region: regionOf(lo, hi) }, [child(name)]);
+  const alignStarts: AlignConstraint = {
+    type: "align",
+    x: "start",
+    children: [A, B, C],
+  };
+  expectConfluent(
+    "region/align",
+    solve(
+      [inCell("A", 10, 30), inCell("B", 50, 90), alignStarts],
+      ["A", "B", "C"]
+    ),
+    solve(
+      [alignStarts, inCell("B", 50, 90), inCell("A", 10, 30)],
+      ["A", "B", "C"]
+    ),
+    {
+      A: { min: 15, center: 20, max: 25 },
+      B: { min: 65, center: 70, max: 75 },
+      C: { min: 15, center: 20, max: 25 },
     }
   );
 }
