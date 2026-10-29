@@ -6,9 +6,11 @@ import { Constraint } from "./constraints";
 import { SlotOperand, type ConstraintRef } from "./constraints/shared";
 import type { GoFishAST } from "./_ast";
 
-/** Run `build` to wrap `node` in new structure, moving the node's identity
- * (_name/key) onto whatever `build` returns — so the parent (faceting/refs/
- * select) still resolves to this node. Its paint-time visibility rule moves
+/** Run `build` to wrap `node` in new structure, moving the node's data key
+ * onto whatever `build` returns, so the parent (faceting, keyed positions)
+ * still finds the node's place by its key. The node keeps its name: the
+ * wrapper is hygienic (see `wrapRing`), so a name lookup goes through it to
+ * the node. Its paint-time visibility rule moves
  * with it, so whatever the wrap adds beside the node (a label's `Text`, an
  * axis's ticks) shows and hides with it. Its `.zOrder()` moves with it too:
  * the hint orders the node among its siblings, which are now the wrapper's,
@@ -19,16 +21,13 @@ export async function wrapPreservingIdentity(
   node: GoFishNode,
   build: (node: GoFishNode) => GoFishNode | Promise<GoFishNode>
 ): Promise<GoFishNode> {
-  const origName = node._name;
   const origKey = node.key;
   const origVisible = node.__gfVisible;
   const origZOrder = node._zOrder;
-  node._name = undefined;
   node.key = undefined;
   node.__gfVisible = undefined;
   node._zOrder = undefined;
   const root = await build(node);
-  if (origName !== undefined) root._name = origName;
   if (origKey !== undefined) root.setKey(origKey);
   if (origVisible !== undefined) root.__gfVisible = origVisible;
   if (origZOrder !== undefined) root._zOrder = origZOrder;
@@ -50,20 +49,22 @@ export type ChromeRing = {
   constraints: RingConstraints;
 };
 
-/** Wrap `inner` in one ring: a `layer` of `inner` (named `name`) and the
- *  ring's shapes, each referred to by its slot. `inner` is seated first
+/** Wrap `inner` in one ring: a `layer` of `inner` and the ring's shapes,
+ *  each referred to by its slot. The ring is hygienic (`_transparent`): it
+ *  takes no name and adds no depth to a name lookup, and `inner`, its slot
+ *  0, keeps its own, so `ref("bar")` on a dressed bar means the bar alone.
+ *  `inner` is seated first
  *  (constraints apply in order and
  *  placement is first-write-wins, so the box the ring reads is placed before
  *  anything seats off it): at `seat`, by its baseline. A seat with neither
  *  axis given leaves `inner` to the layer. */
 export async function wrapRing(
   inner: GoFishNode,
-  name: string,
   ring: ChromeRing,
   seat: { x?: any; y?: any } = { x: 0, y: 0 }
 ): Promise<GoFishNode> {
-  inner.name(name);
   const root = (await (layer as any)([inner, ...ring.nodes])) as GoFishNode;
+  root._transparent = true;
   // A ring's content is the box it dresses, seated in the ring's own frame:
   // it is the ring's own set on both axes, so the ring reports the content's
   // type (the literal pixel seat would otherwise detach it), and the keyed

@@ -1442,7 +1442,7 @@ Both dumps live in `debug/dump.ts`.
 The marginal histogram's layer prints as:
 
 ```
-[sharing] layer __axisContent (3) [position×3,align×2] x: own{scatter,topHist} detached {rightHist} | y: own{scatter,rightHist} detached {topHist}
+[sharing] layer (3) [position×3,align×2] x: own{scatter,topHist} detached {rightHist} | y: own{scatter,rightHist} detached {topHist}
 ```
 
 The registry is the sole producer of every slope. A coord boundary hands down

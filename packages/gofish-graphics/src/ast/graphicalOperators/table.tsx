@@ -4,7 +4,7 @@ import { createNodeOperator } from "../withGoFish";
 import { createOperator } from "../marks/createOperator";
 import { layer } from "./layer";
 import { createGridConstraint } from "../constraints/grid";
-import { ensureChildNames, SlotOperand } from "../constraints/shared";
+import { SlotOperand } from "../constraints/shared";
 import { splitEntries, type SplitBy } from "../datumProjection";
 import { fieldNameOf } from "../data";
 import type { OrdinalKey } from "../underlyingSpace";
@@ -45,9 +45,7 @@ const Table = createNodeOperator(
     // Prefer explicit numCols; fall back to colKeys.length; finally a single row.
     const numCols = numColsOpt ?? colKeys?.length ?? children.length;
 
-    // The cells keep the names it gives them, as spread's do; the grid
-    // refers to them by slot.
-    ensureChildNames(children, "cell");
+    // The grid refers to the cells by slot, as spread does.
 
     const node = (await layer(children)) as GoFishNode;
     await node.relate(() => [

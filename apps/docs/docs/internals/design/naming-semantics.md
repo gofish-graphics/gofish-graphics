@@ -296,9 +296,10 @@ atom as a basic operation. Lisp calls this operation `gensym`.
 identity, and two tokens with the same tag are different. The `createMark`
 boundary is a coarse version of sets of scopes. Each component instance is a
 new scope, and string names written inside the component cannot reach out of
-it. The library's own names (`internalName`, e.g., `__spread#12`) are fresh by
-construction, which is the hygiene a macro system wants for names that a
-library builds on the user's behalf.
+it. The library used to make up fresh names of its own (`__spread#12`) so
+that it could refer to the nodes it built. It now refers to them by handle
+and names nothing (§7), which is the hygiene a macro system wants for the
+nodes a library builds on the user's behalf.
 
 **What does not fit.** A string in GoFish carries no scope set. The string
 `"density"` that the outer callback received and the string `"density"` an
@@ -716,23 +717,47 @@ registry is a child of the registry it is built in. A chart-data `ref` or
 first, then widens. Every registry at the nearest depth contributes, so a
 name a split repeats is plural.
 
-**Still open.**
+**Then, one resolver and hygienic elaboration (#1246, closed).** The
+open points above came from one cause: the library wrote names of its own
+into `_name` so that its constraints could refer to the nodes it built. Lean
+4 treats this problem as macro hygiene (Ullrich and de Moura, "Beyond
+Notations", LMCS 2022). An operator or an elaboration pass is a macro. The
+nodes it introduces must not capture the user's names, and the user's names
+must not capture them. GoFish now follows that rule in two steps.
 
-- The registries remain a second table beside the node tree. C's single
-  resolver would read the tree. It cannot yet, because an operator that
-  constrains its children (`spread`, `scatter`) renames a second child that
-  carries the same name (`ensureChildNames`), so a repeated name survives
-  only in the registry. The operators would need a constraint handle other
-  than `_name` first.
-- Tokens are unchanged. A token that a split repeats is still filed under one
-  key in the registry, and `selectAll(token)` still throws. `ref(token)`
-  inline still reads the global token table, where one node wins silently. Making
-  a repeated token plural needs the same operator change.
+- Every reference resolves once per round, in one pass
+  (`resolveReferences`), with one lookup rule (`lookupName`). From the use
+  site, the lookup takes the nearest level whose subtree has the name, and
+  every match at the closest depth there. It never crosses a `createMark`
+  boundary or the render root. A relate operand starts at its binding layer
+  and skips that layer's clause slots. A singular use (`ref`, a placement
+  operand) needs exactly one match. A paint-order operand takes them all.
+  The old any-depth rule for paint-order operands is gone.
+- An operator or a pass refers to the nodes it builds by handle: a slot of
+  the layer it builds (`SlotOperand`), or a node (`NodeOperand`). A handle
+  needs no lookup. The solver keys every operand by the node it resolved to,
+  so a name appears only in error messages.
+- `_name` holds only names the user wrote. `ensureChildNames` and
+  `internalName` are deleted, and the axes, legends and labels write no
+  names. Two siblings that share a name both keep it, so the name is plural.
+- A wrapper an elaboration pass inserts (`wrapRing`) is transparent. It takes
+  no name and adds no depth to a lookup, and the node it wraps keeps its own
+  name. So `ref("bar")` on a labeled bar is the bar alone, not the bar and
+  its label. A placement or paint-order operand still moves the wrapper with
+  the bar: a layer places what stands in the named node's place.
+- A token is plural like a string. Every node that carries it joins its
+  list, `selectAll(token)` gathers them all, and a singular `ref(token)`
+  that matches several says how many it matched.
+
+The registries stay. They are the declared data channel: a chart-data
+`selectAll` or `ref`, a `LayerBuilder` tier and a transition read them while
+the chart is being built, before the node tree exists.
 
 ## References
 
 - Benzaken, Castagna and Frisch. [CDuce: An XML-Centric General-Purpose Language](https://www.irif.fr/~gc/papers/icfp03.pdf). ICFP 2003.
 - Bostock, Ogievetsky and Heer. D3: Data-Driven Documents. IEEE TVCG 17(12), 2011.
+- Ullrich and de Moura. [Beyond Notations: Hygienic Macro Expansion for Theorem Proving Languages](https://lmcs.episciences.org/9362). Logical Methods in Computer Science 18(2), 2022.
 - Flatt. [Binding as Sets of Scopes](https://users.cs.utah.edu/plt/publications/popl16-f.pdf). POPL 2016.
 - Gabbay and Pitts. A New Approach to Abstract Syntax with Variable Binding. Formal Aspects of Computing 13, 2002.
 - Gottlob, Koch and Pichler. Efficient Algorithms for Processing XPath Queries. VLDB 2002. Extended in ACM TODS 30(2), 2005.

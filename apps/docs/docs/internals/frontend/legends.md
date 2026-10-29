@@ -61,7 +61,7 @@ The ring holds the box inside it (the root with its axes and titles) plus the
 legend:
 
 ```
-root = Layer([ titled.name("__legendContent"), legend ])
+root = Layer([ titled, legend ])
 ```
 
 `legendColumn` is a `Spread({ dir: "y" })` of one row per color-map entry. Each
@@ -111,8 +111,9 @@ the first one places the box the other two read:
    grows upward and the `start` of one that reads top-down (a heatmap):
    `orientSide("start", wrapperDirection(root))`.
 
-The outermost ring inherits the root's `key` and `_name`, so faceting, refs, and
-`selectAll` keep resolving to it.
+The outermost ring inherits the root's `key`, so faceting keeps resolving to it.
+The root keeps its `_name`, and every ring is transparent to a name lookup, so
+refs and `selectAll` still resolve to the root.
 
 ### Why the ring preserves the content's spaces
 

@@ -435,10 +435,12 @@ export const circle = createMark(
 // (resolved at layout time) and as chart data (resolved at build time against
 // the per-chart layer registry, erroring unless exactly one named node
 // matches). `selectAll(name)` is the plural form: one ref per matching named
-// node, chart-data only. Both defer layer lookup until resolution, so layers
-// can be registered by `.name()` on marks before the selector accesses them.
+// node, chart-data only; `name` is a string or a `createName` token, which
+// is plural too (a token on a repeated mark names every node it made). Both
+// defer layer lookup until resolution, so layers can be registered by
+// `.name()` on marks before the selector accesses them.
 export function selectAll(
-  layerName: string
+  layerName: string | Token
 ): GoFishRef & { readonly multiplicity: "all" } {
   return new GoFishRef({
     selection: layerName,

@@ -343,8 +343,8 @@ methods:
   producer-tier auto-naming and a sequenced tier's naming can detect a
   user-chained name without parsing the wire tag (`wireOf`). A `createName`
   token is filed in the layer context under its own symbol (`layerKey`), so
-  those tiers find a token-named mark's nodes too, while no string
-  `selectAll` or `ref` can reach them. (An earlier `ChartBuilder.connect()`
+  those tiers, and `selectAll(token)`, find a token-named mark's nodes too,
+  while no string `selectAll` or `ref` can reach them. (An earlier `ChartBuilder.connect()`
   method used this same stashed name; it was deleted in favor of
   [`.layer()`](/js/api/core/layer), which generalizes the pattern to every
   tier — see below.) `LayerBuilder.wireTiers()` looks for the stashed name on

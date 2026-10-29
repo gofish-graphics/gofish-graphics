@@ -433,7 +433,6 @@ async function main() {
     ]);
     const ring: any = await wrapRing(
       content,
-      "content",
       { nodes: [], constraints: () => [] },
       { x: datum(5), y: undefined }
     );
@@ -460,7 +459,7 @@ async function main() {
     const content: any = await (layer as any)([
       (rect as any)({ w: v(30), h: 10 }),
     ]);
-    const ring: any = await wrapRing(content, "content", {
+    const ring: any = await wrapRing(content, {
       nodes: [(rect as any)({ w: 1, h: 1 })],
       constraints: () => [],
     });

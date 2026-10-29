@@ -28,10 +28,10 @@ import type { ZOrderConstraint } from "./constraints/zorder";
  * A `zAbove(a, b)` / `zBelow(a, b)` constraint declared at a layer L is
  * resolved once, when L orders its children. Its operands are the node sets
  * `resolveReferences` (`_ref.tsx`) found for them: a handle's node, or every
- * node inside L carrying a name operand's name, looked up with the shared
- * name rule (`visibleNodes`: through any non-component node, never into a
- * `createMark` component) from L, or from the layer whose `.relate()` bound
- * it, without that layer's clause slots. For each pair of operand nodes, the constraint orders the two
+ * node a name operand's name means, looked up with the one name rule
+ * (`lookupName`: the nearest depth that has the name, every match there)
+ * from L, or from the layer whose `.relate()` bound it, without that layer's
+ * clause slots, and kept when it lies inside L. For each pair of operand nodes, the constraint orders the two
  * children of the node where their paths from L part: a child of L when they
  * lie in different children, else a node further down (pushed down).
  */

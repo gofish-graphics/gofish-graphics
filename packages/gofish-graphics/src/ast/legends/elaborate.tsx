@@ -39,7 +39,6 @@ const ROW_GAP = 8; // vertical gap between legend rows
 const LABEL_FONT_SIZE = 10;
 const LABEL_COLOR = "gray";
 const LEGEND_CONTENT_GAP = 20; // gap between content and the legend column
-const LEGEND_NAME = "__legend";
 
 /** One legend row: a color swatch followed by its label, aligned on a row. */
 function legendRow(key: any, color: string): GoFishNode {
@@ -67,7 +66,7 @@ export async function legendColumn(
     { dir: "y", spacing: ROW_GAP, alignment: "start" },
     rows
   )) as GoFishNode;
-  return col.name(LEGEND_NAME);
+  return col;
 }
 
 /**
@@ -143,17 +142,13 @@ export async function legendColorbar(
   const span = max === min ? 1 : max - min;
   const bandSpan = span / BAND_COUNT;
 
-  const bandName = (i: number) => `__cbBand${i}`;
-  const tickName = (i: number) => `__cbTick${i}`;
-  const labelName = (i: number) => `__cbLabel${i}`;
-
   const bandH = BAR_HEIGHT / BAND_COUNT;
   const bands = Array.from({ length: BAND_COUNT }, (_, i) =>
     Rect({
       w: BAR_WIDTH,
       h: bandH + BAND_OVERLAP,
       fill: scaleFn(min + (i + 0.5) * bandSpan),
-    }).name(bandName(i))
+    })
   );
 
   // Always show the domain endpoints; fill in d3 "nice" ticks strictly between.
@@ -167,15 +162,15 @@ export async function legendColorbar(
           ),
           max,
         ];
-  const tickMarks = tickValues.map((_, i) =>
-    Rect({ w: TICK_MARK_LEN, h: 1, fill: LABEL_COLOR }).name(tickName(i))
+  const tickMarks = tickValues.map(() =>
+    Rect({ w: TICK_MARK_LEN, h: 1, fill: LABEL_COLOR })
   );
-  const tickLabels = tickValues.map((v, i) =>
+  const tickLabels = tickValues.map((v) =>
     Text({
       text: fmtNum(v),
       fontSize: LABEL_FONT_SIZE,
       fill: LABEL_COLOR,
-    }).name(labelName(i))
+    })
   );
 
   const root = (await (layer as any)({ h: BAR_HEIGHT }, [
@@ -228,7 +223,7 @@ export async function legendColorbar(
     return cs;
   });
 
-  return root.name(LEGEND_NAME);
+  return root;
 }
 
 /**

@@ -21,7 +21,7 @@ import { createNodeOperator } from "../withGoFish";
 import { Constraint, PositionRegion } from "../constraints";
 import { enclosingCell, type ColumnDatum } from "../constraints/position";
 import { isStruct, structBin, type StructExpr } from "../structExpr";
-import { axisName, ensureChildNames, SlotOperand } from "../constraints/shared";
+import { axisName, SlotOperand } from "../constraints/shared";
 import { layer } from "./layer";
 import type { Alignment } from "./alignment";
 
@@ -191,7 +191,6 @@ const PartitionNode = createNodeOperator(
         );
       return cell;
     });
-    ensureChildNames(children, "partition");
     const node = (await layer({ key, ...rest } as any, children)) as GoFishNode;
     // `dir` may be a name the enclosing coordinate space declares, so the
     // constraints wait for the resolveAliases pass.

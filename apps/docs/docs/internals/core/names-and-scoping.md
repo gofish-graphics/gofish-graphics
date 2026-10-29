@@ -47,7 +47,7 @@ scheduled like any other (see below).
 ## One lookup for `ref` and `.relate()`
 
 `ref("x")` and a `.relate()` operand named `x` use the same function,
-`resolveScopedName` in `_ref.tsx`. A `ref("x")` the author writes starts at
+`lookupName` in `_ref.tsx` (`resolveScopedName` is its singular form). A `ref("x")` the author writes starts at
 the relating layer. An operand starts at the layer whose `.relate()` bound it,
 its **scope**. An operand becomes a string ref when it is used as a child of
 a drawing clause (`resolveMarkResult` calls `RelateOperand.toRef()`, a ref
@@ -100,23 +100,29 @@ Inside the level where the search stops, the closest match wins. Distance is
 the number of steps down from that level's node, so a direct child is at
 distance 1. A layer's direct child `x` therefore beats an `x` nested deeper
 inside another child, and a deeply nested name is still reachable when nothing
-closer has it. `closestAtLevel` does this with a breadth-first search that
-stops at the first depth with a match. When the search moves up a level, it
-does not walk the subtree it just searched again.
+closer has it. A wrapper an elaboration pass inserted adds no distance (see
+[Constraint operands](#constraint-operands)). `closestAtLevel` does this with
+a breadth-first search that stops at the first depth with a match. When the
+search moves up a level, it does not walk the subtree it just searched again.
+
+A name is plural: the lookup returns every match at that depth. A singular
+use, a `ref` or a placement operand, needs exactly one. A paint-order operand
+(`zAbove`, `zBelow`) takes them all, and only those inside the layer that
+orders them count.
 
 The search has one hard boundary, the `createMark` component. It never goes
 above the nearest component that contains the start, and it never looks inside
 a nested component (the component's own name is visible, its insides are not).
-Without an enclosing component, the whole diagram is the outermost level. The
-walk that enforces the boundary is `visibleNodes`, which the chart layer
-registry (`collectLayerRegistrations` in `chartBuilder.ts`) and z-order
-resolution (`paintOrder.ts`) also use, so the component boundary means the same
-thing for `ref`, `.relate()`, `selectAll`, and `zAbove` / `zBelow`.
+Without an enclosing component, the whole diagram is the outermost level.
+The chart layer registry (`collectLayerRegistrations` in `chartBuilder.ts`)
+and the `.relate()` environment walk the same boundary (`visibleNodes`), so
+the component boundary means the same thing for `ref`, `.relate()`,
+`selectAll`, and `zAbove` / `zBelow`.
 
 Three results are errors, and each names the problem:
 
-- **Ambiguous.** Two or more nodes with the name at the same smallest distance
-  in the level where the search stops.
+- **Ambiguous.** A singular use, and two or more nodes with the name at the
+  same smallest distance in the level where the search stops.
 - **Missing.** No node with the name anywhere up to the boundary.
 - **Outside the layer.** The name is found only above the relating layer. A
   layer relates what it contains, so a clause's refs and a constraint's
@@ -210,10 +216,10 @@ looks each distinct operand name up once with the lookup above, starting at
 the layer, writes the uid of the node it finds into the operand's `key`, and
 records whether the node is a direct child (`resolvedConstraints`). The
 placement solve reads only the key. The name is kept for error messages. The
-operand stays a name until the round because elaboration can swap a named
-child for a wrapper. Axis, legend, and label elaboration wrap a node with
-`wrapPreservingIdentity`, which moves the node's name and key onto the
-wrapper, so the name still finds the node that now fills that slot.
+operand stays a name until the round because elaboration can wrap a named
+node. Axis, legend, and label elaboration wrap a node with
+`wrapPreservingIdentity`, which moves the node's key onto the wrapper and
+leaves its name on the node, so the name still finds the node.
 
 Operators that build a constrained layer themselves do not use names. Spread,
 scatter, partition, table, and the axis, legend, and label chrome refer to
@@ -223,8 +229,16 @@ that wraps the child in place keeps it. A chrome ring's content is slot 0,
 and its k-th shape is slot k + 1 (`wrapRing`). The default paint order of a
 relational mark holds the nodes themselves (`NodeOperand`). A handle names no
 one, so it can neither capture a user's name nor be captured by one. These
-operators still give their children names (`ensureChildNames`, and the fixed
-chrome names), but nothing looks those names up.
+operators name nothing, so `_name` holds only names the user wrote.
+
+A wrapper that an elaboration pass inserts is transparent to a name lookup
+(`_transparent`, set by `wrapRing`, the one helper that builds them). It
+takes no name, and it adds no depth: the lookup treats its children as if
+they stood where it stands. The node it wraps is its slot 0 and keeps its own
+name, so `ref("bar")` on a labeled bar is the bar alone, not the bar and its
+label. A layer still places, and orders, what stands in a named node's place
+(`inPlace`): a constraint on the labeled bar moves its wrapper, so the label
+moves with it.
 
 ### Nested operands
 
@@ -387,8 +401,8 @@ order is scheduled.
 
 ## Names the library makes up
 
-A name the library makes up must never clash with a name a user writes. Two
-rules keep them apart:
+The library makes up no names in the tree. Two rules keep its nodes apart
+from a user's names:
 
 - The data key is never used as a name. `createMark` used to write each mark's
   data key into `_name`, and `spread`, `scatter`, and `table` used to name an
@@ -396,23 +410,28 @@ rules keep them apart:
   put nodes named `"a"` and `"b"` into the scope, where they could make a
   user's own `"a"` ambiguous, or answer to it. Now the key stays in `key`
   only. Axis tick labels read the key, so they are unchanged.
-- When an operator names a node, it gets a fresh name from `internalName`
-  (`constraints/shared.ts`), e.g., `__spread#12`. Each call returns a new
-  name, so it cannot equal a user's name or another operator's.
-  `ensureChildNames` keeps a name the user gave a child, and gives an
-  `internalName` to an unnamed child or to a second child with the same user
-  name.
+- An operator or a chrome pass refers to the nodes it builds by handle (see
+  [Constraint operands](#constraint-operands)), so it writes no name. Two
+  children that share a user name both keep it, and the name is plural: a
+  singular use of it is ambiguous, and a paint-order operand takes them all.
+  The library used to give the second one a fresh name of its own, and the
+  chrome had fixed names (`__axisContent`, `__legend`); #1246 removed them.
 
-No operator or chrome pass reads these names: they refer to their own nodes
-by handle (see [Constraint operands](#constraint-operands)). The names still
-live in `_name`, next to user names, so they appear in a `.relate()`
-environment. The full fix stops writing them (#1246).
+A chart tier that a later tier reads gets a name only when the user gave its
+mark none (`ensureNamedMark`). That name is a fresh `createName` token, so
+the registry files the tier's marks under a key no string and no other tier
+can reach. It is the one name the library still writes into `_name`, where
+its tag answers to the string `"__gofish_layer"` like any token's tag. The
+tier needs only the registry, so the fix is to file its marks there without
+a tree name (#905).
+
+A token is plural like a string. `resolveReferences` registers every token
+before it resolves any ref, and each node that carries a token joins its
+list. A singular `ref(token)` that matches several nodes says how many it
+matched, and `selectAll(token)` gathers them all from the registry.
 
 ## Open questions
 
-- Library names still share `_name` with user names, and the fixed chrome
-  names (`__axisContent`, `__legend`, and similar) are not yet made unique
-  per call (#927). Chart-tier names have the same problem (#905).
 - A nested operand moves its container only when the container is named too.
   Treating every operand as a direct child plus a constant offset would
   remove that rule (#925).

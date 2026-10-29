@@ -1290,8 +1290,8 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             // (e.g. species under a lake) are scoped to their own subtree, so
             // the ordinal axis labels read `Bass` not `Lake A-Bass`, and each
             // grouping level's axis names itself by its own keys. Uniqueness is
-            // per-layer (each operator's children), which the constraint refs
-            // (`ensureChildNames`) and ordinal domains rely on — never global.
+            // per-layer (each operator's children), which ordinal domains
+            // rely on — never global.
             // A binned key (`field(x).bin(p)`, `struct({ x, y }).bin(b)`) is
             // a cell: the node's key is its id, and the node keeps the cell
             // itself for the ordinal space it folds into

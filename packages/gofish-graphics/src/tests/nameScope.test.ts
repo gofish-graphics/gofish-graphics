@@ -1078,6 +1078,144 @@ async function main() {
     );
   }
 
+  console.log("\n# Names are hygienic (#1246)");
+
+  // The library names nothing: two siblings that share a user name both keep
+  // it, so the name is plural, and a singular use of it is ambiguous. (An
+  // operator used to rename the second one, so it resolved to the first.)
+  await rejects(
+    "two spread children sharing a name both keep it",
+    () =>
+      gf
+        .layer([
+          gf.spread({ dir: "x", spacing: 10 }, [
+            gf.rect({ w: 10, h: 10 }).name("a"),
+            gf.rect({ w: 10, h: 10 }).name("a"),
+          ]),
+          gf.rect({ w: 5, h: 5 }).name("b"),
+        ])
+        .relate(({ a, b }: any) => [
+          gf.Constraint.align({ x: "middle" }, [a, b]),
+        ]),
+    /the name "a" is ambiguous — 2 nodes/
+  );
+
+  // A paint-order operand means every node the name means, by the one
+  // lookup: the matches at the nearest depth, all of them.
+  {
+    const fills = async (children: any[]) =>
+      (
+        await items(
+          gf
+            .layer(children)
+            .relate(({ a, b }: any) => [gf.Constraint.zBelow(b, a)])
+        )
+      ).map((i: any) => i.style?.fill);
+    const sq = (fill: string, name: string) =>
+      gf.rect({ w: 10, h: 10, fill }).name(name);
+    const both = await fills([
+      sq("#a10", "a"),
+      sq("#a20", "a"),
+      sq("#b00", "b"),
+    ]);
+    check(
+      "zBelow(b, a) puts b under both nodes named a",
+      both.indexOf("#b00") < both.indexOf("#a10") &&
+        both.indexOf("#b00") < both.indexOf("#a20"),
+      JSON.stringify(both)
+    );
+    const nearest = await fills([
+      gf.layer([sq("#a30", "a")]),
+      sq("#a10", "a"),
+      sq("#b00", "b"),
+    ]);
+    check(
+      "a z-order name means the nearest depth only: a deeper same name is not ordered",
+      JSON.stringify(nearest) === JSON.stringify(["#a30", "#b00", "#a10"]),
+      JSON.stringify(nearest)
+    );
+  }
+
+  // A labeled mark keeps its name, and the label's wrapper takes none and
+  // adds no depth: ref("bar") is the bar alone, not the bar and its label.
+  {
+    let detail = "";
+    let ok = false;
+    try {
+      const out = await items(
+        gf
+          .layer([
+            gf
+              .rect({ x: 0, y: 0, w: 20, h: 40, fill: "#1a1" })
+              .name("bar")
+              .label(() => "a long label", { position: "outset-right" }),
+            gf.rect({ x: 200, y: 10, w: 20, h: 20, fill: "#777" }).name("dot"),
+          ])
+          .relate(() => [
+            gf.line({ stroke: "#c00" }, [gf.ref("bar"), gf.ref("dot")]),
+          ])
+      );
+      const bar = out.find((i: any) => i.style?.fill === "#1a1");
+      const text = out.find((i: any) => i.kind === "text");
+      const path = out.find((i: any) => i.style?.stroke === "#c00");
+      const xs = (path?.d ?? "").match(/-?[\d.]+/g)?.map(Number) ?? [];
+      // A line between two refs runs between their centers.
+      ok = text !== undefined && close(xs[0], bar.x + bar.w / 2);
+      detail = JSON.stringify({ bar, d: path?.d });
+    } catch (e: any) {
+      detail = String(e?.message);
+    }
+    check('ref("bar") on a labeled bar is the bar alone', ok, detail);
+  }
+
+  // A createName token on a repeated mark is plural: selectAll(token)
+  // gathers every node it made, and the singular ref(token) says how many
+  // it matched.
+  {
+    const token = gf.createName("dot");
+    const rows = [
+      { x: 1, y: 2 },
+      { x: 2, y: 3 },
+      { x: 3, y: 1 },
+    ];
+    const dots = () =>
+      gf
+        .chart(rows)
+        .flow(gf.scatter({ x: "x", y: "y" }))
+        .mark(gf.circle({ r: 3 }).name(token));
+    let seen: unknown[] = [];
+    let msg = "";
+    try {
+      await items(
+        gf.layer([
+          dots(),
+          gf.chart(gf.selectAll(token)).mark((bag: unknown[]) => {
+            seen = bag;
+            return gf.rect({ w: 1, h: 1 });
+          }),
+        ])
+      );
+    } catch (e: any) {
+      msg = String(e?.message);
+    }
+    check(
+      "selectAll(token) gathers every node a repeated mark made",
+      msg === "" && seen.length === rows.length,
+      msg || `seen: ${seen.length}`
+    );
+    await rejects(
+      "ref(token) of a token on a repeated mark says how many it matched",
+      () =>
+        gf.layer([
+          gf.rect({ w: 5, h: 5 }).name(token),
+          gf.rect({ w: 5, h: 5 }).name(token),
+          gf.rect({ w: 5, h: 5 }).name("b"),
+          gf.arrow({}, [gf.ref(token), gf.ref(gf.createName("b"))]),
+        ]),
+      /matched 2 nodes/
+    );
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }

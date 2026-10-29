@@ -12,12 +12,7 @@ import { createNodeOperator } from "../withGoFish";
 import { Alignment } from "./alignment";
 import { layer } from "./layer";
 import { Constraint } from "../constraints";
-import {
-  axisName,
-  ensureChildNames,
-  SlotOperand,
-  type AlignAnchor,
-} from "../constraints/shared";
+import { axisName, SlotOperand, type AlignAnchor } from "../constraints/shared";
 import { createOperator } from "../marks/createOperator";
 import { Mark, MarkChild, Operator } from "../types";
 import type { FieldExpr } from "../fieldExpr";
@@ -152,9 +147,8 @@ export const Spread = createNodeOperator(
       );
     }
 
-    // The children keep the names it gives them, but its constraints refer
-    // to them by slot (`SlotOperand`), so no name is looked up.
-    ensureChildNames(childList, "spread");
+    // Its constraints refer to the children by slot (`SlotOperand`), so no
+    // name is looked up and none is given.
 
     // Elaborate to a layer carrying the cross-axis align + the stack distribute.
     // `fancyDims` (explicit w/h) flow to the layer, which is then a sized

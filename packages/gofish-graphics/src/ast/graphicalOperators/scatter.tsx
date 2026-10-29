@@ -19,7 +19,7 @@ import { Alignment } from "./alignment";
 import { createOperator } from "../marks/createOperator";
 import { layer } from "./layer";
 import { Constraint, type ConstraintSpec } from "../constraints";
-import { axisName, ensureChildNames, SlotOperand } from "../constraints/shared";
+import { axisName, SlotOperand } from "../constraints/shared";
 import { createOverlapConstraint } from "../constraints/overlap";
 import type { Overlap } from "../../families/overlap";
 
@@ -235,7 +235,6 @@ const Scatter = createNodeOperator(
       dims
     );
     const childList = placed.children;
-    ensureChildNames(childList, "scatter");
     const node = (await layer(
       { key, ...fancyDims } as any,
       childList

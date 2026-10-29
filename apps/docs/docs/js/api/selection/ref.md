@@ -49,7 +49,7 @@ gf.layer([
 
 ```ts
 ref(name: string): GoFishRef;                // singular; see ref mark for all forms
-selectAll(layerName: string): GoFishRef[];   // one ref per matching node
+selectAll(layerName: string | Token): GoFishRef[]; // one ref per matching node
 ```
 
 `ref` has several other inline forms (Token, path, direct node) — see the
@@ -58,9 +58,10 @@ as chart data alongside `selectAll`.
 
 ## Parameters
 
-| Parameter | Type     | Description                                                             |
-| --------- | -------- | ----------------------------------------------------------------------- |
-| `name`    | `string` | The name of the layer to reference (registered via `.name()` on a mark) |
+| Parameter   | Type              | Description                                                                        |
+| ----------- | ----------------- | ---------------------------------------------------------------------------------- |
+| `name`      | `string`          | The name of the layer to reference (registered via `.name()` on a mark)            |
+| `layerName` | `string \| Token` | The name `selectAll` gathers: a string, or a `createName` token given to `.name()` |
 
 ## Singular as data: exactly one
 

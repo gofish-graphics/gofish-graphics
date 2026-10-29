@@ -594,6 +594,13 @@ export class GoFishNode {
    * across component boundaries in either direction.
    */
   public _isComponent: boolean = false;
+  /**
+   * A wrapper an elaboration pass inserted around a node (a ring of chrome
+   * or labels, `wrapRing`). It is hygienic: it takes no name, adds no depth
+   * to a name lookup (its children are where it is), and the node it wraps
+   * is its slot 0, so the wrapper stands where that node stood.
+   */
+  public _transparent: boolean = false;
   /** The drawing clauses this layer's `.relate()` added, by slot: the index
    *  of each clause child, mapped to its 1-based position in the callback's
    *  clause list (for error messages). A clause was returned from the
@@ -625,7 +632,7 @@ export class GoFishNode {
     constraints: ConstraintSpec[];
     schedule: RelateSchedule;
   };
-  public _scopeMap?: Map<string, GoFishNode>;
+  public _scopeMap?: Map<string, GoFishNode[]>;
   public parent?: GoFishNode;
   /** The union-find of unknown units a walk rooted here owns, when there is
    *  no render session to hold it (see `walkUnits`). */

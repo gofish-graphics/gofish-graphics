@@ -39,6 +39,7 @@ import {
   type BuildClockOptions,
 } from "../../animation/install";
 import { wireOf } from "../wire";
+import { createName } from "../createName";
 
 /**
  * Sentinel chart-data for an empty `Chart()` scope used inside `.layer(...)`:
@@ -46,20 +47,6 @@ import { wireOf } from "../wire";
  * previous tier's mark and pointing this tier's data at `selectAll(thatName)`.
  */
 export const PREVIOUS_LAYER_MARKS = Symbol("gofish-previous-layer-marks");
-
-/** How many names `mintLayerName` has handed out in each registry. */
-const mintedNames = new WeakMap<LayerContext, number>();
-
-/** A layer name no other tier resolving into `layerContext` has: the name a
- *  tier's mark gets when a later tier (or a transition) reads its marks and
- *  the user named none. One counter per registry, so tiers of builders nested
- *  into an enclosing builder's registry never share a name, which would put
- *  the enclosing tier's marks in the nested tier's scope too. */
-function mintLayerName(layerContext: LayerContext): string {
-  const n = mintedNames.get(layerContext) ?? 0;
-  mintedNames.set(layerContext, n + 1);
-  return `__gofish_layer_${n}`;
-}
 
 export type ChartOptions = {
   w?: number;
@@ -891,10 +878,15 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   /** Ensure this tier's mark carries a name so a later tier can `selectAll` its
    *  nodes. Returns the (possibly renamed) builder and the registry key its
    *  marks are filed under (`layerKey`) — an existing `.name(...)`, a string or
-   *  a `createName` token, wins; otherwise a name fresh in `layerContext`, the
-   *  registry the tier resolves into (`mintLayerName`), is applied to the
-   *  mark. */
-  ensureNamedMark(layerContext: LayerContext): {
+   *  a `createName` token, wins; otherwise a fresh token is applied to the
+   *  mark. The registry files a token under its own symbol, so no string
+   *  `selectAll` or `ref`, and no other tier, reaches the tier's marks.
+   *
+   *  TODO(#905): the token is still written into the marks' `_name`, where
+   *  its tag answers to the string "__gofish_layer" in a tree lookup. The
+   *  tier needs only the registry (the data channel); filing the marks there
+   *  without a tree name would leave `_name` to user names alone. */
+  ensureNamedMark(): {
     builder: ChartBuilder<TInput, TOutput>;
     name: string | symbol;
   } {
@@ -908,7 +900,7 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     if (existing !== undefined) {
       return { builder: this, name: existing };
     }
-    const autoName = mintLayerName(layerContext);
+    const autoName = createName("__gofish_layer");
     // A mark is any function from a datum to a node; the `.name` modifier is
     // on the ones the mark factories build. A plain function gets it here, on
     // a wrapper, so the caller's function is left as it was.
@@ -927,7 +919,10 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     // Swap the mark in directly instead of re-entering `mark()`: `named` can
     // still carry `__relationalFusable`, and fusion was already decided (and
     // skipped) when this mark was first attached.
-    return { builder: this.with({ finalMark: named }), name: autoName };
+    return {
+      builder: this.with({ finalMark: named }),
+      name: layerKey(autoName)!,
+    };
   }
 
   /** The chart-level config every terminal threads through to the node.
@@ -973,7 +968,7 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     if (findTimeTier(this.state.operators) === undefined) {
       return this.resolveNamed(undefined);
     }
-    const { builder, name } = this.ensureNamedMark(this.state.layerContext);
+    const { builder, name } = this.ensureNamedMark();
     return builder.resolveNamed(name);
   }
 
@@ -1348,7 +1343,7 @@ export class LayerBuilder extends RenderableBuilder {
         // empty `Chart()` scope, a relational mark, or a leaf annotation.
         let autoName: string | symbol | undefined;
         if (hasNext) {
-          const named = tier.ensureNamedMark(sharedContext);
+          const named = tier.ensureNamedMark();
           tier = named.builder;
           autoName = named.name;
         }

@@ -55,7 +55,6 @@ import {
 
 // Visual constants — chosen to match the previous bespoke label styling.
 const DEFAULT_OFFSET = 6; // tuned down from the old 10px baseOffset now that the offset is real layout space
-const CONTENT_NAME = "__labelContent";
 const LABEL_FONT_FAMILY = "source-sans-pro, sans-serif";
 
 /**
@@ -332,8 +331,6 @@ type LabelPair = {
 const isChosen = (p: TargetPosition): p is Place | "outline" =>
   p === "outline" || isPlace(p);
 
-let labelUid = 0;
-
 /**
  * Wrap `node` in ONE Layer tier carrying, per label pair, a `ref(target)`
  * stand-in and a label, in the order the pass met them. A label at a
@@ -382,11 +379,7 @@ async function wrapWithLabels(
       const text = resolveLabelText(spec.accessor, target.datum);
       if (!text) continue; // empty/null accessor result: skip this spec
 
-      const idx = labelUid++;
-      const refName = `__lref${idx}`;
-      const textName = `__ltxt${idx}`;
-
-      const stand = ref(target).name(refName);
+      const stand = ref(target);
       refs.push(stand);
 
       const label = LabelText({
@@ -400,7 +393,6 @@ async function wrapWithLabels(
         halo: spec.halo,
         background: spec.background,
       });
-      label.node.name(textName);
       texts.push(label.node);
       seated.push(label);
       // The label is part of its target as a mark, though it lives out of
@@ -429,11 +421,8 @@ async function wrapWithLabels(
           undefined,
           ".label({ avoiding })",
           ".label()"
-        ).map((r, k) => {
-          const stand = r.name(`__lavoid${idx}_${k}`);
-          refs.push(stand);
-          return stand;
-        });
+        );
+        refs.push(...avoid);
         avoided.set(spec.group, avoid);
       }
       placed.push({
@@ -450,7 +439,7 @@ async function wrapWithLabels(
       placed.length === 0
         ? []
         : below.map((t) => {
-            const stand = ref(t.node).name(`__lbelow${labelUid++}`);
+            const stand = ref(t.node);
             refs.push(stand);
             return { node: stand as GoFishAST, label: t };
           });
@@ -458,7 +447,7 @@ async function wrapWithLabels(
     // The content is seated at its own origin first, so every label
     // constraint (which reads a target via its `ref()`) sees it already
     // placed and only moves the label. The chooser runs after the solve.
-    return wrapRing(content, CONTENT_NAME, {
+    return wrapRing(content, {
       nodes: [...refs, ...texts] as GoFishNode[],
       constraints: (at) => [
         ...fixed.flatMap(({ stand, text, position, offset }) =>
