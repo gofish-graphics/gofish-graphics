@@ -663,10 +663,9 @@ The `intrinsicDims` represent the element's box in its local coordinate system (
 
 #### The cell a parent gives a child
 
-There is no channel for a region in the layout call. A `partition` gives
-each child its cell in data, as a `position` constraint with a `region`
-(`PositionRegion`, `src/ast/constraints/position.ts`), and the cell reaches
-the child the way any data position does: through the partition's scale.
+A `partition` gives each child its cell in data, as a `position`
+constraint with a `region` (`PositionRegion`,
+`src/ast/constraints/position.ts`), and the cell reaches the child the way any data position does: through the partition's scale.
 
 - The layer proposes the cell's pixel length as the child's size on each
   axis the cell spans (`buildChildSpans`), and the cell lowers to a pin of

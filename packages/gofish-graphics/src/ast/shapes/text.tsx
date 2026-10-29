@@ -13,7 +13,7 @@ import {
   Transform,
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
-import { boxExtent } from "../extent";
+import { boxExtent, literalStart } from "../extent";
 import { boxOfDims } from "../geometry";
 import { turnedBox, turnedCorners } from "../geometry/plane";
 import type { BoundingBox } from "../../util/bbox";
@@ -250,17 +250,15 @@ export const Text = ({
       resolveExtent: (_ce, _cs, spaces) => {
         const { minX, maxX, minY, maxY } = measure().rel;
         const height = maxY - minY;
-        // Where the origin sits: a literal position places the text in its
-        // parent's pixels, and a center is the box's middle, `(min + max) /
-        // 2` past the origin.
-        const origin = (axis: 0 | 1, min: number, max: number) => {
-          const d = dims[axis];
-          const at = d.center ?? d.min;
-          const px = typeof at === "number" ? at : 0;
-          return d.center !== undefined ? px - (min + max) / 2 : px;
-        };
-        const xAt = origin(0, minX, maxX);
-        const yStart = origin(1, 0, height);
+        // Where the origin sits, by the rule `layout` places it by
+        // (`positionOf`): a center is the box's middle, `(min + max) / 2`
+        // past the origin.
+        const xAt = literalStart(
+          dims[0].center,
+          dims[0].min,
+          (minX + maxX) / 2
+        );
+        const yStart = literalStart(dims[1].center, dims[1].min, height / 2);
         return [
           boxExtent(spaces[0], -(xAt + minX), xAt + maxX),
           boxExtent(spaces[1], -yStart, yStart + height),
@@ -289,15 +287,18 @@ export const Text = ({
 
         // A center places the middle of the box, as for a rect. The box
         // spans `[min, max]` about the origin, so its middle is
-        // `(min + max) / 2` past it, and `positionOf` halves the `min + max`
-        // it is given: in x `minX + maxX` (the width for the default
-        // `"start"` anchor, 0 for `"middle"`), in y `0 + height`.
+        // `(min + max) / 2` past it: in x half the width for the default
+        // `"start"` anchor, 0 for `"middle"`; in y half the height.
         const positionX = positionOf(
           dims[0],
           posFn(scales?.[0]?.map),
-          minX + maxX
+          (minX + maxX) / 2
         );
-        const positionY = positionOf(dims[1], posFn(scales?.[1]?.map), height);
+        const positionY = positionOf(
+          dims[1],
+          posFn(scales?.[1]?.map),
+          height / 2
+        );
 
         const box: [Interval, Interval] = [
           {

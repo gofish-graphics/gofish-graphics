@@ -19,33 +19,11 @@ import { Cell, RegionCell } from "../ast/cells";
 import { PolygonCell } from "../ast/polygonCells";
 import { value } from "../ast/data";
 import type { GoFishNode } from "../ast/_node";
+import { check, items, report } from "./testHelpers";
 
 declare const process: { exit(code: number): never };
 
-let passed = 0;
-let failed = 0;
-function ok(name: string, cond: boolean, detail?: string): void {
-  if (cond) {
-    passed++;
-    console.log(`  ok  ${name}`);
-  } else {
-    failed++;
-    console.error(`  FAIL ${name}${detail ? ` — ${detail}` : ""}`);
-  }
-}
-
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
-
-/** Every item of a display list that draws, flattened out of its groups. */
-const drawn = (dl: any): any[] => {
-  const out: any[] = [];
-  const walk = (it: any) => {
-    if (it.kind !== "group") out.push(it);
-    for (const c of it.children ?? []) walk(c);
-  };
-  dl.items.forEach(walk);
-  return out;
-};
 
 async function main() {
   const { chart, partition, field, Bin, region, text } = await import(
@@ -55,7 +33,7 @@ async function main() {
   console.log("# a region reads its cell from the partition around it");
   {
     // Cells [0, 1) and [1, 2) of a 200px-wide chart over [0, 2].
-    const rects = drawn(
+    const rects = items(
       await chart([{ v: 0.5 }, { v: 1.5 }], { axes: false })
         .flow(partition({ by: field("v").bin(Bin.step(1)), dir: "x" }))
         .mark(region())
@@ -63,7 +41,7 @@ async function main() {
     )
       .filter((it) => it.kind === "rect")
       .sort((a, b) => a.x - b.x);
-    ok(
+    check(
       "a region is its cell on the axis the partition divides, through the partition's scale",
       rects.length === 2 &&
         near(rects[0].x, 0) &&
@@ -72,7 +50,7 @@ async function main() {
         near(rects[1].w, 100),
       JSON.stringify(rects)
     );
-    ok(
+    check(
       "a region fills the size it is proposed on an axis with no cell",
       rects.every((r) => near(r.h, 100)),
       JSON.stringify(rects)
@@ -99,10 +77,10 @@ async function main() {
         .toDisplayList({ w: 200, h: 200 });
     };
     for (const first of ["x", "y"] as const) {
-      const cells = drawn(await nested(region(), first)).filter(
+      const cells = items(await nested(region(), first)).filter(
         (it) => it.kind === "rect"
       );
-      ok(
+      check(
         `a region in nested partitions (${first} first) is the cell where they meet`,
         cells.length === 4 &&
           cells.every(
@@ -119,14 +97,14 @@ async function main() {
     // cell, as a child of the outer partition does, whatever its width: not
     // aligned with the other texts of its column by their start. A text
     // starts at `x` and is a fixed width per character.
-    const texts = drawn(await nested(text({ text: field("name") }), "x"))
+    const texts = items(await nested(text({ text: field("name") }), "x"))
       .filter((it) => it.kind === "text")
       .map((t) => ({ text: t.text as string, x: t.x as number }));
     const a = texts.find((t) => t.text === "a");
     const perChar = a === undefined ? NaN : 2 * (50 - a.x);
     const middle = (t: { text: string; x: number }) =>
       t.x + (perChar * t.text.length) / 2;
-    ok(
+    check(
       "a text in nested partitions sits in the middle of the outer partition's cell, whatever its width",
       texts.length === 4 &&
         perChar > 0 &&
@@ -144,7 +122,7 @@ async function main() {
     const inner = new Cell(0, 1, "0–1");
     const enclosing = new PositionRegion(outer, [value, undefined]);
     const region = new PositionRegion(inner, [undefined, value], enclosing);
-    ok(
+    check(
       "the region spans its own cell and the cell it is in",
       JSON.stringify(region.spans.map((s) => s?.map((v: any) => v.datum))) ===
         "[[2,3],[0,1]]" &&
@@ -154,7 +132,7 @@ async function main() {
     const domains = collectPositionDomains([
       Constraint.position({ region }, [{ name: "child" } as any]),
     ]);
-    ok(
+    check(
       "the cell it is in places the child on x, as an interval does, and makes no cells there",
       domains.x !== undefined &&
         domains.x.min === 2 &&
@@ -201,13 +179,13 @@ async function main() {
     const [outlined, boxed] = dl.items as any[];
     // 50px per unit on x from the left edge; y grows upward over the 200px
     // canvas.
-    ok(
+    check(
       "a region with an outline draws it as a path, through both scales",
       outlined?.kind === "path" &&
         outlined.d === "M50,200 L100,100 L50,0 L0,100 L50,200",
       JSON.stringify(outlined)
     );
-    ok(
+    check(
       "a region with no outline draws its box",
       boxed?.kind === "rect" &&
         boxed.x === 100 &&
@@ -225,15 +203,56 @@ async function main() {
       .flow(partition({ by: field("v").bin(Bin.step(1)), dir: "x" }))
       .mark(region())
       .toDisplayList({ w: 200, h: 100 });
-    ok(
+    check(
       "region() takes no options and draws one rect per cell",
       dl.items.filter((it: any) => it.kind === "rect").length === 2,
       JSON.stringify(dl.items.map((it: any) => it.kind))
     );
   }
 
-  console.log(`\n${passed} passed, ${failed} failed`);
-  if (failed > 0) process.exit(1);
+  console.log("# a cell is not read across a frame of its own");
+  {
+    // Rows of a y partition, each 80px tall with a size of its own, so its
+    // y is a frame of its own: its bars' `pdf`. An x partition in a row
+    // gives its regions no cell on y in that frame, so each is as tall as
+    // its row. EXPECTED FAILURE: the inner partition hands its regions the
+    // outer month cell on y (`enclosingCell`), read through the row's `pdf`
+    // scale, so they come out 26.7 and 20 pixels tall. Whether a node has a
+    // frame of its own is decided at layout, after `enclosingCell` runs.
+    const { layer: row, scatter, rect } = await import("../lib");
+    const rows = [
+      { m: 0.5, x: 0.5, pdf: 1 },
+      { m: 0.5, x: 1.5, pdf: 3 },
+      { m: 1.5, x: 0.5, pdf: 2 },
+      { m: 1.5, x: 1.5, pdf: 4 },
+    ];
+    const dl = await chart(rows, { axes: false })
+      .flow(partition({ by: field("m").bin(Bin.step(1)), dir: "y" }))
+      .mark(
+        row({ h: 80 }, [
+          chart()
+            .flow(scatter({ x: "x" }))
+            .mark(rect({ w: 4, h: "pdf" })),
+          chart()
+            .flow(partition({ by: field("x").bin(Bin.step(1)), dir: "x" }))
+            .mark(region()),
+        ])
+      )
+      .toDisplayList({ w: 200, h: 200 });
+    const cells = items(dl).filter((it) => it.kind === "rect" && it.w === 100);
+    const passes = cells.length === 4 && cells.every((r) => near(r.h!, 80));
+    if (passes)
+      check(
+        "a region across a frame of its own now fills its row: drop the expected failure",
+        false
+      );
+    else
+      console.log(
+        `  xfail a region across a frame of its own fills its row — ${JSON.stringify(cells.map((r) => r.h))}`
+      );
+  }
+
+  report();
 }
 
 main().catch((e) => {

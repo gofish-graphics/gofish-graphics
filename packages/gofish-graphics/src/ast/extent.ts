@@ -101,6 +101,25 @@ export const boxExtent = (
   return impliedExtent(space);
 };
 
+/** Where a box axis starts, in its parent's pixels, when its claim is
+ *  resolved: the claim-time reading of `positionOf` (dims.ts), which places
+ *  it at layout. A pixel `center` less `middlePx` (the box's middle measured
+ *  from its origin), about a datum center (whose pixel the claim does not
+ *  know yet, so at `-middlePx` about it), else at a pixel `min`, else at its
+ *  origin. */
+export const literalStart = (
+  center: MaybeValue<number> | undefined,
+  min: MaybeValue<number> | undefined,
+  middlePx: number
+): number =>
+  typeof center === "number"
+    ? center - middlePx
+    : center !== undefined && isValue(center)
+      ? -middlePx
+      : typeof min === "number"
+        ? min
+        : 0;
+
 /** The claim of a shape's axis `d` (a rect's, an ellipse's), of type
  *  `space`, when the shape has a literal pixel size there ({@link
  *  boxExtent}): a literal `size`, or two literal ends. The box is where the
@@ -125,14 +144,7 @@ export const literalBoxExtent = (
         : undefined;
   if (size === undefined || !Number.isFinite(size)) return impliedExtent(space);
   const center = d.min === undefined ? d.center : undefined;
-  const start =
-    typeof center === "number"
-      ? center - Math.abs(size) / 2
-      : center !== undefined && isValue(center)
-        ? -Math.abs(size) / 2
-        : typeof d.min === "number"
-          ? d.min
-          : 0;
+  const start = literalStart(center, d.min, Math.abs(size) / 2);
   return boxExtent(
     space,
     -(start + Math.min(0, size)),

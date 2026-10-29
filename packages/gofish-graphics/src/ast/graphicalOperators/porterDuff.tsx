@@ -549,15 +549,7 @@ export const mask = createNodeOperator(
         ) => [unionChildSpaces(children, 0), unionChildSpaces(children, 1)],
         resolveExtent: firstChildClaim,
         layout: (size, scales, layoutChildren) => {
-          requireTwoChildren(layoutChildren);
-
-          const childPlaceables = layoutChildren.map((child) =>
-            child.layout(size, scales)
-          );
-          childPlaceables.forEach((child) => {
-            child.place("x", 0, "baseline");
-            child.place("y", 0, "baseline");
-          });
+          const childPlaceables = layoutComposite(size, scales, layoutChildren);
 
           // Mask reports the first child's bounds — visually only the mask
           // shape (first child) defines the opaque region, so reporting the

@@ -4,7 +4,7 @@
 
 import type { DisplayList } from "gofish-ir";
 import { color6, resolveColorChannel } from "../../color";
-import { getValue, isValue, type MaybeValue } from "../data";
+import { isValue, type MaybeValue } from "../data";
 import { displayTranslate, type Dimensions } from "../dims";
 import {
   boxOfDims,
@@ -24,17 +24,14 @@ import {
 } from "../displayList/lowerHelpers";
 import { GoFishNode, outlineOverhang } from "../_node";
 import {
-  CONTINUOUS,
-  joinUnits,
+  pinnedSpan,
   UNDEFINED,
-  valueUnits,
   type UnderlyingSpace,
 } from "../underlyingSpace";
-import { interval } from "../../util/interval";
 import {
   enclosingCell,
-  type CellSpans,
   type PositionInterval,
+  type PositionRegion,
 } from "../constraints/position";
 import { compilePlacementCoordinate } from "../constraints/placementLowering";
 import { createMark } from "../withGoFish";
@@ -93,7 +90,7 @@ export const Region = ({
     );
   // The cell it is in, read when its space is resolved: the partitions
   // around it have given their children their cells by then.
-  let cell: CellSpans | undefined;
+  let cell: PositionRegion | undefined;
   // The outline in the node's local frame and axis order, as `layout` placed
   // it (the cell's outline less the node's translate, drawn in by `inset`),
   // or none for a box. Empty when the inset leaves nothing.
@@ -121,14 +118,11 @@ export const Region = ({
         const axisSpace = (axis: 0 | 1): UnderlyingSpace => {
           const span = cell?.spans[axis];
           if (span === undefined) return UNDEFINED;
-          const [a, b] = [getValue(span[0])!, getValue(span[1])!];
-          return CONTINUOUS(
-            interval(Math.min(a, b), Math.max(a, b)),
-            "pinned",
-            joinUnits(valueUnits(span[0]), valueUnits(span[1]), true, {
-              axis,
-              where: "between a region's two edges",
-            })
+          return pinnedSpan(
+            span[0],
+            span[1],
+            axis,
+            "between a region's two edges"
           );
         };
         return [axisSpace(0), axisSpace(1)];

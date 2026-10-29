@@ -1034,9 +1034,12 @@ facts are emitted: literals are pixels, while datum coordinates elaborate
 through the already-solved data→pixel scale plus any post-scale offset. A
 box placed by a data center (`circle({ cy: "value", r: 5 })`, a `rect` with
 `cx`) is a glyph like a text or an image: its axis space is `glyphAxis` of the
-center, and its layout puts the center through the scale and takes half its
-pixel size off (`positionOf` in `dims.ts`, which every box mark places its
-start by: a rect, an ellipse, a text and an image). This
+center, and its layout puts the center through the scale and takes the
+box's middle, measured from its origin, off (`positionOf` in `dims.ts`,
+which every box mark places its origin by: a rect, an ellipse, a text and an
+image). The middle is half the box's pixel size, except in x for a text,
+whose origin is its anchor point inside its box. Its claim reads the same
+rule before the scales exist (`literalStart` in `extent.ts`). This
 keeps the unified constraint semantics without a generic dense linear solver:
 strong facts win, relation cycles are checked for contradiction, and components
 without an absolute pin are normalized so the minimum solved coordinate in that
@@ -2533,6 +2536,14 @@ that axis: `PositionRegion.placed` says which axes the key places, and
 `collectPositionDomains` folds an enclosing cell's span into the domain as
 an interval, not as a cell. The axis that draws the cells is the outer
 partition's.
+
+The cell pushed down is read in the outer partition's frame, and nothing
+checks that the nodes in between share that frame. A row with a size of its
+own, whose content is placed by other data (a density's `pdf`), maps its
+axis in a frame of its own, so an inner partition or `region` there reads
+the outer cell through the wrong scale (an expected failure in
+`region.test.ts`). Whether a node has a frame of its own is decided at
+layout (`solveLayerScales`), after `enclosingCell` runs.
 
 The region holds its cell (a `RegionCell`, cells.ts: an id, a label when it
 has one, a span per axis, and an outline when it is not a box) and the

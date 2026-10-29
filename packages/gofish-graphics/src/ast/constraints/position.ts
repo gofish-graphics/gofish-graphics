@@ -103,7 +103,7 @@ export class PositionRegion {
   constructor(
     readonly cell: RegionCell,
     columns: readonly [ColumnDatum | undefined, ColumnDatum | undefined],
-    enclosing?: CellSpans
+    enclosing?: PositionRegion
   ) {
     const [x, y] = columns;
     const along = (axis: 0 | 1): PositionInterval | undefined => {
@@ -121,18 +121,24 @@ export class PositionRegion {
   }
 }
 
-/** A cell as a node in it reads it ({@link enclosingCell}): its span in
- *  datums on each axis it has one, and its outline when it has one. */
-export type CellSpans = Pick<PositionRegion, "spans" | "outline">;
-
 /**
  * The cell `node` is in: the region a `position` constraint gives the
  * nearest of it and its ancestors that one names, or undefined. A partition
  * gives each child its cell that way, and a partition inside another's cell
  * gives its children that cell on the axes it does not divide
  * ({@link PositionRegion}), so the nearest region is the whole cell.
+ *
+ * TODO: the cell is the outer partition's, in its frame, but a node between
+ * may map its axis in a frame of its own (a row with a size of its own whose
+ * content is placed by other data), and then the cell's span is read there
+ * in the wrong frame (region.test.ts, "a cell is not read across a frame of
+ * its own"). Whether a node has a frame of its own is decided at layout
+ * (`solveLayerScales`), after this runs.
  */
-export function enclosingCell(node: GoFishNode): CellSpans | undefined {
+// TODO(perf): enclosingCell scans the parent's constraints per lookup, so N
+// cells cost O(N²); a name→region map recorded by partition would make it
+// O(depth). Matters only for plane partitions of thousands of cells.
+export function enclosingCell(node: GoFishNode): PositionRegion | undefined {
   for (let at = node; at.parent !== undefined; at = at.parent) {
     const name = childNameKey(at);
     if (name === undefined) continue;

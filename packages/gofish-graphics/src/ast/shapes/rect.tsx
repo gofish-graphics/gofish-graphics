@@ -40,9 +40,9 @@ import { computeAesthetic, computeSize } from "../../util";
 import {
   UNDEFINED,
   UnderlyingSpace,
-  joinUnits,
   CONTINUOUS,
   magnitude,
+  pinnedSpan,
   valueUnits,
 } from "../underlyingSpace";
 import { interval } from "../../util/interval";
@@ -141,16 +141,8 @@ export const Rect = ({
           // A box placed by its center is a glyph, as a text or an image is.
           const center = centerOf(d);
           if (center !== undefined) return glyphAxis(center, d.size);
-          if (isValue(d.min) && isValue(d.max)) {
-            return CONTINUOUS(
-              interval(getValue(d.min)!, getValue(d.max)!),
-              "pinned",
-              joinUnits(valueUnits(d.min), valueUnits(d.max), true, {
-                axis,
-                where: "between a rect's two ends",
-              })
-            );
-          }
+          if (isValue(d.min) && isValue(d.max))
+            return pinnedSpan(d.min, d.max, axis, "between a rect's two ends");
           if (!isValue(d.min) && !isValue(d.size)) {
             // Nothing data-driven on this axis. Literal pixel sizes are
             // handled at layout time by computeAesthetic, so contribute
@@ -229,8 +221,8 @@ export const Rect = ({
           }
         }
 
-        const x = positionOf(dims[0], pos[0], w);
-        const y = positionOf(dims[1], pos[1], h);
+        const x = positionOf(dims[0], pos[0], w / 2);
+        const y = positionOf(dims[1], pos[1], h / 2);
 
         return {
           intrinsicDims: {
