@@ -40,13 +40,11 @@ import * as Pwl from "../solver/pwl";
 import { GoFishNode } from "../_node";
 import type { GoFishAST } from "../_ast";
 import { type ConstraintRef } from "./shared";
-import { sliceExtent } from "./folds";
 import {
   ordinalOver,
   type OrdinalKey,
   UNDEFINED,
   type UnderlyingSpace,
-  originIs,
 } from "../underlyingSpace";
 import type { ScopeRegistry } from "../solver/scopes";
 import type { PlacementFactEmitter } from "./placementFacts";
@@ -115,17 +113,14 @@ const numRowsOf = (c: GridConstraint): number =>
  *  center a cell in track `i` pins to. */
 export type TrackLayout<T = number> = { starts: T[]; extents: T[] };
 
-/** A cell's size claim on `axis`: the SIZE-magnitude width value it reports,
- *  or undefined when the cell fills (no size claim — a plain `rect({fill})`, a
- *  literal-pixel cell, or an ORDINAL/POSITION axis). */
+/** A cell's size claim on `axis`: the width of its claim, whatever it is (a
+ *  magnitude, a pixel size of its own, or one share σ for a cell that fills
+ *  a share), or undefined when it has none (it fills a room no σ divides). */
 const cellClaim = (
   cell: GoFishAST | undefined,
   axis: 0 | 1
-): Pwl.Value | undefined => {
-  if (!(cell instanceof GoFishNode)) return undefined;
-  const sp = cell._underlyingSpace?.[axis];
-  return originIs(sp, "free") ? cell.resolveExtent()[axis]!.width : undefined;
-};
+): Pwl.Value | undefined =>
+  cell instanceof GoFishNode ? cell.resolveExtent()[axis]?.width : undefined;
 
 /** Per-axis track claims: for each track (a column on x, a row on y), the max
  *  over its cells' claims — the (max, +) rule. A track with no claiming cell is
@@ -154,15 +149,13 @@ export function gridTrackClaims(
   return [colClaims, rowClaims];
 }
 
-/** Solve one axis of tracks against `allocated` pixels under the unified rule.
- *
- *  - No claims (all fill): the leftover after gaps splits equally — today's
- *    `sliceExtent`, bit-identical.
- *  - Some claims: each claimed track takes its claim (evaluated at the solved σ,
- *    or its constant intercept when σ-independent); the remaining fill tracks
- *    share whatever is left, equally. When EVERY track is claimed and a claim is
- *    σ-dependent, σ is solved by inverting `Σ claims + gaps = allocated` through
- *    the scope registry (the same frame equation as any other size scope). */
+/** Solve one axis of tracks against `allocated` pixels under the unified rule:
+ *  each claimed track takes its claim (evaluated at the solved σ, or its
+ *  constant intercept when σ-independent); the tracks with no claim share
+ *  whatever is left, equally. When EVERY track is claimed and a claim is
+ *  σ-dependent (a track of shares claims one σ), σ is solved by inverting
+ *  `Σ claims + gaps = allocated` through the scope registry (the same frame
+ *  equation as any other size scope). */
 function resolveAxisTracks(
   claims: (Pwl.Value | undefined)[],
   allocated: number,
@@ -174,39 +167,32 @@ function resolveAxisTracks(
   const gaps = spacing * Math.max(0, n - 1);
   const nFill = claims.filter((c) => c === undefined).length;
 
-  let extents: number[];
-  if (nFill === n) {
-    const e = sliceExtent(allocated, spacing, n);
-    extents = claims.map(() => e);
-  } else {
-    // Solve σ only when every track is claimed (no fill absorbs the slack) and a
-    // claim is genuinely σ-dependent; otherwise claims are constants and σ is
-    // irrelevant (read back the intercept at σ=0).
-    let sigma = 0;
-    if (nFill === 0 && scopes !== undefined && meta !== undefined) {
-      const claimed = claims.filter((c): c is Pwl.Value => c !== undefined);
-      const gridClaim = Pwl.addConstant(Pwl.add(...claimed), gaps);
-      if (!Pwl.isConstant(gridClaim)) {
-        sigma =
-          scopes.solveSize(
-            { kind: "grid", rootKey: meta.rootKey, axis: meta.axis },
-            gridClaim,
-            allocated
-          ) ?? 0;
-      }
+  // Solve σ only when every track is claimed (no fill absorbs the slack) and a
+  // claim is genuinely σ-dependent; otherwise claims are constants and σ is
+  // irrelevant (read back the intercept at σ=0).
+  let sigma = 0;
+  if (nFill === 0 && scopes !== undefined && meta !== undefined) {
+    const claimed = claims.filter((c): c is Pwl.Value => c !== undefined);
+    const gridClaim = Pwl.addConstant(Pwl.add(...claimed), gaps);
+    if (!Pwl.isConstant(gridClaim)) {
+      sigma =
+        scopes.solveSize(
+          { kind: "grid", rootKey: meta.rootKey, axis: meta.axis },
+          gridClaim,
+          allocated
+        ) ?? 0;
     }
-    const claimedExtents = claims.map((c) =>
-      c === undefined ? undefined : Math.max(0, Pwl.at(c, sigma))
-    );
-    const claimedTotal =
-      claimedExtents.reduce((s: number, e) => s + (e ?? 0), 0) + gaps;
-    const fillShare =
-      nFill > 0 ? Math.max(0, (allocated - claimedTotal) / nFill) : 0;
-    extents = claims.map((c, i) =>
-      c === undefined ? fillShare : claimedExtents[i]!
-    );
   }
-
+  const claimedExtents = claims.map((c) =>
+    c === undefined ? undefined : Math.max(0, Pwl.at(c, sigma))
+  );
+  const claimedTotal =
+    claimedExtents.reduce((s: number, e) => s + (e ?? 0), 0) + gaps;
+  const fillShare =
+    nFill > 0 ? Math.max(0, (allocated - claimedTotal) / nFill) : 0;
+  const extents = claims.map((c, i) =>
+    c === undefined ? fillShare : claimedExtents[i]!
+  );
   return layoutTrack(numbers, extents, spacing);
 }
 

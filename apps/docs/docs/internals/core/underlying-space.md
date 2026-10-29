@@ -948,13 +948,16 @@ track claim = Pwl.max(claims of the cells in that track)      (max, +)
 grid claim  = Pwl.add(track claims) + gaps                    (the σ-frame)
 ```
 
-A claim-less ("fill") cell contributes nothing, so an all-fill grid has no track
-claims and the tracks split the leftover (allocated − gaps) equally — bit-for-bit
-the former `sliceExtent` box-division. Content-sized tracks emerge automatically
-when cells carry size claims: a track sizes to its widest cell, and fill tracks
-share whatever the claimed tracks leave. When every track carries a σ-dependent
-claim (no fill to absorb the slack), the grid claim is inverted against the
-allocated size by the same scope registry that solves any other frame equation.
+A cell's claim counts whatever it is: a magnitude, a pixel size of its own, or
+the one σ a cell that fills a share claims (#493 piece 3). So an all-fill grid
+of shares claims `n·σ + gaps`, and solving it gives each track
+(allocated − gaps)/n, the former `sliceExtent` box-division. A cell with no
+claim at all contributes nothing, and the tracks with no claim share whatever
+the claimed tracks leave, equally. Content-sized tracks emerge automatically
+when cells carry size claims: a track sizes to its widest cell. When every
+track carries a σ-dependent claim (no fill to absorb the slack), the grid claim
+is inverted against the allocated size by the same scope registry that solves
+any other frame equation.
 Because a categorical track axis cannot simultaneously be a SIZE magnitude, the
 grid's _reported_ space stays ORDINAL over the columns/rows (`gridSpaces`, for
 axis rendering; `ordinalOver` the keys `table`'s split found, so a binned

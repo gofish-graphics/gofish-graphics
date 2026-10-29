@@ -15,10 +15,8 @@
 
 /**
  * One slot's extent: a `budget` (pixels) split into `n` equal slots after
- * reserving `spacing` between adjacent ones. The single source of the
- * equal-flex-track / fill-slice formula — used by the distribute budget
- * (constraints/proposalPlan.ts) and the `grid` constraint (constraints/grid.ts)
- * so they cannot drift.
+ * reserving `spacing` between adjacent ones: the fill-slice formula of the
+ * distribute budget (constraints/proposalPlan.ts).
  */
 export function sliceExtent(
   budget: number,
