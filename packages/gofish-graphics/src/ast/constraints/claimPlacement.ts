@@ -491,7 +491,9 @@ export function placeByClaims(
     // constraint places where its frame seats it (layout's seating rule);
     // a literal seat at its pixel, which layout reads as it lays the layer
     // out (a chart's content is seated past its chrome's start gutter,
-    // `seatPastGutters`). Else the solve places it.
+    // `contentSeat`; the claim walk keeps the pin, its data 0, and the two
+    // agree on every box, as layout hands the content its frame from the
+    // seat). Else the solve places it.
     const origin =
       c.standIn || c.fromRefs
         ? tape.input(

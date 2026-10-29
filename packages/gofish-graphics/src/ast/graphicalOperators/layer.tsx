@@ -90,9 +90,9 @@ import {
 } from "../solver/plan";
 import { evaluate } from "../solver/formula";
 import {
+  contentSeat,
   guttersAroundPlot,
   guttersInSlot,
-  seatPastGutters,
 } from "../chromeGutters";
 
 // ── Z-order resolution ────────────────────────────────────────────────────
@@ -801,16 +801,14 @@ export const layer = createNodeOperatorSequential(
             [scopes.fixedSolve(node, 0), scopes.fixedSolve(node, 1)]
           );
           const childScaleFactors = layerScales.sigmas;
-          // A node dressed in chrome reads its gutters off the claims at the
-          // size it is laid out at (#1032): at its σ where its plot has a
-          // claim, else for its slot, which its plot fills. Then it seats
-          // its content past them.
+          // A node dressed in chrome reads its gutters off its chrome forms
+          // at the σ it is laid out at (#1032), else for its slot, which its
+          // plot fills. It seats its content past them (`seatsOf`).
           if (node.chrome !== undefined) {
             node.chrome.gutters = [
               guttersInSlot(node, 0, childScaleFactors[0], size[0]),
               guttersInSlot(node, 1, childScaleFactors[1], size[1]),
             ];
-            seatPastGutters(node);
           }
 
           // Per-child proposed size for distribute-covered children: each
@@ -942,8 +940,21 @@ export const layer = createNodeOperatorSequential(
           // that writes them (#878). Plain children lay out before it, as
           // always.
           const relateOrder = relateScheduleForLayout(node, operands);
-          // Where a literal position pins each child's origin, read once.
+          // Where a literal position pins each child's origin, read once. A
+          // node dressed in chrome seats its content past its start gutters
+          // instead (`contentSeat`).
           const literalSeatsByName = literalSeats(node.constraints);
+          const seatsOf = (
+            i: number
+          ): [number | undefined, number | undefined] => {
+            const name = childNameKey(node.children[i]);
+            const lit = (name === undefined
+              ? undefined
+              : literalSeatsByName.get(name)) ?? [undefined, undefined];
+            return i === 0 && node.chrome !== undefined
+              ? [contentSeat(node, 0, lit[0]), contentSeat(node, 1, lit[1])]
+              : lit;
+          };
 
           const layoutChild = (i: number) => {
             const child = children[i];
@@ -1028,9 +1039,7 @@ export const layer = createNodeOperatorSequential(
             // forwards uniformly (childScaleFactors), the anchored map forwards
             // per child (childPosScalesFor — stripped where a constraint consumed
             // the scale). A stripped map keeps the child's σ.
-            const seats = (childName === undefined
-              ? undefined
-              : literalSeatsByName.get(childName)) ?? [undefined, undefined];
+            const seats = seatsOf(i);
             const childMaps = childPosScalesFor(
               (children[i] as GoFishNode)._underlyingSpace,
               targetDims,
@@ -1170,9 +1179,7 @@ export const layer = createNodeOperatorSequential(
                 const hi = p.localAnchor?.(axis, "max");
                 switch (kind) {
                   case "lit":
-                    return literalSeatsByName.get(
-                      childNameKey(node.children[i!])!
-                    )?.[axis];
+                    return seatsOf(i!)[axis];
                   case "lo":
                     return lo;
                   case "hi":

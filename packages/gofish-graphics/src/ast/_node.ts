@@ -80,6 +80,7 @@ import { impliedExtents, Extent, padExtent } from "./extent";
 import * as Pwl from "./solver/pwl";
 import type { ClaimPlacement, Placement } from "./constraints/claimPlacement";
 import type { LayerPlan } from "./solver/plan";
+import type { ChromeForms } from "./chromeGutters";
 import { toJSON } from "../util/interval";
 import type { AxisScale } from "./domain";
 import { envFlag } from "../util";
@@ -205,12 +206,16 @@ type ClaimMemo = {
   /** A layer's plan per axis ({@link ClaimWalk.plan}); set with its
    *  claim. */
   plans: [LayerPlan | undefined, LayerPlan | undefined];
+  /** Per axis, its chrome forms (`chromeForms` in chromeGutters.ts; `null`:
+   *  none, its plot fills its room). */
+  chrome: [ChromeForms | null | undefined, ChromeForms | null | undefined];
 };
 
 const freshClaimMemo = (): ClaimMemo => ({
   carriesData: [undefined, undefined],
   sharesRoom: [undefined, undefined],
   plans: [undefined, undefined],
+  chrome: [undefined, undefined],
 });
 
 /** What the claim walk reads of a layer (`GoFishNode.claimWalk`). */
@@ -723,8 +728,9 @@ export class GoFishNode {
    * sits outside its chart, so this node's box is its content's box plus
    * these: its claim is the hull of its rings (each places its shapes in the
    * claim walk, `placeByClaims`), and it hands its content what is left of
-   * its slot. Its layout reads them off the claims at the size it is laid
-   * out at (`guttersInSlot` in chromeGutters.ts); until then they are 0.
+   * its slot. Its layout evaluates them at the σ it is laid out at, from its
+   * chrome forms (`chromeForms` and `guttersInSlot` in chromeGutters.ts,
+   * memoized with its claim); until then they are 0.
    */
   public chrome?: {
     content: GoFishNode;

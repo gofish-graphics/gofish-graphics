@@ -7,8 +7,6 @@ import type { Size } from "./dims";
 import { Extent, hullExtent } from "./extent";
 import * as Pwl from "./solver/pwl";
 import { room } from "../util";
-import { childNameKey } from "./constraints/shared";
-import { isLiteralSeat } from "./constraints/claimPlacement";
 import { originIs } from "./underlyingSpace";
 
 /**
@@ -25,11 +23,13 @@ import { originIs } from "./underlyingSpace";
  * The plot is the chart's content without its dressing
  * (`GoFishNode.resolvePlotExtent`): a label placed beside a mark adds
  * around the plot, as chrome does. On an axis where the plot has a claim,
- * the gutters are the chart's claim past the plot's, both widened to the keyed domain the chart maps, at the
- * σ the chart is laid out at. Where the plot fills the room it is given (a
- * category axis), the rings' claims are built around a plot of size X
- * (`ringsAround`), and the plot's size is the X at which they fill the
- * slot.
+ * the gutters are forms of the claim walk: the chart's claim past the
+ * plot's, both widened to the keyed domain the chart maps
+ * (`chromeForms`), a PWL in σ that layout evaluates at the σ the chart is
+ * laid out at. Where the plot fills the room it is given (a category axis),
+ * the rings' claims are built around a plot of size X (`ringsAround`), and
+ * the plot's size is the X at which they fill the slot (until step 5's
+ * shares, see `guttersInSlot`).
  */
 
 /** The claim of `chart`'s rings on `axis` around a plot of size X, as a
@@ -51,31 +51,46 @@ function ringsAround(chart: GoFishNode, axis: 0 | 1): Extent | undefined {
   return inner;
 }
 
-/** The chart's claim and its plot's on `axis`, both widened to the keyed
- *  domain the chart maps, or undefined where the plot fills its room. */
-function claims(
-  chart: GoFishNode,
+/** A node's chrome forms on one axis: its claim and its plot's, both widened
+ *  to the keyed domain it maps. How far its chrome and dressing reach past
+ *  its plot at each end is the difference, a PWL in σ ({@link reachAt}). */
+export type ChromeForms = { whole: Extent; plot: Extent };
+
+/**
+ * `node`'s chrome forms on `axis`, or undefined where its plot fills its
+ * room (it has no plot claim there). They are read off its claims alone, so
+ * they are memoized with them (`ClaimMemo.chrome`, cleared with the claim:
+ * the auto label angle lays out twice). The plot is the content without
+ * its dressing (a value label beside its bar): like chrome, dressing adds
+ * around the plot (#1032). Both are widened as a scope widens its claim
+ * (`KeyedDomains.scope`), so a tick label past a niced domain end reaches
+ * only where the domain does not.
+ */
+export function chromeForms(
+  node: GoFishNode,
   axis: 0 | 1
-): { chart: Extent; plot: Extent } | undefined {
-  const chartClaim = chart.resolveExtent()[axis];
-  // The plot is the content without its dressing (a value label beside
-  // its bar): like chrome, dressing adds around the plot (#1032).
-  const plotClaim = (chart.chrome?.content ?? chart).resolvePlotExtent()[axis];
-  if (chartClaim === undefined || plotClaim === undefined) return undefined;
-  const keyed = chart.tryGetRenderSession()?.keyedDomains;
-  const space = chart._underlyingSpace?.[axis];
-  const wide = (claim: Extent): Extent =>
-    keyed?.scope(chart, axis, space, claim)[1] ?? claim;
-  return { chart: wide(chartClaim), plot: wide(plotClaim) };
+): ChromeForms | undefined {
+  const memo = node._claimMemo.chrome;
+  const hit = memo[axis];
+  if (hit !== undefined) return hit ?? undefined;
+  const whole = node.resolveExtent()[axis];
+  const plot = (node.chrome?.content ?? node).resolvePlotExtent()[axis];
+  let forms: ChromeForms | undefined;
+  if (whole !== undefined && plot !== undefined) {
+    const keyed = node.tryGetRenderSession()?.keyedDomains;
+    const space = node._underlyingSpace?.[axis];
+    const wide = (claim: Extent): Extent =>
+      keyed?.scope(node, axis, space, claim)[1] ?? claim;
+    forms = { whole: wide(whole), plot: wide(plot) };
+  }
+  memo[axis] = forms ?? null;
+  return forms;
 }
 
-/** The gutters of the claims `c` at σ. */
-const guttersAt = (
-  c: { chart: Extent; plot: Extent },
-  sigma: number
-): [number, number] => [
-  room(Pwl.at(c.chart.descent, sigma) - Pwl.at(c.plot.descent, sigma)),
-  room(Pwl.at(c.chart.ascent, sigma) - Pwl.at(c.plot.ascent, sigma)),
+/** How far `f.whole` reaches past `f.plot` at σ, `[start, end]`. */
+const reachAt = (f: ChromeForms, sigma: number): [number, number] => [
+  room(Pwl.at(f.whole.descent, sigma) - Pwl.at(f.plot.descent, sigma)),
+  room(Pwl.at(f.whole.ascent, sigma) - Pwl.at(f.plot.ascent, sigma)),
 ];
 
 /** The gutters of the rings `r` around a plot of size `x`. */
@@ -100,8 +115,9 @@ const solveFor = (m: Pwl.Value, target: number): number => {
 
 /**
  * `chart`'s gutters on `axis` when it is laid out at σ `sigma` in a slot of
- * `slot` pixels (NaN when the axis is unsized, where a plot that fills its
- * room has the size of its own claim, or none).
+ * `slot` pixels (NaN when the axis is unsized): its chrome forms' reach at
+ * σ, or, where its plot fills its room, its rings' around the plot that
+ * fills the slot.
  */
 export function guttersInSlot(
   chart: GoFishNode,
@@ -109,8 +125,13 @@ export function guttersInSlot(
   sigma: number | undefined,
   slot: number
 ): [number, number] {
-  const c = claims(chart, axis);
-  if (c !== undefined) return guttersAt(c, sigma ?? 0);
+  const f = chromeForms(chart, axis);
+  if (f !== undefined) return reachAt(f, sigma ?? 0);
+  // TODO(#1176 step 5): a plot that fills its room claims one share σ in a
+  // data-free scope, so its rings' claim is a PWL in σ and the scope solve
+  // finds the plot's size. Until shares exist, the rings are built around a
+  // plot of size X and solved for X here (exact in the corpus: 1 sized
+  // story and 6 unsized polar ones, all with rings `X + const`).
   const r = ringsAround(chart, axis);
   if (r === undefined) return [0, 0];
   if (!Number.isFinite(slot)) return ringGutters(r, 0);
@@ -118,30 +139,39 @@ export function guttersInSlot(
 }
 
 /**
- * Seat a chart's content past its chrome's start gutters (#1032): the
- * outermost ring pins the ring inside it at a literal pixel (`wrapRing`),
- * and that pixel becomes the start gutter, in the ring's axis order. The
- * layer hands a child it pins at a literal pixel the frame from there
- * (`childPosScalesFor`), so the content's frame starts where its plot does,
- * and whatever it places with no data (an empty cell) sits in the plot, not
- * in the gutter. A seat at a datum, or none (free content its frame seats),
- * already sits where the frame maps it, and so does free content's literal
- * seat at 0, its baseline: the start gutter is part of its claim's descent,
- * below that baseline.
+ * Where a chart seats its content on `axis` (#1032), for the literal pixel
+ * `literal` its outermost ring pins the ring inside it at (`wrapRing`): at
+ * its start gutter, in the ring's axis order. The layer hands a child it
+ * pins at a literal pixel the frame from there (`childPosScalesFor`), so the
+ * content's frame starts where its plot does, and whatever it places with
+ * no data (an empty cell) sits in the plot, not in the gutter. A seat at a
+ * datum, or none (free content its frame seats), already sits where the
+ * frame maps it, and so does free content's literal seat at 0, its
+ * baseline: the start gutter is part of its claim's descent, below that
+ * baseline.
+ *
+ * The claim walk keeps the literal pin (the content's data 0 at the ring's),
+ * and the two agree on every box: layout hands the content its frame from
+ * the seat, so a box's edges telescope to the same pixel. They differ only
+ * for what the content places at a constant of its own frame (a noise
+ * offset, a label slot): the claim walk reads that constant from the
+ * content's data 0, and layout from its plot's start edge, which is
+ * `wide(plot).descent(σ)` apart (0 for a domain that starts at 0).
+ * TODO(#1176): which origin a pinned node's own constants are about (its
+ * data 0, or its plot's start) is a design question, so both stay. Seating
+ * the claim walk at the start gutter instead would move the content's data
+ * 0 off its ticks.
  */
-export function seatPastGutters(chart: GoFishNode): void {
+export function contentSeat(
+  chart: GoFishNode,
+  axis: 0 | 1,
+  literal: number | undefined
+): number | undefined {
+  if (literal === undefined) return undefined;
   const inner = chart.children[0] as GoFishNode;
-  const name = childNameKey(inner);
-  const seat = (axis: 0 | 1) =>
-    originIs(inner._underlyingSpace?.[axis], "free")
-      ? 0
-      : chart.chromeGutters(axis)[0];
-  for (const c of chart.constraints) {
-    if (c.type !== "position" || !isLiteralSeat(c)) continue;
-    if (!c.children.some((r) => r.name === name)) continue;
-    if (typeof c.x === "number") c.x = seat(0);
-    if (typeof c.y === "number") c.y = seat(1);
-  }
+  return originIs(inner._underlyingSpace?.[axis], "free")
+    ? 0
+    : chart.chromeGutters(axis)[0];
 }
 
 /**
@@ -154,8 +184,8 @@ export function guttersAroundPlot(
   axis: 0 | 1,
   plot: number
 ): [number, number] {
-  const c = claims(chart, axis);
-  if (c !== undefined) return guttersAt(c, solveFor(c.plot.width, plot));
+  const f = chromeForms(chart, axis);
+  if (f !== undefined) return reachAt(f, solveFor(f.plot.width, plot));
   const r = ringsAround(chart, axis);
   return r === undefined ? [0, 0] : ringGutters(r, plot);
 }

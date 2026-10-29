@@ -792,27 +792,38 @@ report their size).
   the claim and the domain's end on each side. A tick label past the last
   tick, or a mark past its datum, takes room only where the domain does not
   already reach past it.
-- **The layout.** A layer with chrome reads its gutters off the claims at the
-  size it is laid out at (`guttersInSlot` in `chromeGutters.ts`). Where its
-  plot has a claim, they are its claim past its plot's, both widened to the
-  keyed domain, at its σ. Where its plot fills the room it is given (a
-  category axis), its rings' claims are built around a plot of size X, and
-  the plot's size is the X at which they fill the slot (where fixed parts
-  leave no X that fills it exactly, the X at which the part that grows with
-  X, alone, reaches it, as the root solves σ). It hands its content
-  (its first child) its slot less its gutters, or no room when the gutters
-  are larger than the slot (the scope that solved the slot warns that its
-  fixed parts overflow), and seats it past its start
+- **The layout.** Where its plot has a claim, a layer's gutters are forms
+  of the claim walk (`chromeForms` in `chromeGutters.ts`): its claim and its
+  plot's, both widened to the keyed domain, memoized with its claim, so
+  their difference at each end is a PWL in σ. A layer with chrome evaluates
+  them at the σ it is laid out at (`guttersInSlot`). Where its plot fills
+  the room it is given (a category axis), its rings' claims are built
+  around a plot of size X, and the plot's size is the X at which they fill
+  the slot (where fixed parts leave no X that fills it exactly, the X at
+  which the part that grows with X, alone, reaches it, as the root solves
+  σ). That path waits for step 5, where such a plot claims a share σ. It
+  hands its content (its first child) its slot less its gutters, or no
+  room when the gutters are larger than the slot (the scope that solved the
+  slot warns that its fixed parts overflow), and seats it past its start
   gutter: the ring pins the ring inside it at a literal pixel (`wrapRing`),
-  and that pixel becomes the start gutter (`seatPastGutters`), except on an
-  axis where the content is free (its baseline is its origin, and the start
-  gutter is part of its claim's descent). A layer hands a child it pins at a
-  literal pixel the frame from there (`childPosScalesFor`), so the content's
-  frame starts where its plot does, and what it places with no data (an
-  empty cell) lands in the plot, not in the gutter. A literal pin of a
-  child's origin places it as soon as it is laid out, so a `ref` into it laid
-  out later reads it where it ends up, and another constraint on the axis
-  (an align) moves only the others. The claim walk seats it there too.
+  and layout reads that pin as the start gutter (`contentSeat`), except on
+  an axis where the content is free (its baseline is its origin, and the
+  start gutter is part of its claim's descent). The constraint is not
+  rewritten: the seat is read in the plan's `lit:` input, in the frame
+  handed to the content, and in the pin, one value for all three. A layer
+  hands a child it pins at a literal pixel the frame from there
+  (`childPosScalesFor`), so the content's frame starts where its plot
+  does, and what it places with no data (an empty cell) lands in the plot,
+  not in the gutter. A literal pin of a child's origin places it as soon as
+  it is laid out, so a `ref` into it laid out later reads it where it ends
+  up, and another constraint on the axis (an align) moves only the others.
+  The claim walk keeps the pin, the content's data 0 at the ring's, and
+  agrees with layout on every box, since the frame handed down moves with
+  the seat. They differ only for a constant of the content's own frame (a
+  noise offset, a label slot), which the claim walk reads from the
+  content's data 0 and layout from its plot's start, `wide(plot).descent`
+  apart; which of the two a pinned node's constants are about is open
+  (TODO(#1176) at `contentSeat`).
 - **A chart with a size of its own.** Its chrome dresses its content inside
   the chart's frame (`frameChart`), so the frame's literal size is the plot:
   the frame adds the gutters its content's claims give around a plot of that
