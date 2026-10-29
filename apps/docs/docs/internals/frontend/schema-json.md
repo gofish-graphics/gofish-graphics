@@ -2585,7 +2585,7 @@ for the API.
       }
     },
     "RegionMark": {
-      "description": "Draws the region its parent gives it, such as a partition's cell. It has no size or position of its own: it fills the space it is given on both axes. It draws the region's outline when the region has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.",
+      "description": "Draws the cell it is in, such as a partition's cell. It has no size or position of its own: on each axis where it is in a cell, it is that cell, placed by its data through the partition's scale, and on an axis where it is in no cell, it fills the space it is given. It draws the cell's outline when the cell has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -2617,7 +2617,7 @@ for the API.
         },
         "inset": {
           "$ref": "#/$defs/Number",
-          "description": "Pixels drawn in from each side of the region its parent gives it, on each axis where the region has a span. Paint only: layout still reads the whole region. A region thinner than twice the inset draws nothing.",
+          "description": "Pixels drawn in from each side of the cell it is in, on each axis where it is in a cell. Paint only: layout still reads the whole cell. A cell thinner than twice the inset draws nothing.",
           "default": 0
         },
         "debug": {
