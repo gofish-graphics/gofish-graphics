@@ -66,7 +66,7 @@ const px = (v: number) => `${Math.round(v * 10) / 10} px`;
 
 /** The distribute of the spread or stack `node` is along `axis`, if it is
  *  one (a ring that seats its chrome with a distribute is not). */
-const chainOn = (
+export const chainOn = (
   node: GoFishNode,
   axis: 0 | 1
 ): DistributeConstraint | undefined =>
@@ -141,7 +141,7 @@ function culprit(
   let nodePx = startPx;
   for (;;) {
     if (chainOn(node, axis) !== undefined) break;
-    if (node !== start && node.claimWalk?.ownScope[axis] === true) break;
+    if (node !== start && node.claimWalk?.ownSize(axis) !== undefined) break;
     const big = largestChild(node, axis);
     if (big === undefined) break;
     // Mostly one child's: more than half of the node's fixed pixels. A
@@ -177,7 +177,10 @@ function fixedParts(
     spacing.set(key, cur);
   };
   const visit = (n: GoFishNode) => {
-    if (n.claimWalk?.ownScope[axis] === true && !(ofContent && n === node)) {
+    if (
+      n.claimWalk?.ownSize(axis) !== undefined &&
+      !(ofContent && n === node)
+    ) {
       add(`${describeNode(n)}: its own size`, fixedPx(n, axis));
       return;
     }
@@ -201,7 +204,7 @@ function fixedParts(
     for (const c of composing(n, axis)) visit(c);
   };
   // A node with a size of its own holds that size, whatever is in it.
-  if (!ofContent && node.claimWalk?.ownScope[axis] === true)
+  if (!ofContent && node.claimWalk?.ownSize(axis) !== undefined)
     return [{ part: "its own size", px: total }];
   visit(node);
   const parts = [...spacing].map(([key, { each, count }]) => ({
@@ -240,21 +243,19 @@ export function fixedOverflow(
     axis,
     at.px,
     at.available,
-    fixedParts(at.node, axis, at.px, at.node === start),
-    "The parts that scale are drawn as if the fixed parts took no room"
+    fixedParts(at.node, axis, at.px, at.node === start)
   );
 }
 
 /** A `fixed-overflow` warning: `node`'s fixed `parts` need `needed` pixels
- *  on `axis`, more than the `available` pixels of its slot, and its parts
- *  are drawn as `drawn` says. */
+ *  on `axis`, more than the `available` pixels of its slot, so the parts
+ *  that scale are drawn as if the fixed parts took no room. */
 function fixedWarning(
   node: GoFishNode,
   axis: 0 | 1,
   needed: number,
   available: number,
-  parts: { part: string; px: number }[],
-  drawn: string
+  parts: { part: string; px: number }[]
 ): LayoutWarning {
   const what = describeNode(node);
   const name = axisName(axis);
@@ -269,7 +270,8 @@ function fixedWarning(
       `${what} on ${name}: its fixed parts need ${px(needed)}, but its slot ` +
       `has ${px(Math.max(0, available))}. Fixed parts: ` +
       parts.map((p) => `${p.part} = ${px(p.px)}`).join("; ") +
-      `. ${drawn}, and the graphic overflows on ${name}.`,
+      `. The parts that scale are drawn as if the fixed parts took no ` +
+      `room, and the graphic overflows on ${name}.`,
   };
 }
 

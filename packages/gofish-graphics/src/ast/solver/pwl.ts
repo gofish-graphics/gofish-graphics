@@ -56,6 +56,9 @@ export const constant = (value: number): Affine => affine(0, value);
  *  extent that sits wholly above its baseline). */
 export const ZERO: Affine = constant(0);
 
+/** σ itself, `1σ + 0`: one share of a scope. */
+export const SIGMA: Affine = affine(1, 0);
+
 export const isAffine = (v: Value): v is Affine => v.kind === "affine";
 
 /** The rounding error a sum of numbers can carry, per unit of the sum of
@@ -170,7 +173,7 @@ export function add(...vs: Value[]): Value {
     }
     return affine(cancel(slope, magnitude), intercept);
   }
-  return (vs as Pwl[]).reduce<Pwl>(sum2, ZERO);
+  return vs.reduce<Pwl>(sum2, ZERO);
 }
 
 /** `v + c`. */
@@ -300,7 +303,7 @@ function hull(lines: readonly Segment[], lo: number, hi: number): Segment[] {
 export function envelope(vs: readonly Value[]): Value {
   if (vs.length === 1) return vs[0];
   if (vs.length === 0) return constant(-Infinity);
-  const inputs = (vs as Pwl[]).map(segmentsOf);
+  const inputs = vs.map(segmentsOf);
   if (vs.every(isAffine))
     return fromSegments(
       hull(
@@ -333,6 +336,9 @@ export const max = (...vs: Value[]): Value => {
   const kept = vs.filter((v) => !isZero(v));
   return kept.length === 0 ? ZERO : envelope(kept);
 };
+
+/** `|v|`: the envelope of `v` and `−v`. */
+export const abs = (v: Value): Value => envelope([v, negate(v)]);
 
 /** Whether `v` does not depend on σ. */
 export const isConstant = (v: Value): boolean =>

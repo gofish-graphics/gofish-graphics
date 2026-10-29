@@ -4,11 +4,13 @@
 
 /**
  * The arithmetic a layout computation runs in: plain numbers (pixels at one
- * σ), or values in σ ({@link Pwl.Value}, a claim as a function of σ). The
- * placement solve (constraints/placementSolver.ts,
- * constraints/differenceGraph.ts) is written once over an `Arith`, so the
- * claim walk and layout run the same code: the claim walk in values, layout
- * in numbers.
+ * σ), values in σ ({@link Pwl.Value}, a claim as a function of σ), or the
+ * formulas of a layer's plan (`Tape` in formula.ts). The placement solve
+ * (constraints/placementSolver.ts, constraints/differenceGraph.ts) is
+ * written once over an `Arith`, and the claim walk runs it in formulas; the
+ * layout `BBox` of a node and the grid tracks are in numbers. `values` is
+ * the arithmetic of claims: the claim walk takes differences of claims in
+ * it (`sub`), and tests run the solve and the box ledger in it.
  */
 import * as Pwl from "./pwl";
 
@@ -34,11 +36,8 @@ export type Arith<T> = {
    *  measured yet (formulas, `Tape`) keeps the check for layout to make,
    *  at the σ it lays out at, and answers yes. */
   agree: (a: T, b: T, tolerance: number, owners: CheckOwners) => boolean;
-  /** `x` in the box ledger's form (`BBox`), a value in σ: a number is a
-   *  constant there. */
-  toValue: (x: T) => Pwl.Value;
-  /** A value the box ledger holds, in this arithmetic: the inverse of
-   *  `toValue` (a number solve only writes constants there). */
+  /** A value in σ in this arithmetic (a σ-term gap, the σ of a data map):
+   *  a number solve reads it at σ = 0. */
   fromValue: (v: Pwl.Value) => T;
   /** `x` as a number for a message (a value at σ = 0, as `BBox` reports). */
   report: (x: T) => number;
@@ -67,23 +66,21 @@ export const numbers: Arith<number> = {
   abs: Math.abs,
   near: (a, b, tolerance) => Math.abs(a - b) <= tolerance,
   agree: (a, b, tolerance) => Math.abs(a - b) <= tolerance,
-  toValue: Pwl.constant,
   fromValue: (v) => Pwl.at(v, 0),
   report: (x) => x,
 };
 
 export const values: Arith<Pwl.Value> = {
   zero: Pwl.ZERO,
-  constant: (c) => Pwl.affine(0, c),
+  constant: Pwl.constant,
   add: Pwl.add,
   sub: (a, b) => Pwl.add(a, Pwl.negate(b)),
   scale: Pwl.scale,
   max: Pwl.envelope,
   negate: Pwl.negate,
-  abs: (x) => Pwl.envelope([x, Pwl.negate(x)]),
+  abs: Pwl.abs,
   near: Pwl.approxEqual,
   agree: (a, b, tolerance) => Pwl.approxEqual(a, b, tolerance),
-  toValue: (x) => x,
   fromValue: (v) => v,
   report: (x) => Pwl.at(x, 0),
 };

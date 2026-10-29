@@ -2,7 +2,7 @@
 // @wiki Overview — /internals/layout/passes
 // </gofish-wiki>
 
-import { Extent } from "../extent";
+import type { Extent } from "../extent";
 import type { UnderlyingSpace } from "../underlyingSpace";
 import * as Pwl from "../solver/pwl";
 import {
@@ -32,10 +32,11 @@ import type { ConstraintSpec } from ".";
  * The claim walk places them with the same solve the layout runs (the
  * placement solver), on boxes that are the children's claims instead of
  * their laid-out boxes: data maps through σ from data 0, and every claim is
- * measured from data 0. It is the one solve, run once in values in σ
- * (`values` in arith.ts) instead of numbers: each box's edges come out as
- * piecewise-linear functions of σ, exact at every σ, and the hull is the
- * envelope of the edges.
+ * measured from data 0. It is the one solve, run once in formulas (`Tape`
+ * in formula.ts) instead of numbers: each box's edges come out as formulas
+ * in σ and in what only layout measures, whose claims are piecewise-linear
+ * functions of σ, exact at every σ, and the layer's claim is the envelope
+ * of the edges (`buildPlan` in plan.ts).
  *
  * A `ref` stand-in stands where its node lands in this layer's frame, which
  * the claim walk knows through the layers between them (a placement claim,
@@ -95,7 +96,7 @@ export type ClaimChild = {
   dataPositioned: boolean;
   /** It places itself as it is laid out, before the solve (a position of
    *  its own, a node placed from the refs it reads, or a child in a region
-   *  its layer passes on: `placesItself`, `inPassedRegion` in `plan.ts`).
+   *  its layer passes on: `placesItself`, `handedRegion` in `plan.ts`).
    *  The solve takes it where layout put it (`at:`) unless a `position`
    *  override owns the axis. */
   placesItself?: boolean;
@@ -110,11 +111,6 @@ export type ClaimChild = {
 };
 
 export type ClaimPlacement = {
-  /** The hull of the placed children, or undefined when none takes room. */
-  hull?: Extent;
-  /** The hull of the placed children that are not dressing (see
-   *  {@link placeByClaims}), or undefined when every one is. */
-  plot?: Extent;
   /** The children that draw on the axis but are ink there: they take no
    *  room. (A stand-in draws nothing, so it is not among them.) */
   ink: Set<number>;
@@ -267,15 +263,17 @@ export const constraintsOn = (
 };
 
 /** The children a constraint places on `axis` (a position, an align, a
- *  distribute or a nest acting on it), by their direct operands. */
-export function constrainedOn(
+ *  distribute or a nest acting on it), by their direct operands: of the
+ *  constraints that pass `test`, if one is given. */
+function constrainedOn(
   axis: 0 | 1,
   constraints: ConstraintSpec[],
-  operands: Map<string, { child: number; direct: boolean }>
+  operands: Map<string, { child: number; direct: boolean }>,
+  test: (c: ConstraintSpec) => boolean = () => true
 ): Set<number> {
   const out = new Set<number>();
   for (const c of constraints) {
-    if (!actsOn(c, axis)) continue;
+    if (!actsOn(c, axis) || !test(c)) continue;
     for (const r of c.children) {
       const op = operands.get(r.name);
       if (op?.direct) out.add(op.child);
@@ -286,8 +284,7 @@ export function constrainedOn(
 
 /**
  * Where a layer's constraints place its children on `axis`, from their
- * claims, and the hull of the `candidates` (see the module comment).
- * `nested` is where an operand nested in a child lands in that child's
+ * claims (see the module comment). `nested` is where an operand nested in a child lands in that child's
  * frame, when the claim walk knows (`planPlacementInChild`).
  */
 export function placeByClaims(
@@ -295,41 +292,38 @@ export function placeByClaims(
   children: ClaimChild[],
   constraints: ConstraintSpec[],
   operands: Map<string, { child: number; direct: boolean }>,
-  candidates: Set<number>,
   nested: (name: string) => Placement | undefined,
   // Whether the layer's frame on the axis has a data 0 (`frameOf`): a
   // frame without one maps no datum and seats no baseline.
   framed = true
 ): ClaimPlacement {
   const onAxis = constraintsOn(constraints, axis);
+  const own = axisName(axis);
   // The children a region's cell places on the axis: each lays itself out
   // in the cell, as layout hands it the cell (`GoFishNode.layout`). One
   // with no size of its own fills it, and any other keeps its size in the
   // middle of it.
-  const celled = new Set<number>();
-  for (const c of constraints)
-    if (
+  const celled = constrainedOn(
+    axis,
+    constraints,
+    operands,
+    (c) =>
       c.type === "position" &&
-      c[axisName(axis)] === undefined &&
+      c[own] === undefined &&
       c.region?.spans[axis] !== undefined
-    )
-      for (const r of c.children) {
-        const op = operands.get(r.name);
-        if (op?.direct) celled.add(op.child);
-      }
+  );
   // A child an interval pins (across a span, or a region's cell it fills)
   // has a size from it, whatever its own claim.
-  const spanned = new Set<number>();
-  for (const c of onAxis)
-    if (c.type === "position" && isPositionInterval(c[axisName(axis)]!))
-      for (const r of c.children) {
-        const op = operands.get(r.name);
-        if (
-          op?.direct &&
-          !(celled.has(op.child) && children[op.child].extent !== undefined)
-        )
-          spanned.add(op.child);
-      }
+  const spanned = new Set(
+    [
+      ...constrainedOn(
+        axis,
+        onAxis,
+        operands,
+        (c) => c.type === "position" && isPositionInterval(c[own]!)
+      ),
+    ].filter((i) => !(celled.has(i) && children[i].extent !== undefined))
+  );
 
   // An operand only layout places, unless the claim walk knows where it
   // lands: a node nested in a child, a stand-in for a node elsewhere, a
@@ -389,13 +383,12 @@ export function placeByClaims(
   // relation ties to it stays placed. Where a datum position puts it, the
   // point is data, and the hull holds it; anywhere else it lands only
   // where layout gives it room, and the hull leaves it out.
-  const atDatum = new Set<number>();
-  for (const c of onAxis)
-    if (c.type === "position" && typeof c[axisName(axis)] !== "number")
-      for (const r of c.children) {
-        const op = operands.get(r.name);
-        if (op?.direct) atDatum.add(op.child);
-      }
+  const atDatum = constrainedOn(
+    axis,
+    onAxis,
+    operands,
+    (c) => c.type === "position" && typeof c[own] !== "number"
+  );
   const unplaced = new Set<number>();
   children.forEach((c, i) => {
     if (c.inkOn) ink.add(i);
@@ -438,8 +431,6 @@ export function placeByClaims(
   const out = (i: number) =>
     ink.has(i) || (children[i].standIn && children[i].placed === undefined);
 
-  const hullOf = [...candidates].filter((i) => !out(i) && !unplaced.has(i));
-
   // The children a constraint acts on along this axis; the others sit at
   // their own origin, which is the layer's (a free child's baseline is
   // seated at data 0, and a shared child's claim is measured from it).
@@ -456,13 +447,12 @@ export function placeByClaims(
   const seats = literalSeats(constraints);
   // A `position` override owns its operands' place on the axis, so a child
   // it names is not pinned where it placed itself.
-  const overridden = new Set<number>();
-  for (const c of onAxis)
-    if (c.type === "position" && c.override)
-      for (const r of c.children) {
-        const op = operands.get(r.name);
-        if (op?.direct) overridden.add(op.child);
-      }
+  const overridden = constrainedOn(
+    axis,
+    onAxis,
+    operands,
+    (c) => c.type === "position" && !!c.override
+  );
   // The parts a chain places past their whole box, not by their plots:
   // what is no part of the plot (ink, dressing, chrome).
   const apart = new Set<string>();
@@ -582,7 +572,7 @@ export function placeByClaims(
   const map =
     origin === undefined
       ? undefined
-      : { sigma: T.fromValue(Pwl.affine(1, 0)), originPx: origin };
+      : { sigma: T.fromValue(Pwl.SIGMA), originPx: origin };
   // The layer's box on the axis, which layout lays it out in: a discrete
   // position divides it.
   const box = tape.input("size", Pwl.ZERO);
@@ -632,57 +622,18 @@ export function placeByClaims(
   for (const i of childIndices) if (!at.has(i)) at.set(i, boxOf(i));
   const seated: PlanSeats = { tape, cells, sizeOnly: solvedAxis.sizeOnly };
 
-  // Each edge (0 = lo, 1 = hi) of child `i`, times `sign` (−1 reads a low
-  // edge as a reach below 0, a descent).
-  const edge = (i: number, end: 0 | 1, sign: 1 | -1): Pwl.Value => {
-    const v = at.get(i)![end];
-    return sign === 1 ? v : Pwl.negate(v);
-  };
-
-  // Each edge's form, built once: the boxes and both hulls read the same
-  // edges.
-  const forms = new Map<number, Pwl.Value>();
-  const form = (i: number, end: 0 | 1, sign: 1 | -1): Pwl.Value => {
-    const key = 4 * i + 2 * end + (sign === 1 ? 1 : 0);
-    let f = forms.get(key);
-    if (f === undefined) forms.set(key, (f = edge(i, end, sign)));
-    return f;
-  };
+  // Each placed child's box: every child but the ink, the stand-ins the
+  // solve cannot place, and the fillers it leaves unplaced.
   let boxes: Map<number, BoxForm> | undefined;
   const boxesOf = () => {
     if (boxes !== undefined) return boxes;
     boxes = new Map();
     for (const i of childIndices)
-      if (!out(i) && !unplaced.has(i))
-        boxes.set(i, { lo: form(i, 0, 1), hi: form(i, 1, 1) });
+      if (!out(i) && !unplaced.has(i)) {
+        const [lo, hi] = at.get(i)!;
+        boxes.set(i, { lo, hi });
+      }
     return boxes;
   };
-  if (hullOf.length === 0)
-    return { ink, dressing, boxes: boxesOf, rooms, seats: seated };
-  const roomEdges = (is: number[], end: 0 | 1): Pwl.Value[] =>
-    is.flatMap((i) => {
-      const r = rooms.get(i);
-      return r === undefined ? [] : [end === 1 ? r.hi : Pwl.negate(r.lo)];
-    });
-  const hullOver = (is: number[]): Extent =>
-    Extent(
-      Pwl.envelope([...is.map((i) => form(i, 1, 1)), ...roomEdges(is, 1)]),
-      Pwl.envelope([...is.map((i) => form(i, 0, -1)), ...roomEdges(is, 0)])
-    );
-  const hull = hullOver(hullOf);
-  const plotOf = hullOf.filter((i) => !dressing.has(i));
-  return {
-    ink,
-    dressing,
-    boxes: boxesOf,
-    rooms,
-    seats: seated,
-    hull,
-    plot:
-      plotOf.length === hullOf.length
-        ? hull
-        : plotOf.length === 0
-          ? undefined
-          : hullOver(plotOf),
-  };
+  return { ink, dressing, boxes: boxesOf, rooms, seats: seated };
 }

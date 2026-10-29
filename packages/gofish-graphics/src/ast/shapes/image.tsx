@@ -4,14 +4,13 @@ import { getValue, isValue } from "../data";
 import {
   Dimensions,
   displayTranslate,
-  elaborateDims,
-  deferAxisDims,
+  elaborateOwnDims,
   FancyDims,
   positionOf,
   Transform,
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
-import { bindLengths, isFr, takeLengths, type LengthValue } from "../length";
+import { isFr, type LengthValue } from "../length";
 import { createMark } from "../withGoFish";
 import { MARK_CHANNELS } from "../markChannels.generated";
 import { attachCut } from "../graphicalOperators/cut";
@@ -232,13 +231,10 @@ export const Image = ({
 } & FancyDims<number | LengthValue>) => {
   // A length for its own size (`w: percent(30)`, `w: fr(2)`) is laid out in
   // the room it is given, known only once it is in its tree (#1176 step 6).
-  const ownDims = { ...fancyDims } as Record<string, unknown>;
-  const lengths = takeLengths(ownDims);
   // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
-  const dims = elaborateDims(ownDims as FancyDims<number>);
-  // Its size as its type reads it: a length is never data (see rect.tsx).
-  const dataSize = (axis: 0 | 1) =>
-    lengths[axis] === undefined ? dims[axis].size : undefined;
+  // Its size as its type reads it (`dataSize`): a length is never data.
+  const own = elaborateOwnDims<number>(fancyDims);
+  const { dims, lengths, dataSize } = own;
 
   const node = new GoFishNode(
     {
@@ -352,12 +348,7 @@ export const Image = ({
     },
     []
   );
-  bindLengths(node, dims, lengths);
-  // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
-  node._elaborateInAxisScope = deferAxisDims(
-    ownDims as FancyDims<number>,
-    dims
-  );
+  own.bind(node);
   return node;
 };
 

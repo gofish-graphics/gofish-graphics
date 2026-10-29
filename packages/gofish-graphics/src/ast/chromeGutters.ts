@@ -5,6 +5,7 @@
 import type { GoFishNode } from "./_node";
 import { Extent } from "./extent";
 import * as Pwl from "./solver/pwl";
+import { values } from "./solver/arith";
 import { room } from "../util";
 import { originIs } from "./underlyingSpace";
 
@@ -112,7 +113,7 @@ export const reachAt = (f: ChromeForms, sigma: number): [number, number] => [
  */
 export function aroundShare(
   f: ChromeForms,
-  share: Pwl.Affine = Pwl.affine(1, 0)
+  share: Pwl.Affine = Pwl.SIGMA
 ): ChromeForms {
   // What reaches past a plot of length `t`, read at the plot's length in
   // the outer σ: `h(share(σ))`, `h` read through the line that takes the
@@ -129,7 +130,7 @@ export function aroundShare(
   const reach = (whole: Pwl.Value, plot: Pwl.Value) =>
     atShare(
       Pwl.through(
-        Pwl.envelope([Pwl.add(whole, Pwl.negate(plot)), Pwl.ZERO]),
+        Pwl.envelope([values.sub(whole, plot), Pwl.ZERO]),
         f.plot.width
       )
     );
@@ -210,7 +211,7 @@ export function contentSeat(
  * and what its chrome and dressing reach past it, at the σ at which its plot
  * fills `plot` (#1032). A node's own `w`/`h` is its plot, so a node with a
  * size of its own is this around its size, and so is a part a chain hands
- * a slice as its plot (a facet panel).
+ * a share as its plot (a facet panel).
  */
 export function aroundPlot(
   node: GoFishNode,

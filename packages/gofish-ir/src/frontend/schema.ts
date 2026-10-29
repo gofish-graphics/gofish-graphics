@@ -890,8 +890,9 @@ export type ChannelValue =
 /**
  * A length (#1176 step 6), as `percent(n)` and `fr(k)` build it: `percent`
  * percent of the room it is laid out in plus `px` pixels, or a weight of
- * `fr` shares of the room its nearest scope divides. Mirrors gofish-graphics'
- * `Length` (`ast/length.ts`) and the `Length` option type in descriptors.ts.
+ * `fr` shares of the room its nearest scope divides. gofish-graphics'
+ * `Length` (`ast/length.ts`) is this type; the `Length` option type in
+ * descriptors.ts mirrors it.
  */
 export type LengthIR =
   | { type: "length"; percent: number; px?: number }

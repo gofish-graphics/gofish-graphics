@@ -109,7 +109,7 @@ export class Tape {
     const negate = (x: F): F => scale(-1, x);
     return {
       zero,
-      constant: (c) => this.value(Pwl.affine(0, c)),
+      constant: (c) => this.value(Pwl.constant(c)),
       add,
       sub: (a, b) => add(a, negate(b)),
       scale,
@@ -121,7 +121,7 @@ export class Tape {
       },
       negate,
       abs: (x) => {
-        const c = Pwl.envelope([claimOf(x), Pwl.negate(claimOf(x))]);
+        const c = Pwl.abs(claimOf(x));
         return this.impure[x]
           ? this.push(Op.Abs, c, x, 0, true)
           : this.value(c);
@@ -132,7 +132,6 @@ export class Tape {
         this.checks.push({ a, b, tolerance, ...owners });
         return true;
       },
-      toValue: claimOf,
       fromValue: (v) => this.value(v),
       report: (x) => Pwl.at(claimOf(x), 0),
     };

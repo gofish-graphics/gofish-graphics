@@ -17,8 +17,7 @@ import {
   Size,
   Direction,
   MARK_DIMS,
-  deferAxisDims,
-  elaborateDims,
+  elaborateOwnDims,
 } from "../dims";
 import { getQuantity, getValue, isValue, MaybeValue } from "../data";
 import { computeAesthetic, computeSize } from "../../util";
@@ -26,12 +25,7 @@ import { posFn, pxOf } from "../domain";
 import { UnderlyingSpace, UNDEFINED, magnitude } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
 import * as Pwl from "../solver/pwl";
-import {
-  bindLengths,
-  rejectLength,
-  takeLengths,
-  type LengthValue,
-} from "../length";
+import { rejectLength, type LengthValue } from "../length";
 import { createOperator } from "../marks/createOperator";
 import { SplitBy, splitEntries } from "../datumProjection";
 import type { FieldExpr } from "../fieldExpr";
@@ -105,9 +99,8 @@ const Treemap = createNodeOperator(
 
     // A length for its own size (`w: percent(50)`, `w: fr(2)`) is laid out
     // in the room it is given, once it is in its tree (#1176 step 6).
-    const ownDims = { ...fancyDims } as Record<string, unknown>;
-    const lengths = takeLengths(ownDims);
-    const dims = elaborateDims(ownDims as FancyDims<MaybeValue<number>>);
+    const own = elaborateOwnDims<MaybeValue<number>>(fancyDims);
+    const { dims } = own;
     // Its spacing and padding are one number d3 applies on both axes, so a
     // percent has no one room to be a percent of.
     // TODO(#1176): a percent treemap spacing needs the axis it is of (the
@@ -148,8 +141,8 @@ const Treemap = createNodeOperator(
           // nothing along the axis by data: it has no axis there and fills the
           // slot it is given.
           const axisSpace = (i: Direction): UnderlyingSpace => {
-            // A length is never data (see rect.tsx).
-            const size = lengths[i] === undefined ? dims[i].size : undefined;
+            // A length is never data.
+            const size = own.dataSize(i);
             return isValue(size) ? magnitude(size) : UNDEFINED;
           };
           return [axisSpace(0), axisSpace(1)];
@@ -312,13 +305,9 @@ const Treemap = createNodeOperator(
       },
       children
     );
-    bindLengths(node, dims, lengths);
-    // The treemap's own box is named by axis in `dims` like a mark's; defer it
-    // to the resolveAliases pass.
-    node._elaborateInAxisScope = deferAxisDims(
-      ownDims as FancyDims<MaybeValue<number>>,
-      dims
-    );
+    // The treemap's own box is named by axis in `dims` like a mark's; `bind`
+    // defers it to the resolveAliases pass.
+    own.bind(node);
     return node;
   }
 );

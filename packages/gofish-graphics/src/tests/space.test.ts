@@ -693,8 +693,6 @@ console.log("# space: one fold for every origin");
 {
   const chainOpts = {
     axis: 0 as const,
-    spacing: 10,
-    anchor: "edge" as const,
     origin: { part: 0, fraction: 0, mirrored: false },
   };
   // A spread separates: along its direction its result is a sequence of
@@ -794,8 +792,6 @@ console.log("# space: one fold for every origin");
       ["p", "q"],
       {
         axis: 1,
-        spacing: 0,
-        anchor: "edge",
         origin: { part: 0, fraction: 0, mirrored: false },
       }
     )

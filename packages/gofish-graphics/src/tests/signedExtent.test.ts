@@ -224,8 +224,6 @@ async function main() {
         [],
         {
           axis: 1,
-          spacing: 0,
-          anchor: "edge",
           glue: true,
           origin: { part: 0, fraction: 0, mirrored: false },
         }

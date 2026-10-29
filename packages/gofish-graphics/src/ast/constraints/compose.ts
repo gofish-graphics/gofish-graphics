@@ -8,18 +8,18 @@
 // of its content (its claim is its plan's, `solver/plan.ts`):
 //
 //   type(axis) = max-union over {
-//     each distribute(dir = axis):   its summed fold (Σ extent + spacing)   — series
+//     each distribute(dir = axis):   its series fold (distributeSpaceFold)   — series
 //     each align(spec on axis):      its overlay fold (resolveAlignmentSpace) — overlay
-//     each child covered by neither: its raw extent                        — overlay
+//     each child covered by neither: its raw type                          — overlay
 //   }
 //
-// This is the (max, +) algebra from
+// This is the type half of the (max, +) algebra from
 // apps/docs/docs/internals/design/layout-synthesis.md: a distribute is a series
-// (sum) on its axis, align/overlay is `max`, and any network of the two folds to
-// a single monotone claim — so the inversion (auto-fit) stays a one-unknown
-// solve. `spread` is the one-distribute + one-cross-axis-align instance;
-// SubsetSelection is two disjoint distributes on one axis (their sub-sums
-// overlay, hence `max`). (A grid/`table` is its own `grid` constraint with
+// on its axis, align/overlay is a union. This file folds types only; the
+// claims, where the sums and envelopes are taken, are the plan's (`buildPlan`).
+// `spread` is the one-distribute + one-cross-axis-align instance;
+// SubsetSelection is two disjoint distributes on one axis (their folds
+// overlay, hence the union). (A grid/`table` is its own `grid` constraint with
 // ORDINAL track axes — see constraints/grid.ts — not composed here.)
 //
 // The align fold is load-bearing, not cosmetic: in a bar chart (distribute on x,
@@ -31,8 +31,8 @@
 // Gated to layers with at least one distribute: a pure overlay (no series, e.g.
 // a legend) has nothing to compose, so it is left untouched (undefined) and the
 // layer's default union — which also merges `position` data domains — stands.
-// Distribute interleaved with a `position` pin (solve the sum relative to the
-// pin) is not yet modeled; the distribute claim wins on a shared axis for now.
+// Distribute interleaved with a point `position` pin (the sum relative to the
+// pin) is not modeled: such a layer is left to the default union too.
 
 import type { GoFishAST } from "../_ast";
 import type { Cell } from "../cells";
@@ -86,16 +86,6 @@ const isSpanPosition = (c: ConstraintSpec): c is PositionConstraint =>
   (c.x === undefined || isPositionInterval(c.x)) &&
   (c.y === undefined || isPositionInterval(c.y)) &&
   (c.x !== undefined || c.y !== undefined || c.region !== undefined);
-
-/** One distribute's slice of the layout budget: equal shares of the axis size
- *  among its covered children (consumed by `layer.tsx`'s `layout`). */
-export type DistributeSegment = {
-  dAxis: 0 | 1;
-  /** Already glue-zeroed (see createDistributeConstraint). */
-  spacing: DistributeConstraint["spacing"];
-  /** Covered child names, in placement order. */
-  order: string[];
-};
 
 export type PositionDomains = {
   x?: Interval.Interval;
@@ -205,9 +195,11 @@ export function resolveLayerBaseSpaces(
 const axisSize = <T>(value: T, axis: 0 | 1, other: T): Size<T> =>
   axis === 0 ? [value, other] : [other, value];
 
-type Seg = DistributeSegment & {
+/** One distribute, as its fold reads it: its axis and its covered
+ *  children, in placement order. */
+type Seg = {
+  dAxis: 0 | 1;
   idx: number[];
-  anchor: AlignAnchor | "edge";
   glue: boolean;
   measure?: string;
   hasOrder?: boolean;
@@ -297,10 +289,7 @@ export function planConstraintComposition(
     if (idx === undefined) return undefined;
     segments.push({
       dAxis: axisIndex(d.dir),
-      spacing: d.spacing,
-      order: ordered.map((r) => r.name),
       idx,
-      anchor: d.anchor,
       glue: d.glue,
       measure: d.measure,
       hasOrder: d.hasOrder,
@@ -540,8 +529,6 @@ export function planSharing(
 
 const foldOptions = (s: Seg) => ({
   axis: s.dAxis,
-  spacing: s.spacing,
-  anchor: s.anchor,
   glue: s.glue,
   measure: s.measure,
   hasOrder: s.hasOrder,

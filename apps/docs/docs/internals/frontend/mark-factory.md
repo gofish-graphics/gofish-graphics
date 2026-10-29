@@ -178,7 +178,8 @@ Walking `withGoFish.ts:431-477`:
    whose descriptor type names `t.ref("Length")` (a box's `w`/`h`, a rect's
    `inset`); a length anywhere else throws rather than being dropped. A
    length passes the channels through unchanged (`inferNumeric`), and the
-   shape takes it off its `dims` and binds it to its node (`takeLengths`,
+   shape takes it off its `dims` and binds it to its node
+   (`elaborateOwnDims` in `ast/dims.ts`, over `takeLengths` and
    `bindLengths`).
 2. **Apply each channel.** For each prop in the user's `markOpts`:
    - `Value`-wrapped (`v(...)`) → pass through unchanged. (Already final.)

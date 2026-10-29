@@ -46,7 +46,7 @@ import { RelateOperand } from "../constraints/relate";
 import { nodeSelectionOf } from "../nodeSelection";
 import { planPlacement } from "../solver/plan";
 import type { Placement } from "../constraints/claimPlacement";
-import { Extent } from "../extent";
+import { Extent, hullExtent, padExtent } from "../extent";
 import * as Pwl from "../solver/pwl";
 import { ringPathData } from "../geometry/plane";
 
@@ -123,10 +123,7 @@ function Enclose(
             own.some((e) => e === undefined)
           )
             return undefined;
-          return Extent(
-            Pwl.addConstant(Pwl.envelope(own.map((e) => e!.ascent)), padding),
-            Pwl.addConstant(Pwl.envelope(own.map((e) => e!.descent)), padding)
-          );
+          return padExtent(hullExtent(...(own as Extent[])), padding);
         }) as [Extent | undefined, Extent | undefined],
       layout: (size, scales, children) => {
         // Child placement (`placeUnplacedChild`): a FRESH child reports an

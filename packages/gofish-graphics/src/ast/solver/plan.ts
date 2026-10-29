@@ -11,9 +11,10 @@
 import { GoFishNode } from "../_node";
 import { hasOrigin } from "../underlyingSpace";
 import type { GoFishAST } from "../_ast";
-import { Extent } from "../extent";
+import { Extent, padExtent, scaleExtent, shiftExtent } from "../extent";
 import type { Size } from "../dims";
 import * as Pwl from "./pwl";
+import { values } from "./arith";
 import {
   literalSeats,
   placeByClaims,
@@ -63,37 +64,23 @@ const planOf = (c: GoFishAST, axis: 0 | 1): LayerPlan | undefined =>
     ? c.claimWalk.plan(axis)
     : undefined;
 
-const sub = (a: Pwl.Value, b: Pwl.Value): Pwl.Value =>
-  Pwl.add(a, Pwl.negate(b));
-
-/** How far a claim reaches past the box at each end, `[up, down]`. */
-type Reach = [Pwl.Value, Pwl.Value];
-
-/** `e` less a reach `[up, down]` past its box at each end. */
-const within = (e: Extent, [up, down]: Reach): Extent =>
-  Extent(sub(e.ascent, up), sub(e.descent, down));
-
-/** `e` moved `by` pixels up its axis. */
-const shifted = (e: Extent, by: Pwl.Value): Extent =>
-  Pwl.isZero(by) ? e : Extent(Pwl.add(e.ascent, by), sub(e.descent, by));
+const { sub } = values;
 
 /** `e` read in a frame whose y runs the other way: reflected about data 0. */
 const reflectedExtent = (e: Extent): Extent => Extent(e.descent, e.ascent);
 
-/** `e` drawn scaled by `k` about data 0 (`transform.scale`): a negative
- *  factor reflects it. */
-const scaledExtent = (e: Extent, k: number): Extent =>
-  k === 1
-    ? e
-    : k > 0
-      ? Extent(Pwl.scale(k, e.ascent), Pwl.scale(k, e.descent))
-      : Extent(Pwl.scale(-k, e.descent), Pwl.scale(-k, e.ascent));
+/** The placement of a box `[lo, hi]` whose data 0 is at `zero`. */
+const placementOf = (
+  lo: Pwl.Value,
+  hi: Pwl.Value,
+  zero: Pwl.Value
+): Placement => ({ lo, hi, extent: Extent(sub(hi, zero), sub(zero, lo)) });
 
 /** Where a layer's data 0 sits from the origin its claim is about: past
  *  its box's descent from its literal start, which places its box start
  *  (`translate` in its layout); 0 when its parent places it. */
 const zeroOf = (c: GoFishNode, rec: ChildForms, axis: 0 | 1): Pwl.Value => {
-  const start = c.claimWalk?.literalStart[axis];
+  const start = c.claimWalk?.literalStart(axis);
   return start === undefined
     ? Pwl.ZERO
     : Pwl.addConstant(rec.box.descent, start);
@@ -119,16 +106,14 @@ const boxOf = (c: GoFishAST): Size<Extent | undefined> => {
   if (memo?.claim === claim) return memo.box;
   const o = c.claimedOverhang;
   const bare = (e: Extent | undefined) =>
-    e === undefined || o === 0
-      ? e
-      : within(e, [Pwl.constant(o), Pwl.constant(o)]);
+    e === undefined || o === 0 ? e : padExtent(e, -o);
   let box: Size<Extent | undefined>;
   if (c.claimWalk !== undefined)
     box = ([0, 1] as const).map((axis) => {
       const rec = planOf(c, axis)?.summary;
       return rec === undefined
         ? bare(claim[axis])
-        : shifted(rec.box, zeroOf(c, rec, axis));
+        : shiftExtent(rec.box, zeroOf(c, rec, axis));
     }) as Size<Extent | undefined>;
   else if (c.children.length === 0) box = [bare(claim[0]), bare(claim[1])];
   else box = c.composeExtent(c.children.map(boxOf));
@@ -150,11 +135,11 @@ const reaching = (e: Extent, from: Extent, to: Extent): Extent =>
  * (`GoFishNode.placedByLayout`). Layout pins it where it put itself, so the
  * plan takes it there (`at:`).
  */
-export const placesItself = (c: GoFishAST, axis: 0 | 1): boolean => {
+const placesItself = (c: GoFishAST, axis: 0 | 1): boolean => {
   if (!(c instanceof GoFishNode)) return false;
   if (c.placedByLayout?.[axis] === true) return true;
   if (c.claimWalk !== undefined)
-    return c.claimWalk.literalStart[axis] !== undefined;
+    return c.claimWalk.literalStart(axis) !== undefined;
   const d = (c.args?.dims as { min?: unknown; center?: unknown }[])?.[axis];
   return d?.min !== undefined || d?.center !== undefined;
 };
@@ -229,25 +214,22 @@ const formsOf = (
   axis: 0 | 1
 ): ChildForms => {
   let forms: ChildForms;
-  const own = c instanceof GoFishNode && c.claimWalk?.ownScope[axis] === true;
+  const own =
+    c instanceof GoFishNode && c.claimWalk?.ownSize(axis) !== undefined;
   const rec = planOf(c, axis)?.summary;
   if (c instanceof GoFishNode && rec !== undefined) {
     const zero = zeroOf(c, rec, axis);
-    const o = Pwl.constant(c.claimedOverhang);
-    const recWhole = shifted(
-      Extent(Pwl.add(rec.whole.ascent, o), Pwl.add(rec.whole.descent, o)),
-      zero
-    );
+    const recWhole = shiftExtent(padExtent(rec.whole, c.claimedOverhang), zero);
     // A nest that derives the child pads its claim: read its forms off
     // that claim instead.
     const w = whole !== c.resolveExtent()[axis] ? whole : recWhole;
-    const box = reaching(w, recWhole, shifted(rec.box, zero));
+    const box = reaching(w, recWhole, shiftExtent(rec.box, zero));
     forms = {
       whole: w,
       box,
       plot: c.plotIsBox(axis)
         ? box
-        : rec.plot && reaching(w, recWhole, shifted(rec.plot, zero)),
+        : rec.plot && reaching(w, recWhole, shiftExtent(rec.plot, zero)),
       zero,
     };
   } else {
@@ -267,7 +249,7 @@ const formsOf = (
       zero: Pwl.ZERO,
     };
   }
-  if (axis === 1 && c.yFrame.direction !== parent.yFrame.direction)
+  if (flips(parent, c, axis))
     forms = {
       whole: reflectedExtent(forms.whole),
       box: reflectedExtent(forms.box),
@@ -345,7 +327,6 @@ export function buildPlan(
     }),
     withoutSpannedAligns(node, constraints, operands),
     operands,
-    new Set(node.children.map((_, i) => i)),
     // Into this layer's reading of the container: moved by its data 0 there
     // and reflected where its y runs the other way, as `formsOf` reads it.
     (name) => {
@@ -361,7 +342,7 @@ export function buildPlan(
         p.hi,
         sub(p.hi, p.extent.ascent)
       );
-      return { lo, hi, extent: Extent(sub(hi, zero), sub(zero, lo)) };
+      return placementOf(lo, hi, zero);
     },
     hasOrigin(node._underlyingSpace?.[axis])
   );
@@ -413,10 +394,10 @@ export function buildPlan(
     sBox === undefined || sWhole === undefined
       ? undefined
       : {
-          box: scaledExtent(sBox, scale),
-          whole: scaledExtent(sWhole, scale),
+          box: scaleExtent(scale, sBox),
+          whole: scaleExtent(scale, sWhole),
           plot:
-            plot[0].length === 0 ? undefined : scaledExtent(env(plot)!, scale),
+            plot[0].length === 0 ? undefined : scaleExtent(scale, env(plot)!),
           zero: Pwl.ZERO,
         };
   return { placement, forms, summary };
@@ -436,7 +417,7 @@ function seatOf(
   if (seating === undefined) return undefined;
   if (
     child instanceof GoFishNode &&
-    child.claimWalk?.literalStart[axis] !== undefined
+    child.claimWalk?.literalStart(axis) !== undefined
   )
     return undefined;
   const i = seating.indexOf(child);
@@ -594,7 +575,7 @@ export function planPlacement(
     if (flips(p, m, axis)) sign = -sign as 1 | -1;
   }
   [lo, hi, zero] = moved({ at: Pwl.scale(-sign, at), sign }, lo, hi, zero);
-  return { lo, hi, extent: Extent(sub(hi, zero), sub(zero, lo)) };
+  return placementOf(lo, hi, zero);
 }
 
 /**
@@ -611,6 +592,5 @@ export function planPlacementInChild(
   const walked =
     container.parent && throughPlans(target, container.parent, axis);
   if (walked === undefined || walked.n !== container) return undefined;
-  const [lo, hi, zero] = walked.at;
-  return { lo, hi, extent: Extent(sub(hi, zero), sub(zero, lo)) };
+  return placementOf(...walked.at);
 }

@@ -725,8 +725,8 @@ report their size).
   its own union leaves out (a literal pin, a datum pin, a seat beside a
   sibling) are placed by the same placement solver layout runs, on boxes
   that are their claims, with data mapped through σ from data 0. The solve
-  runs once in values in σ, so each box's edges are piecewise-linear in σ,
-  and the hull is their envelope. A ring is such a layer, so its claim holds its axis, titles or
+  runs once in formulas (`Tape`), so each box's edges are piecewise-linear
+  in σ, and the hull is their envelope (`buildPlan` in `solver/plan.ts`). A ring is such a layer, so its claim holds its axis, titles or
   legend around what it wraps, and so does a scatter's around its marks.
 - **Placement claims.** A `ref` stand-in, or an operand nested in a child,
   stands where its node lands in the layer's frame. The claim walk knows
@@ -865,8 +865,8 @@ report their size).
   its content. Each node has a plot claim
   next to its claim (`GoFishNode.resolvePlotExtent`): a layer composes its
   children's plot claims the way it composes their claims, its hull of what
-  its constraints place leaves out the dressing (`placeByClaims`' plot
-  hull). A child may also hand `placeByClaims` a plot apart from its box
+  its constraints place leaves out the dressing (`buildPlan`'s plot
+  envelope). A child may also hand `placeByClaims` a plot apart from its box
   (`ClaimChild.plot`), which a chain lays it by as layout does
   (`localPlotSpan`), say that it places itself at a literal pixel and stays
   there (`placesItself`), or that it is a ring's chrome (`chrome`), which

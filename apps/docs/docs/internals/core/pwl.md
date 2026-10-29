@@ -156,8 +156,8 @@ amounts agree within a tolerance, and `agree`, the same test where a constraint
 over-determines a box. `numbers` is plain arithmetic, which the layout `BBox` of a node
 and the grid tracks still use. `values` is this module, where `near` and `agree` are
 `approxEqual`, so a cycle in the solve closes only when its two sides agree at every σ.
-The `BBox` ledger is generic in its arithmetic, so `toValue` and `fromValue` move an
-amount into and out of it, and a number is a constant there.
+`fromValue` reads a value in σ (a σ-term gap, the σ of a data map) in an arithmetic: a
+number solve reads it at σ = 0.
 
 The plan's arithmetic is a formula `Tape` (`solver/formula.ts`). Each of its values is a
 node: a sum, a scaling, a max or an absolute value of earlier nodes, a value in σ, or an

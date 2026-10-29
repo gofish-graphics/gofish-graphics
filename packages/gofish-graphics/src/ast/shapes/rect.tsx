@@ -18,8 +18,7 @@ import {
 import {
   Dimensions,
   displayDims as displayDimsOf,
-  elaborateDims,
-  deferAxisDims,
+  elaborateOwnDims,
   FancyDims,
   FancySize,
   Size,
@@ -44,12 +43,10 @@ import { interval } from "../../util/interval";
 import { createMark } from "../withGoFish";
 import * as Pwl from "../solver/pwl";
 import {
-  bindLengths,
   isFr,
   isLength,
   lengthIn,
   printLength,
-  takeLengths,
   type Length,
   type LengthValue,
 } from "../length";
@@ -119,11 +116,10 @@ export const Rect = ({
 } & FancyDims<MaybeValue<number> | LengthValue>) => {
   // A length for its own size (`w: percent(30)`, `w: fr(2)`) is laid out in
   // the room it is given, known only once it is in its tree (#1176 step 6).
-  const ownDims = { ...fancyDims } as Record<string, unknown>;
-  const lengths = takeLengths(ownDims);
   // `embedded` is authored by the resolveEmbedding pass (after underlying-space
   // resolves the axis measure), not inferred here — see _node.resolveEmbedding.
-  const dims = elaborateDims(ownDims as FancyDims<MaybeValue<number>>);
+  const own = elaborateOwnDims<MaybeValue<number>>(fancyDims);
+  const { dims } = own;
   const { rx, ry } = cornerRadii(rxGiven, ryGiven, 0);
   if (isLength(inset)) {
     if (isFr(inset))
@@ -171,7 +167,7 @@ export const Rect = ({
           // A length is never data, and its pixels are known only once the
           // rect is in its tree, after its type: it adds no type, as pixels
           // do.
-          const dSize = lengths[axis] === undefined ? d.size : undefined;
+          const dSize = own.dataSize(axis);
           // A box placed by its center is a glyph, as a text or an image is.
           const center = centerOf(d);
           if (center !== undefined) return glyphAxis(center, dSize);
@@ -452,12 +448,7 @@ export const Rect = ({
     },
     []
   );
-  bindLengths(node, dims, lengths);
-  // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
-  node._elaborateInAxisScope = deferAxisDims(
-    ownDims as FancyDims<MaybeValue<number>>,
-    dims
-  );
+  own.bind(node);
   return node;
 };
 

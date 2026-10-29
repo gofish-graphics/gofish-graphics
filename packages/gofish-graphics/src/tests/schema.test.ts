@@ -227,8 +227,6 @@ async function main() {
         values.map((_, i) => `k${i}`),
         {
           axis: 1,
-          spacing: 0,
-          anchor: "edge",
           glue: true,
           measure: "r",
           origin,

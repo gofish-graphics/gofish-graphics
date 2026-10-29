@@ -6,20 +6,20 @@ import { GoFishNode, type ToPixel } from "../_node";
 import type { DisplayList } from "gofish-ir";
 import { getScopeRegistry, seatInBand, seatInScope } from "../solver/scopes";
 import { isToken } from "../createName";
-import {
-  Size,
-  elaborateDims,
-  deferAxisDims,
-  FancyDims,
-  displayTranslate,
-} from "../dims";
+import { Size, elaborateOwnDims, FancyDims, displayTranslate } from "../dims";
 import {
   UnderlyingSpace,
   isCONTINUOUS,
   isUNDEFINED,
   magnitude,
 } from "../underlyingSpace";
-import { Extent, impliedExtent, mapsDomain, padExtent } from "../extent";
+import {
+  Extent,
+  impliedExtent,
+  mapsDomain,
+  padExtent,
+  shiftExtent,
+} from "../extent";
 import * as Pwl from "../solver/pwl";
 import type { KeyedDomains } from "../keyedDomains";
 import { isValue } from "../data";
@@ -48,6 +48,7 @@ import { GoFishRef } from "../_ref";
 import { applyRelationalZBelowDefaults } from "../constraints/relationalPaint";
 import {
   axisIndex,
+  axisName,
   buildNameIndex,
   childNameKey,
   type ConstraintPosScales,
@@ -94,7 +95,6 @@ import {
   guttersAt,
   setChromeForms,
 } from "../chromeGutters";
-import { bindLengths, takeLengths } from "../length";
 import { resolveSpacing } from "../constraints/distribute";
 import { resolveGridSpacing } from "../constraints/grid";
 import { fixedOverflow, warnLayout } from "../layoutWarnings";
@@ -170,14 +170,10 @@ export const layer = createNodeOperatorSequential(
     // A length for its own size (`w: percent(30)`, `w: fr(2)`, #1176 step
     // 6) is laid out in the room the layer is given, which is known only
     // once the layer is in its tree, so the layer reads it on demand
-    // (`bindLengths`): its size is then pixels, or none for a share.
-    const ownOptions = { ...options } as Record<string, unknown>;
-    const lengths = takeLengths(ownOptions);
-    const dims = elaborateDims(ownOptions as typeof options);
-    // Its size where it can be data: a length never is, and is not read
-    // while the types are resolved, before its room is known.
-    const dataSize = (axis: 0 | 1) =>
-      lengths[axis] === undefined ? dims[axis].size : undefined;
+    // (`bindLengths`): its size is then pixels, or none for a share. Its
+    // size where it can be data (`dataSize`): a length never is.
+    const own = elaborateOwnDims<number>(options);
+    const { dims, dataSize } = own;
 
     // SIZED NODES (#1114). A layer with a size of its own on an axis (a
     // literal `w`/`h`, or a data-valued one) is a sized node there: at layout
@@ -271,7 +267,7 @@ export const layer = createNodeOperatorSequential(
     const heldInChain = (axis: 0 | 1): boolean => {
       for (let p = node.parent; p !== undefined; p = p.parent) {
         if (p.axisDir === axis) return true;
-        if (p.claimWalk?.ownScope[axis] === true) return false;
+        if (p.claimWalk?.ownSize(axis) !== undefined) return false;
       }
       return false;
     };
@@ -442,6 +438,12 @@ export const layer = createNodeOperatorSequential(
     // the type memo and the claim memo are cleared together, so whenever the
     // claim hook runs, this is the composition behind the current types.
     let layerTypes: ReturnType<typeof composeLayerTypes> | undefined;
+    // Whether `axis` is a grid's track axis, whose tracks size at layout
+    // (`resolveGridTracks`): the layer claims by its tracks there.
+    const isTrackAxis = (axis: 0 | 1): boolean => {
+      const grid = layerTypes?.gridAxes;
+      return grid !== undefined && !isUNDEFINED(grid[axis]);
+    };
 
     const node: GoFishNode = new GoFishNode(
       {
@@ -515,21 +517,18 @@ export const layer = createNodeOperatorSequential(
             options.transform?.scale?.x ?? 1,
             options.transform?.scale?.y ?? 1,
           ];
-          // The layer's plan on each axis (`buildPlan`): one solve over
-          // every child, by its box, where its constraints place it. Its
-          // claim is the envelope of what its children draw there, and its
-          // plot the envelope of their plots, leaving out the dressing and
-          // the ink. A grid's track axis has none: its tracks size at
-          // layout (`resolveGridTracks`).
           // Its chains' and grids' length spacings, laid out in its room.
           resolveSpacing(node);
           resolveGridSpacing(node);
           const operands = constraintOperands();
           const ring = isRing(node);
-          // A grid's track axis has a plan too, which places its cells in
-          // their tracks, but its claim is its tracks' (`resolveGridTracks`).
-          const trackAxis = (axis: 0 | 1) =>
-            t.gridAxes !== undefined && !isUNDEFINED(t.gridAxes[axis]);
+          // The layer's plan on each axis (`buildPlan`): one solve over
+          // every child, by its box, where its constraints place it. Its
+          // claim is the envelope of what its children draw there, and its
+          // plot the envelope of their plots, leaving out the dressing and
+          // the ink. A grid's track axis has a plan too, which places its
+          // cells in their tracks, but its claim is its tracks'
+          // (`isTrackAxis`), so no claim reads the plan there.
           const plans = ([0, 1] as const).map((axis) =>
             buildPlan(
               node,
@@ -544,7 +543,7 @@ export const layer = createNodeOperatorSequential(
           ) as [LayerPlan | undefined, LayerPlan | undefined];
           node._claimMemo.plans = plans;
           const claimPlans = plans.map((p, axis) =>
-            trackAxis(axis as 0 | 1) ? undefined : p
+            isTrackAxis(axis as 0 | 1) ? undefined : p
           ) as [LayerPlan | undefined, LayerPlan | undefined];
           const session = node.tryGetRenderSession();
           for (const axis of [0, 1] as const) {
@@ -559,8 +558,8 @@ export const layer = createNodeOperatorSequential(
             Extent | undefined,
           ];
           // A layer whose children are no stand-ins and have their claims
-          // as their plots, with no dressing placed, has its claim as its
-          // plot.
+          // as their plots, with no dressing placed (no child it places is
+          // dressing), has its claim as its plot.
           const plotIsClaim =
             !outlinedNest &&
             node.children.every(
@@ -572,7 +571,11 @@ export const layer = createNodeOperatorSequential(
                 )
             ) &&
             claimPlans.every(
-              (p) => p === undefined || p.placement.plot === p.placement.hull
+              (p) =>
+                p === undefined ||
+                ![...p.placement.boxes().keys()].some((i) =>
+                  p.placement.dressing.has(i)
+                )
             );
           const plot = plotIsClaim
             ? resolved
@@ -665,7 +668,7 @@ export const layer = createNodeOperatorSequential(
             );
           const fixedClaim = (axis: 0 | 1, px: number): Extent | undefined => {
             if (!solvesDomain(axis))
-              return Extent(Pwl.affine(0, aroundPlot(node, axis, px)));
+              return Extent(Pwl.constant(aroundPlot(node, axis, px)));
             const solved = scopes.fixedSolve(node, axis);
             if (solved === undefined) return resolved[axis];
             const { claim, solution, space } = solved;
@@ -678,20 +681,17 @@ export const layer = createNodeOperatorSequential(
             // its box, the content starts at the start edge, so its claim
             // runs from there.
             return seatInScope(solution, space).seat.anchor === "baseline"
-              ? Extent(Pwl.affine(0, ascent), Pwl.affine(0, descent))
-              : Extent(Pwl.affine(0, ascent + descent));
+              ? Extent(Pwl.constant(ascent), Pwl.constant(descent))
+              : Extent(Pwl.constant(ascent + descent));
           };
           // A literal start places the layer that many pixels from its
           // parent's origin (`translate` in `layout`), so its claim moves
           // with it.
           const at = (axis: 0 | 1, claim: Extent | undefined) => {
             const min = dims[axis].min;
-            return claim === undefined || typeof min !== "number" || min === 0
+            return claim === undefined || typeof min !== "number"
               ? claim
-              : Extent(
-                  Pwl.addConstant(claim.ascent, min),
-                  Pwl.addConstant(claim.descent, -min)
-                );
+              : shiftExtent(claim, Pwl.constant(min));
           };
           const claims = ([0, 1] as const).map((axis) => {
             const size = dims[axis].size;
@@ -887,7 +887,7 @@ export const layer = createNodeOperatorSequential(
             for (const axis of [0, 1] as const) {
               if (unplacedOnly && cp.dims[axis].min !== undefined) continue;
               const seat = seatOf(cp, i, axis);
-              cp.place(axis === 0 ? "x" : "y", seat.px, seat.anchor);
+              cp.place(axisName(axis), seat.px, seat.anchor);
             }
           };
 
@@ -1193,7 +1193,7 @@ export const layer = createNodeOperatorSequential(
                   const [a, b] = [e.v[c.a], e.v[c.b]];
                   if (!(Math.abs(a - b) <= c.tolerance))
                     throw new Error(
-                      `Constraint placement conflict on ${axis === 0 ? "x" : "y"}: ` +
+                      `Constraint placement conflict on ${axisName(axis as 0 | 1)}: ` +
                         `${c.owner} asserts ${a}, but ${c.priorOwner} implies ${b}`
                     );
                 }
@@ -1202,7 +1202,7 @@ export const layer = createNodeOperatorSequential(
                 if (e === undefined) return;
                 const axis = i as 0 | 1;
                 const { seats, v } = e;
-                const label = axis === 0 ? "x" : "y";
+                const label = axisName(axis);
                 for (const [key, cell] of seats.cells) {
                   const t = planTargets.get(key);
                   if (t === undefined) continue;
@@ -1339,30 +1339,23 @@ export const layer = createNodeOperatorSequential(
       seating,
       // Both read live: a `dims` option names its axes only once the scopes
       // around the layer are known (`deferAxisDims`), and then sets them.
-      get literalStart(): [number | undefined, number | undefined] {
-        const at = (axis: 0 | 1) => {
-          const min = dims[axis].min;
-          return typeof min === "number" ? min : undefined;
-        };
-        return [at(0), at(1)];
-      },
-      get ownScope(): [boolean, boolean] {
-        return [dims[0].size !== undefined, dims[1].size !== undefined];
+      literalStart: (axis) => {
+        const min = dims[axis].min;
+        return typeof min === "number" ? min : undefined;
       },
       ownSize: (axis) => dims[axis].size,
       // A grid's track axis claims by its tracks, so no plan composes
       // through it there.
       plan: (axis) => {
         node.resolveExtent();
-        const grid = layerTypes?.gridAxes;
-        return grid !== undefined && !isUNDEFINED(grid[axis])
-          ? undefined
-          : node._claimMemo.plans[axis];
+        return isTrackAxis(axis) ? undefined : node._claimMemo.plans[axis];
       },
     };
-    bindLengths(node, dims, lengths);
-    // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
-    node._elaborateInAxisScope = deferAxisDims(ownOptions, dims);
+    // Give it its lengths, and defer the axis-name-keyed `dims` option to
+    // the resolveAliases pass.
+    own.bind(node);
+    // A size of its own makes it a scope of its own there.
+    node.ownsScopeOn = (axis) => dims[axis].size !== undefined;
     // Default zBelow(connector, operand) for relational marks (line/ribbon/…)
     // found anywhere in this layer's subtree, kept apart so a later
     // `.relate()` keeps them (see `applyRelationalZBelowDefaults`).

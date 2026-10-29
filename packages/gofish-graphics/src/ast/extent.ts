@@ -189,12 +189,30 @@ export const impliedExtents = (
   impliedExtent(spaces[1]),
 ];
 
-/** A claim scaled by a pixel-space `transform.scale` (like translate, a scale
- *  acts on pixels, so it scales the claim but never the data interval). */
+/** A claim scaled by a pixel-space `transform.scale` about data 0 (like
+ *  translate, a scale acts on pixels, so it scales the claim but never the
+ *  data interval): a negative factor reflects it. */
 export const scaleExtent = (scale: number, extent: Extent): Extent =>
   scale === 1
     ? extent
-    : Extent(Pwl.scale(scale, extent.ascent), Pwl.scale(scale, extent.descent));
+    : scale > 0
+      ? Extent(
+          Pwl.scale(scale, extent.ascent),
+          Pwl.scale(scale, extent.descent)
+        )
+      : Extent(
+          Pwl.scale(-scale, extent.descent),
+          Pwl.scale(-scale, extent.ascent)
+        );
+
+/** A claim moved `by` pixels up its axis. */
+export const shiftExtent = (extent: Extent, by: Pwl.Value): Extent =>
+  Pwl.isZero(by)
+    ? extent
+    : Extent(
+        Pwl.add(extent.ascent, by),
+        Pwl.add(extent.descent, Pwl.negate(by))
+      );
 
 /** A claim grown by `padding` pixels on each side (a nest's inset). */
 export const padExtent = (extent: Extent, padding: number): Extent =>

@@ -55,9 +55,10 @@ export class LengthValue {
 }
 
 /** The wire form of a {@link LengthValue}. */
-export type Length =
-  | { type: "length"; percent: number; px?: number }
-  | { type: "length"; fr: number };
+export type Length = Frontend.LengthIR;
+
+/** The fields of a length of either kind, each read where it is given. */
+type LengthFields = { percent?: number; px?: number; fr?: number };
 
 /** `n` percent of the room the length is laid out in. */
 export const percent = (n: number): LengthValue => {
@@ -82,20 +83,12 @@ export const isLength = (v: unknown): v is Length | LengthValue =>
 
 /** Whether the length `v` is an `fr` weight. */
 export const isFr = (v: Length | LengthValue): boolean =>
-  (v as { fr?: number }).fr !== undefined;
+  (v as LengthFields).fr !== undefined;
 
 /** `v` as it is written: `percent(30)`, `percent(30).offset(10)`,
  *  `fr(2)`. */
 export const printLength = (v: Length | LengthValue): string => {
-  const {
-    percent: p,
-    px,
-    fr: k,
-  } = v as {
-    percent?: number;
-    px?: number;
-    fr?: number;
-  };
+  const { percent: p, px, fr: k } = v as LengthFields;
   if (k !== undefined) return `fr(${k})`;
   return px === undefined || px === 0
     ? `percent(${p})`
@@ -113,15 +106,7 @@ export const lengthIn = (
   room: () => Pwl.Value
 ): Pwl.Value => {
   if (typeof v === "number") return Pwl.constant(v);
-  const {
-    percent: p,
-    px,
-    fr: k,
-  } = v as {
-    percent?: number;
-    px?: number;
-    fr?: number;
-  };
+  const { percent: p, px, fr: k } = v as LengthFields;
   if (k !== undefined) return Pwl.affine(k, 0);
   return Pwl.addConstant(Pwl.scale((p ?? 0) / 100, room()), px ?? 0);
 };
@@ -135,23 +120,26 @@ export type LengthPair = [
 /**
  * Take a construct's own `w`/`h` lengths out of its options (`w:
  * percent(30)`, `h: fr(2)`), leaving pixels and data values where they
- * are: per axis, the length taken, or undefined. The construct gives them
- * to its node ({@link bindLengths}).
+ * are: a copy of the options without them, and per axis, the length taken,
+ * or undefined. The construct gives them to its node ({@link bindLengths}).
  */
-export const takeLengths = (dims: Record<string, unknown>): LengthPair => {
-  const taken: LengthPair = [undefined, undefined];
+export const takeLengths = (
+  options: Record<string, unknown>
+): { rest: Record<string, unknown>; lengths: LengthPair } => {
+  const rest = { ...options };
+  const lengths: LengthPair = [undefined, undefined];
   (["w", "h"] as const).forEach((k, axis) => {
-    const v = dims[k];
+    const v = rest[k];
     if (!isLength(v)) return;
-    taken[axis] = v;
-    delete dims[k];
+    lengths[axis] = v;
+    delete rest[k];
   });
-  return taken;
+  return { rest, lengths };
 };
 
 /** A node a construct gives its own lengths to: see `GoFishNode.ownLengths`
  *  and `GoFishNode.lengthPx`. */
-type LengthNode = {
+export type LengthNode = {
   ownLengths?: LengthPair;
   lengthPx(axis: 0 | 1): number | undefined;
 };

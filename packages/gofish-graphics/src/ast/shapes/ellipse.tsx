@@ -7,8 +7,7 @@ import { getValue, isValue, MaybeValue, Value } from "../data";
 import {
   Dimensions,
   displayDims as displayDimsOf,
-  elaborateDims,
-  deferAxisDims,
+  elaborateOwnDims,
   FancyDims,
   FancySize,
   Size,
@@ -27,7 +26,7 @@ import { MARK_CHANNELS } from "../markChannels.generated";
 import { boxOfDims, ellipseOutline, outlinePaint } from "../geometry";
 import { around } from "../../families/place";
 import { literalBoxExtents } from "../extent";
-import { bindLengths, takeLengths, type LengthValue } from "../length";
+import { type LengthValue } from "../length";
 import type { DisplayList } from "gofish-ir";
 import {
   lowerStyle,
@@ -55,13 +54,10 @@ export const Ellipse = ({
 } & FancyDims<MaybeValue<number> | LengthValue>) => {
   // A length for its own size (`w: percent(30)`, `w: fr(2)`) is laid out in
   // the room it is given, known only once it is in its tree (#1176 step 6).
-  const ownDims = { ...fancyDims } as Record<string, unknown>;
-  const lengths = takeLengths(ownDims);
   // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
-  const dims = elaborateDims(ownDims as FancyDims<MaybeValue<number>>);
-  // Its size as its type reads it: a length is never data (see rect.tsx).
-  const dataSize = (axis: 0 | 1) =>
-    lengths[axis] === undefined ? dims[axis].size : undefined;
+  // Its size as its type reads it (`dataSize`): a length is never data.
+  const own = elaborateOwnDims<MaybeValue<number>>(fancyDims);
+  const { dims, dataSize } = own;
   // How it paints its outline, read once.
   const paint = outlinePaint({ fill, stroke, strokeWidth });
   const node = new GoFishNode(
@@ -314,12 +310,7 @@ export const Ellipse = ({
     },
     []
   );
-  bindLengths(node, dims, lengths);
-  // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
-  node._elaborateInAxisScope = deferAxisDims(
-    ownDims as FancyDims<MaybeValue<number>>,
-    dims
-  );
+  own.bind(node);
   return node;
 };
 

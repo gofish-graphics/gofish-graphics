@@ -8,7 +8,6 @@ import {
   type AlignAnchor,
   type ConstraintRef,
 } from "./shared";
-import type { Placeable } from "../_node";
 import { isValue, type MaybeValue } from "../data";
 import type { PlacementFactEmitter, RelationAnchor } from "./placementFacts";
 import {
@@ -327,8 +326,6 @@ export function lowerDistributePlacement<T>(
 export type DistributeFoldOptions = {
   /** The axis the chain runs along. */
   axis: 0 | 1;
-  spacing: DistributeConstraint["spacing"];
-  anchor: AlignAnchor | "edge";
   glue?: boolean;
   /** Explicit size on the spread/layer's stack axis; overrides children. */
   size?: MaybeValue<number>;

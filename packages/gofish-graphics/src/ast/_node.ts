@@ -81,7 +81,6 @@ import { impliedExtents, Extent, padExtent } from "./extent";
 import * as Pwl from "./solver/pwl";
 import {
   DEFAULT_CANVAS_SIZE,
-  isFr,
   lengthIn,
   printLength,
   type Length,
@@ -111,7 +110,12 @@ import { isToken, Token } from "./createName";
 import type { ConstraintSpec } from "./constraints";
 import { childRole, type SharingPlan } from "./constraints/compose";
 import type { KeyedDomains } from "./keyedDomains";
-import { mixedSizes, warnLayout, type LayoutWarning } from "./layoutWarnings";
+import {
+  chainOn,
+  mixedSizes,
+  warnLayout,
+  type LayoutWarning,
+} from "./layoutWarnings";
 import { relateEnv, resolveConstraintOperands } from "./constraints";
 import { applyRelationalZBelowDefaults } from "./constraints/relationalPaint";
 import {
@@ -253,9 +257,9 @@ export type ClaimWalk = {
     string,
     { node: GoFishAST; child: number; direct: boolean }
   >;
-  /** Per axis, the literal pixel its own start places it at in its parent
+  /** The literal pixel its own start places it at in its parent on `axis`
    *  (undefined for none: its parent places it). */
-  literalStart: [number | undefined, number | undefined];
+  literalStart: (axis: 0 | 1) => number | undefined;
   /** How it seats its children, read by the placement walk through it
    *  (`planPlacement`): a child's index, its name as a direct operand, and per
    *  axis the constraints that act on it there, by child index. */
@@ -264,10 +268,8 @@ export type ClaimWalk = {
     operandName: Map<number, string>;
     acting: [Map<number, ConstraintSpec[]>, Map<number, ConstraintSpec[]>];
   };
-  /** Per axis, whether it has a size of its own there, which makes it a
-   *  σ-scope of its own. */
-  ownScope: [boolean, boolean];
-  /** Per axis, its own size there: pixels, a data value, or undefined. */
+  /** Per axis, its own size there: pixels, a data value, or undefined. A
+   *  size of its own makes it a σ-scope of its own there. */
   ownSize: (axis: 0 | 1) => MaybeValue<number> | undefined;
 };
 
@@ -829,6 +831,11 @@ export class GoFishNode {
   /** Set on a layer by `layer`: what the claim walk reads of it. A node
    *  with none is not a layer. */
   public claimWalk?: ClaimWalk;
+  /** Set by a construct that solves σ for its content against a room it
+   *  claims itself: whether it does on `axis` ({@link ownsScope}). A layer
+   *  does where it has a size of its own; a coordinate space does on both
+   *  axes, as its room is its own coordinates. */
+  public ownsScopeOn?: (axis: 0 | 1) => boolean;
   /** Set on a ROOT node by the surface that built it (a chart builder or a
    *  component thunk): builds a fresh, unlaid-out copy of the same chart.
    *  Layout writes each node's box once, so a choice that must lay the chart
@@ -1291,12 +1298,12 @@ export class GoFishNode {
       const scope = !own && this.isScope(dim);
       const fills =
         this.children.length > 0
-          ? !own &&
-            (scope ||
-              this.children.every(
-                (c) =>
-                  c instanceof GoFishNode && c._claimMemo.fills?.[dim] === true
-              ))
+          ? this.fillsBy(
+              dim,
+              (c) => c._claimMemo.fills?.[dim] === true,
+              own,
+              scope
+            )
           : extent[dim] === undefined && this.inkOn?.[dim] !== true;
       const forms =
         scope && extent[dim] !== undefined
@@ -1322,7 +1329,7 @@ export class GoFishNode {
         (sharesScope || this.inSlot(dim))
       ) {
         const weight =
-          (this.shareOf(dim) as Pwl.Affine | undefined) ?? Pwl.affine(1, 0);
+          (this.shareOf(dim) as Pwl.Affine | undefined) ?? Pwl.SIGMA;
         const share =
           forms === undefined ? undefined : aroundShare(forms, weight);
         extent[dim] = share?.whole ?? Extent(weight);
@@ -1497,9 +1504,8 @@ export class GoFishNode {
    *  node is given its room from outside its content, so it is a scope for
    *  its content ({@link isScope}). */
   public shareOf(axis: 0 | 1): Pwl.Value | undefined {
-    if (this.ownLengths?.[axis] === undefined) return undefined;
-    const v = this.ownLength(axis)!;
-    return Pwl.isConstant(v) ? undefined : v;
+    const v = this.ownLength(axis);
+    return v && !Pwl.isConstant(v) ? v : undefined;
   }
 
   /** The room of the render root on `axis`: the render's size, or the
@@ -1533,8 +1539,8 @@ export class GoFishNode {
     for (let n: GoFishNode = this; ; n = n.parent!) {
       const len = n.ownLengths?.[axis];
       if (len !== undefined) {
-        const v = n.ownLength(axis)!;
-        if (Pwl.isConstant(v)) return v;
+        const px = n.lengthPx(axis);
+        if (px !== undefined) return Pwl.constant(px);
         throw new Error(
           `${what}: its room is ${n.type}'s ${printLength(len)}, a share of ` +
             `the scope around it, which a percent inside it cannot be laid ` +
@@ -1543,10 +1549,12 @@ export class GoFishNode {
       }
       const own = n.claimWalk?.ownSize(axis);
       if (typeof own === "number") return Pwl.constant(own);
+      // A node that owns its scope with no size of its own is a coordinate
+      // space.
       const given =
         own !== undefined
           ? `${n.type}'s size, which is data`
-          : n.type === "coord"
+          : n.ownsScope(axis)
             ? "a coordinate space, whose room is in its own units (#1238)"
             : n.parent !== undefined && n.isScope(axis)
               ? `the room ${n.type} is given at layout (a facet panel, a ` +
@@ -1558,7 +1566,7 @@ export class GoFishNode {
             `out in yet. Use pixels or fr there.`
         );
       if (n.parent === undefined) return n.canvasRoom(axis);
-      if (n.isBand(axis)) return Pwl.affine(1, 0);
+      if (n.isBand(axis)) return Pwl.SIGMA;
     }
   }
 
@@ -1569,11 +1577,7 @@ export class GoFishNode {
    *  length of their own, which never size the node that holds them. */
   private isBand(axis: 0 | 1): boolean {
     if (this.children.length === 0 || !this.inShare(axis)) return false;
-    if (
-      this.axisDir === axis &&
-      this.constraints.some((c) => c.type === "distribute")
-    )
-      return false;
+    if (chainOn(this, axis) !== undefined) return false;
     let filled = false;
     for (const c of this.children) {
       if (c instanceof GoFishNode && c.ownLengths?.[axis] !== undefined)
@@ -1591,20 +1595,36 @@ export class GoFishNode {
    *  there, or a node whose children all fill. */
   private fillsShape(axis: 0 | 1): boolean {
     if (this.ownLengths?.[axis] !== undefined) return true;
-    if (this.ownsScope(axis)) return false;
-    if (this.isScope(axis)) return true;
-    if (this.children.length === 0) return this.fillsRoom(axis);
-    return this.children.every(
-      (c) => c instanceof GoFishNode && c.fillsShape(axis)
+    if (this.children.length > 0)
+      return this.fillsBy(axis, (c) => c.fillsShape(axis));
+    return (
+      !this.ownsScope(axis) && (this.isScope(axis) || this.fillsRoom(axis))
+    );
+  }
+
+  /** Whether this node, which holds children, fills the room it is given
+   *  on `axis`, where `childFills` says whether a child does: it has no
+   *  scope of its own (`own`), and its room is given to it from outside its
+   *  content (`scope`) or every child fills. */
+  private fillsBy(
+    axis: 0 | 1,
+    childFills: (c: GoFishNode) => boolean,
+    own = this.ownsScope(axis),
+    scope = !own && this.isScope(axis)
+  ): boolean {
+    return (
+      !own &&
+      (scope ||
+        this.children.every((c) => c instanceof GoFishNode && childFills(c)))
     );
   }
 
   /** Whether this node solves σ for its content against a room it claims
-   *  itself on `axis`: a size of its own (`claimWalk.ownScope`), or a
-   *  coordinate space, whose room is its own coordinates (`coord` fits its
-   *  content to them, and claims its box). */
+   *  itself on `axis`, as its construct declares ({@link ownsScopeOn}): a
+   *  size of its own, or a coordinate space, whose room is its own
+   *  coordinates (`coord` fits its content to them, and claims its box). */
   private ownsScope(axis: 0 | 1): boolean {
-    return this.claimWalk?.ownScope[axis] === true || this.type === "coord";
+    return this.ownsScopeOn?.(axis) === true;
   }
 
   /** Whether this node fills the room it is given on `axis`: a leaf with
@@ -1677,7 +1697,7 @@ export class GoFishNode {
    * own there, which maps its plot into that size and claims the total.
    */
   public plotIsBox(axis: 0 | 1): boolean {
-    return this.isChartBox() || this.claimWalk?.ownScope[axis] === true;
+    return this.isChartBox() || this.claimWalk?.ownSize(axis) !== undefined;
   }
 
   /**

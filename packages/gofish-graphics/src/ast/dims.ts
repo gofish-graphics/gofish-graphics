@@ -1,7 +1,13 @@
 import { Frontend } from "gofish-ir";
 import { type MaybeValue } from "./data";
 import { computeAesthetic } from "../util";
-import { rejectLength } from "./length";
+import {
+  bindLengths,
+  rejectLength,
+  takeLengths,
+  type LengthNode,
+  type LengthPair,
+} from "./length";
 
 export type Interval<T = number> = {
   min?: T;
@@ -219,6 +225,38 @@ export const deferAxisDims = (
     : (outer) => {
         applyAxisDims(into, entries, outer);
       };
+};
+
+/**
+ * A construct's own box, from its options: its own `w`/`h` lengths
+ * (`percent(30)`, `fr(2)`, #1176 step 6) taken out ({@link takeLengths}),
+ * since they are laid out in the room it is given, known only once it is in
+ * its tree, and the rest elaborated ({@link elaborateDims}). `dataSize` is
+ * its size where it can be data: a length never is, and is not read while
+ * the types are resolved, before its room is known. `bind` gives the node
+ * its lengths ({@link bindLengths}) and defers the axis-name-keyed `dims`
+ * option to the resolveAliases pass ({@link deferAxisDims}).
+ */
+export const elaborateOwnDims = <T>(
+  options: object
+): {
+  dims: Dimensions<T>;
+  lengths: LengthPair;
+  dataSize: (axis: 0 | 1) => T | undefined;
+  bind: (node: LengthNode & { _elaborateInAxisScope?: AxisScopeHook }) => void;
+} => {
+  const { rest, lengths } = takeLengths(options as Record<string, unknown>);
+  const dims = elaborateDims(rest as FancyDims<T>);
+  return {
+    dims,
+    lengths,
+    dataSize: (axis) =>
+      lengths[axis] === undefined ? dims[axis].size : undefined,
+    bind: (node) => {
+      bindLengths(node, dims, lengths);
+      node._elaborateInAxisScope = deferAxisDims(rest as FancyDims<T>, dims);
+    },
+  };
 };
 
 /**
