@@ -17,7 +17,8 @@ import type { NestConstraint } from "../ast/constraints/nest";
 import {
   compilePlacementCoordinate,
   lowerPlacementConstraints,
-  solvePlacementConstraints,
+  solvePlacementCells,
+  type PlacementConstraint,
 } from "../ast/constraints/placementSolver";
 import { numbers } from "../ast/solver/arith";
 import {
@@ -71,6 +72,52 @@ type Constraint =
   | NestConstraint
   | GridConstraint;
 type Geometry = Record<string, { min?: number; center?: number; max?: number }>;
+
+/** Solve `constraints` over `targets` in numbers and seat each target where
+ *  the solve puts it (a size-strong cell by its extent, any other by its
+ *  start), throwing on a conflict, as a layer seats its plan. */
+function solveAndSeat(
+  constraints: PlacementConstraint[],
+  targets: Map<string, Placeable>,
+  sizes: [number, number],
+  posScales?: Parameters<typeof solvePlacementCells<number>>[4],
+  gridTracks?: [TrackLayout, TrackLayout],
+  dataPositioned?: [Set<string>, Set<string>]
+): void {
+  const solved = solvePlacementCells(
+    numbers,
+    constraints,
+    targets,
+    sizes,
+    posScales,
+    gridTracks,
+    dataPositioned
+  );
+  const conflict = solved.flatMap((r) => r.conflicts)[0];
+  if (conflict !== undefined)
+    throw new Error(
+      `Constraint placement conflict on ${conflict.axis}: ${conflict.owner} ` +
+        `asserts ${conflict.asserted}, but ${conflict.priorOwner} implies ` +
+        `${conflict.implied}`
+    );
+  solved.forEach((result, axis) => {
+    const label = axis === 0 ? "x" : "y";
+    for (const [name, cell] of result.cells) {
+      const target = targets.get(name)!;
+      if (cell.sizeStrong && cell.size !== undefined && target.setExtent)
+        target.setExtent(
+          label,
+          { min: cell.min, max: cell.min + cell.size },
+          cell.sizeOwner
+        );
+      else if (target.pinAnchor)
+        target.pinAnchor(axis as 0 | 1, cell.min, "min");
+      else target.place(axis as 0 | 1, cell.min, "min");
+    }
+    for (const [name, { size, owner }] of result.sizeOnly)
+      targets.get(name)?.setSizeOnly?.(label, size, owner);
+  });
+}
 
 let passed = 0;
 let failed = 0;
@@ -143,7 +190,7 @@ function solve(
 ): Geometry {
   const targets = new Map(names.map((name) => [name, create(name)] as const));
   setup?.(targets);
-  solvePlacementConstraints(constraints, targets, [300, 200]);
+  solveAndSeat(constraints, targets, [300, 200]);
   return Object.fromEntries(
     [...targets].map(([name, target]) => {
       const { min, center, max } = target.dims[0];
@@ -450,7 +497,7 @@ console.log("# constraint confluence: grid content-sized tracks (Stage 6e)");
     ]);
   {
     const t = contentTargets();
-    solvePlacementConstraints([grid], t, [300, 200], undefined, tracks);
+    solveAndSeat([grid], t, [300, 200], undefined, tracks);
     ok(
       "content-sized grid centers each cell in its own track",
       t.get("A")!.dims[0].center === 20 && t.get("B")!.dims[0].center === 100
@@ -467,7 +514,7 @@ console.log("# constraint confluence: grid content-sized tracks (Stage 6e)");
   const withAlign = (order: Constraint[]) => {
     const t = contentTargets();
     t.set("C", makePlaceable(10, 10));
-    solvePlacementConstraints(order, t, [300, 200], undefined, tracks);
+    solveAndSeat(order, t, [300, 200], undefined, tracks);
     return {
       A: t.get("A")!.dims[0].center,
       C: t.get("C")!.dims[0].center,
@@ -485,7 +532,7 @@ console.log("# constraint confluence: grid content-sized tracks (Stage 6e)");
   const pinB = position("B", 250);
   const withPin = (order: Constraint[]) => {
     const t = contentTargets();
-    solvePlacementConstraints(order, t, [300, 200], undefined, tracks);
+    solveAndSeat(order, t, [300, 200], undefined, tracks);
     return { A: t.get("A")!.dims[0].center, B: t.get("B")!.dims[0].center };
   };
   const pf = withPin([grid, pinB]);
@@ -506,7 +553,7 @@ console.log("# constraint confluence: grid content-sized tracks (Stage 6e)");
     ySpacing: 5,
     children: [A, B, C, child("D")],
   };
-  const fromSizes = gridTracksFromSizes(grid2x2, [
+  const fromSizes = gridTracksFromSizes(numbers, grid2x2, [
     [40, 30],
     [100, 30],
     [20, 12],
@@ -1387,7 +1434,7 @@ console.log("# constraint confluence: span size-setting");
       ["A", makePlaceable()],
       ["B", makePlaceable()],
     ]);
-    solvePlacementConstraints(constraints, targets, [300, 200]);
+    solveAndSeat(constraints, targets, [300, 200]);
     return Object.fromEntries(
       [...targets].map(([name, target]) => {
         const { min, center, max } = target.dims[0];
@@ -1487,7 +1534,7 @@ console.log("# constraint confluence: self-placement and override");
   // A is anchored to the x data scale (Stage 6f: the data-positioned fact now
   // arrives as an explicit ownership input, not a `placementOn` method on the
   // target). align must leave A where its own scale puts it.
-  solvePlacementConstraints(
+  solveAndSeat(
     [{ type: "align", x: "baseline", children: [A, B] }],
     targets,
     [300, 200],
@@ -1506,7 +1553,7 @@ console.log("# constraint confluence: self-placement and override");
     ["B", makePlaceable()],
   ]);
   sourceTargets.get("A")!.pinAnchor!("x", 40, "min");
-  solvePlacementConstraints(
+  solveAndSeat(
     [{ type: "align", x: "baseline", children: [A, B] }],
     sourceTargets,
     [300, 200],
@@ -1530,7 +1577,7 @@ console.log("# constraint confluence: self-placement and override");
     x: "baseline",
     children: [A, B],
   };
-  const sameSolve = solvePlacementConstraints;
+  const sameSolve = solveAndSeat;
   const sameSolveTargets = new Map<string, Placeable>([
     ["A", makePlaceable()],
     ["B", makePlaceable()],
@@ -1574,7 +1621,7 @@ console.log("# constraint confluence: contradictions are diagnosed");
   // named-owner conflict must name BOTH owners so the error is actionable.
   const spanThrows = (constraints: PositionConstraint[]): boolean => {
     try {
-      solvePlacementConstraints(
+      solveAndSeat(
         constraints,
         new Map<string, Placeable>([["A", makePlaceable()]]),
         [300, 200]
@@ -1596,7 +1643,7 @@ console.log("# constraint confluence: contradictions are diagnosed");
 
   const spanPositionThrows = (constraints: PositionConstraint[]): boolean => {
     try {
-      solvePlacementConstraints(
+      solveAndSeat(
         constraints,
         new Map<string, Placeable>([["A", makePlaceable()]]),
         [300, 200]

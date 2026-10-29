@@ -2,9 +2,8 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import type { Placeable } from "../_node";
 import { BBox } from "./bbox";
-import { numbers, type Arith } from "../solver/arith";
+import type { Arith } from "../solver/arith";
 import {
   lowerPlacementConstraints,
   type PlacementConstraint,
@@ -64,10 +63,10 @@ export type { PlacementConflict } from "./differenceGraph";
  * Every solved cell writes back through one path: a size-strong cell sets its
  * extent (`setExtent`), a position-only cell pins its `min` anchor.
  *
- * The solve runs in an {@link Arith} `A`. Layout solves in numbers and writes
- * back ({@link solvePlacementConstraints}); the claim walk solves the same
- * program over its children's claims in values in σ ({@link
- * solvePlacementCells}), so each box it reads is a function of σ.
+ * The solve runs in an {@link Arith} `A`. The claim walk solves a layer's
+ * program once over its children's claims, in formulas in σ and in what
+ * only layout measures ({@link solvePlacementCells}, `claimPlacement.ts`);
+ * layout evaluates them and writes each cell back.
  */
 
 /** A solved (node, axis) box: absolute `min`, `size`, and whether the size was
@@ -97,7 +96,7 @@ function closeSizes<T>(
   owners: Map<NodeId, string>;
   conflicts: PlacementConflict[];
 } {
-  const boxes = new Map<NodeId, BBox>();
+  const boxes = new Map<NodeId, BBox<T>>();
   const boxOwner = new Map<NodeId, string>();
   const conflicts: PlacementConflict[] = [];
   for (const fact of pins) {
@@ -118,10 +117,10 @@ function closeSizes<T>(
             : "max";
     let box = boxes.get(fact.node);
     if (!box) {
-      boxes.set(fact.node, (box = new BBox()));
+      boxes.set(fact.node, (box = new BBox(A)));
       boxOwner.set(fact.node, fact.owner);
     }
-    const conflict = box.add(boxKey, A.toValue(fact.value), fact.owner);
+    const conflict = box.add(boxKey, fact.value, fact.owner);
     if (conflict) {
       conflicts.push({
         axis,
@@ -139,9 +138,9 @@ function closeSizes<T>(
     // pin (align `"size"`, no companion anchor) still reads its size back
     // (`BBox.read` falls back to the direct pin when under-determined) — that
     // is exactly the "size without a determined position" case.
-    const size = box.readMono("size");
+    const size = box.readValue("size");
     if (size !== undefined) {
-      sizes.set(node, A.fromValue(size));
+      sizes.set(node, size);
       owners.set(node, boxOwner.get(node)!);
     }
   }
@@ -358,23 +357,24 @@ export type SolvedAxis<T = number> = {
 
 /** A nested operand (see `NestedOperand`) rigidly attached to the layer
  *  child that contains it: `operand.min = container.min + gap` per axis. */
-export type RigidAttachment = { container: string; gap: [number, number] };
+export type RigidAttachment<T = number> = { container: string; gap: [T, T] };
 
 /**
  * Solve the placement of `targets` under `constraints` into a box per (node,
- * axis), without writing it back: the solve {@link solvePlacementConstraints}
- * writes back, which the claim walk also reads to learn where a layer's
- * constraints place its children (`claimPlacement.ts`).
+ * axis), without writing it back. The claim walk solves it once per layer
+ * and axis, and layout writes back what it evaluates to
+ * (`claimPlacement.ts`, `layer`).
  */
 export function solvePlacementCells<T>(
   A: Arith<T>,
   constraints: PlacementConstraint[],
   targets: Map<string, SolvePlaceable<T>>,
-  sizes: [number, number],
+  // The layer's box on each axis, which a discrete position divides.
+  sizes: readonly [T, T],
   posScales?: ConstraintPosScales<T>,
-  gridTracks?: [TrackLayout, TrackLayout],
+  gridTracks?: [TrackLayout<T>, TrackLayout<T>],
   dataPositioned?: [Set<string>, Set<string>],
-  rigid?: Map<string, RigidAttachment>,
+  rigid?: Map<string, RigidAttachment<T>>,
   freeOrigin?: FreeOrigin<T>,
   // Per axis, the targets that are no part of the plot (dressing, chrome):
   // a chain edge between two others lays them by their plots.
@@ -406,7 +406,7 @@ export function solvePlacementCells<T>(
           axis,
           from: { node: container, anchor: "start" },
           to: { node: operand, anchor: "start" },
-          gap: A.constant(gap[idx]),
+          gap: gap[idx],
           owner: `nested operand "${operand}"`,
         });
       }
@@ -431,63 +431,4 @@ export function solvePlacementCells<T>(
       apart?.[1]
     ),
   ] as const;
-}
-
-export function solvePlacementConstraints(
-  constraints: PlacementConstraint[],
-  targets: Map<string, Placeable>,
-  sizes: [number, number],
-  posScales?: ConstraintPosScales,
-  gridTracks?: [TrackLayout, TrackLayout],
-  dataPositioned?: [Set<string>, Set<string>],
-  rigid?: Map<string, RigidAttachment>,
-  freeOrigin?: FreeOrigin,
-  apart?: [Set<string>, Set<string>]
-): PlacementConflict[] {
-  const solved = solvePlacementCells(
-    numbers,
-    constraints,
-    targets,
-    sizes,
-    posScales,
-    gridTracks,
-    dataPositioned,
-    rigid,
-    freeOrigin,
-    apart
-  );
-  const conflicts = solved.flatMap((result) => result.conflicts);
-  if (conflicts.length > 0) {
-    const conflict = conflicts[0];
-    throw new Error(
-      `Constraint placement conflict on ${conflict.axis}: ${conflict.owner} ` +
-        `asserts ${conflict.asserted}, but ${conflict.priorOwner} implies ` +
-        `${conflict.implied}`
-    );
-  }
-
-  // Single write-back per solved cell (replaces the three-way branch): a
-  // size-strong cell (rank-2 determined) sets its extent; a position-only cell
-  // pins its `min` anchor.
-  solved.forEach((result, axisIndexValue) => {
-    const axis = axisIndexValue as 0 | 1;
-    const axisLabel = axisName(axis);
-    for (const [name, cell] of result.cells) {
-      const target = targets.get(name);
-      if (!target) continue;
-      if (cell.sizeStrong && cell.size !== undefined && target.setExtent) {
-        target.setExtent(
-          axisLabel,
-          { min: cell.min, max: cell.min + cell.size },
-          cell.sizeOwner
-        );
-      } else if (target.pinAnchor) target.pinAnchor(axis, cell.min, "min");
-      else target.place(axis, cell.min, "min");
-    }
-    for (const [name, { size, owner }] of result.sizeOnly) {
-      const target = targets.get(name);
-      target?.setSizeOnly?.(axisLabel, size, owner);
-    }
-  });
-  return conflicts;
 }

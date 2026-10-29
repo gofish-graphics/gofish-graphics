@@ -110,12 +110,8 @@ import {
   type RelateFn,
   type RelateSchedule,
 } from "./constraints/relate";
-import {
-  BBox,
-  type BBoxKey,
-  type BBoxConflict,
-  type BBoxValue,
-} from "./constraints/bbox";
+import { BBox, type BBoxKey, type BBoxConflict } from "./constraints/bbox";
+import { numbers } from "./solver/arith";
 import {
   assignPaletteColor,
   createGradientScale,
@@ -662,7 +658,7 @@ export class GoFishNode {
    *  self-layout seed). Lazily created, so the hot single pin / `place()` path
    *  allocates only on first touch. The `dims` getter reads this wherever an axis
    *  is fully solved, falling back to the `(intrinsicDims, transform)` split. */
-  private _bbox?: [BBox?, BBox?];
+  private _bbox?: [BBox<number>?, BBox<number>?];
   public renderData?: any;
   public coordinateTransform?: CoordinateTransform;
   public color?: MaybeValue<string>;
@@ -776,6 +772,11 @@ export class GoFishNode {
    *  Layout size is separate from drawn size (#493), as a CSS box's ink
    *  overflow or a Typst box's `outset` is. */
   public inkOn?: [boolean, boolean];
+  /** Per axis, whether its own layout places it there, from the refs it
+   *  reads (an ordinal axis's label span): its parent's plan takes it where
+   *  layout put it, as it takes a node that places itself at a literal
+   *  pixel (`placesItself`). */
+  public placedByLayout?: [boolean, boolean];
   /**
    * How far this node's outline is drawn past its box on every side, in
    * pixels: half the width of a centered stroke ({@link outlineOverhang}),
@@ -1857,7 +1858,7 @@ export class GoFishNode {
       const id = this.intrinsicDims?.[dir];
       if (id?.size === undefined && id?.min === undefined) continue;
       this._bbox ??= [undefined, undefined];
-      const ledger = (this._bbox[dir] ??= new BBox());
+      const ledger = (this._bbox[dir] ??= new BBox(numbers));
       if (id?.size !== undefined)
         this._addEquation(ledger, dir, "size", id.size);
       const tr = this.transform?.translate?.[dir];
@@ -1927,8 +1928,8 @@ export class GoFishNode {
     return ([0, 1] as const).map((dir) => {
       const ledger = this._bbox?.[dir];
       if (!ledger?.solved) return fromSplit(dir);
-      const min = ledger.read("min")!;
-      const size = ledger.read("size")!;
+      const min = ledger.readValue("min")!;
+      const size = ledger.readValue("size")!;
       return {
         min,
         center: localAnchorPoint("center", min, size),
@@ -1949,7 +1950,7 @@ export class GoFishNode {
   private _projectTranslate(dir: Direction): number | undefined {
     const ledger = this._bbox?.[dir];
     if (!ledger?.solved) return this.transform?.translate?.[dir];
-    const min = ledger.read("min");
+    const min = ledger.readValue("min");
     if (min === undefined) return this.transform?.translate?.[dir];
     return min - (this.intrinsicDims?.[dir]?.min ?? 0);
   }
@@ -1959,7 +1960,7 @@ export class GoFishNode {
    *  solved. Shared by `place()`'s short-circuit and `_pinAnchor`'s override
    *  check. */
   private _isPlacedOn(dir: Direction): boolean {
-    return this._bbox?.[dir]?.read("min") !== undefined;
+    return this._bbox?.[dir]?.readValue("min") !== undefined;
   }
 
   /** The single reconciliation every ledger write does: on a solved axis the
@@ -1977,10 +1978,10 @@ export class GoFishNode {
    *  last-writer" — single-owner case; observe-only behind GOFISH_CONFLICT_CHECK).
    *  Every ledger write goes through here so no conflict is silently dropped. */
   private _addEquation(
-    box: BBox,
+    box: BBox<number>,
     dir: Direction,
     key: BBoxKey,
-    value: BBoxValue,
+    value: number,
     owner?: string
   ): void {
     const conflict = box.add(key, value, owner);
@@ -2160,11 +2161,11 @@ export class GoFishNode {
     // RESET to hold just these keys — and is now the SOLE record of this axis's
     // position.
     this._bbox ??= [undefined, undefined];
-    const bbox = (this._bbox[dir] = new BBox());
+    const bbox = (this._bbox[dir] = new BBox(numbers));
     for (const [key, value] of keys)
       this._addEquation(bbox, dir, key, value, owner);
-    const absMin = bbox.read("min");
-    const size = bbox.read("size");
+    const absMin = bbox.readValue("min");
+    const size = bbox.readValue("size");
     if (absMin === undefined || size === undefined) return; // under-determined
 
     if (!this.intrinsicDims) this.intrinsicDims = [];
@@ -2222,7 +2223,7 @@ export class GoFishNode {
     // `setExtent` rank-1 / re-placement OVERRIDE rebuilds the axis ledger (a new
     // position), re-seeding the frame-invariant size.
     this._bbox ??= [undefined, undefined];
-    if (override || !this._bbox[dir]) this._bbox[dir] = new BBox();
+    if (override || !this._bbox[dir]) this._bbox[dir] = new BBox(numbers);
     const ledger = this._bbox[dir]!;
     if (intrinsic?.size !== undefined)
       this._addEquation(ledger, dir, "size", intrinsic.size);

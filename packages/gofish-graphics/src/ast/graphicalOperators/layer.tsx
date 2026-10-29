@@ -34,7 +34,6 @@ import { createNodeOperatorSequential } from "../withGoFish";
 import { GoFishAST } from "../_ast";
 import { NestedOperand, nestedGap } from "../constraints/nestedOperand";
 import { fromFrameStart, orientView, rawPlaceable } from "../axisDirection";
-import type { RigidAttachment } from "../constraints/placementSolver";
 import {
   applyConstraints,
   resolveConstraintOperands,
@@ -43,7 +42,6 @@ import {
   gridSpaces,
   resolveGridTracks,
   gridCellSizeByName,
-  gridTracksFromSizes,
   relateScheduleForLayout,
   type ConstraintSpec,
   type ZOrderConstraint,
@@ -55,7 +53,6 @@ import {
   buildNameIndex,
   childNameKey,
   type ConstraintPosScales,
-  type FreeOrigin,
 } from "../constraints/shared";
 import {
   applyNestExtentPlan,
@@ -74,7 +71,6 @@ import {
   buildDistributeSliceMap,
   buildLayerConstraintLayoutPlan,
   buildChildProposals,
-  placementConstraints,
   childLayoutSizeProposal,
   childPosScalesFor,
   selectGridConstraint,
@@ -89,6 +85,7 @@ import {
 } from "../constraints/claimPlacement";
 import { buildPlan, planPlacement, type LayerPlan } from "../solver/plan";
 import { planCheck, planCheckOn } from "../solver/planCheck";
+import { evaluate } from "../solver/formula";
 import { isOverlapConstraint } from "../constraints/overlap";
 import {
   guttersAroundPlot,
@@ -554,34 +551,35 @@ export const layer = createNodeOperatorSequential(
           // layout (`resolveGridTracks`).
           const operands = constraintOperands();
           const ring = isRing(node);
+          // A grid's track axis has a plan too, which places its cells in
+          // their tracks, but its claim is its tracks' (`resolveGridTracks`).
+          const trackAxis = (axis: 0 | 1) =>
+            t.gridAxes !== undefined && !isUNDEFINED(t.gridAxes[axis]);
           const plans = ([0, 1] as const).map((axis) =>
-            t.gridAxes !== undefined && !isUNDEFINED(t.gridAxes[axis])
-              ? undefined
-              : buildPlan(
-                  node,
-                  axis,
-                  claimChildren(
-                    axis,
-                    effectiveExtents,
-                    standInPlacements(axis)
-                  ),
-                  node.constraints,
-                  operands,
-                  nestedPlacement(axis),
-                  ring,
-                  scale[axis]
-                )
+            buildPlan(
+              node,
+              axis,
+              claimChildren(axis, effectiveExtents, standInPlacements(axis)),
+              node.constraints,
+              operands,
+              nestedPlacement(axis),
+              ring,
+              scale[axis]
+            )
           ) as [LayerPlan | undefined, LayerPlan | undefined];
           node._claimMemo.plans = plans;
+          const claimPlans = plans.map((p, axis) =>
+            trackAxis(axis as 0 | 1) ? undefined : p
+          ) as [LayerPlan | undefined, LayerPlan | undefined];
           const session = node.tryGetRenderSession();
           for (const axis of [0, 1] as const) {
-            inkChildren[axis] = plans[axis]?.placement.ink ?? new Set();
+            inkChildren[axis] = claimPlans[axis]?.placement.ink ?? new Set();
             dressingChildren[axis] =
-              plans[axis]?.placement.dressing ?? new Set();
+              claimPlans[axis]?.placement.dressing ?? new Set();
             if (inkChildren[axis].size > 0 && session !== undefined)
               (session.inkLayers ??= new Set()).add(node);
           }
-          const resolved = plans.map((p) => p?.summary?.whole) as [
+          const resolved = claimPlans.map((p) => p?.summary?.whole) as [
             Extent | undefined,
             Extent | undefined,
           ];
@@ -598,12 +596,12 @@ export const layer = createNodeOperatorSequential(
                   c.resolvePlotExtent() !== c.resolveExtent()
                 )
             ) &&
-            plans.every(
+            claimPlans.every(
               (p) => p === undefined || p.placement.plot === p.placement.hull
             );
           const plot = plotIsClaim
             ? resolved
-            : (plans.map((p) => p?.summary?.plot) as [
+            : (claimPlans.map((p) => p?.summary?.plot) as [
                 Extent | undefined,
                 Extent | undefined,
               ]);
@@ -850,10 +848,6 @@ export const layer = createNodeOperatorSequential(
           // the layer's frame. A child such a constraint places at a datum
           // point gets no map on that axis (`childPosScalesFor`).
           const effectivePosScales = layerScales.frames;
-          // Which children share this layer's domain on each axis. A
-          // detached child is placed elsewhere, so the placement solve does
-          // not treat it as positioned by its data in this frame.
-          const sharing = node.sharing();
           // What the position constraints hand each child (#1059): the
           // span an interval pins it across, which it is laid out in, and its
           // region: its cell, and on the other axis the region this layer was
@@ -876,13 +870,9 @@ export const layer = createNodeOperatorSequential(
           // stash's is its own scope, a free layer's has its baseline at local
           // 0, since its parent seats it there, and a layer with no data 0
           // has none (`frameOf`). Unconstrained free children are placed
-          // here; constrained ones get the same pixel from the solver's
-          // free-origin fallback (`solveAxisProblem`). A pinned child shares
-          // the frame and stays at 0.
-          const freeOrigin: FreeOrigin = [
-            effectivePosScales[0]?.originPx,
-            effectivePosScales[1]?.originPx,
-          ];
+          // here; constrained ones get the same pixel from the plan, which
+          // reads it as its `origin`. A pinned child shares the frame and
+          // stays at 0.
           //
           // Place a child no constraint places (`unplacedOnly`: on the axes
           // the constraints left it unplaced) at its seat in this layer's
@@ -902,6 +892,27 @@ export const layer = createNodeOperatorSequential(
           // gofish.tsx). A child that reads top-down hangs from its origin,
           // which is its top, in either kind of layer.
           const childFrames: number[] = new Array(children.length);
+          const seatOf = (
+            cp: (typeof childPlaceables)[number],
+            i: number,
+            axis: 0 | 1
+          ): { px: number; anchor: "baseline" | "min" } => {
+            const { seat } = seatInScope(
+              layerScales.scopes[axis],
+              cp.spaceOn?.(axis)
+            );
+            const fromBand =
+              axis === 1 &&
+              seat.anchor === "baseline" &&
+              direction === 1 &&
+              children[i].yFrame.direction !== 1;
+            const band = !fromBand
+              ? 0
+              : Number.isFinite(childFrames[i])
+                ? childFrames[i]
+                : (cp.dims[1].size ?? 0);
+            return { px: seat.px + band, anchor: seat.anchor };
+          };
           const seatChild = (
             cp: (typeof childPlaceables)[number],
             i: number,
@@ -909,21 +920,8 @@ export const layer = createNodeOperatorSequential(
           ) => {
             for (const axis of [0, 1] as const) {
               if (unplacedOnly && cp.dims[axis].min !== undefined) continue;
-              const { seat } = seatInScope(
-                layerScales.scopes[axis],
-                cp.spaceOn?.(axis)
-              );
-              const fromBand =
-                axis === 1 &&
-                seat.anchor === "baseline" &&
-                direction === 1 &&
-                children[i].yFrame.direction !== 1;
-              const band = !fromBand
-                ? 0
-                : Number.isFinite(childFrames[i])
-                  ? childFrames[i]
-                  : (cp.dims[1].size ?? 0);
-              cp.place(axis === 0 ? "x" : "y", seat.px + band, seat.anchor);
+              const seat = seatOf(cp, i, axis);
+              cp.place(axis === 0 ? "x" : "y", seat.px, seat.anchor);
             }
           };
 
@@ -1084,42 +1082,26 @@ export const layer = createNodeOperatorSequential(
               string,
               (typeof childPlaceables)[number]
             >();
-            // The direct child each name in `nameToPlaceable` stands for (or
-            // sits in, for a nested operand), recorded where the name is set.
-            const childOfName = new Map<string, number>();
             for (let i = 0; i < node.children.length; i++) {
               const childName = childNameKey(node.children[i]);
               // A drawing clause laid out after the solve has no placeable
               // yet, and nothing in the solve can address it.
-              if (childName !== undefined && childPlaceables[i]) {
+              if (childName !== undefined && childPlaceables[i])
                 nameToPlaceable.set(childName, childPlaceables[i]);
-                childOfName.set(childName, i);
-              }
             }
             // Operands override by resolution: a direct operand is its child's
-            // placeable; a nested one is a `NestedOperand` rigidly tied to the
-            // child that contains it (keyed by that child's operand name, or a
-            // synthetic key when the child itself is not an operand).
-            const containerKey = new Map<number, string>();
+            // placeable; a nested one is a `NestedOperand` held at a fixed
+            // offset inside the child that contains it (`gaps`).
             const nested: [string, ResolvedOperand][] = [];
             for (const [name, op] of operands) {
-              childOfName.set(name, op.child);
-              if (op.direct) {
+              if (op.direct)
                 nameToPlaceable.set(name, childPlaceables[op.child]);
-                containerKey.set(op.child, name);
-              } else nested.push([name, op]);
+              else nested.push([name, op]);
             }
-            const rigid = new Map<string, RigidAttachment>();
+            const gaps = new Map<string, [number, number]>();
             for (const [name, op] of nested) {
-              let container = containerKey.get(op.child);
-              if (container === undefined) {
-                container = `\u0000child:${op.child}`;
-                containerKey.set(op.child, container);
-                nameToPlaceable.set(container, childPlaceables[op.child]);
-                childOfName.set(container, op.child);
-              }
               // The operand sits at a fixed pixel offset inside its container
-              // (`nestedGap`); the solve sees both in this layer's axis order.
+              // (`nestedGap`), in this layer's axis order.
               const containerPx = rawPlaceable(childPlaceables[op.child]);
               const gapPx = nestedGap(op.node, node.children[op.child]);
               const operand = new NestedOperand(
@@ -1146,87 +1128,149 @@ export const layer = createNodeOperatorSequential(
                   direction
                 ) - (direction === 1 ? 0 : (op.node.dims[1].size ?? 0)),
               ];
-              rigid.set(name, { container, gap });
+              gaps.set(name, gap);
             }
 
-            // Compose and solve placement constraints as one per-axis relational
-            // problem. Declaration order does not choose an anchor; unanchored
-            // components receive a deterministic weak origin.
-            // Placement tracks from the ACTUAL laid-out cell sizes (Stage 6e):
-            // each track's extent is the max of its cells' real geometry, so the
-            // cell-center pins match what rendered (and the solver shadow agrees).
-            const gridTracks = gridC
-              ? gridTracksFromSizes(
-                  gridC,
-                  childPlaceables.map((cp) =>
-                    cp
-                      ? ([
-                          Math.abs(cp.dims[0].size ?? 0),
-                          Math.abs(cp.dims[1].size ?? 0),
-                        ] as [number, number])
-                      : undefined
-                  )
-                )
-              : undefined;
-
-            // Which (constrained child, axis) is anchored to a data scale — its
-            // baseline is fixed at `posScale(0)` by the shared map, so `align`
-            // leaves it where its own scale puts it (a scatter facet panel).
-            // This is the SPACE/scope fact that used to be reconstructed inside
-            // the align guard via a `placementOn` method on the target; Stage 6f
-            // collects it ONCE here, at the layer boundary, reading the pure DATA
-            // fact (a continuous axis with a data position: a pinned or
-            // origin-less one, anything but free) and hands it to the
-            // placement solve's ownership plan — the constraint path no longer
-            // consults the space pass's free/determined/conflict lattice.
-            const dataPositioned: [Set<string>, Set<string>] = [
-              new Set(),
-              new Set(),
-            ];
-            for (const [name, cp] of nameToPlaceable) {
-              const childSpace = (cp as GoFishNode)._underlyingSpace;
-              if (childSpace === undefined) continue;
-              const i = childOfName.get(name)!;
-              for (const axis of [0, 1] as const) {
-                const s = childSpace[axis];
-                const shares = sharing.sets[axis][i] === 0;
-                if (
-                  shares &&
-                  s !== undefined &&
-                  isCONTINUOUS(s) &&
-                  s.origin !== "free"
-                )
-                  dataPositioned[axis].add(name);
-              }
-            }
-
-            // The children that are no part of this layer's plot, per
-            // axis: its dressing and ink there, and a ring's shapes (its
-            // chrome; a ring's plot is the ring inside it). A chain lays
-            // the parts of the plot by their plots, and places one of these
-            // past the whole box of what it dresses (#1032).
-            const apart: [Set<string>, Set<string>] = [new Set(), new Set()];
-            for (const [name] of nameToPlaceable) {
-              const i = childOfName.get(name)!;
-              for (const axis of [0, 1] as const)
-                if (
-                  (ring && i > 0) ||
-                  inkChildren[axis].has(i) ||
-                  dressingChildren[axis].has(i)
-                )
-                  apart[axis].add(name);
-            }
+            // Each target the plan places, by the key the plan names it by:
+            // a child by its name, or by its index (`\u0000child:<i>`), and
+            // an operand nested in a child by its name.
+            const planTargets = new Map<
+              string,
+              (typeof childPlaceables)[number]
+            >();
+            node.children.forEach((c, i) => {
+              if (childPlaceables[i])
+                planTargets.set(
+                  childNameKey(c) || `\u0000child:${i}`,
+                  childPlaceables[i]
+                );
+            });
+            for (const [name] of nested)
+              planTargets.set(name, nameToPlaceable.get(name)!);
+            // What the plan reads off layout on `axis` (`PlanInput`), for a
+            // child by its index and for a nested operand by its name
+            // (`@name`): a target's laid box about its origin (`lo`, `hi`)
+            // and plot (`plo`, `phi`; its box where its plot is its box),
+            // where a target placed before the solve has its origin (`at`),
+            // where this layer's frame seats a child no constraint places
+            // (`seat`, `seatInScope`), a nested operand's offset in its
+            // container (`gap`), the pixel a literal position seats a
+            // child's origin at (`lit`), the pixel of data 0 (`origin`), and
+            // the layer's box (`size`).
+            const inputOf =
+              (axis: 0 | 1) =>
+              (key: string): number | undefined => {
+                if (key === "origin") return effectivePosScales[axis]?.originPx;
+                if (key === "size")
+                  return Number.isFinite(size[axis]) ? size[axis] : undefined;
+                const colon = key.indexOf(":");
+                const kind = key.slice(0, colon);
+                const who = key.slice(colon + 1);
+                const nestedName = who.startsWith("@")
+                  ? who.slice(1)
+                  : undefined;
+                if (kind === "gap") return gaps.get(nestedName!)?.[axis];
+                const i = nestedName === undefined ? Number(who) : undefined;
+                const p =
+                  i !== undefined
+                    ? childPlaceables[i]
+                    : nameToPlaceable.get(nestedName!);
+                if (p === undefined) return undefined;
+                const lo = p.localAnchor?.(axis, "min");
+                const hi = p.localAnchor?.(axis, "max");
+                switch (kind) {
+                  case "lit":
+                    return literalSeatsByName.get(
+                      childNameKey(node.children[i!])!
+                    )?.[axis];
+                  case "lo":
+                    return lo;
+                  case "hi":
+                    return hi;
+                  case "plo":
+                    return p.localPlotSpan?.(axis)?.[0] ?? lo;
+                  case "phi":
+                    return p.localPlotSpan?.(axis)?.[1] ?? hi;
+                  case "at": {
+                    const min = p.dims[axis].min;
+                    return min === undefined || lo === undefined
+                      ? undefined
+                      : min - lo;
+                  }
+                  case "seat": {
+                    // Seating leaves a child that placed itself where it is.
+                    const min = p.dims[axis].min;
+                    if (min !== undefined)
+                      return lo === undefined ? undefined : min - lo;
+                    const seat = seatOf(p, i!, axis);
+                    return seat.anchor === "baseline"
+                      ? seat.px
+                      : lo === undefined
+                        ? undefined
+                        : seat.px - lo;
+                  }
+                }
+                return undefined;
+              };
+            // Write the plan's seats back: each placed cell's box start, and
+            // its size where the plan sets one, at the σ this layer hands
+            // its children, with the inputs measured above.
+            const seatByPlan = () => {
+              const evaluated = ([0, 1] as const).map((axis) => {
+                const seats = node._claimMemo.plans[axis]?.placement.seats;
+                if (seats === undefined) return undefined;
+                const sigma =
+                  effectivePosScales[axis]?.sigma ??
+                  childScaleFactors[axis] ??
+                  0;
+                return {
+                  seats,
+                  v: evaluate(seats.tape, sigma, inputOf(axis)),
+                };
+              });
+              // Two constraints that place one child at two places are an
+              // error: each over-determination the solve kept must agree
+              // where layout evaluates it.
+              evaluated.forEach((e, axis) => {
+                if (e === undefined) return;
+                for (const c of e.seats.tape.checks) {
+                  const [a, b] = [e.v[c.a], e.v[c.b]];
+                  if (!(Math.abs(a - b) <= c.tolerance))
+                    throw new Error(
+                      `Constraint placement conflict on ${axis === 0 ? "x" : "y"}: ` +
+                        `${c.owner} asserts ${a}, but ${c.priorOwner} implies ${b}`
+                    );
+                }
+              });
+              evaluated.forEach((e, i) => {
+                if (e === undefined) return;
+                const axis = i as 0 | 1;
+                const { seats, v } = e;
+                const label = axis === 0 ? "x" : "y";
+                for (const [key, cell] of seats.cells) {
+                  const t = planTargets.get(key);
+                  if (t === undefined) continue;
+                  const min = v[cell.min];
+                  if (cell.sizeStrong && cell.size !== undefined && t.setExtent)
+                    t.setExtent(
+                      label,
+                      { min, max: min + v[cell.size] },
+                      cell.sizeOwner
+                    );
+                  else if (t.pinAnchor) t.pinAnchor(axis, min, "min");
+                  else t.place(axis, min, "min");
+                }
+                for (const [key, { size, owner }] of seats.sizeOnly)
+                  planTargets.get(key)?.setSizeOnly?.(label, v[size], owner);
+              });
+            };
 
             applyConstraints(
-              placementConstraints(node.constraints, proposals.regionByName),
+              node.constraints,
               nameToPlaceable,
               size,
               effectivePosScales,
-              gridTracks,
-              dataPositioned,
-              rigid,
-              freeOrigin,
-              apart
+              seatByPlan
             );
 
             // Place any child the constraints left unplaced at its seat
@@ -1368,9 +1412,14 @@ export const layer = createNodeOperatorSequential(
       },
       placeChildren: (axis, extents) =>
         placeChildren(axis, extents, standInPlacements(axis)),
+      // A grid's track axis claims by its tracks, so no plan composes
+      // through it there.
       plan: (axis) => {
         node.resolveExtent();
-        return node._claimMemo.plans[axis];
+        const grid = layerTypes?.gridAxes;
+        return grid !== undefined && !isUNDEFINED(grid[axis])
+          ? undefined
+          : node._claimMemo.plans[axis];
       },
     };
     // Defer the axis-name-keyed `dims` option to the resolveAliases pass.

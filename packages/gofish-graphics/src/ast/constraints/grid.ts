@@ -50,7 +50,7 @@ import {
 } from "../underlyingSpace";
 import type { ScopeRegistry } from "../solver/scopes";
 import type { PlacementFactEmitter } from "./placementFacts";
-import type { Arith } from "../solver/arith";
+import { numbers, type Arith } from "../solver/arith";
 
 export interface GridOptions {
   numCols: number;
@@ -113,7 +113,7 @@ const numRowsOf = (c: GridConstraint): number =>
 /** The resolved geometry of one axis's tracks: each track's start (low edge, in
  *  the layer's local pixel frame) and extent. `starts[i] + extents[i]/2` is the
  *  center a cell in track `i` pins to. */
-export type TrackLayout = { starts: number[]; extents: number[] };
+export type TrackLayout<T = number> = { starts: T[]; extents: T[] };
 
 /** A cell's size claim on `axis`: the SIZE-magnitude width value it reports,
  *  or undefined when the cell fills (no size claim — a plain `rect({fill})`, a
@@ -207,7 +207,7 @@ function resolveAxisTracks(
     );
   }
 
-  return layoutTrack(extents, spacing);
+  return layoutTrack(numbers, extents, spacing);
 }
 
 /** Resolve both axes' tracks for a grid laid into `size`, under the unified
@@ -236,12 +236,16 @@ export function resolveGridTracks(
 
 /** Lay out a run of track extents into `{ starts, extents }`: cumulative starts
  *  with `spacing` reserved between adjacent tracks. */
-function layoutTrack(extents: number[], spacing: number): TrackLayout {
-  const starts: number[] = [];
-  let cursor = 0;
+function layoutTrack<T>(
+  A: Arith<T>,
+  extents: T[],
+  spacing: number
+): TrackLayout<T> {
+  const starts: T[] = [];
+  let cursor = A.zero;
   for (const e of extents) {
     starts.push(cursor);
-    cursor += e + spacing;
+    cursor = A.add(cursor, A.add(e, A.constant(spacing)));
   }
   return { starts, extents };
 }
@@ -251,26 +255,33 @@ function layoutTrack(extents: number[], spacing: number): TrackLayout {
  *  claim cell equals its content). Computed post-layout so the cell centers pin
  *  to the real geometry — this is the single source both the placement and the
  *  solver shadow read, so they cannot drift from what rendered. */
-export function gridTracksFromSizes(
+export function gridTracksFromSizes<T>(
+  A: Arith<T>,
   c: GridConstraint,
-  cellSizes: (readonly [number, number] | undefined)[]
-): [TrackLayout, TrackLayout] {
+  cellSizes: (readonly [T, T] | undefined)[]
+): [TrackLayout<T>, TrackLayout<T>] {
   const numRows = numRowsOf(c);
-  const colExtents = Array.from({ length: c.numCols }, (_, col) => {
-    let m = 0;
-    for (let row = 0; row < numRows; row++)
-      m = Math.max(m, cellSizes[row * c.numCols + col]?.[0] ?? 0);
-    return m;
-  });
-  const rowExtents = Array.from({ length: numRows }, (_, row) => {
-    let m = 0;
-    for (let col = 0; col < c.numCols; col++)
-      m = Math.max(m, cellSizes[row * c.numCols + col]?.[1] ?? 0);
-    return m;
-  });
+  const colExtents = Array.from({ length: c.numCols }, (_, col) =>
+    A.max([
+      A.zero,
+      ...Array.from(
+        { length: numRows },
+        (_, row) => cellSizes[row * c.numCols + col]?.[0] ?? A.zero
+      ),
+    ])
+  );
+  const rowExtents = Array.from({ length: numRows }, (_, row) =>
+    A.max([
+      A.zero,
+      ...Array.from(
+        { length: c.numCols },
+        (_, col) => cellSizes[row * c.numCols + col]?.[1] ?? A.zero
+      ),
+    ])
+  );
   return [
-    layoutTrack(colExtents, c.xSpacing),
-    layoutTrack(rowExtents, c.ySpacing),
+    layoutTrack(A, colExtents, c.xSpacing),
+    layoutTrack(A, rowExtents, c.ySpacing),
   ];
 }
 
@@ -292,26 +303,31 @@ export function gridCellSizeByName(
   return out;
 }
 
-export type GridCellPlacement = {
+export type GridCellPlacement<T = number> = {
   child: ConstraintRef;
-  center: [number, number];
+  center: [T, T];
 };
 
 /** Equal box-division tracks: every column/row gets the same slice of `size`.
  *  The fallback for `gridCellPlacements` when no resolved tracks are handed in. */
-function equalTracks(
+function equalTracks<T>(
+  A: Arith<T>,
   c: GridConstraint,
-  size: readonly [number, number]
-): [TrackLayout, TrackLayout] {
+  size: readonly [T, T]
+): [TrackLayout<T>, TrackLayout<T>] {
   const numRows = numRowsOf(c);
-  const colExtent = sliceExtent(size[0], c.xSpacing, c.numCols);
-  const rowExtent = sliceExtent(size[1], c.ySpacing, numRows);
+  const slice = (budget: T, spacing: number, n: number) =>
+    A.scale(1 / n, A.sub(budget, A.constant(spacing * (n - 1))));
+  const colExtent = slice(size[0], c.xSpacing, c.numCols);
+  const rowExtent = slice(size[1], c.ySpacing, numRows);
   return [
     layoutTrack(
+      A,
       Array.from({ length: c.numCols }, () => colExtent),
       c.xSpacing
     ),
     layoutTrack(
+      A,
       Array.from({ length: numRows }, () => rowExtent),
       c.ySpacing
     ),
@@ -320,20 +336,21 @@ function equalTracks(
 
 /** Cell centers from resolved tracks — or, when `tracks` is omitted, the equal
  *  box-division fallback used by the direct-solver tests. */
-export function gridCellPlacements(
+export function gridCellPlacements<T>(
+  A: Arith<T>,
   c: GridConstraint,
-  size: readonly [number, number],
-  tracks?: [TrackLayout, TrackLayout]
-): GridCellPlacement[] {
-  const [cols, rows] = tracks ?? equalTracks(c, size);
+  size: readonly [T, T],
+  tracks?: [TrackLayout<T>, TrackLayout<T>]
+): GridCellPlacement<T>[] {
+  const [cols, rows] = tracks ?? equalTracks(A, c, size);
   return c.children.map((child, index) => {
     const column = index % c.numCols;
     const row = Math.floor(index / c.numCols);
     return {
       child,
       center: [
-        cols.starts[column] + cols.extents[column] / 2,
-        rows.starts[row] + rows.extents[row] / 2,
+        A.add(cols.starts[column], A.scale(0.5, cols.extents[column])),
+        A.add(rows.starts[row], A.scale(0.5, rows.extents[row])),
       ],
     };
   });
@@ -346,25 +363,25 @@ export function lowerGridPlacement<T>(
   A: Arith<T>,
   c: GridConstraint,
   owner: string,
-  size: readonly [number, number],
+  size: readonly [T, T],
   emitter: PlacementFactEmitter<T>,
-  tracks?: [TrackLayout, TrackLayout],
+  tracks?: [TrackLayout<T>, TrackLayout<T>],
   pinnedByPosition?: Map<string, Set<0 | 1>>
 ): void {
-  for (const { child, center } of gridCellPlacements(c, size, tracks)) {
+  for (const { child, center } of gridCellPlacements(A, c, size, tracks)) {
     const overridden = pinnedByPosition?.get(child.name);
     if (!overridden?.has(0))
       emitter.pin({
         axis: "x",
         target: { name: child.name, anchor: "middle" },
-        value: A.constant(center[0]),
+        value: center[0],
         owner,
       });
     if (!overridden?.has(1))
       emitter.pin({
         axis: "y",
         target: { name: child.name, anchor: "middle" },
-        value: A.constant(center[1]),
+        value: center[1],
         owner,
       });
   }

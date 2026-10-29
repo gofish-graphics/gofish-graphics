@@ -29,7 +29,7 @@ import type { DistributeConstraint, DistributeOptions } from "./distribute";
 import type { PositionConstraint, PositionOptions } from "./position";
 import type { ZAboveConstraint, ZBelowConstraint } from "./zorder";
 import type { NestConstraint, NestOptions } from "./nest";
-import type { GridConstraint, TrackLayout } from "./grid";
+import type { GridConstraint } from "./grid";
 import {
   applyOverlapPlacement,
   isOverlapConstraint,
@@ -45,13 +45,8 @@ import {
   childNameKey,
   isPlacedOn,
   type ConstraintPosScales,
-  type FreeOrigin,
   type ConstraintRef,
 } from "./shared";
-import {
-  solvePlacementConstraints,
-  type RigidAttachment,
-} from "./placementSolver";
 import { shadowCheckConstraint, SOLVER_CHECK } from "../solver/shadow";
 import { RelateOperand, directChildIndex, type RelateEnv } from "./relate";
 
@@ -367,31 +362,25 @@ function foldCoordinate(
 }
 
 /**
- * Apply a layer's constraints as one relational placement problem. An
- * interval-form `position` contributes extent facts to the same solve, so
- * declaration order cannot choose whether size or position wins. z-order
- * constraints are resolved separately at render time.
+ * Apply a layer's constraints. The placement constraints are placed by the
+ * layer's plan, which the claim walk solved once (`seat`, which writes the
+ * plan's seats back: `layer`'s layout). What no plan can place runs after:
+ * an overlap strategy and a label placement read where the plan put
+ * everything else. z-order constraints are resolved separately at render
+ * time.
  *
- * @param constraints - The constraint specs to compose
+ * @param constraints - The constraint specs
  * @param nameToPlaceable - Map from child name to its Placeable
- * @param sizes - The layer's box size `[w, h]`, used by grid placement
- * @param posScales - Per-axis data→pixel scales for `position` constraints
- * @param rigid - Nested operands (operand name → container name + gap), tied
- *   rigidly to the layer child that contains them
- * @param dataPositioned - Per-axis sets of child names anchored to a data scale
- *   (baseline fixed at `posScale(0)`); `align` leaves these where their own scale
- *   puts them. The space/scope fact that replaced the `placementOn` guard read.
+ * @param sizes - The layer's box size `[w, h]`, used by label placement
+ * @param posScales - Per-axis data→pixel scales
+ * @param seat - Writes the plan's seats back
  */
 export function applyConstraints(
   constraints: ConstraintSpec[],
   nameToPlaceable: Map<string, Placeable>,
   sizes: [number, number],
-  posScales?: ConstraintPosScales,
-  gridTracks?: [TrackLayout, TrackLayout],
-  dataPositioned?: [Set<string>, Set<string>],
-  rigid?: Map<string, RigidAttachment>,
-  freeOrigin?: FreeOrigin,
-  apart?: [Set<string>, Set<string>]
+  posScales: ConstraintPosScales | undefined,
+  seat: () => void
 ): void {
   const placement = constraints.filter(
     (
@@ -408,11 +397,10 @@ export function applyConstraints(
   );
 
   // Solver shadow (observe→assert): snapshot each child's
-  // per-axis placement BEFORE the solve — only when the check is on, so
-  // production pays nothing — so each constraint's shadow can tell a child it
-  // packed from one that arrived pre-positioned. The rank-2 solve places every
-  // target at once (no per-constraint apply boundary), so the checks run once
-  // AFTER the solve against the settled positions.
+  // per-axis placement BEFORE the seats are written — only when the check
+  // is on, so production pays nothing — so each constraint's shadow can tell
+  // a child it packed from one that arrived pre-positioned. The checks run
+  // once AFTER, against the settled positions.
   const prePlaced = SOLVER_CHECK
     ? new Map<string, [boolean, boolean]>(
         [...nameToPlaceable].map(([name, p]) => [
@@ -422,20 +410,10 @@ export function applyConstraints(
       )
     : undefined;
 
-  solvePlacementConstraints(
-    placement,
-    nameToPlaceable,
-    sizes,
-    posScales,
-    gridTracks,
-    dataPositioned,
-    rigid,
-    freeOrigin,
-    apart
-  );
+  seat();
 
   // An overlap constraint is not a difference constraint: it reads where the
-  // solve put each child on the data axis, then places the child on the free
+  // plan put each child on the data axis, then places the child on the free
   // axis. So it runs after the solve.
   for (const constraint of constraints)
     if (isOverlapConstraint(constraint))

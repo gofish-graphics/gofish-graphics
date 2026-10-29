@@ -129,7 +129,12 @@ function solveRelationComponents<T>(
           relative.set(edge.node, expected);
           componentOf.set(edge.node, component);
           queue.push(edge.node);
-        } else if (!A.near(prior, expected, TOLERANCE)) {
+        } else if (
+          !A.agree(expected, prior, TOLERANCE, {
+            owner: edge.owner,
+            priorOwner: "relation graph",
+          })
+        ) {
           conflicts.push({
             axis,
             owner: edge.owner,
@@ -174,7 +179,12 @@ export function solveAxisProblem<T>(
     const prior = offsets.get(component);
     if (prior === undefined) {
       offsets.set(component, { value: assertedOffset, owner });
-    } else if (!A.near(prior.value, assertedOffset, TOLERANCE)) {
+    } else if (
+      !A.agree(value, A.add(rel, prior.value), TOLERANCE, {
+        owner,
+        priorOwner: prior.owner,
+      })
+    ) {
       conflicts.push({
         axis,
         owner,

@@ -59,17 +59,21 @@ export function compilePlacementCoordinate<T>(
   A: Arith<T>,
   coordinate: PositionValue,
   scale: AxisMap<T> | undefined,
-  axisSize?: number
+  axisSize?: T
 ): PlacementCoordinate<T> {
   if (isDiscretePosition(coordinate)) {
-    if (!Number.isFinite(axisSize) || coordinate.count <= 0) return undefined;
-    return A.constant((coordinate.index / coordinate.count) * axisSize!);
+    if (axisSize === undefined || coordinate.count <= 0) return undefined;
+    return A.scale(coordinate.index / coordinate.count, axisSize);
   }
   if (!isValue(coordinate)) return A.constant(coordinate);
-  if (scale === undefined) return undefined;
+  // A map takes only a number to a pixel: a datum that is not one (a value
+  // of a field whose values are not numbers) has no place on the axis.
+  const value = getValue(coordinate);
+  if (scale === undefined || typeof value !== "number" || Number.isNaN(value))
+    return undefined;
   // `pxOf`, in `A`.
   return A.add(
-    A.scale(getValue(coordinate)!, scale.sigma),
+    A.scale(value, scale.sigma),
     scale.originPx,
     A.constant(getValueOffset(coordinate))
   );
@@ -80,14 +84,14 @@ class PlacementOwnershipPlan<T> {
   private readonly initiallyPlaced = new Set<string>();
   private readonly positionPinned = new Set<string>();
   private readonly dataPositionedSet: [Set<string>, Set<string>];
-  private readonly sizes: [number, number];
+  private readonly sizes: readonly [T, T];
 
   constructor(
     private readonly A: Arith<T>,
     targets: Map<string, SolvePlaceable<T>>,
     constraints: PlacementConstraint[],
     posScales: ConstraintPosScales<T> | undefined,
-    sizes: [number, number],
+    sizes: readonly [T, T],
     dataPositioned?: [Set<string>, Set<string>]
   ) {
     this.sizes = sizes;
@@ -181,9 +185,9 @@ export function lowerPlacementConstraints<T>(
   A: Arith<T>,
   constraints: PlacementConstraint[],
   targets: Map<string, SolvePlaceable<T>>,
-  sizes: [number, number],
+  sizes: readonly [T, T],
   posScales?: ConstraintPosScales<T>,
-  gridTracks?: [TrackLayout, TrackLayout],
+  gridTracks?: [TrackLayout<T>, TrackLayout<T>],
   dataPositioned?: [Set<string>, Set<string>]
 ): LoweredPlacement<T> {
   // A `position` pin on a grid cell overrides that cell's track centering on the

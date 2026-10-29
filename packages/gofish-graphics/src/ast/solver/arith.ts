@@ -28,6 +28,12 @@ export type Arith<T> = {
   abs: (x: T) => T;
   /** Whether `a` and `b` agree within `tolerance` (for values, at every σ). */
   near: (a: T, b: T, tolerance: number) => boolean;
+  /** Whether `a`, which `owner` asserts, agrees within `tolerance` with
+   *  `b`, which `priorOwner` already implies: a constraint that
+   *  over-determines a box. An arithmetic whose values layout has not
+   *  measured yet (formulas, `Tape`) keeps the check for layout to make,
+   *  at the σ it lays out at, and answers yes. */
+  agree: (a: T, b: T, tolerance: number, owners: CheckOwners) => boolean;
   /** `x` in the box ledger's form (`BBox`), a value in σ: a number is a
    *  constant there. */
   toValue: (x: T) => Pwl.Value;
@@ -37,6 +43,10 @@ export type Arith<T> = {
   /** `x` as a number for a message (a value at σ = 0, as `BBox` reports). */
   report: (x: T) => number;
 };
+
+/** Who asserts a value, and who implies the value it is checked against
+ *  (`Arith.agree`). */
+export type CheckOwners = { owner: string; priorOwner: string };
 
 export const numbers: Arith<number> = {
   zero: 0,
@@ -56,6 +66,7 @@ export const numbers: Arith<number> = {
   negate: (x) => -x,
   abs: Math.abs,
   near: (a, b, tolerance) => Math.abs(a - b) <= tolerance,
+  agree: (a, b, tolerance) => Math.abs(a - b) <= tolerance,
   toValue: Pwl.constant,
   fromValue: (v) => Pwl.at(v, 0),
   report: (x) => x,
@@ -71,6 +82,7 @@ export const values: Arith<Pwl.Value> = {
   negate: Pwl.negate,
   abs: (x) => Pwl.envelope([x, Pwl.negate(x)]),
   near: Pwl.approxEqual,
+  agree: (a, b, tolerance) => Pwl.approxEqual(a, b, tolerance),
   toValue: (x) => x,
   fromValue: (v) => v,
   report: (x) => Pwl.at(x, 0),

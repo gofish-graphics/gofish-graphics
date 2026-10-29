@@ -101,6 +101,7 @@ export function axisSpan(opts: {
   // on: across it, it has no depth and is wherever its layout left it, so
   // it is ink there too.
   node.inkOn = line === undefined ? [true, true] : alongOnly(dim);
+  node.placedByLayout = alongOnly(dim);
   return node;
 }
 
@@ -171,5 +172,6 @@ export function runStartBox(opts: {
   // depth and is wherever its layout left it: it is ink on both axes
   // (`GoFishNode.inkOn`).
   node.inkOn = [true, true];
+  node.placedByLayout = alongOnly(dim);
   return node;
 }

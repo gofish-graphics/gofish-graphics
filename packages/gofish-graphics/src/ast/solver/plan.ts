@@ -9,6 +9,7 @@
 // plans of the layers between compose (`planPlacement`).
 
 import { GoFishNode } from "../_node";
+import { hasOrigin } from "../underlyingSpace";
 import type { GoFishAST } from "../_ast";
 import { Extent } from "../extent";
 import type { Size } from "../dims";
@@ -20,7 +21,12 @@ import {
   type ClaimPlacement,
   type Placement,
 } from "../constraints/claimPlacement";
-import type { ConstraintSpec } from "../constraints";
+import {
+  getPositioningConstraintRefs,
+  type AlignConstraint,
+  type ConstraintSpec,
+} from "../constraints";
+import { childNameKey } from "../constraints/shared";
 
 /** What a child is to its parent's plan on one axis, about its data 0, in
  *  the parent's axis order. */
@@ -137,17 +143,72 @@ const reaching = (e: Extent, from: Extent, to: Extent): Extent =>
   );
 
 /**
- * Whether `c` places itself on `axis` at a literal pixel of its own: a
- * layer's literal start, or a shape's literal start or center (`positionOf`
- * in its layout). Its claim is then about its parent's origin already, and
- * layout pins it where it put itself (`shouldPinSelfPlacement`).
+ * Whether `c` places itself on `axis` as it is laid out: a layer's literal
+ * start, a shape's start or center, a pixel or a datum (`positionOf` in its
+ * layout), or a node its own layout places from the refs it reads
+ * (`GoFishNode.placedByLayout`). Layout pins it where it put itself, so the
+ * plan takes it there (`at:`).
  */
 export const placesItself = (c: GoFishAST, axis: 0 | 1): boolean => {
   if (!(c instanceof GoFishNode)) return false;
+  if (c.placedByLayout?.[axis] === true) return true;
   if (c.claimWalk !== undefined)
     return c.claimWalk.literalStart[axis] !== undefined;
   const d = (c.args?.dims as { min?: unknown; center?: unknown }[])?.[axis];
-  return typeof d?.min === "number" || typeof d?.center === "number";
+  return d?.min !== undefined || d?.center !== undefined;
+};
+
+/**
+ * Whether layout hands `node` a region on `axis` (`buildChildProposals`):
+ * its parent layer's cell for it spans the axis, or the parent passes on to
+ * it the region the parent was handed, to a child whose cell leaves the
+ * axis open or that no constraint places.
+ */
+const handedRegion = (node: GoFishAST, axis: 0 | 1): boolean => {
+  const p = node.parent;
+  if (!(p instanceof GoFishNode) || (p.type !== "layer" && p.type !== "box"))
+    return false;
+  const key = childNameKey(node);
+  if (key === undefined) return false;
+  for (const c of p.constraints)
+    if (c.type === "position" && c.region !== undefined)
+      if (c.children.some((r) => r?.name === key))
+        return c.region.spans[axis] !== undefined || handedRegion(p, axis);
+  return (
+    !getPositioningConstraintRefs(p.constraints).has(key) &&
+    handedRegion(p, axis)
+  );
+};
+
+/**
+ * `constraints` as the solve sees them once layout has handed each child
+ * its region (`placementConstraints`): an `align` loses each axis on which
+ * every one of its operands is handed a region (`handedRegion`), since the
+ * region placed them there, and goes when it has no axis left. A partition
+ * inside another partition's cell is such a case.
+ */
+const withoutSpannedAligns = (
+  node: GoFishNode,
+  constraints: ConstraintSpec[],
+  operands: Map<string, { child: number; direct: boolean }>
+): ConstraintSpec[] => {
+  const spanned = (c: AlignConstraint, axis: 0 | 1) =>
+    c.children.every((r) => {
+      const op = operands.get(r.name);
+      return op?.direct === true && handedRegion(node.children[op.child], axis);
+    });
+  const out: ConstraintSpec[] = [];
+  for (const c of constraints) {
+    if (c.type !== "align") {
+      out.push(c);
+      continue;
+    }
+    const x = c.x !== undefined && spanned(c, 0) ? undefined : c.x;
+    const y = c.y !== undefined && spanned(c, 1) ? undefined : c.y;
+    if (x === c.x && y === c.y) out.push(c);
+    else if (x !== undefined || y !== undefined) out.push({ ...c, x, y });
+  }
+  return out;
 };
 
 /**
@@ -254,10 +315,11 @@ export function buildPlan(
         chrome: ring && i > 0,
       };
     }),
-    constraints,
+    withoutSpannedAligns(node, constraints, operands),
     operands,
     new Set(node.children.map((_, i) => i)),
-    nested
+    nested,
+    hasOrigin(node._underlyingSpace?.[axis])
   );
   const box: [Pwl.Value[], Pwl.Value[]] = [[], []];
   const whole: [Pwl.Value[], Pwl.Value[]] = [[], []];
