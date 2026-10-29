@@ -455,10 +455,32 @@ type Frame = { at: Pwl.Value; sign: 1 | -1 };
 const flips = (parent: GoFishNode, child: GoFishAST, axis: 0 | 1): boolean =>
   axis === 1 && child.yFrame.direction !== parent.yFrame.direction;
 
-/** Whether plans compose through `n` on `axis`: a layer that is not a
- *  scope of its own there. */
-const composes = (n: GoFishNode, axis: 0 | 1): boolean =>
-  n.claimWalk !== undefined && !n.claimWalk.ownScope[axis];
+/**
+ * How a value in `n`'s plan on `axis` reads in the frame its parent places
+ * it by, where `n` is a layer: as it is when `n` is no scope of its own
+ * there. A layer with a literal size solved its σ in the claim walk
+ * (`ScopeRegistry.fixedSolve`), so a value in its plan is that number at
+ * that σ, whatever σ its parent is solved at; and its plan's data 0 sits
+ * its claim's descent at that σ past the 0 of the claim it reports (its
+ * start edge where it seats its content by its box, else that data 0).
+ * Undefined where no plan reaches: a node that is not a layer, or a scope
+ * the claim walk did not solve (a size read off data, or content that maps
+ * no domain).
+ */
+const leaving = (
+  n: GoFishNode,
+  axis: 0 | 1
+): ((v: Pwl.Value) => Pwl.Value) | undefined => {
+  if (n.claimWalk === undefined) return undefined;
+  if (!n.claimWalk.ownScope[axis]) return (v) => v;
+  const solved = n.tryGetRenderSession()?.scopes?.fixedSolve(n, axis);
+  const claim = n.resolveExtent()[axis];
+  if (solved === undefined || claim === undefined) return undefined;
+  const sigma = solved.solution.sigma;
+  const zero =
+    Pwl.at(solved.claim.descent, sigma) - Pwl.at(claim.descent, sigma);
+  return (v) => Pwl.constant(Pwl.at(v, sigma) + zero);
+};
 
 /** `[lo, hi]` and a point `zero` moved by the frame map `m`, the box kept
  *  in order. */
@@ -476,7 +498,9 @@ const moved = (
  * `target`'s box and data 0 up the plans of its ancestors to `n`, the
  * child of `stop` that holds it, in `n`'s frame: the box in its parent's
  * plan, moved by each ancestor's data 0 in the next one's plan (reflected
- * where y runs the other way). Undefined where a plan does not place it.
+ * where y runs the other way), and read out of each ancestor into the frame
+ * its parent places it by (`leaving`). Undefined where a plan does not
+ * place it.
  */
 const throughPlans = (
   target: GoFishNode,
@@ -487,7 +511,8 @@ const throughPlans = (
   let at: [Pwl.Value, Pwl.Value, Pwl.Value] | undefined;
   while (n.parent !== stop) {
     const p = n.parent;
-    if (p === undefined || !composes(p, axis)) return undefined;
+    const out = p && leaving(p, axis);
+    if (p === undefined || out === undefined) return undefined;
     const plan = p.claimWalk!.plan(axis);
     const i = p.claimWalk!.seating().indexOf(n);
     const box = plan?.placement.boxes().get(i);
@@ -498,6 +523,7 @@ const throughPlans = (
       at === undefined
         ? [box.lo, box.hi, base]
         : moved({ at: base, sign: flips(p, n, axis) ? -1 : 1 }, ...at);
+    at = at.map(out) as [Pwl.Value, Pwl.Value, Pwl.Value];
     n = p;
   }
   return at === undefined ? undefined : { n, at };
@@ -508,8 +534,12 @@ const throughPlans = (
  * (a plan's port): the target's box in its parent's plan, moved by each
  * ancestor's data 0 in the next ancestor's plan (reflected where y runs the
  * other way), up to the nearest node it shares with `frame`, which seats
- * both sides without solving (`seatOf`); then down to `frame`. Undefined
- * where no plan reaches: a node that is not a layer, or a scope of its own.
+ * both sides without solving (`seatOf`); then down to `frame`. On the way
+ * up, a layer with a literal size is crossed at the σ the claim walk solved
+ * it at (`leaving`). On the way down, a layer with a size of its own (or
+ * `frame` itself, sized) is not crossed: its σ is solved after the plan
+ * that asks, as it holds `frame`. Undefined where no plan reaches: a node
+ * that is not a layer, or a scope crossed where its σ is not known.
  */
 export function planPlacement(
   target: GoFishNode,
@@ -520,7 +550,7 @@ export function planPlacement(
   for (let n: GoFishNode | undefined = frame; n; n = n.parent) up.add(n);
   let shared: GoFishNode | undefined = target.parent;
   while (shared !== undefined && !up.has(shared)) shared = shared.parent;
-  if (shared === undefined || !composes(shared, axis)) return undefined;
+  if (shared?.claimWalk === undefined) return undefined;
 
   // The target's box and data 0 in the frame of `n`, the child of `shared`
   // that holds it.
@@ -555,8 +585,8 @@ export function planPlacement(
   const chain: GoFishNode[] = [];
   for (let m = frame; m !== shared; m = m.parent!) chain.push(m);
   for (const m of chain.reverse()) {
+    if (m.claimWalk?.ownScope[axis] === true) return undefined;
     const p = m.parent!;
-    if (p !== shared && !composes(p, axis)) return undefined;
     const s = seatOf(p, m, axis);
     if (s === undefined) return undefined;
     at = Pwl.add(at, Pwl.constant(sign * s));

@@ -734,7 +734,13 @@ report their size).
   moves it by each ancestor's place in the next, where each layer places its
   children by its plan (`GoFishNode.claimWalk.plan`). The step into the
   node the two share reads only where that node seats its child (its origin,
-  or a literal pin), since its own claim may be the one being computed. So a
+  or a literal pin), since its own claim may be the one being computed. A
+  layer with a literal size solved its σ in the claim walk, so a node inside
+  it lands where the plans compose at that σ, which is a number wherever
+  the layer is placed: the tick labels of an axis drawn outside a sized
+  chart take room the same way. The other way is not composed: a stand-in
+  inside a sized layer for a node outside it waits on the layer's σ, which
+  is solved after the plan that asks, so it is ink. So a
   `.label()` text beside its bar, or a text in a spread beside a `ref`,
   takes room where it draws, and σ is solved with it, while the mark it
   describes stays where its own layout puts it. A layer that places such a
@@ -825,7 +831,7 @@ report their size).
   noise offset, a label slot), which the claim walk reads from the
   content's data 0 and layout from its plot's start, `wide(plot).descent`
   apart; which of the two a pinned node's constants are about is open
-  (TODO(#1176) at `contentSeat`).
+  (TODO(#1239) at `contentSeat`).
 - **A node with a size of its own.** Its own `w`/`h` is its plot, for a
   chart and a plain layer alike. Its chrome forms are its content's claim
   and plot, widened to its keyed domain (`setChromeForms`), and the size

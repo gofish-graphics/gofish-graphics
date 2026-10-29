@@ -189,7 +189,7 @@ export function guttersInSlot(
  * offset, a label slot): the claim walk reads that constant from the
  * content's data 0, and layout from its plot's start edge, which is
  * `wide(plot).descent(σ)` apart (0 for a domain that starts at 0).
- * TODO(#1176): which origin a pinned node's own constants are about (its
+ * TODO(#1239): which origin a pinned node's own constants are about (its
  * data 0, or its plot's start) is a design question, so both stay. Seating
  * the claim walk at the start gutter instead would move the content's data
  * 0 off its ticks.
