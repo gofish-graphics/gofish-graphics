@@ -2982,10 +2982,6 @@ def datum(value: Any) -> DatumValue:
     return DatumValue({"type": "datum", "datum": value})
 
 
-def _is_number(v: Any) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool)
-
-
 class LengthValue(dict):
     """
     The `{type: "length", ...}` wire shape of a length, as a dict subclass
@@ -3034,7 +3030,7 @@ def percent(n: float) -> LengthValue:
     Args:
         n: The percent, a finite number.
     """
-    if not _is_number(n) or n != n or n in (float("inf"), float("-inf")):
+    if not _is_number(n) or not math.isfinite(n):
         raise TypeError(f"percent(n): n must be a finite number, got {n!r}")
     return LengthValue({"type": "length", "percent": n})
 
