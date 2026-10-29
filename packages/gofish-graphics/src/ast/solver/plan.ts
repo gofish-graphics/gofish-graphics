@@ -277,6 +277,22 @@ const formsOf = (
 };
 
 /**
+ * `c`'s plot claim in `parent`'s axis order, on both axes (`formsOf`): read
+ * reflected where it reads y the other way. A `nest` pads it before the
+ * plan is built.
+ */
+export const plotIn = (
+  parent: GoFishNode,
+  c: GoFishAST
+): Size<Extent | undefined> =>
+  ([0, 1] as const).map((axis) => {
+    const whole = c.resolveExtent()[axis];
+    return whole === undefined
+      ? undefined
+      : formsOf(parent, c, whole, axis).plot;
+  }) as Size<Extent | undefined>;
+
+/**
  * A layer's plan on `axis`: one solve in values in σ over every child, by
  * its box, with a chain laying its parts by their plots; and its forms, the
  * envelopes of its children's where the solve places them. The summary

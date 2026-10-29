@@ -876,7 +876,9 @@ report their size).
   stand-in) clears that part's whole box, so a ring still seats its title
   past its tick labels. The plot of a chain with a stand-in reaches only as
   far as its stand-ins. A child that reads y the other
-  way has its plot read reflected within its box. The gutters of a chart
+  way has its plot read reflected with its box, at the one place a
+  child's claim meets its parent (`formsOf` in `solver/plan.ts`), which a
+  `nest`'s padding reads too (`plotIn`). The gutters of a chart
   are its claim past the plot claim of its content (`chromeForms` in
   `chromeGutters.ts`), so a chart with a size of its own maps that plot into
   its size, and its labels, like its chrome, add around it (#1032). A node

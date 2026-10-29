@@ -1354,7 +1354,7 @@ export class GoFishNode {
       this.plotIsBox(axis) ? extent[axis] : plot[axis]
     );
     // A reader asks whether the plot differs from the claim by identity
-    // (`plot !== claim`: a dressed child, `plotIn`), so the answer is
+    // (`plot !== claim`: a dressed child, `plotIsClaim` in layer), so the answer is
     // the claim or the plot itself where it is one of them, and otherwise
     // one array per claim and plot.
     const same = (of: Size<Extent | undefined>) =>

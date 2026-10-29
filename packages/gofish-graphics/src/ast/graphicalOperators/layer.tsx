@@ -86,6 +86,7 @@ import {
   buildPlan,
   planPlacement,
   planPlacementInChild,
+  plotIn,
   type LayerPlan,
 } from "../solver/plan";
 import { evaluate } from "../solver/formula";
@@ -127,25 +128,6 @@ const isRing = (node: GoFishNode): boolean => {
   for (let o: GoFishNode | undefined = node; o !== undefined; o = o.parent)
     if (o.chrome?.rings.includes(node)) return true;
   return false;
-};
-
-/** `child`'s plot claim (`GoFishNode.resolvePlotExtent`) in `parent`'s axis
- *  order. A child that reads y the other way is read reflected: its box is
- *  the same, and its plot lies at the other end of it. */
-const plotIn = (
-  child: GoFishNode,
-  parent: GoFishNode
-): Size<Extent | undefined> => {
-  const plot = child.resolvePlotExtent();
-  const full = child.resolveExtent();
-  if (plot === full || child.yFrame.direction === parent.yFrame.direction)
-    return plot;
-  const [f, p] = [full[1], plot[1]];
-  if (f === undefined || p === undefined || f === p) return plot;
-  // Reflected about the box `[−d, a]`: x ↦ (a − d) − x.
-  const { add, negate } = Pwl;
-  const span = add(f.ascent, negate(f.descent));
-  return [plot[0], Extent(add(span, p.descent), add(negate(span), p.ascent))];
 };
 
 export const layer = createNodeOperatorSequential(
@@ -515,7 +497,7 @@ export const layer = createNodeOperatorSequential(
           };
           // Each child's own plot claim, before the nest padding.
           const ownPlots = node.children.map((c) =>
-            c instanceof GoFishNode ? plotIn(c, node) : c.resolveExtent()
+            c instanceof GoFishNode ? plotIn(node, c) : c.resolveExtent()
           );
           const overhang = (i: number) => {
             const c = node.children[i];
