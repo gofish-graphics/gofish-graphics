@@ -406,7 +406,13 @@ canvas: σ is solved from the part of the claim that grows with σ
 (`Pwl.rising`), so the data fills the canvas as if the fixed parts took no
 room, the fixed parts overflow, and the fit warns (see
 [Layout warnings](#layout-warnings)). The same fit, with the same fallback,
-serves a layer with a size of its own and a coord boundary. On an axis the render does not size, a root whose nodes with a
+serves a layer with a size of its own and a coord boundary. Next to σ, the
+fit returns the box it laid the claim out in (`Fitted.box`): a slot that is a
+limit (the render's size, a layer's own size) is the box, whatever the claim
+needs, and what overflows draws past it; a slot that is not one (the default
+canvas, a coord's budget) holds the claim, so the box grows to the claim at
+its σ, and a claim that is only pixels is its own box. The root's size is
+that box. On an axis the render does not size, a root whose nodes with a
 literal size map its keyed domain maps it at the σ they solved
 (`ScopeRegistry.keyedSigma`). Any other unsized root is fitted to the default
 canvas, which is not a limit: it grows to hold what does not fit, so the fit
@@ -850,10 +856,12 @@ report their size).
   chart and a plain layer alike. Its chrome forms are its content's claim
   and plot, widened to its keyed domain (`setChromeForms`), and the size
   is solved as the plot: σ fits the plot to the size, and the node claims
-  the whole at that σ (`ScopeRegistry.solveFixed`), its data 0 past the
-  start reach. Content that maps no domain claims the size and the reach
-  of what dresses it (`aroundPlot`), and layout lays the node out in the
-  same whole. A chart's chrome dresses its content inside the chart's frame
+  its size and the reach of what dresses it at that σ
+  (`ScopeRegistry.solveFixed`), its data 0 past the start reach, whether
+  the content fits or overflows the size. Content that maps no domain is
+  fitted by the same fit, which solves no scope there, and claims the size
+  and the reach of what dresses it from its start edge (`aroundPlot`), and
+  layout lays the node out in the same whole. A chart's chrome dresses its content inside the chart's frame
   (`frameChart`), so the chrome is in those forms; its content need not
   wear chrome of its own: a label hanging off the first bar is dressing, so
   it too adds around the plot. Labels beside a plain layer's content (and
@@ -970,11 +978,10 @@ those lines, so `pnpm capture-one` prints them under the story.
   slot no σ ≥ 0 fits. The one scope fit (`ScopeRegistry.fit`) checks it
   wherever a claim is fitted to a slot: the root on each axis the render
   sizes, and a layer with a size of its own (its content's claim against its
-  size). A layer with a size of its own whose content does not solve a
-  domain on that axis (panels and gaps with fixed sizes, a `percent(30)` and
-  a `percent(70)` part with a 12 px gap) compares its content's plot with
-  its size directly (`fixedOverflow` in the layer's claim hook), since a
-  length has no content minimum. A coord boundary fits through it too but does not warn, since its
+  size), whether or not the content solves a domain on that axis (panels
+  and gaps with fixed sizes, a `percent(30)` and a `percent(70)` part with a
+  12 px gap), since a length has no content minimum. The node still claims
+  its size. A coord boundary fits through it too but does not warn, since its
   budget is in coordinate units, not pixels (an open question). The
   warning names the
   node that holds the fixed parts: down from where the check failed through

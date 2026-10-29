@@ -52,6 +52,10 @@ export type ScopeSolution =
   | { sigma: number; originPx: number }
   | { sigma: number; originPx: undefined; startPx: number };
 
+/** What {@link ScopeRegistry.fit} lays a claim out in: the scope it
+ *  solved, if any, and the box it laid it in, in pixels. */
+export type Fitted = { scope: ScopeSolution | undefined; box: number };
+
 /** The frame a solved scope places its content in, `px(d) = sigma·d +
  *  originPx`, or undefined for an unsolved scope or one with no origin (only
  *  differences). */
@@ -257,13 +261,14 @@ export class ScopeRegistry {
     plot: number
   ): ScopeSolution | undefined {
     const fitted = forms && this.fit(meta, node, space, forms.plot, plot);
-    const reach = fitted && reachAt(forms!, fitted.sigma);
+    const scope = fitted?.scope;
+    const reach = scope && reachAt(forms!, scope.sigma);
     const solution: ScopeSolution | undefined =
-      fitted === undefined
+      scope === undefined
         ? undefined
-        : fitted.originPx === undefined
-          ? fitted
-          : { sigma: fitted.sigma, originPx: fitted.originPx + reach![0] };
+        : scope.originPx === undefined
+          ? scope
+          : { sigma: scope.sigma, originPx: scope.originPx + reach![0] };
     let solves = this.fixed.get(node);
     if (solves === undefined) this.fixed.set(node, (solves = []));
     solves[meta.axis] =
@@ -274,7 +279,7 @@ export class ScopeRegistry {
             solution,
             claim: forms!.whole,
             space,
-            box: plot + reach![0] + reach![1],
+            box: fitted!.box + reach![0] + reach![1],
           };
     return solution;
   }
@@ -342,10 +347,14 @@ export class ScopeRegistry {
    * warns the same way, and gets no scope.
    *
    * `node` is the node whose slot `allocated` is (for a node with a size of
-   * its own, `claim` is its content's). It is undefined for a slot that is
-   * not a pixel limit, where nothing warns: the default canvas of a render
-   * with no size on the axis, which grows to hold its claim (#1179), and a
-   * coord's budget. TODO(#1176): a coord's budget is in its coordinate
+   * its own, `claim` is its content's). Its slot is a limit: the box the
+   * claim is laid out in is the slot, and on overflow what the claim draws
+   * reaches past it. `node` is undefined for a slot that is not a pixel
+   * limit, where nothing warns and the box holds the claim: the default
+   * canvas of a render with no size on the axis, which grows to hold its
+   * claim (#1179), and a coord's budget. There the box is the claim at its
+   * σ where that is longer than the slot, and a claim with no scope (only
+   * pixels) is its own box. TODO(#1176): a coord's budget is in its coordinate
    * units (radians on a polar θ axis), so comparing its claim's fixed
    * pixels with it warns falsely (35 lines in 26 stories). Whether a
    * coord's budget is a limit, and in which units, is open; until then a
@@ -357,20 +366,33 @@ export class ScopeRegistry {
     space: UnderlyingSpace | undefined,
     claim: Extent | undefined,
     allocated: number
-  ): ScopeSolution | undefined {
+  ): Fitted | undefined {
     if (claim === undefined) return undefined;
     const maps = mapsDomain(space, claim);
-    const solved = maps
+    let scope = maps
       ? this.solveScope(meta, space, claim, allocated)
       : undefined;
-    if (solved !== undefined) return solved;
-    if (node !== undefined)
-      warnLayout(node, fixedOverflow(node, meta.axis, claim, allocated));
-    const grows = maps ? Pwl.rising(claim.width) : undefined;
-    const sigma = grows && Pwl.solve(grows, allocated);
-    return sigma === undefined
-      ? undefined
-      : this.scopeAt(meta, space, claim, sigma);
+    if (scope === undefined) {
+      if (node !== undefined)
+        warnLayout(node, fixedOverflow(node, meta.axis, claim, allocated));
+      const grows = maps ? Pwl.rising(claim.width) : undefined;
+      const sigma = grows && Pwl.solve(grows, allocated);
+      if (sigma !== undefined) scope = this.scopeAt(meta, space, claim, sigma);
+    }
+    // Past the slot by more than rounding (as `fixedOverflow` reads it).
+    const grown =
+      scope === undefined ? undefined : Pwl.at(claim.width, scope.sigma);
+    const box =
+      node !== undefined
+        ? allocated
+        : grown !== undefined
+          ? grown > allocated + 0.5
+            ? grown
+            : allocated
+          : Pwl.isConstant(claim.width)
+            ? Pwl.at(claim.width, 0)
+            : allocated;
+    return { scope, box };
   }
 
   /**

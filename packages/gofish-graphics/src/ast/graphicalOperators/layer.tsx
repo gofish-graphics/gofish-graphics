@@ -19,13 +19,7 @@ import {
   isUNDEFINED,
   magnitude,
 } from "../underlyingSpace";
-import {
-  Extent,
-  impliedExtent,
-  mapsDomain,
-  padExtent,
-  shiftExtent,
-} from "../extent";
+import { Extent, impliedExtent, padExtent, shiftExtent } from "../extent";
 import * as Pwl from "../solver/pwl";
 import type { KeyedDomains } from "../keyedDomains";
 import { isValue } from "../data";
@@ -103,7 +97,6 @@ import {
 } from "../chromeGutters";
 import { resolveSpacing } from "../constraints/distribute";
 import { resolveGridSpacing } from "../constraints/grid";
-import { fixedOverflow, warnLayout } from "../layoutWarnings";
 
 // ── Z-order resolution ────────────────────────────────────────────────────
 //
@@ -596,12 +589,15 @@ export const layer = createNodeOperatorSequential(
           // niced (`setChromeForms`), and the literal size is solved once
           // as the plot through the registry (`solveFixed`), whose
           // solution `layout` reuses; the node claims the whole at that σ.
-          // The box's 0 is its start edge, as its parent lays it out whole:
-          // the scope seats the content past it, so the claim is the
-          // content's at that σ, from the start edge. Content that maps no
-          // domain (`mapsDomain`) is laid out in the box, which claims its
-          // size and the reach of what dresses it, from its start edge too
-          // (`aroundPlot`; #493: fixed-size nodes report their size).
+          // The node claims its own size and the reach of what dresses it
+          // (#493: fixed-size nodes report their size), whether its
+          // content fits or overflows it: the one fit (`ScopeRegistry.fit`)
+          // warns once where the content's fixed parts need more than the
+          // size, and the content draws past it. Where the fit solved a
+          // scope, the scope seats the content in the box, so the claim
+          // keeps the content's split about its data 0 at that σ; content
+          // that maps no domain is laid out in the box from its start edge
+          // (`aroundPlot`).
           // A literal size on both axes over one declared unit keeps one
           // data unit the same length on x and y (#582): both scopes take
           // the binding σ (`equalizeFixed`), so both are solved before
@@ -630,22 +626,9 @@ export const layer = createNodeOperatorSequential(
             const size = node.fixedSize(axis);
             return typeof size === "number" ? size : undefined;
           });
-          const solvesDomain = (axis: 0 | 1) =>
-            fixedPx[axis] !== undefined &&
-            mapsDomain(t.resolved[axis], resolved[axis]);
           for (const axis of [0, 1] as const) {
             const px = fixedPx[axis];
             if (px === undefined) continue;
-            // Content that maps no domain is laid out in the box as it is:
-            // where its fixed parts are larger than the box, it warns as a
-            // solve does (`ScopeRegistry.fit`), since no solve is made
-            // (#1176 step 6: `percent(30)` + `percent(70)` + a gap).
-            if (!solvesDomain(axis)) {
-              const content = plot[axis];
-              if (content !== undefined)
-                warnLayout(node, fixedOverflow(node, axis, content, px));
-              continue;
-            }
             const space =
               keyed?.scope(node, axis, t.resolved[axis], resolved[axis]!)[0] ??
               t.resolved[axis];
@@ -658,19 +641,17 @@ export const layer = createNodeOperatorSequential(
               px
             );
           }
-          if (solvesDomain(0) && solvesDomain(1))
+          if (fixedPx[0] !== undefined && fixedPx[1] !== undefined)
             scopes.equalizeFixed(
               node,
               node.key ?? node.type,
               node.yFrame.direction
             );
-          const fixedClaim = (axis: 0 | 1, px: number): Extent | undefined => {
-            if (!solvesDomain(axis))
-              return Extent(Pwl.constant(aroundPlot(node, axis, px)));
+          const fixedClaim = (axis: 0 | 1, px: number): Extent => {
             const solved = scopes.fixedSolve(node, axis);
-            if (solved === undefined) return resolved[axis];
-            const { claim, solution, space } = solved;
-            const ascent = Pwl.at(claim.ascent, solution.sigma);
+            if (solved === undefined)
+              return Extent(Pwl.constant(aroundPlot(node, axis, px)));
+            const { claim, solution, space, box } = solved;
             const descent = Pwl.at(claim.descent, solution.sigma);
             // Where the scope seats its content (`seatInScope`, as `layout`
             // does): by its baseline, the content keeps its split about its
@@ -679,8 +660,8 @@ export const layer = createNodeOperatorSequential(
             // its box, the content starts at the start edge, so its claim
             // runs from there.
             return seatInScope(solution, space).seat.anchor === "baseline"
-              ? Extent(Pwl.constant(ascent), Pwl.constant(descent))
-              : Extent(Pwl.constant(ascent + descent));
+              ? Extent(Pwl.constant(box - descent), Pwl.constant(descent))
+              : Extent(Pwl.constant(box));
           };
           // A literal start places the layer that many pixels from its
           // parent's origin (`translate` in `layout`), so its claim moves

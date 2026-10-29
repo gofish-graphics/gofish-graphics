@@ -385,13 +385,14 @@ export function solveLayerScales(
       // any other sized node solves here, against the size it is given.
       const solve = (): FixedSolve | undefined => {
         const [space, nicedClaim] = scope(axis, content, claim);
-        const solution = scopes.fit(
+        const fitted = scopes.fit(
           { kind: "sized", rootKey: node.key ?? node.type, axis },
           node,
           space,
           nicedClaim,
           layerSize[axis]
         );
+        const solution = fitted?.scope;
         return (
           solution &&
           nicedClaim && {
@@ -399,7 +400,7 @@ export function solveLayerScales(
             solution,
             claim: nicedClaim,
             space,
-            box: layerSize[axis],
+            box: fitted!.box,
           }
         );
       };

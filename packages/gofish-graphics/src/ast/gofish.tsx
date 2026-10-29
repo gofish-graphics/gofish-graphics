@@ -591,11 +591,12 @@ export async function layout(
   // maps it at that σ too, so the axis it draws agrees with the marks. Only
   // when none does (the common `chart(...).render(el, {})`), or they map it
   // at different σs (an over-constrained layout), is σ solved against the
-  // default canvas. The root's size is its claim at its σ: the slot for a
-  // root fitted to it, its own box for a claim that is only pixels (which is
-  // the same at any σ, so 0 stands in). With no claim (a bar chart's
-  // category axis, a bare fixed-size shape) it is the render's slot, or the
-  // default canvas.
+  // default canvas. The root's size is the box the fit lays its claim out
+  // in (`Fitted.box`): the render's slot, which is a limit, or the default
+  // canvas grown to hold the claim, or the claim's own box where it is only
+  // pixels. A root mapped at a σ of its nodes is its claim at that σ. With
+  // no claim (a bar chart's category axis, a bare fixed-size shape) it is
+  // the render's slot, or the default canvas.
   const rootSpaces = [niceUnderlyingSpaceX, niceUnderlyingSpaceY] as const;
   const given = [w, h] as const;
   // A share (#493 piece 3: `sharesRoom`) is a part of a slot, so on an
@@ -626,9 +627,9 @@ export async function layout(
     // the slot, the data fills the slot as if they took no room, and the
     // pixels overflow. A render size is a limit, so the fit warns there.
     // The default canvas is not one: it grows to hold the claim (#1179).
-    const scope =
+    const fitted =
       keyed !== undefined
-        ? scopes.scopeAt(meta, space, claim, keyed)
+        ? undefined
         : scopes.fit(
             meta,
             given[axis] === undefined ? undefined : root,
@@ -636,23 +637,14 @@ export async function layout(
             claim,
             allocated
           );
-    // The root is its slot, or its claim at its σ where that is larger
-    // (a claim that overflows its slot) or where its σ is not its slot's
-    // (`keyed`). A claim with no scope is only pixels, so it is its box.
-    const width =
-      claim === undefined
-        ? undefined
-        : scope !== undefined
-          ? Pwl.at(claim.width, scope.sigma)
-          : Pwl.isConstant(claim.width)
-            ? Pwl.at(claim.width, 0)
-            : undefined;
+    const scope =
+      keyed !== undefined
+        ? scopes.scopeAt(meta, space, claim, keyed)
+        : fitted?.scope;
     const px =
-      width === undefined || scope === undefined
-        ? width
-        : keyed !== undefined || width > allocated + 0.5
-          ? width
-          : allocated;
+      keyed !== undefined && claim !== undefined
+        ? Pwl.at(claim.width, keyed)
+        : fitted?.box;
     return {
       scope,
       px:

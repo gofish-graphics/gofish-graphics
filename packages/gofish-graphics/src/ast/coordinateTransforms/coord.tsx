@@ -475,7 +475,7 @@ export const coord = createNodeOperator(
               resolved,
               claim,
               budget
-            );
+            )?.scope;
             return [scope?.sigma, scope];
           };
           const [sfX, scopeX] = fitAxis(0, budget[0]);
