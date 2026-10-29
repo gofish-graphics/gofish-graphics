@@ -40,9 +40,8 @@ import {
   isLabelPlaceConstraint,
   type LabelPlaceConstraint,
 } from "../labels/placeStep";
-import { visibleNodes } from "../_ref";
+import { namesIn } from "../_ref";
 import {
-  childNameKey,
   isPlacedOn,
   type ConstraintPosScales,
   type FreeOrigin,
@@ -159,26 +158,20 @@ export const Constraint = {
 /**
  * The environment a `.relate(fn)` callback receives: an ordinary object with
  * one operand (a {@link RelateOperand}) for every distinct string name inside
- * `layer` (a token-named node answers to its tag), walking the same bounded
- * tree the name lookup walks (`visibleNodes`: into nested layers, not into a
- * nested `createMark` component). These are exactly the names a constraint of
- * this layer can use: the lookup from the layer (`lookupName`) stops at the
- * layer's own level for any of them, so each resolves to a node inside it,
- * while a name found only outside the layer could never be an operand. A
- * missing name reads as `undefined`, so JS destructuring defaults
- * (`({ a, pad = 8 })`) and optional checks (`note ? ... : ...`) work, and
- * `validateOperands` turns an `undefined` operand into a loud error. Each
- * `resolveReferences` round resolves an operand by its name from `layer` (its
- * scope), to the nodes the name means then.
+ * `layer` (a token-named node answers to its tag), bound now, when the call
+ * runs, to the nodes the name means from `layer` (`namesIn`: the closest
+ * depth below it, into nested layers, not into a nested `createMark`
+ * component, a ring seen as its content). These are exactly the names a
+ * constraint of this layer can use. A node a clause adds later is not in it,
+ * so a clause never captures an operand. A missing name reads as
+ * `undefined`, so JS destructuring defaults (`({ a, pad = 8 })`) and
+ * optional checks (`note ? ... : ...`) work, and `validateOperands` turns an
+ * `undefined` operand into a loud error.
  */
 export function relateEnv(layer: GoFishNode): RelateEnv {
   const env: RelateEnv = {};
-  for (const n of visibleNodes(layer)) {
-    if (n === layer) continue;
-    const name = childNameKey(n);
-    if (name !== undefined && !(name in env))
-      env[name] = new RelateOperand(name, layer);
-  }
+  for (const [name, nodes] of namesIn(layer))
+    env[name] = new RelateOperand(name, nodes);
   return env;
 }
 

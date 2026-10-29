@@ -12,8 +12,10 @@ import { layer } from "../ast/graphicalOperators/layer";
 import { Rect as rect } from "../ast/shapes/rect";
 import { ref } from "../ast/shapes/ref";
 import { enclose } from "../lib";
-import { Constraint, scheduleRelate } from "../ast/constraints";
+import { Constraint, relateEnv, scheduleRelate } from "../ast/constraints";
 import { resolveReferences, resolution } from "../ast/_ref";
+import { wrapRing } from "../ast/elaborationUtils";
+import { createName } from "../ast/createName";
 
 declare const process: { exit(code: number): never };
 
@@ -84,12 +86,18 @@ console.log("# scheduleRelate: ties go to the step declared first");
   // are ready: the solve goes first, then 1 (declared before 3), then 3.
   const { order } = await schedule(
     (layer as any)([(rect as any)({ w: 10, h: 10 }).name("a")]).relate(
-      ({ a }: any) => [
-        enclose({}, [a]),
-        enclose({}, [(rect as any)({ w: 4, h: 4 })]).name("box"),
-        enclose({}, [ref("box")]),
-        Constraint.align({ x: "middle" }, [{ name: "box" } as any, a]),
-      ]
+      // A macro's handle on the second clause's slot (a user's operand
+      // names only nodes the layer held when the call ran).
+      ({ a }: any, layer: any) => {
+        const slot = layer.children.length + 1;
+        const box = { name: "box", means: (l: any) => [l.children[slot]] };
+        return [
+          enclose({}, [a]),
+          enclose({}, [(rect as any)({ w: 4, h: 4 })]).name("box"),
+          enclose({}, [ref("box")]),
+          Constraint.align({ x: "middle" }, [box as any, a]),
+        ];
+      }
     )
   );
   check(
@@ -134,6 +142,56 @@ console.log("# resolution: one stamp over the children and the constraints");
     "the next round gives a fresh schedule, still a clause",
     fresh !== stored && same([...fresh.clauses], [1]),
     JSON.stringify([...fresh.clauses])
+  );
+}
+
+{
+  // A ring is its content: a `.relate()` call binds the content's name to
+  // the content, and the ring's own shapes (here a named one) are invisible.
+  const bar: any = (rect as any)({ w: 10, h: 10 }).name("bar");
+  const tick: any = (rect as any)({ w: 1, h: 4 }).name("tick");
+  const ring: any = await wrapRing(await bar, {
+    nodes: [await tick],
+    constraints: () => [],
+  });
+  const outer: any = await (layer as any)([
+    ring,
+    (rect as any)({ w: 10, h: 10 }).name("dot"),
+  ]);
+  const env = relateEnv(outer);
+  const names = Object.keys(env).sort();
+  check(
+    "a ring's shapes are invisible to a .relate() binding",
+    JSON.stringify(names) === JSON.stringify(["bar", "dot"]),
+    JSON.stringify(names)
+  );
+  check(
+    "a name in a ring's content binds the content, not the ring",
+    env.bar.means()[0] === (await bar),
+    String(env.bar.means()[0]?.type)
+  );
+}
+
+{
+  // A ring is its content in a positional path too: ref([row, 0]) is the
+  // node in slot 0, not the ring an elaboration pass put in its place.
+  const row = createName("row");
+  const bar: any = await (rect as any)({ w: 10, h: 10 });
+  const ring: any = await wrapRing(bar, {
+    nodes: [await (rect as any)({ w: 1, h: 4 })],
+    constraints: () => [],
+  });
+  const at: any = ref([row, 0]);
+  const outer: any = await (layer as any)([
+    (layer as any)([ring]).name(row),
+    at,
+  ]);
+  outer.setRenderSession({ tokenContext: new Map() });
+  resolveReferences(outer);
+  check(
+    "a positional path into a labeled node gives the content",
+    at.targetNode === bar,
+    String(at.targetNode?.type)
   );
 }
 

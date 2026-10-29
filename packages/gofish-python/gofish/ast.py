@@ -1355,20 +1355,22 @@ class RelatableMark(Mark):
         A drawing clause is laid out after the constraints that place the
         nodes it reads, so the arrow above runs between the final positions.
 
-        Names are resolved on the JS side, at layout, by the same lookup
-        `ref("name")` uses: start at this layer, and take the closest node
-        with the name, never crossing a `@mark` boundary. So a parameter can
-        name a node nested anywhere inside the layer, and a direct child
-        beats a deeper node with the same name. A name that matches no node
-        inside the layer, or two nodes at the same smallest distance, is an
-        error at render time. Mirrors `GoFishNode.relate` and the JS
-        `relateEnv` in `packages/gofish-graphics/src/ast/constraints/index.ts`.
+        Names are bound on the JS side, when the layer's `.relate()` runs,
+        by the same lookup `ref("name")` uses: from this layer, the closest
+        nodes with the name, never crossing a `@mark` boundary. So a
+        parameter can name a node nested anywhere inside the layer, and a
+        direct child beats a deeper node with the same name. A name that
+        matches no node inside the layer, or two nodes at the same smallest
+        distance where one is needed, is an error at render time. Mirrors
+        `GoFishNode.relate` and the JS `relateEnv` in
+        `packages/gofish-graphics/src/ast/constraints/index.ts`.
 
         Each call is a binding form with a fresh scope id, which every
-        operand it hands out carries. So an operand used inside a nested
+        operand it hands out carries, and the operand is the node the name
+        meant when that call ran. So an operand used inside a nested
         layer's `.relate()` (an arrow from a callout to the outer curve)
-        still names the node this layer's lookup finds, even when the nested
-        layer has a node with the same name.
+        still names this layer's node, even when the nested layer has a node
+        with the same name.
         """
         if self._children is None:
             raise ValueError(

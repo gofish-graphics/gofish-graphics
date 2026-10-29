@@ -46,20 +46,21 @@ scheduled like any other (see below).
 
 ## One lookup for `ref` and `.relate()`
 
-`ref("x")` and a `.relate()` operand named `x` use the same function,
-`lookupName` in `_ref.tsx`, and a singular use reads its one match (`one`). A `ref("x")` the author writes starts at
-the relating layer. An operand starts at the layer whose `.relate()` bound it,
-its **scope**. An operand becomes a string ref when it is used as a child of
-a drawing clause (`resolveMarkResult` calls `RelateOperand.toRef()`, a ref
-that carries the scope), so the two are the same lookup, started from the
-layer each one belongs to.
+`ref("x")` and a `.relate()` operand named `x` use the same lookup, and a
+singular use reads its one match (`one`). A `ref("x")` the author writes is
+looked up in each round by `lookupName` in `_ref.tsx`, starting at the
+relating layer. An operand is looked up once, when `.relate()` runs, from the
+layer it is called on (`namesIn`, the same search at that layer's level for
+every name at once), and it keeps the nodes it found.
 
-### An operand is a name plus its scope
+### An operand is bound when `.relate()` runs
 
-`.relate()` is a binding form. A `RelateOperand` holds the name and the
-layer it was bound in, the sets-of-scopes idea at the size GoFish needs: one
-scope per `.relate()` call. The difference shows when a clause of one layer
-holds another layer that relates its own names:
+`.relate()` is a binding form. A `RelateOperand` holds its name and the
+nodes the name meant inside the layer when the call ran. This is a handle,
+like the handles an operator holds (see
+[Constraint operands](#constraint-operands)), so no name added later can
+capture it. The difference shows when a clause of one layer holds another
+layer that relates its own names:
 
 ```js
 layer([curve.name("density")]).relate(({ density }) => [
@@ -70,26 +71,23 @@ layer([curve.name("density")]).relate(({ density }) => [
 ```
 
 The arrow sits in the inner layer, and the inner layer has a `density` of
-its own. The `density` operand still resolves from the outer layer, so it
-names the curve. A ref built from an operand that is used outside the layer
-of its scope is an error.
+its own. The `density` operand was bound when the outer callback ran, before
+the inner layer was a clause of the outer one, so it names the curve. When an
+operand is used as a child of a drawing clause, `resolveMarkResult` calls
+`RelateOperand.toRef()`, a ref that holds the operand's node and keeps its
+name for messages and the wire.
 
-Starting at the outer layer is not enough on its own, because the inner
-layer is now one of the outer layer's clauses, and its swatch can be closer
-to the outer layer than the curve inside the chart. An operand names a node
-the layer held when the callback ran, and a name a clause introduces does
-not carry the binding's scope. So the lookup of a bound operand
-(`lookupName(scope, name, true)`) skips the scope layer's
-clause slots at that first level. A `ref("x")` the author writes, and a
-constraint a pass builds without a scope, search the whole layer as before.
+A drawing clause may read an operand of an enclosing `.relate()`, because it
+reads positions and places nothing. A constraint places its operands, so each
+one must be inside the layer that holds the constraint. An operand an
+enclosing `.relate()` bound is a node of that layer outside this one, so
+`resolveReferences` throws on it with the "outside the layer" error below.
 
-A drawing clause may read an operand of an enclosing scope, because it reads
-positions and places nothing. A constraint places its operands, so each one
-must resolve inside the layer that holds the constraint. An operand an
-enclosing `.relate()` bound never does: the lookup from that layer skips its
-clause slots, and the inner layer sits in one. So `resolveReferences`
-throws on such an operand right away, and looks every other operand up from
-the layer itself.
+A name is bound to the nodes it means, so an elaboration pass that later
+wraps a node keeps the binding (`wrapPreservingIdentity` and `wrapRing` move
+the node, never replace it). A name that is a named ref (an alias) binds the
+ref, and a ref made from it reads the alias's target in each round, as
+`ref("x")` does.
 
 From the start, the search looks at every node inside the current level's
 subtree. If it finds the name, it stops there. If not, it moves up to the
@@ -100,7 +98,7 @@ Inside the level where the search stops, the closest match wins. Distance is
 the number of steps down from that level's node, so a direct child is at
 distance 1. A layer's direct child `x` therefore beats an `x` nested deeper
 inside another child, and a deeply nested name is still reachable when nothing
-closer has it. A wrapper an elaboration pass inserted adds no distance (see
+closer has it. A ring an elaboration pass inserted is its content (see
 [Constraint operands](#constraint-operands)). `closestAtLevel` does this with
 a breadth-first search that stops at the first depth with a match. When the
 search moves up a level, it does not walk the subtree it just searched again.
@@ -114,8 +112,9 @@ The search has one hard boundary, the `createMark` component. It never goes
 above the nearest component that contains the start, and it never looks inside
 a nested component (the component's own name is visible, its insides are not).
 Without an enclosing component, the whole diagram is the outermost level.
-The chart layer registry (`collectLayerRegistrations` in `chartBuilder.ts`)
-and the `.relate()` environment walk the same boundary (`visibleNodes`), so
+The chart layer registry (`collectLayerRegistrations` in `chartBuilder.ts`,
+through `visibleNodes`) and the `.relate()` environment (`namesIn`) walk the
+same boundary, so
 the component boundary means the same thing for `ref`, `.relate()`,
 `selectAll`, and `zAbove` / `zBelow`.
 
@@ -187,19 +186,21 @@ inside a cell was invisible outside it.
 
 `.relate(fn)` calls `fn` right away with an environment
 (`relateEnv` in `constraints/index.ts`). The environment is an ordinary
-object with one operand, a `RelateOperand` carrying the name and the layer,
-for every distinct name inside the layer. `GoFishNode.relate` passes the
-layer to the callback too, which the deserializer's callback uses to bind
-the wire's scope id. The environment walks the same bounded tree as the lookup
-(`visibleNodes`), so it goes into nested layers but not into a nested
-`createMark` component.
+object with one operand, a `RelateOperand` bound to the nodes its name
+means, for every distinct name inside the layer. `GoFishNode.relate` passes
+the layer to the callback too. The deserializer's callback keeps the
+environment under the wire's scope id, and an operand on the wire is the
+environment's operand for its name (`relateOperandFor` in `fromJSON.ts`).
+The environment walks the same bounded tree as the lookup (`namesIn`), so it
+goes into nested layers but not into a nested `createMark` component.
 
-These are exactly the names a constraint of this layer can use. The lookup
-from the layer stops at the layer's own level for any of them, so each one
-resolves to a node inside the layer. A name that exists only outside the layer
-could never be an operand, because a layer can only place what it contains.
-Since the layer's contents already exist when `.relate()` runs, the
-callback does not have to wait until layout.
+These are exactly the names a constraint of this layer can use. Each one is
+found at the layer's own level, so it means nodes inside the layer. A name
+that exists only outside the layer could never be an operand, because a layer
+can only place what it contains. Since the layer's contents already exist
+when `.relate()` runs, the binding does not have to wait until layout. A
+node a clause adds is not in the environment, so a constraint cannot name a
+clause by its name.
 
 A name that is not in the environment reads as `undefined`. So JS
 destructuring defaults, e.g., `({ a, b, pad = 8 })`, and optional checks,
@@ -212,18 +213,13 @@ the tree: each ref's target, each constraint operand, and each paint-order
 operand. The render runs it once per round, after the pass that installs the
 operators' constraints (`resolveAliases`), and again whenever a pass rewrites
 the tree (`reresolve` in `gofish.tsx`). For each layer with constraints, it
-looks each operand up with the lookup above, starting at the layer, and
-keeps the result on the layer (`ResolvedConstraints`, read through
-`resolution`): each operand's key, the uid of the node it found, and whether
-that node is a direct child. A round looks each (level, name) up once,
-whichever ref, operand, or paint-order operand asks. The operand object
+reads the nodes each operand means (`ConstraintRef.means`) and keeps the
+result on the layer (`ResolvedConstraints`, read through `resolution`): each
+operand's key, the uid of its node, and whether that node is a direct child.
+A round looks each (level, name) of a `ref("x")` up once. The operand object
 itself holds no resolution, so one operand may serve several layers. The
 placement solve reads only the key (`keyOf`). The name is kept for error
-messages. The
-operand stays a name until the round because elaboration can wrap a named
-node. Axis, legend, and label elaboration wrap a node with
-`wrapPreservingIdentity`, which moves the node's key onto the wrapper and
-leaves its name on the node, so the name still finds the node.
+messages.
 
 Operators that build a constrained layer themselves do not use names. Spread,
 scatter, partition, table, and the axis, legend, and label chrome refer to
@@ -231,18 +227,22 @@ their own children by slot (`SlotOperand` in `constraints/shared.ts`): the
 operand is the child in slot `i` of the layer, whatever fills it, so a pass
 that wraps the child in place keeps it. A chrome ring's content is slot 0,
 and its k-th shape is slot k + 1 (`wrapRing`). The default paint order of a
-relational mark holds the nodes themselves (`NodeOperand`). A handle names no
-one, so it can neither capture a user's name nor be captured by one. These
-operators name nothing, so `_name` holds only names the user wrote.
+relational mark holds the nodes themselves (`NodeOperand`), and a `.relate()`
+operand holds the nodes its name was bound to. Every operand is a handle. A
+handle names no one, so it can neither capture a user's name nor be captured
+by one. These operators name nothing, so `_name` holds only names the user
+wrote.
 
-A wrapper that an elaboration pass inserts is transparent to a name lookup
-(`_transparent`, set by `wrapRing`, the one helper that builds them). It
-takes no name, and it adds no depth: the lookup treats its children as if
-they stood where it stands. The node it wraps is its slot 0 and keeps its own
-name, so `ref("bar")` on a labeled bar is the bar alone, not the bar and its
-label. A layer still places, and orders, what stands in a named node's place
-(`inPlace`): a constraint on the labeled bar moves its wrapper, so the label
-moves with it.
+A ring that an elaboration pass inserts is its content (`_transparent`, set
+by `wrapRing`, the one helper that builds them). The node it wraps is its
+slot 0 and keeps its own name. Every view of the tree a user's reference
+reads sees the content in the ring's place (`contentOf`): the name lookup,
+the `.relate()` environment, `visibleNodes`, and a position in a ref path
+(`ref([token, i])`). So the ring takes no name and adds no depth, its shapes
+(ticks, a label) are invisible, and `ref("bar")` on a labeled bar is the bar
+alone, not the bar and its label. A layer still places, and orders, what
+stands in a named node's place (`inPlace`): a constraint on the labeled bar
+moves its ring, and measures the ring, so the label moves with it.
 
 ### Nested operands
 
@@ -341,7 +341,9 @@ per drawing clause, which lays that clause out. The edges are:
 
 - a clause whose refs point into a plain child runs after the solve;
 - a clause whose refs point into another clause runs after that clause;
-- the solve runs after any clause that contains a constraint operand.
+- the solve runs after any clause that contains a constraint operand. A
+  user's operand never does (it names only nodes the layer held when
+  `.relate()` ran), but a pass's handle may hold a clause slot.
 
 A ref that points outside the layer (a token reaching across scopes) adds no
 edge, and neither does a ref a clause makes to a fresh node inside itself.
@@ -365,17 +367,17 @@ when the layer changed since; a pass that rewrites the tree runs
 
 A clause paints after the plain children, in clause order, except that a
 clause built by `createRelationalMark` (`enclose`, `line`, `ribbon`) paints
-under the nodes it reads. A clause's operands are string refs, which are not
-resolved when the clause is attached, so the default names them:
-`GoFishNode.relate` runs the same pass `layer` runs for its children
-(`applyRelationalZBelowDefaults`), which adds `zBelow(clause, operand)` for
-each string-ref operand whose scope lies in this layer; an operand an
-enclosing `.relate()` bound is left for that layer (see [The Mark Factory](/internals/frontend/mark-factory)).
-The constraint carries the operand's scope, and `resolveReferences` looks
-the name up from that layer without its clause slots, as the placement lookup
-does, so a nested clause's node of the same name does not join the operand's
-set. A paint-order operand that is a name stands for every node inside the
-layer that carries it; paint order reads the sets `resolveReferences` found. An explicit
+under the nodes it reads. `GoFishNode.relate` runs the same pass `layer`
+runs for its children (`applyRelationalZBelowDefaults`), which adds
+`zBelow(clause, operand)` for each operand that lies in this layer's
+children; an operand an enclosing `.relate()` bound is left for that layer
+(see [The Mark Factory](/internals/frontend/mark-factory)). An operand's ref
+holds its node, so the constraint holds that node, and a nested clause's node
+of the same name never joins it. A ref the author wrote by name has no node
+until the round, so the constraint holds the ref and reads its target then.
+A ref draws nothing, so paint order orders what a ref operand stands for,
+its target. A paint-order operand stands for every node it means inside the
+layer; paint order reads the sets `resolveReferences` found. An explicit
 `.zOrder(...)` on the clause wins. `.relate()` replaces the constraints of
 an earlier `.relate()`, but not the defaults `layer` gave its own
 relational-mark children (`_paintDefaults`), so a `line` or `enclose` among
@@ -439,6 +441,9 @@ matched, and `selectAll(token)` gathers them all from the registry.
 
 - A nested operand moves its container only when the container is named too.
   Treating every operand as a direct child plus a constant offset would
-  remove that rule (#925).
+  remove that rule (#925). The same change would let a constraint on a
+  labeled bar measure the bar alone and move its ring; today it measures
+  the ring (`inPlace`). Both need the claim walk (`placeByClaims`) to treat a
+  nested operand as part of its container instead of a fixed point.
 - A named ref is a scope member in some places and an alias for its target
   in others (#926).

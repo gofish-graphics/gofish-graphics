@@ -552,10 +552,11 @@ child (`enclose(opts, [spread(...)])` lays its children out and paints them
 itself, over its outline) is not tagged; and the `layer` combinator runs the
 pass over its children, and `GoFishNode.relate` over its drawing clauses. The
 constraint holds a node operand as the node itself (`NodeOperand`). A
-clause's operands are string refs with no target yet. The layer that an
-operand's scope lies in claims it, as a layer claims a node only when the
-node lies in its children, and the constraint carries the operand's name and
-scope, so `resolveReferences` looks it up where it was bound (see [Names and Scoping](/internals/core/names-and-scoping)).
+clause's operand is a ref that holds the node its name was bound to, so the
+constraint holds that node, and the layer claims it only when the node lies
+in its children: an operand an enclosing `.relate()` bound is left for that
+layer. A ref the author wrote by name has no node until the round, so the
+constraint holds the ref, and paint order reads its target (see [Names and Scoping](/internals/core/names-and-scoping)).
 The defaults `layer` installs for its children are kept apart, as
 `_paintDefaults`: a later `.relate()` on the layer replaces the author's
 constraints with its own and keeps them.

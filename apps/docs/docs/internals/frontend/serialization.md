@@ -478,11 +478,13 @@ marks they are (`_refs_ir`). Its `scope` is the id of the `.relate()`
 call that bound it, which may be an enclosing layer's call when the clause
 holds a nested related layer. Python mints the id per call
 (`relate-<uuid4>`), so ids from separate mark-function replies never clash.
-The reader binds each id to the layer instance whose `.relate()` it is
-rebuilding: `GoFishNode.relate` hands the layer to the callback, and
-`relateCallback` extends `IRContext.relateScopes` with it. The context is
-passed on to every ref the clauses hold, and an
-operand becomes a `RelateOperand` or a ref with that layer as its scope. The two are
+The reader binds each id to the operands of the layer instance whose
+`.relate()` it is rebuilding: `GoFishNode.relate` hands the callback its
+environment, and `relateCallback` extends `IRContext.relateScopes` with it.
+The context is passed on to every ref the clauses hold, and an operand
+becomes that environment's `RelateOperand` for its name, or its ref
+(`relateOperandFor`). A name the call did not bind becomes an operand that
+means no node, reported by name where it is used. The two are
 told apart by `refs`: a constraint always carries it and a mark never does
 (`isConstraintIR`, which the validator uses too). Both readers (`fromJSON.ts`
 and the parity harness, which both go through `fromJSON.ts`) rebuild a constraint with the same `constraintFromIR`

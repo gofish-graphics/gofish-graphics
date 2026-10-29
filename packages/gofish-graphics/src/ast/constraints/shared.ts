@@ -33,23 +33,21 @@ export const isPointAlign = (
   spec !== undefined && spec !== "span" && spec !== "size";
 
 /**
- * A constraint operand. A name operand (a `.relate()` operand, a
- * `RelateOperand`) is a node NAME, resolved with the same lookup
- * `ref("name")` uses (`lookupName`), starting at `scope`, the layer
- * whose `.relate()` bound it, or at the constrained layer when it has none.
- * A handle ({@link SlotOperand}, {@link NodeOperand}) is a reference a macro
- * (an operator, an elaboration pass) builds already resolved: it names no
- * one, so it can neither capture a user's name nor be captured by one.
- * `resolveReferences` (`_ref.tsx`) resolves every operand of a layer once per
- * round, to the node it means, and keeps the result on the layer
- * (`ResolvedConstraints`); an operand object holds no resolution of its own,
- * so one operand may serve several layers. The placement solve keys on the
- * resolved node ({@link KeyOf}), and `name` is only how the operand reads in
- * a message.
+ * A constraint operand: a handle on the nodes it means. A macro (an
+ * operator, an elaboration pass) holds a slot of the layer it built
+ * ({@link SlotOperand}) or a node ({@link NodeOperand}); a `.relate()`
+ * operand (`RelateOperand`) holds the nodes its name meant when the call
+ * bound it. A handle names no one, so it can neither capture a user's name
+ * nor be captured by one. `resolveReferences` (`_ref.tsx`) reads every
+ * operand of a layer once per round and keeps the result on the layer
+ * (`ResolvedConstraints`). The placement solve keys on the node it means
+ * ({@link KeyOf}), and `name` is only how the operand reads in a message.
  */
 export interface ConstraintRef {
   readonly name: string;
-  readonly scope?: GoFishNode;
+  /** The nodes this operand means, read from `layer`, whose constraint
+   *  holds it. */
+  means(layer: GoFishNode): readonly GoFishAST[];
 }
 
 /**
@@ -74,6 +72,9 @@ export class SlotOperand implements ConstraintRef {
           `(slot ${this.slot})`
       );
     return child;
+  }
+  means(layer: GoFishNode): readonly GoFishAST[] {
+    return [this.child(layer)];
   }
   /** How the operand reads in a message: the child's name, or its slot. */
   get name(): string {
@@ -105,6 +106,9 @@ export const childSlots = (layer: GoFishNode): SlotOperand[] =>
  *  `applyRelationalZBelowDefaults`): it resolves to that node. */
 export class NodeOperand implements ConstraintRef {
   constructor(public readonly node: GoFishAST) {}
+  means(): readonly GoFishAST[] {
+    return [this.node];
+  }
   get name(): string {
     return childNameKey(this.node) ?? `a "${this.node.type}" node`;
   }

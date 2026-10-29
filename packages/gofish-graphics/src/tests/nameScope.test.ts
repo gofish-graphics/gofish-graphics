@@ -653,10 +653,17 @@ async function main() {
           gf.rect({ w: 10, h: 10 }).name("a"),
           gf.rect({ w: 10, h: 10 }).name("b"),
         ])
-        .relate(({ a, b }: any) => [
-          gf.Constraint.align({ x: "middle" }, [a, { name: "box" }]),
-          gf.enclose({ padding: 4 }, [b]).name("box"),
-        ]),
+        // A user's operand names only nodes the layer held when the call
+        // ran; a macro's handle may hold a clause slot (here the first drawing
+        // clause's), so this is how a constraint comes to move a clause.
+        .relate(({ a, b }: any, layer: any) => {
+          const slot = layer.children.length;
+          const box = { name: "box", means: (l: any) => [l.children[slot]] };
+          return [
+            gf.Constraint.align({ x: "middle" }, [a, box]),
+            gf.enclose({ padding: 4 }, [b]).name("box"),
+          ];
+        }),
     /form a cycle.*the layer's constraints \(Constraint\.align\), clause 2 \(enclose named "box"\)/
   );
   // A clause over another clause (no cycle) lays out after it.
@@ -857,7 +864,7 @@ async function main() {
   }
 
   console.log(
-    "\n# relate() — an operand is a name plus its binding scope (#1236)"
+    "\n# relate() — an operand is bound when .relate() runs (#1236)"
   );
 
   // (a) #1235: the axes' own `.relate()` calls on other layers cannot drop
@@ -1009,7 +1016,7 @@ async function main() {
         nested((_env, density) => [
           gf.Constraint.align({ x: "middle" }, [density]),
         ]),
-      /bound by an enclosing layer.s \.relate\(\)/
+      /operand "density" is not inside the layer this \.relate\(\) is attached to/
     );
   }
 
@@ -1166,6 +1173,35 @@ async function main() {
       detail = String(e?.message);
     }
     check('ref("bar") on a labeled bar is the bar alone', ok, detail);
+  }
+
+  // A clause's paint-order default follows a named ref (an alias) to the
+  // node it stands for: the connector paints under the bar, not the ref.
+  {
+    let detail = "";
+    let ok = false;
+    try {
+      const barTag = gf.createName("bar");
+      const out = await items(
+        gf
+          .layer([
+            gf.rect({ x: 0, y: 0, w: 40, h: 40, fill: "#1a1" }).name(barTag),
+            gf.rect({ x: 200, y: 10, w: 20, h: 20, fill: "#777" }).name("dot"),
+            gf.ref(barTag).name("alias"),
+          ])
+          .relate(({ alias, dot }: any) => [
+            gf.line({ stroke: "#c00", strokeWidth: 8 }, [alias, dot]),
+          ])
+      );
+      const at = (pred: (i: any) => boolean) => out.findIndex(pred);
+      const bar = at((i) => i.style?.fill === "#1a1");
+      const line = at((i) => i.style?.stroke === "#c00");
+      ok = bar >= 0 && line >= 0 && line < bar;
+      detail = `line ${line}, bar ${bar}`;
+    } catch (e: any) {
+      detail = String(e?.message);
+    }
+    check("a clause's z default follows a named-ref alias", ok, detail);
   }
 
   // A createName token on a repeated mark is plural: selectAll(token)

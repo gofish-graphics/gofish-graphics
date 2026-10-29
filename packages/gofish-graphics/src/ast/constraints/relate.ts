@@ -4,7 +4,7 @@
 
 import type { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
-import { GoFishRef, directChildOf, type ResolvedOperand } from "../_ref";
+import { GoFishRef, directChildOf, one, type ResolvedOperand } from "../_ref";
 import type { ChartBuilder, LayerBuilder } from "../marks/chartBuilder";
 import { LayerContext, resolveMarkResult } from "../marks/markResult";
 import { flattenAndAwaitPromises } from "../withGoFish";
@@ -17,24 +17,38 @@ import { childNameKey, type ConstraintRef } from "./shared";
 import { isThenable } from "../../util";
 
 /**
- * An operand of a `.relate()` callback: a name plus its scope, the layer
- * whose `.relate()` call bound it. `resolveReferences` looks it up by name,
- * from that layer and without its clause slots, so a node a clause
- * introduces, or an inner layer that declares the same name, cannot capture
- * it. As a constraint operand it is a {@link ConstraintRef}. In term
- * position, as a child of a drawing clause such as `arrow(opts, [a, b])`,
- * it becomes a string `ref` with the same name and scope
+ * An operand of a `.relate()` callback: a name, bound when the call runs to
+ * the nodes it means inside the layer (`namesIn`, the lookup `ref("name")`
+ * uses, at the layer's level). The binding is a handle: a node a clause
+ * introduces later, or an inner layer that declares the same name, cannot
+ * capture it, and an elaboration pass that wraps the node keeps it. A name
+ * is plural, so the binding may hold several nodes; a singular use (a
+ * placement, a ref) requires one. As a constraint operand it is a
+ * {@link ConstraintRef}. In term position, as a child of a drawing clause
+ * such as `arrow(opts, [a, b])`, it becomes a `ref` that holds its node
  * ({@link RelateOperand.toRef}).
  */
 export class RelateOperand implements ConstraintRef {
   constructor(
     public readonly name: string,
-    public readonly scope: GoFishNode
+    private readonly bound: readonly GoFishAST[]
   ) {}
 
-  /** This operand as a ref: the same name, looked up from the same scope. */
+  means(): readonly GoFishAST[] {
+    return this.bound;
+  }
+
+  /** This operand as a ref: a handle on its one node, which keeps the name
+   *  for messages and the wire. */
   toRef(): GoFishRef {
-    return new GoFishRef({ selection: this.name, scope: this.scope });
+    if (this.bound.length === 0)
+      throw new Error(
+        `the .relate() operand "${this.name}" names no node inside the layer.`
+      );
+    return new GoFishRef({
+      selection: this.name,
+      node: one(this.bound, `the .relate() operand "${this.name}"`),
+    });
   }
 }
 

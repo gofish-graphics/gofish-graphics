@@ -729,8 +729,7 @@ must not capture them. GoFish now follows that rule in two steps.
   (`resolveReferences`), with one lookup rule (`lookupName`). From the use
   site, the lookup takes the nearest level whose subtree has the name, and
   every match at the closest depth there. It never crosses a `createMark`
-  boundary or the render root. A relate operand starts at its binding layer
-  and skips that layer's clause slots. A singular use (`ref`, a placement
+  boundary or the render root. A singular use (`ref`, a placement
   operand) needs exactly one match. A paint-order operand takes them all.
   The old any-depth rule for paint-order operands is gone.
 - An operator or a pass refers to the nodes it builds by handle: a slot of
@@ -740,11 +739,22 @@ must not capture them. GoFish now follows that rule in two steps.
 - `_name` holds only names the user wrote. `ensureChildNames` and
   `internalName` are deleted, and the axes, legends and labels write no
   names. Two siblings that share a name both keep it, so the name is plural.
-- A wrapper an elaboration pass inserts (`wrapRing`) is transparent. It takes
-  no name and adds no depth to a lookup, and the node it wraps keeps its own
-  name. So `ref("bar")` on a labeled bar is the bar alone, not the bar and
-  its label. A placement or paint-order operand still moves the wrapper with
-  the bar: a layer places what stands in the named node's place.
+- A relate operand is bound when `.relate()` runs, to the nodes its name
+  means inside the layer then (`namesIn`). It is a handle like the others,
+  so the step 1 scope on the operand, the skipped clause slots and the
+  "bound by an enclosing layer" error are gone: a name a clause introduces
+  later cannot capture it. The wire is unchanged. The deserializer keeps
+  each call's environment under its scope id and reads the operand from it.
+- A ring an elaboration pass inserts (`wrapRing`) is its content. Every
+  view a user's reference reads (the lookup, the `.relate()` environment,
+  `visibleNodes`, a position in a ref path) sees the content in its place
+  (`contentOf`). So the ring takes no name and adds no depth, its shapes are
+  invisible, and the node it wraps keeps its own name: `ref("bar")` on a
+  labeled bar is the bar alone, not the bar and its label. A placement or
+  paint-order operand still moves the ring with the bar, and a placement
+  measures the ring: a layer places what stands in the named node's place.
+  Measuring the bar alone needs #925 (a nested operand moves its container)
+  and a claim walk that knows it.
 - A token is plural like a string. Every node that carries it joins its
   list, `selectAll(token)` gathers them all, and a singular `ref(token)`
   that matches several says how many it matched.

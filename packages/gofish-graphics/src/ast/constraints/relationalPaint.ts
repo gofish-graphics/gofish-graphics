@@ -10,7 +10,7 @@
  */
 import { GoFishNode } from "../_node";
 import type { GoFishAST } from "../_ast";
-import { GoFishRef, findPathToRoot, isInside } from "../_ref";
+import { GoFishRef, findPathToRoot } from "../_ref";
 import { Constraint, type ConstraintSpec } from "./index";
 import { NodeOperand, type ConstraintRef } from "./shared";
 
@@ -45,10 +45,10 @@ export function targetOf(n: GoFishAST): GoFishNode | undefined {
  * as an author decision) or `.relate(...)` (a non-empty constraints array)
  * is left alone — the explicit choice wins over the default.
  *
- * An operand that is a ref by a string name with no target yet (a
- * `.relate()` clause's operand, which `GoFishNode.relate` passes here) is
- * claimed by the layer its scope lies in, and the constraint carries the
- * operand's name and scope, so paint order looks it up where it was bound.
+ * An operand is a node or a ref that holds one (a `.relate()` operand's
+ * ref holds the node its name was bound to), claimed by the layer whose
+ * children hold it. A ref the author wrote by name has no node before the
+ * round: the constraint holds the ref, and paint order reads its target.
  *
  * A connector whose referenced node lies outside `children`'s subtrees (e.g.
  * both live several `.layer()` tiers up) is left tagged so an OUTER `layer()`
@@ -84,35 +84,27 @@ export function applyRelationalZBelowDefaults(
     }
     let claimedAny = false;
     for (const operand of operands) {
-      // A ref by a string name that has no target yet (an operand of a
-      // `.relate()` clause, resolved only at layout) names its node: the
-      // constraint names it the same way, and the layer resolves it.
-      if (
-        operand instanceof GoFishRef &&
-        typeof operand.selection === "string" &&
-        operand.targetNode === undefined
-      ) {
-        // Like a node below, an operand is claimed by the layer it lies in:
-        // one an enclosing `.relate()` bound is that layer's to claim.
-        if (operand.scope !== undefined && !isInside(operand.scope, node))
-          continue;
-        pairs.push([
-          connector,
-          { name: operand.selection, scope: operand.scope },
-        ]);
+      // A ref the author wrote by name inside a clause (`ref("a")`) has no
+      // node until the round resolves it: the constraint holds the ref, and
+      // paint order reads its target then. Every other operand is a node or
+      // a ref that holds one (a handle, as a `.relate()` operand's ref is).
+      if (operand instanceof GoFishRef && operand.handle === undefined) {
+        pairs.push([connector, new NodeOperand(operand)]);
         claimedAny = true;
         continue;
       }
-      const target = targetOf(operand);
-      if (!target) continue;
-      // Only claim an operand that actually lives within `children`'s
-      // subtrees at this level (found via an ancestor walk against
-      // `children`) — otherwise leave the tag for an outer `layer()` call to
-      // resolve. The constraint holds the operand itself (a handle): paint
-      // order lifts it to whichever child holds it, or pushes it down when
-      // the connector shares that child.
+      const target =
+        operand instanceof GoFishRef
+          ? operand.handle!
+          : (operand as GoFishNode);
+      // Only claim an operand that lives within this layer's children
+      // (found via an ancestor walk), other than the connector's own:
+      // otherwise leave the tag for an outer `layer()` call to resolve. The
+      // constraint holds the operand itself (a handle): paint order lifts
+      // it to whichever child holds it, or pushes it down when the
+      // connector shares that child.
       const path = findPathToRoot(target);
-      const withinScope = children.some(
+      const withinScope = node.children.some(
         (c) => c !== connector && path.includes(c as GoFishAST)
       );
       if (!withinScope) continue;

@@ -29,7 +29,7 @@ import { computeAesthetic, envFlag } from "../../util";
 import { pxOf } from "../domain";
 import { localAnchorPoint } from "../dims";
 import type { ConstraintSpec, ConstraintPosScales } from "../constraints";
-import type { AlignAnchor } from "../constraints/shared";
+import type { AlignAnchor, ConstraintRef } from "../constraints/shared";
 import { distributePlacementAnchors } from "../constraints/distribute";
 import { originIs } from "../underlyingSpace";
 import type { Extent } from "../extent";
@@ -125,7 +125,7 @@ function shadowCheckDistribute(
 interface NestLike {
   x?: number;
   y?: number;
-  children: { name: string }[];
+  children: ConstraintRef[];
 }
 
 /**
@@ -170,7 +170,7 @@ interface GridLike {
   numCols: number;
   xSpacing: number;
   ySpacing: number;
-  children: { name: string }[];
+  children: ConstraintRef[];
 }
 
 /**
