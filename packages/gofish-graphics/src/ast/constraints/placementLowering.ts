@@ -13,7 +13,7 @@ import type { AlignConstraint } from "./align";
 import { lowerAlignPlacement } from "./align";
 import type { DistributeConstraint } from "./distribute";
 import { lowerDistributePlacement, type GapOf } from "./distribute";
-import type { GridConstraint, TrackLayout } from "./grid";
+import type { GridConstraint, GridTracks } from "./grid";
 import { lowerGridPlacement } from "./grid";
 import type { NestConstraint } from "./nest";
 import { lowerNestPlacement } from "./nest";
@@ -189,7 +189,8 @@ export function lowerPlacementConstraints<T>(
   // The gap a chain or table lays out between its parts (`GoFishNode.gapOf`).
   gapOf: GapOf,
   posScales?: ConstraintPosScales<T>,
-  gridTracks?: [TrackLayout<T>, TrackLayout<T>],
+  // Per axis, the grid's resolved tracks, where the grid places its cells.
+  gridTracks: GridTracks<T> = [undefined, undefined],
   dataPositioned?: [Set<string>, Set<string>]
 ): LoweredPlacement<T> {
   // A `position` pin on a grid cell overrides that cell's track centering on the
@@ -286,9 +287,7 @@ export function lowerPlacementConstraints<T>(
           A,
           constraint,
           owner,
-          sizes,
           lowerer,
-          gapOf,
           gridTracks,
           pinnedByPosition
         );

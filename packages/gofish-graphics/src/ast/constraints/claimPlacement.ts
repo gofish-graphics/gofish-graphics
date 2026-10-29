@@ -577,11 +577,6 @@ export function placeByClaims(
           T.fromValue(gapOf(grid, axis)),
           T.fromValue(Pwl.SIGMA)
         );
-  // The other axis's tracks, which this axis's solve does not read.
-  const across =
-    grid === undefined
-      ? undefined
-      : gridTracks(T, grid, axis === 0 ? 1 : 0, [], T.zero, T.zero);
   const origin = framed ? tape.input("origin", Pwl.ZERO) : undefined;
   const map =
     origin === undefined
@@ -597,11 +592,7 @@ export function placeByClaims(
     axis === 0 ? [box, T.zero] : [T.zero, box],
     gapOf,
     axis === 0 ? [map, undefined] : [undefined, map],
-    tracks === undefined
-      ? undefined
-      : axis === 0
-        ? [tracks, across!]
-        : [across!, tracks],
+    axis === 0 ? [tracks, undefined] : [undefined, tracks],
     axis === 0 ? [dataPositioned, new Set()] : [new Set(), dataPositioned],
     rigid,
     axis === 0 ? [origin, undefined] : [undefined, origin],

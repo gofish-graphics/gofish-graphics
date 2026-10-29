@@ -8,7 +8,7 @@ import {
   lowerPlacementConstraints,
   type PlacementConstraint,
 } from "./placementLowering";
-import type { TrackLayout } from "./grid";
+import type { GridTracks } from "./grid";
 import type { GapOf } from "./distribute";
 import {
   axisIndex,
@@ -375,7 +375,7 @@ export function solvePlacementCells<T>(
   // The gap a chain or table lays out between its parts (`GoFishNode.gapOf`).
   gapOf: GapOf,
   posScales?: ConstraintPosScales<T>,
-  gridTracks?: [TrackLayout<T>, TrackLayout<T>],
+  gridTracks?: GridTracks<T>,
   dataPositioned?: [Set<string>, Set<string>],
   rigid?: Map<string, RigidAttachment<T>>,
   freeOrigin?: FreeOrigin<T>,

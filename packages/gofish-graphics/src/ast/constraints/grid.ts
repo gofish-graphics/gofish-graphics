@@ -116,6 +116,12 @@ const numRowsOf = (c: GridConstraint): number =>
  *  center a cell in track `i` pins to. */
 export type TrackLayout<T = number> = { starts: T[]; extents: T[] };
 
+/** A grid's resolved tracks on x (columns) and y (rows), where known. */
+export type GridTracks<T = number> = readonly [
+  TrackLayout<T> | undefined,
+  TrackLayout<T> | undefined,
+];
+
 /** A cell's size claim on `axis`: the width of its claim, whatever it is (a
  *  magnitude, a pixel size of its own, or one share σ for a cell that fills
  *  a share), or undefined when it has none. */
@@ -216,91 +222,36 @@ export function gridCellSizeByName(
   return out;
 }
 
-export type GridCellPlacement<T = number> = {
-  child: ConstraintRef;
-  center: [T, T];
-};
-
-/** Equal box-division tracks: every column/row gets the same slice of `size`.
- *  The fallback for `gridCellPlacements` when no resolved tracks are handed in. */
-function equalTracks<T>(
-  A: Arith<T>,
-  c: GridConstraint,
-  size: readonly [T, T],
-  gapOf: GapOf
-): [TrackLayout<T>, TrackLayout<T>] {
-  const numRows = numRowsOf(c);
-  const track = (axis: 0 | 1, n: number) => {
-    const gap = A.fromValue(gapOf(c, axis));
-    const extent = A.scale(1 / n, A.sub(size[axis], A.scale(n - 1, gap)));
-    return layoutTrack(
-      A,
-      Array.from({ length: n }, () => extent),
-      gap
-    );
-  };
-  return [track(0, c.numCols), track(1, numRows)];
-}
-
-/** Cell centers from resolved tracks — or, when `tracks` is omitted, the equal
- *  box-division fallback used by the direct-solver tests. */
-export function gridCellPlacements<T>(
-  A: Arith<T>,
-  c: GridConstraint,
-  size: readonly [T, T],
-  gapOf: GapOf,
-  tracks?: [TrackLayout<T>, TrackLayout<T>]
-): GridCellPlacement<T>[] {
-  const [cols, rows] = tracks ?? equalTracks(A, c, size, gapOf);
-  return c.children.map((child, index) => {
-    const column = index % c.numCols;
-    const row = Math.floor(index / c.numCols);
-    return {
-      child,
-      center: [
-        A.add(cols.starts[column], A.scale(0.5, cols.extents[column])),
-        A.add(rows.starts[row], A.scale(0.5, rows.extents[row])),
-      ],
-    };
-  });
-}
-
-/** Emit the per-cell center pins for a grid. A cell whose center on an axis is
- *  claimed by a `position` pin is skipped on that axis — the explicit pin
- *  overrides the track centering (the authoritative-pin pattern). */
+/** Emit the per-cell center pins for a grid, on each axis it has the
+ *  resolved `tracks` of (the claim walk solves one axis at a time, so it
+ *  hands only that axis's): each cell is pinned to the middle of its
+ *  (column, row) track. A cell whose center on an axis is claimed by a
+ *  `position` pin is skipped on that axis — the explicit pin overrides the
+ *  track centering (the authoritative-pin pattern). */
 export function lowerGridPlacement<T>(
   A: Arith<T>,
   c: GridConstraint,
   owner: string,
-  size: readonly [T, T],
   emitter: PlacementFactEmitter<T>,
-  gapOf: GapOf,
-  tracks?: [TrackLayout<T>, TrackLayout<T>],
+  tracks: GridTracks<T>,
   pinnedByPosition?: Map<string, Set<0 | 1>>
 ): void {
-  for (const { child, center } of gridCellPlacements(
-    A,
-    c,
-    size,
-    gapOf,
-    tracks
-  )) {
+  const center = (t: TrackLayout<T>, i: number) =>
+    A.add(t.starts[i], A.scale(0.5, t.extents[i]));
+  c.children.forEach((child, index) => {
+    const at = [index % c.numCols, Math.floor(index / c.numCols)] as const;
     const overridden = pinnedByPosition?.get(child.name);
-    if (!overridden?.has(0))
+    for (const axis of [0, 1] as const) {
+      const t = tracks[axis];
+      if (t === undefined || overridden?.has(axis)) continue;
       emitter.pin({
-        axis: "x",
+        axis: axis === 0 ? "x" : "y",
         target: { name: child.name, anchor: "middle" },
-        value: center[0],
+        value: center(t, at[axis]),
         owner,
       });
-    if (!overridden?.has(1))
-      emitter.pin({
-        axis: "y",
-        target: { name: child.name, anchor: "middle" },
-        value: center[1],
-        owner,
-      });
-  }
+    }
+  });
 }
 
 /**

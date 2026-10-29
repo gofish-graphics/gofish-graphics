@@ -464,8 +464,31 @@ console.log("# constraint confluence: nest and grid placement");
     y: "middle",
     children: [A, B],
   };
-  const first = solve([grid, alignRow], ["A", "B"]);
-  const second = solve([alignRow, grid], ["A", "B"]);
+  // Two fill columns of one share each: (300 − 10) / 2 = 145 px.
+  const tracks = ([0, 1] as const).map((axis) =>
+    gridTracks(
+      numbers,
+      grid,
+      axis,
+      [],
+      grid.spacing[axis] as number,
+      axis === 0 ? 145 : 200
+    )
+  ) as [TrackLayout, TrackLayout];
+  const solveGrid = (order: Constraint[]) => {
+    const targets = new Map(
+      ["A", "B"].map((name) => [name, makePlaceable()] as const)
+    );
+    solveAndSeat(order, targets, [300, 200], undefined, tracks);
+    return Object.fromEntries(
+      [...targets].map(([name, target]) => {
+        const { min, center, max } = target.dims[0];
+        return [name, { min, center, max }];
+      })
+    );
+  };
+  const first = solveGrid([grid, alignRow]);
+  const second = solveGrid([alignRow, grid]);
   ok("grid/align permutations agree", sameGeometry(first, second));
   ok(
     "grid centers cells in their tracks",
