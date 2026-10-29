@@ -309,7 +309,8 @@ export const startAtCenter = (
  *  the parent places it. A pixel center with a pixel size also has the `min`
  *  they derive, but the box is placed by the center: `sizePx` is the box's
  *  own size, which for a text or an image is not the `w` or `h` it was
- *  given (a text's x origin is its anchor, so it passes 0). */
+ *  given (a text's x origin is its anchor point, inside its box, so it passes
+ *  `minX + maxX`, twice the box's middle measured from that origin). */
 export const positionOf = (
   dim: Interval<MaybeValue<number>>,
   scale: ((x: number) => number) | undefined,

@@ -343,7 +343,7 @@ def text(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
         font_weight: CSS font-weight (e.g. 300, 700, "bold").
         debug_bounding_box: Draw the text's bounding box, for layout debugging. Default false.
         rotate: Rotation in degrees, clockwise on screen, about the text anchor. Default 0.
-        text_anchor: Where the text anchor — the local origin `rotate` pivots about and dims channels position — sits along the string: its first character, center, or last character. Default "start".
+        text_anchor: Where the text anchor — the local origin `rotate` pivots about and `x` places — sits along the string: its first character, center, or last character. `cx` places the center of the text's box whatever the anchor. Default "start".
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [

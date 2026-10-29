@@ -2301,7 +2301,7 @@ for the API.
         },
         "textAnchor": {
           "enum": ["start", "middle", "end"],
-          "description": "Where the text anchor — the local origin `rotate` pivots about and dims channels position — sits along the string: its first character, center, or last character.",
+          "description": "Where the text anchor — the local origin `rotate` pivots about and `x` places — sits along the string: its first character, center, or last character. `cx` places the center of the text's box whatever the anchor.",
           "default": "start"
         },
         "name": {

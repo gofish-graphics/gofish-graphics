@@ -1932,7 +1932,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       textAnchor: {
         type: t.enum("start", "middle", "end"),
         default: "start",
-        doc: "Where the text anchor — the local origin `rotate` pivots about and dims channels position — sits along the string: its first character, center, or last character.",
+        doc: "Where the text anchor — the local origin `rotate` pivots about and `x` places — sits along the string: its first character, center, or last character. `cx` places the center of the text's box whatever the anchor.",
       },
     },
   }),

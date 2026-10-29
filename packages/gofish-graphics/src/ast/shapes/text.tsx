@@ -244,22 +244,25 @@ export const Text = ({
         return [glyphAxis(xPos, dims[0].size), glyphAxis(yPos, dims[1].size)];
       },
       // A text has a size of its own, measured here, when the claims are
-      // resolved, so whatever composes it leaves it room (#493). In x it
-      // reaches from its anchor point; in y from its box's start edge, or
-      // about its middle when placed by its center.
+      // resolved, so whatever composes it leaves it room (#493). It reaches
+      // from its origin (in x its anchor point, in y its box's start edge),
+      // or about its box's middle when placed by its center, as in `layout`.
       resolveExtent: (_ce, _cs, spaces) => {
         const { minX, maxX, minY, maxY } = measure().rel;
         const height = maxY - minY;
-        // A literal position places the text in its parent's pixels.
-        const literal = (axis: 0 | 1) => {
+        // Where the origin sits: a literal position places the text in its
+        // parent's pixels, and a center is the box's middle, `(min + max) /
+        // 2` past the origin.
+        const origin = (axis: 0 | 1, min: number, max: number) => {
           const d = dims[axis];
           const at = d.center ?? d.min;
-          return typeof at === "number" ? at : 0;
+          const px = typeof at === "number" ? at : 0;
+          return d.center !== undefined ? px - (min + max) / 2 : px;
         };
-        const yStart =
-          literal(1) - (dims[1].center !== undefined ? height / 2 : 0);
+        const xAt = origin(0, minX, maxX);
+        const yStart = origin(1, 0, height);
         return [
-          boxExtent(spaces[0], -(literal(0) + minX), literal(0) + maxX),
+          boxExtent(spaces[0], -(xAt + minX), xAt + maxX),
           boxExtent(spaces[1], -yStart, yStart + height),
         ];
       },
@@ -284,9 +287,16 @@ export const Text = ({
         // the box's start edge.
         const height = maxY - minY;
 
-        // In x the origin is the anchor point itself, so a center places it
-        // with no offset; in y a center places the middle of the box.
-        const positionX = positionOf(dims[0], posFn(scales?.[0]?.map), 0);
+        // A center places the middle of the box, as for a rect. The box
+        // spans `[min, max]` about the origin, so its middle is
+        // `(min + max) / 2` past it, and `positionOf` halves the `min + max`
+        // it is given: in x `minX + maxX` (the width for the default
+        // `"start"` anchor, 0 for `"middle"`), in y `0 + height`.
+        const positionX = positionOf(
+          dims[0],
+          posFn(scales?.[0]?.map),
+          minX + maxX
+        );
         const positionY = positionOf(dims[1], posFn(scales?.[1]?.map), height);
 
         const box: [Interval, Interval] = [
