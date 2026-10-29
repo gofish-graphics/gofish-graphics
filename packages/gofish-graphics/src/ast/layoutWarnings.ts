@@ -262,30 +262,6 @@ function fixedWarning(
   };
 }
 
-/** A `fixed-overflow` warning for the spread `node`, whose spacing alone
- *  needs more than the `available` pixels it is given along `axis` (its
- *  parts have no size of their own, so they claim nothing; see
- *  `GoFishNode.sharesRoom`), or undefined when it fits. */
-export function spacingOverflow(
-  node: GoFishNode,
-  axis: 0 | 1,
-  available: number
-): LayoutWarning | undefined {
-  const chain = chainOn(node, axis);
-  if (chain === undefined || !Number.isFinite(available)) return undefined;
-  const gaps = chain.children.length - 1;
-  const needed = chain.spacing * gaps;
-  if (needed <= available + 0.5) return undefined;
-  return fixedWarning(
-    node,
-    axis,
-    needed,
-    available,
-    [{ part: `spacing ${chain.spacing} × ${gaps}`, px: needed }],
-    "Its parts are drawn as if the spacing took no room"
-  );
-}
-
 /**
  * A `mixed-sizes` warning for `part`, a part of a chain along `axis` with
  * no size of its own, in a scope that data sizes on `axis` (#1176 step 5).

@@ -764,7 +764,8 @@ report their size).
 - **Bands are shares, and a share is a claim (#493 piece 3, #1176 step 5).**
   A share is a σ weight in its nearest scope (`GoFishNode.isScope`): a node
   whose room is fixed from outside its content. That is the render root in
-  the canvas, a node with a size of its own, a node whose room its parent
+  the canvas, a node with a size of its own, a coordinate space (in its
+  own coordinates), a node whose room its parent
   gives it (a region's cell or a treemap tile, `GoFishNode.givenRoom`, which
   the plan lists in `SharingPlan.rooms`) when σ sizes its content, and a
   node of pinned data in a slot (a facet panel). On an axis where nothing in
@@ -889,10 +890,9 @@ report their size).
   reads it reflected, as it reads the part's box). So the spacing is between plots, and σ and the parts' sizes
   ignore the dressing. A label between two rows sits in the gap, and
   overlaps where it does not fit (#1171); a label past the first or last
-  row reaches past the chain, into the chart's margin. A chain that slices
-  its room (facet panels) gives each part its slice as its plot, and the
-  part's chrome adds around it (`aroundPlot`, the same helper), except a part whose
-  plot is its whole box (a chart, below): its chrome is in its slice. A chain edge to a
+  row reaches past the chain, into the chart's margin. A part that is a
+  share and a scope of its own (a facet panel) has its share as its plot,
+  and its chrome adds around it (`aroundShare`). A chain edge to a
   part that is no part of the plot (dressing, ink, a ring's chrome, a
   stand-in) clears that part's whole box, so a ring still seats its title
   past its tick labels. The plot of a chain with a stand-in reaches only as
@@ -971,10 +971,8 @@ those lines, so `pnpm capture-one` prints them under the story.
   wherever a claim is fitted to a slot: the root on each axis the render
   sizes, and a layer with a size of its own (its content's claim against its
   size). A coord boundary fits through it too but does not warn, since its
-  budget is in coordinate units, not pixels (an open question). A spread
-  whose parts claim nothing
-  checks its spacing against its size (`spacingOverflow`, and its slices
-  then ignore the spacing so the parts stay visible). The warning names the
+  budget is in coordinate units, not pixels (an open question). The
+  warning names the
   node that holds the fixed parts: down from where the check failed through
   each node whose fixed pixels are mostly one child's (rings, label
   wrappers), taking off what each adds, to the first spread, sized node or

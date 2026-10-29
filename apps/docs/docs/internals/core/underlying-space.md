@@ -26,7 +26,6 @@ covers:
   - packages/gofish-graphics/src/ast/graphicalOperators/partition.tsx
   - packages/gofish-graphics/src/ast/shapes/region.tsx
   - packages/gofish-graphics/src/ast/measure.ts
-  - packages/gofish-graphics/src/ast/constraints/folds.ts
   - packages/gofish-graphics/src/ast/constraints/proposalPlan.ts
   - packages/gofish-graphics/src/ast/constraints/compose.ts
   - packages/gofish-graphics/src/ast/constraints/distribute.ts
@@ -806,15 +805,10 @@ included, is what it reports. The claim is the layer's plan's
 (`solver/plan.ts`), which places the same children by the same
 constraints. At layout time the layer then **solves the budget**: its
 claim is inverted against the layer's allotted size to derive a local
-scale factor. In a share scope each child is proposed its
-claim at that σ (a band is one σ, `childLayoutSizeProposal`'s `own`);
-elsewhere distribute-covered fill children are
-proposed slices from the shared proposal plan (`buildDistributeSliceMap`,
-`constraints/proposalPlan.ts`, using `sliceExtent` from
-`constraints/folds.ts`). When distribute segments overlap on the same child
-axis, they are treated as a placement-relation graph rather than a
-spread-like flex slice, so the ambiguous size proposal is skipped instead of
-picked by declaration order. This is what makes constraint-assembled layers
+scale factor. Each child that is a share is proposed its claim at that σ
+(a band is one σ, `childLayoutSizeProposal`'s `own`), so a chain of fill
+children is laid out as its claim says, not by dividing the box. This is
+what makes constraint-assembled layers
 reach the same expressive ceiling as the spread pipeline, auto-fit included
 (issue #475). Composition beyond one distribute (+ one align) per axis falls
 back to `unionChildSpaces`; the general algebra is sketched in
@@ -924,8 +918,8 @@ layer's `transform.scale` whatever its origin. A `transform.scale` is a
 pixel-space operation, like translate, so it scales the claim and never
 the data interval.
 `childLayoutSizeProposal` is the final per-child proposal priority before nest:
-the cell's own track extent (grid), else distribute slice for that named child,
-else the full layer box; then, on an axis an interval `position` spans, the
+the cell's own track extent (grid), else the child's claim at σ when it is a
+share, else the full layer box; then, on an axis an interval `position` spans, the
 span's pixel length (the pins set the child's extent there, whatever else
 proposed one).
 `buildLayerConstraintLayoutPlan` packages the per-layer execution plan — which
@@ -2799,8 +2793,8 @@ display spaces, from before the tree was built, is kept in
 - Per-operator resolvers (each colocated with the operator):
   `src/ast/graphicalOperators/{spread,layer,scatter,enclose,porterDuff,position,connect,arrow,table,coord}.tsx`.
 - Overlay union helpers: `src/ast/graphicalOperators/alignment.ts`.
-- Constraint space folds + the shared slice allocator:
-  `src/ast/constraints/{distribute,align,folds}.ts`.
+- Constraint space folds:
+  `src/ast/constraints/{distribute,align}.ts`.
 - The piecewise-linear value algebra used by claim composition: `src/ast/solver/pwl.ts`.
 - Layout consumption: `gofish.tsx`'s `layout()` for root-level dispatch;
   `layer.tsx`'s `layout` for the per-scope scale-factor solve and the

@@ -18,7 +18,6 @@ import type { UnderlyingSpace } from "../underlyingSpace";
 import { mapsDomain, type Extent } from "../extent";
 import type { AxisMap } from "../domain";
 import type { GoFishNode } from "../_node";
-import { sliceExtent } from "./folds";
 import {
   frameOf,
   scopeFrame,
@@ -34,12 +33,6 @@ import type { ConstraintPosScales } from "./shared";
 import { buildNestPlan, type NestPlan, type NestPlanChild } from "./nestPlan";
 import { isNestConstraint } from "./nest";
 import { isZOrderConstraint } from "./zorder";
-
-export type SliceSegment = {
-  dAxis: 0 | 1;
-  spacing: number;
-  order: string[];
-};
 
 /**
  * The set of names whose position or extent is owned by geometric constraints
@@ -98,49 +91,6 @@ export function buildLayerConstraintLayoutPlan(
       nestPlan?.order ?? Array.from({ length: childNodes.length }, (_, i) => i),
     positionTargetDims: buildPositionTargetDims(constraints),
   };
-}
-
-/** Build per-child size proposals from distribute budget segments.
- *
- * This is the top-down adjoint of the distribute SIZE fold: once a layer has a
- * concrete pixel budget, each unambiguous distribute segment slices that axis
- * among its covered children. Overlapping segments on the same axis are a
- * placement-relation graph rather than a spread-like flex slice; skip their
- * size proposals so fixed-size relational diagrams can still solve placement
- * without declaration-order-sensitive proposal ownership. */
-export function buildDistributeSliceMap(
-  segments: SliceSegment[],
-  size: Size
-): Map<string, Size> | undefined {
-  if (segments.length === 0) return undefined;
-
-  const out = new Map<string, Size>();
-  const seen = new Set<string>();
-  const ambiguousAxes = new Set<0 | 1>();
-  for (const segment of segments) {
-    for (const name of segment.order) {
-      const key = `${segment.dAxis}:${name}`;
-      if (seen.has(key)) ambiguousAxes.add(segment.dAxis);
-      seen.add(key);
-    }
-  }
-
-  for (const segment of segments) {
-    if (ambiguousAxes.has(segment.dAxis)) continue;
-    // Spacing larger than the budget leaves no room: the parts are then
-    // sliced as if it took none, so they stay visible and the chain
-    // overflows (the layer warns, `spacingOverflow`).
-    const n = segment.order.length;
-    const fitted = sliceExtent(size[segment.dAxis], segment.spacing, n);
-    const slice = fitted >= 0 ? fitted : size[segment.dAxis] / n;
-    for (const name of segment.order) {
-      const cur = out.get(name) ?? ([size[0], size[1]] as Size);
-      cur[segment.dAxis] = slice;
-      out.set(name, cur);
-    }
-  }
-
-  return out.size === 0 ? undefined : out;
 }
 
 /** What a layer's `position` constraints hand its children top-down
@@ -303,8 +253,7 @@ export function placementConstraints(
  *      claim at the layer's σ, when σ is the size of a share
  *      (`GoFishNode.sharesRoom`), so a band is one σ and what hangs off it
  *      keeps the room the scope solved for it;
- *   3. distribute: owns only the named child axes it sliced;
- *   4. default layer box: unconstrained/fill proposal is the full layer size.
+ *   3. default layer box: any other child is proposed the full layer size.
  *
  * An interval position (`spanByName`) then owns the axes it spans: the pins
  * set the child's extent there, whatever else proposed one. So does the
@@ -317,7 +266,6 @@ export function childLayoutSizeProposal(
   childName: string | undefined,
   layerSize: Size,
   gridCellByName: Map<string, Size> | undefined,
-  sliceByName: Map<string, Size> | undefined,
   spanByName?: Map<string, Size<number | undefined>>,
   region?: Region,
   own: Size<number | undefined> = [undefined, undefined]
@@ -329,15 +277,8 @@ export function childLayoutSizeProposal(
     gridCellByName.has(childName)
   ) {
     proposal = gridCellByName.get(childName)!;
-  } else {
-    if (
-      sliceByName !== undefined &&
-      childName !== undefined &&
-      sliceByName.has(childName)
-    )
-      proposal = sliceByName.get(childName)!;
-    if (own[0] !== undefined || own[1] !== undefined)
-      proposal = [own[0] ?? proposal[0], own[1] ?? proposal[1]];
+  } else if (own[0] !== undefined || own[1] !== undefined) {
+    proposal = [own[0] ?? proposal[0], own[1] ?? proposal[1]];
   }
   const span = childName !== undefined ? spanByName?.get(childName) : undefined;
   if (span !== undefined)

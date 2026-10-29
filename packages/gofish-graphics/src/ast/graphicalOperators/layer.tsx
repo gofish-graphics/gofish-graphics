@@ -3,7 +3,6 @@
 // </gofish-wiki>
 
 import { GoFishNode, type ToPixel } from "../_node";
-import { spacingOverflow, warnLayout } from "../layoutWarnings";
 import type { DisplayList } from "gofish-ir";
 import { getScopeRegistry, seatInBand, seatInScope } from "../solver/scopes";
 import { isToken } from "../createName";
@@ -67,7 +66,6 @@ import {
   resolveLayerBaseSpaces,
 } from "../constraints/compose";
 import {
-  buildDistributeSliceMap,
   buildLayerConstraintLayoutPlan,
   buildChildProposals,
   childLayoutSizeProposal,
@@ -690,9 +688,6 @@ export const layer = createNodeOperatorSequential(
           // This layer's y direction: its children and constraints are read
           // in this axis order (see `axisDirection.ts`).
           const direction = node.yFrame.direction;
-          // Whether this layer is a ring of chrome, whose shapes are no part
-          // of its plot.
-          const ring = isRing(node);
           // Split the incoming single-carrier scale into its two half-channels
           // for the proposal planning below: σ (size slope) feeds sizing and the
           // child σ forwarding; the anchored map feeds `position` constraints and
@@ -784,27 +779,6 @@ export const layer = createNodeOperatorSequential(
               guttersAt(node, 1, childScaleFactors[1]),
             ];
           }
-
-          // Per-child proposed size for distribute-covered children: each
-          // distribute segment slices its axis size equally among its covered
-          // children; a child covered on both axes (a table cell) draws an
-          // x-slice and a y-slice. Uncovered axes get the full size. A child
-          // carrying its own explicit size ignores this (its size wins),
-          // matching spread; a claim-less child consumes the slice.
-          const sliceByName = layerTypes?.plan
-            ? buildDistributeSliceMap(layerTypes.plan.segments, size)
-            : undefined;
-          // A spread whose parts claim nothing (they share what is left):
-          // spacing alone larger than its size. A spread with a claim is
-          // warned about where its scope is solved.
-          if (
-            node.axisDir !== undefined &&
-            node.resolveExtent()[node.axisDir] === undefined
-          )
-            warnLayout(
-              node,
-              spacingOverflow(node, node.axisDir, size[node.axisDir])
-            );
 
           // `position` constraints with a datum coordinate resolve against
           // the layer's frame. A child such a constraint places at a datum
@@ -946,7 +920,7 @@ export const layer = createNodeOperatorSequential(
             // (ahead of us in layoutOrder, since the plan orders source before
             // derived). Clamp ≥ 0; non-derived axes keep the normal child
             // proposal, so nest composes with — and wins on its derived axes
-            // over — any budget slice.
+            // over — any other proposal.
             const childRegion =
               (childName !== undefined
                 ? proposals.regionByName.get(childName)
@@ -969,12 +943,11 @@ export const layer = createNodeOperatorSequential(
                 ? Pwl.at(claim.width, sigma)
                 : undefined;
             }) as Size<number | undefined>;
-            const proposedParts = applyNestLayoutProposal(
+            const proposed = applyNestLayoutProposal(
               childLayoutSizeProposal(
                 childName,
                 size,
                 gridCellByName,
-                sliceByName,
                 proposals.spanByName,
                 childRegion,
                 own
@@ -982,26 +955,6 @@ export const layer = createNodeOperatorSequential(
               layoutPlan.nestPlan?.byDerived.get(i),
               childPlaceables
             );
-            // A part of a chain that slices its room (a facet panel) gets
-            // its slice as its plot: what dresses it (its chrome) adds
-            // around the slice, into the gaps and past the chain's ends, as
-            // the chain lays it by its plot (#1032). A ring's own shapes
-            // are chrome, and take their slices whole, and so does a part
-            // whose plot is its whole box (a chart: its chrome is in its
-            // slice).
-            const slice =
-              childName === undefined ? undefined : sliceByName?.get(childName);
-            const proposed = proposedParts.map((v, axis) =>
-              slice !== undefined &&
-              own[axis] === undefined &&
-              v === slice[axis] &&
-              v !== size[axis] &&
-              !ring &&
-              child instanceof GoFishNode &&
-              !child.plotIsBox(axis as 0 | 1)
-                ? aroundPlot(child, axis as 0 | 1, v)
-                : v
-            ) as Size;
             // A node dressed in chrome hands its content (its first child)
             // what the chrome's gutters leave of its slot (#1032), or its
             // own room in a share scope. Gutters larger than the slot leave

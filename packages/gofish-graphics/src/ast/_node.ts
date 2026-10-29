@@ -1261,7 +1261,7 @@ export class GoFishNode {
     // layout warns that the axis mixes data-driven and flexible sizes.
     const scopePlot: Size<Extent | undefined | null> = [null, null];
     this._claimMemo.fills = ([0, 1] as const).map((dim) => {
-      const own = this.claimWalk?.ownScope[dim] === true;
+      const own = this.ownsScope(dim);
       const scope = !own && this.isScope(dim);
       const fills =
         this.children.length > 0
@@ -1286,14 +1286,14 @@ export class GoFishNode {
       if (scope) extent[dim] = undefined;
       // The scope the node's own claim is in: the one around it, for a
       // scope of its own.
-      const sharesScope =
-        !this.inCoord() &&
-        !(scope ? this.parent! : this).scopeOf(dim).carriesData(dim);
+      const sharesScope = !(scope ? this.parent! : this)
+        .scopeOf(dim)
+        .carriesData(dim);
       if (
         fills &&
         extent[dim] === undefined &&
         this.inShare(dim) &&
-        (sharesScope || (this.inSlot(dim) && !this.inCoord()))
+        (sharesScope || this.inSlot(dim))
       ) {
         const share = forms === undefined ? undefined : aroundShare(forms);
         extent[dim] = share?.whole ?? Extent(Pwl.affine(1, 0));
@@ -1393,7 +1393,8 @@ export class GoFishNode {
    * Whether this node is a σ-scope of its own on `axis` (#1114, #1176 step
    * 5): the room it is given there is fixed from outside its content, so it
    * solves σ for its content in that room. That is a node with a size of
-   * its own, a literal or a data value; a node whose room its parent gives
+   * its own, a literal or a data value; a coordinate space; a node whose
+   * room its parent gives
    * it ({@link givenRoom}: a region's cell, a treemap tile), with content
    * that σ sizes (of any type but UNDEFINED: data, or a chain of keyed
    * parts); and a node of pinned data in a slot (a facet panel). Content
@@ -1402,7 +1403,7 @@ export class GoFishNode {
    * whose room is the canvas.
    */
   public isScope(axis: 0 | 1): boolean {
-    if (this.claimWalk?.ownScope[axis] === true) return true;
+    if (this.ownsScope(axis)) return true;
     if (this.children.length === 0 || this.parent === undefined) return false;
     const space = this._underlyingSpace?.[axis];
     return (
@@ -1420,12 +1421,12 @@ export class GoFishNode {
     return scope;
   }
 
-  /** Whether this node is in a coordinate space (a `coord` at or above
-   *  it), whose room is the space's own coordinates. */
-  private inCoord(): boolean {
-    for (let n: GoFishNode | undefined = this; n; n = n.parent)
-      if (n.type === "coord") return true;
-    return false;
+  /** Whether this node solves σ for its content against a room it claims
+   *  itself on `axis`: a size of its own (`claimWalk.ownScope`), or a
+   *  coordinate space, whose room is its own coordinates (`coord` fits its
+   *  content to them, and claims its box). */
+  private ownsScope(axis: 0 | 1): boolean {
+    return this.claimWalk?.ownScope[axis] === true || this.type === "coord";
   }
 
   /** Whether this node fills the room it is given on `axis`: a leaf with
@@ -1524,20 +1525,19 @@ export class GoFishNode {
   /**
    * Whether this node's σ on `axis` is the size of a share (#493 piece 3).
    * σ is the one free variable of the scope this node is in (the nearest
-   * node with a size of its own, or the root). When nothing in the scope is
+   * {@link isScope}, or the root). When nothing in the scope is
    * sized or placed by data there (`carriesData`), σ has no data unit to be
    * the pixels of, and it is the room a node with no size of its own takes:
    * a band of a category axis is one σ, and a spread of `n` bands with
    * spacing `g` claims `n·σ + (n − 1)·g`. So what hangs off a band (a label
    * beside it, a category label past the last band) takes room, and the
-   * bands narrow to make it. Inside a coordinate space the room is the
-   * space's own coordinates, which the space fits itself, so σ is never a
-   * share there.
+   * bands narrow to make it. Inside a coordinate space a share is in the
+   * space's own coordinates, which the space fits its content to.
    */
   public sharesRoom(axis: 0 | 1): boolean {
     const memo = this._claimMemo.sharesRoom;
     if (memo[axis] !== undefined) return memo[axis]!;
-    const result = !this.inCoord() && !this.scopeOf(axis).carriesData(axis);
+    const result = !this.scopeOf(axis).carriesData(axis);
     memo[axis] = result;
     return result;
   }

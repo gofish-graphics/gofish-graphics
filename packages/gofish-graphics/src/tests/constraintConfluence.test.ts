@@ -41,7 +41,6 @@ import {
   resolveLayerBaseSpaces,
 } from "../ast/constraints/compose";
 import {
-  buildDistributeSliceMap,
   buildLayerConstraintLayoutPlan,
   buildPositionTargetDims,
   childLayoutSizeProposal,
@@ -743,58 +742,37 @@ console.log("# constraint confluence: layer constraint layout planning");
   );
 }
 
-console.log("# constraint confluence: distribute size proposals");
+console.log("# constraint confluence: child size proposals");
 {
-  const slices = buildDistributeSliceMap(
-    [
-      { dAxis: 0, spacing: 10, order: ["A", "B"] },
-      { dAxis: 1, spacing: 5, order: ["A", "C"] },
-    ],
-    [210, 105]
-  );
-  ok(
-    "distribute proposal slices compose across independent axes",
-    slices?.get("A")?.[0] === 100 &&
-      slices.get("B")?.[0] === 100 &&
-      slices.get("A")?.[1] === 50 &&
-      slices.get("C")?.[1] === 50
-  );
-
-  const overlapAB = { dAxis: 0 as const, spacing: 10, order: ["A", "B"] };
-  const overlapBC = { dAxis: 0 as const, spacing: 20, order: ["B", "C"] };
-  const overlappingForward = buildDistributeSliceMap(
-    [overlapAB, overlapBC],
-    [210, 105]
-  );
-  const overlappingReverse = buildDistributeSliceMap(
-    [overlapBC, overlapAB],
-    [210, 105]
-  );
-  ok(
-    "overlapping distribute proposals are skipped in either order",
-    overlappingForward === undefined && overlappingReverse === undefined
-  );
-
   const layerSize: [number, number] = [300, 200];
   const gridCell: [number, number] = [90, 40];
   const gridCellByName = new Map<string, [number, number]>([["A", gridCell]]);
-  const sliceByName = new Map<string, [number, number]>([["A", [100, 200]]]);
   ok(
-    "grid cell proposal (its track extent) overrides distribute slice",
-    childLayoutSizeProposal("A", layerSize, gridCellByName, sliceByName) ===
-      gridCell
+    "a grid cell is proposed its track extent, whatever its own room",
+    childLayoutSizeProposal(
+      "A",
+      layerSize,
+      gridCellByName,
+      undefined,
+      undefined,
+      [100, undefined]
+    ) === gridCell
+  );
+  const shared = childLayoutSizeProposal(
+    "B",
+    layerSize,
+    gridCellByName,
+    undefined,
+    undefined,
+    [100, undefined]
   );
   ok(
-    "a non-cell named child still receives its distribute slice",
-    childLayoutSizeProposal("A", layerSize, undefined, sliceByName) ===
-      sliceByName.get("A")
+    "a child is proposed its own room in a share scope, and the layer's size elsewhere",
+    shared[0] === 100 && shared[1] === 200
   );
   ok(
-    "unnamed or unsliced child receives full layer proposal",
-    childLayoutSizeProposal(undefined, layerSize, undefined, sliceByName) ===
-      layerSize &&
-      childLayoutSizeProposal("B", layerSize, undefined, sliceByName) ===
-        layerSize
+    "an unnamed child with no room of its own is proposed the layer's size",
+    childLayoutSizeProposal(undefined, layerSize, undefined) === layerSize
   );
 }
 

@@ -220,8 +220,7 @@ type Al = { axis: 0 | 1; anchor: AlignAnchor; idx: number[] };
 /** The structure of a layer's constraint composition: which children each
  *  distribute and align covers, on which axis. It reads only the constraints
  *  and the child nodes, never a type or a claim. The type fold
- *  ({@link composePlanSpaces}) reads it, and a layer's layout slices its
- *  room by its distributes (`buildDistributeSliceMap`). */
+ *  ({@link composePlanSpaces}) and the claim walk read it. */
 export type ComposePlan = {
   segments: Seg[];
   alignFolds: Al[];
