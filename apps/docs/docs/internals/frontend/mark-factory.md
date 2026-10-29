@@ -556,7 +556,8 @@ clause's operand is a ref that holds the node its name was bound to, so the
 constraint holds that node, and the layer claims it only when the node lies
 in its children: an operand an enclosing `.relate()` bound is left for that
 layer. A ref the author wrote by name has no node until the round, so the
-constraint holds the ref, and paint order reads its target (see [Names and Scoping](/internals/core/names-and-scoping)).
+constraint holds the ref, and paint order reads its target. A token ref
+gets no default, so its connector paints in child order (see [Names and Scoping](/internals/core/names-and-scoping)).
 The defaults `layer` installs for its children are kept apart, as
 `_paintDefaults`: a later `.relate()` on the layer replaces the author's
 constraints with its own and keeps them.

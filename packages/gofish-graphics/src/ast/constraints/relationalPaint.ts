@@ -88,15 +88,20 @@ export function applyRelationalZBelowDefaults(
       // node until the round resolves it: the constraint holds the ref, and
       // paint order reads its target then. Every other operand is a node or
       // a ref that holds one (a handle, as a `.relate()` operand's ref is).
-      if (operand instanceof GoFishRef && operand.handle === undefined) {
+      // A token ref has no node before the round either, and is left
+      // unclaimed, as it always was.
+      if (
+        operand instanceof GoFishRef &&
+        operand.handle === undefined &&
+        typeof operand.selection === "string"
+      ) {
         pairs.push([connector, new NodeOperand(operand)]);
         claimedAny = true;
         continue;
       }
       const target =
-        operand instanceof GoFishRef
-          ? operand.handle!
-          : (operand as GoFishNode);
+        operand instanceof GoFishRef ? operand.handle : (operand as GoFishNode);
+      if (target === undefined) continue;
       // Only claim an operand that lives within this layer's children
       // (found via an ancestor walk), other than the connector's own:
       // otherwise leave the tag for an outer `layer()` call to resolve. The

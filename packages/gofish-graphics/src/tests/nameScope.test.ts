@@ -645,27 +645,48 @@ async function main() {
         ]),
     /form a cycle.*clause 1 \(arrow named "self"\)/
   );
+  // An object that only spells a name is not an operand: a name means
+  // nothing until a .relate() call binds it (env[name] for a computed one).
   await rejects(
-    "a constraint that moves a clause which reads its operands is a cycle",
+    "a constraint operand built by hand from a name is an error",
     () =>
       gf
         .layer([
           gf.rect({ w: 10, h: 10 }).name("a"),
           gf.rect({ w: 10, h: 10 }).name("b"),
         ])
-        // A user's operand names only nodes the layer held when the call
-        // ran; a macro's handle may hold a clause slot (here the first drawing
-        // clause's), so this is how a constraint comes to move a clause.
-        .relate(({ a, b }: any, layer: any) => {
-          const slot = layer.children.length;
-          const box = { name: "box", means: (l: any) => [l.children[slot]] };
-          return [
-            gf.Constraint.align({ x: "middle" }, [a, box]),
-            gf.enclose({ padding: 4 }, [b]).name("box"),
-          ];
-        }),
-    /form a cycle.*the layer's constraints \(Constraint\.align\), clause 2 \(enclose named "box"\)/
+        .relate(() => [
+          gf.Constraint.align({ x: "middle" }, [{ name: "a" }, { name: "b" }]),
+        ]),
+    /operand 1 is \{"name":"a"\}, not an operand.*Names inside this layer: a, b/
   );
+  {
+    // A computed name reads its operand from the env.
+    let ok = false;
+    let detail = "";
+    try {
+      const out = await items(
+        gf
+          .layer([
+            gf.rect({ x: 0, y: 0, w: 10, h: 10, fill: "#a00" }).name("a"),
+            gf.rect({ y: 40, w: 30, h: 10, fill: "#0a0" }).name("b"),
+          ])
+          .relate((env: any) => [
+            gf.Constraint.align(
+              { x: "middle" },
+              ["a", "b"].map((n) => env[n])
+            ),
+          ])
+      );
+      const a = out.find((i: any) => i.style?.fill === "#a00");
+      const b = out.find((i: any) => i.style?.fill === "#0a0");
+      ok = close(a.x + a.w / 2, b.x + b.w / 2);
+      detail = JSON.stringify({ a, b });
+    } catch (e: any) {
+      detail = String(e?.message);
+    }
+    check("a computed name reads its operand as env[name]", ok, detail);
+  }
   // A clause over another clause (no cycle) lays out after it.
   {
     let ok = true;
@@ -1173,6 +1194,36 @@ async function main() {
       detail = String(e?.message);
     }
     check('ref("bar") on a labeled bar is the bar alone', ok, detail);
+  }
+
+  // A line over token refs gets no paint-order default: a token ref has no
+  // node before the round, so the line paints in child order, over a box
+  // that holds what it reads (the DFSCQ funnels draw over their stages).
+  {
+    let detail = "";
+    let ok = false;
+    try {
+      const a = gf.createName("a");
+      const b = gf.createName("b");
+      const out = await items(
+        gf.layer([
+          gf.layer([
+            gf.rect({ x: 0, y: 0, w: 200, h: 100, fill: "#fff" }),
+            gf.rect({ x: 10, y: 10, w: 10, h: 10, fill: "#a00" }).name(a),
+            gf.rect({ x: 150, y: 60, w: 10, h: 10, fill: "#0a0" }).name(b),
+          ]),
+          gf.line({ stroke: "#c00" }, [gf.ref(a), gf.ref(b)]),
+        ])
+      );
+      const at = (pred: (i: any) => boolean) => out.findIndex(pred);
+      const box = at((i) => i.style?.fill === "#fff");
+      const line = at((i) => i.style?.stroke === "#c00");
+      ok = box >= 0 && line > box;
+      detail = `box ${box}, line ${line}`;
+    } catch (e: any) {
+      detail = String(e?.message);
+    }
+    check("a line over token refs paints over the box that holds them", ok, detail);
   }
 
   // A clause's paint-order default follows a named ref (an alias) to the

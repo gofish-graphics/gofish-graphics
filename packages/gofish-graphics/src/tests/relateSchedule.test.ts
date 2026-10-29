@@ -12,7 +12,12 @@ import { layer } from "../ast/graphicalOperators/layer";
 import { Rect as rect } from "../ast/shapes/rect";
 import { ref } from "../ast/shapes/ref";
 import { enclose } from "../lib";
-import { Constraint, relateEnv, scheduleRelate } from "../ast/constraints";
+import {
+  Constraint,
+  SlotOperand,
+  relateEnv,
+  scheduleRelate,
+} from "../ast/constraints";
 import { resolveReferences, resolution } from "../ast/_ref";
 import { wrapRing } from "../ast/elaborationUtils";
 import { createName } from "../ast/createName";
@@ -90,7 +95,7 @@ console.log("# scheduleRelate: ties go to the step declared first");
       // names only nodes the layer held when the call ran).
       ({ a }: any, layer: any) => {
         const slot = layer.children.length + 1;
-        const box = { name: "box", means: (l: any) => [l.children[slot]] };
+        const box = new SlotOperand(layer, slot);
         return [
           enclose({}, [a]),
           enclose({}, [(rect as any)({ w: 4, h: 4 })]).name("box"),
@@ -192,6 +197,36 @@ console.log("# resolution: one stamp over the children and the constraints");
     "a positional path into a labeled node gives the content",
     at.targetNode === bar,
     String(at.targetNode?.type)
+  );
+}
+
+{
+  // A user's operand names only nodes the layer held when the call ran; a
+  // pass's handle may hold a clause slot (here the first drawing clause's),
+  // so this is how a constraint comes to move a clause.
+  let message = "";
+  try {
+    await schedule(
+      (layer as any)([
+        (rect as any)({ w: 10, h: 10 }).name("a"),
+        (rect as any)({ w: 10, h: 10 }).name("b"),
+      ]).relate(({ a, b }: any, at: any) => [
+        Constraint.align(
+          { x: "middle" },
+          [a, new SlotOperand(at, at.children.length)]
+        ),
+        enclose({ padding: 4 }, [b]).name("box"),
+      ])
+    );
+  } catch (e: any) {
+    message = String(e?.message);
+  }
+  check(
+    "a constraint that moves a clause which reads its operands is a cycle",
+    /form a cycle.*the layer's constraints \(Constraint\.align\), clause 2 \(enclose named "box"\)/.test(
+      message
+    ),
+    message
   );
 }
 

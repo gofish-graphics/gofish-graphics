@@ -43,6 +43,8 @@ import {
 import { namesIn } from "../_ref";
 import {
   isPlacedOn,
+  NodeOperand,
+  SlotOperand,
   type ConstraintPosScales,
   type FreeOrigin,
   type ConstraintRef,
@@ -181,19 +183,33 @@ export function relateEnv(layer: GoFishNode): RelateEnv {
  * name (#819). Runs when `.relate()` runs, so the stack points at the
  * callback.
  */
+/** Whether `ref` is a constraint operand: a handle on the nodes it means,
+ *  the one a `.relate()` call bound ({@link RelateOperand}) or one a pass
+ *  built ({@link SlotOperand}, {@link NodeOperand}). An object that only
+ *  spells a name is none: a name means nothing until a call binds it. */
+function isOperand(ref: unknown): ref is ConstraintRef {
+  return (
+    ref instanceof RelateOperand ||
+    ref instanceof SlotOperand ||
+    ref instanceof NodeOperand
+  );
+}
+
 export function validateOperands(
   specs: ConstraintSpec[],
   env: RelateEnv
 ): void {
   for (const c of specs) {
     c.children.forEach((ref: ConstraintRef | undefined, i: number) => {
-      if (ref && typeof ref.name === "string") return;
+      if (isOperand(ref)) return;
       const names = Object.keys(env);
       throw new Error(
-        `Constraint.${c.type}: operand ${i + 1} is ${String(ref)}. A ` +
-          `.relate() callback receives only the names of nodes inside its ` +
-          `layer; check the spelling, or name the node with .name(...). ` +
-          `Names inside this layer: ${
+        `Constraint.${c.type}: operand ${i + 1} is ${
+          ref === undefined ? "undefined" : JSON.stringify(ref)
+        }, not an operand. A constraint's operands are the ones a .relate() ` +
+          `callback receives, one per name of a node inside its layer ` +
+          `(read a computed name as env[name]); check the spelling, or name ` +
+          `the node with .name(...). Names inside this layer: ${
             names.length > 0 ? names.join(", ") : "(none)"
           }.`
       );

@@ -206,7 +206,10 @@ A name that is not in the environment reads as `undefined`. So JS
 destructuring defaults, e.g., `({ a, b, pad = 8 })`, and optional checks,
 e.g., `note ? [...] : []`, work as they do for any object. If the callback
 uses `undefined` as an operand, `validateOperands` throws right away, and the
-message lists the names inside the layer (#819).
+message lists the names inside the layer (#819). It throws as well on any
+other value that is not an operand, such as an object that only spells a
+name (`{ name: "a" }`): a name means nothing until a call binds it. A
+computed name reads its operand from the environment, `env[name]`.
 
 One function, `resolveReferences` (`_ref.tsx`), resolves every reference in
 the tree: each ref's target, each constraint operand, and each paint-order
@@ -375,6 +378,8 @@ children; an operand an enclosing `.relate()` bound is left for that layer
 holds its node, so the constraint holds that node, and a nested clause's node
 of the same name never joins it. A ref the author wrote by name has no node
 until the round, so the constraint holds the ref and reads its target then.
+A token ref has no node before the round either, and gets no default: the
+connector paints in child order.
 A ref draws nothing, so paint order orders what a ref operand stands for,
 its target. A paint-order operand stands for every node it means inside the
 layer; paint order reads the sets `resolveReferences` found. An explicit
