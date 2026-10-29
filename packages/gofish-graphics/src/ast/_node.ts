@@ -109,11 +109,7 @@ import type { LayoutWarning } from "./layoutWarnings";
 import { relateEnv } from "./constraints";
 import { applyRelationalZBelowDefaults } from "./constraints/relationalPaint";
 import type { ResolvedConstraints } from "./_ref";
-import {
-  resolveRelateClauses,
-  type RelateCallback,
-  type RelateSchedule,
-} from "./constraints/relate";
+import { resolveRelateClauses, type RelateFn } from "./constraints/relate";
 import {
   BBox,
   type BBoxKey,
@@ -246,21 +242,18 @@ export type ClaimWalk = {
    *  frame (`placeByClaims`), for a node deep inside it that a ref or a
    *  label reads (`placementIn`). */
   childBoxes: (axis: 0 | 1) => Map<number, BoxForm> | undefined;
-  /** Its constraints' operands, resolved, by key (`ConstraintRef.key`). */
-  operands: () => Map<
-    string,
-    { node: GoFishAST; child: number; direct: boolean }
-  >;
   /** Per axis, the literal pixel its own start places it at in its parent
    *  (0 for none). */
   literalStart: [number, number];
   /** How it seats its children, read by the placement walk through it
-   *  (`placementIn`): a child's index, its key as a direct operand, and per
-   *  axis the constraints that act on it there, by child index. */
+   *  (`placementIn`): a child's index, its key as a direct operand, per
+   *  axis the constraints that act on it there, by child index, and the
+   *  literal seats its constraints pin, by key (`literalSeats`). */
   seating: () => {
     indexOf: (child: GoFishAST) => number;
     operandKey: Map<number, string>;
     acting: [Map<number, ConstraintSpec[]>, Map<number, ConstraintSpec[]>];
+    seats: Map<string, [number | undefined, number | undefined]>;
   };
   /** Per axis, whether it has a size of its own there, which makes it a
    *  σ-scope of its own. */
@@ -588,7 +581,7 @@ export class GoFishNode {
   /**
    * String-name scope boundary. Set ONLY by createMark — manual `.scope()`
    * (which flips `_isScope`) does not flip this. String-name lookup
-   * (`resolveScopedName` in _ref.tsx, shared by `ref("name")` and
+   * (`lookupName` in _ref.tsx, shared by `ref("name")` and
    * `.relate()` operands) stops walking up at the nearest `_isComponent`
    * ancestor and does not descend into nested ones, so names don't leak
    * across component boundaries in either direction.
@@ -622,16 +615,9 @@ export class GoFishNode {
    *  author's constraints, and keeps these. */
   public _paintDefaults?: ConstraintSpec[];
   /** What the last `resolveReferences` round resolved this node's
-   *  constraints to (read with `resolvedConstraints` in `_ref.tsx`). */
+   *  references to: its constraint operands and its relate schedule (read
+   *  with `resolution` in `_ref.tsx`). */
   public _resolved?: ResolvedConstraints;
-  /** This layer's relate schedule as `resolveReferences` last computed it, with
-   *  the children and constraints it was computed from (see
-   *  `relateScheduleForLayout` in `constraints/relate.ts`). */
-  public _relateSchedule?: {
-    children: GoFishAST[];
-    constraints: ConstraintSpec[];
-    schedule: RelateSchedule;
-  };
   public _scopeMap?: Map<string, GoFishNode[]>;
   public parent?: GoFishNode;
   /** The union-find of unknown units a walk rooted here owns, when there is
@@ -2654,7 +2640,7 @@ export class GoFishNode {
    * node this layer's lookup finds, not a same-named node of the nested
    * layer.
    */
-  public async relate(fn: RelateCallback, rows?: unknown): Promise<this> {
+  public async relate(fn: RelateFn, rows?: unknown): Promise<this> {
     // Only a layer schedules clauses around its solve (layer.tsx).
     if (this.type !== "layer" && this.type !== "box") {
       throw new Error(

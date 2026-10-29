@@ -47,7 +47,7 @@ scheduled like any other (see below).
 ## One lookup for `ref` and `.relate()`
 
 `ref("x")` and a `.relate()` operand named `x` use the same function,
-`lookupName` in `_ref.tsx` (`resolveScopedName` is its singular form). A `ref("x")` the author writes starts at
+`lookupName` in `_ref.tsx`, and a singular use reads its one match (`one`). A `ref("x")` the author writes starts at
 the relating layer. An operand starts at the layer whose `.relate()` bound it,
 its **scope**. An operand becomes a string ref when it is used as a child of
 a drawing clause (`resolveMarkResult` calls `RelateOperand.toRef()`, a ref
@@ -79,7 +79,7 @@ layer is now one of the outer layer's clauses, and its swatch can be closer
 to the outer layer than the curve inside the chart. An operand names a node
 the layer held when the callback ran, and a name a clause introduces does
 not carry the binding's scope. So the lookup of a bound operand
-(`resolveScopedName(scope, name, what, true)`) skips the scope layer's
+(`lookupName(scope, name, true)`) skips the scope layer's
 clause slots at that first level. A `ref("x")` the author writes, and a
 constraint a pass builds without a scope, search the whole layer as before.
 
@@ -212,10 +212,14 @@ the tree: each ref's target, each constraint operand, and each paint-order
 operand. The render runs it once per round, after the pass that installs the
 operators' constraints (`resolveAliases`), and again whenever a pass rewrites
 the tree (`reresolve` in `gofish.tsx`). For each layer with constraints, it
-looks each distinct operand name up once with the lookup above, starting at
-the layer, writes the uid of the node it finds into the operand's `key`, and
-records whether the node is a direct child (`resolvedConstraints`). The
-placement solve reads only the key. The name is kept for error messages. The
+looks each operand up with the lookup above, starting at the layer, and
+keeps the result on the layer (`ResolvedConstraints`, read through
+`resolution`): each operand's key, the uid of the node it found, and whether
+that node is a direct child. A round looks each (level, name) up once,
+whichever ref, operand, or paint-order operand asks. The operand object
+itself holds no resolution, so one operand may serve several layers. The
+placement solve reads only the key (`keyOf`). The name is kept for error
+messages. The
 operand stays a name until the round because elaboration can wrap a named
 node. Axis, legend, and label elaboration wrap a node with
 `wrapPreservingIdentity`, which moves the node's key onto the wrapper and
@@ -353,10 +357,11 @@ clause which reads the nodes that constraint places. `resolveReferences`
 runs the check as soon as the refs are resolved. It cannot wait for layout,
 because the space pass would recurse forever first (a ref proxies its target's
 type and size claim, and a cyclic target contains the ref).
-`resolveReferences` keeps the schedule it computed on the layer, and layout
-reuses it while the layer has the same children and constraints
-(`relateScheduleForLayout`); a pass that rewrites the tree runs
-`resolveReferences` again, which recomputes it.
+`resolveReferences` keeps the schedule with the rest of the layer's
+resolution, under one stamp: the layer's constraints and its children as
+they were in the round. Every reader goes through `resolution`, which throws
+when the layer changed since; a pass that rewrites the tree runs
+`resolveReferences` again, which recomputes all of it.
 
 A clause paints after the plain children, in clause order, except that a
 clause built by `createRelationalMark` (`enclose`, `line`, `ribbon`) paints

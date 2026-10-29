@@ -18,16 +18,15 @@ import { isThenable } from "../../util";
 
 /**
  * An operand of a `.relate()` callback: a name plus its scope, the layer
- * whose `.relate()` call bound it. It is looked up at layout, by name, from
- * that layer (elaboration can swap a named node for a wrapper, and the
- * wrapper takes the name), so an inner layer that declares the same name
- * cannot capture it. As a constraint operand it is a {@link ConstraintRef}.
- * In term position, as a child of a drawing clause such as
- * `arrow(opts, [a, b])`, it becomes a string `ref` with the same name and
- * scope ({@link RelateOperand.toRef}).
+ * whose `.relate()` call bound it. `resolveReferences` looks it up by name,
+ * from that layer and without its clause slots, so a node a clause
+ * introduces, or an inner layer that declares the same name, cannot capture
+ * it. As a constraint operand it is a {@link ConstraintRef}. In term
+ * position, as a child of a drawing clause such as `arrow(opts, [a, b])`,
+ * it becomes a string `ref` with the same name and scope
+ * ({@link RelateOperand.toRef}).
  */
 export class RelateOperand implements ConstraintRef {
-  key?: string;
   constructor(
     public readonly name: string,
     public readonly scope: GoFishNode
@@ -61,19 +60,14 @@ export type RelateClause =
   | undefined
   | false;
 
-/** A `.relate()` callback: it receives the layer's environment and returns
- *  its clauses (or a promise of them). */
+/** A `.relate()` callback: it receives the layer's environment and the
+ *  layer running it, and returns its clauses (or a promise of them). An
+ *  author's callback reads only the environment; the deserializer's binds
+ *  the wire's scope id to the layer. */
 export type RelateFn = (
-  env: RelateEnv
-) => RelateClause[] | PromiseLike<RelateClause[]>;
-
-/** What `GoFishNode.relate` calls: a callback that is also handed the layer
- *  running it. A {@link RelateFn} is one that ignores the layer; the
- *  deserializer's callback binds the wire's scope id for the call to it. */
-export type RelateCallback = (
   env: RelateEnv,
   layer: GoFishNode
-) => ReturnType<RelateFn>;
+) => RelateClause[] | PromiseLike<RelateClause[]>;
 
 /** Every constraint type, keyed so the compiler checks the list against
  *  `ConstraintSpec`. */
@@ -254,7 +248,7 @@ export function scheduleRelate(
   layer.children.forEach((c, i) => {
     if (!childIndex.has(c)) childIndex.set(c, i);
   });
-  // `directChildIndex`, with the index looked up once per child.
+  // The direct child of `layer` that is or holds `node`, by its index.
   const childOf = (node: GoFishAST): number => {
     const child = directChildOf(layer, node);
     return child ? (childIndex.get(child) ?? -1) : -1;
@@ -355,50 +349,4 @@ function describeStep(layer: GoFishNode, u: number): string {
   return `clause ${layer._relateClauses.get(u)} (${node.type}${
     name === undefined ? "" : ` named "${name}"`
   })`;
-}
-
-/** Whether two lists hold the same items in the same order. */
-function sameItems<T>(a: readonly T[], b: readonly T[]): boolean {
-  return a.length === b.length && a.every((x, i) => x === b[i]);
-}
-
-/**
- * Schedule `layer`'s relate clauses and remember the result for its layout.
- * `resolveReferences` calls this once per resolve pass, as soon as the refs are
- * resolved, so a cycle is reported before the space pass would recurse on it.
- */
-export function computeRelateSchedule(
-  layer: GoFishNode,
-  operands: Map<string, ResolvedOperand>
-): RelateSchedule {
-  const schedule = scheduleRelate(layer, operands);
-  layer._relateSchedule = {
-    children: layer.children.slice(),
-    constraints: layer.constraints,
-    schedule,
-  };
-  return schedule;
-}
-
-/**
- * The schedule `layout` uses: the one `resolveReferences` remembered, when the
- * layer still has the children and constraints it was computed from, else a
- * fresh one. A schedule depends on the children, the constraint operands, and
- * the targets of the clauses' refs; the refs are resolved only in
- * `resolveReferences`, and every pass that rewrites the tree runs `resolveReferences`
- * again (see `reresolve` in gofish.tsx), which recomputes it.
- */
-export function relateScheduleForLayout(
-  layer: GoFishNode,
-  operands: Map<string, ResolvedOperand>
-): RelateSchedule {
-  const cached = layer._relateSchedule;
-  if (
-    cached &&
-    cached.constraints === layer.constraints &&
-    sameItems(cached.children, layer.children)
-  ) {
-    return cached.schedule;
-  }
-  return scheduleRelate(layer, operands);
 }

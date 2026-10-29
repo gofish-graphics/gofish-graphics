@@ -19,7 +19,7 @@ import { Alignment } from "./alignment";
 import { createOperator } from "../marks/createOperator";
 import { layer } from "./layer";
 import { Constraint, type ConstraintSpec } from "../constraints";
-import { axisName, SlotOperand } from "../constraints/shared";
+import { axisName, childSlots } from "../constraints/shared";
 import { createOverlapConstraint } from "../constraints/overlap";
 import type { Overlap } from "../../families/overlap";
 
@@ -251,7 +251,7 @@ const Scatter = createNodeOperator(
         childList.length
       );
       await node.relate(() => {
-        const refs = childList.map((_, i) => new SlotOperand(node, i));
+        const refs = childSlots(node);
         const cs: ConstraintSpec[] = [];
         childList.forEach((_, i) => {
           const pos: {

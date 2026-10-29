@@ -8,6 +8,7 @@ import { Extent, hullExtent } from "./extent";
 import * as Monotonic from "../util/monotonic";
 import { room } from "../util";
 import { isLiteralSeat } from "./constraints/claimPlacement";
+import { resolution } from "./_ref";
 import { originIs } from "./underlyingSpace";
 
 /**
@@ -133,9 +134,10 @@ export function seatPastGutters(chart: GoFishNode): void {
     originIs(inner._underlyingSpace?.[axis], "free")
       ? 0
       : chart.chromeGutters(axis)[0];
+  const { keyOf } = resolution(chart);
   for (const c of chart.constraints) {
     if (c.type !== "position" || !isLiteralSeat(c)) continue;
-    if (!c.children.some((r) => r.key === inner.uid)) continue;
+    if (!c.children.some((r) => keyOf(r) === inner.uid)) continue;
     if (typeof c.x === "number") c.x = seat(0);
     if (typeof c.y === "number") c.y = seat(1);
   }

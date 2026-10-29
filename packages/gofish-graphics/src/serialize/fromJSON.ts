@@ -22,7 +22,7 @@ import {
 import type { AxesOptions, View } from "../ast/gofish";
 import { createName, type Token } from "../ast/createName";
 import { Constraint, RelateOperand } from "../ast/constraints";
-import type { RelateCallback, RelateClause } from "../ast/constraints/relate";
+import type { RelateClause, RelateFn } from "../ast/constraints/relate";
 import type { GoFishNode } from "../ast/_node";
 import { palette, gradient } from "../families/color";
 import { ref } from "../ast/shapes/ref";
@@ -317,10 +317,10 @@ export function resolveNodeRefs(
 function refFromIR(r: Frontend.RefMarkIR, ctx: HeldNodesContext): GoFishRef {
   if (r.scope === undefined)
     return ref(resolveRefSelection(r.selection, ctx.resolveToken));
-  return new GoFishRef({
-    selection: r.selection as string,
-    scope: relateScopeFor(r.scope, ctx),
-  });
+  return new RelateOperand(
+    r.selection as string,
+    relateScopeFor(r.scope, ctx)
+  ).toRef();
 }
 
 /** `opts` with the nodes held by the fields `accepted` declares rebuilt as
@@ -454,7 +454,7 @@ export function mapMarkChildren(specs: MarkSpec[], ctx: IRContext): any[] {
  * other mark. Rebuilt per call: a `ref(...)` clause is a live GoFishRef that
  * `.name()` mutates in place, so calls must not share one.
  */
-function relateCallback(relate: RelateIR, ctx: IRContext): RelateCallback {
+function relateCallback(relate: RelateIR, ctx: IRContext): RelateFn {
   return (_env, layer) => {
     const inner: IRContext = {
       ...ctx,

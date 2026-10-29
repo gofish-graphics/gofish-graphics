@@ -39,7 +39,7 @@
 import * as Monotonic from "../../util/monotonic";
 import { GoFishNode } from "../_node";
 import type { GoFishAST } from "../_ast";
-import { keyOf, type ConstraintRef } from "./shared";
+import { type ConstraintRef, type KeyOf } from "./shared";
 import { sliceExtent } from "./folds";
 import {
   ordinalOver,
@@ -281,6 +281,7 @@ export function gridTracksFromSizes(
  *  claim cell keeps its own (equal or smaller) size and is centered in it. */
 export function gridCellSizeByKey(
   c: GridConstraint,
+  keyOf: KeyOf,
   tracks: [TrackLayout, TrackLayout]
 ): Map<string, [number, number]> {
   const [cols, rows] = tracks;
@@ -349,22 +350,24 @@ export function lowerGridPlacement(
   owner: string,
   size: readonly [number, number],
   emitter: PlacementFactEmitter,
+  keyOf: KeyOf,
   tracks?: [TrackLayout, TrackLayout],
   pinnedByPosition?: Map<string, Set<0 | 1>>
 ): void {
   for (const { child, center } of gridCellPlacements(c, size, tracks)) {
-    const overridden = pinnedByPosition?.get(keyOf(child));
+    const key = keyOf(child);
+    const overridden = pinnedByPosition?.get(key);
     if (!overridden?.has(0))
       emitter.pin({
         axis: "x",
-        target: { name: keyOf(child), anchor: "middle" },
+        target: { key, anchor: "middle" },
         value: center[0],
         owner,
       });
     if (!overridden?.has(1))
       emitter.pin({
         axis: "y",
-        target: { name: keyOf(child), anchor: "middle" },
+        target: { key, anchor: "middle" },
         value: center[1],
         owner,
       });

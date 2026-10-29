@@ -8,7 +8,13 @@ import type { UnderlyingSpace } from "../underlyingSpace";
 import * as Monotonic from "../../util/monotonic";
 import { solvePlacementCells } from "./placementSolver";
 import type { PlacementConstraint } from "./placementLowering";
-import { axisIndex, axisName, isPointAlign, keyOf, type Axis } from "./shared";
+import {
+  axisIndex,
+  axisName,
+  isPointAlign,
+  type Axis,
+  type KeyOf,
+} from "./shared";
 import { isPositionInterval } from "./position";
 import type { ConstraintSpec } from ".";
 
@@ -136,18 +142,20 @@ export const isLiteralSeat = (c: ConstraintSpec): boolean =>
   c.anchor === "baseline" &&
   (typeof c.x === "number" || typeof c.y === "number");
 
-/** Per operand name, the literal pixel a `position` pins its origin at on
+/** Per operand key, the literal pixel a `position` pins its origin at on
  *  each axis (`isLiteralSeat`), the first such pin on each axis. One pass
  *  over the constraints. */
 export const literalSeats = (
-  constraints: readonly ConstraintSpec[]
+  constraints: readonly ConstraintSpec[],
+  keyOf: KeyOf
 ): Map<string, [number | undefined, number | undefined]> => {
   const seats = new Map<string, [number | undefined, number | undefined]>();
   for (const c of constraints) {
     if (c.type !== "position" || !isLiteralSeat(c)) continue;
     for (const r of c.children) {
-      let s = seats.get(keyOf(r));
-      if (s === undefined) seats.set(keyOf(r), (s = [undefined, undefined]));
+      const key = keyOf(r);
+      let s = seats.get(key);
+      if (s === undefined) seats.set(key, (s = [undefined, undefined]));
       if (s[0] === undefined && typeof c.x === "number") s[0] = c.x;
       if (s[1] === undefined && typeof c.y === "number") s[1] = c.y;
     }
@@ -227,7 +235,8 @@ export const constraintsOn = (
 export function constrainedOn(
   axis: 0 | 1,
   constraints: ConstraintSpec[],
-  operands: Map<string, { child: number; direct: boolean }>
+  operands: Map<string, { child: number; direct: boolean }>,
+  keyOf: KeyOf
 ): Set<number> {
   const out = new Set<number>();
   for (const c of constraints) {
@@ -254,8 +263,9 @@ export function placeByClaims(
   children: ClaimChild[],
   constraints: ConstraintSpec[],
   operands: Map<string, { child: number; direct: boolean }>,
+  keyOf: KeyOf,
   candidates: Set<number>,
-  nested: (name: string) => Placement | undefined
+  nested: (key: string) => Placement | undefined
 ): ClaimPlacement {
   const onAxis = constraintsOn(constraints, axis);
   // A child an interval pins (across a span, or a region's cell) has a
@@ -272,26 +282,26 @@ export function placeByClaims(
   // lands: a node nested in a child, a stand-in for a node elsewhere, a
   // node that reads its place from refs.
   const nestedPlaced = new Map<string, Placement>();
-  for (const [name, op] of operands)
+  for (const [key, op] of operands)
     if (!op.direct) {
-      const p = nested(name);
-      if (p !== undefined) nestedPlaced.set(name, p);
+      const p = nested(key);
+      if (p !== undefined) nestedPlaced.set(key, p);
     }
   const presetOf = (i: number): Placement | undefined =>
     children[i].standIn || children[i].fromRefs
       ? children[i].placed
       : undefined;
-  const inkName = (name: string): boolean => {
-    const op = operands.get(name);
+  const inkKey = (key: string): boolean => {
+    const op = operands.get(key);
     if (op === undefined) return true;
-    if (!op.direct) return !nestedPlaced.has(name);
+    if (!op.direct) return !nestedPlaced.has(key);
     const c = children[op.child];
     return c.inkOn || (c.standIn && c.placed === undefined);
   };
   // A child that fills the room it is given has no size the claim walk
   // knows, so neither does the place of whatever is seated beside it.
-  const sizeless = (name: string): boolean => {
-    const op = operands.get(name);
+  const sizeless = (key: string): boolean => {
+    const op = operands.get(key);
     if (op === undefined || !op.direct) return false;
     const c = children[op.child];
     return (
@@ -309,9 +319,9 @@ export function placeByClaims(
   for (const c of onAxis)
     if (c.type === "position")
       for (const r of c.children) {
-        const op = operands.get(keyOf(r));
-        if (op?.direct && !inkName(keyOf(r)) && !sizeless(keyOf(r)))
-          pinned.add(op.child);
+        const key = keyOf(r);
+        const op = operands.get(key);
+        if (op?.direct && !inkKey(key) && !sizeless(key)) pinned.add(op.child);
       }
   const parent = new Map<string, string>();
   const find = (a: string): string => {
@@ -321,15 +331,15 @@ export function placeByClaims(
   };
   for (const c of onAxis) {
     if (!relates(c)) continue;
-    const names = c.children.map(keyOf);
-    for (const n of names) if (!parent.has(n)) parent.set(n, n);
-    for (let k = 1; k < names.length; k++) {
-      const a = find(names[0]);
-      const b = find(names[k]);
+    const keys = c.children.map(keyOf);
+    for (const n of keys) if (!parent.has(n)) parent.set(n, n);
+    for (let k = 1; k < keys.length; k++) {
+      const a = find(keys[0]);
+      const b = find(keys[k]);
       if (a !== b) parent.set(b, a);
     }
   }
-  const inkRoots = new Set([...parent.keys()].filter(inkName).map(find));
+  const inkRoots = new Set([...parent.keys()].filter(inkKey).map(find));
   const sizelessRoots = new Set([...parent.keys()].filter(sizeless).map(find));
   const ink = new Set<number>();
   const unplaced = new Set<number>();
@@ -355,15 +365,13 @@ export function placeByClaims(
   // of the plot: a node with a size of its own maps its plot into that
   // size, and its dressing, like its chrome, adds around it (#1032). The
   // stand-in itself is the node it stands for, a part of the plot.
-  const placedName = (name: string): boolean => {
-    const op = operands.get(name);
+  const placedKey = (key: string): boolean => {
+    const op = operands.get(key);
     if (op === undefined) return false;
-    if (!op.direct) return nestedPlaced.has(name);
+    if (!op.direct) return nestedPlaced.has(key);
     return presetOf(op.child) !== undefined;
   };
-  const dressingRoots = new Set(
-    [...parent.keys()].filter(placedName).map(find)
-  );
+  const dressingRoots = new Set([...parent.keys()].filter(placedKey).map(find));
   const dressing = new Set<number>();
   for (const n of parent.keys()) {
     const op = operands.get(n);
@@ -385,7 +393,7 @@ export function placeByClaims(
   // The children a constraint acts on along this axis; the others sit at
   // their own origin, which is the layer's (a free child's baseline is
   // seated at data 0, and a shared child's claim is measured from it).
-  const constrained = constrainedOn(axis, constraints, operands);
+  const constrained = constrainedOn(axis, constraints, operands, keyOf);
 
   // The claims that are not lines in σ: the solve reads each of their two
   // sides as a value of its own. Placed operands are read at σ.
@@ -410,7 +418,7 @@ export function placeByClaims(
   // Each child's box, `[lo, hi]`, where the solve places it at σ, with the
   // curved claims' sides `sides` (`[ascent, descent]`): a box sits about its
   // origin, or across the span an interval pins.
-  const seats = literalSeats(constraints);
+  const seats = literalSeats(constraints, keyOf);
   const isCurved = new Set(curved);
   const solve = (sigma: number, sides: Map<number, Box>): Map<number, Box> => {
     const boxOf = (i: number): [number, number] => {
@@ -442,10 +450,10 @@ export function placeByClaims(
       indexOf.set(key, i);
       if (preset !== undefined) at.set(i, [preset + box[0], preset + box[1]]);
     }
-    for (const [name, p] of nestedPlaced) {
+    for (const [key, p] of nestedPlaced) {
       const box = boxAt(p.extent, sigma);
       targets.set(
-        name,
+        key,
         claimPlaceable(axis, box, undefined, p.lo.run(sigma) - box[0])
       );
     }
@@ -457,6 +465,7 @@ export function placeByClaims(
     );
     const cells = solvePlacementCells(
       solvable as PlacementConstraint[],
+      keyOf,
       targets,
       [NaN, NaN],
       axis === 0 ? [map, undefined] : [undefined, map],
@@ -465,8 +474,8 @@ export function placeByClaims(
       undefined,
       axis === 0 ? [0, undefined] : [undefined, 0]
     )[axis].cells;
-    for (const [name, cell] of cells) {
-      const i = indexOf.get(name);
+    for (const [key, cell] of cells) {
+      const i = indexOf.get(key);
       if (i === undefined) continue;
       const [lo, hi] = boxOf(i);
       const size = cell.sizeStrong ? (cell.size ?? hi - lo) : hi - lo;

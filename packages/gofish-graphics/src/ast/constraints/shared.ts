@@ -35,20 +35,21 @@ export const isPointAlign = (
 /**
  * A constraint operand. A name operand (a `.relate()` operand, a
  * `RelateOperand`) is a node NAME, resolved with the same lookup
- * `ref("name")` uses (`resolveScopedName`), starting at `scope`, the layer
+ * `ref("name")` uses (`lookupName`), starting at `scope`, the layer
  * whose `.relate()` bound it, or at the constrained layer when it has none.
  * A handle ({@link SlotOperand}, {@link NodeOperand}) is a reference a macro
  * (an operator, an elaboration pass) builds already resolved: it names no
- * one, so it can neither capture a user's name nor be captured by one, and
- * its {@link key} is known when it is built. `resolveReferences`
- * (`_ref.tsx`) writes a name operand's key each round. The placement solve
- * keys on the key, and `name` is only how the operand reads in a message.
+ * one, so it can neither capture a user's name nor be captured by one.
+ * `resolveReferences` (`_ref.tsx`) resolves every operand of a layer once per
+ * round, to the node it means, and keeps the result on the layer
+ * (`ResolvedConstraints`); an operand object holds no resolution of its own,
+ * so one operand may serve several layers. The placement solve keys on the
+ * resolved node ({@link KeyOf}), and `name` is only how the operand reads in
+ * a message.
  */
 export interface ConstraintRef {
   readonly name: string;
   readonly scope?: GoFishNode;
-  /** The `uid` of the node the operand resolved to (see {@link keyOf}). */
-  key?: string;
 }
 
 /**
@@ -62,10 +63,17 @@ export class SlotOperand implements ConstraintRef {
     public readonly layer: GoFishNode,
     public readonly slot: number
   ) {}
-  /** A handle is resolved when it is built: its key is the uid of the
-   *  child in its slot now. */
-  get key(): string | undefined {
-    return this.layer.children[this.slot]?.uid;
+  /** The child that fills this slot, seen from `layer`: a slot operand is a
+   *  handle of the layer that built it, so any other layer, or an empty
+   *  slot, is an error. */
+  child(layer: GoFishNode): GoFishAST {
+    const child = layer === this.layer ? layer.children[this.slot] : undefined;
+    if (child === undefined)
+      throw new Error(
+        `[gofish] a slot operand of another layer, or of an empty slot ` +
+          `(slot ${this.slot})`
+      );
+    return child;
   }
   /** How the operand reads in a message: the child's name, or its slot. */
   get name(): string {
@@ -74,12 +82,19 @@ export class SlotOperand implements ConstraintRef {
   }
 }
 
-/** The slot operand of `node`, a child of `layer`. */
-export const slotOf = (layer: GoFishNode, node: GoFishAST): SlotOperand => {
-  const slot = layer.children.indexOf(node);
-  if (slot < 0)
-    throw new Error("[gofish] slotOf: the node is not a child of the layer");
-  return new SlotOperand(layer, slot);
+/** A finder of slot operands of `layer`: the handle on the slot each of its
+ *  children fills, from one index of the children built once. Throws on a
+ *  node that is not one of them. */
+export const slotOf = (
+  layer: GoFishNode
+): ((node: GoFishAST) => SlotOperand) => {
+  const index = new Map(layer.children.map((c, i) => [c, i]));
+  return (node) => {
+    const i = index.get(node);
+    if (i === undefined)
+      throw new Error("[gofish] slotOf: the node is not a child of the layer");
+    return new SlotOperand(layer, i);
+  };
 };
 
 /** A slot operand for every child of `layer`, in order. */
@@ -90,23 +105,34 @@ export const childSlots = (layer: GoFishNode): SlotOperand[] =>
  *  `applyRelationalZBelowDefaults`): it resolves to that node. */
 export class NodeOperand implements ConstraintRef {
   constructor(public readonly node: GoFishAST) {}
-  get key(): string {
-    return this.node.uid;
-  }
   get name(): string {
     return childNameKey(this.node) ?? `a "${this.node.type}" node`;
   }
 }
 
-/** The handle the placement solve keys `ref` by: the uid of the node it
- *  resolved to. Throws when no resolution has written it yet. */
-export const keyOf = (ref: ConstraintRef): string => {
-  if (ref.key === undefined)
-    throw new Error(
-      `[gofish] constraint operand "${ref.name}" is not resolved ` +
-        `(resolveReferences has not run on its layer)`
-    );
-  return ref.key;
+/** The handle the placement solve keys an operand by: the `uid` of the node
+ *  one layer's last `resolveReferences` round resolved it to
+ *  (`ResolvedConstraints.keyOf`). Throws on an operand that is not one of
+ *  that layer's. */
+export type KeyOf = (ref: ConstraintRef) => string;
+
+/** A layer's resolved operands as a plan reads them (a layer's
+ *  `ResolvedConstraints` is one): each operand's key, and the node each key
+ *  resolved to, with the index of the direct child that is (`direct`) or
+ *  holds it. */
+export type ResolvedOperands = {
+  keyOf: KeyOf;
+  operands: ReadonlyMap<string, { child: number; direct: boolean }>;
+};
+
+/** The index of the direct child `ref` resolved to, or undefined when it
+ *  resolved to a node inside one (a nested operand). */
+export const directSlot = (
+  { keyOf, operands }: ResolvedOperands,
+  ref: ConstraintRef
+): number | undefined => {
+  const op = operands.get(keyOf(ref));
+  return op?.direct ? op.child : undefined;
 };
 
 /** Per-axis data→pixel position maps, as built by `layer.tsx` and consumed
@@ -138,13 +164,6 @@ export const placementKey = (axis: Axis, key: string): string =>
 /** Check if a placeable has been placed on a given axis */
 export const isPlacedOn = (p: Placeable, axisIdx: 0 | 1): boolean =>
   p.dims[axisIdx].min !== undefined;
-
-/** Map each direct child's `uid` to its index, so a resolved operand
- *  (`keyOf`) finds the direct child it is, if it is one. Shared by the
- *  layer's constraint passes (nest plan, composition, sharing). */
-export const buildChildIndex = (
-  childNodes: readonly { uid: string }[]
-): Map<string, number> => new Map(childNodes.map((c, i) => [c.uid, i]));
 
 /** Normalize a node's _name (string or Token) to the string a name lookup
  * compares. Tokens contribute their `__tag`. */

@@ -13,12 +13,14 @@ import * as Interval from "../../util/interval";
 import type { Cell, RegionCell } from "../cells";
 import type { PlacementFactEmitter } from "./placementFacts";
 import {
-  keyOf,
+  SlotOperand,
   type AlignAnchor,
   type Axis,
   type ConstraintRef,
+  type KeyOf,
 } from "./shared";
 import type { GoFishNode } from "../_node";
+import { resolution } from "../_ref";
 
 /** The **interval** form of a position coordinate: pin the target's `start`
  *  (min) edge at `[0]` and its `end` (max) edge at `[1]`, letting the two edges
@@ -139,13 +141,19 @@ export class PositionRegion {
 // cells cost O(N²); a name→region map recorded by partition would make it
 // O(depth). Matters only for plane partitions of thousands of cells.
 export function enclosingCell(node: GoFishNode): PositionRegion | undefined {
-  // A region's operand is its partition's slot handle, whose key is known
-  // before the round resolves the names (the partitions run top-down, in the
-  // pass before it).
+  // A partition's region operand is its slot handle, which names its child
+  // before the round resolves the references (the partitions run top-down,
+  // in the pass before it). A name operand (a user's `.relate()`) is read as
+  // the last round resolved it.
   for (let at = node; at.parent !== undefined; at = at.parent) {
-    for (const c of at.parent.constraints) {
+    const parent = at.parent;
+    const means = (ref: ConstraintRef) =>
+      ref instanceof SlotOperand
+        ? ref.child(parent) === at
+        : resolution(parent).keyOf(ref) === at.uid;
+    for (const c of parent.constraints) {
       if (c.type !== "position" || c.region === undefined) continue;
-      if (c.children.some((ref) => ref?.key === at.uid)) return c.region;
+      if (c.children.some(means)) return c.region;
     }
   }
   return undefined;
@@ -283,20 +291,24 @@ export function lowerPositionPlacement(
   {
     emitter,
     targets,
+    keyOf,
     isInitiallyPlaced,
     isDataPositioned,
     resolveCoordinate,
   }: {
     emitter: PlacementFactEmitter;
     targets: Map<string, unknown>;
-    isInitiallyPlaced: (axis: Axis, name: string) => boolean;
-    isDataPositioned: (axis: 0 | 1, name: string) => boolean;
+    keyOf: KeyOf;
+    isInitiallyPlaced: (axis: Axis, key: string) => boolean;
+    isDataPositioned: (axis: 0 | 1, key: string) => boolean;
     resolveCoordinate: (
       axis: Axis,
       coordinate: PositionValue
     ) => number | undefined;
   }
 ): void {
+  // The operands this solve places, by key, read once.
+  const keys = constraint.children.map(keyOf).filter((key) => targets.get(key));
   // A region centers its target in its cell on each axis the cell spans: the
   // target was laid out in the cell's length (`buildChildSpans`), so one with
   // no size of its own there fills the cell, and one with a size of its own
@@ -310,13 +322,12 @@ export function lowerPositionPlacement(
     const b = resolveCoordinate(axis, span[1]);
     if (a === undefined || b === undefined) return;
     const index = axis === "x" ? 0 : 1;
-    for (const child of constraint.children) {
-      if (!targets.get(keyOf(child))) continue;
-      if (isInitiallyPlaced(axis, keyOf(child))) continue;
-      if (isDataPositioned(index, keyOf(child))) continue;
+    for (const key of keys) {
+      if (isInitiallyPlaced(axis, key)) continue;
+      if (isDataPositioned(index, key)) continue;
       emitter.pin({
         axis,
-        target: { name: keyOf(child), anchor: "middle" },
+        target: { key, anchor: "middle" },
         value: (a + b) / 2,
         owner,
       });
@@ -335,17 +346,16 @@ export function lowerPositionPlacement(
       const min = resolveCoordinate(axis, coordinate[0]);
       const max = resolveCoordinate(axis, coordinate[1]);
       if (min === undefined || max === undefined) return;
-      for (const child of constraint.children) {
-        if (!targets.get(keyOf(child))) continue;
+      for (const key of keys) {
         emitter.pin({
           axis,
-          target: { name: keyOf(child), anchor: "start" },
+          target: { key, anchor: "start" },
           value: min,
           owner,
         });
         emitter.pin({
           axis,
-          target: { name: keyOf(child), anchor: "end" },
+          target: { key, anchor: "end" },
           value: max,
           owner,
         });
@@ -354,14 +364,11 @@ export function lowerPositionPlacement(
     }
     const value = resolveCoordinate(axis, coordinate);
     if (value === undefined) return;
-    for (const child of constraint.children) {
-      const target = targets.get(keyOf(child));
-      if (!target) continue;
-      if (isInitiallyPlaced(axis, keyOf(child)) && !constraint.override)
-        continue;
+    for (const key of keys) {
+      if (isInitiallyPlaced(axis, key) && !constraint.override) continue;
       emitter.pin({
         axis,
-        target: { name: keyOf(child), anchor: constraint.anchor },
+        target: { key, anchor: constraint.anchor },
         value,
         owner,
       });

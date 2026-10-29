@@ -44,10 +44,10 @@ import { visibleNodes } from "../_ref";
 import {
   childNameKey,
   isPlacedOn,
-  keyOf,
   type ConstraintPosScales,
   type FreeOrigin,
   type ConstraintRef,
+  type KeyOf,
 } from "./shared";
 import {
   solvePlacementConstraints,
@@ -56,7 +56,7 @@ import {
 import { shadowCheckConstraint, SOLVER_CHECK } from "../solver/shadow";
 import { RelateOperand, type RelateEnv } from "./relate";
 export type { ResolvedOperand } from "../_ref";
-export { SlotOperand, NodeOperand, slotOf, childSlots, keyOf } from "./shared";
+export { SlotOperand, NodeOperand, childSlots } from "./shared";
 
 export type {
   Axis,
@@ -106,7 +106,6 @@ export { BBox } from "./bbox";
 export {
   RelateOperand,
   scheduleRelate,
-  relateScheduleForLayout,
   type RelateEnv,
   type RelateClause,
   type RelateFn,
@@ -163,15 +162,14 @@ export const Constraint = {
  * `layer` (a token-named node answers to its tag), walking the same bounded
  * tree the name lookup walks (`visibleNodes`: into nested layers, not into a
  * nested `createMark` component). These are exactly the names a constraint of
- * this layer can use: the lookup from the layer (`resolveScopedName`) stops at
- * the layer's own level for any of them, so each resolves to a node inside it,
+ * this layer can use: the lookup from the layer (`lookupName`) stops at the
+ * layer's own level for any of them, so each resolves to a node inside it,
  * while a name found only outside the layer could never be an operand. A
  * missing name reads as `undefined`, so JS destructuring defaults
  * (`({ a, pad = 8 })`) and optional checks (`note ? ... : ...`) work, and
- * `validateOperands` turns an `undefined` operand into a loud error. An
- * operand is resolved to its node at layout, by name, from `layer` (its
- * scope): elaboration can swap a named child for a wrapper, and the wrapper
- * takes the name.
+ * `validateOperands` turns an `undefined` operand into a loud error. Each
+ * `resolveReferences` round resolves an operand by its name from `layer` (its
+ * scope), to the nodes the name means then.
  */
 export function relateEnv(layer: GoFishNode): RelateEnv {
   const env: RelateEnv = {};
@@ -332,6 +330,8 @@ function foldCoordinate(
  * constraints are resolved separately at render time.
  *
  * @param constraints - The constraint specs to compose
+ * @param keyOf - Each operand's key: the uid of the node the layer's last
+ *   `resolveReferences` round resolved it to
  * @param keyToPlaceable - Map from operand key (`keyOf`) to its Placeable
  * @param sizes - The layer's box size `[w, h]`, used by grid placement
  * @param posScales - Per-axis data→pixel scales for `position` constraints
@@ -343,6 +343,7 @@ function foldCoordinate(
  */
 export function applyConstraints(
   constraints: ConstraintSpec[],
+  keyOf: KeyOf,
   keyToPlaceable: Map<string, Placeable>,
   sizes: [number, number],
   posScales?: ConstraintPosScales,
@@ -374,8 +375,8 @@ export function applyConstraints(
   // AFTER the solve against the settled positions.
   const prePlaced = SOLVER_CHECK
     ? new Map<string, [boolean, boolean]>(
-        [...keyToPlaceable].map(([name, p]) => [
-          name,
+        [...keyToPlaceable].map(([key, p]) => [
+          key,
           [isPlacedOn(p, 0), isPlacedOn(p, 1)] as [boolean, boolean],
         ])
       )
@@ -383,6 +384,7 @@ export function applyConstraints(
 
   solvePlacementConstraints(
     placement,
+    keyOf,
     keyToPlaceable,
     sizes,
     posScales,
@@ -398,13 +400,13 @@ export function applyConstraints(
   // axis. So it runs after the solve.
   for (const constraint of constraints)
     if (isOverlapConstraint(constraint))
-      applyOverlapPlacement(constraint, keyToPlaceable, posScales);
+      applyOverlapPlacement(constraint, keyToPlaceable, keyOf, posScales);
 
   // A label placement reads where everything else in the layer landed (the
   // labeled marks, the labels the solve placed), so it runs last.
   for (const constraint of constraints)
     if (isLabelPlaceConstraint(constraint))
-      applyLabelPlacement(constraint, keyToPlaceable, sizes);
+      applyLabelPlacement(constraint, keyToPlaceable, keyOf, sizes);
 
   if (prePlaced) {
     for (const constraint of placement) {
@@ -414,17 +416,19 @@ export function applyConstraints(
       const targets: Placeable[] = [];
       const targetPrePlaced: [boolean, boolean][] = [];
       for (const ref of constraint.children) {
-        const p = ref ? keyToPlaceable.get(keyOf(ref)) : undefined;
+        const key = ref ? keyOf(ref) : undefined;
+        const p = key === undefined ? undefined : keyToPlaceable.get(key);
         if (p === undefined) continue;
         targets.push(p);
-        targetPrePlaced.push(prePlaced.get(keyOf(ref)) ?? [false, false]);
+        targetPrePlaced.push(prePlaced.get(key!) ?? [false, false]);
       }
       shadowCheckConstraint(
         constraint,
         targets,
         posScales,
         targetPrePlaced,
-        keyToPlaceable
+        keyToPlaceable,
+        keyOf
       );
     }
   }

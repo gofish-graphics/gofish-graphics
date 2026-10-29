@@ -4,7 +4,7 @@
 
 import type { GoFishNode } from "./_node";
 import * as Monotonic from "../util/monotonic";
-import { literalSeats, type Placement } from "./constraints/claimPlacement";
+import type { Placement } from "./constraints/claimPlacement";
 
 /**
  * Placement claims (#493): where a node lands in another node's frame, as a
@@ -46,8 +46,7 @@ function seatIn(
   const start = child.claimWalk?.literalStart[axis] ?? 0;
   if (acting.length === 0) return start;
   const key = seating.operandKey.get(i);
-  const seat =
-    key === undefined ? undefined : literalSeats(acting).get(key)?.[axis];
+  const seat = key === undefined ? undefined : seating.seats.get(key)?.[axis];
   return seat === undefined ? undefined : seat + start;
 }
 

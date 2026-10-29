@@ -86,11 +86,15 @@ export async function wrapRing(
   // Every handle is a slot, fixed by construction: the content is slot 0,
   // and the ring's k-th shape is slot k + 1 (a shape may be handed in as the
   // promise its builder returned, which the layer awaits).
+  // The ring's shapes are its slots after the content's, in order; `layer`
+  // may hold each as the node it builds from it, so they are found by
+  // where they stand in `ring.nodes`.
+  const slots = new Map(ring.nodes.map((n, k) => [n as GoFishAST, k + 1]));
   const at = (node: GoFishAST): SlotOperand => {
-    const k = ring.nodes.indexOf(node as GoFishNode);
-    if (k < 0)
+    const k = slots.get(node);
+    if (k === undefined)
       throw new Error("[gofish] wrapRing: the node is not one of the ring's");
-    return new SlotOperand(root, k + 1);
+    return new SlotOperand(root, k);
   };
   await root.relate(() => {
     const content = new SlotOperand(root, 0);

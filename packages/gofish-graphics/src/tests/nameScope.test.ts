@@ -144,7 +144,7 @@ async function main() {
         .relate(({ a, b }: any) => [
           gf.Constraint.align({ x: "middle" }, [a, b]),
         ]),
-    /the name "a" is ambiguous — 2 nodes/
+    /the name "a" is ambiguous: it matched 2 nodes/
   );
   await rejects(
     "same-level duplicate is an error for ref() too",
@@ -357,7 +357,7 @@ async function main() {
         .relate(({ a, b }: any) => [
           gf.Constraint.align({ x: "middle" }, [a, b]),
         ]),
-    /the name "a" is ambiguous — 2 nodes/
+    /the name "a" is ambiguous: it matched 2 nodes/
   );
 
   // 9. Library-made names never clash with user names: a spread's children
@@ -1097,7 +1097,7 @@ async function main() {
         .relate(({ a, b }: any) => [
           gf.Constraint.align({ x: "middle" }, [a, b]),
         ]),
-    /the name "a" is ambiguous — 2 nodes/
+    /the name "a" is ambiguous: it matched 2 nodes/
   );
 
   // A paint-order operand means every node the name means, by the one

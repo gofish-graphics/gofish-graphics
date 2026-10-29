@@ -15,7 +15,7 @@ import type {
   ConstraintPosScales,
   ConstraintRef,
 } from "./shared";
-import { axisIndex, keyOf } from "./shared";
+import { axisIndex, type KeyOf } from "./shared";
 
 /**
  * Spread the children out along `axis` so they stop covering each other,
@@ -69,6 +69,7 @@ export const isOverlapConstraint = (
 export function applyOverlapPlacement(
   constraint: OverlapConstraint,
   targets: Map<string, Placeable>,
+  keyOf: KeyOf,
   posScales?: ConstraintPosScales
 ): void {
   const free = axisIndex(constraint.axis);

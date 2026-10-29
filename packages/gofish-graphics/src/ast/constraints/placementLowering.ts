@@ -24,10 +24,10 @@ import { isPositionInterval, lowerPositionPlacement } from "./position";
 import {
   axisIndex,
   axisName,
-  keyOf,
   placementKey,
   type Axis,
   type ConstraintPosScales,
+  type KeyOf,
 } from "./shared";
 import { pxOf, type AxisMap } from "../domain";
 import type { AnchorProgram } from "./placementFacts";
@@ -77,16 +77,17 @@ class PlacementOwnershipPlan {
   constructor(
     targets: Map<string, Placeable>,
     constraints: PlacementConstraint[],
+    private readonly keyOf: KeyOf,
     posScales: ConstraintPosScales | undefined,
     sizes: [number, number],
     dataPositioned?: [Set<string>, Set<string>]
   ) {
     this.sizes = sizes;
     this.dataPositionedSet = dataPositioned ?? [new Set(), new Set()];
-    for (const [name, target] of targets) {
+    for (const [key, target] of targets) {
       for (const axis of AXIS_INDICES) {
         if (target.dims[axis].min !== undefined)
-          this.initiallyPlaced.add(placementKey(axisName(axis), name));
+          this.initiallyPlaced.add(placementKey(axisName(axis), key));
       }
     }
 
@@ -96,13 +97,13 @@ class PlacementOwnershipPlan {
     }
   }
 
-  isInitiallyPlaced(axis: Axis, name: string): boolean {
-    return this.initiallyPlaced.has(placementKey(axis, name));
+  isInitiallyPlaced(axis: Axis, key: string): boolean {
+    return this.initiallyPlaced.has(placementKey(axis, key));
   }
 
-  isPinned(axis: Axis, name: string): boolean {
-    const key = placementKey(axis, name);
-    return this.initiallyPlaced.has(key) || this.positionPinned.has(key);
+  isPinned(axis: Axis, key: string): boolean {
+    const slot = placementKey(axis, key);
+    return this.initiallyPlaced.has(slot) || this.positionPinned.has(slot);
   }
 
   /** Whether this (node, axis) is anchored to a data (POSITION) scope — its
@@ -110,27 +111,27 @@ class PlacementOwnershipPlan {
    *  it where its own scale puts it (a scatter facet panel). Collected at the
    *  layer boundary (a SPACE/scope fact) and handed in; the ownership plan is the
    *  single authority the align guard consults. */
-  isDataPositioned(axis: 0 | 1, name: string): boolean {
-    return this.dataPositionedSet[axis].has(name);
+  isDataPositioned(axis: 0 | 1, key: string): boolean {
+    return this.dataPositionedSet[axis].has(key);
   }
 
-  shouldPinSelfPlacement(axis: 0 | 1, name: string): boolean {
-    const key = placementKey(axisName(axis), name);
-    return this.initiallyPlaced.has(key) && !this.authoritative.has(key);
+  shouldPinSelfPlacement(axis: 0 | 1, key: string): boolean {
+    const slot = placementKey(axisName(axis), key);
+    return this.initiallyPlaced.has(slot) && !this.authoritative.has(slot);
   }
 
   private notePositionConstraint(
     constraint: PositionConstraint,
     posScales: ConstraintPosScales | undefined
   ): void {
-    for (const child of constraint.children) {
-      if (constraint.override) {
+    const keys = constraint.children.map(this.keyOf);
+    if (constraint.override)
+      for (const key of keys) {
         if (constraint.x !== undefined)
-          this.authoritative.add(placementKey("x", keyOf(child)));
+          this.authoritative.add(placementKey("x", key));
         if (constraint.y !== undefined)
-          this.authoritative.add(placementKey("y", keyOf(child)));
+          this.authoritative.add(placementKey("y", key));
       }
-    }
 
     for (const axis of POSITION_AXES) {
       const idx = axisIndex(axis);
@@ -154,15 +155,14 @@ class PlacementOwnershipPlan {
         );
         if (value === undefined) continue;
       }
-      for (const child of constraint.children) {
-        this.positionPinned.add(placementKey(axis, keyOf(child)));
-      }
+      for (const key of keys) this.positionPinned.add(placementKey(axis, key));
     }
   }
 }
 
 export function lowerPlacementConstraints(
   constraints: PlacementConstraint[],
+  keyOf: KeyOf,
   targets: Map<string, Placeable>,
   sizes: [number, number],
   posScales?: ConstraintPosScales,
@@ -177,15 +177,17 @@ export function lowerPlacementConstraints(
     if (constraint.type !== "position") continue;
     for (const ref of constraint.children) {
       if (!ref) continue;
-      const axes = pinnedByPosition.get(keyOf(ref)) ?? new Set<0 | 1>();
+      const key = keyOf(ref);
+      const axes = pinnedByPosition.get(key) ?? new Set<0 | 1>();
       if (constraint.x !== undefined) axes.add(0);
       if (constraint.y !== undefined) axes.add(1);
-      if (axes.size > 0) pinnedByPosition.set(keyOf(ref), axes);
+      if (axes.size > 0) pinnedByPosition.set(key, axes);
     }
   }
   const ownership = new PlacementOwnershipPlan(
     targets,
     constraints,
+    keyOf,
     posScales,
     sizes,
     dataPositioned
@@ -202,14 +204,14 @@ export function lowerPlacementConstraints(
 
   // A node that self-placed during its own layout is a hard boundary condition,
   // except where an authoritative position constraint explicitly owns the axis.
-  for (const [name] of targets) {
+  for (const [key, target] of targets) {
     for (const axis of AXIS_INDICES) {
-      if (!ownership.shouldPinSelfPlacement(axis, name)) continue;
-      const min = targets.get(name)!.dims[axis].min;
+      if (!ownership.shouldPinSelfPlacement(axis, key)) continue;
+      const min = target.dims[axis].min;
       if (min !== undefined)
         lowerer.pin({
           axis: axisName(axis),
-          target: { name, anchor: "start" },
+          target: { key, anchor: "start" },
           value: min,
           owner: "self-placement",
         });
@@ -226,6 +228,7 @@ export function lowerPlacementConstraints(
         lowerPositionPlacement(constraint, owner, {
           emitter: lowerer,
           targets,
+          keyOf,
           isInitiallyPlaced,
           isDataPositioned,
           resolveCoordinate: resolveAxisCoordinate,
@@ -235,6 +238,7 @@ export function lowerPlacementConstraints(
         lowerAlignPlacement(constraint, owner, {
           emitter: lowerer,
           targets,
+          keyOf,
           posScales,
           isPinned,
           isDataPositioned,
@@ -244,11 +248,12 @@ export function lowerPlacementConstraints(
         lowerDistributePlacement(constraint, owner, {
           emitter: lowerer,
           targets,
+          keyOf,
           isInitiallyPlaced,
         });
         return;
       case "nest":
-        lowerNestPlacement(constraint, owner, lowerer);
+        lowerNestPlacement(constraint, owner, lowerer, keyOf);
         return;
       case "grid":
         lowerGridPlacement(
@@ -256,6 +261,7 @@ export function lowerPlacementConstraints(
           owner,
           sizes,
           lowerer,
+          keyOf,
           gridTracks,
           pinnedByPosition
         );

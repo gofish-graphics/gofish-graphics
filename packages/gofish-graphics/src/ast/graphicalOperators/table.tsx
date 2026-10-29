@@ -4,7 +4,7 @@ import { createNodeOperator } from "../withGoFish";
 import { createOperator } from "../marks/createOperator";
 import { layer } from "./layer";
 import { createGridConstraint } from "../constraints/grid";
-import { SlotOperand } from "../constraints/shared";
+import { childSlots } from "../constraints/shared";
 import { splitEntries, type SplitBy } from "../datumProjection";
 import { fieldNameOf } from "../data";
 import type { OrdinalKey } from "../underlyingSpace";
@@ -62,7 +62,7 @@ const Table = createNodeOperator(
           colHasOrder,
           rowHasOrder,
         },
-        children.map((_, i) => new SlotOperand(node, i))
+        childSlots(node)
       ),
     ]);
 

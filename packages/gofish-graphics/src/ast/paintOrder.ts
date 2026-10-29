@@ -4,7 +4,7 @@
 
 import { GoFishNode } from "./_node";
 import type { GoFishAST } from "./_ast";
-import { resolvedConstraints } from "./_ref";
+import { resolution } from "./_ref";
 import { childNameKey, type ConstraintRef } from "./constraints/shared";
 import { isZOrderConstraint } from "./constraints/zorder";
 import type { ZOrderConstraint } from "./constraints/zorder";
@@ -72,8 +72,8 @@ function resolveZConstraints(layer: GoFishNode): void {
   }
 
   // The nodes each operand names, as `resolveReferences` found them
-  // (`zOperandNodes`), as paths from `layer`.
-  const { z } = resolvedConstraints(layer);
+  // (`ResolvedConstraints.z`), as paths from `layer`.
+  const { z } = resolution(layer);
   const pathsOf = (ref: ConstraintRef): GoFishAST[][] =>
     (z.get(ref) ?? []).map((n) => pathFrom(layer, n));
 

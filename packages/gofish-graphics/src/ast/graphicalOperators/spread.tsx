@@ -12,7 +12,7 @@ import { createNodeOperator } from "../withGoFish";
 import { Alignment } from "./alignment";
 import { layer } from "./layer";
 import { Constraint } from "../constraints";
-import { axisName, SlotOperand, type AlignAnchor } from "../constraints/shared";
+import { axisName, childSlots, type AlignAnchor } from "../constraints/shared";
 import { createOperator } from "../marks/createOperator";
 import { Mark, MarkChild, Operator } from "../types";
 import type { FieldExpr } from "../fieldExpr";
@@ -172,7 +172,7 @@ export const Spread = createNodeOperator(
       const alignAxis = axisName((1 - stackDir) as Direction);
       const stackAxis = axisName(stackDir);
       await node.relate(() => {
-        const refs = childList.map((_, i) => new SlotOperand(node, i));
+        const refs = childSlots(node);
         // The cross-axis align: it shares the frame (unions the children's
         // domain) and, for free children (bars), commits a baseline. A
         // self-positioned child (a scatter facet) is left alone by `align`

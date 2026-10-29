@@ -113,15 +113,15 @@ export class PlacementProgramLowerer implements PlacementFactEmitter {
     return this.anchorProgram.axes[axisIndex(axis)];
   }
 
-  private target(name: string): Placeable | undefined {
-    return this.targets.get(name);
+  private target(key: string): Placeable | undefined {
+    return this.targets.get(key);
   }
 
   pin(request: PlacementPinRequest): void {
-    if (!this.target(request.target.name)) return;
+    if (!this.target(request.target.key)) return;
     this.anchorFacts(request.axis).push({
       type: "anchor-pin",
-      node: request.target.name,
+      node: request.target.key,
       axis: request.axis,
       anchor: request.target.anchor,
       value: request.value,
@@ -130,10 +130,10 @@ export class PlacementProgramLowerer implements PlacementFactEmitter {
   }
 
   include(request: PlacementParticipantRequest): void {
-    if (!this.target(request.name)) return;
+    if (!this.target(request.key)) return;
     this.anchorFacts(request.axis).push({
       type: "anchor-participant",
-      node: request.name,
+      node: request.key,
       axis: request.axis,
       owner: request.owner,
       origin: request.origin,
@@ -141,13 +141,12 @@ export class PlacementProgramLowerer implements PlacementFactEmitter {
   }
 
   relate(request: PlacementRelationRequest): void {
-    if (!this.target(request.from.name) || !this.target(request.to.name))
-      return;
+    if (!this.target(request.from.key) || !this.target(request.to.key)) return;
     this.anchorFacts(request.axis).push({
       type: "anchor-relation",
       axis: request.axis,
-      from: { node: request.from.name, anchor: request.from.anchor },
-      to: { node: request.to.name, anchor: request.to.anchor },
+      from: { node: request.from.key, anchor: request.from.anchor },
+      to: { node: request.to.key, anchor: request.to.anchor },
       gap: request.gap,
       owner: request.owner,
       chain: request.chain,
@@ -155,10 +154,10 @@ export class PlacementProgramLowerer implements PlacementFactEmitter {
   }
 
   pinSize(request: PlacementSizePinRequest): void {
-    if (!this.target(request.name)) return;
+    if (!this.target(request.key)) return;
     this.anchorFacts(request.axis).push({
       type: "size-pin",
-      node: request.name,
+      node: request.key,
       axis: request.axis,
       value: request.value,
       owner: request.owner,

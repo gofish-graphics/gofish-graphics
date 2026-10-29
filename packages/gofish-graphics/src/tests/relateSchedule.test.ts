@@ -12,12 +12,8 @@ import { layer } from "../ast/graphicalOperators/layer";
 import { Rect as rect } from "../ast/shapes/rect";
 import { ref } from "../ast/shapes/ref";
 import { enclose } from "../lib";
-import {
-  Constraint,
-  scheduleRelate,
-  relateScheduleForLayout,
-} from "../ast/constraints";
-import { resolveReferences, resolvedConstraints } from "../ast/_ref";
+import { Constraint, scheduleRelate } from "../ast/constraints";
+import { resolveReferences, resolution } from "../ast/_ref";
 
 declare const process: { exit(code: number): never };
 
@@ -41,7 +37,7 @@ async function schedule(node: any) {
   resolveReferences(node);
   return {
     node,
-    order: scheduleRelate(node, resolvedConstraints(node).operands),
+    order: scheduleRelate(node, resolution(node).operands),
   };
 }
 
@@ -103,32 +99,39 @@ console.log("# scheduleRelate: ties go to the step declared first");
   );
 }
 
-console.log("# relateScheduleForLayout: reuse the resolve-pass schedule");
+console.log("# resolution: one stamp over the children and the constraints");
 {
   const { node } = await schedule(
     (layer as any)([(rect as any)({ w: 10, h: 10 }).name("a")]).relate(
       ({ a }: any) => [enclose({}, [a])]
     )
   );
-  resolveReferences(node);
-  const operands = resolvedConstraints(node).operands;
-  const stored = node._relateSchedule?.schedule;
+  const stored = resolution(node).schedule;
   check(
-    "resolveReferences stores the schedule and layout reuses it",
-    stored !== undefined && relateScheduleForLayout(node, operands) === stored
+    "resolveReferences keeps the schedule with the operands",
+    stored !== undefined && same([...stored.clauses], [1])
   );
   node.children = [...node.children];
   check(
-    "an unchanged list of children still reuses it",
-    relateScheduleForLayout(node, operands) === stored
+    "an unchanged list of children still reads the same resolution",
+    resolution(node).schedule === stored
   );
-  // A pass that wraps a child (elaboration) replaces it in its slot; the
-  // slot stays a clause, since the layer records its clauses by slot.
+  // A pass that wraps a child (elaboration) replaces it in its slot: the
+  // resolution is stale until the next round, and reading it throws.
   const wrapped = await (layer as any)([node.children[1]]);
   node.children = [node.children[0], wrapped];
-  const fresh = relateScheduleForLayout(node, operands);
+  wrapped.parent = node;
+  let threw = false;
+  try {
+    resolution(node);
+  } catch {
+    threw = true;
+  }
+  check("a child replaced in its slot makes the resolution stale", threw);
+  resolveReferences(node);
+  const fresh = resolution(node).schedule;
   check(
-    "a child replaced in its slot gets a fresh schedule, still a clause",
+    "the next round gives a fresh schedule, still a clause",
     fresh !== stored && same([...fresh.clauses], [1]),
     JSON.stringify([...fresh.clauses])
   );

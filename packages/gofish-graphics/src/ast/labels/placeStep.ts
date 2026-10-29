@@ -26,7 +26,7 @@
 import type { Placeable } from "../_node";
 import type { GoFishRef } from "../_ref";
 import { rawPlaceable } from "../axisDirection";
-import { keyOf, type ConstraintRef } from "../constraints/shared";
+import { type ConstraintRef, type KeyOf } from "../constraints/shared";
 import { placedOutlines as outlinesAt, type Outline } from "../geometry";
 import {
   around,
@@ -166,6 +166,7 @@ export type HiddenLabels = Map<string, { hidden: number; total: number }>;
 export function applyLabelPlacement(
   constraint: LabelPlaceConstraint,
   targets: Map<string, Placeable>,
+  keyOf: KeyOf,
   sizes: [number, number]
 ): void {
   if (constraint.items.length === 0) return;

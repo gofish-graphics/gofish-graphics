@@ -21,7 +21,7 @@ import { createNodeOperator } from "../withGoFish";
 import { Constraint, PositionRegion } from "../constraints";
 import { enclosingCell, type ColumnDatum } from "../constraints/position";
 import { isStruct, structBin, type StructExpr } from "../structExpr";
-import { axisName, SlotOperand } from "../constraints/shared";
+import { axisName, childSlots } from "../constraints/shared";
 import { layer } from "./layer";
 import type { Alignment } from "./alignment";
 
@@ -220,7 +220,7 @@ const PartitionNode = createNodeOperator(
         (axis) => regions[0]?.spans[axis] === undefined
       );
       await node.relate(() => {
-        const refs = children.map((_, i) => new SlotOperand(node, i));
+        const refs = childSlots(node);
         return [
           ...refs.map((ref, i) =>
             Constraint.position({ region: regions[i] }, [ref])

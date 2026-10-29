@@ -107,7 +107,7 @@ export type ChartOptions = {
  * names registered *inside* a `createMark` component (a child with
  * `_isComponent === true`) are internal to that component and not selectable
  * from outside. Both this registry and string-name lookup
- * (`resolveScopedName`) ride the single bounded walk `visibleNodes` in
+ * (`lookupName`) ride the single bounded walk `visibleNodes` in
  * _ref.tsx, so the component boundary means the same thing for both — the
  * walk does not descend into a
  * component child's subtree, but the component child's OWN

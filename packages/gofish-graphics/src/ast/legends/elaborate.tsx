@@ -180,7 +180,7 @@ export async function legendColorbar(
   ])) as GoFishNode;
 
   await root.relate(() => {
-    const at = (node: GoFishNode) => slotOf(root, node);
+    const at = slotOf(root);
     const cs: any[] = [];
     // Bands: centered in the bar column (x), pinned by their bottom edge at
     // their slice's low value (y) and stacked bottom→top to fill the bar.

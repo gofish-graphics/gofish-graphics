@@ -43,22 +43,23 @@ import { fromFrameStart, orientView, rawPlaceable } from "../axisDirection";
 import type { RigidAttachment } from "../constraints/placementSolver";
 import {
   applyConstraints,
-  type ResolvedOperand,
   collectPositionDomains,
   gridSpaces,
   resolveGridTracks,
   gridCellSizeByKey,
   gridTracksFromSizes,
-  relateScheduleForLayout,
   type ConstraintSpec,
   type ZOrderConstraint,
 } from "../constraints";
-import { GoFishRef, resolvedConstraints } from "../_ref";
+import {
+  GoFishRef,
+  resolution,
+  type ResolvedConstraints,
+  type ResolvedOperand,
+} from "../_ref";
 import { applyRelationalZBelowDefaults } from "../constraints/relationalPaint";
 import {
   axisIndex,
-  buildChildIndex,
-  keyOf,
   type ConstraintPosScales,
   type FreeOrigin,
 } from "../constraints/shared";
@@ -128,7 +129,8 @@ const outlined = (
       };
 
 /** Whether `node` is a ring of chrome (`GoFishNode.chrome`): a layer whose
- *  first child is the ring inside it and whose other children are chrome. */
+ *  first child is the ring inside it and whose other children are chrome.
+ *  (Not every `_transparent` wrapper: a label ring's labels are no chrome.) */
 const isRing = (node: GoFishNode): boolean => {
   for (let o: GoFishNode | undefined = node; o !== undefined; o = o.parent)
     if (o.chrome?.rings.includes(node)) return true;
@@ -225,10 +227,6 @@ export const layer = createNodeOperatorSequential(
     // the ones the union leaves out (`placed`), and, on an axis no
     // constraint fold composes, every child a constraint places there.
     const claimPlaced: [Set<number>, Set<number>] = [new Set(), new Set()];
-    // The constraints' operands by key, as the last `resolveReferences`
-    // round resolved them: the claim walk and layout both read them.
-    const constraintOperands = (): Map<string, ResolvedOperand> =>
-      resolvedConstraints(node).operands;
     // Per axis, the children that are ink there (`placeByClaims`): they
     // draw, but take no room in the claim, nor in the box.
     const inkChildren: [Set<number>, Set<number>] = [new Set(), new Set()];
@@ -299,34 +297,41 @@ export const layer = createNodeOperatorSequential(
     const placeChildren = (
       axis: 0 | 1,
       extents: Size<Extent | undefined>[],
-      placed: (Placement | undefined)[]
-    ) =>
-      placeByClaims(
+      placed: (Placement | undefined)[],
+      candidates: Set<number>
+    ) => {
+      const { operands, keyOf } = resolution(node);
+      return placeByClaims(
         axis,
         claimChildren(axis, extents, placed),
         node.constraints,
-        constraintOperands(),
-        claimPlaced[axis],
-        nestedPlacement(axis)
+        operands,
+        keyOf,
+        candidates,
+        nestedPlacement(axis, operands)
       );
-    // Where an operand nested in a child lands in this layer's frame.
-    const nestedPlacement = (axis: 0 | 1) => (key: string) => {
-      const op = constraintOperands().get(key);
-      return op !== undefined && op.node instanceof GoFishNode
-        ? placementIn(op.node, node, axis)
-        : undefined;
     };
+    // Where an operand nested in a child lands in this layer's frame.
+    const nestedPlacement =
+      (axis: 0 | 1, operands: Map<string, ResolvedOperand>) =>
+      (key: string) => {
+        const op = operands.get(key);
+        return op !== undefined && op.node instanceof GoFishNode
+          ? placementIn(op.node, node, axis)
+          : undefined;
+      };
     // How this layer seats its children (`ClaimWalk.seating`), read once
     // for the operands it was read from.
     let seatingMemo:
       | {
-          of: Map<string, ResolvedOperand>;
+          of: ResolvedConstraints;
           seating: ReturnType<NonNullable<GoFishNode["claimWalk"]>["seating"]>;
         }
       | undefined;
     const seating = () => {
-      const operands = constraintOperands();
-      if (seatingMemo?.of === operands) return seatingMemo.seating;
+      const resolved = resolution(node);
+      if (seatingMemo?.of === resolved) return seatingMemo.seating;
+      const { operands, keyOf } = resolved;
       const operandKey = new Map<number, string>();
       for (const [key, op] of operands)
         if (op.direct && !operandKey.has(op.child))
@@ -356,8 +361,14 @@ export const layer = createNodeOperatorSequential(
         index = new Map(node.children.map((c, j) => [c, j]));
         return index.get(child) ?? -1;
       };
-      seatingMemo = { of: operands, seating: { indexOf, operandKey, acting } };
-      return seatingMemo.seating;
+      const fresh = {
+        indexOf,
+        operandKey,
+        acting,
+        seats: literalSeats(node.constraints, keyOf),
+      };
+      seatingMemo = { of: resolved, seating: fresh };
+      return fresh;
     };
     // Whether a child of this layer's own set takes whatever room the layer
     // is given on `axis` (it claims none, as a rect with no size does).
@@ -411,7 +422,7 @@ export const layer = createNodeOperatorSequential(
       // type and claim flow through the union, and `inner = outer − 2p` is
       // purely a layout-time proposal. When inner isn't continuous,
       // `nestedSpace` leaves outer as-is and the proposal handles sizing.
-      const nestPlan = buildNestPlan(childNodes, constraints);
+      const nestPlan = buildNestPlan(childNodes, constraints, resolution(node));
       const effectiveChildren = applyNestSpacePlan(children, nestPlan);
 
       // `position` constraints contribute a POSITION-domain fragment per
@@ -427,11 +438,11 @@ export const layer = createNodeOperatorSequential(
       // the ring's sharing puts in a set of its own) positions it in the
       // layer's frame but is no part of the type the layer reports, so a
       // chart's chrome never re-types it (#1170).
-      const childIndex = buildChildIndex(childNodes);
+      const { operands, keyOf } = resolution(node);
       const posDomains = collectPositionDomains(constraints, (c, axis) =>
         c.children.every((r) => {
-          const i = childIndex.get(keyOf(r));
-          return i === undefined || sharing.sets[axis][i] === 0;
+          const op = operands.get(keyOf(r));
+          return op?.direct !== true || sharing.sets[axis][op.child] === 0;
         })
       );
       // The children the layer's own union leaves out on each axis: those
@@ -458,7 +469,11 @@ export const layer = createNodeOperatorSequential(
       // distribute fold on the distribute axis, the alignment fold on the
       // cross axis); the claim hook folds their claims the same way. A sized
       // layer maps the folded type into its box, exactly like spread.
-      const plan = planConstraintComposition(constraints, childNodes);
+      const plan = planConstraintComposition(
+        constraints,
+        childNodes,
+        resolution(node)
+      );
       const composed =
         plan !== undefined
           ? composePlanSpaces(plan, effectiveChildren)
@@ -511,7 +526,7 @@ export const layer = createNodeOperatorSequential(
         // nests the content on its axis: the layer's size is a magnitude in
         // its parent's unit, and the content is a second frame inside it.
         resolveSharing: (childNodes, constraints) => {
-          const plan = planSharing(constraints, childNodes);
+          const plan = planSharing(constraints, childNodes, resolution(node));
           for (const axis of [0, 1] as const)
             if (isValue(dims[axis].size))
               childNodes.forEach((_, i) => plan.nested[axis].add(i));
@@ -575,7 +590,7 @@ export const layer = createNodeOperatorSequential(
             options.transform?.scale?.x ?? 1,
             options.transform?.scale?.y ?? 1,
           ];
-          const operands = constraintOperands();
+          const { operands, keyOf } = resolution(node);
           // A stand-in the claim walk places on an axis: the constraints
           // seat what is related to it where its target lands, so a fold
           // that starts its children at the layer's origin does not hold.
@@ -609,7 +624,7 @@ export const layer = createNodeOperatorSequential(
               modes[axis] === "placed"
                 ? new Set([
                     ...t.placed[axis],
-                    ...constrainedOn(axis, node.constraints, operands),
+                    ...constrainedOn(axis, node.constraints, operands, keyOf),
                     ...fromRefs,
                   ])
                 : t.placed[axis];
@@ -625,7 +640,8 @@ export const layer = createNodeOperatorSequential(
             const p = placeChildren(
               axis,
               effectiveExtents,
-              placedStandIns[axis]
+              placedStandIns[axis],
+              claimPlaced[axis]
             );
             placements[axis] = p;
             inkChildren[axis] = p.ink;
@@ -886,10 +902,16 @@ export const layer = createNodeOperatorSequential(
           // authoritative PLACEMENT tracks are recomputed from the actual
           // laid-out cell sizes after the child loop (`gridTracksFromSizes`), so
           // cell centers pin to the real geometry.
+          // Every reference as the last `resolveReferences` round resolved
+          // it: each placement operand, by key (it threw on a missing,
+          // ambiguous, or out-of-layer operand, #819), and the order of the
+          // drawing clauses.
+          const { operands, keyOf, schedule: relateOrder } = resolution(node);
           const gridC = selectGridConstraint(node.constraints);
           const gridCellByKey = gridC
             ? gridCellSizeByKey(
                 gridC,
+                keyOf,
                 resolveGridTracks(
                   gridC,
                   node.children,
@@ -992,6 +1014,7 @@ export const layer = createNodeOperatorSequential(
           // laid out in: an interval it is pinned across, or its cell (#1059).
           const spanByKey = buildChildSpans(
             node.constraints,
+            keyOf,
             effectivePosScales
           );
 
@@ -1062,12 +1085,9 @@ export const layer = createNodeOperatorSequential(
 
           const layoutPlan = buildLayerConstraintLayoutPlan(
             node.children,
-            node.constraints
+            node.constraints,
+            { operands, keyOf }
           );
-          // Every placement operand resolved to a node inside this layer, by
-          // key (`resolveReferences` threw on a missing, ambiguous, or
-          // out-of-layer operand, #819).
-          const operands = constraintOperands();
           // A child skips phase-1 baseline placement only when a positioning
           // operand names the child itself. A nested operand does not: it is
           // a fixed reference into its container, which stays where its own
@@ -1079,12 +1099,11 @@ export const layer = createNodeOperatorSequential(
             if (op?.direct) constrainedChildren.add(op.child);
           }
           // Drawing clauses of `.relate()` run in dependency order around the
-          // solve: a clause that reads positions lays out after the solve
-          // that writes them (#878). Plain children lay out before it, as
-          // always.
-          const relateOrder = relateScheduleForLayout(node, operands);
+          // solve (`relateOrder`): a clause that reads positions lays out
+          // after the solve that writes them (#878). Plain children lay out
+          // before it, as always.
           // Where a literal position pins each child's origin, read once.
-          const literalSeatsByKey = literalSeats(node.constraints);
+          const literalSeatsByKey = literalSeats(node.constraints, keyOf);
 
           const layoutChild = (i: number) => {
             const child = children[i];
@@ -1286,10 +1305,10 @@ export const layer = createNodeOperatorSequential(
               new Set(),
               new Set(),
             ];
-            for (const [name, cp] of keyToPlaceable) {
+            for (const [key, cp] of keyToPlaceable) {
               const childSpace = (cp as GoFishNode)._underlyingSpace;
               if (childSpace === undefined) continue;
-              const i = childOfKey.get(name)!;
+              const i = childOfKey.get(key)!;
               for (const axis of [0, 1] as const) {
                 const s = childSpace[axis];
                 const shares = sharing.sets[axis][i] === 0;
@@ -1299,7 +1318,7 @@ export const layer = createNodeOperatorSequential(
                   isCONTINUOUS(s) &&
                   s.origin !== "free"
                 )
-                  dataPositioned[axis].add(name);
+                  dataPositioned[axis].add(key);
               }
             }
 
@@ -1309,19 +1328,20 @@ export const layer = createNodeOperatorSequential(
             // the parts of the plot by their plots, and places one of these
             // past the whole box of what it dresses (#1032).
             const apart: [Set<string>, Set<string>] = [new Set(), new Set()];
-            for (const [name] of keyToPlaceable) {
-              const i = childOfKey.get(name)!;
+            for (const key of keyToPlaceable.keys()) {
+              const i = childOfKey.get(key)!;
               for (const axis of [0, 1] as const)
                 if (
                   (ring && i > 0) ||
                   inkChildren[axis].has(i) ||
                   dressingChildren[axis].has(i)
                 )
-                  apart[axis].add(name);
+                  apart[axis].add(key);
             }
 
             applyConstraints(
               node.constraints,
+              keyOf,
               keyToPlaceable,
               size,
               effectivePosScales,
@@ -1438,7 +1458,6 @@ export const layer = createNodeOperatorSequential(
     node.claimWalk = {
       ink: inkChildren,
       dressing: dressingChildren,
-      operands: constraintOperands,
       seating,
       literalStart: [0, 1].map((axis) => {
         const min = dims[axis].min;
@@ -1446,7 +1465,12 @@ export const layer = createNodeOperatorSequential(
       }) as [number, number],
       ownScope: [dims[0].size !== undefined, dims[1].size !== undefined],
       placeChildren: (axis, extents) =>
-        placeChildren(axis, extents, standInPlacements(axis)),
+        placeChildren(
+          axis,
+          extents,
+          standInPlacements(axis),
+          claimPlaced[axis]
+        ),
       // Memoized with the claims it reads. The claim hook's own placement
       // is not reused: it places the nest-adjusted claims, and only on an
       // axis the claim walk places children on.
@@ -1455,17 +1479,11 @@ export const layer = createNodeOperatorSequential(
         if (memo[axis] === "busy") return undefined;
         if (memo[axis] !== undefined) return memo[axis];
         memo[axis] = "busy";
-        const boxes = placeByClaims(
+        const boxes = placeChildren(
           axis,
-          claimChildren(
-            axis,
-            node.children.map((c) => c.resolveExtent()),
-            standInPlacements(axis)
-          ),
-          node.constraints,
-          constraintOperands(),
-          new Set(),
-          nestedPlacement(axis)
+          node.children.map((c) => c.resolveExtent()),
+          standInPlacements(axis),
+          new Set()
         ).boxes();
         memo[axis] = boxes;
         return boxes;
