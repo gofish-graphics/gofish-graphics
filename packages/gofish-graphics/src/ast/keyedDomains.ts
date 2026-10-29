@@ -34,7 +34,7 @@ import { unitKey } from "./measure";
 export type KeyedNode = {
   readonly uid: string;
   type: string;
-  children: unknown[];
+  children: readonly unknown[];
   _underlyingSpace?: Size<UnderlyingSpace>;
   /** Set on a coordinate transform: the space it opens for its subtree. */
   _space?: unknown;

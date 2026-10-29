@@ -381,9 +381,23 @@ export function resolveOptions(raw: Record<string, any>): Record<string, any> {
  *  `undefined`/`{}`, reproducing the pre-array-form suppression behavior. */
 export function mapOperator(
   op: OperatorSpec,
-  bridge?: DeriveBridge,
-  resolveToken: TokenResolver = makeTokenResolver()
+  bridge?: DeriveBridge
 ): Operator<any, any> | null {
+  return operatorFromIR(op, {
+    bridge,
+    resolveToken: makeTokenResolver(),
+    tables: {},
+  });
+}
+
+/** {@link mapOperator} inside a document: a `.label()` call's held nodes
+ *  (`avoiding`) are rebuilt in `ctx`, as a mark's are, so an operand of an
+ *  enclosing `.relate()` there is the one that call bound. */
+function operatorFromIR(
+  op: OperatorSpec,
+  ctx: IRContext
+): Operator<any, any> | null {
+  const { bridge } = ctx;
   const { type, translate, label, ...opts } = op as Record<string, any>;
   let operator = rebuild("operator", type as string, unwrapOpts(opts, bridge), {
     bridge,
@@ -403,9 +417,7 @@ export function mapOperator(
       operator = (operator as any).label(
         accessor,
         Object.keys(labelOpts).length > 0
-          ? resolveHeldNodes(Frontend.LABEL_OPTIONS, labelOpts, {
-              resolveToken,
-            })
+          ? resolveHeldNodes(Frontend.LABEL_OPTIONS, labelOpts, ctx)
           : undefined
       );
     }
@@ -785,7 +797,7 @@ function chartFromIR(chartSpec: ChartSpec, ctx: IRContext): ChartBuilder<any> {
       operators.push(mapMark(opSpec as MarkSpec, ctx) as any);
       continue;
     }
-    const op = mapOperator(opSpec, ctx.bridge, ctx.resolveToken);
+    const op = operatorFromIR(opSpec, ctx);
     if (op) operators.push(op);
   }
   const mark = mapMark(chartSpec.mark, ctx);

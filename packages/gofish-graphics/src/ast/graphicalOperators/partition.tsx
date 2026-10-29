@@ -219,17 +219,15 @@ const PartitionNode = createNodeOperator(
       const free = ([0, 1] as const).filter(
         (axis) => regions[0]?.spans[axis] === undefined
       );
-      await node.relate(() => {
-        const refs = childSlots(node);
-        return [
-          ...refs.map((ref, i) =>
-            Constraint.position({ region: regions[i] }, [ref])
-          ),
-          ...free.map((axis) =>
-            Constraint.align({ [axisName(axis)]: alignment }, refs)
-          ),
-        ];
-      });
+      const refs = childSlots(node);
+      await node.INTERNAL_relate([
+        ...refs.map((ref, i) =>
+          Constraint.position({ region: regions[i] }, [ref])
+        ),
+        ...free.map((axis) =>
+          Constraint.align({ [axisName(axis)]: alignment }, refs)
+        ),
+      ]);
     };
     if (axes !== undefined) node._axisOverride = axisOverrideOf(axes);
     return node;

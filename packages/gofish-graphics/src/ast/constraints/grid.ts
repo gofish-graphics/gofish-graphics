@@ -382,7 +382,7 @@ export function lowerGridPlacement(
  */
 export function gridSpaces(
   c: GridConstraint,
-  cells: GoFishAST[]
+  cells: readonly GoFishAST[]
 ): [UnderlyingSpace, UnderlyingSpace] {
   const keyAt = (i: number): OrdinalKey | undefined =>
     cells[i] instanceof GoFishNode ? (cells[i] as GoFishNode).key : undefined;

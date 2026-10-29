@@ -13,14 +13,12 @@ import * as Interval from "../../util/interval";
 import type { Cell, RegionCell } from "../cells";
 import type { PlacementFactEmitter } from "./placementFacts";
 import {
-  SlotOperand,
   type AlignAnchor,
   type Axis,
   type ConstraintRef,
   type KeyOf,
 } from "./shared";
 import type { GoFishNode } from "../_node";
-import { resolution } from "../_ref";
 
 /** The **interval** form of a position coordinate: pin the target's `start`
  *  (min) edge at `[0]` and its `end` (max) edge at `[1]`, letting the two edges
@@ -141,16 +139,12 @@ export class PositionRegion {
 // cells cost O(N²); a name→region map recorded by partition would make it
 // O(depth). Matters only for plane partitions of thousands of cells.
 export function enclosingCell(node: GoFishNode): PositionRegion | undefined {
-  // A partition's region operand is its slot handle, which names its child
-  // before the round resolves the references (the partitions run top-down,
-  // in the pass before it). A name operand (a user's `.relate()`) is read as
-  // the last round resolved it.
+  // An operand is a handle on the nodes it means, so it is read directly:
+  // this runs from the partitions' pass, before the round resolves the
+  // references.
   for (let at = node; at.parent !== undefined; at = at.parent) {
     const parent = at.parent;
-    const means = (ref: ConstraintRef) =>
-      ref instanceof SlotOperand
-        ? ref.child(parent) === at
-        : resolution(parent).keyOf(ref) === at.uid;
+    const means = (ref: ConstraintRef) => ref.means(parent).includes(at);
     for (const c of parent.constraints) {
       if (c.type !== "position" || c.region === undefined) continue;
       if (c.children.some(means)) return c.region;

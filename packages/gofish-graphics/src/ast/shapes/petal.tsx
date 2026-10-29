@@ -68,7 +68,7 @@ export const Petal = ({
       // },
       resolveUnderlyingSpace: (
         _children: Size<UnderlyingSpace>[],
-        _childNodes: GoFishAST[]
+        _childNodes: readonly GoFishAST[]
       ) => {
         return [
           pointOrMagnitude(dims[0].min, dims[0].size),

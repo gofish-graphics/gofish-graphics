@@ -544,11 +544,15 @@ export function contentOf(node: GoFishAST): GoFishAST {
  * Every name inside `layer`, with the nodes it means from `layer`: the
  * matches at the closest depth below it, as {@link lookupName} finds them
  * at `layer`'s level, all names in one walk. A `.relate()` call binds its
- * operands to these (`relateEnv`).
+ * operands to these (`relateEnv`). The layer's own drawing clauses are not
+ * inside it in this sense: a `.relate()` call replaces them, so it binds
+ * the names of the layer's other children.
  */
 export function namesIn(layer: GoFishNode): Map<string, GoFishAST[]> {
   const found = new Map<string, { depth: number; nodes: GoFishAST[] }>();
-  let frontier = layer.children.map(contentOf);
+  let frontier = layer.children
+    .filter((_, i) => !layer._relateClauses.has(i))
+    .map(contentOf);
   for (let depth = 0; frontier.length > 0; depth++) {
     const next: GoFishAST[] = [];
     for (const n of frontier) {
@@ -696,8 +700,9 @@ export type ResolvedOperand = {
  *  references to (read with {@link resolution}). Its stamp is the
  *  constraints and the children it was resolved from. */
 export type ResolvedConstraints = {
-  constraints: readonly ConstraintSpec[];
-  children: readonly GoFishAST[];
+  /** The node's `_version` when the round resolved it: a later change to
+   *  its children or constraints makes this resolution stale. */
+  version: number;
   /** Every placement operand's node, by its key (the node's `uid`). */
   operands: Map<string, ResolvedOperand>;
   /** The key of each placement operand (see `KeyOf`). */
@@ -741,6 +746,15 @@ function resolveIn(root: GoFishAST, round: Round): void {
       : undefined;
 }
 
+/** The resolution of a node with no constraints and no clauses. */
+const NOTHING_RESOLVED: ResolvedConstraints = {
+  version: -1,
+  operands: new Map(),
+  keyOf: (ref) => noKey(ref),
+  z: new Map(),
+  schedule: { clauses: new Set(), beforeSolve: [], afterSolve: [] },
+};
+
 /** The key of an operand no resolution holds. */
 const noKey: KeyOf = (ref) => {
   throw new Error(
@@ -756,20 +770,8 @@ export function resolution(node: GoFishNode): ResolvedConstraints {
   const r = node._resolved;
   if (r === undefined) {
     if (node.constraints.length === 0 && node._relateClauses.size === 0)
-      return {
-        constraints: node.constraints,
-        children: node.children,
-        operands: new Map(),
-        keyOf: noKey,
-        z: new Map(),
-        schedule: { clauses: new Set(), beforeSolve: [], afterSolve: [] },
-      };
-  } else if (
-    r.constraints === node.constraints &&
-    r.children.length === node.children.length &&
-    r.children.every((c, i) => c === node.children[i])
-  )
-    return r;
+      return NOTHING_RESOLVED;
+  } else if (r.version === node._version) return r;
   throw new Error(
     `[gofish] the references of a ${node.type} are not resolved for its ` +
       `current constraints and children (resolveReferences must run after ` +
@@ -882,8 +884,7 @@ function resolveConstraints(layer: GoFishNode): ResolvedConstraints {
   // now: a cycle would otherwise recurse forever in the space pass (a ref
   // proxies its target's space, and a cyclic target contains the ref).
   return {
-    constraints: layer.constraints,
-    children: layer.children.slice(),
+    version: layer._version,
     operands,
     keyOf,
     z,
@@ -916,10 +917,18 @@ function aliasTarget(
   if (!(handle instanceof GoFishRef)) return handle;
   if (handle !== from) handle.resolveTarget(round);
   const target = handle.targetNode;
-  if (!target)
-    throw new Error(
-      `ref("${String(from.selection)}") names a ref that points at nothing.`
-    );
+  if (!target) {
+    // A handle ref has no selection: describe it by the node it holds,
+    // which is `handle`.
+    const name = childNameKey(handle);
+    const what =
+      from.selection !== undefined
+        ? `ref("${String(from.selection)}")`
+        : name !== undefined
+          ? `a ref to "${name}"`
+          : "a ref";
+    throw new Error(`${what} names a ref that points at nothing.`);
+  }
   return target;
 }
 

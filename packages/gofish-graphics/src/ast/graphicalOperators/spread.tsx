@@ -171,33 +171,31 @@ export const Spread = createNodeOperator(
       const stackDir = resolveAxisName(inner, dirName, `spread({ dir })`);
       const alignAxis = axisName((1 - stackDir) as Direction);
       const stackAxis = axisName(stackDir);
-      await node.relate(() => {
-        const refs = childSlots(node);
-        // The cross-axis align: it shares the frame (unions the children's
-        // domain) and, for free children (bars), commits a baseline. A
-        // self-positioned child (a scatter facet) is left alone by `align`
-        // automatically — the placement solver reads the child's abstract
-        // placement, so no guard flag.
-        return [
-          Constraint.align({ [alignAxis]: alignment }, refs),
-          Constraint.distribute(
-            {
-              dir: stackAxis,
-              spacing: glue ? 0 : spacing,
-              anchor,
-              glue,
-              order: reverse ? "reverse" : "forward",
-              origin: origin && { ...origin, part: refs[origin.part] },
-              // The grouping field for this (stack) axis → the ORDINAL
-              // space's measure, so a spread-by-category axis titles itself
-              // off its space.
-              measure: axisMeasures?.[dirName],
-              hasOrder,
-            },
-            refs
-          ),
-        ];
-      });
+      const refs = childSlots(node);
+      // The cross-axis align: it shares the frame (unions the children's
+      // domain) and, for free children (bars), commits a baseline. A
+      // self-positioned child (a scatter facet) is left alone by `align`
+      // automatically — the placement solver reads the child's abstract
+      // placement, so no guard flag.
+      await node.INTERNAL_relate([
+        Constraint.align({ [alignAxis]: alignment }, refs),
+        Constraint.distribute(
+          {
+            dir: stackAxis,
+            spacing: glue ? 0 : spacing,
+            anchor,
+            glue,
+            order: reverse ? "reverse" : "forward",
+            origin: origin && { ...origin, part: refs[origin.part] },
+            // The grouping field for this (stack) axis → the ORDINAL
+            // space's measure, so a spread-by-category axis titles itself
+            // off its space.
+            measure: axisMeasures?.[dirName],
+            hasOrder,
+          },
+          refs
+        ),
+      ]);
       // Tag with stack direction so coord can map axis overrides to polar dims.
       node.axisDir = stackDir;
     };

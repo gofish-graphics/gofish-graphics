@@ -175,7 +175,11 @@ index and in each ancestor's: the nearest depth below that ancestor that has
 the name, and the registries at that depth. So a lookup reads one index
 entry per ancestor and never walks down. The tree lookup has no such index,
 because elaboration renames and wraps nodes after they are built, so it
-searches each level breadth first. So a `layer` repeated per `spread` cell finds its own
+searches each level breadth first. A registry that is thrown away (the one
+the clauses of a replaced `.relate()` call were resolved in) is removed with
+`LayerContext.discard`, which rebuilds each ancestor's index entry for its
+names from that ancestor's own names and its remaining nested registries, so
+no lookup finds the removed names afterwards. So a `layer` repeated per `spread` cell finds its own
 cell's `bars`, and a `selectAll("bars")` outside the spread gathers the bars
 of every cell. A name a split repeats is plural: `selectAll` gathers it, and
 the singular `ref` reports how many marks it matched. Before #1236 each
@@ -187,8 +191,15 @@ inside a cell was invisible outside it.
 `.relate(fn)` calls `fn` right away with an environment
 (`relateEnv` in `constraints/index.ts`). The environment is an ordinary
 object with one operand, a `RelateOperand` bound to the nodes its name
-means, for every distinct name inside the layer. `GoFishNode.relate` passes
-the layer to the callback too. The deserializer's callback keeps the
+means, for every distinct name inside the layer. The layer's own drawing
+clauses are not part of it: a call replaces them, so it binds the names of
+the layer's other children. `GoFishNode.relate` passes the layer to the
+callback too, and hands what the callback returns to its core,
+`INTERNAL_relate`. The core resolves every clause first and only then
+attaches them, so a clause that throws leaves the layer as it was. An
+operator that relates its children by slot (spread, scatter, partition,
+table, a chrome ring) calls the core directly, since it reads no
+environment. The deserializer's callback keeps the
 environment under the wire's scope id, and an operand on the wire is the
 environment's operand for its name (`relateOperandFor` in `fromJSON.ts`).
 The environment walks the same bounded tree as the lookup (`namesIn`), so it
@@ -219,6 +230,10 @@ the tree (`reresolve` in `gofish.tsx`). For each layer with constraints, it
 reads the nodes each operand means (`ConstraintRef.means`) and keeps the
 result on the layer (`ResolvedConstraints`, read through `resolution`): each
 operand's key, the uid of its node, and whether that node is a direct child.
+A node's `children` and `constraints` are replaced, never edited in place
+(`replaceChild` swaps one child), and each replacement bumps the node's
+`_version`. The resolution records the version it was made at, so
+`resolution` tells a stale one in constant time and throws.
 A round looks each (level, name) of a `ref("x")` up once. The operand object
 itself holds no resolution, so one operand may serve several layers. The
 placement solve reads only the key (`keyOf`). The name is kept for error

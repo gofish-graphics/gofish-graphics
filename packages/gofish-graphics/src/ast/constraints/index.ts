@@ -197,12 +197,12 @@ function isOperand(ref: unknown): ref is ConstraintRef {
 
 export function validateOperands(
   specs: ConstraintSpec[],
-  env: RelateEnv
+  layer: GoFishNode
 ): void {
   for (const c of specs) {
     c.children.forEach((ref: ConstraintRef | undefined, i: number) => {
       if (isOperand(ref)) return;
-      const names = Object.keys(env);
+      const names = [...namesIn(layer).keys()];
       throw new Error(
         `Constraint.${c.type}: operand ${i + 1} is ${
           ref === undefined ? "undefined" : JSON.stringify(ref)
@@ -244,7 +244,7 @@ export function validateOperands(
  * ring's ticks, each a set of its own, add nothing to the type it reports.
  */
 export function collectPositionDomains(
-  constraints: ConstraintSpec[],
+  constraints: readonly ConstraintSpec[],
   counts: (c: ConstraintSpec, axis: 0 | 1) => boolean = () => true
 ): PositionDomains {
   const axes = [newAxisDomain(), newAxisDomain()] as const;
@@ -351,7 +351,7 @@ function foldCoordinate(
  *   puts them. The space/scope fact that replaced the `placementOn` guard read.
  */
 export function applyConstraints(
-  constraints: ConstraintSpec[],
+  constraints: readonly ConstraintSpec[],
   keyOf: KeyOf,
   keyToPlaceable: Map<string, Placeable>,
   sizes: [number, number],

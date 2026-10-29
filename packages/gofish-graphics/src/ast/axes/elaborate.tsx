@@ -1714,10 +1714,7 @@ export async function elaborateChrome(
         b.rowEnd = Math.max(b.rowEnd, r.rowEnd);
       }
       below.issues.push(...res.fold.issues);
-      if (res.node !== child) {
-        node.children[i] = res.node;
-        res.node.parent = node;
-      }
+      if (res.node !== child) node.replaceChild(i, res.node);
     }
   }
 

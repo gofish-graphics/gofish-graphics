@@ -538,10 +538,7 @@ async function elaborateLabelsWalk(
     if (child instanceof GoFishNode) {
       const res = await elaborateLabelsWalk(child, held, calls, order);
       if (res.changed) changed = true;
-      if (res.node !== child) {
-        node.children[i] = res.node;
-        res.node.parent = node;
-      }
+      if (res.node !== child) node.replaceChild(i, res.node);
       pending.push(...res.pending);
       below.push(...res.labels);
     }

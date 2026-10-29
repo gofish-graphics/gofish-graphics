@@ -245,7 +245,7 @@ export const coord = createNodeOperator(
         key,
         resolveUnderlyingSpace: (
           children: Size<UnderlyingSpace>[],
-          _childNodes: GoFishAST[]
+          _childNodes: readonly GoFishAST[]
         ) => {
           // A space may DECLARE its own data window per axis (geo's lon/lat
           // box), in which case it replaces the children's union — the window

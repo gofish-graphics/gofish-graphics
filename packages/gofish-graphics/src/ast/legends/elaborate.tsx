@@ -179,49 +179,47 @@ export async function legendColorbar(
     ...tickLabels,
   ])) as GoFishNode;
 
-  await root.relate(() => {
-    const at = slotOf(root);
-    const cs: any[] = [];
-    // Bands: centered in the bar column (x), pinned by their bottom edge at
-    // their slice's low value (y) and stacked bottom→top to fill the bar.
-    // Each band overhangs upward by BAND_OVERLAP; the next band (drawn on
-    // top) covers that overhang, so no sub-pixel seam shows between bands.
-    // (x uses anchor "middle", y uses "start" — separate constraints since
-    // one shared anchor can't do both.)
-    bands.forEach((band, i) => {
-      cs.push(
-        Constraint.position({ x: BAR_WIDTH / 2, anchor: "middle" }, [at(band)])
-      );
-      cs.push(
-        Constraint.position({ y: datum(min + i * bandSpan), anchor: "start" }, [
-          at(band),
-        ])
-      );
-    });
-    // Ticks + labels pinned at their value. x and y are pinned by separate
-    // position constraints so the label can sit start-aligned in x while
-    // staying middle-aligned in y (one shared anchor can't do both).
-    tickValues.forEach((v, i) => {
-      cs.push(
-        Constraint.position(
-          { x: BAR_WIDTH + TICK_MARK_LEN / 2, y: datum(v), anchor: "middle" },
-          [at(tickMarks[i])]
-        )
-      );
-      cs.push(
-        Constraint.position({ y: datum(v), anchor: "middle" }, [
-          at(tickLabels[i]),
-        ])
-      );
-      cs.push(
-        Constraint.position(
-          { x: BAR_WIDTH + TICK_MARK_LEN + BAR_LABEL_GAP, anchor: "start" },
-          [at(tickLabels[i])]
-        )
-      );
-    });
-    return cs;
+  const at = slotOf(root);
+  const cs: any[] = [];
+  // Bands: centered in the bar column (x), pinned by their bottom edge at
+  // their slice's low value (y) and stacked bottom→top to fill the bar.
+  // Each band overhangs upward by BAND_OVERLAP; the next band (drawn on
+  // top) covers that overhang, so no sub-pixel seam shows between bands.
+  // (x uses anchor "middle", y uses "start" — separate constraints since
+  // one shared anchor can't do both.)
+  bands.forEach((band, i) => {
+    cs.push(
+      Constraint.position({ x: BAR_WIDTH / 2, anchor: "middle" }, [at(band)])
+    );
+    cs.push(
+      Constraint.position({ y: datum(min + i * bandSpan), anchor: "start" }, [
+        at(band),
+      ])
+    );
   });
+  // Ticks + labels pinned at their value. x and y are pinned by separate
+  // position constraints so the label can sit start-aligned in x while
+  // staying middle-aligned in y (one shared anchor can't do both).
+  tickValues.forEach((v, i) => {
+    cs.push(
+      Constraint.position(
+        { x: BAR_WIDTH + TICK_MARK_LEN / 2, y: datum(v), anchor: "middle" },
+        [at(tickMarks[i])]
+      )
+    );
+    cs.push(
+      Constraint.position({ y: datum(v), anchor: "middle" }, [
+        at(tickLabels[i]),
+      ])
+    );
+    cs.push(
+      Constraint.position(
+        { x: BAR_WIDTH + TICK_MARK_LEN + BAR_LABEL_GAP, anchor: "start" },
+        [at(tickLabels[i])]
+      )
+    );
+  });
+  await root.INTERNAL_relate(cs);
 
   return root;
 }

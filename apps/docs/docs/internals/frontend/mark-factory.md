@@ -412,7 +412,7 @@ backs `makeRelatableMark` (which adds `.relate()`, and hands the rows the mark
 was called with to `GoFishNode.relate`, so a drawing clause binds them; the
 `layer([...])` combinator keeps the registry it resolved its children in as
 the node's `_names`, so a drawing clause is resolved in a fresh registry
-nested in it) and the
+nested in it, which the call that replaces the clause discards) and the
 combinator marks — one wiring, not three copies. The region-compositing
 combinators share one factory (`makePorterDuffCombinator`), typed by their
 options: only `intersect` takes paint (`fill`, `stroke`, `strokeWidth`,

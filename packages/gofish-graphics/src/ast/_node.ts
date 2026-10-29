@@ -9,7 +9,7 @@
 // Type-only (erased) so no runtime cycle with solver/scopes.ts, which imports
 // RenderSession from here.
 import type { ScopeRegistry } from "./solver/scopes";
-import type { LayerContext } from "./marks/markResult";
+import { LayerContext } from "./marks/markResult";
 import type { SplitBy } from "./datumProjection";
 import {
   Anchor,
@@ -357,7 +357,7 @@ export function placeUnplacedChild(child: Placeable): void {
 export type Layout = (
   size: Size,
   scales: Size<AxisScale | undefined>,
-  children: GoFishAST[],
+  children: readonly GoFishAST[],
   node: GoFishNode
 ) => { intrinsicDims: FancyDims; transform: FancyTransform; renderData?: any };
 
@@ -409,7 +409,7 @@ export type GeometryFn = (
     transform?: Transform;
     renderData?: any;
   },
-  children: GoFishAST[],
+  children: readonly GoFishAST[],
   node: GoFishNode
 ) => Omit<Geometry, "outline"> & Partial<Pick<Geometry, "outline">>;
 
@@ -459,10 +459,10 @@ export const defaultGeometry: GeometryFn = (
 
 export type ResolveUnderlyingSpace = (
   childSpaces: Size<UnderlyingSpace>[],
-  childNodes: (GoFishNode | GoFishRef)[],
+  childNodes: readonly (GoFishNode | GoFishRef)[],
   /** This node's positioning constraints. `position` constraints contribute a
    *  POSITION-domain fragment to the resolved space (see `layer.tsx`). */
-  constraints: ConstraintSpec[]
+  constraints: readonly ConstraintSpec[]
 ) => FancySize<UnderlyingSpace>;
 
 /**
@@ -475,8 +475,8 @@ export type ResolveUnderlyingSpace = (
  * `GOFISH_DUMP_SHARING` prints it.
  */
 export type ResolveSharing = (
-  childNodes: (GoFishNode | GoFishRef)[],
-  constraints: ConstraintSpec[]
+  childNodes: readonly (GoFishNode | GoFishRef)[],
+  constraints: readonly ConstraintSpec[]
 ) => SharingPlan;
 
 /** Every child in the own set on both axes, nothing nested. */
@@ -507,8 +507,8 @@ export type ResolveExtent = (
   childExtents: Size<Extent | undefined>[],
   childSpaces: Size<UnderlyingSpace>[],
   spaces: Size<UnderlyingSpace>,
-  childNodes: (GoFishNode | GoFishRef)[],
-  constraints: ConstraintSpec[]
+  childNodes: readonly (GoFishNode | GoFishRef)[],
+  constraints: readonly ConstraintSpec[]
 ) => Size<Extent | undefined>;
 
 /** Depth of type-hook calls in progress. A claim walk started from inside a
@@ -610,6 +610,9 @@ export class GoFishNode {
    *  would. A layer built without the combinator has none, as its plain
    *  children have none. */
   public _names?: LayerContext;
+  /** The registry the current `.relate()` clauses were resolved in, nested
+   *  in {@link _names}; the next call discards it. */
+  public _clauseNames?: LayerContext;
   /** The paint-order defaults `layer` installed for its relational-mark
    *  children (`applyRelationalZBelowDefaults`): `.relate()` replaces the
    *  author's constraints, and keeps these. */
@@ -664,7 +667,34 @@ export class GoFishNode {
   private readonly _geometryFn?: GeometryFn;
   /** Memo for {@link geometry}; cleared by every `layout()`. */
   private _geometry?: Geometry;
-  public children: GoFishAST[];
+  private _children!: readonly GoFishAST[];
+  private _constraints: readonly ConstraintSpec[] = [];
+  /** Bumped whenever {@link children} or {@link constraints} is replaced:
+   *  `resolution` compares it to the round's stamp, in O(1). Both arrays are
+   *  replaced, never edited in place ({@link replaceChild}). */
+  public _version = 0;
+  public get children(): readonly GoFishAST[] {
+    return this._children;
+  }
+  public set children(children: readonly GoFishAST[]) {
+    this._children = children;
+    this._version++;
+  }
+  public get constraints(): readonly ConstraintSpec[] {
+    return this._constraints;
+  }
+  public set constraints(constraints: readonly ConstraintSpec[]) {
+    this._constraints = constraints;
+    this._version++;
+  }
+  /** Put `child` in slot `i` in place of the node there (an elaboration
+   *  pass's wrapper), as a new children array. */
+  public replaceChild(i: number, child: GoFishAST): void {
+    const next = this._children.slice();
+    next[i] = child;
+    child.parent = this;
+    this.children = next;
+  }
   public intrinsicDims?: Dimensions;
   public transform?: Transform;
   /** Persistent per-axis bbox ledger: the box-key equations that determine this
@@ -685,7 +715,6 @@ export class GoFishNode {
    *  (not yet lowered, silenced, or no own paint, as on a compositor). Its
    *  labels lower after it and read it (see `autoLabelColorForStyle`). */
   public paintedStyle?: DisplayList.Style;
-  public constraints: ConstraintSpec[] = [];
   public colorConfig?: ColorConfig;
   public _labels?: LabelSpec[];
   /** Where a `.label()` with no `position` goes (see the constructor). */
@@ -2641,24 +2670,46 @@ export class GoFishNode {
    * layer.
    */
   public async relate(fn: RelateFn, rows?: unknown): Promise<this> {
-    // Only a layer schedules clauses around its solve (layer.tsx).
-    if (this.type !== "layer" && this.type !== "box") {
-      throw new Error(
-        `.relate() is a layer method, but it was called on a ${this.type}. ` +
-          `Wrap the nodes to relate in a layer([...]) and relate that.`
-      );
+    this.requireLayer();
+    return this.INTERNAL_relate(fn(relateEnv(this), this), rows);
+  }
+
+  /**
+   * The core of {@link relate}: install `clauses` (what a relate callback
+   * returns) in place of an earlier call's. An operator that relates its
+   * children by their slot handles (`spread`, `scatter`, `partition`, ...)
+   * calls it directly, since it reads no environment. The clauses are all
+   * resolved before the layer changes, so one that throws leaves the layer
+   * as it was. A drawing clause is resolved in a fresh registry nested in
+   * the one the layer's plain children were resolved in (`_names`; a root
+   * for a layer built without the combinator), so a `selectAll` in a clause
+   * sees the names the layer holds, and the call that replaces it discards
+   * that registry, so its names are gone.
+   */
+  public async INTERNAL_relate(
+    clauses: unknown,
+    rows?: unknown
+  ): Promise<this> {
+    this.requireLayer();
+    const names = this._names?.child() ?? new LayerContext();
+    let resolved: Awaited<ReturnType<typeof resolveRelateClauses>>;
+    try {
+      resolved = await resolveRelateClauses(clauses, this, names, rows);
+    } catch (e) {
+      names.discard();
+      throw e;
     }
+    const { constraints, nodes, positions } = resolved;
     // A later call replaces the drawing clauses of an earlier one.
     const old = this._relateClauses;
-    this.children = this.children.filter((_, i) => !old.has(i));
-    this._relateClauses = new Map();
-    const env = relateEnv(this);
-    const { constraints, nodes } = await resolveRelateClauses(
-      fn(env, this),
-      env,
-      this,
-      rows
+    const kept = this.children.filter((_, i) => !old.has(i));
+    this._clauseNames?.discard();
+    this._clauseNames = names;
+    this._relateClauses = new Map(
+      positions.map((position, k) => [kept.length + k, position])
     );
+    for (const node of nodes) node.parent = this;
+    this.children = [...kept, ...nodes];
     // The relate's constraints replace an earlier relate's, and the layer's
     // paint-order defaults for its own relational-mark children stay.
     this.constraints = [...(this._paintDefaults ?? []), ...constraints];
@@ -2668,6 +2719,16 @@ export class GoFishNode {
     // names of this layer.
     applyRelationalZBelowDefaults(this, nodes);
     return this;
+  }
+
+  /** Only a layer schedules clauses around its solve (layer.tsx). */
+  private requireLayer(): void {
+    if (this.type !== "layer" && this.type !== "box") {
+      throw new Error(
+        `.relate() is a layer method, but it was called on a ${this.type}. ` +
+          `Wrap the nodes to relate in a layer([...]) and relate that.`
+      );
+    }
   }
 
   public zOrder(value: number): this {

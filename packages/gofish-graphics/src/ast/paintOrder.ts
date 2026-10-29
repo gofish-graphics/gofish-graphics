@@ -159,10 +159,10 @@ const describe = (c: ZOrderConstraint): string =>
  * A node's own z constraints are resolved here, before any of its
  * descendants is ordered: every bake walk orders a node before descending.
  */
-export function orderChildrenForPaint(node: GoFishAST): GoFishAST[] {
+export function orderChildrenForPaint(node: GoFishAST): readonly GoFishAST[] {
   if (!(node instanceof GoFishNode) || !node.children) return [];
   const edges = edgesFor(node);
-  const children: GoFishAST[] = node.children;
+  const children = node.children;
   const n = children.length;
   if (n < 2) return children;
 

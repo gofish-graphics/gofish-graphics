@@ -18,6 +18,7 @@ const {
   layer,
   spread,
   circle,
+  rect,
   enclose,
   ref,
   selectAll,
@@ -133,6 +134,72 @@ console.log("# avoiding: [b] inside .relate(), as Python writes it");
     "fromJSON renders the same enclosure as the JS spec",
     ir === js && js.includes("<path"),
     `${ir.length} vs ${js.length} chars`
+  );
+}
+
+console.log("# an operator's .label({ avoiding: [a] }) inside .relate()");
+{
+  // A drawing clause that is a chart: its operator's label avoids an
+  // operand of the enclosing `.relate()`, which the IR names by its scope.
+  const rows = [
+    { k: "p", v: 40 },
+    { k: "q", v: 60 },
+  ];
+  const js = await svgOf((el) =>
+    layer([circle({ r: 30, fill: "#111" }).name("a")])
+      .relate(({ a }: any) => [
+        chart(rows)
+          .flow(spread({ by: "k", dir: "x" }).label("k", { avoiding: [a] }))
+          .mark(rect({ w: 10, h: "v" })),
+      ])
+      .render(el, { w: 200, h: 150 })
+  );
+  const doc = {
+    irVersion: 0,
+    ir: "gofish-frontend",
+    tables: { t0: rows },
+    root: {
+      type: "layer",
+      __combinator: true,
+      children: [{ type: "circle", r: 30, fill: "#111", name: "a" }],
+      relate: {
+        scope: "r1",
+        clauses: [
+          {
+            type: "chart",
+            data: { type: "table", id: "t0" },
+            mark: { type: "rect", w: 10, h: "v" },
+            operators: [
+              {
+                type: "spread",
+                by: "k",
+                dir: "x",
+                label: [
+                  {
+                    accessor: "k",
+                    avoiding: [{ type: "ref", selection: "a", scope: "r1" }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    },
+  };
+  check("the IR validates", valid(doc) === "", valid(doc));
+  let message = "";
+  const ir = await svgOf((el) =>
+    Promise.resolve(Serialize.renderIR(doc, el, { w: 200, h: 150 })).catch(
+      (e: Error) => {
+        message = e.message;
+      }
+    )
+  );
+  check(
+    "fromJSON binds the label's operand and renders the JS spec",
+    message === "" && ir === js && js.includes("<text"),
+    message || `${ir.length} vs ${js.length} chars`
   );
 }
 

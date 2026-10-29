@@ -32,7 +32,7 @@ const childLabel = (child: GoFishAST, i: number): string => {
 function printSharingAxis(
   plan: SharingPlan,
   axis: 0 | 1,
-  childNodes: GoFishAST[]
+  childNodes: readonly GoFishAST[]
 ): string {
   const MAX = 6;
   const groups = new Map<number, string[]>();
@@ -60,7 +60,9 @@ function printSharingAxis(
 const DUMP_SHARING = envFlag("GOFISH_DUMP_SHARING");
 
 /** A layer's constraints, counted by type: `position×14,align`. */
-const printConstraintTypes = (constraints: ConstraintSpec[]): string => {
+const printConstraintTypes = (
+  constraints: readonly ConstraintSpec[]
+): string => {
   const counts = new Map<string, number>();
   for (const c of constraints)
     counts.set(c.type, (counts.get(c.type) ?? 0) + 1);

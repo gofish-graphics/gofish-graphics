@@ -57,8 +57,12 @@ export class LayerContext {
     { depth: number; scopes: LayerContext[] }
   >();
 
+  /** The registries nested in this one, in creation order. */
+  private readonly kids: LayerContext[] = [];
+
   constructor(readonly parent?: LayerContext) {
     this.depth = parent ? parent.depth + 1 : 0;
+    parent?.kids.push(this);
   }
 
   /** A fresh registry nested in this one. */
@@ -80,6 +84,40 @@ export class LayerContext {
     }
     entry.nodes.push(node);
     entry.data.push((node as { datum?: unknown }).datum);
+  }
+
+  /** Remove this registry, and every registry nested in it, from its
+   *  parent: no lookup from an ancestor finds their names afterwards. Each
+   *  ancestor's index for those names is rebuilt from its own names and its
+   *  remaining nested registries' indices, nearest first. */
+  discard(): void {
+    const p = this.parent;
+    if (p === undefined) return;
+    const i = p.kids.indexOf(this);
+    if (i < 0) return;
+    p.kids.splice(i, 1);
+    for (const key of this.nearest.keys())
+      for (let s: LayerContext | undefined = p; s; s = s.parent) s.reindex(key);
+  }
+
+  /** Rebuild this registry's index for `key`: itself when it has the name,
+   *  else the nearest of its nested registries that do, in scope order. */
+  private reindex(key: string | symbol): void {
+    if (this.own.has(key)) {
+      this.nearest.set(key, { depth: 0, scopes: [this] });
+      return;
+    }
+    let best: { depth: number; scopes: LayerContext[] } | undefined;
+    for (const kid of this.kids) {
+      const at = kid.nearest.get(key);
+      if (at === undefined) continue;
+      const depth = at.depth + 1;
+      if (best === undefined || depth < best.depth)
+        best = { depth, scopes: [...at.scopes] };
+      else if (depth === best.depth) best.scopes.push(...at.scopes);
+    }
+    if (best === undefined) this.nearest.delete(key);
+    else this.nearest.set(key, best);
   }
 
   /** Record this registry's new `key` in its own and every ancestor's index.

@@ -192,8 +192,11 @@ function shadowCheckGrid(
 ): void {
   const numCols = constraint.numCols;
   const numRows = Math.ceil(constraint.children.length / numCols);
-  const targetOf = (i: number): Placeable | undefined =>
-    targetByKey.get(keyOf(constraint.children[i]));
+  // A cell past the last child (a partial last row) is empty: absent.
+  const targetOf = (i: number): Placeable | undefined => {
+    const ref = constraint.children[i];
+    return ref === undefined ? undefined : targetByKey.get(keyOf(ref));
+  };
   const centerOf = (i: number, idx: 0 | 1): number | undefined => {
     const t = targetOf(i);
     return t ? anchorCoord(t, idx, "middle") : undefined;

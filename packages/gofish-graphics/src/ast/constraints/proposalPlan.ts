@@ -79,7 +79,7 @@ export type LayerConstraintLayoutPlan = {
  *  phase-1 placement skipping, nest source-before-derived order, and
  *  datum-position scale consumption. */
 export function buildLayerConstraintLayoutPlan(
-  childNodes: NestPlanChild[],
+  childNodes: readonly NestPlanChild[],
   constraints: readonly ConstraintSpec[],
   resolved: ResolvedOperands
 ): LayerConstraintLayoutPlan {

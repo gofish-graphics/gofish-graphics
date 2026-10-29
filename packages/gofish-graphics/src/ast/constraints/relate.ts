@@ -143,25 +143,27 @@ async function flattenClausesAsync(c: unknown): Promise<unknown[]> {
 }
 
 /**
- * Resolve a relate callback's result into its constraints and its drawing
- * clauses, in declaration order. The result is awaited, must be a list, and
- * is flattened (synchronously when it holds no promise, which is the common
- * case: an operator that relates one constraint per child). Each constraint's
- * operands are checked against `env`. Each other clause is resolved to its
- * node, the way an operator resolves its children, and added to `layer` as
- * a child in a clause slot (`_relateClauses`, keyed by child index, with its
- * 1-based position in the flattened list for error messages). A clause is
- * resolved in a fresh registry nested in the one the layer's plain children
- * were resolved in (`_names`; a root for a layer built without the
- * combinator), so a `selectAll` in a clause sees the names the layer holds,
- * and a clause that a later call replaces leaves nothing behind.
+ * Resolve a relate result (a list of clauses) into its constraints and its
+ * drawing clauses, in declaration order, without changing `layer`: the
+ * caller attaches them (`GoFishNode.INTERNAL_relate`), so a clause that
+ * throws leaves the layer as it was. The result is awaited, must be a list,
+ * and is flattened (synchronously when it holds no promise, which is the
+ * common case: an operator that relates one constraint per child). Each
+ * constraint's operands are checked to be operands. Each other clause is
+ * resolved to its node, the way an operator resolves its children, in
+ * `names`, with its 1-based position in the flattened list (for error
+ * messages).
  */
 export async function resolveRelateClauses(
   result: unknown,
-  env: RelateEnv,
   layer: GoFishNode,
+  names: LayerContext,
   rows?: unknown
-): Promise<{ constraints: ConstraintSpec[]; nodes: GoFishNode[] }> {
+): Promise<{
+  constraints: ConstraintSpec[];
+  nodes: GoFishNode[];
+  positions: number[];
+}> {
   const awaited = isThenable(result) ? await result : result;
   if (!Array.isArray(awaited)) {
     throw new Error(
@@ -188,11 +190,11 @@ export async function resolveRelateClauses(
       );
     } else terms.push({ term: c, position });
   });
-  validateOperands(constraints, env);
+  validateOperands(constraints, layer);
   // One at a time, like `reifyChildrenSequentially`: resolving a term can
   // have effects (a mark function or builder runs), so their order is kept.
   const nodes: GoFishNode[] = [];
-  const names = layer._names?.child() ?? new LayerContext();
+  const positions: number[] = [];
   for (const { term, position } of terms) {
     // A drawing clause is a mark position over the layer's rows, as the
     // layer's children are: an empty-scope `chart()` in it binds them.
@@ -204,11 +206,9 @@ export async function resolveRelateClauses(
       );
     }
     nodes.push(node);
-    node.parent = layer;
-    layer._relateClauses.set(layer.children.length, position);
-    layer.children.push(node);
+    positions.push(position);
   }
-  return { constraints, nodes };
+  return { constraints, nodes, positions };
 }
 
 /** Every ref in `node`'s subtree (a ref has no children of its own). */

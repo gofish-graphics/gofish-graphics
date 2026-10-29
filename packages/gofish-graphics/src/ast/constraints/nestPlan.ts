@@ -196,7 +196,7 @@ export function applyNestExtentPlan(
  *  (the common path, and CENTER_ONLY-only nests, stay on the untouched
  *  proposal path — their centering is handled by the placement solver). */
 export function buildNestPlan(
-  childNodes: NestPlanChild[],
+  childNodes: readonly NestPlanChild[],
   constraints: readonly ConstraintSpec[],
   operands: ResolvedOperands
 ): NestPlan | undefined {

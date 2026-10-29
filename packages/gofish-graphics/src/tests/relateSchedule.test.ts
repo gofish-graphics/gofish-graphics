@@ -11,7 +11,8 @@
 import { layer } from "../ast/graphicalOperators/layer";
 import { Rect as rect } from "../ast/shapes/rect";
 import { ref } from "../ast/shapes/ref";
-import { enclose } from "../lib";
+import { chart, enclose, layer as layerMark, rect as rectMark } from "../lib";
+import { LayerContext, resolveMarkResult } from "../ast/marks/markResult";
 import {
   Constraint,
   SlotOperand,
@@ -124,9 +125,8 @@ console.log("# resolution: one stamp over the children and the constraints");
     "resolveReferences keeps the schedule with the operands",
     stored !== undefined && same([...stored.clauses], [1])
   );
-  node.children = [...node.children];
   check(
-    "an unchanged list of children still reads the same resolution",
+    "a node that has not changed reads the same resolution",
     resolution(node).schedule === stored
   );
   // A pass that wraps a child (elaboration) replaces it in its slot: the
@@ -211,10 +211,10 @@ console.log("# resolution: one stamp over the children and the constraints");
         (rect as any)({ w: 10, h: 10 }).name("a"),
         (rect as any)({ w: 10, h: 10 }).name("b"),
       ]).relate(({ a, b }: any, at: any) => [
-        Constraint.align(
-          { x: "middle" },
-          [a, new SlotOperand(at, at.children.length)]
-        ),
+        Constraint.align({ x: "middle" }, [
+          a,
+          new SlotOperand(at, at.children.length),
+        ]),
         enclose({ padding: 4 }, [b]).name("box"),
       ])
     );
@@ -227,6 +227,58 @@ console.log("# resolution: one stamp over the children and the constraints");
       message
     ),
     message
+  );
+}
+
+console.log("# .relate(): a replaced or failed call leaves nothing behind");
+{
+  // A layer built by the combinator resolves its clauses in a registry
+  // nested in its own, so a name a clause registers (a named chart) is
+  // visible from outside.
+  const root = new LayerContext();
+  const node: any = await resolveMarkResult(
+    layerMark([rectMark({ w: 10, h: 10 }).name("base")]) as any,
+    root
+  );
+  const hiChart = () =>
+    chart([{ a: 1 }])
+      .mark(rectMark({ w: 5, h: 5 }))
+      .name("hi");
+  const clause = () => [hiChart()];
+  await node.relate(clause);
+  await node.relate(clause);
+  const hi = root.lookup("hi")?.nodes ?? [];
+  check(
+    "a clause a later call replaced is gone from the names",
+    hi.length === 1 && hi[0] === node.children[1],
+    String(hi.length)
+  );
+
+  const children = node.children;
+  const clauses = [...node._relateClauses];
+  const constraints = node.constraints;
+  let message = "";
+  try {
+    await node.relate(({ base }: any) => [
+      Constraint.align({ x: "middle" }, [base]),
+      hiChart(),
+      async () => {
+        throw new Error("boom");
+      },
+    ]);
+  } catch (e: any) {
+    message = String(e?.message);
+  }
+  const after = root.lookup("hi")?.nodes ?? [];
+  check(
+    "a call whose clause throws leaves the layer as it was",
+    message === "boom" &&
+      node.children === children &&
+      JSON.stringify([...node._relateClauses]) === JSON.stringify(clauses) &&
+      node.constraints === constraints &&
+      after.length === 1 &&
+      after[0] === hi[0],
+    JSON.stringify({ message, n: node.children.length, hi: after.length })
   );
 }
 

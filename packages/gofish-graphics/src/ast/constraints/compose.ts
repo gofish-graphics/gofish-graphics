@@ -296,8 +296,8 @@ export type ComposePlan = {
 };
 
 export function planConstraintComposition(
-  constraints: ConstraintSpec[],
-  childNodes: GoFishAST[],
+  constraints: readonly ConstraintSpec[],
+  childNodes: readonly GoFishAST[],
   resolved: ResolvedOperands
 ): ComposePlan | undefined {
   const distributes = constraints.filter(
@@ -478,8 +478,8 @@ export type LayerSharingPlan = SharingPlan & {
 };
 
 export function planSharing(
-  constraints: ConstraintSpec[],
-  childNodes: GoFishAST[],
+  constraints: readonly ConstraintSpec[],
+  childNodes: readonly GoFishAST[],
   resolved: ResolvedOperands
 ): LayerSharingPlan {
   const n = childNodes.length;

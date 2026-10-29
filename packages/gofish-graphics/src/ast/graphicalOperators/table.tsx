@@ -48,7 +48,7 @@ const Table = createNodeOperator(
     // The grid refers to the cells by slot, as spread does.
 
     const node = (await layer(children)) as GoFishNode;
-    await node.relate(() => [
+    await node.INTERNAL_relate([
       // grid is table's private elaboration target — not part of the public
       // `Constraint` factory (see constraints/index.ts).
       createGridConstraint(

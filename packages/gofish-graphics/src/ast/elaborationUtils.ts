@@ -83,28 +83,37 @@ export async function wrapRing(
     const none = (): [Set<number>, Set<number>] => [new Set(), new Set()];
     return { sets: [sets, [...sets]], nested: none(), datumPlaced: none() };
   });
-  // Every handle is a slot, fixed by construction: the content is slot 0,
-  // and the ring's k-th shape is slot k + 1 (a shape may be handed in as the
-  // promise its builder returned, which the layer awaits).
-  // The ring's shapes are its slots after the content's, in order; `layer`
-  // may hold each as the node it builds from it, so they are found by
-  // where they stand in `ring.nodes`.
-  const slots = new Map(ring.nodes.map((n, k) => [n as GoFishAST, k + 1]));
+  // Every handle is a slot: the content is slot 0, and each of the ring's
+  // shapes is the slot of the child `layer` made of it. A shape may be
+  // handed in as the promise its builder returned, which the layer awaits:
+  // awaiting it again gives the same node, so each entry is matched to its
+  // child by identity, and a shape the layer did not keep is an error, not
+  // a shifted slot.
+  const slotOfChild = new Map(root.children.map((c, k) => [c as unknown, k]));
+  const slots = new Map<unknown, number>();
+  for (const entry of ring.nodes) {
+    const node = await entry;
+    const k = slotOfChild.get(node);
+    if (k === undefined || k === 0)
+      throw new Error(
+        "[gofish] wrapRing: a shape of the ring is not a child of its layer"
+      );
+    slots.set(entry, k);
+    slots.set(node, k);
+  }
   const at = (node: GoFishAST): SlotOperand => {
     const k = slots.get(node);
     if (k === undefined)
       throw new Error("[gofish] wrapRing: the node is not one of the ring's");
     return new SlotOperand(root, k);
   };
-  await root.relate(() => {
-    const content = new SlotOperand(root, 0);
-    return [
-      ...(seat.x === undefined && seat.y === undefined
-        ? []
-        : [Constraint.position({ ...seat, anchor: "baseline" }, [content])]),
-      ...ring.constraints(at, content),
-    ];
-  });
+  const content = new SlotOperand(root, 0);
+  await root.INTERNAL_relate([
+    ...(seat.x === undefined && seat.y === undefined
+      ? []
+      : [Constraint.position({ ...seat, anchor: "baseline" }, [content])]),
+    ...ring.constraints(at, content),
+  ]);
   return root;
 }
 

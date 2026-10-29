@@ -399,8 +399,8 @@ export const layer = createNodeOperatorSequential(
     // `layerTypes` for the claim hook, which follows the same steps.
     const composeLayerTypes = (
       children: Size<UnderlyingSpace>[],
-      childNodes: GoFishAST[],
-      constraints: ConstraintSpec[]
+      childNodes: readonly GoFishAST[],
+      constraints: readonly ConstraintSpec[]
     ) => {
       // A grid constraint makes this layer a grid. Stage 6e: the grid no
       // longer bypasses the fold — it participates. Its categorical track
@@ -534,8 +534,8 @@ export const layer = createNodeOperatorSequential(
         },
         resolveUnderlyingSpace: (
           children: Size<UnderlyingSpace>[],
-          _childNodes: GoFishAST[],
-          constraints: ConstraintSpec[]
+          _childNodes: readonly GoFishAST[],
+          constraints: readonly ConstraintSpec[]
         ) => {
           layerTypes = composeLayerTypes(
             children,

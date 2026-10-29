@@ -105,7 +105,9 @@ const resolveAnchor = (a: AnchorSpec): [number, number] => {
  * its keyframe groups, see `src/timeWindow.ts`). Undefined otherwise, and the
  * connector is drawn whole, as any connector is.
  */
-function sequenceKeyframes(children: GoFishAST[]): Keyframe[] | undefined {
+function sequenceKeyframes(
+  children: readonly GoFishAST[]
+): Keyframe[] | undefined {
   // The first operand decides whether there is anything to find, so a chart
   // with no sequence walks up from one operand, not from every one.
   const first =
@@ -290,7 +292,7 @@ export const connect = createNodeOperator(
         strokeOverhang: outlineOverhang(stroke ?? fill ?? "black", strokeWidth),
         resolveUnderlyingSpace: (
           children: Size<UnderlyingSpace>[],
-          _childNodes: GoFishAST[]
+          _childNodes: readonly GoFishAST[]
         ) => {
           return [UNDEFINED, UNDEFINED];
         },

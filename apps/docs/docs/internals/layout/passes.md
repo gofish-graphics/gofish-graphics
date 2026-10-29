@@ -225,10 +225,11 @@ and `type`). The scope also carries `warpedBy`, the type of the nearest enclosin
 space that is not linear, for work that is only correct in a linear one (scatter's
 `overlap`). The walk is synchronous: it queues each node's hook with its two scopes, in
 pre-order. The pass then runs the queue one hook at a time, in
-that order. It does not run them concurrently, because an operator's `.relate()`
-walks the subtree to build its environment and must not interleave with a
-descendant's hook. The walk sees the tree before any hook runs; that is enough,
-because spread's and scatter's `.relate()` return constraints only and add no nodes.
+that order. It does not run them concurrently, so a hook never interleaves with a
+descendant's. An operator installs its constraints through the core of `.relate()`
+(`INTERNAL_relate`), which builds no environment, since the operator refers to its
+children by slot. The walk sees the tree before any hook runs; that is enough,
+because spread's and scatter's constraints add no nodes.
 A name the scope does not declare **throws**, listing the names it does; so does
 setting one (axis, anchor) slot twice, across the top-level keys and `dims` or within
 `dims`. Scatter merges its top-level `x`/`xMin`/`xMax` (and `y` ones) with its `dims`

@@ -209,7 +209,7 @@ const claimPlaceable = (
  *  region (a `partition` cell) places its child across its datum span on
  *  the axis, as an interval does. */
 export const constraintsOn = (
-  constraints: ConstraintSpec[],
+  constraints: readonly ConstraintSpec[],
   axis: 0 | 1
 ): ConstraintSpec[] => {
   const own = axisName(axis);
@@ -234,7 +234,7 @@ export const constraintsOn = (
  *  distribute or a nest acting on it), by their direct operands. */
 export function constrainedOn(
   axis: 0 | 1,
-  constraints: ConstraintSpec[],
+  constraints: readonly ConstraintSpec[],
   operands: Map<string, { child: number; direct: boolean }>,
   keyOf: KeyOf
 ): Set<number> {
@@ -261,7 +261,7 @@ const isLinearExtent = (e: Extent): boolean =>
 export function placeByClaims(
   axis: 0 | 1,
   children: ClaimChild[],
-  constraints: ConstraintSpec[],
+  constraints: readonly ConstraintSpec[],
   operands: Map<string, { child: number; direct: boolean }>,
   keyOf: KeyOf,
   candidates: Set<number>,
