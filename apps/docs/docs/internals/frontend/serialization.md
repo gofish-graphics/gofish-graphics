@@ -465,11 +465,19 @@ any position.
 ### `.relate()` clauses
 
 A `layer` combinator mark carries its `.relate()` callback as
-`relate: RelateClauseIR[]`, the callback's clauses in order, already
-evaluated on the authoring side. A clause is a `ConstraintIR`
-(`{ type, options?, refs }`, the operands as names) or a `MarkIR` that draws
-(`arrow`, `enclose`, a relational `line`, ...), whose children may include
-`{ type: "ref", selection: "name" }` refs to the layer's names. The two are
+`relate: { scope, clauses }` (`RelateIR`): a scope id for the call and the
+callback's clauses in order, already evaluated on the authoring side. A
+clause is a `ConstraintIR` (`{ type, options?, refs }`) or a `MarkIR` that
+draws (`arrow`, `enclose`, a relational `line`, ...). An operand is the same
+value in both places, a `RelateOperandIR`
+`{ type: "ref", selection: "name", scope }`: as a constraint's `refs` entry,
+and as a child of a drawing clause. Its `scope` is the id of the `.relate()`
+call that bound it, which may be an enclosing layer's call when the clause
+holds a nested related layer. Python mints the id per call
+(`relate-<uuid4>`), so ids from separate mark-function replies never clash.
+The reader binds each id to the layer instance whose `.relate()` it is
+rebuilding (`relateCallback` extends `IRContext.relateScopes`), and an
+operand becomes a `RelateOperand` or a ref with that layer as its scope. The two are
 told apart by `refs`: a constraint always carries it and a mark never does
 (`isConstraintIR`, which the validator uses too). Both readers (`fromJSON.ts`
 and the parity harness, which both go through `fromJSON.ts`) rebuild a constraint with the same `constraintFromIR`

@@ -618,8 +618,8 @@ function walkRefType(
     case "ConstraintIR":
       walkConstraint(value, path, ctx);
       return;
-    case "RelateClauseIR":
-      walkRelateClause(value, path, ctx);
+    case "RelateIR":
+      walkRelate(value, path, ctx);
       return;
     case "NodeSelectionIR":
       walkNodeSelection(value, path, ctx);
@@ -1131,7 +1131,8 @@ function walkRefMark(
       });
     }
   });
-  walkMarkNode(node, path, ctx, REF_MARK_FIELDS, ["selection"]);
+  optionalField(node, "scope", path, ctx, expectString);
+  walkMarkNode(node, path, ctx, REF_MARK_FIELDS, ["selection", "scope"]);
 }
 
 function walkOffsetMark(
@@ -1319,6 +1320,28 @@ function walkLabel(node: unknown, path: string, ctx: Context): void {
   walkArray(node, path, ctx, walkLabelSpec);
 }
 
+/** A `.relate()` call: its scope id and its clauses. */
+function walkRelate(node: unknown, path: string, ctx: Context): void {
+  if (!isObject(node)) {
+    ctx.errors.push({
+      path,
+      message: `expected a { scope, clauses } relate call, got ${typeNameOf(node)}`,
+    });
+    return;
+  }
+  expectField(node, "scope", path, ctx, expectString);
+  expectField(node, "clauses", path, ctx, (v, p) =>
+    walkArray(v, p, ctx, walkRelateClause)
+  );
+}
+
+/** A `.relate()` operand: `{ type: "ref", selection: name, scope }`. */
+const isRelateOperandIR = (x: unknown): boolean =>
+  isObject(x) &&
+  x.type === "ref" &&
+  typeof x.selection === "string" &&
+  typeof x.scope === "string";
+
 /** A relate clause is a constraint when it carries `refs`, else a mark. */
 function walkRelateClause(node: unknown, path: string, ctx: Context): void {
   if (isObject(node) && isConstraintIR(node as RelateClauseIR))
@@ -1347,8 +1370,12 @@ function walkConstraint(node: unknown, path: string, ctx: Context): void {
     return;
   }
   expectField(node, "refs", path, ctx, (v, p) => {
-    if (!Array.isArray(v) || !v.every((x) => typeof x === "string")) {
-      ctx.errors.push({ path: p, message: "refs must be an array of strings" });
+    if (!Array.isArray(v) || !v.every(isRelateOperandIR)) {
+      ctx.errors.push({
+        path: p,
+        message:
+          'refs must be an array of .relate() operands ({ type: "ref", selection, scope })',
+      });
     }
     // `nest` relates exactly two refs: [outer, inner].
     if (t === "nest" && Array.isArray(v) && v.length !== 2) {

@@ -40,11 +40,10 @@ export function avoidedRefs(
       const target = item.targetNode;
       return target !== undefined
         ? new GoFishRef({ node: target })
-        : new GoFishRef({ selection: item.selection! });
+        : new GoFishRef({ selection: item.selection!, scope: item.scope });
     }
     if (item instanceof GoFishNode) return new GoFishRef({ node: item });
-    if (item instanceof RelateOperand)
-      return new GoFishRef({ selection: item.name });
+    if (item instanceof RelateOperand) return item.toRef();
     throw new Error(
       `[gofish] ${where} lists placed nodes or refs (a .relate() operand, ref(...)); a fresh mark has no place to avoid.`
     );

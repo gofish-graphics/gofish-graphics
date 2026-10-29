@@ -119,11 +119,14 @@ console.log("# relateScheduleForLayout: reuse the resolve-pass schedule");
     "an unchanged list of children still reuses it",
     relateScheduleForLayout(node, operands) === stored
   );
-  node.children = [node.children[1], node.children[0]];
+  // A pass that wraps a child (elaboration) replaces it in its slot; the
+  // slot stays a clause, since the layer records its clauses by slot.
+  const wrapped = await (layer as any)([node.children[1]]);
+  node.children = [node.children[0], wrapped];
   const fresh = relateScheduleForLayout(node, operands);
   check(
-    "changed children get a fresh schedule",
-    fresh !== stored && same([...fresh.clauses], [0]),
+    "a child replaced in its slot gets a fresh schedule, still a clause",
+    fresh !== stored && same([...fresh.clauses], [1]),
     JSON.stringify([...fresh.clauses])
   );
 }

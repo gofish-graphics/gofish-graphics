@@ -16,7 +16,7 @@ import {
   translateForAnchor,
 } from "./dims";
 import type { AxisScale } from "./domain";
-import { GoFishNode, isRelateClause } from "./_node";
+import { GoFishNode, relateClausePosition } from "./_node";
 import { GoFishAST } from "./_ast";
 import { MaybeValue } from "./data";
 import { ORDINAL, UnderlyingSpace } from "./underlyingSpace";
@@ -85,6 +85,11 @@ export class GoFishRef {
     return this.pinned[dir] ?? walk(this.selectedNode) - walk(this.parent);
   }
   public readonly selection?: string | Token | (Token | string | number)[];
+  /** For a string selection that came from a `.relate()` operand: the layer
+   *  whose `.relate()` bound it. The name is looked up from there, not from
+   *  wherever the ref ends up, so a nested layer's same-named node cannot
+   *  capture it. Assigned unconditionally, like `multiplicity`. */
+  public readonly scope?: GoFishNode;
   private directNode?: GoFishNode;
   private selectedNode?: GoFishNode;
   private renderSession?: RenderSession;
@@ -94,11 +99,13 @@ export class GoFishRef {
     selection,
     node,
     multiplicity,
+    scope,
   }: {
     name?: string | Token;
     selection?: string | Token | (Token | string | number)[];
     node?: GoFishNode;
     multiplicity?: "one" | "all";
+    scope?: GoFishNode;
   }) {
     if (selection === undefined && !node) {
       throw new Error("Ref must have either selection or node");
@@ -107,6 +114,7 @@ export class GoFishRef {
     this.selection = selection;
     this.directNode = node;
     this.multiplicity = multiplicity;
+    this.scope = scope;
   }
 
   /** The raw datum carried by the node this ref points at — the *bag of rows*
@@ -241,8 +249,17 @@ export class GoFishRef {
 
   private resolveLocalString(name: string): GoFishNode {
     // A string name is a variable of the layer that relates it: legal only
-    // inside a `.relate()` clause, and resolved from that clause's layer.
-    const layer = relatingLayerOf(this);
+    // inside a `.relate()` clause. An operand's ref is resolved from the
+    // layer whose `.relate()` bound it (its scope), which may enclose the
+    // clause it sits in; a ref the author wrote by name, from the layer whose
+    // clause holds it.
+    if (this.scope && !isInside(this, this.scope)) {
+      throw new Error(
+        `ref("${name}"): a .relate() operand is used outside the layer whose ` +
+          `.relate() bound it. Use it inside that layer's clauses.`
+      );
+    }
+    const layer = this.scope ?? relatingLayerOf(this);
     if (!layer) {
       throw new Error(
         `ref("${name}") is a string ref outside a .relate() clause. A string ` +
@@ -253,7 +270,12 @@ export class GoFishRef {
           `and ref the token.`
       );
     }
-    const found = resolveScopedName(layer, name, `ref("${name}")`);
+    const found = resolveScopedName(
+      layer,
+      name,
+      `ref("${name}")`,
+      this.scope !== undefined
+    );
     if (!isInside(found, layer)) {
       throw new Error(
         `ref("${name}") in a .relate() clause names a node outside the ` +
@@ -396,13 +418,16 @@ export class GoFishRef {
 }
 
 /** The layer whose `.relate()` clause contains `node`: the parent of the
- *  nearest ancestor flagged `_relateClause`, or `undefined` when `node` is not
- *  inside a relate clause. */
+ *  nearest ancestor that sits in one of its parent's clause slots, or
+ *  `undefined` when `node` is not inside a relate clause. */
 export function relatingLayerOf(node: GoFishAST): GoFishNode | undefined {
-  let cur: GoFishAST | undefined = node;
-  while (cur) {
-    if (isRelateClause(cur)) return cur.parent;
-    cur = cur.parent;
+  for (let cur: GoFishAST | undefined = node; cur; cur = cur.parent) {
+    const parent = cur.parent;
+    if (
+      parent?._relateClauses &&
+      relateClausePosition(parent, parent.children.indexOf(cur)) !== undefined
+    )
+      return parent;
   }
   return undefined;
 }
@@ -468,9 +493,14 @@ function scopeRootOf(from: GoFishNode): GoFishNode {
 function closestAtLevel(
   level: GoFishNode,
   name: string,
-  searched: GoFishNode | undefined
+  searched: GoFishNode | undefined,
+  bound = false
 ): GoFishAST[] {
-  let frontier: GoFishAST[] = level.children;
+  let frontier: GoFishAST[] = bound
+    ? level.children.filter(
+        (_, i) => relateClausePosition(level, i) === undefined
+      )
+    : level.children;
   while (frontier.length > 0) {
     const matches = frontier.filter((n) => childNameKey(n) === name);
     if (matches.length > 0) return matches;
@@ -500,17 +530,29 @@ function closestAtLevel(
  * match hides an outer one with the same name; that is intended, and it is
  * what lets a mark repeated per row (or a helper called many times) reuse its
  * local names. `what` names the consumer in the error message.
+ *
+ * `bound` is for a `.relate()` operand, with `from` the layer whose
+ * `.relate()` bound it. The operand names a node the layer held when the
+ * callback ran, so the search at `from` skips the layer's clause slots: a
+ * name a clause introduces (a nested callout's own `density`) never captures
+ * the operand, however close it is.
  */
 export function resolveScopedName(
   from: GoFishNode,
   name: string,
-  what: string
+  what: string,
+  bound = false
 ): GoFishAST {
   const boundary = scopeRootOf(from);
   let level = from;
   let searched: GoFishNode | undefined;
   for (;;) {
-    const matches = closestAtLevel(level, name, searched);
+    const matches = closestAtLevel(
+      level,
+      name,
+      searched,
+      bound && level === from
+    );
     if (matches.length === 1) return matches[0];
     if (matches.length > 1) {
       throw new Error(

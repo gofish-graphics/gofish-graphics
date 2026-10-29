@@ -105,9 +105,8 @@ export async function resolveMarkResult(
     raw = await (raw as unknown as Promise<ReturnType<Mark<any>>>);
   }
   // A `.relate()` operand in term position (a child of a drawing clause) is
-  // a string ref to the node it names, resolved from the relating layer.
-  if (raw instanceof RelateOperand)
-    return new GoFishRef({ selection: raw.name }) as unknown as GoFishNode;
+  // a string ref to the node it names, resolved from the layer that bound it.
+  if (raw instanceof RelateOperand) return raw.toRef() as unknown as GoFishNode;
   // A chart pipeline resolves to its own node. A `.mark(<relational mark>)`
   // chart elaborates to `.mark(anchor).layer(R)`, i.e. a LayerBuilder — so a
   // chart pipeline handed anywhere a mark is taken (a `.layer(...)` tier, a

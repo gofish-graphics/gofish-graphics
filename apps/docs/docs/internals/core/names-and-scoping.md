@@ -31,9 +31,9 @@ A string name is a variable of the layer that relates it. It may be used in
 one place: a `.relate()` callback on a layer, either as one of the operands
 the callback receives, or as a `ref("x")` inside one of the clauses the
 callback returns. `GoFishRef.resolveLocalString` finds the relating layer
-with `relatingLayerOf`, which walks up to the nearest ancestor flagged
-`_relateClause` (a drawing clause of some layer's `.relate()`) and returns its
-parent. A string `ref` with no such ancestor, a plain child or an operator
+with `relatingLayerOf`, which walks up to the nearest ancestor that sits in
+one of its parent's clause slots (`_relateClauses`, see below) and returns
+that parent. A string `ref` with no such ancestor, a plain child or an operator
 child written outside `.relate()`, is an error, and the message says to move
 the ref into the enclosing layer's `.relate()`.
 
@@ -47,10 +47,49 @@ scheduled like any other (see below).
 ## One lookup for `ref` and `.relate()`
 
 `ref("x")` and a `.relate()` operand named `x` use the same function,
-`resolveScopedName` in `_ref.tsx`, and both start at the relating layer. An
-operand becomes a string ref when it is used as a child of a drawing clause
-(`resolveMarkResult` turns a `RelateOperand` into `ref(name)`), so the two are
-the same thing spelled two ways.
+`resolveScopedName` in `_ref.tsx`. A `ref("x")` the author writes starts at
+the relating layer. An operand starts at the layer whose `.relate()` bound it,
+its **scope**. An operand becomes a string ref when it is used as a child of
+a drawing clause (`resolveMarkResult` calls `RelateOperand.toRef()`, a ref
+that carries the scope), so the two are the same lookup, started from the
+layer each one belongs to.
+
+### An operand is a name plus its scope
+
+`.relate()` is a binding form. A `RelateOperand` holds the name and the
+layer it was bound in, the sets-of-scopes idea at the size GoFish needs: one
+scope per `.relate()` call. The difference shows when a clause of one layer
+holds another layer that relates its own names:
+
+```js
+layer([curve.name("density")]).relate(({ density }) => [
+  layer([swatch.name("density"), note.name("note")]).relate(({ note }) => [
+    arrow({}, [note, density]),
+  ]),
+]);
+```
+
+The arrow sits in the inner layer, and the inner layer has a `density` of
+its own. The `density` operand still resolves from the outer layer, so it
+names the curve. A ref built from an operand that is used outside the layer
+of its scope is an error.
+
+Starting at the outer layer is not enough on its own, because the inner
+layer is now one of the outer layer's clauses, and its swatch can be closer
+to the outer layer than the curve inside the chart. An operand names a node
+the layer held when the callback ran, and a name a clause introduces does
+not carry the binding's scope. So the lookup of a bound operand
+(`resolveScopedName(scope, name, what, true)`) skips the scope layer's
+clause slots at that first level. A `ref("x")` the author writes, and a
+constraint a pass builds without a scope, search the whole layer as before.
+
+A drawing clause may read an operand of an enclosing scope, because it reads
+positions and places nothing. A constraint places its operands, so each one
+must still resolve inside the layer that holds the constraint
+(`resolveConstraintOperands` starts each lookup at the operand's scope and
+then requires the node to be inside the layer). Two operands with one name
+but different scopes that find different nodes in one layer's constraints
+are an error, since the layer keys operands by name.
 
 From the start, the search looks at every node inside the current level's
 subtree. If it finds the name, it stops there. If not, it moves up to the
@@ -121,8 +160,9 @@ registry.
 
 `.relate(fn)` calls `fn` right away with an environment
 (`relateEnv` in `constraints/index.ts`). The environment is an ordinary
-object with one operand, a `RelateOperand` carrying the name, for every
-distinct name inside the layer. It walks the same bounded tree as the lookup
+object with one operand, a `RelateOperand` carrying the name and the layer,
+for every distinct name inside the layer. `bindRelateEnv` records the layer
+for the environment, so the clauses can be resolved in it. It walks the same bounded tree as the lookup
 (`visibleNodes`), so it goes into nested layers but not into a nested
 `createMark` component.
 
@@ -228,9 +268,21 @@ into constraints (plain objects built by a `Constraint.*` factory, or one of
 the private elaboration targets `grid`, `overlap` and `labelPlace` that
 `table`, `scatter` and `.label()` build) and terms,
 checks the constraints' operands, and resolves each term to its node, one at a
-time. `GoFishNode.relate` appends those nodes to the layer's children, each
-flagged `_relateClause` with its position in the list. A later `.relate()` call replaces the clauses
-of an earlier one. `.relate()` is a layer method: it throws on any other node,
+time. A term is resolved in the same name registry as the layer's plain
+children: the `layer([...])` combinator keeps the context it resolved its
+children in as `_names`, so `chart(selectAll("points"))` in a clause finds
+the layer's `points`, as it would as a plain child. `GoFishNode.relate`
+appends the nodes to the layer's children and records each slot in the
+layer's `_relateClauses`, with the clause's position in the list. A later
+`.relate()` call replaces the clauses of an earlier one.
+
+The list belongs to the layer, not to the child. It used to be a flag on
+the child, `_relateClause`, read against whatever the child's parent was at
+the time. Axis elaboration wraps a clause and the wrapper's own `.relate()`
+read the flag as its own and dropped the clause (#1235). A slot cannot be
+read by another layer, and a pass that wraps a child replaces it in its slot
+(`children[i] = wrapper`), so the wrapper stays a clause. Only `.relate()`
+appends children to a layer after it is built, so slots do not move. `.relate()` is a layer method: it throws on any other node,
 because only `layer.tsx` knows how to schedule clauses.
 
 Coordinates are single-assignment: a clause that reads a position must run
@@ -267,7 +319,8 @@ under the nodes it reads. A clause's operands are string refs, which are not
 resolved when the clause is attached, so the default names them:
 `GoFishNode.relate` runs the same pass `layer` runs for its children
 (`applyRelationalZBelowDefaults`), which adds `zBelow(clause, name)` for
-each string-ref operand (see [The Mark Factory](/internals/frontend/mark-factory)). An explicit
+each string-ref operand of this layer's scope; an operand an enclosing
+`.relate()` bound is left for that layer (see [The Mark Factory](/internals/frontend/mark-factory)). An explicit
 `.zOrder(...)` on the clause wins. `.relate()` replaces the constraints of
 an earlier `.relate()`, but not the defaults `layer` gave its own
 relational-mark children (`_paintDefaults`), so a `line` or `enclose` among

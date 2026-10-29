@@ -3,7 +3,7 @@
 // </gofish-wiki>
 
 import type { GoFishAST } from "../_ast";
-import { GoFishNode, isRelateClause } from "../_node";
+import { GoFishNode, relateClausePosition } from "../_node";
 import { GoFishRef } from "../_ref";
 import type { ChartBuilder, LayerBuilder } from "../marks/chartBuilder";
 import { resolveMarkResult } from "../marks/markResult";
@@ -18,20 +18,52 @@ import { childNameKey, type ConstraintRef } from "./shared";
 import { isThenable } from "../../util";
 
 /**
- * An operand of a `.relate()` callback: a variable that names a node inside
- * the layer. As a constraint operand it is a {@link ConstraintRef} (the solve
- * resolves it by name at layout). In term position, as a child of a drawing
- * clause such as `arrow(opts, [a, b])`, it becomes a string `ref` of the same
- * name (`resolveMarkResult` does the conversion), which resolves from the
- * relating layer.
+ * An operand of a `.relate()` callback: a name plus its scope, the layer
+ * whose `.relate()` call bound it. It is looked up at layout, by name, from
+ * that layer (elaboration can swap a named node for a wrapper, and the
+ * wrapper takes the name), so an inner layer that declares the same name
+ * cannot capture it. As a constraint operand it is a {@link ConstraintRef}.
+ * In term position, as a child of a drawing clause such as
+ * `arrow(opts, [a, b])`, it becomes a string `ref` with the same name and
+ * scope ({@link RelateOperand.toRef}).
  */
 export class RelateOperand implements ConstraintRef {
-  constructor(public readonly name: string) {}
+  constructor(
+    public readonly name: string,
+    public readonly scope: GoFishNode
+  ) {}
+
+  /** This operand as a ref: the same name, looked up from the same scope. */
+  toRef(): GoFishRef {
+    return new GoFishRef({ selection: this.name, scope: this.scope });
+  }
 }
 
 /** The environment a `.relate()` callback receives: one operand per name
  *  inside the layer (see `relateEnv` in `constraints/index.ts`). */
 export type RelateEnv = Record<string, RelateOperand>;
+
+/** The scope each environment belongs to: the layer whose `.relate()` call
+ *  built it. Kept beside the environment, not in it, so the callback's
+ *  `**rest`-style reads see only names. */
+const envScopes = new WeakMap<RelateEnv, GoFishNode>();
+
+/** Record that `env` was built by `scope`'s `.relate()` call. */
+export function bindRelateEnv(env: RelateEnv, scope: GoFishNode): RelateEnv {
+  envScopes.set(env, scope);
+  return env;
+}
+
+/** The layer whose `.relate()` call built `env`. The deserializer binds the
+ *  wire's scope id for that call to it. */
+export function relateScopeOf(env: RelateEnv): GoFishNode {
+  const scope = envScopes.get(env);
+  if (!scope)
+    throw new Error(
+      ".relate(): this environment was not built by a .relate() call."
+    );
+  return scope;
+}
 
 /** One clause of a `.relate()` callback: a constraint that places its
  *  operands, or a term that draws (an operator or mark, possibly unresolved:
@@ -122,14 +154,20 @@ async function flattenClausesAsync(c: unknown): Promise<unknown[]> {
  * is flattened (synchronously when it holds no promise, which is the common
  * case: an operator that relates one constraint per child). Each constraint's
  * operands are checked against `env`. Each other clause is resolved to its
- * node, the way an operator resolves its children, and flagged
- * `_relateClause` with its 1-based position in the flattened list.
+ * node, the way an operator resolves its children, and returned with its
+ * 1-based position in the flattened list (for error messages). A clause is
+ * resolved in the registry the layer's plain children were resolved in
+ * (`_names`, an empty one for a layer built without the combinator), so a `selectAll`
+ * in a clause sees the names the layer holds.
  */
 export async function resolveRelateClauses(
   result: unknown,
   env: RelateEnv,
   rows?: unknown
-): Promise<{ constraints: ConstraintSpec[]; nodes: GoFishNode[] }> {
+): Promise<{
+  constraints: ConstraintSpec[];
+  nodes: { node: GoFishNode; position: number }[];
+}> {
   const awaited = isThenable(result) ? await result : result;
   if (!Array.isArray(awaited)) {
     throw new Error(
@@ -159,19 +197,19 @@ export async function resolveRelateClauses(
   validateOperands(constraints, env);
   // One at a time, like `reifyChildrenSequentially`: resolving a term can
   // have effects (a mark function or builder runs), so their order is kept.
-  const nodes: GoFishNode[] = [];
+  const nodes: { node: GoFishNode; position: number }[] = [];
+  const names = relateScopeOf(env)?._names ?? {};
   for (const { term, position } of terms) {
     // A drawing clause is a mark position over the layer's rows, as the
     // layer's children are: an empty-scope `chart()` in it binds them.
-    const node = await resolveMarkResult(term as any, {}, rows);
+    const node = await resolveMarkResult(term as any, names, rows);
     if (!(node instanceof GoFishNode)) {
       throw new Error(
         `.relate(): clause ${position} is neither a constraint nor a mark or ` +
           `operator (got ${String(node)}).`
       );
     }
-    node._relateClause = position;
-    nodes.push(node);
+    nodes.push({ node, position });
   }
   return { constraints, nodes };
 }
@@ -235,8 +273,8 @@ export function scheduleRelate(
   operands: Map<string, ResolvedOperand>
 ): RelateSchedule {
   const clauses = new Set<number>();
-  layer.children.forEach((c, i) => {
-    if (isRelateClause(c)) clauses.add(i);
+  layer.children.forEach((_, i) => {
+    if (relateClausePosition(layer, i) !== undefined) clauses.add(i);
   });
   if (clauses.size === 0) return { clauses, beforeSolve: [], afterSolve: [] };
 
@@ -346,7 +384,7 @@ function describeStep(layer: GoFishNode, u: number): string {
   }
   const node = layer.children[u] as GoFishNode;
   const name = childNameKey(node);
-  return `clause ${node._relateClause} (${node.type}${
+  return `clause ${relateClausePosition(layer, u)} (${node.type}${
     name === undefined ? "" : ` named "${name}"`
   })`;
 }

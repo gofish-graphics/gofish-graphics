@@ -9,6 +9,7 @@
 // Type-only (erased) so no runtime cycle with solver/scopes.ts, which imports
 // RenderSession from here.
 import type { ScopeRegistry } from "./solver/scopes";
+import type { LayerContext } from "./marks/markResult";
 import type { SplitBy } from "./datumProjection";
 import {
   Anchor,
@@ -593,20 +594,26 @@ export class GoFishNode {
    * across component boundaries in either direction.
    */
   public _isComponent: boolean = false;
-  /** Set when this node is a drawing clause of its parent layer's
-   *  `.relate()`: its 1-based position in the callback's clause list (for
-   *  error messages). It was returned from the callback, not written as a
-   *  plain child. A string
-   *  `ref` is legal only inside such a clause, and the layer schedules the
-   *  clause after the clauses that place what it reads. */
-  public _relateClause?: number;
+  /** The drawing clauses this layer's `.relate()` added, by slot: the index
+   *  of each clause child, mapped to its 1-based position in the callback's
+   *  clause list (for error messages). A clause was returned from the
+   *  callback, not written as a plain child. A string `ref` is legal only
+   *  inside such a clause, and the layer schedules the clause after the
+   *  clauses that place what it reads. The list is the layer's, not a flag on
+   *  the child, so another layer's `.relate()` never mistakes it for its own,
+   *  and a pass that wraps a clause in its slot (axis elaboration replaces
+   *  `children[i]`) leaves it a clause. */
+  public _relateClauses?: Map<number, number>;
+  /** The name registry this layer's children were resolved in (the
+   *  `layer([...])` combinator's own context). Its `.relate()` clauses are
+   *  resolved in it too, so a `selectAll` in a clause sees what a plain child
+   *  would. A layer built without the combinator has none, as its plain
+   *  children have none. */
+  public _names?: LayerContext;
   /** The paint-order defaults `layer` installed for its relational-mark
    *  children (`applyRelationalZBelowDefaults`): `.relate()` replaces the
    *  author's constraints, and keeps these. */
   public _paintDefaults?: ConstraintSpec[];
-  /** Set by `.relate()`: whether it added drawing clauses to this layer, so
-   *  a layer without any skips looking for them in `resolveNames`. */
-  public _hasRelateClauses: boolean = false;
   /** This layer's relate schedule as `resolveNames` last computed it, with
    *  the children and constraints it was computed from (see
    *  `relateScheduleForLayout` in `constraints/relate.ts`). */
@@ -1108,7 +1115,7 @@ export class GoFishNode {
     // With every ref resolved, check the relate clauses' dependency order
     // now: a cycle would otherwise recurse forever in the space pass (a ref
     // proxies its target's space, and a cyclic target contains the ref).
-    if (this._hasRelateClauses && this.children.some(isRelateClause)) {
+    if (this._relateClauses && this._relateClauses.size > 0) {
       computeRelateSchedule(this, resolveConstraintOperands(this));
     }
   }
@@ -2656,13 +2663,18 @@ export class GoFishNode {
    * places its operands, or a term that draws: an operator or mark such as
    * `arrow(opts, [a, b])` or `enclose(opts, [a, b])`, whose children may
    * mix operands from the environment with fresh marks. A drawing clause
-   * becomes a child of this layer (flagged `_relateClause`), and the layer
-   * lays it out after the clauses that write the positions it reads (see
-   * `scheduleRelate` in `constraints/relate.ts`). A later call replaces the
-   * clauses of an earlier one. `rows` are the rows the layer was drawn for,
-   * when it is a mark: a drawing clause is a mark position over them, so an
-   * empty-scope `chart()` in it binds them, as one among the layer's
-   * children does.
+   * becomes a child of this layer, recorded in the layer's clause list
+   * (`_relateClauses`), and the layer lays it out after the clauses that
+   * write the positions it reads (see `scheduleRelate` in
+   * `constraints/relate.ts`). A later call replaces the clauses of an earlier
+   * one. `rows` are the rows the layer was drawn for, when it is a mark: a
+   * drawing clause is a mark position over them, so an empty-scope `chart()`
+   * in it binds them, as one among the layer's children does.
+   *
+   * Each call is a binding form: its operands carry this layer as their
+   * scope, so an operand used in a nested layer's clause still means the
+   * node this layer's lookup finds, not a same-named node of the nested
+   * layer.
    */
   public async relate(fn: RelateFn, rows?: unknown): Promise<this> {
     // Only a layer schedules clauses around its solve (layer.tsx).
@@ -2673,7 +2685,9 @@ export class GoFishNode {
       );
     }
     // A later call replaces the drawing clauses of an earlier one.
-    this.children = this.children.filter((c) => !isRelateClause(c));
+    const old = this._relateClauses;
+    if (old) this.children = this.children.filter((_, i) => !old.has(i));
+    this._relateClauses = undefined;
     const env = relateEnv(this);
     const { constraints, nodes } = await resolveRelateClauses(
       fn(env),
@@ -2683,16 +2697,20 @@ export class GoFishNode {
     // The relate's constraints replace an earlier relate's, and the layer's
     // paint-order defaults for its own relational-mark children stay.
     this.constraints = [...(this._paintDefaults ?? []), ...constraints];
-    for (const node of nodes) {
+    if (nodes.length > 0) this._relateClauses = new Map();
+    for (const { node, position } of nodes) {
       node.parent = this;
+      this._relateClauses!.set(this.children.length, position);
       this.children.push(node);
     }
     // A drawing clause that is a relational mark (`enclose`, `line`, ...)
     // paints under the nodes it reads, by the same default a layer gives its
     // children (`applyRelationalZBelowDefaults`); a clause's operands are
     // names of this layer.
-    applyRelationalZBelowDefaults(this, nodes);
-    this._hasRelateClauses = nodes.length > 0;
+    applyRelationalZBelowDefaults(
+      this,
+      nodes.map((n) => n.node)
+    );
     return this;
   }
 
@@ -2710,10 +2728,14 @@ export class GoFishNode {
   }
 }
 
-/** Whether `c` is a drawing clause of some layer's `.relate()`. (`instanceof`
- *  first: a token `ref` proxy answers every property.) */
-export function isRelateClause(c: GoFishAST | undefined): c is GoFishNode {
-  return c instanceof GoFishNode && c._relateClause !== undefined;
+/** The 1-based clause position of `layer`'s child at index `i`, when that
+ *  child is a drawing clause of `layer`'s own `.relate()`; else `undefined`.
+ *  (`instanceof` first: a token `ref` proxy answers every property.) */
+export function relateClausePosition(
+  layer: GoFishAST | undefined,
+  i: number
+): number | undefined {
+  return layer instanceof GoFishNode ? layer._relateClauses?.get(i) : undefined;
 }
 
 const isGoFishNode = (node: GoFishNode | GoFishAST): node is GoFishNode => {

@@ -101,6 +101,9 @@ export function applyRelationalZBelowDefaults(
         typeof operand.selection === "string" &&
         operand.targetNode === undefined
       ) {
+        // An operand an enclosing `.relate()` bound is a name of that
+        // layer, not this one: leave it for that layer to claim.
+        if (operand.scope !== undefined && operand.scope !== node) continue;
         pairs.push([ensureConstraintName(connector), operand.selection]);
         claimedAny = true;
         continue;

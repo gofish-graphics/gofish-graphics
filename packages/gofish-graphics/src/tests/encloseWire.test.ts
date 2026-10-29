@@ -101,25 +101,28 @@ console.log("# avoiding: [b] inside .relate(), as Python writes it");
           })),
         },
       ],
-      relate: [
-        {
-          type: "enclose",
-          __combinator: true,
-          options: {
-            shape: {
-              kind: "blob",
-              convexity: 0,
-              clearance: 6,
-              avoiding: [{ type: "ref", selection: "b" }],
+      relate: {
+        scope: "r1",
+        clauses: [
+          {
+            type: "enclose",
+            __combinator: true,
+            options: {
+              shape: {
+                kind: "blob",
+                convexity: 0,
+                clearance: 6,
+                avoiding: [{ type: "ref", selection: "b", scope: "r1" }],
+              },
+              padding: 22,
             },
-            padding: 22,
+            children: [
+              { type: "ref", selection: "a", scope: "r1" },
+              { type: "ref", selection: "c", scope: "r1" },
+            ],
           },
-          children: [
-            { type: "ref", selection: "a" },
-            { type: "ref", selection: "c" },
-          ],
-        },
-      ],
+        ],
+      },
     },
   };
   check("the IR validates", valid(doc) === "", valid(doc));

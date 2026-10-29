@@ -731,7 +731,11 @@ class Mark(_Root):
         # the base class oblivious to the subclass extension.
         relate = getattr(self, "_relate", None)
         if relate is not None:
-            d["relate"] = [c.to_dict(payload) for c in relate]
+            scope, clauses = relate
+            d["relate"] = {
+                "scope": scope,
+                "clauses": [c.to_dict(payload) for c in clauses],
+            }
         # `@mark`-decorated components flag their output Mark as a
         # scope boundary so the harness wraps the resolved node in
         # `node.scope()` — matches JS createMark's behavior.
@@ -925,10 +929,12 @@ class RefSentinel(Mark):
     callback.
 
     `layer([rect(...).name("a")]).relate(lambda a, b: [...])` receives one of
-    these per callback parameter, carrying the parameter's name. As a
-    constraint operand it serializes as the name; as a child of a drawing
-    clause (`arrow([a, b])`) it serializes as `ref("a")`. JS resolves the
-    name at layout, from the relating layer.
+    these per callback parameter, carrying the parameter's name and the scope
+    id of the `.relate()` call that bound it. It serializes, as a constraint
+    operand and as a child of a drawing clause (`arrow([a, b])`) alike, as
+    `{"type": "ref", "selection": "a", "scope": ...}`, the same value as the
+    JS `RelateOperand`. JS resolves the name at layout, from the layer that
+    call ran on, so an inner layer's node of the same name cannot capture it.
     """
 
     _not_applicable = (
@@ -936,13 +942,22 @@ class RefSentinel(Mark):
         "applied to rows."
     )
 
-    def __init__(self, ref_name: str):
-        super().__init__("ref", selection=ref_name)
+    def __init__(self, ref_name: str, scope: str):
+        super().__init__("ref", selection=ref_name, scope=scope)
 
     @property
     def ref_name(self) -> str:
         """The name this operand stands for."""
         return self.kwargs["selection"]
+
+    @property
+    def scope(self) -> str:
+        """The id of the `.relate()` call that bound this operand."""
+        return self.kwargs["scope"]
+
+    def operand_ir(self) -> dict:
+        """This operand as a constraint's `refs` entry."""
+        return {"type": "ref", "selection": self.ref_name, "scope": self.scope}
 
 
 def _subtree_names(children: List[Any]) -> List[str]:
@@ -962,11 +977,14 @@ def _subtree_names(children: List[Any]) -> List[str]:
 
 
 def _callback_refs(
-    callback: Callable[..., Any], children: List[Any]
+    callback: Callable[..., Any],
+    children: List[Any],
+    operand: Callable[[str], "RefSentinel"],
 ) -> Dict[str, RefSentinel]:
     """The keyword arguments a `.relate()` callback receives: one
     `RefSentinel` per parameter it declares without a default, named after
-    the parameter. A parameter with a default keeps it and gets no
+    the parameter (`operand(name)`, which carries the call's scope id). A
+    parameter with a default keeps it and gets no
     `RefSentinel`: that is the loop idiom `lambda a, b, gap=gap: [...]`,
     which binds a loop variable, not a node. A callback with a `**rest`
     catch-all also receives every other name inside the layer
@@ -985,7 +1003,7 @@ def _callback_refs(
     ]
     if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params):
         names += [n for n in _subtree_names(children) if n not in declared]
-    return {name: RefSentinel(name) for name in names}
+    return {name: operand(name) for name in names}
 
 
 class AlignConstraint:
@@ -999,7 +1017,7 @@ class AlignConstraint:
         return {
             "type": "align",
             "options": self.options,
-            "refs": [r.ref_name for r in self.refs],
+            "refs": [r.operand_ir() for r in self.refs],
         }
 
 
@@ -1014,7 +1032,7 @@ class DistributeConstraint:
         return {
             "type": "distribute",
             "options": self.options,
-            "refs": [r.ref_name for r in self.refs],
+            "refs": [r.operand_ir() for r in self.refs],
         }
 
 
@@ -1035,7 +1053,7 @@ class PositionConstraint:
         return {
             "type": "position",
             "options": self.options,
-            "refs": [r.ref_name for r in self.refs],
+            "refs": [r.operand_ir() for r in self.refs],
         }
 
 
@@ -1058,7 +1076,7 @@ class NestConstraint:
         return {
             "type": "nest",
             "options": self.options,
-            "refs": [r.ref_name for r in self.refs],
+            "refs": [r.operand_ir() for r in self.refs],
         }
 
 
@@ -1080,7 +1098,7 @@ class ZOrderConstraint:
     def to_dict(self, payload: "_Payload") -> dict:
         return {
             "type": self.ctype,
-            "refs": [r.ref_name for r in self.refs],
+            "refs": [r.operand_ir() for r in self.refs],
         }
 
 
@@ -1306,7 +1324,8 @@ class RelatableMark(Mark):
         **kwargs,
     ):
         super().__init__(mark_type, _children=_children, **kwargs)
-        self._relate: Optional[List[Any]] = None
+        # The `.relate()` call: its scope id and its clauses.
+        self._relate: Optional[Tuple[str, List[Any]]] = None
 
     def _copy_meta(self, target: "Mark") -> "Mark":
         super()._copy_meta(target)
@@ -1342,21 +1361,40 @@ class RelatableMark(Mark):
         inside the layer, or two nodes at the same smallest distance, is an
         error at render time. Mirrors `GoFishNode.relate` and the JS
         `relateEnv` in `packages/gofish-graphics/src/ast/constraints/index.ts`.
+
+        Each call is a binding form with a fresh scope id, which every
+        operand it hands out carries. So an operand used inside a nested
+        layer's `.relate()` (an arrow from a callout to the outer curve)
+        still names the node this layer's lookup finds, even when the nested
+        layer has a node with the same name.
         """
         if self._children is None:
             raise ValueError(
                 ".relate() requires combinator children — use "
                 "`layer([...]).relate(...)`"
             )
-
-        clauses = _relate_clauses(
-            callback(**_callback_refs(callback, self._children))
+        children = self._children
+        return self._relate_env(
+            lambda operand: callback(
+                **_callback_refs(callback, children, operand)
+            )
         )
+
+    def _relate_env(
+        self, build: Callable[[Callable[[str], RefSentinel]], List[Any]]
+    ) -> "RelatableMark":
+        """`.relate()` with the environment as a function: `build` receives
+        `operand(name)`, which returns this call's operand for `name`, and
+        returns the clauses. For a library helper that relates names it gave
+        its own children (gotree's combiners), so it need not ask for every
+        name in the subtree with `**rest`."""
+        scope = f"relate-{uuid.uuid4()}"
+        clauses = _relate_clauses(build(lambda name: RefSentinel(name, scope)))
         new_mark = type(self)(
             self.mark_type, _children=self._children, **self.kwargs
         )
         self._copy_meta(new_mark)
-        new_mark._relate = clauses
+        new_mark._relate = (scope, clauses)
         return new_mark
 
 

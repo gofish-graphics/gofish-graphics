@@ -1,4 +1,4 @@
-import type { Placeable } from "../_node";
+import type { GoFishNode, Placeable } from "../_node";
 import type { GoFishAST } from "../_ast";
 import type { AxisMap } from "../domain";
 import { isToken, type Token } from "../createName";
@@ -33,11 +33,16 @@ export const isPointAlign = (
   spec !== undefined && spec !== "span" && spec !== "size";
 
 /**
- * A constraint operand: a node NAME, resolved at layout from the constrained
- * layer with the same lookup `ref("name")` uses (`resolveScopedName`), and the
- * operand's key in the placement solve.
+ * A constraint operand: a node NAME, resolved at layout with the same lookup
+ * `ref("name")` uses (`resolveScopedName`), and the operand's key in the
+ * placement solve. The lookup starts at `scope`, the layer whose `.relate()`
+ * bound the operand (a `RelateOperand`), or at the constrained layer when it
+ * has none (a constraint a pass builds directly).
  */
-export type ConstraintRef = { readonly name: string };
+export type ConstraintRef = {
+  readonly name: string;
+  readonly scope?: GoFishNode;
+};
 
 /** Per-axis data→pixel position maps, as built by `layer.tsx` and consumed
  *  by `Constraint.position` (a literal coordinate is a raw pixel; a `datum`

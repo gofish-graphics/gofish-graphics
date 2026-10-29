@@ -22,8 +22,15 @@ import {
 import type { AxesOptions, View } from "../ast/gofish";
 import { createName, type Token } from "../ast/createName";
 import { Constraint, RelateOperand } from "../ast/constraints";
+import {
+  relateScopeOf,
+  type RelateClause,
+  type RelateFn,
+} from "../ast/constraints/relate";
+import type { GoFishNode } from "../ast/_node";
 import { palette, gradient } from "../families/color";
 import { ref } from "../ast/shapes/ref";
+import type { GoFishRef } from "../ast/_ref";
 import { sealComponent } from "../ast/withGoFish";
 import {
   forwardInputsResolver,
@@ -55,7 +62,7 @@ export type OperatorSpec = Frontend.OperatorIR;
  *  union) because every reapplication site below works entry-by-entry. */
 export type LabelSpec = Frontend.LabelSpecIR;
 export type ConstraintSpec = Frontend.ConstraintIR;
-type RelateClauseIR = Frontend.RelateClauseIR;
+type RelateIR = Frontend.RelateIR;
 
 /**
  * What rebuilding any part of a document needs besides the part itself.
@@ -76,16 +83,45 @@ export interface IRContext {
    *  `encodeInputRefs`), which an `{__inputRef: i}` sentinel in its reply
    *  resolves back to. */
   inputRefs?: any[];
+  /** The layer each enclosing `.relate()` call ran on, by the call's wire
+   *  scope id (`RelateIR.scope`): an operand on the wire names its scope by
+   *  that id. Set per instance, as each `.relate()` callback runs, so a
+   *  layer drawn once per group binds its own. */
+  relateScopes?: Readonly<Record<string, GoFishNode>>;
+}
+
+/**
+ * The layer a wire scope id names: the one whose `.relate()` call bound it,
+ * for the instance being rebuilt (see `IRContext.relateScopes`).
+ */
+function relateScopeFor(
+  scope: string,
+  relateScopes: IRContext["relateScopes"]
+): GoFishNode {
+  const layer = relateScopes?.[scope];
+  if (!layer)
+    throw new Error(
+      `a .relate() operand of scope "${scope}" is used outside the .relate() ` +
+        `call that bound it.`
+    );
+  return layer;
 }
 
 /**
  * Rebuild one constraint clause of a `.relate()` from its IR. The wire
- * carries operand NAMES; each becomes a `RelateOperand`, which the layer
- * resolves at layout like any other, so a name that matches no node inside
- * the layer is reported there, by name.
+ * carries operands as a name plus the id of the `.relate()` call that bound
+ * it; each becomes a `RelateOperand` of that call's layer, which the layer
+ * resolves at layout like any other, so a name that matches no node is
+ * reported there, by name.
  */
-export function constraintFromIR(c: Frontend.ConstraintIR): unknown {
-  const operands = c.refs.map((name) => new RelateOperand(name));
+export function constraintFromIR(
+  c: Frontend.ConstraintIR,
+  ctx: IRContext
+): unknown {
+  const operands = c.refs.map(
+    (r) =>
+      new RelateOperand(r.selection, relateScopeFor(r.scope, ctx.relateScopes))
+  );
   if (c.type === "zAbove" || c.type === "zBelow") {
     return (Constraint as any)[c.type](...operands);
   }
@@ -273,11 +309,27 @@ export function resolveNodeRefs(
   kind: Frontend.NodeKind,
   type: string,
   opts: Record<string, any>,
-  resolveToken: TokenResolver
+  resolveToken: TokenResolver,
+  relateScopes?: IRContext["relateScopes"]
 ): Record<string, any> {
   const accepted = Frontend.acceptedFields(kind, type);
   if (accepted === undefined) return opts;
-  return resolveHeldNodes(accepted, opts, resolveToken);
+  return resolveHeldNodes(accepted, opts, resolveToken, relateScopes);
+}
+
+/** A `ref` from its IR. A `.relate()` operand (it carries `scope`) is looked
+ *  up from the layer whose `.relate()` call bound it. */
+function refFromIR(
+  r: Frontend.RefMarkIR,
+  resolveToken: TokenResolver,
+  relateScopes: IRContext["relateScopes"]
+): GoFishRef {
+  if (r.scope === undefined)
+    return ref(resolveRefSelection(r.selection, resolveToken));
+  return new RelateOperand(
+    r.selection as string,
+    relateScopeFor(r.scope, relateScopes)
+  ).toRef();
 }
 
 /** `opts` with the nodes held by the fields `accepted` declares rebuilt as
@@ -286,11 +338,12 @@ export function resolveNodeRefs(
 function resolveHeldNodes(
   accepted: Readonly<Record<string, { type: Frontend.FieldType }>>,
   opts: Record<string, any>,
-  resolveToken: TokenResolver
+  resolveToken: TokenResolver,
+  relateScopes?: IRContext["relateScopes"]
 ): Record<string, any> {
   const nodes = (v: any): any =>
     Array.isArray(v)
-      ? v.map((r) => ref(resolveRefSelection(r.selection, resolveToken)))
+      ? v.map((r) => refFromIR(r, resolveToken, relateScopes))
       : refOfSelect(v);
   const out: Record<string, any> = { ...opts };
   for (const [key, value] of Object.entries(opts)) {
@@ -404,16 +457,28 @@ export function mapMarkChildren(specs: MarkSpec[], ctx: IRContext): any[] {
 }
 
 /**
- * Rebuild the clauses of a `.relate()` callback, in order: a constraint
- * (it carries `refs`, operand names) through {@link constraintFromIR}, a mark
- * that draws like any other mark.
+ * A `.relate()` callback rebuilt from its IR. When the layer runs it, the
+ * call's wire scope id is bound to that layer (`relateScopeOf(env)`), and
+ * the clauses are rebuilt in order: a constraint (it carries `refs`, its
+ * operands) through {@link constraintFromIR}, a mark that draws like any
+ * other mark. Rebuilt per call: a `ref(...)` clause is a live GoFishRef that
+ * `.name()` mutates in place, so calls must not share one.
  */
-function relateClauses(clauses: RelateClauseIR[], ctx: IRContext): unknown[] {
-  return clauses.map((c) =>
-    Frontend.isConstraintIR(c)
-      ? constraintFromIR(c)
-      : mapMark(c as MarkSpec, ctx)
-  );
+function relateCallback(relate: RelateIR, ctx: IRContext): RelateFn {
+  return (env) => {
+    const inner: IRContext = {
+      ...ctx,
+      relateScopes: {
+        ...ctx.relateScopes,
+        [relate.scope]: relateScopeOf(env),
+      },
+    };
+    return relate.clauses.map((c) =>
+      Frontend.isConstraintIR(c)
+        ? constraintFromIR(c, inner)
+        : mapMark(c as MarkSpec, inner)
+    ) as RelateClause[];
+  };
 }
 
 /** Build a single mark from its IR spec. Recurses into combinator children.
@@ -547,7 +612,7 @@ function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
 
   // Leaf-form `ref(name)` — not a combinator, not a mark factory.
   if (spec.type === "ref" && !spec.__combinator) {
-    const refNode = ref(resolveRefSelection(spec.selection, resolveToken));
+    const refNode = refFromIR(spec, resolveToken, ctx.relateScopes);
     // A named ref stand-in, `ref(token).name("a")`. GoFishRef's
     // `.name()` mutates in place and returns `this`, making the ref a
     // relate operand of the enclosing layer (RefMarkIR carries `name`;
@@ -608,7 +673,8 @@ function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
       "combinator-mark",
       spec.type,
       resolveOptions(unwrapOpts(spec.options ?? {}, bridge)),
-      resolveToken
+      resolveToken,
+      ctx.relateScopes
     );
     let mark = rebuild("combinator-mark", spec.type, opts, {
       children: childMarks,
@@ -617,10 +683,7 @@ function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
       throw new Error(`Unknown combinator mark type: ${spec.type}`);
     }
     if (spec.relate && typeof (mark as any).relate === "function") {
-      // Rebuilt per call: a `ref(...)` clause is a live GoFishRef that
-      // `.name()` mutates in place, so calls must not share one.
-      const clauses = spec.relate as RelateClauseIR[];
-      mark = (mark as any).relate(() => relateClauses(clauses, ctx));
+      mark = (mark as any).relate(relateCallback(spec.relate, ctx));
     }
     if (spec.__scope) {
       mark = wrapWithScope(mark);
@@ -655,7 +718,8 @@ function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
       "leaf-mark",
       type as string,
       unwrapOpts(opts, bridge),
-      resolveToken
+      resolveToken,
+      ctx.relateScopes
     )
   );
   if (mark === undefined) {
@@ -667,7 +731,12 @@ function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
       mark = (mark as any).label(
         accessor,
         Object.keys(labelOpts).length > 0
-          ? resolveHeldNodes(Frontend.LABEL_OPTIONS, labelOpts, resolveToken)
+          ? resolveHeldNodes(
+              Frontend.LABEL_OPTIONS,
+              labelOpts,
+              resolveToken,
+              ctx.relateScopes
+            )
           : undefined
       );
     }

@@ -1253,6 +1253,8 @@ export function layer<T>(
       }
       const node = await Layer(opts, resolved);
       node.datum = datumOfInput(d as unknown[]);
+      // Its `.relate()` clauses are resolved in the same context.
+      node._names = sharedContext;
       return node;
     };
   // Each child is applied to the layer's own input.

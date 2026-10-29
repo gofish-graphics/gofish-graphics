@@ -103,7 +103,13 @@ layer([
   the clauses.
 - **Paint order.** Drawing clauses paint after the plain children, in clause
   order.
-- **Scope.** A string `ref("name")` is legal only inside a `.relate()` clause,
+- **Scope.** An operand keeps the layer whose `.relate()` bound it. Used
+  inside a nested layer's clause, it still names the node that layer found,
+  even when the nested layer has a node with the same name; a constraint
+  operand must still lie inside the layer that holds the constraint. A clause
+  sees the same chart names as the layer's plain children, so
+  `chart(select_all("points"))` works in a clause. A string `ref("name")` is
+  legal only inside a `.relate()` clause,
   where it resolves from the related layer; anywhere else it raises and says
   to move it into `.relate()`. A `create_name` token `ref` reaches across
   scopes and works anywhere.

@@ -291,7 +291,7 @@ shared by both loops: every child goes to `resolveMarkResult`
   tier, so resolving the tiers by hand would drop the shared projection;
 - a **`.relate()` operand** (a `RelateOperand`, a child of a drawing clause such
   as `arrow(opts, [a, b])`) — becomes a string `ref` of the name it carries,
-  which resolves from the relating layer (see
+  which resolves from the layer whose `.relate()` bound it (see
   [Name Resolution & Scoping](/internals/core/names-and-scoping)).
 
 `markResult.ts` imports neither `chartBuilder` nor `createOperator`, so
@@ -406,7 +406,9 @@ defers its layer registration via a `__layerRegistration` tag collected in a
 single post-resolve DFS walk (`collectLayerRegistrations`), so registry order
 follows parent-iteration order, not async-completion order. The same factory
 backs `makeRelatableMark` (which adds `.relate()`, and hands the rows the mark
-was called with to `GoFishNode.relate`, so a drawing clause binds them) and the
+was called with to `GoFishNode.relate`, so a drawing clause binds them; the
+`layer([...])` combinator keeps the registry it resolved its children in as
+the node's `_names`, so a drawing clause is resolved in it too) and the
 combinator marks — one wiring, not three copies. The region-compositing
 combinators share one factory (`makePorterDuffCombinator`), typed by their
 options: only `intersect` takes paint (`fill`, `stroke`, `strokeWidth`,
