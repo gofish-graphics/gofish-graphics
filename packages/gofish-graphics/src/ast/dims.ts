@@ -296,27 +296,31 @@ export const centerOf = <T>(d: Interval<T>): T | undefined =>
   d.min === undefined ? d.center : undefined;
 
 /** The pixel start of a box axis placed by its center: the center through
- *  the axis's scale, less half the box's pixel size. */
+ *  the axis's scale, less `middlePx`, the box's middle measured from its
+ *  origin. */
 export const startAtCenter = (
   center: MaybeValue<number>,
   scale: ((x: number) => number) | undefined,
-  sizePx: number
-): number => computeAesthetic(center, scale, undefined)! - sizePx / 2;
+  middlePx: number
+): number => computeAesthetic(center, scale, undefined)! - middlePx;
 
-/** The pixel start of a box axis `sizePx` pixels long: by its center when it
- *  has one ({@link startAtCenter}), else at its `min` through the axis's
- *  scale. Undefined when the box has no position of its own on the axis, so
- *  the parent places it. A pixel center with a pixel size also has the `min`
- *  they derive, but the box is placed by the center: `sizePx` is the box's
- *  own size, which for a text or an image is not the `w` or `h` it was
- *  given (a text's x origin is its anchor, so it passes 0). */
+/** The pixel position of a box axis's origin: by its center when it has one
+ *  ({@link startAtCenter}), else at its `min` through the axis's scale.
+ *  Undefined when the box has no position of its own on the axis, so the
+ *  parent places it. `middlePx` is the box's middle measured from its
+ *  origin: half its size for a box whose origin is its start (a rect, an
+ *  image), and `(minX + maxX) / 2` in x for a text, whose x origin is its
+ *  anchor point, inside its box. A pixel center with a pixel size also has
+ *  the `min` they derive, but the box is placed by the center, since the
+ *  box's own size (a text's, an image's) need not be the `w` or `h` it was
+ *  given. */
 export const positionOf = (
   dim: Interval<MaybeValue<number>>,
   scale: ((x: number) => number) | undefined,
-  sizePx: number
+  middlePx: number
 ): number | undefined =>
   dim.center !== undefined
-    ? startAtCenter(dim.center, scale, sizePx)
+    ? startAtCenter(dim.center, scale, middlePx)
     : computeAesthetic(dim.min, scale, undefined);
 
 export type IndexedDims<T = number> = {

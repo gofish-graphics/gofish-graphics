@@ -299,8 +299,11 @@ export function collectPositionDomains(
       const span = c.region?.spans[axis];
       if (span !== undefined) {
         foldCoordinate(acc, span, axis);
+        // An enclosing cell's span (`PositionRegion.placed`) places the
+        // child as an interval does: the cell is the outer partition's.
         const cell = c.region!.cell;
-        if (cell instanceof Cell) acc.cells?.push([cell]);
+        if (cell instanceof Cell && c.region!.placed[axis])
+          acc.cells?.push([cell]);
         else acc.cells = undefined;
       }
     }

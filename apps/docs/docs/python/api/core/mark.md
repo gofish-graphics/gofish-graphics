@@ -281,7 +281,7 @@ group's rows) produces gets stamped with that leaf's own subdata, and
   ```
 
 - **A `field(...)` aggregate** (`field("count").sum()` / `.mean()` /
-  `.count()` / `.distinct()`) folds the group's rows to one value — use this
+  `.median()` / `.count()` / `.distinct()`) folds the group's rows to one value — use this
   for a group total or mean:
 
   ```python

@@ -6,9 +6,9 @@
  * stories in `stories/bench/Benchmarks.stories.tsx`): a multi-tier `.layer()`
  * chain where a MIDDLE tier is an empty-scope `chart().flow(group({by}))`
  * whose mark is a relational mark (`line()`, tagged `__relationalFusable`).
- * Fusion is correctly skipped when that tier's `.mark()` is first called
- * (`usesPreviousLayerMarks()` is true), so the still-tagged relational mark is
- * stored as `finalMark`. Because a LATER tier follows, `LayerBuilder.resolve()`
+ * Fusion is left to the binding when that tier's `.mark()` is first called
+ * (`usesPreviousLayerMarks()` is true; #1232), so the still-tagged relational
+ * mark is stored as `finalMark`. Because a LATER tier follows, `LayerBuilder.resolve()`
  * calls `tier.withData(prevRefs)` (an Array of `GoFishRef`, not a `GoFishRef`
  * instance) and then `tier.ensureNamedMark(...)`. Before the fix,
  * `ensureNamedMark` re-invoked `this.mark(named)`, re-entering the fusion
@@ -24,8 +24,20 @@
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 
-const { chart, group, scatter, circle, line, ribbon, text, selectAll, layer } =
-  GoFish as any;
+const {
+  chart,
+  group,
+  scatter,
+  spread,
+  field,
+  circle,
+  blank,
+  line,
+  ribbon,
+  text,
+  selectAll,
+  layer,
+} = GoFish as any;
 
 declare const process: { exit(code: number): never };
 
@@ -84,26 +96,114 @@ async function main() {
   );
   check("resolve() produced a node", node !== undefined && node !== null);
 
-  console.log(
-    "\n# Anchor channels on a relational mark that will NOT fuse must throw at .mark() call time"
-  );
+  console.log("\n# An empty scope decides fusion where it is bound (#1232)");
 
   // Empty-scope tier (`usesPreviousLayerMarks()`) + a relational mark carrying
-  // an anchor key (`h`) — the mark connects the previous tier's existing
-  // marks, so `h` has nothing to anchor and must be a loud error, thrown
-  // synchronously when `.mark()` is called (not deferred to `.resolve()`).
-  let anchorOnEmptyScopeThrew: unknown;
+  // an anchor key (`h`). The scope's data is not known at `.mark()`, so the
+  // mark is kept for the binding to decide: no throw yet.
+  let deferredThrew: unknown;
   try {
     chart()
       .flow(group({ by: "family" }))
       .mark(line({ h: "count" }));
   } catch (e) {
-    anchorOnEmptyScopeThrew = e;
+    deferredThrew = e;
   }
   check(
-    "empty-scope tier: line({ h }) throws synchronously at .mark() call time",
-    anchorOnEmptyScopeThrew instanceof Error &&
-      /\bh\b/.test((anchorOnEmptyScopeThrew as Error).message)
+    "empty-scope tier: line({ h }) does not throw at .mark() call time",
+    deferredThrew === undefined,
+    deferredThrew instanceof Error ? deferredThrew.message : String(deferredThrew)
+  );
+
+  // Bound to the previous tier's marks by `.layer(...)`: the line connects
+  // EXISTING marks, so `h` has nothing to anchor and is a loud error. A chain
+  // whose first tier is that empty scope is bound the same way.
+  const layeredOverDots = (tier: any) =>
+    chart(data, { w: 200, h: 200 })
+      .flow(scatter({ by: "id", x: "x", y: "y" }))
+      .mark(circle({ r: 3 }))
+      .layer(tier)
+      .resolve();
+  const lineWithH = () =>
+    chart()
+      .flow(group({ by: "family" }))
+      .mark(line({ h: "count" }));
+  for (const [label, tier] of [
+    ["empty-scope .layer() tier", lineWithH()],
+    ["empty-scope chain in .layer()", lineWithH().layer(text({ text: "c" }))],
+  ] as const) {
+    let threw: unknown;
+    try {
+      await layeredOverDots(tier);
+    } catch (e) {
+      threw = e;
+    }
+    check(
+      `${label}: line({ h }) throws (it connects existing marks)`,
+      threw instanceof Error &&
+        /connects EXISTING marks/.test((threw as Error).message),
+      threw instanceof Error ? threw.message : String(threw)
+    );
+  }
+
+  // Bound to a partition's rows in a mark position (a `layer([...])` child):
+  // the rows need anchors, so the ribbon fuses and draws them. This is the
+  // #1232 repro, which used to throw the "connects EXISTING marks" error.
+  const ridgeRows = [
+    { g: "a", x: 0, pdf: 1 },
+    { g: "a", x: 1, pdf: 3 },
+    { g: "a", x: 2, pdf: 2 },
+    { g: "b", x: 0, pdf: 2 },
+    { g: "b", x: 1, pdf: 1 },
+    { g: "b", x: 2, pdf: 4 },
+  ];
+  const ridgeline = (inner: any) =>
+    chart(ridgeRows)
+      .flow(spread({ by: field("g"), dir: "y" }))
+      .mark(layer([inner]))
+      .toDisplayList({ w: 200, h: 200 });
+  const pathsOf = (dl: any) => {
+    const out: string[] = [];
+    const walk = (it: any) => {
+      if (it.kind === "path") out.push(it.d);
+      for (const c of it.children ?? []) walk(c);
+    };
+    dl.items.forEach(walk);
+    return out;
+  };
+  let fusedInLayer: any;
+  let fusedInLayerThrew: unknown;
+  try {
+    fusedInLayer = await ridgeline(
+      chart()
+        .flow(scatter({ x: "x" }))
+        .mark(ribbon({ h: "pdf", fill: "none" }))
+    );
+  } catch (e) {
+    fusedInLayerThrew = e;
+  }
+  check(
+    "empty scope in a layer([...]) child: ribbon({ h }) fuses over the rows",
+    fusedInLayerThrew === undefined,
+    fusedInLayerThrew instanceof Error
+      ? fusedInLayerThrew.message
+      : String(fusedInLayerThrew)
+  );
+  // It draws exactly what the fusion written out by hand draws.
+  const byHand = pathsOf(
+    await ridgeline(
+      chart()
+        .flow(scatter({ x: "x" }))
+        .mark(blank({ h: "pdf" }))
+        .layer(ribbon({ fill: "none" }))
+    )
+  );
+  const fusedPaths = fusedInLayer ? pathsOf(fusedInLayer) : [];
+  check(
+    "...one ribbon per partition, as .mark(blank({ h })).layer(ribbon()) draws",
+    fusedPaths.length === 2 &&
+      JSON.stringify(fusedPaths) === JSON.stringify(byHand),
+    `${JSON.stringify(fusedPaths)} vs ${JSON.stringify(byHand)}`
   );
 
   // Same empty-scope shape, but with NO anchor keys — the existing happy path

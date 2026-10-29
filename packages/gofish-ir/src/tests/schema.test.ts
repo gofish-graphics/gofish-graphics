@@ -684,6 +684,8 @@ for (const [name, partition] of [
   ["a step", { kind: "step", size: 0.5 }],
   ["a threshold count", { kind: "thresholds", thresholds: 20 }],
   ["threshold edges", { kind: "thresholds", thresholds: [1, 2, 5] }],
+  ["a quantile count", { kind: "quantiles", quantiles: 10 }],
+  ["quantile probabilities", { kind: "quantiles", quantiles: [0.05, 0.5] }],
 ] as const) {
   const r = validate(binBy(partition));
   check(
@@ -701,6 +703,9 @@ for (const [name, partition] of [
   ["a fractional threshold count", { kind: "thresholds", thresholds: 2.5 }],
   ["an empty list of edges", { kind: "thresholds", thresholds: [] }],
   ["a non-numeric edge", { kind: "thresholds", thresholds: [1, "2"] }],
+  ["a quantile count below 1", { kind: "quantiles", quantiles: 0 }],
+  ["a probability of 0", { kind: "quantiles", quantiles: [0, 0.5] }],
+  ["a probability of 1", { kind: "quantiles", quantiles: [0.5, 1] }],
   ["a Calendar value with no kind", { every: 1, start: "sunday" }],
   ["the old untagged Calendar form", { unit: "month", step: 1 }],
   ["a start on a level other than weeks", { kind: "month", start: "sunday" }],
@@ -766,6 +771,21 @@ for (const [name, partition] of [
     "bin with a key beside the partition rejected, naming the key",
     !r.valid && r.errors.some((e) => e.path.endsWith(".thresholds")),
     JSON.stringify(r)
+  );
+}
+// `median` is a fold, as `mean` is.
+{
+  const withOp = (op: string) =>
+    validate(
+      chart([{ type: "spread", dir: "x", by: "k" }], {
+        type: "rect",
+        h: { type: "field", name: "y", ops: [{ op }] },
+      })
+    );
+  check(
+    "a median fold accepts, an unknown fold rejects",
+    withOp("median").valid && !withOp("medium").valid,
+    JSON.stringify(withOp("median"))
   );
 }
 
@@ -1357,6 +1377,7 @@ console.log("\n# Strategies");
       ["Bin", { kind: "step" }, /size/],
       ["Bin", { step: 1 }, /unknown kind undefined/],
       ["Bin", { kind: "thresholds", thresholds: 0 }, /at least 1/],
+      ["Bin", { kind: "quantiles", quantiles: [1] }, /below 1/],
       ["Calendar", { kind: "month", every: 0 }, /at least 1/],
       ["Calendar", { kind: "month", every: 1.5 }, /whole number/],
       [

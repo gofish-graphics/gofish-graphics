@@ -11,7 +11,7 @@
 //   - DOMAIN ops (`sort`/`reverse`/`bin`/`dropNulls`) apply to a `by` grouping key — see
 //     `splitEntries` in datumProjection.ts, the shared split+ops helper used
 //     by spread/group/scatter.
-//   - AGGREGATE ops (`sum`/`mean`/`count`/`distinct`) fold a value channel's
+//   - AGGREGATE ops (`sum`/`mean`/`median`/`count`/`distinct`) fold a value channel's
 //     rows to a single value — see `evalFieldValues` below. Expression
 //     evaluation is ORTHOGONAL to the channel's default aggregation (sum for
 //     size, mean for pos): the channel applies its default exactly as it
@@ -28,6 +28,7 @@
 // Only type-only imports from `data.ts` (no runtime import) so `data.ts` can
 // import THIS module's class at runtime without a cycle.
 import type { MaybeValue } from "./data";
+import { median } from "d3-array";
 import { checkSummable, COUNT, type Quantity } from "./measure";
 import { withWire, wireOf } from "./wire";
 import {
@@ -84,6 +85,7 @@ export type FieldOp =
   | { op: "normalize" }
   | { op: "sum" }
   | { op: "mean" }
+  | { op: "median" }
   | { op: "count" }
   | { op: "distinct" };
 
@@ -170,8 +172,9 @@ export class FieldExpr<
    *  - a product of calendar levels, `[Calendar.year, Calendar.month]`: one
    *    cell where one cell of each level meet, each level a part of the one
    *    before it (the June of 2015, labeled "Jun 2015").
-   *  - `Bin.step(size)` or `Bin.thresholds(countOrEdges)` (a count or a list
-   *    of edges); about 10 cells when omitted.
+   *  - `Bin.step(size)`, `Bin.thresholds(countOrEdges)` (a count or a list
+   *    of edges), or `Bin.quantiles(countOrProbabilities)` (a count or a
+   *    list of probabilities); about 10 cells when omitted.
    *
    *  A second `.bin(...)` splits each cell of the first (a chain:
    *  `.bin(Calendar.year).bin(Calendar.month)`, the months of each year), and
@@ -226,6 +229,13 @@ export class FieldExpr<
    *  (size/pos) slot. */
   mean(): FieldExpr<false> {
     return this._withOp({ op: "mean" });
+  }
+
+  /** Fold the group's rows to the median of this field (the type-7
+   *  quantile at 0.5: the mean of the two middle values when there is an
+   *  even number). Valid only in a value (size/pos) slot. */
+  median(): FieldExpr<false> {
+    return this._withOp({ op: "median" });
   }
 
   /** Fold the group's rows to the row count (ignores the field's own values).
@@ -424,6 +434,12 @@ export const meanOf = (values: readonly unknown[]): number | undefined => {
     : vs.reduce((a, b) => a + b, 0) / vs.length;
 };
 
+/** The median of the values of `values` that are not missing (d3's
+ *  `median`, the type-7 quantile at 0.5), or undefined when there are none,
+ *  as for {@link meanOf}. */
+export const medianOf = (values: readonly unknown[]): number | undefined =>
+  median(present(values));
+
 /** The sum of the values of `values` that are not missing. Over no rows it
  *  is 0, the sum of nothing. Over rows whose values are all missing it is
  *  undefined, as in SQL: their sum is unknown, not 0. */
@@ -510,6 +526,8 @@ export function evalFieldValues<T>(
       // (`meanOf`), which a channel takes as it is, so the channel has no
       // value either.
       return { values: [meanOf(rows.map(key))], folded: true };
+    case "median":
+      return { values: [medianOf(rows.map(key))], folded: true };
     default: // "sum"
       return {
         values: [sumIn(rows.map(key), column, "field(...).sum()")],

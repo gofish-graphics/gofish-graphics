@@ -58,6 +58,43 @@ Figma-inspired names above — a clean break, no aliases:
 | `atop`            | `paint`     |
 | `mask`            | `mask`      |
 
+## Region and paint
+
+The operands give the region. Without `fill` or `stroke`, `intersect` draws
+the operands' own paint where they overlap. With either, it draws the overlap
+as one shape in its own paint, and the operands' paint is not drawn.
+
+```python
+from gofish import circle, intersect, rect
+
+intersect(
+    [circle(cx=90, cy=90, r=70), rect(x=80, y=30, w=120, h=120)],
+    fill="#D1E4F6",
+    stroke="#467DA8",
+    stroke_width=2,
+).render(w=220, h=180)
+```
+
+A painted `intersect` draws one exact path when both operands trace their
+outlines (a `rect` with square corners, a `circle`, an `ellipse`, a `ribbon`,
+a `region`) and at least one of them is convex. Curves are flattened. When an
+operand has no exact outline (an `image`, a `text`, a rounded `rect`), a fill
+is drawn through a mask of the two operands' ink, and a `stroke` raises:
+
+```
+intersect: a stroke needs the exact outline of the result, and these operands
+give none. ...
+```
+
+Two operands that are both not convex also raise on a stroke
+([#1201](https://github.com/joshpoll/gofish/issues/1201)). The stroke is
+never quietly dropped or drawn around a box. Only `intersect` takes paint
+today; `exclude` and `subtract` can leave holes or several pieces.
+
+A [croissant chart](/python/examples/croissant) paints the intersection of a
+density curve with each cell of a partition, drawn in by
+[`region(inset=...)`](/python/api/marks/region).
+
 ## Signatures
 
 ```python

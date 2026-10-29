@@ -3,6 +3,7 @@
 from gofish import (
     Bin,
     Color,
+    Constraint,
     chart,
     circle,
     field,
@@ -231,8 +232,9 @@ def story_penguin_beak_voronoi():
     )
 
 
-# A text mark has a size of its own, so it sits at the center of its
-# hexagon's box, which is the hexagon's center.
+# Each hexagon is a layer of its region and its count. The region draws the
+# hexagon it is in, and the count is centered on the region's box, the
+# hexagon's center.
 def story_airport_hex_counts():
     airports = _contiguous_airports()
     return (
@@ -245,8 +247,12 @@ def story_airport_hex_counts():
         .mark(
             layer(
                 [
-                    region(fill=field("iata").count(), stroke="white"),
-                    text(text=field("iata").count(), font_size=10),
+                    region(fill=field("iata").count(), stroke="white").name("cell"),
+                    text(text=field("iata").count(), font_size=10).name("count"),
+                ]
+            ).relate(
+                lambda cell, count: [
+                    Constraint.align([cell, count], x="middle", y="middle"),
                 ]
             )
         ),

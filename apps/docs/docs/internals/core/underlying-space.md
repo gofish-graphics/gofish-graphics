@@ -727,17 +727,16 @@ composes its targets' spaces into the layer's claim on that axis:
   the old `min` (on an upward y, a spread pinned across a cell drew its bars
   one cell away). The interval also sizes the target before its layout: the
   layer proposes the span's pixel length as the child's size on that axis
-  (`buildChildProposals`, `constraints/proposalPlan.ts`), so the child's
+  (`buildChildSpans`, `constraints/proposalPlan.ts`), so the child's
   content fills the span it will be pinned across rather than being laid out
   in the whole layer and then stretched. `scatter` uses both
   forms of `Constraint.position`: plain `x`/`y` → a point coordinate, range
   `xMin`/`xMax`/`yMin`/`yMax` → an interval coordinate (the operator no longer
   has a bespoke layout). A position constraint may instead give its target
   a **region** (`region: PositionRegion`, #1059), which is what `partition`
-  uses. It is not a pin: the
-  layer turns it into the region it hands the target in its layout call,
-  and the target places itself there, keeping the size its layout gave it
-  (see [Partition](#partition-each-group-in-its-cell)). A categorical
+  uses. It sizes its target as an interval does, but pins only the
+  target's middle at the cell's middle, so the target keeps the size its
+  layout gave it (see [Partition](#partition-each-group-in-its-cell)). A categorical
   scatter channel such as `x: "lake"` lowers to discrete placement coordinates
   `i / count · axisSize`; those are placement coordinates, not datum values, so
   they become numeric placement facts without affecting the layer's data domain.
@@ -1035,9 +1034,12 @@ facts are emitted: literals are pixels, while datum coordinates elaborate
 through the already-solved data→pixel scale plus any post-scale offset. A
 box placed by a data center (`circle({ cy: "value", r: 5 })`, a `rect` with
 `cx`) is a glyph like a text or an image: its axis space is `glyphAxis` of the
-center, and its layout puts the center through the scale and takes half its
-pixel size off (`positionOf` in `dims.ts`, which every box mark places its
-start by: a rect, an ellipse, a text and an image). This
+center, and its layout puts the center through the scale and takes the
+box's middle, measured from its origin, off (`positionOf` in `dims.ts`,
+which every box mark places its origin by: a rect, an ellipse, a text and an
+image). The middle is half the box's pixel size, except in x for a text,
+whose origin is its anchor point inside its box. Its claim reads the same
+rule before the scales exist (`literalStart` in `extent.ts`). This
 keeps the unified constraint semantics without a generic dense linear solver:
 strong facts win, relation cycles are checked for contradiction, and components
 without an absolute pin are normalized so the minimum solved coordinate in that
@@ -2156,12 +2158,15 @@ reads only the classes, never the definition. Nine classes exist:
   names the unit variable. A transform writes it for the columns it makes
   (`bin(field)`'s `start`/`end`/`size` are amounts of `field`'s quantity, in
   `field`'s declared unit if it has one; its `count` is in `"count"`).
-- `HasDomain` (`{ lo, hi }`, #1059): the interval the column's values span,
+- `HasDomain` (`{ lo, hi, sorted }`, #1059): the interval the column's values span,
   from the least to the greatest, in the data it was typed with. Nothing
   declares it: `applySchema` computes it for every column whose
   values are all finite numbers (missing values aside; a time's values are
   epoch milliseconds by then), after the other classes. It is what a binned
-  key's cells cover (see [Cells](#cells-a-binned-key)).
+  key's cells cover (see [Cells](#cells-a-binned-key)). `sorted()` gives
+  the same values in order, for the cells of `Bin.quantiles`: it reads them
+  off the typed rows on its first call only and keeps them, so a column no
+  quantile reads is never copied.
 - `HasInteger` (`{}`): the values are integers. JS has one number type, so
   no JS column has it and no builder writes it: the Python hosts' Arrow
   decode attaches it to a column that arrived as integers, and their encode
@@ -2308,7 +2313,7 @@ error rather than silently doing the wrong thing:
   named field over each group's rows; `reverse` reverses the entries. An
   aggregate op or `normalize` reaching a `by` slot throws — a domain op
   describes _which groups exist_, not _what a group's value is_.
-- **Aggregate ops** (`.sum()`, `.mean()`, `.count()`, `.distinct()`) apply to
+- **Aggregate ops** (`.sum()`, `.mean()`, `.median()`, `.count()`, `.distinct()`) apply to
   a _value_ channel slot (a mark's `h`/`w`/`x`/`y`, or an operator's
   entry-flagged `size`) and fold a group's rows to a single value —
   `evalFieldValues` in `fieldExpr.ts`. A domain op or a second aggregate
@@ -2337,10 +2342,10 @@ never in the expression's `ops`, so the three slots stay as they are.
 
 `field(x).bin(p)` (#1058) is a value transform: it maps each value of `x` to
 its **cell** in the partition `p` (`cells.ts`). A partition is a Calendar
-value (`calendar.ts`), `Bin.step(size)`, or `Bin.thresholds(countOrEdges)`
-(a count, or a list of edges), the two `Bin` kinds that bin one field
-(`families/bin.ts`). Those two are objects of a class, `StepBin` and
-`ThresholdsBin`, whose own keys are their wire form (`{ kind: "step", size }`)
+value (`calendar.ts`), `Bin.step(size)`, `Bin.thresholds(countOrEdges)`
+(a count, or a list of edges), or `Bin.quantiles(countOrProbabilities)`, the
+three `Bin` kinds that bin one field (`families/bin.ts`). Those three are
+objects of a class, `StepBin`, `ThresholdsBin` and `QuantilesBin`, whose own keys are their wire form (`{ kind: "step", size }`)
 and whose `.format(fn)` is held off those keys, as a Calendar value's is. The
 wire form of the op is `{ op: "bin", partition? }` with the partition's own
 wire form, a Calendar value's `{ kind: "month", every: 1 }` or a `Bin` kind's,
@@ -2395,7 +2400,14 @@ puts a value in the cell that holds it whatever the domain (March 1 is in
 March). A `Bin.thresholds` partition is fitted to the domain, so it covers
 the closed domain: the count's step is the one a numeric axis with that many
 ticks uses (`tickIncrement`), and the largest value falls in the last cell
-when it sits on an edge, as in numpy's `histogram` and d3's `bin`.
+when it sits on an edge, as in numpy's `histogram` and d3's `bin`. A
+`Bin.quantiles` partition is fitted the same way, with its inner edges at
+type-7 quantiles (`quantileSorted`) of the column's values in the data it
+was typed with (`HasDomain.sorted`), so it too reads no group's rows. Two
+edges at one value, as many equal values give, throw rather than merge, as
+polars' `qcut` does. A column of one value has no quantiles to cut at, and
+throws saying the column is constant; a probability given twice is caught
+earlier, by the list's `uniqueItems` in the descriptor.
 
 **Cycles, products and chains.** A calendar level binned alone is a part
 of the next larger level (`CalendarPartition.cycle`): `Calendar.month` is
@@ -2475,41 +2487,75 @@ the year too, as a product or a chain).
 
 It has no layout code of its own. It is a layer with one `position`
 constraint per child that gives it its cell (`Constraint.position({ region
-})`, with a `PositionRegion` per cell) and one `align` on each axis the
-key's columns are not placed along (the other axis, for a 1D key), as in a
-scatter.
+})`, with a `PositionRegion` per cell) and one `align` on each axis where
+nothing gives the children a cell (the other axis, for a top-level 1D key),
+as in a scatter.
 
-**Regions flow down in the layout call.** A region is the space a parent
-gives a child, and it travels with the size proposal:
-`child.layout(size, scales, region)` (`geometry/region.ts`). A region is a
-span `[min, max]` per axis, either of which may be missing, plus an optional
-outline, measured from the parent's origin in the axis order of whoever
-holds it (`GoFishNode.layout` reflects it into the child's own order when
-the two y directions differ). The layer builds each child's region in
-`buildChildProposals` (`constraints/proposalPlan.ts`): on an axis where the
-child's `region` spans, the cell's two edges mapped to pixels; on an axis
-where it spans none, the region the layer itself was handed there, if any. Each region bounds a different axis, so that is their intersection. The
-child is proposed each span's length as its size (`childLayoutSizeProposal`)
-and then places itself in the span: a node whose own layout did not place it
-on that axis is centered there by `GoFishNode.layout`. So a `rect` or a
-`region` with no size there fills its cell, a `stack` or `spread` inside a
-cell divides the cell, and a circle or a text keeps its own size and sits in
-the middle of the cell. An interval would pin both edges instead, which sets
-the child's size and would stretch a circle into an ellipse. The region
-itself lowers to no placement fact: its target is already placed when the
-solve runs, so the layer takes it out of what the solve sees
-(`placementConstraints`, `constraints/proposalPlan.ts`). There an `align`
-also loses each axis on which every one of its operands has a span in its
-region, since the regions placed them there.
+**A partition pushes its scale and its cells down.** The cell is in data,
+so the partition's position scale maps it: the layer resolves the cell's two
+edges through its frame, as it resolves an interval
+(`compilePlacementCoordinate`). The child is proposed the cell's length as
+its size there (`buildChildSpans`, `childLayoutSizeProposal`,
+`constraints/proposalPlan.ts`), and the cell lowers to a pin of the child's
+middle at the cell's middle (`lowerPositionPlacement`,
+`constraints/position.ts`). So a `rect` with no size there fills its cell, a
+`stack` or `spread` inside a cell divides the cell, and a circle or a text
+keeps its own size and sits in the middle of the cell. An interval would pin
+both edges instead, which sets the child's size and would stretch a circle
+into an ellipse. A child placed by its data in the layer's frame is not
+pinned (`isDataPositioned`), and neither is one that placed itself: they are
+where they are. The ownership plan (`PlacementOwnershipPlan`,
+`constraints/placementLowering.ts`) records a cell's axes as pinned for its
+children, as it does an interval's, so an `align` on that axis defers to the
+cell: it moves only children with no cell there, to the first child that has
+one. (The layer's type fold does not yet agree: an align on an axis that a
+cell or an interval places replaces the layer's position frame there, so end
+to end the cell loses its map; an expected failure in `region.test.ts`.
+`partition` aligns only on axes where its children have no cell.)
 
-A child with no region of its own gets the region the layer was handed,
-outline and all, unless the layer's constraints place it (a stack's
-children are placed by its distribute and align). So a layer of a `region`
-and a `text` as a partition's mark gives each cell to both: the region
-draws it, and the text sits at its center. A layer passes the region it was
-handed on in its own frame, each span starting at 0 (`rebaseRegion`), and
-`GoFishNode.layout` places the layer itself in the region it was handed, as
-it places any node.
+**A `region` is placed by its data.** The `region` mark reads its cell from
+the partition around it (`enclosingCell`, `constraints/position.ts`: the
+region a `position` constraint gives the nearest of it and its ancestors).
+Its type on each axis its cell spans is the cell's interval, `CONTINUOUS`
+and `pinned`, so it shares the frame of the layer it is in, as a rect with a
+data `x` and `x2` does, and the partition hands it the map of its scale
+through the one seating rule (`childPosScalesFor`, `seatInScope`,
+`frameOf`). It maps the cell's edges, and the outline of a cell of the
+plane, through that map. Since its type claimed the cell, its parent
+leaves it where its data puts it, so a datum it cannot map (no map on that
+axis, as under a `spread` on the cell's axis, or a corner that is not a
+number) is an error that names the axis, not a box at the size it is
+offered. Only on an axis with no cell is it as long as its proposed size.
+A layer of marks in a cell (a `region` and a curve,
+or a dot at a median) is pinned too, so every mark in it reads the same
+scale. Such a layer is not pinned to the cell's middle, and nothing places
+a mark in it that has no position of its own: a text in a layer beside a
+`region` is placed by an `align` that names the two, not by the cell. A
+region composite (`intersect` and the others) is no different: its `region()`
+operand reads its cell, and its `ref` operand is where its target is.
+
+**A partition inside a cell divides that cell.** A partition reads the cell
+it is in (`enclosingCell`) when its constraints are built, and the
+partitions around it have built theirs by then, since the hooks run top-down
+(`resolveAliases`). On each axis its key does not place, each child's region
+spans the cell the partition is in (`PositionRegion`'s `enclosing`), so the
+child is placed there as a child of the outer partition is: centered in it,
+or filling it. The inner partition's layer is then pinned on that axis, over
+the cell, so it shares the outer partition's frame and resolves the cell
+through the outer scale. Nothing is left to align there. The cell pushed
+down is the outer partition's, so it makes no cells of the inner layer on
+that axis: `PositionRegion.placed` says which axes the key places, and
+`collectPositionDomains` folds an enclosing cell's span into the domain as
+an interval, not as a cell. The axis that draws the cells is the outer
+partition's.
+
+The cell pushed down is read in the outer partition's frame, and nothing
+checks that the nodes in between share that frame. A row with a size of its
+own, whose content is placed by other data (a density's `pdf`), maps its
+axis in a frame of its own, so an inner partition or `region` there reads
+the outer cell through the wrong scale (an expected failure in
+`region.test.ts`). Whether a node has a frame of its own is decided at
+layout (`solveLayerScales`), after `enclosingCell` runs.
 
 The region holds its cell (a `RegionCell`, cells.ts: an id, a label when it
 has one, a span per axis, and an outline when it is not a box) and the
@@ -2535,11 +2581,11 @@ partition and labels each cell between its two boundary ticks
 ([Axes](/internals/frontend/axes)). A numeric axis over numeric cells keeps
 its round-number ticks.
 
-A top-level partition hands each child its cell on `dir` and no span on the
+A top-level partition gives each child its cell on `dir` and no span on the
 other axis, where `alignment` places the children (bars on a shared
-baseline). Inside another partition's cell, a partition hands each child
+baseline). Inside another partition's cell, a partition gives each child
 that cell on the other axis as well, so the child sits in a rectangle and
-`alignment` has nothing left to move. That is why two nested 1D partitions,
+there is nothing left to align. That is why two nested 1D partitions,
 one per axis, place each leaf the same way in either order; only the order
 of the children differs (`cells.test.ts` checks this for regions, rects,
 circles, and texts of different widths).
@@ -2551,17 +2597,16 @@ layout of its own, and on the wire it is the two partitions. Empty cells are gro
 count over one is 0 and is drawn.
 
 **Regions with an outline.** A region may also hold an outline, the same
-shape the `boundary` geometry query (#974) returns, but handed from parent to
+shape the `boundary` geometry query (#974) returns, but given from parent to
 child: a `PositionRegion` holds the cell's outline in datums (`outline`,
 `[x, y]` per corner) when the cell has one and is placed along both axes,
-`buildChildProposals` maps it
-through both scales into the child's region, and the `region` mark draws a
-region's outline as a path when it has one, and its box otherwise (under a
+and the `region` mark maps it through both scales and draws it as a path
+when it has one, and its box otherwise (under a
 nonlinear coordinate space, resampled, so a hexagon in polar coordinates
 draws curved). The cells of a binned struct, below, are what make outlines.
-One step is left for later (a TODO in `buildChildProposals`): a child that
-gets a cell of its own does not inherit the outline of the region its layer
-was handed, which would need that outline clipped to the cell.
+One step is left for later (a TODO in `PositionRegion`): a 1D partition
+inside a hexagon gives its children the hexagon's box cut down to their
+cells, not the hexagon's outline clipped to them.
 
 ### Cells of the plane: a binned struct
 
@@ -2616,7 +2661,14 @@ polygon cell is no cell of one axis alone, each axis is a plain continuous
 axis (`collectPositionDomains` collects only a cell of a line, a `Cell`). A
 `region` draws the outline, and answers it as its `outline` geometry query
 (see [Layout Calculation](/internals/layout/passes)); any other mark is placed
-in the box, so a circle or a text sits at a hexagon's center.
+in the box, so a circle or a text sits at a hexagon's center. `region({ inset })`
+draws the cell in by `inset` pixels on each axis where the region has a span
+(`insetConvex` for an outline, a smaller box otherwise). The inset is paint
+only: the region's box, which layout reads, stays the cell, and its `outline`
+query answers what it draws, so `intersect` cuts the drawn-in cell. A cell
+thinner than twice the inset draws nothing, and its outline is exact and
+empty (no pieces), so an `intersect` with it is exactly empty and draws
+nothing either.
 
 **Expression evaluation is orthogonal to the channel's own aggregation.**
 `inferSize`/`inferPos`'s shared core (`inferNumeric` in `channels.ts`) always

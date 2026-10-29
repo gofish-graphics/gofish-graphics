@@ -278,12 +278,12 @@ export const Image = ({
         const positionX = positionOf(
           dims[0],
           posFn(scales?.[0]?.map),
-          resolvedDimensions.width
+          resolvedDimensions.width / 2
         );
         const positionY = positionOf(
           dims[1],
           posFn(scales?.[1]?.map),
-          resolvedDimensions.height
+          resolvedDimensions.height / 2
         );
 
         return {

@@ -162,7 +162,46 @@ class TestOperators:
         assert field("x").bin(Bin.thresholds([1, 2, 5]))["ops"] == [
             {"op": "bin", "partition": {"kind": "thresholds", "thresholds": [1, 2, 5]}}
         ]
+        assert field("x").bin(Bin.quantiles(10))["ops"] == [
+            {"op": "bin", "partition": {"kind": "quantiles", "quantiles": 10}}
+        ]
+        assert field("x").bin(Bin.quantiles([0.25, 0.75]))["ops"] == [
+            {"op": "bin", "partition": {"kind": "quantiles", "quantiles": [0.25, 0.75]}}
+        ]
         assert field("x").bin()["ops"] == [{"op": "bin"}]
+
+    def test_median_fold_wire(self):
+        """`.median()` is a fold, written as its op, as `.mean()` is."""
+        assert field("y").median()["ops"] == [{"op": "median"}]
+
+    def test_quantile_rows(self):
+        """`quantile_rows` turns a density grid into rows at its quantiles,
+        keeping the columns that are constant, as JS `quantileRows` does."""
+        from statistics import NormalDist
+
+        from gofish import quantile_rows
+
+        nd = NormalDist()
+        grid = [
+            {"month": "Jan", "x": -6 + i * 0.02, "pdf": nd.pdf(-6 + i * 0.02)}
+            for i in range(601)
+        ][::-1]
+        rows = quantile_rows(grid, x="x", density="pdf", n=1000)
+        assert len(rows) == 1000
+        worst = max(abs(r["x"] - nd.inv_cdf((i + 0.5) / 1000)) for i, r in enumerate(rows))
+        assert worst < 0.005
+        assert all(r["month"] == "Jan" and "pdf" not in r for r in rows)
+        flat = quantile_rows([{"x": 0, "d": 2}, {"x": 10, "d": 2}], x="x", density="d", n=4)
+        assert [r["x"] for r in flat] == [1.25, 3.75, 6.25, 8.75]
+        with pytest.raises(ValueError, match="no area"):
+            quantile_rows([{"x": 0, "d": 1}], x="x", density="d", n=3)
+        with pytest.raises(ValueError, match="whole number"):
+            quantile_rows(grid, x="x", density="pdf", n=0)
+        # Two curves mixed together (called before the split by month): two
+        # rows at one position.
+        two_months = grid + [{**r, "month": "Feb"} for r in grid]
+        with pytest.raises(ValueError, match='"x" .*more than one curve.*inside derive'):
+            quantile_rows(two_months, x="x", density="pdf", n=10)
 
     def test_bin_product_and_chain_wire(self):
         """A product is a list partition on one bin op; a chain is one bin op

@@ -168,7 +168,7 @@ gf.spread(
 );
 ```
 
-## Croissant charts: recomposing in continuous space
+## Recomposing with gaps
 
 `inset` shrinks both the visible window **and** the slice's reported bounding
 box — a slice reports the bounds of its visible region, not its full logical
@@ -177,9 +177,8 @@ plain flush `stack` pulls the inset slices flush and drops the gaps (`stack`
 recomposes its children flush by design — it has no `spacing` option).
 
 To recompose the slices back into the source's **continuous** space while
-keeping the inset gaps — a
-[croissant chart](https://vis.khoury.northeastern.edu/pubs/Fygenson2026CroissantChartsModulating/) —
-pad each slice back to its full logical extent in user space: add `inset / 2`
+keeping the inset gaps, pad each slice back to its full logical extent in user
+space: add `inset / 2`
 of transparent space on each side along `dir` (an inner `stack` with
 zero-cross-extent spacer rects), then flush-stack the padded slices.
 The padding amount is the constant `inset / 2`, independent of each slice's
@@ -203,6 +202,16 @@ The recomposed row spans the source's **exact** extent, with an even `inset`-wid
 gap at every cut point. (There is no built-in one-axis padding operator —
 `frame`/`layer` size to their content, so they can't pad a smaller child;
 the spacer rects are the spelling.)
+
+A [croissant chart](https://vis.khoury.northeastern.edu/pubs/Fygenson2026CroissantChartsModulating/)
+cuts a density curve at its quantiles. It does not cut a picture of the curve:
+it partitions the curve's rows into quantile cells and paints the
+[`intersect`](/js/api/operators/region-compositing#region-and-paint) of the
+drawn curve with each cell's [`region({ inset })`](/js/api/marks/region), so
+the slices sit on a real axis.
+
+::: gofish example:croissant
+:::
 
 ## Signatures
 

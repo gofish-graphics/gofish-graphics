@@ -566,6 +566,22 @@ export const glyphAxis = (
     : magnitude(size);
 };
 
+/** One axis of a box placed by its data at both ends (a rect with a data
+ *  `x` and `x2`, a region across its cell): the interval between the ends,
+ *  pinned, in the unit the two ends join to. `where` names the pair in a
+ *  unit clash. */
+export const pinnedSpan = (
+  a: MaybeValue<number>,
+  b: MaybeValue<number>,
+  axis: 0 | 1,
+  where: string
+): UnderlyingSpace =>
+  CONTINUOUS(
+    interval(getValue(a)!, getValue(b)!),
+    "pinned",
+    joinUnits(valueUnits(a), valueUnits(b), true, { axis, where })
+  );
+
 /** A *positioning* space — one that places marks along an axis (a pinned
  *  data axis or an `ORDINAL` category axis), as opposed to a free magnitude (a
  *  mark's own extent) or `UNDEFINED`. Used to find the axis a set of marks is

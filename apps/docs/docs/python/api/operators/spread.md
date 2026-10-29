@@ -151,7 +151,7 @@ appends one op to an ordered pipeline. It works in two disjoint places:
   `.drop_nulls()` decide **which groups exist and in
   what order**.
 - As a mark or `size` channel value (a **value** slot): `.sum()`, `.mean()`,
-  `.count()`, and `.distinct()` **fold a group's rows to one number**,
+  `.median()`, `.count()`, and `.distinct()` **fold a group's rows to one number**,
   overriding the channel's own default aggregation (sum for size, mean for
   position).
 

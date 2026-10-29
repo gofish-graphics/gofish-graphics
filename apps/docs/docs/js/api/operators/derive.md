@@ -96,6 +96,33 @@ derive(monthlyHighs, {
 )
 ```
 
+## Data helpers
+
+Helpers for the function `derive` takes:
+
+- `normalize(rows, field)`: each row with `field` divided by the column's
+  total.
+- `repeat(row, field)`: the row, `row[field]` times.
+- `quantileRows(rows, { x, density, n })`: `n` rows at the quantiles of a
+  density curve, one at each probability `(i + 0.5) / n`. `rows` is a grid of one curve,
+  each row a position `x` and the `density` there, in any order, with no two rows at one position (call it after the split into curves).
+  The density is integrated by the trapezoid rule. Each row made holds `x`
+  and every column whose value is the same in all of `rows` (a group's
+  `month`). [`Bin.quantiles`](/js/api/bin#bin-quantiles) and
+  `field(x).median()` over the result read the curve instead of the grid.
+  It stands in for first-class distributions
+  ([#980](https://github.com/gofish-graphics/gofish-graphics/issues/980)),
+  which will replace it.
+
+```ts
+// The quantiles of a drawn density, cut into ten equal-mass cells
+.flow(
+  derive((rows) => quantileRows(rows, { x: "x", density: "pdf", n: 1000 })),
+  partition({ by: field("x").bin(Bin.quantiles(10)), dir: "x" })
+)
+.mark(circle({ cx: field("x").median(), r: 3 }))
+```
+
 ## Units: keeping axes shared across a transform
 
 A channel that encodes a column carries the column's **unit**. GoFish uses

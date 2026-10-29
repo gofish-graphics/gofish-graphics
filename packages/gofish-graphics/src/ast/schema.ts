@@ -164,8 +164,18 @@ export type HasQuantity = { name: string };
  *  it; a split leaf and a `filter`'s result keep it with the rest of the
  *  column's type ({@link copyColumnTypes}), and a `derive` computes its
  *  result's own. A binned key's cells cover it (cells.ts), so every group
- *  of a split over the column has the same cells, whatever rows it holds. */
-export type HasDomain = { lo: number; hi: number };
+ *  of a split over the column has the same cells, whatever rows it holds.
+ *  `sorted` gives the same values in order, for the cells of
+ *  `Bin.quantiles`, which are quantiles of them: it reads them off the rows
+ *  on its first call only, so a column no quantile reads is never copied
+ *  or sorted. */
+export type HasDomain = {
+  lo: number;
+  hi: number;
+  /** The column's values in the data it was typed with, ascending,
+   *  missing values aside. */
+  sorted: () => readonly number[];
+};
 
 /** A column's type: the classes it has, keyed by class name. */
 export type ColumnType = {
@@ -856,7 +866,7 @@ function meetChartUnits(types: ColumnTypes): void {
  *  columns). */
 function columnDomains(rows: readonly unknown[]): Map<string, HasDomain> {
   // A column whose values are not all finite numbers maps to null.
-  const domains = new Map<string, HasDomain | null>();
+  const domains = new Map<string, { lo: number; hi: number } | null>();
   for (const row of rows) {
     if (row == null || typeof row !== "object") continue;
     for (const column in row) {
@@ -872,8 +882,31 @@ function columnDomains(rows: readonly unknown[]): Map<string, HasDomain> {
     }
   }
   return new Map(
-    [...domains].filter((e): e is [string, HasDomain] => e[1] !== null)
+    [...domains].flatMap(([column, d]): [string, HasDomain][] =>
+      d === null ? [] : [[column, { ...d, sorted: sortedColumn(rows, column) }]]
+    )
   );
+}
+
+/** A column's values in `rows`, ascending, missing values aside. They are
+ *  read off the rows on the first call and kept, so a column no quantile
+ *  reads is never copied or sorted. Every value it reads is a finite number,
+ *  as the column has a domain. */
+function sortedColumn(
+  rows: readonly unknown[],
+  column: string
+): () => readonly number[] {
+  let sorted: number[] | undefined;
+  return () => {
+    if (sorted !== undefined) return sorted;
+    sorted = [];
+    for (const row of rows) {
+      if (row == null || typeof row !== "object") continue;
+      const v = (row as Record<string, unknown>)[column];
+      if (v != null) sorted.push(v as number);
+    }
+    return sorted.sort((a, b) => a - b);
+  };
 }
 
 /** The zones {@link checkZone} has found valid. */

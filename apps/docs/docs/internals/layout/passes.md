@@ -15,7 +15,7 @@ covers:
   - packages/gofish-graphics/src/ast/shapes/rect.tsx
   - packages/gofish-graphics/src/ast/perf.ts
   - packages/gofish-graphics/src/ast/geometry/index.ts
-  - packages/gofish-graphics/src/ast/geometry/region.ts
+  - packages/gofish-graphics/src/ast/geometry/clip.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/pack.tsx
   - packages/gofish-graphics/src/ast/graphicalOperators/overlap.ts
   - packages/gofish-graphics/src/ast/constraints/overlap.ts
@@ -661,37 +661,34 @@ For a bar chart rectangle, the layout function:
 
 The `intrinsicDims` represent the element's box in its local coordinate system (with min typically at 0, or at the negative endpoint of a negative bar), while `transform.translate` positions it in the parent's coordinate system. The node's `dims` compose the two exactly once (`combineDims`: `min = local min + translate`), so a layout must never fold its translate into `intrinsicDims.min` as well; doing so counts the offset twice (#755).
 
-#### The region a parent hands a child
+#### The cell a parent gives a child
 
-A parent can hand a child a **region** with its size proposal:
-`child.layout(size, scales, region)` (#1059, `src/ast/geometry/region.ts`).
-It is the top-down twin of the geometry queries below: a span `[min, max]`
-per axis, either of which may be missing, plus an optional closed outline,
-measured from the parent's origin as a `translate` is.
+A `partition` gives each child its cell in data, as a `position`
+constraint with a `region` (`PositionRegion`,
+`src/ast/constraints/position.ts`), and the cell reaches the child the way any data position does: through the partition's scale.
 
-- `GoFishNode.layout` reads the region into the node's own axis order
-  (reflecting y when the node and its parent run opposite ways) and passes
-  it to the node's `_layout` as a sixth argument.
-- After `_layout`, on each axis where the region has a span and the node did
-  not place itself, `GoFishNode.layout` centers the node in the span. The
-  parent proposed the span's length as the node's size, so a node with no
-  size of its own there (a `rect` with no `w`) fills the span, and any other
-  node keeps its size and sits in the middle.
-- A `region` mark places itself by the region (it is its spans) and draws the
-  outline as a path when there is one, else its box.
-- A `layer` builds its children's regions from the regions its `position`
-  constraints give them (`PositionRegion`) and from the region it was itself
-  handed (`buildChildProposals`). A child with no region of its own gets the
-  layer's region, outline and all, unless the layer's constraints place it,
-  so `layer([region(...), text(...)])` in a hexagon gives the hexagon to
-  both. It passes its own region on in its own frame, each span starting at
-  0 (`rebaseRegion`), and `GoFishNode.layout` centers the layer in the
-  region it was given, as it centers any node.
+- The layer proposes the cell's pixel length as the child's size on each
+  axis the cell spans (`buildChildSpans`), and the cell lowers to a pin of
+  the child's middle at the cell's middle (`lowerPositionPlacement`). So a
+  node with no size of its own there (a `rect` with no `w`) fills the cell,
+  and any other node keeps its size and sits in the middle.
+- A child placed by its data in the layer's frame is not pinned. A `region`
+  mark is one: it reads its cell (`enclosingCell`), its type there is the
+  cell's interval, pinned, and it maps the cell's edges, and the outline of
+  a cell of the plane, through the map the partition hands it
+  (`childPosScalesFor`). A layer of marks in a cell is one too, so the marks
+  in it share the partition's frame. A text beside a `region` in such a
+  layer is placed by an `align` that names the two, as any mark in a layer
+  is.
+- A partition inside another partition's cell divides that cell: on each
+  axis its key does not place, it gives each child the cell it is in, so
+  the child is placed there as a child of the outer partition is. That cell
+  makes no cells of the inner partition (`PositionRegion.placed`).
 
-Today only `partition` makes regions (see
-[Underlying Space](/internals/core/underlying-space#partition-each-group-in-its-cell)).
-A region over a binned struct (`struct({ x, y }).bin(Bin.hex(...))`) also has
-an outline, the cell's polygon; every other region is a box.
+See
+[Underlying Space](/internals/core/underlying-space#partition-each-group-in-its-cell).
+A cell of a binned struct (`struct({ x, y }).bin(Bin.hex(...))`) also has
+an outline, the cell's polygon; every other cell is a box.
 
 #### Chrome gutters
 
@@ -947,7 +944,13 @@ helper, which falls back to the box when the node does not answer.
   it, on an open or a closed outline, and absent when no stroke is drawn.
   The ink is the inside when filled, plus the band. An outline may also name
   `parts`, arc-length ranges for the mark's own pieces. A region with holes
-  (several loops under a fill rule) is not an outline yet (#1201). Every
+  (several loops under a fill rule) is not an outline yet (#1201). An
+  outline marked `bounds` stands in for the ink without tracing it: the box
+  fallback and a rotated text's glyph box. A `rect`'s outline is what it
+  draws: its box drawn in by its `inset` (`insetBox`, which `region` uses
+  too), with its rounded corners sampled (`roundedBoxOutline`). A path boolean (a painted `intersect`) reads only outlines that are
+  not `bounds`, and clips them with `geometry/clip.ts` (Sutherland-Hodgman,
+  exact when one ring is convex; the general case is #1201). Every
   node answers it: `GoFishNode.geometry()` gives a node whose definition
   has no outline the box as a closed, filled rect (`boxOutline`) whose
   parts are its edges, `x-min`, `x-max`, `y-min` and `y-max`, named in the

@@ -238,7 +238,8 @@ gone, #1058.) A binned key, `field("date").bin(Calendar.month)`, is an op in
 the field expression's `ops`: `{ "op": "bin", "partition": { "kind": "month",
 "step": 1 } }`, where the partition is a Calendar value's wire form, a
 `Bin` kind that bins one field, `{ "kind": "step", "size": 0.5 }` or
-`{ "kind": "thresholds", "thresholds": 20 }` (`PartitionIR`, one union told
+`{ "kind": "thresholds", "thresholds": 20 }` or
+`{ "kind": "quantiles", "quantiles": 10 }` (`PartitionIR`, one union told
 apart by `kind`), or a list of
 Calendar values for a product (`.bin([Calendar.year, Calendar.month])`), and
 an op with no `partition` bins into about 10 cells. A chain,
@@ -611,7 +612,7 @@ so the strategy options are `t.ref("Tile")`, `t.ref("Overlap")`,
 positional-only parameter in Python, and `{ kind: "step", size: 0.5 }` on
 the wire either way. A construct descriptor has the same field: `COORDS.geo`
 takes `projection` by position (`Coord.geo("mercator", { lon })`). The `Bin` kinds bin one of two keys (`BIN_KINDS`):
-`step` and `thresholds` cut the line of one field, and `hex` and `voronoi`
+`step`, `thresholds` and `quantiles` cut the line of one field, and `hex` and `voronoi`
 divide the plane of two. `OPTION_TYPES.StructBin` is the kinds of the plane,
 derived from the one `Bin` entry, so a struct's bin op takes a `StructBin`,
 and the JS layout checks a struct's bin with `checkStructBin(value, where)`
@@ -623,7 +624,8 @@ A field's bin op takes a Calendar value, `{ kind: "month", every? }` or
 has no step), or a `Bin` kind that cuts one field's line.
 The `Calendar` family declares the Calendar kinds, one per level, and
 `OPTION_TYPES.Calendar` is its union. `OPTION_TYPES.Partition` is one tagged
-union of the Calendar kinds and the `Bin` kinds `step` and `thresholds`, so
+union of the Calendar kinds and the `Bin` kinds `step`, `thresholds` and
+`quantiles`, so
 the validator, the JSON Schema and the Python generator each read a field's
 partition by its `kind`, and the JS layout checks one with
 `checkPartition(value, where)`. An axis's `levels` entries take
@@ -648,12 +650,15 @@ emitter, which drops every function as a callback, the shared encoder
 (`encodeIR`), and `checkStrategy` then see only values. A Python bare kind is a dict, so
 `_to_wire` and `json.dumps` read it as one. A param
 may carry bounds, `t.num({ min: 0, finite: true })` for a pixel padding,
-`t.num({ exclusiveMin: 0, finite: true })` for a hex radius, or
+`t.num({ exclusiveMin: 0, finite: true })` for a hex radius,
+`t.num({ exclusiveMin: 0, exclusiveMax: 1 })` for a quantile's probability, or
 `t.num({ min: 1, integer: true })` for a Calendar step or a count of
 thresholds, and a list may carry a least length,
 `t.array(t.num({ finite: true }), { minItems: 1 })` for a list of edges
-that must not be empty. The validator, the JSON Schema (`minimum`,
-`exclusiveMinimum`, `integer`, `minItems`) and the Python generator check
+that must not be empty, and may hold no item twice, `uniqueItems: true` for
+a list of quantile probabilities. The validator, the JSON Schema (`minimum`,
+`exclusiveMinimum`, `exclusiveMaximum`, `integer`, `minItems`,
+`uniqueItems`) and the Python generator check
 them. When a
 value matches no branch of an untagged union, and only one branch is of the
 value's kind (a number for `Bin.hex`'s `radius: number | { x, y }`), the
