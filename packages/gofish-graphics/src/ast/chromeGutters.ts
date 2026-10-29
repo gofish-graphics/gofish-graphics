@@ -108,13 +108,30 @@ export const reachAt = (f: ChromeForms, sigma: number): [number, number] => [
  * chrome and dressing reach past the plot is read through the length its
  * plot has at its own σ (`Pwl.through`), so at each outer σ the node
  * claims what {@link aroundPlot} lays it out at around a plot that long.
+ * Its plot is `share`, one σ by default, `kσ` for `fr(k)` (#1176 step 6).
  */
-export function aroundShare(f: ChromeForms): ChromeForms {
-  const share = Pwl.affine(1, 0);
+export function aroundShare(
+  f: ChromeForms,
+  share: Pwl.Affine = Pwl.affine(1, 0)
+): ChromeForms {
+  // What reaches past a plot of length `t`, read at the plot's length in
+  // the outer σ: `h(share(σ))`, `h` read through the line that takes the
+  // share's length back to σ.
+  const atShare = (h: Pwl.Value): Pwl.Value =>
+    share.slope === 1 && share.intercept === 0
+      ? h
+      : share.slope === 0
+        ? Pwl.constant(Pwl.at(h, share.intercept))
+        : Pwl.through(
+            h,
+            Pwl.affine(1 / share.slope, -share.intercept / share.slope)
+          );
   const reach = (whole: Pwl.Value, plot: Pwl.Value) =>
-    Pwl.through(
-      Pwl.envelope([Pwl.add(whole, Pwl.negate(plot)), Pwl.ZERO]),
-      f.plot.width
+    atShare(
+      Pwl.through(
+        Pwl.envelope([Pwl.add(whole, Pwl.negate(plot)), Pwl.ZERO]),
+        f.plot.width
+      )
     );
   return {
     whole: Extent(

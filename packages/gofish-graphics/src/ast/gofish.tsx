@@ -79,6 +79,11 @@ import {
 import { legendRing } from "./legends/elaborate";
 import { elaborateLabels } from "./labels/elaborate";
 import { reportHiddenLabels } from "./labels/placeStep";
+// Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE
+// axis, which needs a concrete canvas to scale data into (see the per-axis
+// comment in `layout()` for the full behavior, including the shrink-to-fit
+// case).
+import { DEFAULT_CANVAS_SIZE, rejectLength } from "./length";
 
 export type CategoricalScale = {
   color: Map<any, string>;
@@ -344,11 +349,6 @@ export const axesEnabled = (
   return enabled;
 };
 
-// Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE axis,
-// which needs a concrete canvas to scale data into (see the per-axis comment in
-// `layout()` for the full behavior, including the shrink-to-fit case).
-const DEFAULT_CANVAS_SIZE = 400;
-
 export async function layout(
   {
     w,
@@ -388,6 +388,11 @@ export async function layout(
   warnings: LayoutWarning[];
 }> {
   child = await child;
+  // The render's size is the outermost room: pixels only (a size from the
+  // HTML container is a separate feature).
+  rejectLength("render's w", w);
+  rejectLength("render's h", h);
+  contexts.session.canvas = [w, h];
   child.setRenderSession(contexts.session);
   // Note: callers must await `document.fonts.ready` before invoking
   // `layout()`. The public `gofish()` entry handles this; standalone

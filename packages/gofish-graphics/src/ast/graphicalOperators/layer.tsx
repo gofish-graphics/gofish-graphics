@@ -94,6 +94,9 @@ import {
   guttersAt,
   setChromeForms,
 } from "../chromeGutters";
+import { bindLengths, takeLengths } from "../length";
+import { resolveSpacing } from "../constraints/distribute";
+import { fixedOverflow, warnLayout } from "../layoutWarnings";
 
 // ── Z-order resolution ────────────────────────────────────────────────────
 //
@@ -163,7 +166,17 @@ export const layer = createNodeOperatorSequential(
       );
     }
 
-    const dims = elaborateDims(options);
+    // A length for its own size (`w: percent(30)`, `w: fr(2)`, #1176 step
+    // 6) is laid out in the room the layer is given, which is known only
+    // once the layer is in its tree, so the layer reads it on demand
+    // (`bindLengths`): its size is then pixels, or none for a share.
+    const ownOptions = { ...options } as Record<string, unknown>;
+    const lengths = takeLengths(ownOptions);
+    const dims = elaborateDims(ownOptions as typeof options);
+    // Its size where it can be data: a length never is, and is not read
+    // while the types are resolved, before its room is known.
+    const dataSize = (axis: 0 | 1) =>
+      lengths[axis] === undefined ? dims[axis].size : undefined;
 
     // SIZED NODES (#1114). A layer with a size of its own on an axis (a
     // literal `w`/`h`, or a data-valued one) is a sized node there: at layout
@@ -440,7 +453,7 @@ export const layer = createNodeOperatorSequential(
         resolveSharing: (childNodes, constraints) => {
           const plan = planSharing(constraints, childNodes);
           for (const axis of [0, 1] as const)
-            if (isValue(dims[axis].size))
+            if (isValue(dataSize(axis)))
               childNodes.forEach((_, i) => plan.nested[axis].add(i));
           return plan;
         },
@@ -461,7 +474,7 @@ export const layer = createNodeOperatorSequential(
           // Its content is nested in that box (see `resolveSharing`). A
           // literal size carries no data, so it changes nothing here.
           return ([0, 1] as const).map((axis) => {
-            const dsize = dims[axis].size;
+            const dsize = dataSize(axis);
             return isValue(dsize)
               ? magnitude(dsize)
               : layerTypes!.resolved[axis];
@@ -507,6 +520,8 @@ export const layer = createNodeOperatorSequential(
           // plot the envelope of their plots, leaving out the dressing and
           // the ink. A grid's track axis has none: its tracks size at
           // layout (`resolveGridTracks`).
+          // Its chains' length spacings, laid out in its room.
+          resolveSpacing(node);
           const operands = constraintOperands();
           const ring = isRing(node);
           // A grid's track axis has a plan too, which places its cells in
@@ -617,7 +632,17 @@ export const layer = createNodeOperatorSequential(
             mapsDomain(t.resolved[axis], resolved[axis]);
           for (const axis of [0, 1] as const) {
             const px = fixedPx[axis];
-            if (px === undefined || !solvesDomain(axis)) continue;
+            if (px === undefined) continue;
+            // Content that maps no domain is laid out in the box as it is:
+            // where its fixed parts are larger than the box, it warns as a
+            // solve does (`ScopeRegistry.fit`), since no solve is made
+            // (#1176 step 6: `percent(30)` + `percent(70)` + a gap).
+            if (!solvesDomain(axis)) {
+              const content = plot[axis];
+              if (content !== undefined)
+                warnLayout(node, fixedOverflow(node, axis, content, px));
+              continue;
+            }
             const space =
               keyed?.scope(node, axis, t.resolved[axis], resolved[axis]!)[0] ??
               t.resolved[axis];
@@ -1322,6 +1347,7 @@ export const layer = createNodeOperatorSequential(
       get ownScope(): [boolean, boolean] {
         return [dims[0].size !== undefined, dims[1].size !== undefined];
       },
+      ownSize: (axis) => dims[axis].size,
       // A grid's track axis claims by its tracks, so no plan composes
       // through it there.
       plan: (axis) => {
@@ -1332,8 +1358,9 @@ export const layer = createNodeOperatorSequential(
           : node._claimMemo.plans[axis];
       },
     };
+    bindLengths(node, dims, lengths);
     // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
-    node._elaborateInAxisScope = deferAxisDims(options, dims);
+    node._elaborateInAxisScope = deferAxisDims(ownOptions, dims);
     // Default zBelow(connector, operand) for relational marks (line/ribbon/…)
     // found anywhere in this layer's subtree, kept apart so a later
     // `.relate()` keeps them (see `applyRelationalZBelowDefaults`).

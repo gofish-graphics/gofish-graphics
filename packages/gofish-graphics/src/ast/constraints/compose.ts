@@ -92,7 +92,7 @@ const isSpanPosition = (c: ConstraintSpec): c is PositionConstraint =>
 export type DistributeSegment = {
   dAxis: 0 | 1;
   /** Already glue-zeroed (see createDistributeConstraint). */
-  spacing: number;
+  spacing: DistributeConstraint["spacing"];
   /** Covered child names, in placement order. */
   order: string[];
 };

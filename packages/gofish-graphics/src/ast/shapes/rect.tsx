@@ -42,6 +42,17 @@ import {
 } from "../underlyingSpace";
 import { interval } from "../../util/interval";
 import { createMark } from "../withGoFish";
+import * as Pwl from "../solver/pwl";
+import {
+  bindLengths,
+  isFr,
+  isLength,
+  lengthIn,
+  printLength,
+  takeLengths,
+  type Length,
+  type LengthValue,
+} from "../length";
 import { MARK_CHANNELS } from "../markChannels.generated";
 import { attachCut } from "../graphicalOperators/cut";
 import type { DisplayList } from "gofish-ir";
@@ -59,9 +70,12 @@ const DEFAULT_RECT_SIZE = 16;
  *  center, and never below zero size. */
 const insetBy = (
   d: { min: number; size: number; center: number; max: number },
-  inset: number
+  inset: number | Length | LengthValue
 ) => {
-  const size = Math.max(0, Math.abs(d.size) - 2 * inset);
+  // A percent inset is a percent of the rect's own box on that axis
+  // (#1176 step 6): `inset: percent(10)` draws a bar at 80% of its band.
+  const px = lengthIn(inset, () => Pwl.constant(Math.abs(d.size)));
+  const size = Math.max(0, Math.abs(d.size) - 2 * Pwl.at(px, 0));
   return {
     min: d.center - size / 2,
     max: d.center + size / 2,
@@ -99,17 +113,29 @@ export const Rect = ({
    *  where it has no size or span of its own (a bar's width in a `spread` or
    *  a `partition` cell), so neighbors are drawn apart. A side the rect sizes
    *  itself (a bar's data height) is never inset. Paint only: the rect's
-   *  box, which layout and refs read, stays the space it was given. */
-  inset?: number;
-} & FancyDims<MaybeValue<number>>) => {
+   *  box, which layout and refs read, stays the space it was given. A
+   *  percent is a percent of that box (#1176 step 6). */
+  inset?: number | LengthValue;
+} & FancyDims<MaybeValue<number> | LengthValue>) => {
+  // A length for its own size (`w: percent(30)`, `w: fr(2)`) is laid out in
+  // the room it is given, known only once it is in its tree (#1176 step 6).
+  const ownDims = { ...fancyDims } as Record<string, unknown>;
+  const lengths = takeLengths(ownDims);
   // `embedded` is authored by the resolveEmbedding pass (after underlying-space
   // resolves the axis measure), not inferred here — see _node.resolveEmbedding.
-  const dims = elaborateDims(fancyDims);
+  const dims = elaborateDims(ownDims as FancyDims<MaybeValue<number>>);
   const { rx, ry } = cornerRadii(rxGiven, ryGiven, 0);
-  if (!(Number.isFinite(inset) && inset >= 0))
+  if (isLength(inset)) {
+    if (isFr(inset))
+      throw new Error(
+        `rect: inset takes pixels or a percent of the rect's box, not ` +
+          `${printLength(inset)}.`
+      );
+  } else if (!(Number.isFinite(inset) && inset >= 0))
     throw new Error(
       `rect: inset must be a number of pixels, 0 or more, got ${inset}.`
     );
+  const insets = isLength(inset) || inset > 0;
   // Whether the rect fills the space its parent gives it on `axis`: it sets
   // no size and no span there (read after the resolveAliases pass, which
   // writes the axis-name-keyed `dims` onto `dims`).
@@ -142,9 +168,13 @@ export const Rect = ({
       ) => {
         const resolveAxis = (axis: 0 | 1): UnderlyingSpace => {
           const d = dims[axis];
+          // A length is never data, and its pixels are known only once the
+          // rect is in its tree, after its type: it adds no type, as pixels
+          // do.
+          const dSize = lengths[axis] === undefined ? d.size : undefined;
           // A box placed by its center is a glyph, as a text or an image is.
           const center = centerOf(d);
-          if (center !== undefined) return glyphAxis(center, d.size);
+          if (center !== undefined) return glyphAxis(center, dSize);
           if (isValue(d.min) && isValue(d.max)) {
             return CONTINUOUS(
               interval(getValue(d.min)!, getValue(d.max)!),
@@ -155,23 +185,23 @@ export const Rect = ({
               })
             );
           }
-          if (!isValue(d.min) && !isValue(d.size)) {
+          if (!isValue(d.min) && !isValue(dSize)) {
             // Nothing data-driven on this axis. Literal pixel sizes are
             // handled at layout time by computeAesthetic, so contribute
             // nothing to the underlying-space tree.
             return UNDEFINED;
           }
-          if (isAesthetic(d.min) && isValue(d.size)) {
-            return magnitude(d.size, "none");
+          if (isAesthetic(d.min) && isValue(dSize)) {
+            return magnitude(dSize, "none");
           }
-          if (!isValue(d.min) && isValue(d.size)) {
+          if (!isValue(d.min) && isValue(dSize)) {
             // No data position; data-driven size → a span from the baseline,
             // signed: a negative value extends below it (#773).
-            return magnitude(d.size);
+            return magnitude(dSize);
           }
           // has position (data-driven), maybe with literal/no size → POSITION.
           const min = isValue(d.min) ? getValue(d.min)! : 0;
-          const size = isValue(d.size) ? getValue(d.size)! : 0;
+          const size = isValue(dSize) ? getValue(dSize)! : 0;
           return CONTINUOUS(
             interval(min, min + size),
             "pinned",
@@ -272,8 +302,7 @@ export const Rect = ({
         const isXEmbedded = intrinsicDims![0].embedded;
         const isYEmbedded = intrinsicDims![1].embedded;
         const displayDims = displayDimsOf(intrinsicDims, transform).map(
-          (d, axis) =>
-            inset > 0 && fills(axis as 0 | 1) ? insetBy(d, inset) : d
+          (d, axis) => (insets && fills(axis as 0 | 1) ? insetBy(d, inset) : d)
         );
 
         const unitScale = node.getRenderSession().scaleContext?.unit;
@@ -423,8 +452,12 @@ export const Rect = ({
     },
     []
   );
+  bindLengths(node, dims, lengths);
   // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
-  node._elaborateInAxisScope = deferAxisDims(fancyDims, dims);
+  node._elaborateInAxisScope = deferAxisDims(
+    ownDims as FancyDims<MaybeValue<number>>,
+    dims
+  );
   return node;
 };
 

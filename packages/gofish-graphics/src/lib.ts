@@ -21,6 +21,11 @@ export { value as v } from "./ast/data";
 // accessor; `literal(x)` is an explicit constant.
 export { datum, field, literal } from "./ast/data";
 export type { FieldAccessor, LiteralValue } from "./ast/data";
+// `percent(n)` / `fr(n)` — lengths: a percent of the room a size or gap is
+// laid out in (`percent(30).offset(10)` adds pixels), or an `fr` weight, a
+// share of the nearest scope's room (#1176 step 6).
+export { percent, fr } from "./ast/length";
+export type { LengthValue, Length } from "./ast/length";
 // `chunk(size)` — a `by` key that groups consecutive rows `size` at a time
 // (a bin over row position).
 export { chunk } from "./ast/data";

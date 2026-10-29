@@ -79,6 +79,14 @@ import {
 } from "./underlyingSpace";
 import { impliedExtents, Extent, padExtent } from "./extent";
 import * as Pwl from "./solver/pwl";
+import {
+  DEFAULT_CANVAS_SIZE,
+  isFr,
+  lengthIn,
+  printLength,
+  type Length,
+  type LengthValue,
+} from "./length";
 import type { Placement } from "./constraints/claimPlacement";
 import type { LayerPlan } from "./solver/plan";
 import { aroundShare, setChromeForms, type ChromeForms } from "./chromeGutters";
@@ -177,6 +185,10 @@ export type RenderSession = {
   /** Whether a node laid out draws an outline past its box
    *  (`GoFishNode.strokeOverhang`), so the render looks for it too. */
   outlined?: boolean;
+  /** The render's own size per axis (`render(el, { w, h })`), undefined on
+   *  an axis it does not size: the room of the render root (#1176 step 6),
+   *  which a percent there is laid out in. */
+  canvas?: [number | undefined, number | undefined];
 };
 
 /** How far an outline of `stroke` color and `strokeWidth` is drawn past the
@@ -210,6 +222,9 @@ type ClaimMemo = {
   /** Per axis, its chrome forms (`chromeForms` in chromeGutters.ts; `null`:
    *  none, it has no claim there). */
   chrome: [ChromeForms | null | undefined, ChromeForms | null | undefined];
+  /** Per axis, its own size as a length laid out in its room
+   *  ({@link GoFishNode.ownLength}; `null`: it has none). */
+  lengths: [Pwl.Value | null | undefined, Pwl.Value | null | undefined];
 };
 
 const freshClaimMemo = (): ClaimMemo => ({
@@ -217,6 +232,7 @@ const freshClaimMemo = (): ClaimMemo => ({
   sharesRoom: [undefined, undefined],
   plans: [undefined, undefined],
   chrome: [undefined, undefined],
+  lengths: [undefined, undefined],
 });
 
 /** What the claim walk reads of a layer (`GoFishNode.claimWalk`). */
@@ -251,6 +267,8 @@ export type ClaimWalk = {
   /** Per axis, whether it has a size of its own there, which makes it a
    *  σ-scope of its own. */
   ownScope: [boolean, boolean];
+  /** Per axis, its own size there: pixels, a data value, or undefined. */
+  ownSize: (axis: 0 | 1) => MaybeValue<number> | undefined;
 };
 
 export type Placeable = {
@@ -769,6 +787,14 @@ export class GoFishNode {
    *  Layout size is separate from drawn size (#493), as a CSS box's ink
    *  overflow or a Typst box's `outset` is. */
   public inkOn?: [boolean, boolean];
+  /** Per axis, its own `w`/`h` when it is a length (#1176 step 6): a
+   *  percent of the room its parent lays it out in, or an `fr` weight in
+   *  its nearest scope ({@link ownLength}). Set by the construct, which
+   *  reads its size there through {@link lengthPx}. */
+  public ownLengths?: [
+    Length | LengthValue | undefined,
+    Length | LengthValue | undefined,
+  ];
   /** Per axis, whether its own layout places it there, from the refs it
    *  reads (an ordinal axis's label span): its parent's plan takes it where
    *  layout put it, as it takes a node that places itself at a literal
@@ -1295,8 +1321,11 @@ export class GoFishNode {
         this.inShare(dim) &&
         (sharesScope || this.inSlot(dim))
       ) {
-        const share = forms === undefined ? undefined : aroundShare(forms);
-        extent[dim] = share?.whole ?? Extent(Pwl.affine(1, 0));
+        const weight =
+          (this.shareOf(dim) as Pwl.Affine | undefined) ?? Pwl.affine(1, 0);
+        const share =
+          forms === undefined ? undefined : aroundShare(forms, weight);
+        extent[dim] = share?.whole ?? Extent(weight);
         if (scope) scopePlot[dim] = share?.plot ?? extent[dim];
         if (!sharesScope) warnLayout(this, mixedSizes(this, dim));
       } else if (scope) scopePlot[dim] = undefined;
@@ -1405,6 +1434,7 @@ export class GoFishNode {
   public isScope(axis: 0 | 1): boolean {
     if (this.ownsScope(axis)) return true;
     if (this.children.length === 0 || this.parent === undefined) return false;
+    if (this.shareOf(axis) !== undefined) return true;
     const space = this._underlyingSpace?.[axis];
     return (
       (this.givenRoom(axis) && space !== undefined && !isUNDEFINED(space)) ||
@@ -1419,6 +1449,144 @@ export class GoFishNode {
     while (scope.parent !== undefined && !scope.isScope(axis))
       scope = scope.parent;
     return scope;
+  }
+
+  /**
+   * This node's own size on `axis` when it is a length (#1176 step 6),
+   * laid out in its room, as a value in σ: a constant where the room is
+   * known before the layer solve (a percent of a node with a size of its
+   * own, or of the canvas), `ρσ` for a percent of a band, and `kσ` for
+   * `fr(k)`, a weight in its nearest scope. Undefined when its size there
+   * is no length.
+   */
+  public ownLength(axis: 0 | 1): Pwl.Value | undefined {
+    const len = this.ownLengths?.[axis];
+    if (len === undefined) return undefined;
+    const memo = this._claimMemo.lengths[axis];
+    if (memo !== undefined) return memo ?? undefined;
+    const v = lengthIn(len, () =>
+      this.parent === undefined
+        ? this.canvasRoom(axis)
+        : this.parent.roomFor(axis, `${this.type}'s ${printLength(len)}`)
+    );
+    this._claimMemo.lengths[axis] = v;
+    return v;
+  }
+
+  /** This node's own size on `axis` in pixels when it is a length known
+   *  before the layer solve ({@link ownLength}): a percent of a room of
+   *  known size. Undefined when it has no length there or the length is a
+   *  share ({@link shareOf}). */
+  public lengthPx(axis: 0 | 1): number | undefined {
+    const v = this.ownLength(axis);
+    return v !== undefined && Pwl.isConstant(v) ? Pwl.at(v, 0) : undefined;
+  }
+
+  /** This node's own size on `axis` when it is a share of its nearest
+   *  scope: `fr(k)`, or a percent of a band ({@link ownLength}). Such a
+   *  node is given its room from outside its content, so it is a scope for
+   *  its content ({@link isScope}). */
+  public shareOf(axis: 0 | 1): Pwl.Value | undefined {
+    if (this.ownLengths?.[axis] === undefined) return undefined;
+    const v = this.ownLength(axis)!;
+    return Pwl.isConstant(v) ? undefined : v;
+  }
+
+  /** The room of the render root on `axis`: the render's size, or the
+   *  default canvas where the render gives none (a data σ is solved in it
+   *  there too). */
+  private canvasRoom(axis: 0 | 1): Pwl.Value {
+    const given = this.tryGetRenderSession()?.canvas?.[axis];
+    return Pwl.constant(given ?? DEFAULT_CANVAS_SIZE);
+  }
+
+  /**
+   * The room a length `what` is laid out in when this node holds it on
+   * `axis` (#1176 step 6): the room this node lays its children out in, for
+   * a child's own size, and its own room, for one of its own options (a
+   * spread's spacing). A node with a size of its own is that room (its
+   * plot: its chrome adds outside it). A node whose room is a share of the
+   * scope around it and that its content does not size (a band: an overlay
+   * of parts that fill one share) has `σ` as its room. The render root has
+   * the canvas. A node that hugs its content has no room of its own, so it
+   * passes the question to its parent (the Typst rule): no length is ever a
+   * share of a box its own content sizes, so no fixed point is solved.
+   *
+   * A room that is given only at layout, from outside a scope whose content
+   * is in a σ of its own (a share-sized node, a facet panel, a region cell,
+   * a treemap tile, a coordinate space), is neither a constant nor a σ term
+   * of the content's scope, so a percent there is an error.
+   * TODO(#1176): a percent inside such a scope needs its room, a term of the
+   * outer σ, inside the inner scope's claim.
+   */
+  public roomFor(axis: 0 | 1, what: string): Pwl.Value {
+    for (let n: GoFishNode = this; ; n = n.parent!) {
+      const len = n.ownLengths?.[axis];
+      if (len !== undefined) {
+        const v = n.ownLength(axis)!;
+        if (Pwl.isConstant(v)) return v;
+        throw new Error(
+          `${what}: its room is ${n.type}'s ${printLength(len)}, a share of ` +
+            `the scope around it, which a percent inside it cannot be laid ` +
+            `out in yet. Give ${n.type} a size in pixels, or use fr inside it.`
+        );
+      }
+      const own = n.claimWalk?.ownSize(axis);
+      if (typeof own === "number") return Pwl.constant(own);
+      const given =
+        own !== undefined
+          ? `${n.type}'s size, which is data`
+          : n.type === "coord"
+            ? "a coordinate space, whose room is in its own units (#1238)"
+            : n.parent !== undefined && n.isScope(axis)
+              ? `the room ${n.type} is given at layout (a facet panel, a ` +
+                `region cell or a treemap tile)`
+              : undefined;
+      if (given !== undefined)
+        throw new Error(
+          `${what}: its room is ${given}, which a percent cannot be laid ` +
+            `out in yet. Use pixels or fr there.`
+        );
+      if (n.parent === undefined) return n.canvasRoom(axis);
+      if (n.isBand(axis)) return Pwl.affine(1, 0);
+    }
+  }
+
+  /** Whether this node's room on `axis` is one share of its scope, a band
+   *  ({@link roomFor}): it is in a share, it is no chain along the axis
+   *  (whose parts each take a share), and what it holds fills the room it
+   *  is given: at least one part, and every part but those sized by a
+   *  length of their own, which never size the node that holds them. */
+  private isBand(axis: 0 | 1): boolean {
+    if (this.children.length === 0 || !this.inShare(axis)) return false;
+    if (
+      this.axisDir === axis &&
+      this.constraints.some((c) => c.type === "distribute")
+    )
+      return false;
+    let filled = false;
+    for (const c of this.children) {
+      if (c instanceof GoFishNode && c.ownLengths?.[axis] !== undefined)
+        continue;
+      if (!(c instanceof GoFishNode) || !c.fillsShape(axis)) return false;
+      filled = true;
+    }
+    return filled;
+  }
+
+  /** Whether this node fills the room it is given on `axis`, read without
+   *  the claims of what it holds (as {@link fillsRoom} is read with them),
+   *  so a length's room walk can ask it of a node whose claim it is part
+   *  of: a node sized by a length of its own, a scope, a leaf with no claim
+   *  there, or a node whose children all fill. */
+  private fillsShape(axis: 0 | 1): boolean {
+    if (this.ownLengths?.[axis] !== undefined) return true;
+    if (this.ownsScope(axis)) return false;
+    if (this.isScope(axis)) return true;
+    if (this.children.length === 0) return this.fillsRoom(axis);
+    return this.children.every(
+      (c) => c instanceof GoFishNode && c.fillsShape(axis)
+    );
   }
 
   /** Whether this node solves σ for its content against a room it claims

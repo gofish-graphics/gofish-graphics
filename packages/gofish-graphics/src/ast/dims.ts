@@ -1,6 +1,7 @@
 import { Frontend } from "gofish-ir";
 import { type MaybeValue } from "./data";
 import { computeAesthetic } from "../util";
+import { rejectLength } from "./length";
 
 export type Interval<T = number> = {
   min?: T;
@@ -330,6 +331,9 @@ const isIndexedDims = <T>(d: FancyDims<T>): d is IndexedDims<T> =>
   "0" in d || "1" in d;
 
 export const elaborateDims = <T>(dims: FancyDims<T>): Dimensions<T> => {
+  // A construct that takes a length for its own size takes it out first
+  // (`takeLengths`); anywhere else a length is an error, never dropped.
+  for (const [k, v] of Object.entries(dims)) rejectLength(`${k} here`, v);
   if (isIndexedDims(dims)) {
     return [
       {

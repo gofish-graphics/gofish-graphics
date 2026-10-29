@@ -1,4 +1,5 @@
 import { GoFishNode } from "../_node";
+import { isFr, isLength, type LengthValue } from "../length";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { type ColorConfig } from "../colorSchemes";
 import { applySchema, type SchemaEntry } from "../schema";
@@ -62,8 +63,11 @@ function mintLayerName(layerContext: LayerContext): string {
 }
 
 export type ChartOptions = {
-  w?: number;
-  h?: number;
+  /** The plot's width: pixels, a percent of the room the chart is laid out
+   *  in, or an `fr` weight in its nearest scope (#1176 step 6). */
+  w?: number | LengthValue;
+  /** The plot's height, as {@link ChartOptions.w}. */
+  h?: number | LengthValue;
   coord?: CoordinateTransform;
   color?: ColorConfig;
   /**
@@ -1152,7 +1156,11 @@ async function frameChart(
   const content = await Layer({}, children);
   content._chartContent = true;
   const node = await Frame(options, [content]);
-  node._chartBox = [options.w !== undefined, options.h !== undefined];
+  // A chart with a size of its own draws its axes inside its box. An `fr`
+  // size is a share of the scope around it, which it is given from
+  // outside, so it draws them around itself, as a facet panel does.
+  const box = (v: unknown) => v !== undefined && !(isLength(v) && isFr(v));
+  node._chartBox = [box(options.w), box(options.h)];
   node._chartAxes = options.axes ?? true;
   return node;
 }

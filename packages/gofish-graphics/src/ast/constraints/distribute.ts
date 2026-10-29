@@ -2,7 +2,12 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import type { Axis, AlignAnchor, ConstraintRef } from "./shared";
+import {
+  axisIndex,
+  type Axis,
+  type AlignAnchor,
+  type ConstraintRef,
+} from "./shared";
 import type { Placeable } from "../_node";
 import { isValue, type MaybeValue } from "../data";
 import type { PlacementFactEmitter, RelationAnchor } from "./placementFacts";
@@ -27,10 +32,23 @@ import {
 } from "../axisDirection";
 import type { Arith } from "../solver/arith";
 import * as Interval from "../../util/interval";
+import * as Pwl from "../solver/pwl";
+import {
+  isFr,
+  lengthIn,
+  printLength,
+  type Length,
+  type LengthValue,
+} from "../length";
+import type { GoFishNode } from "../_node";
+import { mixedSizes, noRoom, warnLayout } from "../layoutWarnings";
 
 export interface DistributeOptions {
   dir: Axis;
-  spacing?: number;
+  /** The gap between neighbors (or the pitch, for a fixed anchor): pixels,
+   *  a percent of the room of the layer that holds the chain, or an `fr`
+   *  weight in its scope (#1176 step 6). Default 8. */
+  spacing?: number | Length | LengthValue;
   /** How adjacent children in the chain relate:
    *  - `"edge"` (default): `start[i+1] = end[i] + spacing` — spacing is the gap
    *    between facing edges (content-dependent).
@@ -78,7 +96,11 @@ export type StackOrigin<Part> = {
 export interface DistributeConstraint {
   type: "distribute";
   dir: Axis;
-  spacing: number;
+  spacing: number | Length | LengthValue;
+  /** A length `spacing` laid out in the room of the layer that holds the
+   *  chain, as a value in its σ (`resolveSpacing`): set by the layer's
+   *  claim walk, before its plan is built. */
+  gap?: Pwl.Value;
   anchor: AlignAnchor | "edge";
   order: "forward" | "reverse";
   glue: boolean;
@@ -105,6 +127,56 @@ export const createDistributeConstraint = (
   hasOrder: options.hasOrder,
   origin: options.glue ? options.origin : undefined,
 });
+
+/** The gap a distribute's length `spacing` resolved to (`resolveSpacing`). */
+const gapOf = (c: DistributeConstraint): Pwl.Value => {
+  if (c.gap === undefined)
+    throw new Error(
+      `[gofish] distribute: spacing ${printLength(c.spacing as Length)} was ` +
+        `read before its layer laid it out in its room.`
+    );
+  return c.gap;
+};
+
+/**
+ * Lay the length spacings of `node`'s distributes out in its room (#1176
+ * step 6), as values in the σ of the scope the chain is in: a percent of
+ * the layer's room (`GoFishNode.roomFor`: its own size, or the room above
+ * it that it passes through), and `fr(k)` as `kσ`, so the gaps are the
+ * flexible parts of the chain. A gap of `fr` in a scope that data sizes is
+ * a weight of a data unit, so it warns as a flexible part there does
+ * (`mixed-sizes`). On an axis the render gives no size to a scope of shares,
+ * nothing gives an `fr` gap room: it is 0, and it warns.
+ */
+export function resolveSpacing(node: GoFishNode): void {
+  for (const c of node.constraints) {
+    if (c.type !== "distribute") continue;
+    const d = c as DistributeConstraint;
+    if (typeof d.spacing === "number") continue;
+    const axis = axisIndex(d.dir);
+    const spacing = d.spacing;
+    let gap = lengthIn(spacing, () =>
+      node.roomFor(axis, `spacing ${printLength(spacing)}`)
+    );
+    if (isFr(spacing)) {
+      const scope = node.scopeOf(axis);
+      if (
+        scope.parent === undefined &&
+        !scope.isScope(axis) &&
+        node.tryGetRenderSession()?.canvas?.[axis] === undefined &&
+        scope.sharesRoom(axis)
+      ) {
+        warnLayout(node, noRoom(node, axis, printLength(spacing)));
+        gap = Pwl.ZERO;
+      } else if (scope.carriesData(axis))
+        warnLayout(
+          node,
+          mixedSizes(node, axis, `its spacing ${printLength(spacing)}`)
+        );
+    }
+    d.gap = gap;
+  }
+}
 
 /** The {@link StackOrigin} of a stack over `ordered` (its parts in placement
  *  order), with `part` an index into `ordered`: the declared origin, else the
@@ -230,7 +302,10 @@ export function lowerDistributePlacement<T>(
       axis: constraint.dir,
       from: { name: ordered[i - 1].name, anchor: anchors.from },
       to: { name: ordered[i].name, anchor: anchors.to },
-      gap: A.constant(constraint.spacing),
+      gap:
+        typeof constraint.spacing === "number"
+          ? A.constant(constraint.spacing)
+          : A.fromValue(gapOf(constraint)),
       owner,
       chain: constraint.glue ? "stack" : "spread",
     });
@@ -252,7 +327,7 @@ export function lowerDistributePlacement<T>(
 export type DistributeFoldOptions = {
   /** The axis the chain runs along. */
   axis: 0 | 1;
-  spacing: number;
+  spacing: DistributeConstraint["spacing"];
   anchor: AlignAnchor | "edge";
   glue?: boolean;
   /** Explicit size on the spread/layer's stack axis; overrides children. */
