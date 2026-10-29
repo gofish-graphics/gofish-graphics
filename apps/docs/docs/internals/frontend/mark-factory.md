@@ -315,9 +315,14 @@ its flow, which hand their mark to it), each child of a combinator (`spread`,
 function is called with them, and what it returns is resolved as a root,
 with `NO_ROWS`. A builder is bound to the rows when its own rows are the
 enclosing scope's, by one method on the builders' shared base
-`RenderableBuilder`: `inScope(rows)` is `withData(rows)` when
+`RenderableBuilder`: `inScope(rows)` binds the rows when
 `usesPreviousLayerMarks()` is true (an empty `chart()`, or a `.layer(...)`
-chain whose first tier is one, #1181) and the builder itself otherwise. So
+chain whose first tier is one, #1181) and is the builder itself otherwise.
+A `.layer(...)` chain binds an empty-scope tier differently, with
+`withData(marks)`, since what it binds is the previous tier's marks, not
+rows. The two differ only for a relational mark placed directly in the
+empty scope's `.mark(...)`: over rows it fuses, over marks it connects them
+(see Blank-fusion below). So
 `.mark(chart())` stores the chart itself as the chart's mark, and an empty
 `chart()` binds its partition's rows the same way as a `spread([...])` child,
 a `layer([...])` child or the mark of a flow, and a chain sits in each of
@@ -574,10 +579,23 @@ anchors drawn for it (`!usesPreviousLayerMarks() && !(data instanceof
 GoFishRef)`) — a relational mark applied directly to an already-drawn refs
 bag (`chart(selectAll("bars")).mark(ribbon(opts))`, or an empty-scope
 `chart()` tier inside `.layer(...)`) keeps its direct bag-form meaning
-unfused, since there's nothing to anchor; `along` on either of those, or on
-the pairwise form, is a builder-time error rather than a silent no-op
-(`rejectAlongWithoutFlow` in chartBuilder.ts, and the pairwise branch in
-chart.ts). A connector's paint (`fill`, `stroke`: the color channels of
+unfused, since there's nothing to anchor; `along` or an anchor key on
+either of those, or `along` on the pairwise form, is an error rather than a
+silent no-op (`rejectUnfusedOptions` in chartBuilder.ts, and the pairwise
+branch in chart.ts).
+
+An empty-scope `chart()` does not know its data when `.mark()` is called, so
+it does not decide there (#1232). It keeps the relational mark as given, and
+the binding decides. In a mark position (a `layer([...])` child, a
+`.relate(...)` clause, a flow's mark) `inScope(rows)` binds the partition's
+rows and replays `.mark(R)` over them, so the mark fuses and the result is the
+fused `LayerBuilder` (a chain whose first tier fuses gets the anchor and
+connector tiers in its place). In a `.layer(...)` chain `withData(marks)`
+binds the previous tier's marks, and the mark connects them, so it is checked
+there as one over refs is checked in `.mark()`. That is why
+`chart().flow(scatter({ x })).mark(ribbon({ h: "pdf" }))` draws one ribbon per
+partition inside a `spread`, while the same chart as a `.layer(...)` tier
+throws on its `h`. A connector's paint (`fill`, `stroke`: the color channels of
 its generated channel map) may be a field name, or an accessor (a field name
 is shorthand for one), rather than a literal color. Every call form (split
 bag, plain bag, pairwise edge row, low-level children) runs the same step,
@@ -594,7 +612,8 @@ The types follow the same split. A relational factory returns a
 tag, and `.translate()` drops, since it does not. `ChartBuilder.mark()` is
 overloaded on it. A `RelationalMark` gets `ChartBuilder | LayerBuilder`,
 because whether it fuses also depends on the chart's data, which the types do
-not track. Every other mark gets a plain `ChartBuilder`, so
+not track. An empty scope always gets the `ChartBuilder`, since it has not
+decided yet. Every other mark gets a plain `ChartBuilder`, so
 `chart(...).mark(petal(...)).name("flower")` typechecks. The pairwise form
 carries the brand too, so its type is the wider union even though it never
 fuses.

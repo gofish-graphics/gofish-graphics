@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import {
   Bin,
-  blank,
   chart,
   circle,
   derive,
@@ -205,14 +204,9 @@ export const Ridgeline: StoryObj<Args> = {
       )
       .mark(
         layer([
-          // An empty-scope chart() reads the month's rows and draws no
-          // anchors of its own, so the ribbon connects explicit blanks.
-          // TODO(#1232): plain .mark(ribbon({ h })) once fusion is decided at
-          // resolve time.
           chart()
             .flow(scatter({ x: "temp_max", h: 34 }))
-            .mark(blank({ h: "pdf" }))
-            .layer(ribbon({ fill: "none" }).name("density")),
+            .mark(ribbon({ h: "pdf", fill: "none" }).name("density")),
         ]).relate(({ density }) => [
           chart()
             .flow(

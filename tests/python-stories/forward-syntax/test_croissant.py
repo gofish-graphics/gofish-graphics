@@ -12,7 +12,6 @@ import math
 
 from gofish import (
     Bin,
-    blank,
     chart,
     circle,
     derive,
@@ -158,8 +157,7 @@ def story_ridgeline():
                 [
                     chart()
                     .flow(scatter(x="temp_max", h=34))
-                    .mark(blank(h="pdf"))
-                    .layer(ribbon(fill="none").name("density")),
+                    .mark(ribbon(h="pdf", fill="none").name("density")),
                 ]
             ).relate(
                 lambda density: [
