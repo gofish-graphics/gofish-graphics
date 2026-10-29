@@ -96,6 +96,7 @@ import {
 } from "../chromeGutters";
 import { bindLengths, takeLengths } from "../length";
 import { resolveSpacing } from "../constraints/distribute";
+import { resolveGridSpacing } from "../constraints/grid";
 import { fixedOverflow, warnLayout } from "../layoutWarnings";
 
 // ── Z-order resolution ────────────────────────────────────────────────────
@@ -520,8 +521,9 @@ export const layer = createNodeOperatorSequential(
           // plot the envelope of their plots, leaving out the dressing and
           // the ink. A grid's track axis has none: its tracks size at
           // layout (`resolveGridTracks`).
-          // Its chains' length spacings, laid out in its room.
+          // Its chains' and grids' length spacings, laid out in its room.
           resolveSpacing(node);
+          resolveGridSpacing(node);
           const operands = constraintOperands();
           const ring = isRing(node);
           // A grid's track axis has a plan too, which places its cells in

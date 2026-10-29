@@ -18,7 +18,7 @@ from . import ast as _ast
 from .ast import Mark, _channel
 
 if TYPE_CHECKING:
-    from .ast import ChunkKey, FieldAccessor, FieldPredicate, StructAccessor
+    from .ast import ChunkKey, FieldAccessor, FieldPredicate, LengthValue, StructAccessor
 
 
 # --- Nested option dicts -----------------------------------------------------
@@ -33,7 +33,8 @@ _OPTION_TYPES: Dict[str, Any] = {
     "AxesOptions": ("object", {"x": ("x", ("ref", "AxisOptions")), "y": ("y", ("ref", "AxisOptions"))}),
     "AxisInterval": ("object", {"min": ("min", None), "center": ("center", None), "max": ("max", None), "size": ("size", None), "embedded": ("embedded", None)}),
     "FieldPredicate": ("object", {"field": ("field", None), "between": ("between", None), "closed": ("closed", None)}),
-    "ChartOptions": ("object", {"w": ("w", None), "h": ("h", None), "coord": ("coord", None), "color": ("color", None), "axes": ("axes", ("ref", "AxesOptions")), "legend": ("legend", None), "padding": ("padding", None), "schema": ("schema", None)}),
+    "Length": ("object", {"type": ("type", None), "percent": ("percent", None), "px": ("px", None), "fr": ("fr", None)}),
+    "ChartOptions": ("object", {"w": ("w", ("ref", "Length")), "h": ("h", ("ref", "Length")), "coord": ("coord", None), "color": ("color", None), "axes": ("axes", ("ref", "AxesOptions")), "legend": ("legend", None), "padding": ("padding", None), "schema": ("schema", None)}),
     "AxisDimsValue": ("ref", "AxisInterval"),
     "Partition": ("tagged", "kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)}), "step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)})}),
     "StructBin": ("tagged", "kind", {"hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),
@@ -121,7 +122,7 @@ def _to_wire(shape: Any, value: Any, path: str) -> Any:
 
 # --- Leaf marks -------------------------------------------------------------
 
-def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None, key: Optional[str] = None, rx: Optional[float] = None, ry: Optional[float] = None, aspect_ratio: Optional[float] = None, inset: Optional[float] = None) -> Mark:
+def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None, key: Optional[str] = None, rx: Optional[float] = None, ry: Optional[float] = None, aspect_ratio: Optional[float] = None, inset: Optional[float | LengthValue] = None) -> Mark:
     """A rectangle. Box geometry via the shared dims channels.
 
     Args:
@@ -129,12 +130,12 @@ def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
         x: Left edge position.
         cx: Center x.
         x2: Right edge position.
-        w: Width.
+        w: Width. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_x: Embed x in the parent's x space.
         y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
         y2: Other y edge position.
-        h: Height.
+        h: Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         fill: Fill color, or a field name for a color scale.
@@ -146,7 +147,7 @@ def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
         rx: Corner radius, x. Default: `ry`, or 0 when neither is given.
         ry: Corner radius, y. Default: `rx`, or 0 when neither is given.
         aspect_ratio: w/h ratio to enforce; the constraining axis wins when both are data-driven.
-        inset: Pixels drawn in from each side of the space the rect fills, on an axis where it has no size or span of its own (a bar's width in a spread or a partition cell), so neighbors are drawn apart. A side the rect sizes itself, such as a bar's data height, is never inset. It changes only what is drawn: the rect's box stays the space it was given. Default 0.
+        inset: Pixels drawn in from each side of the space the rect fills, on an axis where it has no size or span of its own (a bar's width in a spread or a partition cell), so neighbors are drawn apart. A side the rect sizes itself, such as a bar's data height, is never inset. It changes only what is drawn: the rect's box stays the space it was given. Also `percent(n)`, n percent of that space on each axis: `percent(10)` draws a bar at 80% of its band. Default 0.
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
@@ -154,12 +155,12 @@ def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
         ("x", _channel(x)),
         ("cx", _channel(cx)),
         ("x2", _channel(x2)),
-        ("w", _channel(w)),
+        ("w", _channel(_to_wire(("ref", "Length"), w, "w"))),
         ("emX", em_x),
         ("y", _channel(y)),
         ("cy", _channel(cy)),
         ("y2", _channel(y2)),
-        ("h", _channel(h)),
+        ("h", _channel(_to_wire(("ref", "Length"), h, "h"))),
         ("emY", em_y),
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("fill", _channel(fill)),
@@ -171,7 +172,7 @@ def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
         ("rx", rx),
         ("ry", ry),
         ("aspectRatio", aspect_ratio),
-        ("inset", inset),
+        ("inset", _to_wire(("ref", "Length"), inset, "inset")),
     ]:
         if _v is not None:
             _kw[_k] = _v
@@ -225,7 +226,7 @@ def circle(*, debug: Optional[bool] = None, x: Optional[int | float | str] = Non
             _kw[_k] = _v
     return Mark("circle", **_kw)
 
-def ellipse(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, fill_opacity: Optional[float] = None, aspect_ratio: Optional[float] = None) -> Mark:
+def ellipse(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, fill_opacity: Optional[float] = None, aspect_ratio: Optional[float] = None) -> Mark:
     """An ellipse. Box geometry via the shared dims channels; paint is `paint` without filter, plus fillOpacity.
 
     Args:
@@ -233,12 +234,12 @@ def ellipse(*, debug: Optional[bool] = None, x: Optional[int | float | str] = No
         x: Left edge position.
         cx: Center x.
         x2: Right edge position.
-        w: Width.
+        w: Width. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_x: Embed x in the parent's x space.
         y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
         y2: Other y edge position.
-        h: Height.
+        h: Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         fill: Fill color, or a field name for a color scale.
@@ -254,12 +255,12 @@ def ellipse(*, debug: Optional[bool] = None, x: Optional[int | float | str] = No
         ("x", _channel(x)),
         ("cx", _channel(cx)),
         ("x2", _channel(x2)),
-        ("w", _channel(w)),
+        ("w", _channel(_to_wire(("ref", "Length"), w, "w"))),
         ("emX", em_x),
         ("y", _channel(y)),
         ("cy", _channel(cy)),
         ("y2", _channel(y2)),
-        ("h", _channel(h)),
+        ("h", _channel(_to_wire(("ref", "Length"), h, "h"))),
         ("emY", em_y),
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("fill", _channel(fill)),
@@ -377,7 +378,7 @@ def text(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
             _kw[_k] = _v
     return Mark("text", **_kw)
 
-def image(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, key: Optional[str] = None, href: str, filter: Optional[str] = None, opacity: Optional[float] = None, preserve_aspect_ratio: Optional[str] = None) -> Mark:
+def image(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, key: Optional[str] = None, href: str, filter: Optional[str] = None, opacity: Optional[float] = None, preserve_aspect_ratio: Optional[str] = None) -> Mark:
     """An embedded raster/SVG image. Box geometry via the shared dims channels.
 
     Args:
@@ -385,12 +386,12 @@ def image(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None
         x: Left edge position.
         cx: Center x.
         x2: Right edge position.
-        w: Width.
+        w: Width. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_x: Embed x in the parent's x space.
         y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
         y2: Other y edge position.
-        h: Height.
+        h: Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         key: Internal per-node key override.
@@ -405,12 +406,12 @@ def image(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None
         ("x", _channel(x)),
         ("cx", _channel(cx)),
         ("x2", _channel(x2)),
-        ("w", _channel(w)),
+        ("w", _channel(_to_wire(("ref", "Length"), w, "w"))),
         ("emX", em_x),
         ("y", _channel(y)),
         ("cy", _channel(cy)),
         ("y2", _channel(y2)),
-        ("h", _channel(h)),
+        ("h", _channel(_to_wire(("ref", "Length"), h, "h"))),
         ("emY", em_y),
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("key", key),
@@ -447,15 +448,15 @@ def polygon(*, debug: Optional[bool] = None, points: list | str, fill: Optional[
             _kw[_k] = _v
     return Mark("polygon", **_kw)
 
-def blank(*, debug: Optional[bool] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, fill: Optional[str] = None) -> Mark:
+def blank(*, debug: Optional[bool] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, fill: Optional[str] = None) -> Mark:
     """An invisible sizing/positioning guide — a rect that emits no display items at all, with a restricted channel set (no x/y/cx/cy/x2/y2/theta/r — position it via a layout operator).
 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
         em_x: Embed x in the parent's x space.
         em_y: Embed y in the parent's y space.
-        w: Width. Default 0.
-        h: Height. Default 0.
+        w: Width. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides. Default 0.
+        h: Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides. Default 0.
         fill: Fill color. A blank never paints; `fill` only seeds the shared color scale.
     """
     _kw: Dict[str, Any] = {}
@@ -463,8 +464,8 @@ def blank(*, debug: Optional[bool] = None, em_x: Optional[bool] = None, em_y: Op
         ("debug", debug),
         ("emX", em_x),
         ("emY", em_y),
-        ("w", _channel(w)),
-        ("h", _channel(h)),
+        ("w", _channel(_to_wire(("ref", "Length"), w, "w"))),
+        ("h", _channel(_to_wire(("ref", "Length"), h, "h"))),
         ("fill", _channel(fill)),
     ]:
         if _v is not None:
@@ -628,21 +629,21 @@ def arrow(children: List["Mark"], *, bow: Optional[float] = None, stretch: Optio
 
 # --- Dual-form cores (dispatch stays hand-written in ast.py) -----------------
 
-def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, alignment: Optional[str] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float | LengthValue] = None, alignment: Optional[str] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Arrange children along `dir` with spacing, aligning them on the cross axis.
 
     Args:
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         dir: Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
-        spacing: Gap between children, px. Default 8.
+        spacing: Gap between children, px. Also `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible. Default 8.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
         anchor: Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child. Default "edge".
         reverse: Reverse the children's order along dir. Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
         x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
-        w: Data-driven cross-axis extent (field/datum-sized children).
-        h: Data-driven cross-axis extent (field/datum-sized children).
+        w: Width of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
+        h: Height of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         size: Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
@@ -650,7 +651,7 @@ def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Op
     for _k, _v in [
         ("by", by),
         ("dir", dir),
-        ("spacing", spacing),
+        ("spacing", _to_wire(("ref", "Length"), spacing, "spacing")),
         ("alignment", alignment),
         ("anchor", anchor),
         ("reverse", reverse),
@@ -658,8 +659,8 @@ def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Op
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("x", _channel(x)),
         ("y", _channel(y)),
-        ("w", _channel(w)),
-        ("h", _channel(h)),
+        ("w", _channel(_to_wire(("ref", "Length"), w, "w"))),
+        ("h", _channel(_to_wire(("ref", "Length"), h, "h"))),
         ("size", _channel(size)),
         ("debug", debug),
     ]:
@@ -667,7 +668,7 @@ def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Op
             opts[_k] = _v
     return opts
 
-def _stack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _stack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """`spread({ glue: true })` under its own wire tag — children glued together (touching, no gaps).
 
     Args:
@@ -680,8 +681,8 @@ def _stack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Opt
         reverse: Reverse the children's order along dir. Default false.
         x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
-        w: Data-driven cross-axis extent (field/datum-sized children).
-        h: Data-driven cross-axis extent (field/datum-sized children).
+        w: Width of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
+        h: Height of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         size: Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
@@ -697,8 +698,8 @@ def _stack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Opt
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("x", _channel(x)),
         ("y", _channel(y)),
-        ("w", _channel(w)),
-        ("h", _channel(h)),
+        ("w", _channel(_to_wire(("ref", "Length"), w, "w"))),
+        ("h", _channel(_to_wire(("ref", "Length"), h, "h"))),
         ("size", _channel(size)),
         ("debug", debug),
     ]:
@@ -761,19 +762,19 @@ def _group_opts(*, by: str | FieldAccessor | ChunkKey, debug: Optional[bool] = N
             opts[_k] = _v
     return opts
 
-def _table_opts(*, by: dict, spacing: Optional[float | tuple] = None, num_cols: Optional[float] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _table_opts(*, by: dict, spacing: Optional[float | LengthValue | tuple] = None, num_cols: Optional[float] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Arrange cells in a `numCols`-wide grid (or a `{x, y}` keyed grid via `by`).
 
     Args:
         by: The column key (x) and the row key (y), both required. Each takes what spread's `by` takes: a field name, a field(...) key (sorted, binned, a chain or product of bins, a part of a cycle), or chunk(size). A binned key's columns or rows are its cells, empty ones included. Each cell of the table holds the rows in both its column and its row.
-        spacing: Cell gap: a single number for both axes, or [x, y]. Default 0.
+        spacing: Cell gap: a single number for both axes, or [x, y]. Each is pixels or `percent(n)`, n percent of the table's room on its axis. Default 0.
         num_cols: Explicit column count (falls back to the number of distinct column keys).
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
         ("by", _to_wire(("object", {"x": ("x", None), "y": ("y", None)}), by, "by")),
-        ("spacing", spacing),
+        ("spacing", _to_wire(("ref", "Length"), spacing, "spacing")),
         ("numCols", num_cols),
         ("debug", debug),
     ]:
@@ -781,14 +782,14 @@ def _table_opts(*, by: dict, spacing: Optional[float | tuple] = None, num_cols: 
             opts[_k] = _v
     return opts
 
-def _treemap_opts(*, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, spacing: Optional[float] = None, padding: Optional[float] = None, round: Optional[bool] = None, tile: Optional[dict] = None, sort: Optional[str] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _treemap_opts(*, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, spacing: Optional[float] = None, padding: Optional[float] = None, round: Optional[bool] = None, tile: Optional[dict] = None, sort: Optional[str] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """d3-hierarchy treemap layout over the flow's rows, fare/weight-proportional.
 
     Args:
         x: Left edge of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap.
         y: Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap.
-        w: Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
-        h: Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
+        w: Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
+        h: Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         dims: The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         by: Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         spacing: Gap between sibling tiles, in pixels. Default 0.
@@ -803,8 +804,8 @@ def _treemap_opts(*, x: Optional[int | float | str] = None, y: Optional[int | fl
     for _k, _v in [
         ("x", _channel(x)),
         ("y", _channel(y)),
-        ("w", _channel(w)),
-        ("h", _channel(h)),
+        ("w", _channel(_to_wire(("ref", "Length"), w, "w"))),
+        ("h", _channel(_to_wire(("ref", "Length"), h, "h"))),
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("by", by),
         ("spacing", spacing),
@@ -856,14 +857,14 @@ def _partition_opts(*, by: FieldAccessor | StructAccessor, dir: Optional[str] = 
             opts[_k] = _v
     return opts
 
-def _treemap_combinator_opts(*, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, spacing: Optional[float] = None, padding: Optional[float] = None, round: Optional[bool] = None, tile: Optional[dict] = None, sort: Optional[str] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _treemap_combinator_opts(*, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, spacing: Optional[float] = None, padding: Optional[float] = None, round: Optional[bool] = None, tile: Optional[dict] = None, sort: Optional[str] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Low-level combinator form of `treemap` (single level). Same fields as the operator form (OPERATORS.treemap) plus `key`.
 
     Args:
         x: Left edge of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap.
         y: Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap.
-        w: Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
-        h: Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots.
+        w: Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
+        h: Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         dims: The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         by: Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         spacing: Gap between sibling tiles, in pixels. Default 0.
@@ -879,8 +880,8 @@ def _treemap_combinator_opts(*, x: Optional[int | float | str] = None, y: Option
     for _k, _v in [
         ("x", _channel(x)),
         ("y", _channel(y)),
-        ("w", _channel(w)),
-        ("h", _channel(h)),
+        ("w", _channel(_to_wire(("ref", "Length"), w, "w"))),
+        ("h", _channel(_to_wire(("ref", "Length"), h, "h"))),
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("by", by),
         ("spacing", spacing),
@@ -896,24 +897,24 @@ def _treemap_combinator_opts(*, x: Optional[int | float | str] = None, y: Option
             opts[_k] = _v
     return opts
 
-def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, alignment: Optional[str] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float | LengthValue] = None, alignment: Optional[str] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Low-level combinator form of `spread`. Same fields as the operator form (OPERATORS.spread) plus `key` and the full box-dims group.
 
     Args:
         x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         cx: Center x.
         x2: Right edge position.
-        w: Data-driven cross-axis extent (field/datum-sized children).
+        w: Width of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_x: Embed x in the parent's x space.
         y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         cy: Center y.
         y2: Other y edge position.
-        h: Data-driven cross-axis extent (field/datum-sized children).
+        h: Height of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         dir: Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
-        spacing: Gap between children, px. Default 8.
+        spacing: Gap between children, px. Also `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible. Default 8.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
         anchor: Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child. Default "edge".
         reverse: Reverse the children's order along dir. Default false.
@@ -927,17 +928,17 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
         ("x", _channel(x)),
         ("cx", _channel(cx)),
         ("x2", _channel(x2)),
-        ("w", _channel(w)),
+        ("w", _channel(_to_wire(("ref", "Length"), w, "w"))),
         ("emX", em_x),
         ("y", _channel(y)),
         ("cy", _channel(cy)),
         ("y2", _channel(y2)),
-        ("h", _channel(h)),
+        ("h", _channel(_to_wire(("ref", "Length"), h, "h"))),
         ("emY", em_y),
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("by", by),
         ("dir", dir),
-        ("spacing", spacing),
+        ("spacing", _to_wire(("ref", "Length"), spacing, "spacing")),
         ("alignment", alignment),
         ("anchor", anchor),
         ("reverse", reverse),
@@ -951,19 +952,19 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
             opts[_k] = _v
     return opts
 
-def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Low-level combinator form of `stack`. Same fields as the operator form (OPERATORS.stack) plus `key` and the full box-dims group.
 
     Args:
         x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         cx: Center x.
         x2: Right edge position.
-        w: Data-driven cross-axis extent (field/datum-sized children).
+        w: Width of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_x: Embed x in the parent's x space.
         y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         cy: Center y.
         y2: Other y edge position.
-        h: Data-driven cross-axis extent (field/datum-sized children).
+        h: Height of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
@@ -982,12 +983,12 @@ def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optiona
         ("x", _channel(x)),
         ("cx", _channel(cx)),
         ("x2", _channel(x2)),
-        ("w", _channel(w)),
+        ("w", _channel(_to_wire(("ref", "Length"), w, "w"))),
         ("emX", em_x),
         ("y", _channel(y)),
         ("cy", _channel(cy)),
         ("y2", _channel(y2)),
-        ("h", _channel(h)),
+        ("h", _channel(_to_wire(("ref", "Length"), h, "h"))),
         ("emY", em_y),
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("by", by),
@@ -1158,19 +1159,19 @@ def _enclose_opts(*, padding: Optional[float] = None, shape: Optional[dict] = No
             opts[_k] = _v
     return opts
 
-def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, key: Optional[str] = None, coord: Optional[Any] = None, axes: Optional[bool | dict] = None, transform: Optional[dict] = None, box: Optional[bool] = None) -> Dict[str, Any]:
+def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, key: Optional[str] = None, coord: Optional[Any] = None, axes: Optional[bool | dict] = None, transform: Optional[dict] = None, box: Optional[bool] = None) -> Dict[str, Any]:
     """Compose children on the same canvas at (0, 0) unless placed by constraints. Also accepts explicit box dims when given a self-scaling size.
 
     Args:
         x: Left edge position.
         cx: Center x.
         x2: Right edge position.
-        w: Width.
+        w: Width. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_x: Embed x in the parent's x space.
         y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
         y2: Other y edge position.
-        h: Height.
+        h: Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         key: Internal per-node key override.
@@ -1184,12 +1185,12 @@ def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | flo
         ("x", _channel(x)),
         ("cx", _channel(cx)),
         ("x2", _channel(x2)),
-        ("w", _channel(w)),
+        ("w", _channel(_to_wire(("ref", "Length"), w, "w"))),
         ("emX", em_x),
         ("y", _channel(y)),
         ("cy", _channel(cy)),
         ("y2", _channel(y2)),
-        ("h", _channel(h)),
+        ("h", _channel(_to_wire(("ref", "Length"), h, "h"))),
         ("emY", em_y),
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("key", key),
@@ -1202,12 +1203,12 @@ def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | flo
             opts[_k] = _v
     return opts
 
-def _chart_opts(*, w: Optional[float] = None, h: Optional[float] = None, coord: Optional[Any] = None, color: Optional[Any] = None, axes: Optional[bool | dict] = None, legend: Optional[bool] = None, padding: Optional[float] = None, schema: Optional[dict] = None) -> Dict[str, Any]:
+def _chart_opts(*, w: Optional[float | LengthValue] = None, h: Optional[float | LengthValue] = None, coord: Optional[Any] = None, color: Optional[Any] = None, axes: Optional[bool | dict] = None, legend: Optional[bool] = None, padding: Optional[float] = None, schema: Optional[dict] = None) -> Dict[str, Any]:
     """Chart-level options for chart(data, **options).
 
     Args:
-        w: Width of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it.
-        h: Height of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it.
+        w: Width of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
+        h: Height of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         coord: Coordinate transform for the whole chart, made by a call in the Coord family: Coord.polar(), Coord.clock(), Coord.wavy(), ...
         color: Color scale for every mark, made by a call in the Color family: Color.palette(...) or Color.gradient(...).
         axes: Draw this chart's axes: a boolean for both axes, or per-axis options {x?, y?}. It applies at this chart: a nested chart reads its own, and draws only the axes of the domains it owns. A chart that turns an axis off hides it; no chart inside it draws that axis instead. Default true.
@@ -1217,8 +1218,8 @@ def _chart_opts(*, w: Optional[float] = None, h: Optional[float] = None, coord: 
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
-        ("w", w),
-        ("h", h),
+        ("w", _to_wire(("ref", "Length"), w, "w")),
+        ("h", _to_wire(("ref", "Length"), h, "h")),
         ("coord", coord),
         ("color", color),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),

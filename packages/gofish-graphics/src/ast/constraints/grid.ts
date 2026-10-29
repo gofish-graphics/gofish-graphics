@@ -49,11 +49,23 @@ import {
 import type { ScopeRegistry } from "../solver/scopes";
 import type { PlacementFactEmitter } from "./placementFacts";
 import { numbers, type Arith } from "../solver/arith";
+import {
+  isFr,
+  isLength,
+  lengthIn,
+  printLength,
+  type Length,
+  type LengthValue,
+} from "../length";
+
+/** One gap between tracks: pixels, or a percent of the table's room on its
+ *  axis (#1176 step 6). */
+export type TrackGap = number | Length | LengthValue;
 
 export interface GridOptions {
   numCols: number;
   /** [x, y] gaps between tracks; a scalar applies to both. Default 0. */
-  spacing?: number | [number, number];
+  spacing?: TrackGap | [TrackGap, TrackGap];
   /** The column and row keys, in order: text, or cells for a binned key
    *  (`ORDINAL_TYPE.cells`). */
   colKeys?: OrdinalKey[];
@@ -72,6 +84,13 @@ export interface GridConstraint {
   numCols: number;
   xSpacing: number;
   ySpacing: number;
+  /** A percent gap, per axis, laid out in the table's room by its layer's
+   *  claim walk (`resolveGridSpacing`), which sets `xSpacing` / `ySpacing`
+   *  to its pixels. */
+  gapLengths?: [
+    Length | LengthValue | undefined,
+    Length | LengthValue | undefined,
+  ];
   colKeys?: OrdinalKey[];
   rowKeys?: OrdinalKey[];
   colMeasure?: string;
@@ -87,11 +106,26 @@ export const createGridConstraint = (
   children: ConstraintRef[]
 ): GridConstraint => {
   const sp = options.spacing ?? 0;
+  const gaps = (Array.isArray(sp) ? sp : [sp, sp]) as [TrackGap, TrackGap];
+  // A percent gap is laid out once the table is in its tree; an fr gap would
+  // make the tracks flexible, which a table's tracks are not yet.
+  // TODO(#1176): `fr` table gaps, with the tracks as σ weights.
+  const lengths = gaps.map((g) => {
+    if (!isLength(g)) return undefined;
+    if (isFr(g))
+      throw new Error(
+        `table: spacing takes pixels or a percent of the table's room, not ` +
+          `${printLength(g)}.`
+      );
+    return g;
+  }) as [Length | LengthValue | undefined, Length | LengthValue | undefined];
+  const px = (g: TrackGap) => (typeof g === "number" ? g : 0);
   return {
     type: "grid",
     numCols: options.numCols,
-    xSpacing: Array.isArray(sp) ? sp[0] : sp,
-    ySpacing: Array.isArray(sp) ? sp[1] : sp,
+    xSpacing: px(gaps[0]),
+    ySpacing: px(gaps[1]),
+    gapLengths: lengths[0] || lengths[1] ? lengths : undefined,
     colKeys: options.colKeys,
     rowKeys: options.rowKeys,
     colMeasure: options.colMeasure,
@@ -104,6 +138,29 @@ export const createGridConstraint = (
 
 export const isGridConstraint = (c: { type: string }): c is GridConstraint =>
   c.type === "grid";
+
+/** Lay the percent gaps of `node`'s grids out in its room on each axis
+ *  (`GoFishNode.roomFor`), as pixels: the tracks are sized in pixels, so a
+ *  room that is a share of a scope (a band) is an error there. */
+export function resolveGridSpacing(node: GoFishNode): void {
+  for (const c of node.constraints) {
+    if (!isGridConstraint(c) || c.gapLengths === undefined) continue;
+    ([0, 1] as const).forEach((axis) => {
+      const len = c.gapLengths![axis];
+      if (len === undefined) return;
+      const what = `table's spacing ${printLength(len)}`;
+      const v = lengthIn(len, () => node.roomFor(axis, what));
+      if (!Pwl.isConstant(v))
+        throw new Error(
+          `${what}: its room is a share of the scope around the table, ` +
+            `which a table's tracks cannot be laid out in yet. Give the ` +
+            `table a container with a size of its own.`
+        );
+      if (axis === 0) c.xSpacing = Pwl.at(v, 0);
+      else c.ySpacing = Pwl.at(v, 0);
+    });
+  }
+}
 
 const numRowsOf = (c: GridConstraint): number =>
   Math.ceil(c.children.length / c.numCols);

@@ -414,6 +414,13 @@ only correct in some spaces reads it there: `scatter`'s `overlap` keeps
 children apart in the layout frame, which is the screen only in a linear space,
 so it throws under any other transform (#1002).
 
+A coord's own `w`/`h` may be a length (#1176 step 6): it is laid out in its
+parent's room like any node's size, and a coord with a length size reports no
+claim of its own (`resolveExtent` returns undefined), so its parent's room
+decides it. Inside a coord, a percent has no room: the coord's budget is in
+coordinate units (#1238), so a percent under it throws, and so does a percent
+`padding`.
+
 See [Layout & Render Passes](/internals/layout/passes) for how `coord` fits into the
 larger pipeline, and [Authoring Coordinate Transforms](/internals/layout/coordinate-transforms)
 for the transform interface itself.

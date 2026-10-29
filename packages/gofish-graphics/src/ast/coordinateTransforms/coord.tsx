@@ -16,6 +16,12 @@ import {
   Interval,
   Size,
 } from "../dims";
+import {
+  bindLengths,
+  rejectLength,
+  takeLengths,
+  type LengthValue,
+} from "../length";
 import { flattenLayout } from "./bake";
 import { orderChildrenForPaint } from "../paintOrder";
 import * as IntervalLib from "../../util/interval";
@@ -188,10 +194,15 @@ export const coord = createNodeOperator(
       grid?: boolean;
       axes?: AxesOptions;
       padding?: number;
-    } & FancyDims,
+    } & FancyDims<number | LengthValue>,
     children: GoFishAST[]
   ) => {
-    const dims = elaborateDims(fancyDims);
+    // A length for its box's size (a polar chart's `w: percent(50)`) is laid
+    // out in the room it is given, once it is in its tree (#1176 step 6).
+    const ownDims = { ...fancyDims } as Record<string, unknown>;
+    const lengths = takeLengths(ownDims);
+    rejectLength("a coordinate space's padding", padding);
+    const dims = elaborateDims(ownDims as FancyDims);
     // THE discriminator: does this space frame its own window? A `fit`-ted space
     // (geo) lays out in a data window, so its budget IS the frame — which decides
     // the budget rule, the box, the culling frame and whether the polar overlays
@@ -285,6 +296,8 @@ export const coord = createNodeOperator(
             axes ||
             dims[0].size !== undefined ||
             dims[1].size !== undefined ||
+            lengths[0] !== undefined ||
+            lengths[1] !== undefined ||
             (coordTransform.innerRadius ?? 0) > 0
           )
             return [undefined, undefined];
@@ -1036,7 +1049,8 @@ export const coord = createNodeOperator(
     };
     // The coord's own box lives in its parent's space, so its `dims` option
     // resolves against the parent's names (the hook's `outer` scope).
-    coordNode._elaborateInAxisScope = deferAxisDims(fancyDims, dims);
+    bindLengths(coordNode, dims, lengths);
+    coordNode._elaborateInAxisScope = deferAxisDims(ownDims as FancyDims, dims);
     return coordNode;
   }
 );

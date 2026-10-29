@@ -1,8 +1,13 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Underlying Space — /internals/core/underlying-space
+// </gofish-wiki>
+
 // Lengths (#1176 step 6): a size or a gap given as pixels (a number), as a
 // percent of the room it is laid out in, or as an `fr` weight, a share of
 // the nearest σ-scope.
 
 import * as Pwl from "./solver/pwl";
+import { Frontend } from "gofish-ir";
 
 /** The canvas an axis the render gives no size is laid out against: a data
  *  σ is solved in it (`layout` in gofish.tsx), and a percent there is a
@@ -175,6 +180,54 @@ export const bindLengths = (
     });
   });
 };
+
+/** Whether a field of this declared type takes a length: its type names the
+ *  `Length` option type, alone or in a union, a tuple or a list. */
+const takesLength = (type: Frontend.FieldType): boolean => {
+  switch (type.kind) {
+    case "ref":
+      return type.name === "Length";
+    case "union":
+      return type.options.some(takesLength);
+    case "tuple":
+      return type.items.some(takesLength);
+    case "array":
+      return takesLength(type.items);
+    default:
+      return false;
+  }
+};
+
+/** The length `v` holds, at its top or as an item of a list (a table's
+ *  `[x, y]` spacing), if any. */
+const heldLength = (v: unknown): Length | LengthValue | undefined =>
+  isLength(v)
+    ? v
+    : Array.isArray(v)
+      ? (v.find(isLength) as Length | LengthValue | undefined)
+      : undefined;
+
+/**
+ * Check that each option of a construct that holds a length is one its
+ * descriptor declares as taking one (`t.ref("Length")` in gofish-ir's
+ * descriptor table, the one list of the options that do): a length anywhere
+ * else is an error, never dropped. `fields` are the construct's declared
+ * fields (`Frontend.acceptedFields`); a construct with none has no wire form,
+ * so it is not checked here.
+ */
+export function checkLengths(
+  fields: Readonly<Record<string, { type: Frontend.FieldType }>> | undefined,
+  what: string,
+  opts: Record<string, unknown> | undefined
+): void {
+  if (fields === undefined || opts === undefined) return;
+  for (const [key, v] of Object.entries(opts)) {
+    const len = heldLength(v);
+    if (len === undefined) continue;
+    if (!Object.hasOwn(fields, key) || !takesLength(fields[key].type))
+      rejectLength(`${what}'s ${key}`, len);
+  }
+}
 
 /** A length where only pixels are accepted, named for its message: `what`
  *  takes no percent or fr. */

@@ -2,6 +2,9 @@
 // @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
+import { Frontend } from "gofish-ir";
+import { checkLengths } from "./length";
+
 import { getColumnTypes, setColumnTypes } from "./schema";
 import type { JSX } from "solid-js";
 import { GoFishAST } from "./_ast";
@@ -479,6 +482,13 @@ function buildCreatedMark(
   kind: MarkKind,
   markOpts: Record<string, any>
 ): any {
+  // A percent or fr length only where the mark's descriptor takes one.
+  if (serialize !== undefined)
+    checkLengths(
+      Frontend.acceptedFields("leaf-mark", serialize),
+      serialize,
+      markOpts
+    );
   const baseMark: Mark<any> = async (
     d: unknown[],
     key?: string | number,

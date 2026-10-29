@@ -14,6 +14,10 @@ import {
   percent,
   fr,
   value,
+  text,
+  ellipse,
+  treemap,
+  table,
 } from "../lib";
 import { runLayout } from "../ast/gofish";
 import * as Pwl from "../ast/solver/pwl";
@@ -93,6 +97,12 @@ async function main() {
     { k: "b", v: 5 },
     { k: "c", v: 2 },
     { k: "d", v: 4 },
+  ];
+  const grid = [
+    { c: "a", r: "p" },
+    { c: "b", r: "p" },
+    { c: "a", r: "q" },
+    { c: "b", r: "q" },
   ];
   const bars = (opts: Record<string, unknown>, spacing: any = 0) =>
     chart(rows, { axes: false, ...opts })
@@ -332,6 +342,48 @@ async function main() {
     );
     await throws("a rect's inset of fr", () =>
       rect({ w: 10, h: 10, inset: fr(1) as any }).toDisplayList({})
+    );
+    await throws("a text's fontSize", async () =>
+      text({ text: "a", fontSize: percent(10) as any })
+    );
+    await throws("a chart's padding", async () =>
+      chart(rows, { padding: percent(5) as any })
+        .flow(spread({ by: "k", dir: "x" }))
+        .mark(rect({ h: "v" }))
+        .toDisplayList({})
+    );
+    await throws("a treemap's spacing", () =>
+      chart(rows, { w: 200, h: 200 })
+        .flow(treemap({ by: "k", size: "v", spacing: percent(5) as any }))
+        .mark(rect({}))
+        .toDisplayList()
+    );
+    await throws("a table's fr spacing", () =>
+      chart(grid, { w: 200, h: 200 })
+        .flow(table({ by: { x: "c", y: "r" }, spacing: fr(1) as any }))
+        .mark(rect({}))
+        .toDisplayList()
+    );
+  }
+
+  console.log("\n# an ellipse and a table take percents");
+  {
+    const dl = await layer({ w: 300, h: 100 }, [
+      ellipse({ w: percent(50), h: 20 }),
+    ]).toDisplayList({});
+    const e = items(dl).find((i) => i.kind === "ellipse") as any;
+    check("an ellipse at 50% of 300 px is 150 px", close(2 * e?.rx, 150), e);
+    const cells = rectsOf(
+      await chart(grid, { axes: false, w: 200, h: 200 })
+        .flow(table({ by: { x: "c", y: "r" }, spacing: percent(10) }))
+        .mark(rect({}))
+        .toDisplayList()
+    );
+    // Two columns and a 20 px gap (10% of 200 px) share 200 px.
+    check(
+      "a table's 10% spacing is 20 px of 200 px",
+      cells.length === 4 && cells.every((c) => close(c.w, 90, 1e-3)),
+      cells.map((c) => c.w)
     );
   }
 

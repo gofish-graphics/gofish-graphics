@@ -2,6 +2,9 @@
 // @wiki The Operator Factory — /internals/frontend/operator-factory
 // </gofish-wiki>
 
+import { Frontend } from "gofish-ir";
+import { checkLengths } from "../length";
+
 /**
  * createOperator: a factory for the fluent API's layout operators.
  *
@@ -1206,6 +1209,12 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         );
       }
       if (cfg.serialize) {
+        // A percent or fr length only where its descriptor takes one.
+        checkLengths(
+          Frontend.acceptedFields("combinator-mark", cfg.serialize),
+          cfg.serialize,
+          opts as Record<string, unknown>
+        );
         tagCombinator(combinator, cfg.serialize, opts, marks);
       }
       return combinator;
@@ -1395,6 +1404,12 @@ export function createOperator<Datum, Options extends Record<string, any>>(
     // Tag the operator with IR-serialization metadata so the frontend-IR
     // emitter can reconstruct it as `{ type, ...opts }` on the wire.
     if (cfg.serialize) {
+      // A percent or fr length only where its descriptor takes one.
+      checkLengths(
+        Frontend.acceptedFields("operator", cfg.serialize),
+        cfg.serialize,
+        opts as Record<string, unknown>
+      );
       withWire(operator, { type: cfg.serialize, opts });
     }
     const withTranslate = attachTranslateOption(operator, (translateOpts) =>

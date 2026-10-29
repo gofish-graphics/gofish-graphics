@@ -11,6 +11,7 @@ import {
   Transform,
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
+import { bindLengths, isFr, takeLengths, type LengthValue } from "../length";
 import { createMark } from "../withGoFish";
 import { MARK_CHANNELS } from "../markChannels.generated";
 import { attachCut } from "../graphicalOperators/cut";
@@ -228,9 +229,16 @@ export const Image = ({
   filter?: string;
   opacity?: number;
   preserveAspectRatio?: string;
-} & FancyDims<number>) => {
+} & FancyDims<number | LengthValue>) => {
+  // A length for its own size (`w: percent(30)`, `w: fr(2)`) is laid out in
+  // the room it is given, known only once it is in its tree (#1176 step 6).
+  const ownDims = { ...fancyDims } as Record<string, unknown>;
+  const lengths = takeLengths(ownDims);
   // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
-  const dims = elaborateDims(fancyDims);
+  const dims = elaborateDims(ownDims as FancyDims<number>);
+  // Its size as its type reads it: a length is never data (see rect.tsx).
+  const dataSize = (axis: 0 | 1) =>
+    lengths[axis] === undefined ? dims[axis].size : undefined;
 
   const node = new GoFishNode(
     {
@@ -250,7 +258,7 @@ export const Image = ({
 
         // With no data position or size, the image's intrinsic dimensions are
         // resolved at layout time via resolveRenderedDimensions.
-        return [glyphAxis(xPos, dims[0].size), glyphAxis(yPos, dims[1].size)];
+        return [glyphAxis(xPos, dataSize(0)), glyphAxis(yPos, dataSize(1))];
       },
       layout: (size, scales, children) => {
         // For data-bound (Value-wrapped) dims, map from data units to pixels via
@@ -263,6 +271,9 @@ export const Image = ({
             const map = scales?.[dim]?.map;
             return map ? pxOf(map, dataSize) - pxOf(map, 0) : dataSize;
           }
+          // An `fr` size is the share it is given.
+          const len = lengths[dim];
+          if (len !== undefined && isFr(len)) return size[dim];
           return raw;
         };
         const requestedWidth = pixelSize(0);
@@ -341,8 +352,12 @@ export const Image = ({
     },
     []
   );
+  bindLengths(node, dims, lengths);
   // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
-  node._elaborateInAxisScope = deferAxisDims(fancyDims, dims);
+  node._elaborateInAxisScope = deferAxisDims(
+    ownDims as FancyDims<number>,
+    dims
+  );
   return node;
 };
 

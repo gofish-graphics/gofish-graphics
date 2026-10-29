@@ -173,6 +173,13 @@ Walking `withGoFish.ts:431-477`:
    list (`rect({...})([box])`, so the rect's datum is `[box]`). Nothing
    inspects the input's shape; the `infer*` helpers all read it as the list
    it is.
+   Before that, the options are checked for lengths (`checkLengths` in
+   `ast/length.ts`): a `percent(n)` or `fr(k)` is allowed only in a field
+   whose descriptor type names `t.ref("Length")` (a box's `w`/`h`, a rect's
+   `inset`); a length anywhere else throws rather than being dropped. A
+   length passes the channels through unchanged (`inferNumeric`), and the
+   shape takes it off its `dims` and binds it to its node (`takeLengths`,
+   `bindLengths`).
 2. **Apply each channel.** For each prop in the user's `markOpts`:
    - `Value`-wrapped (`v(...)`) → pass through unchanged. (Already final.)
    - **No value means not drawn**, for every data channel, in one place: a

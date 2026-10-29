@@ -292,7 +292,8 @@ export interface SpreadOperator
   by?: string | FieldAccessor | ChunkKeyIR;
   /** `x`/`y`, or an axis name the enclosing coordinate space declares. */
   dir?: string;
-  spacing?: number;
+  /** Pixels, or a length (`percent(n)`, `fr(k)`). */
+  spacing?: number | LengthIR;
   alignment?: string;
   anchor?: "edge" | "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
@@ -304,9 +305,10 @@ export interface SpreadOperator
   x?: ChannelValue;
   y?: ChannelValue;
   /** Data-driven operator extent (#4/#20): a field name or pixel number sizing
-   *  this operator's box, reported as a SIZE claim to the enclosing scale. */
-  w?: ChannelValue;
-  h?: ChannelValue;
+   *  this operator's box, reported as a SIZE claim to the enclosing scale,
+   *  or a length (`percent(n)`, `fr(k)`). */
+  w?: ChannelValue | LengthIR;
+  h?: ChannelValue | LengthIR;
   /** Per-entry stack-axis extent (#700 Phase 2): a field name/accessor or
    *  pixel number sizing each split entry. A `field(name).normalize()`
    *  accessor (a `FieldAccessor` with a `normalize` pipeline op) replaces
@@ -338,8 +340,8 @@ export interface StackOperator
   /** Box position, extent, and per-entry size — see `SpreadOperator`. */
   x?: ChannelValue;
   y?: ChannelValue;
-  w?: ChannelValue;
-  h?: ChannelValue;
+  w?: ChannelValue | LengthIR;
+  h?: ChannelValue | LengthIR;
   size?: ChannelValue;
   axes?: AxesOptions;
 }
@@ -443,7 +445,8 @@ export interface TableOperator
     x: string | FieldAccessor | ChunkKeyIR;
     y: string | FieldAccessor | ChunkKeyIR;
   };
-  spacing?: number | [number, number];
+  /** Pixels or `percent(n)`, one for both axes or `[x, y]`. */
+  spacing?: number | LengthIR | [number | LengthIR, number | LengthIR];
   numCols?: number;
 }
 
@@ -493,8 +496,9 @@ export interface TreemapOperator
    *  annotation, so they are pixel literals. */
   x?: ChannelValue;
   y?: ChannelValue;
-  w?: ChannelValue;
-  h?: ChannelValue;
+  /** Its box's size, or a length (`percent(n)`, `fr(k)`). */
+  w?: ChannelValue | LengthIR;
+  h?: ChannelValue | LengthIR;
   /** The same box by axis name (see `AxisDims`). */
   dims?: AxisDims;
 }
@@ -882,6 +886,16 @@ export type ChannelValue =
   | FieldAccessor
   | DatumValue
   | BridgeLambdaSentinel;
+
+/**
+ * A length (#1176 step 6), as `percent(n)` and `fr(k)` build it: `percent`
+ * percent of the room it is laid out in plus `px` pixels, or a weight of
+ * `fr` shares of the room its nearest scope divides. Mirrors gofish-graphics'
+ * `Length` (`ast/length.ts`) and the `Length` option type in descriptors.ts.
+ */
+export type LengthIR =
+  | { type: "length"; percent: number; px?: number }
+  | { type: "length"; fr: number };
 
 /** One axis of a `dims` option, as an interval: its anchors, each a channel
  *  value (`size` a size channel, the rest positions). */

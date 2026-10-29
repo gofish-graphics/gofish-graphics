@@ -2982,6 +2982,76 @@ def datum(value: Any) -> DatumValue:
     return DatumValue({"type": "datum", "datum": value})
 
 
+def _is_number(v: Any) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+class LengthValue(dict):
+    """
+    The `{type: "length", ...}` wire shape of a length, as a dict subclass
+    so a percent supports pixel arithmetic: `percent(30) + 10` /
+    `percent(30) - 10` yield a new length whose `px` field carries the
+    pixels (CSS `calc(30% + 10px)`). Mirrors `percent(n).offset(px)` in
+    JS. An `fr` weight takes no pixels. Serializes like a plain dict (it is
+    one), so it crosses the IR bridge unchanged.
+    """
+
+    def _with_px(self, px):
+        if not _is_number(px):
+            return NotImplemented
+        if "fr" in self:
+            raise TypeError(f"fr({self['fr']}) + px: an fr weight takes no offset")
+        px = self.get("px", 0) + px
+        out = LengthValue({"type": "length", "percent": self["percent"]})
+        if px != 0:
+            out["px"] = px
+        return out
+
+    def __add__(self, px):  # percent(30) + 10
+        return self._with_px(px)
+
+    def __radd__(self, px):  # 10 + percent(30)
+        return self._with_px(px)
+
+    def __sub__(self, px):  # percent(30) - 10
+        if not _is_number(px):
+            return NotImplemented
+        return self._with_px(-px)
+
+    def offset(self, px):
+        """Method form, for parity with JS ``percent(n).offset(px)``."""
+        return self._with_px(px)
+
+
+def percent(n: float) -> LengthValue:
+    """
+    `n` percent of the room a size or gap is laid out in: its parent's
+    room for a node's own `w`/`h`, the operator's own room for its
+    `spacing`, and the rect's own box for `inset`. `percent(30) + 10`
+    adds pixels. Mirrors JS `percent(n)` in
+    `packages/gofish-graphics/src/ast/length.ts`.
+
+    Args:
+        n: The percent, a finite number.
+    """
+    if not _is_number(n) or n != n or n in (float("inf"), float("-inf")):
+        raise TypeError(f"percent(n): n must be a finite number, got {n!r}")
+    return LengthValue({"type": "length", "percent": n})
+
+
+def fr(n: float) -> LengthValue:
+    """
+    A weight of `n` shares of the room the nearest scope divides: a
+    category band is `fr(1)`. Mirrors JS `fr(n)`.
+
+    Args:
+        n: The weight, a finite number, 0 or more.
+    """
+    if not _is_number(n) or not (0 <= n < float("inf")):
+        raise TypeError(f"fr(n): n must be a finite number, 0 or more, got {n!r}")
+    return LengthValue({"type": "length", "fr": n})
+
+
 class FieldAccessor(dict):
     """
     The `{type: "field", name, ops?}` wire shape, as a dict

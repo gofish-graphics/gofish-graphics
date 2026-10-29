@@ -239,6 +239,17 @@ export const ch = {
   }),
 };
 
+/** A size that also takes a length (#1176 step 6): a channel value (pixels
+ *  or data), `percent(n)` of the room the node is laid out in, or `fr(k)`, a
+ *  weight of k shares of its nearest scope. */
+const lengthSize = (doc: string): FieldSpec => ({
+  type: t.union(t.channel("number", "size"), t.ref("Length")),
+  doc,
+});
+
+const PERCENT_FR =
+  " Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.";
+
 /** Declare a shared field group (included by reference from multiple
  *  construct entries). Identity function — it exists so callsites read as
  *  the design doc's `group({...})`. */
@@ -1051,12 +1062,16 @@ function strategyType(
  *  type `ChartOptions` (`OPTION_TYPES`). */
 export const CHART_OPTIONS: FieldGroup = group({
   w: {
-    type: t.number,
-    doc: "Width of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it.",
+    type: t.union(t.number, t.ref("Length")),
+    doc:
+      "Width of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it." +
+      PERCENT_FR,
   },
   h: {
-    type: t.number,
-    doc: "Height of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it.",
+    type: t.union(t.number, t.ref("Length")),
+    doc:
+      "Height of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it." +
+      PERCENT_FR,
   },
   coord: {
     type: t.any,
@@ -1141,6 +1156,29 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
         type: t.enum("both", "left", "right", "none"),
         default: "both",
         doc: "Which ends of the interval are inclusive, as in polars' `is_between`.",
+      },
+    }),
+  },
+  Length: {
+    pyClass: "LengthValue",
+    doc: "A length, as `percent(n)` or `fr(k)` builds it: a percent of the room it is laid out in plus pixels (`percent(n).offset(px)`), or a weight of `fr` shares of its nearest scope.",
+    type: t.object({
+      type: {
+        type: t.literal("length"),
+        required: true,
+        doc: "The tag that marks a length.",
+      },
+      percent: {
+        type: t.num({ finite: true }),
+        doc: "Percent of the room the length is laid out in.",
+      },
+      px: {
+        type: t.num({ finite: true }),
+        doc: "Pixels added to the percent.",
+      },
+      fr: {
+        type: t.num({ min: 0, finite: true }),
+        doc: "Shares of the room the nearest scope divides.",
       },
     }),
   },
@@ -1304,6 +1342,14 @@ export const boxDims: FieldGroup = group({
   ),
 });
 
+/** {@link boxDims} with a `w` and `h` that take lengths too (#1176 step 6):
+ *  the box of a mark or a layer that a percent or `fr` can size. */
+export const lengthBoxDims: FieldGroup = group({
+  ...boxDims,
+  w: lengthSize("Width." + PERCENT_FR),
+  h: lengthSize("Height." + PERCENT_FR),
+});
+
 /** `rect`'s full paint group (the only leaf mark that supports all five —
  *  ellipse/petal/circle support a different set (no filter; ellipse and
  *  circle add fillOpacity) and declare their paint fields directly rather
@@ -1343,8 +1389,14 @@ const spreadBoxFields: FieldGroup = group({
   y: ch.pos(
     "Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
   ),
-  w: ch.size("Data-driven cross-axis extent (field/datum-sized children)."),
-  h: ch.size("Data-driven cross-axis extent (field/datum-sized children)."),
+  w: lengthSize(
+    "Width of this operator's box: pixels, or a field name sizing it from data." +
+      PERCENT_FR
+  ),
+  h: lengthSize(
+    "Height of this operator's box: pixels, or a field name sizing it from data." +
+      PERCENT_FR
+  ),
   size: ch.size(
     "Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine."
   ),
@@ -1430,9 +1482,9 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).",
       },
       spacing: {
-        type: t.number,
+        type: t.union(t.number, t.ref("Length")),
         default: 8,
-        doc: "Gap between children, px.",
+        doc: "Gap between children, px. Also `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible.",
       },
       alignment: {
         type: t.string,
@@ -1564,9 +1616,16 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "The column key (x) and the row key (y), both required. Each takes what spread's `by` takes: a field name, a field(...) key (sorted, binned, a chain or product of bins, a part of a cycle), or chunk(size). A binned key's columns or rows are its cells, empty ones included. Each cell of the table holds the rows in both its column and its row.",
       },
       spacing: {
-        type: t.union(t.number, t.tuple(t.number, t.number)),
+        type: t.union(
+          t.number,
+          t.ref("Length"),
+          t.tuple(
+            t.union(t.number, t.ref("Length")),
+            t.union(t.number, t.ref("Length"))
+          )
+        ),
         default: 0,
-        doc: "Cell gap: a single number for both axes, or [x, y].",
+        doc: "Cell gap: a single number for both axes, or [x, y]. Each is pixels or `percent(n)`, n percent of the table's room on its axis.",
       },
       numCols: {
         type: t.number,
@@ -1605,11 +1664,13 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       y: ch.pos(
         "Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
       ),
-      w: ch.size(
-        "Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots."
+      w: lengthSize(
+        "Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots." +
+          PERCENT_FR
       ),
-      h: ch.size(
-        "Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots."
+      h: lengthSize(
+        "Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots." +
+          PERCENT_FR
       ),
       dims: axisDims(
         "The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
@@ -1687,7 +1748,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
 export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   rect: leafMark("rect", {
     doc: "A rectangle. Box geometry via the shared dims channels.",
-    include: [boxDims, paint],
+    include: [lengthBoxDims, paint],
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
       rx: {
@@ -1703,9 +1764,9 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         doc: "w/h ratio to enforce; the constraining axis wins when both are data-driven.",
       },
       inset: {
-        type: t.number,
+        type: t.union(t.number, t.ref("Length")),
         default: 0,
-        doc: "Pixels drawn in from each side of the space the rect fills, on an axis where it has no size or span of its own (a bar's width in a spread or a partition cell), so neighbors are drawn apart. A side the rect sizes itself, such as a bar's data height, is never inset. It changes only what is drawn: the rect's box stays the space it was given.",
+        doc: "Pixels drawn in from each side of the space the rect fills, on an axis where it has no size or span of its own (a bar's width in a spread or a partition cell), so neighbors are drawn apart. A side the rect sizes itself, such as a bar's data height, is never inset. It changes only what is drawn: the rect's box stays the space it was given. Also `percent(n)`, n percent of that space on each axis: `percent(10)` draws a bar at 80% of its band.",
       },
       // A fluent-factory-wide dev flag (`FACTORY_ONLY_KEYS` in
       // marks/createOperator.ts strips `by`/`debug` before layout, generically
@@ -1755,7 +1816,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   ellipse: leafMark("ellipse", {
     doc: "An ellipse. Box geometry via the shared dims channels; paint is `paint` without filter, plus fillOpacity.",
-    include: [boxDims],
+    include: [lengthBoxDims],
     fields: {
       fill: ch.color("Fill color, or a field name for a color scale."),
       stroke: ch.color("Stroke color. Defaults to `fill`."),
@@ -1853,7 +1914,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   image: leafMark("image", {
     doc: "An embedded raster/SVG image. Box geometry via the shared dims channels.",
-    include: [boxDims],
+    include: [lengthBoxDims],
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
       href: { type: t.string, required: true, doc: "Image URL or data URI." },
@@ -1906,8 +1967,8 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
     fields: {
       emX: { type: t.boolean, doc: "Embed x in the parent's x space." },
       emY: { type: t.boolean, doc: "Embed y in the parent's y space." },
-      w: { ...ch.size("Width."), default: 0 },
-      h: { ...ch.size("Height."), default: 0 },
+      w: { ...lengthSize("Width." + PERCENT_FR), default: 0 },
+      h: { ...lengthSize("Height." + PERCENT_FR), default: 0 },
       fill: ch.color(
         "Fill color. A blank never paints; `fill` only seeds the shared color scale."
       ),
@@ -2130,7 +2191,7 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
 
   layer: combinatorMark("layer", {
     doc: "Compose children on the same canvas at (0, 0) unless placed by constraints. Also accepts explicit box dims when given a self-scaling size.",
-    include: [boxDims],
+    include: [lengthBoxDims],
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
       // A real `layer` option, not a chart-only one: `layer({ coord }, children)`

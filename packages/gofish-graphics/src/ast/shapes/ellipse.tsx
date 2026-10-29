@@ -27,6 +27,7 @@ import { MARK_CHANNELS } from "../markChannels.generated";
 import { boxOfDims, ellipseOutline, outlinePaint } from "../geometry";
 import { around } from "../../families/place";
 import { literalBoxExtents } from "../extent";
+import { bindLengths, takeLengths, type LengthValue } from "../length";
 import type { DisplayList } from "gofish-ir";
 import {
   lowerStyle,
@@ -51,9 +52,16 @@ export const Ellipse = ({
   fillOpacity?: number;
   /** w/h ratio to enforce. When both dims are data-driven, the constraining axis is used. */
   aspectRatio?: number;
-} & FancyDims<MaybeValue<number>>) => {
+} & FancyDims<MaybeValue<number> | LengthValue>) => {
+  // A length for its own size (`w: percent(30)`, `w: fr(2)`) is laid out in
+  // the room it is given, known only once it is in its tree (#1176 step 6).
+  const ownDims = { ...fancyDims } as Record<string, unknown>;
+  const lengths = takeLengths(ownDims);
   // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
-  const dims = elaborateDims(fancyDims);
+  const dims = elaborateDims(ownDims as FancyDims<MaybeValue<number>>);
+  // Its size as its type reads it: a length is never data (see rect.tsx).
+  const dataSize = (axis: 0 | 1) =>
+    lengths[axis] === undefined ? dims[axis].size : undefined;
   // How it paints its outline, read once.
   const paint = outlinePaint({ fill, stroke, strokeWidth });
   const node = new GoFishNode(
@@ -75,8 +83,8 @@ export const Ellipse = ({
         const axisSpace = (axis: 0 | 1) => {
           const center = centerOf(dims[axis]);
           return center !== undefined
-            ? glyphAxis(center, dims[axis].size)
-            : pointOrMagnitude(dims[axis].min, dims[axis].size);
+            ? glyphAxis(center, dataSize(axis))
+            : pointOrMagnitude(dims[axis].min, dataSize(axis));
         };
         return [axisSpace(0), axisSpace(1)];
       },
@@ -306,8 +314,12 @@ export const Ellipse = ({
     },
     []
   );
+  bindLengths(node, dims, lengths);
   // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
-  node._elaborateInAxisScope = deferAxisDims(fancyDims, dims);
+  node._elaborateInAxisScope = deferAxisDims(
+    ownDims as FancyDims<MaybeValue<number>>,
+    dims
+  );
   return node;
 };
 

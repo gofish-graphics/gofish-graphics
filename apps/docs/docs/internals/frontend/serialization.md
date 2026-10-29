@@ -622,6 +622,16 @@ partition by its `kind`, and the JS layout checks one with
 `checkPartition(value, where)`. An axis's `levels` entries take
 `OPTION_TYPES.Calendar`.
 
+`OPTION_TYPES.Length` is a length (#1176 step 6): `{ type: "length",
+percent, px? }` or `{ type: "length", fr }`, what JS `percent(n)` /
+`fr(k)` and Python's `LengthValue` dicts serialize to (`LengthIR` in
+`schema.ts`). A field takes a length exactly when its type names
+`t.ref("Length")` (`lengthSize` for a box's `w`/`h`, `spacing` on `spread`,
+`stack` and `table`, `inset` on `rect`). The JS factories read that from the
+table (`checkLengths` in `gofish-graphics/src/ast/length.ts`), so a length
+in any other field throws rather than being dropped by the wire's key
+filter.
+
 A kind with no required param is a value as it is, and calling it sets
 options (#1133): `Curve.monotone` is `Curve.monotone()`, and
 `Calendar.month({ every: 3 })` sets the month's step. Neither the wire nor

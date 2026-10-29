@@ -1469,6 +1469,16 @@ export class GoFishNode {
         ? this.canvasRoom(axis)
         : this.parent.roomFor(axis, `${this.type}'s ${printLength(len)}`)
     );
+    // A chart with a percent size draws its axes inside its box, which it
+    // decides when it is built (`frameChart`): a percent that turns out to be
+    // a share of a band has no box to draw them in.
+    // TODO(#1176): read a chart's box from its resolved length instead.
+    if (this._chartBox?.[axis] === true && !Pwl.isConstant(v))
+      throw new Error(
+        `chart's ${printLength(len)}: its room is a band, a share of the ` +
+          `scope around it, so the chart has no box of its own to draw its ` +
+          `axes in. Use fr for a chart sized by a share.`
+      );
     this._claimMemo.lengths[axis] = v;
     return v;
   }

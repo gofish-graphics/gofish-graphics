@@ -11,6 +11,7 @@ covers:
   - packages/gofish-graphics/src/ast/graphicalOperators/alignment.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/layer.tsx
   - packages/gofish-graphics/src/ast/channels.ts
+  - packages/gofish-graphics/src/ast/length.ts
   - packages/gofish-graphics/src/ast/data.ts
   - packages/gofish-graphics/src/ast/fieldExpr.ts
   - packages/gofish-graphics/src/ast/datumProjection.ts
@@ -543,6 +544,26 @@ each inherent to what the origin states are:
   holds it. A band of no size in a chain sized by data is one σ, one data
   unit, and the layout warns (`mixed-sizes`). A leaf in no slot (a rule laid
   over a bar chart) claims nothing, and fills the room of what holds it.
+- **A length is a claim, too** (#1176 step 6, `ast/length.ts`): `fr(k)` is
+  `kσ`, a share of weight `k`, so a band is `fr(1)` and a node sized with
+  `fr` is a scope for its own content (`GoFishNode.shareOf`, read by
+  `isScope`). `percent(p)` is `(p/100)·room`, where the room is found by
+  `GoFishNode.roomFor`, walking up from the node that asks: a node with a
+  literal or percent size of its own, the canvas at the root (the render
+  size, or 400 px), or a band (`isBand`: a share whose content fills it),
+  whose room is `σ`. A node with no size of its own hugs its content, so it
+  passes the question to its parent; a room-given node (a facet panel, a
+  cell, a tile, a coord) is not asked, and a percent under one throws. So a
+  percent is a constant at a scope, which acts as pixels (`bindLengths`
+  makes it the node's `dims.size`), or a σ term in a band, which is a share.
+  Either way it is a `Pwl` value before the solve, and no claim carries an
+  unknown parent size. Spacing is the same: a spread's length gap is
+  resolved in the layer claim hook (`resolveSpacing`) against the spread's
+  own room and lowers as `chain.gap`, a σ term for `fr`. An `fr` gap with no
+  room (an unsized root) is 0 and warns (`no-room`); an `fr` in a data scope
+  warns `mixed-sizes`. A length has no content minimum: fixed parts larger
+  than a sized layer warn `fixed-overflow`. A table's percent gap resolves
+  the same way (`resolveGridSpacing`, constant rooms only).
 - **A plot claim beside the claim**: a layer's plan also computes the
   claim of the plot, which leaves out dressing (a label placed beside a
   `ref` stand-in for its mark), a shape's outline (half its stroke past its

@@ -970,7 +970,11 @@ those lines, so `pnpm capture-one` prints them under the story.
   slot no σ ≥ 0 fits. The one scope fit (`ScopeRegistry.fit`) checks it
   wherever a claim is fitted to a slot: the root on each axis the render
   sizes, and a layer with a size of its own (its content's claim against its
-  size). A coord boundary fits through it too but does not warn, since its
+  size). A layer with a size of its own whose content does not solve a
+  domain on that axis (panels and gaps with fixed sizes, a `percent(30)` and
+  a `percent(70)` part with a 12 px gap) compares its content's plot with
+  its size directly (`fixedOverflow` in the layer's claim hook), since a
+  length has no content minimum. A coord boundary fits through it too but does not warn, since its
   budget is in coordinate units, not pixels (an open question). The
   warning names the
   node that holds the fixed parts: down from where the check failed through
@@ -985,6 +989,12 @@ those lines, so `pnpm capture-one` prints them under the story.
   which is a data type with no name: no one scale fits it and the data. The
   claim walk gives it one σ, one data unit (`mixedSizes`), and the warning
   names the chain, the axis, the flexible part and the data-driven parts.
+  An `fr(k)` part or an `fr` spacing in such a chain warns the same way,
+  naming the length (`mixedSizes(part, axis, gap)`).
+- **A flexible gap with no room (`no-room`).** An `fr` spacing in a chain
+  whose scope is the unsized root on that axis has nothing to divide, so its
+  gaps are 0 (as in CSS and Typst), and the warning asks for a `w` or `h`
+  (`noRoom`, raised by `resolveSpacing` in `distribute.ts`).
 - **A drawing past the canvas (`ink-overflow`).** After placement, on each
   axis the render sizes and no fixed-overflow was found, the hull of the
   root's box and its ink is checked against the canvas, naming the ink node
