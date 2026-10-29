@@ -10,8 +10,7 @@
  *   - **sized nodes solve** (#1114) — the render root, a coord boundary, and
  *     a node whose size is given to it (a literal or data-valued `w`/`h`, a
  *     facet panel's slot), each mapping its measure-keyed domain into that
- *     size — each calls {@link ScopeRegistry.fit} (or
- *     {@link ScopeRegistry.solveSize} for a grid's bare tracks). A literal
+ *     size — each calls {@link ScopeRegistry.fit}. A literal
  *     size solves once, in the claim walk ({@link ScopeRegistry.solveFixed}),
  *     and its layout reuses the solution;
  *   - **everyone else INHERITS** — "not a root → inherit": a non-root site
@@ -38,7 +37,7 @@ import { resolveUnit, sameUnitVar } from "../measure";
 import { reachAt, type ChromeForms } from "../chromeGutters";
 import { fromFrameStart, type AxisDirection } from "../axisDirection";
 
-export type ScopeKind = "root" | "sized" | "coord" | "grid" | "recenter";
+export type ScopeKind = "root" | "sized" | "coord" | "recenter";
 
 /** A solved σ-scope on one axis: its slope `sigma` (px per data unit) and,
  *  when the scope's type has an origin, `originPx`, the pixel of data 0 (the
@@ -327,29 +326,6 @@ export class ScopeRegistry {
       else if (Math.abs(next - sigma) > 1e-9 * Math.abs(sigma))
         return undefined;
     }
-    return sigma;
-  }
-
-  /**
-   * Solve σ for a SIZE frame at a scope root: invert `content(σ) = allocated`.
-   * `frame` is the width in σ (a space's `width`, or a composed
-   * distribute size domain). Returns the slope, or `undefined` when no σ ≥ 0
-   * determines it (`Pwl.solve`) — the caller applies its own fallback.
-   */
-  solveSize(
-    meta: ScopeMeta,
-    frame: Pwl.Value,
-    allocated: number
-  ): number | undefined {
-    const sigma = Pwl.solve(frame, allocated);
-    if (DUMP_SCOPES)
-      this.entries.push({
-        ...meta,
-        allocated,
-        frame: Pwl.print(frame),
-        sigma,
-        hasMap: false,
-      });
     return sigma;
   }
 

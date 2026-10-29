@@ -379,12 +379,6 @@ async function main() {
         .mark(rect({ h: "v", w: 10 }))
         .toDisplayList()
     );
-    await throws("a table's fr spacing", () =>
-      chart(grid, { w: 200, h: 200 })
-        .flow(table({ by: { x: "c", y: "r" }, spacing: fr(1) as any }))
-        .mark(rect({}))
-        .toDisplayList()
-    );
   }
 
   console.log("\n# a size given as a length and in dims is set twice");
@@ -439,7 +433,7 @@ async function main() {
     );
   }
 
-  console.log("\n# an ellipse and a table take percents");
+  console.log("\n# an ellipse and a table take percents, a table fr");
   {
     const dl = await layer({ w: 300, h: 100 }, [
       ellipse({ w: percent(50), h: 20 }),
@@ -457,6 +451,19 @@ async function main() {
       "a table's 10% spacing is 20 px of 200 px",
       cells.length === 4 && cells.every((c) => close(c.w, 90, 1e-3)),
       cells.map((c) => c.w)
+    );
+    // Two tracks and an fr(1) gap are three shares of 200 px.
+    const frCells = rectsOf(
+      await chart(grid, { axes: false, w: 200, h: 200 })
+        .flow(table({ by: { x: "c", y: "r" }, spacing: fr(1) }))
+        .mark(rect({}))
+        .toDisplayList()
+    );
+    check(
+      "a table's fr(1) spacing is one share of three",
+      frCells.length === 4 &&
+        frCells.every((c) => close(c.w, 200 / 3, 1e-3) && close(c.h, 200 / 3, 1e-3)),
+      frCells.map((c) => [c.x, c.w, c.h])
     );
   }
 

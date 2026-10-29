@@ -45,8 +45,7 @@ import { percent, fr } from "gofish-graphics";
 | -------------------------------------------------------- | ------ | -------------------------------- | ------- |
 | `w`, `h` of `chart`, `layer`, `rect`, `ellipse`, `image` | yes    | the parent's room                | yes     |
 | `w`, `h` of `spread`, `stack`, `treemap`, `blank`        | yes    | the parent's room                | yes     |
-| `spacing` of `spread`                                    | yes    | the operator's room              | yes     |
-| `spacing` of `table`                                     | yes    | the operator's room              | no      |
+| `spacing` of `spread` and `table`                        | yes    | the operator's room              | yes     |
 | `inset` of `rect`                                        | yes    | the rect's own box, on each side | no      |
 
 Any other option throws on a length. So does `render`'s `w` and `h`, which

@@ -11,7 +11,7 @@ import type { DistributeConstraint } from "../ast/constraints/distribute";
 import type { GridConstraint, TrackLayout } from "../ast/constraints/grid";
 import {
   gridCellSizeByName,
-  gridTracksFromSizes,
+  gridTracks,
 } from "../ast/constraints/grid";
 import type { NestConstraint } from "../ast/constraints/nest";
 import {
@@ -447,8 +447,7 @@ console.log("# constraint confluence: nest and grid placement");
   const grid: GridConstraint = {
     type: "grid",
     numCols: 2,
-    xSpacing: 10,
-    ySpacing: 0,
+    spacing: [10, 0],
     children: [A, B],
   };
   const alignRow: AlignConstraint = {
@@ -468,12 +467,11 @@ console.log("# constraint confluence: nest and grid placement");
 console.log("# constraint confluence: grid content-sized tracks (Stage 6e)");
 {
   // Two columns of DIFFERENT extent (content-sized): col0=40, col1=100,
-  // xSpacing=10 → starts [0, 50]; centers col0=20, col1=50+50=100.
+  // spacing [10, 0] → starts [0, 50]; centers col0=20, col1=50+50=100.
   const grid: GridConstraint = {
     type: "grid",
     numCols: 2,
-    xSpacing: 10,
-    ySpacing: 0,
+    spacing: [10, 0],
     children: [A, B],
   };
   const tracks: [TrackLayout, TrackLayout] = [
@@ -544,20 +542,28 @@ console.log("# constraint confluence: grid content-sized tracks (Stage 6e)");
   // Authoritative placement tracks are recomputed from ACTUAL laid-out cell
   // sizes: a track sizes to the MAX of its cells (a claim cell wider than a
   // sibling pins the track; a mixed fill/claim track = the claim). 2 cols × 2
-  // rows, xSpacing=10: col0 max(40,20)=40, col1 max(100,60)=100.
+  // rows, spacing [10, 5]: col0 max(40,20)=40, col1 max(100,60)=100.
   const grid2x2: GridConstraint = {
     type: "grid",
     numCols: 2,
-    xSpacing: 10,
-    ySpacing: 5,
+    spacing: [10, 5],
     children: [A, B, C, child("D")],
   };
-  const fromSizes = gridTracksFromSizes(numbers, grid2x2, [
-    [40, 30],
-    [100, 30],
-    [20, 12],
-    [60, 8],
-  ]);
+  const fromSizes = ([0, 1] as const).map((axis) =>
+    gridTracks(
+      numbers,
+      grid2x2,
+      axis,
+      [
+        [40, 30],
+        [100, 30],
+        [20, 12],
+        [60, 8],
+      ].map((size) => size[axis]),
+      grid2x2.spacing[axis] as number,
+      0
+    )
+  );
   ok(
     "placement tracks take the max laid-out size per track",
     JSON.stringify(fromSizes[0].extents) === "[40,100]" &&
@@ -781,15 +787,13 @@ console.log("# constraint confluence: grid proposal ownership");
   const grid2: GridConstraint = {
     type: "grid",
     numCols: 2,
-    xSpacing: 10,
-    ySpacing: 0,
+    spacing: [10, 0],
     children: [A, B],
   };
   const grid1: GridConstraint = {
     type: "grid",
     numCols: 1,
-    xSpacing: 0,
-    ySpacing: 5,
+    spacing: [0, 5],
     children: [A, B],
   };
 

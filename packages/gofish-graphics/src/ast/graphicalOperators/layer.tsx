@@ -44,7 +44,7 @@ import {
   type ResolvedOperand,
   collectPositionDomains,
   gridSpaces,
-  resolveGridTracks,
+  gridTracksAt,
   gridCellSizeByName,
   relateScheduleForLayout,
   type ConstraintSpec,
@@ -446,12 +446,6 @@ export const layer = createNodeOperatorSequential(
     // the type memo and the claim memo are cleared together, so whenever the
     // claim hook runs, this is the composition behind the current types.
     let layerTypes: ReturnType<typeof composeLayerTypes> | undefined;
-    // Whether `axis` is a grid's track axis, whose tracks size at layout
-    // (`resolveGridTracks`): the layer claims by its tracks there.
-    const isTrackAxis = (axis: 0 | 1): boolean => {
-      const grid = layerTypes?.gridAxes;
-      return grid !== undefined && !isUNDEFINED(grid[axis]);
-    };
 
     const node: GoFishNode = new GoFishNode(
       {
@@ -492,7 +486,7 @@ export const layer = createNodeOperatorSequential(
           }) as Size<UnderlyingSpace>;
         },
         // The claim half: the nest padding on the children's claims, then
-        // the layer's plan on each axis but a grid's track axis.
+        // the layer's plan on each axis.
         resolveExtent: (childExtents, _childSpaces, spaces) => {
           const t = layerTypes;
           if (t === undefined)
@@ -534,9 +528,8 @@ export const layer = createNodeOperatorSequential(
           // every child, by its box, where its constraints place it. Its
           // claim is the envelope of what its children draw there, and its
           // plot the envelope of their plots, leaving out the dressing and
-          // the ink. A grid's track axis has a plan too, which places its
-          // cells in their tracks, but its claim is its tracks'
-          // (`isTrackAxis`), so no claim reads the plan there.
+          // the ink. On a grid's track axis it places its cells in their
+          // tracks, and its claim is the tracks and gaps (`gridTracks`).
           const plans = ([0, 1] as const).map((axis) =>
             buildPlan(
               node,
@@ -550,18 +543,15 @@ export const layer = createNodeOperatorSequential(
             )
           ) as [LayerPlan | undefined, LayerPlan | undefined];
           node._claimMemo.plans = plans;
-          const claimPlans = plans.map((p, axis) =>
-            isTrackAxis(axis as 0 | 1) ? undefined : p
-          ) as [LayerPlan | undefined, LayerPlan | undefined];
           const session = node.tryGetRenderSession();
           for (const axis of [0, 1] as const) {
-            inkChildren[axis] = claimPlans[axis]?.placement.ink ?? new Set();
+            inkChildren[axis] = plans[axis]?.placement.ink ?? new Set();
             dressingChildren[axis] =
-              claimPlans[axis]?.placement.dressing ?? new Set();
+              plans[axis]?.placement.dressing ?? new Set();
             if (inkChildren[axis].size > 0 && session !== undefined)
               (session.inkLayers ??= new Set()).add(node);
           }
-          const resolved = claimPlans.map((p) => p?.summary?.whole) as [
+          const resolved = plans.map((p) => p?.summary?.whole) as [
             Extent | undefined,
             Extent | undefined,
           ];
@@ -578,7 +568,7 @@ export const layer = createNodeOperatorSequential(
                   c.resolvePlotExtent() !== c.resolveExtent()
                 )
             ) &&
-            claimPlans.every(
+            plans.every(
               (p) =>
                 p === undefined ||
                 ![...p.placement.boxes().keys()].some((i) =>
@@ -587,7 +577,7 @@ export const layer = createNodeOperatorSequential(
             );
           const plot = plotIsClaim
             ? resolved
-            : (claimPlans.map((p) => p?.summary?.plot) as [
+            : (plans.map((p) => p?.summary?.plot) as [
                 Extent | undefined,
                 Extent | undefined,
               ]);
@@ -748,27 +738,6 @@ export const layer = createNodeOperatorSequential(
                 );
           }) as Size;
 
-          // Grid budget (Stage 6e): resolve the tracks under the unified max rule
-          // from the cells' pre-layout size claims — each track sizes to the max
-          // claim of its cells, fill tracks split the leftover equally. This
-          // sizes only the FILL cells (a claim cell keeps its own size); the
-          // authoritative PLACEMENT tracks are recomputed from the actual
-          // laid-out cell sizes after the child loop (`gridTracksFromSizes`), so
-          // cell centers pin to the real geometry.
-          const gridC = selectGridConstraint(node.constraints);
-          const gridCellByName = gridC
-            ? gridCellSizeByName(
-                gridC,
-                resolveGridTracks(
-                  gridC,
-                  node.children,
-                  size,
-                  getScopeRegistry(node.tryGetRenderSession()),
-                  node.key ?? node.type
-                )
-              )
-            : undefined;
-
           // The scales this layer hands its children (`solveLayerScales`): on
           // an axis where it is a sized node (a size of its own, or a slot it
           // is given with no frame), it maps the keyed domain of its content
@@ -801,6 +770,16 @@ export const layer = createNodeOperatorSequential(
             [scopes.fixedSolve(node, 0), scopes.fixedSolve(node, 1)]
           );
           const childScaleFactors = layerScales.sigmas;
+          // A grid's tracks at the σ its cells are laid out at
+          // (`gridTracksAt`): each cell is proposed its track's extent, and
+          // the plan centers it in its track from its laid-out size.
+          const gridC = selectGridConstraint(node.constraints);
+          const gridCellByName = gridC
+            ? gridCellSizeByName(
+                gridC,
+                gridTracksAt(gridC, node.children, childScaleFactors)
+              )
+            : undefined;
           // A node dressed in chrome reads its gutters off its chrome forms
           // at the σ it is laid out at (#1032). It seats its content past
           // them (`seatsOf`).
@@ -1348,11 +1327,9 @@ export const layer = createNodeOperatorSequential(
         return typeof min === "number" ? min : undefined;
       },
       ownSize: (axis) => node.fixedSize(axis),
-      // A grid's track axis claims by its tracks, so no plan composes
-      // through it there.
       plan: (axis) => {
         node.resolveExtent();
-        return isTrackAxis(axis) ? undefined : node._claimMemo.plans[axis];
+        return node._claimMemo.plans[axis];
       },
     };
     // Give it its own box, and defer the axis-name-keyed `dims` option to

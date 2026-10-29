@@ -16,7 +16,7 @@ import type { SolvePlaceable } from "./placementProgramLowerer";
 import type { PlacementConstraint } from "./placementLowering";
 import { axisIndex, axisName, type Axis } from "./shared";
 import { isPositionInterval } from "./position";
-import { gridTracksFromSizes } from "./grid";
+import { gridTracks, trackGap } from "./grid";
 import type { ConstraintSpec } from ".";
 
 /**
@@ -554,20 +554,30 @@ export function placeByClaims(
     });
   }
   // A grid's tracks size to the largest of their cells as layout lays them
-  // out (`gridTracksFromSizes`), and center each cell in its track.
+  // out, a track no cell claims room in being one share (`gridTracks`), and
+  // center each cell in its track. Its claim is the tracks and the gaps
+  // between them, a chain's along the axis.
   const grid = onAxis.find((c) => c.type === "grid");
-  const gridTracks =
+  const tracks =
     grid === undefined
       ? undefined
-      : gridTracksFromSizes(
+      : gridTracks(
           T,
           grid,
-          childIndices.map((i) => {
-            const t = targets.get(keyOf(i))!;
-            const size = t.dims[axis].size ?? T.zero;
-            return axis === 0 ? [size, T.zero] : [T.zero, size];
-          })
+          axis,
+          childIndices.map((i) =>
+            children[i].extent === undefined
+              ? undefined
+              : (targets.get(keyOf(i))!.dims[axis].size ?? T.zero)
+          ),
+          T.fromValue(trackGap(grid, axis)),
+          T.fromValue(Pwl.SIGMA)
         );
+  // The other axis's tracks, which this axis's solve does not read.
+  const across =
+    grid === undefined
+      ? undefined
+      : gridTracks(T, grid, axis === 0 ? 1 : 0, [], T.zero, T.zero);
   const origin = framed ? tape.input("origin", Pwl.ZERO) : undefined;
   const map =
     origin === undefined
@@ -582,7 +592,11 @@ export function placeByClaims(
     targets,
     axis === 0 ? [box, T.zero] : [T.zero, box],
     axis === 0 ? [map, undefined] : [undefined, map],
-    gridTracks,
+    tracks === undefined
+      ? undefined
+      : axis === 0
+        ? [tracks, across!]
+        : [across!, tracks],
     axis === 0 ? [dataPositioned, new Set()] : [new Set(), dataPositioned],
     rigid,
     axis === 0 ? [origin, undefined] : [undefined, origin],

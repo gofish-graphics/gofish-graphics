@@ -152,29 +152,38 @@ export function resolveSpacing(node: GoFishNode): void {
     if (c.type !== "distribute") continue;
     const d = c as DistributeConstraint;
     if (typeof d.spacing === "number") continue;
-    const axis = axisIndex(d.dir);
-    const spacing = d.spacing;
-    let gap = lengthIn(spacing, () =>
-      node.roomFor(axis, `spacing ${printLength(spacing)}`)
-    );
-    if (isFr(spacing)) {
-      const scope = node.scopeOf(axis);
-      if (
-        scope.parent === undefined &&
-        !scope.isScope(axis) &&
-        node.tryGetRenderSession()?.canvas?.[axis] === undefined &&
-        scope.sharesRoom(axis)
-      ) {
-        warnLayout(node, noRoom(node, axis, printLength(spacing)));
-        gap = Pwl.ZERO;
-      } else if (scope.carriesData(axis))
-        warnLayout(
-          node,
-          mixedSizes(node, axis, `its spacing ${printLength(spacing)}`)
-        );
-    }
-    d.gap = gap;
+    d.gap = layOutGap(node, axisIndex(d.dir), d.spacing);
   }
+}
+
+/** A length gap between the parts `node` lays out along `axis` (a chain's
+ *  spacing, a table's gap between tracks), laid out in its room
+ *  ({@link resolveSpacing}): a percent of the room, or `kσ` for `fr(k)`,
+ *  0 where nothing gives it room. `what` names it in a percent's error. */
+export function layOutGap(
+  node: GoFishNode,
+  axis: 0 | 1,
+  spacing: Length | LengthValue,
+  what = `spacing ${printLength(spacing)}`
+): Pwl.Value {
+  const gap = lengthIn(spacing, () => node.roomFor(axis, what));
+  if (!isFr(spacing)) return gap;
+  const scope = node.scopeOf(axis);
+  if (
+    scope.parent === undefined &&
+    !scope.isScope(axis) &&
+    node.tryGetRenderSession()?.canvas?.[axis] === undefined &&
+    scope.sharesRoom(axis)
+  ) {
+    warnLayout(node, noRoom(node, axis, printLength(spacing)));
+    return Pwl.ZERO;
+  }
+  if (scope.carriesData(axis))
+    warnLayout(
+      node,
+      mixedSizes(node, axis, `its spacing ${printLength(spacing)}`)
+    );
+  return gap;
 }
 
 /** The {@link StackOrigin} of a stack over `ordered` (its parts in placement

@@ -247,8 +247,8 @@ export function placementConstraints(
 /** Choose the concrete size proposed to one child in a layer.
  *
  * Priority is explicit and single-owner:
- *   1. grid: each cell is proposed ITS (column, row) track's extent (resolved by
- *      the unified max rule in `resolveGridTracks`), keyed by name;
+ *   1. grid: each cell is proposed ITS (column, row) track's extent (its cells'
+ *      claims at the layer's σ, `gridTracksAt`), keyed by name;
  *   2. the child's own room in a share scope (`own`, where defined): its
  *      claim at the layer's σ, when σ is the size of a share
  *      (`GoFishNode.sharesRoom`), so a band is one σ and what hangs off it
@@ -423,7 +423,7 @@ export function solveLayerScales(
 
 /** Select the layer's single grid constraint, if any.
  *
- * A grid resolves its tracks under the unified max rule (`resolveGridTracks`)
+ * A grid sizes its tracks under the (max, +) rule (`gridTracks`) and
  * composes with sibling constraints: its per-track claim participates in
  * sizing, and its cell-center pins solve jointly with any align/position/z-order
  * on the same layer. At most one grid per layer: two track partitions on one

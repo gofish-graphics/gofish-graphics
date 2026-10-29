@@ -251,7 +251,7 @@ export type ClaimWalk = {
   dressing: [Set<number>, Set<number>];
   /** Its plan on `axis` (`buildPlan`): where its constraints place each
    *  of its children in its frame, and its claim, the envelope of them.
-   *  Undefined on a grid's track axis. A node deep inside it that a ref or
+   *  A node deep inside it that a ref or
    *  a label reads lands where the plans compose (`planPlacement`). */
   plan: (axis: 0 | 1) => LayerPlan | undefined;
   /** Its constraints' operands, resolved. */

@@ -569,8 +569,9 @@ each inherent to what the origin states are:
   own room and lowers as `chain.gap`, a σ term for `fr`. An `fr` gap with no
   room (an unsized root) is 0 and warns (`no-room`); an `fr` in a data scope
   warns `mixed-sizes`. A length has no content minimum: fixed parts larger
-  than a sized layer warn `fixed-overflow`. A table's percent gap resolves
-  the same way (`resolveGridSpacing`, constant rooms only).
+  than a sized layer warn `fixed-overflow`. A table's length gap between
+  tracks is laid out the same way, by the same helper (`resolveGridSpacing`
+  through `layOutGap`): a percent of the table's room, or a σ term for `fr`.
 - **A plot claim beside the claim**: a layer's plan also computes the
   claim of the plot, which leaves out dressing (a label placed beside a
   `ref` stand-in for its mark), a shape's outline (half its stroke past its
@@ -964,8 +965,8 @@ which reads the types the first one produced;
 once the source has concrete dimensions,
 `applyNestLayoutProposal` does the corresponding layout-time arithmetic on the
 derived axes.
-Grid is a **track equation** under the same unified sizing rule, not a separate
-layout regime (Stage 6e). Per axis, `resolveGridTracks` sets
+Grid is a **track equation** under the same sizing rule, not a separate
+layout regime (Stage 6e). Per axis, `gridTracks` sets
 
 ```
 track claim = Pwl.max(claims of the cells in that track)      (max, +)
@@ -973,24 +974,26 @@ grid claim  = Pwl.add(track claims) + gaps                    (the σ-frame)
 ```
 
 A cell's claim counts whatever it is: a magnitude, a pixel size of its own, or
-the one σ a cell that fills a share claims (#493 piece 3). So an all-fill grid
-of shares claims `n·σ + gaps`, and solving it gives each track
-(allocated − gaps)/n, the former `sliceExtent` box-division. A cell with no
-claim at all contributes nothing, and the tracks with no claim share whatever
-the claimed tracks leave, equally. Content-sized tracks emerge automatically
-when cells carry size claims: a track sizes to its widest cell. When every
-track carries a σ-dependent claim (no fill to absorb the slack), the grid claim
-is inverted against the allocated size by the same scope registry that solves
-any other frame equation.
+the one σ a cell that fills a share claims (#493 piece 3). A track whose cells
+claim nothing is not sized by its content, so it is a share of its scope,
+`fr(1)`: one σ. So an all-fill grid claims `n·σ + gaps`, and the scope it is
+in solves it to give each track (allocated − gaps)/n. Content-sized tracks
+size to their widest cell, and are fixed parts, like the pixel gaps; a gap
+may also be a percent of the table's room or an `fr` weight, a term of the
+claim. The grid claim is the layer's claim on the track axis: its plan
+composes the tracks and gaps as a chain does (`placeByClaims`), so the one
+fit of its nearest scope (`ScopeRegistry.fit`) solves σ for it, with the one
+overflow warning and the one fallback, and a table nested in a chain claims
+its shares in the chain's scope.
 Because a categorical track axis cannot simultaneously be a SIZE magnitude, the
 grid's _reported_ space stays ORDINAL over the columns/rows (`gridSpaces`, for
 axis rendering; `ordinalOver` the keys `table`'s split found, so a binned
 column or row key gives an ordinal over its cells, as a spread's does: the
 split runs `splitEntries` once per key, as `spread` does, and each cell of
-the table holds the rows in both groups) while the size claim is consumed at layout time by the track
-resolution. The layout budget sizes fill cells to their track extent; the
-authoritative **placement tracks** are recomputed from the actual laid-out cell
-sizes (`gridTracksFromSizes`) so each cell pins to the real geometry, one source
+the table holds the rows in both groups) while its claim is the tracks'.
+Layout reads the same track rule at the σ the layer lays its cells out at
+(`gridTracksAt`) and proposes each cell its track's extent; the plan then
+centers each cell in its track from the laid-out cell sizes, one source
 every reader of the placement shares, so they cannot drift.
 
 The grid now **genuinely composes** with sibling constraints: its per-track claim
@@ -1415,8 +1418,8 @@ inverted once by `Pwl.solve` — and one registry does the inversion. A
 `RenderSession`, is the one place σ / posScale is derived: `fit(meta, node,
 space, claim, allocated)` fits a sized node's claim to its slot (through
 `solveScope(space, claim, allocated)`, which solves σ and `originPx`, with
-one fallback and one warning when no σ ≥ 0 fits), and
-`solveSize(frame, allocated)` inverts a bare claim (a grid's tracks).
+one fallback and one warning when no σ ≥ 0 fits). A grid's tracks are part
+of its layer's claim, so they need no solve of their own.
 
 **Only a sized node solves; everyone else inherits** (#1114). A node is sized on
 an axis when its size there is given to it rather than computed from σ:
@@ -1478,7 +1481,7 @@ another value, such as a bar's, is never one value.
 
 Behind `GOFISH_DUMP_SCOPES` the registry prints every scope it solved as a
 printable frame equation, one line per solve, with kind `root`, `coord`,
-`sized`, `grid` or `recenter`:
+`sized` or `recenter`:
 
 ```
 [scope] root   key=root  axis=y [0,140]→[0,400] = 400  σ=2.857 map=yes

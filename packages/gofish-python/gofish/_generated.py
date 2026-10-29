@@ -767,7 +767,7 @@ def _table_opts(*, by: dict, spacing: Optional[float | LengthValue | tuple] = No
 
     Args:
         by: The column key (x) and the row key (y), both required. Each takes what spread's `by` takes: a field name, a field(...) key (sorted, binned, a chain or product of bins, a part of a cycle), or chunk(size). A binned key's columns or rows are its cells, empty ones included. Each cell of the table holds the rows in both its column and its row.
-        spacing: Cell gap: a single number for both axes, or [x, y]. Each is pixels or `percent(n)`, n percent of the table's room on its axis. Default 0.
+        spacing: Cell gap: a single number for both axes, or [x, y]. Each is pixels, `percent(n)`, n percent of the table's room on its axis, or `fr(k)`, k shares of its scope. Default 0.
         num_cols: Explicit column count (falls back to the number of distinct column keys).
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """

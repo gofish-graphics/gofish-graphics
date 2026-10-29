@@ -1625,7 +1625,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
           )
         ),
         default: 0,
-        doc: "Cell gap: a single number for both axes, or [x, y]. Each is pixels or `percent(n)`, n percent of the table's room on its axis.",
+        doc: "Cell gap: a single number for both axes, or [x, y]. Each is pixels, `percent(n)`, n percent of the table's room on its axis, or `fr(k)`, k shares of its scope.",
       },
       numCols: {
         type: t.number,
