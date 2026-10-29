@@ -472,7 +472,7 @@ def blank(*, debug: Optional[bool] = None, em_x: Optional[bool] = None, em_y: Op
     return Mark("blank", **_kw)
 
 def region(*, debug: Optional[bool] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None, inset: Optional[float] = None) -> Mark:
-    """Draws the region its parent gives it, such as a partition's cell. It has no size or position of its own: it fills the space it is given on both axes. It draws the region's outline when the region has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.
+    """Draws the cell it is in, such as a partition's cell. It has no size or position of its own: on each axis where it is in a cell, it is that cell, placed by its data through the partition's scale, and on an axis where it is in no cell, it fills the space it is given. It draws the cell's outline when the cell has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.
 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
@@ -481,7 +481,7 @@ def region(*, debug: Optional[bool] = None, fill: Optional[str] = None, stroke: 
         stroke_width: Stroke width in pixels. Default 0.
         opacity: Opacity, 0 to 1. Default 1.
         filter: Raw SVG filter attribute.
-        inset: Pixels drawn in from each side of the region its parent gives it, on each axis where the region has a span. Paint only: layout still reads the whole region. A region thinner than twice the inset draws nothing. Default 0.
+        inset: Pixels drawn in from each side of the cell it is in, on each axis where it is in a cell. Paint only: layout still reads the whole cell. A cell thinner than twice the inset draws nothing. Default 0.
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [

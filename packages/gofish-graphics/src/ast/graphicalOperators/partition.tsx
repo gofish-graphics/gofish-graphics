@@ -19,7 +19,7 @@ import {
 import { compose } from "../marks/compose";
 import { createNodeOperator } from "../withGoFish";
 import { Constraint, PositionRegion } from "../constraints";
-import type { ColumnDatum } from "../constraints/position";
+import { enclosingCell, type ColumnDatum } from "../constraints/position";
 import { isStruct, structBin, type StructExpr } from "../structExpr";
 import { axisName, ensureChildNames } from "../constraints/shared";
 import { layer } from "./layer";
@@ -38,25 +38,27 @@ import type { Alignment } from "./alignment";
  * data, empty ones included, so an empty cell keeps its place: it is a group
  * with no rows, and it is still placed.
  *
- * **How a child gets its region.** Each child is handed a REGION in its
- * layout call, with its size proposal (#1059, `geometry/region.ts`): the
- * region this partition was itself handed, cut down to the child's cell on
- * `dir`. The cell is stated as a position constraint that gives a region,
- * `Constraint.position({ region })` ({@link PositionRegion}), which also
- * makes the axis's domain and tells the axis that it places cells; the
- * layer turns it into the child's region (`buildChildProposals`). The child is
- * laid out in its region's length and places itself in it: a mark with no
- * size of its own (a `rect`, a `region`) fills its cell, and a mark with a
- * size of its own (a circle, a text) sits in the middle of it.
+ * **How a child gets its cell.** The cell is stated in data, as a position
+ * constraint that gives a region, `Constraint.position({ region })`
+ * ({@link PositionRegion}). It makes the axis's domain, so the partition's
+ * scale maps the cells, and tells the axis that it places cells. The layer
+ * lays each child out in its cell's length (`buildChildSpans`) and centers
+ * it there (`lowerPositionPlacement`): a mark with no size of its own (a
+ * `rect`) fills its cell, and a mark with a size of its own (a circle, a
+ * text) sits in the middle of it. A `region` mark reads its cell itself
+ * (`enclosingCell`) and is placed by its data, through the partition's
+ * scale, which the partition hands it as it hands any child placed by its
+ * data.
  *
- * On the other axis a top-level partition gives no span, so there the
+ * On the other axis a top-level partition gives no cell, so there the
  * children are aligned by `alignment`, as in `scatter` (bars stand on a
- * shared baseline). A partition inside another partition's cell gives each
- * child that cell on the other axis too, so the child sits in a rectangle,
- * and `alignment` has nothing left to move. That is why nested 1D partitions
- * place their children the same way in either order. There is no layout code
- * of its own: it is a layer with one position constraint per child and one
- * align.
+ * shared baseline). A partition inside another partition's cell divides
+ * that cell: on the other axis it gives each child the cell it is in
+ * (`enclosingCell`), so the child is placed there as a child of the outer
+ * partition is, and nothing is left to align. That is why nested 1D
+ * partitions place their children the same way in either order. There is no
+ * layout code of its own: it is a layer with one position constraint per
+ * child and an align on each axis where nothing gives a cell.
  *
  * **The product form**, `by: { x, y }`, is the two nested 1D partitions, x
  * then y. It is built by that rewrite (`compose`), so it adds no behavior of
@@ -65,10 +67,10 @@ import type { Alignment } from "./alignment";
  * **The plane form**, `by: struct({ x, y }).bin(b)`, divides both axes at
  * once into polygon cells. It is the same split and the same constraints:
  * the struct's columns are placed along x and y, so each child's region
- * spans both axes (its cell's box) and holds the cell's outline in data,
- * which the layer maps through both scales into the child's region, and no
- * axis is left to align. A `region` mark draws the outline; any other mark
- * is placed in the box (a circle sits at the box's center).
+ * spans both axes (its cell's box) and holds the cell's outline in data, and
+ * no axis is left to align. A `region` mark maps the outline through both
+ * scales and draws it; any other mark is placed in the box (a circle sits at
+ * the box's center).
  */
 type PartitionCommon = {
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
@@ -205,16 +207,24 @@ const PartitionNode = createNodeOperator(
         undefined,
       ];
       placed.forEach((axis, k) => (along[axis] = columns[k]));
-      // The children are aligned on each axis no column is placed along.
-      const free = ([0, 1] as const).filter((axis) => !placed.includes(axis));
+      // The cell this partition is in, which it divides: its children are
+      // in it on each axis no column is placed along. The partitions around
+      // it have run, since the hooks run top-down.
+      const enclosing = enclosingCell(node);
+      const regions = cells.map(
+        (cell) => new PositionRegion(cell, along, enclosing)
+      );
+      // The children are aligned on each axis where nothing gives them a
+      // cell.
+      const free = ([0, 1] as const).filter(
+        (axis) =>
+          along[axis] === undefined && enclosing?.spans[axis] === undefined
+      );
       await node.relate((g) => {
         const refs = names.map((name) => g[name]);
         return [
           ...refs.map((ref, i) =>
-            Constraint.position(
-              { region: new PositionRegion(cells[i], along) },
-              [ref]
-            )
+            Constraint.position({ region: regions[i] }, [ref])
           ),
           ...free.map((axis) =>
             Constraint.align({ [axisName(axis)]: alignment }, refs)

@@ -31,8 +31,11 @@ import {
   type UnderlyingSpace,
 } from "../underlyingSpace";
 import { interval } from "../../util/interval";
-import { childNameKey } from "../constraints/shared";
-import type { PositionInterval, PositionRegion } from "../constraints/position";
+import {
+  enclosingCell,
+  type CellSpans,
+  type PositionInterval,
+} from "../constraints/position";
 import { compilePlacementCoordinate } from "../constraints/placementLowering";
 import { createMark } from "../withGoFish";
 import { MARK_CHANNELS } from "../markChannels.generated";
@@ -55,37 +58,6 @@ export type RegionProps = {
   opacity?: number;
   filter?: string;
 };
-
-/** The cell a node is in, in data: per axis, the span the nearest
- *  `partition` cell around it gives there (`PositionRegion`), and the
- *  outline of the nearest cell when that cell has one. */
-type EnclosingCell = {
-  spans: [PositionInterval | undefined, PositionInterval | undefined];
-  outline?: PositionRegion["outline"];
-};
-
-/**
- * The cell `node` is in. A partition gives each of its children its cell in
- * a `position` constraint that names the child, so the cell of a node is the
- * one given to its nearest ancestor (or itself) that a partition names, axis
- * by axis: a partition inside another's cell gives its children both cells.
- */
-function enclosingCell(node: GoFishNode): EnclosingCell {
-  const cell: EnclosingCell = { spans: [undefined, undefined] };
-  for (let at = node; at.parent !== undefined; at = at.parent) {
-    const name = childNameKey(at);
-    if (name === undefined) continue;
-    for (const c of at.parent.constraints) {
-      if (c.type !== "position" || c.region === undefined) continue;
-      if (!c.children.some((ref) => ref?.name === name)) continue;
-      if (cell.spans.every((s) => s === undefined))
-        cell.outline = c.region.outline;
-      cell.spans[0] ??= c.region.spans[0];
-      cell.spans[1] ??= c.region.spans[1];
-    }
-  }
-  return cell;
-}
 
 /**
  * `region()`'s node (#1059): it draws the cell it is in, such as a
@@ -121,7 +93,7 @@ export const Region = ({
     );
   // The cell it is in, read when its space is resolved: the partitions
   // around it have given their children their cells by then.
-  let cell: EnclosingCell = { spans: [undefined, undefined] };
+  let cell: CellSpans | undefined;
   // The outline in the node's local frame and axis order, as `layout` placed
   // it (the cell's outline less the node's translate, drawn in by `inset`),
   // or none for a box. Empty when the inset leaves nothing.
@@ -147,7 +119,7 @@ export const Region = ({
       resolveUnderlyingSpace: () => {
         cell = enclosingCell(node);
         const axisSpace = (axis: 0 | 1): UnderlyingSpace => {
-          const span = cell.spans[axis];
+          const span = cell?.spans[axis];
           if (span === undefined) return UNDEFINED;
           const [a, b] = [getValue(span[0])!, getValue(span[1])!];
           return CONTINUOUS(
@@ -166,7 +138,7 @@ export const Region = ({
         const px = (axis: 0 | 1, v: PositionInterval[number]) =>
           compilePlacementCoordinate(v, scales[axis]?.map);
         const extent = (axis: 0 | 1) => {
-          const span = cell.spans[axis];
+          const span = cell?.spans[axis];
           const a = span && px(axis, span[0]);
           const b = span && px(axis, span[1]);
           if (a !== undefined && b !== undefined) {
@@ -190,7 +162,7 @@ export const Region = ({
         const ring =
           x.translate === undefined || y.translate === undefined
             ? undefined
-            : cell.outline?.map(
+            : cell?.outline?.map(
                 ([vx, vy]): OutlinePoint => [
                   px(0, vx)! - x.translate!,
                   px(1, vy)! - y.translate!,

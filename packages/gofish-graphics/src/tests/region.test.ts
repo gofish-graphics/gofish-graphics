@@ -1,17 +1,21 @@
 /**
- * Regions handed down in the layout call (#1059, `geometry/region.ts`): a
- * node placed in a region fills each span it has no size along and is
- * centered in each span it has a size along; a `region` mark is its region,
- * and draws the region's outline when it has one, else its box. Partition
+ * Regions (#1059, #1234): a `region` mark reads the cell it is in from the
+ * partition around it, in data, and is placed by its data there; a partition
+ * inside another partition's cell divides that cell, so its children are
+ * placed in the outer cell as the outer partition's own children are; and
+ * that cell is the outer partition's, so it makes no cells of the inner one.
+ * A region draws its cell's outline when it has one, else its box. Partition
  * order invariance is checked in cells.test.ts. Run via `tsx`.
  */
 import "../lib";
 import { layer } from "../ast/graphicalOperators/layer";
 import { Region } from "../ast/shapes/region";
-import { Ellipse } from "../ast/shapes/ellipse";
-import { Rect } from "../ast/shapes/rect";
-import { Constraint, PositionRegion } from "../ast/constraints";
-import { RegionCell } from "../ast/cells";
+import {
+  collectPositionDomains,
+  Constraint,
+  PositionRegion,
+} from "../ast/constraints";
+import { Cell, RegionCell } from "../ast/cells";
 import { PolygonCell } from "../ast/polygonCells";
 import { value } from "../ast/data";
 import type { GoFishNode } from "../ast/_node";
@@ -30,79 +34,134 @@ function ok(name: string, cond: boolean, detail?: string): void {
   }
 }
 
-/** Lay `node` out alone, handed `spans` and proposed their lengths (as a
- *  layer proposes them), and return its box in its parent's frame, per axis
- *  `[min, max]`. */
-function placedIn(
-  node: GoFishNode,
-  spans: [[number, number] | undefined, [number, number] | undefined]
-): [number | undefined, number | undefined][] {
-  node.resolveUnderlyingSpace();
-  const size = spans.map((s) => (s === undefined ? 400 : s[1] - s[0]));
-  const view = node.layout(size as [number, number], [undefined, undefined], {
-    spans,
-  });
-  return [0, 1].map((a) => [view.dims[a].min, view.dims[a].max]);
-}
+const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
+
+/** Every item of a display list that draws, flattened out of its groups. */
+const drawn = (dl: any): any[] => {
+  const out: any[] = [];
+  const walk = (it: any) => {
+    if (it.kind !== "group") out.push(it);
+    for (const c of it.children ?? []) walk(c);
+  };
+  dl.items.forEach(walk);
+  return out;
+};
 
 async function main() {
-  console.log("# a node placed in the region it is handed");
+  const { chart, partition, field, Bin, region, text } = await import(
+    "../lib"
+  );
+
+  console.log("# a region reads its cell from the partition around it");
   {
-    const box = placedIn(Region({}), [
-      [10, 40],
-      [20, 70],
-    ]);
+    // Cells [0, 1) and [1, 2) of a 200px-wide chart over [0, 2].
+    const rects = drawn(
+      await chart([{ v: 0.5 }, { v: 1.5 }], { axes: false })
+        .flow(partition({ by: field("v").bin(Bin.step(1)), dir: "x" }))
+        .mark(region())
+        .toDisplayList({ w: 200, h: 100 })
+    )
+      .filter((it) => it.kind === "rect")
+      .sort((a, b) => a.x - b.x);
     ok(
-      "a region is its region's box",
-      JSON.stringify(box) === "[[10,40],[20,70]]",
-      JSON.stringify(box)
+      "a region is its cell on the axis the partition divides, through the partition's scale",
+      rects.length === 2 &&
+        near(rects[0].x, 0) &&
+        near(rects[0].w, 100) &&
+        near(rects[1].x, 100) &&
+        near(rects[1].w, 100),
+      JSON.stringify(rects)
     );
-    const circle = placedIn(Ellipse({ w: 10, h: 10 }), [
-      [10, 40],
-      [20, 70],
-    ]);
     ok(
-      "a circle keeps its size and is centered in its region",
-      JSON.stringify(circle) === "[[20,30],[40,50]]",
-      JSON.stringify(circle)
-    );
-    const bar = placedIn(Rect({ h: 30 }), [[0, 50], undefined]);
-    ok(
-      "a rect fills the span it has no size along, and is left to its parent on an axis with no span",
-      bar[0][0] === 0 && bar[0][1] === 50 && bar[1][0] === undefined,
-      JSON.stringify(bar)
+      "a region fills the size it is proposed on an axis with no cell",
+      rects.every((r) => near(r.h, 100)),
+      JSON.stringify(rects)
     );
   }
 
-  console.log("# a layer hands its region to the children it does not place");
+  console.log("# a partition inside another partition's cell divides it");
   {
-    const fill = Region({});
-    const dot = Ellipse({ w: 10, h: 10 });
-    const group = (await layer({}, [fill, dot])) as GoFishNode;
-    const box = placedIn(group, [
-      [10, 40],
-      [20, 70],
+    // Two columns of x, two rows of y: the cells are 100px squares. The
+    // names differ in width, so a text aligned by its edge, rather than
+    // centered in its cell, would show it.
+    const rows = [
+      { a: 0.5, b: 0.5, name: "a" },
+      { a: 0.6, b: 1.5, name: "bbbbbbbb" },
+      { a: 1.5, b: 0.5, name: "cc" },
+      { a: 1.5, b: 1.5, name: "dddd" },
+    ];
+    const nested = (mark: any, first: "x" | "y") => {
+      const px = partition({ by: field("a").bin(Bin.step(1)), dir: "x" });
+      const py = partition({ by: field("b").bin(Bin.step(1)), dir: "y" });
+      return chart(rows, { axes: false })
+        .flow(...(first === "x" ? [px, py] : [py, px]))
+        .mark(mark)
+        .toDisplayList({ w: 200, h: 200 });
+    };
+    for (const first of ["x", "y"] as const) {
+      const cells = drawn(await nested(region(), first)).filter(
+        (it) => it.kind === "rect"
+      );
+      ok(
+        `a region in nested partitions (${first} first) is the cell where they meet`,
+        cells.length === 4 &&
+          cells.every(
+            (r) =>
+              near(r.w, 100) &&
+              near(r.h, 100) &&
+              near(r.x % 100, 0) &&
+              near(r.y % 100, 0)
+          ),
+        JSON.stringify(cells)
+      );
+    }
+    // On the outer partition's axis, each text sits in the middle of its
+    // cell, as a child of the outer partition does, whatever its width: not
+    // aligned with the other texts of its column by their start. A text
+    // starts at `x` and is a fixed width per character.
+    const texts = drawn(await nested(text({ text: field("name") }), "x"))
+      .filter((it) => it.kind === "text")
+      .map((t) => ({ text: t.text as string, x: t.x as number }));
+    const a = texts.find((t) => t.text === "a");
+    const perChar = a === undefined ? NaN : 2 * (50 - a.x);
+    const middle = (t: { text: string; x: number }) =>
+      t.x + (perChar * t.text.length) / 2;
+    ok(
+      "a text in nested partitions sits in the middle of the outer partition's cell, whatever its width",
+      texts.length === 4 &&
+        perChar > 0 &&
+        texts.every((t) => near(middle(t), t.text <= "bbbbbbbb" ? 50 : 150)),
+      JSON.stringify(texts)
+    );
+  }
+
+  console.log("# the cell a partition is in is not one of its cells");
+  {
+    // An inner y partition's child in the outer x cell [2, 3): the region
+    // spans that cell on x, which places it there, but only its own key's
+    // cell makes the layer's cells.
+    const outer = new Cell(2, 3, "2–3");
+    const inner = new Cell(0, 1, "0–1");
+    const enclosing = new PositionRegion(outer, [value, undefined]);
+    const region = new PositionRegion(inner, [undefined, value], enclosing);
+    ok(
+      "the region spans its own cell and the cell it is in",
+      JSON.stringify(region.spans.map((s) => s?.map((v: any) => v.datum))) ===
+        "[[2,3],[0,1]]" &&
+        JSON.stringify(region.placed) === "[false,true]",
+      JSON.stringify(region.spans)
+    );
+    const domains = collectPositionDomains([
+      Constraint.position({ region }, [{ name: "child" } as any]),
     ]);
     ok(
-      "the layer is placed in its region",
-      JSON.stringify(box) === "[[10,40],[20,70]]",
-      JSON.stringify(box)
-    );
-    // The children's boxes are in the layer's frame; add its min.
-    const abs = (n: GoFishNode) =>
-      [0, 1].map((a) => [
-        box[a][0]! + n.dims[a].min!,
-        box[a][0]! + n.dims[a].max!,
-      ]);
-    ok(
-      "a region in the layer fills the layer's region",
-      JSON.stringify(abs(fill)) === "[[10,40],[20,70]]",
-      JSON.stringify(abs(fill))
-    );
-    ok(
-      "a circle in the layer is centered in the layer's region",
-      JSON.stringify(abs(dot)) === "[[20,30],[40,50]]",
-      JSON.stringify(abs(dot))
+      "the cell it is in places the child on x, as an interval does, and makes no cells there",
+      domains.x !== undefined &&
+        domains.x.min === 2 &&
+        domains.x.max === 3 &&
+        domains.xCells === undefined &&
+        domains.yCells !== undefined,
+      JSON.stringify(domains)
     );
   }
 
@@ -161,7 +220,6 @@ async function main() {
 
   console.log("# a region mark called with no options");
   {
-    const { chart, partition, field, Bin, region } = await import("../lib");
     const rows = [{ v: 0.5 }, { v: 1.5 }, { v: 1.7 }];
     const dl = await chart(rows, { axes: false })
       .flow(partition({ by: field("v").bin(Bin.step(1)), dir: "x" }))

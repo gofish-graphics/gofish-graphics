@@ -12,7 +12,13 @@ import {
 import * as Interval from "../../util/interval";
 import type { Cell, RegionCell } from "../cells";
 import type { PlacementFactEmitter } from "./placementFacts";
-import type { AlignAnchor, Axis, ConstraintRef } from "./shared";
+import {
+  childNameKey,
+  type AlignAnchor,
+  type Axis,
+  type ConstraintRef,
+} from "./shared";
+import type { GoFishNode } from "../_node";
 
 /** The **interval** form of a position coordinate: pin the target's `start`
  *  (min) edge at `[0]` and its `end` (max) edge at `[1]`, letting the two edges
@@ -52,14 +58,15 @@ export type ColumnDatum = (v: number) => MaybeValue<number>;
 
 /**
  * The **region** a `position` constraint gives its target (#1059): the cell
- * of the key a `partition` grouped by, which the layer hands the target as
- * the REGION it is laid out in (`geometry/region.ts`). It is not a pin. At
- * layout the layer maps it to pixels (`buildChildProposals`) and passes it in
- * the target's layout call, and the target places itself in it: a mark with
- * no size of its own on an axis (a rect, a `region`) fills the cell there,
- * and a mark with a size of its own (a circle, a text) sits in the middle of
- * it. An interval instead pins both edges, and so sets the target's size
- * whatever it is.
+ * of the key a `partition` grouped by. It is not a pin. The layer lays the
+ * target out in the cell's length on each axis the cell spans
+ * (`buildChildSpans`) and centers it there (`lowerPositionPlacement`): a
+ * mark with no size of its own on an axis (a rect) fills the cell there, and
+ * a mark with a size of its own (a circle, a text) sits in the middle of it.
+ * A target its data places in the layer's frame (a `region` mark, which
+ * reads its cell with {@link enclosingCell}) is in its cell already. An
+ * interval instead pins both edges, and so sets the target's size whatever
+ * it is.
  *
  * `columns` names, per axis, the column the cell is placed along there, as
  * a map from a value to its datum. A cell of a line ({@link Cell}) is placed
@@ -70,6 +77,16 @@ export type ColumnDatum = (v: number) => MaybeValue<number>;
  * read from it does, and they make the layer's position domain on that axis.
  * `outline` is the cell's outline in datums, `[x, y]` per corner, when the
  * cell has one and is placed along both axes.
+ *
+ * A partition inside another partition's cell divides that cell. On each
+ * axis its key does not place, the region's span is the span of the cell
+ * the partition is in (`enclosing`), so its child is placed there as a child
+ * of the outer partition is. `placed` says which axes the key places: only
+ * those make the layer's cells there (`collectPositionDomains`), since an
+ * enclosing cell is the outer partition's, and its axis draws it.
+ * TODO(#1059): the outline is the key's own, so a 1D partition inside a
+ * hexagon gives its children the hexagon's box, cut down to their cells,
+ * and not the hexagon clipped to them.
  */
 export class PositionRegion {
   readonly spans: readonly [
@@ -80,24 +97,51 @@ export class PositionRegion {
     MaybeValue<number>,
     MaybeValue<number>,
   ])[];
+  /** Per axis, whether the key places the cell there. */
+  readonly placed: readonly [boolean, boolean];
 
   constructor(
     readonly cell: RegionCell,
-    columns: readonly [ColumnDatum | undefined, ColumnDatum | undefined]
+    columns: readonly [ColumnDatum | undefined, ColumnDatum | undefined],
+    enclosing?: CellSpans
   ) {
     const [x, y] = columns;
     const along = (axis: 0 | 1): PositionInterval | undefined => {
       const datum = columns[axis];
-      if (datum === undefined) return undefined;
+      if (datum === undefined) return enclosing?.spans[axis];
       const [a, b] = cell.span(axis);
       return [datum(a), datum(b)];
     };
     this.spans = [along(0), along(1)];
+    this.placed = [x !== undefined, y !== undefined];
     this.outline =
       x === undefined || y === undefined
         ? undefined
         : cell.outline?.map(([px, py]) => [x(px), y(py)] as const);
   }
+}
+
+/** A cell as a node in it reads it ({@link enclosingCell}): its span in
+ *  datums on each axis it has one, and its outline when it has one. */
+export type CellSpans = Pick<PositionRegion, "spans" | "outline">;
+
+/**
+ * The cell `node` is in: the region a `position` constraint gives the
+ * nearest of it and its ancestors that one names, or undefined. A partition
+ * gives each child its cell that way, and a partition inside another's cell
+ * gives its children that cell on the axes it does not divide
+ * ({@link PositionRegion}), so the nearest region is the whole cell.
+ */
+export function enclosingCell(node: GoFishNode): CellSpans | undefined {
+  for (let at = node; at.parent !== undefined; at = at.parent) {
+    const name = childNameKey(at);
+    if (name === undefined) continue;
+    for (const c of at.parent.constraints) {
+      if (c.type !== "position" || c.region === undefined) continue;
+      if (c.children.some((ref) => ref?.name === name)) return c.region;
+    }
+  }
+  return undefined;
 }
 
 /** Every coordinate a position constraint gives on `axis`: its point or
@@ -120,7 +164,7 @@ export const axisCoordinates = (
  *     its size (the size-setting range form; each endpoint is a pixel literal
  *     or a datum, never a discrete position).
  * A `region` ({@link PositionRegion}) instead gives the target a cell, which
- * the layer hands it as the region it lays itself out in.
+ * the layer lays it out in and centers it in.
  * The layer derives its POSITION domain from the datum coordinates of its
  * `position` constraints (point values plus interval and region edges). At
  * least one of `x`, `y`, and `region` is required.

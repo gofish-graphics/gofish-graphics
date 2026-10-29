@@ -132,7 +132,9 @@ hexagon is a group with no rows, so it is drawn with a count of 0.
 :::
 
 A mark with a size of its own is centered in its cell's box, which for a
-hexagon is its center.
+hexagon is its center. In a [`layer`](/js/api/operators/layer) beside a
+`region`, the layer places it, so the example centers each count on its
+region with an `align`.
 
 ::: gofish example:airport-counts-in-hexagons
 :::
