@@ -78,7 +78,7 @@ import {
 } from "./underlyingSpace";
 import { impliedExtents, Extent, padExtent } from "./extent";
 import * as Pwl from "./solver/pwl";
-import type { ClaimPlacement, Placement } from "./constraints/claimPlacement";
+import type { Placement } from "./constraints/claimPlacement";
 import type { LayerPlan } from "./solver/plan";
 import type { ChromeForms } from "./chromeGutters";
 import { toJSON } from "../util/interval";
@@ -207,7 +207,7 @@ type ClaimMemo = {
    *  claim. */
   plans: [LayerPlan | undefined, LayerPlan | undefined];
   /** Per axis, its chrome forms (`chromeForms` in chromeGutters.ts; `null`:
-   *  none, its plot fills its room). */
+   *  none, it has no claim there). */
   chrome: [ChromeForms | null | undefined, ChromeForms | null | undefined];
 };
 
@@ -250,14 +250,6 @@ export type ClaimWalk = {
   /** Per axis, whether it has a size of its own there, which makes it a
    *  σ-scope of its own. */
   ownScope: [boolean, boolean];
-  /** Where its constraints place its children in the claim walk, for the
-   *  children's claims `extents` on `axis` (see `placeByClaims`). A chart
-   *  reads its rings' through it, around a plot that fills its room
-   *  (`ringsAround` in chromeGutters.ts). */
-  placeChildren: (
-    axis: 0 | 1,
-    extents: Size<Extent | undefined>[]
-  ) => ClaimPlacement;
 };
 
 export type Placeable = {
@@ -735,7 +727,7 @@ export class GoFishNode {
    * these: its claim is the hull of its rings (each places its shapes in the
    * claim walk, `placeByClaims`), and it hands its content what is left of
    * its slot. Its layout evaluates them at the σ it is laid out at, from its
-   * chrome forms (`chromeForms` and `guttersInSlot` in chromeGutters.ts,
+   * chrome forms (`chromeForms` and `guttersAt` in chromeGutters.ts,
    * memoized with its claim); until then they are 0.
    */
   public chrome?: {
@@ -1254,18 +1246,23 @@ export class GoFishNode {
     );
     // A node fills the room it is given when it has no size of its own: a
     // leaf with no claim, or a node with no size of its own whose children
-    // all fill. Where the room is a share (`sharesRoom`), a leaf that fills
-    // claims one σ (#493 piece 3).
+    // all fill. Where the room is a share (`sharesRoom`), a node that fills
+    // and has no claim claims one σ (#493 piece 3).
     this._claimMemo.fills = ([0, 1] as const).map((dim) => {
-      if (this.children.length > 0)
-        return (
-          this.claimWalk?.ownScope[dim] !== true &&
-          this.children.every(
-            (c) => c instanceof GoFishNode && c._claimMemo.fills?.[dim] === true
-          )
-        );
-      const fills = extent[dim] === undefined && this.inkOn?.[dim] !== true;
-      if (fills && this.sharesRoom(dim) && this.inShare(dim))
+      const fills =
+        this.children.length > 0
+          ? this.claimWalk?.ownScope[dim] !== true &&
+            this.children.every(
+              (c) =>
+                c instanceof GoFishNode && c._claimMemo.fills?.[dim] === true
+            )
+          : extent[dim] === undefined && this.inkOn?.[dim] !== true;
+      if (
+        fills &&
+        extent[dim] === undefined &&
+        this.sharesRoom(dim) &&
+        this.inShare(dim)
+      )
         extent[dim] = Extent(Pwl.affine(1, 0));
       return fills;
     }) as [boolean, boolean];

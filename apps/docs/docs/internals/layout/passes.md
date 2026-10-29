@@ -765,9 +765,11 @@ report their size).
   where nothing in a scope is sized or placed by data
   (`GoFishNode.carriesData`), σ has no data unit to be the pixels of, so it
   is the room a node with no size of its own takes (`GoFishNode.sharesRoom`):
-  such a leaf in a slot, or inside a node in a slot, claims one σ. A leaf in
-  no slot (a rule laid over a bar chart) claims nothing, and fills the room
-  of what holds it. A spread of `n` bands with spacing `g` claims
+  a node that fills (a leaf with no size of its own, or a node with no size
+  of its own whose children all fill) and has no claim of its own claims one
+  σ there when it is in a slot or inside a node in a slot. A node in no slot
+  (a rule laid over a bar chart) claims nothing, and fills the room of what
+  holds it. A spread of `n` bands with spacing `g` claims
   `n·σ + (n − 1)·g`, so the claim walk knows where each band lands, and a
   value label beside a band, or the half of a category label past the last
   band, takes room. Solving the scope against its slot narrows the bands to
@@ -800,17 +802,15 @@ report their size).
   the claim and the domain's end on each side. A tick label past the last
   tick, or a mark past its datum, takes room only where the domain does not
   already reach past it.
-- **The layout.** Where its plot has a claim, a layer's gutters are forms
-  of the claim walk (`chromeForms` in `chromeGutters.ts`): its claim and its
-  plot's, both widened to the keyed domain, memoized with its claim, so
-  their difference at each end is a PWL in σ. A layer with chrome evaluates
-  them at the σ it is laid out at (`guttersInSlot`). Where its plot fills
-  the room it is given (a category axis), its rings' claims are built
-  around a plot of size X, and the plot's size is the X at which they fill
-  the slot (where fixed parts leave no X that fills it exactly, the X at
-  which the part that grows with X, alone, reaches it, as the root solves
-  σ). That path waits for step 5, where such a plot claims a share σ. It
-  hands its content (its first child) its slot less its gutters, or no
+- **The layout.** A layer's gutters are forms of the claim walk
+  (`chromeForms` in `chromeGutters.ts`): its claim and its plot's, both
+  widened to the keyed domain, memoized with its claim, so their difference
+  at each end is a PWL in σ. A layer with chrome evaluates them at the σ it
+  is laid out at (`guttersAt`). A plot that fills a share claims one σ, so
+  its forms are PWLs in σ like any other. A plot with no claim on an axis
+  (one in a coordinate space, or one that fills a room no σ divides) is a
+  point at its 0, so its chrome reaches past it by the layer's whole claim.
+  It hands its content (its first child) its slot less its gutters, or no
   room when the gutters are larger than the slot (the scope that solved the
   slot warns that its fixed parts overflow), and seats it past its start
   gutter: the ring pins the ring inside it at a literal pixel (`wrapRing`),

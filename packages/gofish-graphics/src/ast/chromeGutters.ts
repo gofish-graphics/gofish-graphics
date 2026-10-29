@@ -3,8 +3,7 @@
 // </gofish-wiki>
 
 import type { GoFishNode } from "./_node";
-import type { Size } from "./dims";
-import { Extent, hullExtent } from "./extent";
+import { Extent } from "./extent";
 import * as Pwl from "./solver/pwl";
 import { room } from "../util";
 import { originIs } from "./underlyingSpace";
@@ -22,42 +21,18 @@ import { originIs } from "./underlyingSpace";
  *
  * The plot is the chart's content without its dressing
  * (`GoFishNode.resolvePlotExtent`): a label placed beside a mark adds
- * around the plot, as chrome does. On an axis where the plot has a claim,
- * the gutters are forms of the claim walk: the chart's claim past the
- * plot's, both widened to the keyed domain the chart maps
- * (`chromeForms`), a PWL in σ that layout evaluates at the σ the chart is
- * laid out at. Where the plot fills the room it is given (a category axis),
- * the rings' claims are built around a plot of size X (`ringsAround`), and
- * the plot's size is the X at which they fill the slot (until step 5's
- * shares, see `guttersInSlot`).
+ * around the plot, as chrome does. The gutters are forms of the claim walk:
+ * the chart's claim past the plot's, both widened to the keyed domain the
+ * chart maps (`chromeForms`), a PWL in σ that layout evaluates at the σ the
+ * chart is laid out at. A plot that fills a share claims one σ (#493 piece
+ * 3), so its forms are PWLs in σ too. A plot with no claim on an axis (one inside a
+ * coordinate space, or one that fills a room no σ divides) is a point at its
+ * 0 (`setChromeForms`): its chrome reaches past it by the chart's whole
+ * claim.
  */
 
-/** The claim of `chart`'s rings on `axis` around a plot of size X, as a
- *  function of X: the plot is `[0, X]`, and each ring's claim is what it
- *  wraps with its shapes placed around it. Undefined when a ring cannot
- *  place its shapes in the claim walk (it is not a layer). The rings are
- *  its own, or, for a chart with a size of its own, its content's: it
- *  wears its chrome inside its frame, on its one child (`frameChart`).
- *  Part of the step 5 shortcut (`guttersInSlot`). */
-function ringsAround(chart: GoFishNode, axis: 0 | 1): Extent | undefined {
-  const rings =
-    chart.chrome?.rings ??
-    (chart._chartBox !== undefined
-      ? (chart.children[0] as GoFishNode | undefined)?.chrome?.rings
-      : undefined);
-  let inner: Extent = Extent(Pwl.affine(1, 0));
-  for (const ring of rings ?? []) {
-    const place = ring.claimWalk?.placeChildren;
-    if (place === undefined) return undefined;
-    const extents = ring.children.map((c, i): Size<Extent | undefined> => {
-      if (i > 0) return c.resolveExtent();
-      return axis === 0 ? [inner, undefined] : [undefined, inner];
-    });
-    const p = place(axis, extents);
-    if (p.hull !== undefined) inner = hullExtent(inner, p.hull);
-  }
-  return inner;
-}
+/** The claim of a plot with no claim: a point at its 0. */
+const POINT: Extent = Extent(Pwl.ZERO);
 
 /** A node's chrome forms on one axis: its claim and its plot's, both widened
  *  to the keyed domain it maps. How far its chrome and dressing reach past
@@ -68,9 +43,10 @@ export type ChromeForms = { whole: Extent; plot: Extent };
  * `node`'s chrome forms on `axis` for what it draws, `whole`, and its plot,
  * both widened as a scope widens its claim (`KeyedDomains.scope`), so a
  * tick label past a niced domain end reaches only where the domain does
- * not; undefined where its plot fills its room (it has no plot claim
- * there). They are memoized with its claim (`ClaimMemo.chrome`, cleared
- * with it: the auto label angle lays out twice).
+ * not. A plot with no claim there is a point at its 0 ({@link POINT}).
+ * Undefined where the node has no claim either. They are memoized with its
+ * claim (`ClaimMemo.chrome`, cleared with it: the auto label angle lays out
+ * twice).
  */
 export function setChromeForms(
   node: GoFishNode,
@@ -90,8 +66,8 @@ export function setChromeForms(
       )[1] ?? claim
 ): ChromeForms | undefined {
   const forms =
-    whole !== undefined && plot !== undefined
-      ? { whole: wide(whole), plot: wide(plot) }
+    whole !== undefined
+      ? { whole: wide(whole), plot: wide(plot ?? POINT) }
       : undefined;
   node._claimMemo.chrome[axis] = forms ?? null;
   return forms;
@@ -125,12 +101,6 @@ export const reachAt = (f: ChromeForms, sigma: number): [number, number] => [
   room(Pwl.at(f.whole.ascent, sigma) - Pwl.at(f.plot.ascent, sigma)),
 ];
 
-/** The gutters of the rings `r` around a plot of size `x`. */
-const ringGutters = (r: Extent, x: number): [number, number] => [
-  room(Pwl.at(r.descent, x)),
-  room(Pwl.at(r.ascent, x) - x),
-];
-
 /** The X ≥ 0 at which `m` reaches `target` (`m` never decreases), solved
  *  as the root's σ is: where the fixed parts of `m` alone are larger than
  *  the target, no X reaches it, and X is where the part that grows with X,
@@ -146,28 +116,16 @@ const solveFor = (m: Pwl.Value, target: number): number => {
 };
 
 /**
- * `chart`'s gutters on `axis` when it is laid out at σ `sigma` in a slot of
- * `slot` pixels (NaN when the axis is unsized): its chrome forms' reach at
- * σ, or, where its plot fills its room, its rings' around the plot that
- * fills the slot.
+ * `chart`'s gutters on `axis` when it is laid out at σ `sigma`: its chrome
+ * forms' reach at σ (none where it has no claim).
  */
-export function guttersInSlot(
+export function guttersAt(
   chart: GoFishNode,
   axis: 0 | 1,
-  sigma: number | undefined,
-  slot: number
+  sigma: number | undefined
 ): [number, number] {
   const f = chromeForms(chart, axis);
-  if (f !== undefined) return reachAt(f, sigma ?? 0);
-  // TODO(#1176 step 5): a plot that fills its room claims one share σ in a
-  // data-free scope, so its rings' claim is a PWL in σ and the scope solve
-  // finds the plot's size. Until shares exist, the rings are built around a
-  // plot of size X and solved for X here (exact in the corpus: 1 sized
-  // story and 6 unsized polar ones, all with rings `X + const`).
-  const r = ringsAround(chart, axis);
-  if (r === undefined) return [0, 0];
-  if (!Number.isFinite(slot)) return ringGutters(r, 0);
-  return ringGutters(r, solveFor(r.width, slot));
+  return f !== undefined ? reachAt(f, sigma ?? 0) : [0, 0];
 }
 
 /**
@@ -220,9 +178,6 @@ export function aroundPlot(
 ): number {
   const f = chromeForms(node, axis);
   const [start, end] =
-    f !== undefined
-      ? reachAt(f, solveFor(f.plot.width, plot))
-      : // TODO(#1176 step 5): a plot that fills its room (see `guttersInSlot`).
-        ringGutters(ringsAround(node, axis) ?? Extent(Pwl.affine(1, 0)), plot);
+    f !== undefined ? reachAt(f, solveFor(f.plot.width, plot)) : [0, 0];
   return plot + start + end;
 }

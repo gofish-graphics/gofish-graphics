@@ -78,7 +78,6 @@ import {
 import {
   actsOn,
   literalSeats,
-  placeByClaims,
   type ClaimChild,
   type Placement,
 } from "../constraints/claimPlacement";
@@ -94,7 +93,7 @@ import {
   aroundPlot,
   chromeForms,
   contentSeat,
-  guttersInSlot,
+  guttersAt,
   setChromeForms,
 } from "../chromeGutters";
 
@@ -264,21 +263,6 @@ export const layer = createNodeOperatorSequential(
       }
       return false;
     };
-    // Where the layer's constraints place its children on `axis` in the
-    // claim walk (`placeByClaims`), for their claims `extents`.
-    const placeChildren = (
-      axis: 0 | 1,
-      extents: Size<Extent | undefined>[],
-      placed: (Placement | undefined)[]
-    ) =>
-      placeByClaims(
-        axis,
-        claimChildren(axis, extents, placed),
-        node.constraints,
-        constraintOperands(),
-        new Set(node.children.map((_, i) => i)),
-        nestedPlacement(axis)
-      );
     // Where an operand nested in a child lands in that child's own frame.
     const nestedPlacement = (axis: 0 | 1) => (name: string) => {
       const op = constraintOperands().get(name);
@@ -792,12 +776,12 @@ export const layer = createNodeOperatorSequential(
           );
           const childScaleFactors = layerScales.sigmas;
           // A node dressed in chrome reads its gutters off its chrome forms
-          // at the σ it is laid out at (#1032), else for its slot, which its
-          // plot fills. It seats its content past them (`seatsOf`).
+          // at the σ it is laid out at (#1032). It seats its content past
+          // them (`seatsOf`).
           if (node.chrome !== undefined) {
             node.chrome.gutters = [
-              guttersInSlot(node, 0, childScaleFactors[0], size[0]),
-              guttersInSlot(node, 1, childScaleFactors[1], size[1]),
+              guttersAt(node, 0, childScaleFactors[0]),
+              guttersAt(node, 1, childScaleFactors[1]),
             ];
           }
 
@@ -1383,8 +1367,6 @@ export const layer = createNodeOperatorSequential(
       get ownScope(): [boolean, boolean] {
         return [dims[0].size !== undefined, dims[1].size !== undefined];
       },
-      placeChildren: (axis, extents) =>
-        placeChildren(axis, extents, standInPlacements(axis)),
       // A grid's track axis claims by its tracks, so no plan composes
       // through it there.
       plan: (axis) => {
