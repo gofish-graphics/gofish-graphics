@@ -872,7 +872,7 @@ console.log("# an arrow is labeled past its head");
 console.log("# a mark's own label beside labeled children");
 {
   // The arrow's own label is placed at its end even when its children carry
-  // labels too (its labels then move up with the tier that wraps them).
+  // labels too.
   const { tip, label } = await arrowDoc(true);
   ok(
     "an arrow with labeled children is still labeled at its end",
@@ -881,18 +881,17 @@ console.log("# a mark's own label beside labeled children");
   );
 }
 
-console.log("# labels placed lower down keep later calls off");
+console.log("# one call's labels keep a later call's off");
 {
-  // Call A sits in an inner tier, call B in the outer one; A's label to the
-  // right of its box covers the only spot B has, left of its box.
-  const inner = layer([
-    rect({ x: 0, y: 0, w: 10, h: 10, fill: "#ccc" }).label(() => "AAAAAAAA", {
-      position: Place.around({ directions: ["right"] }),
-    }),
-  ]);
+  // Two calls on one layer: A's label right of its box covers the only spot
+  // B has, left of its box. Neither label reaches the other's mark.
   const node = layer([
-    inner,
-    rect({ x: 60, y: 0, w: 10, h: 10, fill: "#ccc" }).label(() => "BBBBBBBB", {
+    layer([
+      rect({ x: 0, y: 0, w: 10, h: 10, fill: "#ccc" }).label(() => "AAAAAAAA", {
+        position: Place.around({ directions: ["right"] }),
+      }),
+    ]),
+    rect({ x: 110, y: 0, w: 10, h: 10, fill: "#ccc" }).label(() => "BBBBBBBB", {
       position: Place.around({ directions: ["left"] }),
     }),
   ]);
@@ -904,42 +903,9 @@ console.log("# labels placed lower down keep later calls off");
   const A = texts.find((t) => t.text === "AAAAAAAA");
   const B = texts.find((t) => t.text === "BBBBBBBB");
   ok(
-    "a label placed by the chooser in a lower tier is an obstacle above",
+    "a label the chooser placed is an obstacle to a later call",
     A !== undefined && (B === undefined || !boxesOverlap(textBox(A), textBox(B))),
     JSON.stringify({ A: A && textBox(A), B: B && textBox(B) })
-  );
-
-  // A hidden label takes no room: its empty box at its mark's center does
-  // not keep a later call off that point.
-  const hiddenInner = layer([
-    rect({ x: 20, y: 0, w: 10, h: 10, fill: "#ccc" }).label(() => "HIDDEN", {
-      position: Place.around({ directions: ["top"] }),
-    }),
-  ]);
-  const over = (withHidden: boolean) =>
-    layer([
-      rect({ x: 0, y: 0, w: 60, h: 20, fill: "#eee" }).label(() => "CCCCC", {
-        position: Place.interior(),
-      }),
-      withHidden
-        ? hiddenInner
-        : layer([rect({ x: 20, y: 0, w: 10, h: 10, fill: "#ccc" })]),
-    ]);
-  console.info = () => {};
-  const odoc = await (over(true) as any).toDisplayList({ w: 200, h: 50 });
-  const bdoc = await (over(false) as any).toDisplayList({ w: 200, h: 50 });
-  console.info = saved;
-  const otexts = textItems(odoc);
-  const C = otexts.find((t) => t.text === "CCCCC");
-  const bare = textItems(bdoc).find((t) => t.text === "CCCCC");
-  ok(
-    "a hidden label lower down does not block a later call",
-    otexts.every((t) => t.text !== "HIDDEN") &&
-      C !== undefined &&
-      bare !== undefined &&
-      C.x === bare.x &&
-      C.y === bare.y,
-    JSON.stringify({ texts: otexts.map((t) => t.text), C, bare })
   );
 }
 
@@ -994,6 +960,58 @@ console.log("# end labels dodge only labels they overlap");
     "and counted in the note",
     ca !== undefined || info.some((m) => m.includes("Place.end()")),
     JSON.stringify(info)
+  );
+}
+
+console.log("# a label is a text on its chart, whatever groups its mark");
+{
+  // A label's layer is on the nearest chart around its mark (or the render
+  // root), so wrapping the labeled mark in a one-child layer, which is not
+  // a chart, draws the same picture.
+  const geometry = async (node: any, w: number, h: number) =>
+    JSON.stringify(
+      items(await node.toDisplayList({ w, h }))
+        .filter((i) => i.kind !== "group")
+        .map(({ id, key, name, ...rest }) => rest)
+    );
+  const rows = [
+    { name: "a", v: 3 },
+    { name: "b", v: 5 },
+    { name: "c", v: 2 },
+  ];
+  const bars = async (wrap: boolean, position?: any) =>
+    (await chart(rows)
+      .flow(spread({ by: "name", dir: "x" }))
+      .mark(
+        wrap
+          ? layer([rect({ h: "v" }).label("name", { position })])
+          : rect({ h: "v" }).label("name", { position })
+      )
+      .resolve()) as GoFishNode;
+  for (const [what, position] of [
+    ["a position string", "outset-top"],
+    ["the chooser", Place.around()],
+  ] as const) {
+    const bare = await geometry(await bars(false, position), 200, 120);
+    const wrapped = await geometry(await bars(true, position), 200, 120);
+    ok(
+      `in a chart, ${what}: a one-child layer around the mark changes nothing`,
+      bare === wrapped && bare.includes('"text":"b"'),
+      `${bare}\n  vs ${wrapped}`
+    );
+  }
+
+  // With no chart, the label's layer is on the render root.
+  const box = () =>
+    rect({ x: 10, y: 10, w: 40, h: 20 }).label(() => "box", {
+      position: "outset-top",
+    });
+  const bare = await geometry(layer([box()]), 100, 80);
+  const wrapped = await geometry(layer([layer([box()])]), 100, 80);
+  ok(
+    "with no chart: a one-child layer around the mark changes nothing",
+    bare === wrapped && bare.includes('"text":"box"'),
+    `${bare}\n  vs ${wrapped}`
   );
 }
 

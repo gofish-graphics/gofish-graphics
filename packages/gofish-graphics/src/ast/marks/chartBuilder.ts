@@ -963,6 +963,9 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     // deterministic regardless of how individual async legs (e.g. a Python
     // `derive` RPC) interleaved at resolution time.
     collectLayerRegistrations(content, this.state.layerContext);
+    // The chart's marks, apart from the transitions it draws over them: a
+    // label of a mark here is a text on them (`GoFishNode._chartContent`).
+    content._chartContent = true;
 
     // The transitions this tier draws over its marks (see `resolve`).
     const marks =
@@ -1146,7 +1149,9 @@ async function frameChart(
   options: ChartOptions,
   children: GoFishNode[]
 ): Promise<GoFishNode> {
-  const node = await Frame(options, [await Layer({}, children)]);
+  const content = await Layer({}, children);
+  content._chartContent = true;
+  const node = await Frame(options, [content]);
   node._chartBox = [options.w !== undefined, options.h !== undefined];
   node._chartAxes = options.axes ?? true;
   return node;

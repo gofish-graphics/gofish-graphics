@@ -708,6 +708,12 @@ export class GoFishNode {
    *  has a size of its own (`w`/`h`). A chart is where its axes are drawn
    *  (`isAxisBoundary`). Undefined on every other node. */
   public _chartBox?: [boolean, boolean];
+  /** Set on what holds a `chart()`'s marks: the node its mark resolves to,
+   *  apart from the transitions it draws over them, and the layer its frame
+   *  holds, every tier of a `.layer()` chain included (`frameChart`). A
+   *  label is a layer of text on the nearest one around its mark
+   *  (`elaborateLabels`). */
+  public _chartContent?: true;
   /** Set on the node a `chart()` resolves to, next to {@link _chartBox}: the
    *  chart's own `axes` option (default `true`). It applies at the chart and
    *  below it, down to the next chart (`resolveAxes`). The render root's

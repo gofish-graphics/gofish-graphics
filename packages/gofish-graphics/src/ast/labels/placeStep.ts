@@ -11,10 +11,10 @@
  *
  * For each `.label()` call, its labels are taken in data order, and each
  * takes its strategy's first candidate whose box covers no obstacle: the
- * marks the labels of this layer describe (the label's own mark is read as
- * its outline only), the labels already placed (by this step, by the solve
- * for a position string, or by the chooser in a layer below; a hidden one
- * takes no room), and the nodes in the call's `avoiding`. A label with no
+ * marks the labels of this layer (one chart's) describe (the label's own
+ * mark is read as its outline only), the labels already placed (by this
+ * step, or by the solve for a position string; a hidden one takes no room),
+ * and the nodes in the call's `avoiding`. A label with no
  * free candidate is hidden. `Place.start()` and `Place.end()` labels have
  * one spot each, past their paths' ends: the ones of a call that overlap
  * there slide apart vertically, and one that still covers an obstacle is
