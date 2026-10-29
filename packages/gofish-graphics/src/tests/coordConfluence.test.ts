@@ -21,6 +21,7 @@ import { value } from "../ast/data";
 import { layer as Layer } from "../ast/graphicalOperators/layer";
 import { Constraint } from "../ast/constraints";
 import { Frame } from "../ast/graphicalOperators/frame";
+import { resolveReferences } from "../ast/_ref";
 
 let passed = 0;
 let failed = 0;
@@ -58,6 +59,7 @@ const dist = (cs: any[]) => {
 async function leafThetaSizes(child: any): Promise<number[]> {
   const root: any = await coord({ transform: polar() }, [child]);
   await root.resolveAliases();
+  resolveReferences(root);
   root.resolveUnderlyingSpace();
   root.resolveEmbedding();
   root.layout([400, 400], [undefined, undefined]);
@@ -158,6 +160,7 @@ console.log("# a frame with a coord honors its explicit w/h (#535)");
     dist([wedge(), wedge()]),
   ]);
   await root.resolveAliases();
+  resolveReferences(root);
   root.resolveUnderlyingSpace();
   root.resolveEmbedding();
   const placeable: any = root.layout([400, 400], [undefined, undefined]);

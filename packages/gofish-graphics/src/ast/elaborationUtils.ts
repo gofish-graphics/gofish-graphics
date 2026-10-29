@@ -3,6 +3,8 @@ import type { LayerSharingPlan } from "./constraints/compose";
 import { round12 } from "./cells";
 import { layer } from "./graphicalOperators/layer";
 import { Constraint } from "./constraints";
+import { SlotOperand, type ConstraintRef } from "./constraints/shared";
+import type { GoFishAST } from "./_ast";
 
 /** Run `build` to wrap `node` in new structure, moving the node's identity
  * (_name/key) onto whatever `build` returns — so the parent (faceting/refs/
@@ -33,16 +35,24 @@ export async function wrapPreservingIdentity(
   return root;
 }
 
+/** Builds a ring's constraints from handles: `at(node)` is the handle on
+ *  one of the ring's shapes, and `inner` the handle on the box inside the
+ *  ring. Handles name no one, so chrome never looks a name up. */
+export type RingConstraints = (
+  at: (node: GoFishAST) => ConstraintRef,
+  inner: ConstraintRef
+) => any[];
+
 /** One ring of chrome: its shapes, and the constraints that seat them past
- *  the box inside the ring (named `inner`), built from the ring's
- *  name→ref map. */
+ *  the box inside the ring. */
 export type ChromeRing = {
   nodes: GoFishNode[];
-  constraints: (g: Record<string, any>, inner: string) => any[];
+  constraints: RingConstraints;
 };
 
 /** Wrap `inner` in one ring: a `layer` of `inner` (named `name`) and the
- *  ring's shapes. `inner` is seated first (constraints apply in order and
+ *  ring's shapes, each referred to by its slot. `inner` is seated first
+ *  (constraints apply in order and
  *  placement is first-write-wins, so the box the ring reads is placed before
  *  anything seats off it): at `seat`, by its baseline. A seat with neither
  *  axis given leaves `inner` to the layer. */
@@ -72,12 +82,24 @@ export async function wrapRing(
     const none = (): [Set<number>, Set<number>] => [new Set(), new Set()];
     return { sets: [sets, [...sets]], nested: none(), datumPlaced: none() };
   });
-  await root.relate((g) => [
-    ...(seat.x === undefined && seat.y === undefined
-      ? []
-      : [Constraint.position({ ...seat, anchor: "baseline" }, [g[name]])]),
-    ...ring.constraints(g, name),
-  ]);
+  // Every handle is a slot, fixed by construction: the content is slot 0,
+  // and the ring's k-th shape is slot k + 1 (a shape may be handed in as the
+  // promise its builder returned, which the layer awaits).
+  const at = (node: GoFishAST): SlotOperand => {
+    const k = ring.nodes.indexOf(node as GoFishNode);
+    if (k < 0)
+      throw new Error("[gofish] wrapRing: the node is not one of the ring's");
+    return new SlotOperand(root, k + 1);
+  };
+  await root.relate(() => {
+    const content = new SlotOperand(root, 0);
+    return [
+      ...(seat.x === undefined && seat.y === undefined
+        ? []
+        : [Constraint.position({ ...seat, anchor: "baseline" }, [content])]),
+      ...ring.constraints(at, content),
+    ];
+  });
   return root;
 }
 

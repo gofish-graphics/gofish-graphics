@@ -416,7 +416,7 @@ export const connect = createNodeOperator(
           // axis, ORDINAL = category axis), skipping the mark's own SIZE
           // (its extent, e.g. a circle's radius) and UNDEFINED.
           //
-          // The children carry the space because `resolveNames` runs before the
+          // The children carry the space because `resolveReferences` runs before the
           // underlying-space pass, so a `ref` already proxies its target's space
           // (falling back to ORDINAL ⇒ discrete when unresolved).
           const connectionSpaceOf = (

@@ -10,7 +10,7 @@ import type { AlignConstraint } from "../ast/constraints/align";
 import type { DistributeConstraint } from "../ast/constraints/distribute";
 import type { GridConstraint, TrackLayout } from "../ast/constraints/grid";
 import {
-  gridCellSizeByName,
+  gridCellSizeByKey,
   gridTracksFromSizes,
 } from "../ast/constraints/grid";
 import type { NestConstraint } from "../ast/constraints/nest";
@@ -184,7 +184,9 @@ function expectConfluent(
   );
 }
 
-const child = (name: string) => ({ name });
+// A resolved operand: its key is the uid of the node it names (here, the
+// name itself).
+const child = (name: string) => ({ name, key: name });
 const A = child("A");
 const B = child("B");
 const C = child("C");
@@ -242,6 +244,7 @@ const span = (name: string, min: number, max: number): PositionConstraint => ({
 
 const namedNode = (name: string, width?: number) => ({
   _name: name,
+  uid: name,
   key: name,
   args: { dims: [{ size: width }, { size: 10 }] },
   children: [],
@@ -446,7 +449,7 @@ console.log("# constraint confluence: grid content-sized tracks (Stage 6e)");
   ];
 
   // The per-cell budget map hands each cell its own track's extent.
-  const cellSizes = gridCellSizeByName(grid, tracks);
+  const cellSizes = gridCellSizeByKey(grid, tracks);
   ok(
     "grid cell budget = per-cell track extents",
     JSON.stringify(cellSizes.get("A")) === "[40,30]" &&
@@ -708,9 +711,9 @@ console.log("# constraint confluence: layer constraint layout planning");
   ]);
   ok(
     "layout plan excludes z-order refs and skips only nest inner",
-    plan.constrainedNames.has("A") &&
-      plan.constrainedNames.has("C") &&
-      !plan.constrainedNames.has("B")
+    plan.constrainedKeys.has("A") &&
+      plan.constrainedKeys.has("C") &&
+      !plan.constrainedKeys.has("B")
   );
   ok(
     "layout plan orders nest source before derived child",
@@ -1234,8 +1237,8 @@ console.log("# constraint confluence: interval vs point compose bail");
   // layer's default union — conservatively, even when it also carries an
   // interval on the other axis.
   const childNodes = [
-    { _name: "A", key: "A" },
-    { _name: "B", key: "B" },
+    { _name: "A", uid: "A", key: "A" },
+    { _name: "B", uid: "B", key: "B" },
   ] as unknown as Parameters<typeof planConstraintComposition>[1];
   const distAB = distribute(["A", "B"]);
   const pureInterval: PositionConstraint = {

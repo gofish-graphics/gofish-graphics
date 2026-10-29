@@ -12,7 +12,7 @@ import { GoFishNode } from "../_node";
 import type { GoFishAST } from "../_ast";
 import { GoFishRef, findPathToRoot, isInside } from "../_ref";
 import { Constraint, type ConstraintSpec } from "./index";
-import { internalName, type ConstraintRef } from "./shared";
+import { NodeOperand, type ConstraintRef } from "./shared";
 
 /** Find every relational-mark connector node (tagged `__relationalOperands`
  *  by `createRelationalMark`, chart.ts) anywhere in `node`'s subtree that
@@ -29,16 +29,6 @@ function findUnclaimedConnectors(node: GoFishAST, out: GoFishNode[]): void {
 /** The node identity of a `GoFishAST` (a ref's target, or the node itself). */
 export function targetOf(n: GoFishAST): GoFishNode | undefined {
   return n instanceof GoFishRef ? n.targetNode : (n as GoFishNode);
-}
-
-/** Give `node` a resolvable constraint name if it doesn't already have one
- *  (a fresh `internalName`, as `ensureChildNames` does). */
-function ensureConstraintName(node: GoFishNode): string {
-  if (node._name !== undefined) {
-    return typeof node._name === "string" ? node._name : internalName("z");
-  }
-  node._name = internalName("z");
-  return node._name;
 }
 
 /**
@@ -79,7 +69,7 @@ export function applyRelationalZBelowDefaults(
   for (const child of children) findUnclaimedConnectors(child, connectors);
   if (connectors.length === 0) return [];
 
-  const pairs: [string, ConstraintRef][] = [];
+  const pairs: [GoFishNode, ConstraintRef][] = [];
   for (const connector of connectors) {
     const operands: GoFishAST[] | undefined = (connector as any)
       .__relationalOperands;
@@ -107,7 +97,7 @@ export function applyRelationalZBelowDefaults(
         if (operand.scope !== undefined && !isInside(operand.scope, node))
           continue;
         pairs.push([
-          ensureConstraintName(connector),
+          connector,
           { name: operand.selection, scope: operand.scope },
         ]);
         claimedAny = true;
@@ -118,21 +108,18 @@ export function applyRelationalZBelowDefaults(
       // Only claim an operand that actually lives within `children`'s
       // subtrees at this level (found via an ancestor walk against
       // `children`) — otherwise leave the tag for an outer `layer()` call to
-      // resolve. The constraint names the operand itself: paint order lifts
-      // it to whichever child holds it, or pushes it down when the connector
-      // shares that child. Names are visible through any non-component node.
+      // resolve. The constraint holds the operand itself (a handle): paint
+      // order lifts it to whichever child holds it, or pushes it down when
+      // the connector shares that child.
       const path = findPathToRoot(target);
       const withinScope = children.some(
         (c) => c !== connector && path.includes(c as GoFishAST)
       );
       if (!withinScope) continue;
       // An operand that is itself a plain layer (a `layer([...])` mark, a
-      // `time.history`) names that whole layer, so the connector goes under
+      // `time.history`) is that whole layer, so the connector goes under
       // everything it paints.
-      pairs.push([
-        ensureConstraintName(connector),
-        { name: ensureConstraintName(target) },
-      ]);
+      pairs.push([connector, new NodeOperand(target)]);
       claimedAny = true;
     }
     // Consumed (fully or partially) at this level — don't let an outer layer
@@ -143,7 +130,7 @@ export function applyRelationalZBelowDefaults(
   }
   if (pairs.length === 0) return [];
   const zBelowConstraints = pairs.map(([a, b]) =>
-    Constraint.zBelow({ name: a }, b)
+    Constraint.zBelow(new NodeOperand(a), b)
   );
   node.constraints = [...node.constraints, ...zBelowConstraints];
   return zBelowConstraints;

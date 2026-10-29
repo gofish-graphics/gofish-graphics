@@ -24,6 +24,7 @@ import { isPositionInterval, lowerPositionPlacement } from "./position";
 import {
   axisIndex,
   axisName,
+  keyOf,
   placementKey,
   type Axis,
   type ConstraintPosScales,
@@ -125,9 +126,9 @@ class PlacementOwnershipPlan {
     for (const child of constraint.children) {
       if (constraint.override) {
         if (constraint.x !== undefined)
-          this.authoritative.add(placementKey("x", child.name));
+          this.authoritative.add(placementKey("x", keyOf(child)));
         if (constraint.y !== undefined)
-          this.authoritative.add(placementKey("y", child.name));
+          this.authoritative.add(placementKey("y", keyOf(child)));
       }
     }
 
@@ -154,7 +155,7 @@ class PlacementOwnershipPlan {
         if (value === undefined) continue;
       }
       for (const child of constraint.children) {
-        this.positionPinned.add(placementKey(axis, child.name));
+        this.positionPinned.add(placementKey(axis, keyOf(child)));
       }
     }
   }
@@ -176,10 +177,10 @@ export function lowerPlacementConstraints(
     if (constraint.type !== "position") continue;
     for (const ref of constraint.children) {
       if (!ref) continue;
-      const axes = pinnedByPosition.get(ref.name) ?? new Set<0 | 1>();
+      const axes = pinnedByPosition.get(keyOf(ref)) ?? new Set<0 | 1>();
       if (constraint.x !== undefined) axes.add(0);
       if (constraint.y !== undefined) axes.add(1);
-      if (axes.size > 0) pinnedByPosition.set(ref.name, axes);
+      if (axes.size > 0) pinnedByPosition.set(keyOf(ref), axes);
     }
   }
   const ownership = new PlacementOwnershipPlan(

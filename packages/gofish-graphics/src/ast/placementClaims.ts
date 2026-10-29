@@ -45,9 +45,9 @@ function seatIn(
   const acting = seating.acting[axis].get(i) ?? [];
   const start = child.claimWalk?.literalStart[axis] ?? 0;
   if (acting.length === 0) return start;
-  const name = seating.operandName.get(i);
+  const key = seating.operandKey.get(i);
   const seat =
-    name === undefined ? undefined : literalSeats(acting).get(name)?.[axis];
+    key === undefined ? undefined : literalSeats(acting).get(key)?.[axis];
   return seat === undefined ? undefined : seat + start;
 }
 

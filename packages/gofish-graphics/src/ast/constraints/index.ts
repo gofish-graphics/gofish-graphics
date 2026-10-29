@@ -40,10 +40,11 @@ import {
   isLabelPlaceConstraint,
   type LabelPlaceConstraint,
 } from "../labels/placeStep";
-import { resolveScopedName, visibleNodes } from "../_ref";
+import { visibleNodes } from "../_ref";
 import {
   childNameKey,
   isPlacedOn,
+  keyOf,
   type ConstraintPosScales,
   type FreeOrigin,
   type ConstraintRef,
@@ -53,7 +54,9 @@ import {
   type RigidAttachment,
 } from "./placementSolver";
 import { shadowCheckConstraint, SOLVER_CHECK } from "../solver/shadow";
-import { RelateOperand, directChildIndex, type RelateEnv } from "./relate";
+import { RelateOperand, type RelateEnv } from "./relate";
+export type { ResolvedOperand } from "../_ref";
+export { SlotOperand, NodeOperand, slotOf, childSlots, keyOf } from "./shared";
 
 export type {
   Axis,
@@ -94,7 +97,7 @@ export {
   isGridConstraint,
   gridSpaces,
   resolveGridTracks,
-  gridCellSizeByName,
+  gridCellSizeByKey,
   gridTracksFromSizes,
   type TrackLayout,
 } from "./grid";
@@ -205,69 +208,6 @@ export function validateOperands(
       );
     });
   }
-}
-
-/** A layer constraint operand resolved to a node inside the layer: `child` is
- *  the index of the layer's direct child that is (`direct`) or contains
- *  `node`. */
-export type ResolvedOperand = {
-  node: GoFishAST;
-  child: number;
-  direct: boolean;
-};
-
-/**
- * Resolve every placement operand of `layer`'s constraints to a node inside
- * the layer, once per distinct name, with the same lookup `ref("name")` uses
- * (`resolveScopedName`: missing or ambiguous names throw). An operand bound
- * by `layer`'s own `.relate()` is looked up from `layer` with its clause
- * slots skipped; one with no scope (a constraint a pass builds on the layer
- * directly), from `layer`. An operand an enclosing layer's `.relate()`
- * bound names a node of that layer outside this one (the lookup from there
- * skips that layer's clause slots, and this layer sits in one), so this layer
- * cannot place it. Every operand must lie inside the layer (a layer can only
- * place what it contains). z-order constraints are excluded: they relate
- * SETS of nodes at paint time (`paintOrder.ts`), not single placeables.
- */
-export function resolveConstraintOperands(
-  layer: GoFishNode
-): Map<string, ResolvedOperand> {
-  const out = new Map<string, ResolvedOperand>();
-  for (const c of layer.constraints) {
-    if (isZOrderConstraint(c)) continue;
-    for (const ref of c.children) {
-      if (ref.scope !== undefined && ref.scope !== layer) {
-        throw new Error(
-          `Constraint.${c.type}: operand "${ref.name}" was bound by an ` +
-            `enclosing layer's .relate(), and that layer's operand cannot be ` +
-            `placed by this layer. Place it with a constraint of the ` +
-            `enclosing layer's .relate().`
-        );
-      }
-      if (out.has(ref.name)) continue;
-      const node = resolveScopedName(
-        layer,
-        ref.name,
-        `Constraint.${c.type} operand`,
-        ref.scope !== undefined
-      );
-      const child = directChildIndex(layer, node);
-      if (child < 0) {
-        throw new Error(
-          `Constraint.${c.type}: operand "${ref.name}" is not inside the ` +
-            `layer this .relate() is attached to. A layer can only place ` +
-            `nodes it contains; attach the constraint to a layer that ` +
-            `contains every operand.`
-        );
-      }
-      out.set(ref.name, {
-        node,
-        child,
-        direct: layer.children[child] === node,
-      });
-    }
-  }
-  return out;
 }
 
 /**
@@ -392,18 +332,18 @@ function foldCoordinate(
  * constraints are resolved separately at render time.
  *
  * @param constraints - The constraint specs to compose
- * @param nameToPlaceable - Map from child name to its Placeable
+ * @param keyToPlaceable - Map from operand key (`keyOf`) to its Placeable
  * @param sizes - The layer's box size `[w, h]`, used by grid placement
  * @param posScales - Per-axis data→pixel scales for `position` constraints
- * @param rigid - Nested operands (operand name → container name + gap), tied
+ * @param rigid - Nested operands (operand key → container key + gap), tied
  *   rigidly to the layer child that contains them
- * @param dataPositioned - Per-axis sets of child names anchored to a data scale
+ * @param dataPositioned - Per-axis sets of operand keys anchored to a data scale
  *   (baseline fixed at `posScale(0)`); `align` leaves these where their own scale
  *   puts them. The space/scope fact that replaced the `placementOn` guard read.
  */
 export function applyConstraints(
   constraints: ConstraintSpec[],
-  nameToPlaceable: Map<string, Placeable>,
+  keyToPlaceable: Map<string, Placeable>,
   sizes: [number, number],
   posScales?: ConstraintPosScales,
   gridTracks?: [TrackLayout, TrackLayout],
@@ -434,7 +374,7 @@ export function applyConstraints(
   // AFTER the solve against the settled positions.
   const prePlaced = SOLVER_CHECK
     ? new Map<string, [boolean, boolean]>(
-        [...nameToPlaceable].map(([name, p]) => [
+        [...keyToPlaceable].map(([name, p]) => [
           name,
           [isPlacedOn(p, 0), isPlacedOn(p, 1)] as [boolean, boolean],
         ])
@@ -443,7 +383,7 @@ export function applyConstraints(
 
   solvePlacementConstraints(
     placement,
-    nameToPlaceable,
+    keyToPlaceable,
     sizes,
     posScales,
     gridTracks,
@@ -458,13 +398,13 @@ export function applyConstraints(
   // axis. So it runs after the solve.
   for (const constraint of constraints)
     if (isOverlapConstraint(constraint))
-      applyOverlapPlacement(constraint, nameToPlaceable, posScales);
+      applyOverlapPlacement(constraint, keyToPlaceable, posScales);
 
   // A label placement reads where everything else in the layer landed (the
   // labeled marks, the labels the solve placed), so it runs last.
   for (const constraint of constraints)
     if (isLabelPlaceConstraint(constraint))
-      applyLabelPlacement(constraint, nameToPlaceable, sizes);
+      applyLabelPlacement(constraint, keyToPlaceable, sizes);
 
   if (prePlaced) {
     for (const constraint of placement) {
@@ -474,17 +414,17 @@ export function applyConstraints(
       const targets: Placeable[] = [];
       const targetPrePlaced: [boolean, boolean][] = [];
       for (const ref of constraint.children) {
-        const p = ref ? nameToPlaceable.get(ref.name) : undefined;
+        const p = ref ? keyToPlaceable.get(keyOf(ref)) : undefined;
         if (p === undefined) continue;
         targets.push(p);
-        targetPrePlaced.push(prePlaced.get(ref!.name) ?? [false, false]);
+        targetPrePlaced.push(prePlaced.get(keyOf(ref)) ?? [false, false]);
       }
       shadowCheckConstraint(
         constraint,
         targets,
         posScales,
         targetPrePlaced,
-        nameToPlaceable
+        keyToPlaceable
       );
     }
   }

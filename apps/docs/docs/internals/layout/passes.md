@@ -119,17 +119,24 @@ This pass traverses the tree and:
 
 **Example**: In a bar chart with `fill: "category"`, each unique category value gets assigned a color from the palette.
 
-### Pass 3: Name Resolution
+### Pass 3: Reference Resolution
 
-**Location**: `src/ast/gofish.tsx:173`
+**Location**: `src/ast/gofish.tsx` (after `resolveAliases`, Pass 5.5)
 
 ```typescript
-child.resolveNames();
+resolveReferences(child);
 ```
 
-**Implementation**: `src/ast/_node.ts:194-201`
+**Implementation**: `src/ast/_ref.tsx` (`resolveReferences`)
 
-Maps named nodes to the scope context, enabling references between chart elements. This resolves variable names and data bindings, mapping data field names to their corresponding values and establishing scope relationships between parent and child nodes.
+The one resolver for every reference in the tree. It registers token names
+in their scopes, resolves each ref to its target, resolves each layer's
+constraint operands and paint-order operands to nodes (writing each
+operand's `key`, the node's uid, which the placement solve reads), and
+checks each layer's `.relate()` clauses for a cycle. It runs after
+`resolveAliases`, because that pass installs the operators' constraints, and
+again after every pass that rewrites the tree (`reresolve`). See
+[Name Resolution & Scoping](/internals/core/names-and-scoping).
 
 ### Pass 4: Key Resolution
 

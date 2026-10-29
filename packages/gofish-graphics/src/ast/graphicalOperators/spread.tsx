@@ -15,6 +15,7 @@ import { Constraint } from "../constraints";
 import {
   axisName,
   ensureChildNames,
+  SlotOperand,
   type AlignAnchor,
 } from "../constraints/shared";
 import { createOperator } from "../marks/createOperator";
@@ -118,8 +119,6 @@ export const Spread = createNodeOperator(
     // every use below can key by name.
     const dirName: AxisName = typeof dir === "number" ? axisName(dir) : dir;
 
-    // Give each child a unique constraint name so the align/distribute can
-    // reference it (shared with scatter — see `ensureChildNames`).
     let childList = children as GoFishAST[];
 
     if (size !== undefined) {
@@ -153,7 +152,9 @@ export const Spread = createNodeOperator(
       );
     }
 
-    const names = ensureChildNames(childList, "spread");
+    // The children keep the names it gives them, but its constraints refer
+    // to them by slot (`SlotOperand`), so no name is looked up.
+    ensureChildNames(childList, "spread");
 
     // Elaborate to a layer carrying the cross-axis align + the stack distribute.
     // `fancyDims` (explicit w/h) flow to the layer, which is then a sized
@@ -176,8 +177,8 @@ export const Spread = createNodeOperator(
       const stackDir = resolveAxisName(inner, dirName, `spread({ dir })`);
       const alignAxis = axisName((1 - stackDir) as Direction);
       const stackAxis = axisName(stackDir);
-      await node.relate((g) => {
-        const refs = names.map((name) => g[name]);
+      await node.relate(() => {
+        const refs = childList.map((_, i) => new SlotOperand(node, i));
         // The cross-axis align: it shares the frame (unions the children's
         // domain) and, for free children (bars), commits a baseline. A
         // self-positioned child (a scatter facet) is left alone by `align`
@@ -192,7 +193,7 @@ export const Spread = createNodeOperator(
               anchor,
               glue,
               order: reverse ? "reverse" : "forward",
-              origin: origin && { ...origin, part: names[origin.part] },
+              origin: origin && { ...origin, part: refs[origin.part] },
               // The grouping field for this (stack) axis → the ORDINAL
               // space's measure, so a spread-by-category axis titles itself
               // off its space.

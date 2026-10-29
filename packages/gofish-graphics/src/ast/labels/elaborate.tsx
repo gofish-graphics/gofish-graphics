@@ -9,7 +9,7 @@ import { GoFishRef } from "../_ref";
 import { LabelText, type LabelNode } from "./labelNode";
 import { ref } from "../shapes/ref";
 import { Constraint } from "../constraints";
-import type { AlignAnchor, ConstraintRef } from "../constraints/shared";
+import type { AlignAnchor } from "../constraints/shared";
 import { placedOutlines, type Outline } from "../geometry";
 import { pointInRing } from "../geometry/plane";
 import {
@@ -358,23 +358,23 @@ async function wrapWithLabels(
     const texts: GoFishNode[] = [];
     // Labels at a position string, placed by the solve.
     const fixed: {
-      refName: string;
-      textName: string;
+      stand: GoFishAST;
+      text: GoFishNode;
       position: LabelPosition;
       offset?: number;
       label: LabelNode;
     }[] = [];
     // Labels the chooser places after the solve.
     const placed: {
-      refName: string;
-      textName: string;
-      avoidNames: string[];
+      stand: GoFishAST;
+      text: GoFishNode;
+      avoid: GoFishAST[];
       spec: LabelSpec;
       place: Place | "outline";
       node: ReturnType<typeof LabelText>;
     }[] = [];
     // The nodes each call keeps off, read through refs made once per call.
-    const avoided = new Map<unknown, string[]>();
+    const avoided = new Map<unknown, GoFishAST[]>();
 
     for (const { target, spec, position } of [...pairs].sort(
       (a, b) => a.order - b.order
@@ -410,8 +410,8 @@ async function wrapWithLabels(
       target.INTERNAL_attach(label.node);
       if (!isChosen(position)) {
         fixed.push({
-          refName,
-          textName,
+          stand,
+          text: label.node,
           position,
           offset: spec.offset,
           label,
@@ -422,37 +422,37 @@ async function wrapWithLabels(
       // know where it lands: it is ink, which takes no room, and the canvas
       // grows to hold it where the render gives no size (#1032).
       label.node.inkOn = [true, true];
-      let avoidNames = avoided.get(spec.group);
-      if (avoidNames === undefined) {
-        avoidNames = avoidedRefs(
+      let avoid = avoided.get(spec.group);
+      if (avoid === undefined) {
+        avoid = avoidedRefs(
           spec.avoiding,
           undefined,
           ".label({ avoiding })",
           ".label()"
         ).map((r, k) => {
-          const name = `__lavoid${idx}_${k}`;
-          refs.push(r.name(name));
-          return name;
+          const stand = r.name(`__lavoid${idx}_${k}`);
+          refs.push(stand);
+          return stand;
         });
-        avoided.set(spec.group, avoidNames);
+        avoided.set(spec.group, avoid);
       }
       placed.push({
-        refName,
-        textName,
-        avoidNames,
+        stand,
+        text: label.node,
+        avoid,
         spec,
         place: position,
         node: label,
       });
     }
     // The labels seated below, which the chooser keeps its labels off.
-    const belowNames =
+    const belowStands =
       placed.length === 0
         ? []
         : below.map((t) => {
-            const name = `__lbelow${labelUid++}`;
-            refs.push(ref(t.node).name(name));
-            return { name, label: t };
+            const stand = ref(t.node).name(`__lbelow${labelUid++}`);
+            refs.push(stand);
+            return { node: stand as GoFishAST, label: t };
           });
 
     // The content is seated at its own origin first, so every label
@@ -460,13 +460,13 @@ async function wrapWithLabels(
     // placed and only moves the label. The chooser runs after the solve.
     return wrapRing(content, CONTENT_NAME, {
       nodes: [...refs, ...texts] as GoFishNode[],
-      constraints: (g) => [
-        ...fixed.flatMap(({ refName, textName, position, offset }) =>
+      constraints: (at) => [
+        ...fixed.flatMap(({ stand, text, position, offset }) =>
           buildLabelConstraints(
             position,
             offset,
-            g[refName],
-            g[textName],
+            at(stand),
+            at(text),
             yDirection
           )
         ),
@@ -477,25 +477,19 @@ async function wrapWithLabels(
                 placed.map(
                   (p): LabelPlaceItem => ({
                     group: p.spec.group,
-                    target: g[p.refName] as ConstraintRef,
-                    label: g[p.textName] as ConstraintRef,
+                    target: at(p.stand),
+                    label: at(p.text),
                     node: p.node,
                     place: p.place,
                     offset: p.spec.offset,
-                    avoiding: p.avoidNames.map((n) => g[n] as ConstraintRef),
+                    avoiding: p.avoid.map(at),
                     call: callName(p.spec.accessor),
                   })
                 ),
                 [
-                  ...fixed.map(({ textName, label }) => ({
-                    name: textName,
-                    label,
-                  })),
-                  ...belowNames,
-                ].map(({ name, label }) => ({
-                  ref: g[name] as ConstraintRef,
-                  label,
-                })),
+                  ...fixed.map(({ text, label }) => ({ node: text, label })),
+                  ...belowStands,
+                ].map(({ node, label }) => ({ ref: at(node), label })),
                 yDirection
               ),
             ]),

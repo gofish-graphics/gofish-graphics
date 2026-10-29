@@ -4,7 +4,7 @@
 
 import { GoFishNode } from "./_node";
 import type { GoFishAST } from "./_ast";
-import { isInside, visibleNodes } from "./_ref";
+import { resolvedConstraints } from "./_ref";
 import { childNameKey, type ConstraintRef } from "./constraints/shared";
 import { isZOrderConstraint } from "./constraints/zorder";
 import type { ZOrderConstraint } from "./constraints/zorder";
@@ -26,12 +26,12 @@ import type { ZOrderConstraint } from "./constraints/zorder";
  * constraint tries to order them.
  *
  * A `zAbove(a, b)` / `zBelow(a, b)` constraint declared at a layer L is
- * resolved once, when L orders its children. Its operand names are looked up
- * with the shared name rule (`visibleNodes`: through any non-component node,
- * never into a `createMark` component), and every node inside L carrying the
- * name is an operand. An operand a `.relate()` bound is looked up from the
- * layer that bound it, without that layer's clause slots, so a same-named
- * node a clause introduces is not in its set. For each pair of operand nodes, the constraint orders the two
+ * resolved once, when L orders its children. Its operands are the node sets
+ * `resolveReferences` (`_ref.tsx`) found for them: a handle's node, or every
+ * node inside L carrying a name operand's name, looked up with the shared
+ * name rule (`visibleNodes`: through any non-component node, never into a
+ * `createMark` component) from L, or from the layer whose `.relate()` bound
+ * it, without that layer's clause slots. For each pair of operand nodes, the constraint orders the two
  * children of the node where their paths from L part: a child of L when they
  * lie in different children, else a node further down (pushed down).
  */
@@ -71,27 +71,11 @@ function resolveZConstraints(layer: GoFishNode): void {
     return;
   }
 
-  // The paths to every node inside `layer` named in the scope an operand is
-  // looked up from: `layer`, or the layer whose `.relate()` bound it, with
-  // that layer's clause slots skipped (`visibleNodes(scope, true)`), so a
-  // name a clause introduces never joins the operand's set. One table per
-  // scope.
-  const tables = new Map<GoFishNode | undefined, Map<string, GoFishAST[][]>>();
-  const pathsOf = (ref: ConstraintRef): GoFishAST[][] | undefined => {
-    let byName = tables.get(ref.scope);
-    if (byName === undefined) {
-      tables.set(ref.scope, (byName = new Map()));
-      const from = ref.scope ?? layer;
-      for (const n of visibleNodes(from, ref.scope !== undefined)) {
-        const name = n === from ? undefined : childNameKey(n);
-        if (name === undefined || n === layer || !isInside(n, layer)) continue;
-        let paths = byName.get(name);
-        if (paths === undefined) byName.set(name, (paths = []));
-        paths.push(pathFrom(layer, n));
-      }
-    }
-    return byName.get(ref.name);
-  };
+  // The nodes each operand names, as `resolveReferences` found them
+  // (`zOperandNodes`), as paths from `layer`.
+  const { z } = resolvedConstraints(layer);
+  const pathsOf = (ref: ConstraintRef): GoFishAST[][] =>
+    (z.get(ref) ?? []).map((n) => pathFrom(layer, n));
 
   const written: GoFishAST[] = [];
   const addEdge = (at: GoFishAST, edge: Edge) => {
@@ -144,7 +128,7 @@ function resolveZConstraints(layer: GoFishNode): void {
   for (const c of constraints) {
     const as = pathsOf(c.children[0]);
     const bs = pathsOf(c.children[1]);
-    if (as !== undefined && bs !== undefined) split(layer, 0, as, bs, c);
+    split(layer, 0, as, bs, c);
   }
   partedAt.set(layer, written);
 }

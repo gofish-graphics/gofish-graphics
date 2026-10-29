@@ -48,6 +48,10 @@ titles = Layer([ axes.name("__titleContent"), ...title anchors, ...titles ])
 root   = Layer([ titles.name("__legendContent"), legend ])
 ```
 
+The names are only labels. A ring's constraints refer to what it seats by
+slot (`wrapRing`): the box inside the ring is slot 0, and its k-th shape is
+slot k + 1, so no lookup can find a same-named node elsewhere.
+
 A node gets only the rings it has shapes for. Its chrome is:
 
 - the axes `resolveAxes` assigned it (the first two rings);

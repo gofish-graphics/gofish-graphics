@@ -4,7 +4,7 @@
 
 import { UnderlyingSpace, isCONTINUOUS } from "../underlyingSpace";
 import { padExtent, type Extent } from "../extent";
-import type { ConstraintRef } from "./shared";
+import { keyOf, type ConstraintRef } from "./shared";
 import type { PlacementFactEmitter } from "./placementFacts";
 
 /**
@@ -77,8 +77,8 @@ export function lowerNestPlacement(
     if (constraint[axis] === undefined) continue;
     emitter.relate({
       axis,
-      from: { name: outer.name, anchor: "middle" },
-      to: { name: inner.name, anchor: "middle" },
+      from: { name: keyOf(outer), anchor: "middle" },
+      to: { name: keyOf(inner), anchor: "middle" },
       gap: 0,
       owner,
     });

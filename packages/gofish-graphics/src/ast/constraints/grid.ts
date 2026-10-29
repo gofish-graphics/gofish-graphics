@@ -39,7 +39,7 @@
 import * as Monotonic from "../../util/monotonic";
 import { GoFishNode } from "../_node";
 import type { GoFishAST } from "../_ast";
-import { type ConstraintRef } from "./shared";
+import { keyOf, type ConstraintRef } from "./shared";
 import { sliceExtent } from "./folds";
 import {
   ordinalOver,
@@ -276,10 +276,10 @@ export function gridTracksFromSizes(
   ];
 }
 
-/** Per-cell proposed size `[cellW, cellH]`, keyed by cell name: each cell is
+/** Per-cell proposed size `[cellW, cellH]`, keyed by cell operand key: each cell is
  *  proposed its (column, row) track's extent. A fill cell fills that extent; a
  *  claim cell keeps its own (equal or smaller) size and is centered in it. */
-export function gridCellSizeByName(
+export function gridCellSizeByKey(
   c: GridConstraint,
   tracks: [TrackLayout, TrackLayout]
 ): Map<string, [number, number]> {
@@ -289,7 +289,7 @@ export function gridCellSizeByName(
     if (child === undefined) return;
     const col = index % c.numCols;
     const row = Math.floor(index / c.numCols);
-    out.set(child.name, [cols.extents[col], rows.extents[row]]);
+    out.set(keyOf(child), [cols.extents[col], rows.extents[row]]);
   });
   return out;
 }
@@ -353,18 +353,18 @@ export function lowerGridPlacement(
   pinnedByPosition?: Map<string, Set<0 | 1>>
 ): void {
   for (const { child, center } of gridCellPlacements(c, size, tracks)) {
-    const overridden = pinnedByPosition?.get(child.name);
+    const overridden = pinnedByPosition?.get(keyOf(child));
     if (!overridden?.has(0))
       emitter.pin({
         axis: "x",
-        target: { name: child.name, anchor: "middle" },
+        target: { name: keyOf(child), anchor: "middle" },
         value: center[0],
         owner,
       });
     if (!overridden?.has(1))
       emitter.pin({
         axis: "y",
-        target: { name: child.name, anchor: "middle" },
+        target: { name: keyOf(child), anchor: "middle" },
         value: center[1],
         owner,
       });

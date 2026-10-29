@@ -7,7 +7,6 @@ import type { Size } from "./dims";
 import { Extent, hullExtent } from "./extent";
 import * as Monotonic from "../util/monotonic";
 import { room } from "../util";
-import { childNameKey } from "./constraints/shared";
 import { isLiteralSeat } from "./constraints/claimPlacement";
 import { originIs } from "./underlyingSpace";
 
@@ -130,14 +129,13 @@ export function guttersInSlot(
  */
 export function seatPastGutters(chart: GoFishNode): void {
   const inner = chart.children[0] as GoFishNode;
-  const name = childNameKey(inner);
   const seat = (axis: 0 | 1) =>
     originIs(inner._underlyingSpace?.[axis], "free")
       ? 0
       : chart.chromeGutters(axis)[0];
   for (const c of chart.constraints) {
     if (c.type !== "position" || !isLiteralSeat(c)) continue;
-    if (!c.children.some((r) => r.name === name)) continue;
+    if (!c.children.some((r) => r.key === inner.uid)) continue;
     if (typeof c.x === "number") c.x = seat(0);
     if (typeof c.y === "number") c.y = seat(1);
   }

@@ -44,10 +44,11 @@ function check(name: string, cond: boolean, detail?: string): void {
   }
 }
 
-/** Children that carry only a constraint name, as in constraintConfluence. */
+/** Children that carry only a constraint name, as in constraintConfluence;
+ *  an operand is resolved to the uid of the child it names (the name). */
 const kids = (...names: string[]) =>
-  names.map((name) => ({ _name: name, key: name })) as unknown as GoFishAST[];
-const r = (name: string) => ({ name });
+  names.map((name) => ({ _name: name, uid: name, key: name })) as unknown as GoFishAST[];
+const r = (name: string) => ({ name, key: name });
 
 /** The plan in a form that is easy to compare: per axis, each child's set
  *  index, and the sorted nested indices. */

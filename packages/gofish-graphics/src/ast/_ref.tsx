@@ -26,7 +26,15 @@ import type { Geometry } from "./geometry";
 import type { DisplayList } from "gofish-ir";
 type DisplayListItem = DisplayList.DisplayItem;
 import { isToken, Token } from "./createName";
-import { childNameKey } from "./constraints/shared";
+import {
+  childNameKey,
+  NodeOperand,
+  SlotOperand,
+  type ConstraintRef,
+} from "./constraints/shared";
+import { isZOrderConstraint } from "./constraints/zorder";
+import { computeRelateSchedule } from "./constraints/relate";
+import type { ConstraintSpec } from "./constraints";
 import {
   CANVAS_FRAME,
   orientView,
@@ -34,8 +42,13 @@ import {
   type YFrame,
 } from "./axisDirection";
 
+let refUidCounter = 0;
+
 export class GoFishRef {
   public type: string = "ref";
+  /** The stand-in's identity, as `GoFishNode.uid` is a node's: the key a
+   *  constraint operand that resolves to this stand-in carries. */
+  public readonly uid: string = `ref-${refUidCounter++}`;
   // Stored as `_name` (not `name`) so the constraint system's childNameKey,
   // which reads `_name`, treats a named ref as a constraint target — and so
   // `name()` can be a chainable method like GoFishNode.name().
@@ -120,7 +133,7 @@ export class GoFishRef {
   /** The raw datum carried by the node this ref points at — the *bag of rows*
    * that flowed into the node (the operator pipeline binds this as an array;
    * a fully-split leaf is a 1-row bag). Reads `directNode` first because
-   * `split` runs before layout/resolveNames (when only `directNode` is set);
+   * `split` runs before layout/resolveReferences (when only `directNode` is set);
    * falls back to the resolved `selectedNode`.
    *
    * This is intentionally the *uncollapsed* bag: `sumBy(ref.datum, "count")`
@@ -151,7 +164,8 @@ export class GoFishRef {
     return this;
   }
 
-  public resolveNames(): void {
+  /** Resolve this ref's target (one step of {@link resolveReferences}). */
+  public resolveTarget(): void {
     if (this.multiplicity === "all") {
       throw new Error(
         'selectAll(...) cannot be used inline in a layout; pass it as chart data: Chart(selectAll("name"))'
@@ -294,7 +308,7 @@ export class GoFishRef {
             `different name.`
         );
       }
-      found.resolveNames();
+      found.resolveTarget();
       const target = found.targetNode;
       if (!target) {
         throw new Error(`ref("${name}") names a ref that points at nothing.`);
@@ -584,6 +598,216 @@ export function resolveScopedName(
       `visible up to the nearest createMark boundary; to reach across one, ` +
       `use createName("${name}") and a ref path.`
   );
+}
+
+/** `layer`'s direct child that is or contains `node`, or `undefined` when
+ *  `node` is not inside `layer`. */
+export function directChildOf(
+  layer: GoFishNode,
+  node: GoFishAST
+): GoFishAST | undefined {
+  let cur: GoFishAST | undefined = node;
+  while (cur && cur.parent !== layer) cur = cur.parent;
+  return cur;
+}
+
+/** The index of `layer`'s direct child that is or contains `node`, or -1 when
+ *  `node` is not inside `layer`. */
+export function directChildIndex(layer: GoFishNode, node: GoFishAST): number {
+  const child = directChildOf(layer, node);
+  return child ? layer.children.indexOf(child) : -1;
+}
+
+/** A layer constraint operand resolved to a node inside the layer: `child` is
+ *  the index of the layer's direct child that is (`direct`) or contains
+ *  `node`; `name` is how its first operand reads in a message. */
+export type ResolvedOperand = {
+  name: string;
+  node: GoFishAST;
+  child: number;
+  direct: boolean;
+};
+
+/** What {@link resolveReferences} resolved a node's constraints to, for the
+ *  constraints it was resolved from. */
+export type ResolvedConstraints = {
+  constraints: ConstraintSpec[];
+  /** Every placement operand, by its key (`ConstraintRef.key`). */
+  operands: Map<string, ResolvedOperand>;
+  /** Every z-order operand: the nodes inside the node it names. */
+  z: Map<ConstraintRef, GoFishAST[]>;
+};
+
+/**
+ * Resolve every reference in the tree under `root`: each `ref` stand-in's
+ * target, and each constraint operand (a `.relate()` operand, a macro's
+ * slot or node handle, a z-order operand), then check each layer's relate
+ * clauses for a cycle, which needs both. This is one round of a fixed
+ * point: a pass that rewrites the tree (chrome, labels) runs it again, and
+ * every pass that reads a resolution reads the last round's.
+ *
+ * A token registers in a pre-order walk, as the refs are resolved, so a
+ * token ref must follow its target (#677).
+ */
+export function resolveReferences(root: GoFishAST): void {
+  if (root instanceof GoFishRef) {
+    root.resolveTarget();
+    return;
+  }
+  registerToken(root);
+  for (const child of root.children) resolveReferences(child);
+  root._resolved =
+    root.constraints.length > 0 ? resolveConstraints(root) : undefined;
+  // With every ref resolved, check the relate clauses' dependency order
+  // now: a cycle would otherwise recurse forever in the space pass (a ref
+  // proxies its target's space, and a cyclic target contains the ref).
+  if (root._relateClauses.size > 0)
+    computeRelateSchedule(root, root._resolved?.operands ?? new Map());
+}
+
+/** `node`'s constraints as the last {@link resolveReferences} resolved
+ *  them. Throws when the constraints changed since. */
+export function resolvedConstraints(node: GoFishNode): ResolvedConstraints {
+  const r = node._resolved;
+  if (node.constraints.length === 0)
+    return { constraints: node.constraints, operands: new Map(), z: new Map() };
+  if (r === undefined || r.constraints !== node.constraints)
+    throw new Error(
+      `[gofish] the constraints of a ${node.type} were not resolved ` +
+        `(resolveReferences must run after they are installed)`
+    );
+  return r;
+}
+
+/** Register `node`'s token name globally and in its nearest scope root. */
+function registerToken(node: GoFishNode): void {
+  if (node._isScope && !node._scopeMap) node._scopeMap = new Map();
+  if (node._name === undefined || !isToken(node._name)) return;
+  const token = node._name;
+  node.getRenderSession().tokenContext.set(token, node);
+  for (let a = node.parent; a; a = a.parent) {
+    if (a._isScope) {
+      if (!a._scopeMap) a._scopeMap = new Map();
+      a._scopeMap.set(token.__tag, node);
+      return;
+    }
+  }
+}
+
+/**
+ * Resolve every operand of `layer`'s constraints and write each placement
+ * operand's key. A placement operand resolves to one node inside the layer:
+ * a name operand with the string-name lookup (`resolveScopedName`: missing
+ * or ambiguous names throw), from `layer` with its clause slots skipped when
+ * `layer`'s own `.relate()` bound it, from `layer` when it has no scope (a
+ * constraint a pass builds by name); a slot operand to the child that fills
+ * its slot; a node operand to its node. An operand an enclosing layer's
+ * `.relate()` bound names a node of that layer outside this one (the lookup
+ * from there skips that layer's clause slots, and this layer sits in one),
+ * so this layer cannot place it. Every operand must lie inside the layer (a
+ * layer can only place what it contains).
+ *
+ * A z-order operand relates a SET of nodes at paint time: every node inside
+ * the layer it names (see {@link zOperandNodes}).
+ */
+function resolveConstraints(layer: GoFishNode): ResolvedConstraints {
+  const operands = new Map<string, ResolvedOperand>();
+  const z = new Map<ConstraintRef, GoFishAST[]>();
+  // A name resolves once per scope it is looked up from.
+  const byName = new Map<string, GoFishAST>();
+  for (const c of layer.constraints) {
+    if (isZOrderConstraint(c)) {
+      for (const ref of c.children) z.set(ref, zOperandNodes(layer, ref));
+      continue;
+    }
+    for (const ref of c.children) {
+      const node = resolveOperand(layer, ref, `Constraint.${c.type}`, byName);
+      if (operands.has(node.uid)) continue;
+      const child = directChildIndex(layer, node);
+      if (child < 0) {
+        throw new Error(
+          `Constraint.${c.type}: operand "${ref.name}" is not inside the ` +
+            `layer this .relate() is attached to. A layer can only place ` +
+            `nodes it contains; attach the constraint to a layer that ` +
+            `contains every operand.`
+        );
+      }
+      operands.set(node.uid, {
+        name: ref.name,
+        node,
+        child,
+        direct: layer.children[child] === node,
+      });
+    }
+  }
+  return { constraints: layer.constraints, operands, z };
+}
+
+/** The node one placement operand of `layer` names (see
+ *  {@link resolveConstraints}), writing a name operand's key. A handle
+ *  carries its key already; it is only checked here. */
+function resolveOperand(
+  layer: GoFishNode,
+  ref: ConstraintRef,
+  what: string,
+  byName: Map<string, GoFishAST>
+): GoFishAST {
+  if (ref instanceof SlotOperand) {
+    const child = ref.layer === layer ? layer.children[ref.slot] : undefined;
+    if (child === undefined)
+      throw new Error(
+        `${what}: a slot operand of another layer, or of an empty slot ` +
+          `(slot ${ref.slot})`
+      );
+    return child;
+  }
+  if (ref instanceof NodeOperand) return ref.node;
+  if (ref.scope !== undefined && ref.scope !== layer) {
+    throw new Error(
+      `${what}: operand "${ref.name}" was bound by an ` +
+        `enclosing layer's .relate(), and that layer's operand cannot be ` +
+        `placed by this layer. Place it with a constraint of the ` +
+        `enclosing layer's .relate().`
+    );
+  }
+  const scopeKey = `${ref.scope !== undefined}:${ref.name}`;
+  let node = byName.get(scopeKey);
+  if (node === undefined) {
+    node = resolveScopedName(
+      layer,
+      ref.name,
+      `${what} operand`,
+      ref.scope !== undefined
+    );
+    byName.set(scopeKey, node);
+  }
+  ref.key = node.uid;
+  return node;
+}
+
+/**
+ * The nodes a z-order operand of `layer` names. A handle names its node (a
+ * slot operand, the child in its slot). A name names every node inside
+ * `layer` that carries it, looked up with the shared walk (`visibleNodes`:
+ * through any non-component node, never into a `createMark` component) from
+ * the layer whose `.relate()` bound it, without that layer's clause slots, so
+ * a same-named node a clause introduces is not in its set, or from `layer`
+ * when it has no scope.
+ */
+function zOperandNodes(layer: GoFishNode, ref: ConstraintRef): GoFishAST[] {
+  if (ref instanceof SlotOperand) {
+    const child = ref.layer === layer ? layer.children[ref.slot] : undefined;
+    return child === undefined ? [] : [child];
+  }
+  if (ref instanceof NodeOperand)
+    return ref.node !== layer && isInside(ref.node, layer) ? [ref.node] : [];
+  const from = ref.scope ?? layer;
+  const out: GoFishAST[] = [];
+  for (const n of visibleNodes(from, ref.scope !== undefined)) {
+    if (n === from || n === layer || !isInside(n, layer)) continue;
+    if (childNameKey(n) === ref.name) out.push(n);
+  }
+  return out;
 }
 
 export const findPathToRoot = (node: GoFishAST): GoFishAST[] => {

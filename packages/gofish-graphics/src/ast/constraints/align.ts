@@ -10,7 +10,7 @@ import type {
   ConstraintPosScales,
   ConstraintRef,
 } from "./shared";
-import { axisIndex } from "./shared";
+import { axisIndex, keyOf } from "./shared";
 import { isUNDEFINED } from "../underlyingSpace";
 import type { PlacementFactEmitter } from "./placementFacts";
 
@@ -115,10 +115,10 @@ export function lowerAlignPlacement(
   const emitSpanOrSize = (axis: Axis, kind: "span" | "size") => {
     const idx = axisIndex(axis);
     const children = constraint.children.filter((child) =>
-      targets.has(child.name)
+      targets.has(keyOf(child))
     );
     if (children.length < 2) return;
-    const sourceRef = children.find((child) => isPinned(axis, child.name));
+    const sourceRef = children.find((child) => isPinned(axis, keyOf(child)));
     if (!sourceRef) {
       throw new Error(
         `Constraint.align: "${kind}" on axis "${axis}" (${owner}) needs an ` +
@@ -127,7 +127,7 @@ export function lowerAlignPlacement(
             .join(", ")}] is placed yet.`
       );
     }
-    const source = targets.get(sourceRef.name)!;
+    const source = targets.get(keyOf(sourceRef))!;
     const sourceMin = source.dims[idx].min;
     const sourceSize = source.dims[idx].size;
     if (sourceMin === undefined || sourceSize === undefined) {
@@ -137,8 +137,8 @@ export function lowerAlignPlacement(
       );
     }
     for (const child of children) {
-      if (child.name === sourceRef.name) continue;
-      const target = targets.get(child.name)!;
+      if (keyOf(child) === keyOf(sourceRef)) continue;
+      const target = targets.get(keyOf(child))!;
       const space = target.spaceOn?.(idx);
       if (space === undefined || !isUNDEFINED(space)) {
         throw new Error(
@@ -154,18 +154,18 @@ export function lowerAlignPlacement(
       if (kind === "span") {
         emitter.pin({
           axis,
-          target: { name: child.name, anchor: "start" },
+          target: { name: keyOf(child), anchor: "start" },
           value: sourceMin,
           owner,
         });
         emitter.pin({
           axis,
-          target: { name: child.name, anchor: "end" },
+          target: { name: keyOf(child), anchor: "end" },
           value: sourceMin + sourceSize,
           owner,
         });
       } else {
-        emitter.pinSize({ axis, name: child.name, value: sourceSize, owner });
+        emitter.pinSize({ axis, name: keyOf(child), value: sourceSize, owner });
       }
     }
   };
@@ -177,7 +177,7 @@ export function lowerAlignPlacement(
       return;
     }
     const children = constraint.children.filter((child) =>
-      targets.has(child.name)
+      targets.has(keyOf(child))
     );
     if (children.length === 0) return;
     const anchors = normalizedAnchors(spec, children.length);
@@ -196,13 +196,13 @@ export function lowerAlignPlacement(
     // be the baseline source while the legend is the only target align
     // writes. Faceted scatter panels, where every panel is already
     // data-positioned, still contribute no write targets.
-    const source = entries.find(({ child }) => isPinned(axis, child.name));
+    const source = entries.find(({ child }) => isPinned(axis, keyOf(child)));
     const nonPinned = entries.filter(
-      ({ child }) => !isPinned(axis, child.name)
+      ({ child }) => !isPinned(axis, keyOf(child))
     );
     const movable = nonPinned.filter(({ child, anchor }) => {
       return !isDataPositionedAlignTarget(
-        child.name,
+        keyOf(child),
         anchor,
         idx,
         posScales,
@@ -219,7 +219,7 @@ export function lowerAlignPlacement(
         nonPinned.length > 0 &&
         nonPinned.every(({ child, anchor }) => {
           return isDataPositionedAlignTarget(
-            child.name,
+            keyOf(child),
             anchor,
             idx,
             posScales,
@@ -240,8 +240,8 @@ export function lowerAlignPlacement(
       for (const target of movable) {
         emitter.relate({
           axis,
-          from: { name: source.child.name, anchor: source.anchor },
-          to: { name: target.child.name, anchor: target.anchor },
+          from: { name: keyOf(source.child), anchor: source.anchor },
+          to: { name: keyOf(target.child), anchor: target.anchor },
           gap: 0,
           owner,
         });
@@ -252,15 +252,15 @@ export function lowerAlignPlacement(
     for (let i = 1; i < movable.length; i++) {
       emitter.relate({
         axis,
-        from: { name: movable[0].child.name, anchor: movable[0].anchor },
-        to: { name: movable[i].child.name, anchor: movable[i].anchor },
+        from: { name: keyOf(movable[0].child), anchor: movable[0].anchor },
+        to: { name: keyOf(movable[i].child), anchor: movable[i].anchor },
         gap: 0,
         owner,
       });
     }
     emitter.include({
       axis,
-      name: movable[0].child.name,
+      name: keyOf(movable[0].child),
       owner,
     });
   };

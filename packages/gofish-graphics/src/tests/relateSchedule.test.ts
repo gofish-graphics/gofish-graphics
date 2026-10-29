@@ -14,10 +14,10 @@ import { ref } from "../ast/shapes/ref";
 import { enclose } from "../lib";
 import {
   Constraint,
-  resolveConstraintOperands,
   scheduleRelate,
   relateScheduleForLayout,
 } from "../ast/constraints";
+import { resolveReferences, resolvedConstraints } from "../ast/_ref";
 
 declare const process: { exit(code: number): never };
 
@@ -38,8 +38,11 @@ const same = (a: number[], b: number[]) =>
 
 async function schedule(node: any) {
   node = await node;
-  node.resolveNames();
-  return { node, order: scheduleRelate(node, resolveConstraintOperands(node)) };
+  resolveReferences(node);
+  return {
+    node,
+    order: scheduleRelate(node, resolvedConstraints(node).operands),
+  };
 }
 
 console.log("# scheduleRelate: ties go to the step declared first");
@@ -107,11 +110,11 @@ console.log("# relateScheduleForLayout: reuse the resolve-pass schedule");
       ({ a }: any) => [enclose({}, [a])]
     )
   );
-  const operands = resolveConstraintOperands(node);
-  node.resolveNames();
+  resolveReferences(node);
+  const operands = resolvedConstraints(node).operands;
   const stored = node._relateSchedule?.schedule;
   check(
-    "resolveNames stores the schedule and layout reuses it",
+    "resolveReferences stores the schedule and layout reuses it",
     stored !== undefined && relateScheduleForLayout(node, operands) === stored
   );
   node.children = [...node.children];

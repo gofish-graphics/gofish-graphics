@@ -550,11 +550,12 @@ zOrder incantation needed, in every call form including the low-level
 combinator one. Two refinements: an operand that is the connector's own fresh
 child (`enclose(opts, [spread(...)])` lays its children out and paints them
 itself, over its outline) is not tagged; and the `layer` combinator runs the
-pass over its children, and `GoFishNode.relate` over its drawing clauses. A
+pass over its children, and `GoFishNode.relate` over its drawing clauses. The
+constraint holds a node operand as the node itself (`NodeOperand`). A
 clause's operands are string refs with no target yet. The layer that an
 operand's scope lies in claims it, as a layer claims a node only when the
 node lies in its children, and the constraint carries the operand's name and
-scope, so paint order looks it up where it was bound (see [Names and Scoping](/internals/core/names-and-scoping)).
+scope, so `resolveReferences` looks it up where it was bound (see [Names and Scoping](/internals/core/names-and-scoping)).
 The defaults `layer` installs for its children are kept apart, as
 `_paintDefaults`: a later `.relate()` on the layer replaces the author's
 constraints with its own and keeps them.

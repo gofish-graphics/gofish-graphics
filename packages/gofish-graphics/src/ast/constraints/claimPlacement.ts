@@ -8,7 +8,7 @@ import type { UnderlyingSpace } from "../underlyingSpace";
 import * as Monotonic from "../../util/monotonic";
 import { solvePlacementCells } from "./placementSolver";
 import type { PlacementConstraint } from "./placementLowering";
-import { axisIndex, axisName, isPointAlign, type Axis } from "./shared";
+import { axisIndex, axisName, isPointAlign, keyOf, type Axis } from "./shared";
 import { isPositionInterval } from "./position";
 import type { ConstraintSpec } from ".";
 
@@ -64,8 +64,8 @@ export type Placement = BoxForm & { extent: Extent };
 
 /** What the claim walk knows of one child of the layer. */
 export type ClaimChild = {
-  /** The name constraints read it by. */
-  name: string | undefined;
+  /** The key constraints read it by (its `uid`). */
+  key: string;
   /** Its claim on the axis; undefined when it takes whatever room it is
    *  given (it fills), so its size is not known. */
   extent: Extent | undefined;
@@ -146,8 +146,8 @@ export const literalSeats = (
   for (const c of constraints) {
     if (c.type !== "position" || !isLiteralSeat(c)) continue;
     for (const r of c.children) {
-      let s = seats.get(r.name);
-      if (s === undefined) seats.set(r.name, (s = [undefined, undefined]));
+      let s = seats.get(keyOf(r));
+      if (s === undefined) seats.set(keyOf(r), (s = [undefined, undefined]));
       if (s[0] === undefined && typeof c.x === "number") s[0] = c.x;
       if (s[1] === undefined && typeof c.y === "number") s[1] = c.y;
     }
@@ -233,7 +233,7 @@ export function constrainedOn(
   for (const c of constraints) {
     if (!actsOn(c, axis)) continue;
     for (const r of c.children) {
-      const op = operands.get(r.name);
+      const op = operands.get(keyOf(r));
       if (op?.direct) out.add(op.child);
     }
   }
@@ -264,7 +264,7 @@ export function placeByClaims(
   for (const c of onAxis)
     if (c.type === "position" && isPositionInterval(c[axisName(axis)]!))
       for (const r of c.children) {
-        const op = operands.get(r.name);
+        const op = operands.get(keyOf(r));
         if (op?.direct) spanned.add(op.child);
       }
 
@@ -309,8 +309,8 @@ export function placeByClaims(
   for (const c of onAxis)
     if (c.type === "position")
       for (const r of c.children) {
-        const op = operands.get(r.name);
-        if (op?.direct && !inkName(r.name) && !sizeless(r.name))
+        const op = operands.get(keyOf(r));
+        if (op?.direct && !inkName(keyOf(r)) && !sizeless(keyOf(r)))
           pinned.add(op.child);
       }
   const parent = new Map<string, string>();
@@ -321,7 +321,7 @@ export function placeByClaims(
   };
   for (const c of onAxis) {
     if (!relates(c)) continue;
-    const names = c.children.map((r) => r.name);
+    const names = c.children.map(keyOf);
     for (const n of names) if (!parent.has(n)) parent.set(n, n);
     for (let k = 1; k < names.length; k++) {
       const a = find(names[0]);
@@ -427,8 +427,8 @@ export function placeByClaims(
       const c = children[i];
       const box = boxOf(i);
       const p = presetOf(i);
-      // A child with no name no constraint reads: it sits at its origin.
-      const key = c.name ?? `\u0000child:${i}`;
+      // A child no constraint reads sits at its origin.
+      const key = c.key;
       const seat = seats.get(key)?.[axis];
       const preset =
         p !== undefined
@@ -453,7 +453,7 @@ export function placeByClaims(
     // A relation with an operand the solve leaves out (ink) places nothing
     // here.
     const solvable = onAxis.filter((c) =>
-      c.children.every((r) => targets.has(r.name))
+      c.children.every((r) => targets.has(keyOf(r)))
     );
     const cells = solvePlacementCells(
       solvable as PlacementConstraint[],

@@ -8,6 +8,7 @@ import { Text } from "../shapes/text";
 import { Spread } from "../graphicalOperators/spread";
 import { layer } from "../graphicalOperators/layer";
 import { Constraint } from "../constraints";
+import { slotOf } from "../constraints/shared";
 import { breadthFirst, fmtNum, type ChromeRing } from "../elaborationUtils";
 import { ticks as d3Ticks } from "d3-array";
 import { datum } from "../data";
@@ -183,7 +184,8 @@ export async function legendColorbar(
     ...tickLabels,
   ])) as GoFishNode;
 
-  await root.relate((g: Record<string, any>) => {
+  await root.relate(() => {
+    const at = (node: GoFishNode) => slotOf(root, node);
     const cs: any[] = [];
     // Bands: centered in the bar column (x), pinned by their bottom edge at
     // their slice's low value (y) and stacked bottom→top to fill the bar.
@@ -191,15 +193,13 @@ export async function legendColorbar(
     // top) covers that overhang, so no sub-pixel seam shows between bands.
     // (x uses anchor "middle", y uses "start" — separate constraints since
     // one shared anchor can't do both.)
-    bands.forEach((_, i) => {
+    bands.forEach((band, i) => {
       cs.push(
-        Constraint.position({ x: BAR_WIDTH / 2, anchor: "middle" }, [
-          g[bandName(i)],
-        ])
+        Constraint.position({ x: BAR_WIDTH / 2, anchor: "middle" }, [at(band)])
       );
       cs.push(
         Constraint.position({ y: datum(min + i * bandSpan), anchor: "start" }, [
-          g[bandName(i)],
+          at(band),
         ])
       );
     });
@@ -210,18 +210,18 @@ export async function legendColorbar(
       cs.push(
         Constraint.position(
           { x: BAR_WIDTH + TICK_MARK_LEN / 2, y: datum(v), anchor: "middle" },
-          [g[tickName(i)]]
+          [at(tickMarks[i])]
         )
       );
       cs.push(
         Constraint.position({ y: datum(v), anchor: "middle" }, [
-          g[labelName(i)],
+          at(tickLabels[i]),
         ])
       );
       cs.push(
         Constraint.position(
           { x: BAR_WIDTH + TICK_MARK_LEN + BAR_LABEL_GAP, anchor: "start" },
-          [g[labelName(i)]]
+          [at(tickLabels[i])]
         )
       );
     });
@@ -254,15 +254,15 @@ export async function legendRing(
   const top = orientSide("start", wrapperDirection(owner));
   return {
     nodes: [legend],
-    constraints: (g, inner) => [
+    constraints: (at, inner) => [
       // Seat the column just right of the full box inside (incl. axis labels
       // and titles).
       Constraint.distribute({ dir: "x", spacing: LEGEND_CONTENT_GAP }, [
-        g[inner],
-        g[LEGEND_NAME],
+        inner,
+        at(legend),
       ]),
       // Top-align the column with the box's top.
-      Constraint.align({ y: top }, [g[inner], g[LEGEND_NAME]]),
+      Constraint.align({ y: top }, [inner, at(legend)]),
     ],
   };
 }

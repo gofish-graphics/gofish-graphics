@@ -87,7 +87,7 @@ A drawing clause may read an operand of an enclosing scope, because it reads
 positions and places nothing. A constraint places its operands, so each one
 must resolve inside the layer that holds the constraint. An operand an
 enclosing `.relate()` bound never does: the lookup from that layer skips its
-clause slots, and the inner layer sits in one. So `resolveConstraintOperands`
+clause slots, and the inner layer sits in one. So `resolveReferences`
 throws on such an operand right away, and looks every other operand up from
 the layer itself.
 
@@ -201,21 +201,30 @@ e.g., `note ? [...] : []`, work as they do for any object. If the callback
 uses `undefined` as an operand, `validateOperands` throws right away, and the
 message lists the names inside the layer (#819).
 
-At layout, the layer resolves each distinct operand name once
-(`resolveConstraintOperands`) with the lookup above, starting at itself, and
-records whether the node is a direct child. The operand stays a name until
-then because elaboration can swap a named child for a wrapper. Axis, legend,
-and label elaboration wrap a node with `wrapPreservingIdentity`, which moves
-the node's name and key onto the wrapper, so the name still finds the node
-that now fills that slot.
+One function, `resolveReferences` (`_ref.tsx`), resolves every reference in
+the tree: each ref's target, each constraint operand, and each paint-order
+operand. The render runs it once per round, after the pass that installs the
+operators' constraints (`resolveAliases`), and again whenever a pass rewrites
+the tree (`reresolve` in `gofish.tsx`). For each layer with constraints, it
+looks each distinct operand name up once with the lookup above, starting at
+the layer, writes the uid of the node it finds into the operand's `key`, and
+records whether the node is a direct child (`resolvedConstraints`). The
+placement solve reads only the key. The name is kept for error messages. The
+operand stays a name until the round because elaboration can swap a named
+child for a wrapper. Axis, legend, and label elaboration wrap a node with
+`wrapPreservingIdentity`, which moves the node's name and key onto the
+wrapper, so the name still finds the node that now fills that slot.
 
-Operators that build a constrained layer themselves use the same path. Spread,
-scatter, table, and the axis, legend, and label chrome call plain
-`.relate()` with constraint clauses only, and read their operands from the
-environment. The closest match
-rule is what makes this safe. An operator names its own direct children, which
-are at distance 1, so a node with the same name deeper inside a child never
-competes.
+Operators that build a constrained layer themselves do not use names. Spread,
+scatter, partition, table, and the axis, legend, and label chrome refer to
+their own children by slot (`SlotOperand` in `constraints/shared.ts`): the
+operand is the child in slot `i` of the layer, whatever fills it, so a pass
+that wraps the child in place keeps it. A chrome ring's content is slot 0,
+and its k-th shape is slot k + 1 (`wrapRing`). The default paint order of a
+relational mark holds the nodes themselves (`NodeOperand`). A handle names no
+one, so it can neither capture a user's name nor be captured by one. These
+operators still give their children names (`ensureChildNames`, and the fixed
+chrome names), but nothing looks those names up.
 
 ### Nested operands
 
@@ -326,13 +335,14 @@ to resolve before the solve moved them.
 
 A cycle is an error that names every clause on it: a clause whose ref points
 at itself, two clauses that read each other, or a constraint that moves a
-clause which reads the nodes that constraint places. `GoFishNode.resolveNames`
+clause which reads the nodes that constraint places. `resolveReferences`
 runs the check as soon as the refs are resolved. It cannot wait for layout,
 because the space pass would recurse forever first (a ref proxies its target's
-type and size claim, and a cyclic target contains the ref). `resolveNames` keeps the
-schedule it computed on the layer, and layout reuses it while the layer has
-the same children and constraints (`relateScheduleForLayout`); a pass that
-rewrites the tree runs `resolveNames` again, which recomputes it.
+type and size claim, and a cyclic target contains the ref).
+`resolveReferences` keeps the schedule it computed on the layer, and layout
+reuses it while the layer has the same children and constraints
+(`relateScheduleForLayout`); a pass that rewrites the tree runs
+`resolveReferences` again, which recomputes it.
 
 A clause paints after the plain children, in clause order, except that a
 clause built by `createRelationalMark` (`enclose`, `line`, `ribbon`) paints
@@ -342,9 +352,11 @@ resolved when the clause is attached, so the default names them:
 (`applyRelationalZBelowDefaults`), which adds `zBelow(clause, operand)` for
 each string-ref operand whose scope lies in this layer; an operand an
 enclosing `.relate()` bound is left for that layer (see [The Mark Factory](/internals/frontend/mark-factory)).
-The constraint carries the operand's scope, and paint order looks the name
-up from that layer without its clause slots, as the placement lookup does,
-so a nested clause's node of the same name does not join the operand's set. An explicit
+The constraint carries the operand's scope, and `resolveReferences` looks
+the name up from that layer without its clause slots, as the placement lookup
+does, so a nested clause's node of the same name does not join the operand's
+set. A paint-order operand that is a name stands for every node inside the
+layer that carries it; paint order reads the sets `resolveReferences` found. An explicit
 `.zOrder(...)` on the clause wins. `.relate()` replaces the constraints of
 an earlier `.relate()`, but not the defaults `layer` gave its own
 relational-mark children (`_paintDefaults`), so a `line` or `enclose` among
@@ -384,16 +396,17 @@ rules keep them apart:
   put nodes named `"a"` and `"b"` into the scope, where they could make a
   user's own `"a"` ambiguous, or answer to it. Now the key stays in `key`
   only. Axis tick labels read the key, so they are unchanged.
-- When an operator has to name a node, it gets a fresh name from
-  `internalName` (`constraints/shared.ts`), e.g., `__spread#12`. Each call
-  returns a new name, so it cannot equal a user's name or another operator's.
+- When an operator names a node, it gets a fresh name from `internalName`
+  (`constraints/shared.ts`), e.g., `__spread#12`. Each call returns a new
+  name, so it cannot equal a user's name or another operator's.
   `ensureChildNames` keeps a name the user gave a child, and gives an
   `internalName` to an unnamed child or to a second child with the same user
   name.
 
-These names still live in `_name`, next to user names, so they appear in a
-`.relate()` environment. The full fix keeps library names out of `_name`
-altogether (see the open questions).
+No operator or chrome pass reads these names: they refer to their own nodes
+by handle (see [Constraint operands](#constraint-operands)). The names still
+live in `_name`, next to user names, so they appear in a `.relate()`
+environment. The full fix stops writing them (#1246).
 
 ## Open questions
 

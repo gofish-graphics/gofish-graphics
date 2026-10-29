@@ -4,7 +4,7 @@
 
 import type { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
-import { GoFishRef } from "../_ref";
+import { GoFishRef, directChildOf, type ResolvedOperand } from "../_ref";
 import type { ChartBuilder, LayerBuilder } from "../marks/chartBuilder";
 import { LayerContext, resolveMarkResult } from "../marks/markResult";
 import { flattenAndAwaitPromises } from "../withGoFish";
@@ -12,7 +12,6 @@ import {
   isZOrderConstraint,
   validateOperands,
   type ConstraintSpec,
-  type ResolvedOperand,
 } from "./index";
 import { childNameKey, type ConstraintRef } from "./shared";
 import { isThenable } from "../../util";
@@ -28,6 +27,7 @@ import { isThenable } from "../../util";
  * scope ({@link RelateOperand.toRef}).
  */
 export class RelateOperand implements ConstraintRef {
+  key?: string;
   constructor(
     public readonly name: string,
     public readonly scope: GoFishNode
@@ -210,24 +210,6 @@ function refsIn(node: GoFishAST, out: GoFishRef[] = []): GoFishRef[] {
   return out;
 }
 
-/** `layer`'s direct child that is or contains `node`, or `undefined` when
- *  `node` is not inside `layer`. */
-function directChildOf(
-  layer: GoFishNode,
-  node: GoFishAST
-): GoFishAST | undefined {
-  let cur: GoFishAST | undefined = node;
-  while (cur && cur.parent !== layer) cur = cur.parent;
-  return cur;
-}
-
-/** The index of `layer`'s direct child that is or contains `node`, or -1 when
- *  `node` is not inside `layer`. */
-export function directChildIndex(layer: GoFishNode, node: GoFishAST): number {
-  const child = directChildOf(layer, node);
-  return child ? layer.children.indexOf(child) : -1;
-}
-
 /** The order of one layer's relate steps (see {@link scheduleRelate}). */
 export type RelateSchedule = {
   /** The indices of the layer's children that are drawing clauses. */
@@ -382,7 +364,7 @@ function sameItems<T>(a: readonly T[], b: readonly T[]): boolean {
 
 /**
  * Schedule `layer`'s relate clauses and remember the result for its layout.
- * `resolveNames` calls this once per resolve pass, as soon as the refs are
+ * `resolveReferences` calls this once per resolve pass, as soon as the refs are
  * resolved, so a cycle is reported before the space pass would recurse on it.
  */
 export function computeRelateSchedule(
@@ -399,11 +381,11 @@ export function computeRelateSchedule(
 }
 
 /**
- * The schedule `layout` uses: the one `resolveNames` remembered, when the
+ * The schedule `layout` uses: the one `resolveReferences` remembered, when the
  * layer still has the children and constraints it was computed from, else a
  * fresh one. A schedule depends on the children, the constraint operands, and
  * the targets of the clauses' refs; the refs are resolved only in
- * `resolveNames`, and every pass that rewrites the tree runs `resolveNames`
+ * `resolveReferences`, and every pass that rewrites the tree runs `resolveReferences`
  * again (see `reresolve` in gofish.tsx), which recomputes it.
  */
 export function relateScheduleForLayout(

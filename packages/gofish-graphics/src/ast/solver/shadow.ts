@@ -18,7 +18,7 @@
  */
 import * as M from "../../util/monotonic";
 import type { Placeable } from "../_node";
-import { axisIndex, isPlacedOn, type Axis } from "../constraints/shared";
+import { axisIndex, isPlacedOn, keyOf, type Axis } from "../constraints/shared";
 import { getValue, isValue, type MaybeValue } from "../data";
 import { computeAesthetic, envFlag } from "../../util";
 import { pxOf } from "../domain";
@@ -187,7 +187,7 @@ function shadowCheckGrid(
   const numCols = constraint.numCols;
   const numRows = Math.ceil(constraint.children.length / numCols);
   const targetOf = (i: number): Placeable | undefined =>
-    targetByName.get(constraint.children[i]?.name);
+    targetByName.get(keyOf(constraint.children[i]));
   const centerOf = (i: number, idx: 0 | 1): number | undefined => {
     const t = targetOf(i);
     return t ? anchorCoord(t, idx, "middle") : undefined;
@@ -411,7 +411,7 @@ export function shadowCheckScaleRoot(
  * dispatches by constraint type. `prePlaced` is the per-target `[x, y]`
  * placement snapshot the caller takes BEFORE the placement solve (only when the
  * check is enabled); it's `undefined` (and this no-ops) in production.
- * `nameToPlaceable` is the layer's resolved children by name, read by the `nest`
+ * `keyToPlaceable` is the layer's resolved children by name, read by the `nest`
  * and `grid` checks.
  */
 export function shadowCheckConstraint(
@@ -419,7 +419,7 @@ export function shadowCheckConstraint(
   targets: Placeable[],
   posScales: ConstraintPosScales | undefined,
   prePlaced: [boolean, boolean][] | undefined,
-  nameToPlaceable: Map<string, Placeable>
+  keyToPlaceable: Map<string, Placeable>
 ): void {
   if (!SOLVER_CHECK || !prePlaced) return;
   const c = constraint as { type?: string; dir?: Axis };
@@ -438,10 +438,10 @@ export function shadowCheckConstraint(
     const nest = constraint as NestLike;
     shadowCheckNest(
       nest,
-      nameToPlaceable.get(nest.children[0]?.name),
-      nameToPlaceable.get(nest.children[1]?.name)
+      keyToPlaceable.get(keyOf(nest.children[0])),
+      keyToPlaceable.get(keyOf(nest.children[1]))
     );
   } else if (c.type === "grid") {
-    shadowCheckGrid(constraint as GridLike, nameToPlaceable);
+    shadowCheckGrid(constraint as GridLike, keyToPlaceable);
   }
 }

@@ -376,7 +376,7 @@ export const tween = createNodeOperator(
             if (leaf === operands[k]) return placed[operand[k]];
             const stand = new GoFishRef({ node: leaf });
             stand.parent = self;
-            stand.resolveNames();
+            stand.resolveTarget();
             return stand.layout(size);
           };
 

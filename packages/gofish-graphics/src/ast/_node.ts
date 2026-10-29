@@ -101,15 +101,15 @@ import {
   yFrameIn,
   type YFrame,
 } from "./axisDirection";
-import { isToken, Token } from "./createName";
+import type { Token } from "./createName";
 import type { ConstraintSpec } from "./constraints";
 import { childRole, type SharingPlan } from "./constraints/compose";
 import type { KeyedDomains } from "./keyedDomains";
 import type { LayoutWarning } from "./layoutWarnings";
-import { relateEnv, resolveConstraintOperands } from "./constraints";
+import { relateEnv } from "./constraints";
 import { applyRelationalZBelowDefaults } from "./constraints/relationalPaint";
+import type { ResolvedConstraints } from "./_ref";
 import {
-  computeRelateSchedule,
   resolveRelateClauses,
   type RelateCallback,
   type RelateSchedule,
@@ -246,7 +246,7 @@ export type ClaimWalk = {
    *  frame (`placeByClaims`), for a node deep inside it that a ref or a
    *  label reads (`placementIn`). */
   childBoxes: (axis: 0 | 1) => Map<number, BoxForm> | undefined;
-  /** Its constraints' operands, resolved. */
+  /** Its constraints' operands, resolved, by key (`ConstraintRef.key`). */
   operands: () => Map<
     string,
     { node: GoFishAST; child: number; direct: boolean }
@@ -255,11 +255,11 @@ export type ClaimWalk = {
    *  (0 for none). */
   literalStart: [number, number];
   /** How it seats its children, read by the placement walk through it
-   *  (`placementIn`): a child's index, its name as a direct operand, and per
+   *  (`placementIn`): a child's index, its key as a direct operand, and per
    *  axis the constraints that act on it there, by child index. */
   seating: () => {
     indexOf: (child: GoFishAST) => number;
-    operandName: Map<number, string>;
+    operandKey: Map<number, string>;
     acting: [Map<number, ConstraintSpec[]>, Map<number, ConstraintSpec[]>];
   };
   /** Per axis, whether it has a size of its own there, which makes it a
@@ -614,7 +614,10 @@ export class GoFishNode {
    *  children (`applyRelationalZBelowDefaults`): `.relate()` replaces the
    *  author's constraints, and keeps these. */
   public _paintDefaults?: ConstraintSpec[];
-  /** This layer's relate schedule as `resolveNames` last computed it, with
+  /** What the last `resolveReferences` round resolved this node's
+   *  constraints to (read with `resolvedConstraints` in `_ref.tsx`). */
+  public _resolved?: ResolvedConstraints;
+  /** This layer's relate schedule as `resolveReferences` last computed it, with
    *  the children and constraints it was computed from (see
    *  `relateScheduleForLayout` in `constraints/relate.ts`). */
   public _relateSchedule?: {
@@ -1085,38 +1088,6 @@ export class GoFishNode {
           color.set(key, assignPaletteColor(colorConfig, String(key), i));
         }
       });
-    }
-  }
-
-  public resolveNames(): void {
-    if (this._isScope && !this._scopeMap) {
-      this._scopeMap = new Map();
-    }
-    if (this._name !== undefined && isToken(this._name)) {
-      const token = this._name;
-      this.getRenderSession().tokenContext.set(token, this);
-      // Register the token's tag in the nearest enclosing scope root.
-      let ancestor: GoFishNode | undefined = this.parent;
-      while (ancestor) {
-        if (ancestor._isScope) {
-          if (!ancestor._scopeMap) ancestor._scopeMap = new Map();
-          ancestor._scopeMap.set(token.__tag, this);
-          break;
-        }
-        ancestor = ancestor.parent;
-      }
-    }
-    // A string _name registers nowhere: `ref(string)` and `.relate()`
-    // operands find it by walking the component scope (`resolveScopedName`
-    // in _ref.tsx), bounded by the nearest createMark.
-    this.children.forEach((child) => {
-      child.resolveNames();
-    });
-    // With every ref resolved, check the relate clauses' dependency order
-    // now: a cycle would otherwise recurse forever in the space pass (a ref
-    // proxies its target's space, and a cyclic target contains the ref).
-    if (this._relateClauses.size > 0) {
-      computeRelateSchedule(this, resolveConstraintOperands(this));
     }
   }
 

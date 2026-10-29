@@ -76,9 +76,11 @@ import {
 } from "./position";
 import {
   axisIndex,
-  buildNameIndex,
+  buildChildIndex,
   isPointAlign,
+  keyOf as operandKey,
   type AlignAnchor,
+  type ConstraintRef,
 } from "./shared";
 
 /** A position constraint that places its target only across spans: its
@@ -98,7 +100,7 @@ export type DistributeSegment = {
   dAxis: 0 | 1;
   /** Already glue-zeroed (see createDistributeConstraint). */
   spacing: number;
-  /** Covered child names, in placement order. */
+  /** Covered children's operand keys, in placement order. */
   order: string[];
 };
 
@@ -327,7 +329,7 @@ export function planConstraintComposition(
   // axis makes it not an overlay, so the align fold runs.)
   if (distributes.length === 0 && spans.length === 0) return undefined;
 
-  const indexByName = buildNameIndex(childNodes);
+  const index = buildChildIndex(childNodes);
   // A child's ordinal key: its cell, for a binned key, else its `key`.
   const keyOf = (i: number): OrdinalKey | undefined => {
     const node = childNodes[i];
@@ -348,8 +350,8 @@ export function planConstraintComposition(
       (node as { _syntheticKey?: boolean })._syntheticKey === true
     );
   };
-  const idxOf = (refs: readonly { name: string }[]): number[] | undefined => {
-    const out = refs.map((r) => indexByName.get(r.name));
+  const idxOf = (refs: readonly ConstraintRef[]): number[] | undefined => {
+    const out = refs.map((r) => index.get(operandKey(r)));
     return out.every((i): i is number => i !== undefined) ? out : undefined;
   };
 
@@ -364,7 +366,7 @@ export function planConstraintComposition(
     segments.push({
       dAxis: axisIndex(d.dir),
       spacing: d.spacing,
-      order: ordered.map((r) => r.name),
+      order: ordered.map(operandKey),
       idx,
       anchor: d.anchor,
       glue: d.glue,
@@ -480,12 +482,12 @@ export function planSharing(
   childNodes: GoFishAST[]
 ): LayerSharingPlan {
   const n = childNodes.length;
-  const index = buildNameIndex(childNodes);
+  const index = buildChildIndex(childNodes);
   // A ref that is not a direct child (a ref into a nested tier) has no slot
   // here, so it takes no part.
-  const idxOf = (refs: readonly { name: string }[]): number[] =>
+  const idxOf = (refs: readonly ConstraintRef[]): number[] =>
     refs
-      .map((r) => index.get(r.name))
+      .map((r) => index.get(operandKey(r)))
       .filter((i): i is number => i !== undefined);
 
   const datumPlaced: [Set<number>, Set<number>] = [new Set(), new Set()];

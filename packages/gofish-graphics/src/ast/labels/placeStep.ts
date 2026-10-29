@@ -26,7 +26,7 @@
 import type { Placeable } from "../_node";
 import type { GoFishRef } from "../_ref";
 import { rawPlaceable } from "../axisDirection";
-import type { ConstraintRef } from "../constraints/shared";
+import { keyOf, type ConstraintRef } from "../constraints/shared";
 import { placedOutlines as outlinesAt, type Outline } from "../geometry";
 import {
   around,
@@ -195,7 +195,7 @@ export function applyLabelPlacement(
   const session = constraint.items[0].node.node.getRenderSession();
   const hiddenLabels = (session.hiddenLabels ??= new Map());
   const get = (ref: ConstraintRef): Placeable => {
-    const p = targets.get(ref.name);
+    const p = targets.get(keyOf(ref));
     if (p === undefined)
       throw new Error(`[gofish] .label(): "${ref.name}" was not laid out`);
     return p;

@@ -20,7 +20,7 @@ import {
 } from "../solver/scopes";
 import type { ConstraintSpec } from ".";
 import type { GridConstraint } from "./grid";
-import type { ConstraintPosScales } from "./shared";
+import { keyOf, type ConstraintPosScales } from "./shared";
 import { buildNestPlan, type NestPlan, type NestPlanChild } from "./nestPlan";
 import { isNestConstraint } from "./nest";
 import { isZOrderConstraint } from "./zorder";
@@ -32,7 +32,7 @@ export type SliceSegment = {
 };
 
 /**
- * The set of names whose position or extent is owned by geometric constraints
+ * The set of operand keys whose position or extent is owned by geometric constraints
  * (`align` / `distribute` / `position` / `nest` / `grid`). Used by
  * `layer.tsx` to decide which children skip phase-1 baseline placement. z-order
  * constraints don't position, so they are excluded.
@@ -43,24 +43,24 @@ export type SliceSegment = {
 export function getPositioningConstraintRefs(
   constraints: readonly ConstraintSpec[]
 ): Set<string> {
-  const names = new Set<string>();
+  const keys = new Set<string>();
   for (const c of constraints) {
     if (isZOrderConstraint(c)) continue;
     if (isNestConstraint(c)) {
-      names.add(c.children[1].name);
+      keys.add(keyOf(c.children[1]));
       continue;
     }
     // grid: every cell is placed by the placement solver, so all skip phase-1
     // baseline.
-    for (const ref of c.children) if (ref) names.add(ref.name);
+    for (const ref of c.children) if (ref) keys.add(keyOf(ref));
   }
-  return names;
+  return keys;
 }
 
 export type LayerConstraintLayoutPlan = {
   /** Children skipped by phase-1 baseline placement because a positioning
    *  constraint owns their placement/extent. */
-  constrainedNames: Set<string>;
+  constrainedKeys: Set<string>;
   /** Nest dependency/order plan, if any nest derives size. */
   nestPlan: NestPlan | undefined;
   /** Child layout order, source-before-derived for nest dependencies. */
@@ -79,7 +79,7 @@ export function buildLayerConstraintLayoutPlan(
 ): LayerConstraintLayoutPlan {
   const nestPlan = buildNestPlan([...childNodes], [...constraints]);
   return {
-    constrainedNames:
+    constrainedKeys:
       constraints.length > 0
         ? getPositioningConstraintRefs(constraints)
         : new Set<string>(),
@@ -167,9 +167,9 @@ export function buildChildSpans(
       if (a === undefined || b === undefined) continue;
       for (const ref of c.children) {
         if (!ref) continue;
-        const cur = spanByName.get(ref.name) ?? [undefined, undefined];
+        const cur = spanByName.get(keyOf(ref)) ?? [undefined, undefined];
         cur[axis] = Math.abs(b - a);
-        spanByName.set(ref.name, cur);
+        spanByName.set(keyOf(ref), cur);
       }
     }
   }
@@ -402,10 +402,10 @@ export function buildPositionTargetDims(
   for (const constraint of constraints) {
     if (constraint.type !== "position") continue;
     for (const ref of constraint.children) {
-      const dims = collected.get(ref.name) ?? new Set<0 | 1>();
+      const dims = collected.get(keyOf(ref)) ?? new Set<0 | 1>();
       if (constraint.x !== undefined && isValue(constraint.x)) dims.add(0);
       if (constraint.y !== undefined && isValue(constraint.y)) dims.add(1);
-      if (dims.size > 0) collected.set(ref.name, dims);
+      if (dims.size > 0) collected.set(keyOf(ref), dims);
     }
   }
   return new Map(
