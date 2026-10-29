@@ -4,14 +4,18 @@ Croissant charts: a density curve cut at its quantiles into equal-probability
 slices, each drawn on its own with a small gap, with one dot per slice at the
 slice's median. The first layer draws the curve, unseen; the `.relate()`
 clause turns the grid into quantile rows of that curve, partitions them into
-`Bin.quantiles(10)` cells, and in each cell draws the curve intersected with
-the cell's region, drawn in by a few pixels, plus a dot at the cell's median.
+`Bin.quantiles(n)` cells (ten, or five a month in the ridgeline), and in each
+cell draws the curve intersected with the cell's region, drawn in by a few
+pixels, plus a dot at the cell's median. The last story cuts an area into
+calendar months the same way.
 """
 
 import math
 
 from gofish import (
     Bin,
+    Calendar,
+    Unit,
     chart,
     circle,
     derive,
@@ -156,9 +160,10 @@ def story_ridgeline():
             layer(
                 [
                     chart()
-                    .flow(scatter(x="temp_max", h=34))
+                    .flow(scatter(x="temp_max"))
                     .mark(ribbon(h="pdf", fill="none").name("density")),
-                ]
+                ],
+                h=34,
             ).relate(
                 lambda density: [
                     chart()
@@ -169,22 +174,22 @@ def story_ridgeline():
                             )
                         ),
                         partition(
-                            by=field("temp_max").bin(Bin.quantiles(10)), dir="x"
+                            by=field("temp_max").bin(Bin.quantiles(5)), dir="x"
                         ),
                     )
                     .mark(
                         layer(
                             [
                                 intersect(
-                                    [density, region(inset=1.5)],
+                                    [density, region(inset=2)],
                                     fill=FILL,
                                     stroke=STROKE,
                                     stroke_width=1.5,
                                 ),
                                 circle(
                                     cx=field("temp_max").median(),
-                                    cy=4,
-                                    r=1.75,
+                                    cy=5,
+                                    r=2.25,
                                     fill=STROKE,
                                 ),
                             ]
@@ -194,4 +199,60 @@ def story_ridgeline():
             )
         ),
         {},
+    )
+
+
+def _highs_2012():
+    """Seattle's daily highs in 2012, each the mean of the 15 days centered on
+    it (fewer at the ends of the year)."""
+    days = [d for d in SEATTLE_WEATHER if d["date"].startswith("2012")]
+    rows = []
+    for i, d in enumerate(days):
+        window = days[max(0, i - 7) : i + 8]
+        total = 0.0
+        for w in window:
+            total += w["temp_max"]
+        rows.append({"date": d["date"][:10], "temp_smooth": total / len(window)})
+    return rows
+
+
+HIGHS_2012 = _highs_2012()
+SCHEMA_2012 = {"date": Unit.time()}
+
+
+def story_seattle_highs_by_month():
+    return (
+        layer(
+            [
+                chart(HIGHS_2012, schema=SCHEMA_2012)
+                .flow(scatter(x="date"))
+                .mark(ribbon(h="temp_smooth", fill="none").name("temps")),
+            ]
+        ).relate(
+            lambda temps: [
+                chart(HIGHS_2012, schema=SCHEMA_2012)
+                .flow(
+                    partition(
+                        by=field("date").bin([Calendar.year, Calendar.month]),
+                        dir="x",
+                    )
+                )
+                .mark(
+                    intersect(
+                        [temps, region(inset=2)],
+                        fill=FILL,
+                        stroke=STROKE,
+                        stroke_width=1.5,
+                    )
+                ),
+            ]
+        ),
+        {
+            "w": 560,
+            "h": 220,
+            "axes": {
+                "x": {"title": False},
+                "y": {"title": "Daily high, 15-day mean (°C)"},
+            },
+        },
     )

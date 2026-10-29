@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import {
   Bin,
+  Calendar,
   chart,
   circle,
   derive,
@@ -14,6 +15,7 @@ import {
   ribbon,
   scatter,
   spread,
+  Unit,
 } from "../../src/lib";
 import { penguins } from "../../src/data/penguins";
 import { seattleWeather } from "../../src/data/seatle-weather";
@@ -26,10 +28,12 @@ import { seattleWeather } from "../../src/data/seatle-weather";
  * Each chart is two layers over one table, the curve's grid rows `{ x, pdf }`.
  * The first draws the curve (`fill: "none"`, so it is not seen). The second
  * turns the grid into quantile rows of the drawn curve (`quantileRows`),
- * partitions them into `Bin.quantiles(10)` cells, and in each cell draws the
- * curve's area intersected with the cell's region, drawn in by 3 pixels, plus
- * a dot at the cell's median. The second layer is a `.relate()` clause of the
- * first, so `density` names the curve drawn beside it.
+ * partitions them into `Bin.quantiles(n)` cells (ten, or five a month in the
+ * ridgeline), and in each cell draws the curve's area intersected with the
+ * cell's region, drawn in by a few pixels, plus a dot at the cell's median.
+ * The second layer is a `.relate()` clause of the first, so `density` names
+ * the curve drawn beside it. The last story cuts an area into calendar months
+ * the same way.
  */
 const meta: Meta = { title: "Forward Syntax/Croissant" };
 export default meta;
@@ -185,7 +189,7 @@ export const Ridgeline: StoryObj<Args> = {
     gallery: {
       title: "Croissant Ridgeline of Seattle Highs by Month",
       description:
-        "A ridgeline of croissant charts, one per month of Seattle's daily high temperatures, each month's density cut at its own deciles into ten equal-probability slices.",
+        "A ridgeline of croissant charts, one per month of Seattle's daily high temperatures, each month's density cut at its own quintiles into five equal-probability slices.",
     },
   },
   render: (args: Args) => {
@@ -203,9 +207,12 @@ export const Ridgeline: StoryObj<Args> = {
         })
       )
       .mark(
-        layer([
+        // Each month's row is 34 pixels tall. The height is the row's, so
+        // both layers get it: the curve fills it, and so does each cell's
+        // region, which is in no cell on y and is as tall as its row.
+        layer({ h: 34 }, [
           chart()
-            .flow(scatter({ x: "temp_max", h: 34 }))
+            .flow(scatter({ x: "temp_max" }))
             .mark(ribbon({ h: "pdf", fill: "none" }).name("density")),
         ]).relate(({ density }) => [
           chart()
@@ -214,7 +221,7 @@ export const Ridgeline: StoryObj<Args> = {
                 quantileRows(rows, { x: "temp_max", density: "pdf", n: 1000 })
               ),
               partition({
-                by: field("temp_max").bin(Bin.quantiles(10)),
+                by: field("temp_max").bin(Bin.quantiles(5)),
                 dir: "x",
               })
             )
@@ -222,12 +229,12 @@ export const Ridgeline: StoryObj<Args> = {
               layer([
                 intersect({ fill: FILL, stroke: STROKE, strokeWidth: 1.5 }, [
                   density,
-                  region({ inset: 1.5 }),
+                  region({ inset: 2 }),
                 ]),
                 circle({
                   cx: field("temp_max").median(),
-                  cy: 4,
-                  r: 1.75,
+                  cy: 5,
+                  r: 2.25,
                   fill: STROKE,
                 }),
               ])
@@ -235,6 +242,62 @@ export const Ridgeline: StoryObj<Args> = {
         ])
       )
       .render(container);
+    return container;
+  },
+};
+
+// Seattle's daily highs in 2012, each the mean of the 15 days centered on it
+// (fewer at the ends of the year).
+const days2012 = seattleWeather.filter((d) => d.date.startsWith("2012"));
+const highs2012 = days2012.map((d, i) => {
+  const window = days2012.slice(Math.max(0, i - 7), i + 8);
+  return {
+    date: d.date.slice(0, 10),
+    temp_smooth: window.reduce((s, w) => s + w.temp_max, 0) / window.length,
+  };
+});
+const schema2012 = { date: Unit.time() };
+
+export const SeattleHighsByMonth: StoryObj<Args> = {
+  args: { w: 560, h: 220 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Seattle Highs Cut by Month",
+      description:
+        "A 15-day rolling mean of Seattle's daily highs in 2012, drawn as an area and cut into calendar months, each month a slice as wide as its days.",
+    },
+  },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    layer([
+      chart(highs2012, { schema: schema2012 })
+        .flow(scatter({ x: "date" }))
+        .mark(ribbon({ h: "temp_smooth", fill: "none" }).name("temps")),
+    ])
+      .relate(({ temps }) => [
+        chart(highs2012, { schema: schema2012 })
+          .flow(
+            partition({
+              by: field("date").bin([Calendar.year, Calendar.month]),
+              dir: "x",
+            })
+          )
+          .mark(
+            intersect({ fill: FILL, stroke: STROKE, strokeWidth: 1.5 }, [
+              temps,
+              region({ inset: 2 }),
+            ])
+          ),
+      ])
+      .render(container, {
+        w: args.w,
+        h: args.h,
+        axes: {
+          x: { title: false },
+          y: { title: "Daily high, 15-day mean (°C)" },
+        },
+      });
     return container;
   },
 };
