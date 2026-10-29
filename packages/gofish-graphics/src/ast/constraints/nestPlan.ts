@@ -19,9 +19,8 @@ export type NestPlanChild = NamedNode & {
   key?: string;
   args?: { dims?: [{ size?: unknown }, { size?: unknown }] };
   children?: readonly unknown[];
-  /** Its own length's pixels on an axis, where its room is known before
-   *  the layer solve (`GoFishNode.lengthPx`). */
-  lengthPx?: (axis: 0 | 1) => number | undefined;
+  /** The size it fixes for itself on an axis (`GoFishNode.fixedSize`). */
+  fixedSize?: (axis: 0 | 1) => unknown;
 };
 
 // ── Nest pre-pass ───────────────────────────────────────────────────────────
@@ -252,7 +251,7 @@ export function buildNestPlan(
   const ownSize = (idx: number, axis: 0 | 1) => {
     const n = childNodes[idx];
     const size = n.args?.dims?.[axis]?.size;
-    return isLength(size) ? n.lengthPx?.(axis) : size;
+    return isLength(size) ? n.fixedSize?.(axis) : size;
   };
   // A composite (any node with children — a stack, a layer, a nested
   // box) shrink-wraps to its content, so it carries a definite extent without

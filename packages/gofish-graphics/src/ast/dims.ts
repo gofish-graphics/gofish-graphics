@@ -259,6 +259,9 @@ export const elaborateOwnDims = <T>(
   options: object
 ): {
   dims: OwnDims<T>;
+  /** Its size on an axis as its type reads it ({@link sizeForType}): a
+   *  length is never data. Read live, after the `dims` option is merged. */
+  dataSize: (axis: 0 | 1) => T | undefined;
   bind: (node: {
     ownDims?: OwnDims<unknown>;
     _elaborateInAxisScope?: AxisScopeHook;
@@ -270,6 +273,7 @@ export const elaborateOwnDims = <T>(
   const dims = intervalsOf(fancy) as OwnDims<T>;
   return {
     dims,
+    dataSize: (axis) => sizeForType(dims[axis].size),
     bind: (node) => {
       node.ownDims = dims as OwnDims<unknown>;
       node._elaborateInAxisScope = deferAxisDims(fancy, dims);

@@ -18,7 +18,6 @@ import {
   Direction,
   MARK_DIMS,
   elaborateOwnDims,
-  sizeForType,
 } from "../dims";
 import { getQuantity, getValue, isValue, MaybeValue } from "../data";
 import { computeAesthetic, computeSize } from "../../util";
@@ -142,7 +141,7 @@ const Treemap = createNodeOperator(
           // nothing along the axis by data: it has no axis there and fills the
           // slot it is given.
           const axisSpace = (i: Direction): UnderlyingSpace => {
-            const size = sizeForType(dims[i].size);
+            const size = own.dataSize(i);
             return isValue(size) ? magnitude(size) : UNDEFINED;
           };
           return [axisSpace(0), axisSpace(1)];

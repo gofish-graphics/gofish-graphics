@@ -6,13 +6,7 @@ import { GoFishNode, type ToPixel } from "../_node";
 import type { DisplayList } from "gofish-ir";
 import { getScopeRegistry, seatInBand, seatInScope } from "../solver/scopes";
 import { isToken } from "../createName";
-import {
-  Size,
-  elaborateOwnDims,
-  FancyDims,
-  displayTranslate,
-  sizeForType,
-} from "../dims";
+import { Size, elaborateOwnDims, FancyDims, displayTranslate } from "../dims";
 import {
   UnderlyingSpace,
   isCONTINUOUS,
@@ -171,8 +165,7 @@ export const layer = createNodeOperatorSequential(
     // it (`fixedSize`): it is then a scope for its content, but not a sized
     // node. A length is never data (`sizeForType`).
     const own = elaborateOwnDims<number>(options);
-    const { dims } = own;
-    const dataSize = (axis: 0 | 1) => sizeForType(dims[axis].size);
+    const { dims, dataSize } = own;
 
     // SIZED NODES (#1114). A layer with a size of its own on an axis (a
     // literal `w`/`h`, or a data-valued one) is a sized node there: at layout

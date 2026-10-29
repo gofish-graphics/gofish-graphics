@@ -5,7 +5,6 @@ import {
   Dimensions,
   displayTranslate,
   elaborateOwnDims,
-  sizeForType,
   FancyDims,
   positionOf,
   Transform,
@@ -234,8 +233,7 @@ export const Image = ({
   // the room it is given, known only once it is in its tree (#1176 step 6).
   // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
   const own = elaborateOwnDims<number>(fancyDims);
-  const { dims } = own;
-  const dataSize = (axis: 0 | 1) => sizeForType(dims[axis].size);
+  const { dims, dataSize } = own;
 
   const node = new GoFishNode(
     {
@@ -263,10 +261,11 @@ export const Image = ({
         // with rect's data-driven sizing. For literal-number dims, treat as pixels.
         const pixelSize = (dim: 0 | 1): number | undefined => {
           const raw = dims[dim].size;
-          // A length is its pixels where its room is known before the solve
-          // (`lengthPx`), and the room it is given where it is a share of
-          // its scope (`fr`, or a percent of a band), as a rect's is.
-          if (isLength(raw)) return node.lengthPx(dim) ?? size[dim];
+          // A length is the size it fixes for itself (`fixedSize`), and the
+          // room it is given where it is a share of its scope (`fr`, or a
+          // percent of a band), as a rect's is.
+          if (isLength(raw))
+            return (node.fixedSize(dim) as number | undefined) ?? size[dim];
           if (isValue(raw)) {
             const dataSize = getValue(raw)!;
             const map = scales?.[dim]?.map;

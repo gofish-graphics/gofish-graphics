@@ -18,9 +18,7 @@ import {
 import {
   Dimensions,
   displayDims as displayDimsOf,
-  type Interval,
   elaborateOwnDims,
-  sizeForType,
   FancyDims,
   FancySize,
   Size,
@@ -122,13 +120,7 @@ export const Rect = ({
   // `embedded` is authored by the resolveEmbedding pass (after underlying-space
   // resolves the axis measure), not inferred here — see _node.resolveEmbedding.
   const own = elaborateOwnDims<MaybeValue<number>>(fancyDims);
-  const { dims } = own;
-  // Its box with the size it fixes for itself (`fixedSize`): a length's
-  // pixels, or none for a share of its scope, which fills its room.
-  const fixedBox = (axis: 0 | 1): Interval<MaybeValue<number>> => ({
-    ...dims[axis],
-    size: node.fixedSize(axis),
-  });
+  const { dims, dataSize } = own;
   const { rx, ry } = cornerRadii(rxGiven, ryGiven, 0);
   // An inset is never negative. A percent's box is known only at layout, so
   // it is checked here by its parts: a percent and pixels, each 0 or more.
@@ -160,7 +152,7 @@ export const Rect = ({
     !(dims[axis].min !== undefined && dims[axis].max !== undefined);
   // How it paints its outline, read once.
   const paint = outlinePaint({ fill, stroke, strokeWidth });
-  const node = new GoFishNode(
+  const node: GoFishNode = new GoFishNode(
     {
       key,
       type: "rect",
@@ -184,7 +176,7 @@ export const Rect = ({
       ) => {
         const resolveAxis = (axis: 0 | 1): UnderlyingSpace => {
           const d = dims[axis];
-          const dSize = sizeForType(d.size);
+          const dSize = dataSize(axis);
           // A box placed by its center is a glyph, as a text or an image is.
           const center = centerOf(d);
           if (center !== undefined) return glyphAxis(center, dSize);
@@ -227,12 +219,16 @@ export const Rect = ({
       // A literal pixel size is the rect's own (#493): it claims it, so
       // whatever composes it leaves it room.
       resolveExtent: (_ce, _cs, spaces) =>
-        literalBoxExtents(spaces, [fixedBox(0), fixedBox(1)], aspectRatio),
+        literalBoxExtents(
+          spaces,
+          [node.fixedBox(0), node.fixedBox(1)],
+          aspectRatio
+        ),
       layout: (size, scales, children) => {
         const pos = [posFn(scales?.[0]?.map), posFn(scales?.[1]?.map)];
         // The box's pixel size on one axis.
         const sizeOn = (k: 0 | 1): number => {
-          const d = fixedBox(k);
+          const d = node.fixedBox(k);
           const at = (v: MaybeValue<number> | undefined) =>
             computeAesthetic(v, pos[k], undefined)!;
           const map = scales?.[k]?.map;

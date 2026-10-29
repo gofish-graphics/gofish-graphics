@@ -7,9 +7,7 @@ import { getValue, isValue, MaybeValue, Value } from "../data";
 import {
   Dimensions,
   displayDims as displayDimsOf,
-  type Interval,
   elaborateOwnDims,
-  sizeForType,
   FancyDims,
   FancySize,
   Size,
@@ -58,14 +56,7 @@ export const Ellipse = ({
   // the room it is given, known only once it is in its tree (#1176 step 6).
   // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
   const own = elaborateOwnDims<MaybeValue<number>>(fancyDims);
-  const { dims } = own;
-  const dataSize = (axis: 0 | 1) => sizeForType(dims[axis].size);
-  // Its box with the size it fixes for itself (`fixedSize`): a length's
-  // pixels, or none for a share of its scope, which fills its room.
-  const fixedBox = (axis: 0 | 1): Interval<MaybeValue<number>> => ({
-    ...dims[axis],
-    size: node.fixedSize(axis),
-  });
+  const { dims, dataSize } = own;
   // How it paints its outline, read once.
   const paint = outlinePaint({ fill, stroke, strokeWidth });
   const node: GoFishNode = new GoFishNode(
@@ -94,7 +85,11 @@ export const Ellipse = ({
       },
       // A literal pixel size is the ellipse's own (#493), as a rect's is.
       resolveExtent: (_ce, _cs, spaces) =>
-        literalBoxExtents(spaces, [fixedBox(0), fixedBox(1)], aspectRatio),
+        literalBoxExtents(
+          spaces,
+          [node.fixedBox(0), node.fixedBox(1)],
+          aspectRatio
+        ),
       layout: (size, scales, children) => {
         const [wSize, hSize] = [node.fixedSize(0), node.fixedSize(1)];
         let w = isValue(wSize)

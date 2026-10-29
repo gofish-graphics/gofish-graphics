@@ -36,6 +36,7 @@ import {
   type SpaceDeclaration,
   type AxisScopeHook,
   type OwnDims,
+  type Interval,
 } from "./dims";
 import {
   axesEnabled,
@@ -1591,6 +1592,16 @@ export class GoFishNode {
       : (size as MaybeValue<number> | undefined);
   }
 
+  /** Its own box on `axis` ({@link ownDims}) with the size it fixes for
+   *  itself ({@link fixedSize}): a length's pixels, or none for a share of
+   *  its scope, which fills its room. */
+  public fixedBox(axis: 0 | 1): Interval<MaybeValue<number>> {
+    return {
+      ...(this.ownDims?.[axis] as Interval<MaybeValue<number>>),
+      size: this.fixedSize(axis),
+    };
+  }
+
   /** The room of the render root on `axis`: the render's size, or the
    *  default canvas where the render gives none (a data σ is solved in it
    *  there too). */
@@ -1975,8 +1986,9 @@ export class GoFishNode {
         if (dim.embedded === true) continue;
         // A length embeds as the size it fixes (`fixedSize`): its pixels
         // never do, and a share of its scope does, as a box with no size.
-        const size = isLength(dim.size) ? this.fixedSize(dir) : dim.size;
-        let embedded = baseEmbedded({ ...dim, size } as Dimensions[number]);
+        const box = isLength(dim.size) ? this.fixedBox(dir) : dim;
+        const size = box.size;
+        let embedded = baseEmbedded(box as Dimensions[number]);
         // Route B gate (coord-scoped): a value-sized dim positioned in a unit
         // FOREIGN to its size's unit is a foreign extent (a bubble) → ink.
         if (embedded && within) {
