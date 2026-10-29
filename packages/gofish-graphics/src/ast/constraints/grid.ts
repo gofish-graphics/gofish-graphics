@@ -31,9 +31,8 @@
 // The grid is interpreted by the Layer after `selectGridConstraint` has
 // established that there is at most one grid owner for the layer. `gridSpaces`
 // gives the categorical track axes (ORDINAL over columns/rows) for axis
-// rendering — a categorical axis cannot simultaneously be a SIZE magnitude, so
-// the grid's size claim is consumed at layout time (track resolution) rather than
-// reported as the axis space.
+// rendering: the layer reports those as its type, and its size claim as its
+// claim.
 
 import * as Pwl from "../solver/pwl";
 import { GoFishNode } from "../_node";
@@ -45,7 +44,6 @@ import {
   UNDEFINED,
   type UnderlyingSpace,
 } from "../underlyingSpace";
-import type { ScopeRegistry } from "../solver/scopes";
 import type { PlacementFactEmitter } from "./placementFacts";
 import { numbers, type Arith } from "../solver/arith";
 import type { Length, LengthValue } from "../length";

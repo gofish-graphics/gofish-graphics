@@ -337,9 +337,9 @@ export const layer = createNodeOperatorSequential(
       // axes (ORDINAL over columns / rows, for axis rendering) are composed
       // in at the END of this function, overriding the covered axes, while
       // any sibling constraint (align / position) still contributes to the
-      // fold below. Its size claim (Σ max-of-cell-claims + gaps) is consumed
-      // at layout time by `resolveGridTracks`, not reported as the axis space
-      // — a categorical axis cannot also be a SIZE magnitude.
+      // fold below. Its size claim (Σ max-of-cell-claims + gaps) is the
+      // layer's claim (`gridTracks`), not its type: a categorical axis
+      // cannot also be a SIZE magnitude.
       const gridC = selectGridConstraint(constraints);
 
       // Nest type fold: only INSIDE_OUT edges (`dir: 'in'`) derive a type
@@ -427,7 +427,6 @@ export const layer = createNodeOperatorSequential(
         nestPlan,
         effectiveChildren,
         plan,
-        gridAxes,
         resolved,
       };
     };

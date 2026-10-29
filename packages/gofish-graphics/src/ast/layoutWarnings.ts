@@ -392,17 +392,14 @@ function mixedSizes(
 }
 
 /**
- * A `no-room` warning: the `fr` spacing `spelled` of the chain `chain`
- * sits in a scope of shares on an axis the render gives no size, so
- * nothing gives it room, and it is 0 (as in CSS and Typst).
+ * A `no-room` warning: the `fr` spacing `spelled` of `node` (a chain's
+ * spacing or a table's gap between tracks) sits in a scope of shares on an
+ * axis the render gives no size, so nothing gives it room, and it is 0 (as
+ * in CSS and Typst).
  */
-function noRoom(
-  chain: GoFishNode,
-  axis: 0 | 1,
-  spelled: string
-): LayoutWarning {
+function noRoom(node: GoFishNode, axis: 0 | 1, spelled: string): LayoutWarning {
   const name = axisName(axis);
-  const what = describeNode(chain);
+  const what = describeNode(node);
   return {
     kind: "no-room",
     node: what,

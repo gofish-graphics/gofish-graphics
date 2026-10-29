@@ -97,7 +97,7 @@ export type ClaimChild = {
   dataPositioned: boolean;
   /** It places itself as it is laid out, before the solve (a position of
    *  its own, a node placed from the refs it reads, or a child in a region
-   *  its layer passes on: `placesItself`, `handedRegion` in `plan.ts`).
+   *  its layer passes on: `placesItself`, `GoFishNode.handsRegion`).
    *  The solve takes it where layout put it (`at:`) unless a `position`
    *  override owns the axis. */
   placesItself?: boolean;
