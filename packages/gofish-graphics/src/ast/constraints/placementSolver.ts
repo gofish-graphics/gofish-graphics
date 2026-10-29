@@ -9,7 +9,7 @@ import {
   type PlacementConstraint,
 } from "./placementLowering";
 import type { GridTracks } from "./grid";
-import type { GapOf } from "./distribute";
+import type { GapOf } from "./gap";
 import {
   axisIndex,
   axisName,

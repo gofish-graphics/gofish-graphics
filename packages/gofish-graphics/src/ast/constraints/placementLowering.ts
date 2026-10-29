@@ -12,7 +12,8 @@ import {
 import type { AlignConstraint } from "./align";
 import { lowerAlignPlacement } from "./align";
 import type { DistributeConstraint } from "./distribute";
-import { lowerDistributePlacement, type GapOf } from "./distribute";
+import { lowerDistributePlacement } from "./distribute";
+import type { GapOf } from "./gap";
 import type { GridConstraint, GridTracks } from "./grid";
 import { lowerGridPlacement } from "./grid";
 import type { NestConstraint } from "./nest";

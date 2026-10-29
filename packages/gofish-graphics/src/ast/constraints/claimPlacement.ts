@@ -17,7 +17,7 @@ import type { PlacementConstraint } from "./placementLowering";
 import { axisIndex, axisName, type Axis } from "./shared";
 import { isPositionInterval } from "./position";
 import { gridTracks } from "./grid";
-import type { GapOf } from "./distribute";
+import type { GapOf } from "./gap";
 import type { ConstraintSpec } from ".";
 
 /**

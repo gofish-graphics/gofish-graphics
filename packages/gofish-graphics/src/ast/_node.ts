@@ -119,8 +119,7 @@ import {
   warnLayout,
   type LayoutWarning,
 } from "./layoutWarnings";
-import type { DistributeConstraint } from "./constraints/distribute";
-import type { GridConstraint } from "./constraints/grid";
+import { spacingOn, type GapConstraint } from "./constraints/gap";
 import { relateEnv, resolveConstraintOperands } from "./constraints";
 import { applyRelationalZBelowDefaults } from "./constraints/relationalPaint";
 import {
@@ -241,10 +240,6 @@ type ClaimMemo = {
    *  ({@link GoFishNode.gapOf}), once read. */
   gaps: Map<GapConstraint, [Pwl.Value | undefined, Pwl.Value | undefined]>;
 };
-
-/** A constraint that lays a gap out between the parts it places along an
- *  axis: a chain's spacing, a table's gap between tracks. */
-export type GapConstraint = DistributeConstraint | GridConstraint;
 
 const freshClaimMemo = (): ClaimMemo => ({
   carriesData: [undefined, undefined],
@@ -1532,7 +1527,7 @@ export class GoFishNode {
    * claim walk and layout both read it here, once per constraint and axis.
    */
   public gapOf(c: GapConstraint, axis: 0 | 1): Pwl.Value {
-    const spacing = c.type === "grid" ? c.spacing[axis] : c.spacing;
+    const spacing = spacingOn(c, axis) ?? 0;
     if (typeof spacing === "number") return Pwl.constant(spacing);
     const memo = this._claimMemo.gaps.get(c) ?? [undefined, undefined];
     const known = memo[axis];

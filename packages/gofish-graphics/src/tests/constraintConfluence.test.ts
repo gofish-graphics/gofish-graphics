@@ -7,10 +7,8 @@
 import type { Placeable } from "../ast/_node";
 import * as Pwl from "../ast/solver/pwl";
 import type { AlignConstraint } from "../ast/constraints/align";
-import type {
-  DistributeConstraint,
-  GapOf,
-} from "../ast/constraints/distribute";
+import type { DistributeConstraint } from "../ast/constraints/distribute";
+import type { GapOf } from "../ast/constraints/gap";
 import type { GridConstraint, TrackLayout } from "../ast/constraints/grid";
 import {
   gridCellSizeByName,

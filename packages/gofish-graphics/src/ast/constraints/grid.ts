@@ -46,17 +46,12 @@ import {
 } from "../underlyingSpace";
 import type { PlacementFactEmitter } from "./placementFacts";
 import { numbers, type Arith } from "../solver/arith";
-import type { Length, LengthValue } from "../length";
-import type { GapOf } from "./distribute";
-
-/** One gap between tracks: pixels, a percent of the table's room on its
- *  axis, or an `fr` weight in its scope (#1176 step 6). */
-export type TrackGap = number | Length | LengthValue;
+import type { Gap, GapOf } from "./gap";
 
 export interface GridOptions {
   numCols: number;
   /** [x, y] gaps between tracks; a scalar applies to both. Default 0. */
-  spacing?: TrackGap | [TrackGap, TrackGap];
+  spacing?: Gap | [Gap, Gap];
   /** The column and row keys, in order: text, or cells for a binned key
    *  (`ORDINAL_TYPE.cells`). */
   colKeys?: OrdinalKey[];
@@ -75,7 +70,7 @@ export interface GridConstraint {
   numCols: number;
   /** The gap between tracks on x and on y: pixels, or a length the table
    *  lays out in its room (`GoFishNode.gapOf`). */
-  spacing: [TrackGap, TrackGap];
+  spacing: [Gap, Gap];
   colKeys?: OrdinalKey[];
   rowKeys?: OrdinalKey[];
   colMeasure?: string;
@@ -94,7 +89,7 @@ export const createGridConstraint = (
   return {
     type: "grid",
     numCols: options.numCols,
-    spacing: (Array.isArray(sp) ? sp : [sp, sp]) as [TrackGap, TrackGap],
+    spacing: (Array.isArray(sp) ? sp : [sp, sp]) as [Gap, Gap],
     colKeys: options.colKeys,
     rowKeys: options.rowKeys,
     colMeasure: options.colMeasure,

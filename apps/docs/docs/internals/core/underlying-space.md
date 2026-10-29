@@ -40,6 +40,7 @@ covers:
   - packages/gofish-graphics/src/ast/constraints/nest.ts
   - packages/gofish-graphics/src/ast/constraints/nestPlan.ts
   - packages/gofish-graphics/src/ast/constraints/grid.ts
+  - packages/gofish-graphics/src/ast/constraints/gap.ts
   - packages/gofish-graphics/src/ast/constraints/bbox.ts
   - packages/gofish-graphics/src/ast/debug/dump.ts
 ---
@@ -569,7 +570,9 @@ each inherent to what the origin states are:
   one reader (`GoFishNode.gapOf`, once per constraint and axis): a percent
   of the room, or a σ term for `fr`. It is read, never written into the
   constraint: the claim walk and layout pass the reader to the placement
-  lowering (`GapOf`), as they pass a grid's tracks. An `fr` gap with no
+  lowering (`GapOf`), as they pass a grid's tracks. Which gap a constraint
+  lays out on an axis is one rule (`spacingOn`, `constraints/gap.ts`): a
+  table's gap there, and a chain's spacing on the axis it runs along. An `fr` gap with no
   room (an unsized root, `GoFishNode.sharesHaveNoRoom`) is 0 at the σ of 0 that root lays out at, and
   warns (`no-room`); an `fr` in a data scope warns `mixed-sizes`, once per
   chain (`warnFlexibleSizes`). A length has no content minimum: fixed parts

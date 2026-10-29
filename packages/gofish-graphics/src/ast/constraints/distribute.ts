@@ -32,15 +32,14 @@ import {
 import type { Arith } from "../solver/arith";
 import * as Interval from "../../util/interval";
 import * as Pwl from "../solver/pwl";
-import type { Length, LengthValue } from "../length";
-import type { GapConstraint } from "../_node";
+import type { Gap, GapOf } from "./gap";
 
 export interface DistributeOptions {
   dir: Axis;
   /** The gap between neighbors (or the pitch, for a fixed anchor): pixels,
    *  a percent of the room of the layer that holds the chain, or an `fr`
    *  weight in its scope (#1176 step 6). Default 8. */
-  spacing?: number | Length | LengthValue;
+  spacing?: Gap;
   /** How adjacent children in the chain relate:
    *  - `"edge"` (default): `start[i+1] = end[i] + spacing` — spacing is the gap
    *    between facing edges (content-dependent).
@@ -90,7 +89,7 @@ export interface DistributeConstraint {
   dir: Axis;
   /** The gap between neighbors: pixels, or a length the layer that holds
    *  the chain lays out in its room (`GoFishNode.gapOf`). */
-  spacing: number | Length | LengthValue;
+  spacing: Gap;
   anchor: AlignAnchor | "edge";
   order: "forward" | "reverse";
   glue: boolean;
@@ -117,12 +116,6 @@ export const createDistributeConstraint = (
   hasOrder: options.hasOrder,
   origin: options.glue ? options.origin : undefined,
 });
-
-/** Reads the gap a chain or table lays out between its parts along an
- *  axis, as a value in σ: the layer that holds it lays it out in its room
- *  (`GoFishNode.gapOf`). The claim walk and layout pass it to the
- *  placement lowering, as they pass a grid's tracks. */
-export type GapOf = (c: GapConstraint, axis: 0 | 1) => Pwl.Value;
 
 /** The {@link StackOrigin} of a stack over `ordered` (its parts in placement
  *  order), with `part` an index into `ordered`: the declared origin, else the
@@ -250,10 +243,7 @@ export function lowerDistributePlacement<T>(
       axis: constraint.dir,
       from: { name: ordered[i - 1].name, anchor: anchors.from },
       to: { name: ordered[i].name, anchor: anchors.to },
-      gap:
-        typeof constraint.spacing === "number"
-          ? A.constant(constraint.spacing)
-          : A.fromValue(gapOf(constraint, axisIndex(constraint.dir))),
+      gap: A.fromValue(gapOf(constraint, axisIndex(constraint.dir))),
       owner,
       chain: constraint.glue ? "stack" : "spread",
     });

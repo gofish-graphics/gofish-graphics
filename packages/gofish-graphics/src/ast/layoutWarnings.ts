@@ -4,7 +4,7 @@
 
 import type { GoFishNode } from "./_node";
 import type { DistributeConstraint } from "./constraints/distribute";
-import type { GridConstraint } from "./constraints/grid";
+import { spacingOn } from "./constraints/gap";
 import { axisIndex, axisName } from "./constraints/shared";
 import type { Extent } from "./extent";
 import { room } from "../util";
@@ -275,13 +275,7 @@ function fixedWarning(
  *  chains' spacings and its table's gap between tracks there. */
 const frGaps = (node: GoFishNode, axis: 0 | 1): (Length | LengthValue)[] =>
   node.constraints.flatMap((c) => {
-    const spacing =
-      c.type === "grid"
-        ? (c as GridConstraint).spacing[axis]
-        : c.type === "distribute" &&
-            axisIndex((c as DistributeConstraint).dir) === axis
-          ? (c as DistributeConstraint).spacing
-          : undefined;
+    const spacing = spacingOn(c, axis);
     return spacing !== undefined && typeof spacing !== "number" && isFr(spacing)
       ? [spacing]
       : [];
