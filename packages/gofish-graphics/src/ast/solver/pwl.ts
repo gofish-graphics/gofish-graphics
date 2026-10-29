@@ -391,6 +391,21 @@ export const rising = (v: Value): Affine | undefined => {
 };
 
 /**
+ * The σ ≥ 0 at which `v` fills `target` ({@link solve}), or, where none
+ * does because its fixed parts alone are longer than `target`, the σ at
+ * which the part of `v` that grows with σ alone fills it ({@link rising}):
+ * `v` drawn as if its fixed parts took no room. Undefined when neither
+ * does. The one solve of a claim in its slot (`ScopeRegistry.fit`), and of
+ * a plot in a node's own size (`aroundPlot`).
+ */
+export const fill = (v: Value, target: number): number | undefined => {
+  const sigma = solve(v, target);
+  if (sigma !== undefined) return sigma;
+  const grows = rising(v);
+  return grows && solve(grows, target);
+};
+
+/**
  * Whether `a` and `b` are the same function of σ within an absolute
  * `tolerance`. Two lines agree everywhere when they agree at σ = 0 and 1.
  * Their difference is a line between breakpoints, so two piecewise values

@@ -143,20 +143,6 @@ export function aroundShare(
   };
 }
 
-/** The X ≥ 0 at which `m` reaches `target` (`m` never decreases), solved
- *  as the root's σ is: where the fixed parts of `m` alone are larger than
- *  the target, no X reaches it, and X is where the part that grows with X,
- *  alone, reaches it (`Pwl.rising`): drawn as if the fixed parts took
- *  no room. */
-const solveFor = (m: Pwl.Value, target: number): number => {
-  const grows = Pwl.rising(m);
-  const x =
-    Pwl.at(m, 0) > target + 0.5
-      ? grows && Pwl.solve(grows, target)
-      : Pwl.solve(m, target);
-  return x !== undefined && Number.isFinite(x) ? Math.max(0, x) : 0;
-};
-
 /**
  * `chart`'s gutters on `axis` when it is laid out at σ `sigma`: its chrome
  * forms' reach at σ (none where it has no claim).
@@ -219,7 +205,15 @@ export function aroundPlot(
   plot: number
 ): number {
   const f = chromeForms(node, axis);
+  // The σ at which the plot fills `plot`, by the one fit's solve
+  // (`Pwl.fill`); 0 where none does.
+  const sigma = f && Pwl.fill(f.plot.width, plot);
   const [start, end] =
-    f !== undefined ? reachAt(f, solveFor(f.plot.width, plot)) : [0, 0];
+    f !== undefined
+      ? reachAt(
+          f,
+          sigma !== undefined && Number.isFinite(sigma) ? Math.max(0, sigma) : 0
+        )
+      : [0, 0];
   return plot + start + end;
 }

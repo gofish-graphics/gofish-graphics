@@ -375,8 +375,7 @@ export class ScopeRegistry {
     if (scope === undefined) {
       if (node !== undefined)
         warnLayout(node, fixedOverflow(node, meta.axis, claim, allocated));
-      const grows = maps ? Pwl.rising(claim.width) : undefined;
-      const sigma = grows && Pwl.solve(grows, allocated);
+      const sigma = maps ? Pwl.fill(claim.width, allocated) : undefined;
       if (sigma !== undefined) scope = this.scopeAt(meta, space, claim, sigma);
     }
     // Past the slot by more than rounding (as `fixedOverflow` reads it).

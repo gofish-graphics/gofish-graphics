@@ -403,8 +403,9 @@ its pixels, and, when the axis has an origin, the pixel of data 0
 whole graphic (#493). A claim with no σ in it maps no domain and is not
 solved. When no σ ≥ 0 fits, the claim's fixed parts are larger than the
 canvas: σ is solved from the part of the claim that grows with σ
-(`Pwl.rising`), so the data fills the canvas as if the fixed parts took no
-room, the fixed parts overflow, and the fit warns (see
+(`Pwl.rising`; the two steps are `Pwl.fill`, which `aroundPlot` also uses
+to lay a plot out in a node's own size), so the data fills the canvas as if
+the fixed parts took no room, the fixed parts overflow, and the fit warns (see
 [Layout warnings](#layout-warnings)). The same fit, with the same fallback,
 serves a layer with a size of its own and a coord boundary. Next to σ, the
 fit returns the box it laid the claim out in (`Fitted.box`): a slot that is a
