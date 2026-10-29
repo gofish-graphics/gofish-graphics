@@ -34,11 +34,11 @@ field. Here is the derivation.
 
 The two consumers that solve σ read each kind like this:
 
-|              | content extent at σ           | scale factor from allocated `size`   |
-| ------------ | ----------------------------- | ------------------------------------ |
-| `SIZE`       | `domain.run(σ)` (`shadow.ts`) | `domain.inverse(size)` (`layer.tsx`) |
-| `POSITION`   | `width(domain) · σ`           | `size / width(domain)`               |
-| `DIFFERENCE` | `width · σ`                   | `size / width`                       |
+|              | content extent at σ | scale factor from allocated `size`   |
+| ------------ | ------------------- | ------------------------------------ |
+| `SIZE`       | `domain.run(σ)`     | `domain.inverse(size)` (`layer.tsx`) |
+| `POSITION`   | `width(domain) · σ` | `size / width(domain)`               |
+| `DIFFERENCE` | `width · σ`         | `size / width`                       |
 
 A [`Monotonic`](/internals/core/pwl) `linear(slope, intercept)` has
 `run(σ) = slope·σ + intercept` and `inverse(y) = (y − intercept)/slope`. So a

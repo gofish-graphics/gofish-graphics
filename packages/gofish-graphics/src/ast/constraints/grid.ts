@@ -253,8 +253,8 @@ function layoutTrack<T>(
 /** The AUTHORITATIVE placement tracks: each track's extent is the max of its
  *  cells' ACTUAL laid-out sizes (a filled cell equals the budgeted extent; a
  *  claim cell equals its content). Computed post-layout so the cell centers pin
- *  to the real geometry — this is the single source both the placement and the
- *  solver shadow read, so they cannot drift from what rendered. */
+ *  to the real geometry — this is the single source the placement reads, so it
+ *  cannot drift from what rendered. */
 export function gridTracksFromSizes<T>(
   A: Arith<T>,
   c: GridConstraint,

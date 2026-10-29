@@ -1,26 +1,24 @@
 /**
  * capture-sweep.ts
  *
- * Solver shadow sweep (#39 stage 5): render EVERY story headlessly with
- * `GOFISH_SOLVER_CHECK` injected into the page, and surface any solver-shadow
- * divergence the render logs. The rank-2 placement solve is now the shipped
- * commit path (stages 5b/5c), so the placement `[solver-check]` shadow is
- * retired; this sweep now watches the remaining shadows — chiefly the `_node.ts`
- * ledger `[bbox-conflict]` over-determination check.
+ * Ledger conflict sweep (#39): render EVERY story headlessly with
+ * `GOFISH_CONFLICT_CHECK` injected into the page, and surface any
+ * `[bbox-conflict]` line the render logs: the `_node.ts` ledger found a box
+ * whose position was written twice with different values
+ * (over-determination).
  *
  * The harness aliases `gofish-graphics` to `src/`, so it renders the library
  * live from source — no rebuild needed (run `pnpm install` first on a fresh
- * worktree). An init script sets `window.GOFISH_SOLVER_CHECK = 1` before any
- * story module loads, so `envFlag("GOFISH_SOLVER_CHECK")` is true and the
- * remaining shadow checks run. Each story's browser console is captured; any
- * `[solver-check]` (a scale-root / σ shadow divergence) or `[bbox-conflict]`
- * (ledger over-determination) line is collected and reported per story.
+ * worktree). An init script sets `window.GOFISH_CONFLICT_CHECK = 1` before
+ * any story module loads, so `envFlag("GOFISH_CONFLICT_CHECK")` is true.
+ * Each story's browser console is captured, and any `[bbox-conflict]` line is
+ * collected and reported per story.
  *
  * Usage:
  *   tsx scripts/capture-sweep.ts            # whole suite
  *   tsx scripts/capture-sweep.ts bar        # only stories matching "bar"
  *
- * Exit code 0 = every story clean, 1 = at least one story logged a divergence
+ * Exit code 0 = every story clean, 1 = at least one story logged a conflict
  * (so it doubles as a pass/fail gate).
  */
 
@@ -36,8 +34,8 @@ const TESTS_DIR = join(import.meta.dirname, "..");
 const HARNESS_DIR = join(TESTS_DIR, "harness");
 const VITE_PORT = 3004; // distinct from the other capture ports so they can coexist
 
-/** A shadow divergence line matches one of the solver-check prefixes. */
-const SHADOW_PREFIX = /^\[(solver-check|bbox-conflict)\]/;
+/** A ledger conflict line. */
+const CONFLICT_PREFIX = /^\[bbox-conflict\]/;
 
 interface StoryReport {
   path: string;
@@ -67,17 +65,17 @@ async function main() {
     });
     const page = await context.newPage();
 
-    // Turn the shadow on before any story module evaluates. `envFlag` reads
+    // Turn the check on before any story module evaluates. `envFlag` reads
     // `globalThis[name]`, which is `window` in the page.
     await page.addInitScript(() => {
-      (window as unknown as Record<string, unknown>).GOFISH_SOLVER_CHECK = 1;
+      (window as unknown as Record<string, unknown>).GOFISH_CONFLICT_CHECK = 1;
     });
 
     // Collect console output into a per-story buffer. Cleared before each render.
     let buffer: string[] = [];
     page.on("console", (msg) => {
       const text = msg.text();
-      if (SHADOW_PREFIX.test(text)) buffer.push(text);
+      if (CONFLICT_PREFIX.test(text)) buffer.push(text);
       else if (msg.type() === "error") console.error(`[browser] ${text}`);
       else if (process.env.DEBUG)
         console.log(`[browser:${msg.type()}] ${text}`);
@@ -105,7 +103,7 @@ async function main() {
       : allStories;
 
     console.log(
-      `Sweeping ${stories.length} stories${filter ? ` matching "${filter}"` : ""} with GOFISH_SOLVER_CHECK=1\n`
+      `Sweeping ${stories.length} stories${filter ? ` matching "${filter}"` : ""} with GOFISH_CONFLICT_CHECK=1\n`
     );
 
     for (const story of stories) {
@@ -138,7 +136,7 @@ async function main() {
         if (buffer.length > 0) {
           const lines = [...buffer];
           reports.push({ path, lines });
-          console.log(`DIVERGED (${lines.length})`);
+          console.log(`CONFLICT (${lines.length})`);
         } else {
           console.log("clean");
         }
@@ -156,12 +154,12 @@ async function main() {
   }
 
   // Report.
-  console.log(`\n=== Solver-shadow sweep result ===\n`);
+  console.log(`\n=== Ledger conflict sweep result ===\n`);
   console.log(`  Stories rendered: ${total}`);
-  console.log(`  Stories with divergences: ${reports.length}`);
+  console.log(`  Stories with conflicts: ${reports.length}`);
 
   if (reports.length > 0) {
-    console.log(`\n  Divergences:`);
+    console.log(`\n  Conflicts:`);
     for (const r of reports) {
       console.log(`    ${r.path}`);
       for (const line of r.lines) console.log(`      ${line}`);
@@ -174,10 +172,10 @@ async function main() {
   }
 
   if (reports.length === 0) {
-    console.log(`\n  Clean: no story logged a solver-shadow divergence.`);
+    console.log(`\n  Clean: no story logged a ledger conflict.`);
   }
 
-  // Non-zero when any story diverged so this can gate the 5a landing.
+  // Non-zero when any story logged a conflict, so this can gate a change.
   process.exit(reports.length > 0 ? 1 : 0);
 }
 

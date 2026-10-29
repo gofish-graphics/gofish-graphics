@@ -5,7 +5,6 @@
 import { GoFishNode, warnLayout, type ToPixel } from "../_node";
 import { fixedOverflowInside, spacingOverflow } from "../layoutWarnings";
 import type { DisplayList } from "gofish-ir";
-import { shadowCheckScaleRoot } from "../solver/shadow";
 import { getScopeRegistry, seatInScope } from "../solver/scopes";
 import { isToken } from "../createName";
 import {
@@ -818,16 +817,6 @@ export const layer = createNodeOperatorSequential(
           // (`layoutWarnings.ts`).
           for (const axis of layerScales.failedAxes)
             warnLayout(node, fixedOverflowInside(node, axis, size[axis]));
-          for (const check of layerScales.checks) {
-            // Solver shadow (#39): assert the frame equation content(σ)=allocated
-            // closes for this σ-scope. No-op unless GOFISH_SOLVER_CHECK is set.
-            shadowCheckScaleRoot(
-              check.extent,
-              size[check.axis],
-              check.sigma,
-              check.axis
-            );
-          }
 
           // Per-child proposed size for distribute-covered children: each
           // distribute segment slices its axis size equally among its covered

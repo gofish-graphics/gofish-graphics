@@ -360,12 +360,6 @@ export type LayerScales = {
   scopes: Size<ScopeSolution | undefined>;
   /** Axes whose solve was attempted and failed (a claim with no σ in it). */
   failedAxes: (0 | 1)[];
-  /** Every solve, for the solver shadow hook. */
-  checks: {
-    axis: 0 | 1;
-    extent: Extent | undefined;
-    sigma: number | undefined;
-  }[];
 };
 
 /**
@@ -430,7 +424,6 @@ export function solveLayerScales(
     undefined,
   ];
   const failedAxes: (0 | 1)[] = [];
-  const checks: LayerScales["checks"] = [];
 
   for (const axis of [0, 1] as const) {
     const content = contentSpaces?.[axis];
@@ -470,7 +463,6 @@ export function solveLayerScales(
       };
       const s = fixed[axis] ?? solve();
       const solved = s?.solution;
-      checks.push({ axis, extent: s?.claim, sigma: solved?.sigma });
       if (solved !== undefined) {
         sigmas[axis] = solved.sigma;
         frames[axis] = scopeFrame(solved);
@@ -485,7 +477,7 @@ export function solveLayerScales(
     });
     seatScopes[axis] = frames[axis];
   }
-  return { frames, sigmas, scopes: seatScopes, failedAxes, checks };
+  return { frames, sigmas, scopes: seatScopes, failedAxes };
 }
 
 /** Select the layer's single grid constraint, if any.

@@ -14,7 +14,7 @@ export const isThenable = <T>(v: T | PromiseLike<T>): v is PromiseLike<T> =>
 
 /** Read a dev-gate flag from `globalThis.<name>` or `process.env.<name>` (truthy
  *  = on). Zero-cost when off; the single reader for the #39 dev gates
- *  (`GOFISH_SOLVER_CHECK`, `GOFISH_CONFLICT_CHECK`). */
+ *  (`GOFISH_CONFLICT_CHECK`, `GOFISH_DUMP_SCOPES`, `GOFISH_DUMP_SHARING`). */
 export const envFlag = (name: string): boolean => {
   const g = globalThis as Record<string, unknown> & {
     process?: { env?: Record<string, string | undefined> };

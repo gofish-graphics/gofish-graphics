@@ -274,8 +274,7 @@ the range sits on it changes. On a partial arc a range below 0 therefore runs
 back past the baseline angle, out of the `[0, centralAngle]` sweep. The θ tick
 ring already assumed data 0 at θ = 0, so ticks and content agree. A range that
 starts at 0, like a pie's, does not move. The rule is a property of the scope,
-so every reader of it agrees (the children's frame, the solver shadow check,
-the scope dump): `fitAxis` passes it to `solveScope` as the scope's
+so every reader of it agrees (the children's frame and the scope dump): `fitAxis` passes it to `solveScope` as the scope's
 `dataZero: "start"`, and `solveScope` seats data 0 at the box's low edge.
 
 **`HasZero`: literal offsets are distances from 0.** On an axis whose 0 is a

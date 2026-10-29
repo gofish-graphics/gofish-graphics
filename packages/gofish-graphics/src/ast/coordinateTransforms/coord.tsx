@@ -39,7 +39,6 @@ import {
 } from "../graphicalOperators/alignment";
 import { axisScale } from "../domain";
 import { reflectInterval } from "../axisDirection";
-import { shadowCheckScaleRoot } from "../solver/shadow";
 import {
   getScopeRegistry,
   seatInScope,
@@ -465,11 +464,6 @@ export const coord = createNodeOperator(
               claim,
               budget
             );
-            // Solver shadow (#39): a coord boundary RE-ROOTS σ for its subtree,
-            // exactly as the root fits content to the canvas — assert the same
-            // frame equation content(σ)=budget closes at the boundary. No-op
-            // unless GOFISH_SOLVER_CHECK is set.
-            shadowCheckScaleRoot(claim, budget, scope?.sigma, axis);
             if (scope === undefined) return [1, undefined];
             return [scope.sigma, scope];
           };

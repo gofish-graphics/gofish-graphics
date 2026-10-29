@@ -43,11 +43,9 @@ import {
 import { scopedNames, visibleNodes } from "../_ref";
 import {
   childNameKey,
-  isPlacedOn,
   type ConstraintPosScales,
   type ConstraintRef,
 } from "./shared";
-import { shadowCheckConstraint, SOLVER_CHECK } from "../solver/shadow";
 import { RelateOperand, directChildIndex, type RelateEnv } from "./relate";
 
 export type {
@@ -382,34 +380,6 @@ export function applyConstraints(
   posScales: ConstraintPosScales | undefined,
   seat: () => void
 ): void {
-  const placement = constraints.filter(
-    (
-      constraint
-    ): constraint is
-      | AlignConstraint
-      | DistributeConstraint
-      | PositionConstraint
-      | NestConstraint
-      | GridConstraint =>
-      !isZOrderConstraint(constraint) &&
-      !isOverlapConstraint(constraint) &&
-      !isLabelPlaceConstraint(constraint)
-  );
-
-  // Solver shadow (observe→assert): snapshot each child's
-  // per-axis placement BEFORE the seats are written — only when the check
-  // is on, so production pays nothing — so each constraint's shadow can tell
-  // a child it packed from one that arrived pre-positioned. The checks run
-  // once AFTER, against the settled positions.
-  const prePlaced = SOLVER_CHECK
-    ? new Map<string, [boolean, boolean]>(
-        [...nameToPlaceable].map(([name, p]) => [
-          name,
-          [isPlacedOn(p, 0), isPlacedOn(p, 1)] as [boolean, boolean],
-        ])
-      )
-    : undefined;
-
   seat();
 
   // An overlap constraint is not a difference constraint: it reads where the
@@ -424,27 +394,4 @@ export function applyConstraints(
   for (const constraint of constraints)
     if (isLabelPlaceConstraint(constraint))
       applyLabelPlacement(constraint, nameToPlaceable, sizes);
-
-  if (prePlaced) {
-    for (const constraint of placement) {
-      // Build the target list and its aligned pre-solve placement snapshot in
-      // one pass (index i of each array is the same child), so the per-target
-      // `prePlaced` the checks read is the state BEFORE the solve, not after.
-      const targets: Placeable[] = [];
-      const targetPrePlaced: [boolean, boolean][] = [];
-      for (const ref of constraint.children) {
-        const p = ref ? nameToPlaceable.get(ref.name) : undefined;
-        if (p === undefined) continue;
-        targets.push(p);
-        targetPrePlaced.push(prePlaced.get(ref!.name) ?? [false, false]);
-      }
-      shadowCheckConstraint(
-        constraint,
-        targets,
-        posScales,
-        targetPrePlaced,
-        nameToPlaceable
-      );
-    }
-  }
 }

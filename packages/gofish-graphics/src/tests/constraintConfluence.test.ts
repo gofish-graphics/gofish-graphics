@@ -1277,8 +1277,10 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
     domain: (axis: 0 | 1) => ReturnType<typeof interval> | undefined = none,
     ticks: (axis: 0 | 1) => typeof DEFAULT_AXIS_TICKS | undefined = none,
     inSlot: [boolean, boolean] = [false, false]
-  ) =>
-    solveLayerScales(
+  ) => {
+    // The axes the layer solves: it scopes its claim only to solve it.
+    const solved: (0 | 1)[] = [];
+    const scales = solveLayerScales(
       ownSize,
       spaces,
       claims,
@@ -1289,12 +1291,15 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
       maps,
       // `KeyedDomains.scope`, over a stand-in table.
       (axis, space, claim) => {
+        solved.push(axis);
         const [wide, wideClaim] = widenScope(space, claim, domain(axis));
         return niceScope(wide, wideClaim, ticks(axis));
       },
       new ScopeRegistry(),
       "test"
     );
+    return { ...scales, solved };
+  };
 
   const sized = solve(
     [true, true],
@@ -1327,7 +1332,7 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
     inherits.sigmas[0] === 2 &&
       inherits.sigmas[1] === 3 &&
       inherits.frames[0] === handedX &&
-      inherits.checks.length === 0
+      inherits.solved.length === 0
   );
 
   // A node handed no σ at all is sized by the box it is given (a chain of
@@ -1347,7 +1352,7 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
     // Only pixels (fixed boxes): nothing to solve, and not a failure.
     "a claim with no σ in it is not solved, and inherits",
     unscaled.failedAxes.length === 0 &&
-      unscaled.checks.length === 1 &&
+      unscaled.solved.length === 1 &&
       unscaled.sigmas[1] === undefined
   );
 
@@ -1381,7 +1386,7 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
   ok(
     "a pinned node nested at a datum inherits σ in a frame of its own",
     atDatum.sigmas[0] === 2 &&
-      atDatum.checks.length === 0 &&
+      atDatum.solved.length === 0 &&
       atDatum.frames[0]?.sigma === 2 &&
       atDatum.frames[0]?.originPx === 0
   );

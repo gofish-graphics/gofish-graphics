@@ -46,7 +46,6 @@ import {
   orientSide,
   yDirection,
 } from "./axisDirection";
-import { shadowCheckScaleRoot } from "./solver/shadow";
 import {
   perfNow,
   perfAdd,
@@ -730,12 +729,6 @@ export async function layout(
     rootScopes[0]?.sigma,
     rootScopes[1]?.sigma,
   ];
-
-  // Solver shadow (#39): the ROOT σ-scope — the SIZE frame equation
-  // content(σ)=canvas the whole chart resolves against. No-op unless
-  // GOFISH_SOLVER_CHECK is set.
-  shadowCheckScaleRoot(rootClaims[0], canvas[0], rootScaleFactors[0], 0);
-  shadowCheckScaleRoot(rootClaims[1], canvas[1], rootScaleFactors[1], 1);
 
   // The root content sits in the root scope's frame by the one seating
   // rule (`seatInScope`): a pinned content shares the frame and places its
