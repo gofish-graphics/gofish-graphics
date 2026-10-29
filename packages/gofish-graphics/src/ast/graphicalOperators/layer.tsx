@@ -83,7 +83,12 @@ import {
   type ClaimChild,
   type Placement,
 } from "../constraints/claimPlacement";
-import { buildPlan, planPlacement, type LayerPlan } from "../solver/plan";
+import {
+  buildPlan,
+  planPlacement,
+  planPlacementInChild,
+  type LayerPlan,
+} from "../solver/plan";
 import { evaluate } from "../solver/formula";
 import {
   guttersAroundPlot,
@@ -304,11 +309,14 @@ export const layer = createNodeOperatorSequential(
         new Set(node.children.map((_, i) => i)),
         nestedPlacement(axis)
       );
-    // Where an operand nested in a child lands in this layer's frame.
+    // Where an operand nested in a child lands in that child's own frame.
     const nestedPlacement = (axis: 0 | 1) => (name: string) => {
       const op = constraintOperands().get(name);
-      return op !== undefined && op.node instanceof GoFishNode
-        ? planPlacement(op.node, node, axis)
+      const container = op && node.children[op.child];
+      return op !== undefined &&
+        op.node instanceof GoFishNode &&
+        container instanceof GoFishNode
+        ? planPlacementInChild(op.node, container, axis)
         : undefined;
     };
     // How this layer seats its children (`ClaimWalk.seating`), read once

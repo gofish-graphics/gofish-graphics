@@ -37,9 +37,12 @@ import type { ConstraintSpec } from ".";
  * piecewise-linear functions of σ, exact at every σ, and the hull is the
  * envelope of the edges.
  *
- * A `ref` stand-in, or an operand nested in a child, stands where its node
- * lands in this layer's frame, which the claim walk knows through the
- * layers between them (a placement claim, `planPlacement`): a value label
+ * A `ref` stand-in stands where its node lands in this layer's frame, which
+ * the claim walk knows through the layers between them (a placement claim,
+ * `planPlacement`). An operand nested in a child is held at its offset in
+ * that child, which the plans from it up to the child give
+ * (`planPlacementInChild`), so it moves with the child wherever the solve
+ * places the child. A value label
  * beside its bar takes room where it draws, while the bar stays where its
  * own layout puts it. A band of a category axis is a share, which is a
  * claim too (`GoFishNode.sharesRoom`), so a label beside a band is placed
@@ -284,8 +287,8 @@ export function constrainedOn(
 /**
  * Where a layer's constraints place its children on `axis`, from their
  * claims, and the hull of the `candidates` (see the module comment).
- * `nested` is where an operand nested in a child lands in the layer's frame,
- * when the claim walk knows (`planPlacement`).
+ * `nested` is where an operand nested in a child lands in that child's
+ * frame, when the claim walk knows (`planPlacementInChild`).
  */
 export function placeByClaims(
   axis: 0 | 1,
@@ -529,7 +532,8 @@ export function placeByClaims(
   // An operand nested in a child is held at a fixed offset inside it
   // (`NestedOperand`), which layout measures (`gap:`): the solve moves the
   // child with it. In the claim walk the offset is where the plans of the
-  // layers between put it (`planPlacement`).
+  // layers between put it in the child (`planPlacementInChild`), from the
+  // child's box start.
   const rigid = new Map<string, RigidAttachment<F>>();
   for (const [name, op] of operands) {
     if (op.direct) continue;
@@ -537,9 +541,7 @@ export function placeByClaims(
     const box = boxOfClaim(p?.extent);
     const containerMin = presetMin.get(op.child);
     const gapClaim =
-      p !== undefined && containerMin !== undefined
-        ? values.sub(p.lo, tape.claim[containerMin])
-        : Pwl.ZERO;
+      p !== undefined ? values.sub(p.lo, boxOf(op.child)[0]) : Pwl.ZERO;
     const gap = tape.input(`gap:@${name}`, gapClaim);
     const lo = tape.input(`lo:@${name}`, box[0]);
     const hi = tape.input(`hi:@${name}`, box[1]);

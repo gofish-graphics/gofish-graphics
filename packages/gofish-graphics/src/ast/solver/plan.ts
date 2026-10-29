@@ -285,8 +285,10 @@ const formsOf = (
  * envelope of their boxes, which is what layout lays out.
  *
  * `children` is what the claim walk knows of each child, with its claim as
- * its extent (`claimChildren` in `layer`). `ring` says the layer is a ring
- * of chrome, whose children past the first are chrome.
+ * its extent (`claimChildren` in `layer`). `nested` is where an operand
+ * nested in a child lands in that child's own frame
+ * (`planPlacementInChild`). `ring` says the layer is a ring of chrome, whose
+ * children past the first are chrome.
  */
 export function buildPlan(
   node: GoFishNode,
@@ -298,10 +300,19 @@ export function buildPlan(
   ring: boolean,
   scale: number
 ): LayerPlan {
-  const forms = children.map((c, i) =>
-    c.extent === undefined
-      ? undefined
-      : formsOf(node, node.children[i], c.extent, axis)
+  // A child placed where its refs land is placed by what it draws: its
+  // forms are where it is placed, all of them box.
+  const forms = children.map((c, i): ChildForms | undefined =>
+    c.extent !== undefined
+      ? formsOf(node, node.children[i], c.extent, axis)
+      : c.fromRefs && c.placed !== undefined
+        ? {
+            whole: c.placed.extent,
+            box: c.placed.extent,
+            plot: c.placed.extent,
+            zero: Pwl.ZERO,
+          }
+        : undefined
   );
   const placement = placeByClaims(
     axis,
@@ -318,7 +329,23 @@ export function buildPlan(
     withoutSpannedAligns(node, constraints, operands),
     operands,
     new Set(node.children.map((_, i) => i)),
-    nested,
+    // Into this layer's reading of the container: moved by its data 0 there
+    // and reflected where its y runs the other way, as `formsOf` reads it.
+    (name) => {
+      const op = operands.get(name);
+      const f = op && forms[op.child];
+      const p = f && nested(name);
+      if (op === undefined || f === undefined || p === undefined)
+        return undefined;
+      const sign = flips(node, node.children[op.child], axis) ? -1 : 1;
+      const [lo, hi, zero] = moved(
+        { at: f.zero, sign },
+        p.lo,
+        p.hi,
+        sub(p.hi, p.extent.ascent)
+      );
+      return { lo, hi, extent: Extent(sub(hi, zero), sub(zero, lo)) };
+    },
     hasOrigin(node._underlyingSpace?.[axis])
   );
   const box: [Pwl.Value[], Pwl.Value[]] = [[], []];
@@ -430,6 +457,37 @@ const moved = (
 };
 
 /**
+ * `target`'s box and data 0 up the plans of its ancestors to `n`, the
+ * child of `stop` that holds it, in `n`'s frame: the box in its parent's
+ * plan, moved by each ancestor's data 0 in the next one's plan (reflected
+ * where y runs the other way). Undefined where a plan does not place it.
+ */
+const throughPlans = (
+  target: GoFishNode,
+  stop: GoFishNode,
+  axis: 0 | 1
+): { n: GoFishNode; at: [Pwl.Value, Pwl.Value, Pwl.Value] } | undefined => {
+  let n = target;
+  let at: [Pwl.Value, Pwl.Value, Pwl.Value] | undefined;
+  while (n.parent !== stop) {
+    const p = n.parent;
+    if (p === undefined || !composes(p, axis)) return undefined;
+    const plan = p.claimWalk!.plan(axis);
+    const i = p.claimWalk!.seating().indexOf(n);
+    const box = plan?.placement.boxes().get(i);
+    const f = plan?.forms[i];
+    if (box === undefined || f === undefined) return undefined;
+    const base = Pwl.add(Pwl.add(box.lo, f.box.descent), f.zero);
+    at =
+      at === undefined
+        ? [box.lo, box.hi, base]
+        : moved({ at: base, sign: flips(p, n, axis) ? -1 : 1 }, ...at);
+    n = p;
+  }
+  return at === undefined ? undefined : { n, at };
+};
+
+/**
  * Where `target` lands in `frame`'s frame on `axis`, by composing plans
  * (a plan's port): the target's box in its parent's plan, moved by each
  * ancestor's data 0 in the next ancestor's plan (reflected where y runs the
@@ -442,7 +500,6 @@ export function planPlacement(
   frame: GoFishNode,
   axis: 0 | 1
 ): Placement | undefined {
-  if (target.resolveExtent()[axis] === undefined) return undefined;
   const up = new Set<GoFishNode>();
   for (let n: GoFishNode | undefined = frame; n; n = n.parent) up.add(n);
   let shared: GoFishNode | undefined = target.parent;
@@ -462,26 +519,10 @@ export function planPlacement(
     hi = b.ascent;
     zero = Pwl.ZERO;
   } else {
-    let first = true;
-    lo = hi = zero = Pwl.ZERO;
-    while (n.parent !== shared) {
-      const p = n.parent!;
-      if (!composes(p, axis)) return undefined;
-      const plan = p.claimWalk!.plan(axis);
-      const i = p.claimWalk!.seating().indexOf(n);
-      const box = plan?.placement.boxes().get(i);
-      const f = plan?.forms[i];
-      if (box === undefined || f === undefined) return undefined;
-      const base = Pwl.add(Pwl.add(box.lo, f.box.descent), f.zero);
-      if (first) {
-        [lo, hi, zero] = [box.lo, box.hi, base];
-        first = false;
-      } else {
-        const m: Frame = { at: base, sign: flips(p, n, axis) ? -1 : 1 };
-        [lo, hi, zero] = moved(m, lo, hi, zero);
-      }
-      n = p;
-    }
+    const walked = throughPlans(target, shared, axis);
+    if (walked === undefined) return undefined;
+    [lo, hi, zero] = walked.at;
+    n = walked.n;
   }
   const seat = seatOf(shared, n, axis);
   if (seat === undefined) return undefined;
@@ -506,5 +547,23 @@ export function planPlacement(
     if (flips(p, m, axis)) sign = -sign as 1 | -1;
   }
   [lo, hi, zero] = moved({ at: Pwl.scale(-sign, at), sign }, lo, hi, zero);
+  return { lo, hi, extent: Extent(sub(hi, zero), sub(zero, lo)) };
+}
+
+/**
+ * Where `target`, nested in `container`, lands in the container's own
+ * frame on `axis`, by the plans from the target up to the container's
+ * (`throughPlans`): its offset inside the container, which holds wherever
+ * its parent's solve places the container. Undefined where no plan reaches.
+ */
+export function planPlacementInChild(
+  target: GoFishNode,
+  container: GoFishNode,
+  axis: 0 | 1
+): Placement | undefined {
+  const walked =
+    container.parent && throughPlans(target, container.parent, axis);
+  if (walked === undefined || walked.n !== container) return undefined;
+  const [lo, hi, zero] = walked.at;
   return { lo, hi, extent: Extent(sub(hi, zero), sub(zero, lo)) };
 }

@@ -649,7 +649,11 @@ spread's size option sets once the scopes around it are known) is read by
 its claim there, not its plan. A node nested in a child is placed by
 composing plans (`planPlacement`): its box in its parent's plan, moved by
 each ancestor's data 0 in the next one's, reflected where y runs the
-other way.
+other way. A constraint operand nested in a child is placed the same way
+up to that child only (`planPlacementInChild`): its offset in the child,
+which holds wherever the layer's solve places the child. A child drawn
+around refs (an `enclose` of `ref`s) has the box its refs give it as its
+forms, so a node nested past it is placed too.
 Every continuous axis has
 exactly one claim; `resolveExtent()` checks this. Another axis has one when
 its content's room depends on σ, or when its content has a pixel size of its
