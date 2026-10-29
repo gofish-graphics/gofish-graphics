@@ -71,6 +71,7 @@ import {
 import { Frontend } from "gofish-ir";
 import {
   getScopeRegistry,
+  seatInBand,
   seatInScope,
   type EqualMeasureAxis,
   type ScopeSolution,
@@ -770,7 +771,7 @@ export async function layout(
   // root's ink before its box (see below). The root's
   // axis order starts at the frame's start edge: the left on
   // x, the top for a y that reads top-down, and the BOTTOM for a continuous
-  // y, which grows upward from there (`fromFrameStart`). A position `p`
+  // y, which grows upward from there (`seatInBand`). A position `p`
   // along the root's axis order is the pixel `p` from that edge, inward.
   //
   // Where a scope solved against the render's slot places the root (a
@@ -805,11 +806,12 @@ export async function layout(
       !root.sharesRoom(axis) &&
       seat.anchor === "baseline"
     ) {
-      root.place(
-        name,
-        edge + fromFrameStart(offset + seat.px, rootSizes[axis].px, direction),
-        "baseline"
+      const at = seatInBand(
+        { px: offset + seat.px, anchor: seat.anchor },
+        rootSizes[axis].px,
+        direction
       );
+      root.place(name, edge + at.px, at.anchor);
       return true;
     }
     root.pinAnchor(

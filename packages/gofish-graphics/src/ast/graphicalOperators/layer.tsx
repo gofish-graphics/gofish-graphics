@@ -5,7 +5,7 @@
 import { GoFishNode, type ToPixel } from "../_node";
 import { spacingOverflow, warnLayout } from "../layoutWarnings";
 import type { DisplayList } from "gofish-ir";
-import { getScopeRegistry, seatInScope } from "../solver/scopes";
+import { getScopeRegistry, seatInBand, seatInScope } from "../solver/scopes";
 import { isToken } from "../createName";
 import {
   Size,
@@ -866,8 +866,8 @@ export const layer = createNodeOperatorSequential(
           // y grows upward inside this layer that reads top-down has its
           // baseline seated from the bottom of the band this layer allocated
           // it (`childFrames`, else its own box): its axis starts there, as
-          // the root's starts at the bottom of the canvas (`placeRoot` in
-          // gofish.tsx). A child that reads top-down hangs from its origin,
+          // the root's starts at the bottom of the canvas (`seatInBand`, as
+          // `placeRoot` in gofish.tsx). A child that reads top-down hangs from its origin,
           // which is its top, in either kind of layer.
           const childFrames: number[] = new Array(children.length);
           const seatOf = (
@@ -879,17 +879,20 @@ export const layer = createNodeOperatorSequential(
               layerScales.scopes[axis],
               cp.spaceOn?.(axis)
             );
+            // A scope's seat is in this layer's axis order. With no scope a
+            // child's baseline is at its own axis start, which, for a child
+            // whose y grows upward in a layer that reads top-down, is its
+            // band's bottom.
             const fromBand =
               axis === 1 &&
-              seat.anchor === "baseline" &&
+              layerScales.scopes[axis] === undefined &&
               direction === 1 &&
               children[i].yFrame.direction !== 1;
-            const band = !fromBand
-              ? 0
-              : Number.isFinite(childFrames[i])
-                ? childFrames[i]
-                : (cp.dims[1].size ?? 0);
-            return { px: seat.px + band, anchor: seat.anchor };
+            if (!fromBand) return seat;
+            const band = Number.isFinite(childFrames[i])
+              ? childFrames[i]
+              : (cp.dims[1].size ?? 0);
+            return seatInBand(seat, band, -1);
           };
           const seatChild = (
             cp: (typeof childPlaceables)[number],

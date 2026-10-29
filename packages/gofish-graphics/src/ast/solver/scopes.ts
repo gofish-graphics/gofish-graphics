@@ -36,6 +36,7 @@ import type { GoFishNode, RenderSession } from "../_node";
 import { fixedOverflow, warnLayout } from "../layoutWarnings";
 import { resolveUnit, sameUnitVar } from "../measure";
 import { reachAt, type ChromeForms } from "../chromeGutters";
+import { fromFrameStart, type AxisDirection } from "../axisDirection";
 
 export type ScopeKind = "root" | "sized" | "coord" | "grid" | "recenter";
 
@@ -124,6 +125,22 @@ export const seatInScope = (
     childMap: frameOf(child, { map: frame }),
   };
 };
+
+/** A seat in pixels from the start edge of the band that holds the child,
+ *  for a seat read in `direction` relative to that band: `1` where the seat
+ *  is in the band's own axis order, `-1` where it is in the other (a root
+ *  whose y grows upward on the canvas, or a child whose y grows upward that
+ *  no scope seats inside a layer that reads top-down, whose axis starts at
+ *  its band's bottom). One rule for the render root (`placeRoot` in
+ *  gofish.tsx) and a layer's children (`seatOf` in layer.tsx). */
+export const seatInBand = (
+  seat: Seat,
+  band: number,
+  direction: AxisDirection
+): Seat => ({
+  px: fromFrameStart(seat.px, band, direction),
+  anchor: seat.anchor,
+});
 
 /** The pixel of data 0 in a box whose claim starts `offset` px above its low
  *  edge: a claim is measured from data 0, so data 0 sits `claim.descent(σ)`

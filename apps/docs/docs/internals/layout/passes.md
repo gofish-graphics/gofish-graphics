@@ -534,9 +534,11 @@ it lands at the bottom left.
 
 Seating a child at its baseline is the one place a boundary between two directions
 needs more than the reflection: a child whose y grows upward inside a layer that
-reads top-down is seated at the bottom of the band the layer allocated it (or of
-its own box when unsized), its own start end, exactly as the root sits in the
-canvas (`placeRoot`, `fromFrameStart`). So a bar chart in a cell of a layer that
+reads top-down, and that no scope of the layer seats, is seated at the bottom of
+the band the layer allocated it (or of its own box when unsized), its own start
+end, by the rule the root sits in the canvas by (`seatInBand`, which `placeRoot`
+and the layer's `seatOf` both call). A scope's seat is already in the layer's
+axis order. So a bar chart in a cell of a layer that
 reads top-down sits with its baseline at the bottom of its cell. Every other child
 is seated by its origin at the seat. That is not one rule "each child at its own
 start end of its band": a child that reads top-down inside a layer whose y grows
@@ -1118,10 +1120,21 @@ const fromFrameStart = (p, size, direction) => (direction === 1 ? p : size - p);
 // A scope solved against the render's slot with a data 0 seats the root's
 // baseline in its own frame (its size, `rootSizes`). Anywhere else the
 // root's box is placed, its start edge at the frame's start.
+// A seat read in `direction` inside a band (`seatInBand`, the rule a layer
+// seats its children by too).
+const seatInBand = (seat, band, direction) => ({
+  px: fromFrameStart(seat.px, band, direction),
+  anchor: seat.anchor,
+});
 given && scope?.originPx !== undefined
   ? root.place(
       axis,
-      pad + fromFrameStart(offset + seatPx, rootSizes[axis].px, direction),
+      pad +
+        seatInBand(
+          { px: offset + seatPx, anchor: "baseline" },
+          rootSizes[axis].px,
+          direction
+        ).px,
       "baseline"
     )
   : root.pinAnchor(
