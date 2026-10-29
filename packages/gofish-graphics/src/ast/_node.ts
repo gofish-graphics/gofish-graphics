@@ -1821,6 +1821,25 @@ export class GoFishNode {
     return result;
   }
 
+  /**
+   * Whether a share has no room in this node's scope on `axis` (#1176 step
+   * 5): its σ is a share ({@link sharesRoom}) and is the render root's,
+   * which is no scope of its own there, on an axis the render gives no
+   * size. The default canvas gives a data σ room but gives shares none, so
+   * the root lays that axis out unsized at a σ of 0: a node with no size of
+   * its own keeps its default size, and an `fr` gap is 0. (An unsized band
+   * keeps its default; a CSS-style `fr` on an unsized axis may come later.)
+   */
+  public sharesHaveNoRoom(axis: 0 | 1): boolean {
+    const scope = this.scopeOf(axis);
+    return (
+      scope.parent === undefined &&
+      !scope.isScope(axis) &&
+      this.tryGetRenderSession()?.canvas?.[axis] === undefined &&
+      this.sharesRoom(axis)
+    );
+  }
+
   /** The pixels this node's chrome reaches past its content on `axis`,
    *  `[start, end]` in its axis order (see {@link chrome}); `[0, 0]` for a
    *  node with no chrome, or before its layout reads them. */

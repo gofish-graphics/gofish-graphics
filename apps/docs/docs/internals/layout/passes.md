@@ -1004,7 +1004,10 @@ those lines, so `pnpm capture-one` prints them under the story.
   whose scope is the unsized root on that axis has nothing to divide, so its
   gaps are 0 (as in CSS and Typst), and the warning asks for a `w` or `h`
   (`warnFlexibleSizes`). The root lays that axis out unsized, at a σ of 0,
-  so the gap `kσ` is 0 there.
+  so the gap `kσ` is 0 there. One predicate says where shares have no room
+  (`GoFishNode.sharesHaveNoRoom`), and both the root's layout and this
+  check read it: the default canvas gives a data σ room but gives shares
+  none.
 - **A drawing past the canvas (`ink-overflow`).** After placement, on each
   axis the render sizes and no fixed-overflow was found, the hull of the
   root's box and its ink is checked against the canvas, naming the ink node

@@ -599,14 +599,11 @@ export async function layout(
   // the render's slot, or the default canvas.
   const rootSpaces = [niceUnderlyingSpaceX, niceUnderlyingSpaceY] as const;
   const given = [w, h] as const;
-  // A share (#493 piece 3: `sharesRoom`) is a part of a slot, so on an
-  // axis the render gives no size there is none to share: the root lays
-  // that axis out unsized, and a node with no size of its own keeps its
-  // default size, as it does where nothing claims.
+  // Where the root's shares have no room (`sharesHaveNoRoom`), the root
+  // lays that axis out unsized, and a node with no size of its own keeps
+  // its default size, as it does where nothing claims.
   const rootClaims = ([0, 1] as const).map((axis) =>
-    given[axis] === undefined && root.sharesRoom(axis)
-      ? undefined
-      : [niceExtentX, niceExtentY][axis]
+    root.sharesHaveNoRoom(axis) ? undefined : [niceExtentX, niceExtentY][axis]
   ) as [Extent | undefined, Extent | undefined];
   const rootSizes = ([0, 1] as const).map((axis) => {
     const space = rootSpaces[axis];

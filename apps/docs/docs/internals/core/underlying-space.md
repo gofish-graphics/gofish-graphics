@@ -570,7 +570,7 @@ each inherent to what the origin states are:
   of the room, or a σ term for `fr`. It is read, never written into the
   constraint: the claim walk and layout pass the reader to the placement
   lowering (`GapOf`), as they pass a grid's tracks. An `fr` gap with no
-  room (an unsized root) is 0 at the σ of 0 that root lays out at, and
+  room (an unsized root, `GoFishNode.sharesHaveNoRoom`) is 0 at the σ of 0 that root lays out at, and
   warns (`no-room`); an `fr` in a data scope warns `mixed-sizes`, once per
   chain (`warnFlexibleSizes`). A length has no content minimum: fixed parts
   larger than a sized layer warn `fixed-overflow`.

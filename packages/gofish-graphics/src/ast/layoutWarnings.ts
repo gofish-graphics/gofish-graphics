@@ -296,9 +296,9 @@ const frGaps = (node: GoFishNode, axis: 0 | 1): (Length | LengthValue)[] =>
  * In a scope that data sizes there, a flexible size has no data type, so it
  * shares no scale with the data: it is a σ weight in the scope, that many
  * data units wide. The node warns once (`mixed-sizes`), naming its flexible
- * parts and gaps. On an axis the render gives no size, a scope of shares at
- * the root has no room, so an `fr` gap there, which has no default size as
- * a part has, is 0, and warns (`no-room`).
+ * parts and gaps. Where shares have no room (`GoFishNode.sharesHaveNoRoom`),
+ * an `fr` gap, which has no default size as a part has, is 0, and warns
+ * (`no-room`).
  */
 export function warnFlexibleSizes(node: GoFishNode, axis: 0 | 1): void {
   const gaps = frGaps(node, axis);
@@ -306,19 +306,13 @@ export function warnFlexibleSizes(node: GoFishNode, axis: 0 | 1): void {
     (c): c is GoFishNode => "isShare" in c && (c as GoFishNode).isShare(axis)
   );
   if (gaps.length === 0 && parts.length === 0) return;
-  const scope = node.scopeOf(axis);
-  // TODO(#1176): the root's fit decides that a share has no room there.
-  if (
-    gaps.length > 0 &&
-    scope.parent === undefined &&
-    !scope.isScope(axis) &&
-    node.tryGetRenderSession()?.canvas?.[axis] === undefined &&
-    scope.sharesRoom(axis)
-  ) {
+  // The default canvas gives a data σ room but gives shares none
+  // (`sharesHaveNoRoom`), so the fit is not asked: an `fr` gap there is 0.
+  if (gaps.length > 0 && node.sharesHaveNoRoom(axis)) {
     for (const g of gaps) warnLayout(node, noRoom(node, axis, printLength(g)));
     return;
   }
-  if (scope.carriesData(axis))
+  if (node.scopeOf(axis).carriesData(axis))
     warnLayout(node, mixedSizes(node, axis, parts, gaps));
 }
 
