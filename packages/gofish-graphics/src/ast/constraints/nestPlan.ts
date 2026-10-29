@@ -29,7 +29,7 @@ export type NestPlanChild = NamedNode & {
 //   inner sized, outer not  → 'in'   INSIDE_OUT  (outer = inner + 2p; boxes)
 //   outer sized, inner not  → 'out'  OUTSIDE_IN  (inner = outer − 2p; padding)
 //   neither sized           → 'out'  OUTSIDE_IN  (the layer sizes outer — a
-//                             distribute slice or the layer box as a fill child
+//                             distribute share or the layer box as a fill child
 //                             — then inner = outer − 2p)
 //   both sized              → CENTER_ONLY (no derivation; only center inner —
 //                             over-determination checked for two literal-px sizes)

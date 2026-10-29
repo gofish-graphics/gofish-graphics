@@ -41,7 +41,7 @@ import type { Arith } from "../solver/arith";
  * bar's `size = count·σ`, resolved once σ is solved; see
  * apps/docs/docs/internals/design/unified-propagation.md), or a formula of a
  * layer's plan (`Tape`), so a size two pins determine stays a formula in
- * what layout measures. Consistency is checked by the arithmetic's `near`.
+ * what layout measures. Consistency is checked by the arithmetic's `agree`.
  */
 export type BBoxKey = "min" | "max" | "center" | "size";
 
