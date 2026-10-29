@@ -1,0 +1,277 @@
+// THROWAWAY prototype stories for the naming-semantics proposal (#1236).
+// Each "...A" story turns on the approach-A prototype (globalThis.__PROTO_A):
+// relate operands carry the node they were bound to, and a drawing clause is
+// resolved in the layer's name registry. The "...Today" stories run the
+// same spec with the flag off. Not for merge.
+import type { Meta, StoryObj } from "@storybook/html";
+import { initializeContainer } from "../helper";
+import {
+  Bin,
+  arrow,
+  chart,
+  circle,
+  derive,
+  field,
+  intersect,
+  layer,
+  line,
+  partition,
+  position,
+  quantileRows,
+  rect,
+  region,
+  ribbon,
+  scatter,
+  selectAll,
+  spread,
+  text,
+} from "../../src/lib";
+import { seattleWeather } from "../../src/data/seatle-weather";
+
+const meta: Meta = { title: "Proposals/NamingSemantics" };
+export default meta;
+
+const FILL = "#D1E4F6";
+const STROKE = "#467DA8";
+const RED = "#C0392B";
+
+const normPdf = (x: number, mu = 0, sd = 1) =>
+  Math.exp(-0.5 * ((x - mu) / sd) ** 2) / (sd * Math.sqrt(2 * Math.PI));
+const gridOf = (f: (x: number) => number, lo: number, hi: number, n: number) =>
+  Array.from({ length: n }, (_, i) => {
+    const x = lo + ((hi - lo) * i) / (n - 1);
+    return { x, pdf: f(x) };
+  });
+const kde = (values: number[]) => {
+  const n = values.length;
+  const mean = values.reduce((s, v) => s + v, 0) / n;
+  const sd = Math.sqrt(
+    values.reduce((s, v) => s + (v - mean) ** 2, 0) / (n - 1)
+  );
+  const bw = 1.06 * sd * n ** -0.2;
+  return {
+    bw,
+    f: (x: number) => values.reduce((s, v) => s + normPdf(x, v, bw), 0) / n,
+  };
+};
+const months = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+const monthlyDensity = months.flatMap((month, m) => {
+  const highs = seattleWeather
+    .filter((d) => new Date(d.date).getUTCMonth() === m)
+    .map((d) => d.temp_max);
+  const { f, bw } = kde(highs);
+  const lo = Math.min(...highs) - 3 * bw;
+  const hi = Math.max(...highs) + 3 * bw;
+  return gridOf(f, lo, hi, 161).map(({ x, pdf }) => ({
+    month,
+    temp_max: x,
+    pdf,
+  }));
+});
+const monthlyMean = months.map((month, m) => {
+  const highs = seattleWeather
+    .filter((d) => new Date(d.date).getUTCMonth() === m)
+    .map((d) => d.temp_max);
+  return {
+    month: m + 1,
+    mean: highs.reduce((s, v) => s + v, 0) / highs.length,
+  };
+});
+const normalGrid = gridOf((x) => normPdf(x), -4, 4, 401);
+
+type Args = { w: number; h: number };
+
+/** Render `build()` with the approach-A prototype on or off; an error is
+ *  shown as text so the capture records it. */
+const story = (
+  protoA: boolean | "B" | "C",
+  build: () => any,
+  opts: Record<string, unknown>,
+  args: Args = { w: 420, h: 200 }
+): StoryObj<Args> => ({
+  args,
+  render: (a: Args) => {
+    (globalThis as any).__PROTO_A = protoA === true || protoA === "C";
+    (globalThis as any).__PROTO_B = protoA === "B";
+    (globalThis as any).__PROTO_C = protoA === "C";
+    const container = initializeContainer();
+    const showError = (e: any) => {
+      const pre = document.createElement("pre");
+      pre.style.cssText =
+        "white-space:pre-wrap;max-width:460px;font:12px/1.4 monospace;color:#b00020;margin:8px";
+      pre.textContent = "Error: " + String(e?.message ?? e).slice(0, 360);
+      container.appendChild(pre);
+    };
+    try {
+      Promise.resolve(
+        build().render(container, { ...(a.h ? { w: a.w, h: a.h } : {}), ...opts })
+      ).catch(showError);
+    } catch (e) {
+      showError(e);
+    }
+    return container;
+  },
+});
+
+// --- Example 1: the croissant ridgeline (#1229). Same spelling in A, B, C.
+const ridgeline = () =>
+  chart(monthlyDensity, {
+    w: 520,
+    axes: { x: { title: "Daily high (°C)" }, y: false },
+  })
+    .flow(
+      spread({
+        by: field("month").sort(months),
+        dir: "y",
+        anchor: "baseline",
+        spacing: 36,
+      })
+    )
+    .mark(
+      layer([
+        chart()
+          .flow(scatter({ x: "temp_max", h: 34 }))
+          .mark(ribbon({ h: "pdf", fill: "none" }).name("density")),
+      ]).relate(({ density }) => [
+        chart()
+          .flow(
+            derive((rows) =>
+              quantileRows(rows, { x: "temp_max", density: "pdf", n: 1000 })
+            ),
+            partition({
+              by: field("temp_max").bin(Bin.quantiles(10)),
+              dir: "x",
+            })
+          )
+          .mark(
+            layer([
+              intersect({ fill: FILL, stroke: STROKE, strokeWidth: 1.5 }, [
+                density,
+                region({ inset: 1.5 }),
+              ]),
+              circle({
+                cx: field("temp_max").median(),
+                cy: 4,
+                r: 1.75,
+                fill: STROKE,
+              }),
+            ])
+          ),
+      ])
+    );
+export const RidgelineToday = story(false, ridgeline, {}, { w: 520, h: 0 });
+export const RidgelineA = story(true, ridgeline, {}, { w: 520, h: 0 });
+
+// --- Example 2: a nested relate whose clause points at the outer `density`.
+// The callout's legend swatch is also named "density".
+const nestedCapture = () =>
+  layer([
+    chart(normalGrid, { w: 240, h: 180 })
+      .flow(scatter({ x: "x" }))
+      .mark(ribbon({ h: "pdf", fill: FILL, stroke: STROKE }).name("density")),
+  ]).relate(({ density }) => [
+    position({ x: 280, y: 30 }, [
+      layer([
+        spread({ dir: "x", spacing: 6, alignment: "middle" }, [
+          rect({ w: 12, h: 12, fill: FILL, stroke: STROKE }).name("density"),
+          text({ text: "standard normal", fontSize: 12 }).name("note"),
+        ]),
+      ]).relate(({ note }) => [
+        arrow({ stroke: RED }, [note, density]),
+      ]),
+    ]),
+  ]);
+export const NestedCaptureToday = story(false, nestedCapture, { axes: false }, { w: 560, h: 200 });
+export const NestedCaptureA = story(true, nestedCapture, { axes: false }, { w: 560, h: 200 });
+
+// --- Example 3a: selectAll inside a clause (bug b).
+const meanDots = () =>
+  chart(monthlyMean)
+    .flow(scatter({ x: "month", y: "mean" }))
+    .mark(circle({ r: 3.5, fill: STROKE }).name("means"));
+const clauseSelectAll = () =>
+  layer([meanDots()]).relate(() => [
+    chart(selectAll("means")).mark(line({ stroke: STROKE })),
+  ]);
+const plainChildSelectAll = () =>
+  layer([meanDots(), chart(selectAll("means")).mark(line({ stroke: STROKE }))]);
+export const ClauseSelectAllToday = story(false, clauseSelectAll, {
+  axes: false,
+});
+export const ClauseSelectAllA = story(true, clauseSelectAll, { axes: false });
+export const PlainChildSelectAllToday = story(false, plainChildSelectAll, {
+  axes: false,
+});
+
+// --- Example 3b: selectAll across a spread. Each month's median dot is named
+// "median" inside its own per-month layer; a line through all twelve is drawn
+// from outside the spread.
+const ridgeWithMedians = () =>
+  chart(monthlyDensity, { w: 520, axes: false })
+    .flow(
+      spread({
+        by: field("month").sort(months),
+        dir: "y",
+        anchor: "baseline",
+        spacing: 36,
+      })
+    )
+    .mark(
+      layer([
+        chart()
+          .flow(scatter({ x: "temp_max", h: 34 }))
+          .mark(ribbon({ h: "pdf", fill: FILL, stroke: STROKE })),
+        chart()
+          .flow(
+            derive((rows) =>
+              quantileRows(rows, { x: "temp_max", density: "pdf", n: 1000 })
+            )
+          )
+          .mark(
+            circle({
+              cx: field("temp_max").median(),
+              cy: 4,
+              r: 3,
+              fill: RED,
+            }).name("median")
+          ),
+      ])
+    );
+const medianTrendPlain = () =>
+  layer([
+    ridgeWithMedians(),
+    chart(selectAll("median")).mark(line({ stroke: RED })),
+  ]);
+const medianTrendClause = () =>
+  layer([ridgeWithMedians()]).relate(() => [
+    chart(selectAll("median")).mark(line({ stroke: RED })),
+  ]);
+export const MedianTrendPlainToday = story(false, medianTrendPlain, {}, {
+  w: 520,
+  h: 480,
+});
+export const MedianTrendClauseToday = story(false, medianTrendClause, {}, {
+  w: 520,
+  h: 480,
+});
+export const MedianTrendClauseA = story(true, medianTrendClause, {}, {
+  w: 520,
+  h: 480,
+});
+export const MedianTrendPlainC = story("C", medianTrendPlain, {}, {
+  w: 520,
+  h: 480,
+});
+export const MedianTrendClauseC = story("C", medianTrendClause, {}, {
+  w: 520,
+  h: 480,
+});
+export const NestedCaptureB = story("B", nestedCapture, { axes: false }, {
+  w: 560,
+  h: 200,
+});
+export const RidgelineB = story("B", ridgeline, {}, { w: 520, h: 0 });
+export const ClauseSelectAllB = story("B", clauseSelectAll, { axes: false });

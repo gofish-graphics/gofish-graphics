@@ -648,6 +648,13 @@ their component.
 
 ### Recommendation
 
+> **Update (2026-10-28).** The API proposal in `proposals/naming-semantics/`
+> refines this. Prototypes of A and of B's operand (a name plus the scope of
+> the `.relate()` that bound it) draw the same pictures, and B's operand needs
+> no forwarding link and is the same value in Python. The proposal recommends
+> B's operand with A's clause list, plus C's `selectAll` rule. The text below
+> is the original recommendation.
+
 I recommend **A**. It fixes all three bugs with the smallest change to what
 users see. It also matches what the JS code already says. The callback's
 destructured names are JS variables, and JS variables are lexically scoped, so
