@@ -71,6 +71,7 @@ import {
   isUNDEFINED,
   UnderlyingSpace,
   axisOver,
+  originIs,
   placeBaseline,
   MeasureClash,
   DEFAULT_AXIS_TICKS,
@@ -80,7 +81,7 @@ import { impliedExtents, Extent, padExtent } from "./extent";
 import * as Pwl from "./solver/pwl";
 import type { Placement } from "./constraints/claimPlacement";
 import type { LayerPlan } from "./solver/plan";
-import type { ChromeForms } from "./chromeGutters";
+import { aroundShare, setChromeForms, type ChromeForms } from "./chromeGutters";
 import { toJSON } from "../util/interval";
 import type { AxisScale } from "./domain";
 import { envFlag } from "../util";
@@ -102,7 +103,7 @@ import { isToken, Token } from "./createName";
 import type { ConstraintSpec } from "./constraints";
 import { childRole, type SharingPlan } from "./constraints/compose";
 import type { KeyedDomains } from "./keyedDomains";
-import type { LayoutWarning } from "./layoutWarnings";
+import { mixedSizes, warnLayout, type LayoutWarning } from "./layoutWarnings";
 import { relateEnv, resolveConstraintOperands } from "./constraints";
 import { applyRelationalZBelowDefaults } from "./constraints/relationalPaint";
 import {
@@ -464,11 +465,15 @@ export const shareAll: ResolveSharing = (childNodes) => ({
 });
 
 /** Every child in a set of its own on both axes, nested in a frame of its
- *  own (a treemap's tile). */
+ *  own, its tile, which is its room (a treemap). */
 export const nestEach: ResolveSharing = (childNodes) => {
   const sets = childNodes.map((_, i) => i + 1);
   const all = () => new Set(childNodes.map((_, i) => i));
-  return { sets: [sets, [...sets]], nested: [all(), all()] };
+  return {
+    sets: [sets, [...sets]],
+    nested: [all(), all()],
+    rooms: [all(), all()],
+  };
 };
 
 /**
@@ -1245,29 +1250,71 @@ export class GoFishNode {
       this.constraints
     );
     // A node fills the room it is given when it has no size of its own: a
-    // leaf with no claim, or a node with no size of its own whose children
-    // all fill. Where the room is a share (`sharesRoom`), a node that fills
-    // and has no claim claims one σ (#493 piece 3).
+    // leaf with no claim, a node whose room is given to it from outside
+    // its content (`isScope`), or a node with no size of its own whose
+    // children all fill. A scope of its own claims none of its content
+    // outward, since its content's claim is in its own σ. Where the room is
+    // a share (`inShare`), a node that fills claims one σ of the scope
+    // around it (#493 piece 3), and a scope of its own adds what its chrome
+    // reaches past that σ (`aroundShare`). In a scope that data sizes, only
+    // a part of a chain is a share: it is one data unit wide, and the
+    // layout warns that the axis mixes data-driven and flexible sizes.
+    const scopePlot: Size<Extent | undefined | null> = [null, null];
     this._claimMemo.fills = ([0, 1] as const).map((dim) => {
+      const own = this.claimWalk?.ownScope[dim] === true;
+      const scope = !own && this.isScope(dim);
       const fills =
         this.children.length > 0
-          ? this.claimWalk?.ownScope[dim] !== true &&
-            this.children.every(
-              (c) =>
-                c instanceof GoFishNode && c._claimMemo.fills?.[dim] === true
-            )
+          ? !own &&
+            (scope ||
+              this.children.every(
+                (c) =>
+                  c instanceof GoFishNode && c._claimMemo.fills?.[dim] === true
+              ))
           : extent[dim] === undefined && this.inkOn?.[dim] !== true;
+      const forms =
+        scope && extent[dim] !== undefined
+          ? setChromeForms(
+              this,
+              dim,
+              extent[dim],
+              (this.chrome !== undefined
+                ? this.chrome.content.resolvePlotExtent()
+                : (this._plotExtent ?? extent))[dim]
+            )
+          : undefined;
+      if (scope) extent[dim] = undefined;
+      // The scope the node's own claim is in: the one around it, for a
+      // scope of its own.
+      const sharesScope =
+        !this.inCoord() &&
+        !(scope ? this.parent! : this).scopeOf(dim).carriesData(dim);
       if (
         fills &&
         extent[dim] === undefined &&
-        this.sharesRoom(dim) &&
-        this.inShare(dim)
-      )
-        extent[dim] = Extent(Pwl.affine(1, 0));
+        this.inShare(dim) &&
+        (sharesScope || (this.inSlot(dim) && !this.inCoord()))
+      ) {
+        const share = forms === undefined ? undefined : aroundShare(forms);
+        extent[dim] = share?.whole ?? Extent(Pwl.affine(1, 0));
+        if (scope) scopePlot[dim] = share?.plot ?? extent[dim];
+        if (!sharesScope) warnLayout(this, mixedSizes(this, dim));
+      } else if (scope) scopePlot[dim] = undefined;
       return fills;
     }) as [boolean, boolean];
+    if (scopePlot[0] !== null || scopePlot[1] !== null) {
+      const plot = this._plotExtent ?? extent;
+      this._plotExtent = [
+        scopePlot[0] === null ? plot[0] : scopePlot[0],
+        scopePlot[1] === null ? plot[1] : scopePlot[1],
+      ];
+    }
     for (const dim of [0, 1] as const) {
-      if (isCONTINUOUS(spaces[dim]) && extent[dim] === undefined)
+      if (
+        isCONTINUOUS(spaces[dim]) &&
+        extent[dim] === undefined &&
+        !this.isScope(dim)
+      )
         throw new Error(
           `[gofish] ${this.type}: axis ${dim} has a continuous type but no ` +
             `size claim. Every continuous axis has a claim.`
@@ -1316,27 +1363,89 @@ export class GoFishNode {
   }
 
   /** Whether the room this node is given on `axis` is a share: it is in a
-   *  slot (a spread, grid or treemap slot), or inside a node that is, short
-   *  of a node with a size of its own. A node in no slot (a rule laid over a
-   *  bar chart) is given the whole room of what holds it. */
+   *  slot (a spread or grid slot), or inside a node that is, short of a
+   *  scope ({@link isScope}). A node in no slot (a rule laid over a bar
+   *  chart) is given the whole room of what holds it, and a node its parent
+   *  gives a room ({@link givenRoom}: a region's cell, a treemap tile) is
+   *  given that room. */
   private inShare(axis: 0 | 1): boolean {
-    for (
-      let n: GoFishNode | undefined = this;
-      n !== undefined && n.claimWalk?.ownScope[axis] !== true;
-      n = n.parent
-    )
+    for (let n: GoFishNode | undefined = this; n !== undefined; ) {
+      if (n.givenRoom(axis)) return false;
       if (n.inSlot(axis)) return true;
+      n = n.parent;
+      if (n?.isScope(axis) === true) return false;
+    }
+    return false;
+  }
+
+  /** Whether this node's parent gives it its room on `axis`, from outside
+   *  its content: a region's cell (a `partition` cell) or a treemap tile
+   *  (`SharingPlan.rooms`). */
+  public givenRoom(axis: 0 | 1): boolean {
+    const p = this.parent;
+    return (
+      p !== undefined &&
+      p.sharing().rooms?.[axis].has(p.children.indexOf(this)) === true
+    );
+  }
+
+  /**
+   * Whether this node is a σ-scope of its own on `axis` (#1114, #1176 step
+   * 5): the room it is given there is fixed from outside its content, so it
+   * solves σ for its content in that room. That is a node with a size of
+   * its own, a literal or a data value; a node whose room its parent gives
+   * it ({@link givenRoom}: a region's cell, a treemap tile), with content
+   * that σ sizes (of any type but UNDEFINED: data, or a chain of keyed
+   * parts); and a node of pinned data in a slot (a facet panel). Content
+   * that σ does not size (a text, a shape that fills) has nothing to solve,
+   * and keeps its own size in its room. The render root is the top scope,
+   * whose room is the canvas.
+   */
+  public isScope(axis: 0 | 1): boolean {
+    if (this.claimWalk?.ownScope[axis] === true) return true;
+    if (this.children.length === 0 || this.parent === undefined) return false;
+    const space = this._underlyingSpace?.[axis];
+    return (
+      (this.givenRoom(axis) && space !== undefined && !isUNDEFINED(space)) ||
+      (originIs(space, "pinned") && this.inSlot(axis))
+    );
+  }
+
+  /** The scope this node's content is in on `axis`: the nearest scope at
+   *  or above it ({@link isScope}), or the root. */
+  private scopeOf(axis: 0 | 1): GoFishNode {
+    let scope: GoFishNode = this;
+    while (scope.parent !== undefined && !scope.isScope(axis))
+      scope = scope.parent;
+    return scope;
+  }
+
+  /** Whether this node is in a coordinate space (a `coord` at or above
+   *  it), whose room is the space's own coordinates. */
+  private inCoord(): boolean {
+    for (let n: GoFishNode | undefined = this; n; n = n.parent)
+      if (n.type === "coord") return true;
     return false;
   }
 
   /** Whether this node fills the room it is given on `axis`: a leaf with
-   *  no size of its own, or a node with no size of its own whose children
-   *  all fill. A share scope gives such a node one σ
-   *  (`sharesRoom`), but a `nest` that derives it gives it its inner's size
-   *  plus the padding instead. */
+   *  no size of its own, a scope of its own ({@link isScope}), or a node
+   *  with no size of its own whose children all fill. A share gives such a
+   *  node one σ (`inShare`), but a `nest` that derives it gives it its
+   *  inner's size plus the padding instead. */
   public fillsRoom(axis: 0 | 1): boolean {
     this.resolveExtent();
     return this._claimMemo.fills?.[axis] === true;
+  }
+
+  /** Whether this node's size on `axis` is flexible: it fills the room it
+   *  is given ({@link fillsRoom}) and brings no data into the scope around
+   *  it (its own data, if any, is in a scope of its own). Its claim, where
+   *  it has one, is shares of that scope's σ alone. */
+  public flexes(axis: 0 | 1): boolean {
+    return (
+      this.fillsRoom(axis) && (this.isScope(axis) || !this.carriesData(axis))
+    );
   }
 
   /**
@@ -1406,9 +1515,7 @@ export class GoFishNode {
       this._underlyingSpace?.[axis]?.kind === "continuous" ||
       this.children.some(
         (c) =>
-          c instanceof GoFishNode &&
-          c.claimWalk?.ownScope[axis] !== true &&
-          c.carriesData(axis)
+          c instanceof GoFishNode && !c.isScope(axis) && c.carriesData(axis)
       );
     memo[axis] = result;
     return result;
@@ -1430,16 +1537,7 @@ export class GoFishNode {
   public sharesRoom(axis: 0 | 1): boolean {
     const memo = this._claimMemo.sharesRoom;
     if (memo[axis] !== undefined) return memo[axis]!;
-    let scope: GoFishNode = this;
-    while (
-      scope.parent !== undefined &&
-      scope.claimWalk?.ownScope[axis] !== true
-    )
-      scope = scope.parent;
-    let inCoord = false;
-    for (let n: GoFishNode | undefined = this; n; n = n.parent)
-      if (n.type === "coord") inCoord = true;
-    const result = !inCoord && !scope.carriesData(axis);
+    const result = !this.inCoord() && !this.scopeOf(axis).carriesData(axis);
     memo[axis] = result;
     return result;
   }

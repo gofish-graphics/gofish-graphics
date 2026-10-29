@@ -761,27 +761,41 @@ report their size).
   padding. So the outline takes room where it draws and never moves its
   members. The box is exact for `Shape.box()`, and a blob lies inside it; an
   oval can reach past it, and that reach is ink.
-- **Bands are shares, and a share is a claim (#493 piece 3).** On an axis
-  where nothing in a scope is sized or placed by data
-  (`GoFishNode.carriesData`), σ has no data unit to be the pixels of, so it
-  is the room a node with no size of its own takes (`GoFishNode.sharesRoom`):
-  a node that fills (a leaf with no size of its own, or a node with no size
-  of its own whose children all fill) and has no claim of its own claims one
-  σ there when it is in a slot or inside a node in a slot. A node in no slot
-  (a rule laid over a bar chart) claims nothing, and fills the room of what
-  holds it. A spread of `n` bands with spacing `g` claims
+- **Bands are shares, and a share is a claim (#493 piece 3, #1176 step 5).**
+  A share is a σ weight in its nearest scope (`GoFishNode.isScope`): a node
+  whose room is fixed from outside its content. That is the render root in
+  the canvas, a node with a size of its own, a node whose room its parent
+  gives it (a region's cell or a treemap tile, `GoFishNode.givenRoom`, which
+  the plan lists in `SharingPlan.rooms`) when σ sizes its content, and a
+  node of pinned data in a slot (a facet panel). On an axis where nothing in
+  a scope is sized or placed by data (`GoFishNode.carriesData`, which does
+  not look inside a nested scope), σ has no data unit to be the pixels of,
+  so it is the room a node with no size of its own takes
+  (`GoFishNode.sharesRoom`): a node that fills (a leaf with no size of its
+  own, or a node with no size of its own that is a scope or whose children
+  all fill) and has no claim of its own claims one σ there when it is in a
+  slot or inside a node in a slot, with no room given between. A scope that
+  fills solves its content in its own room and claims one σ in the scope
+  above, and what dresses its content reaches past that σ (`aroundShare` in
+  `chromeGutters.ts`): its whole past its plot, read as a function of the
+  share through the content's plot (`through` in `solver/pwl.ts`). So facet
+  panels are shares of the chain that holds them, and their axes take room
+  in its claim. A node in no slot (a rule laid over a bar chart) claims
+  nothing, and fills the room of what holds it. A spread of `n` bands with
+  spacing `g` claims
   `n·σ + (n − 1)·g`, so the claim walk knows where each band lands, and a
   value label beside a band, or the half of a category label past the last
   band, takes room. Solving the scope against its slot narrows the bands to
   make it. In a share scope a layer lays each child out at its claim at σ,
-  so the bands are the σ the scope solved. On an axis the render gives no
+  so the bands are the σ the scope solved, and so is a share in a scope that
+  carries data (`GoFishNode.flexes`). On an axis the render gives no
   size there is no slot to share, and the bands keep their default size. A
   node that fills (`GoFishNode.fillsRoom`: a leaf with no size of its own, or
   a node with no size of its own whose children all fill) and that a `nest`
-  derives takes the inner's size plus the padding, not a share. A
-  scope that mixes data and bands of no size on one axis keeps the bands as
-  they were: they claim nothing and share what the data leaves, and what
-  hangs off them is ink.
+  derives takes the inner's size plus the padding, not a share. A node
+  that fills in a slot of a scope that carries data is a share too: it is
+  one σ, one data unit, and the layout warns that its chain mixes
+  data-driven and flexible sizes (`mixed-sizes`, below).
 - **Category labels overdraw their neighbors (#1115).** A category label is
   centered on its slot's ref, and only its overhang past the ends of its
   axis takes room: the claim of a ring is the hull of its labels, so labels
@@ -795,8 +809,7 @@ report their size).
   with a size of its own, one under a node that reads y the other way, a node
   that reads its place from refs (`GoFishNode.inkOn`: the span a label over
   a run of several slots is centered on, or an `enclose` with a member the
-  claim walk cannot place), and a band in a scope that mixes data and
-  bands.
+  claim walk cannot place).
 - **Nicing holds the domain.** A claim is the hull of what the content draws,
   so widening it to a keyed or niced domain (`widenTo`) takes the farther of
   the claim and the domain's end on each side. A tick label past the last
@@ -969,6 +982,11 @@ those lines, so `pnpm capture-one` prints them under the story.
   description summed, with their count) and the rest of the fixed pixels.
   The scope then maps its data at the σ where the parts that grow with σ
   fill the slot, as if the fixed parts took no room.
+- **Data-driven and flexible sizes in one chain (`mixed-sizes`).** A part
+  with no size of its own beside parts sized by data has a flexible size,
+  which is a data type with no name: no one scale fits it and the data. The
+  claim walk gives it one σ, one data unit (`mixedSizes`), and the warning
+  names the chain, the axis, the flexible part and the data-driven parts.
 - **A drawing past the canvas (`ink-overflow`).** After placement, on each
   axis the render sizes and no fixed-overflow was found, the hull of the
   root's box and its ink is checked against the canvas, naming the ink node

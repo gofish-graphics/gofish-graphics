@@ -379,6 +379,11 @@ export type SharingPlan = {
   /** Per axis: children whose own extent sits in a frame of its own (a datum
    *  placement, a spread slot, a grid cell). */
   nested: [Set<number>, Set<number>];
+  /** Per axis: children the node gives a room of its own, from outside
+   *  their content (a region's cell, a treemap tile), which makes a child
+   *  with content a σ-scope of its own (`GoFishNode.isScope`). None when
+   *  absent. */
+  rooms?: [Set<number>, Set<number>];
 };
 
 /** What a child is to its parent on one axis, by the parent's plan:
@@ -425,6 +430,7 @@ export function planSharing(
 
   const datumPlaced: [Set<number>, Set<number>] = [new Set(), new Set()];
   const nested: [Set<number>, Set<number>] = [new Set(), new Set()];
+  const rooms: [Set<number>, Set<number>] = [new Set(), new Set()];
   const detached: [Set<number>, Set<number>] = [new Set(), new Set()];
   const joins: [number[][], number[][]] = [[], []];
   const detach = (axis: 0 | 1, idx: number[]) =>
@@ -450,6 +456,13 @@ export function planSharing(
             idx.forEach((i) => datumPlaced[axis].add(i));
             nest(axis, idx);
           }
+          // A region's cell, with no coordinate of its own on the axis, is
+          // the child's room there.
+          if (
+            c.region?.spans[axis] !== undefined &&
+            (axis === 0 ? c.x : c.y) === undefined
+          )
+            idx.forEach((i) => rooms[axis].add(i));
         }
         break;
       }
@@ -523,7 +536,7 @@ export function planSharing(
       return s;
     });
   }
-  return { sets, nested, datumPlaced };
+  return { sets, nested, rooms, datumPlaced };
 }
 
 const foldOptions = (s: Seg) => ({

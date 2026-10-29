@@ -89,6 +89,11 @@ of negative slope, which the lower reach of a union needs. `max` drops zero clai
 first. `ZERO` is the shared claim `0σ + 0`, the default descent of an extent that sits
 wholly above its baseline.
 
+`through(f, g)` reads `f` as a function of `g`'s value: the value of `f` at the σ where
+`g` reaches a value. A share's dressing uses it, since the dressing is a function of the
+content's σ, and the share is the content's plot. Below `g(0)` it is `f(0)`, where `g`
+is flat it jumps as `solve` does, and past a `g` that ends flat it stays constant.
+
 `print` renders a value as its equation: `40σ + 16`, or `max(σ + 30, 2σ)` for a value
 that bends upward, matching the forms in the
 [layout synthesis essay](/internals/design/layout-synthesis).

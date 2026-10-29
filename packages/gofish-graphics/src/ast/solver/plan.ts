@@ -56,9 +56,10 @@ export type LayerPlan = {
 };
 
 /** `c`'s plan on `axis`, when it is a layer that is no scope of its own
- *  there (a size of its own is its claim). */
+ *  there (`GoFishNode.isScope`: its plan is in a σ of its own, and its
+ *  claim is what it claims in its parent's). */
 const planOf = (c: GoFishAST, axis: 0 | 1): LayerPlan | undefined =>
-  c instanceof GoFishNode && c.claimWalk?.ownScope[axis] === false
+  c instanceof GoFishNode && c.claimWalk !== undefined && !c.isScope(axis)
     ? c.claimWalk.plan(axis)
     : undefined;
 
@@ -464,15 +465,15 @@ const flips = (parent: GoFishNode, child: GoFishAST, axis: 0 | 1): boolean =>
  * its claim's descent at that σ past the 0 of the claim it reports (its
  * start edge where it seats its content by its box, else that data 0).
  * Undefined where no plan reaches: a node that is not a layer, or a scope
- * the claim walk did not solve (a size read off data, or content that maps
- * no domain).
+ * the claim walk did not solve (a size read off data, a room its parent
+ * gives it, or content that maps no domain).
  */
 const leaving = (
   n: GoFishNode,
   axis: 0 | 1
 ): ((v: Pwl.Value) => Pwl.Value) | undefined => {
   if (n.claimWalk === undefined) return undefined;
-  if (!n.claimWalk.ownScope[axis]) return (v) => v;
+  if (!n.isScope(axis)) return (v) => v;
   const solved = n.tryGetRenderSession()?.scopes?.fixedSolve(n, axis);
   const claim = n.resolveExtent()[axis];
   if (solved === undefined || claim === undefined) return undefined;
@@ -585,7 +586,7 @@ export function planPlacement(
   const chain: GoFishNode[] = [];
   for (let m = frame; m !== shared; m = m.parent!) chain.push(m);
   for (const m of chain.reverse()) {
-    if (m.claimWalk?.ownScope[axis] === true) return undefined;
+    if (m.isScope(axis)) return undefined;
     const p = m.parent!;
     const s = seatOf(p, m, axis);
     if (s === undefined) return undefined;

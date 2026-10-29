@@ -15,6 +15,7 @@ import {
   text,
   field,
   layer as layerOf,
+  value,
 } from "../lib";
 import { runLayout } from "../ast/gofish";
 import * as Pwl from "../ast/solver/pwl";
@@ -397,6 +398,55 @@ async function main() {
       "labels below the bars: the caption's height counts from below the labels",
       close(bottom.height, 132 + 12, 0.5) && plotBottom < bottom.height - 1,
       [bottom.height, plotBottom]
+    );
+  }
+
+  console.log(
+    "\n# a flexible part beside data-sized parts is one data unit, and warns"
+  );
+  {
+    // Two bars sized by data and one with no size of its own, in one chain
+    // with no container between them: the flexible part is a σ weight in the
+    // chain's scope, one data unit wide, so 40σ + 20σ + σ + 2 · 10 = 300.
+    const rows = [
+      { k: "a", v: 40 },
+      { k: "b", v: 20 },
+      { k: "flex", v: 0 },
+    ];
+    const build = () =>
+      chart(rows, { axes: false })
+        .flow(spread({ by: "k", dir: "x", spacing: 10 }))
+        .mark((d: any) =>
+          d[0].k === "flex"
+            ? rect({ h: 10 })
+            : rect({ w: value(d[0].v), h: 10 })
+        );
+    const sigma = 280 / 61;
+    const rects = items(await build().toDisplayList({ w: 300, h: 50 })).filter(
+      (i) => i.kind === "rect"
+    );
+    check(
+      "the data-sized parts are 40σ and 20σ, and the flexible part is σ",
+      rects.length === 3 &&
+        close(rects[0].w, 40 * sigma) &&
+        close(rects[1].w, 20 * sigma) &&
+        close(rects[2].w, sigma),
+      rects.map((r) => r.w)
+    );
+    const data = await runLayout({ w: 300, h: 50 }, await build().resolve());
+    const mixed = data.warnings.filter((w) => w.kind === "mixed-sizes");
+    check(
+      "the layout warns that x mixes data-driven and flexible sizes, naming the parts",
+      mixed.length === 1 &&
+        mixed[0].axis === "x" &&
+        mixed[0].message.includes(
+          'spread(by: "k") on x mixes data-driven and flexible sizes'
+        ) &&
+        mixed[0].message.includes('rect(key: "flex") has no size of its own') &&
+        mixed[0].message.includes(
+          'rect(key: "a"), rect(key: "b") are sized by data'
+        ),
+      data.warnings.map((w) => w.message)
     );
   }
 

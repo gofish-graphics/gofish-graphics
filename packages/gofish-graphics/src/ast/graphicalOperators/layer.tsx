@@ -761,7 +761,7 @@ export const layer = createNodeOperatorSequential(
             layerTypes?.resolved,
             contentExtents,
             node._underlyingSpace,
-            (axis) => node.inSlot(axis),
+            (axis) => node.isScope(axis),
             size,
             inheritedScaleFactors,
             inheritedPosScales,
@@ -954,7 +954,8 @@ export const layer = createNodeOperatorSequential(
               (constrainedChildren.has(i) ? undefined : proposals.passedOn);
             // In a share scope (`sharesRoom`) a child is laid out at its
             // claim at σ: a band is one σ, and a node that holds bands is
-            // what its claim says at the σ the scope solved.
+            // what its claim says at the σ the scope solved. So is a share
+            // in a scope that data sizes (a part whose size flexes).
             const own = ([0, 1] as const).map((axis) => {
               const sigma = childScaleFactors[axis];
               const claim =
@@ -964,7 +965,7 @@ export const layer = createNodeOperatorSequential(
               return claim !== undefined &&
                 sigma !== undefined &&
                 Number.isFinite(sigma) &&
-                node.sharesRoom(axis)
+                (node.sharesRoom(axis) || (child as GoFishNode).flexes(axis))
                 ? Pwl.at(claim.width, sigma)
                 : undefined;
             }) as Size<number | undefined>;
@@ -992,6 +993,7 @@ export const layer = createNodeOperatorSequential(
               childName === undefined ? undefined : sliceByName?.get(childName);
             const proposed = proposedParts.map((v, axis) =>
               slice !== undefined &&
+              own[axis] === undefined &&
               v === slice[axis] &&
               v !== size[axis] &&
               !ring &&

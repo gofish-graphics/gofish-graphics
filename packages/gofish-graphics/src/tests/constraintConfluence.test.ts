@@ -1276,7 +1276,7 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
     maps: [AxisMap | undefined, AxisMap | undefined],
     domain: (axis: 0 | 1) => ReturnType<typeof interval> | undefined = none,
     ticks: (axis: 0 | 1) => typeof DEFAULT_AXIS_TICKS | undefined = none,
-    inSlot: [boolean, boolean] = [false, false]
+    isScope: [boolean, boolean] = [false, false]
   ) => {
     // The axes the layer solves: it scopes its claim only to solve it.
     const solved: (0 | 1)[] = [];
@@ -1285,7 +1285,7 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
       spaces,
       claims,
       spaces,
-      (axis) => inSlot[axis],
+      (axis) => isScope[axis],
       [100, 80],
       sigmas,
       maps,
@@ -1356,8 +1356,9 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
       unscaled.sigmas[1] === undefined
   );
 
-  // A pinned node in a slot (a facet panel) is sized by its slot; a free
-  // one (a part of a chain) inherits σ.
+  // A node whose room is given to it (`GoFishNode.isScope`: a pinned
+  // node in a slot, a facet panel) is sized by its room; any other (a free
+  // part of a chain) inherits σ.
   const slot = solve(
     [false, false],
     [positionSpace, sizeSpace],
@@ -1366,10 +1367,10 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
     [undefined, undefined],
     none,
     none,
-    [true, true]
+    [true, false]
   );
   ok(
-    "a pinned node in a slot is sized by its slot; a free one inherits",
+    "a node whose room is given is sized by it; any other inherits",
     slot.sigmas[0] === 10 && slot.sigmas[1] === 3
   );
 

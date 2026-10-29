@@ -14,7 +14,7 @@ import {
   type Region,
   type Span,
 } from "../geometry";
-import { originIs, type UnderlyingSpace } from "../underlyingSpace";
+import type { UnderlyingSpace } from "../underlyingSpace";
 import { mapsDomain, type Extent } from "../extent";
 import type { AxisMap } from "../domain";
 import type { GoFishNode } from "../_node";
@@ -369,8 +369,9 @@ export type LayerScales = {
  *   - it has a size of its own (`ownSize`): a literal `w`/`h`, or a
  *     data-valued one, whose box its parent's σ sizes and whose content it
  *     maps into that box;
- *   - or it holds pinned data in a slot its parent nests it in (`inSlot`: a
- *     spread, grid or treemap slot, a facet panel). Its box is that slot;
+ *   - or its room is given to it from outside its content (`isScope`: a
+ *     region's cell, a treemap tile, pinned data in a slot, a facet panel).
+ *     Its box is that room;
  *   - or nothing above it solved a σ to hand it (`handedSigmas` is
  *     undefined): it is the top of its space, and its box is the size it is
  *     given.
@@ -397,9 +398,10 @@ export function solveLayerScales(
   contentExtents: Size<Extent | undefined>,
   // What the layer reports upward, whose frame it has when it inherits.
   reported: Size<UnderlyingSpace> | undefined,
-  // Per axis: its parent nests it in a slot of its own (`inSlot`). Read
-  // last, only when the other conditions leave it to decide.
-  inSlot: (axis: 0 | 1) => boolean,
+  // Per axis: its room is given to it from outside its content
+  // (`GoFishNode.isScope`). Read last, only when the other conditions leave
+  // it to decide.
+  isScope: (axis: 0 | 1) => boolean,
   layerSize: Size,
   handedSigmas: Size<number | undefined>,
   handedMaps: ConstraintPosScales,
@@ -429,8 +431,7 @@ export function solveLayerScales(
     const sized =
       ownSize[axis] ||
       (handedMaps[axis] === undefined &&
-        (handedSigmas[axis] === undefined ||
-          (originIs(content, "pinned") && inSlot(axis))));
+        (handedSigmas[axis] === undefined || isScope(axis)));
     const claim = contentExtents[axis];
     // A claim that maps no domain (content that is only fixed boxes) has
     // nothing to solve: the layer inherits.

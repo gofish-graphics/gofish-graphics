@@ -22,9 +22,12 @@ import * as Pwl from "./solver/pwl";
  * - `ink-overflow`: what the graphic draws reaches past the canvas for
  *   another reason: a node the claim walk cannot place (ink), so it took
  *   no room.
+ * - `mixed-sizes`: a part of a chain with no size of its own (a flexible
+ *   size, a share of the chain's room) sits in a scope that data sizes.
+ *   It is drawn one data unit wide.
  */
 export type LayoutWarning = {
-  kind: "fixed-overflow" | "ink-overflow";
+  kind: "fixed-overflow" | "ink-overflow" | "mixed-sizes";
   /** The node, as its operator or mark and key: `spread(by: "site")`. */
   node: string;
   axis: "x" | "y";
@@ -281,6 +284,50 @@ export function spacingOverflow(
     [{ part: `spacing ${chain.spacing} × ${gaps}`, px: needed }],
     "Its parts are drawn as if the spacing took no room"
   );
+}
+
+/**
+ * A `mixed-sizes` warning for `part`, a part of a chain along `axis` with
+ * no size of its own, in a scope that data sizes on `axis` (#1176 step 5).
+ * A flexible size has no data type, so it shares no scale with the data:
+ * the part is a σ weight in the scope, one data unit wide. It names the
+ * chain's parts that data sizes, or the scope when none of them is.
+ */
+export function mixedSizes(part: GoFishNode, axis: 0 | 1): LayoutWarning {
+  const chain = part.parent!;
+  const name = axisName(axis);
+  const what = describeNode(part);
+  const data = chain.children.filter(
+    (c): c is GoFishNode =>
+      c !== part &&
+      "carriesData" in c &&
+      !(c as GoFishNode).isScope(axis) &&
+      (c as GoFishNode).carriesData(axis)
+  );
+  let scope = chain;
+  while (scope.parent !== undefined && !scope.isScope(axis))
+    scope = scope.parent;
+  const sized =
+    data.length === 0
+      ? `${describeNode(scope)} sizes its other parts by data`
+      : `${[...new Set(data.map(describeNode))].join(", ")} ` +
+        `${data.length === 1 ? "is" : "are"} sized by data`;
+  return {
+    kind: "mixed-sizes",
+    node: describeNode(chain),
+    axis: name,
+    needed: 0,
+    available: 0,
+    parts: [],
+    message:
+      `${describeNode(chain)} on ${name} mixes data-driven and flexible ` +
+      `sizes: ${what} has no size of its own, so its size is flexible, ` +
+      `but ${sized}. A flexible size is like a data type with no name, so ` +
+      `this is like sizing two parts along ${name} by two different data ` +
+      `types: no one scale fits both. ${what} is drawn one data unit wide. ` +
+      `Give it a size of its own, or put the data-driven parts in a ` +
+      `container with a size of its own.`,
+  };
 }
 
 /** An `ink-overflow` warning: what the graphic draws spans `[lo, hi]` on

@@ -204,6 +204,60 @@ export function scale(k: number, v: Value): Value {
 /** `−v`. */
 export const negate = (v: Value): Value => scale(-1, v);
 
+/**
+ * `f` read through `g`: the value `h` of `t` with `h(g(σ)) = f(σ)`, for a
+ * `g` that never decreases. It reads a claim in a scope of its own in the
+ * σ of the scope around it, where `g` is how long that scope's room is at
+ * its own σ (a facet panel's plot, `chromeGutters.ts`). Below `g(0)` no σ
+ * makes `g` that short, so `h` is `f(0)` there; where `g` is flat, `h`
+ * takes `f` past the flat stretch, as {@link solve} takes the largest σ.
+ */
+export function through(f: Value, g: Value): Value {
+  const out: Segment[] = [];
+  const push = (from: number, to: number, slope: number, intercept: number) => {
+    const lo = Math.max(0, from);
+    if (to > lo) out.push({ from: lo, to, slope, intercept });
+  };
+  const g0 = at(g, 0);
+  push(0, g0, 0, at(f, 0));
+  const fs = segmentsOf(f);
+  for (const s of segmentsOf(g)) {
+    if (!(s.slope > 0)) continue;
+    // σ = (t − intercept) / slope on this stretch of g; f's breakpoints
+    // inside it cut it.
+    const cuts = [
+      s.from,
+      ...fs.map((x) => x.to).filter((x) => x > s.from && x < s.to),
+      s.to,
+    ];
+    for (let k = 0; k + 1 < cuts.length; k++) {
+      const seg = segmentAt(
+        fs,
+        (cuts[k] + Math.min(cuts[k + 1], cuts[k] + 1)) / 2
+      );
+      push(
+        s.slope * cuts[k] + s.intercept,
+        cuts[k + 1] === Infinity
+          ? Infinity
+          : s.slope * cuts[k + 1] + s.intercept,
+        seg.slope / s.slope,
+        seg.intercept - (seg.slope * s.intercept) / s.slope
+      );
+    }
+  }
+  // Past a g that ends flat, f stays where g left it.
+  const last = out[out.length - 1];
+  if (last === undefined) return constant(at(f, 0));
+  if (last.to < Infinity)
+    out.push({
+      from: last.to,
+      to: Infinity,
+      slope: 0,
+      intercept: last.slope * last.to + last.intercept,
+    });
+  return fromSegments(out);
+}
+
 /** The upper envelope of `lines` on `[lo, hi]`, as segments in order. In
  *  slope order each line enters and leaves the envelope once, so one pass
  *  over a stack keeps the lines that bound it (a monotone hull). */

@@ -538,9 +538,11 @@ each inherent to what the origin states are:
   slot, claims one σ, so a spread of `n`
   bands with spacing `g` claims `n·σ + (n − 1)·g`, and whatever hangs off a
   band (a value label, the half of a category label past the last band)
-  takes room in the same claim, which narrows the bands. A scope whose axis
-  mixes data with bands of no size keeps them as before: the bands claim
-  nothing and share what the data leaves. A leaf in no slot (a rule laid
+  takes room in the same claim, which narrows the bands. A share is a σ
+  weight in its nearest scope, and a node whose room is given (a facet
+  panel, a cell, a tile) is a scope, so a panel is a share of the chain that
+  holds it. A band of no size in a chain sized by data is one σ, one data
+  unit, and the layout warns (`mixed-sizes`). A leaf in no slot (a rule laid
   over a bar chart) claims nothing, and fills the room of what holds it.
 - **A plot claim beside the claim**: a layer's plan also computes the
   claim of the plot, which leaves out dressing (a label placed beside a
@@ -1403,6 +1405,8 @@ an axis when its size there is given to it rather than computed from σ:
 - a node with a literal `w`/`h`;
 - a node with a data-valued `w`/`h`, whose box its parent's σ sizes and whose
   content it maps into that box;
+- a node whose room its parent gives it (a region's cell, a treemap tile),
+  with content that σ sizes, sized by that room;
 - a node with pinned data in a slot its parent nests it in (a spread, grid
   or treemap slot: a facet panel), sized by its slot;
 - a node handed no σ at all because nothing above it could solve one, sized
@@ -1597,8 +1601,8 @@ in the parent's own set and reads its values in the parent's frame. A
 own: it is placed at a datum, or it is the content of a data-valued box. A
 **slot** child has a set and a frame of its own (a spread slot, a grid cell).
 A **detached** child has a set of its own and is placed elsewhere. The table
-build reads it, and so does `GoFishNode.inSlot`, which a layer's σ solve asks
-(`solveLayerScales`) only for pinned content handed a σ and no map.
+build reads it, and so does `GoFishNode.isScope`, which a layer's σ solve asks
+(`solveLayerScales`) only for content handed a σ and no map.
 Values with no unit (literals) are keyed by their set. So two facet panels
 that plot one column share one domain, and a count histogram placed beside a
 scatter of millimeters keeps its own. Chrome never decides a domain, it only

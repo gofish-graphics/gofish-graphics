@@ -101,6 +101,30 @@ export const reachAt = (f: ChromeForms, sigma: number): [number, number] => [
   room(Pwl.at(f.whole.ascent, sigma) - Pwl.at(f.plot.ascent, sigma)),
 ];
 
+/**
+ * The claim of a node that is a σ-scope of its own and fills a share of
+ * the scope around it (a facet panel, #1176 step 5), by its chrome forms
+ * `f` in its own σ. Its plot is one σ of the scope around it. What its
+ * chrome and dressing reach past the plot is read through the length its
+ * plot has at its own σ (`Pwl.through`), so at each outer σ the node
+ * claims what {@link aroundPlot} lays it out at around a plot that long.
+ */
+export function aroundShare(f: ChromeForms): ChromeForms {
+  const share = Pwl.affine(1, 0);
+  const reach = (whole: Pwl.Value, plot: Pwl.Value) =>
+    Pwl.through(
+      Pwl.envelope([Pwl.add(whole, Pwl.negate(plot)), Pwl.ZERO]),
+      f.plot.width
+    );
+  return {
+    whole: Extent(
+      Pwl.add(share, reach(f.whole.ascent, f.plot.ascent)),
+      reach(f.whole.descent, f.plot.descent)
+    ),
+    plot: Extent(share),
+  };
+}
+
 /** The X ≥ 0 at which `m` reaches `target` (`m` never decreases), solved
  *  as the root's σ is: where the fixed parts of `m` alone are larger than
  *  the target, no X reaches it, and X is where the part that grows with X,
