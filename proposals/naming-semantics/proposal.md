@@ -181,58 +181,45 @@ A callout is drawn inside the outer `.relate()`. The callout is its own layer wi
 
 ```js
 layer([
-  chart(normalGrid)
+  chart(normalGrid, { w: 240, h: 160 })
     .flow(scatter({ x: "x" }))
     .mark(ribbon({ h: "pdf" }).name("density")),
 ]).relate(({ density }) => [
-  // A callout, built by a helper that happens to name its swatch "density" too.
-  position({ x: 280, y: 30 }, [
-    layer([
-      spread({ dir: "x", spacing: 6, alignment: "middle" }, [
-        rect({ w: 12, h: 12 }).name("density"),
-        text({ text: "standard normal" }).name("note"),
-      ]),
-    ]).relate(({ note }) => [arrow({ stroke: RED }, [note, density])]),
-  ]),
+  // A callout above the peak, built by a helper that happens to name its
+  // swatch "density" too.
+  layer([
+    rect({ x: 55, y: 205, w: 12, h: 12 }).name("density"),
+    text({ x: 73, y: 205, text: "standard normal" }).name("note"),
+  ]).relate(({ note }) => [arrow({ stroke: RED, padEnd: 2 }, [note, density])]),
 ]);
 ```
 
 ```python
 layer(
     [
-        chart(normal_grid).flow(scatter(x="x")).mark(ribbon(h="pdf").name("density")),
+        chart(normal_grid, w=240, h=160)
+        .flow(scatter(x="x"))
+        .mark(ribbon(h="pdf").name("density")),
     ]
 ).relate(
     lambda density: [
-        # A callout, built by a helper that happens to name its swatch "density" too.
-        position(
+        # A callout above the peak, built by a helper that happens to name
+        # its swatch "density" too.
+        layer(
             [
-                layer(
-                    [
-                        spread(
-                            [
-                                rect(w=12, h=12).name("density"),
-                                text(text="standard normal").name("note"),
-                            ],
-                            dir="x",
-                            spacing=6,
-                            alignment="middle",
-                        ),
-                    ]
-                ).relate(lambda note: [arrow([note, density], stroke=RED)]),
-            ],
-            x=280,
-            y=30,
-        ),
+                rect(x=55, y=205, w=12, h=12).name("density"),
+                text(x=73, y=205, text="standard normal").name("note"),
+            ]
+        ).relate(lambda note: [arrow([note, density], stroke=RED, pad_end=2)]),
     ]
 )
 ```
 
-| Today: the arrow is captured by the swatch | A, B and C: the arrow reaches the curve |
-| ------------------------------------------ | --------------------------------------- |
-| ![today](nested-today.png)                 | ![proposed](nested-proposed.png)        |
+| Today: the arrow is captured by the swatch | Implemented (C): the arrow reaches the curve |
+| ------------------------------------------ | -------------------------------------------- |
+| ![today](nested-today.png)                 | ![proposed](nested-proposed.png)             |
 
-Today the outer `density` turns into the string `"density"` inside the inner clause, and the inner layer's own swatch captures it. No error is raised. If the helper did not name a swatch `density`, the same program throws "names a node outside the relating layer" instead. A, B and C all draw the arrow to the curve. (The arrow ends at the curve's bounding box, which is how `arrow` reads any node.)
+Today the outer `density` turns into the string `"density"` inside the inner clause, and the inner layer's own swatch captures it. No error is raised. If the helper did not name a swatch `density`, the same program throws "names a node outside the relating layer" instead. A, B and C all draw the arrow to the curve. (The arrow ends at the curve's bounding box, which is how `arrow` reads any node, so the implemented render puts the callout above the peak, where the box meets the curve, and sets `padEnd: 2` so the head touches it. The "today" render is of the earlier layout.)
 
 On the wire, the arrow's two operands differ only in their scope id. This is the whole change Python needs:
 

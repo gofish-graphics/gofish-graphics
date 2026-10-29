@@ -7,7 +7,11 @@ status: speculative
 
 # Naming semantics
 
-> **Status: design exploration (2026-10-28).** Nothing here is implemented.
+> **Status: partly implemented (2026-10-29).** The proposal's option C, B's
+> operand with A's clause list plus C's `selectAll` rule, is implemented in
+> [#1237](https://github.com/gofish-graphics/gofish-graphics/pull/1237). All
+> three bugs in section 4 are fixed. Section 7 records what was built and
+> what is still open. The rest of the note is the exploration as written.
 > This note maps the way GoFish names work onto programming language theory,
 > turns three `.relate()` bugs into precise test cases, and compares three
 > candidate semantics. It tracks
@@ -383,6 +387,8 @@ I got.
 
 ### (a) `.relate()` drops other layers' clauses (#1235)
 
+> **Fixed** by the clause list on the layer (section 7).
+
 ```ts
 import { layer, chart, scatter, circle } from "../src/lib";
 const rows = [{ x: 1 }, { x: 2 }];
@@ -437,6 +443,8 @@ over several fields, and any field the function forgets to move is lost.
 
 ### (b) A clause cannot see the layer's chart names
 
+> **Fixed**: a clause is resolved in the registry of the layer's plain children (section 7).
+
 ```ts
 import { layer, chart, scatter, circle, line, selectAll } from "../src/lib";
 const rows = [
@@ -474,6 +482,8 @@ the layer registry and the tree lookup are two environments for one layer, and
 `.relate()` connects only one of them.
 
 ### (c) Clause operands are looked up again where they are used
+
+> **Fixed**: an operand carries the scope that bound it (section 7).
 
 ```ts
 import { layer, rect, circle, arrow, spread } from "../src/lib";
@@ -679,6 +689,45 @@ the string-ref rule.
    keep its flat registry per `layer`?
 4. Should a token applied under a split be an error, or a plural name like
    `selectAll`?
+
+## 7. What was implemented
+
+The change follows the proposal's recommendation in two steps.
+
+**Step 1: an operand is a name plus its scope.**
+
+- A `RelateOperand` holds the name and the layer whose `.relate()` bound it.
+  A ref built from it resolves from that layer. At that first level the
+  lookup skips the layer's clause slots. A name a clause introduces does not
+  carry the binding's scope, so the bug (c) swatch cannot capture the
+  operand, even when it is closer to the layer than the curve.
+- A constraint operand must still lie inside the layer that places it.
+- The layer keeps its clauses as slots (`_relateClauses`), not as a flag on
+  each child. A pass that wraps a clause replaces it in its slot, so the
+  wrapper stays a clause, and no other layer can read the list (bug (a)).
+- The `layer([...])` combinator keeps the registry it resolved its plain
+  children in, and the clauses are resolved in it (bug (b)).
+- On the wire, `relate` is `{ scope, clauses }`, and every operand is
+  `{ type: "ref", selection, scope }`. Python mints the scope id per call.
+
+**Step 2: `selectAll` widens like `ref`.** Each `layer` combinator's
+registry is a child of the registry it is built in. A chart-data `ref` or
+`selectAll` searches its registry and the ones nested in it, nearest depth
+first, then widens. Every registry at the nearest depth contributes, so a
+name a split repeats is plural.
+
+**Still open.**
+
+- The registries remain a second table beside the node tree. C's single
+  resolver would read the tree. It cannot yet, because an operator that
+  constrains its children (`spread`, `scatter`) renames a second child that
+  carries the same name (`ensureChildNames`), so a repeated name survives
+  only in the registry. The operators would need a constraint handle other
+  than `_name` first.
+- Tokens are unchanged. A token that a split repeats is still filed under one
+  key in the registry, and `selectAll(token)` still throws. `ref(token)`
+  inline still reads the global token table, where one node wins silently. Making
+  a repeated token plural needs the same operator change.
 
 ## References
 
