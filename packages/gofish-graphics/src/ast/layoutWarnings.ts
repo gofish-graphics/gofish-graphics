@@ -4,11 +4,12 @@
 
 import type { GoFishNode } from "./_node";
 import type { DistributeConstraint } from "./constraints/distribute";
+import type { GridConstraint } from "./constraints/grid";
 import { axisIndex, axisName } from "./constraints/shared";
 import type { Extent } from "./extent";
 import { room } from "../util";
 import * as Pwl from "./solver/pwl";
-import { printLength } from "./length";
+import { isFr, printLength, type Length, type LengthValue } from "./length";
 
 /**
  * A problem layout found and drew through anyway (#493): the render keeps
@@ -188,12 +189,7 @@ function fixedParts(
     if (chain !== undefined && !chain.glue && chain.anchor === "edge") {
       const gaps = chain.children.length - 1;
       // A length spacing's fixed pixels are its gap at σ = 0.
-      const each =
-        typeof chain.spacing === "number"
-          ? chain.spacing
-          : chain.gap === undefined
-            ? 0
-            : Pwl.at(chain.gap, 0);
+      const each = Pwl.at(n.gapOf(chain, axis), 0);
       const spelled =
         typeof chain.spacing === "number"
           ? `${chain.spacing}`
@@ -275,33 +271,102 @@ function fixedWarning(
   };
 }
 
+/** The `fr` gaps `node` lays out between its parts along `axis`: its
+ *  chains' spacings and its table's gap between tracks there. */
+const frGaps = (node: GoFishNode, axis: 0 | 1): (Length | LengthValue)[] =>
+  node.constraints.flatMap((c) => {
+    const spacing =
+      c.type === "grid"
+        ? (c as GridConstraint).spacing[axis]
+        : c.type === "distribute" &&
+            axisIndex((c as DistributeConstraint).dir) === axis
+          ? (c as DistributeConstraint).spacing
+          : undefined;
+    return spacing !== undefined && typeof spacing !== "number" && isFr(spacing)
+      ? [spacing]
+      : [];
+  });
+
 /**
- * A `mixed-sizes` warning for a flexible size along `axis` in a scope
- * that data sizes there (#1176 step 5): `part`, a part of a chain with no
- * size of its own or with an `fr` size, or, when `gap` names it, the
- * `fr` spacing of the chain `part` (#1176 step 6). A flexible size has no
- * data type, so it shares no scale with the data: it is a σ weight in the
- * scope, that many data units wide. It names the chain's parts that data
- * sizes, or the scope when none of them is.
+ * Check the flexible sizes `node` lays out along `axis` once (#1176 steps 5
+ * and 6): its parts whose claim is one share of their scope
+ * (`GoFishNode.isShare`: a part with no size of its own, or an `fr` size),
+ * and its `fr` gaps (a chain's spacing, a table's gap between tracks).
+ *
+ * In a scope that data sizes there, a flexible size has no data type, so it
+ * shares no scale with the data: it is a σ weight in the scope, that many
+ * data units wide. The node warns once (`mixed-sizes`), naming its flexible
+ * parts and gaps. On an axis the render gives no size, a scope of shares at
+ * the root has no room, so an `fr` gap there, which has no default size as
+ * a part has, is 0, and warns (`no-room`).
  */
-export function mixedSizes(
-  part: GoFishNode,
+export function warnFlexibleSizes(node: GoFishNode, axis: 0 | 1): void {
+  const gaps = frGaps(node, axis);
+  const parts = node.children.filter(
+    (c): c is GoFishNode => "isShare" in c && (c as GoFishNode).isShare(axis)
+  );
+  if (gaps.length === 0 && parts.length === 0) return;
+  const scope = node.scopeOf(axis);
+  // TODO(#1176): the root's fit decides that a share has no room there.
+  if (
+    gaps.length > 0 &&
+    scope.parent === undefined &&
+    !scope.isScope(axis) &&
+    node.tryGetRenderSession()?.canvas?.[axis] === undefined &&
+    scope.sharesRoom(axis)
+  ) {
+    for (const g of gaps) warnLayout(node, noRoom(node, axis, printLength(g)));
+    return;
+  }
+  if (scope.carriesData(axis))
+    warnLayout(node, mixedSizes(node, axis, parts, gaps));
+}
+
+/** A clause list: `a`, `a and b`, `a, b and c`. */
+const listed = (items: string[]): string =>
+  items.length <= 1
+    ? (items[0] ?? "")
+    : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+
+/**
+ * A `mixed-sizes` warning for the flexible sizes the chain `chain` lays out
+ * along `axis` in a scope that data sizes there ({@link warnFlexibleSizes}):
+ * `parts`, its parts with no size of its own or with an `fr` size, and
+ * `gaps`, its `fr` spacings. It names the chain's parts that data sizes, or
+ * the scope when none of them is.
+ */
+function mixedSizes(
+  chain: GoFishNode,
   axis: 0 | 1,
-  gap?: string
+  parts: GoFishNode[],
+  gaps: (Length | LengthValue)[]
 ): LayoutWarning {
-  const chain = gap === undefined ? part.parent! : part;
   const name = axisName(axis);
-  const what = gap ?? describeNode(part);
-  const own = part.lengthOn(axis);
-  const flexible =
-    gap !== undefined
-      ? `${what} is flexible`
-      : own !== undefined
-        ? `${what} has the size ${printLength(own)}, which is flexible`
-        : `${what} has no size of its own, so its size is flexible`;
+  const items = [
+    ...parts.map((part) => {
+      const what = describeNode(part);
+      const own = part.lengthOn(axis);
+      return {
+        what,
+        flexible:
+          own !== undefined
+            ? `${what} has the size ${printLength(own)}, which is flexible`
+            : `${what} has no size of its own, so its size is flexible`,
+        wide: own === undefined ? "one data unit" : "its weight in data units",
+      };
+    }),
+    ...gaps.map((g) => {
+      const what = `its spacing ${printLength(g)}`;
+      return {
+        what,
+        flexible: `${what} is flexible`,
+        wide: "its weight in data units",
+      };
+    }),
+  ];
   const data = chain.children.filter(
     (c): c is GoFishNode =>
-      c !== part &&
+      !parts.includes(c as GoFishNode) &&
       "carriesData" in c &&
       !(c as GoFishNode).isScope(axis) &&
       (c as GoFishNode).carriesData(axis)
@@ -312,6 +377,7 @@ export function mixedSizes(
       ? `${describeNode(scope)} sizes its other parts by data`
       : `${[...new Set(data.map(describeNode))].join(", ")} ` +
         `${data.length === 1 ? "is" : "are"} sized by data`;
+  const one = items.length === 1;
   return {
     kind: "mixed-sizes",
     node: describeNode(chain),
@@ -321,16 +387,13 @@ export function mixedSizes(
     parts: [],
     message:
       `${describeNode(chain)} on ${name} mixes data-driven and flexible ` +
-      `sizes: ${flexible}, ` +
+      `sizes: ${listed(items.map((i) => i.flexible))}, ` +
       `but ${sized}. A flexible size is like a data type with no name, so ` +
       `this is like sizing two parts along ${name} by two different data ` +
-      `types: no one scale fits both. ${what} is drawn ${
-        gap === undefined && own === undefined
-          ? "one data unit"
-          : "its weight in data units"
-      } wide. ` +
-      `Give it a size of its own, or put the data-driven parts in a ` +
-      `container with a size of its own.`,
+      `types: no one scale fits both. ` +
+      `${listed(items.map((i) => `${i.what} is drawn ${i.wide} wide`))}. ` +
+      `Give ${one ? "it a size of its own" : "them sizes of their own"}, ` +
+      `or put the data-driven parts in a container with a size of its own.`,
   };
 }
 
@@ -339,7 +402,7 @@ export function mixedSizes(
  * sits in a scope of shares on an axis the render gives no size, so
  * nothing gives it room, and it is 0 (as in CSS and Typst).
  */
-export function noRoom(
+function noRoom(
   chain: GoFishNode,
   axis: 0 | 1,
   spelled: string

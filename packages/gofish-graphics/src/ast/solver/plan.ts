@@ -317,6 +317,7 @@ export function buildPlan(
       );
       return placementOf(lo, hi, zero);
     },
+    (c, a) => node.gapOf(c, a),
     hasOrigin(node._underlyingSpace?.[axis])
   );
   const box: [Pwl.Value[], Pwl.Value[]] = [[], []];

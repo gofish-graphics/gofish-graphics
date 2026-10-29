@@ -16,7 +16,8 @@ import type { SolvePlaceable } from "./placementProgramLowerer";
 import type { PlacementConstraint } from "./placementLowering";
 import { axisIndex, axisName, type Axis } from "./shared";
 import { isPositionInterval } from "./position";
-import { gridTracks, trackGap } from "./grid";
+import { gridTracks } from "./grid";
+import type { GapOf } from "./distribute";
 import type { ConstraintSpec } from ".";
 
 /**
@@ -293,6 +294,9 @@ export function placeByClaims(
   constraints: ConstraintSpec[],
   operands: Map<string, { child: number; direct: boolean }>,
   nested: (name: string) => Placement | undefined,
+  // The gap a chain or table lays out between its parts, in σ
+  // (`GoFishNode.gapOf`).
+  gapOf: GapOf,
   // Whether the layer's frame on the axis has a data 0 (`frameOf`): a
   // frame without one maps no datum and seats no baseline.
   framed = true
@@ -570,7 +574,7 @@ export function placeByClaims(
               ? undefined
               : (targets.get(keyOf(i))!.dims[axis].size ?? T.zero)
           ),
-          T.fromValue(trackGap(grid, axis)),
+          T.fromValue(gapOf(grid, axis)),
           T.fromValue(Pwl.SIGMA)
         );
   // The other axis's tracks, which this axis's solve does not read.
@@ -591,6 +595,7 @@ export function placeByClaims(
     onAxis as PlacementConstraint[],
     targets,
     axis === 0 ? [box, T.zero] : [T.zero, box],
+    gapOf,
     axis === 0 ? [map, undefined] : [undefined, map],
     tracks === undefined
       ? undefined

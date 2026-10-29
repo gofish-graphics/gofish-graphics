@@ -95,8 +95,6 @@ import {
   guttersAt,
   setChromeForms,
 } from "../chromeGutters";
-import { resolveSpacing } from "../constraints/distribute";
-import { resolveGridSpacing } from "../constraints/grid";
 
 // ── Z-order resolution ────────────────────────────────────────────────────
 //
@@ -512,9 +510,6 @@ export const layer = createNodeOperatorSequential(
             options.transform?.scale?.x ?? 1,
             options.transform?.scale?.y ?? 1,
           ];
-          // Its chains' and grids' length spacings, laid out in its room.
-          resolveSpacing(node);
-          resolveGridSpacing(node);
           const operands = constraintOperands();
           const ring = isRing(node);
           // The layer's plan on each axis (`buildPlan`): one solve over
@@ -758,7 +753,9 @@ export const layer = createNodeOperatorSequential(
           const gridCellByName = gridC
             ? gridCellSizeByName(
                 gridC,
-                gridTracksAt(gridC, node.children, childScaleFactors)
+                gridTracksAt(gridC, node.children, childScaleFactors, (c, a) =>
+                  node.gapOf(c, a)
+                )
               )
             : undefined;
           // A node dressed in chrome reads its gutters off its chrome forms

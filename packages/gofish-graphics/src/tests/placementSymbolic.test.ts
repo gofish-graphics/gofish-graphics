@@ -104,6 +104,9 @@ const solveIn = <T>(
     constraints as PlacementConstraint[],
     targets,
     [NaN, NaN],
+    // Pixel spacings, as a layer reads them (`GoFishNode.gapOf`).
+    (c, axis) =>
+      Pwl.constant((c.type === "grid" ? c.spacing[axis] : c.spacing) as number),
     axis === 0 ? [map, undefined] : [undefined, map],
     undefined,
     [new Set(), new Set()],

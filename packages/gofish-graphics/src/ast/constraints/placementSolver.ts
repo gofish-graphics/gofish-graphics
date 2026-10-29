@@ -9,6 +9,7 @@ import {
   type PlacementConstraint,
 } from "./placementLowering";
 import type { TrackLayout } from "./grid";
+import type { GapOf } from "./distribute";
 import {
   axisIndex,
   axisName,
@@ -371,6 +372,8 @@ export function solvePlacementCells<T>(
   targets: Map<string, SolvePlaceable<T>>,
   // The layer's box on each axis, which a discrete position divides.
   sizes: readonly [T, T],
+  // The gap a chain or table lays out between its parts (`GoFishNode.gapOf`).
+  gapOf: GapOf,
   posScales?: ConstraintPosScales<T>,
   gridTracks?: [TrackLayout<T>, TrackLayout<T>],
   dataPositioned?: [Set<string>, Set<string>],
@@ -385,6 +388,7 @@ export function solvePlacementCells<T>(
     constraints,
     targets,
     sizes,
+    gapOf,
     posScales,
     gridTracks,
     dataPositioned

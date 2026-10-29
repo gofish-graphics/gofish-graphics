@@ -12,7 +12,7 @@ import {
 import type { AlignConstraint } from "./align";
 import { lowerAlignPlacement } from "./align";
 import type { DistributeConstraint } from "./distribute";
-import { lowerDistributePlacement } from "./distribute";
+import { lowerDistributePlacement, type GapOf } from "./distribute";
 import type { GridConstraint, TrackLayout } from "./grid";
 import { lowerGridPlacement } from "./grid";
 import type { NestConstraint } from "./nest";
@@ -186,6 +186,8 @@ export function lowerPlacementConstraints<T>(
   constraints: PlacementConstraint[],
   targets: Map<string, SolvePlaceable<T>>,
   sizes: readonly [T, T],
+  // The gap a chain or table lays out between its parts (`GoFishNode.gapOf`).
+  gapOf: GapOf,
   posScales?: ConstraintPosScales<T>,
   gridTracks?: [TrackLayout<T>, TrackLayout<T>],
   dataPositioned?: [Set<string>, Set<string>]
@@ -273,6 +275,7 @@ export function lowerPlacementConstraints<T>(
           emitter: lowerer,
           targets,
           isInitiallyPlaced,
+          gapOf,
         });
         return;
       case "nest":
@@ -285,6 +288,7 @@ export function lowerPlacementConstraints<T>(
           owner,
           sizes,
           lowerer,
+          gapOf,
           gridTracks,
           pinnedByPosition
         );

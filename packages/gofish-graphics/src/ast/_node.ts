@@ -114,10 +114,12 @@ import { childRole, type SharingPlan } from "./constraints/compose";
 import type { KeyedDomains } from "./keyedDomains";
 import {
   chainOn,
-  mixedSizes,
+  warnFlexibleSizes,
   warnLayout,
   type LayoutWarning,
 } from "./layoutWarnings";
+import type { DistributeConstraint } from "./constraints/distribute";
+import type { GridConstraint } from "./constraints/grid";
 import { relateEnv, resolveConstraintOperands } from "./constraints";
 import { applyRelationalZBelowDefaults } from "./constraints/relationalPaint";
 import {
@@ -222,6 +224,9 @@ type ClaimMemo = {
   /** Per axis, whether the node fills the room it is given
    *  ({@link GoFishNode.fillsRoom}); set with its claim. */
   fills?: [boolean, boolean];
+  /** Per axis, whether its claim is one share of the scope around it, a σ
+   *  weight ({@link GoFishNode.isShare}); set with its claim. */
+  shares?: [boolean, boolean];
   /** A layer's plan per axis ({@link ClaimWalk.plan}); set with its
    *  claim. */
   plans: [LayerPlan | undefined, LayerPlan | undefined];
@@ -231,7 +236,14 @@ type ClaimMemo = {
   /** Per axis, its own size as a length laid out in its room
    *  ({@link GoFishNode.ownLength}), once read. */
   lengths: [Pwl.Value | undefined, Pwl.Value | undefined];
+  /** Per constraint and axis, the gap it lays out between its parts
+   *  ({@link GoFishNode.gapOf}), once read. */
+  gaps: Map<GapConstraint, [Pwl.Value | undefined, Pwl.Value | undefined]>;
 };
+
+/** A constraint that lays a gap out between the parts it places along an
+ *  axis: a chain's spacing, a table's gap between tracks. */
+export type GapConstraint = DistributeConstraint | GridConstraint;
 
 const freshClaimMemo = (): ClaimMemo => ({
   carriesData: [undefined, undefined],
@@ -239,6 +251,7 @@ const freshClaimMemo = (): ClaimMemo => ({
   plans: [undefined, undefined],
   chrome: [undefined, undefined],
   lengths: [undefined, undefined],
+  gaps: new Map(),
 });
 
 /** What the claim walk reads of a layer (`GoFishNode.claimWalk`). */
@@ -1288,9 +1301,11 @@ export class GoFishNode {
     // a share (`inShare`), a node that fills claims one σ of the scope
     // around it (#493 piece 3), and a scope of its own adds what its chrome
     // reaches past that σ (`aroundShare`). In a scope that data sizes, only
-    // a part of a chain is a share: it is one data unit wide, and the
-    // layout warns that the axis mixes data-driven and flexible sizes.
+    // a part of a chain is a share: it is one data unit wide, and its chain
+    // warns that the axis mixes data-driven and flexible sizes
+    // (`warnFlexibleSizes`).
     const scopePlot: Size<Extent | undefined | null> = [null, null];
+    const shares: [boolean, boolean] = [false, false];
     this._claimMemo.fills = ([0, 1] as const).map((dim) => {
       const own = this.ownsScope(dim);
       const scope = !own && this.isScope(dim);
@@ -1332,10 +1347,15 @@ export class GoFishNode {
           forms === undefined ? undefined : aroundShare(forms, weight);
         extent[dim] = share?.whole ?? Extent(weight);
         if (scope) scopePlot[dim] = share?.plot ?? extent[dim];
-        if (!sharesScope) warnLayout(this, mixedSizes(this, dim));
+        shares[dim] = true;
       } else if (scope) scopePlot[dim] = undefined;
       return fills;
     }) as [boolean, boolean];
+    this._claimMemo.shares = shares;
+    // Its flexible parts and gaps, checked once per axis it lays out
+    // (`warnFlexibleSizes`).
+    warnFlexibleSizes(this, 0);
+    warnFlexibleSizes(this, 1);
     if (scopePlot[0] !== null || scopePlot[1] !== null) {
       const plot = this._plotExtent ?? extent;
       this._plotExtent = [
@@ -1500,6 +1520,35 @@ export class GoFishNode {
       );
     this._claimMemo.lengths[axis] = v;
     return v;
+  }
+
+  /**
+   * The gap `c` lays out between the parts this node places along `axis`
+   * (a chain's spacing, a table's gap between tracks), as a value in the σ
+   * of the scope the parts are in (#1176 step 6): pixels as given, a
+   * percent of this node's room ({@link roomFor}), and `kσ` for `fr(k)`, a
+   * flexible part of the chain. It is read, never written into `c`: the
+   * claim walk and layout both read it here, once per constraint and axis.
+   */
+  public gapOf(c: GapConstraint, axis: 0 | 1): Pwl.Value {
+    const spacing = c.type === "grid" ? c.spacing[axis] : c.spacing;
+    if (typeof spacing === "number") return Pwl.constant(spacing);
+    const memo = this._claimMemo.gaps.get(c) ?? [undefined, undefined];
+    const known = memo[axis];
+    if (known !== undefined) return known;
+    const what = `${c.type === "grid" ? "table's " : ""}spacing ${printLength(spacing)}`;
+    const v = lengthIn(spacing, () => this.roomFor(axis, what));
+    memo[axis] = v;
+    this._claimMemo.gaps.set(c, memo);
+    return v;
+  }
+
+  /** Whether this node's claim on `axis` is one share of the scope around
+   *  it, a σ weight: it fills a share it is given and has no claim of its
+   *  own there (see {@link resolveExtent}). */
+  public isShare(axis: 0 | 1): boolean {
+    this.resolveExtent();
+    return this._claimMemo.shares?.[axis] === true;
   }
 
   /** This node's own size on `axis` in pixels when it is a length known

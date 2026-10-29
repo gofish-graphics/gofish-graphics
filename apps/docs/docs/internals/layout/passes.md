@@ -995,14 +995,16 @@ those lines, so `pnpm capture-one` prints them under the story.
 - **Data-driven and flexible sizes in one chain (`mixed-sizes`).** A part
   with no size of its own beside parts sized by data has a flexible size,
   which is a data type with no name: no one scale fits it and the data. The
-  claim walk gives it one σ, one data unit (`mixedSizes`), and the warning
-  names the chain, the axis, the flexible part and the data-driven parts.
-  An `fr(k)` part or an `fr` spacing in such a chain warns the same way,
-  naming the length (`mixedSizes(part, axis, gap)`).
+  claim walk gives it one σ, one data unit (`GoFishNode.isShare`). An
+  `fr(k)` part or an `fr` spacing in such a chain is flexible too. The chain
+  checks its parts and gaps once per axis (`warnFlexibleSizes`), and warns
+  once, naming the chain, the axis, each flexible part and gap, and the
+  data-driven parts.
 - **A flexible gap with no room (`no-room`).** An `fr` spacing in a chain
   whose scope is the unsized root on that axis has nothing to divide, so its
   gaps are 0 (as in CSS and Typst), and the warning asks for a `w` or `h`
-  (`noRoom`, raised by `resolveSpacing` in `distribute.ts`).
+  (`warnFlexibleSizes`). The root lays that axis out unsized, at a σ of 0,
+  so the gap `kσ` is 0 there.
 - **A drawing past the canvas (`ink-overflow`).** After placement, on each
   axis the render sizes and no fixed-overflow was found, the hull of the
   root's box and its ink is checked against the canvas, naming the ink node

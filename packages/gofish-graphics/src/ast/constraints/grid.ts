@@ -19,7 +19,8 @@
 // cell that fills a share claims one σ (#493 piece 3), so an all-fill grid
 // claims `n·σ + gaps`; content-sized tracks size to their widest cell, and
 // are fixed parts beside the pixel gaps. A gap may be a percent of the
-// table's room or an `fr` weight, a term of the claim (`resolveGridSpacing`).
+// table's room or an `fr` weight, a term of the claim, which the layer
+// reads where it lays the tracks out (`GoFishNode.gapOf`).
 // The grid claim is the layer's claim on the axis, composed by its plan as
 // any chain's is (`placeByClaims`, `gridTracks`), so the scope it is in
 // solves σ for it by the one fit, with the one overflow warning and the one
@@ -47,8 +48,8 @@ import {
 import type { ScopeRegistry } from "../solver/scopes";
 import type { PlacementFactEmitter } from "./placementFacts";
 import { numbers, type Arith } from "../solver/arith";
-import { printLength, type Length, type LengthValue } from "../length";
-import { layOutGap } from "./distribute";
+import type { Length, LengthValue } from "../length";
+import type { GapOf } from "./distribute";
 
 /** One gap between tracks: pixels, a percent of the table's room on its
  *  axis, or an `fr` weight in its scope (#1176 step 6). */
@@ -74,11 +75,9 @@ export interface GridOptions {
 export interface GridConstraint {
   type: "grid";
   numCols: number;
-  /** The gap between tracks on x and on y. */
+  /** The gap between tracks on x and on y: pixels, or a length the table
+   *  lays out in its room (`GoFishNode.gapOf`). */
   spacing: [TrackGap, TrackGap];
-  /** Per axis, a length gap laid out in the table's room by its layer's
-   *  claim walk (`resolveGridSpacing`), as a value in σ. */
-  gaps?: [Pwl.Value | undefined, Pwl.Value | undefined];
   colKeys?: OrdinalKey[];
   rowKeys?: OrdinalKey[];
   colMeasure?: string;
@@ -110,33 +109,6 @@ export const createGridConstraint = (
 
 export const isGridConstraint = (c: { type: string }): c is GridConstraint =>
   c.type === "grid";
-
-/** Lay the length gaps of `node`'s grids out in its room on each axis
- *  (`layOutGap`, as a chain's spacing is): a percent of its room and an
- *  `fr` weight, each a value in σ. */
-export function resolveGridSpacing(node: GoFishNode): void {
-  for (const c of node.constraints) {
-    if (!isGridConstraint(c)) continue;
-    c.gaps = c.spacing.map((g, axis) =>
-      typeof g === "number"
-        ? undefined
-        : layOutGap(node, axis as 0 | 1, g, `table's spacing ${printLength(g)}`)
-    ) as [Pwl.Value | undefined, Pwl.Value | undefined];
-  }
-}
-
-/** The gap between `c`'s tracks on `axis`, a value in σ. */
-export const trackGap = (c: GridConstraint, axis: 0 | 1): Pwl.Value => {
-  const g = c.spacing[axis];
-  if (typeof g === "number") return Pwl.constant(g);
-  const v = c.gaps?.[axis];
-  if (v === undefined)
-    throw new Error(
-      `[gofish] table: spacing ${printLength(g)} was read before its layer ` +
-        `laid it out in its room.`
-    );
-  return v;
-};
 
 const numRowsOf = (c: GridConstraint): number =>
   Math.ceil(c.children.length / c.numCols);
@@ -187,13 +159,15 @@ export function gridTracks<T>(
 }
 
 /** Both axes' tracks of `c` laid out at the σ its layer hands its cells
- *  (`sigmas`): each cell's claim at σ ({@link gridTracks}). A claim that no
- *  σ solves has no part that grows with σ, so it is the same at any σ, and
- *  is read at 0. Layout proposes each cell its track's extent. */
+ *  (`sigmas`): each cell's claim at σ ({@link gridTracks}), with the gaps
+ *  the layer lays out (`gapOf`). A claim that no σ solves has no part that
+ *  grows with σ, so it is the same at any σ, and is read at 0. Layout
+ *  proposes each cell its track's extent. */
 export function gridTracksAt(
   c: GridConstraint,
   cells: readonly GoFishAST[],
-  sigmas: readonly [number | undefined, number | undefined]
+  sigmas: readonly [number | undefined, number | undefined],
+  gapOf: GapOf
 ): [TrackLayout, TrackLayout] {
   const at = (axis: 0 | 1): TrackLayout => {
     const s = sigmas[axis];
@@ -207,7 +181,7 @@ export function gridTracksAt(
       c,
       axis,
       sizes,
-      Pwl.at(trackGap(c, axis), sigma),
+      Pwl.at(gapOf(c, axis), sigma),
       sigma
     );
   };
@@ -254,11 +228,12 @@ export type GridCellPlacement<T = number> = {
 function equalTracks<T>(
   A: Arith<T>,
   c: GridConstraint,
-  size: readonly [T, T]
+  size: readonly [T, T],
+  gapOf: GapOf
 ): [TrackLayout<T>, TrackLayout<T>] {
   const numRows = numRowsOf(c);
   const track = (axis: 0 | 1, n: number) => {
-    const gap = A.fromValue(trackGap(c, axis));
+    const gap = A.fromValue(gapOf(c, axis));
     const extent = A.scale(1 / n, A.sub(size[axis], A.scale(n - 1, gap)));
     return layoutTrack(
       A,
@@ -275,9 +250,10 @@ export function gridCellPlacements<T>(
   A: Arith<T>,
   c: GridConstraint,
   size: readonly [T, T],
+  gapOf: GapOf,
   tracks?: [TrackLayout<T>, TrackLayout<T>]
 ): GridCellPlacement<T>[] {
-  const [cols, rows] = tracks ?? equalTracks(A, c, size);
+  const [cols, rows] = tracks ?? equalTracks(A, c, size, gapOf);
   return c.children.map((child, index) => {
     const column = index % c.numCols;
     const row = Math.floor(index / c.numCols);
@@ -300,10 +276,17 @@ export function lowerGridPlacement<T>(
   owner: string,
   size: readonly [T, T],
   emitter: PlacementFactEmitter<T>,
+  gapOf: GapOf,
   tracks?: [TrackLayout<T>, TrackLayout<T>],
   pinnedByPosition?: Map<string, Set<0 | 1>>
 ): void {
-  for (const { child, center } of gridCellPlacements(A, c, size, tracks)) {
+  for (const { child, center } of gridCellPlacements(
+    A,
+    c,
+    size,
+    gapOf,
+    tracks
+  )) {
     const overridden = pinnedByPosition?.get(child.name);
     if (!overridden?.has(0))
       emitter.pin({

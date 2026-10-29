@@ -564,14 +564,16 @@ each inherent to what the origin states are:
   room it is given), and the length itself is read where it is laid out
   (`GoFishNode.lengthOn`, `ownLength`).
   Either way it is a `Pwl` value before the solve, and no claim carries an
-  unknown parent size. Spacing is the same: a spread's length gap is
-  resolved in the layer claim hook (`resolveSpacing`) against the spread's
-  own room and lowers as `chain.gap`, a σ term for `fr`. An `fr` gap with no
-  room (an unsized root) is 0 and warns (`no-room`); an `fr` in a data scope
-  warns `mixed-sizes`. A length has no content minimum: fixed parts larger
-  than a sized layer warn `fixed-overflow`. A table's length gap between
-  tracks is laid out the same way, by the same helper (`resolveGridSpacing`
-  through `layOutGap`): a percent of the table's room, or a σ term for `fr`.
+  unknown parent size. Spacing is the same: a spread's length gap, and a
+  table's gap between tracks, is laid out against the layer's own room by
+  one reader (`GoFishNode.gapOf`, once per constraint and axis): a percent
+  of the room, or a σ term for `fr`. It is read, never written into the
+  constraint: the claim walk and layout pass the reader to the placement
+  lowering (`GapOf`), as they pass a grid's tracks. An `fr` gap with no
+  room (an unsized root) is 0 at the σ of 0 that root lays out at, and
+  warns (`no-room`); an `fr` in a data scope warns `mixed-sizes`, once per
+  chain (`warnFlexibleSizes`). A length has no content minimum: fixed parts
+  larger than a sized layer warn `fixed-overflow`.
 - **A plot claim beside the claim**: a layer's plan also computes the
   claim of the plot, which leaves out dressing (a label placed beside a
   `ref` stand-in for its mark), a shape's outline (half its stroke past its

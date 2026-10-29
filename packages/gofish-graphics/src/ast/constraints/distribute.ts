@@ -32,15 +32,8 @@ import {
 import type { Arith } from "../solver/arith";
 import * as Interval from "../../util/interval";
 import * as Pwl from "../solver/pwl";
-import {
-  isFr,
-  lengthIn,
-  printLength,
-  type Length,
-  type LengthValue,
-} from "../length";
-import type { GoFishNode } from "../_node";
-import { mixedSizes, noRoom, warnLayout } from "../layoutWarnings";
+import type { Length, LengthValue } from "../length";
+import type { GapConstraint } from "../_node";
 
 export interface DistributeOptions {
   dir: Axis;
@@ -95,11 +88,9 @@ export type StackOrigin<Part> = {
 export interface DistributeConstraint {
   type: "distribute";
   dir: Axis;
+  /** The gap between neighbors: pixels, or a length the layer that holds
+   *  the chain lays out in its room (`GoFishNode.gapOf`). */
   spacing: number | Length | LengthValue;
-  /** A length `spacing` laid out in the room of the layer that holds the
-   *  chain, as a value in its σ (`resolveSpacing`): set by the layer's
-   *  claim walk, before its plan is built. */
-  gap?: Pwl.Value;
   anchor: AlignAnchor | "edge";
   order: "forward" | "reverse";
   glue: boolean;
@@ -127,64 +118,11 @@ export const createDistributeConstraint = (
   origin: options.glue ? options.origin : undefined,
 });
 
-/** The gap a distribute's length `spacing` resolved to (`resolveSpacing`). */
-const gapOf = (c: DistributeConstraint): Pwl.Value => {
-  if (c.gap === undefined)
-    throw new Error(
-      `[gofish] distribute: spacing ${printLength(c.spacing as Length)} was ` +
-        `read before its layer laid it out in its room.`
-    );
-  return c.gap;
-};
-
-/**
- * Lay the length spacings of `node`'s distributes out in its room (#1176
- * step 6), as values in the σ of the scope the chain is in: a percent of
- * the layer's room (`GoFishNode.roomFor`: its own size, or the room above
- * it that it passes through), and `fr(k)` as `kσ`, so the gaps are the
- * flexible parts of the chain. A gap of `fr` in a scope that data sizes is
- * a weight of a data unit, so it warns as a flexible part there does
- * (`mixed-sizes`). On an axis the render gives no size to a scope of shares,
- * nothing gives an `fr` gap room: it is 0, and it warns.
- */
-export function resolveSpacing(node: GoFishNode): void {
-  for (const c of node.constraints) {
-    if (c.type !== "distribute") continue;
-    const d = c as DistributeConstraint;
-    if (typeof d.spacing === "number") continue;
-    d.gap = layOutGap(node, axisIndex(d.dir), d.spacing);
-  }
-}
-
-/** A length gap between the parts `node` lays out along `axis` (a chain's
- *  spacing, a table's gap between tracks), laid out in its room
- *  ({@link resolveSpacing}): a percent of the room, or `kσ` for `fr(k)`,
- *  0 where nothing gives it room. `what` names it in a percent's error. */
-export function layOutGap(
-  node: GoFishNode,
-  axis: 0 | 1,
-  spacing: Length | LengthValue,
-  what = `spacing ${printLength(spacing)}`
-): Pwl.Value {
-  const gap = lengthIn(spacing, () => node.roomFor(axis, what));
-  if (!isFr(spacing)) return gap;
-  const scope = node.scopeOf(axis);
-  if (
-    scope.parent === undefined &&
-    !scope.isScope(axis) &&
-    node.tryGetRenderSession()?.canvas?.[axis] === undefined &&
-    scope.sharesRoom(axis)
-  ) {
-    warnLayout(node, noRoom(node, axis, printLength(spacing)));
-    return Pwl.ZERO;
-  }
-  if (scope.carriesData(axis))
-    warnLayout(
-      node,
-      mixedSizes(node, axis, `its spacing ${printLength(spacing)}`)
-    );
-  return gap;
-}
+/** Reads the gap a chain or table lays out between its parts along an
+ *  axis, as a value in σ: the layer that holds it lays it out in its room
+ *  (`GoFishNode.gapOf`). The claim walk and layout pass it to the
+ *  placement lowering, as they pass a grid's tracks. */
+export type GapOf = (c: GapConstraint, axis: 0 | 1) => Pwl.Value;
 
 /** The {@link StackOrigin} of a stack over `ordered` (its parts in placement
  *  order), with `part` an index into `ordered`: the declared origin, else the
@@ -285,11 +223,13 @@ export function lowerDistributePlacement<T>(
     emitter,
     targets,
     isInitiallyPlaced,
+    gapOf,
   }: {
     A: Arith<T>;
     emitter: PlacementFactEmitter<T>;
     targets: Pick<Map<string, unknown>, "has" | "get">;
     isInitiallyPlaced: (axis: Axis, name: string) => boolean;
+    gapOf: GapOf;
   }
 ): void {
   const children = constraint.children.filter((child) =>
@@ -313,7 +253,7 @@ export function lowerDistributePlacement<T>(
       gap:
         typeof constraint.spacing === "number"
           ? A.constant(constraint.spacing)
-          : A.fromValue(gapOf(constraint)),
+          : A.fromValue(gapOf(constraint, axisIndex(constraint.dir))),
       owner,
       chain: constraint.glue ? "stack" : "spread",
     });

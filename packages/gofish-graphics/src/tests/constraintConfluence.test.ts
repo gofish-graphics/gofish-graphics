@@ -7,7 +7,10 @@
 import type { Placeable } from "../ast/_node";
 import * as Pwl from "../ast/solver/pwl";
 import type { AlignConstraint } from "../ast/constraints/align";
-import type { DistributeConstraint } from "../ast/constraints/distribute";
+import type {
+  DistributeConstraint,
+  GapOf,
+} from "../ast/constraints/distribute";
 import type { GridConstraint, TrackLayout } from "../ast/constraints/grid";
 import {
   gridCellSizeByName,
@@ -21,6 +24,11 @@ import {
   type PlacementConstraint,
 } from "../ast/constraints/placementSolver";
 import { numbers } from "../ast/solver/arith";
+
+/** The gaps of constraints with pixel spacings, as a layer reads them
+ *  (`GoFishNode.gapOf`). */
+const pixelGaps: GapOf = (c, axis) =>
+  Pwl.constant((c.type === "grid" ? c.spacing[axis] : c.spacing) as number);
 import {
   anchorExpr,
   participantFact,
@@ -79,7 +87,7 @@ function solveAndSeat(
   constraints: PlacementConstraint[],
   targets: Map<string, Placeable>,
   sizes: [number, number],
-  posScales?: Parameters<typeof solvePlacementCells<number>>[4],
+  posScales?: Parameters<typeof solvePlacementCells<number>>[5],
   gridTracks?: [TrackLayout, TrackLayout],
   dataPositioned?: [Set<string>, Set<string>]
 ): void {
@@ -88,6 +96,7 @@ function solveAndSeat(
     constraints,
     targets,
     sizes,
+    pixelGaps,
     posScales,
     gridTracks,
     dataPositioned
@@ -982,7 +991,8 @@ console.log("# constraint confluence: placement constraint lowering");
     numbers,
     [position("A", 20)],
     targets("A"),
-    [300, 200]
+    [300, 200],
+    pixelGaps
   );
   const positionFact = loweredPosition.anchorProgram.axes[0][0];
   ok(
@@ -1006,7 +1016,8 @@ console.log("# constraint confluence: placement constraint lowering");
       },
     ],
     targets("A"),
-    [300, 200]
+    [300, 200],
+    pixelGaps
   );
   const discretePositionFact = loweredDiscretePosition.anchorProgram.axes[0][0];
   ok(
@@ -1022,7 +1033,8 @@ console.log("# constraint confluence: placement constraint lowering");
     numbers,
     [{ type: "align", x: "middle", children: [A, B] }],
     targets("A", "B"),
-    [300, 200]
+    [300, 200],
+    pixelGaps
   );
   ok(
     "align lowers to anchor-relation plus anchor-participant facts",
@@ -1044,7 +1056,8 @@ console.log("# constraint confluence: placement constraint lowering");
     numbers,
     [distribute(["A", "B", "C"])],
     targets("A", "B", "C"),
-    [300, 200]
+    [300, 200],
+    pixelGaps
   );
   ok(
     "distribute lowers to chain anchor-relations plus a participant",
@@ -1069,7 +1082,8 @@ console.log("# constraint confluence: placement constraint lowering");
     numbers,
     [{ type: "nest", x: 5, children: [A, B] }],
     targets("A", "B"),
-    [300, 200]
+    [300, 200],
+    pixelGaps
   );
   ok(
     "nest lowers to an anchor-relation between centers",
@@ -1089,7 +1103,8 @@ console.log("# constraint confluence: placement constraint lowering");
     numbers,
     [span("C", 10, 30)],
     targets("C"),
-    [300, 200]
+    [300, 200],
+    pixelGaps
   );
   const spanFacts = loweredSpan.anchorProgram.axes[0];
   ok(
@@ -1127,7 +1142,8 @@ console.log("# constraint confluence: placement constraint lowering");
     numbers,
     [mixed],
     targets("C"),
-    [300, 200]
+    [300, 200],
+    pixelGaps
   );
   ok(
     "interval+point on one constraint: interval axis yields two edge pins",

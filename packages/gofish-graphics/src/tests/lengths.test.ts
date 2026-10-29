@@ -242,10 +242,10 @@ async function main() {
       rects.map((r) => [r.x, r.w])
     );
     check(
-      "the layout warns that the spacing has no room on x",
-      warned.some(
-        (m) => m.includes("`spacing: fr(1)` has no room on x") && m.includes("w")
-      ),
+      "the layout warns once that the spacing has no room on x",
+      warned.length === 1 &&
+        warned[0].includes("`spacing: fr(1)` has no room on x") &&
+        warned[0].includes("w"),
       warned
     );
   }
@@ -278,6 +278,53 @@ async function main() {
       ),
       part
     );
+    // An fr gap and an fr part in one chain: the chain warns once, naming
+    // both.
+    const both = await warningsOf(() => build(fr(1), fr(2)).toDisplayList());
+    const mixed = both.filter((m) =>
+      m.includes("mixes data-driven and flexible")
+    );
+    check(
+      "a chain with an fr gap and an fr part warns once, naming both",
+      mixed.length === 1 &&
+        mixed[0].includes('rect(key: "d") has the size fr(2)') &&
+        mixed[0].includes("its spacing fr(1) is flexible"),
+      both
+    );
+  }
+
+  console.log("\n# a gap is read, never written into its constraint");
+  {
+    // After the layout lays their length gaps out, the constraints hold
+    // their spacing as given and nothing else: no gap laid out in σ.
+    const specs = (n: GoFishNode) =>
+      walk(n).flatMap((m) =>
+        m.constraints.filter(
+          (c) => c.type === "distribute" || c.type === "grid"
+        )
+      );
+    for (const [what, build] of [
+      ["a spread's fr spacing", () => bars({ w: 400, h: 100 }, fr(1))],
+      [
+        "a table's percent spacing",
+        () =>
+          chart(grid, { axes: false, w: 200, h: 200 })
+            .flow(table({ by: { x: "c", y: "r" }, spacing: percent(10) }))
+            .mark(rect({})),
+      ],
+    ] as const) {
+      const node = await build().resolve();
+      await runLayout({ w: 400, h: 200 }, node);
+      const laid = specs(node);
+      check(
+        `${what} is not written into its constraint`,
+        laid.length === 1 &&
+          typeof (laid[0] as any).spacing !== "number" &&
+          !("gap" in laid[0]) &&
+          !("gaps" in laid[0]),
+        laid
+      );
+    }
   }
 
   console.log("\n# a percent of a band is a σ term");
