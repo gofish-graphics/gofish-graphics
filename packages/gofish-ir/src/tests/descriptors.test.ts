@@ -136,7 +136,7 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "sort",
     "size",
   ],
-  pack: ["by"],
+  pack: ["by", "spacing"],
   partition: ["by", "dir", "alignment", "axes"],
 };
 
@@ -321,6 +321,7 @@ const SCHEMA_STRATEGY_KEYS: Record<
   Shape: {
     box: { rx: true, ry: true },
     oval: {},
+    arcs: { radius: true },
     blob: {
       convexity: true,
       holes: true,

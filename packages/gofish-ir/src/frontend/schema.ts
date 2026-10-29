@@ -186,7 +186,8 @@ export type OperatorIR =
   | LogOperator
   | TreemapOperator
   | PackOperator
-  | PartitionOperator;
+  | PartitionOperator
+  | FlowStepMarkIR;
 
 /**
  * `derive(fn)` — opaque user transformation. Function bodies are not
@@ -514,7 +515,18 @@ export interface PackOperator
   label?: LabelIR;
   /** Field to partition rows by. Without `by`, one child per row. */
   by?: string | FieldAccessor | ChunkKeyIR;
+  /** Gap between sibling circles, in pixels. Default 0. */
+  spacing?: number;
 }
+
+/**
+ * A leaf mark standing in `operators` as a `.flow()` step: `enclose({...})`,
+ * an outline around each group's subtree, laid out with it. Its IR is the
+ * mark's own (`LeafMarkIR` with type `"enclose"`); its place in the chart
+ * (`operators` or `mark`) tells the forms apart. The descriptor's
+ * `flowStep` (`isFlowStepMark`) says which leaf marks may stand here.
+ */
+export type FlowStepMarkIR = LeafMarkIR & { type: "enclose" };
 
 /**
  * `partition({ by, dir })` — divide the space along `dir` into the cells of
@@ -639,6 +651,7 @@ export type NodeSelectionIR = RefMarkIR[] | (SelectRefIR & { mode: "all" });
 export type ShapeIR =
   | { kind: "box"; rx?: number; ry?: number }
   | { kind: "oval" }
+  | { kind: "arcs"; radius?: number }
   | {
       kind: "blob";
       convexity?: number;

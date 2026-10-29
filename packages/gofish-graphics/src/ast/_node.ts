@@ -419,6 +419,23 @@ export type GeometryFn = (
   node: GoFishNode
 ) => Omit<Geometry, "outline"> & Partial<Pick<Geometry, "outline">>;
 
+/** Where `child` sits in `node`'s frame: its translate, read when a geometry
+ *  query moves the child's shape into the node's frame. A child not placed
+ *  yet has no position there, so that is a loud error. */
+export const placedTranslate = (
+  child: GoFishAST,
+  node: GoFishNode
+): [number, number] => {
+  const tx = child.projectedTranslate(0);
+  const ty = child.projectedTranslate(1);
+  if (tx === undefined || ty === undefined)
+    throw new Error(
+      `[gofish] geometry(): a child of ${node.type} was not placed, so ` +
+        `its position in the ${node.type}'s frame is unknown`
+    );
+  return [tx, ty];
+};
+
 /** The geometry a node has when its definition supplies none. A leaf answers
  *  only `box`. A node with children also answers `enclosingCircle`, lazily: the
  *  smallest circle around its children's enclosing circles, each moved by the
@@ -434,14 +451,10 @@ export const defaultGeometry: GeometryFn = (
     box,
     enclosingCircle: () => {
       const circles = children.map((child) => {
-        const tx = child.projectedTranslate(0);
-        const ty = child.projectedTranslate(1);
-        if (tx === undefined || ty === undefined)
-          throw new Error(
-            `[gofish] geometry(): a child of ${node.type} was not placed, so ` +
-              `its position in the ${node.type}'s frame is unknown`
-          );
-        const c = translateCircle(enclosingCircle(child.geometry()), [tx, ty]);
+        const c = translateCircle(
+          enclosingCircle(child.geometry()),
+          placedTranslate(child, node)
+        );
         return { x: c.cx, y: c.cy, r: c.r };
       });
       const e = packEnclose(circles);

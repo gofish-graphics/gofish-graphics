@@ -6,6 +6,7 @@ import { Size, displayTranslate } from "../dims";
 import type { Extent } from "../extent";
 import {
   lowerStyle,
+  lowerSubtree,
   pixelBox,
   rectItemFromBox,
   ringItem,
@@ -191,10 +192,13 @@ function shapeOnly(
 /**
  * Lower a composite's two children, a bake boundary, through `toPixel`
  * (the composite's own pixel map), in source order: the first child, then
- * the second.
+ * the second. Each operand's subtree is baked under the node's `translate`
+ * (`lowerSubtree`), so an operand that only places its children (a `pack`)
+ * lowers its leaves.
  */
 function lowerOperands(
   node: GoFishNode,
+  translate: [number, number],
   coordinateTransform: CoordinateTransform | undefined,
   toPixel: ToPixel
 ): [DisplayList.DisplayItem[], DisplayList.DisplayItem[]] {
@@ -204,8 +208,8 @@ function lowerOperands(
   session.toPixel = toPixel;
   try {
     return [
-      node.children[0].INTERNAL_lower(coordinateTransform),
-      node.children[1].INTERNAL_lower(coordinateTransform),
+      lowerSubtree(node.children[0], translate, coordinateTransform),
+      lowerSubtree(node.children[1], translate, coordinateTransform),
     ];
   } finally {
     session.toPixel = outer;
@@ -356,8 +360,11 @@ function compositeNode(
           if (strokes) throw noExactGeometry("a stroke");
           // No exact outline: fill the overlap of the two operands' shapes,
           // an alpha mask of each over a fill of the box.
-          const [a, b] = lowerOperands(node, coordinateTransform, ([cx, cy]) =>
-            outer([tx + cx, ty + cy])
+          const [a, b] = lowerOperands(
+            node,
+            [tx, ty],
+            coordinateTransform,
+            outer
           ).map(shapeOnly);
           const bbox = { x: bx, y: by, w: bw, h: bh };
           const fillRect = rectItemFromBox(bx, bx + bw, by, by + bh, (p) => p, {
@@ -392,11 +399,14 @@ function compositeNode(
         // `paintSVG`'s / `render.ts`'s `composite` case), so child
         // coordinates must start near the bbox's own origin rather than
         // the document's. We reproduce that by subtracting the bbox origin.
+        // Each operand's subtree is baked under the node's translate, so
+        // this shift is the bbox origin alone.
         const [source, dest] = lowerOperands(
           node,
+          [tx, ty],
           coordinateTransform,
-          ([cx, cy]) => {
-            const [ax, ay] = outer([tx + cx, ty + cy]);
+          (p) => {
+            const [ax, ay] = outer(p);
             return [ax - bx, ay - by];
           }
         );
@@ -588,8 +598,9 @@ export const mask = createNodeOperator(
           const outer = node.getRenderSession().toPixel!;
           const [maskItems, content] = lowerOperands(
             node,
+            [tx, ty],
             coordinateTransform,
-            ([cx, cy]) => outer([tx + cx, ty + cy])
+            outer
           );
 
           const minX = intrinsicDims?.[0]?.min ?? 0;

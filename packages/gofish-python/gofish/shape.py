@@ -19,7 +19,7 @@ from typing import Any, Dict, Optional
 
 from ._strategy import bare_kind
 
-__all__ = ["box", "oval", "blob", "hull", "spine"]
+__all__ = ["box", "oval", "arcs", "blob", "hull", "spine"]
 
 
 @bare_kind("Shape")
@@ -58,6 +58,29 @@ def box(*, rx: Optional[float] = None, ry: Optional[float] = None) -> Dict[str, 
 def oval() -> Dict[str, Any]:
     """The smallest-area ellipse that holds every member grown by `padding`. It may be rotated: it follows the members, not the axes."""
     return {"kind": "oval"}
+
+
+@bare_kind("Shape")
+def arcs(*, radius: Optional[float] = None) -> Dict[str, Any]:
+    """The members grown by `padding`, closed by a disc of `radius`: every gap the disc cannot pass through is filled, every concave corner is a circular arc of `radius`, and holes are always filled. Around circles it is made of circular arcs only, the contour of a bubble treemap (Görtler et al. 2018). Two discs of radius a with a gap g between their padded edges join only when 2·a·radius ≥ a·g + g²/4; otherwise they stay separate pieces.
+
+    Args:
+        radius: The radius of the closing disc, in pixels: the radius of every concave arc. 0 is the padded union; a large radius nears the padded convex hull. Default 12.
+    """
+    if radius is not None:
+        if not (isinstance(radius, (int, float)) and not isinstance(radius, bool)):
+            raise TypeError(f"Shape.arcs(radius=...) must be a finite number >= 0, got {type(radius).__name__}")
+        if not math.isfinite(radius):
+            raise ValueError(f"Shape.arcs(radius=...) must be finite, got {radius!r}")
+        if radius < 0:
+            raise ValueError(f"Shape.arcs(radius=...) must be >= 0, got {radius!r}")
+    out: Dict[str, Any] = {"kind": "arcs"}
+    for _k, _v in [
+        ("radius", radius),
+    ]:
+        if _v is not None:
+            out[_k] = _v
+    return out
 
 
 @bare_kind("Shape")

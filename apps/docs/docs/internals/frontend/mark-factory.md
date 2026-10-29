@@ -497,6 +497,12 @@ forms:
   group** (e.g. `ribbon({})` fused over `stack({ by: "species" })` draws one
   band per species; see "Default grouping" below). A refs-bag chart spells
   the same split structurally instead, via an upstream `group()`.
+- **Flow-step form** (`enclose` only, `flowStep: true`): the bag mark is
+  tagged as one that may stand in `.flow()` (`withFlowStep` in compose.ts),
+  and `.flow()` and `compose()` wrap it in one generic step
+  (`flowStepOperator`) that applies it to each group's subtree as its one
+  fresh operand, with its paint resolved off that operand's rows. Position alone tells the two meanings apart; see
+  [Enclose and the Shape Family](/internals/frontend/enclose).
 
 ### A connector's datum, and its `live()` channels
 
@@ -597,13 +603,14 @@ there as one over refs is checked in `.mark()`. That is why
 partition inside a `spread`, while the same chart as a `.layer(...)` tier
 throws on its `h`. A connector's paint (`fill`, `stroke`: the color channels of
 its generated channel map) may be a field name, or an accessor (a field name
-is shorthand for one), rather than a literal color. Every call form (split
+is shorthand for one), rather than a literal color, and so may a raw channel
+(enclose's `padding`), whose value is used as it is. Every call form (split
 bag, plain bag, pairwise edge row, low-level children) runs the same step,
 `resolveGroupPaint` in chart.ts, once per connector: Python accessors are
 resolved over exactly the rows the group's walk reaches (`rowsReached`,
 `resolveChannelAccessors`), then `projectByValues` (the projection `by`
 uses) reads the value. One value is the connector's color (`colorValue`, the
-helper `inferColor` uses); several throw; none passes a literal color string
+helper `inferColor` uses), or a raw channel's value; several throw; none passes a literal color string
 through and drops an accessor, so a raw function never reaches `Connect`.
 
 The types follow the same split. A relational factory returns a

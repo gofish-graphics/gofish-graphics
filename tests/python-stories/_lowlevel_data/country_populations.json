@@ -1,0 +1,492 @@
+[
+  {
+    "continent": "Asia",
+    "region": "East Asia",
+    "country": "China",
+    "pop": 1410,
+    "uncertainty": 1
+  },
+  {
+    "continent": "Asia",
+    "region": "East Asia",
+    "country": "Japan",
+    "pop": 124,
+    "uncertainty": 1
+  },
+  {
+    "continent": "Asia",
+    "region": "East Asia",
+    "country": "South Korea",
+    "pop": 52,
+    "uncertainty": 1
+  },
+  {
+    "continent": "Asia",
+    "region": "East Asia",
+    "country": "Taiwan",
+    "pop": 24,
+    "uncertainty": 1
+  },
+  {
+    "continent": "Asia",
+    "region": "East Asia",
+    "country": "North Korea",
+    "pop": 26,
+    "uncertainty": 1
+  },
+  {
+    "continent": "Asia",
+    "region": "East Asia",
+    "country": "Mongolia",
+    "pop": 3.4,
+    "uncertainty": 1
+  },
+  {
+    "continent": "Asia",
+    "region": "South Asia",
+    "country": "India",
+    "pop": 1428,
+    "uncertainty": 4
+  },
+  {
+    "continent": "Asia",
+    "region": "South Asia",
+    "country": "Pakistan",
+    "pop": 240,
+    "uncertainty": 4
+  },
+  {
+    "continent": "Asia",
+    "region": "South Asia",
+    "country": "Bangladesh",
+    "pop": 173,
+    "uncertainty": 4
+  },
+  {
+    "continent": "Asia",
+    "region": "South Asia",
+    "country": "Nepal",
+    "pop": 31,
+    "uncertainty": 4
+  },
+  {
+    "continent": "Asia",
+    "region": "South Asia",
+    "country": "Sri Lanka",
+    "pop": 22,
+    "uncertainty": 4
+  },
+  {
+    "continent": "Asia",
+    "region": "South Asia",
+    "country": "Afghanistan",
+    "pop": 42,
+    "uncertainty": 4
+  },
+  {
+    "continent": "Asia",
+    "region": "Southeast Asia",
+    "country": "Indonesia",
+    "pop": 277,
+    "uncertainty": 3
+  },
+  {
+    "continent": "Asia",
+    "region": "Southeast Asia",
+    "country": "Philippines",
+    "pop": 117,
+    "uncertainty": 3
+  },
+  {
+    "continent": "Asia",
+    "region": "Southeast Asia",
+    "country": "Vietnam",
+    "pop": 99,
+    "uncertainty": 3
+  },
+  {
+    "continent": "Asia",
+    "region": "Southeast Asia",
+    "country": "Thailand",
+    "pop": 72,
+    "uncertainty": 3
+  },
+  {
+    "continent": "Asia",
+    "region": "Southeast Asia",
+    "country": "Myanmar",
+    "pop": 54,
+    "uncertainty": 3
+  },
+  {
+    "continent": "Asia",
+    "region": "Southeast Asia",
+    "country": "Malaysia",
+    "pop": 34,
+    "uncertainty": 3
+  },
+  {
+    "continent": "Asia",
+    "region": "Southeast Asia",
+    "country": "Cambodia",
+    "pop": 17,
+    "uncertainty": 3
+  },
+  {
+    "continent": "Asia",
+    "region": "Western Asia",
+    "country": "Turkey",
+    "pop": 85,
+    "uncertainty": 6
+  },
+  {
+    "continent": "Asia",
+    "region": "Western Asia",
+    "country": "Iran",
+    "pop": 89,
+    "uncertainty": 6
+  },
+  {
+    "continent": "Asia",
+    "region": "Western Asia",
+    "country": "Iraq",
+    "pop": 45,
+    "uncertainty": 6
+  },
+  {
+    "continent": "Asia",
+    "region": "Western Asia",
+    "country": "Saudi Arabia",
+    "pop": 37,
+    "uncertainty": 6
+  },
+  {
+    "continent": "Asia",
+    "region": "Western Asia",
+    "country": "Yemen",
+    "pop": 34,
+    "uncertainty": 6
+  },
+  {
+    "continent": "Asia",
+    "region": "Western Asia",
+    "country": "Syria",
+    "pop": 23,
+    "uncertainty": 6
+  },
+  {
+    "continent": "Africa",
+    "region": "West Africa",
+    "country": "Nigeria",
+    "pop": 223,
+    "uncertainty": 10
+  },
+  {
+    "continent": "Africa",
+    "region": "West Africa",
+    "country": "Ghana",
+    "pop": 34,
+    "uncertainty": 10
+  },
+  {
+    "continent": "Africa",
+    "region": "West Africa",
+    "country": "Ivory Coast",
+    "pop": 29,
+    "uncertainty": 10
+  },
+  {
+    "continent": "Africa",
+    "region": "West Africa",
+    "country": "Niger",
+    "pop": 27,
+    "uncertainty": 10
+  },
+  {
+    "continent": "Africa",
+    "region": "West Africa",
+    "country": "Mali",
+    "pop": 23,
+    "uncertainty": 10
+  },
+  {
+    "continent": "Africa",
+    "region": "West Africa",
+    "country": "Senegal",
+    "pop": 18,
+    "uncertainty": 10
+  },
+  {
+    "continent": "Africa",
+    "region": "East Africa",
+    "country": "Ethiopia",
+    "pop": 126,
+    "uncertainty": 8
+  },
+  {
+    "continent": "Africa",
+    "region": "East Africa",
+    "country": "Tanzania",
+    "pop": 67,
+    "uncertainty": 8
+  },
+  {
+    "continent": "Africa",
+    "region": "East Africa",
+    "country": "Kenya",
+    "pop": 55,
+    "uncertainty": 8
+  },
+  {
+    "continent": "Africa",
+    "region": "East Africa",
+    "country": "Uganda",
+    "pop": 48,
+    "uncertainty": 8
+  },
+  {
+    "continent": "Africa",
+    "region": "East Africa",
+    "country": "Mozambique",
+    "pop": 34,
+    "uncertainty": 8
+  },
+  {
+    "continent": "Africa",
+    "region": "East Africa",
+    "country": "Madagascar",
+    "pop": 30,
+    "uncertainty": 8
+  },
+  {
+    "continent": "Africa",
+    "region": "North Africa",
+    "country": "Egypt",
+    "pop": 112,
+    "uncertainty": 5
+  },
+  {
+    "continent": "Africa",
+    "region": "North Africa",
+    "country": "Algeria",
+    "pop": 45,
+    "uncertainty": 5
+  },
+  {
+    "continent": "Africa",
+    "region": "North Africa",
+    "country": "Sudan",
+    "pop": 48,
+    "uncertainty": 5
+  },
+  {
+    "continent": "Africa",
+    "region": "North Africa",
+    "country": "Morocco",
+    "pop": 37,
+    "uncertainty": 5
+  },
+  {
+    "continent": "Africa",
+    "region": "North Africa",
+    "country": "Tunisia",
+    "pop": 12,
+    "uncertainty": 5
+  },
+  {
+    "continent": "Africa",
+    "region": "Central & South",
+    "country": "DR Congo",
+    "pop": 102,
+    "uncertainty": 12
+  },
+  {
+    "continent": "Africa",
+    "region": "Central & South",
+    "country": "South Africa",
+    "pop": 60,
+    "uncertainty": 12
+  },
+  {
+    "continent": "Africa",
+    "region": "Central & South",
+    "country": "Angola",
+    "pop": 36,
+    "uncertainty": 12
+  },
+  {
+    "continent": "Africa",
+    "region": "Central & South",
+    "country": "Cameroon",
+    "pop": 28,
+    "uncertainty": 12
+  },
+  {
+    "continent": "Europe",
+    "region": "Western Europe",
+    "country": "Germany",
+    "pop": 84,
+    "uncertainty": 1
+  },
+  {
+    "continent": "Europe",
+    "region": "Western Europe",
+    "country": "France",
+    "pop": 68,
+    "uncertainty": 1
+  },
+  {
+    "continent": "Europe",
+    "region": "Western Europe",
+    "country": "United Kingdom",
+    "pop": 68,
+    "uncertainty": 1
+  },
+  {
+    "continent": "Europe",
+    "region": "Western Europe",
+    "country": "Netherlands",
+    "pop": 18,
+    "uncertainty": 1
+  },
+  {
+    "continent": "Europe",
+    "region": "Western Europe",
+    "country": "Belgium",
+    "pop": 12,
+    "uncertainty": 1
+  },
+  {
+    "continent": "Europe",
+    "region": "Southern Europe",
+    "country": "Italy",
+    "pop": 59,
+    "uncertainty": 1.5
+  },
+  {
+    "continent": "Europe",
+    "region": "Southern Europe",
+    "country": "Spain",
+    "pop": 48,
+    "uncertainty": 1.5
+  },
+  {
+    "continent": "Europe",
+    "region": "Southern Europe",
+    "country": "Portugal",
+    "pop": 10,
+    "uncertainty": 1.5
+  },
+  {
+    "continent": "Europe",
+    "region": "Southern Europe",
+    "country": "Greece",
+    "pop": 10,
+    "uncertainty": 1.5
+  },
+  {
+    "continent": "Europe",
+    "region": "Eastern Europe",
+    "country": "Russia",
+    "pop": 144,
+    "uncertainty": 3
+  },
+  {
+    "continent": "Europe",
+    "region": "Eastern Europe",
+    "country": "Ukraine",
+    "pop": 37,
+    "uncertainty": 3
+  },
+  {
+    "continent": "Europe",
+    "region": "Eastern Europe",
+    "country": "Poland",
+    "pop": 37,
+    "uncertainty": 3
+  },
+  {
+    "continent": "Europe",
+    "region": "Eastern Europe",
+    "country": "Romania",
+    "pop": 19,
+    "uncertainty": 3
+  },
+  {
+    "continent": "Europe",
+    "region": "Eastern Europe",
+    "country": "Czechia",
+    "pop": 11,
+    "uncertainty": 3
+  },
+  {
+    "continent": "Americas",
+    "region": "North America",
+    "country": "United States",
+    "pop": 335,
+    "uncertainty": 1.5
+  },
+  {
+    "continent": "Americas",
+    "region": "North America",
+    "country": "Mexico",
+    "pop": 128,
+    "uncertainty": 1.5
+  },
+  {
+    "continent": "Americas",
+    "region": "North America",
+    "country": "Canada",
+    "pop": 39,
+    "uncertainty": 1.5
+  },
+  {
+    "continent": "Americas",
+    "region": "North America",
+    "country": "Guatemala",
+    "pop": 18,
+    "uncertainty": 1.5
+  },
+  {
+    "continent": "Americas",
+    "region": "South America",
+    "country": "Brazil",
+    "pop": 216,
+    "uncertainty": 4
+  },
+  {
+    "continent": "Americas",
+    "region": "South America",
+    "country": "Colombia",
+    "pop": 52,
+    "uncertainty": 4
+  },
+  {
+    "continent": "Americas",
+    "region": "South America",
+    "country": "Argentina",
+    "pop": 46,
+    "uncertainty": 4
+  },
+  {
+    "continent": "Americas",
+    "region": "South America",
+    "country": "Peru",
+    "pop": 34,
+    "uncertainty": 4
+  },
+  {
+    "continent": "Americas",
+    "region": "South America",
+    "country": "Venezuela",
+    "pop": 28,
+    "uncertainty": 4
+  },
+  {
+    "continent": "Americas",
+    "region": "South America",
+    "country": "Chile",
+    "pop": 20,
+    "uncertainty": 4
+  }
+]

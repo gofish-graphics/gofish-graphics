@@ -32,6 +32,25 @@ export function cross(
   return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
 }
 
+/** The distance from (x, y) to the segment from (ax, ay) to (bx, by). */
+export const segDist = (
+  x: number,
+  y: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number
+): number => {
+  const ex = bx - ax,
+    ey = by - ay,
+    L = ex * ex + ey * ey;
+  const t =
+    L > 0 ? Math.max(0, Math.min(1, ((x - ax) * ex + (y - ay) * ey) / L)) : 0;
+  const dx = x - ax - t * ex,
+    dy = y - ay - t * ey;
+  return Math.sqrt(dx * dx + dy * dy);
+};
+
 /** Whether `p` is inside a ring (even-odd). */
 export function pointInRing(
   p: readonly [number, number],

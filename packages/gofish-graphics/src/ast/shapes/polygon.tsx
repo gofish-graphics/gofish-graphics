@@ -1,8 +1,13 @@
 import { getColumnTypes, setColumnTypes } from "../schema";
 import { datumOfInput } from "../marks/markResult";
-import { packEnclose } from "d3-hierarchy";
 import { GoFishNode, outlineOverhang } from "../_node";
-import { boxOfDims, outlinePaint, ringExtent, ringOutline } from "../geometry";
+import {
+  boxOfDims,
+  outlinePaint,
+  ringExtent,
+  ringOutline,
+  ringsEnclosingCircle,
+} from "../geometry";
 import { GoFishAST } from "../_ast";
 import { Size } from "../dims";
 import { UNDEFINED, UnderlyingSpace, CONTINUOUS } from "../underlyingSpace";
@@ -167,13 +172,8 @@ export const Polygon = ({
         outline: () => [
           ringOutline(localRef.current, node.yFrame.direction, paint),
         ],
-        enclosingCircle: () => {
-          const d = node.yFrame.direction;
-          const e = packEnclose(
-            localRef.current.map(([x, y]) => ({ x, y: d * y, r: 0 }))
-          );
-          return { cx: e.x, cy: e.y, r: e.r };
-        },
+        enclosingCircle: () =>
+          ringsEnclosingCircle([localRef.current], node.yFrame.direction),
       }),
     },
     []

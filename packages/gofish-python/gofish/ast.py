@@ -170,7 +170,17 @@ class Composed:
         self.operators: tuple = tuple(operators)
 
 
-def _expand_composed(op: Union[Operator, Composed]) -> tuple:
+def _expand_composed(op: Union[Operator, Composed, "_FlowStepMark"]) -> tuple:
+    """The operators a ``.flow(...)`` argument stands for: a fragment's own
+    operators, or the argument itself (an operator, or a mark that is also a
+    flow step, ``enclose(...)``: see ``_FlowStepMark``). Mirrors JS
+    ``expandComposedOperator`` (ast/marks/compose.ts). Any other mark is an
+    error: it belongs in ``.mark(...)``."""
+    if isinstance(op, Mark) and not isinstance(op, _FlowStepMark):
+        raise TypeError(
+            f"{op.mark_type}(...) is a mark, not a flow step: pass it to "
+            f".mark(...), not .flow(...) or compose(...)"
+        )
     return op.operators if isinstance(op, Composed) else (op,)
 
 
@@ -2259,7 +2269,7 @@ def pack(
     Operator form (no positional arg): packs each group (or row, without
     ``by``). Used inside `.flow(...)`.
 
-        chart(seafood).flow(pack(by="lake"), pack()).mark(circle(r=12))
+        chart(seafood).flow(pack(by="lake", spacing=4), pack()).mark(circle(r=12))
 
     Combinator form (positional list of marks): returns a low-level Mark that
     packs the given child marks. A pack nested in a pack is packed by the
@@ -3526,14 +3536,18 @@ def enclose(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
     """Enclose mark: an outline drawn around nodes, under them. The outline is
     a ``shape`` from the ``Shape`` family: the padded bounding box
     (``Shape.box(rx=..., ry=...)``, the default), the smallest ellipse around
-    the members (``Shape.oval()``), or a smooth region (``Shape.blob(...)``,
+    the members (``Shape.oval()``), the padded members with arc corners
+    (``Shape.arcs(radius=...)``), or a smooth region (``Shape.blob(...)``,
     ``Shape.hull(...)``, ``Shape.spine(...)``).
 
-    Two forms, like :func:`line`: combinator form ``enclose([a, c], ...)``
-    (fresh children are laid out as ``layer`` lays them out; ``ref(...)``
-    children and ``.relate()`` operands are enclosed where they are), and bag
-    form ``chart(select_all("points")).flow(group(by="species"))
-    .mark(enclose(...))``, one outline per group.
+    Three forms: combinator form ``enclose([a, c], ...)`` (fresh children are
+    laid out as ``layer`` lays them out; ``ref(...)`` children and
+    ``.relate()`` operands are enclosed where they are); bag form
+    ``chart(select_all("points")).flow(group(by="species"))
+    .mark(enclose(...))``, one outline per group; and flow-step form
+    ``.flow(pack(by="region"), enclose(...), pack())``, an outline around
+    each group's subtree, laid out with it. ``padding`` may be a field name,
+    read once per group.
 
     The options are the generated ``_enclose_opts`` core's (see the docs
     options table); an unknown option raises TypeError.
@@ -3541,7 +3555,18 @@ def enclose(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
     kwargs = _enclose_opts(**options)
     if children is not None:
         return Mark("enclose", _children=list(children), **kwargs)
-    return Mark("enclose", **kwargs)
+    return _FlowStepMark("enclose", **kwargs)
+
+
+class _FlowStepMark(Mark):
+    """A mark that is also a ``.flow(...)`` step: ``enclose(...)``, the bag
+    form in ``.mark(...)`` and, in ``.flow(...)`` (or ``compose(...)``), a
+    step around each group's subtree. Its IR is the same in both places, the
+    mark's: in ``operators`` it carries the mark's modifiers (``name``,
+    ``label``, ``zOrder``, ``translate``), which each group's outline takes.
+    Every modifier returns a mark of the same class (``type(self)``), so a
+    chain keeps the step. Mirrors JS ``withFlowStep`` (ast/marks/compose.ts).
+    """
 
 
 # ─── cut: slice a source shape into N clipped sub-shapes ────────────────────

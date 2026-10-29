@@ -1611,6 +1611,12 @@ for the API.
           ],
           "description": "Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
         },
+        "spacing": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Gap between sibling circles, in pixels: each child's enclosing circle is packed as if its radius were `spacing / 2` larger.",
+          "default": 0
+        },
         "label": {
           "$ref": "#/$defs/LabelIR"
         },
@@ -1678,7 +1684,7 @@ for the API.
       }
     },
     "OperatorIR": {
-      "description": "A pipeline operator — a discriminated union, one member per operator type. See validate.ts and schema.ts for the same field shapes.",
+      "description": "A pipeline operator — a discriminated union, one member per operator type, plus each leaf mark that may stand as a flow step. See validate.ts and schema.ts for the same field shapes.",
       "oneOf": [
         {
           "$ref": "#/$defs/DeriveOperator"
@@ -1718,6 +1724,9 @@ for the API.
         },
         {
           "$ref": "#/$defs/PartitionOperator"
+        },
+        {
+          "$ref": "#/$defs/EncloseMark"
         }
       ]
     },
@@ -2843,7 +2852,7 @@ for the API.
       }
     },
     "EncloseMark": {
-      "description": "Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.oval()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs.",
+      "description": "Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.oval()`), the padded members with arc corners (`Shape.arcs()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs. Flow-step form `.flow(..., enclose(opts), ...)`: an outline around each group's subtree, laid out with it, so the operator above packs or places the outlined group and an outer `enclose` hugs this outline; in a chart's `operators`, its IR is this mark's.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -2852,13 +2861,13 @@ for the API.
           "const": "enclose"
         },
         "padding": {
-          "$ref": "#/$defs/Number",
-          "description": "Pixels between the members and the outline. For a blob, the distance from each member's own outline (around a line's whole length).",
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Pixels between the members and the outline: a number, or a field name or accessor read once per enclosed group (constant within the group). For a blob or arcs, the distance from each member's own outline (around a line's whole length).",
           "default": 2
         },
         "shape": {
           "$ref": "#/$defs/Shape",
-          "description": "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset."
+          "description": "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.arcs({radius}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -4041,6 +4050,21 @@ for the API.
           "properties": {
             "kind": {
               "const": "oval"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "arcs"
+            },
+            "radius": {
+              "type": "number",
+              "minimum": 0,
+              "description": "The radius of the closing disc, in pixels: the radius of every concave arc. 0 is the padded union; a large radius nears the padded convex hull.",
+              "default": 12
             }
           },
           "required": ["kind"]

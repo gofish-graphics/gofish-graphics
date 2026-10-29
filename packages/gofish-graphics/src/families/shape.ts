@@ -43,8 +43,11 @@ export type BlobShape = Omit<BlobIR, "avoiding"> & { avoiding?: Nodes };
 /** `oval()`: the minimum-area enclosing ellipse. See {@link oval}. */
 export type OvalShape = Extract<Frontend.ShapeIR, { kind: "oval" }>;
 
+/** `arcs()`: the padded members, closed by a disc. See {@link arcs}. */
+export type ArcsShape = Extract<Frontend.ShapeIR, { kind: "arcs" }>;
+
 /** Every built-in outline: the value of `enclose`'s `shape`. */
-export type Shape = BoxShape | OvalShape | BlobShape;
+export type Shape = BoxShape | OvalShape | ArcsShape | BlobShape;
 
 /** The options `blob()`, `hull()` and `spine()` share. */
 export type BlobOptions = Omit<BlobShape, "kind">;
@@ -76,6 +79,26 @@ export const oval = bareKind(
   // name, as the other kinds' unknown options do.
   (opts: Omit<OvalShape, "kind"> = {}): OvalShape => ({
     kind: "oval",
+    ...given(opts),
+  })
+);
+
+/**
+ * The members grown by `enclose`'s `padding`, with every gap a disc of
+ * `radius` cannot reach into filled: the morphological closing of the padded
+ * members by that disc, with holes filled (the contour of a bubble treemap,
+ * Görtler et al. 2018). Each concave corner is a circular arc of `radius`
+ * and the convex parts are the padded members' own boundaries, so around
+ * circles the outline is made of circular arcs only. The geometry is in
+ * `ast/graphicalOperators/enclose/arcs.ts`.
+ *
+ * @param radius The radius of the closing disc, in pixels. 0 is the padded
+ *   union; a large radius nears the padded convex hull. Default 12.
+ */
+export const arcs = bareKind(
+  "Shape.arcs",
+  (opts: Omit<ArcsShape, "kind"> = {}): ArcsShape => ({
+    kind: "arcs",
     ...given(opts),
   })
 );

@@ -18,9 +18,10 @@ import { flattenLayout } from "../ast/coordinateTransforms/bake";
 import { Rect } from "../ast/shapes/rect";
 import { layer as Layer } from "../ast/graphicalOperators/layer";
 import { Constraint } from "../ast/constraints";
-import { enclose, line } from "../lib";
+import { chart, enclose, line, rect as rectMark, spread } from "../lib";
 import { ref } from "../ast/shapes/ref";
-import { intersect } from "../ast/graphicalOperators/porterDuff";
+import { intersect, mask } from "../ast/graphicalOperators/porterDuff";
+import { pack } from "../ast/graphicalOperators/pack";
 import { toDisplayList } from "../ast/displayList/toDisplayList";
 
 let passed = 0;
@@ -93,7 +94,9 @@ async function lowerOrder(node: any, m: Record<string, any>): Promise<string> {
   const visit = (item: any): void => {
     const k = byUid.get(item.id);
     if (k !== undefined && !order.includes(k)) order.push(k);
-    for (const c of item.children ?? []) visit(c);
+    // A group's children, and a compositor's operands.
+    for (const key of ["children", "source", "dest", "mask", "content"])
+      for (const c of item[key] ?? []) visit(c);
   };
   items.forEach(visit);
   return order.join(",");
@@ -317,7 +320,9 @@ console.log("# interleaving one child between parts of another is a cycle");
   );
 }
 
-console.log("# a constraint pushed down into a coord orders the coord's children");
+console.log(
+  "# a constraint pushed down into a coord orders the coord's children"
+);
 {
   // a and b both lie in the coord, so zAbove(a, b), declared at the outer
   // layer, parts at the coord. The coord paints its own children, so it must
@@ -380,6 +385,63 @@ console.log("# a z constraint between a compositor's operands is an error");
     ]),
     "zAbove(a, b)",
     "composites"
+  );
+}
+
+console.log("# a compositor's operand that only places its children lowers");
+{
+  // A pack has no lowering of its own: its leaves lower where it put them,
+  // so a compositor bakes each operand's subtree (`bakeSubtree`).
+  const A = Rect({ w: 40, h: 40 });
+  const B = Rect({ w: 40, h: 40 });
+  const C = Rect({ x: 0, y: 0, w: 100, h: 40 });
+  await expectLowerOrder(
+    "intersect over a pack operand lowers its leaves",
+    Layer([intersect([pack({}, [A, B]), C])]),
+    { A, B, C },
+    "A,B,C"
+  );
+  const D = Rect({ w: 40, h: 40 });
+  const E = Rect({ w: 40, h: 40 });
+  const F = Rect({ x: 0, y: 0, w: 100, h: 40 });
+  await expectLowerOrder(
+    "mask over a pack operand lowers its leaves",
+    Layer([mask([pack({}, [D, E]), F])]),
+    { D, E, F },
+    "D,E,F"
+  );
+}
+
+console.log("# a cut slice shows its own window of the source");
+{
+  // Each slice is mask([window, offset(source)]): the offset's shift is
+  // render-only, so it lowers its child itself (a bake boundary). Slice i's
+  // source sits i slice widths left of its window.
+  const dl = await chart(
+    ["a", "b", "c", "d"].map((k) => ({ k })),
+    { w: 600, h: 200 }
+  )
+    .flow(spread({ dir: "x", spacing: 4 }))
+    .mark(rectMark({ w: 400, h: 80, fill: "steelblue" }).cut({ dir: "x" }))
+    .toDisplayList({ axes: false });
+  const masks: any[] = [];
+  const visit = (items: any[]) => {
+    for (const it of items) {
+      if (it.kind === "mask") masks.push(it);
+      for (const key of ["children", "content"])
+        if (Array.isArray(it[key])) visit(it[key]);
+    }
+  };
+  visit(dl.items);
+  const offsets = masks.map((m, i) => {
+    const win = m.mask.find((it: any) => it.kind === "rect");
+    const src = m.content.find((it: any) => it.kind === "rect");
+    return src.x - (win.x - i * win.w);
+  });
+  ok(
+    "slice i's source rect is at its window's x minus i window widths",
+    masks.length === 4 && offsets.every((d) => Math.abs(d) < 1e-6),
+    JSON.stringify(offsets)
   );
 }
 
