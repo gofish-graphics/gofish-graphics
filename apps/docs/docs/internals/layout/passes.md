@@ -709,7 +709,7 @@ an outline, the cell's polygon; every other region is a box.
 #### Chrome gutters
 
 Chrome sits outside its chart (#1032). A chart's own `w`/`h` is its plot, and
-the slot a parent gives it (a spread slice, a grid cell, or the canvas at the
+the slot a parent gives it (a share of a chain, a grid cell, or the canvas at the
 root) is its whole graphic, its chrome included. The chrome's **gutters** are
 how far it reaches past the plot on each side, `chrome.gutters`, per axis
 `[start, end]` in the chart's axis order. They come from the claim walk, so
@@ -762,7 +762,7 @@ report their size).
   members. The box is exact for `Shape.box()`, and a blob lies inside it; an
   oval can reach past it, and that reach is ink.
 - **Bands are shares, and a share is a claim (#493 piece 3, #1176 step 5).**
-  A share is a σ weight in its nearest scope (`GoFishNode.isScope`): a node
+  A share is a σ weight in its nearest scope (`GoFishNode.scopeOf`), a node
   whose room is fixed from outside its content. That is the render root in
   the canvas, a node with a size of its own, a coordinate space (in its
   own coordinates), a node whose room its parent

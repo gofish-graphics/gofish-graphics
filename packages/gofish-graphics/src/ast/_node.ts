@@ -1414,7 +1414,7 @@ export class GoFishNode {
 
   /** The scope this node's content is in on `axis`: the nearest scope at
    *  or above it ({@link isScope}), or the root. */
-  private scopeOf(axis: 0 | 1): GoFishNode {
+  public scopeOf(axis: 0 | 1): GoFishNode {
     let scope: GoFishNode = this;
     while (scope.parent !== undefined && !scope.isScope(axis))
       scope = scope.parent;
@@ -1505,9 +1505,8 @@ export class GoFishNode {
   /**
    * Whether something data sizes or places on `axis` composes into this
    * node's claim: its type there is continuous, or a child's is, short of a
-   * child with a size of its own (a σ-scope of its own, which claims its
-   * pixels). Read from the types alone, which the claim walk resolves
-   * first.
+   * child that is a scope of its own ({@link isScope}), whose data is in its
+   * own σ. Read from the types alone, which the claim walk resolves first.
    */
   public carriesData(axis: 0 | 1): boolean {
     const memo = this._claimMemo.carriesData;

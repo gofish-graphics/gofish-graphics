@@ -280,9 +280,7 @@ export function mixedSizes(part: GoFishNode, axis: 0 | 1): LayoutWarning {
       !(c as GoFishNode).isScope(axis) &&
       (c as GoFishNode).carriesData(axis)
   );
-  let scope = chain;
-  while (scope.parent !== undefined && !scope.isScope(axis))
-    scope = scope.parent;
+  const scope = chain.scopeOf(axis);
   const sized =
     data.length === 0
       ? `${describeNode(scope)} sizes its other parts by data`
