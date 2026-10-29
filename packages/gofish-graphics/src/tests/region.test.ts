@@ -159,6 +159,21 @@ async function main() {
     );
   }
 
+  console.log("# a region mark called with no options");
+  {
+    const { chart, partition, field, Bin, region } = await import("../lib");
+    const rows = [{ v: 0.5 }, { v: 1.5 }, { v: 1.7 }];
+    const dl = await chart(rows, { axes: false })
+      .flow(partition({ by: field("v").bin(Bin.step(1)), dir: "x" }))
+      .mark(region())
+      .toDisplayList({ w: 200, h: 100 });
+    ok(
+      "region() takes no options and draws one rect per cell",
+      dl.items.filter((it: any) => it.kind === "rect").length === 2,
+      JSON.stringify(dl.items.map((it: any) => it.kind))
+    );
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }
