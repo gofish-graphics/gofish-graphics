@@ -667,6 +667,7 @@ function describeType(type: FieldType): string {
         type.min !== undefined ? ` >= ${type.min}` : "",
         type.exclusiveMin !== undefined ? ` > ${type.exclusiveMin}` : "",
         type.max !== undefined ? ` <= ${type.max}` : "",
+        type.exclusiveMax !== undefined ? ` < ${type.exclusiveMax}` : "",
       ]
         .filter((b) => b !== "")
         .join(" and")}`;
@@ -676,7 +677,7 @@ function describeType(type: FieldType): string {
       return `a list or tuple of ${type.items.length} items: ${type.items.map(describeType).join(", ")}`;
     case "array":
       if (isTable(type)) return "a table (a list of dict rows, or a dataframe)";
-      return `a list${type.minItems !== undefined ? ` of at least ${type.minItems} item${type.minItems === 1 ? "" : "s"}` : ""}, each item ${describeType(type.items)}`;
+      return `a list${type.minItems !== undefined ? ` of at least ${type.minItems} item${type.minItems === 1 ? "" : "s"}` : ""}, each item ${describeType(type.items)}${type.uniqueItems ? ", no item twice" : ""}`;
     case "string":
       return "a str";
     case "boolean":
@@ -757,6 +758,12 @@ function pyValueChecks(
         ...(type.max !== undefined
           ? fail(`${v} > ${type.max}`, `must be <= ${type.max}`)
           : []),
+        ...(type.exclusiveMax !== undefined
+          ? fail(
+              `${v} >= ${type.exclusiveMax}`,
+              `must be < ${type.exclusiveMax}`
+            )
+          : []),
       ];
     case "array":
       // A table's rows are data; any other list is checked item by item.
@@ -766,6 +773,12 @@ function pyValueChecks(
           ? fail(
               `len(${v}) < ${type.minItems}`,
               `must have at least ${type.minItems} item${type.minItems === 1 ? "" : "s"}`
+            )
+          : []),
+        ...(type.uniqueItems
+          ? fail(
+              `any(${v}[i] in ${v}[:i] for i in range(len(${v})))`,
+              "must not hold an item twice"
             )
           : []),
         `for ${v}_item in ${v}:`,

@@ -181,7 +181,7 @@ for the API.
       }
     },
     "FieldAccessor": {
-      "description": "Explicit field-accessor form, emitted by field(name). Optionally carries a chained pipeline (ops) — field(\"site\").sort(\"yield\") or field(\"count\").normalize(). Two disjoint slots consume ops: a `by` (grouping key) slot accepts the domain ops (sort/reverse/bin); a value (size/pos) channel slot accepts the aggregate ops (sum/mean/count/distinct) and, only on an operator's entry-flagged size channel, normalize.",
+      "description": "Explicit field-accessor form, emitted by field(name). Optionally carries a chained pipeline (ops) — field(\"site\").sort(\"yield\") or field(\"count\").normalize(). Two disjoint slots consume ops: a `by` (grouping key) slot accepts the domain ops (sort/reverse/bin); a value (size/pos) channel slot accepts the aggregate ops (sum/mean/median/count/distinct) and, only on an operator's entry-flagged size channel, normalize.",
       "type": "object",
       "required": ["type", "name"],
       "properties": {
@@ -302,7 +302,7 @@ for the API.
               "const": "bin"
             },
             "partition": {
-              "description": "The partition each value is binned into: a Calendar value (Calendar.month({ every: 3 }) is { kind: month, every: 3 }), Bin.step(size) or Bin.thresholds(countOrEdges), told apart by kind; or a product of Calendar values (a list, [year, month]: one cell where they meet). Absent: about 10 cells. A second bin op splits the cells of the one before it.",
+              "description": "The partition each value is binned into: a Calendar value (Calendar.month({ every: 3 }) is { kind: month, every: 3 }), Bin.step(size), Bin.thresholds(countOrEdges) or Bin.quantiles(countOrProbabilities), told apart by kind; or a product of Calendar values (a list, [year, month]: one cell where they meet). Absent: about 10 cells. A second bin op splits the cells of the one before it.",
               "oneOf": [
                 {
                   "$ref": "#/$defs/Partition"
@@ -352,6 +352,15 @@ for the API.
           "properties": {
             "op": {
               "const": "mean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "median"
             }
           }
         },
@@ -1643,7 +1652,7 @@ for the API.
               "$ref": "#/$defs/StructAccessor"
             }
           ],
-          "description": "A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error."
+          "description": "A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), Bin.quantiles(countOrProbabilities), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error."
         },
         "dir": {
           "type": "string",
@@ -2292,7 +2301,7 @@ for the API.
         },
         "textAnchor": {
           "enum": ["start", "middle", "end"],
-          "description": "Where the text anchor — the local origin `rotate` pivots about and dims channels position — sits along the string: its first character, center, or last character.",
+          "description": "Where the text anchor — the local origin `rotate` pivots about and `x` places — sits along the string: its first character, center, or last character. `cx` places the center of the text's box whatever the anchor.",
           "default": "start"
         },
         "name": {
@@ -2576,7 +2585,7 @@ for the API.
       }
     },
     "RegionMark": {
-      "description": "Draws the region its parent gives it, such as a partition's cell. It has no size or position of its own: it fills the space it is given on both axes. It draws the region's outline when the region has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.",
+      "description": "Draws the cell it is in, such as a partition's cell. It has no size or position of its own: on each axis where it is in a cell, it is that cell, placed by its data through the partition's scale, and on an axis where it is in no cell, it fills the space it is given. It draws the cell's outline when the cell has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -2605,6 +2614,11 @@ for the API.
         "filter": {
           "type": "string",
           "description": "Raw SVG filter attribute."
+        },
+        "inset": {
+          "$ref": "#/$defs/Number",
+          "description": "Pixels drawn in from each side of the cell it is in, on each axis where it is in a cell. Paint only: layout still reads the whole cell. A cell thinner than twice the inset draws nothing.",
+          "default": 0
         },
         "debug": {
           "type": "boolean"
@@ -3407,9 +3421,37 @@ for the API.
             }
           },
           "required": ["kind", "thresholds"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "quantiles"
+            },
+            "quantiles": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/Number",
+                    "exclusiveMinimum": 0,
+                    "exclusiveMaximum": 1
+                  },
+                  "minItems": 1,
+                  "uniqueItems": true
+                }
+              ],
+              "description": "A count: that many cells, each holding about the same number of values. Or a list of distinct probabilities, each above 0 and below 1: the inner edges are the quantiles at them."
+            }
+          },
+          "required": ["kind", "quantiles"]
         }
       ],
-      "description": "The cells `field(x).bin(...)` cuts a field's line into: a Calendar value (Calendar.month, Calendar.hour({ every: 6 })), Bin.step(size) or Bin.thresholds(countOrEdges)."
+      "description": "The cells `field(x).bin(...)` cuts a field's line into: a Calendar value (Calendar.month, Calendar.hour({ every: 6 })), Bin.step(size), Bin.thresholds(countOrEdges) or Bin.quantiles(countOrProbabilities)."
     },
     "StructBin": {
       "anyOf": [
@@ -3760,6 +3802,34 @@ for the API.
           "type": "object",
           "properties": {
             "kind": {
+              "const": "quantiles"
+            },
+            "quantiles": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/Number",
+                    "exclusiveMinimum": 0,
+                    "exclusiveMaximum": 1
+                  },
+                  "minItems": 1,
+                  "uniqueItems": true
+                }
+              ],
+              "description": "A count: that many cells, each holding about the same number of values. Or a list of distinct probabilities, each above 0 and below 1: the inner edges are the quantiles at them."
+            }
+          },
+          "required": ["kind", "quantiles"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
               "const": "hex"
             },
             "radius": {
@@ -3808,7 +3878,7 @@ for the API.
           "required": ["kind", "seeds"]
         }
       ],
-      "description": "The cells a key is binned into. `step` and `thresholds` cut the line of one field into intervals: the value of `field(x).bin(...)`. `hex` and `voronoi` divide the plane of two fields into polygons: the value of `struct({ x, y }).bin(...)`. Each kind makes cells that do not overlap, and puts each row in the cell its value falls in."
+      "description": "The cells a key is binned into. `step`, `thresholds` and `quantiles` cut the line of one field into intervals: the value of `field(x).bin(...)`. `hex` and `voronoi` divide the plane of two fields into polygons: the value of `struct({ x, y }).bin(...)`. Each kind makes cells that do not overlap, and puts each row in the cell its value falls in."
     },
     "Calendar": {
       "anyOf": [

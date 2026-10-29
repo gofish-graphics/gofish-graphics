@@ -59,6 +59,9 @@ function fieldTypeToSchema(type: FieldType): Record<string, unknown> {
           ? { exclusiveMinimum: type.exclusiveMin }
           : {}),
         ...(type.max !== undefined ? { maximum: type.max } : {}),
+        ...(type.exclusiveMax !== undefined
+          ? { exclusiveMaximum: type.exclusiveMax }
+          : {}),
       };
     case "boolean":
       return { type: "boolean" };
@@ -82,6 +85,7 @@ function fieldTypeToSchema(type: FieldType): Record<string, unknown> {
         type: "array",
         items: fieldTypeToSchema(type.items),
         ...(type.minItems !== undefined ? { minItems: type.minItems } : {}),
+        ...(type.uniqueItems ? { uniqueItems: true } : {}),
       };
     case "tuple":
       return {
@@ -351,7 +355,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
     // — see GENERATED_DEFS below.
     FieldAccessor: {
       description:
-        'Explicit field-accessor form, emitted by field(name). Optionally carries a chained pipeline (ops) — field("site").sort("yield") or field("count").normalize(). Two disjoint slots consume ops: a `by` (grouping key) slot accepts the domain ops (sort/reverse/bin); a value (size/pos) channel slot accepts the aggregate ops (sum/mean/count/distinct) and, only on an operator\'s entry-flagged size channel, normalize.',
+        'Explicit field-accessor form, emitted by field(name). Optionally carries a chained pipeline (ops) — field("site").sort("yield") or field("count").normalize(). Two disjoint slots consume ops: a `by` (grouping key) slot accepts the domain ops (sort/reverse/bin); a value (size/pos) channel slot accepts the aggregate ops (sum/mean/median/count/distinct) and, only on an operator\'s entry-flagged size channel, normalize.',
       type: "object",
       required: ["type", "name"],
       properties: {
@@ -434,7 +438,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             op: { const: "bin" },
             partition: {
               description:
-                "The partition each value is binned into: a Calendar value (Calendar.month({ every: 3 }) is { kind: month, every: 3 }), Bin.step(size) or Bin.thresholds(countOrEdges), told apart by kind; or a product of Calendar values (a list, [year, month]: one cell where they meet). Absent: about 10 cells. A second bin op splits the cells of the one before it.",
+                "The partition each value is binned into: a Calendar value (Calendar.month({ every: 3 }) is { kind: month, every: 3 }), Bin.step(size), Bin.thresholds(countOrEdges) or Bin.quantiles(countOrProbabilities), told apart by kind; or a product of Calendar values (a list, [year, month]: one cell where they meet). Absent: about 10 cells. A second bin op splits the cells of the one before it.",
               oneOf: [
                 { $ref: "#/$defs/Partition" },
                 {
@@ -466,6 +470,11 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           type: "object",
           required: ["op"],
           properties: { op: { const: "mean" } },
+        },
+        {
+          type: "object",
+          required: ["op"],
+          properties: { op: { const: "median" } },
         },
         {
           type: "object",

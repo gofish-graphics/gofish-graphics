@@ -124,7 +124,7 @@ frame, and it reads each outline by its exact form where it has one:
   two semi-axes as well. The blob reads only the disc, so it pads the ellipse
   a little more along its short axis (a declared shortcut, below). The oval
   reads the semi-axes and samples the ellipse itself.
-- An outline that gives a `box` (a `rect`'s, or the fallback of a node with
+- An outline that gives a `box` (a `rect`'s with square corners, or the fallback of a node with
   no outline of its own) is its box. The blob measures the distance to it
   exactly, as a rectangle.
 - An open outline (a `line`, an `arrow` to the tip of its head) is its
@@ -134,7 +134,7 @@ frame, and it reads each outline by its exact form where it has one:
   the pieces of its loop, each a tube as wide as its stroke: a ring. Its
   inside is not ink, so it is not part of the member.
 - Any other closed outline, which is filled (a `polygon`, a `ribbon`'s band,
-  a rotated `text`'s glyph box), is its bounding box, a declared shortcut
+  a `rect` with rounded corners, a rotated `text`'s glyph box), is its bounding box, a declared shortcut
   (below).
 
 The blob needs these exact forms. A disc is one Delaunay site and links to

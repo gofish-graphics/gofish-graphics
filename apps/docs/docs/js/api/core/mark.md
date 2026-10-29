@@ -180,7 +180,7 @@ ways:
   ```
 
 - **A `field(...)` aggregate** (`field("count").sum()` / `.mean()` /
-  `.count()` / `.distinct()`) folds the group's rows to one value — use this
+  `.median()` / `.count()` / `.distinct()`) folds the group's rows to one value — use this
   for a group total or mean, e.g. `.label(field("count").sum())` to label a
   stacked segment with its total row count.
 - **A function accessor** receives the **whole group** (an array of rows),

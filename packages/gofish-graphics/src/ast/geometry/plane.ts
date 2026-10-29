@@ -21,6 +21,17 @@ export function signedArea2(ring: readonly (readonly [number, number])[]) {
   return a;
 }
 
+/** The cross product of `b − a` and `c − a`: positive when `a`, `b`, `c`
+ *  turn the way a ring with positive {@link signedArea2} winds, 0 when they
+ *  are on one line. */
+export function cross(
+  a: readonly [number, number],
+  b: readonly [number, number],
+  c: readonly [number, number]
+): number {
+  return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+}
+
 /** The distance from (x, y) to the segment from (ax, ay) to (bx, by). */
 export const segDist = (
   x: number,

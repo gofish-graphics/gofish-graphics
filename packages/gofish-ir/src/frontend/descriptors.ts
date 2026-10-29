@@ -62,6 +62,9 @@ export type FieldType =
       exclusiveMin?: number;
       /** The greatest value allowed (inclusive). NaN is never at most it. */
       max?: number;
+      /** A bound the value must be below (exclusive): `1` for a probability
+       *  that must be inside (0, 1). NaN is never below it. */
+      exclusiveMax?: number;
       /** Reject Infinity and -Infinity (NaN is never finite). */
       finite?: boolean;
       /** Only whole numbers. */
@@ -79,6 +82,8 @@ export type FieldType =
       items: FieldType;
       /** The fewest items allowed: `1` for a list that must not be empty. */
       minItems?: number;
+      /** No item may appear twice (JSON Schema's `uniqueItems`). */
+      uniqueItems?: true;
     }
   | { kind: "tuple"; items: readonly FieldType[] }
   | { kind: "object"; fields: Readonly<FieldGroup> }
@@ -168,7 +173,8 @@ export const t = {
   string: { kind: "string" } as FieldType,
   number: { kind: "number" } as FieldType,
   /** A number with bounds: at least `min`, above `exclusiveMin`, at most
-   *  `max`, finite when `finite`, and whole when `integer`
+   *  `max`, below `exclusiveMax`, finite when `finite`, and whole when
+   *  `integer`
    *  (`t.num({ min: 0, finite: true })` for a pixel padding,
    *  `t.num({ exclusiveMin: 0, finite: true })` for a hex radius,
    *  `t.num({ min: 0, max: 1 })` for a share, `t.num({ min: 1, integer: true })`
@@ -177,6 +183,7 @@ export const t = {
     min?: number;
     exclusiveMin?: number;
     max?: number;
+    exclusiveMax?: number;
     finite?: boolean;
     integer?: boolean;
   }): FieldType => ({
@@ -204,8 +211,11 @@ export const t = {
   union: (...options: FieldType[]): FieldType => ({ kind: "union", options }),
   /** A list of `items`, with at least `minItems` of them when given
    *  (`t.array(t.number, { minItems: 1 })` for a list that must not be
-   *  empty). */
-  array: (items: FieldType, bounds: { minItems?: number } = {}): FieldType => ({
+   *  empty), and no item twice with `uniqueItems`. */
+  array: (
+    items: FieldType,
+    bounds: { minItems?: number; uniqueItems?: true } = {}
+  ): FieldType => ({
     kind: "array",
     items,
     ...bounds,
@@ -784,7 +794,7 @@ export const STRATEGIES = {
     },
   },
   Bin: {
-    doc: "The cells a key is binned into. `step` and `thresholds` cut the line of one field into intervals: the value of `field(x).bin(...)`. `hex` and `voronoi` divide the plane of two fields into polygons: the value of `struct({ x, y }).bin(...)`. Each kind makes cells that do not overlap, and puts each row in the cell its value falls in.",
+    doc: "The cells a key is binned into. `step`, `thresholds` and `quantiles` cut the line of one field into intervals: the value of `field(x).bin(...)`. `hex` and `voronoi` divide the plane of two fields into polygons: the value of `struct({ x, y }).bin(...)`. Each kind makes cells that do not overlap, and puts each row in the cell its value falls in.",
     kinds: {
       step: {
         doc: "Cells of one width, aligned to multiples of it: a value is in the cell that starts at the largest multiple of the width at or below it. Every value has a cell, whatever the domain.",
@@ -808,6 +818,23 @@ export const STRATEGIES = {
             ),
             required: true,
             doc: "A count: about that many cells, with the width a numeric axis with that many ticks would use, so the edges are round numbers. Or a list of edges: the cells end and start at them, with the domain's ends as the outer edges, and an edge outside the domain cuts nothing.",
+          },
+        },
+      },
+      quantiles: {
+        doc: "Cells whose inner edges are quantiles of the field's values in the chart's data (type 7, the default of numpy and d3), with the domain's ends as the outer edges, as in polars' and pandas' `qcut`. Two edges at one value, as many equal values can give, are an error: ask for fewer cells.",
+        positional: "quantiles",
+        params: {
+          quantiles: {
+            type: t.union(
+              t.num({ min: 1, integer: true }),
+              t.array(t.num({ exclusiveMin: 0, exclusiveMax: 1 }), {
+                minItems: 1,
+                uniqueItems: true,
+              })
+            ),
+            required: true,
+            doc: "A count: that many cells, each holding about the same number of values. Or a list of distinct probabilities, each above 0 and below 1: the inner edges are the quantiles at them.",
           },
         },
       },
@@ -1028,7 +1055,7 @@ export type StrategyFamilyName = keyof typeof STRATEGIES;
  *  `struct({ x, y }).bin(b)`, whose cells are polygons of the plane. A kind
  *  is valid only on its key. */
 export const BIN_KINDS = {
-  field: ["step", "thresholds"],
+  field: ["step", "thresholds", "quantiles"],
   struct: ["hex", "voronoi"],
 } as const satisfies Record<
   "field" | "struct",
@@ -1170,7 +1197,7 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
   // `field(x).bin(...)` partition is a Calendar kind or a Bin kind that cuts
   // one field's line: one tagged union of both families' kinds.
   Partition: {
-    doc: "The cells `field(x).bin(...)` cuts a field's line into: a Calendar value (Calendar.month, Calendar.hour({ every: 6 })), Bin.step(size) or Bin.thresholds(countOrEdges).",
+    doc: "The cells `field(x).bin(...)` cuts a field's line into: a Calendar value (Calendar.month, Calendar.hour({ every: 6 })), Bin.step(size), Bin.thresholds(countOrEdges) or Bin.quantiles(countOrProbabilities).",
     type: t.union(
       ...kindBranches(STRATEGIES.Calendar),
       ...kindBranches(STRATEGIES.Bin, BIN_KINDS.field)
@@ -1722,7 +1749,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       by: {
         type: t.union(t.ref("FieldAccessor"), t.ref("StructAccessor")),
         required: true,
-        doc: "A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error.",
+        doc: "A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), Bin.quantiles(countOrProbabilities), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error.",
       },
       dir: {
         type: t.string,
@@ -1905,7 +1932,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       textAnchor: {
         type: t.enum("start", "middle", "end"),
         default: "start",
-        doc: "Where the text anchor — the local origin `rotate` pivots about and dims channels position — sits along the string: its first character, center, or last character.",
+        doc: "Where the text anchor — the local origin `rotate` pivots about and `x` places — sits along the string: its first character, center, or last character. `cx` places the center of the text's box whatever the anchor.",
       },
     },
   }),
@@ -1978,9 +2005,14 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   region: leafMark("region", {
-    doc: "Draws the region its parent gives it, such as a partition's cell. It has no size or position of its own: it fills the space it is given on both axes. It draws the region's outline when the region has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.",
+    doc: "Draws the cell it is in, such as a partition's cell. It has no size or position of its own: on each axis where it is in a cell, it is that cell, placed by its data through the partition's scale, and on an axis where it is in no cell, it fills the space it is given. It draws the cell's outline when the cell has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.",
     include: [paint],
     fields: {
+      inset: {
+        type: t.number,
+        default: 0,
+        doc: "Pixels drawn in from each side of the cell it is in, on each axis where it is in a cell. Paint only: layout still reads the whole cell. A cell thinner than twice the inset draws nothing.",
+      },
       debug: {
         type: t.boolean,
         doc: "Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.",
@@ -2299,12 +2331,28 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
   }),
   inside: combinatorMark("inside", {
     pyName: "intersect",
-    doc: "Draw only where both regions overlap: A ∩ B. Binary only.",
+    doc: "Draw only where both regions overlap: A ∩ B. Binary only. With no `fill` or `stroke`, it draws the operands' own paint where they overlap. With either, it draws the overlap as one shape in its own paint: an exact path when both operands trace their outlines and one of them is convex, and with no exact path a fill of the overlapping ink, while a stroke is then an error.",
     fields: {
       blendMode: {
         type: t.enum("color", "multiply", "screen", "overlay", "luminosity"),
         default: "color",
-        doc: "Blend used where the two regions combine.",
+        doc: "Blend used where the two regions combine. Unused when the result is painted.",
+      },
+      fill: ch.color(
+        "Fill color of the overlap, or a field name or accessor for a color scale. Default none when `stroke` is given."
+      ),
+      stroke: ch.color(
+        "Stroke color of the overlap's outline, or a field name or accessor for a color scale. Default none. It needs an exact outline: both operands must trace their shape (a rect, ellipse, polygon, ribbon, area or region, or a ref to one; not an image, a text or a group), and at least one of them must be convex. Otherwise it is an error."
+      ),
+      strokeWidth: {
+        type: t.number,
+        default: 1,
+        doc: "Stroke width in pixels. Without `stroke` it draws nothing.",
+      },
+      opacity: {
+        type: t.number,
+        default: 1,
+        doc: "Opacity of the result, 0 to 1: of the painted overlap, fill and stroke, or with no `fill` or `stroke`, of the operands as drawn where they overlap.",
       },
     },
   }),

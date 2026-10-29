@@ -238,6 +238,15 @@ function checkItem(
     }
   } else if (kind === "mask") {
     checkBBox(item.bbox, `${path}.bbox`, errors);
+    if (
+      item.mode !== undefined &&
+      item.mode !== "luminance" &&
+      item.mode !== "alpha"
+    )
+      errors.push({
+        path: `${path}.mode`,
+        message: `mode must be "luminance" or "alpha"`,
+      });
     for (const key of ["mask", "content"] as const) {
       if (!Array.isArray(item[key]))
         errors.push({

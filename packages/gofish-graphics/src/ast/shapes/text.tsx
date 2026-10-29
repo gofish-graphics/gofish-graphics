@@ -13,7 +13,7 @@ import {
   Transform,
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
-import { boxExtent } from "../extent";
+import { boxExtent, literalStart } from "../extent";
 import { boxOfDims } from "../geometry";
 import { turnedBox, turnedCorners } from "../geometry/plane";
 import type { BoundingBox } from "../../util/bbox";
@@ -244,22 +244,23 @@ export const Text = ({
         return [glyphAxis(xPos, dims[0].size), glyphAxis(yPos, dims[1].size)];
       },
       // A text has a size of its own, measured here, when the claims are
-      // resolved, so whatever composes it leaves it room (#493). In x it
-      // reaches from its anchor point; in y from its box's start edge, or
-      // about its middle when placed by its center.
+      // resolved, so whatever composes it leaves it room (#493). It reaches
+      // from its origin (in x its anchor point, in y its box's start edge),
+      // or about its box's middle when placed by its center, as in `layout`.
       resolveExtent: (_ce, _cs, spaces) => {
         const { minX, maxX, minY, maxY } = measure().rel;
         const height = maxY - minY;
-        // A literal position places the text in its parent's pixels.
-        const literal = (axis: 0 | 1) => {
-          const d = dims[axis];
-          const at = d.center ?? d.min;
-          return typeof at === "number" ? at : 0;
-        };
-        const yStart =
-          literal(1) - (dims[1].center !== undefined ? height / 2 : 0);
+        // Where the origin sits, by the rule `layout` places it by
+        // (`positionOf`): a center is the box's middle, `(min + max) / 2`
+        // past the origin.
+        const xAt = literalStart(
+          dims[0].center,
+          dims[0].min,
+          (minX + maxX) / 2
+        );
+        const yStart = literalStart(dims[1].center, dims[1].min, height / 2);
         return [
-          boxExtent(spaces[0], -(literal(0) + minX), literal(0) + maxX),
+          boxExtent(spaces[0], -(xAt + minX), xAt + maxX),
           boxExtent(spaces[1], -yStart, yStart + height),
         ];
       },
@@ -284,10 +285,20 @@ export const Text = ({
         // the box's start edge.
         const height = maxY - minY;
 
-        // In x the origin is the anchor point itself, so a center places it
-        // with no offset; in y a center places the middle of the box.
-        const positionX = positionOf(dims[0], posFn(scales?.[0]?.map), 0);
-        const positionY = positionOf(dims[1], posFn(scales?.[1]?.map), height);
+        // A center places the middle of the box, as for a rect. The box
+        // spans `[min, max]` about the origin, so its middle is
+        // `(min + max) / 2` past it: in x half the width for the default
+        // `"start"` anchor, 0 for `"middle"`; in y half the height.
+        const positionX = positionOf(
+          dims[0],
+          posFn(scales?.[0]?.map),
+          (minX + maxX) / 2
+        );
+        const positionY = positionOf(
+          dims[1],
+          posFn(scales?.[1]?.map),
+          height / 2
+        );
 
         const box: [Interval, Interval] = [
           {
@@ -413,6 +424,8 @@ export const Text = ({
       geometry: ({ intrinsicDims, renderData }, _children, node) => {
         const box = boxOfDims(intrinsicDims, node.type);
         const layout = (renderData as { layout?: TextLayout })?.layout;
+        // Unrotated, it is read as its box (`GoFishNode.geometry`), which
+        // only bounds its glyphs, as the turned box below does.
         if (!rotate || layout === undefined) return { box };
         const glyphDy = (renderData as { glyphDy?: number }).glyphDy ?? 0;
         const { bbox, anchor } = layout;
@@ -429,7 +442,9 @@ export const Text = ({
         // Its glyphs are read as filling the turned box.
         return {
           box,
-          outline: () => [{ points: corners, closed: true, filled: true }],
+          outline: () => [
+            { points: corners, closed: true, filled: true, bounds: true },
+          ],
         };
       },
     },

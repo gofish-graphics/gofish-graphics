@@ -143,7 +143,7 @@ const compositeToSVG = (item: CompositeItem | MaskItem): string => {
       `<defs>` +
       `<g id="${sourceId}">${item.mask.map(itemToSVG).join("")}</g>` +
       `<g id="${destinationId}">${item.content.map(itemToSVG).join("")}</g>` +
-      `<mask id="${maskId}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">` +
+      `<mask id="${maskId}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse"${item.mode === "alpha" ? ` style="mask-type:alpha"` : ""}>` +
       `<use href="#${sourceId}"/></mask>` +
       `</defs>` +
       `<use href="#${destinationId}" mask="url(#${maskId})"/>`
@@ -216,7 +216,7 @@ const compositeToSVG = (item: CompositeItem | MaskItem): string => {
     `/>`;
 
   return (
-    `<g transform="translate(${x} ${y})" style="isolation:isolate">` +
+    `<g transform="translate(${x} ${y})" style="isolation:isolate"${item.style?.opacity !== undefined ? ` opacity="${item.style.opacity}"` : ""}>` +
     `<defs>` +
     `<g id="${sourceId}">${item.source.map(itemToSVG).join("")}</g>` +
     `<g id="${destinationId}">${item.dest.map(itemToSVG).join("")}</g>` +

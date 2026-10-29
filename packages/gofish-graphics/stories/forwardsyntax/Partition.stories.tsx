@@ -6,6 +6,7 @@ import {
   chart,
   circle,
   Color,
+  Constraint,
   field,
   layer,
   partition,
@@ -324,9 +325,9 @@ export const PenguinBeakVoronoi: StoryObj<Args> = {
   },
 };
 
-// Each hexagon is a layer of its region and its count. The layer hands the
-// hexagon it is given to both: the region draws it, and the text, which has a
-// size of its own, sits at the center of its box, the hexagon's center.
+// Each hexagon is a layer of its region and its count. The region draws the
+// hexagon it is in, and the count is centered on the region's box, the
+// hexagon's center.
 export const AirportHexCounts: StoryObj<Args> = {
   args: { w: 600, h: 360 },
   loaders: [async () => ({ airports: await data["airports.csv"]() })],
@@ -351,8 +352,10 @@ export const AirportHexCounts: StoryObj<Args> = {
       )
       .mark(
         layer([
-          region({ fill: field("iata").count(), stroke: "white" }),
-          text({ text: field("iata").count(), fontSize: 10 }),
+          region({ fill: field("iata").count(), stroke: "white" }).name("cell"),
+          text({ text: field("iata").count(), fontSize: 10 }).name("count"),
+        ]).relate(({ cell, count }) => [
+          Constraint.align({ x: "middle", y: "middle" }, [cell, count]),
         ])
       )
       .render(container, { axes: true });
