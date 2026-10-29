@@ -406,12 +406,13 @@ defers its layer registration via a `__layerRegistration` tag collected in a
 single post-resolve DFS walk (`collectLayerRegistrations`), so registry order
 follows parent-iteration order, not async-completion order. The registries
 nest: a `layer([...])` combinator's is a child of the one it is built in, and
-`resolveRefData` reads a name with the widening lookup `lookupLayerName` (see
+`resolveRefData` reads a name with the widening lookup `LayerContext.lookup` (see
 [Name Resolution & Scoping](/internals/core/names-and-scoping)). The same factory
 backs `makeRelatableMark` (which adds `.relate()`, and hands the rows the mark
 was called with to `GoFishNode.relate`, so a drawing clause binds them; the
 `layer([...])` combinator keeps the registry it resolved its children in as
-the node's `_names`, so a drawing clause is resolved in it too) and the
+the node's `_names`, so a drawing clause is resolved in a fresh registry
+nested in it) and the
 combinator marks — one wiring, not three copies. The region-compositing
 combinators share one factory (`makePorterDuffCombinator`), typed by their
 options: only `intersect` takes paint (`fill`, `stroke`, `strokeWidth`,
@@ -550,9 +551,10 @@ combinator one. Two refinements: an operand that is the connector's own fresh
 child (`enclose(opts, [spread(...)])` lays its children out and paints them
 itself, over its outline) is not tagged; and the `layer` combinator runs the
 pass over its children, and `GoFishNode.relate` over its drawing clauses. A
-clause's operands are string refs with no target yet, and the pass names
-such a ref's node by its string, with no scope check, since the name is the
-relating layer's (see [Names and Scoping](/internals/core/names-and-scoping)).
+clause's operands are string refs with no target yet. The layer that an
+operand's scope lies in claims it, as a layer claims a node only when the
+node lies in its children, and the constraint carries the operand's name and
+scope, so paint order looks it up where it was bound (see [Names and Scoping](/internals/core/names-and-scoping)).
 The defaults `layer` installs for its children are kept apart, as
 `_paintDefaults`: a later `.relate()` on the layer replaces the author's
 constraints with its own and keeps them.

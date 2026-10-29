@@ -17,17 +17,9 @@ import { RelateOperand } from "../constraints/relate";
 import { isToken } from "../createName";
 import type { Mark, MarkChild } from "../types";
 
-/** Per-chart registry of named layers for ref()/selectAll() lookup. A string
- *  name is its own key. A `createName` token is keyed by its symbol, which no
- *  string can equal, so its nodes are there for the chart's own use (a later
- *  tier's scope, a sequence's transitions) and stay out of reach of a string
- *  `selectAll`/`ref`. */
-export type LayerContext = {
-  [key: string | symbol]: {
-    data: any[];
-    nodes: GoFishNode[];
-  };
-};
+/** The marks one name stands for in a registry: the nodes, and the datum of
+ *  each, in registration order. */
+export type LayerEntry = { data: any[]; nodes: GoFishNode[] };
 
 /** The registry key a `.name(...)` value is filed under, or `undefined` when it
  *  names nothing (an empty string, or no name). */
@@ -37,69 +29,108 @@ export function layerKey(name: unknown): string | symbol | undefined {
   return undefined;
 }
 
-/** The scope tree the registries form: a `layer([...])` combinator's
- *  registry is a child of the registry of the place it is built in (a chart,
- *  an operator's cell, another layer). A registry with no parent is a root:
- *  a top-level render, or the body of a `createMark` component, which is the
- *  boundary of every name lookup. Kept beside the registries, not in them,
- *  because a registry's keys are names. */
-const scopeTree = new WeakMap<
-  LayerContext,
-  { parent?: LayerContext; children: LayerContext[] }
->();
-
-function scopeLinks(ctx: LayerContext) {
-  let links = scopeTree.get(ctx);
-  if (!links) scopeTree.set(ctx, (links = { children: [] }));
-  return links;
-}
-
-/** A fresh registry nested in `parent`'s scope (a root when `parent` is
- *  `undefined`). */
-export function childLayerContext(parent?: LayerContext): LayerContext {
-  const ctx: LayerContext = {};
-  if (parent) {
-    scopeLinks(parent).children.push(ctx);
-    scopeLinks(ctx).parent = parent;
-  }
-  return ctx;
-}
+let nextScope = 0;
 
 /**
- * The marks a name (a registry key) stands for, seen from the registry
- * `from`, by the same widening lookup `ref("x")` uses over the tree: search
- * `from`'s scope and the scopes nested in it, then its parent's, one level at
- * a time, and stop at the first level that has the name. Inside that level
- * the nearest depth wins, and every registry at that depth that has the name
- * contributes its marks, in scope order: a name a split repeats (one
- * `layer` per cell) is plural, so `selectAll` gathers all its marks and the
- * singular `ref` reports how many it found. Never crosses a root.
- * `undefined` when no level has the name.
+ * A registry of named marks for `ref()`/`selectAll()` lookup, and the scope
+ * it belongs to. A string name is its own key. A `createName` token is keyed
+ * by its symbol, which no string can equal, so its nodes are there for the
+ * chart's own use (a later tier's scope, a sequence's transitions) and stay
+ * out of reach of a string `selectAll`/`ref`.
+ *
+ * The registries form a scope tree: a `layer([...])` combinator's registry
+ * is a child of the registry of the place it is built in (a chart, an
+ * operator's cell, another layer). A registry with no parent is a root: a
+ * top-level render, or the body of a `createMark` component, which is the
+ * boundary of every name lookup. A registry links only to its parent. Each
+ * new name is indexed upward when it is registered: every ancestor records
+ * the nearest depth below it that has the name, and the registries at that
+ * depth, so a lookup reads one index entry per ancestor.
  */
-export function lookupLayerName(
-  from: LayerContext,
-  key: string | symbol
-): { data: any[]; nodes: GoFishNode[] } | undefined {
-  let level: LayerContext | undefined = from;
-  let searched: LayerContext | undefined;
-  while (level) {
-    let frontier: LayerContext[] = [level];
-    while (frontier.length > 0) {
-      const hits = frontier.filter((c) => c[key] !== undefined);
-      if (hits.length === 1) return hits[0][key];
-      if (hits.length > 1)
-        return {
-          data: hits.flatMap((c) => c[key].data),
-          nodes: hits.flatMap((c) => c[key].nodes),
-        };
-      frontier = frontier.flatMap((c) =>
-        (scopeTree.get(c)?.children ?? []).filter((k) => k !== searched)
-      );
-    }
-    searched = level;
-    level = scopeTree.get(level)?.parent;
+export class LayerContext {
+  /** Creation order: the order of a parent's children. */
+  readonly seq = nextScope++;
+  readonly depth: number;
+  private readonly own = new Map<string | symbol, LayerEntry>();
+  private readonly nearest = new Map<
+    string | symbol,
+    { depth: number; scopes: LayerContext[] }
+  >();
+
+  constructor(readonly parent?: LayerContext) {
+    this.depth = parent ? parent.depth + 1 : 0;
   }
-  return undefined;
+
+  /** A fresh registry nested in this one. */
+  child(): LayerContext {
+    return new LayerContext(this);
+  }
+
+  /** The marks filed under `key` in this registry itself, not widened. */
+  get(key: string | symbol): LayerEntry | undefined {
+    return this.own.get(key);
+  }
+
+  /** File `node` under `key` in this registry. */
+  register(key: string | symbol, node: GoFishNode): void {
+    let entry = this.own.get(key);
+    if (!entry) {
+      this.own.set(key, (entry = { data: [], nodes: [] }));
+      this.indexUpward(key);
+    }
+    entry.nodes.push(node);
+    entry.data.push((node as { datum?: unknown }).datum);
+  }
+
+  /** Record this registry's new `key` in its own and every ancestor's index.
+   *  An ancestor that already knows a nearer registry has passed it on
+   *  upward, so the walk stops there. */
+  private indexUpward(key: string | symbol): void {
+    for (let s: LayerContext | undefined = this; s; s = s.parent) {
+      const depth = this.depth - s.depth;
+      const at = s.nearest.get(key);
+      if (at && at.depth < depth) return;
+      if (!at || depth < at.depth) {
+        s.nearest.set(key, { depth, scopes: [this] });
+      } else {
+        const i = at.scopes.findIndex((o) => treeOrder(this, o) < 0);
+        at.scopes.splice(i < 0 ? at.scopes.length : i, 0, this);
+      }
+    }
+  }
+
+  /**
+   * The marks `key` stands for, seen from this registry, by the same
+   * widening lookup `ref("x")` uses over the tree: search this scope and the
+   * scopes nested in it, then its parent's, one level at a time, and stop at
+   * the first level that has the name. Inside that level the nearest depth
+   * wins, and every registry at that depth that has the name contributes its
+   * marks, in scope order: a name a split repeats (one `layer` per cell) is
+   * plural, so `selectAll` gathers all its marks and the singular `ref`
+   * reports how many it found. Never crosses a root. `undefined` when no
+   * level has the name.
+   */
+  lookup(key: string | symbol): LayerEntry | undefined {
+    for (let s: LayerContext | undefined = this; s; s = s.parent) {
+      const at = s.nearest.get(key);
+      if (at)
+        return {
+          data: at.scopes.flatMap((c) => c.own.get(key)!.data),
+          nodes: at.scopes.flatMap((c) => c.own.get(key)!.nodes),
+        };
+    }
+    return undefined;
+  }
+}
+
+/** Scope order for two registries at the same depth: the creation order of
+ *  the children of their nearest common ancestor that hold them. */
+function treeOrder(a: LayerContext, b: LayerContext): number {
+  while (a.parent !== b.parent) {
+    a = a.parent!;
+    b = b.parent!;
+  }
+  return a.seq - b.seq;
 }
 
 /**
@@ -181,7 +212,7 @@ export async function resolveMarkResult(
   if (isChartPipeline(raw))
     return raw
       .inScope(rows)
-      .withLayerContext(layerContext ?? {})
+      .withLayerContext(layerContext ?? new LayerContext())
       .resolve();
   if (typeof raw === "function")
     return resolveMarkResult(

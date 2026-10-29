@@ -1076,16 +1076,13 @@ export interface ConstraintIR {
 }
 
 /**
- * A `.relate()` operand on the wire: a name plus its scope, the id of the
- * `.relate()` call that bound it (`RelateIR.scope`). The receiver looks the
- * name up from the layer that call ran on, so an inner layer that declares
- * the same name cannot capture it.
+ * A `.relate()` operand on the wire: a ref by name (`RefMarkIR`) whose
+ * `scope` is required: the id of the `.relate()` call that bound it
+ * (`RelateIR.scope`). The receiver looks the name up from the layer that
+ * call ran on, so an inner layer that declares the same name cannot capture
+ * it.
  */
-export interface RelateOperandIR {
-  type: "ref";
-  selection: string;
-  scope: string;
-}
+export type RelateOperandIR = RefMarkIR & { selection: string; scope: string };
 
 /**
  * One clause of a `.relate()` callback: a constraint over operands

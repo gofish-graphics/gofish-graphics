@@ -31,7 +31,7 @@ import {
   NO_ROWS,
   resolveMarkResult,
   stashLayerName,
-  type LayerContext,
+  LayerContext,
 } from "./markResult";
 import { markDataTime, chainedUpdates } from "../../animation/transition";
 import {
@@ -131,11 +131,7 @@ function registerLayerNode(node: GoFishNode, layerContext: LayerContext): void {
   const layerName = (node as { __layerRegistration?: string | symbol })
     .__layerRegistration;
   if (layerName) {
-    if (!layerContext[layerName]) {
-      layerContext[layerName] = { data: [], nodes: [] };
-    }
-    layerContext[layerName].nodes.push(node);
-    layerContext[layerName].data.push((node as { datum?: unknown }).datum);
+    layerContext.register(layerName, node);
     // One-shot — repeat resolves (e.g. embedded Layer renders) would
     // otherwise re-push the same node.
     (node as { __layerRegistration?: string | symbol }).__layerRegistration =
@@ -1010,7 +1006,9 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
 
     // The transitions this tier draws over its marks (see `resolve`).
     const marks =
-      name === undefined ? [] : (this.state.layerContext[name]?.nodes ?? []);
+      name === undefined
+        ? []
+        : (this.state.layerContext.get(name)?.nodes ?? []);
     const transitions: GoFishNode[] = [];
     for (const update of chainedUpdates(marks)) {
       const tier = update.layer() as Mark<any>;
@@ -1060,17 +1058,12 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     if (this.state.nodeName !== undefined) {
       result.name(this.state.nodeName);
       stashLayerName(this, this.state.nodeName);
-      const entry = (this.state.layerContext[this.state.nodeName] ??= {
-        data: [],
-        nodes: [],
-      });
       // One-shot per resolved node: a re-resolve against the same shared
       // layerContext (e.g. an embedded Layer render) must not re-register the
       // same node, or selectAll/ref(name) would see duplicates.
-      if (!entry.nodes.includes(result)) {
-        entry.nodes.push(result);
-        entry.data.push((result as { datum?: unknown }).datum);
-      }
+      const ctx = this.state.layerContext;
+      if (!ctx.get(this.state.nodeName)?.nodes.includes(result))
+        ctx.register(this.state.nodeName, result);
     }
 
     return result;
@@ -1146,7 +1139,7 @@ export function chart<T>(
     // A strategy kind used bare is read as its value from here on.
     options: withKindValues(resolvedOptions),
     operators: [],
-    layerContext: {},
+    layerContext: new LayerContext(),
   });
 }
 
@@ -1302,7 +1295,7 @@ export class LayerBuilder extends RenderableBuilder {
   }
 
   async resolve(): Promise<GoFishNode> {
-    const sharedContext: LayerContext = this.layerContext ?? {};
+    const sharedContext = this.layerContext ?? new LayerContext();
     const nodes: GoFishNode[] = [];
     // The root tier's box is the CHART's box, not that one tier's. Its
     // coordinate space: a basemap under `geo(...)` and the paths layered over
@@ -1370,7 +1363,9 @@ export class LayerBuilder extends RenderableBuilder {
           nodes.push(await Layer({}, await tier.resolveNodes()));
         } else nodes.push(await tier.resolve());
         prevRefs = autoName
-          ? (sharedContext[autoName]?.nodes ?? []).map((n) => ref({ __ref: n }))
+          ? (sharedContext.get(autoName)?.nodes ?? []).map((n) =>
+              ref({ __ref: n })
+            )
           : undefined;
       } else {
         // Mark tier: resolve the bare mark against the shared layer context

@@ -85,11 +85,11 @@ constraint a pass builds without a scope, search the whole layer as before.
 
 A drawing clause may read an operand of an enclosing scope, because it reads
 positions and places nothing. A constraint places its operands, so each one
-must still resolve inside the layer that holds the constraint
-(`resolveConstraintOperands` starts each lookup at the operand's scope and
-then requires the node to be inside the layer). Two operands with one name
-but different scopes that find different nodes in one layer's constraints
-are an error, since the layer keys operands by name.
+must resolve inside the layer that holds the constraint. An operand an
+enclosing `.relate()` bound never does: the lookup from that layer skips its
+clause slots, and the inner layer sits in one. So `resolveConstraintOperands`
+throws on such an operand right away, and looks every other operand up from
+the layer itself.
 
 From the start, the search looks at every node inside the current level's
 subtree. If it finds the name, it stops there. If not, it moves up to the
@@ -157,14 +157,20 @@ There a name is a set, by design. The inline lookup on this page never reads
 the registries.
 
 The registries follow the same widening rule as the tree lookup
-(`lookupLayerName` in `marks/markResult.ts`). Each `layer([...])` combinator
-has a registry of its own, nested in the registry of the place it is built
-(`childLayerContext`): a chart, an operator's cell, another layer. A chart
-shares the registry it is built in. A top-level render and a `createMark`
-body start a root, which no lookup crosses. A lookup searches its registry
-and the ones nested in it, nearest depth first, then its parent's, one level
-at a time, and stops at the first level that has the name. Every registry at
-that depth contributes. So a `layer` repeated per `spread` cell finds its own
+(`LayerContext.lookup` in `marks/markResult.ts`). Each `layer([...])`
+combinator has a registry of its own, nested in the registry of the place it
+is built (`LayerContext.child`): a chart, an operator's cell, another layer.
+A chart shares the registry it is built in. A top-level render and a
+`createMark` body start a root, which no lookup crosses. A lookup searches
+its registry and the ones nested in it, nearest depth first, then its
+parent's, one level at a time, and stops at the first level that has the
+name. Every registry at that depth contributes. A registry links only to its
+parent. When a registry first gets a name, it records the name in its own
+index and in each ancestor's: the nearest depth below that ancestor that has
+the name, and the registries at that depth. So a lookup reads one index
+entry per ancestor and never walks down. The tree lookup has no such index,
+because elaboration renames and wraps nodes after they are built, so it
+searches each level breadth first. So a `layer` repeated per `spread` cell finds its own
 cell's `bars`, and a `selectAll("bars")` outside the spread gathers the bars
 of every cell. A name a split repeats is plural: `selectAll` gathers it, and
 the singular `ref` reports how many marks it matched. Before #1236 each
@@ -176,8 +182,9 @@ inside a cell was invisible outside it.
 `.relate(fn)` calls `fn` right away with an environment
 (`relateEnv` in `constraints/index.ts`). The environment is an ordinary
 object with one operand, a `RelateOperand` carrying the name and the layer,
-for every distinct name inside the layer. `bindRelateEnv` records the layer
-for the environment, so the clauses can be resolved in it. It walks the same bounded tree as the lookup
+for every distinct name inside the layer. `GoFishNode.relate` passes the
+layer to the callback too, which the deserializer's callback uses to bind
+the wire's scope id. The environment walks the same bounded tree as the lookup
 (`visibleNodes`), so it goes into nested layers but not into a nested
 `createMark` component.
 
@@ -283,19 +290,18 @@ into constraints (plain objects built by a `Constraint.*` factory, or one of
 the private elaboration targets `grid`, `overlap` and `labelPlace` that
 `table`, `scatter` and `.label()` build) and terms,
 checks the constraints' operands, and resolves each term to its node, one at a
-time. A term is resolved in the same name registry as the layer's plain
-children: the `layer([...])` combinator keeps the context it resolved its
-children in as `_names`, so `chart(selectAll("points"))` in a clause finds
-the layer's `points`, as it would as a plain child. `GoFishNode.relate`
-appends the nodes to the layer's children and records each slot in the
-layer's `_relateClauses`, with the clause's position in the list. A later
-`.relate()` call replaces the clauses of an earlier one.
+time. A term is resolved in a fresh registry nested in the one the layer's plain
+children were resolved in: the `layer([...])` combinator keeps that registry
+as `_names`, so `chart(selectAll("points"))` in a clause finds the layer's
+`points`, as it would as a plain child, and a clause that a later call
+replaces leaves no names behind. `resolveRelateClauses` appends the nodes to
+the layer's children and records each slot in the layer's `_relateClauses`
+(a map from child index to the clause's position in the list; empty when
+there are none). A later `.relate()` call replaces the clauses of an
+earlier one.
 
-The list belongs to the layer, not to the child. It used to be a flag on
-the child, `_relateClause`, read against whatever the child's parent was at
-the time. Axis elaboration wraps a clause and the wrapper's own `.relate()`
-read the flag as its own and dropped the clause (#1235). A slot cannot be
-read by another layer, and a pass that wraps a child replaces it in its slot
+The list belongs to the layer, not to the child, so no other layer can read
+it (#1235), and a pass that wraps a child replaces it in its slot
 (`children[i] = wrapper`), so the wrapper stays a clause. Only `.relate()`
 appends children to a layer after it is built, so slots do not move. `.relate()` is a layer method: it throws on any other node,
 because only `layer.tsx` knows how to schedule clauses.
@@ -333,9 +339,12 @@ clause built by `createRelationalMark` (`enclose`, `line`, `ribbon`) paints
 under the nodes it reads. A clause's operands are string refs, which are not
 resolved when the clause is attached, so the default names them:
 `GoFishNode.relate` runs the same pass `layer` runs for its children
-(`applyRelationalZBelowDefaults`), which adds `zBelow(clause, name)` for
-each string-ref operand of this layer's scope; an operand an enclosing
-`.relate()` bound is left for that layer (see [The Mark Factory](/internals/frontend/mark-factory)). An explicit
+(`applyRelationalZBelowDefaults`), which adds `zBelow(clause, operand)` for
+each string-ref operand whose scope lies in this layer; an operand an
+enclosing `.relate()` bound is left for that layer (see [The Mark Factory](/internals/frontend/mark-factory)).
+The constraint carries the operand's scope, and paint order looks the name
+up from that layer without its clause slots, as the placement lookup does,
+so a nested clause's node of the same name does not join the operand's set. An explicit
 `.zOrder(...)` on the clause wins. `.relate()` replaces the constraints of
 an earlier `.relate()`, but not the defaults `layer` gave its own
 relational-mark children (`_paintDefaults`), so a `line` or `enclose` among

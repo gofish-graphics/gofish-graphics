@@ -54,7 +54,6 @@ import {
   nameModifier,
   labelModifier,
   zOrderModifier,
-  LayerContext,
 } from "./createOperator";
 import type { ModifierConfig, ZOrderValue } from "./createOperator";
 import { layer as Layer } from "../graphicalOperators/layer";
@@ -100,7 +99,7 @@ import {
 } from "../schema";
 import { withWire } from "../wire";
 import { withKindValues } from "../strategyKind";
-import { childLayerContext, datumOfInput } from "./markResult";
+import { LayerContext, datumOfInput } from "./markResult";
 import { withFlowStep } from "./compose";
 export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
@@ -275,7 +274,10 @@ export function resolve(
 ): Operator<any[], any[]> {
   return mapOperator<any[], any[]>(
     (rows, layerContext) => {
-      const refs = resolveRefData(opts.from, layerContext ?? {});
+      const refs = resolveRefData(
+        opts.from,
+        layerContext ?? new LayerContext()
+      );
       const matchField = (r: GoFishRef): string => {
         const field = opts.key ?? (r.targetNode as any)?.__splitBy;
         if (typeof field !== "string") {
@@ -1235,13 +1237,13 @@ export function layer<T>(
     async (d, key, _layerContext) => {
       // A layer establishes its OWN name scope: `.name(...)` registrations of
       // its children go into a registry nested in the enclosing one
-      // (`childLayerContext`). A `ref(name)`/`selectAll(name)` reads the
-      // nearest scope that has the name (`lookupLayerName`), so a layer
+      // (`LayerContext.child`). A `ref(name)`/`selectAll(name)` reads the
+      // nearest scope that has the name (`LayerContext.lookup`), so a layer
       // repeated per `spread` cell finds its own cell's `bars`, while a
       // `selectAll("bars")` outside the spread gathers every cell's. Resolve
       // sequentially so a child referencing a name sees earlier siblings'
       // registrations.
-      const sharedContext = childLayerContext(_layerContext);
+      const sharedContext = _layerContext?.child() ?? new LayerContext();
       const resolved: GoFishNode[] = [];
       for (const m of children) {
         // Each child is a mark position over this layer's rows: an empty-scope

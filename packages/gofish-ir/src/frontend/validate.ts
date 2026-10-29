@@ -1335,12 +1335,24 @@ function walkRelate(node: unknown, path: string, ctx: Context): void {
   );
 }
 
-/** A `.relate()` operand: `{ type: "ref", selection: name, scope }`. */
-const isRelateOperandIR = (x: unknown): boolean =>
-  isObject(x) &&
-  x.type === "ref" &&
-  typeof x.selection === "string" &&
-  typeof x.scope === "string";
+/** A `.relate()` operand: a ref (`RefMarkIR`) whose `scope` is required
+ *  and whose selection is a name. */
+function walkRelateOperand(node: unknown, path: string, ctx: Context): void {
+  if (!isObject(node) || node.type !== "ref") {
+    ctx.errors.push({
+      path,
+      message: `expected a .relate() operand { type: "ref", selection, scope }, got ${typeNameOf(node)}`,
+    });
+    return;
+  }
+  walkRefMark(node, path, ctx);
+  expectField(node, "scope", path, ctx, expectString);
+  if (Array.isArray(node.selection))
+    ctx.errors.push({
+      path: `${path}.selection`,
+      message: "a .relate() operand's selection is a name",
+    });
+}
 
 /** A relate clause is a constraint when it carries `refs`, else a mark. */
 function walkRelateClause(node: unknown, path: string, ctx: Context): void {
@@ -1370,13 +1382,7 @@ function walkConstraint(node: unknown, path: string, ctx: Context): void {
     return;
   }
   expectField(node, "refs", path, ctx, (v, p) => {
-    if (!Array.isArray(v) || !v.every(isRelateOperandIR)) {
-      ctx.errors.push({
-        path: p,
-        message:
-          'refs must be an array of .relate() operands ({ type: "ref", selection, scope })',
-      });
-    }
+    walkArray(v, p, ctx, walkRelateOperand);
     // `nest` relates exactly two refs: [outer, inner].
     if (t === "nest" && Array.isArray(v) && v.length !== 2) {
       ctx.errors.push({

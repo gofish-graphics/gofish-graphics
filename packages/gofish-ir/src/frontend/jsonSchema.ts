@@ -207,7 +207,7 @@ function buildLeafMarkDefs(): Record<string, unknown> {
         ...properties,
         name: { type: "string" },
         label: { $ref: "#/$defs/LabelIR" },
-        relate: { $ref: "#/$defs/RelateIR" },
+        relate: fieldTypeToSchema(MARK_BASE_FIELDS.relate.type),
         zOrder: fieldTypeToSchema(MARK_BASE_FIELDS.zOrder.type),
         debug: { type: "boolean" },
         translate: { $ref: "#/$defs/Translate" },
@@ -604,7 +604,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         children: { type: "array", items: { $ref: "#/$defs/MarkIR" } },
         name: { type: "string" },
         label: { $ref: "#/$defs/LabelIR" },
-        relate: { $ref: "#/$defs/RelateIR" },
+        relate: fieldTypeToSchema(MARK_BASE_FIELDS.relate.type),
         zOrder: fieldTypeToSchema(MARK_BASE_FIELDS.zOrder.type),
         debug: { type: "boolean" },
         translate: { $ref: "#/$defs/Translate" },
@@ -716,15 +716,11 @@ export const FRONTEND_IR_JSON_SCHEMA = {
     },
     RelateOperandIR: {
       description:
-        "A .relate() operand: a name plus the id of the .relate() call that bound it.",
-      type: "object",
-      required: ["type", "selection", "scope"],
-      additionalProperties: false,
-      properties: {
-        type: { const: "ref" },
-        selection: { type: "string" },
-        scope: { type: "string" },
-      },
+        "A .relate() operand: a ref by name that carries the id of the .relate() call that bound it.",
+      allOf: [
+        { $ref: "#/$defs/RefMarkIR" },
+        { required: ["scope"], properties: { selection: { type: "string" } } },
+      ],
     },
     ConstraintIR: {
       type: "object",

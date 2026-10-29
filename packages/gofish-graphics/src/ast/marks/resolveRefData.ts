@@ -1,6 +1,6 @@
 import type { GoFishRef } from "../_ref";
 import { ref } from "../shapes/ref";
-import { lookupLayerName, type LayerContext } from "./markResult";
+import type { LayerContext } from "./markResult";
 
 /**
  * Resolve a `GoFishRef` used as chart data against the layer registry, the
@@ -13,7 +13,7 @@ import { lookupLayerName, type LayerContext } from "./markResult";
  *   reference: the list of that one ref (and `selectAll` over one is an
  *   error — it requires a string layer name).
  * - A string selection looks up the named layer, nearest scope first
- *   (`lookupLayerName`). `multiplicity === "all"`
+ *   (`LayerContext.lookup`). `multiplicity === "all"`
  *   (from `selectAll`) yields a ref per matching node; the singular `ref`
  *   yields the list of the one matching ref, throwing if the layer matched
  *   zero or more than one node. Being singular is a check on how many nodes
@@ -30,7 +30,7 @@ export function resolveRefData(
     return [r];
   }
 
-  const layer = lookupLayerName(layerContext, r.selection);
+  const layer = layerContext.lookup(r.selection);
   if (!layer) {
     throw new Error(
       `Layer "${r.selection}" not found. Make sure to call .name("${r.selection}") on the mark first.`

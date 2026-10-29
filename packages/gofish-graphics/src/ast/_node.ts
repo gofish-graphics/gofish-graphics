@@ -111,7 +111,7 @@ import { applyRelationalZBelowDefaults } from "./constraints/relationalPaint";
 import {
   computeRelateSchedule,
   resolveRelateClauses,
-  type RelateFn,
+  type RelateCallback,
   type RelateSchedule,
 } from "./constraints/relate";
 import {
@@ -603,7 +603,7 @@ export class GoFishNode {
    *  the child, so another layer's `.relate()` never mistakes it for its own,
    *  and a pass that wraps a clause in its slot (axis elaboration replaces
    *  `children[i]`) leaves it a clause. */
-  public _relateClauses?: Map<number, number>;
+  public _relateClauses: Map<number, number> = new Map();
   /** The name registry this layer's children were resolved in (the
    *  `layer([...])` combinator's own context). Its `.relate()` clauses are
    *  resolved in it too, so a `selectAll` in a clause sees what a plain child
@@ -1115,7 +1115,7 @@ export class GoFishNode {
     // With every ref resolved, check the relate clauses' dependency order
     // now: a cycle would otherwise recurse forever in the space pass (a ref
     // proxies its target's space, and a cyclic target contains the ref).
-    if (this._relateClauses && this._relateClauses.size > 0) {
+    if (this._relateClauses.size > 0) {
       computeRelateSchedule(this, resolveConstraintOperands(this));
     }
   }
@@ -2676,7 +2676,7 @@ export class GoFishNode {
    * node this layer's lookup finds, not a same-named node of the nested
    * layer.
    */
-  public async relate(fn: RelateFn, rows?: unknown): Promise<this> {
+  public async relate(fn: RelateCallback, rows?: unknown): Promise<this> {
     // Only a layer schedules clauses around its solve (layer.tsx).
     if (this.type !== "layer" && this.type !== "box") {
       throw new Error(
@@ -2686,31 +2686,23 @@ export class GoFishNode {
     }
     // A later call replaces the drawing clauses of an earlier one.
     const old = this._relateClauses;
-    if (old) this.children = this.children.filter((_, i) => !old.has(i));
-    this._relateClauses = undefined;
+    this.children = this.children.filter((_, i) => !old.has(i));
+    this._relateClauses = new Map();
     const env = relateEnv(this);
     const { constraints, nodes } = await resolveRelateClauses(
-      fn(env),
+      fn(env, this),
       env,
+      this,
       rows
     );
     // The relate's constraints replace an earlier relate's, and the layer's
     // paint-order defaults for its own relational-mark children stay.
     this.constraints = [...(this._paintDefaults ?? []), ...constraints];
-    if (nodes.length > 0) this._relateClauses = new Map();
-    for (const { node, position } of nodes) {
-      node.parent = this;
-      this._relateClauses!.set(this.children.length, position);
-      this.children.push(node);
-    }
     // A drawing clause that is a relational mark (`enclose`, `line`, ...)
     // paints under the nodes it reads, by the same default a layer gives its
     // children (`applyRelationalZBelowDefaults`); a clause's operands are
     // names of this layer.
-    applyRelationalZBelowDefaults(
-      this,
-      nodes.map((n) => n.node)
-    );
+    applyRelationalZBelowDefaults(this, nodes);
     return this;
   }
 
@@ -2726,16 +2718,6 @@ export class GoFishNode {
   public getZOrder(): number | undefined {
     return this._zOrder;
   }
-}
-
-/** The 1-based clause position of `layer`'s child at index `i`, when that
- *  child is a drawing clause of `layer`'s own `.relate()`; else `undefined`.
- *  (`instanceof` first: a token `ref` proxy answers every property.) */
-export function relateClausePosition(
-  layer: GoFishAST | undefined,
-  i: number
-): number | undefined {
-  return layer instanceof GoFishNode ? layer._relateClauses?.get(i) : undefined;
 }
 
 const isGoFishNode = (node: GoFishNode | GoFishAST): node is GoFishNode => {

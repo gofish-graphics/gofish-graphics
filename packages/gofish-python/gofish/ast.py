@@ -955,9 +955,11 @@ class RefSentinel(Mark):
         """The id of the `.relate()` call that bound this operand."""
         return self.kwargs["scope"]
 
-    def operand_ir(self) -> dict:
-        """This operand as a constraint's `refs` entry."""
-        return {"type": "ref", "selection": self.ref_name, "scope": self.scope}
+
+def _refs_ir(refs: List[RefSentinel], payload: "_Payload") -> List[dict]:
+    """A constraint's operands as its `refs` entries: each serialized as the
+    ref mark it is."""
+    return [r.to_dict(payload) for r in refs]
 
 
 def _subtree_names(children: List[Any]) -> List[str]:
@@ -1017,7 +1019,7 @@ class AlignConstraint:
         return {
             "type": "align",
             "options": self.options,
-            "refs": [r.operand_ir() for r in self.refs],
+            "refs": _refs_ir(self.refs, payload),
         }
 
 
@@ -1032,7 +1034,7 @@ class DistributeConstraint:
         return {
             "type": "distribute",
             "options": self.options,
-            "refs": [r.operand_ir() for r in self.refs],
+            "refs": _refs_ir(self.refs, payload),
         }
 
 
@@ -1053,7 +1055,7 @@ class PositionConstraint:
         return {
             "type": "position",
             "options": self.options,
-            "refs": [r.operand_ir() for r in self.refs],
+            "refs": _refs_ir(self.refs, payload),
         }
 
 
@@ -1076,7 +1078,7 @@ class NestConstraint:
         return {
             "type": "nest",
             "options": self.options,
-            "refs": [r.operand_ir() for r in self.refs],
+            "refs": _refs_ir(self.refs, payload),
         }
 
 
@@ -1098,7 +1100,7 @@ class ZOrderConstraint:
     def to_dict(self, payload: "_Payload") -> dict:
         return {
             "type": self.ctype,
-            "refs": [r.operand_ir() for r in self.refs],
+            "refs": _refs_ir(self.refs, payload),
         }
 
 
@@ -1373,10 +1375,9 @@ class RelatableMark(Mark):
                 ".relate() requires combinator children — use "
                 "`layer([...]).relate(...)`"
             )
-        children = self._children
         return self._relate_env(
             lambda operand: callback(
-                **_callback_refs(callback, children, operand)
+                **_callback_refs(callback, self._children, operand)
             )
         )
 

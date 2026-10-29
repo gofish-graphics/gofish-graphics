@@ -16,7 +16,7 @@ import {
   translateForAnchor,
 } from "./dims";
 import type { AxisScale } from "./domain";
-import { GoFishNode, relateClausePosition } from "./_node";
+import { GoFishNode } from "./_node";
 import { GoFishAST } from "./_ast";
 import { MaybeValue } from "./data";
 import { ORDINAL, UnderlyingSpace } from "./underlyingSpace";
@@ -423,16 +423,17 @@ export class GoFishRef {
 export function relatingLayerOf(node: GoFishAST): GoFishNode | undefined {
   for (let cur: GoFishAST | undefined = node; cur; cur = cur.parent) {
     const parent = cur.parent;
+    // (`instanceof` first: a token `ref` proxy answers every property.)
     if (
-      parent?._relateClauses &&
-      relateClausePosition(parent, parent.children.indexOf(cur)) !== undefined
+      parent instanceof GoFishNode &&
+      parent._relateClauses.has(parent.children.indexOf(cur))
     )
       return parent;
   }
   return undefined;
 }
 
-function isInside(node: GoFishAST, root: GoFishNode): boolean {
+export function isInside(node: GoFishAST, root: GoFishNode): boolean {
   for (let cur: GoFishAST | undefined = node; cur; cur = cur.parent) {
     if (cur === root) return true;
   }
@@ -452,11 +453,18 @@ function isInside(node: GoFishAST, root: GoFishNode): boolean {
  * `collectLayerRegistrations` (chartBuilder.ts layer registry), and z-order
  * operand lookup (paintOrder.ts), so the component boundary means the same
  * thing for `ref`, `.relate()`, `selectAll` and `zAbove`/`zBelow`.
+ *
+ * `bound` is for a `.relate()` operand whose scope is `root`: the walk skips
+ * `root`'s clause slots, as `resolveScopedName` does.
  */
-export function* visibleNodes(root: GoFishAST): Generator<GoFishAST> {
+export function* visibleNodes(
+  root: GoFishAST,
+  bound = false
+): Generator<GoFishAST> {
   yield root;
   if (!(root instanceof GoFishNode)) return;
-  for (const child of root.children ?? []) {
+  for (const [i, child] of (root.children ?? []).entries()) {
+    if (bound && root._relateClauses.has(i)) continue;
     if (child instanceof GoFishNode && child._isComponent) {
       // Visible (a leaf component, e.g. a createMark `rect`, can carry a name)
       // but a boundary: don't descend into it.
@@ -496,20 +504,22 @@ function closestAtLevel(
   searched: GoFishNode | undefined,
   bound = false
 ): GoFishAST[] {
-  let frontier: GoFishAST[] = bound
-    ? level.children.filter(
-        (_, i) => relateClausePosition(level, i) === undefined
-      )
-    : level.children;
+  // The first frontier is `level`'s children; a bound lookup skips its
+  // clause slots there.
+  let frontier: GoFishAST[] = level.children;
+  let skip = bound ? level._relateClauses : undefined;
   while (frontier.length > 0) {
-    const matches = frontier.filter((n) => childNameKey(n) === name);
+    const matches = frontier.filter(
+      (n, i) => !skip?.has(i) && childNameKey(n) === name
+    );
     if (matches.length > 0) return matches;
     const next: GoFishAST[] = [];
-    for (const n of frontier) {
-      if (n === searched) continue;
+    frontier.forEach((n, i) => {
+      if (n === searched || skip?.has(i)) return;
       if (n instanceof GoFishNode && !n._isComponent) next.push(...n.children);
-    }
+    });
     frontier = next;
+    skip = undefined;
   }
   return [];
 }

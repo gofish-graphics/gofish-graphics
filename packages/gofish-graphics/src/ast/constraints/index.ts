@@ -53,12 +53,7 @@ import {
   type RigidAttachment,
 } from "./placementSolver";
 import { shadowCheckConstraint, SOLVER_CHECK } from "../solver/shadow";
-import {
-  RelateOperand,
-  bindRelateEnv,
-  directChildIndex,
-  type RelateEnv,
-} from "./relate";
+import { RelateOperand, directChildIndex, type RelateEnv } from "./relate";
 
 export type {
   Axis,
@@ -183,7 +178,7 @@ export function relateEnv(layer: GoFishNode): RelateEnv {
     if (name !== undefined && !(name in env))
       env[name] = new RelateOperand(name, layer);
   }
-  return bindRelateEnv(env, layer);
+  return env;
 }
 
 /**
@@ -224,42 +219,38 @@ export type ResolvedOperand = {
 /**
  * Resolve every placement operand of `layer`'s constraints to a node inside
  * the layer, once per distinct name, with the same lookup `ref("name")` uses
- * (`resolveScopedName`: missing or ambiguous names throw), started from the
- * operand's scope: the layer whose `.relate()` bound it, which is `layer`
- * unless the operand came from an enclosing `.relate()`. An operand with no
- * scope (a constraint a pass builds on the layer directly) is `layer`'s.
- * Every operand must lie inside the layer (a layer can only place what it
- * contains). z-order constraints are excluded: they relate SETS of nodes at
- * paint time (`paintOrder.ts`), not single placeables.
+ * (`resolveScopedName`: missing or ambiguous names throw). An operand bound
+ * by `layer`'s own `.relate()` is looked up from `layer` with its clause
+ * slots skipped; one with no scope (a constraint a pass builds on the layer
+ * directly), from `layer`. An operand an enclosing layer's `.relate()`
+ * bound names a node of that layer outside this one (the lookup from there
+ * skips that layer's clause slots, and this layer sits in one), so this layer
+ * cannot place it. Every operand must lie inside the layer (a layer can only
+ * place what it contains). z-order constraints are excluded: they relate
+ * SETS of nodes at paint time (`paintOrder.ts`), not single placeables.
  */
 export function resolveConstraintOperands(
   layer: GoFishNode
 ): Map<string, ResolvedOperand> {
   const out = new Map<string, ResolvedOperand>();
-  const scopeOf = new Map<string, GoFishNode>();
   for (const c of layer.constraints) {
     if (isZOrderConstraint(c)) continue;
     for (const ref of c.children) {
-      const scope = ref.scope ?? layer;
-      if (scopeOf.get(ref.name) === scope) continue;
+      if (ref.scope !== undefined && ref.scope !== layer) {
+        throw new Error(
+          `Constraint.${c.type}: operand "${ref.name}" was bound by an ` +
+            `enclosing layer's .relate(), and that layer's operand cannot be ` +
+            `placed by this layer. Place it with a constraint of the ` +
+            `enclosing layer's .relate().`
+        );
+      }
+      if (out.has(ref.name)) continue;
       const node = resolveScopedName(
-        scope,
+        layer,
         ref.name,
         `Constraint.${c.type} operand`,
         ref.scope !== undefined
       );
-      scopeOf.set(ref.name, scope);
-      const seen = out.get(ref.name);
-      if (seen) {
-        // Operands are keyed by name below; two scopes that see one name as
-        // two nodes would be two operands under one key.
-        if (seen.node !== node)
-          throw new Error(
-            `Constraint.${c.type}: two operands named "${ref.name}", bound ` +
-              `by different .relate() calls, are different nodes. Rename one.`
-          );
-        continue;
-      }
       const child = directChildIndex(layer, node);
       if (child < 0) {
         throw new Error(

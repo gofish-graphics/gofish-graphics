@@ -974,6 +974,34 @@ async function main() {
       JSON.stringify(own)
     );
 
+    // Paint order is hygienic too: a connector clause paints under the
+    // layer's "density" (its default `zBelow`), not under a nested clause's
+    // same-named node, which keeps its declaration order below the line.
+    const painted = await items(
+      gf
+        .layer([
+          gf.rect({ x: 0, y: 0, w: 40, h: 20, fill: "#00f" }).name("density"),
+          gf.rect({ x: 100, y: 0, w: 10, h: 10, fill: "#999" }).name("box"),
+        ])
+        .relate(({ density, box }: any) => [
+          gf.layer([
+            gf
+              .rect({ x: 0, y: 60, w: 40, h: 20, fill: "#0f0" })
+              .name("density"),
+          ]),
+          gf.line({ stroke: "#f00" }, [box, density]),
+        ])
+    );
+    const at = (pred: (i: any) => boolean) => painted.findIndex(pred);
+    const inner = at((i) => i.style?.fill === "#0f0");
+    const line = at((i) => i.style?.stroke === "#f00");
+    const outer = at((i) => i.style?.fill === "#00f");
+    check(
+      "a clause connector's paint default ignores a nested same-named node",
+      inner >= 0 && line >= 0 && inner < line && line < outer,
+      `inner ${inner}, line ${line}, outer ${outer}`
+    );
+
     // A constraint places only nodes inside its own layer.
     await rejects(
       "a nested constraint on an outer operand is an error",
@@ -981,7 +1009,7 @@ async function main() {
         nested((_env, density) => [
           gf.Constraint.align({ x: "middle" }, [density]),
         ]),
-      /inside|contain/
+      /bound by an enclosing layer.s \.relate\(\)/
     );
   }
 

@@ -10,9 +10,9 @@
  */
 import { GoFishNode } from "../_node";
 import type { GoFishAST } from "../_ast";
-import { GoFishRef, findPathToRoot } from "../_ref";
+import { GoFishRef, findPathToRoot, isInside } from "../_ref";
 import { Constraint, type ConstraintSpec } from "./index";
-import { internalName } from "./shared";
+import { internalName, type ConstraintRef } from "./shared";
 
 /** Find every relational-mark connector node (tagged `__relationalOperands`
  *  by `createRelationalMark`, chart.ts) anywhere in `node`'s subtree that
@@ -56,8 +56,9 @@ function ensureConstraintName(node: GoFishNode): string {
  * is left alone — the explicit choice wins over the default.
  *
  * An operand that is a ref by a string name with no target yet (a
- * `.relate()` clause's operand, which `GoFishNode.relate` passes here) names
- * its node directly, with no scope check: the name is the layer's.
+ * `.relate()` clause's operand, which `GoFishNode.relate` passes here) is
+ * claimed by the layer its scope lies in, and the constraint carries the
+ * operand's name and scope, so paint order looks it up where it was bound.
  *
  * A connector whose referenced node lies outside `children`'s subtrees (e.g.
  * both live several `.layer()` tiers up) is left tagged so an OUTER `layer()`
@@ -78,7 +79,7 @@ export function applyRelationalZBelowDefaults(
   for (const child of children) findUnclaimedConnectors(child, connectors);
   if (connectors.length === 0) return [];
 
-  const pairs: [string, string][] = [];
+  const pairs: [string, ConstraintRef][] = [];
   for (const connector of connectors) {
     const operands: GoFishAST[] | undefined = (connector as any)
       .__relationalOperands;
@@ -101,10 +102,14 @@ export function applyRelationalZBelowDefaults(
         typeof operand.selection === "string" &&
         operand.targetNode === undefined
       ) {
-        // An operand an enclosing `.relate()` bound is a name of that
-        // layer, not this one: leave it for that layer to claim.
-        if (operand.scope !== undefined && operand.scope !== node) continue;
-        pairs.push([ensureConstraintName(connector), operand.selection]);
+        // Like a node below, an operand is claimed by the layer it lies in:
+        // one an enclosing `.relate()` bound is that layer's to claim.
+        if (operand.scope !== undefined && !isInside(operand.scope, node))
+          continue;
+        pairs.push([
+          ensureConstraintName(connector),
+          { name: operand.selection, scope: operand.scope },
+        ]);
         claimedAny = true;
         continue;
       }
@@ -126,7 +131,7 @@ export function applyRelationalZBelowDefaults(
       // everything it paints.
       pairs.push([
         ensureConstraintName(connector),
-        ensureConstraintName(target),
+        { name: ensureConstraintName(target) },
       ]);
       claimedAny = true;
     }
@@ -137,13 +142,8 @@ export function applyRelationalZBelowDefaults(
     if (claimedAny) delete (connector as any).__relationalOperands;
   }
   if (pairs.length === 0) return [];
-  const refs: Record<string, { name: string }> = {};
-  for (const [a, b] of pairs) {
-    refs[a] ??= { name: a };
-    refs[b] ??= { name: b };
-  }
   const zBelowConstraints = pairs.map(([a, b]) =>
-    Constraint.zBelow(refs[a], refs[b])
+    Constraint.zBelow({ name: a }, b)
   );
   node.constraints = [...node.constraints, ...zBelowConstraints];
   return zBelowConstraints;

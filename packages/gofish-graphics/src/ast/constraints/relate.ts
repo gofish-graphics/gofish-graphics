@@ -3,10 +3,10 @@
 // </gofish-wiki>
 
 import type { GoFishAST } from "../_ast";
-import { GoFishNode, relateClausePosition } from "../_node";
+import { GoFishNode } from "../_node";
 import { GoFishRef } from "../_ref";
 import type { ChartBuilder, LayerBuilder } from "../marks/chartBuilder";
-import { resolveMarkResult } from "../marks/markResult";
+import { LayerContext, resolveMarkResult } from "../marks/markResult";
 import { flattenAndAwaitPromises } from "../withGoFish";
 import {
   isZOrderConstraint,
@@ -43,28 +43,6 @@ export class RelateOperand implements ConstraintRef {
  *  inside the layer (see `relateEnv` in `constraints/index.ts`). */
 export type RelateEnv = Record<string, RelateOperand>;
 
-/** The scope each environment belongs to: the layer whose `.relate()` call
- *  built it. Kept beside the environment, not in it, so the callback's
- *  `**rest`-style reads see only names. */
-const envScopes = new WeakMap<RelateEnv, GoFishNode>();
-
-/** Record that `env` was built by `scope`'s `.relate()` call. */
-export function bindRelateEnv(env: RelateEnv, scope: GoFishNode): RelateEnv {
-  envScopes.set(env, scope);
-  return env;
-}
-
-/** The layer whose `.relate()` call built `env`. The deserializer binds the
- *  wire's scope id for that call to it. */
-export function relateScopeOf(env: RelateEnv): GoFishNode {
-  const scope = envScopes.get(env);
-  if (!scope)
-    throw new Error(
-      ".relate(): this environment was not built by a .relate() call."
-    );
-  return scope;
-}
-
 /** One clause of a `.relate()` callback: a constraint that places its
  *  operands, or a term that draws (an operator or mark, possibly unresolved:
  *  a promise, a mark function, or a chart builder). As with an operator's
@@ -88,6 +66,14 @@ export type RelateClause =
 export type RelateFn = (
   env: RelateEnv
 ) => RelateClause[] | PromiseLike<RelateClause[]>;
+
+/** What `GoFishNode.relate` calls: a callback that is also handed the layer
+ *  running it. A {@link RelateFn} is one that ignores the layer; the
+ *  deserializer's callback binds the wire's scope id for the call to it. */
+export type RelateCallback = (
+  env: RelateEnv,
+  layer: GoFishNode
+) => ReturnType<RelateFn>;
 
 /** Every constraint type, keyed so the compiler checks the list against
  *  `ConstraintSpec`. */
@@ -154,20 +140,20 @@ async function flattenClausesAsync(c: unknown): Promise<unknown[]> {
  * is flattened (synchronously when it holds no promise, which is the common
  * case: an operator that relates one constraint per child). Each constraint's
  * operands are checked against `env`. Each other clause is resolved to its
- * node, the way an operator resolves its children, and returned with its
- * 1-based position in the flattened list (for error messages). A clause is
- * resolved in the registry the layer's plain children were resolved in
- * (`_names`, an empty one for a layer built without the combinator), so a `selectAll`
- * in a clause sees the names the layer holds.
+ * node, the way an operator resolves its children, and added to `layer` as
+ * a child in a clause slot (`_relateClauses`, keyed by child index, with its
+ * 1-based position in the flattened list for error messages). A clause is
+ * resolved in a fresh registry nested in the one the layer's plain children
+ * were resolved in (`_names`; a root for a layer built without the
+ * combinator), so a `selectAll` in a clause sees the names the layer holds,
+ * and a clause that a later call replaces leaves nothing behind.
  */
 export async function resolveRelateClauses(
   result: unknown,
   env: RelateEnv,
+  layer: GoFishNode,
   rows?: unknown
-): Promise<{
-  constraints: ConstraintSpec[];
-  nodes: { node: GoFishNode; position: number }[];
-}> {
+): Promise<{ constraints: ConstraintSpec[]; nodes: GoFishNode[] }> {
   const awaited = isThenable(result) ? await result : result;
   if (!Array.isArray(awaited)) {
     throw new Error(
@@ -197,8 +183,8 @@ export async function resolveRelateClauses(
   validateOperands(constraints, env);
   // One at a time, like `reifyChildrenSequentially`: resolving a term can
   // have effects (a mark function or builder runs), so their order is kept.
-  const nodes: { node: GoFishNode; position: number }[] = [];
-  const names = relateScopeOf(env)?._names ?? {};
+  const nodes: GoFishNode[] = [];
+  const names = layer._names?.child() ?? new LayerContext();
   for (const { term, position } of terms) {
     // A drawing clause is a mark position over the layer's rows, as the
     // layer's children are: an empty-scope `chart()` in it binds them.
@@ -209,7 +195,10 @@ export async function resolveRelateClauses(
           `operator (got ${String(node)}).`
       );
     }
-    nodes.push({ node, position });
+    nodes.push(node);
+    node.parent = layer;
+    layer._relateClauses.set(layer.children.length, position);
+    layer.children.push(node);
   }
   return { constraints, nodes };
 }
@@ -272,10 +261,7 @@ export function scheduleRelate(
   layer: GoFishNode,
   operands: Map<string, ResolvedOperand>
 ): RelateSchedule {
-  const clauses = new Set<number>();
-  layer.children.forEach((_, i) => {
-    if (relateClausePosition(layer, i) !== undefined) clauses.add(i);
-  });
+  const clauses = new Set(layer._relateClauses.keys());
   if (clauses.size === 0) return { clauses, beforeSolve: [], afterSolve: [] };
 
   const SOLVE = -1;
@@ -384,7 +370,7 @@ function describeStep(layer: GoFishNode, u: number): string {
   }
   const node = layer.children[u] as GoFishNode;
   const name = childNameKey(node);
-  return `clause ${relateClausePosition(layer, u)} (${node.type}${
+  return `clause ${layer._relateClauses.get(u)} (${node.type}${
     name === undefined ? "" : ` named "${name}"`
   })`;
 }

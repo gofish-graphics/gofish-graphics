@@ -126,6 +126,10 @@ not a component, and never into a `createMark` component (see
 `spread` or a `box` layer is found, and a constraint never reaches past the nearest
 component around L.
 
+An operand a `.relate()` bound is looked up from the layer that bound it, without
+that layer's clause slots (`visibleNodes(scope, true)`), so a node of the same name
+that a clause introduces is not in its set.
+
 This holds for a user's `zAbove` / `zBelow` and for the relational-mark default
 (`zBelow(connector, operand)` in `layer.tsx`). The default names the operand itself,
 so the connector paints under whichever child of the layer holds the operand, and a
