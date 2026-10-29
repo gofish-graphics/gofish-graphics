@@ -239,6 +239,15 @@ itself holds no resolution, so one operand may serve several layers. The
 placement solve reads only the key (`keyOf`). The name is kept for error
 messages.
 
+A **chrome ring** is the layer an elaboration pass builds to attach chrome to
+a node: an axis line, ticks and tick labels, a title, a legend, or the text of
+`.label()`. `wrapRing` builds it as `layer([content, ...shapes])` and puts it
+in the node's place. The node it wraps is its content. The shapes are the
+chrome, and the ring's constraints seat each one against the content. Passes
+nest rings: a chart sits inside its axis ring, which sits inside its title and
+legend rings, and a labeled bar is a ring of its own. Elsewhere in these docs a
+polygon's outline is also called a ring. That is a different thing.
+
 Operators that build a constrained layer themselves do not use names. Spread,
 scatter, partition, table, and the axis, legend, and label chrome refer to
 their own children by slot (`SlotOperand` in `constraints/shared.ts`): the

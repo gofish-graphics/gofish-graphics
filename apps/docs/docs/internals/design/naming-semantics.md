@@ -380,6 +380,72 @@ Syme describes.
 the `letrec`. The callback cannot introduce a name that the layer does not
 already hold, except by naming a node inside a clause.
 
+### 3.8 Macro expansion, not substitution
+
+Two standard repairs for capture look alike, and GoFish needs the second one.
+
+**Capture-avoiding substitution** is a step inside one fixed language. In
+β-reduction, `(λx. body) v` becomes `body` with `v` put in place of `x`. If
+`v` mentions a `y` that `body` binds, the `y` in `body` is renamed first. This
+is always safe because of **α-equivalence**: the name of a bound variable has
+no meaning outside its binder, so renaming it changes nothing anyone can see.
+The binding structure is known before the step.
+
+**Macro expansion** turns surface syntax into core syntax, using code that
+someone else wrote. A macro adds syntax the user never wrote: new binders, new
+references and new structure around the user's code. The binding structure is
+known only after expansion, because expansion builds it. Capture can go both
+ways: the macro's binders can capture the user's names, and the user's binders
+can capture the macro's references. Hygiene (§3.4) repairs this by marking
+what the macro introduced and leaving the user's identifiers alone.
+
+GoFish is on the macro side, for four reasons.
+
+1. **A GoFish name is not α-convertible.** `.name("density")` is not a bound
+   variable. It flows up and out, like a module export or a record label:
+   `selectAll("median")` from outside a spread reads it by its string, and so
+   does an outer `.relate()`. Renaming it breaks those readers. The old
+   `ensureChildNames` renamed a second sibling with the same name to
+   `__spread#N`, which is substitution's repair applied to a name that has no
+   α-equivalence, and it broke the plural `selectAll`. Hygiene's repair does
+   not rename the user's names, so it still works.
+2. **The library writes the structure that causes capture.** Spread, scatter,
+   partition and table expand to `layer(children).relate(constraints)`. The
+   axis, title, legend and label passes wrap a node in a chrome ring (see
+   [Name Resolution & Scoping](/internals/core/names-and-scoping#constraint-operands)).
+   Both add nodes and references the user never wrote, which is what a macro
+   does. Each bug of this kind was a macro bug: the library's references
+   colliding with the user's names, a ring changing what a name finds by
+   taking the name or adding depth, and a user's name capturing an outer
+   operand (bug (c)).
+3. **Binding depends on expansion, and expansion depends on types.** A name
+   resolves by its place in the finished tree. That tree exists only after the
+   axis and label passes run, those passes read types, and the types need
+   resolved references. So resolution, expansion and type inference run to a
+   fixed point together, as in Lean 4's elaborator, which postpones a step
+   whose type is not yet known and retries it (Ullrich and de Moura, §5).
+   Substitution assumes the binding is settled before it runs.
+4. **The phases are a compiler's, not an evaluator's.** A spec is elaborated,
+   its constraints are installed, the constraints are solved, and the result
+   is drawn. Names are resolved on the elaboration side. Layout does not run
+   the spec. It compiles the spec into a constraint system.
+
+**What fits substitution.** Two places do substitute. The `.relate()`
+callback is a JavaScript function, so `({ density }) => ...` binds a
+JavaScript variable, and JavaScript's lexical scope substitutes it without
+capture. That part was never broken. The bugs were in building the
+environment the callback receives. And a mark repeated once per row is a
+template instantiated per datum, which is a kind of substitution. The usual
+repair would give each copy's names a fresh suffix. GoFish instead keeps the
+name on every copy and makes it plural, as CDuce's `x :: R` binds the whole
+sequence under repetition (§3.1). It does so for the same reason as point 1:
+the name is read from outside, so it must survive.
+
+**In short.** Substitution protects bound names, which no one outside can see,
+by renaming them. Hygiene protects names the user can see, which cannot be
+renamed, by marking what the library made. GoFish names are visible, and the
+library makes the structure that causes capture, so the repair is hygiene.
+
 ## 4. Three bugs as test cases
 
 Each repro below runs on `main` (`9e8dc8a91`) with `npx tsx` from
@@ -745,7 +811,8 @@ must not capture them. GoFish now follows that rule in two steps.
   "bound by an enclosing layer" error are gone: a name a clause introduces
   later cannot capture it. The wire is unchanged. The deserializer keeps
   each call's environment under its scope id and reads the operand from it.
-- A ring an elaboration pass inserts (`wrapRing`) is its content. Every
+- A chrome ring an elaboration pass inserts (`wrapRing`; see
+  [the definition](/internals/core/names-and-scoping#constraint-operands)) is its content. Every
   view a user's reference reads (the lookup, the `.relate()` environment,
   `visibleNodes`, a position in a ref path) sees the content in its place
   (`contentOf`). So the ring takes no name and adds no depth, its shapes are
