@@ -233,19 +233,46 @@ export function lowerPositionPlacement(
     emitter,
     targets,
     isInitiallyPlaced,
+    isDataPositioned,
     resolveCoordinate,
   }: {
     emitter: PlacementFactEmitter;
     targets: Map<string, unknown>;
     isInitiallyPlaced: (axis: Axis, name: string) => boolean;
+    isDataPositioned: (axis: 0 | 1, name: string) => boolean;
     resolveCoordinate: (
       axis: Axis,
       coordinate: PositionValue
     ) => number | undefined;
   }
 ): void {
-  // A region pins nothing: the layer handed the target its region in its
-  // layout call, and the target placed itself there.
+  // A region centers its target in its cell on each axis the cell spans: the
+  // target was laid out in the cell's length (`buildChildSpans`), so one with
+  // no size of its own there fills the cell, and one with a size of its own
+  // sits in its middle. A target with a position of its own there keeps it:
+  // one placed by its data in the layer's frame (a `region` mark, or a layer
+  // of marks with data positions) is already in its cell, and one that
+  // placed itself is where it put itself.
+  const center = (axis: Axis, span: PositionInterval | undefined) => {
+    if (span === undefined) return;
+    const a = resolveCoordinate(axis, span[0]);
+    const b = resolveCoordinate(axis, span[1]);
+    if (a === undefined || b === undefined) return;
+    const index = axis === "x" ? 0 : 1;
+    for (const child of constraint.children) {
+      if (!targets.get(child.name)) continue;
+      if (isInitiallyPlaced(axis, child.name)) continue;
+      if (isDataPositioned(index, child.name)) continue;
+      emitter.pin({
+        axis,
+        target: { name: child.name, anchor: "middle" },
+        value: (a + b) / 2,
+        owner,
+      });
+    }
+  };
+  center("x", constraint.region?.spans[0]);
+  center("y", constraint.region?.spans[1]);
   const emit = (axis: Axis, coordinate: PositionCoordinate | undefined) => {
     if (coordinate === undefined) return;
     // Interval form: pin BOTH edges (start=min, end=max) as strong anchor pins.

@@ -82,8 +82,7 @@ import {
 import {
   buildDistributeSliceMap,
   buildLayerConstraintLayoutPlan,
-  buildChildProposals,
-  placementConstraints,
+  buildChildSpans,
   childLayoutSizeProposal,
   childPosScalesFor,
   selectGridConstraint,
@@ -861,7 +860,7 @@ export const layer = createNodeOperatorSequential(
                 ) as [Extent | undefined, Extent | undefined]);
           return claims;
         },
-        layout: (size, scales, children, node, region) => {
+        layout: (size, scales, children, node) => {
           // This layer's y direction: its children and constraints are read
           // in this axis order (see `axisDirection.ts`).
           const direction = node.yFrame.direction;
@@ -1002,31 +1001,11 @@ export const layer = createNodeOperatorSequential(
           // detached child is placed elsewhere, so the placement solve does
           // not treat it as positioned by its data in this frame.
           const sharing = node.sharing();
-          // What the position constraints hand each child (#1059): the
-          // span an interval pins it across, which it is laid out in, and its
-          // region: its cell, and on the other axis the region this layer was
-          // given; or, for a child with no cell that no constraint places,
-          // the region this layer was given. A child is laid out in its
-          // region's length, and places itself in it.
-          // On an axis where this layer was handed a span and shares its
-          // parent's frame (it is pinned: its frame is the map it was
-          // handed), its children's data positions are in its parent's
-          // frame, so the region stays in that frame too, and the layer sits
-          // at 0 there (see `translate` below) instead of being centered in
-          // the span.
-          // TODO(#1234): shortcut; the composite repeats this rule. Decide it
-          // once in GoFishNode.layout when a node's frame is known pre-layout.
-          const sharedInSpan = ([0, 1] as const).map(
-            (axis) =>
-              region?.spans[axis] !== undefined &&
-              inheritedPosScales[axis] !== undefined &&
-              effectivePosScales[axis] === inheritedPosScales[axis]
-          ) as [boolean, boolean];
-          const proposals = buildChildProposals(
+          // The span each child's position constraints hand it, which it is
+          // laid out in: an interval it is pinned across, or its cell (#1059).
+          const spanByName = buildChildSpans(
             node.constraints,
-            effectivePosScales,
-            region,
-            sharedInSpan
+            effectivePosScales
           );
 
           // Where a child's baseline goes on each axis (#773), by the one
@@ -1134,11 +1113,6 @@ export const layer = createNodeOperatorSequential(
             // derived). Clamp ≥ 0; non-derived axes keep the normal child
             // proposal, so nest composes with — and wins on its derived axes
             // over — any budget slice.
-            const childRegion =
-              (childName !== undefined
-                ? proposals.regionByName.get(childName)
-                : undefined) ??
-              (constrainedChildren.has(i) ? undefined : proposals.passedOn);
             // In a share scope (`sharesRoom`) a child is laid out at its
             // claim at σ: a band is one σ, and a node that holds bands is
             // what its claim says at the σ the scope solved.
@@ -1161,8 +1135,7 @@ export const layer = createNodeOperatorSequential(
                 size,
                 gridCellByName,
                 sliceByName,
-                proposals.spanByName,
-                childRegion,
+                spanByName,
                 own
               ),
               layoutPlan.nestPlan?.byDerived.get(i),
@@ -1213,14 +1186,10 @@ export const layer = createNodeOperatorSequential(
               seats
             );
             childFrames[i] = layoutSize[1];
-            const childPlaceable = child.layout(
-              layoutSize,
-              [
-                axisScale(childScaleFactors[0], childMaps[0]),
-                axisScale(childScaleFactors[1], childMaps[1]),
-              ],
-              childRegion
-            );
+            const childPlaceable = child.layout(layoutSize, [
+              axisScale(childScaleFactors[0], childMaps[0]),
+              axisScale(childScaleFactors[1], childMaps[1]),
+            ]);
             if (!constrainedChildren.has(i)) {
               seatChild(childPlaceable, i);
             } else {
@@ -1381,7 +1350,7 @@ export const layer = createNodeOperatorSequential(
             }
 
             applyConstraints(
-              placementConstraints(node.constraints, proposals.regionByName),
+              node.constraints,
               nameToPlaceable,
               size,
               effectivePosScales,
@@ -1434,11 +1403,7 @@ export const layer = createNodeOperatorSequential(
           const scaleY = options.transform?.scale?.y ?? 1;
 
           const translate = (axis: 0 | 1, min: number): number | undefined =>
-            dims[axis].min !== undefined
-              ? dims[axis].min - min
-              : sharedInSpan[axis]
-                ? 0
-                : undefined;
+            dims[axis].min !== undefined ? dims[axis].min - min : undefined;
 
           return {
             // Store only the local box `(min, size)`; the `dims` getter derives

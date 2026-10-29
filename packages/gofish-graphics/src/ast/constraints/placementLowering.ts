@@ -224,6 +224,7 @@ export function lowerPlacementConstraints(
           emitter: lowerer,
           targets,
           isInitiallyPlaced,
+          isDataPositioned,
           resolveCoordinate: resolveAxisCoordinate,
         });
         return;

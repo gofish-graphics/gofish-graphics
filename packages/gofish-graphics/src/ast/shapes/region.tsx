@@ -4,7 +4,7 @@
 
 import type { DisplayList } from "gofish-ir";
 import { color6, resolveColorChannel } from "../../color";
-import { isValue, type MaybeValue } from "../data";
+import { getValue, isValue, type MaybeValue } from "../data";
 import { displayTranslate, type Dimensions } from "../dims";
 import {
   boxOfDims,
@@ -23,18 +23,28 @@ import {
   roleFor,
 } from "../displayList/lowerHelpers";
 import { GoFishNode, outlineOverhang } from "../_node";
-import { UNDEFINED } from "../underlyingSpace";
+import {
+  CONTINUOUS,
+  joinUnits,
+  UNDEFINED,
+  valueUnits,
+  type UnderlyingSpace,
+} from "../underlyingSpace";
+import { interval } from "../../util/interval";
+import { childNameKey } from "../constraints/shared";
+import type { PositionInterval, PositionRegion } from "../constraints/position";
+import { compilePlacementCoordinate } from "../constraints/placementLowering";
 import { createMark } from "../withGoFish";
 import { MARK_CHANNELS } from "../markChannels.generated";
 
 const DEFAULT_SIZE = 16;
 
 /** What a region takes: paint, and how far it is drawn in from its cell's
- *  sides. Its shape is the space it is given. */
+ *  sides. Its shape is the cell it is in. */
 export type RegionProps = {
   key?: string;
-  /** Pixels drawn in from each side of the cell: each side its parent
-   *  gives it, on an axis where it has a span (both axes of a hexagon, the
+  /** Pixels drawn in from each side of the cell: each side the cell has,
+   *  on an axis where it is in a cell (both axes of a hexagon, the
    *  two ends of a 1D partition's cell). Paint only: its box, which layout
    *  reads, stays the cell. A cell thinner than twice the inset draws
    *  nothing. */
@@ -46,18 +56,53 @@ export type RegionProps = {
   filter?: string;
 };
 
+/** The cell a node is in, in data: per axis, the span the nearest
+ *  `partition` cell around it gives there (`PositionRegion`), and the
+ *  outline of the nearest cell when that cell has one. */
+type EnclosingCell = {
+  spans: [PositionInterval | undefined, PositionInterval | undefined];
+  outline?: PositionRegion["outline"];
+};
+
 /**
- * `region()`'s node (#1059): it draws the region its parent gives it, such as
- * a `partition`'s cell, and has no size or position of its own.
+ * The cell `node` is in. A partition gives each of its children its cell in
+ * a `position` constraint that names the child, so the cell of a node is the
+ * one given to its nearest ancestor (or itself) that a partition names, axis
+ * by axis: a partition inside another's cell gives its children both cells.
+ */
+function enclosingCell(node: GoFishNode): EnclosingCell {
+  const cell: EnclosingCell = { spans: [undefined, undefined] };
+  for (let at = node; at.parent !== undefined; at = at.parent) {
+    const name = childNameKey(at);
+    if (name === undefined) continue;
+    for (const c of at.parent.constraints) {
+      if (c.type !== "position" || c.region === undefined) continue;
+      if (!c.children.some((ref) => ref?.name === name)) continue;
+      if (cell.spans.every((s) => s === undefined))
+        cell.outline = c.region.outline;
+      cell.spans[0] ??= c.region.spans[0];
+      cell.spans[1] ??= c.region.spans[1];
+    }
+  }
+  return cell;
+}
+
+/**
+ * `region()`'s node (#1059): it draws the cell it is in, such as a
+ * `partition`'s cell, and has no size or position of its own.
  *
- * The region comes in the layout call (`geometry/region.ts`). On each axis
- * where it has a span, the node is that span. On an axis where it has none,
- * the node is as long as the size it is proposed, and its parent places it
- * there, as it places a rect with no size.
+ * The cell is in data (`enclosingCell`). On each axis where the region is in
+ * a cell, it is placed by its data, as a rect with a data `x` and `x2` is:
+ * its space is the cell's interval, pinned, and it maps the cell's edges
+ * (and the outline of a cell of the plane) through the map its parent hands
+ * it, the frame of the partition, which a child placed by its data shares.
+ * On an axis where it is in no cell, it is as long as the size it is
+ * proposed, and its parent places it there, as it places a rect with no
+ * size.
  *
- * It draws the region's outline when the region has one (a hexagon, a
- * Voronoi cell, from a `partition` over `struct({ x, y }).bin(b)`), and its box
- * otherwise, drawn in by `inset` from each side the region gives it. Under a
+ * It draws the cell's outline when the cell has one (a hexagon, a Voronoi
+ * cell, from a `partition` over `struct({ x, y }).bin(b)`), and its box
+ * otherwise, drawn in by `inset` from each side the cell gives it. Under a
  * nonlinear coordinate space either one is resampled, so a cell of a polar
  * partition draws as the wedge it is. Its outline is what it draws.
  */
@@ -74,12 +119,15 @@ export const Region = ({
     throw new Error(
       `region: inset must be a number of pixels, 0 or more, got ${inset}.`
     );
+  // The cell it is in, read when its space is resolved: the partitions
+  // around it have given their children their cells by then.
+  let cell: EnclosingCell = { spans: [undefined, undefined] };
   // The outline in the node's local frame and axis order, as `layout` placed
-  // it (the region's outline less the node's translate, drawn in by
-  // `inset`), or none for a box. Empty when the inset leaves nothing.
+  // it (the cell's outline less the node's translate, drawn in by `inset`),
+  // or none for a box. Empty when the inset leaves nothing.
   let outline: Point[] | undefined;
   // Per axis, how far its box is drawn in at each end: `inset` where the
-  // region gives a span, else 0.
+  // cell gives a span, else 0.
   let boxInset: [number, number] = [0, 0];
   // Without an outline, the box it draws: its box drawn in by `boxInset`.
   const drawnBox = (intrinsicDims: Dimensions, type: string) =>
@@ -87,7 +135,7 @@ export const Region = ({
 
   // How it paints its outline, read once.
   const paint = outlinePaint({ fill, stroke, strokeWidth });
-  return new GoFishNode(
+  const node: GoFishNode = new GoFishNode(
     {
       key,
       type: "region",
@@ -96,12 +144,35 @@ export const Region = ({
       // data-driven, as `rect` does.
       color: isValue(fill) ? fill : stroke,
       strokeOverhang: outlineOverhang(stroke, strokeWidth),
-      resolveUnderlyingSpace: () => [UNDEFINED, UNDEFINED],
-      layout: (size, _scales, _children, _node, region) => {
+      resolveUnderlyingSpace: () => {
+        cell = enclosingCell(node);
+        const axisSpace = (axis: 0 | 1): UnderlyingSpace => {
+          const span = cell.spans[axis];
+          if (span === undefined) return UNDEFINED;
+          const [a, b] = [getValue(span[0])!, getValue(span[1])!];
+          return CONTINUOUS(
+            interval(Math.min(a, b), Math.max(a, b)),
+            "pinned",
+            joinUnits(valueUnits(span[0]), valueUnits(span[1]), true, {
+              axis,
+              where: "between a region's two edges",
+            })
+          );
+        };
+        return [axisSpace(0), axisSpace(1)];
+      },
+      layout: (size, scales) => {
+        // A datum of the cell through the map its parent hands it.
+        const px = (axis: 0 | 1, v: PositionInterval[number]) =>
+          compilePlacementCoordinate(v, scales[axis]?.map);
         const extent = (axis: 0 | 1) => {
-          const span = region?.spans[axis];
-          if (span !== undefined)
-            return { min: 0, size: span[1] - span[0], translate: span[0] };
+          const span = cell.spans[axis];
+          const a = span && px(axis, span[0]);
+          const b = span && px(axis, span[1]);
+          if (a !== undefined && b !== undefined) {
+            const min = Math.min(a, b);
+            return { min: 0, size: Math.max(a, b) - min, translate: min };
+          }
           const s = size[axis];
           return {
             min: 0,
@@ -110,20 +181,21 @@ export const Region = ({
           };
         };
         const [x, y] = [extent(0), extent(1)];
-        if (
-          region?.outline !== undefined &&
-          (x.translate === undefined || y.translate === undefined)
-        )
-          throw new Error(
-            "region: an outline needs a span on both axes (geometry/region.ts)."
-          );
         boxInset = [
           x.translate === undefined ? 0 : inset,
           y.translate === undefined ? 0 : inset,
         ];
-        const ring = region?.outline?.map(
-          ([px, py]): OutlinePoint => [px - x.translate!, py - y.translate!]
-        );
+        // The cell's outline in the node's local frame, when it is placed by
+        // the cell on both axes.
+        const ring =
+          x.translate === undefined || y.translate === undefined
+            ? undefined
+            : cell.outline?.map(
+                ([vx, vy]): OutlinePoint => [
+                  px(0, vx)! - x.translate!,
+                  px(1, vy)! - y.translate!,
+                ]
+              );
         outline =
           ring === undefined || inset === 0 ? ring : insetConvex(ring, inset);
         if (outline === undefined && ring !== undefined)
@@ -192,8 +264,8 @@ export const Region = ({
           ringItem(points, coordinateTransform, toPixel, node.datum, style),
         ];
       },
-      // Its outline is what it draws: the region's outline when it has one,
-      // and its box otherwise, drawn in by its inset. It traces the region
+      // Its outline is what it draws: the cell's outline when it has one,
+      // and its box otherwise, drawn in by its inset. It traces the cell
       // exactly, so `intersect` can cut it.
       geometry: ({ intrinsicDims }, _children, node) => {
         const box = boxOfDims(intrinsicDims, node.type);
@@ -215,8 +287,9 @@ export const Region = ({
     },
     []
   );
+  return node;
 };
 
-/** The `region` mark: draws the region its parent gives it (a partition's
- *  cell). IR type `region`. */
+/** The `region` mark: draws the cell it is in (a partition's cell). IR type
+ *  `region`. */
 export const region = createMark(Region, MARK_CHANNELS.region, "region");

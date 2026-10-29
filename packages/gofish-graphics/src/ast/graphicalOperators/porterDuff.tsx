@@ -28,8 +28,6 @@ import {
   type OutlinePoint,
 } from "../geometry";
 import { inks } from "../geometry/outline";
-import { rebaseRegion, type Region } from "../geometry/region";
-import { GoFishRef } from "../_ref";
 import type { AxisScale } from "../domain";
 import type { CoordinateTransform } from "../coordinateTransforms/coord";
 
@@ -78,42 +76,20 @@ const firstChildClaim = (
 ];
 
 /**
- * Lay out a composite's children in its own frame. A composite has no frame
- * of its own: it hands its children the scales it was given, so their data
- * positions are in its parent's frame. It hands them the region it was given
- * (a `region()` operand fills a partition's cell), places each child that did
- * not place itself at its origin (a `ref` operand is already where its target
- * is), and is placed in the region as below.
+ * Lay out a composite's children in its own frame, as a layer does: it hands
+ * them the scales it was given, so their data positions (a `region()`
+ * operand's cell, a `ref` operand's target) are in its parent's frame, and
+ * places each child that did not place itself at its origin.
  */
 function layoutComposite(
   size: Size,
   scales: Size<AxisScale | undefined>,
-  children: GoFishAST[],
-  region: Region | undefined
-): {
-  placed: Placeable[];
-  translate: [number | undefined, number | undefined];
-} {
+  children: GoFishAST[]
+): Placeable[] {
   requireTwoChildren(children);
-  // A `ref` operand is already where its target is, in the frame the two
-  // share, so a composite holding one shares its parent's frame: it hands
-  // the region on as it came and sits at 0 on each axis the region gives a
-  // span. Otherwise its frame is its own, as a layer's is: the region is
-  // rebased to it, and the composite, a rigid unit, is centered in the span.
-  // TODO(#1234): shortcut; the same "shared frame sits at 0" rule as layer's
-  // `sharedInSpan`, decided here by a different test.
-  const shared = children.some((child) => child instanceof GoFishRef);
-  const childRegion =
-    region === undefined || shared ? region : rebaseRegion(region);
-  const placed = children.map((child) =>
-    child instanceof GoFishNode
-      ? child.layout(size, scales, childRegion)
-      : child.layout(size, scales)
-  );
+  const placed = children.map((child) => child.layout(size, scales));
   placed.forEach(placeUnplacedChild);
-  const at = (axis: 0 | 1) =>
-    shared && region?.spans[axis] !== undefined ? 0 : undefined;
-  return { placed, translate: [at(0), at(1)] };
+  return placed;
 }
 
 /** How far the samples of a curved operand may stray from it, in pixels. */
@@ -294,9 +270,8 @@ function compositeNode(
               unionChildExtents(childExtents, childSpaces, 0, spaces[0]),
               unionChildExtents(childExtents, childSpaces, 1, spaces[1]),
             ],
-      layout: (size, scales, layoutChildren, _node, region) => {
-        const laid = layoutComposite(size, scales, layoutChildren, region);
-        placed = laid.placed;
+      layout: (size, scales, layoutChildren) => {
+        placed = layoutComposite(size, scales, layoutChildren);
         exact = undefined;
 
         const { minX, maxX, minY, maxY } = isAtop
@@ -322,7 +297,7 @@ function compositeNode(
               max: maxY,
             },
           ],
-          transform: { translate: laid.translate },
+          transform: { translate: [undefined, undefined] },
         };
       },
       // IR lowering — mirror of `render`. A composite is a bake boundary,

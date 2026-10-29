@@ -48,8 +48,7 @@ export type {
   OutlinePaint,
   OutlinePart,
   OutlinePoint,
+  Point,
   HasOutline,
 } from "./outline";
-export { reflectRegionY, rebaseRegion, hasSpan } from "./region";
 export { insetConvex, intersectRings } from "./clip";
-export type { Region, Span, Point } from "./region";

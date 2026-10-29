@@ -14,6 +14,9 @@ import type { Geometry } from "./index";
  */
 export type OutlinePoint = [number, number];
 
+/** A point that is only read, such as a corner of a cell's polygon. */
+export type Point = readonly [number, number];
+
 /**
  * A named stretch of an outline, as arc lengths from its first point: one of
  * the mark's own pieces, named in the mark's own frame. A box names its four

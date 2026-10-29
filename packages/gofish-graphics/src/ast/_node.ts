@@ -139,11 +139,9 @@ import {
   boxOfDims,
   boxOutline,
   enclosingCircle,
-  reflectRegionY,
   translateCircle,
   type Geometry,
   type Outline,
-  type Region,
 } from "./geometry";
 
 export type RenderSession = {
@@ -362,18 +360,11 @@ export function placeUnplacedChild(child: Placeable): void {
 // applied; `transform.translate` is its offset in the parent's frame. `dims`
 // composes the two exactly once (`combineDims`), so a layout must never fold
 // its translate into `intrinsicDims.min` too (#755).
-//
-// `region` is the space the parent gives the node, when it gives one (#1059,
-// `geometry/region.ts`), in the node's axis order and measured from the
-// parent's origin, as `translate` is. A layout may place itself by it (a
-// `region` mark fills it, a `layer` that hands regions on passes it to its
-// children); one that does not is centered in it by `GoFishNode.layout`.
 export type Layout = (
   size: Size,
   scales: Size<AxisScale | undefined>,
   children: GoFishAST[],
-  node: GoFishNode,
-  region?: Region
+  node: GoFishNode
 ) => { intrinsicDims: FancyDims; transform: FancyTransform; renderData?: any };
 
 /** Map a layout pixel (y-down, layout origin) to a final absolute canvas
@@ -1800,27 +1791,13 @@ export class GoFishNode {
    * `orientTransform`), and the node is handed back to its parent as a view in
    * the PARENT's axis order (`orientView`). The y scale is reflected on the
    * way in when the two directions differ (`orientScales`).
-   *
-   * `region` is the space the parent gives the node (#1059,
-   * `geometry/region.ts`), in the PARENT's axis order. The node's own layout
-   * reads it in its own order. On each axis where the region has a span and
-   * the node's layout did not place itself, the node is centered in the span:
-   * a node with no size of its own there was laid out in the span's length
-   * (the size proposal), so it fills the span, and any other node keeps its
-   * size and sits in the middle.
    */
-  public layout(
-    size: Size,
-    scales: Size<AxisScale | undefined>,
-    region?: Region
-  ): Placeable {
+  public layout(size: Size, scales: Size<AxisScale | undefined>): Placeable {
     // Layout re-joins a layer's position measures (`collectPositionDomains`),
     // so it reads the type walk's union-find of units, whose bindings it
     // must see. The outermost call installs it, as the walk's root does.
     if (!hasUnits()) {
-      return withUnits(this.walkUnits(), () =>
-        this.layout(size, scales, region)
-      );
+      return withUnits(this.walkUnits(), () => this.layout(size, scales));
     }
     const direction = this.yFrame.direction;
     const parentDirection = yDirection(this.parent);
@@ -1833,10 +1810,7 @@ export class GoFishNode {
       size,
       orientScales(scales, direction, parentDirection),
       this.children,
-      this,
-      region === undefined || direction === parentDirection
-        ? region
-        : reflectRegionY(region)
+      this
     );
 
     this.intrinsicDims = orientDims(elaborateDims(intrinsicDims), direction);
@@ -1865,12 +1839,7 @@ export class GoFishNode {
       // `place()` short-circuits on the solved ledger, not on the translate.
       this._clearTranslateIfSolved(dir);
     }
-    const view = orientView(this, parentDirection);
-    region?.spans.forEach((span, dir) => {
-      if (span === undefined || view.dims[dir].min !== undefined) return;
-      view.place(dir === 0 ? "x" : "y", (span[0] + span[1]) / 2, "center");
-    });
-    return view;
+    return orientView(this, parentDirection);
   }
 
   /**
