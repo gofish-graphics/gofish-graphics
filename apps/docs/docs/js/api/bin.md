@@ -120,15 +120,15 @@ spread({ by: field("age").bin(Bin.thresholds([18, 30, 50])), dir: "x" });
 Bin.quantiles(countOrProbabilities: number | number[])
 ```
 
-| Param                  | Type                 | Description                                                                                                                   |
-| ---------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `countOrProbabilities` | `number \| number[]` | A count, 1 or more: that many cells, each holding about as many values. Or a list of probabilities, each above 0 and below 1. |
+| Param                  | Type                 | Description                                                                                                                            |
+| ---------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `countOrProbabilities` | `number \| number[]` | A count, 1 or more: that many cells, each holding about as many values. Or a list of distinct probabilities, each above 0 and below 1. |
 
 The inner edges are quantiles of the field's values in the chart's data
 (type 7, the default of numpy and d3), and the domain's ends are the outer
 edges, as in polars' and pandas' `qcut`. A count `n` puts the inner edges at
 the probabilities `1/n, 2/n, ...`. Two edges at one value, as many equal
-values can give, are an error: ask for fewer cells.
+values can give, are an error: ask for fewer cells. A column whose values are all one value has no quantiles, and is an error too.
 
 ```ts
 partition({ by: field("x").bin(Bin.quantiles(10)), dir: "x" });

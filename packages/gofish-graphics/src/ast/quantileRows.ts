@@ -22,8 +22,8 @@ export type QuantileRowsOptions = {
 
 /**
  * `n` rows at the quantiles of the density that `rows` sample, one at each
- * probability `(i + 0.5) / n`. The rows are a grid of the curve: each holds a
- * position `x` and the density there, in any order. The density is taken to
+ * probability `(i + 0.5) / n`. The rows are a grid of one curve: each holds a
+ * position `x`, no two the same, and the density there, in any order. The density is taken to
  * be linear between grid points, integrated by the trapezoid rule to a
  * cumulative distribution, and each quantile is read off it by linear
  * interpolation.
@@ -57,6 +57,15 @@ export function quantileRows(
       return [at, d] as const;
     })
     .sort((a, b) => a[0] - b[0]);
+  // A grid has one density at each position: two rows at one position are
+  // two curves mixed together.
+  for (let i = 1; i < grid.length; i++)
+    if (grid[i][0] === grid[i - 1][0])
+      throw new Error(
+        `${where}: two rows have "${x}" ${grid[i][0]}, so these rows hold ` +
+          `more than one curve. Call quantileRows on each curve's rows: ` +
+          `inside derive, after the flow splits the curves apart.`
+      );
   // The cumulative area at each grid point (trapezoid rule).
   const cdf = [0];
   for (let i = 1; i < grid.length; i++)

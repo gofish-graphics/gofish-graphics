@@ -1,7 +1,21 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import bottlePng from "../assets/wilsonblanco.png";
-import { circle, paint, image, intersect, mask as maskOp, subtract, rect, exclude, type MarkChild } from "../../src/lib";
+import {
+  Bin,
+  chart,
+  circle,
+  field,
+  paint,
+  image,
+  intersect,
+  mask as maskOp,
+  partition,
+  subtract,
+  rect,
+  exclude,
+  type MarkChild,
+} from "../../src/lib";
 // `over` is internal (conceptually `layer`, #196) — imported from source for
 // the low-level Union demo only; it is not part of the public lib surface.
 import { over } from "../../src/ast/marks/chart";
@@ -131,6 +145,28 @@ export const IntersectImageFill: StoryObj = {
       image({ href: bottlePng, x: 0, y: 0, w: 193, h: 678 }),
       rect({ x: 0, y: 339, w: 193, h: 339 }),
     ]).render(container, { w: 193, h: 678 });
+    return container;
+  },
+};
+
+// A composite under a partition, its operands at literal positions. Each
+// cell's copy should be centered in that cell, as a layer's would be (as on
+// main); for now every copy sits at the origin (TODO(#1234) in
+// `layoutComposite`, porterDuff.tsx).
+export const IntersectInCells: StoryObj = {
+  name: "Intersect in partition cells",
+  render: () => {
+    const container = initializeContainer();
+    container.innerHTML = "";
+    chart([{ v: 5 }, { v: 15 }, { v: 25 }], { w: 480, h: 120 })
+      .flow(partition({ by: field("v").bin(Bin.step(10)), dir: "x" }))
+      .mark(
+        intersect([
+          rect({ x: 0, y: 0, w: 90, h: 40, fill: "#467DA8" }),
+          rect({ x: 30, y: 20, w: 90, h: 40, fill: "#D1E4F6" }),
+        ])
+      )
+      .render(container);
     return container;
   },
 };

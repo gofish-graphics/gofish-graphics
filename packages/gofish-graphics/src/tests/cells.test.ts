@@ -299,6 +299,35 @@ async function main() {
       badP.includes("below 1"),
       badP
     );
+    const repeatedP = (() => {
+      try {
+        checkPartition({ kind: "quantiles", quantiles: [0.5, 0.5] }, "t");
+        return "no error";
+      } catch (e) {
+        return (e as Error).message;
+      }
+    })();
+    check(
+      "a probability given twice is an error that says so",
+      repeatedP.includes("twice") && !repeatedP.includes("fewer cells"),
+      repeatedP
+    );
+    for (const p of [Bin.quantiles(1), Bin.quantiles(4)]) {
+      const constant = (() => {
+        try {
+          binCells(p, over([7, 7, 7]), undefined, 'field("x").bin(...)');
+          return "no error";
+        } catch (e) {
+          return (e as Error).message;
+        }
+      })();
+      check(
+        `${String(p)} over a constant column says the column is constant`,
+        constant.includes("every value of this column is 7") &&
+          !constant.includes("fewer cells"),
+        constant
+      );
+    }
   }
 
   console.log("\n# calendar partitions: a level alone is a part of a cycle");

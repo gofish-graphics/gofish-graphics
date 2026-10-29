@@ -85,6 +85,7 @@ function fieldTypeToSchema(type: FieldType): Record<string, unknown> {
         type: "array",
         items: fieldTypeToSchema(type.items),
         ...(type.minItems !== undefined ? { minItems: type.minItems } : {}),
+        ...(type.uniqueItems ? { uniqueItems: true } : {}),
       };
     case "tuple":
       return {

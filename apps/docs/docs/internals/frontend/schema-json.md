@@ -3432,10 +3432,11 @@ for the API.
                     "exclusiveMinimum": 0,
                     "exclusiveMaximum": 1
                   },
-                  "minItems": 1
+                  "minItems": 1,
+                  "uniqueItems": true
                 }
               ],
-              "description": "A count: that many cells, each holding about the same number of values. Or a list of probabilities, each above 0 and below 1: the inner edges are the quantiles at them."
+              "description": "A count: that many cells, each holding about the same number of values. Or a list of distinct probabilities, each above 0 and below 1: the inner edges are the quantiles at them."
             }
           },
           "required": ["kind", "quantiles"]
@@ -3807,10 +3808,11 @@ for the API.
                     "exclusiveMinimum": 0,
                     "exclusiveMaximum": 1
                   },
-                  "minItems": 1
+                  "minItems": 1,
+                  "uniqueItems": true
                 }
               ],
-              "description": "A count: that many cells, each holding about the same number of values. Or a list of probabilities, each above 0 and below 1: the inner edges are the quantiles at them."
+              "description": "A count: that many cells, each holding about the same number of values. Or a list of distinct probabilities, each above 0 and below 1: the inner edges are the quantiles at them."
             }
           },
           "required": ["kind", "quantiles"]

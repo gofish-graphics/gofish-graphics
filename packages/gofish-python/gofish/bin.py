@@ -70,7 +70,7 @@ def quantiles(quantiles: int | list, /) -> Dict[str, Any]:
     """Cells whose inner edges are quantiles of the field's values in the chart's data (type 7, the default of numpy and d3), with the domain's ends as the outer edges, as in polars' and pandas' `qcut`. Two edges at one value, as many equal values can give, are an error: ask for fewer cells.
 
     Args:
-        quantiles: A count: that many cells, each holding about the same number of values. Or a list of probabilities, each above 0 and below 1: the inner edges are the quantiles at them.
+        quantiles: A count: that many cells, each holding about the same number of values. Or a list of distinct probabilities, each above 0 and below 1: the inner edges are the quantiles at them.
     """
     if isinstance(quantiles, int) and not isinstance(quantiles, bool):
         if quantiles < 1:
@@ -78,6 +78,8 @@ def quantiles(quantiles: int | list, /) -> Dict[str, Any]:
     elif isinstance(quantiles, list):
         if len(quantiles) < 1:
             raise ValueError(f"Bin.quantiles(quantiles) must have at least 1 item, got {quantiles!r}")
+        if any(quantiles[i] in quantiles[:i] for i in range(len(quantiles))):
+            raise ValueError(f"Bin.quantiles(quantiles) must not hold an item twice, got {quantiles!r}")
         for quantiles_item in quantiles:
             if not (isinstance(quantiles_item, (int, float)) and not isinstance(quantiles_item, bool)):
                 raise TypeError(f"Bin.quantiles(quantiles) item must be a number > 0 and < 1, got {type(quantiles_item).__name__}")
@@ -88,7 +90,7 @@ def quantiles(quantiles: int | list, /) -> Dict[str, Any]:
             if quantiles_item >= 1:
                 raise ValueError(f"Bin.quantiles(quantiles) item must be < 1, got {quantiles_item!r}")
     else:
-        raise TypeError(f"Bin.quantiles(quantiles) must be a whole number >= 1 or a list of at least 1 item, each item a number > 0 and < 1, got {type(quantiles).__name__}")
+        raise TypeError(f"Bin.quantiles(quantiles) must be a whole number >= 1 or a list of at least 1 item, each item a number > 0 and < 1, no item twice, got {type(quantiles).__name__}")
     out: Dict[str, Any] = {"kind": "quantiles"}
     for _k, _v in [
         ("quantiles", quantiles),

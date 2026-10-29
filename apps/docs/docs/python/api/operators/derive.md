@@ -96,8 +96,8 @@ GoFish ships small helpers that pair well with `derive`:
 - `repeat(row, field)` — repeat a row `row[field]` times.
 - `quantile_rows(rows, x=..., density=..., n=...)` — `n` rows at the
   quantiles of a density curve, one at each probability `(i + 0.5) / n`.
-  `rows` is a grid of the curve, each row a position `x` and the `density`
-  there, in any order. The density is integrated by the trapezoid rule. Each
+  `rows` is a grid of one curve, each row a position `x` and the `density`
+  there, in any order, with no two rows at one position (call it after the split into curves). The density is integrated by the trapezoid rule. Each
   row made holds `x` and every column whose value is the same in all of
   `rows` (a group's `month`). [`Bin.quantiles`](/python/api/bin#bin-quantiles)
   and `field(x).median()` over the result read the curve instead of the

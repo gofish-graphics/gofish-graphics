@@ -216,7 +216,7 @@ const compositeToSVG = (item: CompositeItem | MaskItem): string => {
     `/>`;
 
   return (
-    `<g transform="translate(${x} ${y})" style="isolation:isolate">` +
+    `<g transform="translate(${x} ${y})" style="isolation:isolate"${item.style?.opacity !== undefined ? ` opacity="${item.style.opacity}"` : ""}>` +
     `<defs>` +
     `<g id="${sourceId}">${item.source.map(itemToSVG).join("")}</g>` +
     `<g id="${destinationId}">${item.dest.map(itemToSVG).join("")}</g>` +

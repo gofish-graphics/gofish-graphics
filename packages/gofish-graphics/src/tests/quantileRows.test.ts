@@ -138,6 +138,24 @@ console.log("# quantileRows");
       )
     ).includes("whole number")
   );
+  const mixed = throws(() =>
+    quantileRows(
+      [
+        { month: 1, x: 0, d: 1 },
+        { month: 1, x: 1, d: 1 },
+        { month: 2, x: 0, d: 2 },
+        { month: 2, x: 1, d: 2 },
+      ],
+      { x: "x", density: "d", n: 3 }
+    )
+  );
+  check(
+    "two rows at one position (curves mixed together) are an error",
+    mixed.includes('"x"') &&
+      mixed.includes("more than one curve") &&
+      mixed.includes("inside derive"),
+    mixed
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

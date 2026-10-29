@@ -166,8 +166,9 @@ export type HasQuantity = { name: string };
  *  result's own. A binned key's cells cover it (cells.ts), so every group
  *  of a split over the column has the same cells, whatever rows it holds.
  *  `sorted` gives the same values in order, for the cells of
- *  `Bin.quantiles`, which are quantiles of them: it sorts on its first call
- *  only, so a column no quantile reads is never sorted. */
+ *  `Bin.quantiles`, which are quantiles of them: it reads them off the rows
+ *  on its first call only, so a column no quantile reads is never copied
+ *  or sorted. */
 export type HasDomain = {
   lo: number;
   hi: number;
@@ -864,44 +865,48 @@ function meetChartUnits(types: ColumnTypes): void {
  *  neither has a scan to fold it into (about 0.5 ms for 10,000 rows of six
  *  columns). */
 function columnDomains(rows: readonly unknown[]): Map<string, HasDomain> {
-  // A column whose values are not all finite numbers maps to null; any other
-  // to its values so far and their range.
-  type Scan = { lo: number; hi: number; values: number[] };
-  const scans = new Map<string, Scan | null>();
+  // A column whose values are not all finite numbers maps to null.
+  const domains = new Map<string, { lo: number; hi: number } | null>();
   for (const row of rows) {
     if (row == null || typeof row !== "object") continue;
     for (const column in row) {
       const v = (row as Record<string, unknown>)[column];
       if (v == null) continue;
-      const d = scans.get(column);
+      const d = domains.get(column);
       if (d === null) continue;
-      if (typeof v !== "number" || !Number.isFinite(v)) scans.set(column, null);
-      else if (d === undefined)
-        scans.set(column, { lo: v, hi: v, values: [v] });
-      else {
-        d.values.push(v);
-        if (v < d.lo) d.lo = v;
-        else if (v > d.hi) d.hi = v;
-      }
+      if (typeof v !== "number" || !Number.isFinite(v))
+        domains.set(column, null);
+      else if (d === undefined) domains.set(column, { lo: v, hi: v });
+      else if (v < d.lo) d.lo = v;
+      else if (v > d.hi) d.hi = v;
     }
   }
   return new Map(
-    [...scans].flatMap(([column, d]): [string, HasDomain][] => {
-      if (d === null) return [];
-      const { lo, hi, values } = d;
-      let sorted = false;
-      const domain: HasDomain = {
-        lo,
-        hi,
-        sorted: () => {
-          if (!sorted) values.sort((a, b) => a - b);
-          sorted = true;
-          return values;
-        },
-      };
-      return [[column, domain]];
-    })
+    [...domains].flatMap(([column, d]): [string, HasDomain][] =>
+      d === null ? [] : [[column, { ...d, sorted: sortedColumn(rows, column) }]]
+    )
   );
+}
+
+/** A column's values in `rows`, ascending, missing values aside. They are
+ *  read off the rows on the first call and kept, so a column no quantile
+ *  reads is never copied or sorted. Every value it reads is a finite number,
+ *  as the column has a domain. */
+function sortedColumn(
+  rows: readonly unknown[],
+  column: string
+): () => readonly number[] {
+  let sorted: number[] | undefined;
+  return () => {
+    if (sorted !== undefined) return sorted;
+    sorted = [];
+    for (const row of rows) {
+      if (row == null || typeof row !== "object") continue;
+      const v = (row as Record<string, unknown>)[column];
+      if (v != null) sorted.push(v as number);
+    }
+    return sorted.sort((a, b) => a - b);
+  };
 }
 
 /** The zones {@link checkZone} has found valid. */

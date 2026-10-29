@@ -82,6 +82,8 @@ export type FieldType =
       items: FieldType;
       /** The fewest items allowed: `1` for a list that must not be empty. */
       minItems?: number;
+      /** No item may appear twice (JSON Schema's `uniqueItems`). */
+      uniqueItems?: true;
     }
   | { kind: "tuple"; items: readonly FieldType[] }
   | { kind: "object"; fields: Readonly<FieldGroup> }
@@ -209,8 +211,11 @@ export const t = {
   union: (...options: FieldType[]): FieldType => ({ kind: "union", options }),
   /** A list of `items`, with at least `minItems` of them when given
    *  (`t.array(t.number, { minItems: 1 })` for a list that must not be
-   *  empty). */
-  array: (items: FieldType, bounds: { minItems?: number } = {}): FieldType => ({
+   *  empty), and no item twice with `uniqueItems`. */
+  array: (
+    items: FieldType,
+    bounds: { minItems?: number; uniqueItems?: true } = {}
+  ): FieldType => ({
     kind: "array",
     items,
     ...bounds,
@@ -821,10 +826,11 @@ export const STRATEGIES = {
               t.num({ min: 1, integer: true }),
               t.array(t.num({ exclusiveMin: 0, exclusiveMax: 1 }), {
                 minItems: 1,
+                uniqueItems: true,
               })
             ),
             required: true,
-            doc: "A count: that many cells, each holding about the same number of values. Or a list of probabilities, each above 0 and below 1: the inner edges are the quantiles at them.",
+            doc: "A count: that many cells, each holding about the same number of values. Or a list of distinct probabilities, each above 0 and below 1: the inner edges are the quantiles at them.",
           },
         },
       },
@@ -2310,17 +2316,17 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
         "Fill color of the overlap, or a field name or accessor for a color scale. Default none when `stroke` is given."
       ),
       stroke: ch.color(
-        "Stroke color of the overlap's outline, or a field name or accessor for a color scale. Default none. It needs an exact outline: an operand with no outline (an image, text, a rounded rect) makes it an error."
+        "Stroke color of the overlap's outline, or a field name or accessor for a color scale. Default none. It needs an exact outline: both operands must trace their shape (a rect, ellipse, polygon, ribbon, area or region, or a ref to one; not an image, a text or a group), and at least one of them must be convex. Otherwise it is an error."
       ),
       strokeWidth: {
         type: t.number,
         default: 1,
-        doc: "Stroke width in pixels.",
+        doc: "Stroke width in pixels. Without `stroke` it draws nothing.",
       },
       opacity: {
         type: t.number,
         default: 1,
-        doc: "Opacity of the painted overlap, fill and stroke, 0 to 1.",
+        doc: "Opacity of the result, 0 to 1: of the painted overlap, fill and stroke, or with no `fill` or `stroke`, of the operands as drawn where they overlap.",
       },
     },
   }),

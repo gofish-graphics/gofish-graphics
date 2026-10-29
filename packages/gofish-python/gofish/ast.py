@@ -3386,7 +3386,7 @@ def quantile_rows(rows: List[dict], *, x: str, density: str, n: int) -> List[dic
     ``field(x).median()`` over them read the curve, not the grid. Mirrors JS
     ``quantileRows``.
 
-    The rows are a grid of the curve, in any order. The density is taken to
+    The rows are a grid of one curve, one row per position, in any order. The density is taken to
     be linear between grid points, integrated by the trapezoid rule, and each
     quantile is read off the result by linear interpolation. Each row made
     holds ``x`` and every other column whose value is the same in all rows
@@ -3415,6 +3415,15 @@ def quantile_rows(rows: List[dict], *, x: str, density: str, n: int) -> List[dic
             )
         grid.append((float(at), float(d)))
     grid.sort(key=lambda p: p[0])
+    # A grid has one density at each position: two rows at one position are
+    # two curves mixed together.
+    for i in range(1, len(grid)):
+        if grid[i][0] == grid[i - 1][0]:
+            raise ValueError(
+                f'{where}: two rows have "{x}" {grid[i][0]:g}, so these rows hold '
+                f"more than one curve. Call quantile_rows on each curve's rows: "
+                f"inside derive, after the flow splits the curves apart."
+            )
     cdf = [0.0]
     for i in range(1, len(grid)):
         cdf.append(cdf[-1] + (grid[i][0] - grid[i - 1][0]) * (grid[i][1] + grid[i - 1][1]) / 2)

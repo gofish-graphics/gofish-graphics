@@ -425,6 +425,14 @@ function walkFieldType(
         );
         return;
       }
+      if (type.uniqueItems) {
+        const keys = value.map((item) => JSON.stringify(item));
+        const twice = keys.find((k, i) => keys.indexOf(k) !== i);
+        if (twice !== undefined) {
+          fail(`expected no item twice, got ${twice} twice`);
+          return;
+        }
+      }
       value.forEach((item, i) =>
         walkFieldType(type.items, item, `${path}[${i}]`, ctx)
       );

@@ -520,9 +520,9 @@ def intersect(children: List["Mark"], *, blend_mode: Optional[str] = None, fill:
     Args:
         blend_mode: Blend used where the two regions combine. Unused when the result is painted. Default "color".
         fill: Fill color of the overlap, or a field name or accessor for a color scale. Default none when `stroke` is given.
-        stroke: Stroke color of the overlap's outline, or a field name or accessor for a color scale. Default none. It needs an exact outline: an operand with no outline (an image, text, a rounded rect) makes it an error.
-        stroke_width: Stroke width in pixels. Default 1.
-        opacity: Opacity of the painted overlap, fill and stroke, 0 to 1. Default 1.
+        stroke: Stroke color of the overlap's outline, or a field name or accessor for a color scale. Default none. It needs an exact outline: both operands must trace their shape (a rect, ellipse, polygon, ribbon, area or region, or a ref to one; not an image, a text or a group), and at least one of them must be convex. Otherwise it is an error.
+        stroke_width: Stroke width in pixels. Without `stroke` it draws nothing. Default 1.
+        opacity: Opacity of the result, 0 to 1: of the painted overlap, fill and stroke, or with no `fill` or `stroke`, of the operands as drawn where they overlap. Default 1.
     """
     kwargs: Dict[str, Any] = {}
     for _k, _v in [

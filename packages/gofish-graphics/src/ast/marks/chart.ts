@@ -583,7 +583,7 @@ function tagRelationalFusable(
 }
 
 /**
- * The paint channels of a relational mark (`fill`, `stroke`): the color
+ * The paint channels of a relational mark or `intersect` (`fill`, `stroke`): the color
  * channels of its channel map, generated from its descriptor. They are the
  * keys the connector reads per group, so the only ones resolved.
  */
@@ -606,9 +606,12 @@ const paintChannelsOf = (type: string): Record<string, "color"> =>
  * is a loud error, never a silent first-row pick (mirrors the
  * homogeneity-collapse error `resolveLabelText` throws for `.label(field)`).
  * None passes a string through unchanged (it names no field, so it is a
- * literal color) and drops an accessor (a group with no rows has nothing for
- * it to read), so a raw function never reaches `Connect`. A `Value` or
- * undefined is left as is.
+ * literal color, as for a mark's color channel) and drops an accessor (a
+ * group with no rows has nothing for it to read), so a raw function never
+ * reaches the node. A `Value` or undefined is left as is.
+ *
+ * The same resolution serves every mark whose paint is one color: the
+ * connectors, `enclose`, and `intersect` (over the rows of its input).
  *
  * Python accessors are resolved first, over exactly the rows that walk reads
  * (`rowsReached`), in one batch call each (`resolveChannelAccessors`).
@@ -629,7 +632,7 @@ async function resolveGroupPaint<O extends Record<string, unknown>>(
     const values = projectByValues(group, raw);
     if (values.length === 0) {
       // No row has a value: a string is then a literal color, and an
-      // accessor has nothing to read, so the connector keeps its default.
+      // accessor has nothing to read, so the mark keeps its default.
       if (typeof raw === "function")
         resolved = { ...resolved, [key]: undefined };
       continue;
@@ -1238,7 +1241,10 @@ function makePorterDuffCombinator<O extends PdOptions = PdOptions>(
         const [child0, child1] = await Promise.all(
           children.map((m) => resolveMarkResult(m, layerContext, d, key))
         );
-        const node = await lowLevel(opts, [child0, child1]);
+        // Its paint (`intersect`'s fill and stroke) is read off its input,
+        // as a connector's is off the group it threads.
+        const paintOpts = await resolveGroupPaint(irType, opts, d);
+        const node = await lowLevel(paintOpts, [child0, child1]);
         node.datum = datumOfInput(d as unknown[]);
         return node;
       };

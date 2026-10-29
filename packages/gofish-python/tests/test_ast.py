@@ -197,6 +197,11 @@ class TestOperators:
             quantile_rows([{"x": 0, "d": 1}], x="x", density="d", n=3)
         with pytest.raises(ValueError, match="whole number"):
             quantile_rows(grid, x="x", density="pdf", n=0)
+        # Two curves mixed together (called before the split by month): two
+        # rows at one position.
+        two_months = grid + [{**r, "month": "Feb"} for r in grid]
+        with pytest.raises(ValueError, match='"x" .*more than one curve.*inside derive'):
+            quantile_rows(two_months, x="x", density="pdf", n=10)
 
     def test_bin_product_and_chain_wire(self):
         """A product is a list partition on one bin op; a chain is one bin op

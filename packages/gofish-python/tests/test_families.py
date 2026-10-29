@@ -144,6 +144,10 @@ BAD_VALUES = [
     (lambda: Bin.quantiles(0), "Bin.quantiles(quantiles) must be >= 1, got 0"),
     (lambda: Bin.quantiles([0.5, 1]), "Bin.quantiles(quantiles) item must be < 1, got 1"),
     (lambda: Bin.quantiles([0, 0.5]), "Bin.quantiles(quantiles) item must be > 0, got 0"),
+    (
+        lambda: Bin.quantiles([0.5, 0.5]),
+        "Bin.quantiles(quantiles) must not hold an item twice, got [0.5, 0.5]",
+    ),
     (lambda: Coord.geo("robinson"), 'Coord.geo(projection) must be one of "equalEarth", "mercator"'),
     (lambda: Coord.polar(center=(1, 2, 3)), "Coord.polar(center=...) must have 2 items"),
     (lambda: Coord.geo("mercator", lat=(0, float("nan"))), "Coord.geo(lat=...)[1] must not be NaN"),

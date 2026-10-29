@@ -2162,8 +2162,9 @@ reads only the classes, never the definition. Nine classes exist:
   values are all finite numbers (missing values aside; a time's values are
   epoch milliseconds by then), after the other classes. It is what a binned
   key's cells cover (see [Cells](#cells-a-binned-key)). `sorted()` gives
-  the same values in order, sorted on its first call only, for the cells of
-  `Bin.quantiles`.
+  the same values in order, for the cells of `Bin.quantiles`: it reads them
+  off the typed rows on its first call only and keeps them, so a column no
+  quantile reads is never copied.
 - `HasInteger` (`{}`): the values are integers. JS has one number type, so
   no JS column has it and no builder writes it: the Python hosts' Arrow
   decode attaches it to a column that arrived as integers, and their encode
@@ -2402,7 +2403,9 @@ when it sits on an edge, as in numpy's `histogram` and d3's `bin`. A
 type-7 quantiles (`quantileSorted`) of the column's values in the data it
 was typed with (`HasDomain.sorted`), so it too reads no group's rows. Two
 edges at one value, as many equal values give, throw rather than merge, as
-polars' `qcut` does.
+polars' `qcut` does. A column of one value has no quantiles to cut at, and
+throws saying the column is constant; a probability given twice is caught
+earlier, by the list's `uniqueItems` in the descriptor.
 
 **Cycles, products and chains.** A calendar level binned alone is a part
 of the next larger level (`CalendarPartition.cycle`): `Calendar.month` is
@@ -2524,7 +2527,12 @@ children read the same scale as the parent, so a span rebased to 0 would
 put a child that reads a datum position (a curve, a dot at a median) at the
 wrong place. A region composite (`intersect` and the others) has no frame of
 its own either: it hands its operands the region as it came and places
-neither (`layoutComposite` in `porterDuff.tsx`).
+neither (`layoutComposite` in `porterDuff.tsx`), and sits at 0 on each axis
+the region gives a span. That is a shortcut (#1234): operands at literal
+positions, in a cell with no data map, then sit at the origin of every cell
+rather than being centered in it, and a layer's test (was a map handed
+down?) cannot tell those apart from a croissant's operands, which get no
+map either.
 
 The region holds its cell (a `RegionCell`, cells.ts: an id, a label when it
 has one, a span per axis, and an outline when it is not a box) and the
@@ -2636,7 +2644,9 @@ draws the cell in by `inset` pixels on each axis where the region has a span
 (`insetConvex` for an outline, a smaller box otherwise). The inset is paint
 only: the region's box, which layout reads, stays the cell, and its `outline`
 query answers what it draws, so `intersect` cuts the drawn-in cell. A cell
-thinner than twice the inset draws nothing.
+thinner than twice the inset draws nothing, and its outline is exact and
+empty (no pieces), so an `intersect` with it is exactly empty and draws
+nothing either.
 
 **Expression evaluation is orthogonal to the channel's own aggregation.**
 `inferSize`/`inferPos`'s shared core (`inferNumeric` in `channels.ts`) always

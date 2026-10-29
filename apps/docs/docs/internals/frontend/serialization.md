@@ -648,8 +648,10 @@ may carry bounds, `t.num({ min: 0, finite: true })` for a pixel padding,
 `t.num({ min: 1, integer: true })` for a Calendar step or a count of
 thresholds, and a list may carry a least length,
 `t.array(t.num({ finite: true }), { minItems: 1 })` for a list of edges
-that must not be empty. The validator, the JSON Schema (`minimum`,
-`exclusiveMinimum`, `exclusiveMaximum`, `integer`, `minItems`) and the Python generator check
+that must not be empty, and may hold no item twice, `uniqueItems: true` for
+a list of quantile probabilities. The validator, the JSON Schema (`minimum`,
+`exclusiveMinimum`, `exclusiveMaximum`, `integer`, `minItems`,
+`uniqueItems`) and the Python generator check
 them. When a
 value matches no branch of an untagged union, and only one branch is of the
 value's kind (a number for `Bin.hex`'s `radius: number | { x, y }`), the

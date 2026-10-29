@@ -277,7 +277,11 @@ export function paintSVG(
       );
 
       return (
-        <g transform={`translate(${x} ${y})`} style="isolation:isolate">
+        <g
+          transform={`translate(${x} ${y})`}
+          style="isolation:isolate"
+          opacity={item.style?.opacity}
+        >
           <defs>
             <g id={sourceId}>
               {item.source.map((c) => paintSVG(c, interactive))}

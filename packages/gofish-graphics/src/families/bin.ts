@@ -79,7 +79,7 @@ export function thresholds(countOrEdges: number | number[]): ThresholdsBin {
  * `.format(fn)` labels the cells by a function of the cell.
  *
  * @param countOrProbabilities A count: that many cells, each holding about
- *   the same number of values. Or a list of probabilities, each above 0 and
+ *   the same number of values. Or a list of distinct probabilities, each above 0 and
  *   below 1: the inner edges are the quantiles at them.
  */
 export function quantiles(

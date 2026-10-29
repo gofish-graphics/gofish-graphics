@@ -102,7 +102,13 @@ function layoutComposite(
   );
   placed.forEach(placeUnplacedChild);
   // TODO(#1234): shortcut; the same "shared frame sits at 0" rule as layer's
-  // `sharedInSpan`.
+  // `sharedInSpan`. It is wrong for operands at literal positions: under a
+  // partition with no data map, every cell's copy sits at the origin instead
+  // of being centered in its cell, as on main (the IntersectInCells story).
+  // Layer's own predicate (a map handed down) cannot replace it: a croissant's
+  // composite gets no map either (its operands, a ref to a ribbon and a
+  // `region()`, have no position space), yet its `region()` operand fills the
+  // region in its parent's frame, so it must sit at 0.
   const at = (axis: 0 | 1) =>
     region?.spans[axis] !== undefined ? 0 : undefined;
   return { placed, translate: [at(0), at(1)] };
@@ -115,13 +121,16 @@ const TOLERANCE = 0.25;
  * A placed operand's region as one exact ring in the composite's frame, or
  * undefined when it has none: its outline must be one closed loop that
  * traces its shape (not a box standing in for an image, a text or a group,
- * `Outline.bounds`). Its paint does not matter: an operand gives shape only.
+ * `Outline.bounds`). An outline of no pieces is exact and empty (a cell its
+ * inset leaves nothing of): the empty ring. Its paint does not matter: an
+ * operand gives shape only.
  */
 function operandRing(p: Placeable): OutlinePoint[] | undefined {
   const outlines: Outline[] = placedOutlines(
     p as Placeable & { geometry(): any },
     TOLERANCE
   );
+  if (outlines.length === 0) return [];
   if (outlines.length !== 1) return undefined;
   const [o] = outlines;
   if (!o.closed || o.bounds) return undefined;
@@ -130,15 +139,17 @@ function operandRing(p: Placeable): OutlinePoint[] | undefined {
 
 /**
  * The exact outline of `A ∩ B` in the composite's frame: a ring, an empty
- * list when they do not overlap, or undefined when there is no exact answer
- * (an operand without an exact outline, or two non-convex operands; see
- * `geometry/clip.ts`).
+ * list when they do not overlap or an operand is exactly empty, or undefined
+ * when there is no exact answer (an operand without an exact outline, or two
+ * non-convex operands; see `geometry/clip.ts`).
  */
 function exactIntersection(
   placed: readonly Placeable[]
 ): OutlinePoint[] | undefined {
   const a = operandRing(placed[0]);
+  if (a?.length === 0) return [];
   const b = a && operandRing(placed[1]);
+  if (b?.length === 0) return [];
   return a && b && intersectRings(a, b);
 }
 
@@ -153,6 +164,51 @@ const noExactGeometry = (what: string) =>
       `convex (#1201). Without it, intersect can fill the overlap but not ` +
       `stroke it: drop \`stroke\`, or make an operand one of those shapes.`
   );
+
+/** The ink an operand's shape leaves: opaque, unstroked, at full opacity. */
+const SHAPE_STYLE: DisplayList.Style = { fill: "black" };
+
+/**
+ * Lowered operands as their shapes alone, for the alpha masks a painted
+ * `intersect` fills through: an operand gives shape only, so its own paint
+ * (an opacity, `fill: "none"`, a stroke) must not change the mask. Each
+ * shape item (a rect, ellipse, path or text) is drawn in {@link SHAPE_STYLE},
+ * a group's and a composite's items are read the same way, and a mask's
+ * content is (its mask still clips it).
+ *
+ * An image is the domain's one exception: it has no shape apart from its
+ * pixels, so its region is where its alpha is, and it is kept as drawn.
+ */
+function shapeOnly(
+  items: DisplayList.DisplayItem[]
+): DisplayList.DisplayItem[] {
+  return items.map((item): DisplayList.DisplayItem => {
+    switch (item.kind) {
+      case "rect":
+      case "ellipse":
+      case "path":
+      case "text":
+        return { ...item, style: SHAPE_STYLE };
+      case "image":
+        return item;
+      case "group":
+        return {
+          ...item,
+          style: undefined,
+          children: shapeOnly(item.children),
+        };
+      case "composite":
+        return {
+          ...item,
+          style: undefined,
+          source: shapeOnly(item.source),
+          dest: shapeOnly(item.dest),
+        };
+      case "mask":
+        return { ...item, style: undefined, content: shapeOnly(item.content) };
+    }
+  });
+}
 
 /**
  * Lower a composite's two children, a bake boundary, through `toPixel`
@@ -321,11 +377,11 @@ function compositeNode(
             ];
           }
           if (strokes) throw noExactGeometry("a stroke");
-          // No exact outline: fill the overlap of the two operands' ink, an
-          // alpha mask of each over a fill of the box.
+          // No exact outline: fill the overlap of the two operands' shapes,
+          // an alpha mask of each over a fill of the box.
           const [a, b] = lowerOperands(node, coordinateTransform, ([cx, cy]) =>
             outer([tx + cx, ty + cy])
-          );
+          ).map(shapeOnly);
           const bbox = { x: bx, y: by, w: bw, h: bh };
           const fillRect = rectItemFromBox(bx, bx + bw, by, by + bh, (p) => p, {
             rx: 0,
@@ -376,6 +432,10 @@ function compositeNode(
             bbox: { x: bx, y: by, w: bw, h: bh },
             source,
             dest,
+            // `opacity` fades the composited result as a whole.
+            ...(paint?.opacity !== undefined && {
+              style: { opacity: paint.opacity },
+            }),
           },
         ];
       },

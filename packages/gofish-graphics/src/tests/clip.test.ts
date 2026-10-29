@@ -15,7 +15,24 @@ import {
 import * as GoFish from "../../dist/index.js";
 import { check, items, report } from "./testHelpers";
 
-const { circle, image, intersect, rect, text } = GoFish as any;
+const {
+  Bin,
+  chart,
+  circle,
+  derive,
+  field,
+  image,
+  intersect,
+  layer,
+  partition,
+  quantileRows,
+  rect,
+  region,
+  ribbon,
+  scatter,
+  spread,
+  text,
+} = GoFish as any;
 
 type Pt = [number, number];
 
@@ -196,6 +213,199 @@ console.log("# intersect with paint");
     "an unpainted intersect draws no path of its own",
     !items(dl).some((it) => it.kind === "path"),
     items(dl).map((it) => it.kind)
+  );
+}
+{
+  // An operand whose exact outline is empty (a cell 10 pixels wide, which
+  // an inset of 6 leaves nothing of) makes the intersection exactly empty:
+  // nothing is drawn, and a stroke is no error.
+  let message = "";
+  let drawn: unknown[] = ["not drawn"];
+  try {
+    const dl = await chart([{ v: 5 }, { v: 15 }, { v: 25 }], { axes: false })
+      .flow(partition({ by: field("v").bin(Bin.step(10)), dir: "x" }))
+      .mark(
+        intersect({ fill: "#eee", stroke: "black" }, [
+          rect({ x: 0, y: 0, w: 1000, h: 50 }),
+          region({ inset: 6 }),
+        ])
+      )
+      .toDisplayList({ w: 30, h: 50 });
+    drawn = items(dl).filter((it) => it.kind === "path" || it.kind === "mask");
+  } catch (e) {
+    message = e instanceof Error ? e.message : String(e);
+  }
+  check(
+    "an exactly empty operand draws nothing, with no error",
+    message === "" && drawn.length === 0,
+    message || drawn
+  );
+}
+{
+  // The croissant spec narrow enough that the inset empties some cells.
+  const normPdf = (x: number) => Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
+  const grid = Array.from({ length: 401 }, (_, i) => {
+    const x = -4 + (8 * i) / 400;
+    return { x, pdf: normPdf(x) };
+  });
+  let message = "";
+  try {
+    await layer([
+      chart(grid)
+        .flow(scatter({ x: "x" }))
+        .mark(ribbon({ h: "pdf", fill: "none" }).name("density")),
+    ])
+      .relate(({ density }: any) => [
+        chart(grid)
+          .flow(
+            derive((rows: any) =>
+              quantileRows(rows, { x: "x", density: "pdf", n: 1000 })
+            ),
+            partition({ by: field("x").bin(Bin.quantiles(10)), dir: "x" })
+          )
+          .mark(
+            intersect({ fill: "#eee", stroke: "black", strokeWidth: 2 }, [
+              density,
+              region({ inset: 3 }),
+            ])
+          ),
+      ])
+      .toDisplayList({ w: 150, h: 100, axes: { x: true, y: false } });
+  } catch (e) {
+    message = e instanceof Error ? e.message : String(e);
+  }
+  check("a croissant 150 pixels wide renders", message === "", message);
+}
+
+console.log("# intersect paint from data");
+{
+  const rows = [
+    { k: "a", v: 1 },
+    { k: "b", v: 2 },
+  ];
+  const shapes = () => [
+    rect({ x: 0, y: 0, w: 40, h: 40 }),
+    rect({ x: 20, y: 20, w: 40, h: 40 }),
+  ];
+  const fills = async (fill: unknown) => {
+    const dl = await chart(rows)
+      .flow(spread({ by: "k", dir: "x" }))
+      .mark(intersect({ fill }, shapes()))
+      .toDisplayList({ w: 200, h: 100 });
+    return items(dl)
+      .filter((it) => it.kind === "path")
+      .map((it) => it.style?.fill);
+  };
+  for (const [what, fill] of [
+    ["a field name", "k"],
+    ["an accessor", (d: any) => d.k],
+  ] as const) {
+    const drawn = await fills(fill);
+    check(
+      `fill as ${what} reads a color off each copy's rows`,
+      drawn.length === 2 &&
+        drawn.every((f) => typeof f === "string" && f !== "k") &&
+        drawn[0] !== drawn[1],
+      drawn
+    );
+  }
+  // With no rows, an accessor has nothing to read, and the composite keeps
+  // its default, as a connector does: no function reaches the node.
+  const noRows = items(
+    await intersect({ fill: (d: any) => d.k }, shapes()).toDisplayList({
+      w: 100,
+      h: 100,
+    })
+  );
+  check(
+    "an accessor fill with no rows to read leaves the composite unpainted",
+    noRows.some((it) => it.kind === "composite") &&
+      !noRows.some((it) => typeof it.style?.fill === "function"),
+    noRows.map((it) => it.kind)
+  );
+}
+
+console.log("# intersect: operands give shape only");
+{
+  // Through the mask (an image has no exact outline), an operand's own
+  // paint does not change the shape it gives.
+  const dl = await intersect({ fill: "#467DA8" }, [
+    image({ href: "x.png", x: 0, y: 0, w: 100, h: 100, opacity: 0.3 }),
+    rect({
+      x: 50,
+      y: 0,
+      w: 100,
+      h: 100,
+      fill: "none",
+      stroke: "red",
+      strokeWidth: 4,
+      opacity: 0.2,
+    }),
+  ]).toDisplayList({ w: 200, h: 200 });
+  const maskShapes: any[] = [];
+  const walk = (it: any) => {
+    if (it.kind === "mask") {
+      it.mask.forEach((m: any) => maskShapes.push(m));
+      it.content.forEach(walk);
+    }
+  };
+  dl.items.forEach(function visit(it: any) {
+    walk(it);
+    (it.children ?? []).forEach(visit);
+  });
+  const maskRect = maskShapes.find((m) => m.kind === "rect");
+  const maskImage = maskShapes.find((m) => m.kind === "image");
+  check(
+    "a shape operand masks as an opaque, unstroked fill",
+    maskRect?.style?.fill === "black" &&
+      maskRect.style.stroke === undefined &&
+      maskRect.style.opacity === undefined,
+    maskRect
+  );
+  check(
+    "an image operand masks by its own alpha, as drawn",
+    maskImage?.style?.opacity === 0.3,
+    maskImage
+  );
+}
+
+console.log("# intersect opacity");
+{
+  const two = () => [
+    rect({ x: 0, y: 0, w: 100, h: 100, fill: "red" }),
+    rect({ x: 50, y: 50, w: 100, h: 100, fill: "blue" }),
+  ];
+  const unpainted = items(
+    await intersect({ opacity: 0.5 }, two()).toDisplayList({ w: 200, h: 200 })
+  ).filter((it) => it.kind === "composite");
+  check(
+    "opacity alone fades the composited operands",
+    unpainted.length === 1 && unpainted[0].style?.opacity === 0.5,
+    unpainted
+  );
+  const painted = items(
+    await intersect({ fill: "#eee", opacity: 0.5 }, two()).toDisplayList({
+      w: 200,
+      h: 200,
+    })
+  ).filter((it) => it.kind === "path");
+  check(
+    "opacity fades the painted overlap",
+    painted.length === 1 && painted[0].style?.opacity === 0.5,
+    painted
+  );
+  const widthOnly = items(
+    await intersect({ fill: "#eee", strokeWidth: 3 }, two()).toDisplayList({
+      w: 200,
+      h: 200,
+    })
+  ).filter((it) => it.kind === "path");
+  check(
+    "strokeWidth without stroke draws no stroke",
+    widthOnly.length === 1 &&
+      (widthOnly[0].style?.stroke === undefined ||
+        widthOnly[0].style.stroke === "none"),
+    widthOnly
   );
 }
 

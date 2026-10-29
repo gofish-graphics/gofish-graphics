@@ -621,6 +621,14 @@ function quantileEdges(
   domain: HasDomain,
   where: string
 ): number[] {
+  // A column of one value has no cells of its own to cut: every quantile is
+  // that value, and so are both ends of its domain.
+  if (domain.lo === domain.hi)
+    throw new Error(
+      `${where}: ${String(p)} needs a column with more than one value, but ` +
+        `every value of this column is ${round12(domain.lo)}. Bin it with ` +
+        `Bin.step or Bin.thresholds, or leave it unbinned.`
+    );
   const given = p.quantiles;
   const ps = Array.isArray(given)
     ? [...given].sort((a, b) => a - b)

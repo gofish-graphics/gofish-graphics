@@ -10,7 +10,21 @@ captured DOM is byte-identical.
 
 import os
 
-from gofish import circle, exclude, image, intersect, mask, over, paint, rect, subtract
+from gofish import (
+    Bin,
+    chart,
+    circle,
+    exclude,
+    field,
+    image,
+    intersect,
+    mask,
+    over,
+    paint,
+    partition,
+    rect,
+    subtract,
+)
 
 # The Vite-served URL of the bottle image. JS storybook imports it via
 # `import bottlePng from "../assets/wilsonblanco.png"`, which Vite resolves
@@ -97,4 +111,22 @@ def story_intersect_image_fill():
             fill="#467DA8",
         ),
         {"w": 193, "h": 678},
+    )
+
+
+def story_intersect_in_cells():
+    # A composite under a partition, its operands at literal positions. For
+    # now every cell's copy sits at the origin (TODO(#1234), porterDuff.tsx).
+    return (
+        chart([{"v": 5}, {"v": 15}, {"v": 25}], w=480, h=120)
+        .flow(partition(by=field("v").bin(Bin.step(10)), dir="x"))
+        .mark(
+            intersect(
+                [
+                    rect(x=0, y=0, w=90, h=40, fill="#467DA8"),
+                    rect(x=30, y=20, w=90, h=40, fill="#D1E4F6"),
+                ]
+            )
+        ),
+        {},
     )
