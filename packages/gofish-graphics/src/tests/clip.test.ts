@@ -409,4 +409,27 @@ console.log("# intersect opacity");
   );
 }
 
+console.log("# intersect under a partition");
+{
+  // Operands at literal positions: each cell's copy is centered in its
+  // cell, as a layer's would be, not stacked at the origin.
+  const dl = await chart([{ v: 5 }, { v: 15 }, { v: 25 }], { axes: false })
+    .flow(partition({ by: field("v").bin(Bin.step(10)), dir: "x" }))
+    .mark(
+      intersect([
+        rect({ x: 0, y: 0, w: 90, h: 40, fill: "red" }),
+        rect({ x: 30, y: 20, w: 90, h: 40, fill: "blue" }),
+      ])
+    )
+    .toDisplayList({ w: 480, h: 120 });
+  const xs = items(dl)
+    .filter((it) => it.kind === "composite")
+    .map((it) => Math.round(it.bbox.x));
+  check(
+    "each cell's composite sits in its own cell",
+    xs.length === 3 && new Set(xs).size === 3,
+    xs
+  );
+}
+
 report();

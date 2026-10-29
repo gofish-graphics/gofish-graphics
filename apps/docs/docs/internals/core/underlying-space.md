@@ -2526,13 +2526,18 @@ and reports a translate of 0 there (`sharedInSpan` in `layer.tsx`): its
 children read the same scale as the parent, so a span rebased to 0 would
 put a child that reads a datum position (a curve, a dot at a median) at the
 wrong place. A region composite (`intersect` and the others) has no frame of
-its own either: it hands its operands the region as it came and places
-neither (`layoutComposite` in `porterDuff.tsx`), and sits at 0 on each axis
-the region gives a span. That is a shortcut (#1234): operands at literal
-positions, in a cell with no data map, then sit at the origin of every cell
-rather than being centered in it, and a layer's test (was a map handed
-down?) cannot tell those apart from a croissant's operands, which get no
-map either.
+its own when it holds a `ref` operand, since a ref is already where its
+target is, in the frame the two share (`layoutComposite` in
+`porterDuff.tsx`). Such a composite hands its operands the region as it
+came and sits at 0 on each axis the region gives a span: a croissant's
+`region()` operand fills the cell in the frame its `ref` to the density
+curve is in. A composite without a ref has a frame of its own, as a layer
+does: the region is rebased to it, and the composite, a rigid unit, is
+centered in its span, so operands at literal positions draw one copy in
+each cell. The rule is the same as a layer's (`sharedInSpan`) decided by a
+different test, a duplication left for #1234: a croissant's composite gets
+no map from its parent, so a layer's test (was a map handed down?) does not
+apply.
 
 The region holds its cell (a `RegionCell`, cells.ts: an id, a label when it
 has one, a span per axis, and an outline when it is not a box) and the

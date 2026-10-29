@@ -149,10 +149,8 @@ export const IntersectImageFill: StoryObj = {
   },
 };
 
-// A composite under a partition, its operands at literal positions. Each
-// cell's copy should be centered in that cell, as a layer's would be (as on
-// main); for now every copy sits at the origin (TODO(#1234) in
-// `layoutComposite`, porterDuff.tsx).
+// A composite under a partition, its operands at literal positions: each
+// cell draws its own copy, centered in that cell, as a layer would be.
 export const IntersectInCells: StoryObj = {
   name: "Intersect in partition cells",
   render: () => {

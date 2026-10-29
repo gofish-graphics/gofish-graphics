@@ -28,7 +28,8 @@ import {
   type OutlinePoint,
 } from "../geometry";
 import { inks } from "../geometry/outline";
-import type { Region } from "../geometry/region";
+import { rebaseRegion, type Region } from "../geometry/region";
+import { GoFishRef } from "../_ref";
 import type { AxisScale } from "../domain";
 import type { CoordinateTransform } from "../coordinateTransforms/coord";
 
@@ -79,11 +80,10 @@ const firstChildClaim = (
 /**
  * Lay out a composite's children in its own frame. A composite has no frame
  * of its own: it hands its children the scales it was given, so their data
- * positions are in its parent's frame. So it hands them the region it was
- * given as it came (a `region()` operand fills a partition's cell), places
- * each child that did not place itself at its origin (a `ref` operand is
- * already where its target is), and sits at 0 on each axis the region gives
- * a span, rather than being centered in it.
+ * positions are in its parent's frame. It hands them the region it was given
+ * (a `region()` operand fills a partition's cell), places each child that did
+ * not place itself at its origin (a `ref` operand is already where its target
+ * is), and is placed in the region as below.
  */
 function layoutComposite(
   size: Size,
@@ -95,22 +95,24 @@ function layoutComposite(
   translate: [number | undefined, number | undefined];
 } {
   requireTwoChildren(children);
+  // A `ref` operand is already where its target is, in the frame the two
+  // share, so a composite holding one shares its parent's frame: it hands
+  // the region on as it came and sits at 0 on each axis the region gives a
+  // span. Otherwise its frame is its own, as a layer's is: the region is
+  // rebased to it, and the composite, a rigid unit, is centered in the span.
+  // TODO(#1234): shortcut; the same "shared frame sits at 0" rule as layer's
+  // `sharedInSpan`, decided here by a different test.
+  const shared = children.some((child) => child instanceof GoFishRef);
+  const childRegion =
+    region === undefined || shared ? region : rebaseRegion(region);
   const placed = children.map((child) =>
     child instanceof GoFishNode
-      ? child.layout(size, scales, region)
+      ? child.layout(size, scales, childRegion)
       : child.layout(size, scales)
   );
   placed.forEach(placeUnplacedChild);
-  // TODO(#1234): shortcut; the same "shared frame sits at 0" rule as layer's
-  // `sharedInSpan`. It is wrong for operands at literal positions: under a
-  // partition with no data map, every cell's copy sits at the origin instead
-  // of being centered in its cell, as on main (the IntersectInCells story).
-  // Layer's own predicate (a map handed down) cannot replace it: a croissant's
-  // composite gets no map either (its operands, a ref to a ribbon and a
-  // `region()`, have no position space), yet its `region()` operand fills the
-  // region in its parent's frame, so it must sit at 0.
   const at = (axis: 0 | 1) =>
-    region?.spans[axis] !== undefined ? 0 : undefined;
+    shared && region?.spans[axis] !== undefined ? 0 : undefined;
   return { placed, translate: [at(0), at(1)] };
 }
 
