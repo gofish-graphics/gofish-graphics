@@ -383,24 +383,34 @@ its size, and each ring claims it where it places it (see
 **Location**: `src/ast/gofish.tsx` (`layout()`), `src/ast/solver/scopes.ts`
 
 ```typescript
-let rootScopes = [
-  scopes.solveScope(meta(0), rootSpaces[0], rootClaims[0], canvas[0]),
-  scopes.solveScope(meta(1), rootSpaces[1], rootClaims[1], canvas[1]),
-];
+const scope =
+  keyed !== undefined
+    ? scopes.scopeAt(meta, space, claim, keyed)
+    : scopes.fit(
+        meta,
+        given[axis] === undefined ? undefined : root,
+        space,
+        claim,
+        allocated
+      );
 ```
 
-For every continuous root axis, `solveScope` solves σ from the axis's size
-claim against the canvas (`claim.width(σ) = canvas`), so pixel overhead such
-as spacing, and the chrome's gutters, keeps its pixels, and, when the axis has
-an origin, the pixel of data 0 (`originPx`). The canvas is the render's `w`/`h`:
-the render size is the whole graphic (#493).
-When no σ fits (nodes with a literal size and their chrome are larger than the
-canvas), the root maps its domain at the σ those nodes solved
-(`ScopeRegistry.keyedSigma`) and overflows the canvas, like any other fixed
-size. With no such nodes, what is larger than the canvas is pixels that do
-not scale (a text at a literal position past its end): σ is solved from the
-part of the claim that grows with σ (`Pwl.rising`), so the data fills
-the canvas and the pixels overflow. A pinned axis hands its content the map
+For every continuous root axis, the one scope fit (`ScopeRegistry.fit`)
+solves σ from the axis's size claim against the canvas (`claim.width(σ) =
+canvas`), so pixel overhead such as spacing, and the chrome's gutters, keeps
+its pixels, and, when the axis has an origin, the pixel of data 0
+(`originPx`). The canvas is the render's `w`/`h`: the render size is the
+whole graphic (#493). A claim with no σ in it maps no domain and is not
+solved. When no σ ≥ 0 fits, the claim's fixed parts are larger than the
+canvas: σ is solved from the part of the claim that grows with σ
+(`Pwl.rising`), so the data fills the canvas as if the fixed parts took no
+room, the fixed parts overflow, and the fit warns (see
+[Layout warnings](#layout-warnings)). The same fit, with the same fallback,
+serves a layer with a size of its own and a coord boundary. On an axis the render does not size, a root whose nodes with a
+literal size map its keyed domain maps it at the σ they solved
+(`ScopeRegistry.keyedSigma`). Any other unsized root is fitted to the default
+canvas, which is not a limit: it grows to hold what does not fit, so the fit
+does not warn there (#1179). A pinned axis hands its content the map
 `px(d) = σ·d + originPx`; a free root is placed at `originPx`. A one-value
 domain (a one-point chart) has no width for σ to scale, so its value maps to
 the middle of the canvas, as in d3 and Vega-Lite: σ is 0 and the claim is
@@ -907,7 +917,7 @@ inside the canvas, and it overflows it.
 
 Layout never draws nothing and never grows the canvas past the render's
 `w`/`h`. Where it cannot fit, it draws anyway and records a `LayoutWarning`
-on the render session (`warnLayout` in `_node.ts`, the builders in
+on the render session (`warnLayout` and the builders in
 `layoutWarnings.ts`). `layout()` returns them, `gofish()` puts the latest on
 `view.warnings` and prints each one once per chart (a re-render does not
 print it again), and the export terminals print them too, each as one
@@ -917,9 +927,12 @@ those lines, so `pnpm capture-one` prints them under the story.
 - **Fixed parts larger than their slot (`fixed-overflow`).** A claim's fixed
   pixels are its width at σ = 0: literal spacing, literal sizes and
   positions, text, chrome, and what hangs off bands. Where they exceed the
-  slot no σ ≥ 0 fits. The root checks each axis the render sizes, a layer
-  with a size of its own checks the axes its solve fails on
-  (`solveLayerScales`' `failedAxes`), and a spread whose parts claim nothing
+  slot no σ ≥ 0 fits. The one scope fit (`ScopeRegistry.fit`) checks it
+  wherever a claim is fitted to a slot: the root on each axis the render
+  sizes, and a layer with a size of its own (its content's claim against its
+  size). A coord boundary fits through it too but does not warn, since its
+  budget is in coordinate units, not pixels (an open question). A spread
+  whose parts claim nothing
   checks its spacing against its size (`spacingOverflow`, and its slices
   then ignore the spacing so the parts stay visible). The warning names the
   node that holds the fixed parts: down from where the check failed through
@@ -927,7 +940,7 @@ those lines, so `pnpm capture-one` prints them under the story.
   wrappers), taking off what each adds, to the first spread, sized node or
   leaf. It lists the spacing of each spread below it (spreads of one
   description summed, with their count) and the rest of the fixed pixels.
-  The root then maps its data at the σ where the parts that grow with σ
+  The scope then maps its data at the σ where the parts that grow with σ
   fill the slot, as if the fixed parts took no room.
 - **A drawing past the canvas (`ink-overflow`).** After placement, on each
   axis the render sizes and no fixed-overflow was found, the hull of the

@@ -63,6 +63,41 @@ async function main() {
     );
   }
 
+  console.log(
+    "\n# an unsized root whose fixed parts exceed the default canvas (#1179)"
+  );
+  {
+    // Data-valued widths, spacing 200 × 5 = 1000 px: more than the default
+    // 400 px canvas, so no σ ≥ 0 fits. The bars alone fill the 400 px
+    // (σ = 400 / 6, never negative), and the canvas grows to hold the
+    // spacing. The render gave no size, so nothing overflows or warns.
+    const data = ["a", "b", "c", "d", "e", "f"].map((k) => ({ k, v: 1 }));
+    const bars = () =>
+      chart(data, { axes: false })
+        .flow(spread({ by: "k", dir: "x", spacing: 200 }))
+        .mark(rect({ w: "v", h: 10 }));
+    const rects = items(await bars().toDisplayList({})).filter(
+      (i) => i.kind === "rect"
+    );
+    check(
+      "every bar is 400 / 6 px wide",
+      rects.length === 6 && rects.every((r) => close(r.w, 400 / 6)),
+      rects.map((r) => r.w)
+    );
+    check(
+      "bars sit 200 px apart",
+      close(rects[1].x! - rects[0].x! - rects[0].w!, 200),
+      rects.map((r) => r.x)
+    );
+    const data1179 = await runLayout({}, bars().resolve());
+    check(
+      "the canvas holds the bars and the spacing, and nothing warns",
+      close(data1179.width, 400 + 1000, 1e-6) &&
+        data1179.warnings.length === 0,
+      [data1179.width, data1179.warnings.map((w) => w.message)]
+    );
+  }
+
   console.log("\n# a chart's content gets no less than no room");
   {
     // Three nested charts in 24 px of height: the spacing and the label row

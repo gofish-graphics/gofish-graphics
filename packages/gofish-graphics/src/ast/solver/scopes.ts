@@ -10,7 +10,7 @@
  *   - **sized nodes solve** (#1114) — the render root, a coord boundary, and
  *     a node whose size is given to it (a literal or data-valued `w`/`h`, a
  *     facet panel's slot), each mapping its measure-keyed domain into that
- *     size — each calls {@link ScopeRegistry.solveScope} (or
+ *     size — each calls {@link ScopeRegistry.fit} (or
  *     {@link ScopeRegistry.solveSize} for a grid's bare tracks). A literal
  *     size solves once, in the claim walk ({@link ScopeRegistry.solveFixed}),
  *     and its layout reuses the solution;
@@ -29,10 +29,11 @@ import {
   originIs,
   type UnderlyingSpace,
 } from "../underlyingSpace";
-import { Extent } from "../extent";
+import { Extent, mapsDomain } from "../extent";
 import type { AxisMap } from "../domain";
 import { envFlag } from "../../util";
-import type { RenderSession } from "../_node";
+import type { GoFishNode, RenderSession } from "../_node";
+import { fixedOverflow, warnLayout } from "../layoutWarnings";
 import { resolveUnit, sameUnitVar } from "../measure";
 
 export type ScopeKind = "root" | "sized" | "coord" | "grid" | "recenter";
@@ -226,14 +227,14 @@ export class ScopeRegistry {
    * size of its own can map that domain at the same σ ({@link keyedSigma}).
    */
   solveFixed(
-    node: object,
+    node: GoFishNode,
     key: string | undefined,
     meta: ScopeMeta,
     space: UnderlyingSpace | undefined,
     claim: Extent | undefined,
     allocated: number
   ): ScopeSolution | undefined {
-    const solution = this.solveScope(meta, space, claim, allocated);
+    const solution = this.fit(meta, node, space, claim, allocated);
     let solves = this.fixed.get(node);
     if (solves === undefined) this.fixed.set(node, (solves = []));
     solves[meta.axis] =
@@ -317,6 +318,50 @@ export class ScopeRegistry {
   }
 
   /**
+   * Fit a scope root's claim to its slot on one axis: the one solve of every
+   * sized site (the render root, a node with a size of its own, a coord
+   * boundary). A claim with no σ in it maps no domain (`mapsDomain`), so it
+   * is not solved. Any other claim solves `claim.width(σ) = allocated`
+   * ({@link solveScope}). When no σ ≥ 0 does, the claim's fixed parts need
+   * more than the slot: the scope takes the σ at which the part of the claim
+   * that grows with σ, alone, fills the slot (`Pwl.rising`), as if the fixed
+   * parts took no room, and the layout warns once, at `node`
+   * (`fixedOverflow`). A claim with no σ in it that is larger than its slot
+   * warns the same way, and gets no scope.
+   *
+   * `node` is the node whose slot `allocated` is (for a node with a size of
+   * its own, `claim` is its content's). It is undefined for a slot that is
+   * not a pixel limit, where nothing warns: the default canvas of a render
+   * with no size on the axis, which grows to hold its claim (#1179), and a
+   * coord's budget. TODO(#1176): a coord's budget is in its coordinate
+   * units (radians on a polar θ axis), so comparing its claim's fixed
+   * pixels with it warns falsely (35 lines in 26 stories). Whether a
+   * coord's budget is a limit, and in which units, is open; until then a
+   * coord does not warn, as before.
+   */
+  fit(
+    meta: ScopeMeta,
+    node: GoFishNode | undefined,
+    space: UnderlyingSpace | undefined,
+    claim: Extent | undefined,
+    allocated: number
+  ): ScopeSolution | undefined {
+    if (claim === undefined) return undefined;
+    const maps = mapsDomain(space, claim);
+    const solved = maps
+      ? this.solveScope(meta, space, claim, allocated)
+      : undefined;
+    if (solved !== undefined) return solved;
+    if (node !== undefined)
+      warnLayout(node, fixedOverflow(node, meta.axis, claim, allocated));
+    const grows = maps ? Pwl.rising(claim.width) : undefined;
+    const sigma = grows && Pwl.solve(grows, allocated);
+    return sigma === undefined
+      ? undefined
+      : this.scopeAt(meta, space, claim, sigma);
+  }
+
+  /**
    * Solve a scope root on one axis from its type and size claim. Every
    * continuous scope solves the same frame equation, `claim.width(σ) =
    * allocated`, so any pixel overhead the claim carries (spacing, padding)
@@ -372,8 +417,10 @@ export class ScopeRegistry {
   /**
    * A scope root on one axis at a σ solved elsewhere: a render root with no
    * size of its own maps its keyed domain at the σ the nodes with a literal
-   * size solve it at ({@link keyedSigma}). Its `originPx` follows from its
-   * claim at that σ, as in {@link solveScope}, and its box is that claim.
+   * size solve it at ({@link keyedSigma}), and a scope whose claim overflows
+   * its slot takes the σ {@link fit} falls back to. Its `originPx` follows
+   * from its claim at that σ, as in {@link solveScope}, and its box is that
+   * claim.
    */
   scopeAt(
     meta: ScopeMeta,

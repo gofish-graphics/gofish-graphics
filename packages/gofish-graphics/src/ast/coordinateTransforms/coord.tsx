@@ -453,19 +453,23 @@ export const coord = createNodeOperator(
                       Pwl.affine(-resolved.dataInterval.min, 0)
                     )
                   );
-            const scope = scopes.solveScope(
+            // The one scope fit (`ScopeRegistry.fit`): a claim with no σ in
+            // it maps no data, so it is not solved and hands no σ down. The
+            // budget is in coordinate units, not a pixel limit, so the fit
+            // does not warn here (TODO(#1176), see `fit`).
+            const scope = scopes.fit(
               {
                 kind: "coord",
                 rootKey: node.key ?? node.type,
                 axis,
                 dataZero: classes.HasCycle === undefined ? "claim" : "start",
               },
+              undefined,
               resolved,
               claim,
               budget
             );
-            if (scope === undefined) return [1, undefined];
-            return [scope.sigma, scope];
+            return [scope?.sigma, scope];
           };
           const [sfX, scopeX] = fitAxis(0, budget[0]);
           const [sfY, scopeY] = fitAxis(1, budget[1]);

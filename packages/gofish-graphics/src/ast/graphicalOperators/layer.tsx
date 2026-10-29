@@ -2,8 +2,8 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import { GoFishNode, warnLayout, type ToPixel } from "../_node";
-import { fixedOverflowInside, spacingOverflow } from "../layoutWarnings";
+import { GoFishNode, type ToPixel } from "../_node";
+import { spacingOverflow, warnLayout } from "../layoutWarnings";
 import type { DisplayList } from "gofish-ir";
 import { getScopeRegistry, seatInScope } from "../solver/scopes";
 import { isToken } from "../createName";
@@ -797,7 +797,7 @@ export const layer = createNodeOperatorSequential(
                 claim,
               ],
             scopes,
-            node.key ?? node.type,
+            node,
             [scopes.fixedSolve(node, 0), scopes.fixedSolve(node, 1)]
           );
           const childScaleFactors = layerScales.sigmas;
@@ -812,11 +812,6 @@ export const layer = createNodeOperatorSequential(
             ];
             seatPastGutters(node);
           }
-          // No σ fits the size this layer has: its fixed parts need more.
-          // It keeps the inherited σ, and the layout warns
-          // (`layoutWarnings.ts`).
-          for (const axis of layerScales.failedAxes)
-            warnLayout(node, fixedOverflowInside(node, axis, size[axis]));
 
           // Per-child proposed size for distribute-covered children: each
           // distribute segment slices its axis size equally among its covered

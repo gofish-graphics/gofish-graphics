@@ -244,10 +244,16 @@ where that meets the canvas:
 `coord.layout` is a **scale scope**, exactly like the root fits content to the
 canvas (gofish.tsx) — here the angular/radial budget plays the canvas role. Its
 `fitAxis(axis, budget)` solves the coord's own scope on that axis with the
-same `solveScope` the root uses: σ from the coord's claim (its children's
-claims overlaid, or a declared window's width) against the budget, so the
-children fill the ring, and, for a pinned axis, the map onto the budget that
-its children share. A free child is seated at the scope's `originPx`.
+same scope fit the root uses (`ScopeRegistry.fit`): σ from the coord's claim
+(its children's claims overlaid, or a declared window's width) against the
+budget, so the children fill the ring, and, for a pinned axis, the map onto
+the budget that its children share. A free child is seated at the scope's
+`originPx`. A claim with no σ in it (a pie of literal angles) maps no data,
+so it is not solved and the coord hands no σ down. A claim whose fixed parts
+need more than the budget gets the fit's one fallback, as at the root, but
+no warning: the budget is in coordinate units (radians on a polar θ axis),
+so comparing the claim's fixed pixels with it would warn falsely. Whether a
+coord's budget is a limit, and in which units, is still open.
 
 The fit departs from the root only where the coordinate space's domain has
 structure that layout must keep. The transform declares it per axis as

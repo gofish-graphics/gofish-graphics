@@ -1385,8 +1385,10 @@ once you know the kind, you know which arithmetic applies.
 Every scale above resolves the same frame equation — `content(σ) = allocated`,
 inverted once by `Pwl.solve` — and one registry does the inversion. A
 `ScopeRegistry` (`ast/solver/scopes.ts`), created once per render on the
-`RenderSession`, is the one place σ / posScale is derived: `solveScope(space,
-claim, allocated)` solves a sized node's σ and its `originPx`, and
+`RenderSession`, is the one place σ / posScale is derived: `fit(meta, node,
+space, claim, allocated)` fits a sized node's claim to its slot (through
+`solveScope(space, claim, allocated)`, which solves σ and `originPx`, with
+one fallback and one warning when no σ ≥ 0 fits), and
 `solveSize(frame, allocated)` inverts a bare claim (a grid's tracks).
 
 **Only a sized node solves; everyone else inherits** (#1114). A node is sized on

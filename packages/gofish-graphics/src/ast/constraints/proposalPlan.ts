@@ -17,6 +17,7 @@ import {
 import { originIs, type UnderlyingSpace } from "../underlyingSpace";
 import { mapsDomain, type Extent } from "../extent";
 import type { AxisMap } from "../domain";
+import type { GoFishNode } from "../_node";
 import { sliceExtent } from "./folds";
 import {
   frameOf,
@@ -358,8 +359,6 @@ export type LayerScales = {
   /** Per axis: the scope the layer seats its children in (`seatInScope`):
    *  the scope it solved there, or the frame it inherits. */
   scopes: Size<ScopeSolution | undefined>;
-  /** Axes whose solve was attempted and failed (a claim with no σ in it). */
-  failedAxes: (0 | 1)[];
 };
 
 /**
@@ -384,9 +383,9 @@ export type LayerScales = {
  * A sized node maps its keyed domain (the domain of its content's unit in its
  * space, see `keyedDomains.ts`) into its size: `scope` widens its claim to
  * the domain and nices it when an axis is drawn over it
- * (`KeyedDomains.scope`), and the result is solved once through the registry
- * (`solveScope`). Its frame is the solved
- * scope's. Every other axis inherits σ, and its frame follows from its type
+ * (`KeyedDomains.scope`), and the result is fitted once to its size through
+ * the registry (`ScopeRegistry.fit`, which warns when its fixed parts need
+ * more than the size). Its frame is the solved scope's. Every other axis inherits σ, and its frame follows from its type
  * ({@link frameOf}).
  */
 export function solveLayerScales(
@@ -410,7 +409,8 @@ export function solveLayerScales(
     claim: Extent
   ) => [UnderlyingSpace | undefined, Extent | undefined],
   scopes: ScopeRegistry,
-  rootKey: string,
+  // The layer, whose slot its content is fitted to (`ScopeRegistry.fit`).
+  node: GoFishNode,
   // Per axis: the scope a literal size solved in the claim walk.
   fixed: Size<FixedSolve | undefined> = [undefined, undefined]
 ): LayerScales {
@@ -423,7 +423,6 @@ export function solveLayerScales(
     undefined,
     undefined,
   ];
-  const failedAxes: (0 | 1)[] = [];
 
   for (const axis of [0, 1] as const) {
     const content = contentSpaces?.[axis];
@@ -444,8 +443,9 @@ export function solveLayerScales(
       // any other sized node solves here, against the size it is given.
       const solve = (): FixedSolve | undefined => {
         const [space, nicedClaim] = scope(axis, content, claim);
-        const solution = scopes.solveScope(
-          { kind: "sized", rootKey, axis },
+        const solution = scopes.fit(
+          { kind: "sized", rootKey: node.key ?? node.type, axis },
+          node,
           space,
           nicedClaim,
           layerSize[axis]
@@ -469,7 +469,6 @@ export function solveLayerScales(
         seatScopes[axis] = solved;
         continue;
       }
-      failedAxes.push(axis);
     }
     frames[axis] = frameOf(reported?.[axis], {
       sigma: sigmas[axis],
@@ -477,7 +476,7 @@ export function solveLayerScales(
     });
     seatScopes[axis] = frames[axis];
   }
-  return { frames, sigmas, scopes: seatScopes, failedAxes };
+  return { frames, sigmas, scopes: seatScopes };
 }
 
 /** Select the layer's single grid constraint, if any.

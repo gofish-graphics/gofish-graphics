@@ -5,6 +5,7 @@
 import type { GoFishNode } from "./_node";
 import type { DistributeConstraint } from "./constraints/distribute";
 import { axisIndex, axisName } from "./constraints/shared";
+import type { Extent } from "./extent";
 import { room } from "../util";
 import * as Pwl from "./solver/pwl";
 
@@ -38,6 +39,18 @@ export type LayoutWarning = {
   overflow?: [number, number];
   /** The whole warning as one line, as it is printed. */
   message: string;
+};
+
+/** Record `warning` (if any) on the render of `node`, once per message. */
+export const warnLayout = (
+  node: GoFishNode,
+  warning: LayoutWarning | undefined
+): void => {
+  if (warning === undefined) return;
+  const session = node.tryGetRenderSession();
+  if (session === undefined) return;
+  const list = (session.warnings ??= []);
+  if (!list.some((w) => w.message === warning.message)) list.push(warning);
 };
 
 /** The prefix every layout warning is printed with. */
@@ -110,13 +123,16 @@ const largestChild = (
  * (a chart's rings, a label wrapper), taking off the pixels the node adds
  * around that child, to the first node that lays several parts out along
  * the axis (a spread), has a size of its own, or has no child that claims.
+ * `startPx` is the fixed pixels of the claim `start` fits to its slot.
  */
 function culprit(
   start: GoFishNode,
   axis: 0 | 1,
-  available: number
-): { node: GoFishNode; available: number } {
+  available: number,
+  startPx: number
+): { node: GoFishNode; available: number; px: number } {
   let node = start;
+  let nodePx = startPx;
   for (;;) {
     if (chainOn(node, axis) !== undefined) break;
     if (node !== start && node.claimWalk?.ownScope[axis] === true) break;
@@ -125,22 +141,28 @@ function culprit(
     // Mostly one child's: more than half of the node's fixed pixels. A
     // node whose fixed pixels are spread over its children (a literal
     // position here, a fixed-size box there) holds them itself.
-    if (fixedPx(big, axis) * 2 <= fixedPx(node, axis)) break;
-    available -= fixedPx(node, axis) - fixedPx(big, axis);
+    const bigPx = fixedPx(big, axis);
+    if (bigPx * 2 <= nodePx) break;
+    available -= nodePx - bigPx;
     node = big;
+    nodePx = bigPx;
   }
-  return { node, available };
+  return { node, available, px: nodePx };
 }
 
 /**
- * The fixed parts under `node` on `axis`: the spacing of each spread along
- * it and the size of each node with a size of its own (parts of one
- * description summed, with how many there are), and the rest of its fixed
- * pixels (text, literal sizes and positions, chrome).
+ * The fixed parts under `node` on `axis`, which come to `total` pixels: the
+ * spacing of each spread along it and the size of each node with a size of
+ * its own (parts of one description summed, with how many there are), and
+ * the rest (text, literal sizes and positions, chrome). `ofContent` says
+ * the pixels are those of the content `node` fits into its own size, not
+ * its own claim, which for a node with a size of its own is that size.
  */
 function fixedParts(
   node: GoFishNode,
-  axis: 0 | 1
+  axis: 0 | 1,
+  total: number,
+  ofContent: boolean
 ): { part: string; px: number }[] {
   const spacing = new Map<string, { each: number; count: number }>();
   const add = (key: string, each: number) => {
@@ -149,7 +171,7 @@ function fixedParts(
     spacing.set(key, cur);
   };
   const visit = (n: GoFishNode) => {
-    if (n.claimWalk?.ownScope[axis] === true) {
+    if (n.claimWalk?.ownScope[axis] === true && !(ofContent && n === node)) {
       add(`${describeNode(n)}: its own size`, fixedPx(n, axis));
       return;
     }
@@ -165,14 +187,14 @@ function fixedParts(
     for (const c of composing(n, axis)) visit(c);
   };
   // A node with a size of its own holds that size, whatever is in it.
-  if (node.claimWalk?.ownScope[axis] === true)
-    return [{ part: "its own size", px: fixedPx(node, axis) }];
+  if (!ofContent && node.claimWalk?.ownScope[axis] === true)
+    return [{ part: "its own size", px: total }];
   visit(node);
   const parts = [...spacing].map(([key, { each, count }]) => ({
     part: count > 1 ? `${key}, ×${count}` : key,
     px: each * count,
   }));
-  const rest = fixedPx(node, axis) - parts.reduce((a, p) => a + p.px, 0);
+  const rest = total - parts.reduce((a, p) => a + p.px, 0);
   if (rest > 0.5)
     parts.push({
       part: "other fixed sizes (text, literal sizes and positions, chrome)",
@@ -182,24 +204,29 @@ function fixedParts(
 }
 
 /**
- * A `fixed-overflow` warning for `start`, whose fixed parts on `axis` need
- * more than the `available` pixels it is given, or undefined when they fit.
- * It names the node that holds the fixed parts (see {@link culprit}).
+ * A `fixed-overflow` warning for `start`, which fits `claim` into the
+ * `available` pixels of its slot on `axis` (`ScopeRegistry.fit`), or
+ * undefined when the claim's fixed parts (its pixels at σ = 0) fit. The
+ * claim is `start`'s own, or for a node with a size of its own, that of
+ * the content it maps into that size. It names the node that holds the
+ * fixed parts (see {@link culprit}).
  */
 export function fixedOverflow(
   start: GoFishNode,
   axis: 0 | 1,
+  claim: Extent,
   available: number
 ): LayoutWarning | undefined {
   if (!Number.isFinite(available)) return undefined;
-  if (fixedPx(start, axis) <= available + 0.5) return undefined;
-  const at = culprit(start, axis, available);
+  const needed = room(Pwl.at(claim.width, 0));
+  if (needed <= available + 0.5) return undefined;
+  const at = culprit(start, axis, available, needed);
   return fixedWarning(
     at.node,
     axis,
-    fixedPx(at.node, axis),
+    at.px,
     at.available,
-    fixedParts(at.node, axis),
+    fixedParts(at.node, axis, at.px, at.node === start),
     "The parts that scale are drawn as if the fixed parts took no room"
   );
 }
@@ -230,18 +257,6 @@ function fixedWarning(
       parts.map((p) => `${p.part} = ${px(p.px)}`).join("; ") +
       `. ${drawn}, and the graphic overflows on ${name}.`,
   };
-}
-
-/** {@link fixedOverflow} for the content of `node`, a node with a size of
- *  its own (`available` pixels) on `axis`: its child whose claim holds the
- *  most fixed pixels. */
-export function fixedOverflowInside(
-  node: GoFishNode,
-  axis: 0 | 1,
-  available: number
-): LayoutWarning | undefined {
-  const big = largestChild(node, axis);
-  return big === undefined ? undefined : fixedOverflow(big, axis, available);
 }
 
 /** A `fixed-overflow` warning for the spread `node`, whose spacing alone

@@ -12,7 +12,6 @@ import {
   debugNodeTree,
   debugUnderlyingSpaceTree,
   GoFishNode,
-  warnLayout,
   type RenderSession,
 } from "./_node";
 import type { GoFishAST } from "./_ast";
@@ -31,9 +30,9 @@ import {
 } from "./underlyingSpace";
 import { mapsDomain, type Extent } from "./extent";
 import {
-  fixedOverflow,
   inkOverflow,
   reportLayoutWarnings,
+  warnLayout,
   type LayoutWarning,
 } from "./layoutWarnings";
 import { axisName } from "./constraints/shared";
@@ -609,48 +608,45 @@ export async function layout(
     const key = mapsDomain(space, claim)
       ? keyedDomains.axisKey(root, axis, root._underlyingSpace![axis])
       : undefined;
-    const keyed = key === undefined ? undefined : scopes.keyedSigma(key, axis);
+    const keyed =
+      key === undefined || given[axis] !== undefined
+        ? undefined
+        : scopes.keyedSigma(key, axis);
     const allocated = given[axis] ?? DEFAULT_CANVAS_SIZE;
-    // A root given a slot fits its claim to it. When no σ does, the
-    // nodes with a literal size and their chrome are larger than the slot
-    // (over-constrained, #1032): the root maps its domain at their σ, and
-    // overflows the slot like any other fixed size. With no such nodes,
-    // what is larger than the slot is pixels that do not scale (a text at
-    // a literal position past the slot's end): the data fills the slot,
-    // at the σ where the part of the claim that grows with σ, alone,
-    // reaches it (as if the fixed parts took no room),
-    // and the pixels overflow.
-    // Fixed parts larger than the slot: no σ ≥ 0 fits (a numeric solve
-    // of a claim with no pieces would settle at σ = 0), and the layout
-    // warns (`layoutWarnings.ts`).
-    const overfull =
-      given[axis] !== undefined &&
-      claim !== undefined &&
-      Pwl.at(claim.width, 0) > allocated + 0.5;
-    if (overfull) warnLayout(root, fixedOverflow(root, axis, allocated));
-    const fitted =
-      overfull || (given[axis] === undefined && keyed !== undefined)
-        ? undefined
-        : scopes.solveScope(meta, space, claim, allocated);
-    const grows = claim === undefined ? undefined : Pwl.rising(claim.width);
-    const below =
-      fitted !== undefined
-        ? undefined
-        : (keyed ?? (grows && Pwl.solve(grows, allocated)));
+    // An unsized root whose nodes with a literal size map its keyed domain
+    // maps it at their σ. Any other root fits its claim to its slot, the
+    // render's or the default canvas, by the one scope fit
+    // (`ScopeRegistry.fit`). When the claim's fixed parts are larger than
+    // the slot, the data fills the slot as if they took no room, and the
+    // pixels overflow. A render size is a limit, so the fit warns there.
+    // The default canvas is not one: it grows to hold the claim (#1179).
     const scope =
-      below === undefined ? fitted : scopes.scopeAt(meta, space, claim, below);
-    // A scope solved against the box fills it (a one-value domain's claim
-    // is centered in it); one at a σ from below is its claim at that σ.
-    const px =
+      keyed !== undefined
+        ? scopes.scopeAt(meta, space, claim, keyed)
+        : scopes.fit(
+            meta,
+            given[axis] === undefined ? undefined : root,
+            space,
+            claim,
+            allocated
+          );
+    // The root is its slot, or its claim at its σ where that is larger
+    // (a claim that overflows its slot) or where its σ is not its slot's
+    // (`keyed`). A claim with no scope is only pixels, so it is its box.
+    const width =
       claim === undefined
         ? undefined
         : scope !== undefined
-          ? below === undefined
-            ? allocated
-            : Pwl.at(claim.width, scope.sigma)
+          ? Pwl.at(claim.width, scope.sigma)
           : Pwl.isConstant(claim.width)
             ? Pwl.at(claim.width, 0)
             : undefined;
+    const px =
+      width === undefined || scope === undefined
+        ? width
+        : keyed !== undefined || width > allocated + 0.5
+          ? width
+          : allocated;
     return {
       scope,
       px:

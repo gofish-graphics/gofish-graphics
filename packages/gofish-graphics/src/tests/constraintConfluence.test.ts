@@ -1296,7 +1296,8 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
         return niceScope(wide, wideClaim, ticks(axis));
       },
       new ScopeRegistry(),
-      "test"
+      // The layer: only read to name a scope, or to warn at.
+      { key: "test", type: "layer" } as any
     );
     return { ...scales, solved };
   };
@@ -1351,8 +1352,7 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
   ok(
     // Only pixels (fixed boxes): nothing to solve, and not a failure.
     "a claim with no σ in it is not solved, and inherits",
-    unscaled.failedAxes.length === 0 &&
-      unscaled.solved.length === 1 &&
+    unscaled.solved.length === 1 &&
       unscaled.sigmas[1] === undefined
   );
 

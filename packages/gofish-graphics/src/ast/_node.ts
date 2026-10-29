@@ -192,18 +192,6 @@ export const outlineOverhang = (
     ? strokeWidth / 2
     : 0;
 
-/** Record `warning` (if any) on the render of `node`. */
-export const warnLayout = (
-  node: GoFishNode,
-  warning: LayoutWarning | undefined
-): void => {
-  if (warning === undefined) return;
-  const session = node.tryGetRenderSession();
-  if (session === undefined) return;
-  const list = (session.warnings ??= []);
-  if (!list.some((w) => w.message === warning.message)) list.push(warning);
-};
-
 /** The claim walk's memos of a node (`GoFishNode._claimMemo`), cleared with
  *  its claims. */
 type ClaimMemo = {
