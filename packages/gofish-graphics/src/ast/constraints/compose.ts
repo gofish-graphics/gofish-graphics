@@ -63,6 +63,7 @@ import {
   type StackOrigin,
 } from "./distribute";
 import { type AlignConstraint } from "./align";
+import { getPositioningConstraintRefs } from "./proposalPlan";
 import {
   axisCoordinates,
   isPositionInterval,
@@ -372,7 +373,18 @@ export type SharingPlan = {
    *  with content a σ-scope of its own (`GoFishNode.isScope`). None when
    *  absent. */
   rooms?: [Set<number>, Set<number>];
+  /** Per axis: the region layout hands each child of a layer there
+   *  (`buildChildProposals`): `"cell"` for a child its `position` gives a
+   *  cell that spans the axis, `"passed"` for a child that gets the region
+   *  the layer was handed (one whose cell leaves the axis open, or that no
+   *  constraint places). A child with no entry is handed none. None when
+   *  absent (`GoFishNode.handsRegion`). */
+  handed?: [Map<number, Handed>, Map<number, Handed>];
 };
+
+/** What layout hands a child as its region on one axis
+ *  (`SharingPlan.handed`). */
+export type Handed = "cell" | "passed";
 
 /** What a child is to its parent on one axis, by the parent's plan:
  *
@@ -419,6 +431,19 @@ export function planSharing(
   const datumPlaced: [Set<number>, Set<number>] = [new Set(), new Set()];
   const nested: [Set<number>, Set<number>] = [new Set(), new Set()];
   const rooms: [Set<number>, Set<number>] = [new Set(), new Set()];
+  // Every child no constraint places gets the region the layer was handed.
+  const handed: [Map<number, Handed>, Map<number, Handed>] = [
+    new Map(),
+    new Map(),
+  ];
+  const placed = new Set(
+    idxOf(
+      [...getPositioningConstraintRefs(constraints)].map((name) => ({ name }))
+    )
+  );
+  childNodes.forEach((_, i) => {
+    if (!placed.has(i)) for (const h of handed) h.set(i, "passed");
+  });
   const detached: [Set<number>, Set<number>] = [new Set(), new Set()];
   const joins: [number[][], number[][]] = [[], []];
   const detach = (axis: 0 | 1, idx: number[]) =>
@@ -451,6 +476,15 @@ export function planSharing(
             (axis === 0 ? c.x : c.y) === undefined
           )
             idx.forEach((i) => rooms[axis].add(i));
+          // Layout hands a child its cell, or on an axis the cell leaves
+          // open, the region the layer was handed (`cellRegion`).
+          if (c.region !== undefined)
+            idx.forEach((i) =>
+              handed[axis].set(
+                i,
+                c.region!.spans[axis] !== undefined ? "cell" : "passed"
+              )
+            );
         }
         break;
       }
@@ -524,7 +558,7 @@ export function planSharing(
       return s;
     });
   }
-  return { sets, nested, rooms, datumPlaced };
+  return { sets, nested, rooms, handed, datumPlaced };
 }
 
 const foldOptions = (s: Seg) => ({

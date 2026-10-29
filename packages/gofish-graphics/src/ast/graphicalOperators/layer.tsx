@@ -912,11 +912,15 @@ export const layer = createNodeOperatorSequential(
             // derived). Clamp ≥ 0; non-derived axes keep the normal child
             // proposal, so nest composes with — and wins on its derived axes
             // over — any other proposal.
+            // Its cell, or the region this layer was handed, which it
+            // passes on (`SharingPlan.handed`).
             const childRegion =
               (childName !== undefined
                 ? proposals.regionByName.get(childName)
                 : undefined) ??
-              (constrainedChildren.has(i) ? undefined : proposals.passedOn);
+              (node.sharing().handed?.[0].get(i) === "passed"
+                ? proposals.passedOn
+                : undefined);
             // In a share scope (`sharesRoom`) a child is laid out at its
             // claim at σ: a band is one σ, and a node that holds bands is
             // what its claim says at the σ the scope solved. So is a share

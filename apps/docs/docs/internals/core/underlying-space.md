@@ -2569,7 +2569,11 @@ and a `text` as a partition's mark gives each cell to both: the region
 draws it, and the text sits at its center. A layer passes the region it was
 handed on in its own frame, each span starting at 0 (`rebaseRegion`), and
 `GoFishNode.layout` places the layer itself in the region it was handed, as
-it places any node.
+it places any node. Which child gets which region is recorded once, in the layer's
+sharing plan (`SharingPlan.handed`: its cell, or the region the layer was
+handed, passed on), and both layout and the claim walk's plan (which
+leaves out an `align` on an axis whose operands are all handed a region,
+`GoFishNode.handsRegion`) read it there.
 
 The region holds its cell (a `RegionCell`, cells.ts: an id, a label when it
 has one, a span per axis, and an outline when it is not a box) and the

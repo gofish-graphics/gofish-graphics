@@ -22,12 +22,7 @@ import {
   type ClaimPlacement,
   type Placement,
 } from "../constraints/claimPlacement";
-import {
-  getPositioningConstraintRefs,
-  type AlignConstraint,
-  type ConstraintSpec,
-} from "../constraints";
-import { childNameKey } from "../constraints/shared";
+import { type AlignConstraint, type ConstraintSpec } from "../constraints";
 
 /** What a child is to its parent's plan on one axis, about its data 0, in
  *  the parent's axis order. */
@@ -145,31 +140,9 @@ const placesItself = (c: GoFishAST, axis: 0 | 1): boolean => {
 };
 
 /**
- * Whether layout hands `node` a region on `axis` (`buildChildProposals`):
- * its parent layer's cell for it spans the axis, or the parent passes on to
- * it the region the parent was handed, to a child whose cell leaves the
- * axis open or that no constraint places.
- */
-const handedRegion = (node: GoFishAST, axis: 0 | 1): boolean => {
-  const p = node.parent;
-  if (!(p instanceof GoFishNode) || (p.type !== "layer" && p.type !== "box"))
-    return false;
-  const key = childNameKey(node);
-  if (key === undefined) return false;
-  for (const c of p.constraints)
-    if (c.type === "position" && c.region !== undefined)
-      if (c.children.some((r) => r?.name === key))
-        return c.region.spans[axis] !== undefined || handedRegion(p, axis);
-  return (
-    !getPositioningConstraintRefs(p.constraints).has(key) &&
-    handedRegion(p, axis)
-  );
-};
-
-/**
  * `constraints` as the solve sees them once layout has handed each child
  * its region (`placementConstraints`): an `align` loses each axis on which
- * every one of its operands is handed a region (`handedRegion`), since the
+ * every one of its operands is handed a region (`handsRegion`), since the
  * region placed them there, and goes when it has no axis left. A partition
  * inside another partition's cell is such a case.
  */
@@ -181,7 +154,7 @@ const withoutSpannedAligns = (
   const spanned = (c: AlignConstraint, axis: 0 | 1) =>
     c.children.every((r) => {
       const op = operands.get(r.name);
-      return op?.direct === true && handedRegion(node.children[op.child], axis);
+      return op?.direct === true && node.handsRegion(op.child, axis);
     });
   const out: ConstraintSpec[] = [];
   for (const c of constraints) {

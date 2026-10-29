@@ -1412,6 +1412,20 @@ export class GoFishNode {
     return false;
   }
 
+  /** Whether layout hands this node's `child`-th child a region on `axis`
+   *  (`SharingPlan.handed`): its cell, or the region this node was handed,
+   *  which it passes on. */
+  public handsRegion(child: number, axis: 0 | 1): boolean {
+    const h = this.sharing().handed?.[axis].get(child);
+    const p = this.parent;
+    return (
+      h === "cell" ||
+      (h === "passed" &&
+        p !== undefined &&
+        p.handsRegion(p.children.indexOf(this), axis))
+    );
+  }
+
   /** Whether this node's parent gives it its room on `axis`, from outside
    *  its content: a region's cell (a `partition` cell) or a treemap tile
    *  (`SharingPlan.rooms`). */
