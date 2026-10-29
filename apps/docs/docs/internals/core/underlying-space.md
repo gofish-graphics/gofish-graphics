@@ -554,8 +554,15 @@ each inherent to what the origin states are:
   whose room is `σ`. A node with no size of its own hugs its content, so it
   passes the question to its parent; a room-given node (a facet panel, a
   cell, a tile, a coord) is not asked, and a percent under one throws. So a
-  percent is a constant at a scope, which acts as pixels (`bindLengths`
-  makes it the node's `dims.size`), or a σ term in a band, which is a share.
+  percent is a constant at a scope, which acts as pixels, or a σ term in a
+  band, which is a share. The length stays in the node's own box as its
+  size, a fourth kind beside pixels, data and none (`OwnSize` in
+  `ast/dims.ts`), and each reader of that size says what a length is to it:
+  the type pass reads no data in it (`sizeForType`), a layout reads the size
+  the node fixes for itself (`GoFishNode.fixedSize`: the length's pixels
+  where its room is a constant, none where it is a share, which fills the
+  room it is given), and the length itself is read where it is laid out
+  (`GoFishNode.lengthOn`, `ownLength`).
   Either way it is a `Pwl` value before the solve, and no claim carries an
   unknown parent size. Spacing is the same: a spread's length gap is
   resolved in the layer claim hook (`resolveSpacing`) against the spread's

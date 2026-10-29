@@ -4,6 +4,7 @@
 
 import type { ConstraintSpec } from ".";
 import type { Dimensions, Size } from "../dims";
+import { isLength } from "../length";
 import {
   isNestConstraint,
   nestedExtent,
@@ -18,6 +19,9 @@ export type NestPlanChild = NamedNode & {
   key?: string;
   args?: { dims?: [{ size?: unknown }, { size?: unknown }] };
   children?: readonly unknown[];
+  /** Its own length's pixels on an axis, where its room is known before
+   *  the layer solve (`GoFishNode.lengthPx`). */
+  lengthPx?: (axis: 0 | 1) => number | undefined;
 };
 
 // ── Nest pre-pass ───────────────────────────────────────────────────────────
@@ -242,10 +246,13 @@ export function buildNestPlan(
   }
 
   /** The node's own declared size on `axis` (literal px or `value(v)`), or
-   *  undefined when it is a fill/derived child. */
+   *  undefined when it is a fill/derived child. A length (#1176 step 6) is
+   *  its pixels where its room is known, and none where it is a share of
+   *  its scope: the scope sizes it, as it sizes a fill. */
   const ownSize = (idx: number, axis: 0 | 1) => {
     const n = childNodes[idx];
-    return n.args?.dims?.[axis]?.size;
+    const size = n.args?.dims?.[axis]?.size;
+    return isLength(size) ? n.lengthPx?.(axis) : size;
   };
   // A composite (any node with children — a stack, a layer, a nested
   // box) shrink-wraps to its content, so it carries a definite extent without

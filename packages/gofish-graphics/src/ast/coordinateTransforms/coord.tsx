@@ -195,7 +195,7 @@ export const coord = createNodeOperator(
     // A length for its box's size (a polar chart's `w: percent(50)`) is laid
     // out in the room it is given, once it is in its tree (#1176 step 6).
     const own = elaborateOwnDims<number>(fancyDims);
-    const { dims, lengths } = own;
+    const { dims } = own;
     // THE discriminator: does this space frame its own window? A `fit`-ted space
     // (geo) lays out in a data window, so its budget IS the frame — which decides
     // the budget rule, the box, the culling frame and whether the polar overlays
@@ -289,8 +289,6 @@ export const coord = createNodeOperator(
             axes ||
             dims[0].size !== undefined ||
             dims[1].size !== undefined ||
-            lengths[0] !== undefined ||
-            lengths[1] !== undefined ||
             (coordTransform.innerRadius ?? 0) > 0
           )
             return [undefined, undefined];
@@ -328,10 +326,13 @@ export const coord = createNodeOperator(
           /* TODO: need correct scale factors */
           // TODO: only works for polar-family transforms right now
           // An explicit `w`/`h` is the coord's box, as it is a layer's (#535).
+          // A length's box is its pixels where its room is known before the
+          // solve, and the room it is given where it is a share of its scope
+          // (`fixedSize`).
           size = [
-            computeSize(dims[0].size, scales?.[0]?.sigma ?? 1, size[0]) ??
+            computeSize(node.fixedSize(0), scales?.[0]?.sigma ?? 1, size[0]) ??
               size[0],
-            computeSize(dims[1].size, scales?.[1]?.sigma ?? 1, size[1]) ??
+            computeSize(node.fixedSize(1), scales?.[1]?.sigma ?? 1, size[1]) ??
               size[1],
           ];
           const [origW, origH] = size;

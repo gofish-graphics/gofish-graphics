@@ -18,7 +18,9 @@ import {
 import {
   Dimensions,
   displayDims as displayDimsOf,
+  type Interval,
   elaborateOwnDims,
+  sizeForType,
   FancyDims,
   FancySize,
   Size,
@@ -121,6 +123,12 @@ export const Rect = ({
   // resolves the axis measure), not inferred here — see _node.resolveEmbedding.
   const own = elaborateOwnDims<MaybeValue<number>>(fancyDims);
   const { dims } = own;
+  // Its box with the size it fixes for itself (`fixedSize`): a length's
+  // pixels, or none for a share of its scope, which fills its room.
+  const fixedBox = (axis: 0 | 1): Interval<MaybeValue<number>> => ({
+    ...dims[axis],
+    size: node.fixedSize(axis),
+  });
   const { rx, ry } = cornerRadii(rxGiven, ryGiven, 0);
   // An inset is never negative. A percent's box is known only at layout, so
   // it is checked here by its parts: a percent and pixels, each 0 or more.
@@ -148,7 +156,7 @@ export const Rect = ({
   // no size and no span there (read after the resolveAliases pass, which
   // writes the axis-name-keyed `dims` onto `dims`).
   const fills = (axis: 0 | 1): boolean =>
-    dims[axis].size === undefined &&
+    node.fixedSize(axis) === undefined &&
     !(dims[axis].min !== undefined && dims[axis].max !== undefined);
   // How it paints its outline, read once.
   const paint = outlinePaint({ fill, stroke, strokeWidth });
@@ -176,10 +184,7 @@ export const Rect = ({
       ) => {
         const resolveAxis = (axis: 0 | 1): UnderlyingSpace => {
           const d = dims[axis];
-          // A length is never data, and its pixels are known only once the
-          // rect is in its tree, after its type: it adds no type, as pixels
-          // do.
-          const dSize = own.dataSize(axis);
+          const dSize = sizeForType(d.size);
           // A box placed by its center is a glyph, as a text or an image is.
           const center = centerOf(d);
           if (center !== undefined) return glyphAxis(center, dSize);
@@ -222,12 +227,12 @@ export const Rect = ({
       // A literal pixel size is the rect's own (#493): it claims it, so
       // whatever composes it leaves it room.
       resolveExtent: (_ce, _cs, spaces) =>
-        literalBoxExtents(spaces, [dims[0], dims[1]], aspectRatio),
+        literalBoxExtents(spaces, [fixedBox(0), fixedBox(1)], aspectRatio),
       layout: (size, scales, children) => {
         const pos = [posFn(scales?.[0]?.map), posFn(scales?.[1]?.map)];
         // The box's pixel size on one axis.
         const sizeOn = (k: 0 | 1): number => {
-          const d = dims[k];
+          const d = fixedBox(k);
           const at = (v: MaybeValue<number> | undefined) =>
             computeAesthetic(v, pos[k], undefined)!;
           const map = scales?.[k]?.map;

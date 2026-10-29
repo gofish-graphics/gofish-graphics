@@ -6,7 +6,13 @@ import { GoFishNode, type ToPixel } from "../_node";
 import type { DisplayList } from "gofish-ir";
 import { getScopeRegistry, seatInBand, seatInScope } from "../solver/scopes";
 import { isToken } from "../createName";
-import { Size, elaborateOwnDims, FancyDims, displayTranslate } from "../dims";
+import {
+  Size,
+  elaborateOwnDims,
+  FancyDims,
+  displayTranslate,
+  sizeForType,
+} from "../dims";
 import {
   UnderlyingSpace,
   isCONTINUOUS,
@@ -169,11 +175,13 @@ export const layer = createNodeOperatorSequential(
 
     // A length for its own size (`w: percent(30)`, `w: fr(2)`, #1176 step
     // 6) is laid out in the room the layer is given, which is known only
-    // once the layer is in its tree, so the layer reads it on demand
-    // (`bindLengths`): its size is then pixels, or none for a share. Its
-    // size where it can be data (`dataSize`): a length never is.
+    // once the layer is in its tree. The size it fixes for itself is its
+    // pixels then, and none where it is a share of its scope, which sizes
+    // it (`fixedSize`): it is then a scope for its content, but not a sized
+    // node. A length is never data (`sizeForType`).
     const own = elaborateOwnDims<number>(options);
-    const { dims, dataSize } = own;
+    const { dims } = own;
+    const dataSize = (axis: 0 | 1) => sizeForType(dims[axis].size);
 
     // SIZED NODES (#1114). A layer with a size of its own on an axis (a
     // literal `w`/`h`, or a data-valued one) is a sized node there: at layout
@@ -613,7 +621,7 @@ export const layer = createNodeOperatorSequential(
           const keyed: KeyedDomains | undefined = session?.keyedDomains;
           const scopes = getScopeRegistry(session);
           for (const axis of [0, 1] as const)
-            if (dims[axis].size !== undefined)
+            if (node.fixedSize(axis) !== undefined)
               setChromeForms(
                 node,
                 axis,
@@ -625,11 +633,11 @@ export const layer = createNodeOperatorSequential(
                     axis,
                     t.resolved[axis],
                     claim,
-                    !isValue(dims[axis].size)
+                    !isValue(dataSize(axis))
                   )[1] ?? claim
               );
           const fixedPx = ([0, 1] as const).map((axis) => {
-            const size = dims[axis].size;
+            const size = node.fixedSize(axis);
             return typeof size === "number" ? size : undefined;
           });
           const solvesDomain = (axis: 0 | 1) =>
@@ -694,8 +702,7 @@ export const layer = createNodeOperatorSequential(
               : shiftExtent(claim, Pwl.constant(min));
           };
           const claims = ([0, 1] as const).map((axis) => {
-            const size = dims[axis].size;
-            if (isValue(size)) return impliedExtent(spaces[axis]);
+            if (isValue(dataSize(axis))) return impliedExtent(spaces[axis]);
             const px = fixedPx[axis];
             if (px !== undefined) return at(axis, fixedClaim(axis, px));
             return at(axis, resolved[axis]);
@@ -730,19 +737,16 @@ export const layer = createNodeOperatorSequential(
           // Compute size using dims (w and h) before passing to children. A
           // node's own size is its plot's: what dresses its content adds
           // around it (`aroundPlot`).
-          size = ([0, 1] as const).map((axis) =>
-            dims[axis].size === undefined
+          size = ([0, 1] as const).map((axis) => {
+            const fixed = node.fixedSize(axis);
+            return fixed === undefined
               ? size[axis]
               : aroundPlot(
                   node,
                   axis,
-                  computeSize(
-                    dims[axis].size,
-                    inheritedScaleFactors[axis]!,
-                    size[axis]
-                  )
-                )
-          ) as Size;
+                  computeSize(fixed, inheritedScaleFactors[axis]!, size[axis])
+                );
+          }) as Size;
 
           // Grid budget (Stage 6e): resolve the tracks under the unified max rule
           // from the cells' pre-layout size claims — each track sizes to the max
@@ -776,10 +780,10 @@ export const layer = createNodeOperatorSequential(
           // A data-valued size's content is a set of its own, so its domain
           // is its unit's. Any other content is in this layer's set, whose
           // domain it shares even when it carries no unit (literals).
-          const viaSet = (axis: 0 | 1) => !isValue(dims[axis].size);
+          const viaSet = (axis: 0 | 1) => !isValue(dataSize(axis));
           const scopes = getScopeRegistry(node.tryGetRenderSession());
           const layerScales = solveLayerScales(
-            [dims[0].size !== undefined, dims[1].size !== undefined],
+            [node.fixedSize(0) !== undefined, node.fixedSize(1) !== undefined],
             layerTypes?.resolved,
             contentExtents,
             node._underlyingSpace,
@@ -1343,7 +1347,7 @@ export const layer = createNodeOperatorSequential(
         const min = dims[axis].min;
         return typeof min === "number" ? min : undefined;
       },
-      ownSize: (axis) => dims[axis].size,
+      ownSize: (axis) => node.fixedSize(axis),
       // A grid's track axis claims by its tracks, so no plan composes
       // through it there.
       plan: (axis) => {
@@ -1351,11 +1355,11 @@ export const layer = createNodeOperatorSequential(
         return isTrackAxis(axis) ? undefined : node._claimMemo.plans[axis];
       },
     };
-    // Give it its lengths, and defer the axis-name-keyed `dims` option to
+    // Give it its own box, and defer the axis-name-keyed `dims` option to
     // the resolveAliases pass.
     own.bind(node);
     // A size of its own makes it a scope of its own there.
-    node.ownsScopeOn = (axis) => dims[axis].size !== undefined;
+    node.ownsScopeOn = (axis) => node.fixedSize(axis) !== undefined;
     // Default zBelow(connector, operand) for relational marks (line/ribbon/…)
     // found anywhere in this layer's subtree, kept apart so a later
     // `.relate()` keeps them (see `applyRelationalZBelowDefaults`).

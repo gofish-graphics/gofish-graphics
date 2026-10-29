@@ -292,7 +292,7 @@ export function mixedSizes(
   const chain = gap === undefined ? part.parent! : part;
   const name = axisName(axis);
   const what = gap ?? describeNode(part);
-  const own = part.ownLengths?.[axis];
+  const own = part.lengthOn(axis);
   const flexible =
     gap !== undefined
       ? `${what} is flexible`

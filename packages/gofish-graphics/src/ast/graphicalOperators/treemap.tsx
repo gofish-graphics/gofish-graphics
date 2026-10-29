@@ -18,6 +18,7 @@ import {
   Direction,
   MARK_DIMS,
   elaborateOwnDims,
+  sizeForType,
 } from "../dims";
 import { getQuantity, getValue, isValue, MaybeValue } from "../data";
 import { computeAesthetic, computeSize } from "../../util";
@@ -141,8 +142,7 @@ const Treemap = createNodeOperator(
           // nothing along the axis by data: it has no axis there and fills the
           // slot it is given.
           const axisSpace = (i: Direction): UnderlyingSpace => {
-            // A length is never data.
-            const size = own.dataSize(i);
+            const size = sizeForType(dims[i].size);
             return isValue(size) ? magnitude(size) : UNDEFINED;
           };
           return [axisSpace(0), axisSpace(1)];
@@ -172,14 +172,16 @@ const Treemap = createNodeOperator(
           };
 
           // Treemap box size per axis (the [w, h] handed to d3-treemap):
-          //  - no size      -> fill the slot the parent gave (size[dir]).
-          //  - numeric size -> that many px (computeSize literal branch).
+          //  - no size      -> fill the slot the parent gave (size[dir]), as a
+          //    length that is a share of its scope does (`fixedSize`).
+          //  - numeric size -> that many px (computeSize literal branch), as a
+          //    length whose room is known is.
           //  - data-driven  -> if a shared posScale exists on this axis (the
           //    faceting parent composed POSITION[0,maxV] across siblings), map
           //    the value through it so all facets share one scale; otherwise
           //    solve our own factor and multiply.
           const resolveAxisSize = (dir: Direction): number => {
-            const declared = dims[dir].size;
+            const declared = node.fixedSize(dir);
             if (declared === undefined) return size[dir];
             if (!isValue(declared)) {
               return computeSize(

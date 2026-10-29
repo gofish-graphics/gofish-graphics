@@ -111,64 +111,6 @@ export const lengthIn = (
   return Pwl.addConstant(Pwl.scale((p ?? 0) / 100, room()), px ?? 0);
 };
 
-/** Per axis, a length or none. */
-export type LengthPair = [
-  LengthValue | Length | undefined,
-  LengthValue | Length | undefined,
-];
-
-/**
- * Take a construct's own `w`/`h` lengths out of its options (`w:
- * percent(30)`, `h: fr(2)`), leaving pixels and data values where they
- * are: a copy of the options without them, and per axis, the length taken,
- * or undefined. The construct gives them to its node ({@link bindLengths}).
- */
-export const takeLengths = (
-  options: Record<string, unknown>
-): { rest: Record<string, unknown>; lengths: LengthPair } => {
-  const rest = { ...options };
-  const lengths: LengthPair = [undefined, undefined];
-  (["w", "h"] as const).forEach((k, axis) => {
-    const v = rest[k];
-    if (!isLength(v)) return;
-    lengths[axis] = v;
-    delete rest[k];
-  });
-  return { rest, lengths };
-};
-
-/** A node a construct gives its own lengths to: see `GoFishNode.ownLengths`
- *  and `GoFishNode.lengthPx`. */
-export type LengthNode = {
-  ownLengths?: LengthPair;
-  lengthPx(axis: 0 | 1): number | undefined;
-};
-
-/**
- * Give `node` the lengths `taken` from its options ({@link takeLengths}):
- * its size on such an axis (`dims[axis].size`) is the length laid out in
- * its room, in pixels where that is known before the layer solve, and none
- * where the length is a share of its scope (an `fr` weight, which its claim
- * is instead). It is read on demand, since the room is known only once the
- * node is in its tree.
- */
-export const bindLengths = (
-  node: LengthNode,
-  dims: { size?: unknown }[],
-  taken: LengthPair
-): void => {
-  if (taken[0] === undefined && taken[1] === undefined) return;
-  node.ownLengths = taken;
-  ([0, 1] as const).forEach((axis) => {
-    if (taken[axis] === undefined) return;
-    Object.defineProperty(dims[axis], "size", {
-      get: () => node.lengthPx(axis),
-      enumerable: true,
-      configurable: true,
-    });
-  });
-};
-
 /** Whether a field of this declared type takes a length: its type names the
  *  `Length` option type, alone or in a union, a tuple or a list. */
 const takesLength = (type: Frontend.FieldType): boolean => {

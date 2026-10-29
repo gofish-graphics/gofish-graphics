@@ -35,6 +35,7 @@ import {
   type AxisScope,
   type SpaceDeclaration,
   type AxisScopeHook,
+  type OwnDims,
 } from "./dims";
 import {
   axesEnabled,
@@ -81,6 +82,7 @@ import { impliedExtents, Extent, padExtent } from "./extent";
 import * as Pwl from "./solver/pwl";
 import {
   DEFAULT_CANVAS_SIZE,
+  isLength,
   lengthIn,
   printLength,
   type Length,
@@ -789,14 +791,10 @@ export class GoFishNode {
    *  Layout size is separate from drawn size (#493), as a CSS box's ink
    *  overflow or a Typst box's `outset` is. */
   public inkOn?: [boolean, boolean];
-  /** Per axis, its own `w`/`h` when it is a length (#1176 step 6): a
-   *  percent of the room its parent lays it out in, or an `fr` weight in
-   *  its nearest scope ({@link ownLength}). Set by the construct, which
-   *  reads its size there through {@link lengthPx}. */
-  public ownLengths?: [
-    Length | LengthValue | undefined,
-    Length | LengthValue | undefined,
-  ];
+  /** The box its own options give it (`elaborateOwnDims`), for a construct
+   *  whose own `w`/`h` may be a length (#1176 step 6): the same intervals
+   *  the construct reads. Its length is read here ({@link lengthOn}). */
+  public ownDims?: OwnDims<unknown>;
   /** Per axis, whether its own layout places it there, from the refs it
    *  reads (an ordinal axis's label span): its parent's plan takes it where
    *  layout put it, as it takes a node that places itself at a literal
@@ -1467,7 +1465,7 @@ export class GoFishNode {
    * is no length.
    */
   public ownLength(axis: 0 | 1): Pwl.Value | undefined {
-    const len = this.ownLengths?.[axis];
+    const len = this.lengthOn(axis);
     if (len === undefined) return undefined;
     const memo = this._claimMemo.lengths[axis];
     if (memo !== undefined) return memo;
@@ -1508,6 +1506,28 @@ export class GoFishNode {
     return v && !Pwl.isConstant(v) ? v : undefined;
   }
 
+  /** Its own `w`/`h` on `axis` when that is a length (`percent(30)`,
+   *  `fr(2)`), read from its own box ({@link ownDims}). */
+  public lengthOn(axis: 0 | 1): Length | LengthValue | undefined {
+    const size = this.ownDims?.[axis]?.size;
+    return isLength(size) ? size : undefined;
+  }
+
+  /**
+   * The size this node fixes for itself on `axis`, from its own box
+   * ({@link ownDims}): pixels or a data value as given, and a length's
+   * pixels where its room is known before the layer solve
+   * ({@link lengthPx}). Undefined where it gives no size, and where its
+   * length is a share of its scope ({@link shareOf}): the scope sizes it,
+   * so it fills the room it is given, as a node with no size does.
+   */
+  public fixedSize(axis: 0 | 1): MaybeValue<number> | undefined {
+    const size = this.ownDims?.[axis]?.size;
+    return isLength(size)
+      ? this.lengthPx(axis)
+      : (size as MaybeValue<number> | undefined);
+  }
+
   /** The room of the render root on `axis`: the render's size, or the
    *  default canvas where the render gives none (a data σ is solved in it
    *  there too). */
@@ -1537,7 +1557,7 @@ export class GoFishNode {
    */
   public roomFor(axis: 0 | 1, what: string): Pwl.Value {
     for (let n: GoFishNode = this; ; n = n.parent!) {
-      const len = n.ownLengths?.[axis];
+      const len = n.lengthOn(axis);
       if (len !== undefined) {
         const px = n.lengthPx(axis);
         if (px !== undefined) return Pwl.constant(px);
@@ -1580,8 +1600,7 @@ export class GoFishNode {
     if (chainOn(this, axis) !== undefined) return false;
     let filled = false;
     for (const c of this.children) {
-      if (c instanceof GoFishNode && c.ownLengths?.[axis] !== undefined)
-        continue;
+      if (c instanceof GoFishNode && c.lengthOn(axis) !== undefined) continue;
       if (!(c instanceof GoFishNode) || !c.fillsShape(axis)) return false;
       filled = true;
     }
@@ -1594,7 +1613,7 @@ export class GoFishNode {
    *  of: a node sized by a length of its own, a scope, a leaf with no claim
    *  there, or a node whose children all fill. */
   private fillsShape(axis: 0 | 1): boolean {
-    if (this.ownLengths?.[axis] !== undefined) return true;
+    if (this.lengthOn(axis) !== undefined) return true;
     if (this.children.length > 0)
       return this.fillsBy(axis, (c) => c.fillsShape(axis));
     return (
@@ -1865,19 +1884,22 @@ export class GoFishNode {
     }
     const within = insideCoord || this.type === "coord";
 
-    const dims = this.args?.dims as Dimensions | undefined;
+    const dims = this.args?.dims as OwnDims<unknown> | undefined;
     if (dims) {
       for (const dir of [0, 1] as const) {
         const dim = dims[dir];
         if (dim === undefined) continue;
         // Explicit emX/emY (or connect's embed()) is a hard claim — leave it.
         if (dim.embedded === true) continue;
-        let embedded = baseEmbedded(dim);
+        // A length embeds as the size it fixes (`fixedSize`): its pixels
+        // never do, and a share of its scope does, as a box with no size.
+        const size = isLength(dim.size) ? this.fixedSize(dir) : dim.size;
+        let embedded = baseEmbedded({ ...dim, size } as Dimensions[number]);
         // Route B gate (coord-scoped): a value-sized dim positioned in a unit
         // FOREIGN to its size's unit is a foreign extent (a bubble) → ink.
         if (embedded && within) {
           for (const pos of [dim.min, dim.center, dim.max]) {
-            if (isValue(pos) && !sameValueUnit(pos, dim.size)) {
+            if (isValue(pos) && !sameValueUnit(pos, size)) {
               embedded = false;
               break;
             }

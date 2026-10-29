@@ -2,23 +2,42 @@ import { Frontend } from "gofish-ir";
 import { type MaybeValue } from "./data";
 import { computeAesthetic } from "../util";
 import {
-  bindLengths,
   heldLength,
+  isLength,
   rejectLength,
-  takeLengths,
-  type LengthNode,
-  type LengthPair,
+  type Length,
+  type LengthValue,
 } from "./length";
 
-export type Interval<T = number> = {
+/** One axis of a box: its anchors, and its size, of type `S` (by default
+ *  that of its anchors). */
+export type Interval<T = number, S = T> = {
   min?: T;
   center?: T;
   max?: T;
-  size?: T;
+  size?: S;
   embedded?: boolean;
 };
 
-export type Dimensions<T = number> = Interval<T>[];
+export type Dimensions<T = number, S = T> = Interval<T, S>[];
+
+/**
+ * A construct's own size on an axis, as its `w`/`h` option gives it: pixels,
+ * a data value, or a length (`percent(30)`, `fr(2)`, #1176 step 6), which is
+ * laid out in the room the construct is given, known only once it is in its
+ * tree (`GoFishNode.ownLength`). Each reader of the size says what a length
+ * is to it.
+ */
+export type OwnSize<T> = T | Length | LengthValue;
+
+/** A construct's own box, from its options ({@link elaborateOwnDims}). */
+export type OwnDims<T> = Dimensions<T, OwnSize<T>>;
+
+/** An own size as the type pass reads it: a length is never data, and its
+ *  pixels are known only once the construct is in its tree, after its type,
+ *  so it adds no type, as pixels do. */
+export const sizeForType = <T>(size: OwnSize<T> | undefined): T | undefined =>
+  isLength(size) ? undefined : size;
 
 export type XYWHDims<T = number> = {
   x?: T;
@@ -229,50 +248,34 @@ export const deferAxisDims = (
 };
 
 /**
- * A construct's own box, from its options: its own `w`/`h` lengths
- * (`percent(30)`, `fr(2)`, #1176 step 6) taken out ({@link takeLengths}),
- * since they are laid out in the room it is given, known only once it is in
- * its tree, and the rest elaborated ({@link elaborateDims}). `dataSize` is
- * its size where it can be data: a length never is, and is not read while
- * the types are resolved, before its room is known. `bind` gives the node
- * its lengths ({@link bindLengths}) and defers the axis-name-keyed `dims`
- * option to the resolveAliases pass ({@link deferAxisDims}).
+ * A construct's own box, from its options: its own `w`/`h` may be a length
+ * (`percent(30)`, `fr(2)`, #1176 step 6), a size beside pixels and data
+ * ({@link OwnSize}); a length anywhere else is an error. `bind` gives the
+ * node its box (`GoFishNode.ownDims`), where it reads its length, and
+ * defers the axis-name-keyed `dims` option to the resolveAliases pass
+ * ({@link deferAxisDims}).
  */
 export const elaborateOwnDims = <T>(
   options: object
 ): {
-  dims: Dimensions<T>;
-  lengths: LengthPair;
-  dataSize: (axis: 0 | 1) => T | undefined;
-  bind: (node: LengthNode & { _elaborateInAxisScope?: AxisScopeHook }) => void;
+  dims: OwnDims<T>;
+  bind: (node: {
+    ownDims?: OwnDims<unknown>;
+    _elaborateInAxisScope?: AxisScopeHook;
+  }) => void;
 } => {
-  const { rest, lengths } = takeLengths(options as Record<string, unknown>);
-  const dims = elaborateDims(rest as FancyDims<T>);
+  const fancy = options as FancyDims<OwnSize<T>>;
+  for (const [k, v] of Object.entries(fancy))
+    if (k !== "w" && k !== "h") rejectLength(`${k} here`, v);
+  const dims = intervalsOf(fancy) as OwnDims<T>;
   return {
     dims,
-    lengths,
-    dataSize: (axis) =>
-      lengths[axis] === undefined ? dims[axis].size : undefined,
     bind: (node) => {
-      bindLengths(node, dims, lengths);
-      node._elaborateInAxisScope = deferAxisDims(rest as FancyDims<T>, dims);
+      node.ownDims = dims as OwnDims<unknown>;
+      node._elaborateInAxisScope = deferAxisDims(fancy, dims);
     },
   };
 };
-
-/**
- * Whether a slot of an interval holds a construct's own length (`w:
- * percent(30)`, `w: fr(2)`): a getter on its size ({@link bindLengths}),
- * read only once its room is known, and set even where it reads as none (an
- * `fr` weight).
- */
-const holdsLength = (iv: Interval<any>, key: IntervalKey): boolean =>
-  Object.getOwnPropertyDescriptor(iv, key)?.get !== undefined;
-
-/** Whether a slot of an interval is set, read without laying out a length
- *  ({@link holdsLength}). */
-const isSet = (iv: Interval<any>, key: IntervalKey): boolean =>
-  holdsLength(iv, key) || iv[key] !== undefined;
 
 /**
  * Merge a `dims` bag into the per-axis intervals `into`, which already hold
@@ -280,12 +283,12 @@ const isSet = (iv: Interval<any>, key: IntervalKey): boolean =>
  * anchor) slot may be set once: a slot that a top-level option (a length
  * included) or an earlier `dims` entry already set is an error. A `dims`
  * entry takes pixels and data values, not a length: a construct's own
- * length is its `w` or `h`. `into`'s intervals are written in place, so a
- * length's getter stays, and closures that captured them observe the
- * result. Returns the option that set each slot, for messages.
+ * length is its `w` or `h`. `into`'s intervals are written in place, so
+ * closures that captured them observe the result. Returns the option that
+ * set each slot, for messages.
  */
 export const mergeAxisDims = (
-  into: Interval<any>[],
+  into: Interval<any, any>[],
   entries: AxisDims<any>,
   scope: AxisScope,
   form: AxisDimsForm
@@ -305,7 +308,7 @@ export const mergeAxisDims = (
         isAxisInterval(entry) ? `${where}.${key}` : where,
         heldLength(iv[key])
       );
-      if (isSet(slots, key)) {
+      if (slots[key] !== undefined) {
         throw new Error(
           `${where}: the ${key} of axis ${axis} is set twice, here and ` +
             `by ${origin(key, axis)}. Set each axis anchor once.`
@@ -324,21 +327,14 @@ export const mergeAxisDims = (
  * `center` and `size`, exactly as `elaborateDims` does for `cx` and `w`.
  */
 export const applyAxisDims = (
-  into: Dimensions<any>,
+  into: Dimensions<any, any>,
   entries: AxisDims<any>,
   scope: AxisScope
 ): void => {
   mergeAxisDims(into, entries, scope, MARK_DIMS);
   for (const axis of [0, 1] as const) {
     const d = into[axis];
-    // A length's size is laid out only once its room is known: its box is
-    // placed by its center then, as with top-level `cx` and a length `w`.
-    if (
-      !holdsLength(d, "size") &&
-      d.min === undefined &&
-      d.center !== undefined &&
-      d.size !== undefined
-    )
+    if (d.min === undefined && d.center !== undefined && d.size !== undefined)
       d.min = deriveMin(d.center, d.size);
   }
 };
@@ -348,16 +344,17 @@ export const applyAxisDims = (
  * `elaborateDims` (for `cx` with `w`) and {@link applyAxisDims} share. A data
  * center stays a center: the shape places the box by it ({@link centerOf},
  * {@link startAtCenter}), so the center goes through the scale and half the
- * size comes off in pixels.
+ * size comes off in pixels. So does a center with a length for its size,
+ * which is laid out only once its room is known.
  */
-const deriveMin = <T>(center: T, size: T): T | undefined =>
+const deriveMin = <T>(center: T, size: unknown): T | undefined =>
   typeof center === "number" && typeof size === "number"
     ? ((center - size / 2) as T)
     : undefined;
 
 /** The center a box axis is placed by: its `center` when it has no `min`
  *  (`cx`/`cy` with a data value, or with no size to derive a `min` from). */
-export const centerOf = <T>(d: Interval<T>): T | undefined =>
+export const centerOf = <T>(d: Interval<T, unknown>): T | undefined =>
   d.min === undefined ? d.center : undefined;
 
 /** The pixel start of a box axis placed by its center: the center through
@@ -376,7 +373,7 @@ export const startAtCenter = (
  *  own size, which for a text or an image is not the `w` or `h` it was
  *  given (a text's x origin is its anchor, so it passes 0). */
 export const positionOf = (
-  dim: Interval<MaybeValue<number>>,
+  dim: Interval<MaybeValue<number>, unknown>,
   scale: ((x: number) => number) | undefined,
   sizePx: number
 ): number | undefined =>
@@ -395,9 +392,15 @@ const isIndexedDims = <T>(d: FancyDims<T>): d is IndexedDims<T> =>
   "0" in d || "1" in d;
 
 export const elaborateDims = <T>(dims: FancyDims<T>): Dimensions<T> => {
-  // A construct that takes a length for its own size takes it out first
-  // (`takeLengths`); anywhere else a length is an error, never dropped.
+  // A construct that takes a length for its own size reads it with
+  // `elaborateOwnDims`; anywhere else a length is an error, never dropped.
   for (const [k, v] of Object.entries(dims)) rejectLength(`${k} here`, v);
+  return intervalsOf(dims);
+};
+
+/** The per-axis intervals of box options: the one body of
+ *  {@link elaborateDims} and {@link elaborateOwnDims}. */
+const intervalsOf = <T>(dims: FancyDims<T>): Dimensions<T> => {
   if (isIndexedDims(dims)) {
     return [
       {

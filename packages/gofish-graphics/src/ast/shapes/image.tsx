@@ -5,12 +5,13 @@ import {
   Dimensions,
   displayTranslate,
   elaborateOwnDims,
+  sizeForType,
   FancyDims,
   positionOf,
   Transform,
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
-import { type LengthValue } from "../length";
+import { isLength, type LengthValue } from "../length";
 import { createMark } from "../withGoFish";
 import { MARK_CHANNELS } from "../markChannels.generated";
 import { attachCut } from "../graphicalOperators/cut";
@@ -232,9 +233,9 @@ export const Image = ({
   // A length for its own size (`w: percent(30)`, `w: fr(2)`) is laid out in
   // the room it is given, known only once it is in its tree (#1176 step 6).
   // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
-  // Its size as its type reads it (`dataSize`): a length is never data.
   const own = elaborateOwnDims<number>(fancyDims);
-  const { dims, dataSize } = own;
+  const { dims } = own;
+  const dataSize = (axis: 0 | 1) => sizeForType(dims[axis].size);
 
   const node = new GoFishNode(
     {
@@ -262,14 +263,15 @@ export const Image = ({
         // with rect's data-driven sizing. For literal-number dims, treat as pixels.
         const pixelSize = (dim: 0 | 1): number | undefined => {
           const raw = dims[dim].size;
+          // A length is its pixels where its room is known before the solve
+          // (`lengthPx`), and the room it is given where it is a share of
+          // its scope (`fr`, or a percent of a band), as a rect's is.
+          if (isLength(raw)) return node.lengthPx(dim) ?? size[dim];
           if (isValue(raw)) {
             const dataSize = getValue(raw)!;
             const map = scales?.[dim]?.map;
             return map ? pxOf(map, dataSize) - pxOf(map, 0) : dataSize;
           }
-          // A length that is a share of its scope (`fr`, or a percent of a
-          // band) is the room it is given, as a rect's is.
-          if (node.shareOf(dim) !== undefined) return size[dim];
           return raw;
         };
         const requestedWidth = pixelSize(0);

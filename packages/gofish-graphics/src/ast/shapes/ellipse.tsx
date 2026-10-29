@@ -7,7 +7,9 @@ import { getValue, isValue, MaybeValue, Value } from "../data";
 import {
   Dimensions,
   displayDims as displayDimsOf,
+  type Interval,
   elaborateOwnDims,
+  sizeForType,
   FancyDims,
   FancySize,
   Size,
@@ -55,12 +57,18 @@ export const Ellipse = ({
   // A length for its own size (`w: percent(30)`, `w: fr(2)`) is laid out in
   // the room it is given, known only once it is in its tree (#1176 step 6).
   // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
-  // Its size as its type reads it (`dataSize`): a length is never data.
   const own = elaborateOwnDims<MaybeValue<number>>(fancyDims);
-  const { dims, dataSize } = own;
+  const { dims } = own;
+  const dataSize = (axis: 0 | 1) => sizeForType(dims[axis].size);
+  // Its box with the size it fixes for itself (`fixedSize`): a length's
+  // pixels, or none for a share of its scope, which fills its room.
+  const fixedBox = (axis: 0 | 1): Interval<MaybeValue<number>> => ({
+    ...dims[axis],
+    size: node.fixedSize(axis),
+  });
   // How it paints its outline, read once.
   const paint = outlinePaint({ fill, stroke, strokeWidth });
-  const node = new GoFishNode(
+  const node: GoFishNode = new GoFishNode(
     {
       type: "ellipse",
       // A dot is labeled around itself.
@@ -86,14 +94,15 @@ export const Ellipse = ({
       },
       // A literal pixel size is the ellipse's own (#493), as a rect's is.
       resolveExtent: (_ce, _cs, spaces) =>
-        literalBoxExtents(spaces, [dims[0], dims[1]], aspectRatio),
+        literalBoxExtents(spaces, [fixedBox(0), fixedBox(1)], aspectRatio),
       layout: (size, scales, children) => {
-        let w = isValue(dims[0].size)
-          ? getValue(dims[0].size!) * scales[0]?.sigma!
-          : (dims[0].size ?? size[0]);
-        let h = isValue(dims[1].size)
-          ? getValue(dims[1].size!) * scales[1]?.sigma!
-          : (dims[1].size ?? size[1]);
+        const [wSize, hSize] = [node.fixedSize(0), node.fixedSize(1)];
+        let w = isValue(wSize)
+          ? getValue(wSize)! * scales[0]?.sigma!
+          : (wSize ?? size[0]);
+        let h = isValue(hSize)
+          ? getValue(hSize)! * scales[1]?.sigma!
+          : (hSize ?? size[1]);
 
         if (aspectRatio !== undefined && aspectRatio > 0) {
           const wIsData = isValue(dims[0].size);

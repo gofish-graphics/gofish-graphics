@@ -291,7 +291,7 @@ async function main() {
         );
     const node = await build().resolve();
     await runLayout({ w: 400, h: 100 }, node);
-    const marker = walk(node).find((n) => n.ownLengths?.[0] !== undefined)!;
+    const marker = walk(node).find((n) => n.lengthOn(0) !== undefined)!;
     const share = marker.shareOf(0);
     check(
       "the marker's length is 0.4σ",
@@ -319,7 +319,7 @@ async function main() {
       )
       .resolve();
     await runLayout({ w: 500, h: 100 }, node);
-    const wide = walk(node).find((n) => n.ownLengths?.[0] !== undefined)!;
+    const wide = walk(node).find((n) => n.lengthOn(0) !== undefined)!;
     check("the fr(2) layer is a scope on x", wide.isScope(0));
     check("it is not one on y", !wide.isScope(1));
   }
