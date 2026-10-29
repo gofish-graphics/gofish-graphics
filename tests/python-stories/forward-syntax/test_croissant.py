@@ -28,6 +28,7 @@ from gofish import (
     ribbon,
     scatter,
     spread,
+    text,
 )
 from python_stories.data import PENGUINS, SEATTLE_WEATHER
 
@@ -204,7 +205,7 @@ def story_ridgeline():
 
 def _highs_2012():
     """Seattle's daily highs in 2012, each the mean of the 15 days centered on
-    it (fewer at the ends of the year)."""
+    it (fewer at the ends of the year), with its month's initial."""
     days = [d for d in SEATTLE_WEATHER if d["date"].startswith("2012")]
     rows = []
     for i, d in enumerate(days):
@@ -212,7 +213,13 @@ def _highs_2012():
         total = 0.0
         for w in window:
             total += w["temp_max"]
-        rows.append({"date": d["date"][:10], "temp_smooth": total / len(window)})
+        rows.append(
+            {
+                "date": d["date"][:10],
+                "letter": MONTHS[int(d["date"][5:7]) - 1][0],
+                "temp_smooth": total / len(window),
+            }
+        )
     return rows
 
 
@@ -238,11 +245,22 @@ def story_seattle_highs_by_month():
                     )
                 )
                 .mark(
-                    intersect(
-                        [temps, region(inset=2)],
-                        fill=FILL,
-                        stroke=STROKE,
-                        stroke_width=1.5,
+                    layer(
+                        [
+                            intersect(
+                                [temps, region(inset=2)],
+                                fill=FILL,
+                                stroke=STROKE,
+                                stroke_width=1.5,
+                            ),
+                            text(
+                                cx=field("date").median(),
+                                y=6,
+                                text="letter",
+                                font_size=11,
+                                fill="#333",
+                            ),
+                        ]
                     )
                 ),
             ]
@@ -250,9 +268,6 @@ def story_seattle_highs_by_month():
         {
             "w": 560,
             "h": 220,
-            "axes": {
-                "x": {"title": False},
-                "y": {"title": "Daily high, 15-day mean (°C)"},
-            },
+            "axes": {"x": False, "y": {"title": "Daily high, 15-day mean (°C)"}},
         },
     )

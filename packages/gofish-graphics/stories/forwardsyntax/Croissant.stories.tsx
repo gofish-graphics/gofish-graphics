@@ -15,6 +15,7 @@ import {
   ribbon,
   scatter,
   spread,
+  text,
   Unit,
 } from "../../src/lib";
 import { penguins } from "../../src/data/penguins";
@@ -247,12 +248,13 @@ export const Ridgeline: StoryObj<Args> = {
 };
 
 // Seattle's daily highs in 2012, each the mean of the 15 days centered on it
-// (fewer at the ends of the year).
+// (fewer at the ends of the year), with its month's initial.
 const days2012 = seattleWeather.filter((d) => d.date.startsWith("2012"));
 const highs2012 = days2012.map((d, i) => {
   const window = days2012.slice(Math.max(0, i - 7), i + 8);
   return {
     date: d.date.slice(0, 10),
+    letter: months[new Date(d.date).getUTCMonth()][0],
     temp_smooth: window.reduce((s, w) => s + w.temp_max, 0) / window.length,
   };
 });
@@ -265,7 +267,7 @@ export const SeattleHighsByMonth: StoryObj<Args> = {
     gallery: {
       title: "Seattle Highs Cut by Month",
       description:
-        "A 15-day rolling mean of Seattle's daily highs in 2012, drawn as an area and cut into calendar months, each month a slice as wide as its days.",
+        "A 15-day rolling mean of Seattle's daily highs in 2012, drawn as an area and cut into calendar months, each month a slice as wide as its days with its initial at its median day.",
     },
   },
   render: (args: Args) => {
@@ -284,19 +286,25 @@ export const SeattleHighsByMonth: StoryObj<Args> = {
             })
           )
           .mark(
-            intersect({ fill: FILL, stroke: STROKE, strokeWidth: 1.5 }, [
-              temps,
-              region({ inset: 2 }),
+            layer([
+              intersect({ fill: FILL, stroke: STROKE, strokeWidth: 1.5 }, [
+                temps,
+                region({ inset: 2 }),
+              ]),
+              text({
+                cx: field("date").median(),
+                y: 6,
+                text: "letter",
+                fontSize: 11,
+                fill: "#333",
+              }),
             ])
           ),
       ])
       .render(container, {
         w: args.w,
         h: args.h,
-        axes: {
-          x: { title: false },
-          y: { title: "Daily high, 15-day mean (°C)" },
-        },
+        axes: { x: false, y: { title: "Daily high, 15-day mean (°C)" } },
       });
     return container;
   },
