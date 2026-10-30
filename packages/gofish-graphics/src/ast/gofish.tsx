@@ -624,26 +624,21 @@ export async function layout(
     // the slot, the data fills the slot as if they took no room, and the
     // pixels overflow. A render size is a limit, so the fit warns there.
     // The default canvas is not one: it grows to hold the claim (#1179).
+    // A keyed σ is solved only for a claim that maps a domain, so `claim`
+    // is set there.
     const fitted =
       keyed !== undefined
-        ? undefined
-        : scopes.fit(
-            meta,
-            given[axis] === undefined ? undefined : root,
-            space,
-            claim,
-            allocated
-          );
-    const scope =
-      keyed !== undefined
-        ? scopes.scopeAt(meta, space, claim, keyed)
-        : fitted?.scope;
-    const px =
-      keyed !== undefined && claim !== undefined
-        ? Pwl.at(claim.width, keyed)
-        : fitted?.box;
+        ? {
+            scope: scopes.scopeAt(meta, space, claim, keyed),
+            box: Pwl.at(claim!.width, keyed),
+          }
+        : scopes.fit(meta, root, space, claim, {
+            px: allocated,
+            limit: given[axis] !== undefined,
+          });
+    const px = fitted?.box;
     return {
-      scope,
+      scope: fitted?.scope,
       px:
         px !== undefined && Number.isFinite(px) && px > 0
           ? px

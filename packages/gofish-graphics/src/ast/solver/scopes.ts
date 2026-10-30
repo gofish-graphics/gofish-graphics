@@ -32,7 +32,7 @@ import { Extent, mapsDomain } from "../extent";
 import type { AxisMap } from "../domain";
 import { envFlag } from "../../util";
 import type { GoFishNode, RenderSession } from "../_node";
-import { fixedOverflow, warnLayout } from "../layoutWarnings";
+import { fixedOverflow, overflows, warnLayout } from "../layoutWarnings";
 import { resolveUnit, sameUnitVar } from "../measure";
 import { reachAt, type ChromeForms } from "../chromeGutters";
 import { fromFrameStart, type AxisDirection } from "../axisDirection";
@@ -55,6 +55,12 @@ export type ScopeSolution =
 /** What {@link ScopeRegistry.fit} lays a claim out in: the scope it
  *  solved, if any, and the box it laid it in, in pixels. */
 export type Fitted = { scope: ScopeSolution | undefined; box: number };
+
+/** The slot a scope root's claim is fit to on one axis ({@link
+ *  ScopeRegistry.fit}): its pixels, and whether they are a limit (a render
+ *  size, a node's own size) or room that grows to hold the claim (the
+ *  default canvas, a coord's budget). */
+export type Slot = { px: number; limit: boolean };
 
 /** The frame a solved scope places its content in, `px(d) = sigma·d +
  *  originPx`, or undefined for an unsolved scope or one with no origin (only
@@ -260,7 +266,9 @@ export class ScopeRegistry {
     forms: ChromeForms | undefined,
     plot: number
   ): ScopeSolution | undefined {
-    const fitted = forms && this.fit(meta, node, space, forms.plot, plot);
+    const fitted =
+      forms &&
+      this.fit(meta, node, space, forms.plot, { px: plot, limit: true });
     const scope = fitted?.scope;
     const reach = scope && reachAt(forms!, scope.sigma);
     const solution: ScopeSolution | undefined =
@@ -346,15 +354,15 @@ export class ScopeRegistry {
    * (`fixedOverflow`). A claim with no σ in it that is larger than its slot
    * warns the same way, and gets no scope.
    *
-   * `node` is the node whose slot `allocated` is (for a node with a size of
-   * its own, `claim` is its content's). Its slot is a limit: the box the
-   * claim is laid out in is the slot, and on overflow what the claim draws
-   * reaches past it. `node` is undefined for a slot that is not a pixel
-   * limit, where nothing warns and the box holds the claim: the default
-   * canvas of a render with no size on the axis, which grows to hold its
-   * claim (#1179), and a coord's budget. There the box is the claim at its
-   * σ where that is longer than the slot, and a claim with no scope (only
-   * pixels) is its own box. TODO(#1176): a coord's budget is in its coordinate
+   * `node` is the node whose slot `slot` is (for a node with a size of its
+   * own, `claim` is its content's). A slot that is a limit is the box the
+   * claim is laid out in, and on overflow what the claim draws reaches past
+   * it, and the fit warns at `node`. A slot that is not a pixel limit warns
+   * nowhere, and the box holds the claim: the default canvas of a render
+   * with no size on the axis, which grows to hold its claim (#1179), and a
+   * coord's budget. There the box is the claim at its σ where that is
+   * longer than the slot, and a claim with no scope (only pixels) is its
+   * own box. TODO(#1176): a coord's budget is in its coordinate
    * units (radians on a polar θ axis), so comparing its claim's fixed
    * pixels with it warns falsely (35 lines in 26 stories). Whether a
    * coord's budget is a limit, and in which units, is open; until then a
@@ -362,35 +370,33 @@ export class ScopeRegistry {
    */
   fit(
     meta: ScopeMeta,
-    node: GoFishNode | undefined,
+    node: GoFishNode,
     space: UnderlyingSpace | undefined,
     claim: Extent | undefined,
-    allocated: number
+    { px, limit }: Slot
   ): Fitted | undefined {
     if (claim === undefined) return undefined;
     const maps = mapsDomain(space, claim);
-    let scope = maps
-      ? this.solveScope(meta, space, claim, allocated)
-      : undefined;
+    let scope = maps ? this.solveScope(meta, space, claim, px) : undefined;
     if (scope === undefined) {
-      if (node !== undefined)
-        warnLayout(node, fixedOverflow(node, meta.axis, claim, allocated));
-      const sigma = maps ? Pwl.fill(claim.width, allocated) : undefined;
+      if (limit) warnLayout(node, fixedOverflow(node, meta.axis, claim, px));
+      // No σ fills the slot, so what grows with σ fills it alone
+      // (`Pwl.fill`, whose first solve `solveScope` just failed).
+      const grows = maps ? Pwl.rising(claim.width) : undefined;
+      const sigma = grows && Pwl.solve(grows, px);
       if (sigma !== undefined) scope = this.scopeAt(meta, space, claim, sigma);
     }
-    // Past the slot by more than rounding (as `fixedOverflow` reads it).
     const grown =
       scope === undefined ? undefined : Pwl.at(claim.width, scope.sigma);
-    const box =
-      node !== undefined
-        ? allocated
-        : grown !== undefined
-          ? grown > allocated + 0.5
-            ? grown
-            : allocated
-          : Pwl.isConstant(claim.width)
-            ? Pwl.at(claim.width, 0)
-            : allocated;
+    const box = limit
+      ? px
+      : grown !== undefined
+        ? overflows(grown, px)
+          ? grown
+          : px
+        : Pwl.isConstant(claim.width)
+          ? Pwl.at(claim.width, 0)
+          : px;
     return { scope, box };
   }
 

@@ -395,8 +395,8 @@ export const rising = (v: Value): Affine | undefined => {
  * does because its fixed parts alone are longer than `target`, the σ at
  * which the part of `v` that grows with σ alone fills it ({@link rising}):
  * `v` drawn as if its fixed parts took no room. Undefined when neither
- * does. The one solve of a claim in its slot (`ScopeRegistry.fit`), and of
- * a plot in a node's own size (`aroundPlot`).
+ * does. The solve of a plot in a node's own size (`aroundPlot`);
+ * `ScopeRegistry.fit` takes the same two steps, the first in `solveScope`.
  */
 export const fill = (v: Value, target: number): number | undefined => {
   const sigma = solve(v, target);

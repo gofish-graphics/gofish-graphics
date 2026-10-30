@@ -1864,6 +1864,9 @@ export class GoFishNode {
    * its own keeps its default size, and an `fr` gap is 0. (An unsized band
    * keeps its default; a CSS-style `fr` on an unsized axis may come later.)
    */
+  // TODO(#1254): a shortcut. The fit cannot tell a band's σ from an `fr`
+  // gap's, and the default canvas gives shares no room, so this asks the
+  // root's canvas directly instead of the one fit.
   public sharesHaveNoRoom(axis: 0 | 1): boolean {
     const scope = this.scopeOf(axis);
     return (

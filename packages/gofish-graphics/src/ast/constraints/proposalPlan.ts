@@ -390,7 +390,7 @@ export function solveLayerScales(
           node,
           space,
           nicedClaim,
-          layerSize[axis]
+          { px: layerSize[axis], limit: true }
         );
         const solution = fitted?.scope;
         return (
