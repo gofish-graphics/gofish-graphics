@@ -6,7 +6,7 @@ import type { GoFishNode } from "./_node";
 import type { DistributeConstraint } from "./constraints/distribute";
 import { spacingOn } from "./constraints/gap";
 import { axisIndex, axisName } from "./constraints/shared";
-import { cellsByName, isGridConstraint, shareTracks } from "./constraints/grid";
+import { cellBoxesOf, isGridConstraint, shareTracks } from "./constraints/grid";
 import type { Extent } from "./extent";
 import { room } from "../util";
 import * as Pwl from "./solver/pwl";
@@ -303,9 +303,7 @@ export function warnFlexibleSizes(node: GoFishNode, axis: 0 | 1): void {
   );
   const grid = node.constraints.find(isGridConstraint);
   const tracks =
-    grid === undefined
-      ? []
-      : shareTracks(grid, axis, cellsByName(node.children));
+    grid === undefined ? [] : shareTracks(grid, axis, cellBoxesOf(node));
   if (gaps.length === 0 && parts.length === 0 && tracks.length === 0) return;
   // The default canvas gives a data σ room but gives shares none
   // (`sharesHaveNoRoom`), so the fit is not asked: an `fr` gap there is 0.

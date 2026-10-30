@@ -137,7 +137,8 @@ async function main() {
     // 140 + 2 · 10 + 3σ = 600, so the plots are 2σ and σ.
     const sigma = 440 / 3;
     const span = (rs: typeof rects) =>
-      Math.max(...rs.map((r) => r.x! + r.w!)) - Math.min(...rs.map((r) => r.x!));
+      Math.max(...rs.map((r) => r.x! + r.w!)) -
+      Math.min(...rs.map((r) => r.x!));
     check(
       "the fr(2) chart's plot is 2σ and the fr(1) chart's is σ",
       rects.length === 9 &&
@@ -218,9 +219,7 @@ async function main() {
 
   console.log("\n# with no room on x, a percent is of the 400 px canvas");
   {
-    const dl = await layer([
-      rect({ w: percent(25), h: 10 }),
-    ]).toDisplayList({});
+    const dl = await layer([rect({ w: percent(25), h: 10 })]).toDisplayList({});
     const rects = rectsOf(dl);
     check(
       "25% of 400 px is 100 px",
@@ -260,13 +259,12 @@ async function main() {
             ? rect({ w: flexW, h: 10 })
             : rect({ w: value(d[0].v), h: 10 })
         );
-    const gap = await warningsOf(() =>
-      build(fr(1), value(4)).toDisplayList()
-    );
+    const gap = await warningsOf(() => build(fr(1), value(4)).toDisplayList());
     check(
       "an fr spacing beside data-sized parts warns mixed sizes",
       gap.some(
-        (m) => m.includes("mixes data-driven and flexible") && m.includes("fr(1)")
+        (m) =>
+          m.includes("mixes data-driven and flexible") && m.includes("fr(1)")
       ),
       gap
     );
@@ -274,7 +272,8 @@ async function main() {
     check(
       "an fr part beside data-sized parts warns mixed sizes",
       part.some(
-        (m) => m.includes("mixes data-driven and flexible") && m.includes("fr(2)")
+        (m) =>
+          m.includes("mixes data-driven and flexible") && m.includes("fr(2)")
       ),
       part
     );
@@ -509,12 +508,16 @@ async function main() {
     check(
       "a table's fr(1) spacing is one share of three",
       frCells.length === 4 &&
-        frCells.every((c) => close(c.w, 200 / 3, 1e-3) && close(c.h, 200 / 3, 1e-3)),
+        frCells.every(
+          (c) => close(c.w, 200 / 3, 1e-3) && close(c.h, 200 / 3, 1e-3)
+        ),
       frCells.map((c) => [c.x, c.w, c.h])
     );
   }
 
-  console.log("\n# an unsized table's fill tracks keep the default, as bands do");
+  console.log(
+    "\n# an unsized table's fill tracks keep the default, as bands do"
+  );
   {
     // With no size on an axis the root gives shares no room
     // (`sharesHaveNoRoom`), so a fill cell keeps rect's default 16 px
@@ -549,13 +552,60 @@ async function main() {
     const wide = await cellsAt({ w: 200 });
     check(
       "with w: 200 the columns share it, and the rows keep 16 px",
-      wide.length === 4 &&
-        wide.every((r) => close(r.w, 95) && r.h === 16),
+      wide.length === 4 && wide.every((r) => close(r.w, 95) && r.h === 16),
       wide.map((r) => [r.x, r.y, r.w, r.h])
     );
   }
 
-  console.log("\n# a table's track no cell sizes, in a scope data sizes, warns");
+  console.log(
+    "\n# a table's track is its cells' boxes, at claim and at layout"
+  );
+  {
+    // Column 1 holds a 40 px rect with a 10 px outline, which draws 5 px past
+    // its box on each side, and a cell that fills its track. Column 2 holds
+    // a fill cell and a 30 px rect. The claim walk lays the columns out by
+    // the boxes, 40 and 30 px; layout proposes the fill cells the same
+    // tracks, so each fills its column and none overhangs into the other.
+    const build = () =>
+      table({ numCols: 2, spacing: 0 }, [
+        rect({ w: 40, h: 20, fill: "red", stroke: "black", strokeWidth: 10 }),
+        rect({ h: 20, fill: "blue" }),
+        rect({ h: 20, fill: "green" }),
+        rect({ w: 30, h: 20, fill: "gray" }),
+      ]);
+    const cells = rectsOf(await build().toDisplayList());
+    const byFill = (f: string) => cells.find((r) => r.style?.fill === f);
+    const [outlined, fill1, fill2, sized] = [
+      "red",
+      "green",
+      "blue",
+      "gray",
+    ].map(byFill);
+    const node = await build()();
+    await runLayout({}, node);
+    const claim = node.resolveExtent()[0];
+    check(
+      "the claim is the tracks' boxes, 40 + 30 px, and the 5 px the outline reaches past the left end",
+      claim !== undefined && close(Pwl.at(claim.width, 0), 75),
+      claim && Pwl.at(claim.width, 0)
+    );
+    check(
+      "the fill cell in column 1 is proposed its track, the outlined cell's 40 px box",
+      close(fill1?.w, 40) && close(fill1?.x, outlined?.x ?? NaN),
+      [fill1?.x, fill1?.w, outlined?.x, outlined?.w]
+    );
+    check(
+      "column 2 starts where column 1's box ends, and its fill cell is 30 px",
+      close(fill2?.x, (outlined?.x ?? NaN) + 40) &&
+        close(fill2?.w, 30) &&
+        close(sized?.x, fill2?.x ?? NaN),
+      [fill2?.x, fill2?.w, sized?.x, sized?.w]
+    );
+  }
+
+  console.log(
+    "\n# a table's track no cell sizes, in a scope data sizes, warns"
+  );
   {
     // Three columns and two cells: the third column is one share, one data
     // unit wide beside the data-sized cells.

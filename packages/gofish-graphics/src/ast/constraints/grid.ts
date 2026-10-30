@@ -12,7 +12,7 @@
 // **The sizing rule.** Per axis, a track's extent is set by ONE rule, the
 // (max, +) fold every other operator already uses:
 //
-//   track claim   = Pwl.max(claims of the cells in that track), or σ
+//   track claim   = Pwl.max(boxes of the cells in that track), or σ
 //   grid claim    = Pwl.add(track claims) + gaps
 //
 // A track whose cells claim nothing is a share of its scope, `fr(1)`: σ. A
@@ -24,12 +24,15 @@
 // The grid claim is the layer's claim on the axis, composed by its plan as
 // any chain's is (`placeByClaims`, `gridTracks`), so the scope it is in
 // solves σ for it by the one fit, with the one overflow warning and the one
-// fallback. Layout proposes each cell its track's claim at that σ
-// (`gridCellSizesAt`), and the plan places each cell in the middle of its
-// track, from the cells' laid-out sizes. Where the layer has no σ on an
-// axis (an unsized root, where shares have no room), a track its cells'
-// claims do not size has no extent to propose, and its cells keep their
-// default size there, as a spread's bands do.
+// fallback. A track is sized by its cells' boxes, both in the claim walk
+// and in layout: what a cell draws past its box (an outline, a label, an
+// offset part) overhangs its track. Layout proposes each cell its track's
+// extent at that σ, from the same boxes, the forms of the layer's plan
+// (`cellBoxesOf`, `gridCellSizesAt`), and the plan places each cell in
+// the middle of its track, from the cells' laid-out sizes. Where the layer
+// has no σ on an axis (an unsized root, where shares have no room), a
+// track its cells' boxes do not size has no extent to propose, and its
+// cells keep their default size there, as a spread's bands do.
 //
 // Every reader finds a cell through the grid's own refs (`CellOf`), in the
 // grid's row-major order, never by the layer's child order.
@@ -152,14 +155,32 @@ export type GridTracks<T = number> = readonly [
   TrackLayout<T> | undefined,
 ];
 
-/** A cell's size claim on `axis`: the width of its claim, whatever it is (a
- *  magnitude, a pixel size of its own, or one share σ for a cell that fills
- *  a share), or undefined when it has none. */
-const cellClaim = (
-  cell: GoFishAST | undefined,
+/** A cell's box on `axis`, by the grid's ref, or undefined for a cell with
+ *  no size there. */
+export type CellBox = (
+  ref: ConstraintRef,
   axis: 0 | 1
-): Pwl.Value | undefined =>
-  cell instanceof GoFishNode ? cell.resolveExtent()[axis]?.width : undefined;
+) => Pwl.Value | undefined;
+
+/**
+ * Each cell's box in `layer`'s plan (`buildPlan`'s forms): the width of its
+ * box, in σ, which is what the claim walk sizes its track by
+ * (`placeByClaims`). A cell that draws past its box (an outline, a label,
+ * an offset part) sizes its track by its box, and what it draws past it
+ * overhangs the track. A cell with no claim has no box. It reads the plan
+ * the layer's claim made (`ClaimMemo.plans`), so it is read once that claim
+ * is made: in layout, and in the checks the claim runs at its end
+ * (`warnFlexibleSizes`).
+ */
+export const cellBoxesOf = (layer: GoFishNode): CellBox => {
+  const index = buildNameIndex(layer.children);
+  return (ref, axis) => {
+    const i = index.get(ref.name);
+    return i === undefined
+      ? undefined
+      : layer._claimMemo.plans[axis]?.forms[i]?.box.width;
+  };
+};
 
 /**
  * Each track's extent on `axis` (columns on x, rows on y): the largest size
@@ -214,21 +235,22 @@ function layoutTrack<T>(A: Arith<T>, extents: T[], gap: T): TrackLayout<T> {
 /**
  * Per-cell proposed size `[cellW, cellH]`, keyed by cell name, at the σ its
  * layer hands its cells (`sigmas`): each cell is proposed its (column, row)
- * track's extent ({@link trackExtents}), its cells' claims at σ. A fill
- * cell fills that extent; a claim cell keeps its own (equal or smaller)
- * size and is centered in it.
+ * track's extent ({@link trackExtents}), its cells' boxes (`boxOf`, the
+ * boxes the claim walk sized the tracks by, {@link cellBoxesOf}) at σ. A
+ * fill cell fills that extent; a cell with a size of its own keeps its own
+ * (equal or smaller) size and is centered in it.
  *
  * Where the layer has no σ on an axis (an unsized root, where shares have
- * no room: `GoFishNode.sharesHaveNoRoom`), a claim that grows with σ has
+ * no room: `GoFishNode.sharesHaveNoRoom`), a box that grows with σ has
  * no size there, as the layer proposes a child of a spread no size from
- * its claim. A claim with no σ in it is the same at any σ, so it still
- * sizes its track. A track no claim sizes then has no extent, and its
+ * its claim. A box with no σ in it is the same at any σ, so it still
+ * sizes its track. A track no box sizes then has no extent, and its
  * cells are proposed none on that axis: they keep their default size, as
  * a spread's bands do.
  */
 export function gridCellSizesAt(
   c: GridConstraint,
-  cellOf: CellOf,
+  boxOf: CellBox,
   sigmas: readonly [number | undefined, number | undefined]
 ): Map<string, [number | undefined, number | undefined]> {
   const extentsOn = (axis: 0 | 1): (number | undefined)[] => {
@@ -239,10 +261,10 @@ export function gridCellSizesAt(
       c,
       axis,
       (ref) => {
-        const claim = cellClaim(cellOf(ref), axis);
-        if (claim === undefined) return undefined;
-        if (sigma !== undefined) return Pwl.at(claim, sigma);
-        return Pwl.isConstant(claim) ? Pwl.at(claim, 0) : undefined;
+        const box = boxOf(ref, axis);
+        if (box === undefined) return undefined;
+        if (sigma !== undefined) return Pwl.at(box, sigma);
+        return Pwl.isConstant(box) ? Pwl.at(box, 0) : undefined;
       },
       sigma
     );
@@ -258,17 +280,17 @@ export function gridCellSizesAt(
   return out;
 }
 
-/** The tracks of `c` on `axis` that no cell's claim sizes, by index: each
- *  is one share of its scope (`fr(1)`), a flexible size
+/** The tracks of `c` on `axis` that no cell's box sizes (`boxOf`), by
+ *  index: each is one share of its scope (`fr(1)`), a flexible size
  *  (`warnFlexibleSizes`). */
 export const shareTracks = (
   c: GridConstraint,
   axis: 0 | 1,
-  cellOf: CellOf
+  boxOf: CellBox
 ): number[] =>
   Array.from({ length: trackCount(c, axis) }, (_, t) => t).filter((t) =>
     cellsOfTrack(c, axis, t).every(
-      (i) => cellClaim(cellOf(c.children[i]), axis) === undefined
+      (i) => boxOf(c.children[i], axis) === undefined
     )
   );
 

@@ -33,6 +33,7 @@ import {
   collectPositionDomains,
   gridSpaces,
   gridCellSizesAt,
+  cellBoxesOf,
   cellsByName,
   relateScheduleForLayout,
   type ConstraintSpec,
@@ -746,14 +747,12 @@ export const layer = createNodeOperatorSequential(
           const childScaleFactors = layerScales.sigmas;
           // A grid's cells at the σ they are laid out at
           // (`gridCellSizesAt`): each cell is proposed its track's extent,
-          // and the plan centers it in its track from its laid-out size.
+          // by the cells' boxes in this layer's plan, as the claim walk
+          // sized the tracks (`cellBoxesOf`), and the plan centers it in
+          // its track from its laid-out size.
           const gridC = selectGridConstraint(node.constraints);
           const gridCellByName = gridC
-            ? gridCellSizesAt(
-                gridC,
-                cellsByName(node.children),
-                childScaleFactors
-              )
+            ? gridCellSizesAt(gridC, cellBoxesOf(node), childScaleFactors)
             : undefined;
           // A node dressed in chrome reads its gutters off its chrome forms
           // at the σ it is laid out at (#1032). It seats its content past

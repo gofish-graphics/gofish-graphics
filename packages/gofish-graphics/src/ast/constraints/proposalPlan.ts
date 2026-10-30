@@ -248,7 +248,7 @@ export function placementConstraints(
  *
  * Priority is explicit and single-owner:
  *   1. grid: each cell is proposed ITS (column, row) track's extent (its cells'
- *      claims at the layer's σ, `gridCellSizesAt`), keyed by name, on each
+ *      boxes at the layer's σ, `gridCellSizesAt`), keyed by name, on each
  *      axis where its track has one, and the layer's box on any other;
  *   2. the child's own room in a share scope (`own`, where defined): its
  *      claim at the layer's σ, when σ is the size of a share

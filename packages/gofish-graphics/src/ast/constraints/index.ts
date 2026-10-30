@@ -87,6 +87,7 @@ export {
   isGridConstraint,
   gridSpaces,
   gridCellSizesAt,
+  cellBoxesOf,
   cellsByName,
   shareTracks,
   gridTracks,
