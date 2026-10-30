@@ -366,6 +366,17 @@ it (#1235), and a pass that wraps a child replaces it in its slot
 appends children to a layer after it is built, so slots do not move. `.relate()` is a layer method: it throws on any other node,
 because only `layer.tsx` knows how to schedule clauses.
 
+The clauses of one `.relate()` call form a `letrec`. A string `ref` written in
+a clause sees the layer's plain children and every node any of the call's
+clauses draws, so one clause can point at a node another clause draws. The
+nearest match wins, as everywhere. A node a clause draws at depth 0 therefore
+shadows a plain child of the same name nested deeper. This is shadowing, not
+capture. A clause's names are binders of the `letrec`, and a string ref in a
+clause is written in their scope. An operand is different. It is bound when
+`.relate()` runs, before any clause exists, so no name a clause draws can
+reach it. To mean the plain child where a clause draws the same name, use the
+operand from the callback's argument.
+
 Coordinates are single-assignment: a clause that reads a position must run
 after the clause that writes it. `scheduleRelate` orders the steps of one
 layer's layout. There are two kinds of step: the **solve**, which lays out the

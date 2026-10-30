@@ -378,7 +378,11 @@ when one is forced.
 **What fits.** A `.relate()` callback is a `letrec` over positions. A clause may
 name a node in a sibling clause, and the scheduler orders the clauses so that
 each position is written before it is read. The cycle error is the same check
-Syme describes.
+Syme describes. This is the intended reading (confirmed for #1237). A string
+ref in a clause is in the `letrec`'s scope, so a node a clause draws may
+shadow a deeper plain child of the same name. That is shadowing, not capture.
+Operands are bound before the clauses exist, so the clauses' names cannot
+reach them.
 
 **What does not fit.** In GoFish the names are bound by the structure, not by
 the `letrec`. The callback cannot introduce a name that the layer does not
