@@ -714,7 +714,9 @@ constraint with a `region` (`PositionRegion`,
   (`childPosScalesFor`). A layer of marks in a cell is one too, so the marks
   in it share the partition's frame. A text beside a `region` in such a
   layer is placed by an `align` that names the two, as any mark in a layer
-  is.
+  is. The `region` places itself there, as a rect with a data `x` and `x2`
+  does (`placesItself`: a shape its own data pins), so the align moves the
+  text to the region and never the region to the text.
 - A partition inside another partition's cell divides that cell: on each
   axis its key does not place, it gives each child the cell it is in, so
   the child is placed there as a child of the outer partition is. That cell

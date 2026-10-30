@@ -9,7 +9,7 @@
 // plans of the layers between compose (`planPlacement`).
 
 import { GoFishNode } from "../_node";
-import { hasOrigin } from "../underlyingSpace";
+import { hasOrigin, originIs } from "../underlyingSpace";
 import type { GoFishAST } from "../_ast";
 import { Extent, padExtent, scaleExtent, shiftExtent } from "../extent";
 import type { Size } from "../dims";
@@ -126,7 +126,9 @@ const reaching = (e: Extent, from: Extent, to: Extent): Extent =>
 /**
  * Whether `c` places itself on `axis` as it is laid out: a layer's literal
  * start, a shape's start or center, a pixel or a datum (`positionOf` in its
- * layout), or a node its own layout places from the refs it reads
+ * layout), a shape its own data pins there (a `region`, placed by the cell
+ * its data is in, as a rect with a data `x` and `x2` is), or a node its own
+ * layout places from the refs it reads
  * (`GoFishNode.placedByLayout`). Layout pins it where it put itself, so the
  * plan takes it there (`at:`).
  */
@@ -136,7 +138,12 @@ const placesItself = (c: GoFishAST, axis: 0 | 1): boolean => {
   if (c.claimWalk !== undefined)
     return c.claimWalk.literalStart(axis) !== undefined;
   const d = (c.args?.dims as { min?: unknown; center?: unknown }[])?.[axis];
-  return d?.min !== undefined || d?.center !== undefined;
+  return (
+    d?.min !== undefined ||
+    d?.center !== undefined ||
+    (c.children.length === 0 &&
+      originIs(c.resolveUnderlyingSpace()[axis], "pinned"))
+  );
 };
 
 /**

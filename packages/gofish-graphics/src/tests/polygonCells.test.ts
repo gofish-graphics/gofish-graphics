@@ -487,6 +487,43 @@ async function main() {
       JSON.stringify(hexCenters) === JSON.stringify(circleCenters),
       JSON.stringify({ hexCenters, circleCenters })
     );
+    // A layer of a region and a text, the text centered on the region by an
+    // align (the Airport Hex Counts story): the region places itself by its
+    // cell's data, so the align moves the text to it, and each hexagon is
+    // where a region alone draws it.
+    const { layer, text } = GoFish as any;
+    const Constraint = (GoFish as any).Constraint;
+    const ldl = await chart(rows, { axes: false, legend: false })
+      .flow(partition({ by: key }))
+      .mark(
+        layer([
+          region({ fill: distField("a").count() }).name("cell"),
+          text({ text: "x", fontSize: 10 }).name("count"),
+        ]).relate(({ cell, count }: any) => [
+          Constraint.align({ x: "middle", y: "middle" }, [cell, count]),
+        ])
+      )
+      .toDisplayList({ w: 300, h: 200 });
+    const lpaths = pathsOf(ldl).map((p) => p.d);
+    check(
+      "a region aligned with a text in a layer draws its hexagon where a region alone does",
+      JSON.stringify([...lpaths].sort()) ===
+        JSON.stringify(paths.map((p) => p.d).sort()),
+      JSON.stringify({ lpaths, alone: paths.map((p) => p.d) })
+    );
+    const texts: any[] = [];
+    const walkT = (it: any) => {
+      if (it.kind === "text") texts.push(it);
+      for (const c of it.children ?? []) walkT(c);
+    };
+    ldl.items.forEach(walkT);
+    const textXs = texts.map((t) => t.x);
+    check(
+      "the texts aligned with regions sit apart, one per hexagon",
+      new Set(textXs.map((x) => x.toFixed(3))).size ===
+        new Set(hexCenters.map((c) => c.split(",")[0])).size,
+      JSON.stringify({ textXs, hexCenters })
+    );
     const seeds = [
       { a: 0, b: 0 },
       { a: 2, b: 1 },
