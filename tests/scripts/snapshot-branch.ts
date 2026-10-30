@@ -8,7 +8,10 @@
  * The snapshot branch is a git orphan (no shared history with code branches)
  * containing only:
  *   .gitattributes          — LFS tracking rule for PNGs
- *   dom/                    — normalized HTML baselines (text, git-diffable)
+ *   dom/                    — normalized HTML baselines (text, git-diffable),
+ *                             each with its `<path>.warnings.txt` (the
+ *                             story's layout warnings and console errors;
+ *                             see story-warnings.ts)
  *   screenshots/            — PNG screenshots (Git LFS)
  *
  * These map to __snapshots__/dom/ and __snapshots__/screenshots/ locally,

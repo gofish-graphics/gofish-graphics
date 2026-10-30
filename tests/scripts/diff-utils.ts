@@ -15,6 +15,13 @@ import { join, dirname } from "path";
 import { diffLines } from "diff";
 import DMP from "diff-match-patch";
 import { storyMetaTitle, storyToPath } from "./path-mapping.js";
+import {
+  diffWarnings,
+  readWarnings,
+  warningsPathFor,
+  type WarningsDiff,
+  type WarningsState,
+} from "./story-warnings.js";
 
 /**
  * Character-level diff backed by Google's diff-match-patch with a per-pair
@@ -76,6 +83,14 @@ export interface DiffEntry {
   afterScreenshotPath: string | null;
   /** Pixel diff percentage (0–100), null if not yet computed */
   diffPercent: number | null;
+  /**
+   * The story's warnings against its baseline's (see story-warnings.ts).
+   * Null for a parity entry, which compares DOM only.
+   */
+  warnings: WarningsDiff | null;
+  /** False for a regression whose DOM is identical: only its warnings
+   *  changed. True otherwise. */
+  domChanged: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -108,45 +123,53 @@ export function readOptional(path: string): string | null {
 // Collect diffs
 // ---------------------------------------------------------------------------
 
-export function collectDiffs(): DiffEntry[] {
+/**
+ * The JS capture (`JS_DIR`) against the baselines: a story with no baseline
+ * is "new"; one whose DOM differs, or whose warnings changed, is a
+ * "regression". A baseline with no warnings file (recorded before warnings
+ * were captured) leaves the warnings unrecorded, which on its own is no diff.
+ * This is the one regression check: compare.ts gates on it and the reports
+ * list it.
+ */
+export function collectJsDiffs(): DiffEntry[] {
   const entries: DiffEntry[] = [];
-  const jsFiles = listHtmlFiles(JS_DIR);
-
-  for (const file of jsFiles) {
+  for (const file of listHtmlFiles(JS_DIR)) {
     const jsContent = readFileSync(join(JS_DIR, file), "utf-8");
     const baselineContent = readOptional(join(BASELINE_DOM, file));
     const pngFile = file.replace(/\.html$/, ".png");
     const afterPng = join(JS_DIR, pngFile);
+    const hasBaseline = baselineContent !== null;
+    const warnings = diffWarnings(
+      hasBaseline
+        ? readWarnings(join(BASELINE_DOM, warningsPathFor(file)))
+        : null,
+      readWarnings(join(JS_DIR, warningsPathFor(file))) ?? [],
+      hasBaseline
+    );
+    const domChanged = jsContent !== baselineContent;
+    if (!domChanged && warnings.state !== "changed") continue;
 
-    if (baselineContent === null) {
-      entries.push({
-        path: file,
-        kind: "new",
-        status: "pending",
-        beforeDom: null,
-        afterDom: jsContent,
-        beforeScreenshotPath: null,
-        afterScreenshotPath: existsSync(afterPng) ? afterPng : null,
-        diffPercent: null,
-      });
-    } else if (jsContent !== baselineContent) {
-      const beforePng = join(BASELINE_SCREENSHOTS, pngFile);
-      entries.push({
-        path: file,
-        kind: "regression",
-        status: "pending",
-        beforeDom: baselineContent,
-        afterDom: jsContent,
-        beforeScreenshotPath: existsSync(beforePng) ? beforePng : null,
-        afterScreenshotPath: existsSync(afterPng) ? afterPng : null,
-        diffPercent: null,
-      });
-    }
+    const beforePng = join(BASELINE_SCREENSHOTS, pngFile);
+    entries.push({
+      path: file,
+      kind: hasBaseline ? "regression" : "new",
+      status: "pending",
+      beforeDom: baselineContent,
+      afterDom: jsContent,
+      beforeScreenshotPath:
+        hasBaseline && existsSync(beforePng) ? beforePng : null,
+      afterScreenshotPath: existsSync(afterPng) ? afterPng : null,
+      diffPercent: null,
+      warnings,
+      domChanged,
+    });
   }
-
-  entries.push(...collectParityDiffs());
-
   return entries;
+}
+
+/** The JS diffs (`collectJsDiffs`) followed by the parity diffs. */
+export function collectDiffs(): DiffEntry[] {
+  return [...collectJsDiffs(), ...collectParityDiffs()];
 }
 
 // ---------------------------------------------------------------------------
@@ -182,6 +205,12 @@ export function collectRemovedStories(): DiffEntry[] {
       beforeScreenshotPath: existsSync(beforePng) ? beforePng : null,
       afterScreenshotPath: null,
       diffPercent: null,
+      warnings: diffWarnings(
+        readWarnings(join(BASELINE_DOM, warningsPathFor(path))),
+        null,
+        true
+      ),
+      domChanged: true,
     };
   });
 }
@@ -231,6 +260,8 @@ export function collectParityDiffs(): DiffEntry[] {
       beforeScreenshotPath: existsSync(beforePng) ? beforePng : null,
       afterScreenshotPath: existsSync(afterPng) ? afterPng : null,
       diffPercent: null,
+      warnings: null,
+      domChanged: true,
     });
   }
 
@@ -270,8 +301,8 @@ export function loadExportExemptParityPaths(): Set<string> {
 // ---------------------------------------------------------------------------
 
 /**
- * Copies a story's captured DOM and screenshot into a baseline directory
- * laid out like the snapshot branch (`dom/` and `screenshots/`). Defaults to
+ * Copies a story's captured DOM, warnings and screenshot into a baseline
+ * directory laid out like the snapshot branch (`dom/` and `screenshots/`). Defaults to
  * the local capture and the local `__snapshots__/` cache.
  */
 export function acceptStory(
@@ -281,6 +312,15 @@ export function acceptStory(
   const htmlDest = join(baselineDir, "dom", path);
   mkdirSync(dirname(htmlDest), { recursive: true });
   writeFileSync(htmlDest, readFileSync(join(captureDir, path)));
+
+  // The warnings file is the capture's or none: a capture without one (made
+  // before warnings were captured) leaves the warnings unrecorded rather
+  // than keeping a stale baseline's.
+  const warningsFile = warningsPathFor(path);
+  const warningsSrc = join(captureDir, warningsFile);
+  const warningsDest = join(baselineDir, "dom", warningsFile);
+  if (existsSync(warningsSrc)) cpSync(warningsSrc, warningsDest);
+  else rmSync(warningsDest, { force: true });
 
   const pngFile = path.replace(/\.html$/, ".png");
   const pngSrc = join(captureDir, pngFile);
@@ -306,6 +346,7 @@ export function removeBaselineStory(
   baselineDir = BASELINE_DIR
 ): void {
   rmSync(join(baselineDir, "dom", path), { force: true });
+  rmSync(join(baselineDir, "dom", warningsPathFor(path)), { force: true });
   rmSync(join(baselineDir, "screenshots", path.replace(/\.html$/, ".png")), {
     force: true,
   });
@@ -461,3 +502,63 @@ export function formatDomDiff(before: string, after: string): string {
 
 /** Below Cloudflare Pages' 25 MiB per-file limit. */
 const MAX_DOM_DIFF_BYTES = 20 * 2 ** 20;
+// ---------------------------------------------------------------------------
+// Warnings formatting (see story-warnings.ts)
+// ---------------------------------------------------------------------------
+
+const STATE_NOTE: Record<WarningsState, string> = {
+  same: "unchanged",
+  changed: "changed",
+  unrecorded:
+    "baseline predates warnings capture: these are recorded as the new baseline on accept",
+  new: "new story",
+  removed: "story removed: the baseline's warnings",
+};
+
+/** A one-line summary of `diff`, e.g. `2 warnings, changed (+1 −1)`. */
+export function warningsSummary(diff: WarningsDiff): string {
+  const count = diff.lines.filter((l) =>
+    diff.state === "removed" ? true : l.kind !== "removed"
+  ).length;
+  const added = diff.lines.filter((l) => l.kind === "added").length;
+  const removed = diff.lines.filter((l) => l.kind === "removed").length;
+  const counts = diff.state === "changed" ? ` (+${added} −${removed})` : "";
+  const noun = count === 1 ? "warning" : "warnings";
+  return `${count} ${noun}, ${STATE_NOTE[diff.state]}${counts}`;
+}
+
+/**
+ * `diff` as a self-contained HTML fragment (inline styles only, so it drops
+ * into the review site and the capture-diff report alike): one row per line,
+ * added lines green with `+`, removed red with `−`, kept plain. In an
+ * unrecorded baseline the "added" lines are not new warnings, only newly
+ * recorded ones, so they are marked as the new baseline instead.
+ */
+export function formatWarningsHtml(diff: WarningsDiff): string {
+  if (diff.lines.length === 0) {
+    return `<div style="padding:8px 12px;color:#888;font-size:13px;">No warnings.</div>`;
+  }
+  const style = {
+    added: { bg: "#d4edda", fg: "#155724", sign: "+" },
+    removed: { bg: "#f8d7da", fg: "#721c24", sign: "−" },
+    kept: { bg: "#f8f8f8", fg: "#555", sign: " " },
+    baseline: { bg: "#e8f0fb", fg: "#1f4e8c", sign: "•" },
+  };
+  const rows = diff.lines
+    .map(({ text, kind }) => {
+      const s =
+        diff.state === "unrecorded" || diff.state === "new"
+          ? style.baseline
+          : diff.state === "removed"
+            ? style.kept
+            : style[kind];
+      return (
+        `<tr style="background:${s.bg};">` +
+        `<td style="color:${s.fg};padding:0 6px;user-select:none;vertical-align:top;">${s.sign}</td>` +
+        `<td style="color:${s.fg};white-space:pre-wrap;word-break:break-word;padding:2px 8px;">${escapeHtml(text)}</td>` +
+        `</tr>`
+      );
+    })
+    .join("");
+  return `<table style="border-collapse:collapse;width:100%;font-family:monospace;font-size:12px;line-height:1.5;">${rows}</table>`;
+}

@@ -4,6 +4,7 @@
  * For each failing story (regression, parity, new, or removed), the report shows:
  *   - Strobe animation between before/after screenshots (base64-embedded, CSS keyframes)
  *   - Pixel diff image (base64-embedded) with diff percentage
+ *   - The story's warnings against its baseline's (story-warnings.ts)
  *   - Colored line diff of the DOM snapshot
  *
  * Outputs:
@@ -20,6 +21,8 @@ import { join } from "path";
 import {
   collectReviewDiffs,
   formatDomDiff,
+  formatWarningsHtml,
+  warningsSummary,
   escapeHtml,
   JS_DIR,
   PYTHON_DIR,
@@ -160,8 +163,18 @@ function generateReport(entries: ReportEntry[]): string {
         ${strobeHtml}
         ${pixelDiffHtml}
       </div>
+      ${
+        d.warnings && d.warnings.lines.length > 0
+          ? `<details ${d.warnings.state === "changed" ? "open" : ""} style="padding:0 16px 16px;">
+        <summary style="cursor:pointer;font-weight:bold;font-size:13px;margin-bottom:8px;">Warnings: ${escapeHtml(warningsSummary(d.warnings))}</summary>
+        <div style="max-height:400px;overflow:auto;border:1px solid #e0e0e0;border-radius:4px;">
+          ${formatWarningsHtml(d.warnings)}
+        </div>
+      </details>`
+          : ""
+      }
       <details style="padding:0 16px 16px;">
-        <summary style="cursor:pointer;font-weight:bold;font-size:13px;margin-bottom:8px;">DOM diff</summary>
+        <summary style="cursor:pointer;font-weight:bold;font-size:13px;margin-bottom:8px;">DOM diff${d.domChanged ? "" : " (identical: only the warnings changed)"}</summary>
         <div style="max-height:600px;overflow:auto;border:1px solid #e0e0e0;border-radius:4px;">
           ${domDiffHtml}
         </div>

@@ -15,7 +15,8 @@
  *
  * The capture loop: spin up a Vite dev server that serves the stories-runner
  * page, then render every (optionally filtered) story and extract + normalize
- * its DOM — in a FRESH browser context per story. The
+ * its DOM and its warnings (layout warnings and console errors, see
+ * story-warnings.ts) — in a FRESH browser context per story. The
  * per-story context is deliberate, not waste: Chromium's canvas `measureText`
  * font metrics (`fontBoundingBoxAscent`/`Descent`, sometimes advance widths)
  * for a font with a distinct real face (e.g. `italic 30px serif` → Times
@@ -75,6 +76,13 @@ import { writeFileSync, mkdirSync, rmSync, existsSync, cpSync } from "fs";
 import { join, dirname } from "path";
 import { normalizeDom } from "./normalize-dom.js";
 import { storyToPath } from "./path-mapping.js";
+import {
+  LAYOUT_WARNING_PREFIX,
+  consoleWarningLine,
+  pageErrorLine,
+  serializeWarnings,
+  warningsPathFor,
+} from "./story-warnings.js";
 import { git, removeWorktree } from "./snapshot-branch.js";
 
 export interface StoryInfo {
@@ -93,7 +101,8 @@ export interface CaptureOptions {
   harnessDir: string;
   /** Port for this capture's Vite server. Must be unique among concurrent captures. */
   port: number;
-  /** Where to write `<path>.html` (and `<path>.png` when `screenshot`). */
+  /** Where to write `<path>.html` and `<path>.warnings.txt` (and
+   *  `<path>.png` when `screenshot`). */
   outDir: string;
   /** Case-insensitive substring matched against `title/name` or story id. */
   filter?: string;
@@ -148,15 +157,11 @@ export interface CaptureResult {
   failed: { path: string; error: string }[];
   skipped: string[];
   /** Absolute paths written per captured story, in story order. */
-  written: { html: string; png?: string }[];
+  written: { html: string; warnings: string; png?: string }[];
 }
 
 /** Wall-clock instant the fake clock is installed at. Any fixed value works;
  *  what matters is that it is the same on every run and every machine. */
-/** The prefix of a layout warning's console line (`LAYOUT_WARNING_PREFIX`
- *  in gofish-graphics' `layoutWarnings.ts`). */
-const LAYOUT_WARNING_PREFIX = "[gofish:layout]";
-
 const CLOCK_EPOCH = Date.UTC(2024, 0, 1, 0, 0, 0);
 /** Where the clock is parked once the page and the story's module have loaded.
  *  They load with time running normally (a clock paused across module init
@@ -338,7 +343,16 @@ export async function withBaseRefHarness<T>(
   }
 }
 
-export type RunnerPage = { context: BrowserContext; page: Page };
+/**
+ * A runner page, and the warnings lines (see story-warnings.ts) its console
+ * has printed so far, in the order printed. A page renders one story, so
+ * these are that story's warnings.
+ */
+export type RunnerPage = {
+  context: BrowserContext;
+  page: Page;
+  warnings: string[];
+};
 
 /**
  * Open a fresh, fully isolated runner page. A new browser CONTEXT gets its own
@@ -348,7 +362,8 @@ export type RunnerPage = { context: BrowserContext; page: Page };
  * flipped `300 18px monospace` metrics for every later story in the run — see
  * header comment). Context startup is ~tens of ms, same order as the
  * navigation itself. Browser console errors and layout warnings go to `log`,
- * so a story's errors and warnings print with that story. `contextOptions` override the context defaults
+ * so a story's errors and warnings print with that story, and to the page's
+ * `warnings`, which the capture stores. `contextOptions` override the context defaults
  * (capture-docs-images asks for `deviceScaleFactor: 2`).
  */
 async function openRunnerPage(
@@ -367,7 +382,10 @@ async function openRunnerPage(
   // header comment).
   await context.clock.install({ time: CLOCK_EPOCH });
   const page = await context.newPage();
+  const warnings: string[] = [];
   page.on("console", (msg) => {
+    const line = consoleWarningLine(msg.type(), msg.text());
+    if (line !== null) warnings.push(line);
     if (msg.type() === "error")
       log({ err: true, text: `[browser] ${msg.text()}` });
     // A layout warning (fixed parts larger than their slot, a drawing past
@@ -377,9 +395,10 @@ async function openRunnerPage(
     else if (process.env.DEBUG)
       log({ err: false, text: `[browser:${msg.type()}] ${msg.text()}` });
   });
-  page.on("pageerror", (err) =>
-    log({ err: true, text: `[browser pageerror] ${err.message}` })
-  );
+  page.on("pageerror", (err) => {
+    warnings.push(pageErrorLine(err.message));
+    log({ err: true, text: `[browser pageerror] ${err.message}` });
+  });
   await page.goto(`http://localhost:${port}/stories-runner.html`, {
     waitUntil: "domcontentloaded",
   });
@@ -391,7 +410,7 @@ async function openRunnerPage(
   // `await document.fonts.ready` resolves in a microtask rather than after
   // a real network fetch of unpredictable length.
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
-  return { context, page };
+  return { context, page, warnings };
 }
 
 /**
@@ -418,7 +437,11 @@ export async function listStories(
 }
 
 type StoryOutcome =
-  | { kind: "ok"; path: string; written: { html: string; png?: string } }
+  | {
+      kind: "ok";
+      path: string;
+      written: { html: string; warnings: string; png?: string };
+    }
   | { kind: "failed"; path: string; error: string }
   | { kind: "skipped"; path: string };
 
@@ -495,9 +518,11 @@ export async function renderStoryOnFakeClock(
   return renderError ? String(renderError) : null;
 }
 
-/** Render one story in `page` and write its output. Throws on timeout. */
+/** Render one story in `runner`'s page and write its output: the normalized
+ *  DOM, the warnings (story-warnings.ts) and, when asked, a screenshot.
+ *  Throws on timeout. */
 async function captureStory(
-  page: Page,
+  { page, warnings }: RunnerPage,
   story: StoryInfo,
   outDir: string,
   screenshot: boolean,
@@ -523,6 +548,11 @@ async function captureStory(
   mkdirSync(dirname(html), { recursive: true });
   writeFileSync(html, normalizeDom(rawDom), "utf-8");
 
+  // Written after the DOM is read: every message the render printed has
+  // reached this process by the time that evaluate returned.
+  const warningsFile = join(outDir, warningsPathFor(`${path}.html`));
+  writeFileSync(warningsFile, serializeWarnings(warnings), "utf-8");
+
   let png: string | undefined;
   if (screenshot) {
     const rootHandle = await page.$("#stories-root");
@@ -532,7 +562,7 @@ async function captureStory(
     }
   }
 
-  return { kind: "ok", path, written: { html, png } };
+  return { kind: "ok", path, written: { html, warnings: warningsFile, png } };
 }
 
 /** The `CAPTURE_CONCURRENCY` env var if set, else
@@ -638,11 +668,11 @@ export async function captureStories(
         // Fresh context (and page) per story: resets Chromium's renderer
         // font-metric state so text measurement can't be polluted by a
         // previous story's raster (see header comment).
-        const { context, page } = await open(log);
+        const runner = await open(log);
         try {
-          outcome = await captureStory(page, story, outDir, screenshot, log);
+          outcome = await captureStory(runner, story, outDir, screenshot, log);
         } finally {
-          await context.close();
+          await runner.context.close();
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

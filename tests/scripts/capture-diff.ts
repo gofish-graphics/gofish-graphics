@@ -5,9 +5,11 @@
  * question "did my change move anything I didn't intend?" WITHOUT stored
  * baselines or CI.
  *
- * It captures the normalized DOM of every (optionally filtered) story twice —
+ * It captures the normalized DOM and the warnings (layout warnings and console
+ * errors, see story-warnings.ts) of every (optionally filtered) story twice —
  * once from the current worktree (HEAD) and once from a throwaway git worktree
- * checked out at <base-ref> — then diffs the two per story. Both captures use
+ * checked out at <base-ref> — then diffs the two per story. A story whose
+ * warnings changed has changed, even when its DOM is identical. Both captures use
  * this tree's capture tooling (driver, harness, normalization; see
  * `withBaseRefHarness`), so only the library and stories differ between them.
  * Because the diff is
@@ -25,11 +27,13 @@
  *
  * Output:
  *   tests/tmp/capture-diff/head/<path>.html   normalized DOM at HEAD
- *   tests/tmp/capture-diff/base/<path>.html   normalized DOM at <base-ref>
- *   tests/tmp/capture-diff/report.html        side-by-side DOM diff and the
+ *   tests/tmp/capture-diff/head/<path>.warnings.txt   its warnings
+ *   tests/tmp/capture-diff/base/...           the same at <base-ref>
+ *   tests/tmp/capture-diff/report.html        DOM diff, warnings diff and the
  *                                             highlighted spec (changed stories)
  *
  * Exit code 0 = nothing moved, 1 = at least one story changed/added/removed
+ * (a warnings-only change counts)
  * (so it doubles as a pass/fail gate in an inner loop).
  */
 
@@ -40,7 +44,18 @@ import {
   HARNESS_DIR,
   withBaseRefHarness,
 } from "./capture-core.js";
-import { formatDomDiff, escapeHtml } from "./diff-utils.js";
+import {
+  formatDomDiff,
+  formatWarningsHtml,
+  warningsSummary,
+  escapeHtml,
+} from "./diff-utils.js";
+import {
+  diffWarnings,
+  readWarnings,
+  warningsPathFor,
+  type WarningsDiff,
+} from "./story-warnings.js";
 import { git } from "./snapshot-branch.js";
 import {
   loadSpecsByPath,
@@ -67,6 +82,7 @@ interface Change {
   kind: "changed" | "added" | "removed";
   baseDom: string | null;
   headDom: string | null;
+  warnings: WarningsDiff;
 }
 
 function generateReport(
@@ -89,24 +105,41 @@ function generateReport(
 
   const entryHtml = changes
     .map((c) => {
+      const domChanged = c.baseDom !== c.headDom;
       const body =
         c.kind === "changed" && c.baseDom && c.headDom
-          ? formatDomDiff(c.baseDom, c.headDom)
+          ? domChanged
+            ? formatDomDiff(c.baseDom, c.headDom)
+            : `<div style="padding:8px 16px;color:#888;font-size:13px;">DOM identical: only the warnings changed.</div>`
           : `<pre style="margin:0;white-space:pre-wrap;padding:8px;">${escapeHtml(
               c.headDom ?? c.baseDom ?? ""
             )}</pre>`;
+      // Open when the warnings changed; collapsed when they are only there.
+      const warningsOpen = c.warnings.state === "changed";
+      const warningsHtml =
+        c.warnings.lines.length === 0
+          ? ""
+          : `
+      <details ${warningsOpen ? "open" : ""} style="padding:0;border-top:1px solid #e0e0e0;">
+        <summary style="cursor:pointer;font-weight:bold;font-size:13px;padding:8px 16px;">Warnings: ${escapeHtml(warningsSummary(c.warnings))}</summary>
+        <div style="max-height:400px;overflow:auto;border-top:1px solid #e0e0e0;">
+          ${formatWarningsHtml(c.warnings)}
+        </div>
+      </details>`;
       return `
     <div style="border:1px solid #ddd;margin:16px 0;border-radius:6px;overflow:hidden;">
       <div style="padding:12px 16px;background:${kindColor[c.kind]}22;border-bottom:1px solid #ddd;">
-        <span style="font-weight:bold;color:${kindColor[c.kind]};">${kindLabel[c.kind]}</span>
+        <span style="font-weight:bold;color:${kindColor[c.kind]};">${kindLabel[c.kind]}${
+          c.kind === "changed" && !domChanged ? " (warnings only)" : ""
+        }</span>
         <span style="margin-left:12px;font-family:monospace;">${escapeHtml(c.path)}</span>
       </div>
-      <details ${c.kind === "changed" ? "open" : ""} style="padding:0;">
+      <details ${c.kind === "changed" && domChanged ? "open" : ""} style="padding:0;">
         <summary style="cursor:pointer;font-weight:bold;font-size:13px;padding:8px 16px;">DOM diff (− ${escapeHtml(baseRef)}, + HEAD)</summary>
         <div style="max-height:600px;overflow:auto;border-top:1px solid #e0e0e0;">
           ${body}
         </div>
-      </details>${
+      </details>${warningsHtml}${
         specs.has(c.path)
           ? `
       <details style="padding:0;border-top:1px solid #e0e0e0;">
@@ -135,7 +168,7 @@ function generateReport(
 </head>
 <body>
   <h1>capture-diff: HEAD vs ${escapeHtml(baseRef)}</h1>
-  <p>${changes.length} story(ies) moved${filter ? ` (filter: <code>${escapeHtml(filter)}</code>)` : ""}. Diff is over normalized geometry/DOM, so it is platform-stable.</p>
+  <p>${changes.length} story(ies) moved${filter ? ` (filter: <code>${escapeHtml(filter)}</code>)` : ""}. Diff is over normalized geometry/DOM and each story's warnings (layout warnings and console errors), so it is platform-stable.</p>
   ${entryHtml}
 </body>
 </html>`;
@@ -210,13 +243,24 @@ async function main() {
     const baseDom = baseSet.has(path)
       ? readFileSync(join(BASE_DIR, path), "utf-8")
       : null;
+    // Both sides are captured by this tree's tooling, so each captured story
+    // has its warnings file.
+    const warnings = diffWarnings(
+      baseDom === null
+        ? null
+        : readWarnings(join(BASE_DIR, warningsPathFor(path))),
+      headDom === null
+        ? null
+        : readWarnings(join(HEAD_DIR, warningsPathFor(path))),
+      baseDom !== null
+    );
 
     if (baseDom === null)
-      changes.push({ path, kind: "added", baseDom, headDom });
+      changes.push({ path, kind: "added", baseDom, headDom, warnings });
     else if (headDom === null)
-      changes.push({ path, kind: "removed", baseDom, headDom });
-    else if (headDom !== baseDom)
-      changes.push({ path, kind: "changed", baseDom, headDom });
+      changes.push({ path, kind: "removed", baseDom, headDom, warnings });
+    else if (headDom !== baseDom || warnings.state === "changed")
+      changes.push({ path, kind: "changed", baseDom, headDom, warnings });
   }
 
   // 4. Report.
@@ -233,7 +277,19 @@ async function main() {
   } else {
     if (changed.length) {
       console.log(`  ${changed.length} changed:`);
-      for (const c of changed) console.log(`    ~ ${c.path}`);
+      for (const c of changed) {
+        const what =
+          c.headDom === c.baseDom
+            ? " (warnings only)"
+            : c.warnings.state === "changed"
+              ? " (DOM and warnings)"
+              : "";
+        console.log(`    ~ ${c.path}${what}`);
+        for (const l of c.warnings.lines) {
+          if (l.kind === "added") console.log(`        + ${l.text}`);
+          else if (l.kind === "removed") console.log(`        - ${l.text}`);
+        }
+      }
     }
     if (added.length) {
       console.log(`  ${added.length} added (not in ${baseRef}):`);

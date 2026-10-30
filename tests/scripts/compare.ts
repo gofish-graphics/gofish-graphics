@@ -1,6 +1,8 @@
 /**
  * Compare DOM snapshots:
- *   1. Regression check  — JS DOM (tmp/js/) vs stored baselines (__snapshots__/dom/)
+ *   1. Regression check  — JS DOM and warnings (tmp/js/) vs stored baselines
+ *                          (__snapshots__/dom/); a change in a story's
+ *                          warnings alone is a regression too
  *   2. Parity check      — Python DOM (tmp/python/) vs JS DOM (tmp/js/)
  *
  * Flags:
@@ -10,83 +12,43 @@
  * On failure, runs diff-report to generate tmp/diff-report.html.
  */
 
-import { readFileSync, readdirSync, existsSync, writeFileSync } from "fs";
+import { writeFileSync } from "fs";
 import { join } from "path";
 import { execSync } from "child_process";
 import { getSnapshotBranchName, pullSnapshots } from "./snapshot-branch.js";
 import {
+  collectJsDiffs,
   collectParityDiffs,
   collectRemovedStories,
   loadExportExemptParityPaths,
 } from "./diff-utils.js";
 
 const ROOT = join(import.meta.dirname, "../..");
-const BASELINE_DIR = join(ROOT, "__snapshots__/dom");
-const JS_DIR = join(import.meta.dirname, "../tmp/js");
 const SUMMARY_PATH = join(import.meta.dirname, "../tmp/diff-summary.json");
 
 const jsOnly = process.argv.includes("--js-only");
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Recursively list .html files under a directory. */
-function listHtmlFiles(dir: string, prefix = ""): string[] {
-  if (!existsSync(dir)) return [];
-  const results: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-    if (entry.isDirectory()) {
-      results.push(...listHtmlFiles(join(dir, entry.name), rel));
-    } else if (entry.name.endsWith(".html")) {
-      results.push(rel);
-    }
-  }
-  return results;
-}
 
 interface Failure {
   kind: "regression" | "parity" | "missing-baseline" | "removed";
   path: string;
   expected?: string;
   actual?: string;
+  /** For a regression: false when only its warnings changed. */
+  domChanged?: boolean;
 }
 
 // ---------------------------------------------------------------------------
-// Regression check: JS vs baselines
+// Regression check: JS vs baselines (DOM and warnings; see collectJsDiffs)
 // ---------------------------------------------------------------------------
 
 function checkRegressions(): Failure[] {
-  const failures: Failure[] = [];
-  const jsFiles = listHtmlFiles(JS_DIR);
-
-  for (const file of jsFiles) {
-    const baselinePath = join(BASELINE_DIR, file);
-    const jsPath = join(JS_DIR, file);
-    const jsContent = readFileSync(jsPath, "utf-8");
-
-    if (!existsSync(baselinePath)) {
-      failures.push({
-        kind: "missing-baseline",
-        path: file,
-        actual: jsContent,
-      });
-      continue;
-    }
-
-    const baselineContent = readFileSync(baselinePath, "utf-8");
-    if (jsContent !== baselineContent) {
-      failures.push({
-        kind: "regression",
-        path: file,
-        expected: baselineContent,
-        actual: jsContent,
-      });
-    }
-  }
-
-  return failures;
+  return collectJsDiffs().map((d) => ({
+    kind: d.kind === "new" ? "missing-baseline" : "regression",
+    path: d.path,
+    expected: d.beforeDom ?? undefined,
+    actual: d.afterDom ?? undefined,
+    domChanged: d.domChanged,
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -137,6 +99,9 @@ function main() {
   }));
 
   const rCount = regressions.filter((f) => f.kind === "regression").length;
+  const wCount = regressions.filter(
+    (f) => f.kind === "regression" && f.domChanged === false
+  ).length;
   const mCount = regressions.filter(
     (f) => f.kind === "missing-baseline"
   ).length;
@@ -147,7 +112,9 @@ function main() {
   if (rCount > 0) {
     console.log(`  ${rCount} regression(s) detected`);
     for (const f of regressions.filter((f) => f.kind === "regression")) {
-      console.log(`    - ${f.path}`);
+      console.log(
+        `    - ${f.path}${f.domChanged === false ? " (warnings only)" : ""}`
+      );
     }
   }
 
@@ -186,6 +153,9 @@ function main() {
     JSON.stringify(
       {
         regressions: rCount,
+        /** Of the regressions, those whose DOM is identical: only their
+         *  warnings changed. */
+        warningsOnly: wCount,
         newStories: mCount,
         parityFailures: pCount,
         removed: remCount,

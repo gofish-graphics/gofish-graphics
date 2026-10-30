@@ -24,6 +24,8 @@ import { join, dirname } from "path";
 import {
   collectReviewDiffs,
   formatDomDiff,
+  formatWarningsHtml,
+  warningsSummary,
   escapeHtml,
   type DiffEntry,
 } from "./diff-utils.js";
@@ -136,6 +138,14 @@ write(
       status: d.status,
       diffPercent: d.diffPercent,
       hasSpec: withSpec.has(d.path),
+      /** False when only the story's warnings changed. */
+      domChanged: d.domChanged,
+      /** How the warnings compare to the baseline's (`WarningsState` in
+       *  story-warnings.ts), or null for a parity entry. */
+      warnings: d.warnings?.state ?? null,
+      /** Lines on either side; 0 means the story warns about nothing. */
+      warningLines: d.warnings?.lines.length ?? 0,
+      warningsSummary: d.warnings ? warningsSummary(d.warnings) : null,
     })),
     null,
     2
@@ -168,12 +178,29 @@ console.log(
 );
 
 // ---------------------------------------------------------------------------
-// data/dom-diffs/{path}.html  and  screenshots/
+// data/warnings/{path}.html, data/dom-diffs/{path}.html  and  screenshots/
 // ---------------------------------------------------------------------------
 
 for (const entry of diffs) {
+  // Warnings before and after, added and removed lines highlighted.
+  if (entry.warnings) {
+    write(
+      join(OUT_DIR, "data/warnings", entry.path),
+      formatWarningsHtml(entry.warnings)
+    );
+  }
+
   // DOM diff HTML
-  if (entry.beforeDom !== null && entry.afterDom !== null) {
+  if (
+    entry.beforeDom !== null &&
+    entry.afterDom !== null &&
+    !entry.domChanged
+  ) {
+    write(
+      join(OUT_DIR, "data/dom-diffs", entry.path),
+      "<em>DOM identical: only the warnings changed.</em>"
+    );
+  } else if (entry.beforeDom !== null && entry.afterDom !== null) {
     const html = formatDomDiff(entry.beforeDom, entry.afterDom);
     write(join(OUT_DIR, "data/dom-diffs", entry.path), html);
   } else if (entry.afterDom !== null) {
@@ -254,6 +281,8 @@ const html = `<!DOCTYPE html>
     .kind-new { color: #89b4fa; }
     .kind-parity { color: #fab387; }
     .kind-removed { color: #9399b2; }
+    .kind-warnings { color: #f9e2af; }
+    .story-warn { font-size: 11px; color: #f9e2af; margin-top: 1px; }
     .status-accepted { color: #a6e3a1 !important; }
     .status-rejected { color: #f38ba8 !important; }
 
@@ -292,6 +321,15 @@ const html = `<!DOCTYPE html>
     #spec-body.expanded { max-height: none; }
     .spec-missing { padding: 16px; color: #888; font-size: 13px; }
     ${SPEC_CSS}
+
+    /* Warnings */
+    #warnings-section { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; margin-bottom: 16px; }
+    #warnings-section > summary { padding: 10px 16px; font-size: 13px; font-weight: 600; cursor: pointer; user-select: none; }
+    #warnings-section > summary:hover { background: #f8f8f8; }
+    #warnings-section[open] > summary { border-bottom: 1px solid #e0e0e0; }
+    #warnings-section.changed > summary { background: #fff8e1; }
+    #warnings-state { font-weight: 400; color: #666; margin-left: 6px; }
+    #warnings-content { max-height: 400px; overflow: auto; }
 
     /* DOM diff */
     #dom-diff-section { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; margin-bottom: 16px; }
@@ -337,6 +375,7 @@ const html = `<!DOCTYPE html>
   <div id="sidebar-filters">
     <button class="filter-btn active" data-filter="all">All</button>
     <button class="filter-btn" data-filter="pending">Pending</button>
+    <button class="filter-btn" data-filter="warnings-only" title="Stories whose DOM is identical and only their warnings changed">Warnings only</button>
   </div>
   <div id="story-list"></div>
 </div>
@@ -418,6 +457,13 @@ const html = `<!DOCTYPE html>
     </div>
     </div>
 
+    <!-- Warnings: layout warnings and console errors, before and after.
+         Open when they changed, collapsed when they are only there. -->
+    <details id="warnings-section" style="display:none;">
+      <summary>Warnings<span id="warnings-state"></span></summary>
+      <div id="warnings-content"></div>
+    </details>
+
     <!-- DOM diff -->
     <div id="dom-diff-section">
       <div id="dom-diff-toggle">
@@ -447,6 +493,7 @@ const html = `<!DOCTYPE html>
   let hasUncommittedAccepts = false;
 
   const domDiffCache = {};
+  const warningsCache = {};
   const specCache = {};
 
   function screenshotUrl(which, path) {
@@ -486,7 +533,9 @@ const html = `<!DOCTYPE html>
   function filteredDiffs() {
     const items = filter === 'pending'
       ? allDiffs.filter(d => d.status === 'pending')
-      : allDiffs;
+      : filter === 'warnings-only'
+        ? allDiffs.filter(d => d.warnings === 'changed' && !d.domChanged)
+        : allDiffs;
     return sortByPixelPercentDesc(items);
   }
 
@@ -510,9 +559,15 @@ const html = `<!DOCTYPE html>
         d.status === 'accepted' ? '✓ accepted' :
         d.status === 'rejected' ? '✗ rejected' : 'pending';
       const statusClass = d.status === 'accepted' ? 'status-accepted' : d.status === 'rejected' ? 'status-rejected' : '';
+      const warningsOnly = d.warnings === 'changed' && !d.domChanged;
       el.innerHTML =
         '<div class="story-name">' + escHtml(d.path) + '</div>' +
-        '<div class="story-kind kind-' + d.kind + '">' + d.kind.toUpperCase() + '</div>' +
+        (warningsOnly
+          ? '<div class="story-kind kind-warnings">WARNINGS CHANGED</div>'
+          : '<div class="story-kind kind-' + d.kind + '">' + d.kind.toUpperCase() + '</div>') +
+        (d.warnings === 'changed' && d.domChanged
+          ? '<div class="story-warn">⚠ warnings changed too</div>'
+          : '') +
         '<div class="story-status ' + statusClass + '">' + statusText +
           (d.diffPercent !== null ? ' · ' + d.diffPercent.toFixed(2) + '% px' : '') + '</div>';
       el.addEventListener('click', () => selectStory(d.path));
@@ -574,9 +629,10 @@ const html = `<!DOCTYPE html>
 
     document.getElementById('main-title').textContent = path;
     const badge = document.getElementById('main-kind-badge');
-    badge.textContent = entry.kind.toUpperCase();
+    const warningsOnly = entry.warnings === 'changed' && !entry.domChanged;
+    badge.textContent = warningsOnly ? 'WARNINGS CHANGED' : entry.kind.toUpperCase();
     const kindColors = { regression: '#e74c3c', new: '#3498db', parity: '#e67e22', removed: '#7f8c8d' };
-    const color = kindColors[entry.kind] || '#888';
+    const color = warningsOnly ? '#b7791f' : (kindColors[entry.kind] || '#888');
     badge.style.cssText = 'background:' + color + '22;color:' + color + ';border:1px solid ' + color + ';border-radius:12px;padding:2px 10px;font-size:11px;font-weight:700;';
 
     const acceptBtn = document.getElementById('btn-accept');
@@ -587,7 +643,33 @@ const html = `<!DOCTYPE html>
     document.getElementById('empty-state').style.display = 'none';
     document.getElementById('compare-row').style.display = '';
     renderCurrentView(entry);
-    await Promise.all([loadSpec(entry), loadDomDiff(path)]);
+    await Promise.all([loadSpec(entry), loadWarnings(entry), loadDomDiff(path)]);
+  }
+
+  async function loadWarnings(entry) {
+    const section = document.getElementById('warnings-section');
+    const content = document.getElementById('warnings-content');
+    if (entry.warnings === null) {
+      section.style.display = 'none';
+      return;
+    }
+    section.style.display = '';
+    section.classList.toggle('changed', entry.warnings === 'changed');
+    document.getElementById('warnings-state').textContent = '· ' + entry.warningsSummary;
+    // Open when there is something to review: changed, newly recorded, a
+    // new story's or a removed story's. Unchanged warnings stay collapsed.
+    section.open = entry.warningLines > 0 && entry.warnings !== 'same';
+    if (warningsCache[entry.path] === undefined) {
+      content.innerHTML = '<div style="padding:12px;color:#888;font-size:13px;">Loading...</div>';
+      try {
+        const res = await fetch('/data/warnings/' + entry.path);
+        warningsCache[entry.path] = res.ok ? await res.text() : '<em style="color:#aaa;">Warnings unavailable.</em>';
+      } catch {
+        warningsCache[entry.path] = '<em style="color:#aaa;">Failed to load warnings.</em>';
+      }
+    }
+    if (currentPath !== entry.path) return;
+    content.innerHTML = warningsCache[entry.path];
   }
 
   async function loadSpec(entry) {
@@ -921,7 +1003,8 @@ write(join(OUT_DIR, "index.html"), html);
 
 console.log(`\nReview site built at: ${OUT_DIR}`);
 console.log(
-  `  index.html, data/diffs.json, data/meta.json, ${diffs.length} dom-diffs`
+  `  index.html, data/diffs.json, data/meta.json, ${diffs.length} dom-diffs, ` +
+    `${diffs.filter((d) => d.warnings).length} warnings`
 );
 const screenshotCount = diffs.filter((d) => d.afterScreenshotPath).length;
 console.log(`  ${screenshotCount} before/after screenshots, functions/ copied`);
