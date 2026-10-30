@@ -18,13 +18,13 @@ Every essay starts with frontmatter:
 
 ```yaml
 ---
-title: The Monotonic Module # page + sidebar title
+title: Piecewise-Linear Values # page + sidebar title
 section: Core # sidebar section (see below)
 order: 61 # sort order within the section/group
 group: Scale Resolution # optional: file under a sidebar label
 status: stable # stable | draft | speculative
 covers: # source files this essay documents
-  - packages/gofish-graphics/src/util/monotonic.ts
+  - packages/gofish-graphics/src/ast/solver/pwl.ts
 ---
 ```
 
@@ -62,11 +62,11 @@ The `covers:` list does double duty:
 
    ```ts
    // <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
-   // @wiki The Monotonic Module — /internals/core/monotonic
+   // @wiki Piecewise-Linear Values — /internals/core/pwl
    // </gofish-wiki>
    ```
 
-   So when you open `monotonic.ts`, you can see at a glance which essay describes it.
+   So when you open `pwl.ts`, you can see at a glance which essay describes it.
    The block is regenerated idempotently — never edit it by hand.
 
 `covers:` is canonical. After editing it, run `pnpm --filter docs sync-backlinks` to

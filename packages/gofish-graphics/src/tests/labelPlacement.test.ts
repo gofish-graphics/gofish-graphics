@@ -827,8 +827,7 @@ console.log("# the label reads the color directly behind its glyphs");
   );
   ok(
     "a halo is what the glyphs are read against",
-    autoLabelColorForStyle({ fill: navy }, true, { halo: "white" }) ===
-      darkTint
+    autoLabelColorForStyle({ fill: navy }, true, { halo: "white" }) === darkTint
   );
   ok(
     "outside, a black background box gets white text",
@@ -898,11 +897,9 @@ console.log("# a fill that puts down no paint is no ink");
 
 console.log("# the label's mark paints before it, whatever its z-order");
 {
-  // The label pass wraps the labeled mark's parent in a ring of [content,
-  // labels]. The parent's `.zOrder()` orders it among its own siblings, so
-  // it moves to the ring; left on the content, it would paint the content
-  // after its labels, over them, and the labels would lower before the mark
-  // they read their color from.
+  // A label is a text layer on its chart (or the render root), painted
+  // above all of the chart's marks, so it lowers after the mark it reads
+  // its color from, whatever the z-order of the mark's parent.
   for (const z of [1, -1]) {
     const mark = Rect({ x: 0, y: 0, w: 40, h: 40, fill: "#1f3a93" });
     mark.label(() => "A", { position: "center" });
@@ -916,9 +913,7 @@ console.log("# the label's mark paints before it, whatever its z-order");
       .filter((i) => i.kind === "text" || i.kind === "rect")
       .map((i) => (i.kind === "text" ? "label" : i.style.fill));
     const want =
-      z > 0
-        ? ["#e15759", "#1f3a93", "label"]
-        : ["#1f3a93", "label", "#e15759"];
+      z > 0 ? ["#e15759", "#1f3a93", "label"] : ["#1f3a93", "#e15759", "label"];
     ok(
       `parent .zOrder(${z}): paints ${want.join(", ")}`,
       order.join() === want.join(),
@@ -959,6 +954,72 @@ console.log("# the painted style is the first own item with paint");
     "a group before the painted rect is skipped",
     node.paintedStyle?.fill === "#1f3a93",
     JSON.stringify(node.paintedStyle)
+  );
+}
+
+console.log("# a label read from an outline the mark does not draw");
+{
+  // A label whose default is read from its mark's outline (`"outline"`)
+  // on a mark that draws none (a region whose inset empties a thin cell)
+  // has nothing to describe: it is hidden, not an error. A filled ring
+  // too small to have an inside (2 points) is labeled around it.
+  const probe = (outline: any[]) =>
+    new GoFishNode(
+      {
+        type: "probe",
+        labelPosition: "outline",
+        resolveUnderlyingSpace: () => [UNDEFINED, UNDEFINED],
+        layout: () => ({
+          intrinsicDims: [
+            { min: 0, size: 10 },
+            { min: 0, size: 10 },
+          ],
+          transform: { translate: [0, 0] },
+        }),
+        geometry: () => ({
+          box: { min: [0, 0], max: [10, 10] },
+          outline: () => outline,
+        }),
+        lower: () => [],
+      },
+      []
+    );
+  const labeled = async (outline: any[]) => {
+    const node = probe(outline);
+    node.label(() => "A");
+    try {
+      const doc = await toDisplayList(Layer([node]), { w: 100, h: 100 });
+      return { texts: textItems(doc).length };
+    } catch (e) {
+      return { error: (e as Error).message };
+    }
+  };
+  const none = await labeled([]);
+  ok(
+    "a mark with no outline: its label is hidden",
+    none.error === undefined && none.texts === 0,
+    JSON.stringify(none)
+  );
+  const empty = await labeled([{ points: [], closed: true, filled: true }]);
+  ok(
+    "a mark with an empty ring: its label is hidden",
+    empty.error === undefined && empty.texts === 0,
+    JSON.stringify(empty)
+  );
+  const thin = await labeled([
+    {
+      points: [
+        [0, 0],
+        [10, 0],
+      ],
+      closed: true,
+      filled: true,
+    },
+  ]);
+  ok(
+    "a filled ring of 2 points: its label is placed around it",
+    thin.error === undefined && thin.texts === 1,
+    JSON.stringify(thin)
   );
 }
 
@@ -1227,7 +1288,7 @@ console.log("# an arrow is labeled past its head");
 console.log("# a mark's own label beside labeled children");
 {
   // The arrow's own label is placed at its end even when its children carry
-  // labels too (its labels then move up with the tier that wraps them).
+  // labels too.
   const { tip, label } = await arrowDoc(true);
   ok(
     "an arrow with labeled children is still labeled at its end",
@@ -1236,18 +1297,17 @@ console.log("# a mark's own label beside labeled children");
   );
 }
 
-console.log("# labels placed lower down keep later calls off");
+console.log("# one call's labels keep a later call's off");
 {
-  // Call A sits in an inner tier, call B in the outer one; A's label to the
-  // right of its box covers the only spot B has, left of its box.
-  const inner = layer([
-    rect({ x: 0, y: 0, w: 10, h: 10, fill: "#ccc" }).label(() => "AAAAAAAA", {
-      position: Place.around({ directions: ["right"] }),
-    }),
-  ]);
+  // Two calls on one layer: A's label right of its box covers the only spot
+  // B has, left of its box. Neither label reaches the other's mark.
   const node = layer([
-    inner,
-    rect({ x: 60, y: 0, w: 10, h: 10, fill: "#ccc" }).label(() => "BBBBBBBB", {
+    layer([
+      rect({ x: 0, y: 0, w: 10, h: 10, fill: "#ccc" }).label(() => "AAAAAAAA", {
+        position: Place.around({ directions: ["right"] }),
+      }),
+    ]),
+    rect({ x: 110, y: 0, w: 10, h: 10, fill: "#ccc" }).label(() => "BBBBBBBB", {
       position: Place.around({ directions: ["left"] }),
     }),
   ]);
@@ -1259,43 +1319,10 @@ console.log("# labels placed lower down keep later calls off");
   const A = texts.find((t) => t.text === "AAAAAAAA");
   const B = texts.find((t) => t.text === "BBBBBBBB");
   ok(
-    "a label placed by the chooser in a lower tier is an obstacle above",
+    "a label the chooser placed is an obstacle to a later call",
     A !== undefined &&
       (B === undefined || !boxesOverlap(textBox(A), textBox(B))),
     JSON.stringify({ A: A && textBox(A), B: B && textBox(B) })
-  );
-
-  // A hidden label takes no room: its empty box at its mark's center does
-  // not keep a later call off that point.
-  const hiddenInner = layer([
-    rect({ x: 20, y: 0, w: 10, h: 10, fill: "#ccc" }).label(() => "HIDDEN", {
-      position: Place.around({ directions: ["top"] }),
-    }),
-  ]);
-  const over = (withHidden: boolean) =>
-    layer([
-      rect({ x: 0, y: 0, w: 60, h: 20, fill: "#eee" }).label(() => "CCCCC", {
-        position: Place.interior(),
-      }),
-      withHidden
-        ? hiddenInner
-        : layer([rect({ x: 20, y: 0, w: 10, h: 10, fill: "#ccc" })]),
-    ]);
-  console.info = () => {};
-  const odoc = await (over(true) as any).toDisplayList({ w: 200, h: 50 });
-  const bdoc = await (over(false) as any).toDisplayList({ w: 200, h: 50 });
-  console.info = saved;
-  const otexts = textItems(odoc);
-  const C = otexts.find((t) => t.text === "CCCCC");
-  const bare = textItems(bdoc).find((t) => t.text === "CCCCC");
-  ok(
-    "a hidden label lower down does not block a later call",
-    otexts.every((t) => t.text !== "HIDDEN") &&
-      C !== undefined &&
-      bare !== undefined &&
-      C.x === bare.x &&
-      C.y === bare.y,
-    JSON.stringify({ texts: otexts.map((t) => t.text), C, bare })
   );
 }
 
@@ -1354,6 +1381,84 @@ console.log("# end labels dodge only labels they overlap");
     "and counted in the note",
     ca !== undefined || info.some((m) => m.includes("Place.end()")),
     JSON.stringify(info)
+  );
+}
+
+console.log("# a label is a text on its chart, whatever groups its mark");
+{
+  // A label's layer is on the nearest chart around its mark (or the render
+  // root), so wrapping the labeled mark in a one-child layer, which is not
+  // a chart, draws the same picture.
+  const geometry = async (node: any, w: number, h: number) =>
+    JSON.stringify(
+      items(await node.toDisplayList({ w, h }))
+        .filter((i) => i.kind !== "group")
+        .map(({ id, key, name, ...rest }) => rest)
+    );
+  const rows = [
+    { name: "a", v: 3 },
+    { name: "b", v: 5 },
+    { name: "c", v: 2 },
+  ];
+  const bars = async (wrap: boolean, position?: any) =>
+    (await chart(rows)
+      .flow(spread({ by: "name", dir: "x" }))
+      .mark(
+        wrap
+          ? layer([rect({ h: "v" }).label("name", { position })])
+          : rect({ h: "v" }).label("name", { position })
+      )
+      .resolve()) as GoFishNode;
+  for (const [what, position] of [
+    ["a position string", "outset-top"],
+    ["the chooser", Place.around()],
+  ] as const) {
+    const bare = await geometry(await bars(false, position), 200, 120);
+    const wrapped = await geometry(await bars(true, position), 200, 120);
+    ok(
+      `in a chart, ${what}: a one-child layer around the mark changes nothing`,
+      bare === wrapped && bare.includes('"text":"b"'),
+      `${bare}\n  vs ${wrapped}`
+    );
+  }
+
+  // With no chart, the label's layer is on the render root.
+  const box = () =>
+    rect({ x: 10, y: 10, w: 40, h: 20 }).label(() => "box", {
+      position: "outset-top",
+    });
+  const bare = await geometry(layer([box()]), 100, 80);
+  const wrapped = await geometry(layer([layer([box()])]), 100, 80);
+  ok(
+    "with no chart: a one-child layer around the mark changes nothing",
+    bare === wrapped && bare.includes('"text":"box"'),
+    `${bare}\n  vs ${wrapped}`
+  );
+}
+
+console.log("# a chosen label keeps off the labels of a chart inside");
+{
+  // The inner chart's label sits on the inner chart's content; the outer
+  // dot, just under its center, is labeled by the chooser on the render
+  // root. The chooser keeps the dot's label off the inner chart's label, as
+  // it keeps off a label at a position string beside it.
+  const doc = await layer([
+    chart([{ n: "INNER LABEL" }], { axes: false, w: 120, h: 40 }).mark(
+      rect({ w: 120, h: 40, fill: "#eee" }).label("n", { position: "center" })
+    ),
+    rect({ x: 59, y: 28, w: 2, h: 2 }).label(() => "OUTER", {
+      position: Place.around(),
+    }),
+  ]).toDisplayList({ w: 200, h: 100 });
+  const texts = textItems(doc);
+  const inner = texts.find((t) => t.text === "INNER LABEL");
+  const outer = texts.find((t) => t.text === "OUTER");
+  ok(
+    "the outer label does not cover the inner chart's label",
+    inner !== undefined &&
+      outer !== undefined &&
+      !convexOverlap(textBox(inner), textBox(outer)),
+    JSON.stringify(texts.map((t) => [t.text, t.x, t.y]))
   );
 }
 

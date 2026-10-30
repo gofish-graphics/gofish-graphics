@@ -50,10 +50,10 @@ import { targetOf } from "../constraints/relationalPaint";
 import { boxOfDims, ringExtent } from "../geometry/box";
 import { RelateOperand } from "../constraints/relate";
 import { nodeSelectionOf } from "../nodeSelection";
-import { placementIn } from "../placementClaims";
+import { planPlacement } from "../solver/plan";
 import type { Placement } from "../constraints/claimPlacement";
-import { Extent } from "../extent";
-import * as Monotonic from "../../util/monotonic";
+import { Extent, hullExtent, padExtent } from "../extent";
+import * as Pwl from "../solver/pwl";
 import { ringPathData } from "../geometry/plane";
 import { outlinePaint, ringOutline, simplifyRing } from "../geometry/outline";
 import { ringsEnclosingCircle } from "../geometry/enclosingCircle";
@@ -131,6 +131,20 @@ function Enclose(
         UNDEFINED,
         UNDEFINED,
       ],
+      // Over fresh members, each laid at the outline's origin, the outline
+      // claims their union grown by the padding. Around refs it is placed
+      // from them (`placedFromRefs` below), and claims nothing of its own.
+      resolveExtent: (childExtents) =>
+        ([0, 1] as const).map((axis) => {
+          const own = childExtents.slice(0, memberCount).map((e) => e[axis]);
+          if (
+            own.length === 0 ||
+            members.some((m) => m instanceof GoFishRef) ||
+            own.some((e) => e === undefined)
+          )
+            return undefined;
+          return padExtent(hullExtent(...(own as Extent[])), padding);
+        }) as [Extent | undefined, Extent | undefined],
       layout: (size, scales, children) => {
         // Child placement (`placeUnplacedChild`): a FRESH child reports an
         // undefined translate until placed, so its baseline is placed at the
@@ -289,9 +303,6 @@ function Enclose(
   // every member does (#493 placement claims). Its claim is the members'
   // padded box. That is exact for `Shape.box()`, and a blob lies inside it;
   // an oval may reach past it, and that reach is ink.
-  // TODO(#1032): an outline over fresh children has no claim yet (the claim
-  // walk reads no size for it); it should claim their union grown by the
-  // padding.
   if (memberCount > 0 && members.every((m) => m instanceof GoFishRef))
     node.placedFromRefs = (frame, axis) =>
       paddedPlacement(
@@ -316,20 +327,17 @@ function paddedPlacement(
   const boxes: Placement[] = [];
   for (const m of members) {
     const target = m instanceof GoFishRef ? m.targetNode : undefined;
-    const p = target && placementIn(target, frame, axis);
+    const p = target && planPlacement(target, frame, axis);
     if (p === undefined) return undefined;
     boxes.push(p);
   }
-  const ascent = Monotonic.adds(
-    Monotonic.envelope(boxes.map((b) => b.hi)),
-    padding
-  );
-  const descent = Monotonic.adds(
-    Monotonic.envelope(boxes.map((b) => Monotonic.negate(b.lo))),
+  const ascent = Pwl.addConstant(Pwl.envelope(boxes.map((b) => b.hi)), padding);
+  const descent = Pwl.addConstant(
+    Pwl.envelope(boxes.map((b) => Pwl.negate(b.lo))),
     padding
   );
   return {
-    lo: Monotonic.negate(descent),
+    lo: Pwl.negate(descent),
     hi: ascent,
     extent: Extent(ascent, descent),
   };

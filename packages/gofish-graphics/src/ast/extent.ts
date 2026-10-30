@@ -11,7 +11,7 @@
 // the types: a claim may read the resolved types, but `./underlyingSpace` never
 // imports this module, so a type can never read a claim.
 
-import * as Monotonic from "../util/monotonic";
+import * as Pwl from "./solver/pwl";
 import { interval, union, width, type Interval } from "../util/interval";
 import type { Size } from "./dims";
 import { isValue, type MaybeValue } from "./data";
@@ -43,29 +43,29 @@ import {
  */
 export type Extent = {
   /** The σ-affine reach above data 0. */
-  ascent: Monotonic.Monotonic;
+  ascent: Pwl.Value;
   /** The σ-affine reach below data 0. */
-  descent: Monotonic.Monotonic;
+  descent: Pwl.Value;
   /** The total `ascent + descent`, the size a scope solves σ against.
    *  Computed once by {@link Extent} from the pair; never set on its own. */
-  width: Monotonic.Monotonic;
+  width: Pwl.Value;
 };
 
 /** Build an {@link Extent} from its two sides. */
 export const Extent = (
-  ascent: Monotonic.Monotonic,
-  descent: Monotonic.Monotonic = Monotonic.ZERO
+  ascent: Pwl.Value,
+  descent: Pwl.Value = Pwl.ZERO
 ): Extent => ({
   ascent,
   descent,
-  width: Monotonic.isZero(descent) ? ascent : Monotonic.add(ascent, descent),
+  width: Pwl.isZero(descent) ? ascent : Pwl.add(ascent, descent),
 });
 
 /** The hull of claims: each side is the envelope of theirs. */
 export const hullExtent = (...extents: Extent[]): Extent =>
   Extent(
-    Monotonic.envelope(extents.map((e) => e.ascent)),
-    Monotonic.envelope(extents.map((e) => e.descent))
+    Pwl.envelope(extents.map((e) => e.ascent)),
+    Pwl.envelope(extents.map((e) => e.descent))
   );
 
 /** The claim a type makes by itself, with no pixel overhead: each side is
@@ -75,7 +75,7 @@ export const hullExtent = (...extents: Extent[]): Extent =>
 export const impliedExtent = (space: UnderlyingSpace): Extent | undefined => {
   if (!isCONTINUOUS(space)) return undefined;
   const { min, max } = space.dataInterval;
-  return Extent(Monotonic.linear(max, 0), Monotonic.linear(-min, 0));
+  return Extent(Pwl.affine(max, 0), Pwl.affine(-min, 0));
 };
 
 /**
@@ -93,10 +93,10 @@ export const boxExtent = (
   hi: number
 ): Extent | undefined => {
   if (space.kind === "undefined")
-    return Extent(Monotonic.linear(0, hi), Monotonic.linear(0, lo));
+    return Extent(Pwl.affine(0, hi), Pwl.affine(0, lo));
   if (isOneValue(space) && space.origin === "pinned") {
     const at = space.dataInterval.min;
-    return Extent(Monotonic.linear(at, hi), Monotonic.linear(-at, lo));
+    return Extent(Pwl.affine(at, hi), Pwl.affine(-at, lo));
   }
   return impliedExtent(space);
 };
@@ -180,7 +180,7 @@ export const literalBoxExtents = (
  *  against. A claim that is only pixels (a box with a literal size) is not:
  *  it needs no canvas, and a scope has nothing to solve from it. */
 export const scalesWithSigma = (extent: Extent | undefined): extent is Extent =>
-  extent !== undefined && !Monotonic.isConstant(extent.width);
+  extent !== undefined && !Pwl.isConstant(extent.width);
 
 /** Whether a scope with type `space` and claim `extent` has a domain to map
  *  into its box: its claim has σ in it, or its type is one data value
@@ -201,21 +201,36 @@ export const impliedExtents = (
   impliedExtent(spaces[1]),
 ];
 
-/** A claim scaled by a pixel-space `transform.scale` (like translate, a scale
- *  acts on pixels, so it scales the claim but never the data interval). */
+/** A claim scaled by a pixel-space `transform.scale` about data 0 (like
+ *  translate, a scale acts on pixels, so it scales the claim but never the
+ *  data interval): a negative factor reflects it. */
 export const scaleExtent = (scale: number, extent: Extent): Extent =>
   scale === 1
     ? extent
+    : scale > 0
+      ? Extent(
+          Pwl.scale(scale, extent.ascent),
+          Pwl.scale(scale, extent.descent)
+        )
+      : Extent(
+          Pwl.scale(-scale, extent.descent),
+          Pwl.scale(-scale, extent.ascent)
+        );
+
+/** A claim moved `by` pixels up its axis. */
+export const shiftExtent = (extent: Extent, by: Pwl.Value): Extent =>
+  Pwl.isZero(by)
+    ? extent
     : Extent(
-        Monotonic.smul(scale, extent.ascent),
-        Monotonic.smul(scale, extent.descent)
+        Pwl.add(extent.ascent, by),
+        Pwl.add(extent.descent, Pwl.negate(by))
       );
 
 /** A claim grown by `padding` pixels on each side (a nest's inset). */
 export const padExtent = (extent: Extent, padding: number): Extent =>
   Extent(
-    Monotonic.adds(extent.ascent, padding),
-    Monotonic.adds(extent.descent, padding)
+    Pwl.addConstant(extent.ascent, padding),
+    Pwl.addConstant(extent.descent, padding)
   );
 
 /** Nice a σ-scope root's type and its claim together (issue #659). Nicing is
@@ -289,16 +304,16 @@ const widenTo = <S extends UnderlyingSpace | undefined>(
     return [
       widenedSpace,
       Extent(
-        Monotonic.envelope([extent.ascent, Monotonic.linear(to.max, 0)]),
-        Monotonic.envelope([extent.descent, Monotonic.linear(-to.min, 0)])
+        Pwl.envelope([extent.ascent, Pwl.affine(to.max, 0)]),
+        Pwl.envelope([extent.descent, Pwl.affine(-to.min, 0)])
       ),
     ];
   const half = (width(to) - width(iv)) / 2;
   return [
     widenedSpace,
     Extent(
-      Monotonic.add(extent.ascent, Monotonic.linear(half, 0)),
-      Monotonic.add(extent.descent, Monotonic.linear(half, 0))
+      Pwl.add(extent.ascent, Pwl.affine(half, 0)),
+      Pwl.add(extent.descent, Pwl.affine(half, 0))
     ),
   ];
 };

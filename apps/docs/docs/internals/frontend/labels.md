@@ -21,8 +21,9 @@ groups. Like [axes](/internals/frontend/axes) and
 [legends](/internals/frontend/legends), a label is **not a privileged render-time
 overlay**. It is _elaborated_ into an ordinary shape, a `label` node (text,
 drawn as one mark; `labelNode.tsx`), seated beside (or inside) the labeled node via a `ref()` stand-in and ordinary `align`/`distribute`
-constraints, wrapped in a `Layer` tier at the labeled node's **parent** — the same
-technique `elaborateOrdinalAxis` uses for its ref-based tick labels. The layout
+constraints, in one `Layer` tier on the labeled node's **chart**, the content of
+the nearest `chart()` around it — the same technique `elaborateOrdinalAxis`
+uses for its ref-based tick labels. The layout
 engine has no label-specific code at all.
 
 ## Why elaborate
@@ -63,7 +64,7 @@ per-instance and per-group labeling; see `resolveLabelTargets` below.
 `layout()`, immediately after chrome elaboration, so a label may target a node
 the chrome pass just wrapped. A label inside a node's content is inside that
 node's chrome rings, so at layout time the rings seat their axes, titles, and
-legend past it. It has two phases:
+legend past it. It has three phases:
 
 1. **`resolveLabelTargets`** — a single top-down walk that pushes each node's
    `_labels` array down to its children whenever the node has children but no
@@ -82,22 +83,23 @@ legend past it. It has two phases:
    children keeps its label too: it says where its label goes
    (`labelPosition`, below), as `arrow` and the `line` connector do, and it
    is the thing labeled.
-2. **`holdLabels`** — a pre-pass that takes every node's `_labels` off it
-   into a map, `held`, keyed by the node that holds them. Each spec is
-   resolved once, here, to its position on its target (`positionOf`), and
-   each call's targets that the chooser places are counted. The target and
-   the position travel with the spec from then on.
-3. **`elaborateLabelsWalk`** — a bottom-up recursion. At each node `P`, every
-   **direct child** that still holds labels is collected. Its labels at a
-   position string are wrapped at
-   `P`: `P` is wrapped once in a `Layer` holding its original content plus
-   one `ref()` + `label` pair per (target × spec). Its labels that the
-   chooser places wait instead (`pending`), and so do the ones handed up
-   from below, until the walk reaches the nearest node that all of their
-   call's targets are under (by the counts from `holdLabels`); they are
-   wrapped there, so one call is placed in one run. A
-   labeled ROOT (no parent to wrap it) gets one final self-wrap in
-   `elaborateLabels` itself.
+2. **`holdLabels`** — a pre-pass that takes every node's `_labels` off it,
+   each spec resolved once to its position on its target (`positionOf`),
+   into one list: a subtree's labels before those of the nodes that hold
+   it, and siblings' in order. The target and the position travel with the
+   spec from then on.
+3. **The chart's layer** — each label goes to its home (`homeOf`): the
+   nearest node above its target, the target included, that holds a
+   chart's marks (`_chartContent`), or the render root when no `chart()`
+   holds it. `chartBuilder.ts` sets `_chartContent` on the node a chart's
+   mark resolves to and on the layer its frame holds, so in a `.layer()`
+   chain the home is the target's own tier, and the transitions a tier
+   draws over its marks (`time.transition()`) are outside it. Each home is
+   wrapped once (`wrapWithLabels`) in a `Layer` holding its original
+   content plus one `ref()` + `label` pair per (target × spec), and the
+   wrapper takes the home's place in its parent. A home is wrapped after
+   the homes inside it, so its chooser reads their labels, already placed,
+   through refs.
 
 A label's text comes from `resolveLabelText` (`labelPlacement.ts`). A field
 expression is evaluated over the target's rows with `evalFieldValues`, given
@@ -106,20 +108,24 @@ checks that the column adds up, as it does in any channel: a column in a unit
 without `CanAdd` throws (#1197, see
 [Underlying Space](/internals/core/underlying-space)).
 
-## The parent-tier wrap invariant
+## A label is a layer on its chart
 
-The wrap happens at the labeled node's **parent** (or, for the labels the
-chooser places, at the nearest node above all of their call's targets),
-never at the labeled node itself. This is deliberate and mirrors the axis gutter invariant exactly
+The wrap happens at the labeled node's chart, never at the labeled node
+itself. This is deliberate and mirrors the axis gutter invariant exactly
 (labels must never shift the marks they describe, #493): wrapping a mark
 individually would fold the label's bbox into the mark's own box, and an
 outset label would then push stacked/box-driven siblings apart — a label on
 one bar in a `stack` would widen that bar's slot and shove its neighbors. By
-wrapping the parent instead, the marks' own layout is untouched; the label
-`Text`s seat off already-placed `ref()` stand-ins in the tier above, so they
-occupy space in the **parent's** bbox (which downstream passes — axis titles,
-legends, the canvas size inference — see and reserve room for) without ever
-perturbing sibling placement inside the parent.
+wrapping the chart's content instead, the marks' own layout is untouched; the
+label `Text`s seat off already-placed `ref()` stand-ins in the tier above, so
+they occupy space in the **chart's** content (which its chrome rings — axes,
+titles, legends — and the canvas size inference see and reserve room for)
+without ever perturbing the marks' placement.
+
+The home depends only on the charts around a mark, not on how its marks are
+grouped: wrapping a labeled mark in a one-child `layer` draws the same
+picture (asserted in `labelPlacement.test.ts`). A chart's labels paint above
+all of its marks, and every chooser label of a chart is placed in one run.
 
 The cost is that a label is not in its mark's subtree, though it is part of
 the mark. So the pass records the link the other way, in both directions:
@@ -155,16 +161,8 @@ placed):
    all of them, which the layer runs after its solve (see "Placement
    strategies" below).
 
-If a node being wrapped **also** holds its own labels (pending for its own
-parent), `elaborateLabelsWalk` moves them in `held` to the freshly built
-wrapper, so the parent's collection loop — which walks `node.children` by
-identity — finds them on the node that actually occupies that slot. They
-keep their target and their position: an `arrow` whose children carry
-labels is still labeled at its end, through a `ref()` to the arrow itself,
-not to the wrapper.
-
-The wrapper hands up every label it seated, placed by the solve or by the
-chooser, so a chooser in a wrapper above keeps its labels off them.
+An `arrow` whose children carry labels is still labeled at its end: its
+own label keeps its target, the arrow, and is read through a `ref()` to it.
 
 ## Position vocabulary → constraints
 
@@ -297,9 +295,9 @@ outlines with `placedOutlines`, as `enclose` does. The labels of one `.label()`
 call share one `group`: an identity made once per call, where the call is
 recorded (the mark modifier's `bind`, an operator's label state, so a call
 read back by `fromJSON` too), so two calls with the same accessor are two
-calls. They are placed in one run, in the layer of the nearest node all of
-their targets are under, so the area they keep to is that node's: the plot
-area below the axes when the call spans the plot. A call's `start` and `end`
+calls. Every call of a chart is placed in one run, in the chart's label layer,
+so the area they keep to is the chart's content: the plot area inside the
+axes. A call's `start` and `end`
 labels are placed first, each kind on its own (see below); the rest are
 taken in data order, and each takes its first candidate that stays
 inside the area the layer was given (`[0, size]` on each axis, so labels stay
@@ -311,8 +309,8 @@ outline, and the band its stroke `width` draws along every outline, open or
 closed, so an unfilled closed outline is only its band), the label's own
 mark as its outline's band only (so a label may sit inside its
 region, and a label `"on"` a path may cover it), the labels placed so far
-(by this step, by the solve for a position string, or by the chooser in a
-wrapper below, read through refs; a hidden one takes no room), and the call's
+(by this step, or by the solve for a position string; a hidden one takes no
+room), the labels of the charts inside the layer's chart, and the call's
 `avoiding` nodes, read through fresh refs made once per call (`nodeRefs.ts`,
 shared with `enclose`; a `selectAll` in `avoiding` is resolved where the
 call is recorded, against the chart's named layers). A label with no free candidate is hidden: it draws nothing and
@@ -335,7 +333,9 @@ definition (`labelPosition`): `ellipse` gives `Place.around()` and `arrow`
 `Place.end()` by convention; a connector (`line`, `ribbon`) and a `polygon`
 give `"outline"`, which the chooser reads from the outline the mark draws
 (`placeByOutline`): `Place.end()` for an open path, `Place.interior()` for a
-filled region, `Place.around()` for a closed outline with no fill. Anything
+filled region, `Place.around()` for a closed outline with no fill. A mark
+that draws no outline (a ring an inset emptied) has nothing to describe,
+so its label is hidden, and the note does not count it. Anything
 else gets `"outset"`. Inside a coordinate space that is not linear (a polar `coord`),
 outlines are not on the screen yet, so a default falls back to `"outset"` and
 a strategy written out is an error that cites #1201. Before that, a strategy

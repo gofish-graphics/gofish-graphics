@@ -274,7 +274,7 @@ export const connect = createNodeOperator(
       strokeWidth: strokeWidth ?? 0,
     });
 
-    return new GoFishNode(
+    const node = new GoFishNode(
       {
         type: "connect",
         // Labeled by its outline: a line at its end, a band inside itself.
@@ -1003,5 +1003,9 @@ export const connect = createNodeOperator(
       },
       children
     );
+    // It draws between the nodes it reads, where they landed: its layout
+    // places it, on both axes.
+    node.placedByLayout = [true, true];
+    return node;
   }
 );

@@ -270,11 +270,14 @@ the `max → min − size` rewrite in `classifyAxisFacts`
 **Running the sweep.** With the workspace installed (`pnpm install`; the harness
 aliases `gofish-graphics` to `src/`, so source edits render live without a
 rebuild), run `pnpm --filter @gofish/tests capture-sweep`. It injects
-`window.GOFISH_SOLVER_CHECK = 1` into every story, captures the browser
-console, and exits non-zero listing each story that logged a `[solver-check]`
-(rank-2 vs rank-1 placement divergence) or `[bbox-conflict]` (ledger
-over-determination) line. A clean run is the 5a gate. Pass a substring to scope
-to one story (`pnpm --filter @gofish/tests capture-sweep bar`).
+`window.GOFISH_CONFLICT_CHECK = 1` into every story, captures the browser
+console, and exits non-zero listing each story that logged a `[bbox-conflict]`
+(ledger over-determination) line. Pass a substring to scope to one story
+(`pnpm --filter @gofish/tests capture-sweep bar`). It used to inject
+`GOFISH_SOLVER_CHECK` as well and collect `[solver-check]` lines from the
+solver shadow (`solver/shadow.ts`). The layout engine work (#1176, step 4)
+deleted that shadow: once layout copies its seats and σ from the plan, the
+shadow re-checked the plan's own equations, so it could no longer fail.
 
 ### Non-goals, held explicitly
 
@@ -305,7 +308,8 @@ Fold the σ resolution into the same linear system, per scope. The two hooks
 already exist: `BBox` key values are already σ-affine `Monotonic`s (the
 "unified-propagation stage 1" note in `bbox.ts` — every caller just happens to
 pass constants today), and `AxisScope`/`SolverBox` (`solver/index.ts`) is the
-validated Phase-0 model.
+validated Phase-0 model. (`solver/index.ts` and the solver shadow were deleted
+in #1176 step 4, after the plan of each layer took over this role.)
 
 ### The sites that become one mechanism
 

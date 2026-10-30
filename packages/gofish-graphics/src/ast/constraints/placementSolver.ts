@@ -2,13 +2,14 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import type { Placeable } from "../_node";
 import { BBox } from "./bbox";
+import type { Arith } from "../solver/arith";
 import {
   lowerPlacementConstraints,
   type PlacementConstraint,
 } from "./placementLowering";
-import type { TrackLayout } from "./grid";
+import type { GridTracks } from "./grid";
+import type { GapOf } from "./gap";
 import {
   axisIndex,
   axisName,
@@ -29,6 +30,7 @@ import {
   anchorOffset,
   freeBaselineOffset,
   strongAnchorOffset,
+  type SolvePlaceable,
 } from "./placementProgramLowerer";
 import {
   solveAxisProblem,
@@ -62,13 +64,18 @@ export type { PlacementConflict } from "./differenceGraph";
  *
  * Every solved cell writes back through one path: a size-strong cell sets its
  * extent (`setExtent`), a position-only cell pins its `min` anchor.
+ *
+ * The solve runs in an {@link Arith} `A`. The claim walk solves a layer's
+ * program once over its children's claims, in formulas in σ and in what
+ * only layout measures ({@link solvePlacementCells}, `claimPlacement.ts`);
+ * layout evaluates them and writes each cell back.
  */
 
 /** A solved (node, axis) box: absolute `min`, `size`, and whether the size was
  *  rank-2 determined by strong pins (so the write-back sets the extent). */
-export type SolvedCell = {
-  min: number;
-  size: number | undefined;
+export type SolvedCell<T = number> = {
+  min: T;
+  size: T | undefined;
   sizeStrong: boolean;
   /** Owner of the strong size equations, for the extent write-back. */
   sizeOwner?: string;
@@ -82,15 +89,16 @@ export type SolvedCell = {
  * A BBox over-determination (e.g. two conflicting intervals on one target)
  * surfaces as a named {@link PlacementConflict}.
  */
-function closeSizes(
+function closeSizes<T>(
+  A: Arith<T>,
   axis: Axis,
-  pins: AnchorFact[]
+  pins: AnchorFact<T>[]
 ): {
-  sizes: Map<NodeId, number>;
+  sizes: Map<NodeId, T>;
   owners: Map<NodeId, string>;
   conflicts: PlacementConflict[];
 } {
-  const boxes = new Map<NodeId, BBox>();
+  const boxes = new Map<NodeId, BBox<T>>();
   const boxOwner = new Map<NodeId, string>();
   const conflicts: PlacementConflict[] = [];
   for (const fact of pins) {
@@ -111,7 +119,7 @@ function closeSizes(
             : "max";
     let box = boxes.get(fact.node);
     if (!box) {
-      boxes.set(fact.node, (box = new BBox()));
+      boxes.set(fact.node, (box = new BBox(A)));
       boxOwner.set(fact.node, fact.owner);
     }
     const conflict = box.add(boxKey, fact.value, fact.owner);
@@ -125,14 +133,14 @@ function closeSizes(
       });
     }
   }
-  const sizes = new Map<NodeId, number>();
+  const sizes = new Map<NodeId, T>();
   const owners = new Map<NodeId, string>();
   for (const [node, box] of boxes) {
     // Not gated on `box.solved`: a rank-1 box holding only a direct `"size"`
     // pin (align `"size"`, no companion anchor) still reads its size back
     // (`BBox.read` falls back to the direct pin when under-determined) — that
     // is exactly the "size without a determined position" case.
-    const size = box.read("size");
+    const size = box.readValue("size");
     if (size !== undefined) {
       sizes.set(node, size);
       owners.set(node, boxOwner.get(node)!);
@@ -144,51 +152,56 @@ function closeSizes(
 /** The offset of `node`'s `anchor` from its `min` on `axis`. A size-strong
  *  (interval/span) cell's reads straight off its closed size, now that sizes
  *  are known; any other cell's off its target's layout. */
-function nodeAnchorOffset(
+function nodeAnchorOffset<T>(
+  A: Arith<T>,
   node: NodeId,
   anchor: RelationAnchor,
   axis: Axis,
-  strongSizes: Map<NodeId, number>,
-  targets: Map<string, Placeable>,
+  strongSizes: Map<NodeId, T>,
+  targets: Map<string, SolvePlaceable<T>>,
   plot = false
-): number | undefined {
+): T | undefined {
   const strong = strongSizes.get(node);
-  if (strong !== undefined) return strongAnchorOffset(strong, anchor);
+  if (strong !== undefined) return strongAnchorOffset(A, strong, anchor);
   const target = targets.get(node);
-  return target && anchorOffset(target, axis, anchor, plot);
+  return target && anchorOffset(A, target, axis, anchor, plot);
 }
 
 /** The offset from its `min` of the point `fraction` of the way from a stack
  *  part's tail to its head (`offsetOf` gives each anchor's offset): the
  *  stack's origin when the part carries it. */
-function stackOriginOffset(
-  offsetOf: (anchor: RelationAnchor) => number | undefined,
+function stackOriginOffset<T>(
+  A: Arith<T>,
+  offsetOf: (anchor: RelationAnchor) => T | undefined,
   fraction: number
-): number | undefined {
+): T | undefined {
   const tail = offsetOf("tail");
   if (fraction === 0 || tail === undefined) return tail;
   const head = offsetOf("head");
-  return head === undefined ? undefined : tail + fraction * (head - tail);
+  return head === undefined
+    ? undefined
+    : A.add(tail, A.scale(fraction, A.sub(head, tail)));
 }
 
 /** Reduce one axis's anchor facts to a `min`-anchored {@link AxisProblem}, using
  *  the closed sizes to substitute each anchor's offset from `min`. */
-function reduceToAxisProblem(
+function reduceToAxisProblem<T>(
+  A: Arith<T>,
   axis: Axis,
-  facts: AnchorFact[],
-  strongSizes: Map<NodeId, number>,
-  targets: Map<string, Placeable>,
+  facts: AnchorFact<T>[],
+  strongSizes: Map<NodeId, T>,
+  targets: Map<string, SolvePlaceable<T>>,
   apart?: Set<string>
-): AxisProblem {
-  const relations: AxisProblem["relations"] = [];
-  const pins: PlacementPinClaim[] = [];
-  const participantFacts: AxisProblem["participantFacts"] = [];
+): AxisProblem<T> {
+  const relations: AxisProblem<T>["relations"] = [];
+  const pins: PlacementPinClaim<T>[] = [];
+  const participantFacts: AxisProblem<T>["participantFacts"] = [];
   const participants = new Set<NodeId>();
-  const chainAnchors = new Map<NodeId, number>();
+  const chainAnchors = new Map<NodeId, T>();
 
   // A chain lays its parts by their plots (`anchorOffset`'s `plot`).
   const resolveOffset = (node: NodeId, anchor: RelationAnchor, plot = false) =>
-    nodeAnchorOffset(node, anchor, axis, strongSizes, targets, plot);
+    nodeAnchorOffset(A, node, anchor, axis, strongSizes, targets, plot);
 
   for (const fact of facts) {
     // A size-pin only feeds `closeSizes`'s box closure (above) — it has no
@@ -203,7 +216,7 @@ function reduceToAxisProblem(
       participants.add(fact.node);
       pins.push({
         node: fact.node,
-        value: fact.value - offset,
+        value: A.sub(fact.value, offset),
         owner: fact.owner,
       });
       continue;
@@ -235,7 +248,7 @@ function reduceToAxisProblem(
         relationFact(
           anchorExpr(fact.from.node, axis, "start"),
           anchorExpr(fact.to.node, axis, "start"),
-          fromOffset + fact.gap - toOffset,
+          A.sub(A.add(fromOffset, fact.gap), toOffset),
           fact.owner,
           fact.chain
         )
@@ -252,19 +265,20 @@ function reduceToAxisProblem(
 
 /** Solve one axis's anchor program into `(min, size)` per node, plus any cell or
  *  graph over-determination conflicts. */
-function solveRank2Axis(
+function solveRank2Axis<T>(
+  A: Arith<T>,
   axis: Axis,
-  facts: AnchorFact[],
-  targets: Map<string, Placeable>,
-  freeOrigin: number | undefined,
+  facts: AnchorFact<T>[],
+  targets: Map<string, SolvePlaceable<T>>,
+  freeOrigin: T | undefined,
   apart?: Set<string>
-): {
-  cells: Map<NodeId, SolvedCell>;
-  sizeOnly: Map<NodeId, { size: number; owner: string }>;
-  conflicts: PlacementConflict[];
-} {
-  const { sizes, owners, conflicts: sizeConflicts } = closeSizes(axis, facts);
-  const problem = reduceToAxisProblem(axis, facts, sizes, targets, apart);
+): SolvedAxis<T> {
+  const {
+    sizes,
+    owners,
+    conflicts: sizeConflicts,
+  } = closeSizes(A, axis, facts);
+  const problem = reduceToAxisProblem(A, axis, facts, sizes, targets, apart);
   const idx = axisIndex(axis);
   // The participants that carry a baseline the free origin may seat, and each
   // one's baseline offset from its `min` (#773). A free participant (a
@@ -273,7 +287,7 @@ function solveRank2Axis(
   // origin (`AnchorParticipantFact.origin`), on whichever part carries it,
   // a size-strong part included. A spread chain carries none and keeps its
   // sequence origin.
-  const freeBaselines = new Map<NodeId, number>();
+  const freeBaselines = new Map<NodeId, T>();
   if (freeOrigin !== undefined) {
     const placedByChain = new Set<NodeId>();
     const stackOrigins = new Map<NodeId, number>();
@@ -284,18 +298,19 @@ function solveRank2Axis(
       placedByChain.add(fact.from.node);
       placedByChain.add(fact.to.node);
     }
-    const baselineOffset = (node: NodeId): number | undefined => {
+    const baselineOffset = (node: NodeId): T | undefined => {
       const origin = stackOrigins.get(node);
       if (origin !== undefined)
         return stackOriginOffset(
-          (anchor) => nodeAnchorOffset(node, anchor, axis, sizes, targets),
+          A,
+          (anchor) => nodeAnchorOffset(A, node, anchor, axis, sizes, targets),
           origin
         );
       // An interval (size-strong) has no baseline, and a chain places its
       // other members' baselines.
       if (sizes.has(node) || placedByChain.has(node)) return undefined;
       const target = targets.get(node);
-      return target && freeBaselineOffset(target, axis);
+      return target && freeBaselineOffset(A, target, axis);
     };
     for (const node of problem.participants) {
       const offset = baselineOffset(node);
@@ -303,6 +318,7 @@ function solveRank2Axis(
     }
   }
   const { positions, conflicts: graphConflicts } = solveAxisProblem(
+    A,
     axis,
     problem,
     freeOrigin === undefined
@@ -310,7 +326,7 @@ function solveRank2Axis(
       : { value: freeOrigin, baselines: freeBaselines }
   );
 
-  const cells = new Map<NodeId, SolvedCell>();
+  const cells = new Map<NodeId, SolvedCell<T>>();
   for (const [node, min] of positions) {
     const strong = sizes.get(node);
     const size = strong ?? targets.get(node)?.dims[idx].size;
@@ -325,7 +341,7 @@ function solveRank2Axis(
   // companion anchor pin never becomes a difference-graph participant, so it
   // never surfaces in `positions` above — it still needs a write-back, just
   // the size, with no position coupling (#726).
-  const sizeOnly = new Map<NodeId, { size: number; owner: string }>();
+  const sizeOnly = new Map<NodeId, { size: T; owner: string }>();
   for (const [node, size] of sizes) {
     if (cells.has(node)) continue;
     sizeOnly.set(node, { size, owner: owners.get(node)! });
@@ -333,38 +349,49 @@ function solveRank2Axis(
   return { cells, sizeOnly, conflicts: [...sizeConflicts, ...graphConflicts] };
 }
 
+/** One axis of a solve: each placed cell, each cell given a size and no
+ *  place, and the over-determinations found. */
+export type SolvedAxis<T = number> = {
+  cells: Map<NodeId, SolvedCell<T>>;
+  sizeOnly: Map<NodeId, { size: T; owner: string }>;
+  conflicts: PlacementConflict[];
+};
+
 /** A nested operand (see `NestedOperand`) rigidly attached to the layer
  *  child that contains it: `operand.min = container.min + gap` per axis. */
-export type RigidAttachment = { container: string; gap: [number, number] };
+export type RigidAttachment<T = number> = { container: string; gap: [T, T] };
 
 /**
  * Solve the placement of `targets` under `constraints` into a box per (node,
- * axis), without writing it back: the solve {@link solvePlacementConstraints}
- * writes back, which the claim walk also reads to learn where a layer's
- * constraints place its children (`claimPlacement.ts`).
+ * axis), without writing it back. The claim walk solves it once per layer
+ * and axis, and layout writes back what it evaluates to
+ * (`claimPlacement.ts`, `layer`).
  */
-export function solvePlacementCells(
+export function solvePlacementCells<T>(
+  A: Arith<T>,
   constraints: PlacementConstraint[],
   keyOf: KeyOf,
-  targets: Map<string, Placeable>,
-  sizes: [number, number],
-  posScales?: ConstraintPosScales,
-  gridTracks?: [TrackLayout, TrackLayout],
+  targets: Map<string, SolvePlaceable<T>>,
+  // The layer's box on each axis, which a discrete position divides.
+  sizes: readonly [T, T],
+  // The gap a chain or table lays out between its parts (`GoFishNode.gapOf`).
+  gapOf: GapOf,
+  posScales?: ConstraintPosScales<T>,
+  gridTracks?: GridTracks<T>,
   dataPositioned?: [Set<string>, Set<string>],
-  rigid?: Map<string, RigidAttachment>,
-  freeOrigin?: FreeOrigin,
+  rigid?: Map<string, RigidAttachment<T>>,
+  freeOrigin?: FreeOrigin<T>,
   // Per axis, the targets that are no part of the plot (dressing, chrome):
   // a chain edge between two others lays them by their plots.
   apart?: [Set<string>, Set<string>]
-): readonly [
-  ReturnType<typeof solveRank2Axis>,
-  ReturnType<typeof solveRank2Axis>,
-] {
+): readonly [SolvedAxis<T>, SolvedAxis<T>] {
   const lowered = lowerPlacementConstraints(
+    A,
     constraints,
     keyOf,
     targets,
     sizes,
+    gapOf,
     posScales,
     gridTracks,
     dataPositioned
@@ -395,6 +422,7 @@ export function solvePlacementCells(
 
   return [
     solveRank2Axis(
+      A,
       "x",
       lowered.anchorProgram.axes[0],
       targets,
@@ -402,6 +430,7 @@ export function solvePlacementCells(
       apart?.[0]
     ),
     solveRank2Axis(
+      A,
       "y",
       lowered.anchorProgram.axes[1],
       targets,
@@ -409,64 +438,4 @@ export function solvePlacementCells(
       apart?.[1]
     ),
   ] as const;
-}
-
-export function solvePlacementConstraints(
-  constraints: PlacementConstraint[],
-  keyOf: KeyOf,
-  targets: Map<string, Placeable>,
-  sizes: [number, number],
-  posScales?: ConstraintPosScales,
-  gridTracks?: [TrackLayout, TrackLayout],
-  dataPositioned?: [Set<string>, Set<string>],
-  rigid?: Map<string, RigidAttachment>,
-  freeOrigin?: FreeOrigin,
-  apart?: [Set<string>, Set<string>]
-): PlacementConflict[] {
-  const solved = solvePlacementCells(
-    constraints,
-    keyOf,
-    targets,
-    sizes,
-    posScales,
-    gridTracks,
-    dataPositioned,
-    rigid,
-    freeOrigin,
-    apart
-  );
-  const conflicts = solved.flatMap((result) => result.conflicts);
-  if (conflicts.length > 0) {
-    const conflict = conflicts[0];
-    throw new Error(
-      `Constraint placement conflict on ${conflict.axis}: ${conflict.owner} ` +
-        `asserts ${conflict.asserted}, but ${conflict.priorOwner} implies ` +
-        `${conflict.implied}`
-    );
-  }
-
-  // Single write-back per solved cell (replaces the three-way branch): a
-  // size-strong cell (rank-2 determined) sets its extent; a position-only cell
-  // pins its `min` anchor.
-  solved.forEach((result, axisIndexValue) => {
-    const axis = axisIndexValue as 0 | 1;
-    const axisLabel = axisName(axis);
-    for (const [key, cell] of result.cells) {
-      const target = targets.get(key);
-      if (!target) continue;
-      if (cell.sizeStrong && cell.size !== undefined && target.setExtent) {
-        target.setExtent(
-          axisLabel,
-          { min: cell.min, max: cell.min + cell.size },
-          cell.sizeOwner
-        );
-      } else if (target.pinAnchor) target.pinAnchor(axis, cell.min, "min");
-      else target.place(axis, cell.min, "min");
-    }
-    for (const [key, { size, owner }] of result.sizeOnly) {
-      const target = targets.get(key);
-      target?.setSizeOnly?.(axisLabel, size, owner);
-    }
-  });
-  return conflicts;
 }

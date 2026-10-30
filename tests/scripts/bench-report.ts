@@ -47,7 +47,15 @@ import type { SkippedExample, SkippedPoint } from "./bench";
 const TESTS_DIR = join(import.meta.dirname, "..");
 const BENCH_DIR = join(TESTS_DIR, "tmp/bench");
 // Engine passes (excludes `fonts`); "total" is the sum, tracked alongside.
-const PASSES = ["resolve", "axes", "embed", "solve", "lower", "paint"];
+const PASSES = [
+  "resolve",
+  "axes",
+  "embed",
+  "claims",
+  "solve",
+  "lower",
+  "paint",
+];
 
 type Stat = { median: number; min: number; p95: number; n: number };
 type ExampleResult = {

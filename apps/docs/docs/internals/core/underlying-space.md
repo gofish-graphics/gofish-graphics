@@ -11,6 +11,7 @@ covers:
   - packages/gofish-graphics/src/ast/graphicalOperators/alignment.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/layer.tsx
   - packages/gofish-graphics/src/ast/channels.ts
+  - packages/gofish-graphics/src/ast/length.ts
   - packages/gofish-graphics/src/ast/data.ts
   - packages/gofish-graphics/src/ast/fieldExpr.ts
   - packages/gofish-graphics/src/ast/datumProjection.ts
@@ -26,7 +27,6 @@ covers:
   - packages/gofish-graphics/src/ast/graphicalOperators/partition.tsx
   - packages/gofish-graphics/src/ast/shapes/region.tsx
   - packages/gofish-graphics/src/ast/measure.ts
-  - packages/gofish-graphics/src/ast/constraints/folds.ts
   - packages/gofish-graphics/src/ast/constraints/proposalPlan.ts
   - packages/gofish-graphics/src/ast/constraints/compose.ts
   - packages/gofish-graphics/src/ast/constraints/distribute.ts
@@ -40,6 +40,7 @@ covers:
   - packages/gofish-graphics/src/ast/constraints/nest.ts
   - packages/gofish-graphics/src/ast/constraints/nestPlan.ts
   - packages/gofish-graphics/src/ast/constraints/grid.ts
+  - packages/gofish-graphics/src/ast/constraints/gap.ts
   - packages/gofish-graphics/src/ast/constraints/bbox.ts
   - packages/gofish-graphics/src/ast/debug/dump.ts
 ---
@@ -53,7 +54,7 @@ each of its two axes (x and y):
   for a continuous axis the data interval it covers. A type says what the
   axis _means_. It has no σ in it.
 - its **size claim** (an `Extent`): how much room the node's content needs
-  on that axis, as Monotonic functions of the scale factor σ. A claim says
+  on that axis, as piecewise-linear functions of the scale factor σ. A claim says
   how big the content _is_.
 
 The types form an intermediate representation called the **underlying space
@@ -139,7 +140,7 @@ different stage of the pipeline:
   a **derived read**, never stored state.
 
 A false friend to never conflate with that intercept: a claim's `width`
-Monotonic carries its _own_ intercept — the σ-independent pixel part of an _extent_
+value carries its _own_ intercept — the σ-independent pixel part of an _extent_
 (spacing, fixed chrome), the intercept of the size-vs-σ line `size = slope·σ +
 intercept`. That is an intercept of the size equation, not of the data→screen
 map; the two never mean the same thing.
@@ -294,7 +295,7 @@ spacing read as if it were data.
 **Ascent and descent (#773).** An extent is measured from its data 0 on both
 sides, like a font's ascent and descent. In the type the two sides are the two
 ends of the interval: the ascent is `max` and the descent is `−min`. In the
-claim they are two Monotonics. A rect of value 30 has data ascent 30 and
+claim they are two values in σ. A rect of value 30 has data ascent 30 and
 claims ascent `30σ`; a rect of value −20 has data descent 20 and claims
 descent `20σ` (a rect length is signed, while a text, image, or treemap size
 is a nonnegative magnitude). Most extents sit wholly above their data 0 and
@@ -538,11 +539,45 @@ each inherent to what the origin states are:
   slot, claims one σ, so a spread of `n`
   bands with spacing `g` claims `n·σ + (n − 1)·g`, and whatever hangs off a
   band (a value label, the half of a category label past the last band)
-  takes room in the same claim, which narrows the bands. A scope whose axis
-  mixes data with bands of no size keeps them as before: the bands claim
-  nothing and share what the data leaves. A leaf in no slot (a rule laid
+  takes room in the same claim, which narrows the bands. A share is a σ
+  weight in its nearest scope, and a node whose room is given (a facet
+  panel, a cell, a tile) is a scope, so a panel is a share of the chain that
+  holds it. A band of no size in a chain sized by data is one σ, one data
+  unit, and the layout warns (`mixed-sizes`). A leaf in no slot (a rule laid
   over a bar chart) claims nothing, and fills the room of what holds it.
-- **A plot claim beside the claim**: the claim folds also compute the
+- **A length is a claim, too** (#1176 step 6, `ast/length.ts`): `fr(k)` is
+  `kσ`, a share of weight `k`, so a band is `fr(1)` and a node sized with
+  `fr` is a scope for its own content (`GoFishNode.shareOf`, read by
+  `isScope`). `percent(p)` is `(p/100)·room`, where the room is found by
+  `GoFishNode.roomFor`, walking up from the node that asks: a node with a
+  literal or percent size of its own, the canvas at the root (the render
+  size, or 400 px), or a band (`isBand`: a share whose content fills it),
+  whose room is `σ`. A node with no size of its own hugs its content, so it
+  passes the question to its parent; a room-given node (a facet panel, a
+  cell, a tile, a coord) is not asked, and a percent under one throws. So a
+  percent is a constant at a scope, which acts as pixels, or a σ term in a
+  band, which is a share. The length stays in the node's own box as its
+  size, a fourth kind beside pixels, data and none (`OwnSize` in
+  `ast/dims.ts`), and each reader of that size says what a length is to it:
+  the type pass reads no data in it (`sizeForType`), a layout reads the size
+  the node fixes for itself (`GoFishNode.fixedSize`: the length's pixels
+  where its room is a constant, none where it is a share, which fills the
+  room it is given), and the length itself is read where it is laid out
+  (`GoFishNode.lengthOn`, `ownLength`).
+  Either way it is a `Pwl` value before the solve, and no claim carries an
+  unknown parent size. Spacing is the same: a spread's length gap, and a
+  table's gap between tracks, is laid out against the layer's own room by
+  one reader (`GoFishNode.gapOf`, once per constraint and axis): a percent
+  of the room, or a σ term for `fr`. It is read, never written into the
+  constraint: the claim walk and layout pass the reader to the placement
+  lowering (`GapOf`), as they pass a grid's tracks. Which gap a constraint
+  lays out on an axis is one rule (`spacingOn`, `constraints/gap.ts`): a
+  table's gap there, and a chain's spacing on the axis it runs along. An `fr` gap with no
+  room (an unsized root, `GoFishNode.sharesHaveNoRoom`) is 0 at the σ of 0 that root lays out at, and
+  warns (`no-room`); an `fr` in a data scope warns `mixed-sizes`, once per
+  chain (`warnFlexibleSizes`). A length has no content minimum: fixed parts
+  larger than a sized layer warn `fixed-overflow`.
+- **A plot claim beside the claim**: a layer's plan also computes the
   claim of the plot, which leaves out dressing (a label placed beside a
   `ref` stand-in for its mark), a shape's outline (half its stroke past its
   box, which its claim reaches and its plot leaves out; a node a `nest`
@@ -552,9 +587,9 @@ each inherent to what the origin states are:
   the outermost ring of a `chart()`: a parent lays a chart out whole,
   `GoFishNode.plotIsBox`). A chain of parts of the plot lays them by their plots, so dressing never
   moves the parts it dresses: it reaches past the chain, or sits in the gaps
-  (`composePlanExtents`' `parts`, `chainFold`'s `reaches`). The plot of a
-  chain with a stand-in reaches only as far as its stand-ins; an align
-  counts the plot of a child it seats at its own data or origin. A chart with a size of its own maps its plot
+  (`ClaimChild.plot` in `placeByClaims`). The plot leaves out what is
+  placed beside a stand-in, so a chain with a stand-in reaches, in its
+  plot, only as far as its stand-ins. A chart with a size of its own maps its plot
   into that size (see
   [Chrome gutters](/internals/layout/passes#chrome-gutters)).
 - **Alignment establishes a baseline; it does not pin**: aligning or
@@ -615,7 +650,7 @@ types: a pinned overlay's claim is the width of the union of its children's
 spans, and where a pinned child sits in that union is a type fact. So the
 claim walk runs second and reads the types, and the type walk never sees a
 claim. The direction is enforced, not just followed. `UnderlyingSpace` holds
-no Monotonic and `underlyingSpace.ts` does not import `extent.ts`, the type
+no claim value and `underlyingSpace.ts` does not import `extent.ts`, the type
 hook's arguments carry no claim, and `resolveExtent()` throws if it is called
 while a type hook is running. One walk returning a pair would have let a type
 fold reach into the claim half next to it, which is exactly the coupling the
@@ -631,7 +666,30 @@ ones that add pixels (a spread's spacing or pitch, a nest's padding, a
 `transform.scale`), the ones that compose their children's claims (an
 overlay, an alignment, a stack, a layer placing its children,
 `placeByClaims`), and the pass-throughs that keep their child's claim as it
-is (`offset`, the `position` operator, a `ref`). Every continuous axis has
+is (`offset`, the `position` operator, a `ref`). A layer claims its
+plan (`buildPlan` in `solver/plan.ts`): one solve over all its children
+in values in σ, by their boxes. Layout seats each child from the same
+plan, evaluated at the σ it lays out at (`solver/formula.ts`, see
+[Piecewise-Linear Values](/internals/core/pwl)). The plan reads three forms
+of each child: its box, which it places, its plot, which a chain lays it
+by, and all it draws, which takes room. A layer's forms are the envelopes
+of its children's where its plan places them, so an outline takes room
+only at the ends of the hull. Any other node's box is its own claim rule
+run over its children's boxes (`GoFishNode.composeExtent`). A child that
+places itself at a literal pixel stays there; a child whose y runs the
+other way is read reflected about its data 0; and a `transform.scale`
+scales the forms about data 0, reflecting them when it is negative. A
+layer that is a scope of its own on an axis (a `dims` size, which a
+spread's size option sets once the scopes around it are known) is read by
+its claim there, not its plan. A node nested in a child is placed by
+composing plans (`planPlacement`): its box in its parent's plan, moved by
+each ancestor's data 0 in the next one's, reflected where y runs the
+other way. A constraint operand nested in a child is placed the same way
+up to that child only (`planPlacementInChild`): its offset in the child,
+which holds wherever the layer's solve places the child. A child drawn
+around refs (an `enclose` of `ref`s) has the box its refs give it as its
+forms, so a node nested past it is placed too.
+Every continuous axis has
 exactly one claim; `resolveExtent()` checks this. Another axis has one when
 its content's room depends on σ, or when its content has a pixel size of its
 own (a claim with no σ in it); content that takes whatever room it is given
@@ -655,19 +713,18 @@ composes its targets' spaces into the layer's claim on that axis:
   re-types it (#1170). A bar chart beside a caption is still a free magnitude
   to the spread that holds them, so the spread gives it the room its bars
   claim.
-- `Constraint.distribute` contributes the stack fold, as a type fold
-  (`distributeSpaceFold`, `constraints/distribute.ts`) and a claim fold
-  (`distributeExtentFold`). The chain moves every target to its place, so it
-  reads each one, pinned or free, as a box. A spread separates: its type is
-  ORDINAL of its keys, or UNDEFINED, and a spread of magnitudes claims the
-  chain of the targets' claims with the spacing added (`chainFold`; for an
-  edge chain, the sum of the widths plus `spacing·(n−1)`) for the enclosing
-  scope to solve σ against (see
+- `Constraint.distribute` contributes the stack fold to the type
+  (`distributeSpaceFold`, `constraints/distribute.ts`). The chain moves
+  every target to its place, so it reads each one, pinned or free, as a
+  box. A spread separates: its type is ORDINAL of its keys, or UNDEFINED,
+  and its claim is its layer's plan's, the chain of the targets' claims
+  with the spacing added (for an edge chain, the sum of the widths plus
+  `spacing·(n−1)`), for the enclosing scope to solve σ against (see
   [the differences that remain](#one-continuous-path-and-the-differences-that-remain)).
   With `glue: true` (stack semantics) the extents are laid end to end and
   pinned over the range of their running sums (`[0, Σ]` when no part has a
-  descent), in data for the type and in claims for the claim, by the same
-  chain fold (`chainFold`).
+  descent), by the chain fold (`chainFold`) in data for the type, and by
+  the plan's solve for the claim.
   A target with no origin (a difference or a non-continuous axis) leaves only
   the ORDINAL of the keys, if any.
 - `Constraint.align` contributes the alignment fold (`resolveAlignmentSpace`)
@@ -688,7 +745,7 @@ composes its targets' spaces into the layer's claim on that axis:
   padding). Only the **inside-out** direction folds here: outer's type is
   inner's type, whatever its origin (padding is pixels, so it is no part of
   the type), and outer's claim is inner's padded on both sides of its
-  baseline, a `Monotonic.adds`, which stays monotone
+  baseline, a `Pwl.addConstant`, which stays exact
   (hence invertible), so a nested pair participates in auto-fit exactly like a
   stack — a parent spread/layer solving a scale factor sees outer as inner
   shifted up by the constant padding. The layer derives these outer spaces in dependency order
@@ -776,22 +833,15 @@ spurious axis (a waffle's `chunk(n)` row index leaking a row "axis"). The
 composition is planned once from the constraints and the child nodes alone
 (`planConstraintComposition`, `constraints/compose.ts`): which children each
 distribute and align covers, on which axis. The type fold
-(`composePlanSpaces`) and the claim fold (`composePlanExtents`) then evaluate
-the same plan, so the two halves cannot disagree about which fold covers
-which child. The covered-axis type fold — UNDEFINED included — is what
-`composePlanSpaces` reports, along with the fold operands of each axis, and
-`composePlanExtents` reads those operands back (it does not fold the types
-again) and reports their claim and the layout budget. At layout time the layer then **solves the budget**:
-a fold-produced claim (of any origin) is inverted against the layer's allotted size to
-derive a local scale factor. In a share scope each child is proposed its
-claim at that σ (a band is one σ, `childLayoutSizeProposal`'s `own`);
-elsewhere distribute-covered fill children are
-proposed slices from the shared proposal plan (`buildDistributeSliceMap`,
-`constraints/proposalPlan.ts`, using `sliceExtent` from
-`constraints/folds.ts`). When distribute segments overlap on the same child
-axis, they are treated as a placement-relation graph rather than a
-spread-like flex slice, so the ambiguous size proposal is skipped instead of
-picked by declaration order. This is what makes constraint-assembled layers
+(`composePlanSpaces`) evaluates it; the covered-axis type fold, UNDEFINED
+included, is what it reports. The claim is the layer's plan's
+(`solver/plan.ts`), which places the same children by the same
+constraints. At layout time the layer then **solves the budget**: its
+claim is inverted against the layer's allotted size to derive a local
+scale factor. Each child that is a share is proposed its claim at that σ
+(a band is one σ, `childLayoutSizeProposal`'s `own`), so a chain of fill
+children is laid out as its claim says, not by dividing the box. This is
+what makes constraint-assembled layers
 reach the same expressive ceiling as the spread pipeline, auto-fit included
 (issue #475). Composition beyond one distribute (+ one align) per axis falls
 back to `unionChildSpaces`; the general algebra is sketched in
@@ -845,16 +895,15 @@ its end and its head its start, so the next part starts where it ends.
 `"middle"` is the
 old `mode: "center"` under its new name; `"start"`/`"end"`/`"baseline"` are new
 fixed-pitch siblings reusing the same anchor vocabulary `align` already uses
-(`constraints/shared.ts`'s `AlignAnchor`). The claim is the one chain fold
-(`chainFold` in `distribute.ts`) that also lays out a stack: each part sits
-about its chain point by a seat, the next chain point is one step on, and the
-claim is the highest reach above the chain's start plus the lowest reach
-below it, over every part. Only the seat and the step differ. A pitched
+(`constraints/shared.ts`'s `AlignAnchor`). The claim is the layer's plan
+(`solver/plan.ts`), which lays the chain by the placement solve layout
+runs: each part sits about its chain point by its anchor, the next chain
+point is one step on, and the claim is the highest reach above the
+chain's start plus the lowest reach below it, over every part. A pitched
 chain's claim steps its anchors one pitch at a time in the chain's axis
-order, and reads each part's claim in that order too: the layer reflects
-the claim of a part that reads y the other way about its origin
-(`composePlanExtents`' `reflected`), as its view in the layer's order
-(`orientView`) places it. So a ridgeline's rows (chained down a y that reads
+order, and reads each part's claim in that order too: the plan reads the
+claim of a part that reads y the other way reflected about its data 0, as
+its view in the layer's order (`orientView`) places it. So a ridgeline's rows (chained down a y that reads
 top-down, each growing upward from its anchor, see
 [Axis direction](/internals/layout/passes#axis-direction)) reach back over
 the rows chained before them. Each part sits about its anchor:
@@ -870,7 +919,7 @@ back over the rows before them, as a ridgeline's do (k in chain order, the
 binding row being whichever peak clears the rows chained above it; usually
 the first row). A `"middle"` row
 taller than both end rows binds too, and a `"baseline"` row's descent counts
-below its anchor. The fold runs in Monotonics, so an all-linear chain's
+below its anchor. The solve runs in values in σ, so an all-linear chain's
 claim is an exact envelope that a scope inverts exactly (before, a pitched
 chain's claim was a closure, solved by a numeric search that could overshoot
 its box by a fraction of a pixel). The fold's child order is the chain order
@@ -897,14 +946,13 @@ growing down and mirrored about their anchors at paint, which needed a
 constraint overrides: union child spaces, and overlay datum-valued
 position/span domains on that union as a pinned space (a free union seated at
 data 0, where the layer places its free children), with constraint measures
-taking precedence. It returns the children's union beside the result. Its
-claim half, `resolveLayerAxisExtent`, takes both and overlays the claims the
-same way and applies the layer's `transform.scale` to the result,
-whatever its origin. A `transform.scale` is a pixel-space operation, like
-translate, so it scales the claim and never the data interval.
+taking precedence. A layer's claim is its plan's, which scales by the
+layer's `transform.scale` whatever its origin. A `transform.scale` is a
+pixel-space operation, like translate, so it scales the claim and never
+the data interval.
 `childLayoutSizeProposal` is the final per-child proposal priority before nest:
-the cell's own track extent (grid), else distribute slice for that named child,
-else the full layer box; then, on an axis an interval `position` spans, the
+the cell's own track extent (grid), else the child's claim at σ when it is a
+share, else the full layer box; then, on an axis an interval `position` spans, the
 span's pixel length (the pins set the child's extent there, whatever else
 proposed one).
 `buildLayerConstraintLayoutPlan` packages the per-layer execution plan — which
@@ -921,31 +969,47 @@ which reads the types the first one produced;
 once the source has concrete dimensions,
 `applyNestLayoutProposal` does the corresponding layout-time arithmetic on the
 derived axes.
-Grid is a **track equation** under the same unified sizing rule, not a separate
-layout regime (Stage 6e). Per axis, `resolveGridTracks` sets
+Grid is a **track equation** under the same sizing rule, not a separate
+layout regime (Stage 6e). Per axis, `gridTracks` sets
 
 ```
-track claim = Monotonic.max(claims of the cells in that track)      (max, +)
-grid claim  = Monotonic.add(track claims) + gaps                    (the σ-frame)
+track claim = Pwl.max(claims of the cells in that track)      (max, +)
+grid claim  = Pwl.add(track claims) + gaps                    (the σ-frame)
 ```
 
-A claim-less ("fill") cell contributes nothing, so an all-fill grid has no track
-claims and the tracks split the leftover (allocated − gaps) equally — bit-for-bit
-the former `sliceExtent` box-division. Content-sized tracks emerge automatically
-when cells carry size claims: a track sizes to its widest cell, and fill tracks
-share whatever the claimed tracks leave. When every track carries a σ-dependent
-claim (no fill to absorb the slack), the grid claim is inverted against the
-allocated size by the same scope registry that solves any other frame equation.
+A cell's claim counts whatever it is: a magnitude, a pixel size of its own, or
+the one σ a cell that fills a share claims (#493 piece 3). A track whose cells
+claim nothing is not sized by its content, so it is a share of its scope,
+`fr(1)`: one σ. So an all-fill grid claims `n·σ + gaps`, and the scope it is
+in solves it to give each track (allocated − gaps)/n. Content-sized tracks
+size to their widest cell, and are fixed parts, like the pixel gaps; a gap
+may also be a percent of the table's room or an `fr` weight, a term of the
+claim. The grid claim is the layer's claim on the track axis: its plan
+composes the tracks and gaps as a chain does (`placeByClaims`), so the one
+fit of its nearest scope (`ScopeRegistry.fit`) solves σ for it, with the one
+overflow warning and the one fallback, and a table nested in a chain claims
+its shares in the chain's scope.
 Because a categorical track axis cannot simultaneously be a SIZE magnitude, the
 grid's _reported_ space stays ORDINAL over the columns/rows (`gridSpaces`, for
 axis rendering; `ordinalOver` the keys `table`'s split found, so a binned
 column or row key gives an ordinal over its cells, as a spread's does: the
 split runs `splitEntries` once per key, as `spread` does, and each cell of
-the table holds the rows in both groups) while the size claim is consumed at layout time by the track
-resolution. The layout budget sizes fill cells to their track extent; the
-authoritative **placement tracks** are recomputed from the actual laid-out cell
-sizes (`gridTracksFromSizes`) so each cell pins to the real geometry — one source
-the placement and the solver shadow both read, so they cannot drift.
+the table holds the rows in both groups) while its claim is the tracks'.
+A track is sized by its cells' boxes, in the claim walk and in layout alike:
+what a cell draws past its box (an outline, a label) overhangs its track.
+Layout reads the same track rule over the same boxes, the forms of the
+layer's plan (`cellBoxesOf`), at the σ the layer lays its cells out at
+(`gridCellSizesAt`), and proposes each cell its track's extent; the plan then
+centers each cell in its track from the laid-out cell sizes, one source
+every reader of the placement shares, so they cannot drift. Where the layer
+has no σ on an axis (an unsized root, where shares have no room), a box
+that grows with σ sizes no track, as the layer proposes a spread's band no
+size from its claim; a track no box sizes has no extent, and its cells
+keep their default size there, as a spread's bands do. Every reader finds a
+cell by the grid's own refs (`CellOf`), in the grid's row-major order. A
+track no cell's box sizes, in a scope that data sizes, is one data unit wide, and
+the table warns `mixed-sizes` as a chain with a flexible part does
+(`shareTracks`, `warnFlexibleSizes`).
 
 The grid now **genuinely composes** with sibling constraints: its per-track claim
 participates in the fold and its cell-center pins solve jointly with any align /
@@ -996,18 +1060,28 @@ offset (`anchorOffset`; a stack part's `tail` is its free baseline's offset,
 or 0, and its `head` is `size − tail`). `position`, `align`,
 `distribute`, `nest`, and `grid` pins/relations over those reduced `min` values
 go through BFS components + pin offsets + free/distribute/normalized-origin
-fallbacks. Every solved cell writes back through **one path**: a size-strong
+fallbacks. The solve is written once over an `Arith` (see
+[Piecewise-Linear Values](/internals/core/pwl)). It runs once, in the claim walk, where
+the targets are boxes read off claims and a datum maps through a symbolic σ, and its
+results are formulas that layout evaluates at the solved σ with what it measured: the
+laid boxes, the pixel of data 0, and the place of each child that places itself (a
+shape at a literal pixel or a data position, an axis span or a `connect`, which set
+`placedByLayout`). A datum that is not a number has no pixel, so it emits no fact.
+Every solved cell writes back through **one path**: a size-strong
 cell sets its extent (`setExtent({min, max})`), a position-only cell pins its
 `min` anchor, a rank-1 size-with-no-position cell (align `"size"`, above)
 sets its size only (`setSizeOnly`) — replacing the old three-way branch and
-the size side-channel. `solvePlacementConstraints` throws on a bbox conflict
-(both intervals' owners named in the message) rather than the silent
-last-writer-wins an ungoverned second write would otherwise produce
-(#725/#726) — align `"span"`/`"size"` reuse this exact path for their
+the size side-channel. A bbox conflict throws (both intervals' owners named
+in the message) rather than the silent last-writer-wins an ungoverned second
+write would otherwise produce (#725/#726). The solve runs in the claim walk,
+where the boxes are formulas, so it records each over-determined box as a
+check (`Arith.agree`), and layout makes the check at σ when it seats the
+children. Align `"span"`/`"size"` reuse this exact path for their
 unbound-target check, and `lowerAlignPlacement` separately warns (not
 throws) when a constraint ends up with nothing movable — every listed
-operand already placed — except the deliberate `isDataPositionedAlignTarget`
-skip (a data-positioned scatter facet), which stays silent.
+operand already placed — except where an operand is placed by its own data
+(a scatter facet, a nested partition's cell: `isDataPositioned`), which
+stays silent.
 
 Before any of this, every placement operand of the layer is resolved to a
 node inside it (`resolveReferences`, `_ref.tsx`), and the solve keys each
@@ -1021,7 +1095,7 @@ out-of-layer operand throws (#819), so a constraint can no longer bind nothing
 in silence. An operand that is a direct child is its child's placeable, as
 before. An operand nested inside a direct child is a `NestedOperand`
 (`constraints/nestedOperand.ts`): its box is the container's box plus the
-constant offset the container's own layout gave it, and the solve adds one
+constant offset the container's own layout gave it (the plan input `gap:@n`), and the solve adds one
 rigid `anchor-relation` (container `start` → operand `start`) per axis the
 operand takes part in. Only a directly named child skips phase-1 baseline
 placement, so an unnamed container stays put and the nested operand is a
@@ -1124,19 +1198,27 @@ constraint.
 That normalization is also what keeps data-positioned children safe. A faceted
 scatter panel over `[1955, 2010]`, anchored to the shared y data scale, should
 not be pulled to `posScale(0)` (data-zero, far below 1955). So `align` leaves it
-alone: **a target anchored to a data (POSITION) scope on a posScale axis, with a
-non-`middle` anchor, is not moved** — `align` shares the frame (it still unions
-the children's data intervals) but supplies no baseline. Its baseline is already
-`posScale(0)` of the shared scope, so all such panels co-locate by construction.
+alone: **a target its own data places is not moved, by any anchor** — `align`
+shares the frame (it still unions the children's data intervals) but supplies no
+baseline. Its baseline is already `posScale(0)` of the shared scope, so all such
+panels co-locate by construction. The claim walk places such a target before
+the solve, where its frame seats it (`placeByClaims`), so the solve reads it as
+already placed. A target is placed by its data only where its layer keeps a
+frame of that data: a `middle` align over pinned children (a streamgraph's
+centered stacks) composes the layer to an origin-less type (`none`), so there
+the align places each child, and centers it.
 
 **The guard asks the solver, not the space pass (Stage 6f).** This is the
 blindingly-obvious final form the whole design arc was reaching for. The question
 "is this target already positioned?" is answered by the placement solve's own
 authority record — the `PlacementOwnershipPlan` — through one predicate,
 `isDataPositioned(axis, name)`. The fact it reads (which children are anchored to
-a POSITION scope on each axis) is a pure **data/scope** fact — a child's type
-on that axis has a data position (it is pinned or origin-less, anything but
-free) — collected _once_ at the layer boundary and
+a POSITION scope on each axis) is a pure **data/scope** fact — a child in the
+layer's own set whose type on that axis is pinned, in a layer whose own type
+there is pinned too (`placedByOwnData`, the one
+rule the claim walk, layout and the sharing of rooms read; a free child still
+waits to be placed, and an origin-less one has a width but no place) —
+collected _once_ at the layer boundary and
 handed to the solve as an explicit ownership input. The constraint path no longer
 reconstructs the space pass's `free`/`determined`/`conflict` lattice by calling a
 `placementOn` method on the target mid-lowering; there is no layout fact derived
@@ -1180,21 +1262,20 @@ the one its type implies.
 **Compositional operators** (`spread`, `stack`, `layer`, `enclose`)
 combine children's spaces. `spread({ glue: false })` keeps the magnitude
 along the stack direction so a parent can solve for shared scale factors
-via `Monotonic.inverse`. `spread({ glue: true })` (i.e. `stack`) lays
+via `Pwl.solve`. `spread({ glue: true })` (i.e. `stack`) lays
 children's extents end to end into a `POSITION` over their running sums
 (`[0, sum]` for positive parts) — the operator commits the data-driven
 magnitudes to an anchored axis. Since the operator/constraint
 unification, these folds have one home: spread's resolver _is_
 `distributeSpaceFold` on the stack axis and `resolveAlignmentSpace` on the
 cross axis — the same functions the constraint path uses (see
-[The contract](#the-contract)), each with its claim half
-(`distributeExtentFold`, `resolveAlignmentExtent`). `layer` and overlay-style
+[The contract](#the-contract)); its claim is its layer's plan's. `layer` and overlay-style
 operators use `unionChildSpaces` (`alignment.ts`). All of them are the one
 overlay fold: the union of the children's seated intervals (each on its
 baseline for an overlay), with the result's origin pinned when any child is,
 free when every child is, and none otherwise; its claim half,
 `unionChildExtents`, overlays the claims the same way, keeping the symbolic
-Monotonics (the per-side max of the ascent and descent claims) for a free
+values in σ (the per-side max of the ascent and descent claims) for a free
 result. UNDEFINED children carry no opinion and are ignored throughout, so a
 fixed-pixel (UNDEFINED) sibling never vetoes the magnitude-preserving path.
 
@@ -1293,7 +1374,7 @@ After both walks, layout proceeds on a single principle:
 **a continuous extent's scale factor is its claim's `width.inverse(size)`, and
 a pinned one _also_ builds a position scale** from its type. Before the [#586
 collapse](#the-three-space-kinds) this was a three-way switch on the kind
-(`SIZE` inverted a Monotonic, `POSITION` divided by an interval width,
+(`SIZE` inverted a claim value, `POSITION` divided by an interval width,
 `DIFFERENCE` divided by a width); a pinned or origin-less claim with no pixel
 overhead is just `linear(dataWidth, 0)`, so `width.inverse(size) = size /
 dataWidth` reproduces both divisions, and the switch folds away:
@@ -1360,11 +1441,13 @@ once you know the kind, you know which arithmetic applies.
 ## The one solve site: the σ-scope registry
 
 Every scale above resolves the same frame equation — `content(σ) = allocated`,
-inverted once by `Monotonic.inverse` — and one registry does the inversion. A
+inverted once by `Pwl.solve` — and one registry does the inversion. A
 `ScopeRegistry` (`ast/solver/scopes.ts`), created once per render on the
-`RenderSession`, is the one place σ / posScale is derived: `solveScope(space,
-claim, allocated)` solves a sized node's σ and its `originPx`, and
-`solveSize(frame, allocated)` inverts a bare claim (a grid's tracks).
+`RenderSession`, is the one place σ / posScale is derived: `fit(meta, node,
+space, claim, allocated)` fits a sized node's claim to its slot (through
+`solveScope(space, claim, allocated)`, which solves σ and `originPx`, with
+one fallback and one warning when no σ ≥ 0 fits). A grid's tracks are part
+of its layer's claim, so they need no solve of their own.
 
 **Only a sized node solves; everyone else inherits** (#1114). A node is sized on
 an axis when its size there is given to it rather than computed from σ:
@@ -1375,6 +1458,8 @@ an axis when its size there is given to it rather than computed from σ:
 - a node with a literal `w`/`h`;
 - a node with a data-valued `w`/`h`, whose box its parent's σ sizes and whose
   content it maps into that box;
+- a node whose room its parent gives it (a region's cell, a treemap tile),
+  with content that σ sizes, sized by that room;
 - a node with pinned data in a slot its parent nests it in (a spread, grid
   or treemap slot: a facet panel), sized by its slot;
 - a node handed no σ at all because nothing above it could solve one, sized
@@ -1424,7 +1509,7 @@ another value, such as a bar's, is never one value.
 
 Behind `GOFISH_DUMP_SCOPES` the registry prints every scope it solved as a
 printable frame equation, one line per solve, with kind `root`, `coord`,
-`sized`, `grid` or `recenter`:
+`sized` or `recenter`:
 
 ```
 [scope] root   key=root  axis=y [0,140]→[0,400] = 400  σ=2.857 map=yes
@@ -1502,7 +1587,7 @@ narrowly construed: a domain (the sibling weights) mapped onto a range (the
 container box) so the pieces sum to the whole.
 
 This is precisely SIZE resolution. A row of `datum(n)`-sized children under a
-shared size scale composes into a Monotonic whose inverse against the
+shared size scale composes into a claim value whose inverse against the
 available extent solves for the scale factor that makes the siblings fill it
 (see [Layout dispatch](#layout-dispatch)). `claim.width.inverse(size)` is
 the normalization step; the `datum(n)` weights are the flex factors. The
@@ -1569,8 +1654,8 @@ in the parent's own set and reads its values in the parent's frame. A
 own: it is placed at a datum, or it is the content of a data-valued box. A
 **slot** child has a set and a frame of its own (a spread slot, a grid cell).
 A **detached** child has a set of its own and is placed elsewhere. The table
-build reads it, and so does `GoFishNode.inSlot`, which a layer's σ solve asks
-(`solveLayerScales`) only for pinned content handed a σ and no map.
+build reads it, and so does `GoFishNode.isScope`, which a layer's σ solve asks
+(`solveLayerScales`) only for content handed a σ and no map.
 Values with no unit (literals) are keyed by their set. So two facet panels
 that plot one column share one domain, and a count histogram placed beside a
 scatter of millimeters keeps its own. Chrome never decides a domain, it only
@@ -1578,11 +1663,11 @@ reads one: a ring or a label wrapper added later reads the seat of the content
 it wraps. Chrome does take room, as pixels: every chrome shape claims its size,
 and a ring's claim is the hull of what it wraps and of its shapes where its
 constraints place them (`placeByClaims`). A layer that wears chrome hands its
-content its slot less its gutters (never less than 0), read off those claims, and a chart with a
-size of its own adds the gutters its claims give around a plot of that size
-(#1032; see [Chrome gutters](/internals/layout/passes#chrome-gutters)). A child
+content its slot less its gutters (never less than 0), forms of those claims in σ evaluated where it is laid out, and a node with a
+size of its own, a chart or a plain layer, takes that size as its plot and
+adds the gutters its content's claims give around it (#1032; see [Chrome gutters](/internals/layout/passes#chrome-gutters)). A child
 placed beside a node inside another child (a label on its mark's ref) takes
-room where the claim walk knows that node lands (`placementIn`), a band of
+room where the claim walk knows that node lands (`planPlacement`), a band of
 a category axis included (a share is a claim), and is ink where it does not
 (inside a coordinate space, or beside a band in a scope that mixes data and
 bands): left out of its layer's claim and box. A pinned child a layer pins at a literal pixel (a chart's
@@ -2497,14 +2582,17 @@ so the partition's position scale maps it: the layer resolves the cell's two
 edges through its frame, as it resolves an interval
 (`compilePlacementCoordinate`). The child is proposed the cell's length as
 its size there (`buildChildSpans`, `childLayoutSizeProposal`,
-`constraints/proposalPlan.ts`), and the cell lowers to a pin of the child's
-middle at the cell's middle (`lowerPositionPlacement`,
-`constraints/position.ts`). So a `rect` with no size there fills its cell, a
+`constraints/proposalPlan.ts`), and the cell places the child's middle at
+the cell's middle. The claim walk reads the cell as an interval on that axis
+(`constraintsOn`, `constraints/claimPlacement.ts`), and seats a child with a
+size of its own in the middle of it, not across it (`placeByClaims`). A cell
+handed to the placement solve directly lowers to the same pin of the
+child's middle (`lowerPositionPlacement`, `constraints/position.ts`). So a `rect` with no size there fills its cell, a
 `stack` or `spread` inside a cell divides the cell, and a circle or a text
 keeps its own size and sits in the middle of the cell. An interval would pin
 both edges instead, which sets the child's size and would stretch a circle
 into an ellipse. A child placed by its data in the layer's frame is not
-pinned (`isDataPositioned`), and neither is one that placed itself: they are
+pinned (`placedByOwnData`, `isDataPositioned`), and neither is one that placed itself: they are
 where they are. The ownership plan (`PlacementOwnershipPlan`,
 `constraints/placementLowering.ts`) records a cell's axes as pinned for its
 children, as it does an interval's, so an `align` on that axis defers to the
@@ -2523,7 +2611,10 @@ data `x` and `x2` does, and the partition hands it the map of its scale
 through the one seating rule (`childPosScalesFor`, `seatInScope`,
 `frameOf`). It maps the cell's edges, and the outline of a cell of the
 plane, through that map. Since its type claimed the cell, its parent
-leaves it where its data puts it, so a datum it cannot map (no map on that
+leaves it where its data puts it (`placedByOwnData`, `_node.ts`, the one
+rule for a child its own data places: its cell is not its room, and no
+constraint in its parent but a `position` moves it, a `middle` align
+included), so a datum it cannot map (no map on that
 axis, as under a `spread` on the cell's axis, or a corner that is not a
 number) is an error that names the axis, not a box at the size it is
 offered. Only on an axis with no cell is it as long as its proposed size.
@@ -2531,7 +2622,9 @@ A layer of marks in a cell (a `region` and a curve,
 or a dot at a median) is pinned too, so every mark in it reads the same
 scale. Such a layer is not pinned to the cell's middle, and nothing places
 a mark in it that has no position of its own: a text in a layer beside a
-`region` is placed by an `align` that names the two, not by the cell. A
+`region` is placed by an `align` that names the two, not by the cell, and
+the align moves the text to the region, whether the region is bare or
+inside a layer of its own (that layer's data places it the same way). A
 region composite (`intersect` and the others) is no different: its `region()`
 operand reads its cell, and its `ref` operand is where its target is.
 
@@ -2775,7 +2868,7 @@ Four things to consider:
 4. **Does it add pixels, or compose or pass through its children's claims?**
    If so, write a claim hook (`resolveExtent`) next to the type hook, using
    the claim half of the fold you used for the type (`unionChildExtents`,
-   `distributeExtentFold`, ...). If not, leave it out: the node then claims
+   `resolveAlignmentExtent`, ...). If not, leave it out: the node then claims
    what its types imply. Never put pixels into a type.
 
 If your operator is layout-time-only (no contribution to the kind tree),
@@ -2817,9 +2910,9 @@ display spaces, from before the tree was built, is kept in
 - Per-operator resolvers (each colocated with the operator):
   `src/ast/graphicalOperators/{spread,layer,scatter,enclose,porterDuff,position,connect,arrow,table,coord}.tsx`.
 - Overlay union helpers: `src/ast/graphicalOperators/alignment.ts`.
-- Constraint space folds + the shared slice allocator:
-  `src/ast/constraints/{distribute,align,folds}.ts`.
-- The Monotonic algebra used by continuous-extent composition: `src/util/monotonic.ts`.
+- Constraint space folds:
+  `src/ast/constraints/{distribute,align}.ts`.
+- The piecewise-linear value algebra used by claim composition: `src/ast/solver/pwl.ts`.
 - Layout consumption: `gofish.tsx`'s `layout()` for root-level dispatch;
   `layer.tsx`'s `layout` for the per-scope scale-factor solve and the
   constraint budget inversion (`spread`/`stack` elaborate to `layer`, so they

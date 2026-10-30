@@ -12,7 +12,6 @@ import {
   debugNodeTree,
   debugUnderlyingSpaceTree,
   GoFishNode,
-  warnLayout,
   type RenderSession,
 } from "./_node";
 import type { GoFishAST } from "./_ast";
@@ -32,13 +31,13 @@ import {
 } from "./underlyingSpace";
 import { mapsDomain, type Extent } from "./extent";
 import {
-  fixedOverflow,
   inkOverflow,
   reportLayoutWarnings,
+  warnLayout,
   type LayoutWarning,
 } from "./layoutWarnings";
 import { axisName } from "./constraints/shared";
-import * as Monotonic from "../util/monotonic";
+import * as Pwl from "./solver/pwl";
 import { room } from "../util";
 import { KeyedDomains } from "./keyedDomains";
 import {
@@ -47,7 +46,6 @@ import {
   orientSide,
   yDirection,
 } from "./axisDirection";
-import { shadowCheckScaleRoot } from "./solver/shadow";
 import {
   perfNow,
   perfAdd,
@@ -74,6 +72,7 @@ import {
 import { Frontend } from "gofish-ir";
 import {
   getScopeRegistry,
+  seatInBand,
   seatInScope,
   type EqualMeasureAxis,
   type ScopeSolution,
@@ -81,6 +80,11 @@ import {
 import { legendRing } from "./legends/elaborate";
 import { elaborateLabels } from "./labels/elaborate";
 import { reportHiddenLabels } from "./labels/placeStep";
+// Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE
+// axis, which needs a concrete canvas to scale data into (see the per-axis
+// comment in `layout()` for the full behavior, including the shrink-to-fit
+// case).
+import { DEFAULT_CANVAS_SIZE, rejectLength } from "./length";
 
 export type CategoricalScale = {
   color: Map<any, string>;
@@ -346,11 +350,6 @@ export const axesEnabled = (
   return enabled;
 };
 
-// Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE axis,
-// which needs a concrete canvas to scale data into (see the per-axis comment in
-// `layout()` for the full behavior, including the shrink-to-fit case).
-const DEFAULT_CANVAS_SIZE = 400;
-
 export async function layout(
   {
     w,
@@ -390,6 +389,11 @@ export async function layout(
   warnings: LayoutWarning[];
 }> {
   child = await child;
+  // The render's size is the outermost room: pixels only (a size from the
+  // HTML container is a separate feature).
+  rejectLength("render's w", w);
+  rejectLength("render's h", h);
+  contexts.session.canvas = [w, h];
   child.setRenderSession(contexts.session);
   // Note: callers must await `document.fonts.ready` before invoking
   // `layout()`. The public `gofish()` entry handles this; standalone
@@ -557,6 +561,8 @@ export async function layout(
   // as every node does with the slot its parent gives it. Every chrome
   // shape claims its size, so the root's claim already holds its chrome
   // (`placeByClaims`), and the layout fits it to the slot.
+  // The root's claim walk and scope solve, up to `solve` (`claims`).
+  const __tClaims = perfNow();
   const root = child;
   // The layout of the root at the render's slot: solve its scopes, lay it
   // out, and place it on the canvas.
@@ -588,21 +594,22 @@ export async function layout(
   // maps it at that σ too, so the axis it draws agrees with the marks. Only
   // when none does (the common `chart(...).render(el, {})`), or they map it
   // at different σs (an over-constrained layout), is σ solved against the
-  // default canvas. The root's size is its claim at its σ: the slot for a
-  // root fitted to it, its own box for a claim that is only pixels (which is
-  // the same at any σ, so 0 stands in). With no claim (a bar chart's
-  // category axis, a bare fixed-size shape) it is the render's slot, or the
-  // default canvas.
+  // default canvas. The root's size is the box the fit lays its claim out
+  // in (`Fitted.box`): the render's slot or the default canvas, grown to
+  // the claim at its σ where that is longer, or the claim's own box where
+  // it is only pixels. So a root whose fixed parts overflow the render's
+  // size sits at the canvas's top-left (`placeRoot`) and draws past its far
+  // edges, past the bottom for a y-up root as for one that reads top-down.
+  // A root mapped at a σ of its nodes is its claim at that σ. With
+  // no claim (a bar chart's category axis, a bare fixed-size shape) it is
+  // the render's slot, or the default canvas.
   const rootSpaces = [niceUnderlyingSpaceX, niceUnderlyingSpaceY] as const;
   const given = [w, h] as const;
-  // A share (#493 piece 3: `sharesRoom`) is a part of a slot, so on an
-  // axis the render gives no size there is none to share: the root lays
-  // that axis out unsized, and a node with no size of its own keeps its
-  // default size, as it does where nothing claims.
+  // Where the root's shares have no room (`sharesHaveNoRoom`), the root
+  // lays that axis out unsized, and a node with no size of its own keeps
+  // its default size, as it does where nothing claims.
   const rootClaims = ([0, 1] as const).map((axis) =>
-    given[axis] === undefined && root.sharesRoom(axis)
-      ? undefined
-      : [niceExtentX, niceExtentY][axis]
+    root.sharesHaveNoRoom(axis) ? undefined : [niceExtentX, niceExtentY][axis]
   ) as [Extent | undefined, Extent | undefined];
   const rootSizes = ([0, 1] as const).map((axis) => {
     const space = rootSpaces[axis];
@@ -611,49 +618,33 @@ export async function layout(
     const key = mapsDomain(space, claim)
       ? keyedDomains.axisKey(root, axis, root._underlyingSpace![axis])
       : undefined;
-    const keyed = key === undefined ? undefined : scopes.keyedSigma(key, axis);
+    const keyed =
+      key === undefined || given[axis] !== undefined
+        ? undefined
+        : scopes.keyedSigma(key, axis);
     const allocated = given[axis] ?? DEFAULT_CANVAS_SIZE;
-    // A root given a slot fits its claim to it. When no σ does, the
-    // nodes with a literal size and their chrome are larger than the slot
-    // (over-constrained, #1032): the root maps its domain at their σ, and
-    // overflows the slot like any other fixed size. With no such nodes,
-    // what is larger than the slot is pixels that do not scale (a text at
-    // a literal position past the slot's end): the data fills the slot,
-    // at the σ where the part of the claim that grows with σ, alone,
-    // reaches it (as if the fixed parts took no room),
-    // and the pixels overflow.
-    // Fixed parts larger than the slot: no σ ≥ 0 fits (a numeric solve
-    // of a claim with no pieces would settle at σ = 0), and the layout
-    // warns (`layoutWarnings.ts`).
-    const overfull =
-      given[axis] !== undefined &&
-      claim !== undefined &&
-      claim.width.run(0) > allocated + 0.5;
-    if (overfull) warnLayout(root, fixedOverflow(root, axis, allocated));
+    // An unsized root whose nodes with a literal size map its keyed domain
+    // maps it at their σ. Any other root fits its claim to its slot, the
+    // render's or the default canvas, by the one scope fit
+    // (`ScopeRegistry.fit`). When the claim's fixed parts are larger than
+    // the slot, the data fills the slot as if they took no room, and the
+    // pixels overflow. A render size is a limit, so the fit warns there.
+    // The default canvas is not one: it grows to hold the claim (#1179).
+    // A keyed σ is solved only for a claim that maps a domain, so `claim`
+    // is set there.
     const fitted =
-      overfull || (given[axis] === undefined && keyed !== undefined)
-        ? undefined
-        : scopes.solveScope(meta, space, claim, allocated);
-    const grows =
-      claim === undefined ? undefined : Monotonic.rising(claim.width);
-    const below =
-      fitted !== undefined ? undefined : (keyed ?? grows?.inverse(allocated));
-    const scope =
-      below === undefined ? fitted : scopes.scopeAt(meta, space, claim, below);
-    // A scope solved against the box fills it (a one-value domain's claim
-    // is centered in it); one at a σ from below is its claim at that σ.
-    const px =
-      claim === undefined
-        ? undefined
-        : scope !== undefined
-          ? below === undefined
-            ? allocated
-            : claim.width.run(scope.sigma)
-          : Monotonic.isConstant(claim.width)
-            ? claim.width.run(0)
-            : undefined;
+      keyed !== undefined
+        ? {
+            scope: scopes.scopeAt(meta, space, claim, keyed),
+            box: Pwl.at(claim!.width, keyed),
+          }
+        : scopes.fit(meta, root, space, claim, {
+            px: allocated,
+            limit: given[axis] !== undefined,
+          });
+    const px = fitted?.box;
     return {
-      scope,
+      scope: fitted?.scope,
       px:
         px !== undefined && Number.isFinite(px) && px > 0
           ? px
@@ -731,12 +722,6 @@ export async function layout(
     rootScopes[1]?.sigma,
   ];
 
-  // Solver shadow (#39): the ROOT σ-scope — the SIZE frame equation
-  // content(σ)=canvas the whole chart resolves against. No-op unless
-  // GOFISH_SOLVER_CHECK is set.
-  shadowCheckScaleRoot(rootClaims[0], canvas[0], rootScaleFactors[0], 0);
-  shadowCheckScaleRoot(rootClaims[1], canvas[1], rootScaleFactors[1], 1);
-
   // The root content sits in the root scope's frame by the one seating
   // rule (`seatInScope`): a pinned content shares the frame and places its
   // data through its map; a free content's baseline is placed at
@@ -762,6 +747,7 @@ export async function layout(
 
   // The root scales are solved in the root's own axis order
   // (`rootYDirection`).
+  perfAdd("claims", perfNow() - __tClaims);
   const __tSolve = perfNow();
   root.layout([layoutW, layoutH], orientScales(rootScales, 1, rootYDirection));
   perfAdd("solve", perfNow() - __tSolve);
@@ -780,7 +766,7 @@ export async function layout(
   // root's ink before its box (see below). The root's
   // axis order starts at the frame's start edge: the left on
   // x, the top for a y that reads top-down, and the BOTTOM for a continuous
-  // y, which grows upward from there (`fromFrameStart`). A position `p`
+  // y, which grows upward from there (`seatInBand`). A position `p`
   // along the root's axis order is the pixel `p` from that edge, inward.
   //
   // Where a scope solved against the render's slot places the root (a
@@ -815,11 +801,12 @@ export async function layout(
       !root.sharesRoom(axis) &&
       seat.anchor === "baseline"
     ) {
-      root.place(
-        name,
-        edge + fromFrameStart(offset + seat.px, rootSizes[axis].px, direction),
-        "baseline"
+      const at = seatInBand(
+        { px: offset + seat.px, anchor: seat.anchor },
+        rootSizes[axis].px,
+        direction
       );
+      root.place(name, edge + at.px, at.anchor);
       return true;
     }
     root.pinAnchor(
@@ -847,7 +834,7 @@ export async function layout(
   // is not
   // fitted inside the canvas, and it overflows it. A label placed beside a
   // node takes room wherever the claim walk knows where the node lands
-  // (`placementIn`), bands of a category axis included (#493 piece 3:
+  // (`planPlacement`), bands of a category axis included (#493 piece 3:
   // `sharesRoom`), so the ink left is what the claim walk cannot place:
   // inside a coordinate space, under a node with a size of its own or one
   // that reads y the other way, a label centered on a run of several slots,

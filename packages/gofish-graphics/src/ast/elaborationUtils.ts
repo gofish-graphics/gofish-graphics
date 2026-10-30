@@ -1,5 +1,5 @@
 import { GoFishNode } from "./_node";
-import type { LayerSharingPlan } from "./constraints/compose";
+import { type LayerSharingPlan } from "./constraints/compose";
 import { round12 } from "./cells";
 import { layer } from "./graphicalOperators/layer";
 import { Constraint } from "./constraints";
@@ -72,7 +72,7 @@ export async function wrapRing(
   // before chrome, #1114). The ring's shapes (an axis's ticks and line, a
   // legend, a title) are each a set of their own: none joins the content's
   // type, whatever constraint seats it. Ticks still sit at data positions in
-  // the ring's frame, through their position constraints. The rule reads no
+  // the ring's frame, through their position constraints. Its sets read no
   // constraint: whatever seats the content (a literal pin, or a delta axis's
   // datum `contentAt`), the content is neither nested nor datum-placed. The
   // content is the ring's first child, by construction, and the rule reads
@@ -81,7 +81,11 @@ export async function wrapRing(
   root.INTERNAL_setSharing((childNodes): LayerSharingPlan => {
     const sets = childNodes.map((_, k) => (k === 0 ? 0 : k + 1));
     const none = (): [Set<number>, Set<number>] => [new Set(), new Set()];
-    return { sets: [sets, [...sets]], nested: none(), datumPlaced: none() };
+    return {
+      sets: [sets, [...sets]],
+      nested: none(),
+      datumPlaced: none(),
+    };
   });
   // Every handle is a slot: the content is slot 0, and each of the ring's
   // shapes is the slot of the child `layer` made of it. A shape may be

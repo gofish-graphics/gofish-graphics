@@ -85,7 +85,7 @@ size (a text is measured when the claims are resolved), each ring claims the
 hull of what it wraps and of its shapes where its constraints place them
 (`placeByClaims`), and the outermost ring hands its content what its gutters
 leave of its slot. A category label is centered on its slot's ref. The claim
-walk knows where the slot lands (`placementIn`): on a data axis (time or
+walk knows where the slot lands (`planPlacement`): on a data axis (time or
 number bins) through the data, and on a category axis because a band is a
 share, which claims one σ (#493 piece 3, `GoFishNode.sharesRoom`). So the
 label takes room, and only its overhang past the ends of the axis reaches

@@ -4,23 +4,22 @@
 
 // ── Per-axis constraint composition (the max-plus fold) ──────────────────────
 //
-// One rule, applied per axis, composes a layer's constraints into a claim the
-// parent can invert for auto-fit (and into a budget for sizing covered
-// children):
+// One rule, applied per axis, composes a layer's constraints into the type
+// of its content (its claim is its plan's, `solver/plan.ts`):
 //
-//   claim(axis) = max-union over {
-//     each distribute(dir = axis):   its summed fold (Σ extent + spacing)   — series
+//   type(axis) = max-union over {
+//     each distribute(dir = axis):   its series fold (distributeSpaceFold)   — series
 //     each align(spec on axis):      its overlay fold (resolveAlignmentSpace) — overlay
-//     each child covered by neither: its raw extent                        — overlay
+//     each child covered by neither: its raw type                          — overlay
 //   }
 //
-// This is the (max, +) algebra from
+// This is the type half of the (max, +) algebra from
 // apps/docs/docs/internals/design/layout-synthesis.md: a distribute is a series
-// (sum) on its axis, align/overlay is `max`, and any network of the two folds to
-// a single monotone claim — so the inversion (auto-fit) stays a one-unknown
-// solve. `spread` is the one-distribute + one-cross-axis-align instance;
-// SubsetSelection is two disjoint distributes on one axis (their sub-sums
-// overlay, hence `max`). (A grid/`table` is its own `grid` constraint with
+// on its axis, align/overlay is a union. This file folds types only; the
+// claims, where the sums and envelopes are taken, are the plan's (`buildPlan`).
+// `spread` is the one-distribute + one-cross-axis-align instance;
+// SubsetSelection is two disjoint distributes on one axis (their folds
+// overlay, hence the union). (A grid/`table` is its own `grid` constraint with
 // ORDINAL track axes — see constraints/grid.ts — not composed here.)
 //
 // The align fold is load-bearing, not cosmetic: in a bar chart (distribute on x,
@@ -32,8 +31,8 @@
 // Gated to layers with at least one distribute: a pure overlay (no series, e.g.
 // a legend) has nothing to compose, so it is left untouched (undefined) and the
 // layer's default union — which also merges `position` data domains — stands.
-// Distribute interleaved with a `position` pin (solve the sum relative to the
-// pin) is not yet modeled; the distribute claim wins on a shared axis for now.
+// Distribute interleaved with a point `position` pin (the sum relative to the
+// pin) is not modeled: such a layer is left to the default union too.
 
 import type { GoFishAST } from "../_ast";
 import type { Cell } from "../cells";
@@ -50,19 +49,15 @@ import {
   type UnitRecord,
 } from "../underlyingSpace";
 import {
-  resolveAlignmentExtent,
   resolveAlignmentSpace,
   seatedUnion,
-  unionChildExtents,
   unionChildSpaces,
 } from "../graphicalOperators/alignment";
-import { Extent, impliedExtent, scaleExtent } from "../extent";
 import { type ConstraintSpec } from ".";
 import * as Interval from "../../util/interval";
 import {
   distributeChildrenInPlacementOrder,
   distributeOrigin,
-  distributeExtentFold,
   distributeSpaceFold,
   type DistributeConstraint,
   type StackOrigin,
@@ -93,24 +88,6 @@ const isSpanPosition = (c: ConstraintSpec): c is PositionConstraint =>
   (c.x === undefined || isPositionInterval(c.x)) &&
   (c.y === undefined || isPositionInterval(c.y)) &&
   (c.x !== undefined || c.y !== undefined || c.region !== undefined);
-
-/** One distribute's slice of the layout budget: equal shares of the axis size
- *  among its covered children (consumed by `layer.tsx`'s `layout`). */
-export type DistributeSegment = {
-  dAxis: 0 | 1;
-  /** Already glue-zeroed (see createDistributeConstraint). */
-  spacing: number;
-  /** Covered children's operand keys, in placement order. */
-  order: string[];
-};
-
-export type ComposeBudget = {
-  segments: DistributeSegment[];
-  /** Per axis: the plan covers it, so the layer's claim there is the composed
-   *  claim, which the layer solves σ against when it is a sized node on that
-   *  axis (`solveLayerScales`). */
-  covered: [boolean, boolean];
-};
 
 export type PositionDomains = {
   x?: Interval.Interval;
@@ -146,7 +123,7 @@ const withoutPlaced = <T>(
  * datum position places is left out of the union: it sits where its datum
  * maps, so the datum is what it adds to the domain. A `transform.scale` does
  * not touch the type: like translate, it acts on pixels, so it scales only the
- * claim ({@link resolveLayerAxisExtent}). */
+ * claim. */
 function resolveLayerAxisSpace(
   base: UnderlyingSpace,
   axis: 0 | 1,
@@ -188,83 +165,31 @@ function resolveLayerAxisSpace(
   );
 }
 
-/** A layer's default types, per axis: `union`, the union of the children a
- *  datum position does not place, and `spaces`, that union with the layer's
- *  datum domain overlaid ({@link resolveLayerAxisSpace}). The claim half
- *  ({@link resolveLayerAxisExtent}) reads both. */
-export type LayerBaseSpaces = {
-  union: Size<UnderlyingSpace>;
-  spaces: Size<UnderlyingSpace>;
-};
-
+/** A layer's default types, per axis: the union of the children a datum
+ *  position does not place, with the layer's datum domain overlaid
+ *  ({@link resolveLayerAxisSpace}). */
 export function resolveLayerBaseSpaces(
   childSpaces: Size<UnderlyingSpace>[],
   positionDomains: PositionDomains,
   placed: [Set<number>, Set<number>] = [new Set(), new Set()]
-): LayerBaseSpaces {
-  const union: Size<UnderlyingSpace> = [UNDEFINED, UNDEFINED];
+): Size<UnderlyingSpace> {
   const spaces: Size<UnderlyingSpace> = [UNDEFINED, UNDEFINED];
   const domains = [positionDomains.x, positionDomains.y];
   const measures = [positionDomains.xMeasure, positionDomains.yMeasure];
   const cells = [positionDomains.xCells, positionDomains.yCells];
   for (const axis of [0, 1] as const) {
-    union[axis] = unionChildSpaces(
-      withoutPlaced(childSpaces, axis, placed[axis], UNDEFINED),
-      axis
-    );
     spaces[axis] = resolveLayerAxisSpace(
-      union[axis],
+      unionChildSpaces(
+        withoutPlaced(childSpaces, axis, placed[axis], UNDEFINED),
+        axis
+      ),
       axis,
       domains[axis],
       measures[axis],
       cells[axis]
     );
   }
-  return { union, spaces };
-}
-
-/** The claim of a layer's default per-axis type `space`, given the
- * children's `base` union ({@link resolveLayerBaseSpaces}): the union of its
- * children's claims, and, when the layer's own datum positions widen the
- * domain, that union overlaid with the datum domain (which claims its data
- * width), seated as the type seats them. Scaled by the layer's
- * `transform.scale`, a pixel-space operation, so it scales the claim of every
- * origin and never the data interval. */
-export function resolveLayerAxisExtent(
-  allChildExtents: Size<Extent | undefined>[],
-  allChildSpaces: Size<UnderlyingSpace>[],
-  axis: 0 | 1,
-  scale: number,
-  positionDomain: Interval.Interval | undefined,
-  base: UnderlyingSpace,
-  space: UnderlyingSpace,
-  placed: Set<number> = new Set()
-): Extent | undefined {
-  const childSpaces = withoutPlaced(allChildSpaces, axis, placed, UNDEFINED);
-  const childExtents = withoutPlaced(
-    allChildExtents,
-    axis,
-    placed,
-    undefined as Extent | undefined
-  );
-  const baseExtent = unionChildExtents(childExtents, childSpaces, axis, base);
-  const datum =
-    positionDomain === undefined
-      ? undefined
-      : CONTINUOUS(positionDomain, "pinned");
-  const extent =
-    datum === undefined
-      ? baseExtent
-      : unionChildExtents(
-          [
-            axisSize(baseExtent, axis, undefined),
-            axisSize(impliedExtent(datum), axis, undefined),
-          ],
-          [axisSize(base, axis, UNDEFINED), axisSize(datum, axis, UNDEFINED)],
-          axis,
-          space
-        );
-  return extent === undefined ? undefined : scaleExtent(scale, extent);
+  return spaces;
 }
 
 /** Build a per-axis Size carrying `value` on `axis` and `other` elsewhere, so
@@ -272,9 +197,11 @@ export function resolveLayerAxisExtent(
 const axisSize = <T>(value: T, axis: 0 | 1, other: T): Size<T> =>
   axis === 0 ? [value, other] : [other, value];
 
-type Seg = DistributeSegment & {
+/** One distribute, as its fold reads it: its axis and its covered
+ *  children, in placement order. */
+type Seg = {
+  dAxis: 0 | 1;
   idx: number[];
-  anchor: AlignAnchor | "edge";
   glue: boolean;
   measure?: string;
   hasOrder?: boolean;
@@ -286,9 +213,8 @@ type Al = { axis: 0 | 1; anchor: AlignAnchor; idx: number[] };
 
 /** The structure of a layer's constraint composition: which children each
  *  distribute and align covers, on which axis. It reads only the constraints
- *  and the child nodes, never a type or a claim, so the type fold
- *  ({@link composePlanSpaces}) and the claim fold ({@link composePlanExtents})
- *  share one plan. */
+ *  and the child nodes, never a type or a claim. The type fold
+ *  ({@link composePlanSpaces}) and the claim walk read it. */
 export type ComposePlan = {
   segments: Seg[];
   alignFolds: Al[];
@@ -365,10 +291,7 @@ export function planConstraintComposition(
     if (idx === undefined) return undefined;
     segments.push({
       dAxis: axisIndex(d.dir),
-      spacing: d.spacing,
-      order: ordered.map(resolved.keyOf),
       idx,
-      anchor: d.anchor,
       glue: d.glue,
       measure: d.measure,
       hasOrder: d.hasOrder,
@@ -446,6 +369,11 @@ export type SharingPlan = {
   /** Per axis: children whose own extent sits in a frame of its own (a datum
    *  placement, a spread slot, a grid cell). */
   nested: [Set<number>, Set<number>];
+  /** Per axis: children the node gives a room of its own, from outside
+   *  their content (a region's cell, a treemap tile), which makes a child
+   *  with content a σ-scope of its own (`GoFishNode.isScope`). None when
+   *  absent. */
+  rooms?: [Set<number>, Set<number>];
 };
 
 /** What a child is to its parent on one axis, by the parent's plan:
@@ -492,6 +420,7 @@ export function planSharing(
 
   const datumPlaced: [Set<number>, Set<number>] = [new Set(), new Set()];
   const nested: [Set<number>, Set<number>] = [new Set(), new Set()];
+  const rooms: [Set<number>, Set<number>] = [new Set(), new Set()];
   const detached: [Set<number>, Set<number>] = [new Set(), new Set()];
   const joins: [number[][], number[][]] = [[], []];
   const detach = (axis: 0 | 1, idx: number[]) =>
@@ -517,6 +446,13 @@ export function planSharing(
             idx.forEach((i) => datumPlaced[axis].add(i));
             nest(axis, idx);
           }
+          // A region's cell, with no coordinate of its own on the axis, is
+          // the child's room there.
+          if (
+            c.region?.spans[axis] !== undefined &&
+            (axis === 0 ? c.x : c.y) === undefined
+          )
+            idx.forEach((i) => rooms[axis].add(i));
         }
         break;
       }
@@ -590,13 +526,11 @@ export function planSharing(
       return s;
     });
   }
-  return { sets, nested, datumPlaced };
+  return { sets, nested, rooms, datumPlaced };
 }
 
 const foldOptions = (s: Seg) => ({
   axis: s.dAxis,
-  spacing: s.spacing,
-  anchor: s.anchor,
   glue: s.glue,
   measure: s.measure,
   hasOrder: s.hasOrder,
@@ -604,25 +538,19 @@ const foldOptions = (s: Seg) => ({
   origin: s.origin,
 });
 
-/** One operand of an axis's max-union: a distribute fold, an align fold, or a
- *  child no fold covers. */
-export type Fragment =
-  | { kind: "distribute"; seg: Seg; space: UnderlyingSpace }
-  | { kind: "align"; al: Al; space: UnderlyingSpace }
-  | { kind: "child"; index: number; space: UnderlyingSpace };
-
-/** The operands of `axis`'s max-union, with their types, or undefined when no
+/** The types of the operands of `axis`'s max-union (each distribute fold,
+ *  each align fold, and each child no fold covers), or undefined when no
  *  distribute or align covers the axis (the layer's default union stands). */
 function axisFragments(
   plan: ComposePlan,
   childSpaces: Size<UnderlyingSpace>[],
   axis: 0 | 1
-): Fragment[] | undefined {
+): UnderlyingSpace[] | undefined {
   const dists = plan.segments.filter((s) => s.dAxis === axis);
   const als = plan.alignFolds.filter((a) => a.axis === axis);
   if (dists.length === 0 && als.length === 0) return undefined;
 
-  const fragments: Fragment[] = [];
+  const fragments: UnderlyingSpace[] = [];
   const covered = new Set<number>(plan.spanCover[axis]);
   for (const s of dists) {
     s.idx.forEach((i) => covered.add(i));
@@ -631,9 +559,7 @@ function axisFragments(
       s.keys,
       foldOptions(s)
     );
-    // Kept even when UNDEFINED: an unkeyed spread of magnitudes has no type
-    // on the axis but still claims σ-dependent room.
-    fragments.push({ kind: "distribute", seg: s, space });
+    fragments.push(space);
   }
   for (const a of als) {
     a.idx.forEach((i) => covered.add(i));
@@ -644,35 +570,26 @@ function axisFragments(
       a.anchor,
       axis
     );
-    fragments.push({ kind: "align", al: a, space });
+    fragments.push(space);
   }
   for (let i = 0; i < childSpaces.length; i++) {
-    if (!covered.has(i))
-      fragments.push({ kind: "child", index: i, space: childSpaces[i][axis] });
+    if (!covered.has(i)) fragments.push(childSpaces[i][axis]);
   }
   return fragments;
 }
 
-/** The composed per-axis TYPES, and the max-union operands each was folded
- *  from (which the claim fold reuses). Undefined on an axis leaves the default
+/** The composed per-axis TYPES. Undefined on an axis leaves the default
  *  union in place (no distribute or align on that axis). */
-export type ComposedSpaces = {
-  spaces: [UnderlyingSpace | undefined, UnderlyingSpace | undefined];
-  fragments: [Fragment[] | undefined, Fragment[] | undefined];
-};
-
 export function composePlanSpaces(
   plan: ComposePlan,
   childSpaces: Size<UnderlyingSpace>[]
-): ComposedSpaces {
+): [UnderlyingSpace | undefined, UnderlyingSpace | undefined] {
   const spaces: [UnderlyingSpace | undefined, UnderlyingSpace | undefined] = [
     undefined,
     undefined,
   ];
-  const fragments: ComposedSpaces["fragments"] = [undefined, undefined];
   for (const axis of [0, 1] as const) {
     const axisFrags = axisFragments(plan, childSpaces, axis);
-    fragments[axis] = axisFrags;
     if (axisFrags === undefined) continue; // keep default union
     // This axis is covered by an align/distribute, so the FOLD is authoritative
     // — set it even when UNDEFINED, to OVERRIDE (suppress) the layer's default
@@ -685,135 +602,10 @@ export function composePlanSpaces(
     spaces[axis] =
       axisFrags.length > 0
         ? unionChildSpaces(
-            axisFrags.map((f) => axisSize(f.space, axis, UNDEFINED)),
+            axisFrags.map((f) => axisSize(f, axis, UNDEFINED)),
             axis
           )
         : UNDEFINED;
   }
-  return { spaces, fragments };
-}
-
-/** The composed per-axis CLAIMS for the types that {@link composePlanSpaces}
- *  produced (`composed`, with its fold operands), plus the layout budget.
- *  Each fold operand's claim comes from its own claim fold, and the operands
- *  overlay as in {@link unionChildExtents}. An axis the plan does not cover is
- *  left undefined (the default union's claim stands). */
-export function composePlanExtents(
-  plan: ComposePlan,
-  composed: ComposedSpaces,
-  childExtents: Size<Extent | undefined>[],
-  childSpaces: Size<UnderlyingSpace>[],
-  // Which children read y the other way from the layer. A fold places each
-  // operand about its origin through its view in the layer's axis order
-  // (`orientView`), so it reads the operand's y claim reflected about its
-  // origin: a ridgeline's rows, chained down a spread that reads top-down,
-  // rise above their baselines.
-  reflected: boolean[],
-  // What a chain reads of its parts. A chain of parts of the plot lays
-  // them by their plots (`plots`, for the children `dressed`), so what
-  // dresses a part (a value label, a nested chart's chrome) never moves the
-  // parts: it takes room only where it reaches past the chain, and sits in
-  // the gaps between the parts (#1032). A chain with a part that is no part
-  // of the plot (a stand-in, beside which its other parts are dressing; a
-  // ring's chrome) lays its parts whole, past what they dress.
-  parts: {
-    plots: Size<Extent | undefined>[];
-    dressed: boolean[];
-    standIn: boolean[];
-    chrome: boolean[];
-  },
-  // The plot's claim instead (`GoFishNode.resolvePlotExtent`). A chain
-  // with a stand-in reaches only as far as its stand-ins. An align counts
-  // the plot of a child it seats where it does whatever its box (at its own
-  // data, or at the origin), and the whole of a child it places by its box;
-  // a child no fold covers sits at its origin, and counts its plot.
-  forPlot: boolean
-): {
-  covered: [boolean, boolean];
-  extents: [Extent | undefined, Extent | undefined];
-  budget: ComposeBudget;
-} {
-  const covered: [boolean, boolean] = [false, false];
-  const extents: [Extent | undefined, Extent | undefined] = [
-    undefined,
-    undefined,
-  ];
-  for (const axis of [0, 1] as const) {
-    const fragments = composed.fragments[axis];
-    const space = composed.spaces[axis];
-    if (fragments === undefined || space === undefined) continue;
-    covered[axis] = true;
-    const reached = forPlot ? parts.plots : childExtents;
-    // An operand's claim in the layer's axis order.
-    const operand = (claims: Size<Extent | undefined>[], i: number) => {
-      const e = claims[i][axis];
-      return axis === 1 && reflected[i] && e !== undefined
-        ? Extent(e.descent, e.ascent)
-        : e;
-    };
-    const chainExtent = (
-      idx: number[],
-      f: Fragment & { kind: "distribute" }
-    ) => {
-      const whole = idx.map((i) => operand(childExtents, i));
-      const standIn = idx.some((i) => parts.standIn[i]);
-      const byPlot =
-        !standIn &&
-        !idx.some((i) => parts.chrome[i]) &&
-        idx.some((i) => parts.dressed[i]);
-      // Each part as the chain lays it, and how far each reaches: the
-      // claim reaches as far as each whole part, the plot as far as the
-      // laid parts (or the stand-ins).
-      const laid = byPlot
-        ? idx.map((i, k) =>
-            parts.dressed[i] ? (operand(parts.plots, i) ?? whole[k]) : whole[k]
-          )
-        : whole;
-      const reaches = forPlot
-        ? standIn
-          ? idx.map((i, k) => (parts.standIn[i] ? laid[k] : undefined))
-          : undefined
-        : byPlot
-          ? whole
-          : undefined;
-      return distributeExtentFold(
-        laid,
-        idx.map((i) => childSpaces[i][axis]),
-        f.space,
-        foldOptions(f.seg),
-        reaches
-      );
-    };
-    const fragmentExtent = (f: Fragment): Extent | undefined =>
-      f.kind === "distribute"
-        ? chainExtent(f.seg.idx, f)
-        : f.kind === "align"
-          ? resolveAlignmentExtent(
-              f.al.idx.map((i) => operand(childExtents, i)),
-              f.al.idx.map((i) => childSpaces[i][axis]),
-              f.al.anchor,
-              f.space,
-              forPlot ? f.al.idx.map((i) => operand(parts.plots, i)) : undefined
-            )
-          : reached[f.index][axis];
-    const extent = unionChildExtents(
-      fragments.map((f) => axisSize(fragmentExtent(f), axis, undefined)),
-      fragments.map((f) => axisSize(f.space, axis, UNDEFINED)),
-      axis,
-      space
-    );
-    extents[axis] = extent;
-  }
-  return {
-    covered,
-    extents,
-    budget: {
-      segments: plan.segments.map(({ dAxis, spacing, order }) => ({
-        dAxis,
-        spacing,
-        order,
-      })),
-      covered,
-    },
-  };
+  return spaces;
 }

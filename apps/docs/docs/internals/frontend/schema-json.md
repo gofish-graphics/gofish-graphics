@@ -1127,8 +1127,15 @@ for the API.
           "description": "Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat)."
         },
         "spacing": {
-          "$ref": "#/$defs/Number",
-          "description": "Gap between children, px.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Gap between children, px. Also `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible.",
           "default": 8
         },
         "alignment": {
@@ -1163,12 +1170,26 @@ for the API.
           "description": "Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
         },
         "w": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Data-driven cross-axis extent (field/datum-sized children)."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Width of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "h": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Data-driven cross-axis extent (field/datum-sized children)."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Height of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "size": {
           "$ref": "#/$defs/ChannelValue",
@@ -1253,12 +1274,26 @@ for the API.
           "description": "Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
         },
         "w": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Data-driven cross-axis extent (field/datum-sized children)."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Width of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "h": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Data-driven cross-axis extent (field/datum-sized children)."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Height of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "size": {
           "$ref": "#/$defs/ChannelValue",
@@ -1460,20 +1495,37 @@ for the API.
               "$ref": "#/$defs/Number"
             },
             {
+              "$ref": "#/$defs/Length"
+            },
+            {
               "type": "array",
               "minItems": 2,
               "maxItems": 2,
               "prefixItems": [
                 {
-                  "$ref": "#/$defs/Number"
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Number"
+                    },
+                    {
+                      "$ref": "#/$defs/Length"
+                    }
+                  ]
                 },
                 {
-                  "$ref": "#/$defs/Number"
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Number"
+                    },
+                    {
+                      "$ref": "#/$defs/Length"
+                    }
+                  ]
                 }
               ]
             }
           ],
-          "description": "Cell gap: a single number for both axes, or [x, y].",
+          "description": "Cell gap: a single number for both axes, or [x, y]. Each is pixels, `percent(n)`, n percent of the table's room on its axis, or `fr(k)`, k shares of its scope.",
           "default": 0
         },
         "numCols": {
@@ -1545,12 +1597,26 @@ for the API.
           "description": "Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
         },
         "w": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "h": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "dims": {
           "type": "object",
@@ -1785,8 +1851,15 @@ for the API.
           "description": "Right edge position."
         },
         "w": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Width."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Width. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "emX": {
           "type": "boolean",
@@ -1805,8 +1878,15 @@ for the API.
           "description": "Other y edge position."
         },
         "h": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Height."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "emY": {
           "type": "boolean",
@@ -1858,8 +1938,15 @@ for the API.
           "description": "w/h ratio to enforce; the constraining axis wins when both are data-driven."
         },
         "inset": {
-          "$ref": "#/$defs/Number",
-          "description": "Pixels drawn in from each side of the space the rect fills, on an axis where it has no size or span of its own (a bar's width in a spread or a partition cell), so neighbors are drawn apart. A side the rect sizes itself, such as a bar's data height, is never inset. It changes only what is drawn: the rect's box stays the space it was given.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Pixels drawn in from each side of the space the rect fills, on an axis where it has no size or span of its own (a bar's width in a spread or a partition cell), so neighbors are drawn apart. A side the rect sizes itself, such as a bar's data height, is never inset. It changes only what is drawn: the rect's box stays the space it was given. Also `percent(n)`, n percent of that space on each axis: `percent(10)` draws a bar at 80% of its band. The percent and any pixels added to it are each 0 or more.",
           "default": 0
         },
         "debug": {
@@ -2020,8 +2107,15 @@ for the API.
           "description": "Right edge position."
         },
         "w": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Width."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Width. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "emX": {
           "type": "boolean",
@@ -2040,8 +2134,15 @@ for the API.
           "description": "Other y edge position."
         },
         "h": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Height."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "emY": {
           "type": "boolean",
@@ -2374,8 +2475,15 @@ for the API.
           "description": "Right edge position."
         },
         "w": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Width."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Width. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "emX": {
           "type": "boolean",
@@ -2394,8 +2502,15 @@ for the API.
           "description": "Other y edge position."
         },
         "h": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Height."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "emY": {
           "type": "boolean",
@@ -2553,13 +2668,27 @@ for the API.
           "description": "Embed y in the parent's y space."
         },
         "w": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Width.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Width. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.",
           "default": 0
         },
         "h": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Height.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.",
           "default": 0
         },
         "fill": {
@@ -3185,16 +3314,54 @@ for the API.
       "required": ["field", "between"],
       "description": "A field predicate, as `field(name).between(lo, hi, { closed })` builds it: the field it reads and the interval it tests."
     },
+    "Length": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "length",
+          "description": "The tag that marks a length."
+        },
+        "percent": {
+          "type": "number",
+          "description": "Percent of the room the length is laid out in."
+        },
+        "px": {
+          "type": "number",
+          "description": "Pixels added to the percent."
+        },
+        "fr": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Shares of the room the nearest scope divides."
+        }
+      },
+      "required": ["type"],
+      "description": "A length, as `percent(n)` or `fr(k)` builds it: a percent of the room it is laid out in plus pixels (`percent(n).offset(px)`), or a weight of `fr` shares of its nearest scope."
+    },
     "ChartOptions": {
       "type": "object",
       "properties": {
         "w": {
-          "$ref": "#/$defs/Number",
-          "description": "Width of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Width of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "h": {
-          "$ref": "#/$defs/Number",
-          "description": "Height of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Height of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "coord": {
           "description": "Coordinate transform for the whole chart, made by a call in the Coord family: Coord.polar(), Coord.clock(), Coord.wavy(), ..."

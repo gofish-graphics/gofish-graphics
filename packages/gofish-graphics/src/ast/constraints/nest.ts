@@ -6,6 +6,7 @@ import { UnderlyingSpace, isCONTINUOUS } from "../underlyingSpace";
 import { padExtent, type Extent } from "../extent";
 import { type ConstraintRef, type KeyOf } from "./shared";
 import type { PlacementFactEmitter } from "./placementFacts";
+import type { Arith } from "../solver/arith";
 
 /**
  * Nesting relation between two named children of a layer.
@@ -67,10 +68,11 @@ export const isNestConstraint = (
   c: { type: string } | undefined
 ): c is NestConstraint => c !== undefined && c.type === "nest";
 
-export function lowerNestPlacement(
+export function lowerNestPlacement<T>(
+  A: Arith<T>,
   constraint: NestConstraint,
   owner: string,
-  emitter: PlacementFactEmitter,
+  emitter: PlacementFactEmitter<T>,
   keyOf: KeyOf
 ): void {
   const [outer, inner] = constraint.children;
@@ -80,7 +82,7 @@ export function lowerNestPlacement(
       axis,
       from: { key: keyOf(outer), anchor: "middle" },
       to: { key: keyOf(inner), anchor: "middle" },
-      gap: 0,
+      gap: A.zero,
       owner,
     });
   }
@@ -96,7 +98,7 @@ export function lowerNestPlacement(
  * When inner's space is continuous, outer has inner's type: padding is
  * pixels, so it is no part of the data extent, whatever the origin. It goes on
  * the claim instead ({@link nestedExtent}): the inner claim with `padding` on
- * both sides of its baseline, a `Monotonic.adds`, which stays invertible, so a
+ * both sides of its baseline, a `Pwl.addConstant`, which stays invertible, so a
  * parent spread/layer solving a scale factor sees `outer = inner + 2·padding`.
  * Chained nests compose: the layer feeds an already-derived outer back in as
  * the next nest's inner.

@@ -1,7 +1,7 @@
 {
   "$schema": "https://typedoc.org/schema.json",
   "plugin": ["typedoc-plugin-markdown"],
-  "entryPoints": ["../../packages/gofish-graphics/src/util/monotonic.ts"],
+  "entryPoints": ["../../packages/gofish-graphics/src/ast/solver/pwl.ts"],
   "tsconfig": "../../packages/gofish-graphics/tsconfig.json",
   "out": "docs/internals/api",
   "readme": "none",

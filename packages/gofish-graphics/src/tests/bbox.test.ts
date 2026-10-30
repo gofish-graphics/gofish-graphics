@@ -10,7 +10,8 @@
  */
 
 import { BBox } from "../ast/constraints/bbox";
-import * as Monotonic from "../util/monotonic";
+import * as Pwl from "../ast/solver/pwl";
+import { numbers, values } from "../ast/solver/arith";
 import { localAnchorPoint } from "../ast/dims";
 
 let passed = 0;
@@ -29,72 +30,72 @@ const near = (a: number | undefined, b: number) =>
 
 console.log("# bbox: under-determined (rank < 2)");
 {
-  const b = new BBox();
-  ok("empty: all keys undefined", b.read("min") === undefined && !b.solved);
+  const b = new BBox(numbers);
+  ok("empty: all keys undefined", b.readValue("min") === undefined && !b.solved);
   b.add("min", 10);
-  ok("rank 1: pinned key readable", b.read("min") === 10);
-  ok("rank 1: other keys undefined", b.read("size") === undefined && !b.solved);
+  ok("rank 1: pinned key readable", b.readValue("min") === 10);
+  ok("rank 1: other keys undefined", b.readValue("size") === undefined && !b.solved);
 }
 
 console.log("# bbox: rank 2 solves every key");
 {
   // min + max → size, center
-  const b = new BBox();
+  const b = new BBox(numbers);
   b.add("min", 10);
   b.add("max", 30);
   ok(
     "min+max ⇒ size=20, center=20, solved",
-    b.solved && near(b.read("size"), 20) && near(b.read("center"), 20)
+    b.solved && near(b.readValue("size"), 20) && near(b.readValue("center"), 20)
   );
 }
 {
   // min + size → max, center
-  const b = new BBox();
+  const b = new BBox(numbers);
   b.add("min", 10);
   b.add("size", 20);
   ok(
     "min+size ⇒ max=30, center=20",
-    near(b.read("max"), 30) && near(b.read("center"), 20)
+    near(b.readValue("max"), 30) && near(b.readValue("center"), 20)
   );
 }
 {
   // center + size → min, max  (the case place()-by-center + a size would hit)
-  const b = new BBox();
+  const b = new BBox(numbers);
   b.add("center", 20);
   b.add("size", 20);
   ok(
     "center+size ⇒ min=10, max=30",
-    near(b.read("min"), 10) && near(b.read("max"), 30)
+    near(b.readValue("min"), 10) && near(b.readValue("max"), 30)
   );
 }
 {
   // max + center → min, size
-  const b = new BBox();
+  const b = new BBox(numbers);
   b.add("max", 30);
   b.add("center", 20);
   ok(
     "max+center ⇒ min=10, size=20",
-    near(b.read("min"), 10) && near(b.read("size"), 20)
+    near(b.readValue("min"), 10) && near(b.readValue("size"), 20)
   );
 }
 {
   // zero-width span: min == max ⇒ size 0 (the degenerate but valid case)
-  const b = new BBox();
+  const b = new BBox(numbers);
   b.add("min", 10);
   b.add("max", 10);
-  ok("min==max ⇒ size 0", b.solved && near(b.read("size"), 0));
+  ok("min==max ⇒ size 0", b.solved && near(b.readValue("size"), 0));
 }
 
 console.log("# bbox: ownership / over-determination");
 {
   // A consistent repeat of an already-pinned key is absorbed (no conflict).
-  const b = new BBox();
+  const b = new BBox(numbers);
   ok("first min: no conflict", b.add("min", 10, "a") === undefined);
   ok("repeat min same value: no conflict", b.add("min", 10, "b") === undefined);
 }
 {
   // A contradicting second write to the SAME key (still rank 1) is a conflict.
-  const b = new BBox();
+  const b = new BBox(numbers);
   b.add("min", 10, "a");
   const c = b.add("min", 99, "b");
   ok(
@@ -104,7 +105,7 @@ console.log("# bbox: ownership / over-determination");
 }
 {
   // Rank-2 over-determination: a 3rd key that disagrees with the solve.
-  const b = new BBox();
+  const b = new BBox(numbers);
   b.add("min", 10, "a");
   b.add("max", 30, "a"); // size now implied = 20
   const c = b.add("size", 99, "c"); // contradicts implied 20
@@ -118,7 +119,7 @@ console.log("# bbox: ownership / over-determination");
 }
 {
   // Rank-2 over-determination that AGREES is absorbed (no conflict).
-  const b = new BBox();
+  const b = new BBox(numbers);
   b.add("min", 10);
   b.add("max", 30); // size implied = 20, center implied = 20
   ok("consistent 3rd key absorbed", b.add("center", 20) === undefined);
@@ -127,40 +128,33 @@ console.log("# bbox: ownership / over-determination");
 console.log("# bbox: σ-affine (Monotonic) keys");
 {
   // A σ-valued size + a numeric min → max = min + count·σ (a bar's edge).
-  const b = new BBox();
-  b.add("min", 100); // a pinned pixel position (constant)
-  b.add("size", Monotonic.linear(10, 0)); // 10·σ
-  const max = b.readMono("max");
+  const b = new BBox(values);
+  b.add("min", Pwl.affine(0, 100)); // a pinned pixel position (constant)
+  b.add("size", Pwl.affine(10, 0)); // 10·σ
+  const max = b.readValue("max");
   ok(
     "numeric min + σ size ⇒ σ-affine max",
-    max !== undefined && near(max.run(0), 100) && near(max.run(1), 110)
+    max !== undefined && near(Pwl.at(max, 0), 100) && near(Pwl.at(max, 1), 110)
   );
-  // read() evaluates at σ: at σ=2 the box top is 100 + 10·2 = 120.
-  ok("read(max, σ=2) evaluates", near(b.read("max", 2), 120));
+  // At σ=2 the box top is 100 + 10·2 = 120.
+  ok("max at σ=2", near(Pwl.at(b.readValue("max")!, 2), 120));
   // center = min + size/2 = 100 + 5σ.
-  ok("center is σ-affine", near(b.read("center", 2), 110));
+  ok("center is σ-affine", near(Pwl.at(b.readValue("center")!, 2), 110));
 }
 {
   // A consistent σ-valued 3rd key is absorbed; a contradicting one conflicts.
-  const b = new BBox();
-  b.add("min", 0);
-  b.add("max", Monotonic.linear(10, 0)); // size now implied = 10σ
+  const b = new BBox(values);
+  b.add("min", Pwl.affine(0, 0));
+  b.add("max", Pwl.affine(10, 0)); // size now implied = 10σ
   ok(
     "consistent σ 3rd key absorbed",
-    b.add("size", Monotonic.linear(10, 0)) === undefined
+    b.add("size", Pwl.affine(10, 0)) === undefined
   );
-  const c = b.add("size", Monotonic.linear(20, 0)); // 20σ ≠ 10σ
+  const c = b.add("size", Pwl.affine(20, 0)); // 20σ ≠ 10σ
   ok(
     "contradicting σ key reports conflict",
     c !== undefined && c.key === "size"
   );
-}
-{
-  // A constant key still reads back as a plain number via read() (default σ=0).
-  const b = new BBox();
-  b.add("min", 10);
-  b.add("size", 20);
-  ok("constant keys read as numbers", b.read("max") === 30);
 }
 
 // `place()` and `setExtent`'s rank-1 pin both place an anchor through

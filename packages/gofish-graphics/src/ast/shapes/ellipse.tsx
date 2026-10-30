@@ -7,8 +7,7 @@ import { getValue, isValue, MaybeValue, Value } from "../data";
 import {
   Dimensions,
   displayDims as displayDimsOf,
-  elaborateDims,
-  deferAxisDims,
+  elaborateOwnDims,
   FancyDims,
   FancySize,
   Size,
@@ -27,6 +26,7 @@ import { MARK_CHANNELS } from "../markChannels.generated";
 import { boxOfDims, ellipseOutline, outlinePaint } from "../geometry";
 import { around } from "../../families/place";
 import { literalBoxExtents } from "../extent";
+import { type LengthValue } from "../length";
 import type { DisplayList } from "gofish-ir";
 import {
   lowerStyle,
@@ -51,12 +51,15 @@ export const Ellipse = ({
   fillOpacity?: number;
   /** w/h ratio to enforce. When both dims are data-driven, the constraining axis is used. */
   aspectRatio?: number;
-} & FancyDims<MaybeValue<number>>) => {
+} & FancyDims<MaybeValue<number> | LengthValue>) => {
+  // A length for its own size (`w: percent(30)`, `w: fr(2)`) is laid out in
+  // the room it is given, known only once it is in its tree (#1176 step 6).
   // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
-  const dims = elaborateDims(fancyDims);
+  const own = elaborateOwnDims<MaybeValue<number>>(fancyDims);
+  const { dims, dataSize } = own;
   // How it paints its outline, read once.
   const paint = outlinePaint({ fill, stroke, strokeWidth });
-  const node = new GoFishNode(
+  const node: GoFishNode = new GoFishNode(
     {
       type: "ellipse",
       // A dot is labeled around itself.
@@ -75,21 +78,26 @@ export const Ellipse = ({
         const axisSpace = (axis: 0 | 1) => {
           const center = centerOf(dims[axis]);
           return center !== undefined
-            ? glyphAxis(center, dims[axis].size)
-            : pointOrMagnitude(dims[axis].min, dims[axis].size);
+            ? glyphAxis(center, dataSize(axis))
+            : pointOrMagnitude(dims[axis].min, dataSize(axis));
         };
         return [axisSpace(0), axisSpace(1)];
       },
       // A literal pixel size is the ellipse's own (#493), as a rect's is.
       resolveExtent: (_ce, _cs, spaces) =>
-        literalBoxExtents(spaces, [dims[0], dims[1]], aspectRatio),
+        literalBoxExtents(
+          spaces,
+          [node.fixedBox(0), node.fixedBox(1)],
+          aspectRatio
+        ),
       layout: (size, scales, children) => {
-        let w = isValue(dims[0].size)
-          ? getValue(dims[0].size!) * scales[0]?.sigma!
-          : (dims[0].size ?? size[0]);
-        let h = isValue(dims[1].size)
-          ? getValue(dims[1].size!) * scales[1]?.sigma!
-          : (dims[1].size ?? size[1]);
+        const [wSize, hSize] = [node.fixedSize(0), node.fixedSize(1)];
+        let w = isValue(wSize)
+          ? getValue(wSize)! * scales[0]?.sigma!
+          : (wSize ?? size[0]);
+        let h = isValue(hSize)
+          ? getValue(hSize)! * scales[1]?.sigma!
+          : (hSize ?? size[1]);
 
         if (aspectRatio !== undefined && aspectRatio > 0) {
           const wIsData = isValue(dims[0].size);
@@ -306,8 +314,7 @@ export const Ellipse = ({
     },
     []
   );
-  // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
-  node._elaborateInAxisScope = deferAxisDims(fancyDims, dims);
+  own.bind(node);
   return node;
 };
 

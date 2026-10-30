@@ -27,6 +27,7 @@
  * The recognized labels are: `fonts` (webfont readiness await), `resolve`
  * (domain inference / underlying-space resolution), `axes` (axis/title/legend
  * elaboration), `embed` (per-dim embedding-flag authoring, `resolveEmbedding`),
+ * `claims` (the root's claim walk, `resolveExtent`, and its scope solve),
  * `solve` (constraint solve), `lower` (display-list lowering), `paint`
  * (display-item → SVG JSX).
  *

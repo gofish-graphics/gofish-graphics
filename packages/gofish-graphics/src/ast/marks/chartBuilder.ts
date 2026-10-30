@@ -1,4 +1,6 @@
+import { Frontend } from "gofish-ir";
 import { GoFishNode } from "../_node";
+import { checkLengths, isFr, isLength, type LengthValue } from "../length";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { type ColorConfig } from "../colorSchemes";
 import { applySchema, type SchemaEntry } from "../schema";
@@ -49,8 +51,11 @@ import { createName } from "../createName";
 export const PREVIOUS_LAYER_MARKS = Symbol("gofish-previous-layer-marks");
 
 export type ChartOptions = {
-  w?: number;
-  h?: number;
+  /** The plot's width: pixels, a percent of the room the chart is laid out
+   *  in, or an `fr` weight in its nearest scope (#1176 step 6). */
+  w?: number | LengthValue;
+  /** The plot's height, as {@link ChartOptions.w}. */
+  h?: number | LengthValue;
   coord?: CoordinateTransform;
   color?: ColorConfig;
   /**
@@ -998,6 +1003,9 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     // deterministic regardless of how individual async legs (e.g. a Python
     // `derive` RPC) interleaved at resolution time.
     collectLayerRegistrations(content, this.state.layerContext);
+    // The chart's marks, apart from the transitions it draws over them: a
+    // label of a mark here is a text on them (`GoFishNode._chartContent`).
+    content._chartContent = true;
 
     // The transitions this tier draws over its marks (see `resolve`).
     const marks =
@@ -1178,8 +1186,24 @@ async function frameChart(
   options: ChartOptions,
   children: GoFishNode[]
 ): Promise<GoFishNode> {
-  const node = await Frame(options, [await Layer({}, children)]);
-  node._chartBox = [options.w !== undefined, options.h !== undefined];
+  const content = await Layer({}, children);
+  content._chartContent = true;
+  const node = await Frame(options, [content]);
+  // A chart with a size of its own draws its axes inside its box. An `fr`
+  // size is a share of the scope around it, which it is given from
+  // outside, so it draws them around itself, as a facet panel does.
+  const box = (v: unknown) => v !== undefined && !(isLength(v) && isFr(v));
+  // A percent or fr length only where the chart's options take one.
+  // TODO(#852, #1238): a percent padding around a polar or geo drawing
+  // needs the room of the coordinate space's box, in its own units.
+  checkLengths(
+    Frontend.OPTION_TYPES.ChartOptions.type.kind === "object"
+      ? Frontend.OPTION_TYPES.ChartOptions.type.fields
+      : undefined,
+    "chart",
+    options as Record<string, unknown>
+  );
+  node._chartBox = [box(options.w), box(options.h)];
   node._chartAxes = options.axes ?? true;
   return node;
 }

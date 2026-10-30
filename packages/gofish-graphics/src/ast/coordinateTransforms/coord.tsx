@@ -10,12 +10,12 @@ import type { DisplayList } from "gofish-ir";
 import { lowerStyle, pathToPixelSVG } from "../displayList/lowerHelpers";
 import {
   displayTranslate,
-  elaborateDims,
-  deferAxisDims,
+  elaborateOwnDims,
   FancyDims,
   Interval,
   Size,
 } from "../dims";
+import { rejectLength, type LengthValue } from "../length";
 import { flattenLayout } from "./bake";
 import { orderChildrenForPaint } from "../paintOrder";
 import * as IntervalLib from "../../util/interval";
@@ -32,14 +32,13 @@ import {
   spaceTitle,
 } from "../underlyingSpace";
 import { boxExtent, Extent, hullExtent, impliedExtent } from "../extent";
-import * as Monotonic from "../../util/monotonic";
+import * as Pwl from "../solver/pwl";
 import {
   unionChildExtents,
   unionChildSpaces,
 } from "../graphicalOperators/alignment";
 import { axisScale } from "../domain";
 import { reflectInterval } from "../axisDirection";
-import { shadowCheckScaleRoot } from "../solver/shadow";
 import {
   getScopeRegistry,
   seatInScope,
@@ -189,10 +188,14 @@ export const coord = createNodeOperator(
       grid?: boolean;
       axes?: AxesOptions;
       padding?: number;
-    } & FancyDims,
+    } & FancyDims<number | LengthValue>,
     children: GoFishAST[]
   ) => {
-    const dims = elaborateDims(fancyDims);
+    rejectLength("a coordinate space's padding", padding);
+    // A length for its box's size (a polar chart's `w: percent(50)`) is laid
+    // out in the room it is given, once it is in its tree (#1176 step 6).
+    const own = elaborateOwnDims<number>(fancyDims);
+    const { dims } = own;
     // THE discriminator: does this space frame its own window? A `fit`-ted space
     // (geo) lays out in a data window, so its budget IS the frame — which decides
     // the budget rule, the box, the culling frame and whether the polar overlays
@@ -293,19 +296,19 @@ export const coord = createNodeOperator(
             unionChildExtents(childExtents, childSpaces, axis, resolved[axis]);
           const r = claim(1);
           const theta = claim(0);
-          if (r === undefined || !Monotonic.isConstant(r.width) || !theta)
+          if (r === undefined || !Pwl.isConstant(r.width) || !theta)
             return [undefined, undefined];
           // The angle fills the angular budget, as `layout` fits it.
           const budget = coordTransform.domain[0].size ?? 2 * Math.PI;
-          const sigma = Monotonic.isConstant(theta.width)
+          const sigma = Pwl.isConstant(theta.width)
             ? 0
-            : theta.width.inverse(budget);
+            : Pwl.solve(theta.width, budget);
           if (sigma === undefined) return [undefined, undefined];
           const box = computeTransformedBoundingBox(
-            -theta.descent.run(sigma),
-            theta.ascent.run(sigma),
-            -r.descent.run(0),
-            r.ascent.run(0),
+            -Pwl.at(theta.descent, sigma),
+            Pwl.at(theta.ascent, sigma),
+            -Pwl.at(r.descent, 0),
+            Pwl.at(r.ascent, 0),
             coordTransform
           );
           return [
@@ -323,10 +326,13 @@ export const coord = createNodeOperator(
           /* TODO: need correct scale factors */
           // TODO: only works for polar-family transforms right now
           // An explicit `w`/`h` is the coord's box, as it is a layer's (#535).
+          // A length's box is its pixels where its room is known before the
+          // solve, and the room it is given where it is a share of its scope
+          // (`fixedSize`).
           size = [
-            computeSize(dims[0].size, scales?.[0]?.sigma ?? 1, size[0]) ??
+            computeSize(node.fixedSize(0), scales?.[0]?.sigma ?? 1, size[0]) ??
               size[0],
-            computeSize(dims[1].size, scales?.[1]?.sigma ?? 1, size[1]) ??
+            computeSize(node.fixedSize(1), scales?.[1]?.sigma ?? 1, size[1]) ??
               size[1],
           ];
           const [origW, origH] = size;
@@ -450,28 +456,27 @@ export const coord = createNodeOperator(
                 : hullExtent(
                     content,
                     Extent(
-                      Monotonic.linear(resolved.dataInterval.min, 0),
-                      Monotonic.linear(-resolved.dataInterval.min, 0)
+                      Pwl.affine(resolved.dataInterval.min, 0),
+                      Pwl.affine(-resolved.dataInterval.min, 0)
                     )
                   );
-            const scope = scopes.solveScope(
+            // The one scope fit (`ScopeRegistry.fit`): a claim with no σ in
+            // it maps no data, so it is not solved and hands no σ down. The
+            // budget is in coordinate units, not a pixel limit, so the fit
+            // does not warn here (TODO(#1176), see `fit`).
+            const scope = scopes.fit(
               {
                 kind: "coord",
                 rootKey: node.key ?? node.type,
                 axis,
                 dataZero: classes.HasCycle === undefined ? "claim" : "start",
               },
+              node,
               resolved,
               claim,
-              budget
-            );
-            // Solver shadow (#39): a coord boundary RE-ROOTS σ for its subtree,
-            // exactly as the root fits content to the canvas — assert the same
-            // frame equation content(σ)=budget closes at the boundary. No-op
-            // unless GOFISH_SOLVER_CHECK is set.
-            shadowCheckScaleRoot(claim, budget, scope?.sigma, axis);
-            if (scope === undefined) return [1, undefined];
-            return [scope.sigma, scope];
+              { px: budget, limit: false }
+            )?.scope;
+            return [scope?.sigma, scope];
           };
           const [sfX, scopeX] = fitAxis(0, budget[0]);
           const [sfY, scopeY] = fitAxis(1, budget[1]);
@@ -1038,7 +1043,10 @@ export const coord = createNodeOperator(
     };
     // The coord's own box lives in its parent's space, so its `dims` option
     // resolves against the parent's names (the hook's `outer` scope).
-    coordNode._elaborateInAxisScope = deferAxisDims(fancyDims, dims);
+    own.bind(coordNode);
+    // Its room is its own coordinates, so it is a scope of its own on both
+    // axes: it fits its content to them, and claims its box.
+    coordNode.ownsScopeOn = () => true;
     return coordNode;
   }
 );

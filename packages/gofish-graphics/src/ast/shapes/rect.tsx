@@ -18,8 +18,7 @@ import {
 import {
   Dimensions,
   displayDims as displayDimsOf,
-  elaborateDims,
-  deferAxisDims,
+  elaborateOwnDims,
   FancyDims,
   FancySize,
   Size,
@@ -34,6 +33,7 @@ import {
   insetBox,
   outlinePaint,
   roundedBoxOutline,
+  type Box,
 } from "../geometry";
 import { aesthetic, continuous, Domain, posFn, pxOf } from "../domain";
 import { computeAesthetic, computeSize } from "../../util";
@@ -47,6 +47,15 @@ import {
 } from "../underlyingSpace";
 import { interval } from "../../util/interval";
 import { createMark } from "../withGoFish";
+import * as Pwl from "../solver/pwl";
+import {
+  isFr,
+  isLength,
+  lengthIn,
+  printLength,
+  type Length,
+  type LengthValue,
+} from "../length";
 import { MARK_CHANNELS } from "../markChannels.generated";
 import { attachCut } from "../graphicalOperators/cut";
 import type { DisplayList } from "gofish-ir";
@@ -89,14 +98,36 @@ export const Rect = ({
    *  where it has no size or span of its own (a bar's width in a `spread` or
    *  a `partition` cell), so neighbors are drawn apart. A side the rect sizes
    *  itself (a bar's data height) is never inset. Paint only: the rect's
-   *  box, which layout and refs read, stays the space it was given. */
-  inset?: number;
-} & FancyDims<MaybeValue<number>>) => {
+   *  box, which layout and refs read, stays the space it was given. A
+   *  percent is a percent of that box (#1176 step 6); it and any pixels
+   *  added to it are each 0 or more. */
+  inset?: number | LengthValue;
+} & FancyDims<MaybeValue<number> | LengthValue>) => {
+  // A length for its own size (`w: percent(30)`, `w: fr(2)`) is laid out in
+  // the room it is given, known only once it is in its tree (#1176 step 6).
   // `embedded` is authored by the resolveEmbedding pass (after underlying-space
   // resolves the axis measure), not inferred here — see _node.resolveEmbedding.
-  const dims = elaborateDims(fancyDims);
+  const own = elaborateOwnDims<MaybeValue<number>>(fancyDims);
+  const { dims, dataSize } = own;
   const { rx, ry } = cornerRadii(rxGiven, ryGiven, 0);
-  if (!(Number.isFinite(inset) && inset >= 0))
+  // An inset is never negative. A percent's box is known only at layout, so
+  // it is checked here by its parts: a percent and pixels, each 0 or more.
+  if (isLength(inset)) {
+    if (isFr(inset))
+      throw new Error(
+        `rect: inset takes pixels or a percent of the rect's box, not ` +
+          `${printLength(inset)}.`
+      );
+    const { percent: p = 0, px = 0 } = inset as {
+      percent?: number;
+      px?: number;
+    };
+    if (!(p >= 0 && px >= 0))
+      throw new Error(
+        `rect: inset must be a percent and pixels, each 0 or more, got ` +
+          `${printLength(inset)}.`
+      );
+  } else if (!(Number.isFinite(inset) && inset >= 0))
     throw new Error(
       `rect: inset must be a number of pixels, 0 or more, got ${inset}.`
     );
@@ -104,17 +135,28 @@ export const Rect = ({
   // no size and no span there (read after the resolveAliases pass, which
   // writes the axis-name-keyed `dims` onto `dims`).
   const fills = (axis: 0 | 1): boolean =>
-    dims[axis].size === undefined &&
+    node.fixedSize(axis) === undefined &&
     !(dims[axis].min !== undefined && dims[axis].max !== undefined);
-  // How far it is drawn in at each end of each axis: `inset` on an axis it
-  // fills, else 0.
-  const insets = (): [number, number] => [
-    fills(0) ? inset : 0,
-    fills(1) ? inset : 0,
-  ];
+  // How far its `box` is drawn in at each end of each axis: `inset` on an
+  // axis it fills, else 0. A percent inset is a percent of the box on that
+  // axis (#1176 step 6): `inset: percent(10)` draws a bar at 80% of its band.
+  const insets = (box: Box): [number, number] => {
+    const on = (axis: 0 | 1) =>
+      !fills(axis)
+        ? 0
+        : typeof inset === "number"
+          ? inset
+          : Pwl.at(
+              lengthIn(inset, () =>
+                Pwl.constant(Math.abs(box.max[axis] - box.min[axis]))
+              ),
+              0
+            );
+    return [on(0), on(1)];
+  };
   // How it paints its outline, read once.
   const paint = outlinePaint({ fill, stroke, strokeWidth });
-  const node = new GoFishNode(
+  const node: GoFishNode = new GoFishNode(
     {
       key,
       type: "rect",
@@ -138,28 +180,29 @@ export const Rect = ({
       ) => {
         const resolveAxis = (axis: 0 | 1): UnderlyingSpace => {
           const d = dims[axis];
+          const dSize = dataSize(axis);
           // A box placed by its center is a glyph, as a text or an image is.
           const center = centerOf(d);
-          if (center !== undefined) return glyphAxis(center, d.size);
+          if (center !== undefined) return glyphAxis(center, dSize);
           if (isValue(d.min) && isValue(d.max))
             return pinnedSpan(d.min, d.max, axis, "between a rect's two ends");
-          if (!isValue(d.min) && !isValue(d.size)) {
+          if (!isValue(d.min) && !isValue(dSize)) {
             // Nothing data-driven on this axis. Literal pixel sizes are
             // handled at layout time by computeAesthetic, so contribute
             // nothing to the underlying-space tree.
             return UNDEFINED;
           }
-          if (isAesthetic(d.min) && isValue(d.size)) {
-            return magnitude(d.size, "none");
+          if (isAesthetic(d.min) && isValue(dSize)) {
+            return magnitude(dSize, "none");
           }
-          if (!isValue(d.min) && isValue(d.size)) {
+          if (!isValue(d.min) && isValue(dSize)) {
             // No data position; data-driven size → a span from the baseline,
             // signed: a negative value extends below it (#773).
-            return magnitude(d.size);
+            return magnitude(dSize);
           }
           // has position (data-driven), maybe with literal/no size → POSITION.
           const min = isValue(d.min) ? getValue(d.min)! : 0;
-          const size = isValue(d.size) ? getValue(d.size)! : 0;
+          const size = isValue(dSize) ? getValue(dSize)! : 0;
           return CONTINUOUS(
             interval(min, min + size),
             "pinned",
@@ -172,12 +215,16 @@ export const Rect = ({
       // A literal pixel size is the rect's own (#493): it claims it, so
       // whatever composes it leaves it room.
       resolveExtent: (_ce, _cs, spaces) =>
-        literalBoxExtents(spaces, [dims[0], dims[1]], aspectRatio),
+        literalBoxExtents(
+          spaces,
+          [node.fixedBox(0), node.fixedBox(1)],
+          aspectRatio
+        ),
       layout: (size, scales, children) => {
         const pos = [posFn(scales?.[0]?.map), posFn(scales?.[1]?.map)];
         // The box's pixel size on one axis.
         const sizeOn = (k: 0 | 1): number => {
-          const d = dims[k];
+          const d = node.fixedBox(k);
           const at = (v: MaybeValue<number> | undefined) =>
             computeAesthetic(v, pos[k], undefined)!;
           const map = scales?.[k]?.map;
@@ -260,15 +307,13 @@ export const Rect = ({
         const isXEmbedded = intrinsicDims![0].embedded;
         const isYEmbedded = intrinsicDims![1].embedded;
         // Its box where its parent placed it, drawn in by its insets.
-        const by = insets();
         const placed = displayDimsOf(intrinsicDims, transform);
-        const { box: drawn } = insetBox(
-          {
-            min: [placed[0].min, placed[1].min],
-            max: [placed[0].max, placed[1].max],
-          },
-          by
-        );
+        const box: Box = {
+          min: [placed[0].min, placed[1].min],
+          max: [placed[0].max, placed[1].max],
+        };
+        const by = insets(box);
+        const { box: drawn } = insetBox(box, by);
         const displayDims = placed.map((d, axis) => {
           if (by[axis] === 0) return d;
           const [min, max] = [drawn.min[axis], drawn.max[axis]];
@@ -415,7 +460,7 @@ export const Rect = ({
       // stroked as wide as `strokeWidth`.
       geometry: ({ intrinsicDims }, _children, node) => {
         const box = boxOfDims(intrinsicDims, node.type);
-        const { box: drawn } = insetBox(box, insets());
+        const { box: drawn } = insetBox(box, insets(box));
         return {
           box,
           outline: (tolerance) => [
@@ -433,8 +478,7 @@ export const Rect = ({
     },
     []
   );
-  // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
-  node._elaborateInAxisScope = deferAxisDims(fancyDims, dims);
+  own.bind(node);
   return node;
 };
 

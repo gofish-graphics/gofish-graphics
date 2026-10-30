@@ -22,9 +22,10 @@ land.
 - **Scale** — a mapping from a data domain to a visual range (pixels, color).
 - **Bounding box (bbox)** — the rectangle a node occupies; the common currency of
   layout. See [The Bounding-Box Model](/internals/core/bbox).
-- **Monotonic** — a monotonically-increasing function tracked symbolically so the
-  engine can reason about data-to-pixel flow. See
-  [The Monotonic Module](/internals/core/monotonic).
+- **Piecewise-linear value (PWL)** — a size claim as a function of the scale factor σ,
+  a line or a few lines joined end to end, kept in closed form so the engine can
+  print it and solve it for σ exactly. See
+  [Piecewise-Linear Values](/internals/core/pwl).
 - **Scenegraph flattening** — collapsing a nested subtree into an absolutely-positioned
   flat list, done by `coord`. See [Flattening the Scenegraph](/internals/layout/coord-flattening).
 

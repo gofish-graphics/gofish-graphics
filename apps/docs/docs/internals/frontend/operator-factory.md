@@ -140,6 +140,13 @@ factory.
 
 ## 4. What happens at render time
 
+Both forms first check their options for lengths (`checkLengths`, from
+`ast/length.ts`, against the descriptor's fields: `Frontend.acceptedFields`
+with kind `"operator"` or `"combinator-mark"`). A `percent(n)` or `fr(k)` is
+accepted only by a field whose type names `t.ref("Length")` (`spacing` and
+`w`/`h` on `spread` and `stack`, `spacing` on `table`); anywhere else it
+throws, so a length is never silently dropped by the wire's key filter.
+
 ### Operator form (`spread({ by, dir })` inside `.flow(...)`)
 
 Walking `createOperator.ts:391-415`:

@@ -12,6 +12,7 @@ import {
 import * as Interval from "../../util/interval";
 import type { Cell, RegionCell } from "../cells";
 import type { PlacementFactEmitter } from "./placementFacts";
+import type { Arith } from "../solver/arith";
 import {
   type AlignAnchor,
   type Axis,
@@ -279,10 +280,11 @@ export function spanDatumInterval(
   return Interval.interval(Math.min(...vals), Math.max(...vals));
 }
 
-export function lowerPositionPlacement(
+export function lowerPositionPlacement<T>(
   constraint: PositionConstraint,
   owner: string,
   {
+    A,
     emitter,
     targets,
     keyOf,
@@ -290,15 +292,13 @@ export function lowerPositionPlacement(
     isDataPositioned,
     resolveCoordinate,
   }: {
-    emitter: PlacementFactEmitter;
+    A: Arith<T>;
+    emitter: PlacementFactEmitter<T>;
     targets: Map<string, unknown>;
     keyOf: KeyOf;
     isInitiallyPlaced: (axis: Axis, key: string) => boolean;
     isDataPositioned: (axis: 0 | 1, key: string) => boolean;
-    resolveCoordinate: (
-      axis: Axis,
-      coordinate: PositionValue
-    ) => number | undefined;
+    resolveCoordinate: (axis: Axis, coordinate: PositionValue) => T | undefined;
   }
 ): void {
   // The operands this solve places, by key, read once.
@@ -322,7 +322,7 @@ export function lowerPositionPlacement(
       emitter.pin({
         axis,
         target: { key, anchor: "middle" },
-        value: (a + b) / 2,
+        value: A.scale(0.5, A.add(a, b)),
         owner,
       });
     }

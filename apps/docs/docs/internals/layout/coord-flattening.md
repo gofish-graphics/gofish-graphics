@@ -256,10 +256,16 @@ where that meets the canvas:
 `coord.layout` is a **scale scope**, exactly like the root fits content to the
 canvas (gofish.tsx) — here the angular/radial budget plays the canvas role. Its
 `fitAxis(axis, budget)` solves the coord's own scope on that axis with the
-same `solveScope` the root uses: σ from the coord's claim (its children's
-claims overlaid, or a declared window's width) against the budget, so the
-children fill the ring, and, for a pinned axis, the map onto the budget that
-its children share. A free child is seated at the scope's `originPx`.
+same scope fit the root uses (`ScopeRegistry.fit`): σ from the coord's claim
+(its children's claims overlaid, or a declared window's width) against the
+budget, so the children fill the ring, and, for a pinned axis, the map onto
+the budget that its children share. A free child is seated at the scope's
+`originPx`. A claim with no σ in it (a pie of literal angles) maps no data,
+so it is not solved and the coord hands no σ down. A claim whose fixed parts
+need more than the budget gets the fit's one fallback, as at the root, but
+no warning: the budget is in coordinate units (radians on a polar θ axis),
+so comparing the claim's fixed pixels with it would warn falsely. Whether a
+coord's budget is a limit, and in which units, is still open.
 
 The fit departs from the root only where the coordinate space's domain has
 structure that layout must keep. The transform declares it per axis as
@@ -286,8 +292,7 @@ the range sits on it changes. On a partial arc a range below 0 therefore runs
 back past the baseline angle, out of the `[0, centralAngle]` sweep. The θ tick
 ring already assumed data 0 at θ = 0, so ticks and content agree. A range that
 starts at 0, like a pie's, does not move. The rule is a property of the scope,
-so every reader of it agrees (the children's frame, the solver shadow check,
-the scope dump): `fitAxis` passes it to `solveScope` as the scope's
+so every reader of it agrees (the children's frame and the scope dump): `fitAxis` passes it to `solveScope` as the scope's
 `dataZero: "start"`, and `solveScope` seats data 0 at the box's low edge.
 
 **`HasZero`: literal offsets are distances from 0.** On an axis whose 0 is a
@@ -420,6 +425,13 @@ enclosing space that is not linear (`AxisScope.warpedBy`). A layout that is
 only correct in some spaces reads it there: `scatter`'s `overlap` keeps
 children apart in the layout frame, which is the screen only in a linear space,
 so it throws under any other transform (#1002).
+
+A coord's own `w`/`h` may be a length (#1176 step 6): it is laid out in its
+parent's room like any node's size, and a coord with a length size reports no
+claim of its own (`resolveExtent` returns undefined), so its parent's room
+decides it. Inside a coord, a percent has no room: the coord's budget is in
+coordinate units (#1238), so a percent under it throws, and so does a percent
+`padding`.
 
 See [Layout & Render Passes](/internals/layout/passes) for how `coord` fits into the
 larger pipeline, and [Authoring Coordinate Transforms](/internals/layout/coordinate-transforms)

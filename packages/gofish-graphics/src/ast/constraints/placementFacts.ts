@@ -24,24 +24,24 @@ export type RelationAnchor = AlignAnchor | "tail" | "head";
 
 export type AnchorRef = { node: NodeId; anchor: RelationAnchor };
 
-export type AnchorPinFact = {
+export type AnchorPinFact<T = number> = {
   type: "anchor-pin";
   node: NodeId;
   axis: Axis;
   anchor: AlignAnchor;
-  value: number;
+  value: T;
   owner: string;
 };
 
 /** Which kind of distribute chain an edge belongs to. */
 export type ChainKind = "stack" | "spread";
 
-export type AnchorRelationFact = {
+export type AnchorRelationFact<T = number> = {
   type: "anchor-relation";
   axis: Axis;
   from: AnchorRef;
   to: AnchorRef;
-  gap: number;
+  gap: T;
   owner: string;
   /** Set on an edge of a distribute chain: a stack's (`glue`) or a
    *  spread's. The chain places its members' baselines along the axis, so the
@@ -72,27 +72,32 @@ export type AnchorParticipantFact = {
  *  stays under-determined for POSITION (by design — "size" must not move the
  *  target) while still being read back by `reduceToAxisProblem`'s strong-size
  *  substitution. */
-export type SizePinFact = {
+export type SizePinFact<T = number> = {
   type: "size-pin";
   node: NodeId;
   axis: Axis;
-  value: number;
+  value: T;
   owner: string;
 };
 
-export type AnchorFact =
-  | AnchorPinFact
-  | AnchorRelationFact
+export type AnchorFact<T = number> =
+  | AnchorPinFact<T>
+  | AnchorRelationFact<T>
   | AnchorParticipantFact
-  | SizePinFact;
+  | SizePinFact<T>;
 
-export type AnchorProgram = { axes: [AnchorFact[], AnchorFact[]] };
+export type AnchorProgram<T = number> = {
+  axes: [AnchorFact<T>[], AnchorFact<T>[]];
+};
 
-export const emptyAnchorProgram = (): AnchorProgram => ({ axes: [[], []] });
+export const emptyAnchorProgram = <T>(): AnchorProgram<T> => ({
+  axes: [[], []],
+});
 
 /** A concrete anchor on one node axis. Datum coordinates have already been
- *  elaborated through the layer's scale before facts are emitted, so the raw
- *  placement algebra is numeric. */
+ *  elaborated through the layer's scale before facts are emitted, so the
+ *  placement algebra holds pixels: numbers, or values in σ when the claim
+ *  walk solves with σ unknown (`Arith`, solver/arith.ts). */
 export type AnchorExpr = {
   node: NodeId;
   axis: Axis;
@@ -104,11 +109,11 @@ export type PlacementAnchorRef = {
   anchor: AlignAnchor;
 };
 
-export type PlacementRelationRequest = {
+export type PlacementRelationRequest<T = number> = {
   axis: Axis;
   from: { key: NodeId; anchor: RelationAnchor };
   to: { key: NodeId; anchor: RelationAnchor };
-  gap: number;
+  gap: T;
   owner: string;
   /** See {@link AnchorRelationFact.chain}. */
   chain?: ChainKind;
@@ -122,19 +127,19 @@ export type PlacementParticipantRequest = {
   origin?: number;
 };
 
-export type PlacementPinRequest = {
+export type PlacementPinRequest<T = number> = {
   axis: Axis;
   target: PlacementAnchorRef;
-  value: number;
+  value: T;
   owner: string;
 };
 
 /** Request a size-only equation on `key` (#726, align `"size"`) — see
  *  {@link SizePinFact}. */
-export type PlacementSizePinRequest = {
+export type PlacementSizePinRequest<T = number> = {
   axis: Axis;
   key: NodeId;
-  value: number;
+  value: T;
   owner: string;
 };
 
@@ -148,11 +153,11 @@ export type PlacementParticipant = {
 /** A relation reduced to `min`-anchored form: `to.min = from.min + offset`,
  *  after the solver substitutes each endpoint's anchor offset post-closure. The
  *  shared difference graph consumes these. */
-export type PlacementRelation = {
+export type PlacementRelation<T = number> = {
   type: "relation";
   from: AnchorExpr;
   to: AnchorExpr;
-  offset: number;
+  offset: T;
   owner: string;
   /** See {@link AnchorRelationFact.chain}. */
   chain?: ChainKind;
@@ -160,11 +165,11 @@ export type PlacementRelation = {
 
 /** The lowering interface: constraints emit anchor pins, relations, and
  *  participants without pre-evaluating any offset (that is the solver's job). */
-export interface PlacementFactEmitter {
-  pin(request: PlacementPinRequest): void;
+export interface PlacementFactEmitter<T = number> {
+  pin(request: PlacementPinRequest<T>): void;
   include(request: PlacementParticipantRequest): void;
-  relate(request: PlacementRelationRequest): void;
-  pinSize(request: PlacementSizePinRequest): void;
+  relate(request: PlacementRelationRequest<T>): void;
+  pinSize(request: PlacementSizePinRequest<T>): void;
 }
 
 export const anchorExpr = (
@@ -173,13 +178,20 @@ export const anchorExpr = (
   anchor: AlignAnchor
 ): AnchorExpr => ({ node, axis, anchor });
 
-export const relationFact = (
+export const relationFact = <T>(
   from: AnchorExpr,
   to: AnchorExpr,
-  offset: number,
+  offset: T,
   owner: string,
   chain?: ChainKind
-): PlacementRelation => ({ type: "relation", from, to, offset, owner, chain });
+): PlacementRelation<T> => ({
+  type: "relation",
+  from,
+  to,
+  offset,
+  owner,
+  chain,
+});
 
 export const participantFact = (
   name: NodeId,

@@ -1,8 +1,9 @@
 // <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Piecewise-Linear Values — /internals/core/pwl
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import * as Monotonic from "../../util/monotonic";
+import type { Arith } from "../solver/arith";
 
 /**
  * A per-axis linear-system bounding box (#39), modeled on Bluefish's
@@ -35,19 +36,14 @@ import * as Monotonic from "../../util/monotonic";
  * `(intrinsic-local box, translate)` split is bridged at the call site by
  * stamping `min` into the translate and `[0, size]` into the local box.
  *
- * **σ-affine key values** (see
- * apps/docs/docs/internals/design/unified-propagation.md). A key's value
- * is a {@link Monotonic} — `slope·σ + intercept` — not just a number, so the
- * ledger can hold a claim that still depends on its scope's scale factor σ (a
- * bar's `size = count·σ`) and resolve it once σ is solved. A plain `number` is
- * accepted and coerced to a constant (`slope 0`); {@link read} evaluates at σ
- * (default 0), so a constant reads back as its number. The σ-aware value is
- * {@link readMono}. Equations stay printable via `Monotonic.print`.
+ * **Key values in any {@link Arith}.** A key's value is a `T`: a number (a
+ * node's own box in layout), a piecewise-linear value in σ (`values`, a
+ * bar's `size = count·σ`, resolved once σ is solved; see
+ * apps/docs/docs/internals/design/unified-propagation.md), or a formula of a
+ * layer's plan (`Tape`), so a size two pins determine stays a formula in
+ * what layout measures. Consistency is checked by the arithmetic's `agree`.
  */
 export type BBoxKey = "min" | "max" | "center" | "size";
-
-/** A box-key value: a σ-affine claim, or a plain number (a constant claim). */
-export type BBoxValue = number | Monotonic.Monotonic;
 
 const COEFFS: Record<BBoxKey, [number, number]> = {
   min: [1, 0],
@@ -56,42 +52,29 @@ const COEFFS: Record<BBoxKey, [number, number]> = {
   size: [0, 1],
 };
 
-/** Coerce a number to a constant Monotonic; pass a Monotonic through. */
-const asMono = (v: BBoxValue): Monotonic.Monotonic =>
-  typeof v === "number" ? Monotonic.linear(0, v) : v;
-
-/** Equality of two σ-affine claims. Linear claims are pinned exactly by two
- *  probes; piecewise claims (a grid's `max`-composed track claims) are
- *  compared structurally at every breakpoint. See `Monotonic.approxEqual`. */
-const monoEqual = (
-  a: Monotonic.Monotonic,
-  b: Monotonic.Monotonic,
-  tolerance: number
-): boolean => Monotonic.approxEqual(a, b, tolerance);
-
 export interface BBoxConflict {
   key: BBoxKey;
-  /** Value the new equation asserts (evaluated at σ=0 for the message). */
+  /** Value the new equation asserts (as the arithmetic reports it). */
   asserted: number;
-  /** Value the already-solved system implies (evaluated at σ=0). */
+  /** Value the already-solved system implies (as the arithmetic reports it). */
   implied: number;
   owner: string | undefined;
   priorOwner: string | undefined;
 }
 
-interface Equation {
+interface Equation<T> {
   key: BBoxKey;
-  value: Monotonic.Monotonic;
+  value: T;
   owner: string | undefined;
 }
 
-/** Solved unknowns `[min, size]` (σ-affine), or undefined when rank < 2. */
-type Solution = [Monotonic.Monotonic, Monotonic.Monotonic] | undefined;
-
-export class BBox {
+export class BBox<T> {
   /** Independent equations retained (at most 2 drive the solve). */
-  private eqs: Equation[] = [];
-  private solution: Solution = undefined;
+  private eqs: Equation<T>[] = [];
+  /** Solved unknowns `[min, size]`, or undefined when rank < 2. */
+  private solution: [T, T] | undefined = undefined;
+
+  constructor(private readonly A: Arith<T>) {}
 
   /**
    * Add one box-key equation. Returns a conflict descriptor when the write is
@@ -101,21 +84,25 @@ export class BBox {
    */
   add(
     key: BBoxKey,
-    value: BBoxValue,
+    value: T,
     owner?: string,
     tolerance = 1e-6
   ): BBoxConflict | undefined {
-    const mono = asMono(value);
+    const A = this.A;
     // If the system already determines this key, the write is a redundant
     // check rather than new information (rank-2 over-determination, or a repeat
     // of an existing key). Verify consistency; report on violation.
     if (this.solution !== undefined) {
-      const implied = this.readMono(key)!;
-      if (!monoEqual(implied, mono, tolerance)) {
+      const implied = this.readValue(key)!;
+      const owners = {
+        owner: owner ?? "cell",
+        priorOwner: this.eqs[0]?.owner ?? "cell",
+      };
+      if (!A.agree(value, implied, tolerance, owners)) {
         return {
           key,
-          asserted: mono.run(0),
-          implied: implied.run(0),
+          asserted: A.report(value),
+          implied: A.report(implied),
           owner,
           priorOwner: this.eqs[0]?.owner,
         };
@@ -126,11 +113,15 @@ export class BBox {
     if (existing) {
       // Same key again: a consistent repeat is ignored; a contradiction is a
       // single-owner conflict.
-      if (!monoEqual(existing.value, mono, tolerance)) {
+      const owners = {
+        owner: owner ?? "cell",
+        priorOwner: existing.owner ?? "cell",
+      };
+      if (!A.agree(value, existing.value, tolerance, owners)) {
         return {
           key,
-          asserted: mono.run(0),
-          implied: existing.value.run(0),
+          asserted: A.report(value),
+          implied: A.report(existing.value),
           owner,
           priorOwner: existing.owner,
         };
@@ -139,26 +130,21 @@ export class BBox {
     }
     // The four keys are pairwise independent in 2 unknowns, so two distinct
     // keys solve the system.
-    this.eqs.push({ key, value: mono, owner });
+    this.eqs.push({ key, value, owner });
     if (this.eqs.length === 2) this.solve();
     return undefined;
   }
 
   private solve(): void {
+    const A = this.A;
     const [a, b] = this.eqs;
     const [a0, a1] = COEFFS[a.key];
     const [b0, b1] = COEFFS[b.key];
     const det = a0 * b1 - a1 * b0;
     if (Math.abs(det) < 1e-12) return; // dependent (shouldn't happen for distinct keys)
-    // min  = (a·b1 − b·a1) / det,  size = (a0·b − b0·a) / det — as Monotonics.
-    const min = Monotonic.add(
-      Monotonic.smul(b1 / det, a.value),
-      Monotonic.smul(-a1 / det, b.value)
-    );
-    const size = Monotonic.add(
-      Monotonic.smul(a0 / det, b.value),
-      Monotonic.smul(-b0 / det, a.value)
-    );
+    // min  = (a·b1 − b·a1) / det,  size = (a0·b − b0·a) / det.
+    const min = A.add(A.scale(b1 / det, a.value), A.scale(-a1 / det, b.value));
+    const size = A.add(A.scale(a0 / det, b.value), A.scale(-b0 / det, a.value));
     this.solution = [min, size];
   }
 
@@ -167,21 +153,14 @@ export class BBox {
     return this.solution !== undefined;
   }
 
-  /** Read a box key as a σ-affine claim: from the solve when determined, else
-   *  from a direct pin, else undefined (under-determined). */
-  readMono(key: BBoxKey): Monotonic.Monotonic | undefined {
+  /** Read a box key: from the solve when determined, else from a direct pin,
+   *  else undefined (under-determined). */
+  readValue(key: BBoxKey): T | undefined {
     if (this.solution !== undefined) {
       const [min, size] = this.solution;
       const [c0, c1] = COEFFS[key];
-      return Monotonic.add(Monotonic.smul(c0, min), Monotonic.smul(c1, size));
+      return this.A.add(this.A.scale(c0, min), this.A.scale(c1, size));
     }
     return this.eqs.find((e) => e.key === key)?.value;
-  }
-
-  /** Read a box key evaluated at scale factor `sigma` (default 0). A constant
-   *  (all-numeric) key reads back as its number — the path every caller uses
-   *  today. */
-  read(key: BBoxKey, sigma = 0): number | undefined {
-    return this.readMono(key)?.run(sigma);
   }
 }

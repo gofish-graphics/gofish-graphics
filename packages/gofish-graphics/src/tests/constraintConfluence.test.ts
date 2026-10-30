@@ -5,21 +5,26 @@
  */
 
 import type { Placeable } from "../ast/_node";
-import * as Monotonic from "../util/monotonic";
+import * as Pwl from "../ast/solver/pwl";
 import type { AlignConstraint } from "../ast/constraints/align";
 import type { DistributeConstraint } from "../ast/constraints/distribute";
+import type { GapOf } from "../ast/constraints/gap";
 import type { GridConstraint, TrackLayout } from "../ast/constraints/grid";
-import {
-  gridCellSizeByKey,
-  gridTracksFromSizes,
-} from "../ast/constraints/grid";
+import { gridTracks } from "../ast/constraints/grid";
 import type { NestConstraint } from "../ast/constraints/nest";
 import {
   compilePlacementCoordinate,
   lowerPlacementConstraints as lowerPlacement,
-  solvePlacementConstraints as solvePlacement,
+  solvePlacementCells as solveCells,
+  type PlacementConstraint,
 } from "../ast/constraints/placementSolver";
 import type { KeyOf, ResolvedOperands } from "../ast/constraints/shared";
+import { numbers } from "../ast/solver/arith";
+
+/** The gaps of constraints with pixel spacings, as a layer reads them
+ *  (`GoFishNode.gapOf`). */
+const pixelGaps: GapOf = (c, axis) =>
+  Pwl.constant((c.type === "grid" ? c.spacing[axis] : c.spacing) as number);
 import {
   anchorExpr,
   participantFact,
@@ -42,11 +47,9 @@ import {
 } from "../ast/constraints/nestPlan";
 import {
   planConstraintComposition,
-  resolveLayerAxisExtent,
   resolveLayerBaseSpaces,
 } from "../ast/constraints/compose";
 import {
-  buildDistributeSliceMap,
   buildLayerConstraintLayoutPlan,
   buildPositionTargetDims,
   childLayoutSizeProposal,
@@ -66,12 +69,7 @@ import {
   originIs,
   DEFAULT_AXIS_TICKS,
 } from "../ast/underlyingSpace";
-import {
-  Extent,
-  impliedExtent,
-  niceScope,
-  widenScope,
-} from "../ast/extent";
+import { Extent, impliedExtent, niceScope, widenScope } from "../ast/extent";
 import { ScopeRegistry } from "../ast/solver/scopes";
 import { interval } from "../util/interval";
 
@@ -82,6 +80,53 @@ type Constraint =
   | NestConstraint
   | GridConstraint;
 type Geometry = Record<string, { min?: number; center?: number; max?: number }>;
+
+/** Solve `constraints` over `targets` in numbers and seat each target where
+ *  the solve puts it (a size-strong cell by its extent, any other by its
+ *  start), throwing on a conflict, as a layer seats its plan. */
+function solveAndSeat(
+  constraints: PlacementConstraint[],
+  targets: Map<string, Placeable>,
+  sizes: [number, number],
+  posScales?: Parameters<typeof solvePlacementCells<number>>[5],
+  gridTracks?: [TrackLayout, TrackLayout],
+  dataPositioned?: [Set<string>, Set<string>]
+): void {
+  const solved = solvePlacementCells(
+    numbers,
+    constraints,
+    targets,
+    sizes,
+    pixelGaps,
+    posScales,
+    gridTracks,
+    dataPositioned
+  );
+  const conflict = solved.flatMap((r) => r.conflicts)[0];
+  if (conflict !== undefined)
+    throw new Error(
+      `Constraint placement conflict on ${conflict.axis}: ${conflict.owner} ` +
+        `asserts ${conflict.asserted}, but ${conflict.priorOwner} implies ` +
+        `${conflict.implied}`
+    );
+  solved.forEach((result, axis) => {
+    const label = axis === 0 ? "x" : "y";
+    for (const [name, cell] of result.cells) {
+      const target = targets.get(name)!;
+      if (cell.sizeStrong && cell.size !== undefined && target.setExtent)
+        target.setExtent(
+          label,
+          { min: cell.min, max: cell.min + cell.size },
+          cell.sizeOwner
+        );
+      else if (target.pinAnchor)
+        target.pinAnchor(axis as 0 | 1, cell.min, "min");
+      else target.place(axis as 0 | 1, cell.min, "min");
+    }
+    for (const [name, { size, owner }] of result.sizeOnly)
+      targets.get(name)?.setSizeOnly?.(label, size, owner);
+  });
+}
 
 let passed = 0;
 let failed = 0;
@@ -154,7 +199,7 @@ function solve(
 ): Geometry {
   const targets = new Map(names.map((name) => [name, create(name)] as const));
   setup?.(targets);
-  solvePlacementConstraints(constraints, targets, [300, 200]);
+  solveAndSeat(constraints, targets, [300, 200]);
   return Object.fromEntries(
     [...targets].map(([name, target]) => {
       const { min, center, max } = target.dims[0];
@@ -195,18 +240,29 @@ const byNameIn = (children: readonly { uid: string }[]): ResolvedOperands => ({
   operands: new Map(children.map((c, i) => [c.uid, { child: i, direct: true }])),
 });
 // The solve, with each operand keyed by its name.
-const lowerPlacementConstraints = (
-  constraints: Parameters<typeof lowerPlacement>[0],
-  ...rest: Parameters<typeof lowerPlacement> extends [any, any, ...infer R]
+function lowerPlacementConstraints<T>(
+  A: Parameters<typeof lowerPlacement<T>>[0],
+  constraints: Parameters<typeof lowerPlacement<T>>[1],
+  ...rest: Parameters<typeof lowerPlacement<T>> extends [
+    any,
+    any,
+    any,
+    ...infer R,
+  ]
     ? R
     : never
-) => lowerPlacement(constraints, byName, ...rest);
-const solvePlacementConstraints = (
-  constraints: Parameters<typeof solvePlacement>[0],
-  ...rest: Parameters<typeof solvePlacement> extends [any, any, ...infer R]
+) {
+  return lowerPlacement(A, constraints, byName, ...rest);
+}
+function solvePlacementCells<T>(
+  A: Parameters<typeof solveCells<T>>[0],
+  constraints: Parameters<typeof solveCells<T>>[1],
+  ...rest: Parameters<typeof solveCells<T>> extends [any, any, any, ...infer R]
     ? R
     : never
-) => solvePlacement(constraints, byName, ...rest);
+) {
+  return solveCells(A, constraints, byName, ...rest);
+}
 const A = child("A");
 const B = child("B");
 const C = child("C");
@@ -433,8 +489,7 @@ console.log("# constraint confluence: nest and grid placement");
   const grid: GridConstraint = {
     type: "grid",
     numCols: 2,
-    xSpacing: 10,
-    ySpacing: 0,
+    spacing: [10, 0],
     children: [A, B],
   };
   const alignRow: AlignConstraint = {
@@ -442,8 +497,31 @@ console.log("# constraint confluence: nest and grid placement");
     y: "middle",
     children: [A, B],
   };
-  const first = solve([grid, alignRow], ["A", "B"]);
-  const second = solve([alignRow, grid], ["A", "B"]);
+  // Two fill columns of one share each: (300 − 10) / 2 = 145 px.
+  const tracks = ([0, 1] as const).map((axis) =>
+    gridTracks(
+      numbers,
+      grid,
+      axis,
+      () => undefined,
+      grid.spacing[axis] as number,
+      axis === 0 ? 145 : 200
+    )
+  ) as [TrackLayout, TrackLayout];
+  const solveGrid = (order: Constraint[]) => {
+    const targets = new Map(
+      ["A", "B"].map((name) => [name, makePlaceable()] as const)
+    );
+    solveAndSeat(order, targets, [300, 200], undefined, tracks);
+    return Object.fromEntries(
+      [...targets].map(([name, target]) => {
+        const { min, center, max } = target.dims[0];
+        return [name, { min, center, max }];
+      })
+    );
+  };
+  const first = solveGrid([grid, alignRow]);
+  const second = solveGrid([alignRow, grid]);
   ok("grid/align permutations agree", sameGeometry(first, second));
   ok(
     "grid centers cells in their tracks",
@@ -454,12 +532,11 @@ console.log("# constraint confluence: nest and grid placement");
 console.log("# constraint confluence: grid content-sized tracks (Stage 6e)");
 {
   // Two columns of DIFFERENT extent (content-sized): col0=40, col1=100,
-  // xSpacing=10 → starts [0, 50]; centers col0=20, col1=50+50=100.
+  // spacing [10, 0] → starts [0, 50]; centers col0=20, col1=50+50=100.
   const grid: GridConstraint = {
     type: "grid",
     numCols: 2,
-    xSpacing: 10,
-    ySpacing: 0,
+    spacing: [10, 0],
     children: [A, B],
   };
   const tracks: [TrackLayout, TrackLayout] = [
@@ -467,12 +544,24 @@ console.log("# constraint confluence: grid content-sized tracks (Stage 6e)");
     { starts: [0], extents: [30] },
   ];
 
-  // The per-cell budget map hands each cell its own track's extent.
-  const cellSizes = gridCellSizeByKey(grid, byName, tracks);
+  // The track rule reads each cell by the grid's ref: each column is as
+  // wide as its cell, laid end to end with the spacing between.
+  const sizeOf = new Map([
+    ["A", 40],
+    ["B", 100],
+  ]);
+  const cols = gridTracks(
+    numbers,
+    grid,
+    0,
+    (ref) => sizeOf.get(ref.name),
+    10,
+    0
+  );
   ok(
-    "grid cell budget = per-cell track extents",
-    JSON.stringify(cellSizes.get("A")) === "[40,30]" &&
-      JSON.stringify(cellSizes.get("B")) === "[100,30]"
+    "grid tracks size to their cells, by the grid's refs",
+    JSON.stringify(cols) === JSON.stringify(tracks[0]),
+    JSON.stringify(cols)
   );
 
   const contentTargets = () =>
@@ -482,7 +571,7 @@ console.log("# constraint confluence: grid content-sized tracks (Stage 6e)");
     ]);
   {
     const t = contentTargets();
-    solvePlacementConstraints([grid], t, [300, 200], undefined, tracks);
+    solveAndSeat([grid], t, [300, 200], undefined, tracks);
     ok(
       "content-sized grid centers each cell in its own track",
       t.get("A")!.dims[0].center === 20 && t.get("B")!.dims[0].center === 100
@@ -499,7 +588,7 @@ console.log("# constraint confluence: grid content-sized tracks (Stage 6e)");
   const withAlign = (order: Constraint[]) => {
     const t = contentTargets();
     t.set("C", makePlaceable(10, 10));
-    solvePlacementConstraints(order, t, [300, 200], undefined, tracks);
+    solveAndSeat(order, t, [300, 200], undefined, tracks);
     return {
       A: t.get("A")!.dims[0].center,
       C: t.get("C")!.dims[0].center,
@@ -517,7 +606,7 @@ console.log("# constraint confluence: grid content-sized tracks (Stage 6e)");
   const pinB = position("B", 250);
   const withPin = (order: Constraint[]) => {
     const t = contentTargets();
-    solvePlacementConstraints(order, t, [300, 200], undefined, tracks);
+    solveAndSeat(order, t, [300, 200], undefined, tracks);
     return { A: t.get("A")!.dims[0].center, B: t.get("B")!.dims[0].center };
   };
   const pf = withPin([grid, pinB]);
@@ -530,20 +619,31 @@ console.log("# constraint confluence: grid content-sized tracks (Stage 6e)");
   // Authoritative placement tracks are recomputed from ACTUAL laid-out cell
   // sizes: a track sizes to the MAX of its cells (a claim cell wider than a
   // sibling pins the track; a mixed fill/claim track = the claim). 2 cols × 2
-  // rows, xSpacing=10: col0 max(40,20)=40, col1 max(100,60)=100.
+  // rows, spacing [10, 5]: col0 max(40,20)=40, col1 max(100,60)=100.
   const grid2x2: GridConstraint = {
     type: "grid",
     numCols: 2,
-    xSpacing: 10,
-    ySpacing: 5,
+    spacing: [10, 5],
     children: [A, B, C, child("D")],
   };
-  const fromSizes = gridTracksFromSizes(grid2x2, [
-    [40, 30],
-    [100, 30],
-    [20, 12],
-    [60, 8],
-  ]);
+  const fromSizes = ([0, 1] as const).map((axis) =>
+    gridTracks(
+      numbers,
+      grid2x2,
+      axis,
+      (ref) =>
+        (
+          ({
+            A: [40, 30],
+            B: [100, 30],
+            C: [20, 12],
+            D: [60, 8],
+          }) as Record<string, number[]>
+        )[ref.name]?.[axis],
+      grid2x2.spacing[axis] as number,
+      0
+    )
+  );
   ok(
     "placement tracks take the max laid-out size per track",
     JSON.stringify(fromSizes[0].extents) === "[40,100]" &&
@@ -630,15 +730,15 @@ console.log("# constraint confluence: nest size dependency planning");
   const foldedClaims = applyNestExtentPlan(
     [
       [undefined, undefined],
-      [Extent(Monotonic.linear(10, 0)), Extent(Monotonic.linear(4, 0))],
+      [Extent(Pwl.affine(10, 0)), Extent(Pwl.affine(4, 0))],
     ],
     folded,
     insideOutPlan
   );
   ok(
     "inside-out nest claim fold pads the inner claim (padding is pixels)",
-    foldedClaims[0][0]!.width.run(1) === 16 &&
-      foldedClaims[0][1]!.width.run(1) === 8
+    Pwl.at(foldedClaims[0][0]!.width, 1) === 16 &&
+      Pwl.at(foldedClaims[0][1]!.width, 1) === 8
   );
   ok(
     "nest space fold copies child spaces instead of mutating input",
@@ -649,7 +749,7 @@ console.log("# constraint confluence: nest size dependency planning");
 
   // The child is placed by the datum position on y, so its own extent (in
   // its own unit, "child") stays out of the layer's y domain.
-  const { union, spaces: resolved } = resolveLayerBaseSpaces(
+  const resolved = resolveLayerBaseSpaces(
     [
       [
         CONTINUOUS(interval(0, 10), "free"),
@@ -662,23 +762,6 @@ console.log("# constraint confluence: nest size dependency planning");
   ok(
     "transform.scale leaves the free magnitude's data extent alone",
     originIs(resolved[0], "free") && dataWidth(resolved[0]) === 10
-  );
-  ok(
-    "transform.scale scales the free magnitude's claim",
-    resolveLayerAxisExtent(
-      [[Extent(Monotonic.linear(10, 0)), undefined]],
-      [
-        [
-          CONTINUOUS(interval(0, 10), "free"),
-          CONTINUOUS(interval(5, 15), "pinned", declared("child")),
-        ],
-      ],
-      0,
-      3,
-      undefined,
-      union[0],
-      resolved[0]
-    )!.width.run(1) === 30
   );
   const pinned = continuousInterval(resolved[1]);
   ok(
@@ -745,58 +828,49 @@ console.log("# constraint confluence: layer constraint layout planning");
   );
 }
 
-console.log("# constraint confluence: distribute size proposals");
+console.log("# constraint confluence: child size proposals");
 {
-  const slices = buildDistributeSliceMap(
-    [
-      { dAxis: 0, spacing: 10, order: ["A", "B"] },
-      { dAxis: 1, spacing: 5, order: ["A", "C"] },
-    ],
-    [210, 105]
-  );
-  ok(
-    "distribute proposal slices compose across independent axes",
-    slices?.get("A")?.[0] === 100 &&
-      slices.get("B")?.[0] === 100 &&
-      slices.get("A")?.[1] === 50 &&
-      slices.get("C")?.[1] === 50
-  );
-
-  const overlapAB = { dAxis: 0 as const, spacing: 10, order: ["A", "B"] };
-  const overlapBC = { dAxis: 0 as const, spacing: 20, order: ["B", "C"] };
-  const overlappingForward = buildDistributeSliceMap(
-    [overlapAB, overlapBC],
-    [210, 105]
-  );
-  const overlappingReverse = buildDistributeSliceMap(
-    [overlapBC, overlapAB],
-    [210, 105]
-  );
-  ok(
-    "overlapping distribute proposals are skipped in either order",
-    overlappingForward === undefined && overlappingReverse === undefined
-  );
-
   const layerSize: [number, number] = [300, 200];
   const gridCell: [number, number] = [90, 40];
-  const gridCellByName = new Map<string, [number, number]>([["A", gridCell]]);
-  const sliceByName = new Map<string, [number, number]>([["A", [100, 200]]]);
-  ok(
-    "grid cell proposal (its track extent) overrides distribute slice",
-    childLayoutSizeProposal("A", layerSize, gridCellByName, sliceByName) ===
-      gridCell
+  const gridCellByName = new Map<
+    string,
+    [number | undefined, number | undefined]
+  >([
+    ["A", gridCell],
+    ["U", [90, undefined]],
+  ]);
+  const cell = childLayoutSizeProposal(
+    "A",
+    layerSize,
+    gridCellByName,
+    undefined,
+    [100, undefined]
   );
   ok(
-    "a non-cell named child still receives its distribute slice",
-    childLayoutSizeProposal("A", layerSize, undefined, sliceByName) ===
-      sliceByName.get("A")
+    "a grid cell is proposed its track extent, whatever its own room",
+    cell[0] === 90 && cell[1] === 40
+  );
+  // A track with no extent (an unsized axis no claim sizes) proposes
+  // nothing there: the cell is laid out in the layer's size, its default.
+  const unsized = childLayoutSizeProposal("U", [300, NaN], gridCellByName);
+  ok(
+    "a grid cell whose track has no extent is proposed the layer's size there",
+    unsized[0] === 90 && Number.isNaN(unsized[1])
+  );
+  const shared = childLayoutSizeProposal(
+    "B",
+    layerSize,
+    gridCellByName,
+    undefined,
+    [100, undefined]
   );
   ok(
-    "unnamed or unsliced child receives full layer proposal",
-    childLayoutSizeProposal(undefined, layerSize, undefined, sliceByName) ===
-      layerSize &&
-      childLayoutSizeProposal("B", layerSize, undefined, sliceByName) ===
-        layerSize
+    "a child is proposed its own room in a share scope, and the layer's size elsewhere",
+    shared[0] === 100 && shared[1] === 200
+  );
+  ok(
+    "an unnamed child with no room of its own is proposed the layer's size",
+    childLayoutSizeProposal(undefined, layerSize, undefined) === layerSize
   );
 }
 
@@ -805,15 +879,13 @@ console.log("# constraint confluence: grid proposal ownership");
   const grid2: GridConstraint = {
     type: "grid",
     numCols: 2,
-    xSpacing: 10,
-    ySpacing: 0,
+    spacing: [10, 0],
     children: [A, B],
   };
   const grid1: GridConstraint = {
     type: "grid",
     numCols: 1,
-    xSpacing: 0,
-    ySpacing: 5,
+    spacing: [0, 5],
     children: [A, B],
   };
 
@@ -922,11 +994,10 @@ console.log("# constraint confluence: child posScale forwarding");
       seated[1]?.sigma === frameY.sigma &&
       seated[1]?.originPx === 0
   );
-  const seatedUndefined = childPosScalesFor(
-    [UNDEFINED, UNDEFINED],
-    undefined,
-    [frameX, frameY]
-  );
+  const seatedUndefined = childPosScalesFor([UNDEFINED, UNDEFINED], undefined, [
+    frameX,
+    frameY,
+  ]);
   ok(
     "a child with no data 0 gets no frame",
     seatedUndefined[0] === undefined && seatedUndefined[1] === undefined
@@ -947,19 +1018,25 @@ console.log("# constraint confluence: raw placement coordinates");
 {
   ok(
     "literal placement coordinate compiles directly to pixels",
-    compilePlacementCoordinate(5, undefined) === 5
+    compilePlacementCoordinate(numbers, 5, undefined) === 5
   );
   ok(
     "datum placement coordinate elaborates through posScale before raw facts",
-    compilePlacementCoordinate(value(5).offset(3), undefined) === undefined &&
-      compilePlacementCoordinate(value(5).offset(3), {
+    compilePlacementCoordinate(numbers, value(5).offset(3), undefined) ===
+      undefined &&
+      compilePlacementCoordinate(numbers, value(5).offset(3), {
         sigma: 10,
         originPx: 0,
       }) === 53
   );
   ok(
     "discrete placement coordinate resolves from containing axis size",
-    compilePlacementCoordinate(discretePosition(2, 6), undefined, 300) === 100
+    compilePlacementCoordinate(
+      numbers,
+      discretePosition(2, 6),
+      undefined,
+      300
+    ) === 100
   );
 }
 
@@ -994,9 +1071,11 @@ console.log("# constraint confluence: placement constraint lowering");
     new Map(names.map((name) => [name, makePlaceable()] as const));
 
   const loweredPosition = lowerPlacementConstraints(
+    numbers,
     [position("A", 20)],
     targets("A"),
-    [300, 200]
+    [300, 200],
+    pixelGaps
   );
   const positionFact = loweredPosition.anchorProgram.axes[0][0];
   ok(
@@ -1009,6 +1088,7 @@ console.log("# constraint confluence: placement constraint lowering");
   );
 
   const loweredDiscretePosition = lowerPlacementConstraints(
+    numbers,
     [
       {
         type: "position",
@@ -1019,7 +1099,8 @@ console.log("# constraint confluence: placement constraint lowering");
       },
     ],
     targets("A"),
-    [300, 200]
+    [300, 200],
+    pixelGaps
   );
   const discretePositionFact = loweredDiscretePosition.anchorProgram.axes[0][0];
   ok(
@@ -1032,9 +1113,11 @@ console.log("# constraint confluence: placement constraint lowering");
   );
 
   const loweredAlign = lowerPlacementConstraints(
+    numbers,
     [{ type: "align", x: "middle", children: [A, B] }],
     targets("A", "B"),
-    [300, 200]
+    [300, 200],
+    pixelGaps
   );
   ok(
     "align lowers to anchor-relation plus anchor-participant facts",
@@ -1053,9 +1136,11 @@ console.log("# constraint confluence: placement constraint lowering");
   );
 
   const loweredDistribute = lowerPlacementConstraints(
+    numbers,
     [distribute(["A", "B", "C"])],
     targets("A", "B", "C"),
-    [300, 200]
+    [300, 200],
+    pixelGaps
   );
   ok(
     "distribute lowers to chain anchor-relations plus a participant",
@@ -1077,9 +1162,11 @@ console.log("# constraint confluence: placement constraint lowering");
   );
 
   const loweredNest = lowerPlacementConstraints(
+    numbers,
     [{ type: "nest", x: 5, children: [A, B] }],
     targets("A", "B"),
-    [300, 200]
+    [300, 200],
+    pixelGaps
   );
   ok(
     "nest lowers to an anchor-relation between centers",
@@ -1096,9 +1183,11 @@ console.log("# constraint confluence: placement constraint lowering");
   );
 
   const loweredSpan = lowerPlacementConstraints(
+    numbers,
     [span("C", 10, 30)],
     targets("C"),
-    [300, 200]
+    [300, 200],
+    pixelGaps
   );
   const spanFacts = loweredSpan.anchorProgram.axes[0];
   ok(
@@ -1133,9 +1222,11 @@ console.log("# constraint confluence: placement constraint lowering");
     children: [child("C")],
   };
   const loweredMixed = lowerPlacementConstraints(
+    numbers,
     [mixed],
     targets("C"),
-    [300, 200]
+    [300, 200],
+    pixelGaps
   );
   ok(
     "interval+point on one constraint: interval axis yields two edge pins",
@@ -1305,25 +1396,31 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
     maps: [AxisMap | undefined, AxisMap | undefined],
     domain: (axis: 0 | 1) => ReturnType<typeof interval> | undefined = none,
     ticks: (axis: 0 | 1) => typeof DEFAULT_AXIS_TICKS | undefined = none,
-    inSlot: [boolean, boolean] = [false, false]
-  ) =>
-    solveLayerScales(
+    isScope: [boolean, boolean] = [false, false]
+  ) => {
+    // The axes the layer solves: it scopes its claim only to solve it.
+    const solved: (0 | 1)[] = [];
+    const scales = solveLayerScales(
       ownSize,
       spaces,
       claims,
       spaces,
-      (axis) => inSlot[axis],
+      (axis) => isScope[axis],
       [100, 80],
       sigmas,
       maps,
       // `KeyedDomains.scope`, over a stand-in table.
       (axis, space, claim) => {
+        solved.push(axis);
         const [wide, wideClaim] = widenScope(space, claim, domain(axis));
         return niceScope(wide, wideClaim, ticks(axis));
       },
       new ScopeRegistry(),
-      "test"
+      // The layer: only read to name a scope, or to warn at.
+      { key: "test", type: "layer" } as any
     );
+    return { ...scales, solved };
+  };
 
   const sized = solve(
     [true, true],
@@ -1356,7 +1453,7 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
     inherits.sigmas[0] === 2 &&
       inherits.sigmas[1] === 3 &&
       inherits.frames[0] === handedX &&
-      inherits.checks.length === 0
+      inherits.solved.length === 0
   );
 
   // A node handed no σ at all is sized by the box it is given (a chain of
@@ -1364,7 +1461,7 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
   const unscaled = solve(
     [false, false],
     [UNDEFINED, UNDEFINED],
-    [Extent(Monotonic.linear(10, 0)), Extent(Monotonic.linear(0, 10))],
+    [Extent(Pwl.affine(10, 0)), Extent(Pwl.affine(0, 10))],
     [undefined, undefined],
     [undefined, undefined]
   );
@@ -1375,13 +1472,12 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
   ok(
     // Only pixels (fixed boxes): nothing to solve, and not a failure.
     "a claim with no σ in it is not solved, and inherits",
-    unscaled.failedAxes.length === 0 &&
-      unscaled.checks.length === 1 &&
-      unscaled.sigmas[1] === undefined
+    unscaled.solved.length === 1 && unscaled.sigmas[1] === undefined
   );
 
-  // A pinned node in a slot (a facet panel) is sized by its slot; a free
-  // one (a part of a chain) inherits σ.
+  // A node whose room is given to it (`GoFishNode.isScope`: a pinned
+  // node in a slot, a facet panel) is sized by its room; any other (a free
+  // part of a chain) inherits σ.
   const slot = solve(
     [false, false],
     [positionSpace, sizeSpace],
@@ -1390,10 +1486,10 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
     [undefined, undefined],
     none,
     none,
-    [true, true]
+    [true, false]
   );
   ok(
-    "a pinned node in a slot is sized by its slot; a free one inherits",
+    "a node whose room is given is sized by it; any other inherits",
     slot.sigmas[0] === 10 && slot.sigmas[1] === 3
   );
 
@@ -1410,7 +1506,7 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
   ok(
     "a pinned node nested at a datum inherits σ in a frame of its own",
     atDatum.sigmas[0] === 2 &&
-      atDatum.checks.length === 0 &&
+      atDatum.solved.length === 0 &&
       atDatum.frames[0]?.sigma === 2 &&
       atDatum.frames[0]?.originPx === 0
   );
@@ -1463,7 +1559,7 @@ console.log("# constraint confluence: span size-setting");
       ["A", makePlaceable()],
       ["B", makePlaceable()],
     ]);
-    solvePlacementConstraints(constraints, targets, [300, 200]);
+    solveAndSeat(constraints, targets, [300, 200]);
     return Object.fromEntries(
       [...targets].map(([name, target]) => {
         const { min, center, max } = target.dims[0];
@@ -1563,7 +1659,7 @@ console.log("# constraint confluence: self-placement and override");
   // A is anchored to the x data scale (Stage 6f: the data-positioned fact now
   // arrives as an explicit ownership input, not a `placementOn` method on the
   // target). align must leave A where its own scale puts it.
-  solvePlacementConstraints(
+  solveAndSeat(
     [{ type: "align", x: "baseline", children: [A, B] }],
     targets,
     [300, 200],
@@ -1582,7 +1678,7 @@ console.log("# constraint confluence: self-placement and override");
     ["B", makePlaceable()],
   ]);
   sourceTargets.get("A")!.pinAnchor!("x", 40, "min");
-  solvePlacementConstraints(
+  solveAndSeat(
     [{ type: "align", x: "baseline", children: [A, B] }],
     sourceTargets,
     [300, 200],
@@ -1606,7 +1702,7 @@ console.log("# constraint confluence: self-placement and override");
     x: "baseline",
     children: [A, B],
   };
-  const sameSolve = solvePlacementConstraints;
+  const sameSolve = solveAndSeat;
   const sameSolveTargets = new Map<string, Placeable>([
     ["A", makePlaceable()],
     ["B", makePlaceable()],
@@ -1650,7 +1746,7 @@ console.log("# constraint confluence: contradictions are diagnosed");
   // named-owner conflict must name BOTH owners so the error is actionable.
   const spanThrows = (constraints: PositionConstraint[]): boolean => {
     try {
-      solvePlacementConstraints(
+      solveAndSeat(
         constraints,
         new Map<string, Placeable>([["A", makePlaceable()]]),
         [300, 200]
@@ -1672,7 +1768,7 @@ console.log("# constraint confluence: contradictions are diagnosed");
 
   const spanPositionThrows = (constraints: PositionConstraint[]): boolean => {
     try {
-      solvePlacementConstraints(
+      solveAndSeat(
         constraints,
         new Map<string, Placeable>([["A", makePlaceable()]]),
         [300, 200]

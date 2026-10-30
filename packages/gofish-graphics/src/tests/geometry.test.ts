@@ -6,6 +6,7 @@
  * nor leave the pack's circle. Run via `tsx`.
  */
 import { Rect } from "../ast/shapes/rect";
+import * as Pwl from "../ast/solver/pwl";
 import { Ellipse } from "../ast/shapes/ellipse";
 import { Polygon } from "../ast/shapes/polygon";
 import { Pack } from "../ast/graphicalOperators/pack";
@@ -574,8 +575,8 @@ console.log("# composites clipped to their first child claim its room");
     const [x, y] = node.resolveExtent();
     ok(
       `${name} claims its first child's width and height`,
-      near(x!.width.run(0), 100) && near(y!.width.run(0), 80),
-      `${x?.width.run(0)} × ${y?.width.run(0)}`
+      near(Pwl.at(x!.width, 0), 100) && near(Pwl.at(y!.width, 0), 80),
+      `${x && Pwl.at(x.width, 0)} × ${y && Pwl.at(y.width, 0)}`
     );
     layOut(node);
     ok(

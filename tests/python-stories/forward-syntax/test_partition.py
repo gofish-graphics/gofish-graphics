@@ -4,6 +4,7 @@ from gofish import (
     Bin,
     Color,
     Constraint,
+    Place,
     chart,
     circle,
     field,
@@ -254,6 +255,26 @@ def story_airport_hex_counts():
                 lambda cell, count: [
                     Constraint.align([cell, count], x="middle", y="middle"),
                 ]
+            )
+        ),
+        {"axes": True},
+    )
+
+
+# The same counts written by the region's own label, inside it
+# (Place.interior()), so its color contrasts with the region's fill.
+def story_airport_hex_counts_labeled():
+    airports = _contiguous_airports()
+    return (
+        chart(airports, color=Color.gradient("blues"), w=600, h=360)
+        .flow(
+            partition(
+                by=struct(x="longitude", y="latitude").bin(Bin.hex(radius=3))
+            )
+        )
+        .mark(
+            region(fill=field("iata").count(), stroke="white").label(
+                field("iata").count(), position=Place.interior()
             )
         ),
         {"axes": True},

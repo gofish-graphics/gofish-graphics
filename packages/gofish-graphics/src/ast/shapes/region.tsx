@@ -4,7 +4,7 @@
 
 import type { DisplayList } from "gofish-ir";
 import { color6, resolveColorChannel } from "../../color";
-import { isValue, type MaybeValue } from "../data";
+import { getValue, isValue, type MaybeValue } from "../data";
 import { displayTranslate, type Dimensions } from "../dims";
 import {
   boxOfDims,
@@ -34,6 +34,7 @@ import {
   type PositionRegion,
 } from "../constraints/position";
 import { compilePlacementCoordinate } from "../constraints/placementLowering";
+import { numbers } from "../solver/arith";
 import { axisName } from "../constraints/shared";
 import { createMark } from "../withGoFish";
 import { MARK_CHANNELS } from "../markChannels.generated";
@@ -135,14 +136,16 @@ export const Region = ({
         // placed by its data there: a datum it cannot map would leave it
         // nowhere, so that is an error, not a guess.
         const px = (axis: 0 | 1, v: PositionInterval[number], what: string) => {
-          const p = compilePlacementCoordinate(v, scales[axis]?.map);
+          const p = compilePlacementCoordinate(numbers, v, scales[axis]?.map);
           if (p === undefined || !Number.isFinite(p))
             throw new Error(
               `region: its cell's ${what} on ${axisName(axis)} does not map ` +
                 `to pixels: ${
                   scales[axis]?.map === undefined
                     ? `the region's parent gives it no map for its cell's data on ${axisName(axis)}`
-                    : `it maps to ${p}`
+                    : p === undefined
+                      ? `its datum ${getValue(v as MaybeValue<number>)} is not a number`
+                      : `it maps to ${p}`
                 }. A region is placed by its cell's data, so it must share ` +
                 `the frame of the partition that gives it the cell (an ` +
                 `operator between them that places its children on ` +

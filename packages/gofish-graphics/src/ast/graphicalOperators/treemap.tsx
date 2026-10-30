@@ -17,14 +17,15 @@ import {
   Size,
   Direction,
   MARK_DIMS,
-  deferAxisDims,
-  elaborateDims,
+  elaborateOwnDims,
 } from "../dims";
 import { getQuantity, getValue, isValue, MaybeValue } from "../data";
 import { computeAesthetic, computeSize } from "../../util";
 import { posFn, pxOf } from "../domain";
 import { UnderlyingSpace, UNDEFINED, magnitude } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
+import * as Pwl from "../solver/pwl";
+import { rejectLength, type LengthValue } from "../length";
 import { createOperator } from "../marks/createOperator";
 import { SplitBy, splitEntries } from "../datumProjection";
 import type { FieldExpr } from "../fieldExpr";
@@ -65,7 +66,7 @@ type TreemapProps = {
   /** Per-entry weight driving each leaf's tile area — one value per child, in
    *  child order (mirrors `spread`'s entry-flagged `size`, #700-style). */
   size?: MaybeValue<number>[];
-} & FancyDims<MaybeValue<number>>;
+} & FancyDims<MaybeValue<number> | LengthValue>;
 
 type LeafDatum = {
   i: number;
@@ -96,7 +97,16 @@ const Treemap = createNodeOperator(
       ...fancyDims
     } = opts;
 
-    const dims = elaborateDims(fancyDims);
+    // A length for its own size (`w: percent(50)`, `w: fr(2)`) is laid out
+    // in the room it is given, once it is in its tree (#1176 step 6).
+    const own = elaborateOwnDims<MaybeValue<number>>(fancyDims);
+    const { dims } = own;
+    // Its spacing and padding are one number d3 applies on both axes, so a
+    // percent has no one room to be a percent of.
+    // TODO(#1176): a percent treemap spacing needs the axis it is of (the
+    // smaller side, or each axis on its own), a design question.
+    rejectLength("treemap's spacing", spacing);
+    rejectLength("treemap's padding", padding);
     // A tile's area is its entry's share of the total, so the treemap adds
     // its entries: their unit must add up (`checkSummable`, #1197). It is
     // checked once here, so the layout below sums the weights as they are.
@@ -130,8 +140,10 @@ const Treemap = createNodeOperator(
           // scale shared across sibling treemaps. Otherwise the treemap orders
           // nothing along the axis by data: it has no axis there and fills the
           // slot it is given.
-          const axisSpace = (i: Direction): UnderlyingSpace =>
-            isValue(dims[i].size) ? magnitude(dims[i].size) : UNDEFINED;
+          const axisSpace = (i: Direction): UnderlyingSpace => {
+            const size = own.dataSize(i);
+            return isValue(size) ? magnitude(size) : UNDEFINED;
+          };
           return [axisSpace(0), axisSpace(1)];
         },
         layout: (size, scales, childAsts, node) => {
@@ -153,24 +165,22 @@ const Treemap = createNodeOperator(
           const localScaleFactor = (dir: Direction): number | undefined => {
             const extent = myExtent[dir];
             if (extent !== undefined) {
-              return (
-                extent.width.inverse(size[dir], {
-                  upperBoundGuess: size[dir],
-                }) ?? 0
-              );
+              return Pwl.solve(extent.width, size[dir]) ?? 0;
             }
             return undefined;
           };
 
           // Treemap box size per axis (the [w, h] handed to d3-treemap):
-          //  - no size      -> fill the slot the parent gave (size[dir]).
-          //  - numeric size -> that many px (computeSize literal branch).
+          //  - no size      -> fill the slot the parent gave (size[dir]), as a
+          //    length that is a share of its scope does (`fixedSize`).
+          //  - numeric size -> that many px (computeSize literal branch), as a
+          //    length whose room is known is.
           //  - data-driven  -> if a shared posScale exists on this axis (the
           //    faceting parent composed POSITION[0,maxV] across siblings), map
           //    the value through it so all facets share one scale; otherwise
           //    solve our own factor and multiply.
           const resolveAxisSize = (dir: Direction): number => {
-            const declared = dims[dir].size;
+            const declared = node.fixedSize(dir);
             if (declared === undefined) return size[dir];
             if (!isValue(declared)) {
               return computeSize(
@@ -296,9 +306,9 @@ const Treemap = createNodeOperator(
       },
       children
     );
-    // The treemap's own box is named by axis in `dims` like a mark's; defer it
-    // to the resolveAliases pass.
-    node._elaborateInAxisScope = deferAxisDims(fancyDims, dims);
+    // The treemap's own box is named by axis in `dims` like a mark's; `bind`
+    // defers it to the resolveAliases pass.
+    own.bind(node);
     return node;
   }
 );
