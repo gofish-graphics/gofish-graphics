@@ -311,7 +311,7 @@ export function warnFlexibleSizes(node: GoFishNode, axis: 0 | 1): void {
   // The default canvas gives a data σ room but gives shares none
   // (`sharesHaveNoRoom`), so the fit is not asked: an `fr` gap there is 0.
   if (gaps.length > 0 && node.sharesHaveNoRoom(axis)) {
-    for (const g of gaps) warnLayout(node, noRoom(node, axis, printLength(g)));
+    for (const g of gaps) warnLayout(node, noRoom(node, axis, g));
     return;
   }
   if (node.scopeOf(axis).carriesData(axis))
@@ -338,28 +338,27 @@ function mixedSizes(
   gaps: (Length | LengthValue)[]
 ): LayoutWarning {
   const name = axisName(axis);
-  const items = [
-    ...parts.map((part) => {
-      const what = describeNode(part);
-      const own = part.lengthOn(axis);
-      return {
-        what,
-        flexible:
-          own !== undefined
-            ? `${what} has the size ${printLength(own)}, which is flexible`
-            : `${what} has no size of its own, so its size is flexible`,
-        wide: own === undefined ? "one data unit" : "its weight in data units",
-      };
-    }),
-    ...gaps.map((g) => {
-      const what = `its spacing ${printLength(g)}`;
-      return {
-        what,
-        flexible: `${what} is flexible`,
-        wide: "its weight in data units",
-      };
-    }),
-  ];
+  // Per flexible size: why it is flexible, and how wide it is drawn.
+  const flexible: string[] = [];
+  const drawn: string[] = [];
+  for (const part of parts) {
+    const what = describeNode(part);
+    const own = part.lengthOn(axis);
+    flexible.push(
+      own !== undefined
+        ? `${what} has the size ${printLength(own)}, which is flexible`
+        : `${what} has no size of its own, so its size is flexible`
+    );
+    drawn.push(
+      `${what} is drawn ` +
+        `${own === undefined ? "one data unit" : "its weight in data units"} wide`
+    );
+  }
+  for (const g of gaps) {
+    const what = `its spacing ${printLength(g)}`;
+    flexible.push(`${what} is flexible`);
+    drawn.push(`${what} is drawn its weight in data units wide`);
+  }
   const data = chain.children.filter(
     (c): c is GoFishNode =>
       !parts.includes(c as GoFishNode) &&
@@ -373,7 +372,6 @@ function mixedSizes(
       ? `${describeNode(scope)} sizes its other parts by data`
       : `${[...new Set(data.map(describeNode))].join(", ")} ` +
         `${data.length === 1 ? "is" : "are"} sized by data`;
-  const one = items.length === 1;
   return {
     kind: "mixed-sizes",
     node: describeNode(chain),
@@ -383,23 +381,27 @@ function mixedSizes(
     parts: [],
     message:
       `${describeNode(chain)} on ${name} mixes data-driven and flexible ` +
-      `sizes: ${listed(items.map((i) => i.flexible))}, ` +
+      `sizes: ${listed(flexible)}, ` +
       `but ${sized}. A flexible size is like a data type with no name, so ` +
       `this is like sizing two parts along ${name} by two different data ` +
       `types: no one scale fits both. ` +
-      `${listed(items.map((i) => `${i.what} is drawn ${i.wide} wide`))}. ` +
-      `Give ${one ? "it a size of its own" : "them sizes of their own"}, ` +
+      `${listed(drawn)}. ` +
+      `Give ${flexible.length === 1 ? "it a size of its own" : "them sizes of their own"}, ` +
       `or put the data-driven parts in a container with a size of its own.`,
   };
 }
 
 /**
- * A `no-room` warning: the `fr` spacing `spelled` of `node` (a chain's
- * spacing or a table's gap between tracks) sits in a scope of shares on an
- * axis the render gives no size, so nothing gives it room, and it is 0 (as
- * in CSS and Typst).
+ * A `no-room` warning: the `fr` spacing `gap` of `node` (a chain's spacing
+ * or a table's gap between tracks) sits in a scope of shares on an axis the
+ * render gives no size, so nothing gives it room, and it is 0 (as in CSS
+ * and Typst).
  */
-function noRoom(node: GoFishNode, axis: 0 | 1, spelled: string): LayoutWarning {
+function noRoom(
+  node: GoFishNode,
+  axis: 0 | 1,
+  gap: Length | LengthValue
+): LayoutWarning {
   const name = axisName(axis);
   const what = describeNode(node);
   return {
@@ -410,7 +412,7 @@ function noRoom(node: GoFishNode, axis: 0 | 1, spelled: string): LayoutWarning {
     available: 0,
     parts: [],
     message:
-      `${what}: \`spacing: ${spelled}\` has no room on ${name}, so its gaps ` +
+      `${what}: \`spacing: ${printLength(gap)}\` has no room on ${name}, so its gaps ` +
       `are 0; give the chart a ${axis === 0 ? "w" : "h"}.`,
   };
 }
