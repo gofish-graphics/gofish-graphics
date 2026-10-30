@@ -35,6 +35,16 @@ const OUT_FILE = join(HERE, "..", "src", "ast", "markChannels.generated.ts");
 function channelKind(type: FieldType, where: string): string {
   if (type.kind === "channel") return type.infer;
   if (type.kind === "record" && carriesChannel(type.valueType)) return "dims";
+  // A union with a channel among its alternatives (`w`: a size channel or a
+  // Length) infers by that channel; its other alternatives pass through.
+  if (type.kind === "union") {
+    const kinds = new Set(
+      type.options
+        .filter(carriesChannel)
+        .map((m, i) => channelKind(m, `${where}|${i}`))
+    );
+    if (kinds.size === 1) return [...kinds][0];
+  }
   throw new Error(
     `${where}: a field that holds a channel must be a channel or a record of ` +
       `channels (a dims bag) for createMark to infer it.`
