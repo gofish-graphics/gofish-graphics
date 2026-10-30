@@ -1525,7 +1525,7 @@ for the API.
               ]
             }
           ],
-          "description": "Cell gap: a single number for both axes, or [x, y]. Each is pixels or `percent(n)`, n percent of the table's room on its axis.",
+          "description": "Cell gap: a single number for both axes, or [x, y]. Each is pixels, `percent(n)`, n percent of the table's room on its axis, or `fr(k)`, k shares of its scope.",
           "default": 0
         },
         "numCols": {
@@ -1946,7 +1946,7 @@ for the API.
               "$ref": "#/$defs/Length"
             }
           ],
-          "description": "Pixels drawn in from each side of the space the rect fills, on an axis where it has no size or span of its own (a bar's width in a spread or a partition cell), so neighbors are drawn apart. A side the rect sizes itself, such as a bar's data height, is never inset. It changes only what is drawn: the rect's box stays the space it was given. Also `percent(n)`, n percent of that space on each axis: `percent(10)` draws a bar at 80% of its band.",
+          "description": "Pixels drawn in from each side of the space the rect fills, on an axis where it has no size or span of its own (a bar's width in a spread or a partition cell), so neighbors are drawn apart. A side the rect sizes itself, such as a bar's data height, is never inset. It changes only what is drawn: the rect's box stays the space it was given. Also `percent(n)`, n percent of that space on each axis: `percent(10)` draws a bar at 80% of its band. The percent and any pixels added to it are each 0 or more.",
           "default": 0
         },
         "debug": {
