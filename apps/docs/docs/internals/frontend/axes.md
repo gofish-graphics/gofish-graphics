@@ -42,11 +42,17 @@ content. Each ring holds the rings inside it plus its own shapes, and seats its
 shapes past everything inside it:
 
 ```
-inner  = Layer([ content.name("__axisContent"), ...continuous/difference shapes ])
-axes   = Layer([ inner.name("__axisInner"), ...ordinal labels ])
-titles = Layer([ axes.name("__titleContent"), ...title anchors, ...titles ])
-root   = Layer([ titles.name("__legendContent"), legend ])
+inner  = Layer([ content, ...continuous/difference shapes ])
+axes   = Layer([ inner, ...ordinal labels ])
+titles = Layer([ axes, ...title anchors, ...titles ])
+root   = Layer([ titles, legend ])
 ```
+
+No ring and no shape has a name. A ring's constraints refer to what it seats
+by slot (`wrapRing`): the box inside the ring is slot 0, and its k-th shape
+is slot k + 1, so no lookup is involved. A ring is transparent to a user's
+name lookup (`_transparent`): it adds no depth, and the content keeps its own
+name, so `ref("bars")` on a chart with axes is the bars alone.
 
 A node gets only the rings it has shapes for. Its chrome is:
 
@@ -392,8 +398,9 @@ out its own alternatives and prunes dominated ones (#486, #630). That replaces
 the whole-chart strategy in `choose.ts`; the policy half (candidates plus score)
 is meant to carry over unchanged.
 
-The wrapper inherits the wrapped node's `key` and `_name`, so faceting and
-external refs keep resolving to it. After the rewrite, the whole tree's underlying
+The wrapper inherits the wrapped node's `key`, so faceting keeps resolving to
+it. The wrapped node keeps its `_name`, and the wrapper is transparent to a name
+lookup, so an external ref resolves to the node itself. After the rewrite, the whole tree's underlying
 space is recomputed (the cache is cleared); then normal layout runs, and each
 σ-scope's solve nices its own domain on demand — there is no tree-wide nice pass.
 

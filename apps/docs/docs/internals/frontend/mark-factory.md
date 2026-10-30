@@ -299,7 +299,7 @@ shared by both loops: every child goes to `resolveMarkResult`
   tier, so resolving the tiers by hand would drop the shared projection;
 - a **`.relate()` operand** (a `RelateOperand`, a child of a drawing clause such
   as `arrow(opts, [a, b])`) — becomes a string `ref` of the name it carries,
-  which resolves from the relating layer (see
+  which resolves from the layer whose `.relate()` bound it (see
   [Name Resolution & Scoping](/internals/core/names-and-scoping)).
 
 `markResult.ts` imports neither `chartBuilder` nor `createOperator`, so
@@ -351,8 +351,8 @@ methods:
   producer-tier auto-naming and a sequenced tier's naming can detect a
   user-chained name without parsing the wire tag (`wireOf`). A `createName`
   token is filed in the layer context under its own symbol (`layerKey`), so
-  those tiers find a token-named mark's nodes too, while no string
-  `selectAll` or `ref` can reach them. (An earlier `ChartBuilder.connect()`
+  those tiers, and `selectAll(token)`, find a token-named mark's nodes too,
+  while no string `selectAll` or `ref` can reach them. (An earlier `ChartBuilder.connect()`
   method used this same stashed name; it was deleted in favor of
   [`.layer()`](/js/api/core/layer), which generalizes the pattern to every
   tier — see below.) `LayerBuilder.wireTiers()` looks for the stashed name on
@@ -412,9 +412,15 @@ method's result with the same set so chains stay extensible and the mark-kind ta
 rides along. `.name()`
 defers its layer registration via a `__layerRegistration` tag collected in a
 single post-resolve DFS walk (`collectLayerRegistrations`), so registry order
-follows parent-iteration order, not async-completion order. The same factory
+follows parent-iteration order, not async-completion order. The registries
+nest: a `layer([...])` combinator's is a child of the one it is built in, and
+`resolveRefData` reads a name with the widening lookup `LayerContext.lookup` (see
+[Name Resolution & Scoping](/internals/core/names-and-scoping)). The same factory
 backs `makeRelatableMark` (which adds `.relate()`, and hands the rows the mark
-was called with to `GoFishNode.relate`, so a drawing clause binds them) and the
+was called with to `GoFishNode.relate`, so a drawing clause binds them; the
+`layer([...])` combinator keeps the registry it resolved its children in as
+the node's `_names`, so a drawing clause is resolved in a fresh registry
+nested in it, which the call that replaces the clause discards) and the
 combinator marks — one wiring, not three copies. The region-compositing
 combinators share one factory (`makePorterDuffCombinator`), typed by their
 options: only `intersect` takes paint (`fill`, `stroke`, `strokeWidth`,
@@ -552,10 +558,14 @@ zOrder incantation needed, in every call form including the low-level
 combinator one. Two refinements: an operand that is the connector's own fresh
 child (`enclose(opts, [spread(...)])` lays its children out and paints them
 itself, over its outline) is not tagged; and the `layer` combinator runs the
-pass over its children, and `GoFishNode.relate` over its drawing clauses. A
-clause's operands are string refs with no target yet, and the pass names
-such a ref's node by its string, with no scope check, since the name is the
-relating layer's (see [Names and Scoping](/internals/core/names-and-scoping)).
+pass over its children, and `GoFishNode.relate` over its drawing clauses. The
+constraint holds a node operand as the node itself (`NodeOperand`). A
+clause's operand is a ref that holds the node its name was bound to, so the
+constraint holds that node, and the layer claims it only when the node lies
+in its children: an operand an enclosing `.relate()` bound is left for that
+layer. A ref the author wrote by name has no node until the round, so the
+constraint holds the ref, and paint order reads its target. A token ref
+gets no default, so its connector paints in child order (see [Names and Scoping](/internals/core/names-and-scoping)).
 The defaults `layer` installs for its children are kept apart, as
 `_paintDefaults`: a later `.relate()` on the layer replaces the author's
 constraints with its own and keeps them.

@@ -1082,13 +1082,14 @@ throws) when a constraint ends up with nothing movable — every listed
 operand already placed — except the deliberate `isDataPositionedAlignTarget`
 skip (a data-positioned scatter facet), which stays silent.
 
-Before any of this, the layer resolves every placement operand to a node
-inside it (`resolveConstraintOperands`, `constraints/index.ts`). Every
-operand is a name, and it goes through the same lookup as `ref("name")` (see
+Before any of this, every placement operand of the layer is resolved to a
+node inside it (`resolveReferences`, `_ref.tsx`), and the solve keys each
+one by that node's uid (`keyOf`). An operand a user writes is a name, and it
+goes through the same lookup as `ref("name")` (see
 [Name Resolution & Scoping](/internals/core/names-and-scoping)), once per
 distinct name. Operators such as `spread` and the axis, legend, and label
-chrome name their own direct children, and the closest match rule makes a
-direct child win over any deeper node with the same name. A missing, ambiguous, or
+chrome refer to their own children by slot (`SlotOperand`), so no name is
+looked up. A missing, ambiguous, or
 out-of-layer operand throws (#819), so a constraint can no longer bind nothing
 in silence. An operand that is a direct child is its child's placeable, as
 before. An operand nested inside a direct child is a `NestedOperand`
@@ -1517,7 +1518,7 @@ Both dumps live in `debug/dump.ts`.
 The marginal histogram's layer prints as:
 
 ```
-[sharing] layer __axisContent (3) [position×3,align×2] x: own{scatter,topHist} detached {rightHist} | y: own{scatter,rightHist} detached {topHist}
+[sharing] layer (3) [position×3,align×2] x: own{scatter,topHist} detached {rightHist} | y: own{scatter,rightHist} detached {topHist}
 ```
 
 The registry is the sole producer of every slope. A coord boundary hands down

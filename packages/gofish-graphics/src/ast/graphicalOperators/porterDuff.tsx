@@ -44,7 +44,7 @@ export type CompositePaint = {
   opacity?: number;
 };
 
-const requireTwoChildren = <T,>(children: T[]) => {
+const requireTwoChildren = <T,>(children: readonly T[]) => {
   if (children.length !== 2) {
     throw new Error(
       "Porter-Duff relation operators currently expect exactly two children"
@@ -85,7 +85,7 @@ const firstChildClaim = (
 function layoutComposite(
   size: Size,
   scales: Size<AxisScale | undefined>,
-  children: GoFishAST[]
+  children: readonly GoFishAST[]
 ): Placeable[] {
   requireTwoChildren(children);
   const placed = children.map((child) => child.layout(size, scales));
@@ -265,7 +265,7 @@ function compositeNode(
       }),
       resolveUnderlyingSpace: (
         children: Size<UnderlyingSpace>[],
-        _childNodes: GoFishAST[]
+        _childNodes: readonly GoFishAST[]
       ) => [unionChildSpaces(children, 0), unionChildSpaces(children, 1)],
       resolveExtent: (childExtents, childSpaces, spaces) =>
         isAtop
@@ -545,7 +545,7 @@ export const mask = createNodeOperator(
         type: "mask",
         resolveUnderlyingSpace: (
           children: Size<UnderlyingSpace>[],
-          _childNodes: GoFishAST[]
+          _childNodes: readonly GoFishAST[]
         ) => [unionChildSpaces(children, 0), unionChildSpaces(children, 1)],
         resolveExtent: firstChildClaim,
         layout: (size, scales, layoutChildren) => {

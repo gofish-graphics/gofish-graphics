@@ -102,6 +102,8 @@ const solveIn = <T>(
   return solvePlacementCells(
     A,
     constraints as PlacementConstraint[],
+    // Each operand is keyed by its name.
+    (r) => r.name,
     targets,
     [NaN, NaN],
     // Pixel spacings, as a layer reads them (`GoFishNode.gapOf`).

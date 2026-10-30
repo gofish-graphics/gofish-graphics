@@ -9,8 +9,8 @@ top-level `layer(children).relate(...)` ties everything together.
 Dynamic-name constraint targeting: the trace generates ~30 runtime-only names
 (`marker-{uid}`, `bar-{uid}`, `label-{uid}`, `lit-{uid}`, `underline-{uid}`),
 not a fixed statically-known set a literal `lambda a, b: ...` destructure
-could spell out (JS bypasses its destructured callback param for the same
-reason, building raw `{name: token.__tag}` refs directly). The Python
+could spell out (JS reads its callback's env by each token's tag,
+`env[token.__tag]`, for the same reason). The Python
 `.relate(callback)` already hands back one `RefSentinel` per named child
 as a **kwarg** keyed by that child's `.name(...)` tag string — a `dict`
 unpacked via `**refs` does not require its keys to be valid identifiers, so

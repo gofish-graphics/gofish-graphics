@@ -120,17 +120,24 @@ This pass traverses the tree and:
 
 **Example**: In a bar chart with `fill: "category"`, each unique category value gets assigned a color from the palette.
 
-### Pass 3: Name Resolution
+### Pass 3: Reference Resolution
 
-**Location**: `src/ast/gofish.tsx:173`
+**Location**: `src/ast/gofish.tsx` (after `resolveAliases`, Pass 5.5)
 
 ```typescript
-child.resolveNames();
+resolveReferences(child);
 ```
 
-**Implementation**: `src/ast/_node.ts:194-201`
+**Implementation**: `src/ast/_ref.tsx` (`resolveReferences`)
 
-Maps named nodes to the scope context, enabling references between chart elements. This resolves variable names and data bindings, mapping data field names to their corresponding values and establishing scope relationships between parent and child nodes.
+The one resolver for every reference in the tree. It registers token names
+in their scopes, resolves each ref to its target, resolves each layer's
+constraint operands and paint-order operands to nodes (writing each
+operand's `key`, the node's uid, which the placement solve reads), and
+checks each layer's `.relate()` clauses for a cycle. It runs after
+`resolveAliases`, because that pass installs the operators' constraints, and
+again after every pass that rewrites the tree (`reresolve`). See
+[Name Resolution & Scoping](/internals/core/names-and-scoping).
 
 ### Pass 4: Key Resolution
 
@@ -219,10 +226,11 @@ and `type`). The scope also carries `warpedBy`, the type of the nearest enclosin
 space that is not linear, for work that is only correct in a linear one (scatter's
 `overlap`). The walk is synchronous: it queues each node's hook with its two scopes, in
 pre-order. The pass then runs the queue one hook at a time, in
-that order. It does not run them concurrently, because an operator's `.relate()`
-walks the subtree to build its environment and must not interleave with a
-descendant's hook. The walk sees the tree before any hook runs; that is enough,
-because spread's and scatter's `.relate()` return constraints only and add no nodes.
+that order. It does not run them concurrently, so a hook never interleaves with a
+descendant's. An operator installs its constraints through the core of `.relate()`
+(`INTERNAL_relate`), which builds no environment, since the operator refers to its
+children by slot. The walk sees the tree before any hook runs; that is enough,
+because spread's and scatter's constraints add no nodes.
 A name the scope does not declare **throws**, listing the names it does; so does
 setting one (axis, anchor) slot twice, across the top-level keys and `dims` or within
 `dims`. Scatter merges its top-level `x`/`xMin`/`xMax` (and `y` ones) with its `dims`

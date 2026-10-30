@@ -851,8 +851,16 @@ class TestNestedChart:
             [self._flower().name("a"), self._flower().name("b")]
         ).relate(lambda a, b: [Constraint.align([a, b], x="middle")])
         d = chart(self.ROWS).mark(m).to_ir()["root"]["mark"]
-        assert d["relate"] == [
-            {"type": "align", "options": {"x": "middle"}, "refs": ["a", "b"]}
+        s = d["relate"]["scope"]
+        assert d["relate"]["clauses"] == [
+            {
+                "type": "align",
+                "options": {"x": "middle"},
+                "refs": [
+                    {"type": "ref", "selection": "a", "scope": s},
+                    {"type": "ref", "selection": "b", "scope": s},
+                ],
+            }
         ]
 
     def _chain(self):
@@ -945,11 +953,16 @@ class TestRelateCallback:
                 Constraint.distribute([a, b], dir="x", spacing=gap)
             ]
         )
-        assert ir(m)["relate"] == [
+        relate = ir(m)["relate"]
+        s = relate["scope"]
+        assert relate["clauses"] == [
             {
                 "type": "distribute",
                 "options": {"dir": "x", "spacing": 7},
-                "refs": ["a", "b"],
+                "refs": [
+                    {"type": "ref", "selection": "a", "scope": s},
+                    {"type": "ref", "selection": "b", "scope": s},
+                ],
             }
         ]
 
@@ -973,8 +986,9 @@ class TestRelateCallback:
         assert seen == {"gap": 3, "rest": ["c"]}
 
     def test_drawing_clause_serializes_operands_as_refs(self):
-        """A drawing clause is a mark; an operand in its children serializes
-        as `ref(name)`, while a constraint operand serializes as its name."""
+        """A drawing clause is a mark. An operand serializes as a ref with the
+        scope id of the `.relate()` call that bound it, the same value as a
+        constraint operand and as the JS `RelateOperand`."""
         m = layer(
             [rect(w=10, h=10).name("a"), rect(w=5, h=5).name("b")]
         ).relate(
@@ -984,14 +998,39 @@ class TestRelateCallback:
                 None,
             ]
         )
-        clauses = ir(m)["relate"]
-        assert clauses[0]["refs"] == ["a", "b"]
-        assert clauses[1]["type"] == "arrow"
-        assert clauses[1]["children"] == [
-            {"type": "ref", "selection": "a"},
-            {"type": "ref", "selection": "b"},
+        relate = ir(m)["relate"]
+        s = relate["scope"]
+        operands = [
+            {"type": "ref", "selection": "a", "scope": s},
+            {"type": "ref", "selection": "b", "scope": s},
         ]
+        clauses = relate["clauses"]
+        assert clauses[0]["refs"] == operands
+        assert clauses[1]["type"] == "arrow"
+        assert clauses[1]["children"] == operands
         assert len(clauses) == 2
+
+    def test_nested_relate_keeps_the_outer_scope(self):
+        """An outer operand used in a nested layer's clause keeps the outer
+        call's scope id, so the nested layer's own `density` cannot capture
+        it (#1236)."""
+        m = layer([rect(w=40, h=20).name("density")]).relate(
+            lambda density: [
+                layer(
+                    [
+                        rect(w=10, h=10).name("density"),
+                        rect(w=4, h=4).name("note"),
+                    ]
+                ).relate(lambda note: [arrow([note, density])])
+            ]
+        )
+        outer = ir(m)["relate"]
+        inner = outer["clauses"][0]["relate"]
+        assert outer["scope"] != inner["scope"]
+        assert inner["clauses"][0]["children"] == [
+            {"type": "ref", "selection": "note", "scope": inner["scope"]},
+            {"type": "ref", "selection": "density", "scope": outer["scope"]},
+        ]
 
 
 class TestSchema:

@@ -120,11 +120,18 @@ compositor's own constraints and throws, naming the constraints, if any z constr
 parts at it. The relational nodes (`connect`, `tween`) paint none of their children
 (their children are refs, which draw nothing), so they never ask for an order.
 
-Names are looked up with the same rule as every other name: through any node that is
-not a component, and never into a `createMark` component (see
-[Names and scoping](/internals/core/names-and-scoping)). So an operand inside a
-`spread` or a `box` layer is found, and a constraint never reaches past the nearest
-component around L.
+Names are looked up with the same rule as every other name (`lookupName`; see
+[Names and scoping](/internals/core/names-and-scoping)): the nearest level that has
+the name, and every match at the closest depth there, never into a `createMark`
+component. A name is plural, so a z-order operand takes every match. So an operand
+inside a `spread` or a `box` layer is found when nothing closer has its name, a
+deeper node of the same name is not, and a constraint never reaches past the
+nearest component around L. Only matches inside L count.
+
+An operand a `.relate()` bound is looked up from the layer that bound it, without
+that layer's clause slots, so a node of the same name that a clause introduces is
+not in its set. A match an elaboration pass wrapped stands for its wrapper, which is
+what L orders.
 
 This holds for a user's `zAbove` / `zBelow` and for the relational-mark default
 (`zBelow(connector, operand)` in `layer.tsx`). The default names the operand itself,

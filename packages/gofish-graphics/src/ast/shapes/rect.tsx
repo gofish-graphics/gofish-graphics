@@ -174,7 +174,7 @@ export const Rect = ({
       strokeOverhang: outlineOverhang(stroke, strokeWidth),
       resolveUnderlyingSpace: (
         _children: Size<UnderlyingSpace>[],
-        _childNodes: GoFishAST[]
+        _childNodes: readonly GoFishAST[]
       ) => {
         const resolveAxis = (axis: 0 | 1): UnderlyingSpace => {
           const d = dims[axis];

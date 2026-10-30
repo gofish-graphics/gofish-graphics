@@ -81,7 +81,7 @@ export const arrow = createNodeOperator(
         labelPosition: end(),
         resolveUnderlyingSpace: (
           _childSpaces: Size<UnderlyingSpace>[],
-          _childNodes: GoFishAST[]
+          _childNodes: readonly GoFishAST[]
         ) => [UNDEFINED, UNDEFINED],
         layout: (size, scales, layoutChildren, node) => {
           if (layoutChildren.length < 2) {

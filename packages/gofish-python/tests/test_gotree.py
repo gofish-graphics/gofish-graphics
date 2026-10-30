@@ -37,6 +37,21 @@ def ir(mark):
     return mark.to_ir()["root"]
 
 
+def clauses(out):
+    """A layer IR's `.relate()` clauses, with each operand written back as
+    its name (every operand must carry the call's own scope id)."""
+    scope = out["relate"]["scope"]
+
+    def name(r):
+        assert r == {"type": "ref", "selection": r["selection"], "scope": scope}
+        return r["selection"]
+
+    return [
+        {**c, "refs": [name(r) for r in c["refs"]]} if "refs" in c else c
+        for c in out["relate"]["clauses"]
+    ]
+
+
 def find(node, pred):
     """Every IR dict under `node` (inclusive) for which `pred` holds."""
     out = []
@@ -56,7 +71,8 @@ def node_marks(mark):
 
 
 def links(mark):
-    return [c for c in ir(mark).get("relate", []) if c["type"] == "line"]
+    relate = ir(mark).get("relate")
+    return [c for c in (relate["clauses"] if relate else []) if c["type"] == "line"]
 
 
 class TestTree:
@@ -201,7 +217,7 @@ class TestCombiners:
     def test_distribute_names_children_and_relates_them(self):
         out = ir(distribute(dir="x", alignment="start")([circle(r=1), circle(r=2)]))
         assert [c["name"] for c in out["children"]] == ["__distribute-0", "__distribute-1"]
-        assert out["relate"] == [
+        assert clauses(out) == [
             {
                 "type": "distribute",
                 "options": {"dir": "x", "spacing": 0, "anchor": "edge", "order": "forward"},
@@ -212,7 +228,7 @@ class TestCombiners:
 
     def test_combine_axes(self):
         out = ir(combine(x={"kind": "nest", "pad": 3}, y="align")([circle(r=1), circle(r=2)]))
-        assert out["relate"] == [
+        assert clauses(out) == [
             {"type": "nest", "options": {"x": 3}, "refs": ["__combine-0", "__combine-1"]},
             {"type": "align", "options": {"y": "middle"}, "refs": ["__combine-0", "__combine-1"]},
         ]
@@ -241,7 +257,7 @@ class TestCombiners:
     def test_nest(self):
         out = ir(nest(x=4)([rect(), circle(r=2)]))
         assert [c["name"] for c in out["children"]] == ["__nest-outer", "__nest-inner"]
-        assert out["relate"] == [
+        assert clauses(out) == [
             {"type": "nest", "options": {"x": 4}, "refs": ["__nest-outer", "__nest-inner"]}
         ]
         with pytest.raises(ValueError, match="exactly 2 children"):

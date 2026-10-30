@@ -59,17 +59,13 @@ import type { MarkChild } from "../../src/lib";
 //   below for what the SOURCE of that span is (and isn't: a genuine,
 //   noteworthy gap was found trying to source it from `ref()`s the way the
 //   task brief suggested — read the comment at `marker`'s definition).
-// - `Constraint.align`/`distribute` targets below are built directly as
-//   `{ name: token.__tag }` `ConstraintRef` handles (`src/ast/constraints
-//   /shared.ts`) rather than
-//   through the destructured `.relate(({a,b,c}) => ...)` callback
-//   param — the trace generates ~30 dynamically-named nodes, not a fixed
-//   set of statically-known names a literal destructure could spell out.
-//   This is exactly the `Record<string, ConstraintRef>` the callback would
-//   have handed back anyway (it keys operands the same way, off each named
-//   node's token `__tag`), just built directly from the
-//   `Token`s this file already holds instead of round-tripping through the
-//   callback's object.
+// - `Constraint.align`/`distribute` targets below are read from the
+//   `.relate(env => ...)` callback's env by each named node's token tag
+//   (`env[token.__tag]`) rather than through a destructured
+//   `.relate(({a,b,c}) => ...)` param — the trace generates ~30
+//   dynamically-named nodes, not a fixed set of statically-known names a
+//   literal destructure could spell out. So each constraint is recorded as
+//   a function of the env, and the layer's one `.relate()` call applies them.
 // - `LabelText`'s optional case-name note (e.g. "AddExp - plus") is a
 //   second, lighter/italic `text()` mark placed next to the main label via
 //   its own tiny `Constraint.align` + `Constraint.distribute`, instead of
@@ -220,8 +216,13 @@ const LabelText = ({ main, note }: { main: string; note?: string }) =>
 
 // ── Diagram assembly ────────────────────────────────────────────────────
 
-type Ref = { name: string };
-const asRef = (t: Token): Ref => ({ name: t.__tag });
+// A node, by its token's tag: the key its operand has in a `.relate()` env.
+type Ref = string;
+const asRef = (t: Token): Ref => t.__tag;
+// A constraint, built once the `.relate()` call hands out its operands.
+type Env = Record<string, any>;
+type Clause = (env: Env) => any;
+const operands = (env: Env, refs: Ref[]) => refs.map((r) => env[r]);
 
 export const OhmParseTree: StoryObj<Args> = {
   args: { w: 820, h: 480 },
@@ -238,7 +239,7 @@ export const OhmParseTree: StoryObj<Args> = {
 
     let uid = 0;
     const children: MarkChild[] = [];
-    const constraints: any[] = [];
+    const constraints: Clause[] = [];
 
     // ── Tier 1: the character row — a self-contained sub-layer with its own
     // `.relate()` call, exactly the two-tier pattern house style uses for
@@ -262,9 +263,12 @@ export const OhmParseTree: StoryObj<Args> = {
           rect({ w: END_W, h: CHAR_H, fill: "transparent" }).name(endTok),
         ]
       )
-        .relate(() => [
-          Constraint.align({ y: "start" }, rowRefs),
-          Constraint.distribute({ dir: "x", spacing: CHAR_GAP }, rowRefs),
+        .relate((env) => [
+          Constraint.align({ y: "start" }, operands(env, rowRefs)),
+          Constraint.distribute(
+            { dir: "x", spacing: CHAR_GAP },
+            operands(env, rowRefs)
+          ),
         ])
         .name(charRowTok)
     );
@@ -324,10 +328,11 @@ export const OhmParseTree: StoryObj<Args> = {
 
     const underlineRowTok = createName("row-underline");
     children.push(rect({ h: 1, y: CHAR_H, fill: "gray" }).name(underlineRowTok));
-    constraints.push(
+    const rowSpan = marker(charLeft(0), endRight);
+    constraints.push((env) =>
       Constraint.align(
         { x: "span" },
-        [marker(charLeft(0), endRight), asRef(underlineRowTok)]
+        operands(env, [rowSpan, asRef(underlineRowTok)])
       )
     );
 
@@ -358,8 +363,9 @@ export const OhmParseTree: StoryObj<Args> = {
           text({ text: `"${node.text}"`, y: y + 6, ...SPECIAL_FONT }).name(labelTok)
         );
         const labelRef = asRef(labelTok);
-        constraints.push(
-          Constraint.align({ x: "middle" }, [spanOf(node.from, node.from), labelRef])
+        const span = spanOf(node.from, node.from);
+        constraints.push((env) =>
+          Constraint.align({ x: "middle" }, operands(env, [span, labelRef]))
         );
         return labelRef;
       }
@@ -378,8 +384,12 @@ export const OhmParseTree: StoryObj<Args> = {
       const src = spanOf(node.from, node.to);
 
       constraints.push(
-        Constraint.align({ x: "span" }, [src, barRef]),
-        Constraint.align({ x: "middle", y: "middle" }, [barRef, labelRef])
+        (env) => Constraint.align({ x: "span" }, operands(env, [src, barRef])),
+        (env) =>
+          Constraint.align(
+            { x: "middle", y: "middle" },
+            operands(env, [barRef, labelRef])
+          )
       );
 
       if (underlined) {
@@ -387,8 +397,11 @@ export const OhmParseTree: StoryObj<Args> = {
         children.push(
           rect({ h: 2, y: y + LABEL_H - 2, fill: "LightGray" }).name(underlineTok)
         );
-        constraints.push(
-          Constraint.align({ x: "span" }, [src, asRef(underlineTok)])
+        constraints.push((env) =>
+          Constraint.align(
+            { x: "span" },
+            operands(env, [src, asRef(underlineTok)])
+          )
         );
       }
 
@@ -408,13 +421,22 @@ export const OhmParseTree: StoryObj<Args> = {
       rect({ h: LABEL_H, y: rowY(1), fill: RULE_COLOR.end, opacity: 0.5 }).name(endBarTok)
     );
     children.push(LabelText({ main: "end" }).name(endLabelTok));
+    const endSpan = marker(endLeft, endRight);
     constraints.push(
-      Constraint.align({ x: "span" }, [marker(endLeft, endRight), asRef(endBarTok)]),
-      Constraint.align({ x: "middle", y: "middle" }, [asRef(endBarTok), asRef(endLabelTok)])
+      (env) =>
+        Constraint.align(
+          { x: "span" },
+          operands(env, [endSpan, asRef(endBarTok)])
+        ),
+      (env) =>
+        Constraint.align(
+          { x: "middle", y: "middle" },
+          operands(env, [asRef(endBarTok), asRef(endLabelTok)])
+        )
     );
 
     layer({ x: 20, y: 20 }, children)
-      .relate(() => constraints)
+      .relate((env) => constraints.map((c) => c(env)))
       .render(container, { w: args.w, h: args.h });
 
     return container;

@@ -1,0 +1,122 @@
+diff --git a/packages/gofish-graphics/src/ast/_node.ts b/packages/gofish-graphics/src/ast/_node.ts
+index 28c6db868..878b6bc88 100644
+--- a/packages/gofish-graphics/src/ast/_node.ts
++++ b/packages/gofish-graphics/src/ast/_node.ts
+@@ -2696,7 +2696,8 @@ export class GoFishNode {
+     const { constraints, nodes } = await resolveRelateClauses(
+       fn(env),
+       env,
+-      rows
++      rows,
++      (globalThis as any).__PROTO_A || (globalThis as any).__PROTO_B ? (this as any)._layerContext : undefined
+     );
+     // The relate's constraints replace an earlier relate's, and the layer's
+     // paint-order defaults for its own relational-mark children stay.
+diff --git a/packages/gofish-graphics/src/ast/_ref.tsx b/packages/gofish-graphics/src/ast/_ref.tsx
+index 8b35c24b2..96a4cf5c0 100644
+--- a/packages/gofish-graphics/src/ast/_ref.tsx
++++ b/packages/gofish-graphics/src/ast/_ref.tsx
+@@ -242,7 +242,7 @@ export class GoFishRef {
+   private resolveLocalString(name: string): GoFishNode {
+     // A string name is a variable of the layer that relates it: legal only
+     // inside a `.relate()` clause, and resolved from that clause's layer.
+-    const layer = relatingLayerOf(this);
++    const layer = (this as any)._boundLayer ?? relatingLayerOf(this);
+     if (!layer) {
+       throw new Error(
+         `ref("${name}") is a string ref outside a .relate() clause. A string ` +
+diff --git a/packages/gofish-graphics/src/ast/constraints/index.ts b/packages/gofish-graphics/src/ast/constraints/index.ts
+index 6b4ff2bbb..2341d025a 100644
+--- a/packages/gofish-graphics/src/ast/constraints/index.ts
++++ b/packages/gofish-graphics/src/ast/constraints/index.ts
+@@ -175,7 +175,11 @@ export function relateEnv(layer: GoFishNode): RelateEnv {
+     if (n === layer) continue;
+     const name = childNameKey(n);
+     if (name !== undefined && !(name in env))
+-      env[name] = new RelateOperand(name);
++      env[name] = new RelateOperand(
++        name,
++        (globalThis as any).__PROTO_A ? n : undefined,
++        (globalThis as any).__PROTO_B ? layer : undefined
++      );
+   }
+   return env;
+ }
+diff --git a/packages/gofish-graphics/src/ast/constraints/relate.ts b/packages/gofish-graphics/src/ast/constraints/relate.ts
+index 3d719cebe..fd0033d0b 100644
+--- a/packages/gofish-graphics/src/ast/constraints/relate.ts
++++ b/packages/gofish-graphics/src/ast/constraints/relate.ts
+@@ -26,7 +26,13 @@ import { isThenable } from "../../util";
+  * relating layer.
+  */
+ export class RelateOperand implements ConstraintRef {
+-  constructor(public readonly name: string) {}
++  // PROTOTYPE (naming proposal, approach A): the node the name meant where
++  // the callback was bound.
++  constructor(
++    public readonly name: string,
++    public readonly node?: any,
++    public readonly scope?: any
++  ) {}
+ }
+ 
+ /** The environment a `.relate()` callback receives: one operand per name
+@@ -128,7 +134,8 @@ async function flattenClausesAsync(c: unknown): Promise<unknown[]> {
+ export async function resolveRelateClauses(
+   result: unknown,
+   env: RelateEnv,
+-  rows?: unknown
++  rows?: unknown,
++  layerContext?: any
+ ): Promise<{ constraints: ConstraintSpec[]; nodes: GoFishNode[] }> {
+   const awaited = isThenable(result) ? await result : result;
+   if (!Array.isArray(awaited)) {
+@@ -163,7 +170,7 @@ export async function resolveRelateClauses(
+   for (const { term, position } of terms) {
+     // A drawing clause is a mark position over the layer's rows, as the
+     // layer's children are: an empty-scope `chart()` in it binds them.
+-    const node = await resolveMarkResult(term as any, {}, rows);
++    const node = await resolveMarkResult(term as any, layerContext ?? {}, rows);
+     if (!(node instanceof GoFishNode)) {
+       throw new Error(
+         `.relate(): clause ${position} is neither a constraint nor a mark or ` +
+diff --git a/packages/gofish-graphics/src/ast/marks/chart.ts b/packages/gofish-graphics/src/ast/marks/chart.ts
+index 30819c019..b2db26059 100644
+--- a/packages/gofish-graphics/src/ast/marks/chart.ts
++++ b/packages/gofish-graphics/src/ast/marks/chart.ts
+@@ -1210,6 +1210,17 @@ export function layer<T>(
+         resolved.push(await resolveMarkResult(m, sharedContext, d, key));
+       }
+       const node = await Layer(opts, resolved);
++      (node as any)._layerContext = sharedContext; // PROTOTYPE
++      // PROTOTYPE (approach C): a name declared inside this layer is also
++      // visible to selectAll in the enclosing layer, which sees every copy.
++      if ((globalThis as any).__PROTO_C && _layerContext) {
++        for (const k of Reflect.ownKeys(sharedContext)) {
++          const e = sharedContext[k as any];
++          const out = ((_layerContext as any)[k] ??= { data: [], nodes: [] });
++          out.data.push(...e.data);
++          out.nodes.push(...e.nodes);
++        }
++      }
+       node.datum = datumOfInput(d as unknown[]);
+       return node;
+     };
+diff --git a/packages/gofish-graphics/src/ast/marks/markResult.ts b/packages/gofish-graphics/src/ast/marks/markResult.ts
+index 15d80a1dd..0d054d83e 100644
+--- a/packages/gofish-graphics/src/ast/marks/markResult.ts
++++ b/packages/gofish-graphics/src/ast/marks/markResult.ts
+@@ -106,6 +106,13 @@ export async function resolveMarkResult(
+   }
+   // A `.relate()` operand in term position (a child of a drawing clause) is
+   // a string ref to the node it names, resolved from the relating layer.
++  if (raw instanceof RelateOperand && raw.node)
++    return new GoFishRef({ node: raw.node }) as unknown as GoFishNode;
++  if (raw instanceof RelateOperand && raw.scope) {
++    const r = new GoFishRef({ selection: raw.name }) as any;
++    r._boundLayer = raw.scope; // PROTOTYPE (approach B): name + binding scope
++    return r as GoFishNode;
++  }
+   if (raw instanceof RelateOperand)
+     return new GoFishRef({ selection: raw.name }) as unknown as GoFishNode;
+   // A chart pipeline resolves to its own node. A `.mark(<relational mark>)`

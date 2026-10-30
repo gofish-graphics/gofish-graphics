@@ -16,13 +16,13 @@ import type { Size } from "../dims";
 import * as Pwl from "./pwl";
 import { values } from "./arith";
 import {
-  literalSeats,
   placeByClaims,
   type ClaimChild,
   type ClaimPlacement,
   type Placement,
 } from "../constraints/claimPlacement";
 import { type ConstraintSpec } from "../constraints";
+import type { ResolvedOperands } from "../constraints/shared";
 
 /** What a child is to its parent's plan on one axis, about its data 0, in
  *  the parent's axis order. */
@@ -235,9 +235,9 @@ export function buildPlan(
   node: GoFishNode,
   axis: 0 | 1,
   children: ClaimChild[],
-  constraints: ConstraintSpec[],
-  operands: Map<string, { child: number; direct: boolean }>,
-  nested: (name: string) => Placement | undefined,
+  constraints: readonly ConstraintSpec[],
+  { operands, keyOf }: ResolvedOperands,
+  nested: (key: string) => Placement | undefined,
   ring: boolean,
   scale: number
 ): LayerPlan {
@@ -269,12 +269,13 @@ export function buildPlan(
     }),
     constraints,
     operands,
+    keyOf,
     // Into this layer's reading of the container: moved by its data 0 there
     // and reflected where its y runs the other way, as `formsOf` reads it.
-    (name) => {
-      const op = operands.get(name);
+    (key) => {
+      const op = operands.get(key);
       const f = op && forms[op.child];
-      const p = f && nested(name);
+      const p = f && nested(key);
       if (op === undefined || f === undefined || p === undefined)
         return undefined;
       const sign = flips(node, node.children[op.child], axis) ? -1 : 1;
@@ -363,13 +364,11 @@ function seatOf(
     child.claimWalk?.literalStart(axis) !== undefined
   )
     return undefined;
-  const i = seating.indexOf(child);
+  const i = parent.indexOfChild(child) ?? -1;
   const acting = seating.acting[axis].get(i) ?? [];
   if (acting.length === 0) return 0;
-  const name = seating.operandName.get(i);
-  return name === undefined
-    ? undefined
-    : literalSeats(acting).get(name)?.[axis];
+  const key = seating.operandKey.get(i);
+  return key === undefined ? undefined : seating.seats.get(key)?.[axis];
 }
 
 /** `x ↦ at + sign·x`: where a point of a node's frame lands in an
@@ -439,7 +438,7 @@ const throughPlans = (
     const out = p && leaving(p, axis);
     if (p === undefined || out === undefined) return undefined;
     const plan = p.claimWalk!.plan(axis);
-    const i = p.claimWalk!.seating().indexOf(n);
+    const i = p.indexOfChild(n) ?? -1;
     const box = plan?.placement.boxes().get(i);
     const f = plan?.forms[i];
     if (box === undefined || f === undefined) return undefined;

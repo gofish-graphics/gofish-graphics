@@ -16,6 +16,7 @@ import {
   type Axis,
   type ConstraintPosScales,
   type FreeOrigin,
+  type KeyOf,
 } from "./shared";
 import {
   anchorExpr,
@@ -369,6 +370,7 @@ export type RigidAttachment<T = number> = { container: string; gap: [T, T] };
 export function solvePlacementCells<T>(
   A: Arith<T>,
   constraints: PlacementConstraint[],
+  keyOf: KeyOf,
   targets: Map<string, SolvePlaceable<T>>,
   // The layer's box on each axis, which a discrete position divides.
   sizes: readonly [T, T],
@@ -386,6 +388,7 @@ export function solvePlacementCells<T>(
   const lowered = lowerPlacementConstraints(
     A,
     constraints,
+    keyOf,
     targets,
     sizes,
     gapOf,

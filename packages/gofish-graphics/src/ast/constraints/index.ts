@@ -40,13 +40,17 @@ import {
   isLabelPlaceConstraint,
   type LabelPlaceConstraint,
 } from "../labels/placeStep";
-import { scopedNames, visibleNodes } from "../_ref";
+import { namesIn } from "../_ref";
 import {
-  childNameKey,
+  NodeOperand,
+  SlotOperand,
   type ConstraintPosScales,
   type ConstraintRef,
+  type KeyOf,
 } from "./shared";
-import { RelateOperand, directChildIndex, type RelateEnv } from "./relate";
+import { RelateOperand, type RelateEnv } from "./relate";
+export type { ResolvedOperand } from "../_ref";
+export { SlotOperand, NodeOperand, childSlots } from "./shared";
 
 export type {
   Axis,
@@ -88,7 +92,7 @@ export {
   gridSpaces,
   gridCellSizesAt,
   cellBoxesOf,
-  cellsByName,
+  cellsOf,
   shareTracks,
   gridTracks,
   type TrackLayout,
@@ -98,7 +102,6 @@ export { BBox } from "./bbox";
 export {
   RelateOperand,
   scheduleRelate,
-  relateScheduleForLayout,
   type RelateEnv,
   type RelateClause,
   type RelateFn,
@@ -152,26 +155,20 @@ export const Constraint = {
 /**
  * The environment a `.relate(fn)` callback receives: an ordinary object with
  * one operand (a {@link RelateOperand}) for every distinct string name inside
- * `layer` (a token-named node answers to its tag), walking the same bounded
- * tree the name lookup walks (`visibleNodes`: into nested layers, not into a
- * nested `createMark` component). These are exactly the names a constraint of
- * this layer can use: the lookup from the layer (`resolveScopedName`) stops at
- * the layer's own level for any of them, so each resolves to a node inside it,
- * while a name found only outside the layer could never be an operand. A
- * missing name reads as `undefined`, so JS destructuring defaults
- * (`({ a, pad = 8 })`) and optional checks (`note ? ... : ...`) work, and
- * `validateOperands` turns an `undefined` operand into a loud error. An
- * operand is resolved to its node at layout, by name: elaboration can swap a
- * named child for a wrapper, and the wrapper takes the name.
+ * `layer` (a token-named node answers to its tag), bound now, when the call
+ * runs, to the nodes the name means from `layer` (`namesIn`: the closest
+ * depth below it, into nested layers, not into a nested `createMark`
+ * component, a ring seen as its content). These are exactly the names a
+ * constraint of this layer can use. A node a clause adds later is not in it,
+ * so a clause never captures an operand. A missing name reads as
+ * `undefined`, so JS destructuring defaults (`({ a, pad = 8 })`) and
+ * optional checks (`note ? ... : ...`) work, and `validateOperands` turns an
+ * `undefined` operand into a loud error.
  */
 export function relateEnv(layer: GoFishNode): RelateEnv {
   const env: RelateEnv = {};
-  for (const n of visibleNodes(layer)) {
-    if (n === layer) continue;
-    const name = childNameKey(n);
-    if (name !== undefined && !(name in env))
-      env[name] = new RelateOperand(name);
-  }
+  for (const [name, nodes] of namesIn(layer))
+    env[name] = new RelateOperand(name, nodes);
   return env;
 }
 
@@ -181,72 +178,38 @@ export function relateEnv(layer: GoFishNode): RelateEnv {
  * name (#819). Runs when `.relate()` runs, so the stack points at the
  * callback.
  */
+/** Whether `ref` is a constraint operand: a handle on the nodes it means,
+ *  the one a `.relate()` call bound ({@link RelateOperand}) or one a pass
+ *  built ({@link SlotOperand}, {@link NodeOperand}). An object that only
+ *  spells a name is none: a name means nothing until a call binds it. */
+function isOperand(ref: unknown): ref is ConstraintRef {
+  return (
+    ref instanceof RelateOperand ||
+    ref instanceof SlotOperand ||
+    ref instanceof NodeOperand
+  );
+}
+
 export function validateOperands(
   specs: ConstraintSpec[],
-  env: RelateEnv
+  layer: GoFishNode
 ): void {
   for (const c of specs) {
     c.children.forEach((ref: ConstraintRef | undefined, i: number) => {
-      if (ref && typeof ref.name === "string") return;
-      const names = Object.keys(env);
+      if (isOperand(ref)) return;
+      const names = [...namesIn(layer).keys()];
       throw new Error(
-        `Constraint.${c.type}: operand ${i + 1} is ${String(ref)}. A ` +
-          `.relate() callback receives only the names of nodes inside its ` +
-          `layer; check the spelling, or name the node with .name(...). ` +
-          `Names inside this layer: ${
+        `Constraint.${c.type}: operand ${i + 1} is ${
+          ref === undefined ? "undefined" : JSON.stringify(ref)
+        }, not an operand. A constraint's operands are the ones a .relate() ` +
+          `callback receives, one per name of a node inside its layer ` +
+          `(read a computed name as env[name]); check the spelling, or name ` +
+          `the node with .name(...). Names inside this layer: ${
             names.length > 0 ? names.join(", ") : "(none)"
           }.`
       );
     });
   }
-}
-
-/** A layer constraint operand resolved to a node inside the layer: `child` is
- *  the index of the layer's direct child that is (`direct`) or contains
- *  `node`. */
-export type ResolvedOperand = {
-  node: GoFishAST;
-  child: number;
-  direct: boolean;
-};
-
-/**
- * Resolve every placement operand of `layer`'s constraints to a node inside
- * the layer, once per distinct name, with the same lookup `ref("name")` uses
- * (`resolveScopedName`: missing or ambiguous names throw), kept across the
- * names so the layer is walked once, not once per name (`scopedNames`). Every operand must
- * lie inside the layer (a layer can only place what it contains). z-order
- * constraints are excluded: they relate SETS of nodes at paint time
- * (`paintOrder.ts`), not single placeables.
- */
-export function resolveConstraintOperands(
-  layer: GoFishNode
-): Map<string, ResolvedOperand> {
-  const out = new Map<string, ResolvedOperand>();
-  const resolve = scopedNames(layer);
-  const childOf = directChildIndex(layer);
-  for (const c of layer.constraints) {
-    if (isZOrderConstraint(c)) continue;
-    for (const ref of c.children) {
-      if (out.has(ref.name)) continue;
-      const node = resolve(ref.name, `Constraint.${c.type} operand`);
-      const child = childOf(node);
-      if (child < 0) {
-        throw new Error(
-          `Constraint.${c.type}: operand "${ref.name}" is not inside the ` +
-            `layer this .relate() is attached to. A layer can only place ` +
-            `nodes it contains; attach the constraint to a layer that ` +
-            `contains every operand.`
-        );
-      }
-      out.set(ref.name, {
-        node,
-        child,
-        direct: layer.children[child] === node,
-      });
-    }
-  }
-  return out;
 }
 
 /**
@@ -276,7 +239,7 @@ export function resolveConstraintOperands(
  * ring's ticks, each a set of its own, add nothing to the type it reports.
  */
 export function collectPositionDomains(
-  constraints: ConstraintSpec[],
+  constraints: readonly ConstraintSpec[],
   counts: (c: ConstraintSpec, axis: 0 | 1) => boolean = () => true
 ): PositionDomains {
   const axes = [newAxisDomain(), newAxisDomain()] as const;
@@ -373,14 +336,17 @@ function foldCoordinate(
  * time.
  *
  * @param constraints - The constraint specs
- * @param nameToPlaceable - Map from child name to its Placeable
+ * @param keyOf - Each operand's key: the uid of the node the layer's last
+ *   `resolveReferences` round resolved it to
+ * @param keyToPlaceable - Map from operand key (`keyOf`) to its Placeable
  * @param sizes - The layer's box size `[w, h]`, used by label placement
  * @param posScales - Per-axis data→pixel scales
  * @param seat - Writes the plan's seats back
  */
 export function applyConstraints(
-  constraints: ConstraintSpec[],
-  nameToPlaceable: Map<string, Placeable>,
+  constraints: readonly ConstraintSpec[],
+  keyOf: KeyOf,
+  keyToPlaceable: Map<string, Placeable>,
   sizes: [number, number],
   posScales: ConstraintPosScales | undefined,
   seat: () => void
@@ -392,11 +358,11 @@ export function applyConstraints(
   // axis. So it runs after the solve.
   for (const constraint of constraints)
     if (isOverlapConstraint(constraint))
-      applyOverlapPlacement(constraint, nameToPlaceable, posScales);
+      applyOverlapPlacement(constraint, keyToPlaceable, keyOf, posScales);
 
   // A label placement reads where everything else in the layer landed (the
   // labeled marks, the labels the solve placed), so it runs last.
   for (const constraint of constraints)
     if (isLabelPlaceConstraint(constraint))
-      applyLabelPlacement(constraint, nameToPlaceable, sizes);
+      applyLabelPlacement(constraint, keyToPlaceable, keyOf, sizes);
 }

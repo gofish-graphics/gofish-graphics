@@ -9,7 +9,7 @@ import { GoFishRef } from "../_ref";
 import { LabelText, type LabelNode } from "./labelNode";
 import { ref } from "../shapes/ref";
 import { Constraint } from "../constraints";
-import type { AlignAnchor, ConstraintRef } from "../constraints/shared";
+import type { AlignAnchor } from "../constraints/shared";
 import { placedOutlines, type Outline } from "../geometry";
 import { pointInRing } from "../geometry/plane";
 import {
@@ -54,7 +54,6 @@ import {
 
 // Visual constants — chosen to match the previous bespoke label styling.
 const DEFAULT_OFFSET = 6; // tuned down from the old 10px baseOffset now that the offset is real layout space
-const CONTENT_NAME = "__labelContent";
 const LABEL_FONT_FAMILY = "source-sans-pro, sans-serif";
 
 /**
@@ -329,8 +328,6 @@ type LabelPair = {
 const isChosen = (p: TargetPosition): p is Place | "outline" =>
   p === "outline" || isPlace(p);
 
-let labelUid = 0;
-
 /**
  * Wrap `node`, a chart's content, in ONE Layer tier carrying, per label
  * pair, a `ref(target)` stand-in and a label, in order. A label at a
@@ -355,33 +352,29 @@ async function wrapWithLabels(
     const texts: GoFishNode[] = [];
     // Labels at a position string, placed by the solve.
     const fixed: {
-      refName: string;
-      textName: string;
+      stand: GoFishAST;
+      text: GoFishNode;
       position: LabelPosition;
       offset?: number;
       label: LabelNode;
     }[] = [];
     // Labels the chooser places after the solve.
     const placed: {
-      refName: string;
-      textName: string;
-      avoidNames: string[];
+      stand: GoFishAST;
+      text: GoFishNode;
+      avoid: GoFishAST[];
       spec: LabelSpec;
       place: Place | "outline";
       node: ReturnType<typeof LabelText>;
     }[] = [];
     // The nodes each call keeps off, read through refs made once per call.
-    const avoided = new Map<unknown, string[]>();
+    const avoided = new Map<unknown, GoFishAST[]>();
 
     for (const { target, spec, position } of pairs) {
       const text = resolveLabelText(spec.accessor, target.datum);
       if (!text) continue; // empty/null accessor result: skip this spec
 
-      const idx = labelUid++;
-      const refName = `__lref${idx}`;
-      const textName = `__ltxt${idx}`;
-
-      const stand = ref(target).name(refName);
+      const stand = ref(target);
       refs.push(stand);
 
       const label = LabelText({
@@ -395,7 +388,6 @@ async function wrapWithLabels(
         halo: spec.halo,
         background: spec.background,
       });
-      label.node.name(textName);
       texts.push(label.node);
       seated.push(label);
       // The label is part of its target as a mark, though it lives out of
@@ -405,8 +397,8 @@ async function wrapWithLabels(
       target.INTERNAL_attach(label.node);
       if (!isChosen(position)) {
         fixed.push({
-          refName,
-          textName,
+          stand,
+          text: label.node,
           position,
           offset: spec.offset,
           label,
@@ -417,24 +409,21 @@ async function wrapWithLabels(
       // know where it lands: it is ink, which takes no room, and the canvas
       // grows to hold it where the render gives no size (#1032).
       label.node.inkOn = [true, true];
-      let avoidNames = avoided.get(spec.group);
-      if (avoidNames === undefined) {
-        avoidNames = avoidedRefs(
+      let avoid = avoided.get(spec.group);
+      if (avoid === undefined) {
+        avoid = avoidedRefs(
           spec.avoiding,
           undefined,
           ".label({ avoiding })",
           ".label()"
-        ).map((r, k) => {
-          const name = `__lavoid${idx}_${k}`;
-          refs.push(r.name(name));
-          return name;
-        });
-        avoided.set(spec.group, avoidNames);
+        );
+        refs.push(...avoid);
+        avoided.set(spec.group, avoid);
       }
       placed.push({
-        refName,
-        textName,
-        avoidNames,
+        stand,
+        text: label.node,
+        avoid,
         spec,
         place: position,
         node: label,
@@ -442,27 +431,27 @@ async function wrapWithLabels(
     }
     // The labels of the charts inside, which the chooser keeps its labels
     // off as it does those at a position string here.
-    const insideNames =
+    const insideStands =
       placed.length === 0
         ? []
-        : inside.map((label) => {
-            const name = `__linside${labelUid++}`;
-            refs.push(ref(label.node).name(name));
-            return { name, label };
+        : inside.map((t) => {
+            const stand = ref(t.node);
+            refs.push(stand);
+            return { node: stand as GoFishAST, label: t };
           });
 
     // The content is seated at its own origin first, so every label
     // constraint (which reads a target via its `ref()`) sees it already
     // placed and only moves the label. The chooser runs after the solve.
-    return wrapRing(content, CONTENT_NAME, {
+    return wrapRing(content, {
       nodes: [...refs, ...texts] as GoFishNode[],
-      constraints: (g) => [
-        ...fixed.flatMap(({ refName, textName, position, offset }) =>
+      constraints: (at) => [
+        ...fixed.flatMap(({ stand, text, position, offset }) =>
           buildLabelConstraints(
             position,
             offset,
-            g[refName],
-            g[textName],
+            at(stand),
+            at(text),
             yDirection
           )
         ),
@@ -473,25 +462,19 @@ async function wrapWithLabels(
                 placed.map(
                   (p): LabelPlaceItem => ({
                     group: p.spec.group,
-                    target: g[p.refName] as ConstraintRef,
-                    label: g[p.textName] as ConstraintRef,
+                    target: at(p.stand),
+                    label: at(p.text),
                     node: p.node,
                     place: p.place,
                     offset: p.spec.offset,
-                    avoiding: p.avoidNames.map((n) => g[n] as ConstraintRef),
+                    avoiding: p.avoid.map(at),
                     call: callName(p.spec.accessor),
                   })
                 ),
                 [
-                  ...fixed.map(({ textName, label }) => ({
-                    name: textName,
-                    label,
-                  })),
-                  ...insideNames,
-                ].map(({ name, label }) => ({
-                  ref: g[name] as ConstraintRef,
-                  label,
-                })),
+                  ...fixed.map(({ text, label }) => ({ node: text, label })),
+                  ...insideStands,
+                ].map(({ node, label }) => ({ ref: at(node), label })),
                 yDirection
               ),
             ]),
@@ -576,10 +559,7 @@ export async function elaborateLabels(
     const wrapped = await wrapWithLabels(home, here, inside);
     done.push(wrapped);
     if (home === node) out = wrapped.node;
-    else {
-      parent!.children[parent!.children.indexOf(home)] = wrapped.node;
-      wrapped.node.parent = parent;
-    }
+    else parent!.replaceChild(parent!.indexOfChild(home)!, wrapped.node);
   }
   return { node: out, changed: true };
 }

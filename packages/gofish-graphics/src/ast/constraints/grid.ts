@@ -46,7 +46,8 @@
 import * as Pwl from "../solver/pwl";
 import { GoFishNode } from "../_node";
 import type { GoFishAST } from "../_ast";
-import { buildNameIndex, type ConstraintRef } from "./shared";
+import { directSlot, type ConstraintRef, type KeyOf } from "./shared";
+import { resolution } from "../_ref";
 import {
   ordinalOver,
   type OrdinalKey,
@@ -119,12 +120,13 @@ const numRowsOf = (c: GridConstraint): number =>
  *  of a grid's cells finds them this way, by the grid's own refs. */
 export type CellOf = (ref: ConstraintRef) => GoFishAST | undefined;
 
-/** {@link CellOf} over a layer's `children`, by their names. */
-export const cellsByName = (children: readonly GoFishAST[]): CellOf => {
-  const index = buildNameIndex(children);
+/** {@link CellOf} over `layer`'s children: the direct child each ref of its
+ *  grid resolved to in the last `resolveReferences` round (`directSlot`). */
+export const cellsOf = (layer: GoFishNode): CellOf => {
+  const resolved = resolution(layer);
   return (ref) => {
-    const i = index.get(ref.name);
-    return i === undefined ? undefined : children[i];
+    const i = directSlot(resolved, ref);
+    return i === undefined ? undefined : layer.children[i];
   };
 };
 
@@ -173,9 +175,9 @@ export type CellBox = (
  * (`warnFlexibleSizes`).
  */
 export const cellBoxesOf = (layer: GoFishNode): CellBox => {
-  const index = buildNameIndex(layer.children);
+  const resolved = resolution(layer);
   return (ref, axis) => {
-    const i = index.get(ref.name);
+    const i = directSlot(resolved, ref);
     return i === undefined
       ? undefined
       : layer._claimMemo.plans[axis]?.forms[i]?.box.width;
@@ -233,7 +235,8 @@ function layoutTrack<T>(A: Arith<T>, extents: T[], gap: T): TrackLayout<T> {
 }
 
 /**
- * Per-cell proposed size `[cellW, cellH]`, keyed by cell name, at the σ its
+ * Per-cell proposed size `[cellW, cellH]`, keyed by cell operand key
+ * (`keyOf`, the uid of the cell), at the σ its
  * layer hands its cells (`sigmas`): each cell is proposed its (column, row)
  * track's extent ({@link trackExtents}), its cells' boxes (`boxOf`, the
  * boxes the claim walk sized the tracks by, {@link cellBoxesOf}) at σ. A
@@ -250,6 +253,7 @@ function layoutTrack<T>(A: Arith<T>, extents: T[], gap: T): TrackLayout<T> {
  */
 export function gridCellSizesAt(
   c: GridConstraint,
+  keyOf: KeyOf,
   boxOf: CellBox,
   sigmas: readonly [number | undefined, number | undefined]
 ): Map<string, [number | undefined, number | undefined]> {
@@ -272,7 +276,7 @@ export function gridCellSizesAt(
   const [cols, rows] = [extentsOn(0), extentsOn(1)];
   const out = new Map<string, [number | undefined, number | undefined]>();
   c.children.forEach((child, index) => {
-    out.set(child.name, [
+    out.set(keyOf(child), [
       cols[index % c.numCols],
       rows[Math.floor(index / c.numCols)],
     ]);
@@ -305,6 +309,7 @@ export function lowerGridPlacement<T>(
   c: GridConstraint,
   owner: string,
   emitter: PlacementFactEmitter<T>,
+  keyOf: KeyOf,
   tracks: GridTracks<T>,
   pinnedByPosition?: Map<string, Set<0 | 1>>
 ): void {
@@ -312,13 +317,14 @@ export function lowerGridPlacement<T>(
     A.add(t.starts[i], A.scale(0.5, t.extents[i]));
   c.children.forEach((child, index) => {
     const at = [index % c.numCols, Math.floor(index / c.numCols)] as const;
-    const overridden = pinnedByPosition?.get(child.name);
+    const key = keyOf(child);
+    const overridden = pinnedByPosition?.get(key);
     for (const axis of [0, 1] as const) {
       const t = tracks[axis];
       if (t === undefined || overridden?.has(axis)) continue;
       emitter.pin({
         axis: axis === 0 ? "x" : "y",
-        target: { name: child.name, anchor: "middle" },
+        target: { key, anchor: "middle" },
         value: center(t, at[axis]),
         owner,
       });

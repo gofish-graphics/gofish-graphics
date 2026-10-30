@@ -9,7 +9,7 @@ import type {
   ConstraintPosScales,
   ConstraintRef,
 } from "./shared";
-import { axisIndex } from "./shared";
+import { axisIndex, type KeyOf } from "./shared";
 import { isUNDEFINED } from "../underlyingSpace";
 import type { PlacementFactEmitter } from "./placementFacts";
 import type { SolvePlaceable } from "./placementProgramLowerer";
@@ -77,14 +77,14 @@ function normalizedAnchors(
  * scale origin).
  */
 function isDataPositionedAlignTarget(
-  name: string,
+  key: string,
   anchor: AlignAnchor,
   axis: 0 | 1,
   posScales: ConstraintPosScales<unknown> | undefined,
-  isDataPositioned: (axis: 0 | 1, name: string) => boolean
+  isDataPositioned: (axis: 0 | 1, key: string) => boolean
 ): boolean {
   if (anchor === "middle" || posScales?.[axis] === undefined) return false;
-  return isDataPositioned(axis, name);
+  return isDataPositioned(axis, key);
 }
 
 export function lowerAlignPlacement<T>(
@@ -94,6 +94,7 @@ export function lowerAlignPlacement<T>(
     A,
     emitter,
     targets,
+    keyOf,
     posScales,
     isPinned,
     isDataPositioned,
@@ -101,11 +102,17 @@ export function lowerAlignPlacement<T>(
     A: Arith<T>;
     emitter: PlacementFactEmitter<T>;
     targets: Map<string, SolvePlaceable<T>>;
+    keyOf: KeyOf;
     posScales: ConstraintPosScales<T> | undefined;
-    isPinned: (axis: Axis, name: string) => boolean;
-    isDataPositioned: (axis: 0 | 1, name: string) => boolean;
+    isPinned: (axis: Axis, key: string) => boolean;
+    isDataPositioned: (axis: 0 | 1, key: string) => boolean;
   }
 ): void {
+  // The operands this solve places, each with its key, read once.
+  const children = constraint.children
+    .map((ref) => ({ ref, key: keyOf(ref) }))
+    .filter(({ key }) => targets.has(key));
+
   /**
    * `"span"`/`"size"` (#726): equate an interval statistic against the first
    * PINNED (already-placed) child — the source — rather than a point anchor.
@@ -117,58 +124,55 @@ export function lowerAlignPlacement<T>(
    */
   const emitSpanOrSize = (axis: Axis, kind: "span" | "size") => {
     const idx = axisIndex(axis);
-    const children = constraint.children.filter((child) =>
-      targets.has(child.name)
-    );
     if (children.length < 2) return;
-    const sourceRef = children.find((child) => isPinned(axis, child.name));
-    if (!sourceRef) {
+    const source = children.find(({ key }) => isPinned(axis, key));
+    if (!source) {
       throw new Error(
         `Constraint.align: "${kind}" on axis "${axis}" (${owner}) needs an ` +
           `already-placed source — none of [${children
-            .map((c) => c.name)
+            .map((c) => c.ref.name)
             .join(", ")}] is placed yet.`
       );
     }
-    const source = targets.get(sourceRef.name)!;
-    const sourceMin = source.dims[idx].min;
-    const sourceSize = source.dims[idx].size;
+    const placed = targets.get(source.key)!;
+    const sourceMin = placed.dims[idx].min;
+    const sourceSize = placed.dims[idx].size;
     if (sourceMin === undefined || sourceSize === undefined) {
       throw new Error(
         `Constraint.align: "${kind}" on axis "${axis}" (${owner}) source ` +
-          `"${sourceRef.name}" has no resolved extent yet.`
+          `"${source.ref.name}" has no resolved extent yet.`
       );
     }
-    for (const child of children) {
-      if (child.name === sourceRef.name) continue;
-      const target = targets.get(child.name)!;
+    for (const { ref, key } of children) {
+      if (key === source.key) continue;
+      const target = targets.get(key)!;
       const space = target.spaceOn?.(idx);
       if (space === undefined || !isUNDEFINED(space)) {
         throw new Error(
           `Constraint.align: "${kind}" on axis "${axis}" (${owner}) cannot ` +
-            `set "${child.name}"'s ${
+            `set "${ref.name}"'s ${
               kind === "size" ? "size" : "position and size"
             } — it already has an intrinsic ${
               axis === "x" ? "width" : "height"
-            } (writer: "${child.name}"'s own size option). "${kind}" only ` +
+            } (writer: "${ref.name}"'s own size option). "${kind}" only ` +
             `applies to a target with no intrinsic size on that axis.`
         );
       }
       if (kind === "span") {
         emitter.pin({
           axis,
-          target: { name: child.name, anchor: "start" },
+          target: { key, anchor: "start" },
           value: sourceMin,
           owner,
         });
         emitter.pin({
           axis,
-          target: { name: child.name, anchor: "end" },
+          target: { key, anchor: "end" },
           value: A.add(sourceMin, sourceSize),
           owner,
         });
       } else {
-        emitter.pinSize({ axis, name: child.name, value: sourceSize, owner });
+        emitter.pinSize({ axis, key, value: sourceSize, owner });
       }
     }
   };
@@ -179,14 +183,12 @@ export function lowerAlignPlacement<T>(
       emitSpanOrSize(axis, spec);
       return;
     }
-    const children = constraint.children.filter((child) =>
-      targets.has(child.name)
-    );
     if (children.length === 0) return;
     const anchors = normalizedAnchors(spec, children.length);
 
-    const entries = children.map((child, index) => ({
-      child,
+    const entries = children.map(({ ref, key }, index) => ({
+      ref,
+      key,
       anchor: anchors[index],
     }));
     const idx = axisIndex(axis);
@@ -199,19 +201,18 @@ export function lowerAlignPlacement<T>(
     // be the baseline source while the legend is the only target align
     // writes. Faceted scatter panels, where every panel is already
     // data-positioned, still contribute no write targets.
-    const source = entries.find(({ child }) => isPinned(axis, child.name));
-    const nonPinned = entries.filter(
-      ({ child }) => !isPinned(axis, child.name)
+    const source = entries.find(({ key }) => isPinned(axis, key));
+    const nonPinned = entries.filter(({ key }) => !isPinned(axis, key));
+    const movable = nonPinned.filter(
+      ({ key, anchor }) =>
+        !isDataPositionedAlignTarget(
+          key,
+          anchor,
+          idx,
+          posScales,
+          isDataPositioned
+        )
     );
-    const movable = nonPinned.filter(({ child, anchor }) => {
-      return !isDataPositionedAlignTarget(
-        child.name,
-        anchor,
-        idx,
-        posScales,
-        isDataPositioned
-      );
-    });
     if (movable.length === 0) {
       // Nothing this constraint can write is either the deliberate
       // data-positioned skip (scatter facets — stay silent, `align` never
@@ -220,19 +221,19 @@ export function lowerAlignPlacement<T>(
       // rather than a silent nothing.
       const allDataPositioned =
         nonPinned.length > 0 &&
-        nonPinned.every(({ child, anchor }) => {
-          return isDataPositionedAlignTarget(
-            child.name,
+        nonPinned.every(({ key, anchor }) =>
+          isDataPositionedAlignTarget(
+            key,
             anchor,
             idx,
             posScales,
             isDataPositioned
-          );
-        });
+          )
+        );
       if (!allDataPositioned) {
         console.warn(
           `[align] ${owner} on axis "${axis}": nothing movable — every ` +
-            `operand [${children.map((c) => c.name).join(", ")}] is ` +
+            `operand [${children.map((c) => c.ref.name).join(", ")}] is ` +
             `already placed.`
         );
       }
@@ -243,8 +244,8 @@ export function lowerAlignPlacement<T>(
       for (const target of movable) {
         emitter.relate({
           axis,
-          from: { name: source.child.name, anchor: source.anchor },
-          to: { name: target.child.name, anchor: target.anchor },
+          from: { key: source.key, anchor: source.anchor },
+          to: { key: target.key, anchor: target.anchor },
           gap: A.zero,
           owner,
         });
@@ -255,15 +256,15 @@ export function lowerAlignPlacement<T>(
     for (let i = 1; i < movable.length; i++) {
       emitter.relate({
         axis,
-        from: { name: movable[0].child.name, anchor: movable[0].anchor },
-        to: { name: movable[i].child.name, anchor: movable[i].anchor },
+        from: { key: movable[0].key, anchor: movable[0].anchor },
+        to: { key: movable[i].key, anchor: movable[i].anchor },
         gap: A.zero,
         owner,
       });
     }
     emitter.include({
       axis,
-      name: movable[0].child.name,
+      key: movable[0].key,
       owner,
     });
   };

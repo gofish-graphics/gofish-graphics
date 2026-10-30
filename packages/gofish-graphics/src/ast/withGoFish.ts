@@ -13,10 +13,13 @@ import type { AxesOptions, View } from "./gofish";
 import type { ColorConfig } from "./colorSchemes";
 import _, { ListOfRecursiveArraysOrValues } from "lodash";
 import { ChartBuilder, LayerBuilder } from "./marks/chart";
-import type { LayerContext } from "./marks/chart";
 // From markResult, which imports neither chartBuilder nor createOperator, so
 // the dependency between those modules keeps running one way.
-import { datumOfInput, resolveMarkResult } from "./marks/markResult";
+import {
+  LayerContext,
+  datumOfInput,
+  resolveMarkResult,
+} from "./marks/markResult";
 import {
   CHANNEL_INFER,
   hasNoValue,
@@ -235,7 +238,7 @@ export async function reifyChildrenSequentially(
 ): Promise<GoFishAST[]> {
   // A thunked promise must resolve before the next child is resolved.
   const resolved: GoFishAST[] = [];
-  const sharedLayerContext = layerContext ?? {};
+  const sharedLayerContext = layerContext ?? new LayerContext();
 
   for (const child of children) {
     const node = await reifyChild(child, sharedLayerContext);
@@ -302,7 +305,7 @@ export async function reifyChildren(
     | LayerBuilder
     | Mark<any>
   >(children);
-  const layerContext: LayerContext = {};
+  const layerContext = new LayerContext();
   const resolvedAll = await Promise.all(
     flattened.map((child) => reifyChild(child, layerContext))
   );
@@ -340,7 +343,7 @@ export function createNodeOperatorSequential<T extends Record<string, any>, R>(
         | LayerBuilder
         | Mark<any>
       >(children);
-      const layerContext: LayerContext = {};
+      const layerContext = new LayerContext();
       const resolvedChildren = await reifyChildrenSequentially(
         flattenedWithThunks,
         layerContext
@@ -578,7 +581,7 @@ function buildCreatedMark(
       }
       return result as unknown as GoFishNode;
     }
-    const node = await resolveMarkResult(raw, {});
+    const node = await resolveMarkResult(raw, new LayerContext());
     if (liveChannels) node.__gfLive = liveChannels;
     // Its whole drawing, not only its own lowering: a component's children
     // lower on their own.

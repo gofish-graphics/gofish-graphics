@@ -1,7 +1,8 @@
 /**
  * String-name resolution: `ref("x")` and `.relate()` operands share one
- * lookup (nearest level, then closest match) bounded by `createMark` (`resolveScopedName` in
- * `_ref.tsx`; essay: /internals/core/names-and-scoping).
+ * lookup (nearest level, then closest match) bounded by `createMark`
+ * (`lookupName` and `namesIn` in `_ref.tsx`; essay:
+ * /internals/core/names-and-scoping).
  *
  * Run: `pnpm build && tsx src/tests/nameScope.test.ts` (wired as
  * `pnpm test:name-scope`). Imports from `dist` for the same lodash-ESM reason
@@ -64,7 +65,9 @@ async function main() {
             .enclose({ padding: 20, fill: "#252150", stroke: "none" }, [
               gf.spread(
                 { dir: "x", spacing: 50, alignment: "middle" },
-                data.map((d) => gf.circle({ r: d.r, fill: "#ccc" }).name(d.name))
+                data.map((d) =>
+                  gf.circle({ r: d.r, fill: "#ccc" }).name(d.name)
+                )
               ),
             ])
             .name("planets"),
@@ -76,7 +79,9 @@ async function main() {
           gf.Constraint.distribute({ dir: "y", spacing: 20 }, [planets, label]),
         ])
     );
-    const bg = out.find((i) => i.kind === "rect" && i.style?.fill === "#252150");
+    const bg = out.find(
+      (i) => i.kind === "rect" && i.style?.fill === "#252150"
+    );
     const mercury = out.find((i) => i.kind === "ellipse" && i.rx === 8);
     const label = out.find((i) => i.kind === "rect" && i.w === 30);
     check(
@@ -116,7 +121,10 @@ async function main() {
     );
     const bars = out.filter((i) => i.kind === "rect" && i.w === 40);
     const ticks = out.filter((i) => i.kind === "rect" && i.w === 10);
-    check("per-row: one bar and one tick per row", bars.length === 3 && ticks.length === 3);
+    check(
+      "per-row: one bar and one tick per row",
+      bars.length === 3 && ticks.length === 3
+    );
     check(
       "per-row: every tick is aligned to its own bar's right edge",
       bars.every((b, i) => close(ticks[i].x + ticks[i].w, b.x + b.w)),
@@ -134,8 +142,10 @@ async function main() {
           gf.rect({ w: 10, h: 10 }).name("a"),
           gf.rect({ w: 5, h: 5 }).name("b"),
         ])
-        .relate(({ a, b }: any) => [gf.Constraint.align({ x: "middle" }, [a, b])]),
-    /the name "a" is ambiguous — 2 nodes/
+        .relate(({ a, b }: any) => [
+          gf.Constraint.align({ x: "middle" }, [a, b]),
+        ]),
+    /the name "a" is ambiguous: it matched 2 nodes/
   );
   await rejects(
     "same-level duplicate is an error for ref() too",
@@ -170,7 +180,9 @@ async function main() {
       );
       const inner = out.find((i) => i.style?.fill === "#222");
       const b = out.find((i) => i.style?.fill === "#333");
-      ok = close(b.x + b.w, inner.x + inner.w) && close(b.y + b.h, inner.y + inner.h);
+      ok =
+        close(b.x + b.w, inner.x + inner.w) &&
+        close(b.y + b.h, inner.y + inner.h);
       detail = JSON.stringify({ inner, b });
     } catch (e: any) {
       ok = false;
@@ -183,15 +195,12 @@ async function main() {
   //     a string ref outside a relate clause. It errors and says what to do
   //     instead.
   await rejects(
-    "the old ref(\"x\").name(\"x\") stand-in is an error",
+    'the old ref("x").name("x") stand-in is an error',
     () =>
       gf.layer([
         gf.rect({ w: 10, h: 10 }).name("x"),
         gf
-          .layer([
-            gf.ref("x").name("x"),
-            gf.rect({ w: 5, h: 5 }).name("label"),
-          ])
+          .layer([gf.ref("x").name("x"), gf.rect({ w: 5, h: 5 }).name("label")])
           .relate(({ x, label }: any) => [
             gf.Constraint.align({ x: "middle" }, [x, label]),
           ]),
@@ -205,7 +214,9 @@ async function main() {
     () =>
       gf
         .layer([gf.rect({ w: 10, h: 10 }).name("a")])
-        .relate(({ a, typo }: any) => [gf.Constraint.align({ x: "middle" }, [a, typo])]),
+        .relate(({ a, typo }: any) => [
+          gf.Constraint.align({ x: "middle" }, [a, typo]),
+        ]),
     /Constraint\.align: operand 2 is undefined.*Names inside this layer: a\./
   );
 
@@ -218,7 +229,9 @@ async function main() {
     () =>
       gf
         .layer([Inside({}), gf.rect({ w: 5, h: 5 }).name("b")])
-        .relate(({ inner, b }: any) => [gf.Constraint.align({ x: "middle" }, [inner, b])]),
+        .relate(({ inner, b }: any) => [
+          gf.Constraint.align({ x: "middle" }, [inner, b]),
+        ]),
     /operand 1 is undefined.*Names inside this layer: b\./
   );
   const ReachesOut = gf.createMark(() =>
@@ -296,7 +309,11 @@ async function main() {
       ok = false;
       detail = String(e?.message);
     }
-    check("ref(): a direct child beats a nested node with the same name", ok, detail);
+    check(
+      "ref(): a direct child beats a nested node with the same name",
+      ok,
+      detail
+    );
   }
 
   // 7. A nested name is reachable when it is the only one.
@@ -338,8 +355,10 @@ async function main() {
           gf.layer([gf.rect({ w: 10, h: 10 }).name("a")]),
           gf.rect({ w: 5, h: 5 }).name("b"),
         ])
-        .relate(({ a, b }: any) => [gf.Constraint.align({ x: "middle" }, [a, b])]),
-    /the name "a" is ambiguous — 2 nodes/
+        .relate(({ a, b }: any) => [
+          gf.Constraint.align({ x: "middle" }, [a, b]),
+        ]),
+    /the name "a" is ambiguous: it matched 2 nodes/
   );
 
   // 9. Library-made names never clash with user names: a spread's children
@@ -353,10 +372,13 @@ async function main() {
         gf
           .layer([
             gf
-              .chart([
-                { k: "a", v: 10 },
-                { k: "b", v: 20 },
-              ], { axes: false })
+              .chart(
+                [
+                  { k: "a", v: 10 },
+                  { k: "b", v: 20 },
+                ],
+                { axes: false }
+              )
               .flow(gf.spread({ by: "k", dir: "x", axes: false }))
               .mark(gf.rect({ h: "v", fill: "#666" }))
               .name("bars"),
@@ -375,7 +397,11 @@ async function main() {
       ok = false;
       detail = String(e?.message);
     }
-    check("a spread's data keys are not names (no clash with a user name)", ok, detail);
+    check(
+      "a spread's data keys are not names (no clash with a user name)",
+      ok,
+      detail
+    );
   }
   await rejects(
     "a data key cannot be looked up as a name",
@@ -388,7 +414,9 @@ async function main() {
             .mark(gf.rect({ h: "v" })),
           gf.rect({ w: 5, h: 5 }).name("b"),
         ])
-        .relate(({ a, b }: any) => [gf.Constraint.align({ x: "middle" }, [a, b])]),
+        .relate(({ a, b }: any) => [
+          gf.Constraint.align({ x: "middle" }, [a, b]),
+        ]),
     /operand 1 is undefined/
   );
 
@@ -409,7 +437,9 @@ async function main() {
             seenNote = note;
             return [
               gf.Constraint.distribute({ dir: "x", spacing: pad }, [a, b]),
-              ...(note ? [gf.Constraint.align({ y: "middle" }, [a, note])] : []),
+              ...(note
+                ? [gf.Constraint.align({ y: "middle" }, [a, note])]
+                : []),
             ];
           })
       );
@@ -421,7 +451,11 @@ async function main() {
       ok = false;
       detail = String(e?.message);
     }
-    check("a missing name is undefined: defaults and optional checks work", ok, detail);
+    check(
+      "a missing name is undefined: defaults and optional checks work",
+      ok,
+      detail
+    );
   }
 
   // A ref laid out again lands in the same place (#928). The ref's
@@ -476,8 +510,12 @@ async function main() {
       const rects = out
         .filter((i) => i.kind === "rect")
         .sort((p, q) => p.x - q.x);
-      const body = out.find((i) => i.kind === "path" && i.style?.fill === "none");
-      const nums = String(body?.d).match(/-?\d+(\.\d+)?/g)!.map(Number);
+      const body = out.find(
+        (i) => i.kind === "path" && i.style?.fill === "none"
+      );
+      const nums = String(body?.d)
+        .match(/-?\d+(\.\d+)?/g)!
+        .map(Number);
       const [sx, sy] = nums;
       const [ex, ey] = nums.slice(-2);
       const [ra, rb] = rects;
@@ -495,7 +533,11 @@ async function main() {
       ok = false;
       detail = String(e?.message);
     }
-    check("#878: an arrow in relate() runs between the final positions", ok, detail);
+    check(
+      "#878: an arrow in relate() runs between the final positions",
+      ok,
+      detail
+    );
   }
 
   // 12. The Diagrams tutorial's final step: the label is centered under
@@ -521,27 +563,37 @@ async function main() {
                   shape: gf.Shape.box({ rx: 16 }),
                 },
                 [
-                gf.spread(
-                  { dir: "x", spacing: 50, alignment: "middle" },
-                  data.map((d) => gf.circle({ r: d.r, fill: "#ccc" }).name(d.name))
-                ),
-              ])
+                  gf.spread(
+                    { dir: "x", spacing: 50, alignment: "middle" },
+                    data.map((d) =>
+                      gf.circle({ r: d.r, fill: "#ccc" }).name(d.name)
+                    )
+                  ),
+                ]
+              )
               .name("planets"),
             gf.rect({ w: 30, h: 10, fill: "#e94560" }).name("label"),
           ])
           .relate(({ mercury, planets, label }: any) => [
             gf.Constraint.align({ x: "middle" }, [mercury, label]),
-            gf.Constraint.distribute({ dir: "y", spacing: 20 }, [planets, label]),
+            gf.Constraint.distribute({ dir: "y", spacing: 20 }, [
+              planets,
+              label,
+            ]),
             gf.arrow({ stroke: "#E94560" }, [label, mercury]),
           ])
       );
-      const bg = out.find((i) => i.kind === "rect" && i.style?.fill === "#252150");
+      const bg = out.find(
+        (i) => i.kind === "rect" && i.style?.fill === "#252150"
+      );
       const mercury = out.find((i) => i.kind === "ellipse" && i.rx === 8);
       const label = out.find((i) => i.kind === "rect" && i.w === 30);
       const body = out.find(
         (i) => i.kind === "path" && i.style?.stroke === "#E94560"
       );
-      const nums = String(body?.d).match(/-?\d+(\.\d+)?/g)!.map(Number);
+      const nums = String(body?.d)
+        .match(/-?\d+(\.\d+)?/g)!
+        .map(Number);
       const [sx, sy] = nums;
       const [ex, ey] = nums.slice(-2);
       // Pixel space is y-down: the label is below the background, so its top
@@ -560,7 +612,11 @@ async function main() {
       ok = false;
       detail = String(e?.message);
     }
-    check("planets: label under the background, arrow from label to Mercury", ok, detail);
+    check(
+      "planets: label under the background, arrow from label to Mercury",
+      ok,
+      detail
+    );
   }
 
   // 13. A drawing clause over refs to other clauses runs after them; a cycle
@@ -590,20 +646,48 @@ async function main() {
         ]),
     /form a cycle.*clause 1 \(arrow named "self"\)/
   );
+  // An object that only spells a name is not an operand: a name means
+  // nothing until a .relate() call binds it (env[name] for a computed one).
   await rejects(
-    "a constraint that moves a clause which reads its operands is a cycle",
+    "a constraint operand built by hand from a name is an error",
     () =>
       gf
         .layer([
           gf.rect({ w: 10, h: 10 }).name("a"),
           gf.rect({ w: 10, h: 10 }).name("b"),
         ])
-        .relate(({ a, b }: any) => [
-          gf.Constraint.align({ x: "middle" }, [a, { name: "box" }]),
-          gf.enclose({ padding: 4 }, [b]).name("box"),
+        .relate(() => [
+          gf.Constraint.align({ x: "middle" }, [{ name: "a" }, { name: "b" }]),
         ]),
-    /form a cycle.*the layer's constraints \(Constraint\.align\), clause 2 \(enclose named "box"\)/
+    /operand 1 is \{"name":"a"\}, not an operand.*Names inside this layer: a, b/
   );
+  {
+    // A computed name reads its operand from the env.
+    let ok = false;
+    let detail = "";
+    try {
+      const out = await items(
+        gf
+          .layer([
+            gf.rect({ x: 0, y: 0, w: 10, h: 10, fill: "#a00" }).name("a"),
+            gf.rect({ y: 40, w: 30, h: 10, fill: "#0a0" }).name("b"),
+          ])
+          .relate((env: any) => [
+            gf.Constraint.align(
+              { x: "middle" },
+              ["a", "b"].map((n) => env[n])
+            ),
+          ])
+      );
+      const a = out.find((i: any) => i.style?.fill === "#a00");
+      const b = out.find((i: any) => i.style?.fill === "#0a0");
+      ok = close(a.x + a.w / 2, b.x + b.w / 2);
+      detail = JSON.stringify({ a, b });
+    } catch (e: any) {
+      detail = String(e?.message);
+    }
+    check("a computed name reads its operand as env[name]", ok, detail);
+  }
   // A clause over another clause (no cycle) lays out after it.
   {
     let ok = true;
@@ -787,7 +871,9 @@ async function main() {
       // the same mark's transitions draw under a string name.
       const drawn = async (name: any) =>
         (
-          await items(tier(rows, gf.circle({ r: 4 }).name(name).transition(tween())))
+          await items(
+            tier(rows, gf.circle({ r: 4 }).name(name).transition(tween()))
+          )
         ).length;
       const byToken = await drawn(gf.createName("dot"));
       const byString = await drawn("dot");
@@ -797,6 +883,427 @@ async function main() {
         JSON.stringify({ byToken, byString })
       );
     }
+  }
+
+  console.log("\n# relate() — an operand is bound when .relate() runs (#1236)");
+
+  // (a) #1235: the axes' own `.relate()` calls on other layers cannot drop
+  //     this layer's clause, whichever axes are drawn.
+  {
+    const rows = [{ x: 1 }, { x: 2 }];
+    const dots = () =>
+      gf
+        .chart(rows)
+        .flow(gf.scatter({ x: "x" }))
+        .mark(gf.circle({ r: 3 }));
+    for (const axes of [true, { x: true, y: false }, false]) {
+      let msg = "";
+      let n = 0;
+      try {
+        n = (
+          await gf
+            .layer([dots()])
+            .relate(() => [dots()])
+            .toDisplayList({ w: 300, h: 100, axes })
+        ).items.filter((i: any) => i.kind === "ellipse").length;
+      } catch (e: any) {
+        msg = String(e?.message);
+      }
+      check(
+        `a drawing clause survives axes: ${JSON.stringify(axes)} (#1235)`,
+        msg === "" && n === 4,
+        msg || `ellipses: ${n}`
+      );
+    }
+  }
+
+  // (b) selectAll inside a clause reads the layer's names.
+  {
+    const rows = [
+      { x: 1, y: 3 },
+      { x: 2, y: 5 },
+      { x: 3, y: 4 },
+    ];
+    let msg = "";
+    let lines = 0;
+    try {
+      const out = await items(
+        gf
+          .layer([
+            gf
+              .chart(rows)
+              .flow(gf.scatter({ x: "x", y: "y" }))
+              .mark(gf.circle({ r: 3 }).name("means")),
+          ])
+          .relate(() => [
+            gf.chart(gf.selectAll("means")).mark(gf.line({ stroke: "#c00" })),
+          ])
+      );
+      lines = out.filter((i: any) => i.style?.stroke === "#c00").length;
+    } catch (e: any) {
+      msg = String(e?.message);
+    }
+    check(
+      "selectAll inside a .relate() clause finds the layer's marks",
+      msg === "" && lines === 1,
+      msg || `lines: ${lines}`
+    );
+  }
+
+  // (c) An outer operand in a nested layer's clause keeps its binding: the
+  //     nested layer's own "density" does not capture it.
+  {
+    const nested = (inner: (env: any, outer: any) => any[]) =>
+      gf
+        .layer([
+          // Deeper than the nested layer's own "density", so only the
+          // binding scope, not distance, keeps the operand on this node.
+          gf.layer([
+            gf.layer([
+              gf
+                .rect({ x: 0, y: 0, w: 40, h: 20, fill: "#00f" })
+                .name("density"),
+            ]),
+          ]),
+        ])
+        .relate(({ density }: any) => [
+          gf
+            .layer([
+              gf
+                .rect({ x: 200, y: 100, w: 10, h: 10, fill: "#0f0" })
+                .name("density"),
+            ])
+            .relate((env: any) => inner(env, density)),
+        ]);
+    const out = await items(
+      nested((_env, density) => [
+        gf.enclose({ padding: 5, fill: "#fc0", stroke: "none" }, [density]),
+      ])
+    );
+    const box = out.find((i: any) => i.style?.fill === "#fc0");
+    check(
+      "an outer operand in a nested clause names the outer node",
+      box?.w === 50 && box?.h === 30,
+      JSON.stringify(box)
+    );
+
+    // The nested layer's own operand of the same name is its own node.
+    const own = (
+      await items(
+        nested(({ density }) => [
+          gf.enclose({ padding: 5, fill: "#fc0", stroke: "none" }, [density]),
+        ])
+      )
+    ).find((i: any) => i.style?.fill === "#fc0");
+    check(
+      "the nested layer's own operand names its own node",
+      own?.w === 20 && own?.h === 20,
+      JSON.stringify(own)
+    );
+
+    // Paint order is hygienic too: a connector clause paints under the
+    // layer's "density" (its default `zBelow`), not under a nested clause's
+    // same-named node, which keeps its declaration order below the line.
+    const painted = await items(
+      gf
+        .layer([
+          gf.rect({ x: 0, y: 0, w: 40, h: 20, fill: "#00f" }).name("density"),
+          gf.rect({ x: 100, y: 0, w: 10, h: 10, fill: "#999" }).name("box"),
+        ])
+        .relate(({ density, box }: any) => [
+          gf.layer([
+            gf
+              .rect({ x: 0, y: 60, w: 40, h: 20, fill: "#0f0" })
+              .name("density"),
+          ]),
+          gf.line({ stroke: "#f00" }, [box, density]),
+        ])
+    );
+    const at = (pred: (i: any) => boolean) => painted.findIndex(pred);
+    const inner = at((i) => i.style?.fill === "#0f0");
+    const line = at((i) => i.style?.stroke === "#f00");
+    const outer = at((i) => i.style?.fill === "#00f");
+    check(
+      "a clause connector's paint default ignores a nested same-named node",
+      inner >= 0 && line >= 0 && inner < line && line < outer,
+      `inner ${inner}, line ${line}, outer ${outer}`
+    );
+
+    // A constraint places only nodes inside its own layer.
+    await rejects(
+      "a nested constraint on an outer operand is an error",
+      () =>
+        nested((_env, density) => [
+          gf.Constraint.align({ x: "middle" }, [density]),
+        ]),
+      /operand "density" is not inside the layer this \.relate\(\) is attached to/
+    );
+  }
+
+  console.log("\n# selectAll widens like ref, nearer scope first (#1236)");
+  {
+    const rows = [
+      { g: "a", v: 1 },
+      { g: "b", v: 2 },
+      { g: "c", v: 3 },
+    ];
+    // One `layer` per spread cell, each naming its dot "dot".
+    const cells = (inCell: () => any[]) =>
+      gf
+        .chart(rows, { axes: false })
+        .flow(gf.spread({ by: "g", dir: "x", spacing: 20 }))
+        .mark(
+          gf.layer([
+            gf.chart().mark(gf.circle({ r: 4, fill: "#c00" }).name("dot")),
+            ...inCell(),
+          ])
+        );
+    const lines = (out: any[], stroke: string) =>
+      out.filter((i: any) => i.kind === "path" && i.style?.stroke === stroke);
+
+    // From outside the spread, the cells are the nearest scopes with "dot":
+    // selectAll gathers all three.
+    const across = await items(
+      gf.layer([
+        cells(() => []),
+        gf
+          .chart(gf.selectAll("dot"))
+          .mark(gf.line({ stroke: "#00c" }).zOrder(1)),
+      ])
+    );
+    const path = lines(across, "#00c")[0]?.d ?? "";
+    check(
+      "selectAll outside a spread gathers every cell's marks",
+      (path.match(/[ML]/g) ?? []).length === 3 ||
+        (path.match(/C/g) ?? []).length === 2,
+      path
+    );
+
+    // Inside a cell, its own scope has "dot": each cell's selectAll finds
+    // only its own dot.
+    let msg = "";
+    try {
+      await items(
+        cells(() => [
+          gf.chart(gf.ref("dot")).mark(gf.circle({ r: 1, fill: "#0c0" })),
+        ])
+      );
+    } catch (e: any) {
+      msg = String(e?.message);
+    }
+    check("ref inside a cell finds only its own cell's mark", msg === "", msg);
+
+    // The singular ref, from outside, sees the plural name and says so.
+    await rejects(
+      "ref of a name a split repeats reports how many it found",
+      () =>
+        gf.layer([
+          cells(() => []),
+          gf.chart(gf.ref("dot")).mark(gf.circle({ r: 1 })),
+        ]),
+      /matched 3 nodes/
+    );
+  }
+
+  console.log("\n# Names are hygienic (#1246)");
+
+  // The library names nothing: two siblings that share a user name both keep
+  // it, so the name is plural, and a singular use of it is ambiguous. (An
+  // operator used to rename the second one, so it resolved to the first.)
+  await rejects(
+    "two spread children sharing a name both keep it",
+    () =>
+      gf
+        .layer([
+          gf.spread({ dir: "x", spacing: 10 }, [
+            gf.rect({ w: 10, h: 10 }).name("a"),
+            gf.rect({ w: 10, h: 10 }).name("a"),
+          ]),
+          gf.rect({ w: 5, h: 5 }).name("b"),
+        ])
+        .relate(({ a, b }: any) => [
+          gf.Constraint.align({ x: "middle" }, [a, b]),
+        ]),
+    /the name "a" is ambiguous: it matched 2 nodes/
+  );
+
+  // A paint-order operand means every node the name means, by the one
+  // lookup: the matches at the nearest depth, all of them.
+  {
+    const fills = async (children: any[]) =>
+      (
+        await items(
+          gf
+            .layer(children)
+            .relate(({ a, b }: any) => [gf.Constraint.zBelow(b, a)])
+        )
+      ).map((i: any) => i.style?.fill);
+    const sq = (fill: string, name: string) =>
+      gf.rect({ w: 10, h: 10, fill }).name(name);
+    const both = await fills([
+      sq("#a10", "a"),
+      sq("#a20", "a"),
+      sq("#b00", "b"),
+    ]);
+    check(
+      "zBelow(b, a) puts b under both nodes named a",
+      both.indexOf("#b00") < both.indexOf("#a10") &&
+        both.indexOf("#b00") < both.indexOf("#a20"),
+      JSON.stringify(both)
+    );
+    const nearest = await fills([
+      gf.layer([sq("#a30", "a")]),
+      sq("#a10", "a"),
+      sq("#b00", "b"),
+    ]);
+    check(
+      "a z-order name means the nearest depth only: a deeper same name is not ordered",
+      JSON.stringify(nearest) === JSON.stringify(["#a30", "#b00", "#a10"]),
+      JSON.stringify(nearest)
+    );
+  }
+
+  // A labeled mark keeps its name, and the label's wrapper takes none and
+  // adds no depth: ref("bar") is the bar alone, not the bar and its label.
+  {
+    let detail = "";
+    let ok = false;
+    try {
+      const out = await items(
+        gf
+          .layer([
+            gf
+              .rect({ x: 0, y: 0, w: 20, h: 40, fill: "#1a1" })
+              .name("bar")
+              .label(() => "a long label", { position: "outset-right" }),
+            gf.rect({ x: 200, y: 10, w: 20, h: 20, fill: "#777" }).name("dot"),
+          ])
+          .relate(() => [
+            gf.line({ stroke: "#c00" }, [gf.ref("bar"), gf.ref("dot")]),
+          ])
+      );
+      const bar = out.find((i: any) => i.style?.fill === "#1a1");
+      const text = out.find((i: any) => i.kind === "text");
+      const path = out.find((i: any) => i.style?.stroke === "#c00");
+      const xs = (path?.d ?? "").match(/-?[\d.]+/g)?.map(Number) ?? [];
+      // A line between two refs runs between their centers.
+      ok = text !== undefined && close(xs[0], bar.x + bar.w / 2);
+      detail = JSON.stringify({ bar, d: path?.d });
+    } catch (e: any) {
+      detail = String(e?.message);
+    }
+    check('ref("bar") on a labeled bar is the bar alone', ok, detail);
+  }
+
+  // A line over token refs gets no paint-order default: a token ref has no
+  // node before the round, so the line paints in child order, over a box
+  // that holds what it reads (the DFSCQ funnels draw over their stages).
+  {
+    let detail = "";
+    let ok = false;
+    try {
+      const a = gf.createName("a");
+      const b = gf.createName("b");
+      const out = await items(
+        gf.layer([
+          gf.layer([
+            gf.rect({ x: 0, y: 0, w: 200, h: 100, fill: "#fff" }),
+            gf.rect({ x: 10, y: 10, w: 10, h: 10, fill: "#a00" }).name(a),
+            gf.rect({ x: 150, y: 60, w: 10, h: 10, fill: "#0a0" }).name(b),
+          ]),
+          gf.line({ stroke: "#c00" }, [gf.ref(a), gf.ref(b)]),
+        ])
+      );
+      const at = (pred: (i: any) => boolean) => out.findIndex(pred);
+      const box = at((i) => i.style?.fill === "#fff");
+      const line = at((i) => i.style?.stroke === "#c00");
+      ok = box >= 0 && line > box;
+      detail = `box ${box}, line ${line}`;
+    } catch (e: any) {
+      detail = String(e?.message);
+    }
+    check(
+      "a line over token refs paints over the box that holds them",
+      ok,
+      detail
+    );
+  }
+
+  // A clause's paint-order default follows a named ref (an alias) to the
+  // node it stands for: the connector paints under the bar, not the ref.
+  {
+    let detail = "";
+    let ok = false;
+    try {
+      const barTag = gf.createName("bar");
+      const out = await items(
+        gf
+          .layer([
+            gf.rect({ x: 0, y: 0, w: 40, h: 40, fill: "#1a1" }).name(barTag),
+            gf.rect({ x: 200, y: 10, w: 20, h: 20, fill: "#777" }).name("dot"),
+            gf.ref(barTag).name("alias"),
+          ])
+          .relate(({ alias, dot }: any) => [
+            gf.line({ stroke: "#c00", strokeWidth: 8 }, [alias, dot]),
+          ])
+      );
+      const at = (pred: (i: any) => boolean) => out.findIndex(pred);
+      const bar = at((i) => i.style?.fill === "#1a1");
+      const line = at((i) => i.style?.stroke === "#c00");
+      ok = bar >= 0 && line >= 0 && line < bar;
+      detail = `line ${line}, bar ${bar}`;
+    } catch (e: any) {
+      detail = String(e?.message);
+    }
+    check("a clause's z default follows a named-ref alias", ok, detail);
+  }
+
+  // A createName token on a repeated mark is plural: selectAll(token)
+  // gathers every node it made, and the singular ref(token) says how many
+  // it matched.
+  {
+    const token = gf.createName("dot");
+    const rows = [
+      { x: 1, y: 2 },
+      { x: 2, y: 3 },
+      { x: 3, y: 1 },
+    ];
+    const dots = () =>
+      gf
+        .chart(rows)
+        .flow(gf.scatter({ x: "x", y: "y" }))
+        .mark(gf.circle({ r: 3 }).name(token));
+    let seen: unknown[] = [];
+    let msg = "";
+    try {
+      await items(
+        gf.layer([
+          dots(),
+          gf.chart(gf.selectAll(token)).mark((bag: unknown[]) => {
+            seen = bag;
+            return gf.rect({ w: 1, h: 1 });
+          }),
+        ])
+      );
+    } catch (e: any) {
+      msg = String(e?.message);
+    }
+    check(
+      "selectAll(token) gathers every node a repeated mark made",
+      msg === "" && seen.length === rows.length,
+      msg || `seen: ${seen.length}`
+    );
+    await rejects(
+      "ref(token) of a token on a repeated mark says how many it matched",
+      () =>
+        gf.layer([
+          gf.rect({ w: 5, h: 5 }).name(token),
+          gf.rect({ w: 5, h: 5 }).name(token),
+          gf.rect({ w: 5, h: 5 }).name("b"),
+          gf.arrow({}, [gf.ref(token), gf.ref(gf.createName("b"))]),
+        ]),
+      /matched 2 nodes/
+    );
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);

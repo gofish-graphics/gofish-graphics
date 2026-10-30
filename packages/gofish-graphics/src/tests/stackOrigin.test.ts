@@ -280,7 +280,7 @@ async function main() {
           {
             dir: "x",
             glue: true,
-            origin: { part: "a", fraction: 0.5, mirrored: false },
+            origin: { part: g.a, fraction: 0.5, mirrored: false },
           },
           [g.a, g.b]
         ),

@@ -105,14 +105,14 @@ export type AnchorExpr = {
 };
 
 export type PlacementAnchorRef = {
-  name: NodeId;
+  key: NodeId;
   anchor: AlignAnchor;
 };
 
 export type PlacementRelationRequest<T = number> = {
   axis: Axis;
-  from: { name: NodeId; anchor: RelationAnchor };
-  to: { name: NodeId; anchor: RelationAnchor };
+  from: { key: NodeId; anchor: RelationAnchor };
+  to: { key: NodeId; anchor: RelationAnchor };
   gap: T;
   owner: string;
   /** See {@link AnchorRelationFact.chain}. */
@@ -121,7 +121,7 @@ export type PlacementRelationRequest<T = number> = {
 
 export type PlacementParticipantRequest = {
   axis: Axis;
-  name: NodeId;
+  key: NodeId;
   owner: string;
   /** See {@link AnchorParticipantFact.origin}. */
   origin?: number;
@@ -134,11 +134,11 @@ export type PlacementPinRequest<T = number> = {
   owner: string;
 };
 
-/** Request a size-only equation on `name` (#726, align `"size"`) — see
+/** Request a size-only equation on `key` (#726, align `"size"`) — see
  *  {@link SizePinFact}. */
 export type PlacementSizePinRequest<T = number> = {
   axis: Axis;
-  name: NodeId;
+  key: NodeId;
   value: T;
   owner: string;
 };

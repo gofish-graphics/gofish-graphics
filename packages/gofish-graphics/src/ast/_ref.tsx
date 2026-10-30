@@ -16,7 +16,7 @@ import {
   translateForAnchor,
 } from "./dims";
 import type { AxisScale } from "./domain";
-import { GoFishNode, isRelateClause } from "./_node";
+import { GoFishNode } from "./_node";
 import { GoFishAST } from "./_ast";
 import { MaybeValue } from "./data";
 import { ORDINAL, UnderlyingSpace } from "./underlyingSpace";
@@ -26,7 +26,16 @@ import type { Geometry } from "./geometry";
 import type { DisplayList } from "gofish-ir";
 type DisplayListItem = DisplayList.DisplayItem;
 import { isToken, Token } from "./createName";
-import { childNameKey } from "./constraints/shared";
+import {
+  childNameKey,
+  contentOf,
+  SlotOperand,
+  type ConstraintRef,
+  type KeyOf,
+} from "./constraints/shared";
+import { isZOrderConstraint } from "./constraints/zorder";
+import { scheduleRelate, type RelateSchedule } from "./constraints/relate";
+import type { ConstraintSpec } from "./constraints";
 import {
   CANVAS_FRAME,
   orientView,
@@ -34,8 +43,13 @@ import {
   type YFrame,
 } from "./axisDirection";
 
+let refUidCounter = 0;
+
 export class GoFishRef {
   public type: string = "ref";
+  /** The stand-in's identity, as `GoFishNode.uid` is a node's: the key a
+   *  constraint operand that resolves to this stand-in carries. */
+  public readonly uid: string = `ref-${refUidCounter++}`;
   // Stored as `_name` (not `name`) so the constraint system's childNameKey,
   // which reads `_name`, treats a named ref as a constraint target — and so
   // `name()` can be a chainable method like GoFishNode.name().
@@ -85,7 +99,11 @@ export class GoFishRef {
     return this.pinned[dir] ?? walk(this.selectedNode) - walk(this.parent);
   }
   public readonly selection?: string | Token | (Token | string | number)[];
-  private directNode?: GoFishNode;
+  /** The node this ref was made from, when it was made from one (a handle):
+   *  a node, or a named ref, which it reads through (an alias). A `.relate()`
+   *  operand's ref holds its handle and keeps the name as its `selection`,
+   *  for messages and the wire. */
+  private directNode?: GoFishAST;
   private selectedNode?: GoFishNode;
   private renderSession?: RenderSession;
   public color?: MaybeValue<string>;
@@ -97,7 +115,7 @@ export class GoFishRef {
   }: {
     name?: string | Token;
     selection?: string | Token | (Token | string | number)[];
-    node?: GoFishNode;
+    node?: GoFishAST;
     multiplicity?: "one" | "all";
   }) {
     if (selection === undefined && !node) {
@@ -107,12 +125,18 @@ export class GoFishRef {
     this.selection = selection;
     this.directNode = node;
     this.multiplicity = multiplicity;
+    // A node ref needs no lookup: it is resolved when it is made. A ref
+    // made from an alias reads its target in the round.
+    if (node instanceof GoFishNode) {
+      this.selectedNode = node;
+      this.color = node.color;
+    }
   }
 
   /** The raw datum carried by the node this ref points at — the *bag of rows*
    * that flowed into the node (the operator pipeline binds this as an array;
    * a fully-split leaf is a 1-row bag). Reads `directNode` first because
-   * `split` runs before layout/resolveNames (when only `directNode` is set);
+   * `split` runs before layout/resolveReferences (when only `directNode` is set);
    * falls back to the resolved `selectedNode`.
    *
    * This is intentionally the *uncollapsed* bag: `sumBy(ref.datum, "count")`
@@ -127,7 +151,22 @@ export class GoFishRef {
    *  resolved selection). Lets build-time consumers (e.g. the `resolve`
    *  operator) read node-level metadata such as `__splitBy`. */
   public get targetNode(): GoFishNode | undefined {
+    return this.selectedNode;
+  }
+
+  /** The node in the tree this ref stands for before any round: the node
+   *  or alias it was made from, else its resolved target. */
+  public get handle(): GoFishAST | undefined {
     return this.directNode ?? this.selectedNode;
+  }
+
+  /** A fresh ref to what this one points at: the same handle, or the same
+   *  selection. */
+  public fresh(): GoFishRef {
+    return new GoFishRef({
+      selection: this.selection,
+      node: this.handle,
+    });
   }
 
   /** A ref holds its target's box, so it has its target's y frame (see
@@ -143,26 +182,28 @@ export class GoFishRef {
     return this;
   }
 
-  public resolveNames(): void {
+  /** Resolve this ref's target (one step of {@link resolveReferences}). */
+  public resolveTarget(round: Round): void {
     if (this.multiplicity === "all") {
       throw new Error(
         'selectAll(...) cannot be used inline in a layout; pass it as chart data: Chart(selectAll("name"))'
       );
     }
     if (this.directNode) {
-      this.selectedNode = this.directNode;
+      this.selectedNode = aliasTarget(this.directNode, round, this);
     } else if (this.selection !== undefined) {
-      this.selectedNode = this.resolveSelection(this.selection);
+      this.selectedNode = this.resolveSelection(this.selection, round);
     }
     this.color = this.selectedNode?.color;
   }
 
   private resolveSelection(
-    selection: string | Token | (Token | string | number)[]
+    selection: string | Token | (Token | string | number)[],
+    round: Round
   ): GoFishNode {
     // String: innermost-enclosing lookup, bounded by createMark.
     if (typeof selection === "string") {
-      return this.resolveLocalString(selection);
+      return this.resolveLocalString(selection, round);
     }
     // Token: global lookup in tokenContext.
     if (isToken(selection)) {
@@ -187,7 +228,10 @@ export class GoFishRef {
         .map((s) => (isToken(s) ? s.__tag : String(s)))
         .join(" > ");
       if (typeof seg === "number") {
-        const child = current.children[seg];
+        // A ring is its content: a position counts the content, not the
+        // ring's shapes.
+        const at = current.children[seg];
+        const child = at === undefined ? undefined : contentOf(at);
         if (child === undefined) {
           throw new Error(
             `Ref path: child index ${seg} out of bounds under "${pathSoFar}" (has ${current.children.length} children)`
@@ -212,7 +256,7 @@ export class GoFishRef {
             `Ref path: tag "${seg}" not found under "${pathSoFar}". Available: ${Array.from(map.keys()).join(", ")}`
           );
         }
-        current = next;
+        current = one(next, `ref path tag "${seg}" under "${pathSoFar}"`);
       } else if (isToken(seg)) {
         // Tokens can be used as path segments for future flexibility —
         // look them up globally.
@@ -226,8 +270,8 @@ export class GoFishRef {
 
   private resolveToken(token: Token): GoFishNode {
     const tokenContext = this.getRenderSession().tokenContext;
-    const node = tokenContext.get(token);
-    if (!node) {
+    const nodes = tokenContext.get(token);
+    if (!nodes) {
       throw new Error(
         `Can't find token "${token.__tag}". Available token tags: ${Array.from(
           tokenContext.keys()
@@ -236,13 +280,14 @@ export class GoFishRef {
           .join(", ")}`
       );
     }
-    return node;
+    return one(nodes, `ref(createName("${token.__tag}"))`);
   }
 
-  private resolveLocalString(name: string): GoFishNode {
+  private resolveLocalString(name: string, round: Round): GoFishNode {
     // A string name is a variable of the layer that relates it: legal only
-    // inside a `.relate()` clause, and resolved from that clause's layer.
-    const layer = relatingLayerOf(this);
+    // inside a `.relate()` clause, and looked up from the layer whose clause
+    // holds it. (A `.relate()` operand's ref holds its node, a handle.)
+    const layer = relatingLayerOf(this, round);
     if (!layer) {
       throw new Error(
         `ref("${name}") is a string ref outside a .relate() clause. A string ` +
@@ -253,7 +298,9 @@ export class GoFishRef {
           `and ref the token.`
       );
     }
-    const found = resolveScopedName(layer, name, `ref("${name}")`);
+    const matches = round.lookup(layer, name);
+    if (matches.length === 0) throw noSuchName(`ref("${name}")`, name, layer);
+    const found = one(matches, `ref("${name}"): the name "${name}"`);
     if (!isInside(found, layer)) {
       throw new Error(
         `ref("${name}") in a .relate() clause names a node outside the ` +
@@ -261,25 +308,16 @@ export class GoFishRef {
           `attach the .relate() to a layer that contains "${name}".`
       );
     }
-    // A named ref stand-in is an alias for the node it points at.
-    if (found instanceof GoFishRef) {
-      if (found === this) {
-        throw new Error(
-          `ref("${name}") refers to itself: it is named "${name}" too, and ` +
-            `it is the nearest node with that name. A ref named after its own ` +
-            `target is no longer needed. Relate the named node directly ` +
-            `(names are visible anywhere inside the layer), or give the ref a ` +
-            `different name.`
-        );
-      }
-      found.resolveNames();
-      const target = found.targetNode;
-      if (!target) {
-        throw new Error(`ref("${name}") names a ref that points at nothing.`);
-      }
-      return target;
+    if (found === this) {
+      throw new Error(
+        `ref("${name}") refers to itself: it is named "${name}" too, and ` +
+          `it is the nearest node with that name. A ref named after its own ` +
+          `target is no longer needed. Relate the named node directly ` +
+          `(names are visible anywhere inside the layer), or give the ref a ` +
+          `different name.`
+      );
     }
-    return found;
+    return aliasTarget(found, round, this);
   }
 
   public embed(direction: FancyDirection): void {
@@ -395,19 +433,54 @@ export class GoFishRef {
   }
 }
 
+/**
+ * What one {@link resolveReferences} call memoizes, as the tree stands for
+ * the round: every string lookup, by the level it starts at and the name,
+ * so the refs that look up the same name share one search; and each layer's
+ * clause children, so {@link relatingLayerOf} tests a node in one step.
+ */
+class Round {
+  private readonly names = new Map<GoFishNode, Map<string, Lookup>>();
+  private readonly clauses = new Map<GoFishNode, Set<GoFishAST>>();
+
+  /** {@link lookupName}, once per (level, name) this round. */
+  lookup(from: GoFishNode, name: string): Lookup {
+    let byName = this.names.get(from);
+    if (byName === undefined) this.names.set(from, (byName = new Map()));
+    let found = byName.get(name);
+    if (found === undefined) byName.set(name, (found = lookupName(from, name)));
+    return found;
+  }
+
+  /** The children of `layer` in its clause slots (`_relateClauses`). */
+  clauseChildren(layer: GoFishNode): Set<GoFishAST> {
+    let set = this.clauses.get(layer);
+    if (set === undefined) {
+      set = new Set();
+      for (const i of layer._relateClauses.keys()) set.add(layer.children[i]);
+      this.clauses.set(layer, set);
+    }
+    return set;
+  }
+}
+
 /** The layer whose `.relate()` clause contains `node`: the parent of the
- *  nearest ancestor flagged `_relateClause`, or `undefined` when `node` is not
- *  inside a relate clause. */
-export function relatingLayerOf(node: GoFishAST): GoFishNode | undefined {
-  let cur: GoFishAST | undefined = node;
-  while (cur) {
-    if (isRelateClause(cur)) return cur.parent;
-    cur = cur.parent;
+ *  nearest ancestor that sits in one of its parent's clause slots, or
+ *  `undefined` when `node` is not inside a relate clause. */
+function relatingLayerOf(
+  node: GoFishAST,
+  round: Round
+): GoFishNode | undefined {
+  for (let cur: GoFishAST | undefined = node; cur; cur = cur.parent) {
+    const parent: GoFishAST | undefined = cur.parent;
+    // (`instanceof` first: a token `ref` proxy answers every property.)
+    if (parent instanceof GoFishNode && round.clauseChildren(parent).has(cur))
+      return parent;
   }
   return undefined;
 }
 
-function isInside(node: GoFishAST, root: GoFishNode): boolean {
+export function isInside(node: GoFishAST, root: GoFishNode): boolean {
   for (let cur: GoFishAST | undefined = node; cur; cur = cur.parent) {
     if (cur === root) return true;
   }
@@ -420,10 +493,11 @@ function isInside(node: GoFishAST, root: GoFishNode): boolean {
  * descends into ordinary children, and *visits* a `_isComponent` child (it is
  * itself visible, since its name belongs to the enclosing scope) but does NOT
  * descend into its subtree — so names don't leak across component boundaries.
- * `ref` stand-ins are visited too (a named ref is a scope member).
+ * `ref` stand-ins are visited too (a named ref is a scope member). A ring
+ * is its content ({@link contentOf}): its shapes are not visible.
  *
  * This is the single home for the bounded walk shared by string-name lookup
- * (`resolveScopedName`, used by `ref(string)` and by `.relate()` operands),
+ * (`lookupName`, used by `ref(string)` and by `.relate()` operands),
  * `collectLayerRegistrations` (chartBuilder.ts layer registry), and z-order
  * operand lookup (paintOrder.ts), so the component boundary means the same
  * thing for `ref`, `.relate()`, `selectAll` and `zAbove`/`zBelow`.
@@ -431,7 +505,8 @@ function isInside(node: GoFishAST, root: GoFishNode): boolean {
 export function* visibleNodes(root: GoFishAST): Generator<GoFishAST> {
   yield root;
   if (!(root instanceof GoFishNode)) return;
-  for (const child of root.children ?? []) {
+  for (const c of root.children ?? []) {
+    const child = contentOf(c);
     if (child instanceof GoFishNode && child._isComponent) {
       // Visible (a leaf component, e.g. a createMark `rect`, can carry a name)
       // but a boundary: don't descend into it.
@@ -457,114 +532,382 @@ function scopeRootOf(from: GoFishNode): GoFishNode {
 }
 
 /**
- * The CLOSEST nodes with each name inside `level`, looked up one name at a
- * time: a breadth-first search over the nodes visible inside `level` (not
- * `level` itself; nested `createMark` components are visited but not entered)
- * that answers a name with every match at the smallest depth below `level`,
- * or `[]`. `searched` is a child subtree an earlier, narrower level already
- * searched without a match: its root is still checked (a level never matches
- * itself, so it was not), but its inside is not walked again.
- *
- * The search goes one depth at a time and only as deep as a name needs, and
- * it keeps every name it has passed with its matches at their depth. So the
- * first lookup walks no deeper than the old one-name search did, and later
- * lookups reuse the depths already walked: resolving many names inside one
- * level walks it at most once (#1175).
+ * Every name inside `layer`, with the nodes it means from `layer`: the
+ * matches at the closest depth below it, as {@link lookupName} finds them
+ * at `layer`'s level, all names in one walk. A `.relate()` call binds its
+ * operands to these (`relateEnv`). The layer's own drawing clauses are not
+ * inside it in this sense: a `.relate()` call replaces them, so it binds
+ * the names of the layer's other children.
  */
-function closestNames(
-  level: GoFishNode,
-  searched: GoFishNode | undefined
-): (name: string) => GoFishAST[] {
-  const closest = new Map<string, GoFishAST[]>();
-  let frontier: GoFishAST[] = level.children;
-  return (name) => {
-    while (!closest.has(name) && frontier.length > 0) {
-      // The names first met at this depth, with all their matches here.
-      const atDepth = new Map<string, GoFishAST[]>();
-      const next: GoFishAST[] = [];
-      for (const n of frontier) {
-        const key = childNameKey(n);
-        if (key !== undefined && !closest.has(key)) {
-          const matches = atDepth.get(key);
-          if (matches) matches.push(n);
-          else atDepth.set(key, [n]);
-        }
-        if (n === searched) continue;
-        if (n instanceof GoFishNode && !n._isComponent)
-          for (const c of n.children) next.push(c);
+export function namesIn(layer: GoFishNode): Map<string, GoFishAST[]> {
+  const found = new Map<string, { depth: number; nodes: GoFishAST[] }>();
+  let frontier = layer.children
+    .filter((_, i) => !layer._relateClauses.has(i))
+    .map(contentOf);
+  for (let depth = 0; frontier.length > 0; depth++) {
+    const next: GoFishAST[] = [];
+    for (const n of frontier) {
+      const name = childNameKey(n);
+      if (name !== undefined) {
+        const at = found.get(name);
+        if (at === undefined) found.set(name, { depth, nodes: [n] });
+        else if (at.depth === depth) at.nodes.push(n);
       }
-      for (const [key, matches] of atDepth) closest.set(key, matches);
-      frontier = next;
+      if (n instanceof GoFishNode && !n._isComponent)
+        for (const c of n.children) next.push(contentOf(c));
     }
-    return closest.get(name) ?? [];
-  };
+    frontier = next;
+  }
+  return new Map([...found].map(([name, at]) => [name, at.nodes]));
 }
 
-/**
- * Resolve a string name from a use site: the layer running `.relate()`, for
- * a constraint operand and for a string ref inside one of its clauses alike.
- * This is the one lookup behind both.
- *
- * Search `from`'s subtree, then its parent's, one ancestor at a time, and stop
- * at the first level whose subtree contains the name. Within that level the
- * closest match wins: the one with the fewest steps down from the level's
- * node. So a layer's direct child `x` beats an `x` nested deeper, and a deeper
- * name is reachable when nothing closer has it. Two or more matches at that
- * same smallest distance is a loud error, and so is no match up to the
- * boundary. The search never crosses a `createMark` boundary (neither upward
- * past the enclosing component, nor downward into a nested one). An inner
- * match hides an outer one with the same name; that is intended, and it is
- * what lets a mark repeated per row (or a helper called many times) reuse its
- * local names. `what` names the consumer in the error message.
- */
-export function resolveScopedName(
-  from: GoFishNode,
-  name: string,
-  what: string
-): GoFishAST {
-  return scopedNames(from)(name, what);
+/** The node that stands in `node`'s place inside `layer`: `node`, or the
+ *  outermost elaboration wrapper below `layer` whose content (slot 0) it is.
+ *  A layer places, and orders, what stands in the place of a node a name
+ *  means, so a node an elaboration pass wrapped moves with its wrapper. */
+function inPlace(node: GoFishAST, layer: GoFishNode): GoFishAST {
+  let cur = node;
+  for (let p = cur.parent; p && p !== layer; p = cur.parent) {
+    if (!p._transparent || p.children[0] !== cur) break;
+    cur = p;
+  }
+  return cur;
 }
 
-/**
- * The lookup of {@link resolveScopedName} from `from`, for many names: each
- * level's search is kept between calls (`closestNames`), so resolving every
- * name a layer's constraints use walks each level once in all, not once per
- * name (#1175).
- */
-export function scopedNames(
-  from: GoFishNode
-): (name: string, what: string) => GoFishAST {
-  const boundary = scopeRootOf(from);
-  // Each level's search, from `from` outward, made when a name first needs it.
-  const levels: ((name: string) => GoFishAST[])[] = [];
-  return (name, what) => {
-    let level = from;
-    let searched: GoFishNode | undefined;
-    for (let i = 0; ; i++) {
-      levels[i] ??= closestNames(level, searched);
-      const matches = levels[i](name);
-      if (matches.length === 1) return matches[0];
-      if (matches.length > 1) {
-        throw new Error(
-          `${what}: the name "${name}" is ambiguous — ${matches.length} nodes ` +
-            `named "${name}" are equally close to the use site. Give them ` +
-            `distinct names, or wrap each repeated part in its own createMark ` +
-            `component.`
-        );
-      }
-      if (level === boundary || !level.parent) break;
-      searched = level;
-      level = level.parent;
-    }
-    const where = boundary._isComponent
-      ? "the enclosing createMark component"
-      : "this diagram";
+/** The one node of `nodes`, which a singular reference (`what`) matched.
+ *  This is the one message for a singular reference, by name or by token,
+ *  that matched several nodes. */
+export function one<T>(nodes: readonly T[], what: string): T {
+  if (nodes.length !== 1)
     throw new Error(
-      `${what}: no node named "${name}" in ${where}. String names are ` +
-        `visible up to the nearest createMark boundary; to reach across one, ` +
-        `use createName("${name}") and a ref path.`
+      `${what} is ambiguous: it matched ${nodes.length} nodes, and a ` +
+        `singular reference needs exactly one. Use selectAll for all of ` +
+        `them, give them distinct names, or wrap each repeated part in its ` +
+        `own createMark component.`
     );
+  return nodes[0];
+}
+
+/** The error for a name that no node up to the boundary of `from` has. */
+function noSuchName(what: string, name: string, from: GoFishNode): Error {
+  const where = scopeRootOf(from)._isComponent
+    ? "the enclosing createMark component"
+    : "this diagram";
+  return new Error(
+    `${what}: no node named "${name}" in ${where}. String names are ` +
+      `visible up to the nearest createMark boundary; to reach across one, ` +
+      `use createName("${name}") and a ref path.`
+  );
+}
+
+/**
+ * The CLOSEST nodes named `name` inside `level`: a breadth-first search over
+ * the nodes visible inside `level` (not `level` itself; nested `createMark`
+ * components are visited but not entered) that returns every match at the
+ * smallest depth below `level`, or `[]`. A ring is its content
+ * ({@link contentOf}). `searched` is a child subtree an
+ * earlier, narrower level already searched without a match: its root is
+ * still checked (a level never matches itself, so it was not), but its
+ * inside is not walked again.
+ */
+function closestAtLevel(
+  level: GoFishNode,
+  name: string,
+  searched: GoFishNode | undefined
+): GoFishAST[] {
+  // The first frontier is `level`'s children. Each depth is built into the
+  // other array.
+  let frontier = level.children.map(contentOf);
+  let next: GoFishAST[] = [];
+  while (frontier.length > 0) {
+    const matches = frontier.filter((n) => childNameKey(n) === name);
+    if (matches.length > 0) return matches;
+    next.length = 0;
+    for (const n of frontier)
+      if (n !== searched && n instanceof GoFishNode && !n._isComponent)
+        for (const c of n.children) next.push(contentOf(c));
+    [frontier, next] = [next, frontier];
+  }
+  return [];
+}
+
+/** What a name means from a use site ({@link lookupName}). */
+type Lookup = GoFishAST[];
+
+/**
+ * Every node a name means from a use site: the matches at the nearest level
+ * whose subtree has the name, at the closest depth there, or `[]` when no
+ * level up to the boundary has it.
+ *
+ * Search `from`'s subtree, then its parent's, one ancestor at a time, and
+ * stop at the first level whose subtree contains the name. Within that level
+ * the closest matches win: those with the fewest steps down from the level's
+ * node. So a layer's direct child `x` beats an `x` nested deeper, and a
+ * deeper name is reachable when nothing closer has it. The search never
+ * crosses a `createMark` boundary (neither upward past the enclosing
+ * component, nor downward into a nested one). An inner match hides an outer
+ * one with the same name; that is intended, and it is what lets a mark
+ * repeated per row (or a helper called many times) reuse its local names.
+ *
+ * A name is plural: every match at that depth is meant. A singular
+ * reference (`ref`, a placement operand) requires one ({@link one}); a
+ * paint-order operand takes them all.
+ */
+function lookupName(from: GoFishNode, name: string): Lookup {
+  const boundary = scopeRootOf(from);
+  let level = from;
+  let searched: GoFishNode | undefined;
+  for (;;) {
+    const matches = closestAtLevel(level, name, searched);
+    if (matches.length > 0) return matches;
+    if (level === boundary || !level.parent) return [];
+    searched = level;
+    level = level.parent;
+  }
+}
+
+/** `layer`'s direct child that is or contains `node`, or `undefined` when
+ *  `node` is not inside `layer`. */
+export function directChildOf(
+  layer: GoFishNode,
+  node: GoFishAST
+): GoFishAST | undefined {
+  let cur: GoFishAST | undefined = node;
+  while (cur && cur.parent !== layer) cur = cur.parent;
+  return cur;
+}
+
+/** A layer constraint operand resolved to a node inside the layer: `child` is
+ *  the index of the layer's direct child that is (`direct`) or contains
+ *  `node`; `name` is how its first operand reads in a message. */
+export type ResolvedOperand = {
+  name: string;
+  node: GoFishAST;
+  child: number;
+  direct: boolean;
+};
+
+/** What the last {@link resolveReferences} round resolved a node's
+ *  references to (read with {@link resolution}). Its stamp is the
+ *  constraints and the children it was resolved from. */
+export type ResolvedConstraints = {
+  /** The node's `_version` when the round resolved it: a later change to
+   *  its children or constraints makes this resolution stale. */
+  version: number;
+  /** Every placement operand's node, by its key (the node's `uid`). */
+  operands: Map<string, ResolvedOperand>;
+  /** The key of each placement operand (see `KeyOf`). */
+  keyOf: KeyOf;
+  /** Every z-order operand: the nodes inside the node it names. */
+  z: Map<ConstraintRef, GoFishAST[]>;
+  /** The order of the layer's relate steps (`scheduleRelate`). */
+  schedule: RelateSchedule;
+};
+
+/**
+ * Resolve every reference in the tree under `root`: each `ref` stand-in's
+ * target, and each constraint operand (a `.relate()` operand, a macro's
+ * slot or node handle, a z-order operand), then check each layer's relate
+ * clauses for a cycle, which needs both. This is one round of a fixed
+ * point: a pass that rewrites the tree (chrome, labels) runs it again, and
+ * every pass that reads a resolution reads the last round's.
+ *
+ * Every token is registered before any ref is resolved, so a token ref may
+ * come before its target (#677), and a token on a repeated mark names every
+ * node that carries it.
+ */
+export function resolveReferences(root: GoFishAST): void {
+  if (root instanceof GoFishNode) {
+    const tokens = root.tryGetRenderSession()?.tokenContext;
+    tokens?.clear();
+    registerTokens(root, tokens ?? new Map());
+  }
+  resolveIn(root, new Round());
+}
+
+function resolveIn(root: GoFishAST, round: Round): void {
+  if (root instanceof GoFishRef) {
+    root.resolveTarget(round);
+    return;
+  }
+  for (const child of root.children) resolveIn(child, round);
+  root._resolved =
+    root.constraints.length > 0 || root._relateClauses.size > 0
+      ? resolveConstraints(root)
+      : undefined;
+}
+
+/** The resolution of a node with no constraints and no clauses. */
+const NOTHING_RESOLVED: ResolvedConstraints = {
+  version: -1,
+  operands: new Map(),
+  keyOf: (ref) => noKey(ref),
+  z: new Map(),
+  schedule: { clauses: new Set(), beforeSolve: [], afterSolve: [] },
+};
+
+/** The key of an operand no resolution holds. */
+const noKey: KeyOf = (ref) => {
+  throw new Error(
+    `[gofish] constraint operand "${ref.name}" is not resolved for this ` +
+      `layer (it is not one of the operands resolveReferences resolved)`
+  );
+};
+
+/** `node`'s references as the last {@link resolveReferences} round resolved
+ *  them. Throws when the node's constraints or children changed since: a
+ *  pass that rewrites the tree must run the round again. */
+export function resolution(node: GoFishNode): ResolvedConstraints {
+  const r = node._resolved;
+  if (r === undefined) {
+    if (node.constraints.length === 0 && node._relateClauses.size === 0)
+      return NOTHING_RESOLVED;
+  } else if (r.version === node._version) return r;
+  throw new Error(
+    `[gofish] the references of a ${node.type} are not resolved for its ` +
+      `current constraints and children (resolveReferences must run after ` +
+      `a pass changes them)`
+  );
+}
+
+/** Register the token name of every node under `node`, pre-order, in
+ *  `tokens` and in its nearest scope root. A token is plural: each node that
+ *  carries it joins its list. */
+function registerTokens(
+  node: GoFishNode,
+  tokens: Map<Token, GoFishNode[]>
+): void {
+  if (node._isScope) node._scopeMap = new Map();
+  if (node._name !== undefined && isToken(node._name)) {
+    const token = node._name;
+    const list = tokens.get(token);
+    if (list === undefined) tokens.set(token, [node]);
+    else list.push(node);
+    for (let a = node.parent; a; a = a.parent) {
+      if (a._isScope) {
+        const map = (a._scopeMap ??= new Map());
+        const tagged = map.get(token.__tag);
+        if (tagged === undefined) map.set(token.__tag, [node]);
+        else tagged.push(node);
+        break;
+      }
+    }
+  }
+  for (const child of node.children)
+    if (child instanceof GoFishNode) registerTokens(child, tokens);
+}
+
+/**
+ * Resolve every operand of `layer`'s constraints, and schedule its relate
+ * clauses. A placement operand means one node inside the layer
+ * ({@link operandNodes}: a missing, ambiguous or outside name throws), and
+ * its key is that node's uid. An operand an enclosing layer's `.relate()`
+ * bound means a node of that layer outside this one, which this layer
+ * cannot place. A z-order operand relates a SET of nodes at paint time:
+ * every node it means inside the layer.
+ */
+function resolveConstraints(layer: GoFishNode): ResolvedConstraints {
+  const operands = new Map<string, ResolvedOperand>();
+  const keys = new Map<ConstraintRef, string>();
+  const z = new Map<ConstraintRef, GoFishAST[]>();
+  const place = (ref: ConstraintRef, what: string) => {
+    if (keys.has(ref)) return;
+    const nodes = operandNodes(layer, ref);
+    if (nodes.length === 0)
+      throw noSuchName(`${what} operand`, ref.name, layer);
+    const node = one(nodes, `${what} operand: the name "${ref.name}"`);
+    const child =
+      ref instanceof SlotOperand
+        ? ref.slot
+        : (() => {
+            const c = directChildOf(layer, node);
+            return c === undefined ? -1 : (layer.indexOfChild(c) ?? -1);
+          })();
+    if (child < 0)
+      throw new Error(
+        `${what}: operand "${ref.name}" is not inside the layer this ` +
+          `.relate() is attached to. A layer can only place nodes it ` +
+          `contains; attach the constraint to a layer that contains every ` +
+          `operand.`
+      );
+    keys.set(ref, node.uid);
+    if (!operands.has(node.uid))
+      operands.set(node.uid, {
+        name: ref.name,
+        node,
+        child,
+        direct: layer.children[child] === node,
+      });
   };
+  for (const c of layer.constraints) {
+    const what = `Constraint.${c.type}`;
+    if (isZOrderConstraint(c)) {
+      for (const ref of c.children)
+        z.set(
+          ref,
+          operandNodes(layer, ref)
+            // A ref draws nothing: paint order orders what it stands for.
+            .map((n) => (n instanceof GoFishRef ? (n.targetNode ?? n) : n))
+            .filter((n) => n !== layer && isInside(n, layer))
+        );
+      continue;
+    }
+    for (const ref of c.children) place(ref, what);
+    // A stack's origin names one of its parts.
+    if (c.type === "distribute" && c.origin !== undefined)
+      place(c.origin.part, what);
+  }
+  const keyOf: KeyOf = (ref) => keys.get(ref) ?? noKey(ref);
+  // With every ref resolved, check the relate clauses' dependency order
+  // now: a cycle would otherwise recurse forever in the space pass (a ref
+  // proxies its target's space, and a cyclic target contains the ref).
+  return {
+    version: layer._version,
+    operands,
+    keyOf,
+    z,
+    schedule: scheduleRelate(layer, operands),
+  };
+}
+
+/**
+ * The nodes one operand of `layer` means (`ConstraintRef.means`), each in its
+ * place inside `layer`. Every operand is a handle: a slot operand means the
+ * child in its slot, a node operand its node, and a `.relate()` operand the
+ * nodes its name meant when the call bound it. A placement takes
+ * {@link one} of them; a paint-order operand takes those inside `layer`.
+ *
+ * The layer places, and orders, what stands in a node's place
+ * ({@link inPlace}), so a node an elaboration pass wrapped moves with its
+ * wrapper.
+ */
+function operandNodes(layer: GoFishNode, ref: ConstraintRef): GoFishAST[] {
+  return ref.means(layer).map((n) => inPlace(n, layer));
+}
+
+/** What a ref made from `handle` points at: the node, or, for a named ref
+ *  (an alias), its target, resolved in this round. */
+function aliasTarget(
+  handle: GoFishAST,
+  round: Round,
+  from: GoFishRef
+): GoFishNode {
+  if (!(handle instanceof GoFishRef)) return handle;
+  if (handle !== from) handle.resolveTarget(round);
+  const target = handle.targetNode;
+  if (!target) {
+    // A handle ref has no selection: describe it by the node it holds,
+    // which is `handle`.
+    const name = childNameKey(handle);
+    const what =
+      from.selection !== undefined
+        ? `ref("${String(from.selection)}")`
+        : name !== undefined
+          ? `a ref to "${name}"`
+          : "a ref";
+    throw new Error(`${what} names a ref that points at nothing.`);
+  }
+  return target;
 }
 
 export const findPathToRoot = (node: GoFishAST): GoFishAST[] => {

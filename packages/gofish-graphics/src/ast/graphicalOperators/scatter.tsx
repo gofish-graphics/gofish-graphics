@@ -19,7 +19,7 @@ import { Alignment } from "./alignment";
 import { createOperator } from "../marks/createOperator";
 import { layer } from "./layer";
 import { Constraint, type ConstraintSpec } from "../constraints";
-import { axisName, ensureChildNames } from "../constraints/shared";
+import { axisName, childSlots } from "../constraints/shared";
 import { createOverlapConstraint } from "../constraints/overlap";
 import type { Overlap } from "../../families/overlap";
 
@@ -235,7 +235,6 @@ const Scatter = createNodeOperator(
       dims
     );
     const childList = placed.children;
-    const names = ensureChildNames(childList, "scatter");
     const node = (await layer(
       { key, ...fancyDims } as any,
       childList
@@ -251,58 +250,51 @@ const Scatter = createNodeOperator(
         inner,
         childList.length
       );
-      await node.relate((g) => {
-        const refs = names.map((name) => g[name]);
-        const cs: ConstraintSpec[] = [];
-        childList.forEach((_, i) => {
-          const pos: {
-            x?: PositionValue;
-            y?: PositionValue;
-            override: boolean;
-          } = { override: true };
-          const span: {
-            x?: [MaybeValue<number>, MaybeValue<number>];
-            y?: [MaybeValue<number>, MaybeValue<number>];
-          } = {};
-          ([0, 1] as const).forEach((axis) => {
-            const name = axisName(axis);
-            const { center: point, min, max } = placement[axis];
-            if (point?.[i] !== undefined) pos[name] = point[i];
-            if (min?.[i] !== undefined && max?.[i] !== undefined)
-              span[name] = [min[i], max[i]];
-          });
-          if (pos.x !== undefined || pos.y !== undefined)
-            cs.push(Constraint.position(pos, [refs[i]]));
-          if (span.x !== undefined || span.y !== undefined)
-            cs.push(Constraint.position(span, [refs[i]]));
+      const refs = childSlots(node);
+      const cs: ConstraintSpec[] = [];
+      childList.forEach((_, i) => {
+        const pos: {
+          x?: PositionValue;
+          y?: PositionValue;
+          override: boolean;
+        } = { override: true };
+        const span: {
+          x?: [MaybeValue<number>, MaybeValue<number>];
+          y?: [MaybeValue<number>, MaybeValue<number>];
+        } = {};
+        ([0, 1] as const).forEach((axis) => {
+          const name = axisName(axis);
+          const { center: point, min, max } = placement[axis];
+          if (point?.[i] !== undefined) pos[name] = point[i];
+          if (min?.[i] !== undefined && max?.[i] !== undefined)
+            span[name] = [min[i], max[i]];
         });
-        // A cross-axis align over the (data-positioned) points: it shares the
-        // frame; `align` leaves the points where their own scale puts them by
-        // reading their abstract placement (no guard flag needed). An overlap
-        // strategy takes the align's place: it grows the children away from
-        // the same line, keeping them clear of each other.
-        const freeAxes = ([0, 1] as const).filter(
-          (axis) => !isPlaced(placement, axis)
-        );
-        if (overlap !== undefined && freeAxes.length === 0)
-          throw new Error(
-            "scatter: `overlap` moves children along an axis no field " +
-              "places, but both x and y are placed by fields here. Drop one " +
-              "of them, or drop `overlap`."
-          );
-        for (const axis of freeAxes)
-          cs.push(
-            overlap !== undefined
-              ? createOverlapConstraint(
-                  axisName(axis),
-                  alignment,
-                  overlap,
-                  refs
-                )
-              : Constraint.align({ [axisName(axis)]: alignment }, refs)
-          );
-        return cs;
+        if (pos.x !== undefined || pos.y !== undefined)
+          cs.push(Constraint.position(pos, [refs[i]]));
+        if (span.x !== undefined || span.y !== undefined)
+          cs.push(Constraint.position(span, [refs[i]]));
       });
+      // A cross-axis align over the (data-positioned) points: it shares the
+      // frame; `align` leaves the points where their own scale puts them by
+      // reading their abstract placement (no guard flag needed). An overlap
+      // strategy takes the align's place: it grows the children away from
+      // the same line, keeping them clear of each other.
+      const freeAxes = ([0, 1] as const).filter(
+        (axis) => !isPlaced(placement, axis)
+      );
+      if (overlap !== undefined && freeAxes.length === 0)
+        throw new Error(
+          "scatter: `overlap` moves children along an axis no field " +
+            "places, but both x and y are placed by fields here. Drop one " +
+            "of them, or drop `overlap`."
+        );
+      for (const axis of freeAxes)
+        cs.push(
+          overlap !== undefined
+            ? createOverlapConstraint(axisName(axis), alignment, overlap, refs)
+            : Constraint.align({ [axisName(axis)]: alignment }, refs)
+        );
+      await node.INTERNAL_relate(cs);
     };
     if (axes !== undefined) node._axisOverride = axisOverrideOf(axes);
     return node;

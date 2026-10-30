@@ -8,6 +8,7 @@ import { Text } from "../shapes/text";
 import { Spread } from "../graphicalOperators/spread";
 import { layer } from "../graphicalOperators/layer";
 import { Constraint } from "../constraints";
+import { slotOf } from "../constraints/shared";
 import { breadthFirst, fmtNum, type ChromeRing } from "../elaborationUtils";
 import { ticks as d3Ticks } from "d3-array";
 import { datum } from "../data";
@@ -38,7 +39,6 @@ const ROW_GAP = 8; // vertical gap between legend rows
 const LABEL_FONT_SIZE = 10;
 const LABEL_COLOR = "gray";
 const LEGEND_CONTENT_GAP = 20; // gap between content and the legend column
-const LEGEND_NAME = "__legend";
 
 /** One legend row: a color swatch followed by its label, aligned on a row. */
 function legendRow(key: any, color: string): GoFishNode {
@@ -66,7 +66,7 @@ export async function legendColumn(
     { dir: "y", spacing: ROW_GAP, alignment: "start" },
     rows
   )) as GoFishNode;
-  return col.name(LEGEND_NAME);
+  return col;
 }
 
 /**
@@ -142,17 +142,13 @@ export async function legendColorbar(
   const span = max === min ? 1 : max - min;
   const bandSpan = span / BAND_COUNT;
 
-  const bandName = (i: number) => `__cbBand${i}`;
-  const tickName = (i: number) => `__cbTick${i}`;
-  const labelName = (i: number) => `__cbLabel${i}`;
-
   const bandH = BAR_HEIGHT / BAND_COUNT;
   const bands = Array.from({ length: BAND_COUNT }, (_, i) =>
     Rect({
       w: BAR_WIDTH,
       h: bandH + BAND_OVERLAP,
       fill: scaleFn(min + (i + 0.5) * bandSpan),
-    }).name(bandName(i))
+    })
   );
 
   // Always show the domain endpoints; fill in d3 "nice" ticks strictly between.
@@ -166,15 +162,15 @@ export async function legendColorbar(
           ),
           max,
         ];
-  const tickMarks = tickValues.map((_, i) =>
-    Rect({ w: TICK_MARK_LEN, h: 1, fill: LABEL_COLOR }).name(tickName(i))
+  const tickMarks = tickValues.map(() =>
+    Rect({ w: TICK_MARK_LEN, h: 1, fill: LABEL_COLOR })
   );
-  const tickLabels = tickValues.map((v, i) =>
+  const tickLabels = tickValues.map((v) =>
     Text({
       text: fmtNum(v),
       fontSize: LABEL_FONT_SIZE,
       fill: LABEL_COLOR,
-    }).name(labelName(i))
+    })
   );
 
   const root = (await (layer as any)({ h: BAR_HEIGHT }, [
@@ -183,52 +179,49 @@ export async function legendColorbar(
     ...tickLabels,
   ])) as GoFishNode;
 
-  await root.relate((g: Record<string, any>) => {
-    const cs: any[] = [];
-    // Bands: centered in the bar column (x), pinned by their bottom edge at
-    // their slice's low value (y) and stacked bottom→top to fill the bar.
-    // Each band overhangs upward by BAND_OVERLAP; the next band (drawn on
-    // top) covers that overhang, so no sub-pixel seam shows between bands.
-    // (x uses anchor "middle", y uses "start" — separate constraints since
-    // one shared anchor can't do both.)
-    bands.forEach((_, i) => {
-      cs.push(
-        Constraint.position({ x: BAR_WIDTH / 2, anchor: "middle" }, [
-          g[bandName(i)],
-        ])
-      );
-      cs.push(
-        Constraint.position({ y: datum(min + i * bandSpan), anchor: "start" }, [
-          g[bandName(i)],
-        ])
-      );
-    });
-    // Ticks + labels pinned at their value. x and y are pinned by separate
-    // position constraints so the label can sit start-aligned in x while
-    // staying middle-aligned in y (one shared anchor can't do both).
-    tickValues.forEach((v, i) => {
-      cs.push(
-        Constraint.position(
-          { x: BAR_WIDTH + TICK_MARK_LEN / 2, y: datum(v), anchor: "middle" },
-          [g[tickName(i)]]
-        )
-      );
-      cs.push(
-        Constraint.position({ y: datum(v), anchor: "middle" }, [
-          g[labelName(i)],
-        ])
-      );
-      cs.push(
-        Constraint.position(
-          { x: BAR_WIDTH + TICK_MARK_LEN + BAR_LABEL_GAP, anchor: "start" },
-          [g[labelName(i)]]
-        )
-      );
-    });
-    return cs;
+  const at = slotOf(root);
+  const cs: any[] = [];
+  // Bands: centered in the bar column (x), pinned by their bottom edge at
+  // their slice's low value (y) and stacked bottom→top to fill the bar.
+  // Each band overhangs upward by BAND_OVERLAP; the next band (drawn on
+  // top) covers that overhang, so no sub-pixel seam shows between bands.
+  // (x uses anchor "middle", y uses "start" — separate constraints since
+  // one shared anchor can't do both.)
+  bands.forEach((band, i) => {
+    cs.push(
+      Constraint.position({ x: BAR_WIDTH / 2, anchor: "middle" }, [at(band)])
+    );
+    cs.push(
+      Constraint.position({ y: datum(min + i * bandSpan), anchor: "start" }, [
+        at(band),
+      ])
+    );
   });
+  // Ticks + labels pinned at their value. x and y are pinned by separate
+  // position constraints so the label can sit start-aligned in x while
+  // staying middle-aligned in y (one shared anchor can't do both).
+  tickValues.forEach((v, i) => {
+    cs.push(
+      Constraint.position(
+        { x: BAR_WIDTH + TICK_MARK_LEN / 2, y: datum(v), anchor: "middle" },
+        [at(tickMarks[i])]
+      )
+    );
+    cs.push(
+      Constraint.position({ y: datum(v), anchor: "middle" }, [
+        at(tickLabels[i]),
+      ])
+    );
+    cs.push(
+      Constraint.position(
+        { x: BAR_WIDTH + TICK_MARK_LEN + BAR_LABEL_GAP, anchor: "start" },
+        [at(tickLabels[i])]
+      )
+    );
+  });
+  await root.INTERNAL_relate(cs);
 
-  return root.name(LEGEND_NAME);
+  return root;
 }
 
 /**
@@ -254,15 +247,15 @@ export async function legendRing(
   const top = orientSide("start", wrapperDirection(owner));
   return {
     nodes: [legend],
-    constraints: (g, inner) => [
+    constraints: (at, inner) => [
       // Seat the column just right of the full box inside (incl. axis labels
       // and titles).
       Constraint.distribute({ dir: "x", spacing: LEGEND_CONTENT_GAP }, [
-        g[inner],
-        g[LEGEND_NAME],
+        inner,
+        at(legend),
       ]),
       // Top-align the column with the box's top.
-      Constraint.align({ y: top }, [g[inner], g[LEGEND_NAME]]),
+      Constraint.align({ y: top }, [inner, at(legend)]),
     ],
   };
 }

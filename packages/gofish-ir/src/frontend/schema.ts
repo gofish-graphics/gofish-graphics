@@ -802,7 +802,7 @@ export interface LeafMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   type: LeafMarkType;
   name?: string;
   label?: LabelIR;
-  relate?: RelateClauseIR[];
+  relate?: RelateIR;
   zOrder?: number | BridgeLambdaSentinel;
   translate?: TranslateIR;
   [key: string]: unknown;
@@ -820,7 +820,7 @@ export interface CombinatorMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   children: MarkIR[];
   name?: string;
   label?: LabelIR;
-  relate?: RelateClauseIR[];
+  relate?: RelateIR;
   zOrder?: number | BridgeLambdaSentinel;
   translate?: TranslateIR;
 }
@@ -829,6 +829,9 @@ export interface CombinatorMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
 export interface RefMarkIR extends BaseIRNode {
   type: "ref";
   selection: string | Array<string | number>;
+  /** Set when the ref is a `.relate()` operand: the id of the `.relate()`
+   *  call that bound it (see `RelateOperandIR`). */
+  scope?: string;
   name?: string;
   label?: LabelIR;
   translate?: TranslateIR;
@@ -1084,16 +1087,34 @@ export interface ConstraintIR {
    *  carry `options`; z-order constraints don't. `nest` options are
    *  `{ x?: number, y?: number }` (per-axis padding) over `refs: [outer, inner]`. */
   options?: Record<string, unknown>;
-  refs: string[];
+  refs: RelateOperandIR[];
 }
 
 /**
- * One clause of a `.relate()` callback: a constraint over names
+ * A `.relate()` operand on the wire: a ref by name (`RefMarkIR`) whose
+ * `scope` is required: the id of the `.relate()` call that bound it
+ * (`RelateIR.scope`). The receiver looks the name up from the layer that
+ * call ran on, so an inner layer that declares the same name cannot capture
+ * it.
+ */
+export type RelateOperandIR = RefMarkIR & { selection: string; scope: string };
+
+/**
+ * One clause of a `.relate()` callback: a constraint over operands
  * (`ConstraintIR`, which always carries `refs`), or a mark that draws, whose
- * children may include `{ type: "ref", selection: name }` references to the
- * layer's names (`MarkIR`, which never carries `refs`).
+ * children may include operands (`{ type: "ref", selection, scope }`) of
+ * this call or of an enclosing one (`MarkIR`, which never carries `refs`).
  */
 export type RelateClauseIR = ConstraintIR | MarkIR;
+
+/**
+ * A `.relate()` call: a binding form with a fresh scope id, which every
+ * operand it hands out carries, and the clauses its callback returned.
+ */
+export interface RelateIR {
+  scope: string;
+  clauses: RelateClauseIR[];
+}
 
 /** A relate clause is a constraint exactly when it carries `refs`. */
 export function isConstraintIR(clause: RelateClauseIR): clause is ConstraintIR {

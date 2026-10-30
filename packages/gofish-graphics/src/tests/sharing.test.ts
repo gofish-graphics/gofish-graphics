@@ -24,6 +24,7 @@ import { Frame } from "../ast/graphicalOperators/frame";
 import { positionNode } from "../ast/graphicalOperators/positionNode";
 import { Rect as rect } from "../ast/shapes/rect";
 import { ref } from "../ast/shapes/ref";
+import { resolveReferences } from "../ast/_ref";
 import { polar } from "../ast/coordinateTransforms/polar";
 import { scatter, group, treemap, rect as rectMark, enclose } from "../lib";
 import { wrapRing } from "../ast/elaborationUtils";
@@ -44,10 +45,20 @@ function check(name: string, cond: boolean, detail?: string): void {
   }
 }
 
-/** Children that carry only a constraint name, as in constraintConfluence. */
+/** Children that carry only a constraint name, as in constraintConfluence;
+ *  an operand is resolved to the uid of the child it names (the name). */
 const kids = (...names: string[]) =>
-  names.map((name) => ({ _name: name, key: name })) as unknown as GoFishAST[];
+  names.map((name) => ({ _name: name, uid: name, key: name })) as unknown as GoFishAST[];
 const r = (name: string) => ({ name });
+
+/** `planSharing` with each operand resolved to the child of its name. */
+const plan = (constraints: ConstraintSpec[], children: GoFishAST[]) =>
+  planSharing(constraints, children, {
+    keyOf: (ref) => ref.name,
+    operands: new Map(
+      children.map((c, i) => [c.uid, { child: i, direct: true }])
+    ),
+  });
 
 /** The plan in a form that is easy to compare: per axis, each child's set
  *  index, and the sorted nested indices. */
@@ -74,10 +85,12 @@ const expect = (
 };
 
 /** The plan of a real node, after its axis-scope elaboration (where spread
- *  and scatter install their constraints). */
+ *  and scatter install their constraints) and the round that resolves their
+ *  operands. */
 async function planOf(node: any): Promise<SharingPlan> {
   node = await node;
   await node._elaborateInAxisScope?.(BASE_AXIS_SCOPE, BASE_AXIS_SCOPE);
+  resolveReferences(node);
   return node.sharing();
 }
 
@@ -86,7 +99,7 @@ async function main() {
 
   expect(
     "layer with no constraints: all share both axes",
-    planSharing([], kids("a", "b", "c")),
+    plan([], kids("a", "b", "c")),
     {
       x: [0, 0, 0],
       y: [0, 0, 0],
@@ -95,14 +108,14 @@ async function main() {
 
   expect(
     "position, literal pixel point: detaches the child on that axis",
-    planSharing([Constraint.position({ y: 120 }, [r("b")])], kids("a", "b")),
+    plan([Constraint.position({ y: 120 }, [r("b")])], kids("a", "b")),
     { x: [0, 0], y: [0, 1], ny: [] }
   );
   // A pixel interval is a literal position too (`positionCoordKind`): it
   // places the child elsewhere, so it detaches it and nests nothing.
   expect(
     "position, literal pixel interval: detaches the child",
-    planSharing(
+    plan(
       [Constraint.position({ x: [0, 50] }, [r("b")])],
       kids("a", "b")
     ),
@@ -111,12 +124,12 @@ async function main() {
 
   expect(
     "position, datum point: stays in the own set, nested at the datum",
-    planSharing([Constraint.position({ x: v(3) }, [r("b")])], kids("a", "b")),
+    plan([Constraint.position({ x: v(3) }, [r("b")])], kids("a", "b")),
     { x: [0, 0], y: [0, 0], nx: [1] }
   );
   expect(
     "position, datum interval: stays in the own set, nested",
-    planSharing(
+    plan(
       [Constraint.position({ y: [v(0), v(10)] }, [r("a")])],
       kids("a", "b")
     ),
@@ -125,7 +138,7 @@ async function main() {
 
   expect(
     "align, point anchor: joins the listed children (beats a position)",
-    planSharing(
+    plan(
       [
         Constraint.position({ x: 0, y: 0 }, [r("a")]),
         Constraint.position({ x: 300 }, [r("b")]),
@@ -138,7 +151,7 @@ async function main() {
   );
   expect(
     'align, "span" and "size": contribute nothing',
-    planSharing(
+    plan(
       [
         Constraint.position({ x: 300, y: 300 }, [r("b")]),
         Constraint.align({ x: "span", y: "size" }, [r("a"), r("b")]),
@@ -150,7 +163,7 @@ async function main() {
 
   expect(
     "distribute, glue (stack): joins the parts",
-    planSharing(
+    plan(
       [
         Constraint.position({ y: 10 }, [r("a")]),
         Constraint.position({ y: 20 }, [r("b")]),
@@ -163,7 +176,7 @@ async function main() {
 
   expect(
     "distribute, no glue (spread): detaches and nests each part",
-    planSharing(
+    plan(
       [Constraint.distribute({ dir: "x" }, [r("a"), r("b"), r("c")])],
       kids("a", "b", "c")
     ),
@@ -172,7 +185,7 @@ async function main() {
 
   expect(
     "nest: outer and inner share the axes it names",
-    planSharing(
+    plan(
       [
         Constraint.position({ x: 5, y: 5 }, [r("inner")]),
         Constraint.nest({ x: 4 }, [r("outer"), r("inner")]),
@@ -184,7 +197,7 @@ async function main() {
 
   expect(
     "grid (table): both axes act as spread directions",
-    planSharing(
+    plan(
       [createGridConstraint({ numCols: 2 }, [r("a"), r("b"), r("c"), r("d")])],
       kids("a", "b", "c", "d")
     ),
@@ -198,7 +211,7 @@ async function main() {
 
   expect(
     "z-order and overlap: nothing",
-    planSharing(
+    plan(
       [
         Constraint.zAbove(r("a"), r("b")),
         Constraint.zBelow(r("b"), r("a")),
@@ -326,13 +339,10 @@ async function main() {
     ],
     [
       "ref: the target takes part where the ref sits",
-      () =>
-        planOf(
-          (layer as any)([
-            (rect as any)({ w: 10, h: v(4) }).name("target"),
-            ref("target"),
-          ])
-        ),
+      async () => {
+        const target = await (rect as any)({ w: 10, h: v(4) });
+        return planOf((layer as any)([target, ref(target)]));
+      },
       { x: [0, 0], y: [0, 0] },
     ],
     [
@@ -342,7 +352,7 @@ async function main() {
           (rect as any)({ w: 10, h: 10 }).name("a"),
           (rect as any)({ w: 10, h: 10 }).name("b"),
         ]).relate(({ a, b }: any) => [enclose({}, [a, b])]);
-        return planSharing(node.constraints, node.children);
+        return plan(node.constraints, node.children);
       },
       { x: [0, 0, 0], y: [0, 0, 0] },
     ],
@@ -387,7 +397,7 @@ async function main() {
   // stories/seaborn/MarginalHistogram.stories.tsx:74-80.
   expect(
     "marginal histogram: x shared through align, y detached by position",
-    planSharing(
+    plan(
       [
         Constraint.position({ x: 0, y: 0, anchor: "baseline" }, [r("scatter")]),
         Constraint.align({ x: "baseline" }, [r("scatter"), r("topHist")]),
@@ -418,7 +428,7 @@ async function main() {
 
   expect(
     "a child that is not a direct child takes no part",
-    planSharing([Constraint.position({ x: 5 }, [r("elsewhere")])], kids("a")),
+    plan([Constraint.position({ x: 5 }, [r("elsewhere")])], kids("a")),
     { x: [0], y: [0] }
   );
 
@@ -432,10 +442,10 @@ async function main() {
     ]);
     const ring: any = await wrapRing(
       content,
-      "content",
       { nodes: [], constraints: () => [] },
       { x: datum(5), y: undefined }
     );
+    resolveReferences(ring);
     ring.resolveUnderlyingSpace();
     const plan: any = ring.sharing();
     check(
@@ -459,7 +469,7 @@ async function main() {
     const content: any = await (layer as any)([
       (rect as any)({ w: v(30), h: 10 }),
     ]);
-    const ring: any = await wrapRing(content, "content", {
+    const ring: any = await wrapRing(content, {
       nodes: [(rect as any)({ w: 1, h: 1 })],
       constraints: () => [],
     });
@@ -467,6 +477,8 @@ async function main() {
     ring.children[0] = wrapper;
     wrapper.parent = ring;
     ring.clearUnderlyingSpace();
+    // The pass runs the round again (`reresolve` in gofish.tsx).
+    resolveReferences(ring);
     ring.resolveUnderlyingSpace();
     const plan: any = ring.sharing();
     check(

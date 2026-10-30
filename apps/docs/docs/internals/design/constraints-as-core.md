@@ -403,11 +403,10 @@ propagation for positions, plus an
 analytic one-unknown size solve Bluefish lacked. The known superlinear
 lurkers, both pre-existing and shared with operators today: nested
 _non-linear_ folds make an ancestor's inversion cost O(subtree closure size · 70) (mitigated by the linear fast path; could memoize `run` per σ), and
-the operand lookup (`scopedNames`, a breadth-first search that stops at
-the first depth with a match and keeps what it walked across names) is
-O(scope) for all of a layer's operand names together (#1175; it was O(scope)
-per distinct name, so quadratic in a scatter's point count). Neither is
-quadratic in spec size.
+the operand lookup (`lookupName`, a breadth-first search that stops at
+the first depth with a match and never walks a subtree twice) is O(scope) per
+distinct operand name in the worst case, and much less when the name is a
+direct child. Neither is quadratic in spec size.
 
 **Brittleness and linear-cost robustness fixes.** Today's constraint path is
 brittle in five identifiable ways, none of which needs a cleverer solver:

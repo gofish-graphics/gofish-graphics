@@ -354,7 +354,7 @@ export const tween = createNodeOperator(
         color: isValue(fill) ? fill : undefined,
         resolveUnderlyingSpace: (
           _children: Size<UnderlyingSpace>[],
-          _childNodes: GoFishAST[]
+          _childNodes: readonly GoFishAST[]
         ) => [UNDEFINED, UNDEFINED],
         layout: (size, scales, children) => {
           // Forward σ but not the anchored map, exactly as `connect` does:
@@ -376,7 +376,6 @@ export const tween = createNodeOperator(
             if (leaf === operands[k]) return placed[operand[k]];
             const stand = new GoFishRef({ node: leaf });
             stand.parent = self;
-            stand.resolveNames();
             return stand.layout(size);
           };
 

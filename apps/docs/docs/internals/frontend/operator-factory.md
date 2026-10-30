@@ -365,9 +365,11 @@ returned). Instead:
   if `labelState` is set, every node the leaf produced gets `node.datum ??=
 leaf` (the leaf's own subdata — usually the rows array `split` handed it)
   and `node.label(labelState.accessor, labelState.options, layerContext)`
-  (the chart's named layers, where a `selectAll(name)` in the label's
-  `avoiding` is found; the mark-side `labelModifier` passes it the same
-  way). Stamping
+  (the name registry the operator is built in: the chart's, or that of a
+  `layer([...])` combinator nested in it. A `selectAll(name)` in the
+  label's `avoiding` is found there by the widening lookup
+  `LayerContext.lookup`, nearer registries first; the mark-side
+  `labelModifier` passes it the same way). Stamping
   `datum` here is what makes the label-elaboration pass's `resolveLabelTargets`
   gate ("a node with its own datum keeps its own label instead of propagating
   it to children") fire at the group level — the same effect the pre-#702 manual workaround achieved

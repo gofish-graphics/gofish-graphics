@@ -17,17 +17,9 @@ import { RelateOperand } from "../constraints/relate";
 import { isToken } from "../createName";
 import type { Mark, MarkChild } from "../types";
 
-/** Per-chart registry of named layers for ref()/selectAll() lookup. A string
- *  name is its own key. A `createName` token is keyed by its symbol, which no
- *  string can equal, so its nodes are there for the chart's own use (a later
- *  tier's scope, a sequence's transitions) and stay out of reach of a string
- *  `selectAll`/`ref`. */
-export type LayerContext = {
-  [key: string | symbol]: {
-    data: any[];
-    nodes: GoFishNode[];
-  };
-};
+/** The marks one name stands for in a registry: the nodes, and the datum of
+ *  each, in registration order. */
+export type LayerEntry = { data: any[]; nodes: GoFishNode[] };
 
 /** The registry key a `.name(...)` value is filed under, or `undefined` when it
  *  names nothing (an empty string, or no name). */
@@ -35,6 +27,164 @@ export function layerKey(name: unknown): string | symbol | undefined {
   if (typeof name === "string") return name.length > 0 ? name : undefined;
   if (isToken(name)) return name.__id;
   return undefined;
+}
+
+let nextScope = 0;
+
+/**
+ * A registry of named marks for `ref()`/`selectAll()` lookup, and the scope
+ * it belongs to. A string name is its own key. A `createName` token is keyed
+ * by its symbol, which no string can equal, so its nodes are there for the
+ * chart's own use (a later tier's scope, a sequence's transitions) and stay
+ * out of reach of a string `selectAll`/`ref`.
+ *
+ * The registries form a scope tree: a `layer([...])` combinator's registry
+ * is a child of the registry of the place it is built in (a chart, an
+ * operator's cell, another layer). A registry with no parent is a root: a
+ * top-level render, or the body of a `createMark` component, which is the
+ * boundary of every name lookup. A registry links only to its parent. Each
+ * new name is indexed upward when it is registered: every ancestor records
+ * the nearest depth below it that has the name, and the registries at that
+ * depth, so a lookup reads one index entry per ancestor.
+ */
+export class LayerContext {
+  /** Creation order: the order of a parent's children. */
+  readonly seq = nextScope++;
+  readonly depth: number;
+  private readonly own = new Map<string | symbol, LayerEntry>();
+  private readonly nearest = new Map<
+    string | symbol,
+    { depth: number; scopes: LayerContext[] }
+  >();
+
+  /** The registries nested in this one, in creation order. */
+  private readonly kids: LayerContext[] = [];
+
+  constructor(readonly parent?: LayerContext) {
+    this.depth = parent ? parent.depth + 1 : 0;
+    parent?.kids.push(this);
+  }
+
+  /** A fresh registry nested in this one. */
+  child(): LayerContext {
+    return new LayerContext(this);
+  }
+
+  /** The marks filed under `key` in this registry itself, not widened. */
+  get(key: string | symbol): LayerEntry | undefined {
+    return this.own.get(key);
+  }
+
+  /** File `node` under `key` in this registry. */
+  register(key: string | symbol, node: GoFishNode): void {
+    let entry = this.own.get(key);
+    if (!entry) {
+      this.own.set(key, (entry = { data: [], nodes: [] }));
+      this.indexUpward(key);
+    }
+    entry.nodes.push(node);
+    entry.data.push((node as { datum?: unknown }).datum);
+  }
+
+  /** Remove this registry, and every registry nested in it, from its
+   *  parent: no lookup from an ancestor finds their names afterwards. Each
+   *  ancestor's index for those names is rebuilt from its own names and its
+   *  remaining nested registries' indices, nearest first. */
+  discard(): void {
+    const p = this.parent;
+    if (p === undefined) return;
+    const i = p.kids.indexOf(this);
+    if (i < 0) return;
+    p.kids.splice(i, 1);
+    for (const key of this.nearest.keys())
+      for (let s: LayerContext | undefined = p; s; s = s.parent) s.reindex(key);
+  }
+
+  /** Rebuild this registry's index for `key`: itself when it has the name,
+   *  else the nearest of its nested registries that do, in scope order. */
+  private reindex(key: string | symbol): void {
+    if (this.own.has(key)) {
+      this.nearest.set(key, { depth: 0, scopes: [this] });
+      return;
+    }
+    let best: { depth: number; scopes: LayerContext[] } | undefined;
+    for (const kid of this.kids) {
+      const at = kid.nearest.get(key);
+      if (at === undefined) continue;
+      const depth = at.depth + 1;
+      if (best === undefined || depth < best.depth)
+        best = { depth, scopes: [...at.scopes] };
+      else if (depth === best.depth) best.scopes.push(...at.scopes);
+    }
+    if (best === undefined) this.nearest.delete(key);
+    else this.nearest.set(key, best);
+  }
+
+  /** Record this registry's new `key` in its own and every ancestor's index.
+   *  An ancestor that already knows a nearer registry has passed it on
+   *  upward, so the walk stops there. */
+  private indexUpward(key: string | symbol): void {
+    for (let s: LayerContext | undefined = this; s; s = s.parent) {
+      const depth = this.depth - s.depth;
+      const at = s.nearest.get(key);
+      if (at && at.depth < depth) return;
+      if (!at || depth < at.depth) {
+        s.nearest.set(key, { depth, scopes: [this] });
+      } else insertInScopeOrder(at.scopes, this);
+    }
+  }
+
+  /**
+   * The marks `key` stands for, seen from this registry, by the same
+   * widening lookup `ref("x")` uses over the tree: search this scope and the
+   * scopes nested in it, then its parent's, one level at a time, and stop at
+   * the first level that has the name. Inside that level the nearest depth
+   * wins, and every registry at that depth that has the name contributes its
+   * marks, in scope order: a name a split repeats (one `layer` per cell) is
+   * plural, so `selectAll` gathers all its marks and the singular `ref`
+   * reports how many it found. Never crosses a root. `undefined` when no
+   * level has the name.
+   */
+  lookup(key: string | symbol): LayerEntry | undefined {
+    for (let s: LayerContext | undefined = this; s; s = s.parent) {
+      const at = s.nearest.get(key);
+      if (at)
+        return {
+          data: at.scopes.flatMap((c) => c.own.get(key)!.data),
+          nodes: at.scopes.flatMap((c) => c.own.get(key)!.nodes),
+        };
+    }
+    return undefined;
+  }
+}
+
+/** Insert `scope` into `scopes`, which is in scope order. Registries mostly
+ *  register in tree order (a split's cells, in sequence), so the common case
+ *  appends; one that registers early is placed by binary search. */
+function insertInScopeOrder(scopes: LayerContext[], scope: LayerContext): void {
+  const last = scopes[scopes.length - 1];
+  if (last === undefined || treeOrder(last, scope) < 0) {
+    scopes.push(scope);
+    return;
+  }
+  let lo = 0;
+  let hi = scopes.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (treeOrder(scopes[mid], scope) < 0) lo = mid + 1;
+    else hi = mid;
+  }
+  scopes.splice(lo, 0, scope);
+}
+
+/** Scope order for two registries at the same depth: the creation order of
+ *  the children of their nearest common ancestor that hold them. */
+function treeOrder(a: LayerContext, b: LayerContext): number {
+  while (a.parent !== b.parent) {
+    a = a.parent!;
+    b = b.parent!;
+  }
+  return a.seq - b.seq;
 }
 
 /**
@@ -105,9 +255,8 @@ export async function resolveMarkResult(
     raw = await (raw as unknown as Promise<ReturnType<Mark<any>>>);
   }
   // A `.relate()` operand in term position (a child of a drawing clause) is
-  // a string ref to the node it names, resolved from the relating layer.
-  if (raw instanceof RelateOperand)
-    return new GoFishRef({ selection: raw.name }) as unknown as GoFishNode;
+  // a string ref to the node it names, resolved from the layer that bound it.
+  if (raw instanceof RelateOperand) return raw.toRef() as unknown as GoFishNode;
   // A chart pipeline resolves to its own node. A `.mark(<relational mark>)`
   // chart elaborates to `.mark(anchor).layer(R)`, i.e. a LayerBuilder — so a
   // chart pipeline handed anywhere a mark is taken (a `.layer(...)` tier, a
@@ -117,7 +266,7 @@ export async function resolveMarkResult(
   if (isChartPipeline(raw))
     return raw
       .inScope(rows)
-      .withLayerContext(layerContext ?? {})
+      .withLayerContext(layerContext ?? new LayerContext())
       .resolve();
   if (typeof raw === "function")
     return resolveMarkResult(
