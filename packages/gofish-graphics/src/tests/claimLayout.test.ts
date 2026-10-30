@@ -16,6 +16,7 @@ import {
   field,
   layer as layerOf,
   value,
+  percent,
 } from "../lib";
 import { runLayout } from "../ast/gofish";
 import * as Pwl from "../ast/solver/pwl";
@@ -447,6 +448,44 @@ async function main() {
           'rect(key: "a"), rect(key: "b") are sized by data'
         ),
       data.warnings.map((w) => w.message)
+    );
+  }
+
+  console.log("\n# an overflow's breakdown sums each kind's parts");
+  {
+    // Two panels and a 12 px gap in a 720 px layer: 30% and 70% are
+    // 216 + 504 px, so the row needs 732 px. Panels of one kind with
+    // different sizes are listed; panels of one size are counted.
+    const row = (a: number, b: number) =>
+      layerOf({ w: 720, h: 120 }, [
+        spread({ dir: "x", spacing: 12, alignment: "start" }, [
+          layerOf({ w: percent(a), h: 120 }, [rect({ fill: "#dbe9f6" })]),
+          layerOf({ w: percent(b), h: 120 }, [rect({ fill: "#fde7d4" })]),
+        ]),
+      ]);
+    const fixedOf = async (a: number, b: number) =>
+      (await runLayout({}, await (row(a, b) as any)(undefined))).warnings.filter(
+        (w) => w.kind === "fixed-overflow"
+      );
+    const differ = await fixedOf(30, 70);
+    check(
+      "30% and 70% panels are summed and listed: 216 px + 504 px = 720 px",
+      differ.length === 1 &&
+        differ[0].message.includes(
+          "Fixed parts: layer: its own size, 216 px + 504 px = 720 px; " +
+            'spread(dir: "x"): spacing 12 × 1 = 12 px.'
+        ),
+      differ.map((w) => w.message)
+    );
+    const same = await fixedOf(50, 50);
+    check(
+      "two 50% panels keep their count: ×2 = 720 px",
+      same.length === 1 &&
+        same[0].message.includes(
+          "Fixed parts: layer: its own size, ×2 = 720 px; " +
+            'spread(dir: "x"): spacing 12 × 1 = 12 px.'
+        ),
+      same.map((w) => w.message)
     );
   }
 

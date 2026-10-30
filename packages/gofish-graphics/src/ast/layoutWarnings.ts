@@ -172,11 +172,13 @@ function fixedParts(
   total: number,
   ofContent: boolean
 ): { part: string; px: number }[] {
-  const spacing = new Map<string, { each: number; count: number }>();
-  const add = (key: string, each: number) => {
-    const cur = spacing.get(key) ?? { each, count: 0 };
-    cur.count++;
-    spacing.set(key, cur);
+  // Each description's parts, by their pixels: parts of one description
+  // can differ (two panels of one kind, a percent spacing in two slots).
+  const groups = new Map<string, number[]>();
+  const add = (key: string, partPx: number) => {
+    const sizes = groups.get(key) ?? [];
+    sizes.push(partPx);
+    groups.set(key, sizes);
   };
   const visit = (n: GoFishNode) => {
     if (
@@ -204,9 +206,9 @@ function fixedParts(
   if (!ofContent && node.claimWalk?.ownSize(axis) !== undefined)
     return [{ part: "its own size", px: total }];
   visit(node);
-  const parts = [...spacing].map(([key, { each, count }]) => ({
-    part: count > 1 ? `${key}, ×${count}` : key,
-    px: each * count,
+  const parts = [...groups].map(([key, sizes]) => ({
+    part: groupedPart(key, sizes),
+    px: sizes.reduce((a, s) => a + s, 0),
   }));
   const named = parts.reduce((a, p) => a + p.px, 0);
   if (Pwl.overflows(total, named))
@@ -215,6 +217,22 @@ function fixedParts(
       px: total - named,
     });
   return parts.sort((a, b) => b.px - a.px);
+}
+
+/**
+ * How a description's parts add up, before ` = <their sum>`: one part is
+ * the description; parts of one size are `×count`; parts of differing sizes
+ * list them, `216 px + 504 px`, or past four give their range.
+ */
+function groupedPart(key: string, sizes: number[]): string {
+  if (sizes.length === 1) return key;
+  const same = sizes.every((s) => !Pwl.overflows(Math.abs(s - sizes[0]), 0));
+  if (same) return `${key}, ×${sizes.length}`;
+  if (sizes.length <= 4) return `${key}, ${sizes.map(px).join(" + ")}`;
+  return (
+    `${key}, ×${sizes.length} from ${px(Math.min(...sizes))} ` +
+    `to ${px(Math.max(...sizes))}`
+  );
 }
 
 /**

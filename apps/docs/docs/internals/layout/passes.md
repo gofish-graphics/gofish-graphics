@@ -1004,8 +1004,11 @@ those lines, so `pnpm capture-one` prints them under the story.
   node that holds the fixed parts: down from where the check failed through
   each node whose fixed pixels are mostly one child's (rings, label
   wrappers), taking off what each adds, to the first spread, sized node or
-  leaf. It lists the spacing of each spread below it (spreads of one
-  description summed, with their count) and the rest of the fixed pixels.
+  leaf. It lists the spacing of each spread below it and the size of each
+  node with a size of its own, the parts of one description summed (with
+  their count when they are one size, `×2 = 720 px`, and each size when
+  they differ, `216 px + 504 px = 720 px`), and the rest of the fixed
+  pixels.
   The scope then maps its data at the σ where the parts that grow with σ
   fill the slot, as if the fixed parts took no room.
 - **Data-driven and flexible sizes in one chain (`mixed-sizes`).** A part
