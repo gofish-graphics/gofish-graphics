@@ -74,15 +74,14 @@ import { execSync, spawn, type ChildProcess } from "child_process";
 import { availableParallelism } from "os";
 import { writeFileSync, mkdirSync, rmSync, existsSync, cpSync } from "fs";
 import { join, dirname } from "path";
-import { normalizeDom } from "./normalize-dom.js";
+import { normalizeDom, realRepoRoot } from "./normalize-dom.js";
 import { storyToPath } from "./path-mapping.js";
 import {
-  LAYOUT_WARNING_PREFIX,
   consoleWarningLine,
   pageErrorLine,
   serializeWarnings,
-  warningsPathFor,
 } from "./story-warnings.js";
+import { snapshotParts } from "./diff-utils.js";
 import { git, removeWorktree } from "./snapshot-branch.js";
 
 export interface StoryInfo {
@@ -275,13 +274,15 @@ export async function withHarness<T>(
   });
   viteProc.stderr?.on("data", (d) => process.stderr.write(d.toString()));
 
+  const repoRoot = realRepoRoot(harnessDir);
   let browser: Browser | undefined;
   try {
     await waitForVite(port);
     browser = await chromium.launch({ headless: true });
     const b = browser;
     return await fn(
-      (log, contextOptions) => openRunnerPage(b, port, log, contextOptions),
+      (log, contextOptions) =>
+        openRunnerPage(b, port, repoRoot, log, contextOptions),
       b
     );
   } finally {
@@ -363,12 +364,14 @@ export type RunnerPage = {
  * header comment). Context startup is ~tens of ms, same order as the
  * navigation itself. Browser console errors and layout warnings go to `log`,
  * so a story's errors and warnings print with that story, and to the page's
- * `warnings`, which the capture stores. `contextOptions` override the context defaults
- * (capture-docs-images asks for `deviceScaleFactor: 2`).
+ * `warnings`, which the capture stores. `repoRoot` is the checkout the dev
+ * server serves (see `normalizeConsoleText`). `contextOptions` override the
+ * context defaults (capture-docs-images asks for `deviceScaleFactor: 2`).
  */
 async function openRunnerPage(
   browser: Browser,
   port: number,
+  repoRoot: string,
   log: Log,
   contextOptions: BrowserContextOptions = {}
 ): Promise<RunnerPage> {
@@ -384,19 +387,22 @@ async function openRunnerPage(
   const page = await context.newPage();
   const warnings: string[] = [];
   page.on("console", (msg) => {
-    const line = consoleWarningLine(msg.type(), msg.text());
-    if (line !== null) warnings.push(line);
+    const line = consoleWarningLine(msg.type(), msg.text(), repoRoot);
+    if (line === null) {
+      if (process.env.DEBUG)
+        log({ err: false, text: `[browser:${msg.type()}] ${msg.text()}` });
+      return;
+    }
+    warnings.push(line);
+    // An error, or a layout warning (fixed parts larger than their slot, a
+    // drawing past the canvas), prints with its story, so a render loop
+    // sees it.
     if (msg.type() === "error")
       log({ err: true, text: `[browser] ${msg.text()}` });
-    // A layout warning (fixed parts larger than their slot, a drawing past
-    // the canvas) prints with its story, so a render loop sees it.
-    else if (msg.text().startsWith(LAYOUT_WARNING_PREFIX))
-      log({ err: false, text: `    ${msg.text()}` });
-    else if (process.env.DEBUG)
-      log({ err: false, text: `[browser:${msg.type()}] ${msg.text()}` });
+    else log({ err: false, text: `    ${msg.text()}` });
   });
   page.on("pageerror", (err) => {
-    warnings.push(pageErrorLine(err.message));
+    warnings.push(pageErrorLine(err.message, repoRoot));
     log({ err: true, text: `[browser pageerror] ${err.message}` });
   });
   await page.goto(`http://localhost:${port}/stories-runner.html`, {
@@ -544,20 +550,22 @@ async function captureStory(
   });
   if (!rawDom.trim()) return { kind: "skipped", path };
 
-  const html = join(outDir, `${path}.html`);
+  const parts = snapshotParts(`${path}.html`);
+  const html = join(outDir, parts.dom);
   mkdirSync(dirname(html), { recursive: true });
   writeFileSync(html, normalizeDom(rawDom), "utf-8");
 
   // Written after the DOM is read: every message the render printed has
-  // reached this process by the time that evaluate returned.
-  const warningsFile = join(outDir, warningsPathFor(`${path}.html`));
+  // reached this process by the time that evaluate returned. Always written,
+  // also when empty: a capture without one is an error (`diffSnapshot`).
+  const warningsFile = join(outDir, parts.warnings);
   writeFileSync(warningsFile, serializeWarnings(warnings), "utf-8");
 
   let png: string | undefined;
   if (screenshot) {
     const rootHandle = await page.$("#stories-root");
     if (rootHandle) {
-      png = join(outDir, `${path}.png`);
+      png = join(outDir, parts.screenshot);
       writeFileSync(png, await rootHandle.screenshot({ type: "png" }));
     }
   }

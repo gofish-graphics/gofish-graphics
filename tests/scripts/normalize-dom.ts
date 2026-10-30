@@ -4,7 +4,13 @@
  * Both JS (Storybook) and Python (harness) DOM output go through this
  * pipeline so that superficial differences (attribute order, whitespace,
  * generated IDs, float precision) don't cause false negatives.
+ *
+ * A story's warnings lines (story-warnings.ts) are normalized here too
+ * (`normalizeConsoleText`), for the same reason.
  */
+
+import { realpathSync } from "fs";
+import { join } from "path";
 
 // ---------------------------------------------------------------------------
 // 1. Strip wrapper markup — keep only the chart container innerHTML
@@ -329,4 +335,49 @@ export function normalizeDom(
   s = normalizeWhitespace(s);
 
   return s;
+}
+
+// ---------------------------------------------------------------------------
+// 7. Console text (a story's warnings lines; see story-warnings.ts)
+// ---------------------------------------------------------------------------
+
+/** A URL of the capture's dev server, up to the next space, quote or paren. */
+const DEV_SERVER_URL = /https?:\/\/localhost:\d+(\/[^\s'"()]*)?/g;
+/** A served URL's path, its query (without the `?`), and the rest. */
+const URL_PARTS = /^([^?#]*)(?:\?([^:#]*))?(.*)$/;
+/** One of Vite's cache-busting query parameters. */
+const CACHE_BUSTER = /^(?:v|t)=[0-9a-zA-Z]+$/;
+
+/**
+ * The first line of a console message, with each URL of the dev server
+ * rewritten to the path it serves, so the same message agrees across
+ * captures from different checkouts and ports (capture-diff's base worktree
+ * and HEAD): the origin is dropped, Vite's `?v=` / `?t=` queries are
+ * removed, and a `/@fs/<repoRoot>/` path (a file outside the Vite root)
+ * becomes repo-relative. Text outside those URLs is left as it is.
+ * `repoRoot` is a real path, as Vite names `/@fs/` files by their real path
+ * (on macOS /tmp is /private/tmp): see `realRepoRoot`.
+ */
+export function normalizeConsoleText(text: string, repoRoot: string): string {
+  const fsPrefix = `/@fs${repoRoot.replace(/\/$/, "")}/`;
+  return text
+    .split("\n")[0]
+    .trimEnd()
+    .replace(DEV_SERVER_URL, (_, url: string = "/") => {
+      // path, query, and the rest (a stack frame's `:line:col`, a hash)
+      const [, path, query = "", rest] = url.match(URL_PARTS)!;
+      const kept = query
+        .split("&")
+        .filter((param) => param && !CACHE_BUSTER.test(param));
+      const served = path.startsWith(fsPrefix)
+        ? "/" + path.slice(fsPrefix.length)
+        : path;
+      return served + (kept.length ? `?${kept.join("&")}` : "") + rest;
+    });
+}
+
+/** The real path of the checkout whose harness is at `harnessDir`, the
+ *  `repoRoot` of `normalizeConsoleText`. */
+export function realRepoRoot(harnessDir: string): string {
+  return realpathSync(join(harnessDir, "../.."));
 }

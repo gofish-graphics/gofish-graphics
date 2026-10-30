@@ -37,7 +37,7 @@
  * (so it doubles as a pass/fail gate in an inner loop).
  */
 
-import { readFileSync, writeFileSync, rmSync, mkdirSync, existsSync } from "fs";
+import { writeFileSync, rmSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import {
   captureStories,
@@ -45,17 +45,12 @@ import {
   withBaseRefHarness,
 } from "./capture-core.js";
 import {
-  formatDomDiff,
-  formatWarningsHtml,
-  warningsSummary,
+  diffSnapshotDirs,
+  formatEntryDomDiff,
+  formatWarningsPanel,
   escapeHtml,
+  type StoryChange,
 } from "./diff-utils.js";
-import {
-  diffWarnings,
-  readWarnings,
-  warningsPathFor,
-  type WarningsDiff,
-} from "./story-warnings.js";
 import { git } from "./snapshot-branch.js";
 import {
   loadSpecsByPath,
@@ -77,69 +72,43 @@ const BASE_PORT = 3003; // distinct so the base worktree's server can coexist
 // Report
 // ---------------------------------------------------------------------------
 
-interface Change {
-  path: string;
-  kind: "changed" | "added" | "removed";
-  baseDom: string | null;
-  headDom: string | null;
-  warnings: WarningsDiff;
-}
-
 function generateReport(
   baseRef: string,
   filter: string | undefined,
-  changes: Change[],
+  changes: StoryChange[],
   /** path → highlighted spec fragment (HEAD's code; none for removed) */
   specs: Map<string, string>
 ): string {
-  const kindColor: Record<Change["kind"], string> = {
+  const kindColor: Record<StoryChange["kind"], string> = {
     changed: "#e74c3c",
-    added: "#3498db",
+    new: "#3498db",
     removed: "#95a5a6",
   };
-  const kindLabel: Record<Change["kind"], string> = {
+  const kindLabel: Record<StoryChange["kind"], string> = {
     changed: "CHANGED",
-    added: `ADDED (not in ${baseRef})`,
+    new: `ADDED (not in ${baseRef})`,
     removed: `REMOVED (only in ${baseRef})`,
   };
 
   const entryHtml = changes
     .map((c) => {
-      const domChanged = c.baseDom !== c.headDom;
-      const body =
-        c.kind === "changed" && c.baseDom && c.headDom
-          ? domChanged
-            ? formatDomDiff(c.baseDom, c.headDom)
-            : `<div style="padding:8px 16px;color:#888;font-size:13px;">DOM identical: only the warnings changed.</div>`
-          : `<pre style="margin:0;white-space:pre-wrap;padding:8px;">${escapeHtml(
-              c.headDom ?? c.baseDom ?? ""
-            )}</pre>`;
-      // Open when the warnings changed; collapsed when they are only there.
-      const warningsOpen = c.warnings.state === "changed";
-      const warningsHtml =
-        c.warnings.lines.length === 0
-          ? ""
-          : `
-      <details ${warningsOpen ? "open" : ""} style="padding:0;border-top:1px solid #e0e0e0;">
-        <summary style="cursor:pointer;font-weight:bold;font-size:13px;padding:8px 16px;">Warnings: ${escapeHtml(warningsSummary(c.warnings))}</summary>
-        <div style="max-height:400px;overflow:auto;border-top:1px solid #e0e0e0;">
-          ${formatWarningsHtml(c.warnings)}
-        </div>
-      </details>`;
+      const domChanged = c.change === "dom" || c.change === "both";
+      const panel = formatWarningsPanel(c.warnings);
       return `
     <div style="border:1px solid #ddd;margin:16px 0;border-radius:6px;overflow:hidden;">
       <div style="padding:12px 16px;background:${kindColor[c.kind]}22;border-bottom:1px solid #ddd;">
-        <span style="font-weight:bold;color:${kindColor[c.kind]};">${kindLabel[c.kind]}${
-          c.kind === "changed" && !domChanged ? " (warnings only)" : ""
+        <span style="font-weight:bold;color:${kindColor[c.kind]};">${escapeHtml(kindLabel[c.kind])}${
+          c.change === "warnings" ? " (warnings only)" : ""
         }</span>
         <span style="margin-left:12px;font-family:monospace;">${escapeHtml(c.path)}</span>
       </div>
-      <details ${c.kind === "changed" && domChanged ? "open" : ""} style="padding:0;">
+      <details ${domChanged ? "open" : ""} style="padding:0;">
         <summary style="cursor:pointer;font-weight:bold;font-size:13px;padding:8px 16px;">DOM diff (− ${escapeHtml(baseRef)}, + HEAD)</summary>
         <div style="max-height:600px;overflow:auto;border-top:1px solid #e0e0e0;">
-          ${body}
+          ${formatEntryDomDiff(c.before?.dom ?? null, c.after?.dom ?? null)}
         </div>
-      </details>${warningsHtml}${
+      </details>
+      ${panel && `<div style="padding:8px 16px 0;border-top:1px solid #e0e0e0;">${panel}</div>`}${
         specs.has(c.path)
           ? `
       <details style="padding:0;border-top:1px solid #e0e0e0;">
@@ -230,45 +199,22 @@ async function main() {
     });
   });
 
-  // 3. Diff per story.
-  const headSet = new Set(headResult.captured);
-  const baseSet = new Set(baseResult.captured);
-  const all = Array.from(new Set([...headSet, ...baseSet])).sort();
-
-  const changes: Change[] = [];
-  for (const path of all) {
-    const headDom = headSet.has(path)
-      ? readFileSync(join(HEAD_DIR, path), "utf-8")
-      : null;
-    const baseDom = baseSet.has(path)
-      ? readFileSync(join(BASE_DIR, path), "utf-8")
-      : null;
-    // Both sides are captured by this tree's tooling, so each captured story
-    // has its warnings file.
-    const warnings = diffWarnings(
-      baseDom === null
-        ? null
-        : readWarnings(join(BASE_DIR, warningsPathFor(path))),
-      headDom === null
-        ? null
-        : readWarnings(join(HEAD_DIR, warningsPathFor(path))),
-      baseDom !== null
-    );
-
-    if (baseDom === null)
-      changes.push({ path, kind: "added", baseDom, headDom, warnings });
-    else if (headDom === null)
-      changes.push({ path, kind: "removed", baseDom, headDom, warnings });
-    else if (headDom !== baseDom || warnings.state === "changed")
-      changes.push({ path, kind: "changed", baseDom, headDom, warnings });
-  }
+  // 3. Diff per story: the same snapshot diff as the CI compare
+  //    (`diffSnapshotDirs`), with the base capture as the baseline. Both
+  //    sides come from this tree's capture, so both have warnings files.
+  const changes = diffSnapshotDirs(BASE_DIR, HEAD_DIR);
 
   // 4. Report.
   console.log(`\n=== Result: HEAD vs ${baseRef} (${baseShort}) ===\n`);
 
   const changed = changes.filter((c) => c.kind === "changed");
-  const added = changes.filter((c) => c.kind === "added");
+  const added = changes.filter((c) => c.kind === "new");
   const removed = changes.filter((c) => c.kind === "removed");
+  const changeNote = {
+    dom: "",
+    warnings: " (warnings only)",
+    both: " (DOM and warnings)",
+  };
 
   if (changes.length === 0) {
     console.log(
@@ -278,13 +224,7 @@ async function main() {
     if (changed.length) {
       console.log(`  ${changed.length} changed:`);
       for (const c of changed) {
-        const what =
-          c.headDom === c.baseDom
-            ? " (warnings only)"
-            : c.warnings.state === "changed"
-              ? " (DOM and warnings)"
-              : "";
-        console.log(`    ~ ${c.path}${what}`);
+        console.log(`    ~ ${c.path}${c.change ? changeNote[c.change] : ""}`);
         for (const l of c.warnings.lines) {
           if (l.kind === "added") console.log(`        + ${l.text}`);
           else if (l.kind === "removed") console.log(`        - ${l.text}`);

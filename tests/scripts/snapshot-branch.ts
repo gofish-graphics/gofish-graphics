@@ -18,9 +18,14 @@
  * but __snapshots__/ is gitignored on code branches — it is a local cache only.
  *
  * The baselines of a code branch B are snapshots/main's current tree,
- * overlaid with only the files snapshots/B changed since it forked from
- * snapshots/main: files it added or modified are taken from snapshots/B, and
- * files it deleted are deleted. A file both changed keeps snapshots/B's
+ * overlaid with only the stories snapshots/B changed since it forked from
+ * snapshots/main. The unit is a story's snapshot (`baselineParts` in
+ * diff-utils.ts: its DOM, warnings and screenshot): when snapshots/B added,
+ * modified or deleted any part of a story, every part of that story is
+ * taken from snapshots/B, and a part snapshots/B does not have is deleted.
+ * So a story's DOM is never paired with another branch's warnings or
+ * screenshot (a DOM accepted on B before warnings were captured has
+ * unrecorded warnings, not main's). A story both changed keeps snapshots/B's
  * version. When snapshots/B does not exist, the baselines are snapshots/main.
  * snapshots/B is a branch of snapshots/main (its first commit has
  * snapshots/main's head as parent), which is what gives it a fork point.
@@ -38,6 +43,7 @@
 import { execSync } from "child_process";
 import { existsSync, mkdirSync, cpSync, rmSync, readdirSync } from "fs";
 import { join, dirname } from "path";
+import { baselineParts, storyOfBaselineFile } from "./diff-utils.js";
 
 export const ROOT = join(import.meta.dirname, "../..");
 
@@ -183,29 +189,56 @@ function fetchHeads({ main, branch }: Heads): void {
 }
 
 /**
- * The baseline files `branch` changed since it forked from `main`, under
- * dom/ and screenshots/: the ones it added or modified (`write`) and the
- * ones it deleted (`remove`). Also returns the fork point: the merge base,
- * or for a branch that has none, the rule at the top of this file.
+ * The overlay of a snapshot branch (the rule at the top of this file), given
+ * the baseline files it `changed` since its fork point and the files it
+ * has (`onBranch`): every part of each story it changed is taken from the
+ * branch (`write`) when the branch has it, and deleted (`remove`) when it
+ * does not. A changed file that is no part of a story follows the same rule
+ * on its own.
+ */
+export function overlayFiles(
+  changed: readonly string[],
+  onBranch: ReadonlySet<string>
+): { write: string[]; remove: string[]; stories: number } {
+  const files = new Set<string>();
+  const stories = new Set<string>();
+  for (const file of changed) {
+    const story = storyOfBaselineFile(file);
+    if (story === null) files.add(file);
+    else stories.add(story);
+  }
+  for (const story of stories) {
+    for (const file of Object.values(baselineParts(story))) files.add(file);
+  }
+  const write: string[] = [];
+  const remove: string[] = [];
+  for (const file of [...files].sort()) {
+    (onBranch.has(file) ? write : remove).push(file);
+  }
+  return { write, remove, stories: stories.size };
+}
+
+/**
+ * The baseline files of `branch`'s overlay (`overlayFiles`), from what it
+ * changed under dom/ and screenshots/ since it forked from `main`. Also
+ * returns the fork point: the merge base, or for a branch that has none,
+ * the rule at the top of this file.
  */
 function branchChanges(
   main: string,
   branch: string
-): { fork: string; write: string[]; remove: string[] } {
+): { fork: string; write: string[]; remove: string[]; stories: number } {
   const fork =
     git(`git merge-base ${main} ${branch}`, { ignoreError: true }) ||
     unrelatedForkPoint(main, branch);
-  const fields = git(
-    `git diff --name-status --no-renames -z ${fork} ${branch} -- dom screenshots`
-  )
-    .split("\0")
-    .filter(Boolean);
-  const write: string[] = [];
-  const remove: string[] = [];
-  for (let i = 0; i < fields.length; i += 2) {
-    (fields[i] === "D" ? remove : write).push(fields[i + 1]);
-  }
-  return { fork, write, remove };
+  const nulList = (cmd: string) => git(cmd).split("\0").filter(Boolean);
+  const changed = nulList(
+    `git diff --name-only --no-renames -z ${fork} ${branch} -- dom screenshots`
+  );
+  const onBranch = new Set(
+    nulList(`git ls-tree -r --name-only -z ${branch} -- dom screenshots`)
+  );
+  return { fork, ...overlayFiles(changed, onBranch) };
 }
 
 /**
@@ -253,7 +286,7 @@ function checkoutBaselines(
     };
   }
 
-  const { fork, write, remove } = branchChanges(main, branch);
+  const { fork, write, remove, stories } = branchChanges(main, branch);
   // Pathspecs on stdin: there can be more files than a command line holds.
   const pathspecs = (files: string[]) => ({
     cwd: wtPath,
@@ -288,8 +321,8 @@ function checkoutBaselines(
   return {
     parents: fork === main ? [branch] : [branch, main],
     description:
-      `${MAIN_SNAPSHOT_BRANCH} with the ${write.length + remove.length} ` +
-      `file(s) ${snapshotBranch} changed`,
+      `${MAIN_SNAPSHOT_BRANCH} with the ${stories} ` +
+      `stor${stories === 1 ? "y" : "ies"} ${snapshotBranch} changed`,
   };
 }
 

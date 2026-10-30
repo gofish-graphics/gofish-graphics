@@ -16,16 +16,13 @@
  *   diff-list.json.
  */
 
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import {
   collectReviewDiffs,
-  formatDomDiff,
-  formatWarningsHtml,
-  warningsSummary,
+  formatEntryDomDiff,
+  formatWarningsPanel,
   escapeHtml,
-  JS_DIR,
-  PYTHON_DIR,
   type DiffEntry,
 } from "./diff-utils.js";
 import { computePixelDiff } from "./pixel-diff.js";
@@ -99,15 +96,6 @@ function generateReport(entries: ReportEntry[]): string {
 
   const entryHtml = entries
     .map((d, i) => {
-      const domDiffHtml =
-        d.beforeDom && d.afterDom
-          ? formatDomDiff(d.beforeDom, d.afterDom)
-          : d.afterDom
-            ? `<pre style="margin:0;white-space:pre-wrap;">${escapeHtml(d.afterDom)}</pre>`
-            : d.beforeDom
-              ? `<pre style="margin:0;white-space:pre-wrap;">${escapeHtml(d.beforeDom)}</pre>`
-              : "";
-
       // Strobe animation: two overlapping images, CSS toggles opacity
       const afterImg = d.afterB64
         ? `<img src="data:image/png;base64,${d.afterB64}" style="display:block;max-width:100%;" />`
@@ -155,7 +143,7 @@ function generateReport(entries: ReportEntry[]): string {
       return `
     <div style="border:1px solid #ddd;margin:16px 0;border-radius:6px;overflow:hidden;">
       <div style="padding:12px 16px;background:${kindColor[d.kind]}22;border-bottom:1px solid #ddd;">
-        <span style="font-weight:bold;color:${kindColor[d.kind]};">${kindLabel[d.kind]}</span>
+        <span style="font-weight:bold;color:${kindColor[d.kind]};">${kindLabel[d.kind]}${d.change === "warnings" ? " (warnings only)" : ""}</span>
         <span style="margin-left:12px;font-family:monospace;">${escapeHtml(d.path)}</span>
       </div>
       <div style="padding:16px;">
@@ -163,20 +151,11 @@ function generateReport(entries: ReportEntry[]): string {
         ${strobeHtml}
         ${pixelDiffHtml}
       </div>
-      ${
-        d.warnings && d.warnings.lines.length > 0
-          ? `<details ${d.warnings.state === "changed" ? "open" : ""} style="padding:0 16px 16px;">
-        <summary style="cursor:pointer;font-weight:bold;font-size:13px;margin-bottom:8px;">Warnings: ${escapeHtml(warningsSummary(d.warnings))}</summary>
-        <div style="max-height:400px;overflow:auto;border:1px solid #e0e0e0;border-radius:4px;">
-          ${formatWarningsHtml(d.warnings)}
-        </div>
-      </details>`
-          : ""
-      }
+      <div style="padding:0 16px;">${formatWarningsPanel(d.warnings)}</div>
       <details style="padding:0 16px 16px;">
-        <summary style="cursor:pointer;font-weight:bold;font-size:13px;margin-bottom:8px;">DOM diff${d.domChanged ? "" : " (identical: only the warnings changed)"}</summary>
+        <summary style="cursor:pointer;font-weight:bold;font-size:13px;margin-bottom:8px;">DOM diff</summary>
         <div style="max-height:600px;overflow:auto;border:1px solid #e0e0e0;border-radius:4px;">
-          ${domDiffHtml}
+          ${formatEntryDomDiff(d.beforeDom, d.afterDom)}
         </div>
       </details>
     </div>`;
