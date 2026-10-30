@@ -205,15 +205,13 @@ export function aroundPlot(
   plot: number
 ): number {
   const f = chromeForms(node, axis);
-  // The σ at which the plot fills `plot`, by the one fit's solve
-  // (`Pwl.fill`); 0 where none does.
-  const sigma = f && Pwl.fill(f.plot.width, plot);
-  const [start, end] =
-    f !== undefined
-      ? reachAt(
-          f,
-          sigma !== undefined && Number.isFinite(sigma) ? Math.max(0, sigma) : 0
-        )
-      : [0, 0];
+  if (f === undefined) return plot;
+  // The σ at which the plot fills `plot` (`Pwl.fill`); 0 where none does,
+  // and where a slot of no finite size gives none.
+  const sigma = Pwl.fill(f.plot.width, plot);
+  const [start, end] = reachAt(
+    f,
+    sigma !== undefined && Number.isFinite(sigma) ? Math.max(0, sigma) : 0
+  );
   return plot + start + end;
 }
