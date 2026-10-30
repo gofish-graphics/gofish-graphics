@@ -258,3 +258,23 @@ def story_airport_hex_counts():
         ),
         {"axes": True},
     )
+
+
+# The same counts written by the region's own label. A region's label goes
+# inside it, and its color contrasts with the region's fill.
+def story_airport_hex_counts_labeled():
+    airports = _contiguous_airports()
+    return (
+        chart(airports, color=Color.gradient("blues"), w=600, h=360)
+        .flow(
+            partition(
+                by=struct(x="longitude", y="latitude").bin(Bin.hex(radius=3))
+            )
+        )
+        .mark(
+            region(fill=field("iata").count(), stroke="white").label(
+                field("iata").count()
+            )
+        ),
+        {"axes": True},
+    )
