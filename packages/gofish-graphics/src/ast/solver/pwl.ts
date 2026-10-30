@@ -390,17 +390,35 @@ export const rising = (v: Value): Affine | undefined => {
   return slope > 0 && Number.isFinite(slope) ? affine(slope, 0) : undefined;
 };
 
+/** Pixels a layout reads as the same when they differ by rounding. */
+const ROUNDING_PX = 0.5;
+
+/** Whether `needed` pixels are more than `px` by more than rounding: a
+ *  claim past its slot, the one test of an overflow. */
+export const overflows = (needed: number, px: number): boolean =>
+  needed > px + ROUNDING_PX;
+
 /**
- * The σ ≥ 0 at which `v` fills `target` ({@link solve}), or, where none
- * does because its fixed parts alone are longer than `target`, the σ at
- * which the part of `v` that grows with σ alone fills it ({@link rising}):
- * `v` drawn as if its fixed parts took no room. Undefined when neither
- * does. The solve of a plot in a node's own size (`aroundPlot`);
- * `ScopeRegistry.fit` takes the same two steps, the first in `solveScope`.
+ * The σ ≥ 0 at which a claim `v` fills a slot of `target` pixels: the one
+ * rule for a claim in its slot, which `ScopeRegistry.fit` and `aroundPlot`
+ * both take.
+ *
+ *   1. The σ at which `v` is `target` ({@link solve}).
+ *   2. Else, where `v` at σ = 0, its fixed parts, already fills the slot
+ *      up to rounding ({@link overflows}), σ = 0: nothing is left for what
+ *      grows with σ.
+ *   3. Else, where its fixed parts are longer than the slot, the σ at which
+ *      the part of `v` that grows with σ alone fills it ({@link rising}):
+ *      `v` drawn as if its fixed parts took no room.
+ *
+ * Undefined when none of these does (a claim that does not grow and is
+ * shorter than the slot).
  */
 export const fill = (v: Value, target: number): number | undefined => {
   const sigma = solve(v, target);
   if (sigma !== undefined) return sigma;
+  const fixed = at(v, 0);
+  if (fixed >= target && !overflows(fixed, target)) return 0;
   const grows = rising(v);
   return grows && solve(grows, target);
 };

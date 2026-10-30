@@ -107,13 +107,17 @@ its one solution. For the max of claims that dips and then rises, it is where th
 rises through the target, which is the σ that fills the box.
 
 Because σ ≥ 0, a claim whose fixed parts are already larger than the target has no
-solution, rather than a negative σ. The scope fit (`ScopeRegistry.fit`) then falls back
-to `rising(v)`, the part of the claim that grows with σ alone (`s·σ` for the slope of its
-last segment): the data fills the slot as if the fixed parts took no room, and they
-overflow (see [Layout and Render Passes](/internals/layout/passes)). Every sized scope,
-the render root, a layer with a size of its own and a coord, uses that one fallback. This
-is what #1179 asked for, an unsized root whose fixed parts exceed the default canvas, and
-it needs no case of its own.
+solution, rather than a negative σ. `fill(v, target)` is the one rule for a claim in its
+slot: the solve, else σ = 0 where the fixed parts, `v(0)`, fill the slot up to rounding
+(`overflows`, the one overflow test, which allows half a pixel), else `rising(v)`, the
+part of the claim that grows with σ alone (`s·σ` for the slope of its last segment): the
+data fills the slot as if the fixed parts took no room, and they overflow (see
+[Layout and Render Passes](/internals/layout/passes)). Fixed parts a rounding past the
+slot so take σ = 0 and do not warn, rather than the σ of what grows alone, which would
+double the drawing. Every sized scope, the render root, a layer with a size of its own
+and a coord (`ScopeRegistry.fit`), and a plot in a node's own size (`aroundPlot`), takes
+that one rule. This is what #1179 asked for, an unsized root whose fixed parts exceed the
+default canvas, and it needs no case of its own.
 
 ## The cancellation rule
 

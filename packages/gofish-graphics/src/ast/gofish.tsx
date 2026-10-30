@@ -592,9 +592,12 @@ export async function layout(
   // when none does (the common `chart(...).render(el, {})`), or they map it
   // at different σs (an over-constrained layout), is σ solved against the
   // default canvas. The root's size is the box the fit lays its claim out
-  // in (`Fitted.box`): the render's slot, which is a limit, or the default
-  // canvas grown to hold the claim, or the claim's own box where it is only
-  // pixels. A root mapped at a σ of its nodes is its claim at that σ. With
+  // in (`Fitted.box`): the render's slot or the default canvas, grown to
+  // the claim at its σ where that is longer, or the claim's own box where
+  // it is only pixels. So a root whose fixed parts overflow the render's
+  // size sits at the canvas's top-left (`placeRoot`) and draws past its far
+  // edges, past the bottom for a y-up root as for one that reads top-down.
+  // A root mapped at a σ of its nodes is its claim at that σ. With
   // no claim (a bar chart's category axis, a bare fixed-size shape) it is
   // the render's slot, or the default canvas.
   const rootSpaces = [niceUnderlyingSpaceX, niceUnderlyingSpaceY] as const;

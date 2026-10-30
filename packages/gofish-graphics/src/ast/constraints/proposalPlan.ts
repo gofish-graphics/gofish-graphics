@@ -402,7 +402,8 @@ export function solveLayerScales(
             solution,
             claim: nicedClaim,
             space,
-            box: fitted!.box,
+            // The size it is given, whatever its content claims (`fit`).
+            box: layerSize[axis],
           }
         );
       };

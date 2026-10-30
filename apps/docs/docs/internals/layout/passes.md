@@ -401,19 +401,23 @@ canvas`), so pixel overhead such as spacing, and the chrome's gutters, keeps
 its pixels, and, when the axis has an origin, the pixel of data 0
 (`originPx`). The canvas is the render's `w`/`h`: the render size is the
 whole graphic (#493). A claim with no σ in it maps no domain and is not
-solved. When no σ ≥ 0 fits, the claim's fixed parts are larger than the
-canvas: σ is solved from the part of the claim that grows with σ
-(`Pwl.rising`; the two steps are `Pwl.fill`, which `aroundPlot` also uses
-to lay a plot out in a node's own size), so the data fills the canvas as if
-the fixed parts took no room, the fixed parts overflow, and the fit warns (see
-[Layout warnings](#layout-warnings)). The same fit, with the same fallback,
-serves a layer with a size of its own and a coord boundary. Next to σ, the
-fit returns the box it laid the claim out in (`Fitted.box`): a slot that is a
-limit (the render's size, a layer's own size) is the box, whatever the claim
-needs, and what overflows draws past it; a slot that is not one (the default
-canvas, a coord's budget) holds the claim, so the box grows to the claim at
-its σ, and a claim that is only pixels is its own box. The root's size is
-that box. On an axis the render does not size, a root whose nodes with a
+solved. When no σ ≥ 0 fits, the rest of the one rule for a claim in its
+slot (`Pwl.fill`, which `aroundPlot` also uses to lay a plot out in a node's
+own size) picks σ: 0 where the claim's fixed parts fill the canvas up to
+rounding (`Pwl.overflows`), else, where they are larger than the canvas, the
+σ solved from the part of the claim that grows with σ (`Pwl.rising`), so the
+data fills the canvas as if the fixed parts took no room, the fixed parts
+overflow, and the fit warns (see [Layout warnings](#layout-warnings)). The
+same fit, with the same rule, serves a layer with a size of its own and a
+coord boundary. Next to σ, the fit returns the box it laid the claim out in
+(`Fitted.box`): the slot, or the claim at its σ where that is longer, and a
+claim that is only pixels is its own box. Only a slot that is a limit (the
+render's size, a layer's own size) warns; the default canvas grows to hold
+the claim, and a coord's budget does not warn. The root's size is that box,
+so a root whose claim overflows the render's size is its claim, seated at
+the canvas's top-left: a y-up root overflows past the bottom, not the top. A
+layer with a size of its own is that size whatever its content claims, so it
+reads its size, not the box. On an axis the render does not size, a root whose nodes with a
 literal size map its keyed domain maps it at the σ they solved
 (`ScopeRegistry.keyedSigma`). Any other unsized root is fitted to the default
 canvas, which is not a limit: it grows to hold what does not fit, so the fit

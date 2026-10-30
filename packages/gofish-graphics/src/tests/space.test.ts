@@ -436,6 +436,41 @@ console.log("# space: a one-value axis does not bind equal measure");
   );
 }
 
+console.log("# space: fit takes the one rule for a claim in its slot (Pwl.fill)");
+{
+  const scopes = new ScopeRegistry();
+  const meta = { kind: "root" as const, rootKey: "t", axis: 1 as const };
+  const space = CONTINUOUS(interval(0, 10), "none");
+  // No session: a fit that warned would find nowhere to put it, so a node
+  // with none stands in.
+  const node = { tryGetRenderSession: () => undefined } as unknown as GoFishNode;
+  const fitIn = (claim: Pwl.Value, px: number, limit: boolean) =>
+    scopes.fit(meta, node, space, Extent(claim), { px, limit })!;
+  // 100.3 px of fixed parts in 100 px: they fill the slot up to rounding,
+  // so σ = 0 and the box is the slot, not σ = 10 and 200.3 px.
+  const band = fitIn(Pwl.affine(10, 100.3), 100, true);
+  ok(
+    "fixed parts past the slot by less than rounding take σ = 0",
+    band.scope?.sigma === 0 && band.box === 100,
+    JSON.stringify(band)
+  );
+  // Past the slot by more than rounding: what grows fills the slot alone,
+  // and the box holds the claim at that σ. (In a limit the fit also warns,
+  // which needs a laid-out node: the render tests in lengths.test.ts.)
+  const over = fitIn(Pwl.affine(10, 30), 20, false);
+  ok(
+    "fixed parts past the slot take the σ of what grows, and the box holds it",
+    over.scope?.sigma === 2 && over.box === 50,
+    JSON.stringify(over)
+  );
+  const fits = fitIn(Pwl.affine(10, 30), 100, true);
+  ok(
+    "a claim that fits its slot solves there, and its box is the slot",
+    fits.scope?.sigma === 7 && fits.box === 100,
+    JSON.stringify(fits)
+  );
+}
+
 console.log("# space: solveScope centers a one-value domain despite float noise");
 {
   // #1176 comment 2: a slope of ~1e-15 used to solve σ ≈ 1e16.

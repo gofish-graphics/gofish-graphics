@@ -32,7 +32,7 @@ import { Extent, mapsDomain } from "../extent";
 import type { AxisMap } from "../domain";
 import { envFlag } from "../../util";
 import type { GoFishNode, RenderSession } from "../_node";
-import { fixedOverflow, overflows, warnLayout } from "../layoutWarnings";
+import { fixedOverflow, warnLayout } from "../layoutWarnings";
 import { resolveUnit, sameUnitVar } from "../measure";
 import { reachAt, type ChromeForms } from "../chromeGutters";
 import { fromFrameStart, type AxisDirection } from "../axisDirection";
@@ -287,7 +287,8 @@ export class ScopeRegistry {
             solution,
             claim: forms!.whole,
             space,
-            box: fitted!.box + reach![0] + reach![1],
+            // Its own size, whatever its content claims (`fit`).
+            box: plot + reach![0] + reach![1],
           };
     return solution;
   }
@@ -347,22 +348,26 @@ export class ScopeRegistry {
    * sized site (the render root, a node with a size of its own, a coord
    * boundary). A claim with no σ in it maps no domain (`mapsDomain`), so it
    * is not solved. Any other claim solves `claim.width(σ) = allocated`
-   * ({@link solveScope}). When no σ ≥ 0 does, the claim's fixed parts need
-   * more than the slot: the scope takes the σ at which the part of the claim
-   * that grows with σ, alone, fills the slot (`Pwl.rising`), as if the fixed
-   * parts took no room, and the layout warns once, at `node`
-   * (`fixedOverflow`). A claim with no σ in it that is larger than its slot
-   * warns the same way, and gets no scope.
+   * ({@link solveScope}). When no σ ≥ 0 does, the rest of the one rule for
+   * a claim in its slot (`Pwl.fill`) picks σ: 0 where the claim's fixed
+   * parts fill the slot up to rounding, else, where they need more than
+   * the slot, the σ at which the part of the claim that grows with σ,
+   * alone, fills the slot (`Pwl.rising`), as if the fixed parts took no
+   * room, and the layout warns once, at `node` (`fixedOverflow`). A claim
+   * with no σ in it that is larger than its slot warns the same way, and
+   * gets no scope.
    *
    * `node` is the node whose slot `slot` is (for a node with a size of its
-   * own, `claim` is its content's). A slot that is a limit is the box the
-   * claim is laid out in, and on overflow what the claim draws reaches past
-   * it, and the fit warns at `node`. A slot that is not a pixel limit warns
-   * nowhere, and the box holds the claim: the default canvas of a render
-   * with no size on the axis, which grows to hold its claim (#1179), and a
-   * coord's budget. There the box is the claim at its σ where that is
-   * longer than the slot, and a claim with no scope (only pixels) is its
-   * own box. TODO(#1176): a coord's budget is in its coordinate
+   * own, `claim` is its content's). Only a slot that is a limit warns: the
+   * render's size, a node's own size. The default canvas of a render with
+   * no size on the axis grows to hold its claim (#1179), and a coord's
+   * budget does not warn. Either way the box the claim is laid out in holds
+   * it: the slot, or the claim at its σ where that is longer, and a claim
+   * with no scope (only pixels) is its own box. So a render root whose
+   * claim overflows the render's size is its claim, which sits at the
+   * canvas's top-left and draws past its far edges. A node with a size of
+   * its own is that size whatever its content claims, so it reads its slot,
+   * not this box. TODO(#1176): a coord's budget is in its coordinate
    * units (radians on a polar θ axis), so comparing its claim's fixed
    * pixels with it warns falsely (35 lines in 26 stories). Whether a
    * coord's budget is a limit, and in which units, is open; until then a
@@ -380,18 +385,19 @@ export class ScopeRegistry {
     let scope = maps ? this.solveScope(meta, space, claim, px) : undefined;
     if (scope === undefined) {
       if (limit) warnLayout(node, fixedOverflow(node, meta.axis, claim, px));
-      // No σ fills the slot, so what grows with σ fills it alone
-      // (`Pwl.fill`, whose first solve `solveScope` just failed).
-      const grows = maps ? Pwl.rising(claim.width) : undefined;
-      const sigma = grows && Pwl.solve(grows, px);
+      // No σ solves the claim in the slot: the rest of the one rule
+      // (`Pwl.fill`, whose first step `solveScope` just took). Its solve
+      // runs again only here, where it failed.
+      const sigma = maps ? Pwl.fill(claim.width, px) : undefined;
       if (sigma !== undefined) scope = this.scopeAt(meta, space, claim, sigma);
     }
+    // The box holds the claim: the slot, or the claim at its σ where that
+    // is longer; a claim with no scope is only pixels, its own box.
     const grown =
       scope === undefined ? undefined : Pwl.at(claim.width, scope.sigma);
-    const box = limit
-      ? px
-      : grown !== undefined
-        ? overflows(grown, px)
+    const box =
+      grown !== undefined
+        ? Pwl.overflows(grown, px)
           ? grown
           : px
         : Pwl.isConstant(claim.width)

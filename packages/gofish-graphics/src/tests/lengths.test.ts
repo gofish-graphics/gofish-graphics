@@ -580,6 +580,32 @@ async function main() {
     );
   }
 
+  console.log("\n# a y-up root whose fixed parts overflow sits at the top");
+  {
+    // 30 px is too short for the axes' fixed parts: the root is its claim,
+    // seated at the canvas's top-left, so it overflows past the bottom and
+    // nothing is drawn above the top (as before #1176 step 6f).
+    const warned: string[] = [];
+    const dl = await collect(warned, () =>
+      chart(rows)
+        .flow(spread({ by: "k", dir: "x" }))
+        .mark(rect({ h: "v" }))
+        .toDisplayList({ w: 200, h: 30 })
+    );
+    const drawn = items(dl).filter((i: any) => i.y !== undefined);
+    check(
+      "the layout warns that y overflows",
+      warned.some((m) => m.includes("on y") && m.includes("fixed parts")),
+      warned
+    );
+    check(
+      "nothing is drawn above the top, and it overflows past the bottom",
+      drawn.every((i: any) => i.y >= 0) &&
+        drawn.some((i: any) => i.y + (i.h ?? 0) > 30),
+      drawn.map((i: any) => [i.kind, i.y])
+    );
+  }
+
   report();
 }
 

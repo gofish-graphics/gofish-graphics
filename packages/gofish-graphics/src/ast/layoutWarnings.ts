@@ -209,21 +209,13 @@ function fixedParts(
     px: each * count,
   }));
   const named = parts.reduce((a, p) => a + p.px, 0);
-  if (overflows(total, named))
+  if (Pwl.overflows(total, named))
     parts.push({
       part: "other fixed sizes (text, literal sizes and positions, chrome)",
       px: total - named,
     });
   return parts.sort((a, b) => b.px - a.px);
 }
-
-/** Pixels a layout reads as the same when they differ by rounding. */
-const ROUNDING_PX = 0.5;
-
-/** Whether `needed` pixels are more than `px` by more than rounding: a
- *  claim past its slot, the one test of an overflow. */
-export const overflows = (needed: number, px: number): boolean =>
-  needed > px + ROUNDING_PX;
 
 /**
  * A `fixed-overflow` warning for `start`, which fits `claim` into the
@@ -241,7 +233,7 @@ export function fixedOverflow(
 ): LayoutWarning | undefined {
   if (!Number.isFinite(available)) return undefined;
   const needed = room(Pwl.at(claim.width, 0));
-  if (!overflows(needed, available)) return undefined;
+  if (!Pwl.overflows(needed, available)) return undefined;
   const at = culprit(start, axis, available, needed);
   return fixedWarning(
     at.node,

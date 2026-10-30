@@ -210,6 +210,40 @@ console.log("# pwl: the cancellation rule decides whether a sum depends on σ");
   );
 }
 
+console.log("# pwl: fill, the one rule for a claim in its slot");
+{
+  ok(
+    "a claim that reaches its slot solves there",
+    Pwl.fill(affine(10, 50), 100) === 5
+  );
+  ok(
+    "fixed parts that fill the slot exactly leave σ = 0",
+    Pwl.fill(affine(10, 100), 100) === 0
+  );
+  // 100.3 px of fixed parts in 100 px: no σ ≥ 0 solves, but they are the
+  // slot up to rounding, so nothing is left for what grows (not σ = 10,
+  // which the part that grows alone would take, 200.3 px in all).
+  ok(
+    "fixed parts past the slot by less than rounding leave σ = 0",
+    Pwl.fill(affine(10, 100.3), 100) === 0 &&
+      Pwl.fill(affine(10, 100.5), 100) === 0,
+    `${Pwl.fill(affine(10, 100.3), 100)}`
+  );
+  ok(
+    "fixed parts past the slot by more than rounding: what grows fills it alone",
+    Pwl.fill(affine(10, 100.6), 100) === 10 &&
+      Pwl.fill(affine(10, 150), 100) === 10
+  );
+  ok(
+    "the tolerance is the overflow test's",
+    !Pwl.overflows(100.5, 100) && Pwl.overflows(100.6, 100)
+  );
+  ok(
+    "a claim that does not grow and is shorter than the slot has no σ",
+    Pwl.fill(affine(0, 40), 100) === undefined
+  );
+}
+
 console.log("# pwl: equality and printing");
 {
   const a = Pwl.envelope([affine(2, 0), affine(1, 30)]);
