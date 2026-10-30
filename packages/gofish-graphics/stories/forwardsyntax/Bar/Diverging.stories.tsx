@@ -93,6 +93,33 @@ export const Likert: StoryObj<Args> = {
   },
 };
 
+export const LikertSwapped: StoryObj<Args> = {
+  args: { w: 640, h: 300 },
+  
+  render: (args: Args) => {
+    const container = initializeContainer();
+    chart(survey, {
+      schema: {
+        response: Unit({
+          domain: Domain.ordered(LEVELS),
+          traits: [Trait.diverging()],
+        }),
+      },
+      color: likertColors,
+      axes: { x: { title: "Respondents" }, y: true },
+      w: args.w,
+      h: args.h,
+    })
+      .flow(
+        stack({ by: "response", dir: "x" }),
+        spread({ by: "question", dir: "y" })
+      )
+      .mark(rect({ w: "count", fill: "response" }))
+      .render(container);
+    return container;
+  },
+};
+
 // An even number of levels has no middle level, so the center is the boundary
 // between the two middle ones.
 const LEVELS4 = ["Strongly disagree", "Disagree", "Agree", "Strongly agree"];
