@@ -1203,7 +1203,10 @@ shares the frame (it still unions the children's data intervals) but supplies no
 baseline. Its baseline is already `posScale(0)` of the shared scope, so all such
 panels co-locate by construction. The claim walk places such a target before
 the solve, where its frame seats it (`placeByClaims`), so the solve reads it as
-already placed.
+already placed. A target is placed by its data only where its layer keeps a
+frame of that data: a `middle` align over pinned children (a streamgraph's
+centered stacks) composes the layer to an origin-less type (`none`), so there
+the align places each child, and centers it.
 
 **The guard asks the solver, not the space pass (Stage 6f).** This is the
 blindingly-obvious final form the whole design arc was reaching for. The question
@@ -1211,7 +1214,8 @@ blindingly-obvious final form the whole design arc was reaching for. The questio
 authority record — the `PlacementOwnershipPlan` — through one predicate,
 `isDataPositioned(axis, name)`. The fact it reads (which children are anchored to
 a POSITION scope on each axis) is a pure **data/scope** fact — a child in the
-layer's own set whose type on that axis is pinned (`placedByOwnData`, the one
+layer's own set whose type on that axis is pinned, in a layer whose own type
+there is pinned too (`placedByOwnData`, the one
 rule the claim walk, layout and the sharing of rooms read; a free child still
 waits to be placed, and an origin-less one has a width but no place) —
 collected _once_ at the layer boundary and

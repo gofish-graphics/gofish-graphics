@@ -297,6 +297,53 @@ async function main() {
     }
   }
 
+  console.log("# a middle align centers stacks of data (a streamgraph)");
+  {
+    // A spread of stacks aligned by their middles (a streamgraph's
+    // layout): each stack's data is pinned, but the align composes them to
+    // a type with no origin, so their data does not place them in the
+    // spread (`placedByOwnData`) and the align centers every stack on one
+    // line. Stacks of different heights then start at different y.
+    const rows = [
+      { g: "a", s: "x", v: 1 },
+      { g: "a", s: "y", v: 1 },
+      { g: "b", s: "x", v: 3 },
+      { g: "b", s: "y", v: 3 },
+      { g: "c", s: "x", v: 2 },
+      { g: "c", s: "y", v: 1 },
+    ];
+    const dl = await chart(rows, { axes: false, legend: false })
+      .flow(
+        spread({ by: "g", dir: "x", spacing: 10, alignment: "middle" }),
+        stack({ by: "s", dir: "y" })
+      )
+      .mark(rect({ h: "v", w: 20 }))
+      .toDisplayList({ w: 300, h: 200 });
+    const byX = new Map<number, Box[]>();
+    for (const r of rectsOf(dl)) {
+      const k = Math.round(r.x);
+      byX.set(k, [...(byX.get(k) ?? []), r]);
+    }
+    const mids = [...byX.values()].map((rs) => {
+      const lo = Math.min(...rs.map((r) => r.y));
+      const hi = Math.max(...rs.map((r) => r.y + r.h));
+      return (lo + hi) / 2;
+    });
+    const starts = [...byX.values()].map((rs) =>
+      Math.min(...rs.map((r) => r.y))
+    );
+    check(
+      "every stack's middle is on one line",
+      mids.length === 3 && mids.every((m) => Math.abs(m - mids[0]) < 1e-6),
+      JSON.stringify({ mids })
+    );
+    check(
+      "the stacks do not share a flat baseline",
+      new Set(starts.map((s) => s.toFixed(3))).size === 3,
+      JSON.stringify({ starts })
+    );
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }

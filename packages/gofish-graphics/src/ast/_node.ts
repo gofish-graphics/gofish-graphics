@@ -508,13 +508,21 @@ export const nestEach: ResolveSharing = (childNodes) => {
  * Whether `parent`'s child `i` is placed by its own data on `axis`: its
  * type there has a pinned origin (its data says where it is: a rect with a
  * data `x` and `x2`, a `region` in its cell, a polygon of data points, or a
- * layer of such marks), and it is in `parent`'s own set, so it maps that
- * data through `parent`'s frame. It sits where its frame seats it (data 0
- * at the frame's), and nothing in `parent` moves it: no constraint
+ * layer of such marks), it is in `parent`'s own set, and `parent`'s type
+ * there is pinned too, so `parent` has a frame of that data and the child
+ * maps its data through it. It sits where its frame seats it (data 0 at
+ * the frame's), and nothing in `parent` moves it: no constraint
  * (`placeByClaims`), and no cell, which it is in already
  * ({@link GoFishNode.givenRoom}). A free child (a bar's data height) still
  * waits to be placed, and so does a child with no origin (a group a middle
  * align made), whose data gives it a width but no place.
+ *
+ * A parent whose own constraints dropped its children's data positions has
+ * no such frame: a `middle` align over pinned children (a streamgraph's
+ * centered stacks) composes them to a type with no origin (`"none"`), so
+ * each child is placed by the align, not by its data. A `middle` align of a
+ * pinned child with a node that has no data (a `region` and its text)
+ * keeps the parent pinned, and the region stays where its data puts it.
  *
  * The one rule for "placed by its own data": the claim walk, layout and the
  * sharing of rooms all read it.
@@ -525,6 +533,7 @@ export const placedByOwnData = (
   axis: 0 | 1
 ): boolean =>
   parent.sharing().sets[axis][i] === 0 &&
+  originIs(parent.resolveUnderlyingSpace()[axis], "pinned") &&
   originIs(parent.children[i].resolveUnderlyingSpace()[axis], "pinned");
 
 /**
