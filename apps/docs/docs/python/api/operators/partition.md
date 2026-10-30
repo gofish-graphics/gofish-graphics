@@ -176,10 +176,10 @@ chart(airports, color=Color.gradient("blues"), axes=True).flow(
 ```
 
 A mark with a size of its own is centered in its cell's box, which for a
-hexagon is its center. A `region`'s label goes inside its outline, so the
-example writes each count with
-[`.label()`](/python/api/core/mark#labeling-a-mark), whose color contrasts with
-the hexagon's fill.
+hexagon is its center. The example writes each count with
+[`.label()`](/python/api/core/mark#labeling-a-mark) at
+[`Place.interior()`](/python/api/place), inside the hexagon, so its color
+contrasts with the hexagon's fill.
 
 ::: gofish example:airport-counts-in-hexagons hidden
 :::

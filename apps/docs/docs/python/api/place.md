@@ -56,13 +56,13 @@ from gofish.place import along  # the same value as Place.along
 
 ## Members
 
-| Member             | Reads                              | Where the label goes                                       | Default for                     |
-| ------------------ | ---------------------------------- | ---------------------------------------------------------- | ------------------------------- |
-| `Place.around()`   | the outline's extreme points       | Just outside the mark, in each of eight screen directions. | a dot (`circle`)                |
-| `Place.along()`    | an open path or a region's outline | On or beside the outline, sliding along it from `at`.      |                                 |
-| `Place.start()`    | an open path's first point         | Just before the path's start, level.                       |                                 |
-| `Place.end()`      | an open path's last point          | Just past the path's end, level.                           | a `line`, an `arrow`            |
-| `Place.interior()` | a filled region                    | Inside the region, where the label's box can grow largest. | a band, a `polygon`, a `region` |
+| Member             | Reads                              | Where the label goes                                       | Default for          |
+| ------------------ | ---------------------------------- | ---------------------------------------------------------- | -------------------- |
+| `Place.around()`   | the outline's extreme points       | Just outside the mark, in each of eight screen directions. | a dot (`circle`)     |
+| `Place.along()`    | an open path or a region's outline | On or beside the outline, sliding along it from `at`.      |                      |
+| `Place.start()`    | an open path's first point         | Just before the path's start, level.                       |                      |
+| `Place.end()`      | an open path's last point          | Just past the path's end, level.                           | a `line`, an `arrow` |
+| `Place.interior()` | a filled region                    | Inside the region, where the label's box can grow largest. | a band, a `polygon`  |
 
 With no `position`, a label takes the default for its mark's kind of
 geometry, and `"outset"` for any other mark.

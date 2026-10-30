@@ -957,6 +957,72 @@ console.log("# the painted style is the first own item with paint");
   );
 }
 
+console.log("# a label read from an outline the mark does not draw");
+{
+  // A label whose default is read from its mark's outline (`"outline"`)
+  // on a mark that draws none (a region whose inset empties a thin cell)
+  // has nothing to describe: it is hidden, not an error. A filled ring
+  // too small to have an inside (2 points) is labeled around it.
+  const probe = (outline: any[]) =>
+    new GoFishNode(
+      {
+        type: "probe",
+        labelPosition: "outline",
+        resolveUnderlyingSpace: () => [UNDEFINED, UNDEFINED],
+        layout: () => ({
+          intrinsicDims: [
+            { min: 0, size: 10 },
+            { min: 0, size: 10 },
+          ],
+          transform: { translate: [0, 0] },
+        }),
+        geometry: () => ({
+          box: { min: [0, 0], max: [10, 10] },
+          outline: () => outline,
+        }),
+        lower: () => [],
+      },
+      []
+    );
+  const labeled = async (outline: any[]) => {
+    const node = probe(outline);
+    node.label(() => "A");
+    try {
+      const doc = await toDisplayList(Layer([node]), { w: 100, h: 100 });
+      return { texts: textItems(doc).length };
+    } catch (e) {
+      return { error: (e as Error).message };
+    }
+  };
+  const none = await labeled([]);
+  ok(
+    "a mark with no outline: its label is hidden",
+    none.error === undefined && none.texts === 0,
+    JSON.stringify(none)
+  );
+  const empty = await labeled([{ points: [], closed: true, filled: true }]);
+  ok(
+    "a mark with an empty ring: its label is hidden",
+    empty.error === undefined && empty.texts === 0,
+    JSON.stringify(empty)
+  );
+  const thin = await labeled([
+    {
+      points: [
+        [0, 0],
+        [10, 0],
+      ],
+      closed: true,
+      filled: true,
+    },
+  ]);
+  ok(
+    "a filled ring of 2 points: its label is placed around it",
+    thin.error === undefined && thin.texts === 1,
+    JSON.stringify(thin)
+  );
+}
+
 console.log("# unfilled regions");
 {
   // A closed outline with no fill is ink only along its stroke: a label

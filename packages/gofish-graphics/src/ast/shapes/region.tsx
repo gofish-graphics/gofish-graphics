@@ -111,8 +111,6 @@ export const Region = ({
     {
       key,
       type: "region",
-      // Labeled by its outline, as a polygon is: inside it when filled.
-      labelPosition: "outline",
       args: { key, fill, stroke, strokeWidth, opacity, filter, inset },
       // Used to seed the unit color scale. Prefer whichever channel is
       // data-driven, as `rect` does.

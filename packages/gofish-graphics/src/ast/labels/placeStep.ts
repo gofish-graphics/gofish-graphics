@@ -261,13 +261,20 @@ export function applyLabelPlacement(
   }
 
   // The calls, in the order their first label appears; each call's labels
-  // in data order, each with its strategy and its offset resolved.
+  // in data order, each with its strategy and its offset resolved. A label
+  // read from its mark's outline when the mark draws none (an inset that
+  // empties a thin cell) has nothing to describe: it is hidden, and is no
+  // label the note counts.
   const calls = new Map<unknown, Resolved[]>();
   for (const item of constraint.items) {
     const place =
       item.place === "outline"
         ? placeByOutline(shapeOf(item.target))
         : item.place;
+    if (place === undefined) {
+      hide(get(item.label), item.node, centerOf(shapeOf(item.target)));
+      continue;
+    }
     const resolved = {
       ...item,
       place,
@@ -363,15 +370,21 @@ const placeName = (p: Place): string => `Place.${p.kind}()`;
 
 /**
  * The strategy of a label whose default is read from its mark's outline
- * (`labelPosition: "outline"`): inside a filled region, around a closed
- * outline that is not filled, and at the end of an open path.
+ * (`labelPosition: "outline"`): inside a filled region (a ring of 3 points
+ * or more), around any other closed outline, and at the end of an open
+ * path. A mark that draws no outline, or only empty ones, has none:
+ * undefined.
  */
-const placeByOutline = (t: TargetShape): Place =>
-  t.outlines.some((o) => o.closed && o.filled)
+const placeByOutline = (t: TargetShape): Place | undefined => {
+  const drawn = t.outlines.filter((o) => o.points.length > 0);
+  return drawn.some((o) => o.closed && o.filled && o.points.length >= 3)
     ? interior()
-    : t.outlines.some((o) => o.closed)
+    : drawn.some((o) => o.closed)
       ? around()
-      : end();
+      : drawn.length > 0
+        ? end()
+        : undefined;
+};
 
 /** The middle of a mark's outlines' box. */
 function centerOf(shape: TargetShape): Pt {

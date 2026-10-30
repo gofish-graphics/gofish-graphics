@@ -330,10 +330,12 @@ labels each call hid (`reportHiddenLabels`, from `gofish.tsx`).
 A position string never goes through the chooser, so it places exactly as
 before. With no `position`, the default comes from the target's node
 definition (`labelPosition`): `ellipse` gives `Place.around()` and `arrow`
-`Place.end()` by convention; a connector (`line`, `ribbon`), a `polygon` and a
-`region` give `"outline"`, which the chooser reads from the outline the mark draws
+`Place.end()` by convention; a connector (`line`, `ribbon`) and a `polygon`
+give `"outline"`, which the chooser reads from the outline the mark draws
 (`placeByOutline`): `Place.end()` for an open path, `Place.interior()` for a
-filled region, `Place.around()` for a closed outline with no fill. Anything
+filled region, `Place.around()` for a closed outline with no fill. A mark
+that draws no outline (a ring an inset emptied) has nothing to describe,
+so its label is hidden, and the note does not count it. Anything
 else gets `"outset"`. Inside a coordinate space that is not linear (a polar `coord`),
 outlines are not on the screen yet, so a default falls back to `"outset"` and
 a strategy written out is an error that cites #1201. Before that, a strategy

@@ -10,6 +10,7 @@ import {
   field,
   layer,
   partition,
+  Place,
   region,
   scatter,
   struct,
@@ -355,8 +356,8 @@ export const AirportHexCounts: StoryObj<Args> = {
   },
 };
 
-// The same counts written by the region's own label. A region's label goes
-// inside it, and its color contrasts with the region's fill.
+// The same counts written by the region's own label, inside it
+// (`Place.interior()`), so its color contrasts with the region's fill.
 export const AirportHexCountsLabeled: StoryObj<Args> = {
   args: { w: 600, h: 360 },
   loaders: [async () => ({ airports: await data["airports.csv"]() })],
@@ -381,7 +382,8 @@ export const AirportHexCountsLabeled: StoryObj<Args> = {
       )
       .mark(
         region({ fill: field("iata").count(), stroke: "white" }).label(
-          field("iata").count()
+          field("iata").count(),
+          { position: Place.interior() }
         )
       )
       .render(container, { axes: true });
