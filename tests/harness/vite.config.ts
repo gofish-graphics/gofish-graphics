@@ -1,6 +1,8 @@
 import { defineConfig } from "vite";
 import solidPlugin from "vite-plugin-solid";
 import { resolve } from "path";
+// PROTOTYPE (#1266): React JSX for packages/gofish-react .tsx files.
+import { gofishReactJsx } from "../../packages/gofish-react/vite-react-jsx";
 
 // Bench gates (set by tests/scripts/bench.ts when spawning this server):
 //   GOFISH_BENCH=1       — emit COOP/COEP so the page is cross-origin isolated,
@@ -22,7 +24,7 @@ const gofishAlias = BENCH_PROD
 export default defineConfig({
   // In prod-bench mode, keep the SolidJS dev export condition from being picked
   // (dev mode adds reactivity bookkeeping no user pays for).
-  plugins: [solidPlugin(BENCH_PROD ? { dev: false } : {})],
+  plugins: [gofishReactJsx(), solidPlugin(BENCH_PROD ? { dev: false } : {})],
   root: resolve(__dirname),
   define: BENCH_PROD ? { "process.env.NODE_ENV": '"production"' } : {},
   server: {

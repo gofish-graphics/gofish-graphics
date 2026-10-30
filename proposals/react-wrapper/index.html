@@ -1,0 +1,1229 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>React Wrapper: Pipelines in JSX</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,600;0,700;1,400&family=IBM+Plex+Serif:wght@600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* Layout: one reading column for prose; code and its render side by side, wider than the column. */
+      :root {
+        --bg: #f6f8f8;
+        --surface: #ffffff;
+        --ink: #17262a;
+        --muted: #56676c;
+        --accent: #0d6e74;
+        --rule: #d7e0e1;
+        --code-bg: #eef3f3;
+        --tok-key: #8a3b9e;
+        --tok-str: #2f7d32;
+        --tok-num: #b35c00;
+        --tok-com: #7b8a8e;
+        --tok-tag: #0d6e74;
+        --tok-attr: #9a5b13;
+        --font-display: "IBM Plex Serif", Georgia, serif;
+        --font-body: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+        --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #111a1c;
+          --surface: #172326;
+          --ink: #e3ecec;
+          --muted: #9aaeb1;
+          --accent: #5cc4c9;
+          --rule: #2a3a3d;
+          --code-bg: #1c2b2e;
+          --tok-key: #d39be0;
+          --tok-str: #8fd18f;
+          --tok-num: #f0a860;
+          --tok-com: #7f9396;
+          --tok-tag: #5cc4c9;
+          --tok-attr: #e3b56b;
+          color-scheme: dark;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #111a1c;
+        --surface: #172326;
+        --ink: #e3ecec;
+        --muted: #9aaeb1;
+        --accent: #5cc4c9;
+        --rule: #2a3a3d;
+        --code-bg: #1c2b2e;
+        --tok-key: #d39be0;
+        --tok-str: #8fd18f;
+        --tok-num: #f0a860;
+        --tok-com: #7f9396;
+        --tok-tag: #5cc4c9;
+        --tok-attr: #e3b56b;
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 16px/1.6 var(--font-body);
+      }
+      main {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 40px 20px 80px;
+      }
+      main > p,
+      main > ul,
+      main > ol,
+      main > h1,
+      main > h2,
+      main > h3,
+      main > h4 {
+        max-width: 72ch;
+      }
+      h1,
+      h2,
+      h3,
+      h4 {
+        text-wrap: balance;
+        line-height: 1.25;
+      }
+      h1 {
+        font: 600 2.1rem/1.2 var(--font-display);
+        margin: 0 0 1rem;
+      }
+      h2 {
+        font: 600 1.45rem/1.3 var(--font-display);
+        margin: 3rem 0 0.8rem;
+        padding-top: 1.2rem;
+        border-top: 1px solid var(--rule);
+      }
+      h3 {
+        font-size: 1.15rem;
+        margin: 2.2rem 0 0.6rem;
+        color: var(--accent);
+      }
+      h4 {
+        font-size: 1.05rem;
+        margin: 2rem 0 0.5rem;
+      }
+      a {
+        color: var(--accent);
+      }
+      strong {
+        font-weight: 600;
+      }
+      code {
+        font: 0.88em var(--font-mono);
+        background: var(--code-bg);
+        padding: 0.1em 0.3em;
+        border-radius: 3px;
+      }
+      pre {
+        background: var(--code-bg);
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 14px 16px;
+        overflow-x: auto;
+        margin: 0 0 1.2rem;
+        max-width: 100%;
+      }
+      pre code {
+        background: none;
+        padding: 0;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      main > p:first-of-type {
+        font-size: 1.05rem;
+      }
+      .pair {
+        display: grid;
+        grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+        gap: 20px;
+        align-items: start;
+        margin: 0 0 1.6rem;
+      }
+      .pair pre {
+        margin: 0;
+      }
+      figure {
+        margin: 0 0 1.4rem;
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 10px;
+      }
+      figure img {
+        display: block;
+        max-width: 100%;
+        height: auto;
+        margin: 0 auto;
+        background: #fff;
+        border-radius: 3px;
+      }
+      figcaption {
+        font-size: 0.82rem;
+        color: var(--muted);
+        margin-top: 6px;
+      }
+      figure.wide {
+        max-width: 1000px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 14px;
+        margin: 1rem 0 1.6rem;
+      }
+      .grid figure {
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+      .grid img {
+        max-height: 200px;
+        object-fit: contain;
+      }
+      .tablewrap {
+        overflow-x: auto;
+        margin: 1rem 0 1.4rem;
+      }
+      table {
+        border-collapse: collapse;
+        font-size: 0.9rem;
+        min-width: 760px;
+        background: var(--surface);
+      }
+      th,
+      td {
+        border: 1px solid var(--rule);
+        padding: 8px 10px;
+        vertical-align: top;
+        text-align: left;
+      }
+      th {
+        background: var(--code-bg);
+      }
+      li {
+        margin: 0.25rem 0;
+      }
+      .hljs-keyword,
+      .hljs-built_in {
+        color: var(--tok-key);
+      }
+      .hljs-string {
+        color: var(--tok-str);
+      }
+      .hljs-number,
+      .hljs-literal {
+        color: var(--tok-num);
+      }
+      .hljs-comment {
+        color: var(--tok-com);
+        font-style: italic;
+      }
+      .hljs-tag,
+      .hljs-name,
+      .hljs-title {
+        color: var(--tok-tag);
+      }
+      .hljs-attr,
+      .hljs-attribute,
+      .hljs-property {
+        color: var(--tok-attr);
+      }
+      @media (max-width: 860px) {
+        .pair {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>React wrapper: where the pipeline goes in JSX</h1>
+      <p>
+        <strong>Summary.</strong> A React wrapper (<code>@gofish/react</code>,
+        #1266) lets an MDX page write a GoFish visualization inline. The
+        combinator form (<code>layer</code>, <code>stack</code>,
+        <code>spread</code> over explicit children) maps one-to-one onto JSX.
+        The pipeline form (<code>chart(data).flow(...).mark(...)</code>) can be
+        nested into JSX too, and a prototype shows it draws the same pictures,
+        but nesting makes one JSX tree mean two different charts.
+      </p>
+      <p>
+        <strong>Recommendation.</strong> Use JSX for combinators and keep the
+        pipeline as a fluent value that JSX holds as a child
+        (<code>&lt;Layer&gt;{chart(...).flow(...).mark(...)}&lt;/Layer&gt;</code>,
+        or <code>&lt;GoFish spec={...} /&gt;</code> at the root). This is the
+        rule GoFish already uses: a call joins independent parts, and a method
+        chain is a sequence of steps that read the caller's state. JSX is a call
+        syntax, so it fits the first and not the second. Nesting the pipeline is
+        the runner-up.
+      </p>
+      <p>
+        <strong>Status.</strong> Proposal only. A throwaway prototype
+        (<code>packages/gofish-react</code>, uncommitted design evidence)
+        implements all four spellings below; every render here comes from it.
+        Nothing is signed off.
+      </p>
+      <h2>Terms</h2>
+      <ul>
+        <li>
+          <strong>JSX</strong>: the
+          <code>&lt;Tag prop={value}&gt;children&lt;/Tag&gt;</code> syntax. It
+          compiles to function calls,
+          <code>createElement(Tag, props, ...children)</code>.
+        </li>
+        <li>
+          <strong>MDX</strong>: Markdown that can contain JSX. Docusaurus,
+          Next.js, Nextra and Astro render it with React, usually to static HTML
+          at build time.
+        </li>
+        <li>
+          <strong>Combinator form</strong>: a GoFish operator applied to an
+          explicit list of children, as in
+          <code>stack({ dir: &quot;y&quot; }, [a, b])</code>.
+        </li>
+        <li>
+          <strong>Pipeline form</strong>:
+          <code>chart(data).flow(step, step).mark(template)</code>. Each flow
+          step splits the data into groups, and the mark is a
+          <strong>template</strong>: GoFish draws one copy of it per group.
+        </li>
+        <li>
+          <strong>Element walk</strong>: reading a JSX tree as plain
+          <code>{ type, props }</code> records, calling user function components
+          to expand them, without rendering anything.
+        </li>
+        <li>
+          <strong>Reconciler</strong>: React's machinery for keeping a tree of
+          host objects in sync with JSX. A custom one
+          (<code>react-reconciler</code>) is what react-three-fiber and
+          modular-svg use.
+        </li>
+        <li>
+          <strong>Server rendering (SSR)</strong>: producing the SVG as HTML on
+          the server or at build time, so the page shows the picture before any
+          JavaScript runs.
+        </li>
+      </ul>
+      <h2>The question, from the notes</h2>
+      <p>
+        Josh's notes (and #1266) raise these tensions. Each is answered below.
+      </p>
+      <ol>
+        <li>
+          The low-level combinator syntax fits JSX; the pipeline does not. What
+          do we do about the pipeline?
+        </li>
+        <li>
+          Is a custom reconciler needed, or does a component that takes a spec
+          cover it?
+        </li>
+        <li>
+          JSX spelling: lowercase intrinsics (<code>&lt;rect&gt;</code>) clash
+          with DOM SVG elements; capitalized components
+          (<code>&lt;Rect&gt;</code>) clash with GoFish's rule that a capital
+          letter means a class or a namespace.
+        </li>
+        <li>
+          Does nesting round-trip to the same frontend IR as the fluent chain?
+        </li>
+        <li>
+          Function-valued options (accessors, <code>derive</code>) must pass
+          through.
+        </li>
+        <li>How do events and animation fit React re-renders?</li>
+      </ol>
+      <h2>What the prototype found</h2>
+      <p>
+        The prototype (<code>packages/gofish-react</code>) reads JSX by an
+        element walk and turns it into the same builder calls the fluent chain
+        makes, then draws the display list as React
+        <code>&lt;svg&gt;</code> elements. 33 tests pass. Every example below
+        draws the same display list from JSX as from the fluent chain.
+      </p>
+      <p>
+        <strong>The pipeline is already a tree at runtime.</strong>
+        <code>.flow(a, b).mark(m)</code> appends to a list, and resolve folds
+        the list from the right into
+        <code>a(b(m))</code> (<code>chartBuilder.ts:983-985</code>). So the
+        nested JSX
+        <code>&lt;A&gt;&lt;B&gt;&lt;M/&gt;&lt;/B&gt;&lt;/A&gt;</code> is the
+        shape the engine runs. The frontend IR stores it as a flat list (<code
+          >{ data, operators: [...], mark }</code
+        >), and the nested JSX flattens into exactly that list. For the stacked
+        bar, ribbon chart, labeled stack, pie and bars-plus-line examples, the
+        IR from nested JSX equals the IR from the chain.
+      </p>
+      <p>
+        <strong>The JS frontend IR cannot carry everything.</strong> The JS
+        emitter has no tag for <code>arrow</code>, <code>.relate()</code> or
+        <code>createMark</code> and throws &quot;untagged mark&quot; on them;
+        only Python emits those. Function-valued options are dropped, and
+        <code>derive(fn)</code> becomes an opaque
+        <code>{ type: &quot;derive&quot; }</code>. So &quot;JSX builds frontend
+        IR&quot;, as #1266 proposes, does not work for diagrams or callbacks
+        today. The prototype goes from JSX straight to builder calls instead.
+        This is a divergence from the issue: the JSX surface is a JS spelling of
+        the JS API, not a new IR frontend, and needs no lambda bridge.
+      </p>
+      <p>
+        <strong>Server rendering works, with one caveat.</strong>
+        <code>toDisplayList</code> and the display-list renderer run in Node.
+        Layout is async, so the root suspends; React 19's
+        <code>prerender</code> waits for it, and
+        <code>renderToString</code> does not. In Node, text width is estimated
+        at 0.6em per character; in the browser it is measured with a canvas. The
+        first bar of the stacked chart sits at x = 50 in Node and x = 51.72 in
+        Chromium, so a server-rendered chart does not exactly match the browser
+        layout when React hydrates it.
+      </p>
+      <p>
+        <strong>Nesting the pipeline hits a wall.</strong> In the fluent API, a
+        step's children are either a template
+        (<code>.flow(stack(o)).mark(m)</code>) or an explicit list (<code
+          >stack(o, [a, b])</code
+        >), and the code says which. In JSX every element has children, so that
+        difference is gone. The prototype tells the two apart by position:
+        inside <code>&lt;Chart&gt;</code>, an operator is a flow step; outside,
+        it is a combinator. Here is one JSX tree whose two readings are both
+        valid GoFish:
+      </p>
+      <pre><code class="language-javascript">&lt;Chart data={seafood}&gt;
+  &lt;Spread by=&quot;lake&quot; dir=&quot;x&quot;&gt;
+    &lt;Stack dir=&quot;y&quot;&gt;
+      &lt;Rect h=&quot;count&quot; fill=&quot;species&quot; /&gt;
+    &lt;/Stack&gt;
+  &lt;/Spread&gt;
+&lt;/Chart&gt;
+</code></pre>
+      <figure class="wide">
+        <img src="img/ambiguity.png" alt="The same JSX read two ways" />
+        <figcaption>
+          Left: &lt;Stack&gt; read as a flow step. Right: read as a combinator.
+          Same JSX.
+        </figcaption>
+      </figure>
+      <p>
+        On the left, <code>&lt;Stack&gt;</code> is a flow step: with no
+        <code>by</code>, each row is its own group (#998: a split with no
+        <code>by</code> puts every item in its own group), so the rows stack. On
+        the right, <code>&lt;Stack&gt;</code> is a combinator over its one
+        explicit child, so each lake draws a single summed bar. Any rule that
+        picks one reading (position, child count, presence of <code>by</code>)
+        is a rule users have to keep in their heads.
+      </p>
+      <p>
+        The prototype hit three smaller walls too. A JSX prop named
+        <code>label</code> is both the <code>.label()</code> modifier and a real
+        option (<code>stack({ label: false })</code>, and a user component's own
+        <code>label</code> prop), so <code>label</code> counts as a modifier
+        only on leaf marks. Later children of <code>&lt;Chart&gt;</code> become
+        <code>.layer()</code> tiers, which is a second position rule. And a user
+        component that calls a React hook throws, because the element walk calls
+        it outside React's render; allowing hooks is what a real reconciler
+        buys.
+      </p>
+      <h2>Precedent</h2>
+      <p>
+        No library I found turns a data-splitting pipeline into nested JSX.
+        Chart libraries nest wrappers over children the user lists by hand (one
+        per series), hide the pipeline inside a chart type, or hand each group
+        to a function. Libraries with a real transform grammar keep it out of
+        the markup. Full notes with sources: the survey file listed at the end.
+      </p>
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr>
+              <th>System</th>
+              <th>What the user writes</th>
+              <th>How data reaches children</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Bluefish</td>
+              <td>
+                <code
+                  >&lt;StackH spacing={50}&gt;&lt;Circle
+                  .../&gt;&lt;/StackH&gt;</code
+                >,
+                <code
+                  >&lt;Arrow&gt;&lt;Ref
+                  select=&quot;label&quot;/&gt;...&lt;/Arrow&gt;</code
+                >
+              </td>
+              <td>none; <code>&lt;For&gt;</code> by hand</td>
+              <td>GoFish's combinator ancestor. Capitalized components.</td>
+            </tr>
+            <tr>
+              <td>Victory</td>
+              <td>
+                <code
+                  >&lt;VictoryStack&gt;&lt;VictoryArea
+                  data={a}/&gt;&lt;VictoryArea
+                  data={b}/&gt;&lt;/VictoryStack&gt;</code
+                >
+              </td>
+              <td>user splits data into one child per series</td>
+              <td>
+                Parent inspects child types; users cannot wrap parts in their
+                own components (issue #2342, open since 2022).
+              </td>
+            </tr>
+            <tr>
+              <td>Recharts</td>
+              <td>
+                <code
+                  >&lt;BarChart data={d}&gt;&lt;Bar dataKey=&quot;x&quot;
+                  stackId=&quot;a&quot;/&gt;...&lt;/BarChart&gt;</code
+                >
+              </td>
+              <td>data on root, field names on leaves</td>
+              <td>
+                3.x added a <code>&lt;BarStack&gt;</code> wrapper and moved to
+                context registration to allow custom components.
+              </td>
+            </tr>
+            <tr>
+              <td>visx</td>
+              <td>
+                <code
+                  >&lt;BarStack data keys x xScale yScale&gt;{(stacks) =&gt; ...
+                  &lt;rect/&gt;}&lt;/BarStack&gt;</code
+                >
+              </td>
+              <td>render prop gets computed geometry</td>
+              <td>
+                The only literal &quot;template per group&quot;, but the user
+                redraws everything.
+              </td>
+            </tr>
+            <tr>
+              <td>Vega-Lite / react-vega</td>
+              <td><code>&lt;VegaEmbed spec={spec}/&gt;</code></td>
+              <td>the spec</td>
+              <td>
+                Spec as a prop. Stacking is implied by <code>color</code>.
+              </td>
+            </tr>
+            <tr>
+              <td>Observable Plot</td>
+              <td>
+                <code
+                  >Plot.plot({...options, document: new
+                  Document()}).toHyperScript()</code
+                >
+              </td>
+              <td>the options object</td>
+              <td>
+                Plot's authors chose spec-as-prop, not JSX marks, and get SSR by
+                laying out against a virtual document.
+              </td>
+            </tr>
+            <tr>
+              <td>chart-parts (MSR)</td>
+              <td>
+                transforms in a fluent library:
+                <code>stack('value').groupBy('key')</code>; JSX holds
+                <code>&lt;Rect table=&quot;data&quot; .../&gt;</code>
+              </td>
+              <td>named tables</td>
+              <td>
+                The closest precedent for the recommendation: the pipeline stays
+                fluent, marks and composition go in JSX.
+              </td>
+            </tr>
+            <tr>
+              <td>react-three-fiber</td>
+              <td>
+                <code
+                  >&lt;mesh&gt;&lt;boxGeometry
+                  args={[1,1,1]}/&gt;&lt;/mesh&gt;</code
+                >
+              </td>
+              <td>props, context, hooks</td>
+              <td>
+                Custom reconciler; lowercase intrinsics generated from THREE.
+                Works because THREE names don't clash with DOM names.
+              </td>
+            </tr>
+            <tr>
+              <td>react-pdf</td>
+              <td>
+                <code
+                  >&lt;Document&gt;&lt;Page&gt;&lt;View&gt;&lt;Text&gt;</code
+                >
+              </td>
+              <td>props</td>
+              <td>
+                Capitalized exports are string host types (<code
+                  >export const Rect = 'RECT'</code
+                >), so <code>&lt;Rect&gt;</code> never clashes with DOM
+                <code>&lt;rect&gt;</code>.
+              </td>
+            </tr>
+            <tr>
+              <td>Remotion, React Router</td>
+              <td>
+                <code>&lt;Sequence from={30}&gt;</code>, nested
+                <code>&lt;Route path&gt;</code>
+              </td>
+              <td>context</td>
+              <td>
+                Nesting a pipeline over time or paths. Neither splits data.
+              </td>
+            </tr>
+            <tr>
+              <td>framer-motion, Mafs</td>
+              <td>
+                <code>&lt;motion.div&gt;</code>,
+                <code>&lt;Coordinates.Cartesian/&gt;</code>
+              </td>
+              <td>props, context</td>
+              <td>
+                JSX member expressions: a namespace object keeps lowercase names
+                legal in JSX.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="grid">
+        <figure>
+          <img
+            src="img/prior/bluefish.png"
+            alt="Bluefish: stack with background"
+          />
+          <figcaption>Bluefish: stack with background</figcaption>
+        </figure>
+        <figure>
+          <img src="img/prior/vegalite.png" alt="Vega-Lite stacked bar" />
+          <figcaption>Vega-Lite stacked bar</figcaption>
+        </figure>
+        <figure>
+          <img src="img/prior/visx.png" alt="visx bar chart" />
+          <figcaption>visx bar chart</figcaption>
+        </figure>
+        <figure>
+          <img src="img/prior/nivo.png" alt="nivo bar chart" />
+          <figcaption>nivo bar chart</figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/prior/recharts.png"
+            alt="Recharts stacked area and bar"
+          />
+          <figcaption>Recharts stacked area and bar</figcaption>
+        </figure>
+      </div>
+      <h2>Approaches</h2>
+      <p>
+        The space has three independent axes. The main one is where the pipeline
+        goes. The other two are how components are named and what machinery
+        reads the JSX. Each is laid out separately.
+      </p>
+      <h3>Axis 1: where the pipeline goes</h3>
+      <h4>Approach A. Spec only</h4>
+      <p>
+        One component, no JSX vocabulary. The visualization is a fluent value.
+      </p>
+      <div class="pair">
+        <div class="code">
+          <pre><code class="language-javascript">&lt;GoFish
+  w={400}
+  h={400}
+  spec={chart(seafood)
+    .flow(spread({ by: &quot;lake&quot;, dir: &quot;x&quot; }), stack({ by: &quot;species&quot;, dir: &quot;y&quot; }))
+    .mark(rect({ h: &quot;count&quot;, fill: &quot;species&quot; }))}
+/&gt;
+</code></pre>
+        </div>
+        <figure>
+          <img src="img/jsx-vs-fluent--stacked-bar.png" alt="Stacked bar" />
+          <figcaption>
+            Stacked bar. Left: the prototype's JSX drawn as React &lt;svg&gt;.
+            Right: the fluent chain drawn by the Solid renderer. Every spelling
+            on this page draws the same display list (tested).
+          </figcaption>
+        </figure>
+      </div>
+      <ul>
+        <li>
+          <strong>Desugars to:</strong> <code>spec.render(...)</code>, nothing
+          else.
+        </li>
+        <li>
+          <strong>Composes:</strong> everything the fluent API does, unchanged.
+        </li>
+        <li>
+          <strong>Trade-offs:</strong> cheapest, exact, and the form every
+          ecosystem ships first. But a diagram is written with no JSX at all,
+          and an MDX author gets no React composition.
+        </li>
+      </ul>
+      <h4>
+        Approach B. JSX for combinators, fluent values for pipelines
+        (recommended)
+      </h4>
+      <p>
+        JSX spells the combinator form. A pipeline stays a fluent value and
+        appears wherever a child may: as a JSX child, or as <code>spec</code> on
+        the root. Approach A is the special case with one child.
+      </p>
+      <p>
+        Bars plus a line over them, from a second chart over
+        <code>selectAll(&quot;bars&quot;)</code>:
+      </p>
+      <div class="pair">
+        <div class="code">
+          <pre><code class="language-javascript">&lt;Layer&gt;
+  {chart(seafood, { w: 400, h: 300 })
+    .flow(spread({ by: &quot;lake&quot;, dir: &quot;x&quot;, spacing: 20 }))
+    .mark(rect({ h: &quot;count&quot;, fill: &quot;#9ecae1&quot; }).name(&quot;bars&quot;))}
+  {chart(selectAll(&quot;bars&quot;)).mark(
+    line({
+      stroke: &quot;#08519c&quot;,
+      strokeWidth: 3,
+      source: [&quot;middle&quot;, &quot;end&quot;],
+      target: [&quot;middle&quot;, &quot;end&quot;],
+    })
+  )}
+&lt;/Layer&gt;
+</code></pre>
+        </div>
+        <figure>
+          <img src="img/jsx-vs-fluent--bars-and-line.png" alt="Bars and line" />
+          <figcaption>
+            Bars and line. Left: the prototype's JSX drawn as React &lt;svg&gt;.
+            Right: the fluent chain drawn by the Solid renderer. Every spelling
+            on this page draws the same display list (tested).
+          </figcaption>
+        </figure>
+      </div>
+      <p>
+        A node-link diagram, where a plain React function component plays the
+        part of <code>createMark</code>:
+      </p>
+      <div class="pair">
+        <div class="code">
+          <pre><code class="language-javascript">function Node({ label }) {
+  return (
+    &lt;Layer
+      w={76}
+      h={40}
+      relate={({ box, caption }) =&gt; [
+        Constraint.align({ x: &quot;middle&quot;, y: &quot;middle&quot; }, [box, caption]),
+      ]}
+    &gt;
+      &lt;Rect
+        w={76}
+        h={40}
+        rx={6}
+        fill=&quot;#e2ebf6&quot;
+        stroke=&quot;#457b9d&quot;
+        strokeWidth={2}
+        name=&quot;box&quot;
+      /&gt;
+      &lt;Text text={label} fontSize={14} fill=&quot;#1d3557&quot; name=&quot;caption&quot; /&gt;
+    &lt;/Layer&gt;
+  );
+}
+
+&lt;Layer x={20} y={20}&gt;
+  &lt;Layer relate={nodeConstraints}&gt;
+    &lt;Node label=&quot;A&quot; name={A} /&gt;
+    &lt;Node label=&quot;B&quot; name={B} /&gt;
+    &lt;Node label=&quot;C&quot; name={C} /&gt;
+    &lt;Node label=&quot;D&quot; name={D} /&gt;
+  &lt;/Layer&gt;
+  &lt;Line {...edge} {...across} zOrder={-1}&gt;
+    &lt;Ref to={A} /&gt;
+    &lt;Ref to={B} /&gt;
+  &lt;/Line&gt;
+  &lt;Line {...edge} {...across} zOrder={-1}&gt;
+    &lt;Ref to={B} /&gt;
+    &lt;Ref to={C} /&gt;
+  &lt;/Line&gt;
+  &lt;Line
+    {...edge}
+    source={[&quot;middle&quot;, &quot;start&quot;]}
+    target={[&quot;middle&quot;, &quot;end&quot;]}
+    zOrder={-1}
+  &gt;
+    &lt;Ref to={B} /&gt;
+    &lt;Ref to={D} /&gt;
+  &lt;/Line&gt;
+&lt;/Layer&gt;;
+</code></pre>
+        </div>
+        <figure>
+          <img src="img/jsx-vs-fluent--node-link.png" alt="Node-link diagram" />
+          <figcaption>
+            Node-link diagram. Left: the prototype's JSX drawn as React
+            &lt;svg&gt;. Right: the fluent chain drawn by the Solid renderer.
+            Every spelling on this page draws the same display list (tested).
+          </figcaption>
+        </figure>
+      </div>
+      <p>
+        The hard case is a diagram whose relations name its parts, here the
+        Bluefish planets. <code>.relate()</code> becomes a
+        <code>relate</code> prop whose function returns JSX:
+      </p>
+      <div class="pair">
+        <div class="code">
+          <pre><code class="language-javascript">&lt;Layer
+  relate={({ Mercury }) =&gt; [
+    &lt;Spread dir=&quot;y&quot; spacing={60} alignment=&quot;middle&quot;&gt;
+      &lt;Text text=&quot;Mercury&quot; name=&quot;label&quot; /&gt;
+      {Mercury}
+    &lt;/Spread&gt;,
+    &lt;Arrow&gt;
+      &lt;Ref to=&quot;label&quot; /&gt;
+      {Mercury}
+    &lt;/Arrow&gt;,
+  ]}
+&gt;
+  &lt;Spread dir=&quot;x&quot; spacing={50} alignment=&quot;middle&quot;&gt;
+    {planets.map((p) =&gt; (
+      &lt;Ellipse
+        key={p.name}
+        w={p.radius * 2}
+        h={p.radius * 2}
+        fill={p.color}
+        stroke=&quot;#333&quot;
+        strokeWidth={3}
+        name={p.name}
+      /&gt;
+    ))}
+  &lt;/Spread&gt;
+&lt;/Layer&gt;
+</code></pre>
+        </div>
+        <figure>
+          <img
+            src="img/jsx-vs-fluent--planets-arrow.png"
+            alt="Planets with an arrow"
+          />
+          <figcaption>
+            Planets with an arrow. Left: the prototype's JSX drawn as React
+            &lt;svg&gt;. Right: the fluent chain drawn by the Solid renderer.
+            Every spelling on this page draws the same display list (tested).
+          </figcaption>
+        </figure>
+      </div>
+      <ul>
+        <li>
+          <strong>Desugars to:</strong> an exact rewrite, one element per call.
+          <code>&lt;Stack dir=&quot;y&quot;&gt;{a}{b}&lt;/Stack&gt;</code> is
+          <code>stack({ dir: &quot;y&quot; }, [a, b])</code>; <code>name</code>,
+          <code>zOrder</code> and <code>relate</code> props are the
+          <code>.name()</code>, <code>.zOrder()</code> and
+          <code>.relate()</code> methods; a user function component is
+          <code>createMark</code>. A fluent value as a child passes through
+          untouched.
+        </li>
+        <li>
+          <strong>Composes:</strong> the pipeline keeps every feature it has
+          (<code>.layer</code>, <code>.label</code>, <code>selectAll</code>,
+          <code>derive</code> with live functions, <code>Coord</code>,
+          <code>.transition</code>) because it is the same value. Coordinate
+          transforms are props (<code>coord={Coord.clock()}</code>).
+        </li>
+        <li>
+          <strong>Overlap:</strong> none. Each JSX element is one existing
+          combinator, with no new semantics.
+        </li>
+        <li>
+          <strong>Trade-offs:</strong> one picture can mix two notations, JSX
+          for the tree and a chain for the pipeline. That mix follows the
+          existing rule for calls and methods. The JSX vocabulary can be
+          generated from <code>descriptors.ts</code>, as the Python wrappers are
+          (#685), so a new operator costs nothing here.
+        </li>
+      </ul>
+      <h4>Approach C. Nesting: each flow step wraps the next (runner-up)</h4>
+      <p>
+        Inside <code>&lt;Chart data&gt;</code>, an operator element is a flow
+        step, its one child is the template, and later children are
+        <code>.layer()</code> tiers. Outside <code>&lt;Chart&gt;</code>, the
+        same elements are combinators.
+      </p>
+      <div class="pair">
+        <div class="code">
+          <pre><code class="language-javascript">&lt;Chart data={seafood} w={400} h={400}&gt;
+  &lt;Spread by=&quot;lake&quot; dir=&quot;x&quot;&gt;
+    &lt;Stack by=&quot;species&quot; dir=&quot;y&quot;&gt;
+      &lt;Rect h=&quot;count&quot; fill=&quot;species&quot; /&gt;
+    &lt;/Stack&gt;
+  &lt;/Spread&gt;
+&lt;/Chart&gt;
+</code></pre>
+        </div>
+        <figure>
+          <img
+            src="img/jsx-vs-fluent--stacked-bar.png"
+            alt="Stacked bar, nested"
+          />
+          <figcaption>
+            Stacked bar, nested. Left: the prototype's JSX drawn as React
+            &lt;svg&gt;. Right: the fluent chain drawn by the Solid renderer.
+            Every spelling on this page draws the same display list (tested).
+          </figcaption>
+        </figure>
+      </div>
+      <div class="pair">
+        <div class="code">
+          <pre><code class="language-javascript">&lt;Chart data={seafood} h={400}&gt;
+  &lt;Spread by=&quot;lake&quot; dir=&quot;x&quot; spacing={64}&gt;
+    &lt;Stack by={field(&quot;species&quot;).sort(&quot;count&quot;)} dir=&quot;y&quot;&gt;
+      &lt;Rect h=&quot;count&quot; fill=&quot;species&quot; /&gt;
+    &lt;/Stack&gt;
+  &lt;/Spread&gt;
+  &lt;Ribbon opacity={0.8} /&gt;
+&lt;/Chart&gt;
+</code></pre>
+        </div>
+        <figure>
+          <img
+            src="img/jsx-vs-fluent--ribbon-chart.png"
+            alt="Ribbon chart, nested"
+          />
+          <figcaption>
+            Ribbon chart, nested. Left: the prototype's JSX drawn as React
+            &lt;svg&gt;. Right: the fluent chain drawn by the Solid renderer.
+            Every spelling on this page draws the same display list (tested).
+          </figcaption>
+        </figure>
+      </div>
+      <div class="pair">
+        <div class="code">
+          <pre><code class="language-javascript">&lt;Chart data={seafood} w={440} h={400}&gt;
+  &lt;Spread by=&quot;lake&quot; dir=&quot;x&quot;&gt;
+    &lt;Stack by=&quot;species&quot; dir=&quot;y&quot;&gt;
+      &lt;Rect h=&quot;count&quot; fill=&quot;species&quot;&gt;
+        &lt;Label field=&quot;species&quot; position=&quot;center&quot; color=&quot;white&quot; fontSize={12} /&gt;
+      &lt;/Rect&gt;
+    &lt;/Stack&gt;
+  &lt;/Spread&gt;
+&lt;/Chart&gt;
+</code></pre>
+        </div>
+        <figure>
+          <img
+            src="img/jsx-vs-fluent--labeled-stack.png"
+            alt="Labeled stack, nested"
+          />
+          <figcaption>
+            Labeled stack, nested. Left: the prototype's JSX drawn as React
+            &lt;svg&gt;. Right: the fluent chain drawn by the Solid renderer.
+            Every spelling on this page draws the same display list (tested).
+          </figcaption>
+        </figure>
+      </div>
+      <div class="pair">
+        <div class="code">
+          <pre><code class="language-javascript">&lt;Chart data={seafood} coord={Coord.clock()} axes padding={80} w={400} h={400}&gt;
+  &lt;Stack by=&quot;species&quot; dir=&quot;x&quot;&gt;
+    &lt;Rect w=&quot;count&quot; fill=&quot;species&quot; /&gt;
+  &lt;/Stack&gt;
+&lt;/Chart&gt;
+</code></pre>
+        </div>
+        <figure>
+          <img src="img/jsx-vs-fluent--pie.png" alt="Pie, nested" />
+          <figcaption>
+            Pie, nested. Left: the prototype's JSX drawn as React &lt;svg&gt;.
+            Right: the fluent chain drawn by the Solid renderer. Every spelling
+            on this page draws the same display list (tested).
+          </figcaption>
+        </figure>
+      </div>
+      <ul>
+        <li>
+          <strong>Desugars to:</strong> the fluent chain. It round-trips to the
+          same IR on five examples and the same display list on all seven.
+        </li>
+        <li><strong>Composes:</strong> the same as B for combinators.</li>
+        <li>
+          <strong>Overlap:</strong> <code>&lt;Stack&gt;</code> inside and
+          outside <code>&lt;Chart&gt;</code> is one name for two readings, which
+          is fine in the fluent API, where the presence of children tells them
+          apart, and ambiguous in JSX, where it cannot (the ambiguity render
+          above).
+        </li>
+        <li>
+          <strong>Trade-offs:</strong> reads beautifully for simple charts and
+          reads in the forward order the pipeline syntax chose
+          (<code>internals/frontend/pipeline-syntax.md</code>). It costs three
+          position rules: flow step vs combinator, first child vs layer tiers,
+          and <code>label</code> as modifier vs option. Labels need a
+          <code>&lt;Label&gt;</code> child, a new spelling for a method.
+        </li>
+      </ul>
+      <h4>Approach D. Pipeline as props on one element</h4>
+      <pre><code class="language-javascript">&lt;Chart
+  data={seafood}
+  w={400}
+  h={400}
+  flow={[spread({ by: &quot;lake&quot;, dir: &quot;x&quot; }), stack({ by: &quot;species&quot;, dir: &quot;y&quot; })]}
+  mark={rect({ h: &quot;count&quot;, fill: &quot;species&quot; })}
+/&gt;
+</code></pre>
+      <ul>
+        <li>
+          <strong>Desugars to:</strong> the fluent chain, field by field. It
+          renders the stacked bar above.
+        </li>
+        <li>
+          <strong>Trade-offs:</strong> this is the single
+          <code>chart({ data, flow, mark, ... })</code> config object that the
+          pipeline-syntax notes already considered and dropped. It is A with the
+          chain cut into props, and it still needs a prop for every builder
+          method (<code>layer</code>, <code>label</code>,
+          <code>transition</code>). Kept here as a foil.
+        </li>
+      </ul>
+      <h3>Axis 2: how JSX names are spelled</h3>
+      <p>
+        JSX reads a lowercase bare name as a DOM element and a capitalized one
+        as a component, so GoFish's lowercase names cannot be used bare.
+      </p>
+      <ul>
+        <li>
+          <strong>N1. Capitalized components</strong>
+          (<code>&lt;Stack&gt;</code>, <code>&lt;Rect&gt;</code>), exported as
+          host types the way react-pdf does (<code
+            >export const Rect = 'RECT'</code
+          >). Bluefish, react-pdf, Victory, visx and Recharts all use capitals.
+          This conflicts with GoFish's capital-letter rule (#416 removed the old
+          capitalized aliases), but the capital is forced by JSX's own grammar,
+          so it is a domain special case inside <code>@gofish/react</code> only,
+          not a second spelling in <code>gofish-graphics</code>.
+        </li>
+        <li>
+          <strong>N2. Lowercase intrinsics</strong> (<code>&lt;stack&gt;</code>,
+          <code>&lt;rect&gt;</code>), like react-three-fiber. <code>rect</code>,
+          <code>text</code>, <code>line</code>, <code>ellipse</code>,
+          <code>polygon</code> and <code>image</code> collide with DOM SVG
+          elements in both the types and the reader's head. Rejected.
+        </li>
+        <li>
+          <strong>N3. A lowercase namespace</strong> (<code
+            >import * as gf from &quot;@gofish/react&quot;</code
+          >, then <code>&lt;gf.stack&gt;</code>, <code>&lt;gf.rect&gt;</code>),
+          like framer-motion's <code>&lt;motion.div&gt;</code>. It keeps
+          GoFish's exact names and its capital rule, at the cost of a prefix on
+          every element.
+        </li>
+      </ul>
+      <p>
+        Recommendation: N1, declared as a JSX-only special case. N3 is the
+        choice if the capital rule should hold everywhere.
+      </p>
+      <h3>Axis 3: what reads the JSX</h3>
+      <ul>
+        <li>
+          <strong>Element walk (prototype).</strong> Read the tree as records,
+          calling user function components to expand them, so a user can wrap
+          parts in a component (avoiding Victory #2342). Synchronous, so server
+          rendering works. A component that calls a hook throws.
+        </li>
+        <li>
+          <strong>Custom reconciler + its-fine</strong> (#1266's plan). User
+          components inside a GoFish tree can use hooks, state and outer
+          context. Costs a host config to maintain across
+          <code>react-reconciler</code> versions (react-pdf vendors three).
+        </li>
+      </ul>
+      <p>
+        Recommendation: the element walk for v1. Hooks belong in the outer React
+        component that holds the visualization, which passes values down as
+        props. Move to a reconciler only when a real example needs hooks inside
+        the tree.
+      </p>
+      <h2>How the recommendation composes</h2>
+      <ul>
+        <li>
+          <strong>Python:</strong> unchanged. Python has no JSX, and its
+          combinator form (<code>stack([a, b], dir=&quot;y&quot;)</code>) is
+          already the call shape the JSX desugars to. The JSX surface is
+          JS-only, like <code>time</code>.
+        </li>
+        <li>
+          <strong>Data types, units, strategies:</strong> untouched; props carry
+          the same values (<code>Coord.clock()</code>,
+          <code>Curve.monotone</code>, <code>field(...).bin(...)</code>).
+        </li>
+        <li>
+          <strong>Layout engine:</strong> sees the same builder calls, so
+          #1176's work applies as is.
+        </li>
+        <li>
+          <strong>Events:</strong> the React <code>&lt;svg&gt;</code> output can
+          attach <code>onClick</code> etc. to display-list items, keyed by mark
+          name. Not prototyped.
+        </li>
+        <li>
+          <strong>Animation and reactive signals (#671):</strong> a React prop
+          change re-runs layout, as the existing &quot;anything layout-affecting
+          reruns the pipeline&quot; rule does. <code>live()</code> paint patches
+          and <code>time.*</code> need a decision on whether React or Solid owns
+          the frame loop. Not prototyped.
+        </li>
+      </ul>
+      <h2>Why B over C</h2>
+      <ol>
+        <li>
+          <strong>It follows the call/method rule GoFish already has.</strong>
+          <code>api-design.md</code>, &quot;Calls, methods and options&quot;: a
+          call joins independent parts (<code>layer([a, b])</code>), and a
+          method chain is steps that read the caller's state
+          (<code>chart(...).flow(...).mark(...)</code>). JSX compiles to calls.
+          The pipeline is a chain for a reason that does not go away in JSX. The
+          difference you noticed between the two forms comes from that rule.
+        </li>
+        <li>
+          <strong>No rule users must model.</strong> Nesting needs a position
+          rule to tell a flow step from a combinator, and the ambiguity render
+          shows that the two readings draw different pictures. B keeps the
+          difference where the fluent API already marks it, in the code.
+        </li>
+        <li>
+          <strong>Exact desugaring, nothing new in the core.</strong> Each
+          element is one existing call (<code>principles.md</code>, &quot;Why
+          keep the core small&quot;). No <code>&lt;Label&gt;</code> element, no
+          tier-by-position rule.
+        </li>
+        <li>
+          <strong>Precedent.</strong> Every ecosystem ships spec-as-prop first.
+          Observable Plot chose it over JSX marks, and chart-parts keeps
+          transforms in a fluent library with marks in JSX. No library nests a
+          data-splitting pipeline.
+        </li>
+        <li>
+          <strong>Extensible at no cost.</strong> A new operator or mark appears
+          in JSX by generation from <code>descriptors.ts</code>; there is no
+          per-construct position semantics to design.
+        </li>
+      </ol>
+      <p>
+        <strong>What would change my pick to C:</strong> a single child rule
+        with no position cases. For example, if every operator's children were
+        always templates instantiated per group, with no-<code>by</code> meaning
+        &quot;one group&quot; rather than &quot;one group per item&quot;. That
+        reverses #998 and would need its own design pass. Real MDX usage that is
+        mostly simple charts would also make C's readability count for more.
+      </p>
+      <h2>Decisions for Josh</h2>
+      <ol>
+        <li>Pipeline in JSX: keep it a fluent value (B), or nest it (C)?</li>
+        <li>
+          Names: capitalized components in <code>@gofish/react</code> only (N1),
+          or a lowercase namespace <code>&lt;gf.stack&gt;</code> (N3)?
+        </li>
+        <li>
+          A plain function component in JSX means <code>createMark</code>. Is
+          that right?
+        </li>
+        <li>
+          Machinery for v1: element walk, with no hooks inside a GoFish tree, or
+          a reconciler from the start?
+        </li>
+        <li>
+          Server rendering: text widths are estimated on the server and measured
+          in the browser. Is a small shift when the client lays out again
+          acceptable for v1, or must server and client agree (font metrics on
+          the server)?
+        </li>
+        <li>Package name <code>@gofish/react</code>?</li>
+      </ol>
+      <h2>User-facing syntax to review</h2>
+      <pre><code class="language-javascript">// New: a root component for a fluent value
+&lt;GoFish w={400} h={300} spec={chart(data).flow(...).mark(...)} /&gt;
+
+// New: combinators as JSX (one element per existing call)
+&lt;Layer&gt;{a}{b}&lt;/Layer&gt;                 // layer([a, b])
+&lt;Stack dir=&quot;y&quot;&gt;{a}{b}&lt;/Stack&gt;         // stack({ dir: &quot;y&quot; }, [a, b])
+&lt;Rect h={40} name=&quot;box&quot; /&gt;            // rect({ h: 40 }).name(&quot;box&quot;)
+&lt;Layer relate={fn}&gt;...&lt;/Layer&gt;        // layer([...]).relate(fn)
+&lt;Line&gt;&lt;Ref to=&quot;a&quot; /&gt;&lt;Ref to=&quot;b&quot; /&gt;&lt;/Line&gt;  // line({}, [ref(&quot;a&quot;), ref(&quot;b&quot;)])
+</code></pre>
+      <h2>Related issues</h2>
+      <ul>
+        <li>
+          #1266: the React wrapper itself (custom fiber via its-fine, frontend
+          IR in, display list out).
+        </li>
+        <li>
+          #685: generate the Python wrappers from <code>descriptors.ts</code>;
+          the model for generating JSX components.
+        </li>
+        <li>
+          #671: reactive signals and <code>live()</code>; how React re-renders
+          meet paint patches.
+        </li>
+        <li>
+          #963: <code>view.unmount()</code>, for effect cleanup on a client-only
+          mount.
+        </li>
+        <li>
+          #416: removed the capitalized aliases (<code>StackX</code>,
+          <code>Frame</code>, <code>GoFish</code>), which set the capital-letter
+          rule.
+        </li>
+        <li>
+          #146: made the node-level operators internal, giving one lowercase
+          surface.
+        </li>
+        <li>
+          #998: a split with no <code>by</code> puts each item in its own group;
+          why <code>&lt;Stack dir=&quot;y&quot;&gt;</code> inside a flow is not
+          a combinator.
+        </li>
+        <li>
+          #577: <code>.toSVG()</code> in Node; the prototype uses
+          <code>toDisplayList</code> instead.
+        </li>
+      </ul>
+      <h2>Files</h2>
+      <ul>
+        <li>
+          Prototype: <code>packages/gofish-react/</code> (element walk, React
+          port of the display-list renderer, 33 tests).
+        </li>
+        <li>
+          Stories:
+          <code
+            >packages/gofish-graphics/stories/proposals/ReactWrapper.stories.tsx</code
+          >.
+        </li>
+        <li>Renders: <code>proposals/react-wrapper/img/</code>.</li>
+        <li>
+          Prior-art survey with sources:
+          <code>proposals/react-wrapper/prior-art.md</code>.
+        </li>
+      </ul>
+    </main>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      try {
+        hljs.highlightAll();
+      } catch (e) {}
+    </script>
+  </body>
+</html>
