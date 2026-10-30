@@ -277,6 +277,48 @@ alone, not the bar and its label. A layer still places, and orders, what
 stands in a named node's place (`inPlace`): a constraint on the labeled bar
 moves its ring, and measures the ring, so the label moves with it.
 
+### Why slots, not uids
+
+A macro's operand could have held a node's `uid` instead of a slot. Both are
+in use: the operand a constraint holds is a slot, and `resolveReferences`
+turns it into the uid of whatever fills that slot each round, which is what
+the solve keys on. The question is which of the two the operand should hold.
+In programming-language terms, a slot is like a de Bruijn index, a position
+counted from the binder, and a uid is like a gensym, an identity that follows
+one node.
+
+The slot wins because of rings. Elaboration runs after the operators install
+their constraints, and it puts a ring in a node's place (`replaceChild`). An
+operand holding the bar's uid would still mean the bare bar, which is now
+inside the ring. A spread would then place the bar within its own ring and
+leave the label behind. To keep uids right, every pass that wraps a node
+would have to rewrite the uids that point at it. That is the rename table
+#1236 removed, and the capture bugs lived there. A slot means whatever fills
+the slot now, which is the ring.
+
+A slot also belongs to one layer: read from any other layer, it throws. A uid
+is global, so a stray one could reach across scopes with no error. And a slot
+survives rebuilding. A node gets its uid from a counter when it is built
+(`GoFishNode`'s constructor), so `fromJSON`, or any rebuild of the spec,
+gives every node a new one. A child index stays the same and can be written
+to the wire as it is.
+
+Slots have costs. A layer's children may be replaced but never inserted or
+reordered. Only `.relate()` appends, so slots do not move, but every pass has
+to keep that rule. Read-only `children`, `replaceChild` and `_version` exist
+to enforce it. An index means nothing in a message, so `SlotOperand.name`
+reads the name of the slot's content (`contentOf`). Every layer needs the
+child index (`indexOfChild`). And where a pass means one particular node, a
+slot is wrong. The paint-order defaults are such a case, so they hold the
+node (`NodeOperand`).
+
+If chrome were attached beside a node instead of wrapping it, a node's
+identity would never change, and uids alone would do. The slot rule,
+`_version` and `contentOf` could then go. But rings would no longer be layers
+that seat chrome with ordinary constraints, and the axis, label and legend
+passes would each need another way to attach. The slot machinery is the cost
+of wrapping.
+
 ### Nested operands
 
 An operand does not have to be a direct child. In the Diagrams tutorial's
