@@ -1,0 +1,1 @@
+[gofish:layout] coord on x: its fixed parts need 505.6 px, but its slot has 480 px. Fixed parts: other fixed sizes (text, literal sizes and positions, chrome) = 505.6 px. The parts that scale are drawn as if the fixed parts took no room, and the graphic overflows on x.

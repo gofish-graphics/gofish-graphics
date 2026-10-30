@@ -1,0 +1,2 @@
+[gofish:layout] the graphic draws past the canvas on x: 0.8 px before it, 0.8 px after it. Its own box reaches there, not a part the claim walk left out: layout drew it larger than its claim, or away from it.
+[gofish:layout] the graphic draws past the canvas on y: 0.8 px before it, 0.8 px after it. Its own box reaches there, not a part the claim walk left out: layout drew it larger than its claim, or away from it.
