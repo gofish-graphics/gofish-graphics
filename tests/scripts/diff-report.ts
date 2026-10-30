@@ -4,6 +4,7 @@
  * For each failing story (regression, parity, new, or removed), the report shows:
  *   - Strobe animation between before/after screenshots (base64-embedded, CSS keyframes)
  *   - Pixel diff image (base64-embedded) with diff percentage
+ *   - The story's warnings against its baseline's (story-warnings.ts)
  *   - Colored line diff of the DOM snapshot
  *
  * Outputs:
@@ -15,14 +16,13 @@
  *   diff-list.json.
  */
 
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import {
   collectReviewDiffs,
-  formatDomDiff,
+  formatEntryDomDiff,
+  formatWarningsPanel,
   escapeHtml,
-  JS_DIR,
-  PYTHON_DIR,
   type DiffEntry,
 } from "./diff-utils.js";
 import { computePixelDiff } from "./pixel-diff.js";
@@ -96,15 +96,6 @@ function generateReport(entries: ReportEntry[]): string {
 
   const entryHtml = entries
     .map((d, i) => {
-      const domDiffHtml =
-        d.beforeDom && d.afterDom
-          ? formatDomDiff(d.beforeDom, d.afterDom)
-          : d.afterDom
-            ? `<pre style="margin:0;white-space:pre-wrap;">${escapeHtml(d.afterDom)}</pre>`
-            : d.beforeDom
-              ? `<pre style="margin:0;white-space:pre-wrap;">${escapeHtml(d.beforeDom)}</pre>`
-              : "";
-
       // Strobe animation: two overlapping images, CSS toggles opacity
       const afterImg = d.afterB64
         ? `<img src="data:image/png;base64,${d.afterB64}" style="display:block;max-width:100%;" />`
@@ -152,7 +143,7 @@ function generateReport(entries: ReportEntry[]): string {
       return `
     <div style="border:1px solid #ddd;margin:16px 0;border-radius:6px;overflow:hidden;">
       <div style="padding:12px 16px;background:${kindColor[d.kind]}22;border-bottom:1px solid #ddd;">
-        <span style="font-weight:bold;color:${kindColor[d.kind]};">${kindLabel[d.kind]}</span>
+        <span style="font-weight:bold;color:${kindColor[d.kind]};">${kindLabel[d.kind]}${d.change === "warnings" ? " (warnings only)" : ""}</span>
         <span style="margin-left:12px;font-family:monospace;">${escapeHtml(d.path)}</span>
       </div>
       <div style="padding:16px;">
@@ -160,10 +151,11 @@ function generateReport(entries: ReportEntry[]): string {
         ${strobeHtml}
         ${pixelDiffHtml}
       </div>
+      <div style="padding:0 16px;">${formatWarningsPanel(d.warnings)}</div>
       <details style="padding:0 16px 16px;">
         <summary style="cursor:pointer;font-weight:bold;font-size:13px;margin-bottom:8px;">DOM diff</summary>
         <div style="max-height:600px;overflow:auto;border:1px solid #e0e0e0;border-radius:4px;">
-          ${domDiffHtml}
+          ${formatEntryDomDiff(d.beforeDom, d.afterDom)}
         </div>
       </details>
     </div>`;

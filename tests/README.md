@@ -34,8 +34,9 @@ stories/**/*.stories.tsx
         │
    Normalize DOM (round floats, stable IDs, sort attrs)
         │
-        ├──► tmp/js/<path>.html   (normalized DOM)
-        └──► tmp/js/<path>.png    (screenshot)
+        ├──► tmp/js/<path>.html           (normalized DOM)
+        ├──► tmp/js/<path>.warnings.txt   (layout warnings + console errors)
+        └──► tmp/js/<path>.png            (screenshot)
                     │
           ┌─────────┴──────────────────────┐
           ▼                                ▼
@@ -51,6 +52,16 @@ stories/**/*.stories.tsx
 
 The regression check compares the JS capture against the accepted baselines. The parity check compares the Python capture against the JS capture of the same commit, not against the baselines, so it does not depend on whether a JS change has been reviewed yet.
 
+### Warnings
+
+A story's warnings are part of its snapshot. They are every line the story printed to the browser console that says something is wrong: each layout warning (a `[gofish:layout]` line, see `packages/gofish-graphics/src/ast/layoutWarnings.ts`), each `console.error` and each uncaught page error. The capture writes them, sorted, one per line, to `<path>.warnings.txt` next to `<path>.html`. The file is written even when it is empty, so a capture without one is an error. Only the first line of a message is kept, and each dev server URL in it is rewritten to the path it serves: no origin or port, no Vite `?v=`/`?t=` query, and a `/@fs/<checkout>/` path made relative to the checkout (`normalizeConsoleText` in `scripts/normalize-dom.ts`). So two captures of the same story agree, also from different checkouts. The snapshot branch stores the file next to the DOM baseline in `dom/`.
+
+A story's DOM file, warnings file and screenshot are one snapshot (`snapshotParts` in `scripts/diff-utils.ts`). An accept copies all three, a removal deletes all three, and a branch's baselines take all three of a story from the same snapshot branch (see [Which baselines a branch gets](#which-baselines-a-branch-gets)). `diffSnapshot` compares two snapshots of a story, and `diffSnapshotDirs` two directories of them. The CI compare and `capture-diff` both use it.
+
+A change in a story's warnings is a regression to review, like a DOM change, even when the DOM is identical. A baseline recorded before warnings were captured has no warnings file. Its warnings are "unrecorded", which is not a diff on its own, so such a story does not fail. When the story is a diff for another reason, the review shows its current warnings as the new baseline that accepting it records. `snapshots/main` gets every story's warnings file on the first push to main after this change, since that push accepts every capture. The unrecorded state is only for that migration, and #1262 removes it once the snapshot branches have caught up.
+
+Every review (the review site, `diff-report.html` and the `capture-diff` report) shows the same warnings panel (`formatWarningsPanel`). It is hidden when neither side has a warning. It is open when the warnings differ from the baseline, are recorded for the first time, or belong to a new or removed story, and collapsed when they are unchanged. A story whose DOM is identical and only its warnings changed shows "DOM identical: only the warnings changed" in place of a DOM diff.
+
 ### DOM Normalization
 
 Both JS and Python DOM go through identical normalization (`scripts/normalize-dom.ts`):
@@ -63,14 +74,17 @@ Both JS and Python DOM go through identical normalization (`scripts/normalize-do
 
 ## Commands
 
-| Command                       | Description                                                                 |
-| ----------------------------- | --------------------------------------------------------------------------- |
-| `pnpm test:visual:js`         | Capture JS snapshots and compare against baselines                          |
-| `pnpm test:visual:update`     | Capture and accept as new baselines                                         |
-| `pnpm test:visual`            | Full test: JS capture + Python capture + compare                            |
-| `pnpm test:visual:python`     | Capture Python snapshots and compare against the JS capture (needs tmp/js/) |
-| `pnpm test:visual:check-sync` | Check that changed JS stories have updated Python equivalents               |
-| `pnpm capture-diff <ref>`     | Diff HEAD's rendered DOM against `<ref>` — no baselines, any OS             |
+| Command                       | Description                                                                  |
+| ----------------------------- | ---------------------------------------------------------------------------- |
+| `pnpm test:visual:js`         | Capture JS snapshots and compare against baselines                           |
+| `pnpm test:visual:update`     | Capture and accept as new baselines                                          |
+| `pnpm test:visual`            | Full test: JS capture + Python capture + compare                             |
+| `pnpm test:visual:python`     | Capture Python snapshots and compare against the JS capture (needs tmp/js/)  |
+| `pnpm test:visual:check-sync` | Check that changed JS stories have updated Python equivalents                |
+| `pnpm capture-diff <ref>`     | Diff HEAD's rendered DOM and warnings against `<ref>` — no baselines, any OS |
+| `pnpm test:visual:review`     | Serve the CI review site for the local capture (see below)                   |
+
+`pnpm test:visual:review` (`scripts/review-server.ts`) builds the same review site CI deploys, from `tmp/js/` and `__snapshots__/`, and serves it at `http://localhost:3005`. Its Commit Accepted button copies the accepted stories into `__snapshots__/` and commits them to `snapshots/<branch>`. Pass `--dry-run` to build that commit without pushing it, and `--no-open` to skip opening a browser.
 
 ## Local regression signal: `capture-diff`
 
@@ -82,7 +96,9 @@ there is no pass/fail signal for a layout change.
 `capture-diff` fills that gap. It answers **"did my change move anything I didn't
 intend?"** by capturing the normalized DOM of every story twice — once from the
 current worktree (HEAD) and once from a throwaway git worktree checked out at a
-base ref — and diffing the two per story. Both captures use the current
+base ref — and diffing the two per story. It diffs each story's warnings
+too (see [Warnings](#warnings)): a story whose warnings changed has changed,
+even when its DOM is identical. Both captures use the current
 worktree's capture tooling (`tests/harness/` and `tests/scripts/`), so only the
 library and the stories come from the base ref:
 
@@ -102,13 +118,15 @@ second argument is a case-insensitive substring filter (matched against
 Output:
 
 ```
-tests/tmp/capture-diff/head/<path>.html   normalized DOM at HEAD
-tests/tmp/capture-diff/base/<path>.html   normalized DOM at <ref>
-tests/tmp/capture-diff/report.html        side-by-side DOM diff (changed stories)
+tests/tmp/capture-diff/head/<path>.html           normalized DOM at HEAD
+tests/tmp/capture-diff/head/<path>.warnings.txt   its warnings
+tests/tmp/capture-diff/base/...                   the same at <ref>
+tests/tmp/capture-diff/report.html                DOM diff and warnings diff (changed stories)
 ```
 
-It prints the changed/added/removed stories and exits non-zero when anything
-moved, so it can gate an agent's inner loop. The base capture installs deps in
+It prints the changed/added/removed stories, with the warnings lines each one
+gained or lost, and exits non-zero when anything moved (a warnings-only change
+counts), so it can gate an agent's inner loop. The base capture installs deps in
 the temp worktree (`pnpm install --ignore-scripts`, mostly links from the shared
 pnpm store) and is torn down automatically. Requires Playwright's chromium
 (`npx playwright install chromium`).
@@ -169,12 +187,12 @@ The `Visual Tests` workflow splits the work into these jobs:
 
 - `js-capture` captures every story once (the slow part). It runs as a matrix of shards on parallel runners (`capture-js-dom.ts --shard i/N`), each uploading a `js-dom-capture-<i>` artifact; the job's comment in `visual-tests.yml` says how they merge.
 - `python-capture` captures the Python stories at the same time, and uploads `tests/tmp/python/` as the `python-dom-capture` artifact.
-- `visual-test` downloads the JS capture and runs `compare.ts --js-only` against the snapshot baselines. On failure it deploys the review site. Accepting diffs there sends only the run id and the accepted story paths, as a `visual-baselines-accept` repository_dispatch. The `Accept Visual Baselines` workflow (`accept-visual-baselines.yml`) has two jobs. The `accept` job runs `scripts/accept-baselines.ts`. It first checks that the run is a Visual Tests run of that branch in this repository, and only then marks the PR's `Visual Diff Review` status as pending. It copies the accepted files from the run's `js-dom-capture-<i>` artifacts to `snapshots/<branch>` in one commit, through the same writer (`commitToSnapshotBranch` in `snapshot-branch.ts`) that updates `snapshots/main` after a merge. An accept that finds the branch moved is redone on top of the new head. A full update of `snapshots/main` fails instead, so older captures never overwrite newer baselines. The `rerun` job waits for the original run to finish, since GitHub refuses to rerun jobs while any job of the run is still in progress, and then re-runs its failed jobs. That re-runs only this job, which reuses the capture from the first attempt instead of capturing again. You can accept by hand too: `pnpm --filter @gofish/tests accept-baselines <run-id> <branch> --all [--dry-run]`, or `--accept-file`/`--remove-file` with one story path per line (absolute paths, since the command runs in `tests/`). `--all` accepts exactly the diffs the run reported, which are the ones its review site lists. The diff report writes that list to `diff-list.json`, which CI uploads in the `visual-diff-report` artifact next to `diff-report.html`. `--all` fails if the file is missing.
+- `visual-test` downloads the JS capture and runs `compare.ts --js-only` against the snapshot baselines. On failure it deploys the review site. For every story it lists, the review site shows the story's warnings panel (see [Warnings](#warnings)). The "Warnings only" filter lists the stories whose DOM is identical and only their warnings changed. Accepting diffs there sends only the run id and the accepted story paths, as a `visual-baselines-accept` repository_dispatch. The `Accept Visual Baselines` workflow (`accept-visual-baselines.yml`) has two jobs. The `accept` job runs `scripts/accept-baselines.ts`. It first checks that the run is a Visual Tests run of that branch in this repository, and only then marks the PR's `Visual Diff Review` status as pending. It copies the accepted files from the run's `js-dom-capture-<i>` artifacts to `snapshots/<branch>` in one commit, through the same writer (`commitToSnapshotBranch` in `snapshot-branch.ts`) that updates `snapshots/main` after a merge. An accept that finds the branch moved is redone on top of the new head. A full update of `snapshots/main` fails instead, so older captures never overwrite newer baselines. The `rerun` job waits for the original run to finish, since GitHub refuses to rerun jobs while any job of the run is still in progress, and then re-runs its failed jobs. That re-runs only this job, which reuses the capture from the first attempt instead of capturing again. You can accept by hand too: `pnpm --filter @gofish/tests accept-baselines <run-id> <branch> --all [--dry-run]`, or `--accept-file`/`--remove-file` with one story path per line (absolute paths, since the command runs in `tests/`). `--all` accepts exactly the diffs the run reported, which are the ones its review site lists. The diff report writes that list to `diff-list.json`, which CI uploads in the `visual-diff-report` artifact next to `diff-report.html`. `--all` fails if the file is missing.
 - `python-parity` downloads both captures and runs `compare-python.ts` on them. It runs at the same time as `visual-test` and does not wait on the visual review.
 
 #### Which baselines a branch gets
 
-Baselines live on snapshot branches: `snapshots/main`, which CI updates after every push to main, and `snapshots/<branch>`, which the first accept on a PR creates as a branch of `snapshots/main`. The baselines for a branch are the current `snapshots/main`, plus only the files `snapshots/<branch>` changed since it forked from `snapshots/main`. A file it added or modified is taken from `snapshots/<branch>`, and a file it deleted is deleted. So a PR that accepted some diffs still sees every later change to main, and does not report those changes as regressions. If main later changes a story the branch accepted too, the branch's version wins, and the story shows as a diff to accept again, because the accept was made against an older render. A branch with no `snapshots/<branch>` gets `snapshots/main` as it is.
+Baselines live on snapshot branches: `snapshots/main`, which CI updates after every push to main, and `snapshots/<branch>`, which the first accept on a PR creates as a branch of `snapshots/main`. The baselines for a branch are the current `snapshots/main`, plus only the stories `snapshots/<branch>` changed since it forked from `snapshots/main`. When it added, modified or deleted any file of a story's snapshot (its DOM, warnings or screenshot), every file of that story is taken from `snapshots/<branch>`, and a file `snapshots/<branch>` does not have is deleted. So a story never pairs a DOM from one snapshot branch with warnings from another: a story accepted on the branch before warnings were captured has unrecorded warnings, not main's. So a PR that accepted some diffs still sees every later change to main, and does not report those changes as regressions. If main later changes a story the branch accepted too, the branch's version wins, and the story shows as a diff to accept again, because the accept was made against an older render. A branch with no `snapshots/<branch>` gets `snapshots/main` as it is.
 
 One function applies this rule, `checkoutBaselines` in `scripts/snapshot-branch.ts`. The reader, `pullSnapshots`, uses it for `compare.ts` and the local review server. The writer, `commitToSnapshotBranch`, builds each commit on the same baselines (an accept, or the update of `snapshots/main` after a merge) and gives the commit both heads as parents, so the fork point moves up to the `snapshots/main` the accept was made on. A snapshot branch made by an older version of this script has no parent. Its fork point is the `snapshots/main` commit that was current when the branch's first commit was made, which is the tree that version copied, and its next accept records `snapshots/main` as a parent.
 

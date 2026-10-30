@@ -247,7 +247,12 @@ jobs:
               const plural = (n, singular, pluralForm) =>
                 `${n} ${n === 1 ? singular : pluralForm}`;
               if (summary.regressions > 0) {
-                parts.push(plural(summary.regressions, 'regression', 'regressions'));
+                // A regression may be only a change in the story's
+                // warnings (layout warnings, console errors); say how many.
+                const warningsOnly = summary.warningsOnly > 0
+                  ? ` (${summary.warningsOnly} warnings only)`
+                  : '';
+                parts.push(plural(summary.regressions, 'regression', 'regressions') + warningsOnly);
               }
               if (summary.newStories > 0) {
                 parts.push(plural(summary.newStories, 'new story', 'new stories'));
