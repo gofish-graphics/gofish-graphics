@@ -120,12 +120,18 @@ const numRowsOf = (c: GridConstraint): number =>
  *  of a grid's cells finds them this way, by the grid's own refs. */
 export type CellOf = (ref: ConstraintRef) => GoFishAST | undefined;
 
-/** {@link CellOf} over `layer`'s children: the direct child each ref of its
- *  grid resolved to in the last `resolveReferences` round (`directSlot`). */
-export const cellsOf = (layer: GoFishNode): CellOf => {
+/** The index of the direct child of `layer` each ref of its grid resolved
+ *  to in the last `resolveReferences` round (`directSlot`), or undefined. */
+const slotOf = (layer: GoFishNode) => {
   const resolved = resolution(layer);
+  return (ref: ConstraintRef): number | undefined => directSlot(resolved, ref);
+};
+
+/** {@link CellOf} over `layer`'s children, by {@link slotOf}. */
+export const cellsOf = (layer: GoFishNode): CellOf => {
+  const slot = slotOf(layer);
   return (ref) => {
-    const i = directSlot(resolved, ref);
+    const i = slot(ref);
     return i === undefined ? undefined : layer.children[i];
   };
 };
@@ -175,9 +181,9 @@ export type CellBox = (
  * (`warnFlexibleSizes`).
  */
 export const cellBoxesOf = (layer: GoFishNode): CellBox => {
-  const resolved = resolution(layer);
+  const slot = slotOf(layer);
   return (ref, axis) => {
-    const i = directSlot(resolved, ref);
+    const i = slot(ref);
     return i === undefined
       ? undefined
       : layer._claimMemo.plans[axis]?.forms[i]?.box.width;

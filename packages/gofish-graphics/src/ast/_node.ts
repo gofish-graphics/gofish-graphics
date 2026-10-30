@@ -262,11 +262,11 @@ export type ClaimWalk = {
    *  (undefined for none: its parent places it). */
   literalStart: (axis: 0 | 1) => number | undefined;
   /** How it seats its children, read by the placement walk through it
-   *  (`planPlacement`): by child index (`indexOfChild`), each child's key as a
-   *  direct operand and per axis the constraints that act on it there, and
-   *  the literal seats its constraints pin, by key (`literalSeats`). */
+   *  (`planPlacement`): per axis, by child index (`indexOfChild`), the
+   *  constraints that act on it there, and the literal seats its
+   *  constraints pin, by key (`literalSeats`; a direct operand's key is its
+   *  child's uid). */
   seating: () => {
-    operandKey: Map<number, string>;
     acting: [Map<number, ConstraintSpec[]>, Map<number, ConstraintSpec[]>];
     seats: Map<string, [number | undefined, number | undefined]>;
   };

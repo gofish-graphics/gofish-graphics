@@ -264,10 +264,6 @@ export const layer = createNodeOperatorSequential(
       const resolved = resolution(node);
       if (seatingMemo?.of === resolved) return seatingMemo.seating;
       const { operands, keyOf } = resolved;
-      const operandKey = new Map<number, string>();
-      for (const [key, op] of operands)
-        if (op.direct && !operandKey.has(op.child))
-          operandKey.set(op.child, key);
       const acting: [
         Map<number, ConstraintSpec[]>,
         Map<number, ConstraintSpec[]>,
@@ -287,7 +283,6 @@ export const layer = createNodeOperatorSequential(
           }
         }
       const fresh = {
-        operandKey,
         acting,
         seats: literalSeats(node.constraints, keyOf),
       };
@@ -720,16 +715,16 @@ export const layer = createNodeOperatorSequential(
             [scopes.fixedSolve(node, 0), scopes.fixedSolve(node, 1)]
           );
           const childScaleFactors = layerScales.sigmas;
-          // A grid's cells at the σ they are laid out at
-          // (`gridCellSizesAt`): each cell is proposed its track's extent,
-          // by the cells' boxes in this layer's plan, as the claim walk
-          // sized the tracks (`cellBoxesOf`), and the plan centers it in
-          // its track from its laid-out size.
           // Every reference as the last `resolveReferences` round resolved
           // it: each placement operand, by key, and the order of the
           // drawing clauses.
           const { operands, keyOf, schedule: relateOrder } = resolution(node);
           const gridC = selectGridConstraint(node.constraints);
+          // A grid's cells at the σ they are laid out at
+          // (`gridCellSizesAt`): each cell is proposed its track's extent,
+          // by the cells' boxes in this layer's plan, as the claim walk
+          // sized the tracks (`cellBoxesOf`), and the plan centers it in
+          // its track from its laid-out size.
           const gridCellByKey = gridC
             ? gridCellSizesAt(
                 gridC,
@@ -847,14 +842,10 @@ export const layer = createNodeOperatorSequential(
             const op = operands.get(key);
             if (op?.direct) constrainedChildren.add(op.child);
           }
-          // Drawing clauses of `.relate()` run in dependency order around the
-          // solve (`relateOrder`): a clause that reads positions lays out
-          // after the solve that writes them (#878). Plain children lay out
-          // before it, as always.
           // Where a literal position pins each child's origin, read once. A
           // node dressed in chrome seats its content past its start gutters
           // instead (`contentSeat`).
-          const literalSeatsByKey = literalSeats(node.constraints, keyOf);
+          const literalSeatsByKey = seating().seats;
           const seatsOf = (
             i: number
           ): [number | undefined, number | undefined] => {
@@ -948,6 +939,10 @@ export const layer = createNodeOperatorSequential(
             childPlaceables[i] = childPlaceable;
           };
 
+          // Drawing clauses of `.relate()` run in dependency order around the
+          // solve (`relateOrder`): a clause that reads positions lays out
+          // after the solve that writes them (#878). Plain children lay out
+          // before it, as always.
           for (const i of layoutPlan.layoutOrder) {
             if (!relateOrder.clauses.has(i)) layoutChild(i);
           }
@@ -972,11 +967,9 @@ export const layer = createNodeOperatorSequential(
             });
             // A nested operand is a `NestedOperand` held at a fixed offset
             // inside the child that contains it (`gaps`).
-            const nested: [string, ResolvedOperand][] = [];
-            for (const [key, op] of operands)
-              if (!op.direct) nested.push([key, op]);
             const gaps = new Map<string, [number, number]>();
-            for (const [key, op] of nested) {
+            for (const [key, op] of operands) {
+              if (op.direct) continue;
               // The operand sits at a fixed pixel offset inside its container
               // (`nestedGap`), in this layer's axis order.
               const containerPx = rawPlaceable(childPlaceables[op.child]);

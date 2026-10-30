@@ -369,8 +369,7 @@ function seatOf(
   const i = parent.indexOfChild(child) ?? -1;
   const acting = seating.acting[axis].get(i) ?? [];
   if (acting.length === 0) return 0;
-  const key = seating.operandKey.get(i);
-  return key === undefined ? undefined : seating.seats.get(key)?.[axis];
+  return seating.seats.get(child.uid)?.[axis];
 }
 
 /** `x ↦ at + sign·x`: where a point of a node's frame lands in an

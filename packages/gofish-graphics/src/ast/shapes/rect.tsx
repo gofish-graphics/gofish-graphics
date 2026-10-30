@@ -142,14 +142,16 @@ export const Rect = ({
   // axis (#1176 step 6): `inset: percent(10)` draws a bar at 80% of its band.
   const insets = (box: Box): [number, number] => {
     const on = (axis: 0 | 1) =>
-      fills(axis)
-        ? Pwl.at(
-            lengthIn(inset, () =>
-              Pwl.constant(Math.abs(box.max[axis] - box.min[axis]))
-            ),
-            0
-          )
-        : 0;
+      !fills(axis)
+        ? 0
+        : typeof inset === "number"
+          ? inset
+          : Pwl.at(
+              lengthIn(inset, () =>
+                Pwl.constant(Math.abs(box.max[axis] - box.min[axis]))
+              ),
+              0
+            );
     return [on(0), on(1)];
   };
   // How it paints its outline, read once.

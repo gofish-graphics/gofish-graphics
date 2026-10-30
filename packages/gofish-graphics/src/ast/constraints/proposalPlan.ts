@@ -140,7 +140,8 @@ export function buildChildSpans(
  *
  * Priority is explicit and single-owner:
  *   1. grid: each cell is proposed ITS (column, row) track's extent (its cells'
- *      boxes at the layer's σ, `gridCellSizesAt`), keyed by name, on each
+ *      boxes at the layer's σ, `gridCellSizesAt`), keyed by the child's key
+ *      (its uid, `keyOf`), on each
  *      axis where its track has one, and the layer's box on any other;
  *   2. the child's own room in a share scope (`own`, where defined): its
  *      claim at the layer's σ, when σ is the size of a share
@@ -148,31 +149,31 @@ export function buildChildSpans(
  *      keeps the room the scope solved for it;
  *   3. default layer box: any other child is proposed the full layer size.
  *
- * A span (`spanByName`, {@link buildChildSpans}) then owns the axes it
+ * A span (`spanByKey`, {@link buildChildSpans}) then owns the axes it
  * spans: an interval's pins set the child's extent there, and a cell is the
  * room the child is laid out in, whatever else proposed one.
  *
  * Nest proposals apply after this, because they derive a child from an already
  * laid-out source and therefore override only the derived axes. */
 export function childLayoutSizeProposal(
-  childName: string | undefined,
+  childKey: string | undefined,
   layerSize: Size,
-  gridCellByName: Map<string, Size<number | undefined>> | undefined,
-  spanByName?: Map<string, Size<number | undefined>>,
+  gridCellByKey: Map<string, Size<number | undefined>> | undefined,
+  spanByKey?: Map<string, Size<number | undefined>>,
   own: Size<number | undefined> = [undefined, undefined]
 ): Size {
   let proposal: Size = layerSize;
   if (
-    gridCellByName !== undefined &&
-    childName !== undefined &&
-    gridCellByName.has(childName)
+    gridCellByKey !== undefined &&
+    childKey !== undefined &&
+    gridCellByKey.has(childKey)
   ) {
-    const cell = gridCellByName.get(childName)!;
+    const cell = gridCellByKey.get(childKey)!;
     proposal = [cell[0] ?? layerSize[0], cell[1] ?? layerSize[1]];
   } else if (own[0] !== undefined || own[1] !== undefined) {
     proposal = [own[0] ?? proposal[0], own[1] ?? proposal[1]];
   }
-  const span = childName !== undefined ? spanByName?.get(childName) : undefined;
+  const span = childKey !== undefined ? spanByKey?.get(childKey) : undefined;
   if (span !== undefined)
     proposal = [span[0] ?? proposal[0], span[1] ?? proposal[1]];
   return proposal;
