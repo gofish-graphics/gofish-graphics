@@ -858,21 +858,20 @@ for the API.
       ]
     },
     "RelateOperandIR": {
-      "description": "A .relate() operand: a name plus the id of the .relate() call that bound it.",
-      "type": "object",
-      "required": ["type", "selection", "scope"],
-      "additionalProperties": false,
-      "properties": {
-        "type": {
-          "const": "ref"
+      "description": "A .relate() operand: a ref by name that carries the id of the .relate() call that bound it.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/RefMarkIR"
         },
-        "selection": {
-          "type": "string"
-        },
-        "scope": {
-          "type": "string"
+        {
+          "required": ["scope"],
+          "properties": {
+            "selection": {
+              "type": "string"
+            }
+          }
         }
-      }
+      ]
     },
     "ConstraintIR": {
       "type": "object",
