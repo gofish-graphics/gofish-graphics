@@ -2,13 +2,7 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import type {
-  AlignAnchor,
-  AlignValue,
-  Axis,
-  ConstraintPosScales,
-  ConstraintRef,
-} from "./shared";
+import type { AlignAnchor, AlignValue, Axis, ConstraintRef } from "./shared";
 import { axisIndex, type KeyOf } from "./shared";
 import { isUNDEFINED } from "../underlyingSpace";
 import type { PlacementFactEmitter } from "./placementFacts";
@@ -63,30 +57,6 @@ function normalizedAnchors(
   return spec;
 }
 
-/**
- * "Is this align target already positioned by a data scale on this axis?" —
- * the guard that leaves self-positioned children (a scatter facet panel) where
- * their own data scale puts them, instead of moving them to the shared baseline.
- *
- * The fact "this (node, axis) is anchored to a POSITION scope" is collected
- * ONCE at the layer boundary (a member of the shared data→pixel map — its
- * baseline is `posScale(0)`, not free to slide) and handed to the ownership
- * plan, the single authority this guard consults (`isDataPositioned`). It is
- * only meaningful where a data scale exists on the axis (`posScales[axis]`) and
- * the anchor is not `middle` (a center alignment resolves against the box, not a
- * scale origin).
- */
-function isDataPositionedAlignTarget(
-  key: string,
-  anchor: AlignAnchor,
-  axis: 0 | 1,
-  posScales: ConstraintPosScales<unknown> | undefined,
-  isDataPositioned: (axis: 0 | 1, key: string) => boolean
-): boolean {
-  if (anchor === "middle" || posScales?.[axis] === undefined) return false;
-  return isDataPositioned(axis, key);
-}
-
 export function lowerAlignPlacement<T>(
   constraint: AlignConstraint,
   owner: string,
@@ -95,7 +65,6 @@ export function lowerAlignPlacement<T>(
     emitter,
     targets,
     keyOf,
-    posScales,
     isPinned,
     isDataPositioned,
   }: {
@@ -103,7 +72,6 @@ export function lowerAlignPlacement<T>(
     emitter: PlacementFactEmitter<T>;
     targets: Map<string, SolvePlaceable<T>>;
     keyOf: KeyOf;
-    posScales: ConstraintPosScales<T> | undefined;
     isPinned: (axis: Axis, key: string) => boolean;
     isDataPositioned: (axis: 0 | 1, key: string) => boolean;
   }
@@ -195,42 +163,24 @@ export function lowerAlignPlacement<T>(
 
     // Two-phase semantics:
     // 1. the first already-placed target can define the shared baseline;
-    // 2. already-placed or data-positioned targets are not themselves moved.
+    // 2. already-placed targets are not themselves moved.
     //
     // Keeping these separate matters for chart+legend layers: the chart may
     // be the baseline source while the legend is the only target align
-    // writes. Faceted scatter panels, where every panel is already
-    // data-positioned, still contribute no write targets.
+    // writes. A target its own data places (`placedByOwnData`: a scatter
+    // facet panel, a `region` in its cell) is placed before the solve, so
+    // it is pinned, and is never moved either.
     const source = entries.find(({ key }) => isPinned(axis, key));
-    const nonPinned = entries.filter(({ key }) => !isPinned(axis, key));
-    const movable = nonPinned.filter(
-      ({ key, anchor }) =>
-        !isDataPositionedAlignTarget(
-          key,
-          anchor,
-          idx,
-          posScales,
-          isDataPositioned
-        )
+    const movable = entries.filter(
+      ({ key }) => !isPinned(axis, key) && !isDataPositioned(idx, key)
     );
     if (movable.length === 0) {
       // Nothing this constraint can write is either the deliberate
-      // data-positioned skip (scatter facets — stay silent, `align` never
-      // fights a panel its own data positions) or a genuine "every operand is already
-      // placed" no-op, which is worth an honest diagnostic (#725 item 6)
-      // rather than a silent nothing.
-      const allDataPositioned =
-        nonPinned.length > 0 &&
-        nonPinned.every(({ key, anchor }) =>
-          isDataPositionedAlignTarget(
-            key,
-            anchor,
-            idx,
-            posScales,
-            isDataPositioned
-          )
-        );
-      if (!allDataPositioned) {
+      // data-positioned case (scatter facets, nested partitions: stay
+      // silent, `align` never fights a node its own data places) or a
+      // genuine "every operand is already placed" no-op, which is worth an
+      // honest diagnostic (#725 item 6) rather than a silent nothing.
+      if (!entries.some(({ key }) => isDataPositioned(idx, key))) {
         console.warn(
           `[align] ${owner} on axis "${axis}": nothing movable — every ` +
             `operand [${children.map((c) => c.ref.name).join(", ")}] is ` +

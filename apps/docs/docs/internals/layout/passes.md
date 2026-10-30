@@ -714,9 +714,10 @@ constraint with a `region` (`PositionRegion`,
   (`childPosScalesFor`). A layer of marks in a cell is one too, so the marks
   in it share the partition's frame. A text beside a `region` in such a
   layer is placed by an `align` that names the two, as any mark in a layer
-  is. The `region` places itself there, as a rect with a data `x` and `x2`
-  does (`placesItself`: a shape its own data pins), so the align moves the
-  text to the region and never the region to the text.
+  is. The `region`'s own data places it there, as a rect's data `x` and
+  `x2` do (`placedByOwnData`), so the align moves the text to the region
+  and never the region to the text. A layer around the region is placed
+  by its data the same way.
 - A partition inside another partition's cell divides that cell: on each
   axis its key does not place, it gives each child the cell it is in, so
   the child is placed there as a child of the outer partition is. That cell
@@ -772,9 +773,10 @@ report their size).
   cell is the room it takes (`ClaimPlacement.rooms`). A child with no
   claim (a filler) takes no room: the solve places it as a point, so what
   a relation ties to it stays placed, and the hull holds that point only
-  where a datum position puts it. A child its own data places is not moved
-  by an align by an end or a baseline, as layout does not move it
-  (`isDataPositionedAlignTarget`). An `enclose` around placed
+  where a datum position puts it. A child its own data places
+  (`placedByOwnData`, `ClaimChild.dataPositioned`) is placed before the
+  solve, where its frame seats it, so no constraint but a `position`
+  (which gives it a frame of its own) moves it, as layout does not move it. An `enclose` around placed
   members (`.relate()` operands, `ref(...)` children, or a `selectAll` in the
   chart form) is placed from its refs the same way
   (`GoFishNode.placedFromRefs`): its box is its members' boxes, each where
@@ -789,7 +791,7 @@ report their size).
   own coordinates), a node whose room its parent
   gives it (a region's cell or a treemap tile, `GoFishNode.givenRoom`, which
   the plan lists in `SharingPlan.rooms`) when σ sizes its content and its
-  data does not place it in its parent's frame (a layer of marks in a cell,
+  data does not place it in its parent's frame (`placedByOwnData`: a layer of marks in a cell,
   or a partition inside another's cell, reads the parent's frame), and a
   node of pinned data in a slot (a facet panel). On an axis where nothing in
   a scope is sized or placed by data (`GoFishNode.carriesData`, which does

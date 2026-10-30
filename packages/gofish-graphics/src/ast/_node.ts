@@ -505,6 +505,29 @@ export const nestEach: ResolveSharing = (childNodes) => {
 };
 
 /**
+ * Whether `parent`'s child `i` is placed by its own data on `axis`: its
+ * type there has a pinned origin (its data says where it is: a rect with a
+ * data `x` and `x2`, a `region` in its cell, a polygon of data points, or a
+ * layer of such marks), and it is in `parent`'s own set, so it maps that
+ * data through `parent`'s frame. It sits where its frame seats it (data 0
+ * at the frame's), and nothing in `parent` moves it: no constraint
+ * (`placeByClaims`), and no cell, which it is in already
+ * ({@link GoFishNode.givenRoom}). A free child (a bar's data height) still
+ * waits to be placed, and so does a child with no origin (a group a middle
+ * align made), whose data gives it a width but no place.
+ *
+ * The one rule for "placed by its own data": the claim walk, layout and the
+ * sharing of rooms all read it.
+ */
+export const placedByOwnData = (
+  parent: GoFishNode,
+  i: number,
+  axis: 0 | 1
+): boolean =>
+  parent.sharing().sets[axis][i] === 0 &&
+  originIs(parent.children[i].resolveUnderlyingSpace()[axis], "pinned");
+
+/**
  * A node's size-claim hook: its per-axis {@link Extent} (undefined on an axis
  * whose type is not continuous). It runs in its own walk, after every type is
  * resolved, so it may read the node's own resolved `spaces` and its children's
@@ -1456,23 +1479,16 @@ export class GoFishNode {
 
   /** Whether this node's parent gives it its room on `axis`, from outside
    *  its content: a region's cell (a `partition` cell) or a treemap tile
-   *  (`SharingPlan.rooms`). A child its data places in its parent's frame
-   *  (pinned data in the parent's own set: a layer of marks in a cell, or a
+   *  (`SharingPlan.rooms`). A child its own data places in its parent's
+   *  frame ({@link placedByOwnData}: a layer of marks in a cell, or a
    *  partition inside another's cell) is in its cell already and reads the
    *  parent's frame, so the cell is not its room. */
   public givenRoom(axis: 0 | 1): boolean {
     const p = this.parent;
     if (p === undefined) return false;
     const i = p.indexOfChild(this) ?? -1;
-    const plan = p.sharing();
-    if (plan.rooms?.[axis].has(i) !== true) return false;
-    const space = this._underlyingSpace?.[axis];
-    return !(
-      plan.sets[axis][i] === 0 &&
-      space !== undefined &&
-      isCONTINUOUS(space) &&
-      space.origin !== "free"
-    );
+    if (p.sharing().rooms?.[axis].has(i) !== true) return false;
+    return !placedByOwnData(p, i, axis);
   }
 
   /**

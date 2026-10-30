@@ -121,11 +121,13 @@ class PlacementOwnershipPlan<T> {
     return this.initiallyPlaced.has(slot) || this.positionPinned.has(slot);
   }
 
-  /** Whether this (node, axis) is anchored to a data (POSITION) scope — its
-   *  baseline is fixed at `posScale(0)` by the shared map, so `align` must leave
-   *  it where its own scale puts it (a scatter facet panel). Collected at the
-   *  layer boundary (a SPACE/scope fact) and handed in; the ownership plan is the
-   *  single authority the align guard consults. */
+  /** Whether this (node, axis) is placed by its own data in the layer's
+   *  frame (`placedByOwnData`: a scatter facet panel, a `region` in its
+   *  cell). Collected at the layer boundary and handed in. Such a target is
+   *  placed before the solve, so it is pinned too; `align` and a region's
+   *  centering read this to leave it alone even where a `position`
+   *  override unpins it, and `align` to stay silent when it has nothing
+   *  left to move. */
   isDataPositioned(axis: 0 | 1, key: string): boolean {
     return this.dataPositionedSet[axis].has(key);
   }
@@ -275,7 +277,6 @@ export function lowerPlacementConstraints<T>(
           emitter: lowerer,
           targets,
           keyOf,
-          posScales,
           isPinned,
           isDataPositioned,
         });

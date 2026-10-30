@@ -98,13 +98,15 @@ export type ClaimChild = {
    *  it lands (`GoFishNode.inkOn`, or a node drawn from refs with no
    *  `placed`): it is ink. */
   inkOn: boolean;
-  /** Its own data places it in the layer's frame (a continuous type with a
-   *  data position in the layer's own set), as layout's `dataPositioned`. */
+  /** Its own data places it in the layer's frame (`placedByOwnData`, the
+   *  one rule): it sits where the frame seats it (`seat:`), and no
+   *  constraint moves it unless a `position` places it on the axis. */
   dataPositioned: boolean;
-  /** It places itself as it is laid out, before the solve (a position of
-   *  its own, or a node placed from the refs it reads: `placesItself`).
-   *  The solve takes it where layout put it (`at:`) unless a `position`
-   *  override owns the axis. */
+  /** It places itself at a position of its own as it is laid out, before
+   *  the solve (a literal start, a shape's own position, or a node placed
+   *  from the refs it reads: `placesItself` in solver/plan.ts). The solve
+   *  takes it where layout put it (`at:`) unless a `position` override
+   *  owns the axis. */
   placesItself?: boolean;
   /** Its plot on the axis, about its origin, where it is not its whole
    *  claim (an outline, dressing or chrome around it): a chain lays it by
@@ -322,35 +324,32 @@ export function placeByClaims(
   // frame without one maps no datum and seats no baseline.
   framed = true
 ): ClaimPlacement {
-  // A cell places a child that neither its data places in the layer's
-  // frame nor placed itself (`constraintsOn`). A child with no claim of
-  // its own (a `region`) fills its cell, which is where its data puts it,
-  // so the cell is its span.
-  const inCell = (key: string): boolean => {
-    const op = operands.get(key);
-    if (op === undefined || !op.direct) return true;
-    const c = children[op.child];
-    return (
-      c.extent === undefined || (!c.dataPositioned && c.placesItself !== true)
-    );
-  };
-  const onAxis = constraintsOn(constraints, axis, (r) => inCell(keyOf(r)));
+  // A cell places a child, by its index, that neither its data places in
+  // the layer's frame nor placed itself (`constraintsOn`).
+  const inCell = (i: number): boolean =>
+    !children[i].dataPositioned && children[i].placesItself !== true;
+  const onAxis = constraintsOn(constraints, axis, (r) => {
+    const op = operands.get(keyOf(r));
+    return op === undefined || !op.direct || inCell(op.child);
+  });
   const own = axisName(axis);
   // The children a region's cell places on the axis: each is laid out in
   // the cell's length (`buildChildSpans`). One with no size of its own
   // fills it, and any other keeps its size in the middle of it.
-  const celled = constrainedOn(
-    axis,
-    constraints,
-    operands,
-    keyOf,
-    (c) =>
-      c.type === "position" &&
-      c[own] === undefined &&
-      c.region?.spans[axis] !== undefined
+  const celled = new Set(
+    [
+      ...constrainedOn(
+        axis,
+        constraints,
+        operands,
+        keyOf,
+        (c) =>
+          c.type === "position" &&
+          c[own] === undefined &&
+          c.region?.spans[axis] !== undefined
+      ),
+    ].filter(inCell)
   );
-  for (const [key, op] of operands)
-    if (op.direct && !inCell(key)) celled.delete(op.child);
   // A child an interval pins (across a span, or a region's cell it fills)
   // has a size from it, whatever its own claim.
   const spanned = new Set(
@@ -494,10 +493,21 @@ export function placeByClaims(
     keyOf,
     (c) => c.type === "position" && !!c.override
   );
+  // Any `position` owns its operands' place on the axis over their own
+  // data: a node it places at a datum takes its own frame there
+  // (`childPosScalesFor`), so its data no longer places it in this
+  // layer's.
+  const positioned = constrainedOn(
+    axis,
+    onAxis,
+    operands,
+    keyOf,
+    (c) => c.type === "position"
+  );
   // The parts a chain places past their whole box, not by their plots:
   // what is no part of the plot (ink, dressing, chrome).
   const apart = new Set<string>();
-  // The children their own data places (layout's `dataPositioned`): an
+  // The children their own data places (`ClaimChild.dataPositioned`): an
   // align by an end or a baseline leaves them where their data puts them.
   const dataPositioned = new Set<string>();
   const boxOf = (i: number): Box =>
@@ -519,7 +529,8 @@ export function placeByClaims(
     // Where its origin is before the solve: a stand-in, or a node drawn
     // from refs, where layout laid it (in the claim walk, where its target
     // lands); a child that places itself where it put itself; a child no
-    // constraint places where its frame seats it (layout's seating rule);
+    // constraint places, or one its own data places (`dataPositioned`),
+    // where its frame seats it (layout's seating rule);
     // a literal seat at its pixel, which layout reads as it lays the layer
     // out (a chart's content is seated past its chrome's start gutter,
     // `contentSeat`; the claim walk keeps the pin, its data 0, and the two
@@ -533,7 +544,7 @@ export function placeByClaims(
           )
         : c.placesItself === true && !overridden.has(i)
           ? tape.input(`at:${i}`, Pwl.ZERO)
-          : !constrained.has(i)
+          : !constrained.has(i) || (c.dataPositioned && !positioned.has(i))
             ? tape.input(`seat:${i}`, Pwl.ZERO)
             : seat !== undefined
               ? tape.input(`lit:${i}`, Pwl.constant(seat))
@@ -608,10 +619,11 @@ export function placeByClaims(
           axis,
           // A cell by the grid's ref, as every reader of a grid finds it.
           (ref) => {
-            const i = indexOf.get(keyOf(ref));
+            const key = keyOf(ref);
+            const i = indexOf.get(key);
             return i === undefined || children[i].extent === undefined
               ? undefined
-              : (targets.get(keyAt(i))!.dims[axis].size ?? T.zero);
+              : (targets.get(key)!.dims[axis].size ?? T.zero);
           },
           T.fromValue(gapOf(grid, axis)),
           T.fromValue(Pwl.SIGMA)

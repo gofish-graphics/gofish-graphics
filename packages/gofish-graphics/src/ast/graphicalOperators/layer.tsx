@@ -2,17 +2,12 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import { GoFishNode, type ToPixel } from "../_node";
+import { GoFishNode, placedByOwnData, type ToPixel } from "../_node";
 import type { DisplayList } from "gofish-ir";
 import { getScopeRegistry, seatInBand, seatInScope } from "../solver/scopes";
 import { isToken } from "../createName";
 import { Size, elaborateOwnDims, FancyDims, displayTranslate } from "../dims";
-import {
-  UnderlyingSpace,
-  isCONTINUOUS,
-  isUNDEFINED,
-  magnitude,
-} from "../underlyingSpace";
+import { UnderlyingSpace, isUNDEFINED, magnitude } from "../underlyingSpace";
 import { Extent, impliedExtent, padExtent, shiftExtent } from "../extent";
 import * as Pwl from "../solver/pwl";
 import type { KeyedDomains } from "../keyedDomains";
@@ -211,27 +206,22 @@ export const layer = createNodeOperatorSequential(
       extents: Size<Extent | undefined>[],
       placed: (Placement | undefined)[]
     ): ClaimChild[] => {
-      const sets = node.sharing().sets[axis];
       let held: boolean | undefined;
-      return node.children.map((c, i) => {
-        const space = c.resolveUnderlyingSpace()[axis];
-        return {
-          key: c.uid,
-          extent: extents[i]?.[axis],
-          space,
-          standIn: c instanceof GoFishRef,
-          fromRefs: c instanceof GoFishNode && c.placedFromRefs !== undefined,
-          placed: placed[i],
-          inkOn:
-            (c as GoFishNode).inkOn?.[axis] === true ||
-            (c instanceof GoFishNode &&
-              c.placedFromRefs !== undefined &&
-              placed[i] === undefined) ||
-            (alongOwnAxis(c, axis) && (held ??= heldInChain(axis))),
-          dataPositioned:
-            sets[i] === 0 && isCONTINUOUS(space) && space.origin !== "free",
-        };
-      });
+      return node.children.map((c, i) => ({
+        key: c.uid,
+        extent: extents[i]?.[axis],
+        space: c.resolveUnderlyingSpace()[axis],
+        standIn: c instanceof GoFishRef,
+        fromRefs: c instanceof GoFishNode && c.placedFromRefs !== undefined,
+        placed: placed[i],
+        inkOn:
+          (c as GoFishNode).inkOn?.[axis] === true ||
+          (c instanceof GoFishNode &&
+            c.placedFromRefs !== undefined &&
+            placed[i] === undefined) ||
+          (alongOwnAxis(c, axis) && (held ??= heldInChain(axis))),
+        dataPositioned: placedByOwnData(node, i, axis),
+      }));
     };
     // A category label along its own axis takes room only past the ends
     // of its axis (#1115): between neighbors it overdraws them rather than

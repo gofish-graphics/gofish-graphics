@@ -1079,8 +1079,9 @@ check (`Arith.agree`), and layout makes the check at σ when it seats the
 children. Align `"span"`/`"size"` reuse this exact path for their
 unbound-target check, and `lowerAlignPlacement` separately warns (not
 throws) when a constraint ends up with nothing movable — every listed
-operand already placed — except the deliberate `isDataPositionedAlignTarget`
-skip (a data-positioned scatter facet), which stays silent.
+operand already placed — except where an operand is placed by its own data
+(a scatter facet, a nested partition's cell: `isDataPositioned`), which
+stays silent.
 
 Before any of this, every placement operand of the layer is resolved to a
 node inside it (`resolveReferences`, `_ref.tsx`), and the solve keys each
@@ -1197,19 +1198,23 @@ constraint.
 That normalization is also what keeps data-positioned children safe. A faceted
 scatter panel over `[1955, 2010]`, anchored to the shared y data scale, should
 not be pulled to `posScale(0)` (data-zero, far below 1955). So `align` leaves it
-alone: **a target anchored to a data (POSITION) scope on a posScale axis, with a
-non-`middle` anchor, is not moved** — `align` shares the frame (it still unions
-the children's data intervals) but supplies no baseline. Its baseline is already
-`posScale(0)` of the shared scope, so all such panels co-locate by construction.
+alone: **a target its own data places is not moved, by any anchor** — `align`
+shares the frame (it still unions the children's data intervals) but supplies no
+baseline. Its baseline is already `posScale(0)` of the shared scope, so all such
+panels co-locate by construction. The claim walk places such a target before
+the solve, where its frame seats it (`placeByClaims`), so the solve reads it as
+already placed.
 
 **The guard asks the solver, not the space pass (Stage 6f).** This is the
 blindingly-obvious final form the whole design arc was reaching for. The question
 "is this target already positioned?" is answered by the placement solve's own
 authority record — the `PlacementOwnershipPlan` — through one predicate,
 `isDataPositioned(axis, name)`. The fact it reads (which children are anchored to
-a POSITION scope on each axis) is a pure **data/scope** fact — a child's type
-on that axis has a data position (it is pinned or origin-less, anything but
-free) — collected _once_ at the layer boundary and
+a POSITION scope on each axis) is a pure **data/scope** fact — a child in the
+layer's own set whose type on that axis is pinned (`placedByOwnData`, the one
+rule the claim walk, layout and the sharing of rooms read; a free child still
+waits to be placed, and an origin-less one has a width but no place) —
+collected _once_ at the layer boundary and
 handed to the solve as an explicit ownership input. The constraint path no longer
 reconstructs the space pass's `free`/`determined`/`conflict` lattice by calling a
 `placementOn` method on the target mid-lowering; there is no layout fact derived
@@ -2583,7 +2588,7 @@ child's middle (`lowerPositionPlacement`, `constraints/position.ts`). So a `rect
 keeps its own size and sits in the middle of the cell. An interval would pin
 both edges instead, which sets the child's size and would stretch a circle
 into an ellipse. A child placed by its data in the layer's frame is not
-pinned (`isDataPositioned`), and neither is one that placed itself: they are
+pinned (`placedByOwnData`, `isDataPositioned`), and neither is one that placed itself: they are
 where they are. The ownership plan (`PlacementOwnershipPlan`,
 `constraints/placementLowering.ts`) records a cell's axes as pinned for its
 children, as it does an interval's, so an `align` on that axis defers to the
@@ -2602,7 +2607,10 @@ data `x` and `x2` does, and the partition hands it the map of its scale
 through the one seating rule (`childPosScalesFor`, `seatInScope`,
 `frameOf`). It maps the cell's edges, and the outline of a cell of the
 plane, through that map. Since its type claimed the cell, its parent
-leaves it where its data puts it, so a datum it cannot map (no map on that
+leaves it where its data puts it (`placedByOwnData`, `_node.ts`, the one
+rule for a child its own data places: its cell is not its room, and no
+constraint in its parent but a `position` moves it, a `middle` align
+included), so a datum it cannot map (no map on that
 axis, as under a `spread` on the cell's axis, or a corner that is not a
 number) is an error that names the axis, not a box at the size it is
 offered. Only on an axis with no cell is it as long as its proposed size.
@@ -2610,7 +2618,9 @@ A layer of marks in a cell (a `region` and a curve,
 or a dot at a median) is pinned too, so every mark in it reads the same
 scale. Such a layer is not pinned to the cell's middle, and nothing places
 a mark in it that has no position of its own: a text in a layer beside a
-`region` is placed by an `align` that names the two, not by the cell. A
+`region` is placed by an `align` that names the two, not by the cell, and
+the align moves the text to the region, whether the region is bare or
+inside a layer of its own (that layer's data places it the same way). A
 region composite (`intersect` and the others) is no different: its `region()`
 operand reads its cell, and its `ref` operand is where its target is.
 
