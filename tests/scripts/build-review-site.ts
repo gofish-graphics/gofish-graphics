@@ -10,21 +10,21 @@
  *   REVIEW_REPO   - GitHub repo (e.g. "owner/repo")
  *   REVIEW_BRANCH - Branch name
  *   REVIEW_SHA    - Commit SHA
+ *   REVIEW_RUN_ID - Workflow run id (see `ReviewMeta.runId`)
+ *
+ * The local review server (review-server.ts) builds the same site with
+ * `buildReviewSite` and serves it.
  */
 
-import {
-  readFileSync,
-  writeFileSync,
-  mkdirSync,
-  existsSync,
-  cpSync,
-  readdirSync,
-} from "fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, cpSync } from "fs";
 import { join, dirname } from "path";
+import { pathToFileURL } from "url";
 import {
   collectReviewDiffs,
-  formatDomDiff,
-  escapeHtml,
+  formatEntryDomDiff,
+  formatWarningsPanel,
+  snapshotParts,
+  DOM_IDENTICAL_NOTE,
   type DiffEntry,
 } from "./diff-utils.js";
 import { computePixelDiff } from "./pixel-diff.js";
@@ -68,163 +68,142 @@ function copyDir(src: string, dest: string): void {
 // Build
 // ---------------------------------------------------------------------------
 
-console.log("Building review site...");
-
-// Collect diffs. Removed stories (baseline exists, story no longer present)
-// are first-class DiffEntry("removed") too — they fail the job like any
-// other unreviewed change (see compare.ts), and accepting one deletes the
-// baseline instead of writing a new one.
-// This is the same list the diff report writes to diff-list.json, which
-// accept-baselines.ts --all accepts.
-const diffs: DiffEntry[] = collectReviewDiffs();
-const removedCount = diffs.filter((d) => d.kind === "removed").length;
-console.log(`  ${diffs.length} diff(s) found`);
-if (removedCount > 0) {
-  console.log(
-    `  ${removedCount} removed stor${removedCount === 1 ? "y" : "ies"} found`
-  );
-}
-
-// Compute pixel diffs
-for (const entry of diffs) {
-  if (entry.beforeScreenshotPath && entry.afterScreenshotPath) {
-    const result = computePixelDiff(
-      entry.beforeScreenshotPath,
-      entry.afterScreenshotPath
-    );
-    if (result !== null) {
-      entry.diffPercent = result.diffPercent;
-
-      // Write diff PNG
-      const diffPngDest = join(
-        OUT_DIR,
-        "screenshots/diff",
-        entry.path.replace(/\.html$/, ".png")
-      );
-      write(diffPngDest, result.diffPng);
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// data/specs/{path} — each story's spec, highlighted at build time
-// ---------------------------------------------------------------------------
-
-// A removed story has no spec: its source is gone.
-const specsByPath = await loadSpecsByPath();
-const highlight = await createCodeHighlighter();
-const withSpec = new Set<string>();
-for (const entry of diffs) {
-  const spec =
-    entry.kind === "removed" ? undefined : specsByPath.get(entry.path);
-  if (!spec) continue;
-  write(join(OUT_DIR, "data/specs", entry.path), specHtml(spec, highlight));
-  withSpec.add(entry.path);
-}
-console.log(`  ${withSpec.size} spec(s) written`);
-
-// ---------------------------------------------------------------------------
-// data/diffs.json
-// ---------------------------------------------------------------------------
-
-write(
-  join(OUT_DIR, "data/diffs.json"),
-  JSON.stringify(
-    diffs.map((d) => ({
-      path: d.path,
-      kind: d.kind,
-      status: d.status,
-      diffPercent: d.diffPercent,
-      hasSpec: withSpec.has(d.path),
-    })),
-    null,
-    2
-  )
-);
-
-// ---------------------------------------------------------------------------
-// data/meta.json
-// ---------------------------------------------------------------------------
-
-const meta = {
-  repo: process.env.REVIEW_REPO ?? "unknown/repo",
+/** What the page shows about where the diffs come from, and what Commit
+ *  Accepted sends with the accepted paths (`data/meta.json`). */
+export interface ReviewMeta {
+  repo: string;
   /** Code branch. Accepted baselines go to the snapshot branch
    *  `snapshots/<branch>`. */
-  branch: process.env.REVIEW_BRANCH ?? "unknown",
-  sha: process.env.REVIEW_SHA ?? "unknown",
+  branch: string;
+  sha: string;
   /** Workflow run id. Commit Accepted sends it, with the accepted paths, to
    *  the commit endpoint, which dispatches the accept-visual-baselines
    *  workflow. That workflow copies the accepted files from this run's
    *  `js-dom-capture-<i>` artifacts, commits them, and then re-runs the run's
    *  failed jobs, which re-runs only the cheap `visual-test` compare job
-   *  against the new baselines. */
-  runId: process.env.REVIEW_RUN_ID ?? "",
-};
-
-write(join(OUT_DIR, "data/meta.json"), JSON.stringify(meta, null, 2));
-
-console.log(
-  `  Repo: ${meta.repo}, branch: ${meta.branch}, sha: ${meta.sha.slice(0, 8)}`
-);
-
-// ---------------------------------------------------------------------------
-// data/dom-diffs/{path}.html  and  screenshots/
-// ---------------------------------------------------------------------------
-
-for (const entry of diffs) {
-  // DOM diff HTML
-  if (entry.beforeDom !== null && entry.afterDom !== null) {
-    const html = formatDomDiff(entry.beforeDom, entry.afterDom);
-    write(join(OUT_DIR, "data/dom-diffs", entry.path), html);
-  } else if (entry.afterDom !== null) {
-    write(
-      join(OUT_DIR, "data/dom-diffs", entry.path),
-      "<em>New story — no baseline to diff against.</em>"
-    );
-  } else if (entry.beforeDom !== null) {
-    // Removed: no "after" DOM — show the baseline that would be deleted.
-    write(
-      join(OUT_DIR, "data/dom-diffs", entry.path),
-      `<pre style="margin:0;white-space:pre-wrap;padding:12px;">${escapeHtml(entry.beforeDom)}</pre>`
-    );
-  }
-
-  // Before screenshot
-  if (entry.beforeScreenshotPath) {
-    const pngPath = entry.path.replace(/\.html$/, ".png");
-    copyFile(
-      entry.beforeScreenshotPath,
-      join(OUT_DIR, "screenshots/before", pngPath)
-    );
-  }
-
-  // After screenshot
-  if (entry.afterScreenshotPath) {
-    const pngPath = entry.path.replace(/\.html$/, ".png");
-    copyFile(
-      entry.afterScreenshotPath,
-      join(OUT_DIR, "screenshots/after", pngPath)
-    );
-  }
+   *  against the new baselines. Empty for the local review server, whose
+   *  commit endpoint accepts from the local capture. */
+  runId: string;
 }
 
-// ---------------------------------------------------------------------------
-// Copy Cloudflare Pages Functions
-// ---------------------------------------------------------------------------
+/**
+ * Builds the review site for `diffs` into `outDir`: the page (`index.html`),
+ * `data/diffs.json` (each entry with its warnings panel), `data/meta.json`,
+ * the specs, the DOM diffs and the screenshots. The page calls
+ * `POST /api/commit` to commit what the reviewer accepted: on Cloudflare
+ * Pages that is `cf-functions/api/commit.ts` (copied in as `functions/`),
+ * and locally it is review-server.ts.
+ */
+export async function buildReviewSite(
+  outDir: string,
+  diffs: DiffEntry[],
+  meta: ReviewMeta
+): Promise<void> {
+  const removedCount = diffs.filter((d) => d.kind === "removed").length;
+  console.log(`  ${diffs.length} diff(s) found`);
+  if (removedCount > 0) {
+    console.log(
+      `  ${removedCount} removed stor${removedCount === 1 ? "y" : "ies"} found`
+    );
+  }
 
-copyDir(CF_FUNCTIONS_DIR, join(OUT_DIR, "functions"));
+  // Compute pixel diffs
+  for (const entry of diffs) {
+    if (entry.beforeScreenshotPath && entry.afterScreenshotPath) {
+      const result = computePixelDiff(
+        entry.beforeScreenshotPath,
+        entry.afterScreenshotPath
+      );
+      if (result !== null) {
+        entry.diffPercent = result.diffPercent;
+        write(
+          join(outDir, "screenshots/diff", snapshotParts(entry.path).screenshot),
+          result.diffPng
+        );
+      }
+    }
+  }
 
-// Move _routes.json to site root (not inside functions/)
-const routesSrc = join(CF_FUNCTIONS_DIR, "_routes.json");
-if (existsSync(routesSrc)) {
-  write(join(OUT_DIR, "_routes.json"), readFileSync(routesSrc));
+  // data/specs/{path}: each story's spec, highlighted at build time. A
+  // removed story has no spec: its source is gone.
+  const specsByPath = await loadSpecsByPath();
+  const highlight = await createCodeHighlighter();
+  const withSpec = new Set<string>();
+  for (const entry of diffs) {
+    const spec =
+      entry.kind === "removed" ? undefined : specsByPath.get(entry.path);
+    if (!spec) continue;
+    write(join(outDir, "data/specs", entry.path), specHtml(spec, highlight));
+    withSpec.add(entry.path);
+  }
+  console.log(`  ${withSpec.size} spec(s) written`);
+
+  write(
+    join(outDir, "data/diffs.json"),
+    JSON.stringify(
+      diffs.map((d) => ({
+        path: d.path,
+        kind: d.kind,
+        status: d.status,
+        diffPercent: d.diffPercent,
+        hasSpec: withSpec.has(d.path),
+        /** What changed (`SnapshotChange`): "warnings" for a warnings-only
+         *  change, whose DOM diff is `DOM_IDENTICAL_NOTE`. */
+        change: d.change,
+        /** The story's warnings panel (`formatWarningsPanel`), "" when
+         *  there is none. */
+        warningsPanel: formatWarningsPanel(d.warnings),
+      })),
+      null,
+      2
+    )
+  );
+
+  write(join(outDir, "data/meta.json"), JSON.stringify(meta, null, 2));
+  console.log(
+    `  Repo: ${meta.repo}, branch: ${meta.branch}, sha: ${meta.sha.slice(0, 8)}`
+  );
+
+  // data/dom-diffs/{path}.html and screenshots/. A warnings-only change has
+  // no DOM diff file: the page shows DOM_IDENTICAL_NOTE for it.
+  for (const entry of diffs) {
+    if (entry.change !== "warnings") {
+      write(
+        join(outDir, "data/dom-diffs", entry.path),
+        formatEntryDomDiff(entry.beforeDom, entry.afterDom)
+      );
+    }
+    const png = snapshotParts(entry.path).screenshot;
+    if (entry.beforeScreenshotPath) {
+      copyFile(entry.beforeScreenshotPath, join(outDir, "screenshots/before", png));
+    }
+    if (entry.afterScreenshotPath) {
+      copyFile(entry.afterScreenshotPath, join(outDir, "screenshots/after", png));
+    }
+  }
+
+  // Cloudflare Pages Functions, and _routes.json at the site root.
+  copyDir(CF_FUNCTIONS_DIR, join(outDir, "functions"));
+  const routesSrc = join(CF_FUNCTIONS_DIR, "_routes.json");
+  if (existsSync(routesSrc)) {
+    write(join(outDir, "_routes.json"), readFileSync(routesSrc));
+  }
+
+  write(join(outDir, "index.html"), PAGE_HTML);
+
+  console.log(`\nReview site built at: ${outDir}`);
+  const screenshotCount = diffs.filter((d) => d.afterScreenshotPath).length;
+  console.log(
+    `  index.html, data/diffs.json, data/meta.json, ${diffs.length} entries, ` +
+      `${screenshotCount} before/after screenshots, functions/ copied`
+  );
 }
 
 // ---------------------------------------------------------------------------
 // index.html — SPA
 // ---------------------------------------------------------------------------
 
-const html = `<!DOCTYPE html>
+const PAGE_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -254,6 +233,8 @@ const html = `<!DOCTYPE html>
     .kind-new { color: #89b4fa; }
     .kind-parity { color: #fab387; }
     .kind-removed { color: #9399b2; }
+    .kind-warnings { color: #f9e2af; }
+    .story-warn { font-size: 11px; color: #f9e2af; margin-top: 1px; }
     .status-accepted { color: #a6e3a1 !important; }
     .status-rejected { color: #f38ba8 !important; }
 
@@ -292,6 +273,9 @@ const html = `<!DOCTYPE html>
     #spec-body.expanded { max-height: none; }
     .spec-missing { padding: 16px; color: #888; font-size: 13px; }
     ${SPEC_CSS}
+
+    /* Warnings */
+    #warnings-panel > details { margin-bottom: 16px !important; border-radius: 8px !important; }
 
     /* DOM diff */
     #dom-diff-section { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; margin-bottom: 16px; }
@@ -337,6 +321,7 @@ const html = `<!DOCTYPE html>
   <div id="sidebar-filters">
     <button class="filter-btn active" data-filter="all">All</button>
     <button class="filter-btn" data-filter="pending">Pending</button>
+    <button class="filter-btn" data-filter="warnings-only" title="Stories whose DOM is identical and only their warnings changed">Warnings only</button>
   </div>
   <div id="story-list"></div>
 </div>
@@ -418,6 +403,10 @@ const html = `<!DOCTYPE html>
     </div>
     </div>
 
+    <!-- Warnings: the entry's warnings panel (formatWarningsPanel in
+         diff-utils.ts), from diffs.json. -->
+    <div id="warnings-panel"></div>
+
     <!-- DOM diff -->
     <div id="dom-diff-section">
       <div id="dom-diff-toggle">
@@ -448,6 +437,8 @@ const html = `<!DOCTYPE html>
 
   const domDiffCache = {};
   const specCache = {};
+  /** DOM_IDENTICAL_NOTE in diff-utils.ts: a warnings-only change's DOM diff. */
+  const DOM_IDENTICAL_NOTE = ${JSON.stringify(DOM_IDENTICAL_NOTE)};
 
   function screenshotUrl(which, path) {
     const pngPath = path.replace(/\\.html$/, '.png');
@@ -486,7 +477,9 @@ const html = `<!DOCTYPE html>
   function filteredDiffs() {
     const items = filter === 'pending'
       ? allDiffs.filter(d => d.status === 'pending')
-      : allDiffs;
+      : filter === 'warnings-only'
+        ? allDiffs.filter(d => d.change === 'warnings')
+        : allDiffs;
     return sortByPixelPercentDesc(items);
   }
 
@@ -512,7 +505,12 @@ const html = `<!DOCTYPE html>
       const statusClass = d.status === 'accepted' ? 'status-accepted' : d.status === 'rejected' ? 'status-rejected' : '';
       el.innerHTML =
         '<div class="story-name">' + escHtml(d.path) + '</div>' +
-        '<div class="story-kind kind-' + d.kind + '">' + d.kind.toUpperCase() + '</div>' +
+        (d.change === 'warnings'
+          ? '<div class="story-kind kind-warnings">WARNINGS CHANGED</div>'
+          : '<div class="story-kind kind-' + d.kind + '">' + d.kind.toUpperCase() + '</div>') +
+        (d.change === 'both'
+          ? '<div class="story-warn">⚠ warnings changed too</div>'
+          : '') +
         '<div class="story-status ' + statusClass + '">' + statusText +
           (d.diffPercent !== null ? ' · ' + d.diffPercent.toFixed(2) + '% px' : '') + '</div>';
       el.addEventListener('click', () => selectStory(d.path));
@@ -574,9 +572,10 @@ const html = `<!DOCTYPE html>
 
     document.getElementById('main-title').textContent = path;
     const badge = document.getElementById('main-kind-badge');
-    badge.textContent = entry.kind.toUpperCase();
+    const warningsOnly = entry.change === 'warnings';
+    badge.textContent = warningsOnly ? 'WARNINGS CHANGED' : entry.kind.toUpperCase();
     const kindColors = { regression: '#e74c3c', new: '#3498db', parity: '#e67e22', removed: '#7f8c8d' };
-    const color = kindColors[entry.kind] || '#888';
+    const color = warningsOnly ? '#b7791f' : (kindColors[entry.kind] || '#888');
     badge.style.cssText = 'background:' + color + '22;color:' + color + ';border:1px solid ' + color + ';border-radius:12px;padding:2px 10px;font-size:11px;font-weight:700;';
 
     const acceptBtn = document.getElementById('btn-accept');
@@ -587,7 +586,10 @@ const html = `<!DOCTYPE html>
     document.getElementById('empty-state').style.display = 'none';
     document.getElementById('compare-row').style.display = '';
     renderCurrentView(entry);
-    await Promise.all([loadSpec(entry), loadDomDiff(path)]);
+    // The warnings panel comes with the entry (formatWarningsPanel): hidden
+    // when empty, open when the warnings need review.
+    document.getElementById('warnings-panel').innerHTML = entry.warningsPanel;
+    await Promise.all([loadSpec(entry), loadDomDiff(entry)]);
   }
 
   async function loadSpec(entry) {
@@ -719,8 +721,13 @@ const html = `<!DOCTYPE html>
     }
   }
 
-  async function loadDomDiff(path) {
+  async function loadDomDiff(entry) {
+    const path = entry.path;
     const content = document.getElementById('dom-diff-content');
+    if (entry.change === 'warnings') {
+      content.innerHTML = '<div style="padding:8px 12px;color:#888;font-size:13px;">' + DOM_IDENTICAL_NOTE + '</div>';
+      return;
+    }
     if (domDiffCache[path] !== undefined) {
       content.innerHTML = domDiffCache[path];
       return;
@@ -831,9 +838,11 @@ const html = `<!DOCTYPE html>
       const removedNote = removals.length > 0 ? ', removing ' + removals.length : '';
       const el = document.getElementById('action-status');
       el.className = '';
+      // The endpoint says what happens next: on Pages a GitHub Action
+      // commits (with a link to follow it), locally the server has committed.
       el.innerHTML = 'Accepting ' + paths.length + ' diff(s)' + removedNote + '. ' +
-        'A GitHub Action commits the baselines in about a minute, then re-runs the failed visual tests once this run has finished. ' +
-        '<a href="' + escHtml(data.workflowUrl) + '" target="_blank" rel="noopener">Follow it on GitHub</a>';
+        escHtml(data.message) +
+        (data.url ? ' <a href="' + escHtml(data.url) + '" target="_blank" rel="noopener">' + escHtml(data.urlLabel || data.url) + '</a>' : '');
       renderSidebar();
       updateCommitBtn();
     } catch (e) {
@@ -913,18 +922,24 @@ const html = `<!DOCTYPE html>
 </body>
 </html>`;
 
-write(join(OUT_DIR, "index.html"), html);
-
 // ---------------------------------------------------------------------------
-// Summary
+// Main: build the CI review site from this run's diffs
 // ---------------------------------------------------------------------------
 
-console.log(`\nReview site built at: ${OUT_DIR}`);
-console.log(
-  `  index.html, data/diffs.json, data/meta.json, ${diffs.length} dom-diffs`
-);
-const screenshotCount = diffs.filter((d) => d.afterScreenshotPath).length;
-console.log(`  ${screenshotCount} before/after screenshots, functions/ copied`);
-console.log(
-  `\nTo test locally:\n  npx wrangler pages dev ${OUT_DIR} --functions-dir ${OUT_DIR}/functions`
-);
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  console.log("Building review site...");
+  // Removed stories (baseline exists, story no longer present) are
+  // first-class DiffEntry("removed") too: they fail the job like any other
+  // unreviewed change (see compare.ts), and accepting one deletes the
+  // baseline instead of writing a new one. This is the same list the diff
+  // report writes to diff-list.json, which accept-baselines.ts --all accepts.
+  await buildReviewSite(OUT_DIR, collectReviewDiffs(), {
+    repo: process.env.REVIEW_REPO ?? "unknown/repo",
+    branch: process.env.REVIEW_BRANCH ?? "unknown",
+    sha: process.env.REVIEW_SHA ?? "unknown",
+    runId: process.env.REVIEW_RUN_ID ?? "",
+  });
+  console.log(
+    `\nTo test locally:\n  npx wrangler pages dev ${OUT_DIR} --functions-dir ${OUT_DIR}/functions`
+  );
+}

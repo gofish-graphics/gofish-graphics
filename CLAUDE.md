@@ -153,8 +153,9 @@ Key coordinate systems available, all in the `Coord` family (`Coord.polar()`):
   off is the kebab-case of `gallery.title`, so titles must be unique, and the docs
   build fails on any `::: gofish example:<id>` reference to an unknown id.
 - **Local regression signal for layout changes**: `pnpm capture-diff <base-ref> [filter]`
-  renders every story's normalized DOM at HEAD and at `<base-ref>` (checked out in a throwaway
-  worktree) and diffs them per story — a baseline-free, platform-stable "did my change move
+  renders every story's normalized DOM and its `[gofish:layout]` warnings and console errors at
+  HEAD and at `<base-ref>` (checked out in a throwaway worktree) and diffs them per story (a
+  warnings-only change counts as a change) — a baseline-free, platform-stable "did my change move
   anything I didn't intend?" check for an inner loop. Unlike the CI visual baselines, it works
   on Mac (it diffs normalized geometry, not pixels, so no text-metric drift) and needs no
   curation. Pass a substring to scope to one story or a group (`pnpm capture-diff main bar`).

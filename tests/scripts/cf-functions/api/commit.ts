@@ -15,7 +15,9 @@
  *
  * Request body:  { repo, branch, runId, paths, removals? }
  *   branch is the code branch (the workflow writes to snapshots/<branch>).
- * Response:      { ok, workflowUrl } or { ok: false, error }
+ * Response:      { ok, message, url, urlLabel } or { ok: false, error }
+ *   message says what happens next; url links to the workflow. The local
+ *   review server (review-server.ts) answers the same request the same way.
  *
  * The dispatch's client_payload is { branch, run_id, paths, removals }.
  * GitHub allows at most 10 top-level keys and 65535 characters in it. Story
@@ -144,6 +146,9 @@ async function handleAccept(
 
   return json({
     ok: true,
-    workflowUrl: `https://github.com/${repo}/actions/workflows/${WORKFLOW_FILE}`,
+    message:
+      "A GitHub Action commits the baselines in about a minute, then re-runs the failed visual tests once this run has finished.",
+    url: `https://github.com/${repo}/actions/workflows/${WORKFLOW_FILE}`,
+    urlLabel: "Follow it on GitHub",
   });
 }
