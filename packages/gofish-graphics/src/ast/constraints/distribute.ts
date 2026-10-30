@@ -2,8 +2,15 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import type { Axis, AlignAnchor, ConstraintRef } from "./shared";
-import type { Placeable } from "../_node";
+import {
+  directSlot,
+  type Axis,
+  type AlignAnchor,
+  type ConstraintRef,
+  type KeyOf,
+} from "./shared";
+import { resolution } from "../_ref";
+import type { GoFishNode, Placeable } from "../_node";
 import { isValue, type MaybeValue } from "../data";
 import type { PlacementFactEmitter, RelationAnchor } from "./placementFacts";
 import {
@@ -52,9 +59,9 @@ export interface DistributeOptions {
   /** The grouping field's values have an order (`HasOrder`, from the chart's
    *  `schema`), so an ORDINAL fold's keys do too ({@link ORDINAL_TYPE}). */
   hasOrder?: boolean;
-  /** A stack's origin (glue only), its part named by child name. Omitted, it
+  /** A stack's origin (glue only), its part one of the operands. Omitted, it
    *  is the tail of the first part laid out. */
-  origin?: StackOrigin<string>;
+  origin?: StackOrigin<ConstraintRef>;
 }
 
 /**
@@ -68,7 +75,7 @@ export interface DistributeOptions {
  * stack's space is {@link CONTINUOUS_TYPE.mirrored}.
  *
  * `part` names the part in three ways on the way down: a child index from
- * the split (`stackOrigin`), a child name on the constraint, and an index
+ * the split (`stackOrigin`), an operand on the constraint, and an index
  * into the parts in placement order once resolved ({@link distributeOrigin}).
  */
 export type StackOrigin<Part> = {
@@ -87,7 +94,7 @@ export interface DistributeConstraint {
   children: ConstraintRef[];
   measure?: string;
   hasOrder?: boolean;
-  origin?: StackOrigin<string>;
+  origin?: StackOrigin<ConstraintRef>;
 }
 
 export const createDistributeConstraint = (
@@ -113,14 +120,16 @@ export const createDistributeConstraint = (
  *  first part's tail. */
 export function distributeOrigin(
   constraint: Pick<DistributeConstraint, "origin">,
-  ordered: readonly { name: string }[]
+  ordered: readonly ConstraintRef[],
+  keyOf: KeyOf
 ): StackOrigin<number> {
   const origin = constraint.origin;
   if (origin === undefined) return { part: 0, fraction: 0, mirrored: false };
-  const part = ordered.findIndex((child) => child.name === origin.part);
+  const key = keyOf(origin.part);
+  const part = ordered.findIndex((child) => keyOf(child) === key);
   if (part < 0) {
     throw new Error(
-      `stack: its origin is on part "${origin.part}", which is not one of ` +
+      `stack: its origin is on part "${origin.part.name}", which is not one of ` +
         `its parts (${ordered.map((child) => `"${child.name}"`).join(", ")}).`
     );
   }
@@ -135,13 +144,6 @@ export function distributeChildrenInPlacementOrder(
 ): readonly ConstraintRef[] {
   return constraint.order === "reverse" ? [...children].reverse() : children;
 }
-
-/** The minimal node shape {@link keysDownTheScreen} reads (duck-typed: a
- *  `GoFishNode`, without importing it). */
-type DistributingNode = FramedNode & {
-  constraints: readonly { type: string }[];
-  children: readonly unknown[];
-};
 
 /**
  * The keys of the parts a node distributes along y, in the order they read
@@ -158,22 +160,18 @@ type DistributingNode = FramedNode & {
  * A part without a key leaves the order undefined. A legend lists its
  * entries in this order when they are a chain's parts.
  */
-export function keysDownTheScreen(
-  node: DistributingNode
-): string[] | undefined {
+export function keysDownTheScreen(node: GoFishNode): string[] | undefined {
   const chain = node.constraints.find(
-    (c): c is DistributeConstraint =>
-      c.type === "distribute" && (c as DistributeConstraint).dir === "y"
+    (c): c is DistributeConstraint => c.type === "distribute" && c.dir === "y"
   );
   if (chain === undefined || inCoordinateSpace(node)) return undefined;
-  const byName = new Map<string, unknown>();
-  for (const child of node.children) {
-    const name = (child as { _name?: unknown })._name;
-    if (typeof name === "string") byName.set(name, child);
-  }
-  const keys = distributeChildrenInPlacementOrder(chain).map(
-    (ref) => (byName.get(ref.name) as { key?: string } | undefined)?.key
-  );
+  const resolved = resolution(node);
+  const keys = distributeChildrenInPlacementOrder(chain).map((ref) => {
+    const i = directSlot(resolved, ref);
+    return i === undefined
+      ? undefined
+      : (node.children[i] as { key?: string }).key;
+  });
   if (keys.some((k) => k === undefined)) return undefined;
   const down = keys as string[];
   return yDirection(node) === -1 ? [...down].reverse() : down;
@@ -205,31 +203,34 @@ export function lowerDistributePlacement(
   {
     emitter,
     targets,
+    keyOf,
     isInitiallyPlaced,
   }: {
     emitter: PlacementFactEmitter;
     targets: Pick<Map<string, Placeable>, "has" | "get">;
-    isInitiallyPlaced: (axis: Axis, name: string) => boolean;
+    keyOf: KeyOf;
+    isInitiallyPlaced: (axis: Axis, key: string) => boolean;
   }
 ): void {
   const children = constraint.children.filter((child) =>
-    targets.has(child.name)
+    targets.has(keyOf(child))
   );
   const ordered = distributeChildrenInPlacementOrder(constraint, children);
   if (ordered.length === 0) return;
+  const keys = ordered.map(keyOf);
   const anchors = distributePlacementAnchors(constraint);
-  for (let i = 1; i < ordered.length; i++) {
+  for (let i = 1; i < keys.length; i++) {
     // A chain edge whose endpoints both arrived pre-positioned is a consistency
     // check, not an owning relation: confluence governs the unknown positions.
     if (
-      isInitiallyPlaced(constraint.dir, ordered[i - 1].name) &&
-      isInitiallyPlaced(constraint.dir, ordered[i].name)
+      isInitiallyPlaced(constraint.dir, keys[i - 1]) &&
+      isInitiallyPlaced(constraint.dir, keys[i])
     )
       continue;
     emitter.relate({
       axis: constraint.dir,
-      from: { name: ordered[i - 1].name, anchor: anchors.from },
-      to: { name: ordered[i].name, anchor: anchors.to },
+      from: { key: keys[i - 1], anchor: anchors.from },
+      to: { key: keys[i], anchor: anchors.to },
       gap: constraint.spacing,
       owner,
       chain: constraint.glue ? "stack" : "spread",
@@ -238,10 +239,10 @@ export function lowerDistributePlacement(
   // A spread's chain starts at its first member. A stack's chain also carries
   // its {@link StackOrigin}, which the solver's free-origin fallback seats at
   // the measure's origin (#773).
-  const origin = distributeOrigin(constraint, ordered);
+  const origin = distributeOrigin(constraint, ordered, keyOf);
   emitter.include({
     axis: constraint.dir,
-    name: ordered[origin.part].name,
+    key: keys[origin.part],
     owner,
     origin: constraint.glue ? origin.fraction : undefined,
   });

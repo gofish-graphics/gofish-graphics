@@ -1,13 +1,13 @@
 import { ChartBuilder } from "../lib";
 import type { LayerBuilder } from "./marks/chartBuilder";
 import { GoFishAST } from "./_ast";
-import { GoFishNode } from "./_node";
+import type { LayerContext } from "./marks/markResult";
 
 /** Optional third argument: when provided by ChartBuilder.resolve(), named marks register each produced node/datum here. */
 export type Mark<T> = (
   d: T,
   key?: string | number,
-  layerContext?: { [name: string]: { data: any[]; nodes: GoFishNode[] } }
+  layerContext?: LayerContext
 ) =>
   | GoFishAST
   | Promise<GoFishAST>

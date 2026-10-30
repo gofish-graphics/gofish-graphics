@@ -332,7 +332,7 @@ export function markSequence(frame: object, sequence: SequenceWindow): void {
 type TreeNode = {
   parent?: unknown;
   key?: unknown;
-  children?: unknown[];
+  children?: readonly unknown[];
   targetNode?: TreeNode;
 };
 

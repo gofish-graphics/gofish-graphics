@@ -12,11 +12,7 @@ import { createNodeOperator } from "../withGoFish";
 import { Alignment } from "./alignment";
 import { layer } from "./layer";
 import { Constraint } from "../constraints";
-import {
-  axisName,
-  ensureChildNames,
-  type AlignAnchor,
-} from "../constraints/shared";
+import { axisName, childSlots, type AlignAnchor } from "../constraints/shared";
 import { createOperator } from "../marks/createOperator";
 import { Mark, MarkChild, Operator } from "../types";
 import type { FieldExpr } from "../fieldExpr";
@@ -118,8 +114,6 @@ export const Spread = createNodeOperator(
     // every use below can key by name.
     const dirName: AxisName = typeof dir === "number" ? axisName(dir) : dir;
 
-    // Give each child a unique constraint name so the align/distribute can
-    // reference it (shared with scatter — see `ensureChildNames`).
     let childList = children as GoFishAST[];
 
     if (size !== undefined) {
@@ -153,7 +147,8 @@ export const Spread = createNodeOperator(
       );
     }
 
-    const names = ensureChildNames(childList, "spread");
+    // Its constraints refer to the children by slot (`SlotOperand`), so no
+    // name is looked up and none is given.
 
     // Elaborate to a layer carrying the cross-axis align + the stack distribute.
     // `fancyDims` (explicit w/h) flow to the layer, which is then a sized
@@ -176,33 +171,31 @@ export const Spread = createNodeOperator(
       const stackDir = resolveAxisName(inner, dirName, `spread({ dir })`);
       const alignAxis = axisName((1 - stackDir) as Direction);
       const stackAxis = axisName(stackDir);
-      await node.relate((g) => {
-        const refs = names.map((name) => g[name]);
-        // The cross-axis align: it shares the frame (unions the children's
-        // domain) and, for free children (bars), commits a baseline. A
-        // self-positioned child (a scatter facet) is left alone by `align`
-        // automatically — the placement solver reads the child's abstract
-        // placement, so no guard flag.
-        return [
-          Constraint.align({ [alignAxis]: alignment }, refs),
-          Constraint.distribute(
-            {
-              dir: stackAxis,
-              spacing: glue ? 0 : spacing,
-              anchor,
-              glue,
-              order: reverse ? "reverse" : "forward",
-              origin: origin && { ...origin, part: names[origin.part] },
-              // The grouping field for this (stack) axis → the ORDINAL
-              // space's measure, so a spread-by-category axis titles itself
-              // off its space.
-              measure: axisMeasures?.[dirName],
-              hasOrder,
-            },
-            refs
-          ),
-        ];
-      });
+      const refs = childSlots(node);
+      // The cross-axis align: it shares the frame (unions the children's
+      // domain) and, for free children (bars), commits a baseline. A
+      // self-positioned child (a scatter facet) is left alone by `align`
+      // automatically — the placement solver reads the child's abstract
+      // placement, so no guard flag.
+      await node.INTERNAL_relate([
+        Constraint.align({ [alignAxis]: alignment }, refs),
+        Constraint.distribute(
+          {
+            dir: stackAxis,
+            spacing: glue ? 0 : spacing,
+            anchor,
+            glue,
+            order: reverse ? "reverse" : "forward",
+            origin: origin && { ...origin, part: refs[origin.part] },
+            // The grouping field for this (stack) axis → the ORDINAL
+            // space's measure, so a spread-by-category axis titles itself
+            // off its space.
+            measure: axisMeasures?.[dirName],
+            hasOrder,
+          },
+          refs
+        ),
+      ]);
       // Tag with stack direction so coord can map axis overrides to polar dims.
       node.axisDir = stackDir;
     };

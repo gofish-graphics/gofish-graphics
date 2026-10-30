@@ -468,7 +468,7 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
 - **The relate ref-walk** (`RelatableMark.relate`'s Python-side
   mirror of `collectConstraintRefs`) — kept hand-written at the time, pending
   a loud unknown/duplicate-ref guard JS-side. That guard now exists
-  (`resolveScopedName`, #819), and the walk is gone: Python passes one ref
+  (`validateOperands`, #819), and the walk is gone: Python passes one ref
   per callback parameter without a default and JS resolves and checks the names at layout.
 - **Generifying the deserializer registry** off the descriptor table
   (option 5 in § Option A above). Since done (#691): the registry is one

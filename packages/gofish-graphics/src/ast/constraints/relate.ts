@@ -3,30 +3,53 @@
 // </gofish-wiki>
 
 import type { GoFishAST } from "../_ast";
-import { GoFishNode, isRelateClause } from "../_node";
-import { GoFishRef } from "../_ref";
+import { GoFishNode } from "../_node";
+import { GoFishRef, directChildOf, one, type ResolvedOperand } from "../_ref";
 import type { ChartBuilder, LayerBuilder } from "../marks/chartBuilder";
-import { resolveMarkResult } from "../marks/markResult";
+import { LayerContext, resolveMarkResult } from "../marks/markResult";
 import { flattenAndAwaitPromises } from "../withGoFish";
 import {
   isZOrderConstraint,
   validateOperands,
   type ConstraintSpec,
-  type ResolvedOperand,
 } from "./index";
 import { childNameKey, type ConstraintRef } from "./shared";
 import { isThenable } from "../../util";
 
 /**
- * An operand of a `.relate()` callback: a variable that names a node inside
- * the layer. As a constraint operand it is a {@link ConstraintRef} (the solve
- * resolves it by name at layout). In term position, as a child of a drawing
- * clause such as `arrow(opts, [a, b])`, it becomes a string `ref` of the same
- * name (`resolveMarkResult` does the conversion), which resolves from the
- * relating layer.
+ * An operand of a `.relate()` callback: a name, bound when the call runs to
+ * the nodes it means inside the layer (`namesIn`, the lookup `ref("name")`
+ * uses, at the layer's level). The binding is a handle: a node a clause
+ * introduces later, or an inner layer that declares the same name, cannot
+ * capture it, and an elaboration pass that wraps the node keeps it. A name
+ * is plural, so the binding may hold several nodes; a singular use (a
+ * placement, a ref) requires one. As a constraint operand it is a
+ * {@link ConstraintRef}. In term position, as a child of a drawing clause
+ * such as `arrow(opts, [a, b])`, it becomes a `ref` that holds its node
+ * ({@link RelateOperand.toRef}).
  */
 export class RelateOperand implements ConstraintRef {
-  constructor(public readonly name: string) {}
+  constructor(
+    public readonly name: string,
+    private readonly bound: readonly GoFishAST[]
+  ) {}
+
+  means(): readonly GoFishAST[] {
+    return this.bound;
+  }
+
+  /** This operand as a ref: a handle on its one node, which keeps the name
+   *  for messages and the wire. */
+  toRef(): GoFishRef {
+    if (this.bound.length === 0)
+      throw new Error(
+        `the .relate() operand "${this.name}" names no node inside the layer.`
+      );
+    return new GoFishRef({
+      selection: this.name,
+      node: one(this.bound, `the .relate() operand "${this.name}"`),
+    });
+  }
 }
 
 /** The environment a `.relate()` callback receives: one operand per name
@@ -51,10 +74,13 @@ export type RelateClause =
   | undefined
   | false;
 
-/** A `.relate()` callback: it receives the layer's environment and returns
- *  its clauses (or a promise of them). */
+/** A `.relate()` callback: it receives the layer's environment and the
+ *  layer running it, and returns its clauses (or a promise of them). An
+ *  author's callback reads only the environment; the deserializer's binds
+ *  the wire's scope id to the layer. */
 export type RelateFn = (
-  env: RelateEnv
+  env: RelateEnv,
+  layer: GoFishNode
 ) => RelateClause[] | PromiseLike<RelateClause[]>;
 
 /** Every constraint type, keyed so the compiler checks the list against
@@ -117,19 +143,27 @@ async function flattenClausesAsync(c: unknown): Promise<unknown[]> {
 }
 
 /**
- * Resolve a relate callback's result into its constraints and its drawing
- * clauses, in declaration order. The result is awaited, must be a list, and
- * is flattened (synchronously when it holds no promise, which is the common
- * case: an operator that relates one constraint per child). Each constraint's
- * operands are checked against `env`. Each other clause is resolved to its
- * node, the way an operator resolves its children, and flagged
- * `_relateClause` with its 1-based position in the flattened list.
+ * Resolve a relate result (a list of clauses) into its constraints and its
+ * drawing clauses, in declaration order, without changing `layer`: the
+ * caller attaches them (`GoFishNode.INTERNAL_relate`), so a clause that
+ * throws leaves the layer as it was. The result is awaited, must be a list,
+ * and is flattened (synchronously when it holds no promise, which is the
+ * common case: an operator that relates one constraint per child). Each
+ * constraint's operands are checked to be operands. Each other clause is
+ * resolved to its node, the way an operator resolves its children, in
+ * `names`, with its 1-based position in the flattened list (for error
+ * messages).
  */
 export async function resolveRelateClauses(
   result: unknown,
-  env: RelateEnv,
+  layer: GoFishNode,
+  names: LayerContext,
   rows?: unknown
-): Promise<{ constraints: ConstraintSpec[]; nodes: GoFishNode[] }> {
+): Promise<{
+  constraints: ConstraintSpec[];
+  nodes: GoFishNode[];
+  positions: number[];
+}> {
   const awaited = isThenable(result) ? await result : result;
   if (!Array.isArray(awaited)) {
     throw new Error(
@@ -156,24 +190,25 @@ export async function resolveRelateClauses(
       );
     } else terms.push({ term: c, position });
   });
-  validateOperands(constraints, env);
+  validateOperands(constraints, layer);
   // One at a time, like `reifyChildrenSequentially`: resolving a term can
   // have effects (a mark function or builder runs), so their order is kept.
   const nodes: GoFishNode[] = [];
+  const positions: number[] = [];
   for (const { term, position } of terms) {
     // A drawing clause is a mark position over the layer's rows, as the
     // layer's children are: an empty-scope `chart()` in it binds them.
-    const node = await resolveMarkResult(term as any, {}, rows);
+    const node = await resolveMarkResult(term as any, names, rows);
     if (!(node instanceof GoFishNode)) {
       throw new Error(
         `.relate(): clause ${position} is neither a constraint nor a mark or ` +
           `operator (got ${String(node)}).`
       );
     }
-    node._relateClause = position;
     nodes.push(node);
+    positions.push(position);
   }
-  return { constraints, nodes };
+  return { constraints, nodes, positions };
 }
 
 /** Every ref in `node`'s subtree (a ref has no children of its own). */
@@ -181,24 +216,6 @@ function refsIn(node: GoFishAST, out: GoFishRef[] = []): GoFishRef[] {
   if (node instanceof GoFishRef) out.push(node);
   else for (const c of node.children ?? []) refsIn(c, out);
   return out;
-}
-
-/** `layer`'s direct child that is or contains `node`, or `undefined` when
- *  `node` is not inside `layer`. */
-function directChildOf(
-  layer: GoFishNode,
-  node: GoFishAST
-): GoFishAST | undefined {
-  let cur: GoFishAST | undefined = node;
-  while (cur && cur.parent !== layer) cur = cur.parent;
-  return cur;
-}
-
-/** The index of `layer`'s direct child that is or contains `node`, or -1 when
- *  `node` is not inside `layer`. */
-export function directChildIndex(layer: GoFishNode, node: GoFishAST): number {
-  const child = directChildOf(layer, node);
-  return child ? layer.children.indexOf(child) : -1;
 }
 
 /** The order of one layer's relate steps (see {@link scheduleRelate}). */
@@ -234,24 +251,17 @@ export function scheduleRelate(
   layer: GoFishNode,
   operands: Map<string, ResolvedOperand>
 ): RelateSchedule {
-  const clauses = new Set<number>();
-  layer.children.forEach((c, i) => {
-    if (isRelateClause(c)) clauses.add(i);
-  });
+  const clauses = new Set(layer._relateClauses.keys());
   if (clauses.size === 0) return { clauses, beforeSolve: [], afterSolve: [] };
 
   const SOLVE = -1;
   // deps.get(u) = the steps u waits for.
   const deps = new Map<number, Set<number>>([[SOLVE, new Set()]]);
   for (const i of clauses) deps.set(i, new Set());
-  const childIndex = new Map<GoFishAST, number>();
-  layer.children.forEach((c, i) => {
-    if (!childIndex.has(c)) childIndex.set(c, i);
-  });
-  // `directChildIndex`, with the index looked up once per child.
+  // The direct child of `layer` that is or holds `node`, by its index.
   const childOf = (node: GoFishAST): number => {
     const child = directChildOf(layer, node);
-    return child ? (childIndex.get(child) ?? -1) : -1;
+    return child ? (layer.indexOfChild(child) ?? -1) : -1;
   };
 
   for (const op of operands.values()) {
@@ -346,53 +356,7 @@ function describeStep(layer: GoFishNode, u: number): string {
   }
   const node = layer.children[u] as GoFishNode;
   const name = childNameKey(node);
-  return `clause ${node._relateClause} (${node.type}${
+  return `clause ${layer._relateClauses.get(u)} (${node.type}${
     name === undefined ? "" : ` named "${name}"`
   })`;
-}
-
-/** Whether two lists hold the same items in the same order. */
-function sameItems<T>(a: readonly T[], b: readonly T[]): boolean {
-  return a.length === b.length && a.every((x, i) => x === b[i]);
-}
-
-/**
- * Schedule `layer`'s relate clauses and remember the result for its layout.
- * `resolveNames` calls this once per resolve pass, as soon as the refs are
- * resolved, so a cycle is reported before the space pass would recurse on it.
- */
-export function computeRelateSchedule(
-  layer: GoFishNode,
-  operands: Map<string, ResolvedOperand>
-): RelateSchedule {
-  const schedule = scheduleRelate(layer, operands);
-  layer._relateSchedule = {
-    children: layer.children.slice(),
-    constraints: layer.constraints,
-    schedule,
-  };
-  return schedule;
-}
-
-/**
- * The schedule `layout` uses: the one `resolveNames` remembered, when the
- * layer still has the children and constraints it was computed from, else a
- * fresh one. A schedule depends on the children, the constraint operands, and
- * the targets of the clauses' refs; the refs are resolved only in
- * `resolveNames`, and every pass that rewrites the tree runs `resolveNames`
- * again (see `reresolve` in gofish.tsx), which recomputes it.
- */
-export function relateScheduleForLayout(
-  layer: GoFishNode,
-  operands: Map<string, ResolvedOperand>
-): RelateSchedule {
-  const cached = layer._relateSchedule;
-  if (
-    cached &&
-    cached.constraints === layer.constraints &&
-    sameItems(cached.children, layer.children)
-  ) {
-    return cached.schedule;
-  }
-  return scheduleRelate(layer, operands);
 }

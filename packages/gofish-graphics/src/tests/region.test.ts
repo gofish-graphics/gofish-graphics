@@ -26,9 +26,15 @@ declare const process: { exit(code: number): never };
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
 
 async function main() {
-  const { chart, partition, field, Bin, region, text } = await import(
-    "../lib"
-  );
+  const {
+    chart,
+    partition,
+    field,
+    Bin,
+    region,
+    text,
+    layer: layerOf,
+  } = await import("../lib");
 
   console.log("# a region reads its cell from the partition around it");
   {
@@ -125,8 +131,7 @@ async function main() {
     check(
       "the region spans its own cell and the cell it is in",
       JSON.stringify(region.spans.map((s) => s?.map((v: any) => v.datum))) ===
-        "[[2,3],[0,1]]" &&
-        JSON.stringify(region.placed) === "[false,true]",
+        "[[2,3],[0,1]]" && JSON.stringify(region.placed) === "[false,true]",
       JSON.stringify(region.spans)
     );
     const domains = collectPositionDomains([
@@ -166,10 +171,9 @@ async function main() {
     const node = (await layer({}, [a, b])) as GoFishNode;
     const columns = [value, value] as const;
     await node.relate((g: any) => [
-      Constraint.position(
-        { region: new PositionRegion(diamond, columns) },
-        [g.a]
-      ),
+      Constraint.position({ region: new PositionRegion(diamond, columns) }, [
+        g.a,
+      ]),
       Constraint.position(
         { region: new PositionRegion(new BoxCell(), columns) },
         [g.b]
@@ -252,6 +256,46 @@ async function main() {
       );
   }
 
+  console.log("# a partition reads a cell a .relate() gives a node it is in");
+  {
+    // A y partition named "a", given the x cell [2, 3) by its layer's
+    // `.relate()`: the partition reads that cell while its own pass runs,
+    // before the round resolves the references, so the operand is read as
+    // the handle it is.
+    const inner = chart([{ b: 0.5 }, { b: 1.5 }], { axes: false })
+      .flow(partition({ by: field("b").bin(Bin.step(1)), dir: "y" }))
+      .mark(region());
+    let error = "";
+    let rects: any[] = [];
+    try {
+      rects = items(
+        await layerOf([inner.name("a")])
+          .relate(({ a }: any) => [
+            Constraint.position(
+              {
+                region: new PositionRegion(new Cell(2, 3, "2–3"), [
+                  value,
+                  undefined,
+                ]),
+              },
+              [a]
+            ),
+          ])
+          .toDisplayList({ w: 200, h: 200 })
+      ).filter((it) => it.kind === "rect");
+    } catch (e) {
+      error = (e as Error).message;
+    }
+    check(
+      "the partition's regions read the cell the .relate() gives",
+      error === "" &&
+        rects.length === 2 &&
+        rects.every((r) => near(r.w, rects[0].w)) &&
+        rects.every((r) => near(r.h, 100)),
+      error || JSON.stringify(rects)
+    );
+  }
+
   console.log("# a region its parent cannot place by its data is an error");
   {
     // A spread on x inside an x partition's cell places its children on x
@@ -286,9 +330,7 @@ async function main() {
       error
     );
     // On the axis with no cell it takes the size it is offered, as before.
-    const rects = items(await spreadOn("y")).filter(
-      (it) => it.kind === "rect"
-    );
+    const rects = items(await spreadOn("y")).filter((it) => it.kind === "rect");
     check(
       "a spread on the axis the cell does not span still lays regions out",
       rects.length === 3 && rects.every((r) => near(r.w, 100)),

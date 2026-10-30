@@ -15,7 +15,7 @@ import type {
   ConstraintPosScales,
   ConstraintRef,
 } from "./shared";
-import { axisIndex } from "./shared";
+import { axisIndex, type KeyOf } from "./shared";
 
 /**
  * Spread the children out along `axis` so they stop covering each other,
@@ -69,12 +69,13 @@ export const isOverlapConstraint = (
 export function applyOverlapPlacement(
   constraint: OverlapConstraint,
   targets: Map<string, Placeable>,
+  keyOf: KeyOf,
   posScales?: ConstraintPosScales
 ): void {
   const free = axisIndex(constraint.axis);
   const data = (1 - free) as 0 | 1;
   const children = constraint.children.map((ref, i) => {
-    const p = targets.get(ref.name);
+    const p = targets.get(keyOf(ref));
     if (p === undefined)
       throw new Error(
         `[gofish] scatter overlap: child "${ref.name}" was not laid out`

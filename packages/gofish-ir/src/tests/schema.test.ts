@@ -1484,6 +1484,44 @@ console.log("\n# Strategies");
   );
 }
 
+console.log("# a .relate() operand's scope");
+{
+  const withOperand = (operand: unknown) =>
+    ({
+      irVersion: 0,
+      ir: "gofish-frontend",
+      root: {
+        type: "layer",
+        __combinator: true,
+        children: [{ type: "rect", name: "a" }],
+        relate: {
+          scope: "r1",
+          clauses: [
+            { type: "align", options: { x: "middle" }, refs: [operand] },
+          ],
+        },
+      },
+    }) as unknown as FrontendIRDocument;
+  check(
+    "an operand with a scope validates",
+    validate(withOperand({ type: "ref", selection: "a", scope: "r1" })).valid
+  );
+  const bad = validate(withOperand({ type: "ref", selection: "a", scope: 3 }));
+  check(
+    "a malformed scope is one error",
+    !bad.valid &&
+      bad.errors.filter((e) => e.path.endsWith(".scope")).length === 1,
+    JSON.stringify(bad.errors)
+  );
+  const missing = validate(withOperand({ type: "ref", selection: "a" }));
+  check(
+    "a missing scope is one error",
+    !missing.valid &&
+      missing.errors.filter((e) => e.path.endsWith(".scope")).length === 1,
+    JSON.stringify(missing.errors)
+  );
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) {
   process.exit(1);

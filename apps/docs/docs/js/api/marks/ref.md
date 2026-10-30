@@ -36,7 +36,7 @@ ref(
 
 ### String — nearest match
 
-A string `ref("x")` is legal only inside a [`.relate()`](/js/api/constraints/relate) clause. Anywhere else it throws, and the message says to move it into `.relate()`. Inside a clause it finds the node named `.name("x")` (or carrying a token tagged `"x"`) that is nearest to the layer that relates it: the closest match inside that layer wins, counted in steps down from the layer, so a direct child beats a node with the same name nested deeper. The search never crosses a `createMark` boundary, in either direction, and the match must lie inside the related layer. Two matches at the same smallest distance is an error, and so is no match at all. A data key is not a name, so `ref("a")` does not find a mark just because its row is keyed `"a"`.
+A string `ref("x")` is legal only inside a [`.relate()`](/js/api/constraints/relate) clause. Anywhere else it throws, and the message says to move it into `.relate()`. Inside a clause it finds the node named `.name("x")` (or carrying a token tagged `"x"`) that is nearest to the layer that relates it: the closest match inside that layer wins, counted in steps down from the layer, so a direct child beats a node with the same name nested deeper. The layer that a mark's labels or a chart's axes add around it counts no steps, and it has no name, so `ref("bar")` on a labeled bar is the bar alone. The search never crosses a `createMark` boundary, in either direction, and the match must lie inside the related layer. Two matches at the same smallest distance is an error, and so is no match at all. A data key is not a name, so `ref("a")` does not find a mark just because its row is keyed `"a"`.
 
 ```ts
 layer([
@@ -51,7 +51,7 @@ A `.relate()` operand is the same thing spelled as a variable: `({ bg, label }) 
 
 ### Token — globally addressable
 
-A `Token` (from [`createName`](/js/api/howto/naming-and-scoping#createname)) is a unique JS value. `.name(token)` registers the node in a global token context; `ref(token)` retrieves it.
+A `Token` (from [`createName`](/js/api/howto/naming-and-scoping#createname)) is a unique JS value. `.name(token)` registers the node in a global token context; `ref(token)` retrieves it. A token on a mark that a chart repeats names every node the mark made, so `ref(token)` throws and says how many nodes it matched; `selectAll(token)` gathers them.
 
 ```ts
 const targetName = createName("target");

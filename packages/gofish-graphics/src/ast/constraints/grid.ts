@@ -39,7 +39,7 @@
 import * as Monotonic from "../../util/monotonic";
 import { GoFishNode } from "../_node";
 import type { GoFishAST } from "../_ast";
-import { type ConstraintRef } from "./shared";
+import { type ConstraintRef, type KeyOf } from "./shared";
 import { sliceExtent } from "./folds";
 import {
   ordinalOver,
@@ -276,11 +276,12 @@ export function gridTracksFromSizes(
   ];
 }
 
-/** Per-cell proposed size `[cellW, cellH]`, keyed by cell name: each cell is
+/** Per-cell proposed size `[cellW, cellH]`, keyed by cell operand key: each cell is
  *  proposed its (column, row) track's extent. A fill cell fills that extent; a
  *  claim cell keeps its own (equal or smaller) size and is centered in it. */
-export function gridCellSizeByName(
+export function gridCellSizeByKey(
   c: GridConstraint,
+  keyOf: KeyOf,
   tracks: [TrackLayout, TrackLayout]
 ): Map<string, [number, number]> {
   const [cols, rows] = tracks;
@@ -289,7 +290,7 @@ export function gridCellSizeByName(
     if (child === undefined) return;
     const col = index % c.numCols;
     const row = Math.floor(index / c.numCols);
-    out.set(child.name, [cols.extents[col], rows.extents[row]]);
+    out.set(keyOf(child), [cols.extents[col], rows.extents[row]]);
   });
   return out;
 }
@@ -349,22 +350,24 @@ export function lowerGridPlacement(
   owner: string,
   size: readonly [number, number],
   emitter: PlacementFactEmitter,
+  keyOf: KeyOf,
   tracks?: [TrackLayout, TrackLayout],
   pinnedByPosition?: Map<string, Set<0 | 1>>
 ): void {
   for (const { child, center } of gridCellPlacements(c, size, tracks)) {
-    const overridden = pinnedByPosition?.get(child.name);
+    const key = keyOf(child);
+    const overridden = pinnedByPosition?.get(key);
     if (!overridden?.has(0))
       emitter.pin({
         axis: "x",
-        target: { name: child.name, anchor: "middle" },
+        target: { key, anchor: "middle" },
         value: center[0],
         owner,
       });
     if (!overridden?.has(1))
       emitter.pin({
         axis: "y",
-        target: { name: child.name, anchor: "middle" },
+        target: { key, anchor: "middle" },
         value: center[1],
         owner,
       });
@@ -379,7 +382,7 @@ export function lowerGridPlacement(
  */
 export function gridSpaces(
   c: GridConstraint,
-  cells: GoFishAST[]
+  cells: readonly GoFishAST[]
 ): [UnderlyingSpace, UnderlyingSpace] {
   const keyAt = (i: number): OrdinalKey | undefined =>
     cells[i] instanceof GoFishNode ? (cells[i] as GoFishNode).key : undefined;

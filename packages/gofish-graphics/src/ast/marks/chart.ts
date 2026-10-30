@@ -54,7 +54,6 @@ import {
   nameModifier,
   labelModifier,
   zOrderModifier,
-  LayerContext,
 } from "./createOperator";
 import type { ModifierConfig, ZOrderValue } from "./createOperator";
 import { layer as Layer } from "../graphicalOperators/layer";
@@ -100,7 +99,7 @@ import {
 } from "../schema";
 import { withWire } from "../wire";
 import { withKindValues } from "../strategyKind";
-import { datumOfInput } from "./markResult";
+import { LayerContext, datumOfInput } from "./markResult";
 import { withFlowStep } from "./compose";
 export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
@@ -275,7 +274,10 @@ export function resolve(
 ): Operator<any[], any[]> {
   return mapOperator<any[], any[]>(
     (rows, layerContext) => {
-      const refs = resolveRefData(opts.from, layerContext ?? {});
+      const refs = resolveRefData(
+        opts.from,
+        layerContext ?? new LayerContext()
+      );
       const matchField = (r: GoFishRef): string => {
         const field = opts.key ?? (r.targetNode as any)?.__splitBy;
         if (typeof field !== "string") {
@@ -433,10 +435,12 @@ export const circle = createMark(
 // (resolved at layout time) and as chart data (resolved at build time against
 // the per-chart layer registry, erroring unless exactly one named node
 // matches). `selectAll(name)` is the plural form: one ref per matching named
-// node, chart-data only. Both defer layer lookup until resolution, so layers
-// can be registered by `.name()` on marks before the selector accesses them.
+// node, chart-data only; `name` is a string or a `createName` token, which
+// is plural too (a token on a repeated mark names every node it made). Both
+// defer layer lookup until resolution, so layers can be registered by
+// `.name()` on marks before the selector accesses them.
 export function selectAll(
-  layerName: string
+  layerName: string | Token
 ): GoFishRef & { readonly multiplicity: "all" } {
   return new GoFishRef({
     selection: layerName,
@@ -1233,17 +1237,15 @@ export function layer<T>(
   const withChildren =
     (children: readonly MarkChild[]): Mark<T> =>
     async (d, key, _layerContext) => {
-      // A layer establishes its OWN local name context: `.name(...)` registrations
-      // and the `ref(name)`/`selectAll(name)` that read them are scoped to *this*
-      // layer's children. We deliberately do NOT inherit the enclosing
-      // `_layerContext` — otherwise a layer nested inside an operator (e.g. one
-      // `layer([bars, area])` per `spread` cell) would share a single context
-      // across every cell, so each cell's `selectAll("bars")` would match every
-      // other cell's bars too (and reference siblings not yet laid out). Names are
-      // local to their layer, mirroring `LayerBuilder.resolve`. Resolve
+      // A layer establishes its OWN name scope: `.name(...)` registrations of
+      // its children go into a registry nested in the enclosing one
+      // (`LayerContext.child`). A `ref(name)`/`selectAll(name)` reads the
+      // nearest scope that has the name (`LayerContext.lookup`), so a layer
+      // repeated per `spread` cell finds its own cell's `bars`, while a
+      // `selectAll("bars")` outside the spread gathers every cell's. Resolve
       // sequentially so a child referencing a name sees earlier siblings'
       // registrations.
-      const sharedContext: LayerContext = {};
+      const sharedContext = _layerContext?.child() ?? new LayerContext();
       const resolved: GoFishNode[] = [];
       for (const m of children) {
         // Each child is a mark position over this layer's rows: an empty-scope
@@ -1253,6 +1255,8 @@ export function layer<T>(
       }
       const node = await Layer(opts, resolved);
       node.datum = datumOfInput(d as unknown[]);
+      // Its `.relate()` clauses are resolved in the same context.
+      node._names = sharedContext;
       return node;
     };
   // Each child is applied to the layer's own input.

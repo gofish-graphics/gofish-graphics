@@ -12,10 +12,10 @@ import {
 } from "./nest";
 import type { UnderlyingSpace } from "../underlyingSpace";
 import { hullExtent, padExtent, type Extent } from "../extent";
-import { buildNameIndex, type NamedNode } from "./shared";
+import { directSlot, type ResolvedOperands } from "./shared";
 
-export type NestPlanChild = NamedNode & {
-  key?: string;
+export type NestPlanChild = {
+  uid: string;
   args?: { dims?: [{ size?: unknown }, { size?: unknown }] };
   children?: readonly unknown[];
 };
@@ -196,14 +196,13 @@ export function applyNestExtentPlan(
  *  (the common path, and CENTER_ONLY-only nests, stay on the untouched
  *  proposal path — their centering is handled by the placement solver). */
 export function buildNestPlan(
-  childNodes: NestPlanChild[],
-  constraints: ConstraintSpec[]
+  childNodes: readonly NestPlanChild[],
+  constraints: readonly ConstraintSpec[],
+  operands: ResolvedOperands
 ): NestPlan | undefined {
   // Common case: no nest constraints — bail before allocating anything.
   if (!constraints.some(isNestConstraint)) return undefined;
   const nests = constraints.filter(isNestConstraint);
-
-  const indexByName = buildNameIndex(childNodes);
 
   type ResolvedNest = {
     c: NestConstraint;
@@ -216,8 +215,8 @@ export function buildNestPlan(
   for (const c of nests) {
     const outerName = c.children[0].name;
     const innerName = c.children[1].name;
-    const outerIdx = indexByName.get(outerName);
-    const innerIdx = indexByName.get(innerName);
+    const outerIdx = directSlot(operands, c.children[0]);
+    const innerIdx = directSlot(operands, c.children[1]);
     // A ref into a nested tier has no direct slot here — nothing to size.
     if (outerIdx === undefined || innerIdx === undefined) continue;
     resolved.push({ c, outerName, innerName, outerIdx, innerIdx });

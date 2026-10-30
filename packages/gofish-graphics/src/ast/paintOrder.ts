@@ -4,8 +4,8 @@
 
 import { GoFishNode } from "./_node";
 import type { GoFishAST } from "./_ast";
-import { visibleNodes } from "./_ref";
-import { childNameKey } from "./constraints/shared";
+import { resolution } from "./_ref";
+import { childNameKey, type ConstraintRef } from "./constraints/shared";
 import { isZOrderConstraint } from "./constraints/zorder";
 import type { ZOrderConstraint } from "./constraints/zorder";
 
@@ -26,10 +26,12 @@ import type { ZOrderConstraint } from "./constraints/zorder";
  * constraint tries to order them.
  *
  * A `zAbove(a, b)` / `zBelow(a, b)` constraint declared at a layer L is
- * resolved once, when L orders its children. Its operand names are looked up
- * with the shared name rule (`visibleNodes`: through any non-component node,
- * never into a `createMark` component), and every node carrying the name is an
- * operand. For each pair of operand nodes, the constraint orders the two
+ * resolved once, when L orders its children. Its operands are the node sets
+ * `resolveReferences` (`_ref.tsx`) found for them: a handle's node, or every
+ * node a name operand's name means, looked up with the one name rule
+ * (`lookupName`: the nearest depth that has the name, every match there)
+ * from L, or from the layer whose `.relate()` bound it, without that layer's
+ * clause slots, and kept when it lies inside L. For each pair of operand nodes, the constraint orders the two
  * children of the node where their paths from L part: a child of L when they
  * lie in different children, else a node further down (pushed down).
  */
@@ -69,14 +71,11 @@ function resolveZConstraints(layer: GoFishNode): void {
     return;
   }
 
-  const byName = new Map<string, GoFishAST[][]>();
-  for (const n of visibleNodes(layer)) {
-    const name = n === layer ? undefined : childNameKey(n);
-    if (name === undefined) continue;
-    let paths = byName.get(name);
-    if (paths === undefined) byName.set(name, (paths = []));
-    paths.push(pathFrom(layer, n));
-  }
+  // The nodes each operand names, as `resolveReferences` found them
+  // (`ResolvedConstraints.z`), as paths from `layer`.
+  const { z } = resolution(layer);
+  const pathsOf = (ref: ConstraintRef): GoFishAST[][] =>
+    (z.get(ref) ?? []).map((n) => pathFrom(layer, n));
 
   const written: GoFishAST[] = [];
   const addEdge = (at: GoFishAST, edge: Edge) => {
@@ -127,9 +126,9 @@ function resolveZConstraints(layer: GoFishNode): void {
   };
 
   for (const c of constraints) {
-    const as = byName.get(c.children[0].name);
-    const bs = byName.get(c.children[1].name);
-    if (as !== undefined && bs !== undefined) split(layer, 0, as, bs, c);
+    const as = pathsOf(c.children[0]);
+    const bs = pathsOf(c.children[1]);
+    split(layer, 0, as, bs, c);
   }
   partedAt.set(layer, written);
 }
@@ -160,22 +159,21 @@ const describe = (c: ZOrderConstraint): string =>
  * A node's own z constraints are resolved here, before any of its
  * descendants is ordered: every bake walk orders a node before descending.
  */
-export function orderChildrenForPaint(node: GoFishAST): GoFishAST[] {
+export function orderChildrenForPaint(node: GoFishAST): readonly GoFishAST[] {
   if (!(node instanceof GoFishNode) || !node.children) return [];
   const edges = edgesFor(node);
-  const children: GoFishAST[] = node.children;
+  const children = node.children;
   const n = children.length;
   if (n < 2) return children;
 
   const zKey = children.map(zOf);
   if (edges.length === 0 && zKey.every((z) => z === 0)) return children;
 
-  const index = new Map(children.map((child, i) => [child, i]));
   const adj: (Set<number> | undefined)[] = new Array(n);
   const inDegree = new Array<number>(n).fill(0);
   for (const { from, to } of edges) {
-    const i = index.get(from)!;
-    const j = index.get(to)!;
+    const i = node.indexOfChild(from)!;
+    const j = node.indexOfChild(to)!;
     const out = (adj[i] ??= new Set());
     if (!out.has(j)) {
       out.add(j);
@@ -230,7 +228,7 @@ export function orderChildrenForPaint(node: GoFishAST): GoFishAST[] {
 
   if (result.length < n) {
     // A child left with a positive in-degree was never emitted.
-    const stuck = (child: GoFishAST) => inDegree[index.get(child)!] > 0;
+    const stuck = (child: GoFishAST) => inDegree[node.indexOfChild(child)!] > 0;
     const involved = new Set(
       edges
         .filter(({ from, to }) => stuck(from) && stuck(to))

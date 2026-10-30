@@ -15,6 +15,7 @@ import {
   type Axis,
   type ConstraintPosScales,
   type FreeOrigin,
+  type KeyOf,
 } from "./shared";
 import {
   anchorExpr,
@@ -344,6 +345,7 @@ export type RigidAttachment = { container: string; gap: [number, number] };
  */
 export function solvePlacementCells(
   constraints: PlacementConstraint[],
+  keyOf: KeyOf,
   targets: Map<string, Placeable>,
   sizes: [number, number],
   posScales?: ConstraintPosScales,
@@ -360,6 +362,7 @@ export function solvePlacementCells(
 ] {
   const lowered = lowerPlacementConstraints(
     constraints,
+    keyOf,
     targets,
     sizes,
     posScales,
@@ -410,6 +413,7 @@ export function solvePlacementCells(
 
 export function solvePlacementConstraints(
   constraints: PlacementConstraint[],
+  keyOf: KeyOf,
   targets: Map<string, Placeable>,
   sizes: [number, number],
   posScales?: ConstraintPosScales,
@@ -421,6 +425,7 @@ export function solvePlacementConstraints(
 ): PlacementConflict[] {
   const solved = solvePlacementCells(
     constraints,
+    keyOf,
     targets,
     sizes,
     posScales,
@@ -446,8 +451,8 @@ export function solvePlacementConstraints(
   solved.forEach((result, axisIndexValue) => {
     const axis = axisIndexValue as 0 | 1;
     const axisLabel = axisName(axis);
-    for (const [name, cell] of result.cells) {
-      const target = targets.get(name);
+    for (const [key, cell] of result.cells) {
+      const target = targets.get(key);
       if (!target) continue;
       if (cell.sizeStrong && cell.size !== undefined && target.setExtent) {
         target.setExtent(
@@ -458,8 +463,8 @@ export function solvePlacementConstraints(
       } else if (target.pinAnchor) target.pinAnchor(axis, cell.min, "min");
       else target.place(axis, cell.min, "min");
     }
-    for (const [name, { size, owner }] of result.sizeOnly) {
-      const target = targets.get(name);
+    for (const [key, { size, owner }] of result.sizeOnly) {
+      const target = targets.get(key);
       target?.setSizeOnly?.(axisLabel, size, owner);
     }
   });

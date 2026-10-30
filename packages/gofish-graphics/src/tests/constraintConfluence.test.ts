@@ -10,15 +10,16 @@ import type { AlignConstraint } from "../ast/constraints/align";
 import type { DistributeConstraint } from "../ast/constraints/distribute";
 import type { GridConstraint, TrackLayout } from "../ast/constraints/grid";
 import {
-  gridCellSizeByName,
+  gridCellSizeByKey,
   gridTracksFromSizes,
 } from "../ast/constraints/grid";
 import type { NestConstraint } from "../ast/constraints/nest";
 import {
   compilePlacementCoordinate,
-  lowerPlacementConstraints,
-  solvePlacementConstraints,
+  lowerPlacementConstraints as lowerPlacement,
+  solvePlacementConstraints as solvePlacement,
 } from "../ast/constraints/placementSolver";
+import type { KeyOf, ResolvedOperands } from "../ast/constraints/shared";
 import {
   anchorExpr,
   participantFact,
@@ -184,7 +185,28 @@ function expectConfluent(
   );
 }
 
+// A resolved operand: its key is the uid of the node it names (here, the
+// name itself).
 const child = (name: string) => ({ name });
+const byName: KeyOf = (ref) => ref.name;
+/** The operands of `children`, each resolved to the child of its name. */
+const byNameIn = (children: readonly { uid: string }[]): ResolvedOperands => ({
+  keyOf: byName,
+  operands: new Map(children.map((c, i) => [c.uid, { child: i, direct: true }])),
+});
+// The solve, with each operand keyed by its name.
+const lowerPlacementConstraints = (
+  constraints: Parameters<typeof lowerPlacement>[0],
+  ...rest: Parameters<typeof lowerPlacement> extends [any, any, ...infer R]
+    ? R
+    : never
+) => lowerPlacement(constraints, byName, ...rest);
+const solvePlacementConstraints = (
+  constraints: Parameters<typeof solvePlacement>[0],
+  ...rest: Parameters<typeof solvePlacement> extends [any, any, ...infer R]
+    ? R
+    : never
+) => solvePlacement(constraints, byName, ...rest);
 const A = child("A");
 const B = child("B");
 const C = child("C");
@@ -242,7 +264,7 @@ const span = (name: string, min: number, max: number): PositionConstraint => ({
 
 const namedNode = (name: string, width?: number) => ({
   _name: name,
-  key: name,
+  uid: name,
   args: { dims: [{ size: width }, { size: 10 }] },
   children: [],
 });
@@ -254,7 +276,7 @@ function nestPlanSignature(constraints: NestConstraint[]): string {
     namedNode("C"),
     namedNode("D"),
   ];
-  const plan = buildNestPlan(children, constraints);
+  const plan = buildNestPlan(children, constraints, byNameIn(children));
   if (plan === undefined) return "none";
   return JSON.stringify({
     order: plan.order,
@@ -446,7 +468,7 @@ console.log("# constraint confluence: grid content-sized tracks (Stage 6e)");
   ];
 
   // The per-cell budget map hands each cell its own track's extent.
-  const cellSizes = gridCellSizeByName(grid, tracks);
+  const cellSizes = gridCellSizeByKey(grid, byName, tracks);
   ok(
     "grid cell budget = per-cell track extents",
     JSON.stringify(cellSizes.get("A")) === "[40,30]" &&
@@ -701,16 +723,16 @@ console.log("# constraint confluence: layer constraint layout planning");
     children: [B, C],
   };
 
-  const plan = buildLayerConstraintLayoutPlan(childNodes, [
-    zOnly,
-    datumC,
-    nestBA,
-  ]);
+  const plan = buildLayerConstraintLayoutPlan(
+    childNodes,
+    [zOnly, datumC, nestBA],
+    byNameIn(childNodes)
+  );
   ok(
     "layout plan excludes z-order refs and skips only nest inner",
-    plan.constrainedNames.has("A") &&
-      plan.constrainedNames.has("C") &&
-      !plan.constrainedNames.has("B")
+    plan.constrainedKeys.has("A") &&
+      plan.constrainedKeys.has("C") &&
+      !plan.constrainedKeys.has("B")
   );
   ok(
     "layout plan orders nest source before derived child",
@@ -864,8 +886,8 @@ console.log("# constraint confluence: position scale ownership planning");
     children: [B],
   };
 
-  const first = buildPositionTargetDims([datumX, literalY, datumY]);
-  const second = buildPositionTargetDims([datumY, literalY, datumX]);
+  const first = buildPositionTargetDims([datumX, literalY, datumY], byName);
+  const second = buildPositionTargetDims([datumY, literalY, datumX], byName);
   ok(
     "datum position targets consume only their datum axes",
     first.get("A")?.has(0) === true &&
@@ -1234,8 +1256,8 @@ console.log("# constraint confluence: interval vs point compose bail");
   // layer's default union — conservatively, even when it also carries an
   // interval on the other axis.
   const childNodes = [
-    { _name: "A", key: "A" },
-    { _name: "B", key: "B" },
+    { _name: "A", uid: "A" },
+    { _name: "B", uid: "B" },
   ] as unknown as Parameters<typeof planConstraintComposition>[1];
   const distAB = distribute(["A", "B"]);
   const pureInterval: PositionConstraint = {
@@ -1255,11 +1277,15 @@ console.log("# constraint confluence: interval vs point compose bail");
   };
   ok(
     "pure-interval position composes with a distribute (span-like)",
-    planConstraintComposition([distAB, pureInterval], childNodes) !== undefined
+    planConstraintComposition([distAB, pureInterval], childNodes, byNameIn(childNodes)) !== undefined
   );
   ok(
     "point+interval position bails composition (conservatively point-form)",
-    planConstraintComposition([distAB, pointPlusInterval], childNodes) ===
+    planConstraintComposition(
+      [distAB, pointPlusInterval],
+      childNodes,
+      byNameIn(childNodes)
+    ) ===
       undefined
   );
 }

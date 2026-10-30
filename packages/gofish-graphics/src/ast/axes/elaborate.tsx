@@ -9,11 +9,16 @@ import { FALLBACK_FONT_FAMILY } from "../shapes/fontUtils";
 import { Spread } from "../graphicalOperators/spread";
 import { ref } from "../shapes/ref";
 import { Constraint } from "../constraints";
-import { axisName, type AlignAnchor } from "../constraints/shared";
+import {
+  axisName,
+  type AlignAnchor,
+  type ConstraintRef,
+} from "../constraints/shared";
 import {
   breadthFirst,
   fmtNum,
   wrapPreservingIdentity,
+  type RingConstraints,
   wrapRing,
   type ChromeRing,
 } from "../elaborationUtils";
@@ -105,8 +110,6 @@ export function defaultAxisSide(
 const TICK_LEN = 4;
 const LABEL_TICK_GAP = 3; // gap between a continuous label and its tick mark
 const ORDINAL_LABEL_GAP = 8; // gap between content edge and the ordinal label row
-const CONTENT_NAME = "__axisContent"; // inner-tier name for the wrapped content
-const INNER_REF_NAME = "__axisInner"; // outer-tier name for the wrapped content
 const AXIS_CONTENT_GAP = 6; // gap between axis line and content
 const LABEL_FONT_SIZE = 10;
 const AXIS_COLOR = "gray";
@@ -120,8 +123,9 @@ type AxisSides = ["start" | "end" | undefined, "start" | "end" | undefined];
 export type AxisElaboration = {
   /** Shapes to add as siblings of the content inside the wrapping layer. */
   nodes: GoFishNode[];
-  /** Builds this axis's constraints from the layer's name→ref map. */
-  constraints: (g: Record<string, any>) => any[];
+  /** Builds this axis's constraints: `at` is the handle on one of its
+   *  `nodes`, and `inner` the handle on the box inside the ring. */
+  constraints: RingConstraints;
   /** The node the axis's title centers on: the axis's own span. A
    *  position-like axis (continuous/difference) sets its line; an ordinal
    *  axis sets the span from its first slot to its last (`axisSpan`), so
@@ -260,7 +264,6 @@ const tickRect = (dim: 0 | 1, len = TICK_LEN): GoFishNode =>
 function tickMark(
   dim: 0 | 1,
   label: string,
-  name: string,
   side: "start" | "end",
   crossDirection: AxisDirection,
   labelAngle: number | undefined,
@@ -283,21 +286,16 @@ function tickMark(
       alignment: "middle",
     },
     atPixelStart ? [text, tick] : [tick, text]
-  ).name(name) as GoFishNode;
+  ) as GoFishNode;
 }
 
 /** The axis line: a 1px rect auto-spanning [min,max] via datum endpoints. */
-function axisLine(
-  dim: 0 | 1,
-  min: number,
-  max: number,
-  name: string
-): GoFishNode {
+function axisLine(dim: 0 | 1, min: number, max: number): GoFishNode {
   return Rect(
     dim === 1
       ? { w: 1, y: datum(min), y2: datum(max), fill: AXIS_COLOR }
       : { h: 1, x: datum(min), x2: datum(max), fill: AXIS_COLOR }
-  ).name(name);
+  );
 }
 
 /**
@@ -320,9 +318,9 @@ function axisLine(
  */
 function gutterConstraints(
   dim: 0 | 1,
-  g: Record<string, any>,
-  lineName: string,
-  ticks: any[],
+  inner: ConstraintRef,
+  line: ConstraintRef,
+  ticks: ConstraintRef[],
   crossFloor?: number,
   side: "start" | "end" = "start"
 ): any[] {
@@ -352,18 +350,16 @@ function gutterConstraints(
             ),
             anchor: innerEdge,
           } as any,
-          [g[lineName]]
+          [line]
         )
       : Constraint.distribute(
           { dir: d, spacing: AXIS_CONTENT_GAP },
-          atEnd
-            ? [g[CONTENT_NAME], g[lineName]]
-            : [g[lineName], g[CONTENT_NAME]]
+          atEnd ? [inner, line] : [line, inner]
         );
   return [
     seat,
     // Tick marks' inner edge flush with the line; labels extend into the gutter.
-    Constraint.align(innerAlign as any, [...ticks, g[lineName]]),
+    Constraint.align(innerAlign as any, [...ticks, line]),
   ];
 }
 
@@ -383,12 +379,11 @@ type ExtraLabel = {
  */
 function positionAxis(opts: {
   dim: 0 | 1;
-  prefix: string;
   lineMin: number;
   lineMax: number;
   tickValues: number[];
   /** Build the node for tick i (labeled for continuous, bare for difference). */
-  tickNode: (v: number, i: number, name: string) => GoFishNode;
+  tickNode: (v: number, i: number) => GoFishNode;
   /**
    * Build a SEPARATE per-tick label, when the tick itself (`tickNode`) is
    * bare — the oblique hanging-point path (see `elaborateContinuousAxis` and
@@ -399,7 +394,7 @@ function positionAxis(opts: {
    * into the gutter; `Constraint.position`'s per-tick data pin still targets
    * the bare tick alone, never the label.
    */
-  tickLabel?: (v: number, i: number, name: string) => GoFishNode;
+  tickLabel?: (v: number, i: number) => GoFishNode;
   /** Shared hanging-point descriptor for `tickLabel` (see `LabelRotation`'s
    *  doc comment) — only consulted when `tickLabel` is given. */
   labelRotation?: LabelRotation;
@@ -416,31 +411,26 @@ function positionAxis(opts: {
   /** Which frame edge to seat the axis on (default near/origin = "start"). */
   side?: "start" | "end";
 }): AxisElaboration {
-  const { dim, prefix, lineMin, lineMax, tickValues } = opts;
+  const { dim, lineMin, lineMax, tickValues } = opts;
   const side = opts.side ?? "start";
-  const lineName = `${prefix}line`;
-  const tickName = (i: number) => `${prefix}t${i}`;
-  const labelName = (i: number) => `${prefix}l${i}`;
-  const tickLabelName = (i: number) => `${prefix}tl${i}`;
   const pos = (v: number) =>
     (dim === 1 ? { y: datum(v) } : { x: datum(v) }) as any;
 
-  const line = axisLine(dim, lineMin, lineMax, lineName);
-  const tickNodes = tickValues.map((v, i) => opts.tickNode(v, i, tickName(i)));
+  const line = axisLine(dim, lineMin, lineMax);
+  const tickNodes = tickValues.map((v, i) => opts.tickNode(v, i));
   const tickLabelNodes = opts.tickLabel
-    ? tickValues.map((v, i) => opts.tickLabel!(v, i, tickLabelName(i)))
+    ? tickValues.map((v, i) => opts.tickLabel!(v, i))
     : [];
   // Extra labels are PLAIN text — no tick mark of their own, or a
   // difference axis ends up with a second row of ticks at the midpoints.
   const extra = opts.extraLabels ?? [];
-  const labelNodes = extra.map((e, i) =>
-    Text({ text: e.text, fontSize: LABEL_FONT_SIZE, fill: AXIS_COLOR }).name(
-      labelName(i)
-    )
+  const labelNodes = extra.map((e) =>
+    Text({ text: e.text, fontSize: LABEL_FONT_SIZE, fill: AXIS_COLOR })
   );
 
-  const constraints = (g: Record<string, any>) => {
-    const ticks = tickValues.map((_, i) => g[tickName(i)]);
+  const constraints: RingConstraints = (at, inner) => {
+    const lineRef = at(line);
+    const ticks = tickNodes.map(at);
     // Data pin: always the bare tick's own bbox (its "middle" anchor is its
     // TRUE center regardless of what a sibling `tickLabel` does — see
     // `tickMark`'s doc comment for why an oblique label can't be nested
@@ -454,7 +444,7 @@ function positionAxis(opts: {
     // and drag the line into the plot. Tick marks align flush with the line
     // (their inner edge IS the tick).
     cs.push(
-      ...gutterConstraints(dim, g, lineName, ticks, opts.crossFloor, side)
+      ...gutterConstraints(dim, inner, lineRef, ticks, opts.crossFloor, side)
     );
     if (opts.tickLabel) {
       const trackAxis = axisName(dim);
@@ -467,7 +457,7 @@ function positionAxis(opts: {
           ? ["baseline", "middle"]
           : ["middle", "middle"];
       tickValues.forEach((_, i) => {
-        const label = g[tickLabelName(i)];
+        const label = at(tickLabelNodes[i]);
         const tick = ticks[i];
         cs.push(
           Constraint.align({ [trackAxis]: anchors } as any, [label, tick])
@@ -485,7 +475,7 @@ function positionAxis(opts: {
     // (now seated) line, by default at the same outer offset as the
     // continuous labels (tick + gap).
     extra.forEach((e, i) => {
-      const label = g[labelName(i)];
+      const label = at(labelNodes[i]);
       cs.push(Constraint.position(pos(e.value), [label]));
       cs.push(
         Constraint.distribute(
@@ -495,7 +485,7 @@ function positionAxis(opts: {
           },
           // Label sits on the OUTER side of the line — past it toward the gutter,
           // which flips with `side`.
-          side === "end" ? [g[lineName], label] : [label, g[lineName]]
+          side === "end" ? [lineRef, label] : [label, lineRef]
         )
       );
     });
@@ -532,7 +522,6 @@ function elaborateContinuousAxis(
   dim: 0 | 1,
   nice: [number, number],
   ticks: AxisTicks,
-  prefix: string,
   crossFloor: number | undefined,
   side: "start" | "end",
   crossDirection: AxisDirection,
@@ -546,31 +535,29 @@ function elaborateContinuousAxis(
   const tickText = (v: number) => fmtNum(mirrored ? Math.abs(v) : v);
   return positionAxis({
     dim,
-    prefix,
     lineMin: niceMin,
     lineMax: niceMax,
     tickValues,
     tickNode: oblique
-      ? (_v, _i, name) => tickRect(dim).name(name)
-      : (v, _i, name) =>
+      ? () => tickRect(dim)
+      : (v) =>
           tickMark(
             dim,
             tickText(v),
-            name,
             side,
             crossDirection,
             labelRotation?.rotate,
             depth
           ),
     tickLabel: oblique
-      ? (v, _i, name) => {
+      ? (v) => {
           const label = Text({
             text: tickText(v),
             fontSize: LABEL_FONT_SIZE,
             fill: AXIS_COLOR,
             rotate: labelRotation!.rotate,
             textAnchor: labelRotation!.textAnchor,
-          }).name(name);
+          });
           label.axisLabel = { dim, kind: "continuous", depth };
           return label;
         }
@@ -613,7 +600,6 @@ function elaborateTimeAxis(
   space: CONTINUOUS_TYPE,
   nice: [number, number],
   levels: readonly { level: CalendarPartition; hidden: boolean }[],
-  prefix: string,
   crossFloor: number | undefined,
   side: "start" | "end"
 ): AxisElaboration {
@@ -668,11 +654,10 @@ function elaborateTimeAxis(
 
   return positionAxis({
     dim,
-    prefix,
     lineMin: lo,
     lineMax: hi,
     tickValues,
-    tickNode: (v, _i, name) => tickRect(dim, tickLen.get(v)!).name(name),
+    tickNode: (v) => tickRect(dim, tickLen.get(v)!),
     extraLabels: labels.flatMap((row, k) =>
       row.map((l) => ({ value: l.at, text: l.text, offset: rowOffset[k] }))
     ),
@@ -689,7 +674,6 @@ function elaborateDifferenceAxis(
   dim: 0 | 1,
   content: CONTINUOUS_TYPE,
   ticks: AxisTicks,
-  prefix: string,
   crossFloor?: number,
   side: "start" | "end" = "start"
 ): AxisElaboration {
@@ -708,11 +692,10 @@ function elaborateDifferenceAxis(
   return {
     ...positionAxis({
       dim,
-      prefix,
       lineMin: 0,
       lineMax: width,
       tickValues,
-      tickNode: (_v, _i, name) => tickRect(dim).name(name),
+      tickNode: () => tickRect(dim),
       extraLabels,
       crossFloor,
       side,
@@ -902,7 +885,7 @@ function inferredOrdinalLevels(
  * edge, so the labels form a straight row or column and don't follow each
  * mark's own extent (which would scatter them, e.g. under a negative bar).
  * The distribute anchors against the wrapped content layer
- * (`INNER_REF_NAME`), whose bbox includes any inner axes' labels, so an
+ * (the `inner` handle of its ring), whose bbox includes any inner axes' labels, so an
  * outer axis stacks below the inner one instead of overlapping it; each row
  * sits past the rows before it.
  *
@@ -925,7 +908,6 @@ function elaborateOrdinalAxis(
   dim: 0 | 1,
   space: Extract<UnderlyingSpace, { kind: "ordinal" }>,
   keyMap: Record<string, GoFishNode>,
-  prefix: string,
   side: "start" | "end",
   levelAt: (depth: number) => LevelSetting,
   entries: readonly (LevelEntry | undefined)[],
@@ -1032,17 +1014,11 @@ function elaborateOrdinalAxis(
     offset = rowEnd + ROW_GAP;
   });
 
-  const lName = (k: number, r: number) =>
-    k === 0 ? `${prefix}ol${r}` : `${prefix}ol${k}_${r}`;
-  const sName = (i: number) => `${prefix}or${i}`;
-  const spanName = (k: number, r: number) => `${prefix}os${k}_${r}`;
-  const dName = (i: number) => `${prefix}od${i}`;
   // Each slot's ref, after the first level's label for that slot, if it has
   // one of its own; then the other labels, the spans they center on, and
   // the dividers.
-  const slotNodes: GoFishNode[][] = slots.map((s, i) => [
-    (ref(s.node) as any).name(sName(i)) as GoFishNode,
-  ]);
+  const slotRefs = slots.map((s) => ref(s.node) as unknown as GoFishNode);
+  const slotNodes: GoFishNode[][] = slotRefs.map((n) => [n]);
   const nodes: GoFishNode[] = [];
   // The axis's own span, from its first slot's start to its last slot's
   // end: what its title centers on, as a continuous axis's title centers on
@@ -1055,7 +1031,7 @@ function elaborateOrdinalAxis(
           from: { node: slots[0].node, edge: "start" },
           to: { node: slots[slots.length - 1].node, edge: "end" },
           cross: 0,
-        }).name(`${prefix}oa`);
+        });
   if (span !== undefined) nodes.push(span);
 
   // Dividers. The rows of the dim, nearest the plot first: the inner axes'
@@ -1120,7 +1096,7 @@ function elaborateOrdinalAxis(
 
   // A label and the box it centers on: its slot's ref or the span of its
   // run (centered), or a label-wide box at the start of its run (start).
-  const pairs: { label: string; on: string; k: number }[] = [];
+  const pairs: { label: GoFishNode; on: GoFishNode; k: number }[] = [];
   levels.forEach((level, k) => {
     if (settings[k].hidden) return;
     const rotation = settings[k].rotation;
@@ -1131,7 +1107,7 @@ function elaborateOrdinalAxis(
         fill: AXIS_COLOR,
         rotate: rotation?.rotate,
         textAnchor: rotation?.textAnchor,
-      }).name(lName(k, r));
+      });
       label.axisLabel = {
         dim,
         kind: "ordinal",
@@ -1139,61 +1115,56 @@ function elaborateOrdinalAxis(
         field: title,
       };
       if (aligns[k] === "start") {
-        nodes.push(label);
-        nodes.push(
-          runStartBox({
-            dim,
-            axisFirst: slots[0].node,
-            axisLast: slots[slots.length - 1].node,
-            first: slots[a].node,
-            prev: a > 0 ? slots[a - 1].node : undefined,
-            width: along(boxes[k][r]),
-            pad: divided.has(`${a - 1}:${k}`) ? LABEL_TICK_GAP : 0,
-          }).name(spanName(k, r))
-        );
-        pairs.push({ label: lName(k, r), on: spanName(k, r), k });
+        const box = runStartBox({
+          dim,
+          axisFirst: slots[0].node,
+          axisLast: slots[slots.length - 1].node,
+          first: slots[a].node,
+          prev: a > 0 ? slots[a - 1].node : undefined,
+          width: along(boxes[k][r]),
+          pad: divided.has(`${a - 1}:${k}`) ? LABEL_TICK_GAP : 0,
+        });
+        nodes.push(label, box);
+        pairs.push({ label, on: box, k });
       } else if (a === b) {
         if (k === 0) slotNodes[a].unshift(label);
         else nodes.push(label);
-        pairs.push({ label: lName(k, r), on: sName(a), k });
+        pairs.push({ label, on: slotRefs[a], k });
       } else {
-        nodes.push(label);
-        nodes.push(
-          axisSpan({
-            dim,
-            from: { node: slots[a].node, edge: "start" },
-            to: { node: slots[b].node, edge: "end" },
-            cross: 0,
-          }).name(spanName(k, r))
-        );
-        pairs.push({ label: lName(k, r), on: spanName(k, r), k });
+        const box = axisSpan({
+          dim,
+          from: { node: slots[a].node, edge: "start" },
+          to: { node: slots[b].node, edge: "end" },
+          cross: 0,
+        });
+        nodes.push(label, box);
+        pairs.push({ label, on: box, k });
       }
     });
   });
 
-  dividers.forEach((d, n) =>
-    nodes.push(
-      axisSpan({
-        dim,
-        from: { node: slots[d.at].node, edge: "end" },
-        to: { node: slots[d.at + 1].node, edge: "start" },
-        cross: d.end - d.start,
-        line: { color: AXIS_COLOR },
-      }).name(dName(n))
-    )
+  const dividerNodes = dividers.map((d) =>
+    axisSpan({
+      dim,
+      from: { node: slots[d.at].node, edge: "end" },
+      to: { node: slots[d.at + 1].node, edge: "start" },
+      cross: d.end - d.start,
+      line: { color: AXIS_COLOR },
+    })
   );
+  nodes.push(...dividerNodes);
 
   // Seat `node` `at` past the plot edge, which lies `rowsBelow` inside the
   // content's gutter edge (the inner axes' rows are past it). `side` picks
   // the edge: "start" seats it before the content (node → content), "end"
   // after it (content → node), flipping which frame edge (top/bottom or
   // left/right) the axis lands on.
-  const seat = (g: Record<string, any>, node: any, at: number) =>
+  const seat = (inner: ConstraintRef, node: ConstraintRef, at: number) =>
     Constraint.distribute(
       { dir: gutterDir, spacing: at - rowsBelow },
-      side === "end" ? [g[INNER_REF_NAME], node] : [node, g[INNER_REF_NAME]]
+      side === "end" ? [inner, node] : [node, inner]
     );
-  const constraints = (g: Record<string, any>) => {
+  const constraints: RingConstraints = (at, inner) => {
     const cs: any[] = [];
     // Hanging-point rule (see `LabelRotation`'s doc comment): unrotated /
     // ±90° keeps plain bbox-middle centering; an oblique angle anchors the
@@ -1215,11 +1186,13 @@ function elaborateOrdinalAxis(
           ? ["baseline", "middle"]
           : ["middle", "middle"];
       cs.push(
-        Constraint.align({ [trackAxis]: anchors } as any, [g[label], g[on]])
+        Constraint.align({ [trackAxis]: anchors } as any, [at(label), at(on)])
       );
-      cs.push(seat(g, g[label], rowOffset[k]));
+      cs.push(seat(inner, at(label), rowOffset[k]));
     }
-    dividers.forEach((d, n) => cs.push(seat(g, g[dName(n)], d.start)));
+    dividers.forEach((d, n) =>
+      cs.push(seat(inner, at(dividerNodes[n]), d.start))
+    );
     return cs;
   };
 
@@ -1561,7 +1534,6 @@ function elaborationsFor(
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
     const s = wide[dim];
-    const prefix = dim === 1 ? "__y" : "__x";
     const crossFloor = floors[cross(dim)];
     const kind = axisOver(s);
     const ticks = ticksFor(dim);
@@ -1580,15 +1552,7 @@ function elaborationsFor(
       );
       continuousAxis(
         dim,
-        elaborateTimeAxis(
-          dim,
-          s,
-          nices[dim]!,
-          rows,
-          prefix,
-          crossFloor,
-          axisSide(dim)
-        ),
+        elaborateTimeAxis(dim, s, nices[dim]!, rows, crossFloor, axisSide(dim)),
         rows.map((r) => String(r.level))
       );
     } else if (kind === "absolute" && isCONTINUOUS(s)) {
@@ -1598,7 +1562,6 @@ function elaborationsFor(
           dim,
           nices[dim]!,
           ticks,
-          prefix,
           crossFloor,
           axisSide(dim),
           crossDirection(dim),
@@ -1611,14 +1574,7 @@ function elaborationsFor(
     } else if (kind === "delta" && isCONTINUOUS(s)) {
       continuousAxis(
         dim,
-        elaborateDifferenceAxis(
-          dim,
-          s,
-          ticks,
-          prefix,
-          crossFloor,
-          axisSide(dim)
-        ),
+        elaborateDifferenceAxis(dim, s, ticks, crossFloor, axisSide(dim)),
         numericNames(dim)
       );
     } else if (isORDINAL(s)) {
@@ -1644,7 +1600,6 @@ function elaborationsFor(
         dim,
         s,
         keyMap,
-        prefix,
         axisSide(dim),
         levelAt,
         entriesFor(dim),
@@ -1759,10 +1714,7 @@ export async function elaborateChrome(
         b.rowEnd = Math.max(b.rowEnd, r.rowEnd);
       }
       below.issues.push(...res.fold.issues);
-      if (res.node !== child) {
-        node.children[i] = res.node;
-        res.node.parent = node;
-      }
+      if (res.node !== child) node.replaceChild(i, res.node);
     }
   }
 
@@ -1820,10 +1772,10 @@ export async function elaborateChrome(
       };
       ring = await wrapRing(
         ring,
-        CONTENT_NAME,
         {
           nodes: constrained.flatMap((e) => e.nodes),
-          constraints: (g) => constrained.flatMap((e) => e.constraints(g)),
+          constraints: (at, inner) =>
+            constrained.flatMap((e) => e.constraints(at, inner)),
         },
         { x: contentAt(0), y: contentAt(1) }
       );
@@ -1837,9 +1789,10 @@ export async function elaborateChrome(
     // includes any nested inner-facet labels, so an outer label row stacks
     // below the inner row.
     if (refBased.length > 0) {
-      ring = await wrapRing(ring, INNER_REF_NAME, {
+      ring = await wrapRing(ring, {
         nodes: refBased.flatMap((e) => e.nodes),
-        constraints: (g) => refBased.flatMap((e) => e.constraints(g)),
+        constraints: (at, inner) =>
+          refBased.flatMap((e) => e.constraints(at, inner)),
       });
       rings.push(ring);
     }
@@ -1849,7 +1802,6 @@ export async function elaborateChrome(
     if (titles[0] !== undefined || titles[1] !== undefined) {
       ring = await wrapRing(
         ring,
-        TITLE_CONTENT_NAME,
         axisTitles(
           titles,
           [anchors[0] ?? content, anchors[1] ?? content],
@@ -1861,7 +1813,7 @@ export async function elaborateChrome(
 
     // The legend, beside everything inside it, titles included.
     if (legend !== undefined) {
-      ring = await wrapRing(ring, LEGEND_CONTENT_NAME, legend);
+      ring = await wrapRing(ring, legend);
       rings.push(ring);
     }
     return ring;
@@ -1912,19 +1864,11 @@ export function axisTitle(
   return title === false ? undefined : (title ?? inferred);
 }
 const TITLE_CONTENT_GAP = 8; // gap between a title and the box it is seated past
-const TITLE_CONTENT_NAME = "__titleContent";
-const LEGEND_CONTENT_NAME = "__legendContent";
-const X_TITLE_ANCHOR_NAME = "__xTitleAnchor";
-const Y_TITLE_ANCHOR_NAME = "__yTitleAnchor";
-const X_TITLE_NAME = "__xAxisTitle";
-const Y_TITLE_NAME = "__yAxisTitle";
 
 /** The x-axis title: horizontal text below the plot. The customization seam
  *  (like `legendColumn` / `tickMark`) — a future public API can override it. */
 export function xAxisTitle(text: string): GoFishNode {
-  return Text({ text, fontSize: TITLE_FONT_SIZE, fill: TITLE_COLOR }).name(
-    X_TITLE_NAME
-  );
+  return Text({ text, fontSize: TITLE_FONT_SIZE, fill: TITLE_COLOR });
 }
 
 /** The y-axis title, reading bottom-to-top (facing inward) in the left gutter:
@@ -1936,7 +1880,7 @@ export function yAxisTitle(text: string): GoFishNode {
     fontSize: TITLE_FONT_SIZE,
     fill: TITLE_COLOR,
     rotate: -90,
-  }).name(Y_TITLE_NAME);
+  });
 }
 
 /**
@@ -1958,49 +1902,46 @@ function axisTitles(
   sides: AxisSides
 ): ChromeRing {
   const [xTitle, yTitle] = titles;
-  const refs: GoFishNode[] = [];
-  const texts: GoFishNode[] = [];
-  if (xTitle !== undefined) {
-    refs.push((ref(anchors[0]) as any).name(X_TITLE_ANCHOR_NAME) as GoFishNode);
-    texts.push(xAxisTitle(xTitle));
-  }
-  if (yTitle !== undefined) {
-    refs.push((ref(anchors[1]) as any).name(Y_TITLE_ANCHOR_NAME) as GoFishNode);
-    texts.push(yAxisTitle(yTitle));
-  }
+  const x =
+    xTitle === undefined
+      ? undefined
+      : {
+          anchor: ref(anchors[0]) as unknown as GoFishNode,
+          text: xAxisTitle(xTitle),
+        };
+  const y =
+    yTitle === undefined
+      ? undefined
+      : {
+          anchor: ref(anchors[1]) as unknown as GoFishNode,
+          text: yAxisTitle(yTitle),
+        };
   return {
-    nodes: [...refs, ...texts],
-    constraints: (g, inner) => {
+    nodes: [
+      ...(x ? [x.anchor] : []),
+      ...(y ? [y.anchor] : []),
+      ...(x ? [x.text] : []),
+      ...(y ? [y.text] : []),
+    ],
+    constraints: (at, inner) => {
       const cs: any[] = [];
-      if (xTitle !== undefined) {
-        cs.push(
-          Constraint.align({ x: "middle" }, [
-            g[X_TITLE_ANCHOR_NAME],
-            g[X_TITLE_NAME],
-          ])
-        );
+      if (x !== undefined) {
+        const text = at(x.text);
+        cs.push(Constraint.align({ x: "middle" }, [at(x.anchor), text]));
         cs.push(
           Constraint.distribute(
             { dir: "y", spacing: TITLE_CONTENT_GAP },
-            sides[0] === "end"
-              ? [g[inner], g[X_TITLE_NAME]]
-              : [g[X_TITLE_NAME], g[inner]]
+            sides[0] === "end" ? [inner, text] : [text, inner]
           )
         );
       }
-      if (yTitle !== undefined) {
-        cs.push(
-          Constraint.align({ y: "middle" }, [
-            g[Y_TITLE_ANCHOR_NAME],
-            g[Y_TITLE_NAME],
-          ])
-        );
+      if (y !== undefined) {
+        const text = at(y.text);
+        cs.push(Constraint.align({ y: "middle" }, [at(y.anchor), text]));
         cs.push(
           Constraint.distribute(
             { dir: "x", spacing: TITLE_CONTENT_GAP },
-            sides[1] === "end"
-              ? [g[inner], g[Y_TITLE_NAME]]
-              : [g[Y_TITLE_NAME], g[inner]]
+            sides[1] === "end" ? [inner, text] : [text, inner]
           )
         );
       }

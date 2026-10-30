@@ -90,7 +90,7 @@ export const Polygon = ({
       strokeOverhang: outlineOverhang(stroke, strokeWidth),
       resolveUnderlyingSpace: (
         _children: Size<UnderlyingSpace>[],
-        _childNodes: GoFishAST[]
+        _childNodes: readonly GoFishAST[]
       ): Size<UnderlyingSpace> =>
         dataBound
           ? [

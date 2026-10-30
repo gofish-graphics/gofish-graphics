@@ -76,9 +76,11 @@ import {
 } from "./position";
 import {
   axisIndex,
-  buildNameIndex,
+  directSlot,
   isPointAlign,
   type AlignAnchor,
+  type ConstraintRef,
+  type ResolvedOperands,
 } from "./shared";
 
 /** A position constraint that places its target only across spans: its
@@ -98,7 +100,7 @@ export type DistributeSegment = {
   dAxis: 0 | 1;
   /** Already glue-zeroed (see createDistributeConstraint). */
   spacing: number;
-  /** Covered child names, in placement order. */
+  /** Covered children's operand keys, in placement order. */
   order: string[];
 };
 
@@ -294,8 +296,9 @@ export type ComposePlan = {
 };
 
 export function planConstraintComposition(
-  constraints: ConstraintSpec[],
-  childNodes: GoFishAST[]
+  constraints: readonly ConstraintSpec[],
+  childNodes: readonly GoFishAST[],
+  resolved: ResolvedOperands
 ): ComposePlan | undefined {
   const distributes = constraints.filter(
     (c): c is DistributeConstraint => c.type === "distribute"
@@ -327,7 +330,6 @@ export function planConstraintComposition(
   // axis makes it not an overlay, so the align fold runs.)
   if (distributes.length === 0 && spans.length === 0) return undefined;
 
-  const indexByName = buildNameIndex(childNodes);
   // A child's ordinal key: its cell, for a binned key, else its `key`.
   const keyOf = (i: number): OrdinalKey | undefined => {
     const node = childNodes[i];
@@ -348,8 +350,8 @@ export function planConstraintComposition(
       (node as { _syntheticKey?: boolean })._syntheticKey === true
     );
   };
-  const idxOf = (refs: readonly { name: string }[]): number[] | undefined => {
-    const out = refs.map((r) => indexByName.get(r.name));
+  const idxOf = (refs: readonly ConstraintRef[]): number[] | undefined => {
+    const out = refs.map((r) => directSlot(resolved, r));
     return out.every((i): i is number => i !== undefined) ? out : undefined;
   };
 
@@ -364,13 +366,13 @@ export function planConstraintComposition(
     segments.push({
       dAxis: axisIndex(d.dir),
       spacing: d.spacing,
-      order: ordered.map((r) => r.name),
+      order: ordered.map(resolved.keyOf),
       idx,
       anchor: d.anchor,
       glue: d.glue,
       measure: d.measure,
       hasOrder: d.hasOrder,
-      origin: distributeOrigin(d, ordered),
+      origin: distributeOrigin(d, ordered, resolved.keyOf),
       keys: idx.map(keyOf),
       anonymous: idx.length > 0 && idx.every(syntheticOf),
     });
@@ -476,16 +478,16 @@ export type LayerSharingPlan = SharingPlan & {
 };
 
 export function planSharing(
-  constraints: ConstraintSpec[],
-  childNodes: GoFishAST[]
+  constraints: readonly ConstraintSpec[],
+  childNodes: readonly GoFishAST[],
+  resolved: ResolvedOperands
 ): LayerSharingPlan {
   const n = childNodes.length;
-  const index = buildNameIndex(childNodes);
   // A ref that is not a direct child (a ref into a nested tier) has no slot
   // here, so it takes no part.
-  const idxOf = (refs: readonly { name: string }[]): number[] =>
+  const idxOf = (refs: readonly ConstraintRef[]): number[] =>
     refs
-      .map((r) => index.get(r.name))
+      .map((r) => directSlot(resolved, r))
       .filter((i): i is number => i !== undefined);
 
   const datumPlaced: [Set<number>, Set<number>] = [new Set(), new Set()];

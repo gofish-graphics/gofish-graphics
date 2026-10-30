@@ -403,7 +403,7 @@ propagation for positions, plus an
 analytic one-unknown size solve Bluefish lacked. The known superlinear
 lurkers, both pre-existing and shared with operators today: nested
 _non-linear_ folds make an ancestor's inversion cost O(subtree closure size · 70) (mitigated by the linear fast path; could memoize `run` per σ), and
-the operand lookup (`resolveScopedName`, a breadth-first search that stops at
+the operand lookup (`lookupName`, a breadth-first search that stops at
 the first depth with a match and never walks a subtree twice) is O(scope) per
 distinct operand name in the worst case, and much less when the name is a
 direct child. Neither is quadratic in spec size.

@@ -31,7 +31,7 @@ import {
   NO_ROWS,
   resolveMarkResult,
   stashLayerName,
-  type LayerContext,
+  LayerContext,
 } from "./markResult";
 import { markDataTime, chainedUpdates } from "../../animation/transition";
 import {
@@ -39,6 +39,7 @@ import {
   type BuildClockOptions,
 } from "../../animation/install";
 import { wireOf } from "../wire";
+import { createName } from "../createName";
 
 /**
  * Sentinel chart-data for an empty `Chart()` scope used inside `.layer(...)`:
@@ -46,20 +47,6 @@ import { wireOf } from "../wire";
  * previous tier's mark and pointing this tier's data at `selectAll(thatName)`.
  */
 export const PREVIOUS_LAYER_MARKS = Symbol("gofish-previous-layer-marks");
-
-/** How many names `mintLayerName` has handed out in each registry. */
-const mintedNames = new WeakMap<LayerContext, number>();
-
-/** A layer name no other tier resolving into `layerContext` has: the name a
- *  tier's mark gets when a later tier (or a transition) reads its marks and
- *  the user named none. One counter per registry, so tiers of builders nested
- *  into an enclosing builder's registry never share a name, which would put
- *  the enclosing tier's marks in the nested tier's scope too. */
-function mintLayerName(layerContext: LayerContext): string {
-  const n = mintedNames.get(layerContext) ?? 0;
-  mintedNames.set(layerContext, n + 1);
-  return `__gofish_layer_${n}`;
-}
 
 export type ChartOptions = {
   w?: number;
@@ -120,7 +107,7 @@ export type ChartOptions = {
  * names registered *inside* a `createMark` component (a child with
  * `_isComponent === true`) are internal to that component and not selectable
  * from outside. Both this registry and string-name lookup
- * (`resolveScopedName`) ride the single bounded walk `visibleNodes` in
+ * (`lookupName`) ride the single bounded walk `visibleNodes` in
  * _ref.tsx, so the component boundary means the same thing for both — the
  * walk does not descend into a
  * component child's subtree, but the component child's OWN
@@ -131,11 +118,7 @@ function registerLayerNode(node: GoFishNode, layerContext: LayerContext): void {
   const layerName = (node as { __layerRegistration?: string | symbol })
     .__layerRegistration;
   if (layerName) {
-    if (!layerContext[layerName]) {
-      layerContext[layerName] = { data: [], nodes: [] };
-    }
-    layerContext[layerName].nodes.push(node);
-    layerContext[layerName].data.push((node as { datum?: unknown }).datum);
+    layerContext.register(layerName, node);
     // One-shot — repeat resolves (e.g. embedded Layer renders) would
     // otherwise re-push the same node.
     (node as { __layerRegistration?: string | symbol }).__layerRegistration =
@@ -895,10 +878,15 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   /** Ensure this tier's mark carries a name so a later tier can `selectAll` its
    *  nodes. Returns the (possibly renamed) builder and the registry key its
    *  marks are filed under (`layerKey`) — an existing `.name(...)`, a string or
-   *  a `createName` token, wins; otherwise a name fresh in `layerContext`, the
-   *  registry the tier resolves into (`mintLayerName`), is applied to the
-   *  mark. */
-  ensureNamedMark(layerContext: LayerContext): {
+   *  a `createName` token, wins; otherwise a fresh token is applied to the
+   *  mark. The registry files a token under its own symbol, so no string
+   *  `selectAll` or `ref`, and no other tier, reaches the tier's marks.
+   *
+   *  TODO(#905): the token is still written into the marks' `_name`, where
+   *  its tag answers to the string "__gofish_layer" in a tree lookup. The
+   *  tier needs only the registry (the data channel); filing the marks there
+   *  without a tree name would leave `_name` to user names alone. */
+  ensureNamedMark(): {
     builder: ChartBuilder<TInput, TOutput>;
     name: string | symbol;
   } {
@@ -912,7 +900,7 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     if (existing !== undefined) {
       return { builder: this, name: existing };
     }
-    const autoName = mintLayerName(layerContext);
+    const autoName = createName("__gofish_layer");
     // A mark is any function from a datum to a node; the `.name` modifier is
     // on the ones the mark factories build. A plain function gets it here, on
     // a wrapper, so the caller's function is left as it was.
@@ -931,7 +919,10 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     // Swap the mark in directly instead of re-entering `mark()`: `named` can
     // still carry `__relationalFusable`, and fusion was already decided (and
     // skipped) when this mark was first attached.
-    return { builder: this.with({ finalMark: named }), name: autoName };
+    return {
+      builder: this.with({ finalMark: named }),
+      name: layerKey(autoName)!,
+    };
   }
 
   /** The chart-level config every terminal threads through to the node.
@@ -977,7 +968,7 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     if (findTimeTier(this.state.operators) === undefined) {
       return this.resolveNamed(undefined);
     }
-    const { builder, name } = this.ensureNamedMark(this.state.layerContext);
+    const { builder, name } = this.ensureNamedMark();
     return builder.resolveNamed(name);
   }
 
@@ -1010,7 +1001,9 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
 
     // The transitions this tier draws over its marks (see `resolve`).
     const marks =
-      name === undefined ? [] : (this.state.layerContext[name]?.nodes ?? []);
+      name === undefined
+        ? []
+        : (this.state.layerContext.get(name)?.nodes ?? []);
     const transitions: GoFishNode[] = [];
     for (const update of chainedUpdates(marks)) {
       const tier = update.layer() as Mark<any>;
@@ -1060,17 +1053,12 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     if (this.state.nodeName !== undefined) {
       result.name(this.state.nodeName);
       stashLayerName(this, this.state.nodeName);
-      const entry = (this.state.layerContext[this.state.nodeName] ??= {
-        data: [],
-        nodes: [],
-      });
       // One-shot per resolved node: a re-resolve against the same shared
       // layerContext (e.g. an embedded Layer render) must not re-register the
       // same node, or selectAll/ref(name) would see duplicates.
-      if (!entry.nodes.includes(result)) {
-        entry.nodes.push(result);
-        entry.data.push((result as { datum?: unknown }).datum);
-      }
+      const ctx = this.state.layerContext;
+      if (!ctx.get(this.state.nodeName)?.nodes.includes(result))
+        ctx.register(this.state.nodeName, result);
     }
 
     return result;
@@ -1146,7 +1134,7 @@ export function chart<T>(
     // A strategy kind used bare is read as its value from here on.
     options: withKindValues(resolvedOptions),
     operators: [],
-    layerContext: {},
+    layerContext: new LayerContext(),
   });
 }
 
@@ -1302,7 +1290,7 @@ export class LayerBuilder extends RenderableBuilder {
   }
 
   async resolve(): Promise<GoFishNode> {
-    const sharedContext: LayerContext = this.layerContext ?? {};
+    const sharedContext = this.layerContext ?? new LayerContext();
     const nodes: GoFishNode[] = [];
     // The root tier's box is the CHART's box, not that one tier's. Its
     // coordinate space: a basemap under `geo(...)` and the paths layered over
@@ -1355,7 +1343,7 @@ export class LayerBuilder extends RenderableBuilder {
         // empty `Chart()` scope, a relational mark, or a leaf annotation.
         let autoName: string | symbol | undefined;
         if (hasNext) {
-          const named = tier.ensureNamedMark(sharedContext);
+          const named = tier.ensureNamedMark();
           tier = named.builder;
           autoName = named.name;
         }
@@ -1370,7 +1358,9 @@ export class LayerBuilder extends RenderableBuilder {
           nodes.push(await Layer({}, await tier.resolveNodes()));
         } else nodes.push(await tier.resolve());
         prevRefs = autoName
-          ? (sharedContext[autoName]?.nodes ?? []).map((n) => ref({ __ref: n }))
+          ? (sharedContext.get(autoName)?.nodes ?? []).map((n) =>
+              ref({ __ref: n })
+            )
           : undefined;
       } else {
         // Mark tier: resolve the bare mark against the shared layer context

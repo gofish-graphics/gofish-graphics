@@ -21,7 +21,7 @@ import { createNodeOperator } from "../withGoFish";
 import { Constraint, PositionRegion } from "../constraints";
 import { enclosingCell, type ColumnDatum } from "../constraints/position";
 import { isStruct, structBin, type StructExpr } from "../structExpr";
-import { axisName, ensureChildNames } from "../constraints/shared";
+import { axisName, childSlots } from "../constraints/shared";
 import { layer } from "./layer";
 import type { Alignment } from "./alignment";
 
@@ -191,7 +191,6 @@ const PartitionNode = createNodeOperator(
         );
       return cell;
     });
-    const names = ensureChildNames(children, "partition");
     const node = (await layer({ key, ...rest } as any, children)) as GoFishNode;
     // `dir` may be a name the enclosing coordinate space declares, so the
     // constraints wait for the resolveAliases pass.
@@ -220,17 +219,15 @@ const PartitionNode = createNodeOperator(
       const free = ([0, 1] as const).filter(
         (axis) => regions[0]?.spans[axis] === undefined
       );
-      await node.relate((g) => {
-        const refs = names.map((name) => g[name]);
-        return [
-          ...refs.map((ref, i) =>
-            Constraint.position({ region: regions[i] }, [ref])
-          ),
-          ...free.map((axis) =>
-            Constraint.align({ [axisName(axis)]: alignment }, refs)
-          ),
-        ];
-      });
+      const refs = childSlots(node);
+      await node.INTERNAL_relate([
+        ...refs.map((ref, i) =>
+          Constraint.position({ region: regions[i] }, [ref])
+        ),
+        ...free.map((axis) =>
+          Constraint.align({ [axisName(axis)]: alignment }, refs)
+        ),
+      ]);
     };
     if (axes !== undefined) node._axisOverride = axisOverrideOf(axes);
     return node;

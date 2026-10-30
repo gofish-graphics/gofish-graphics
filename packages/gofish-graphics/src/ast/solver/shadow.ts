@@ -18,13 +18,18 @@
  */
 import * as M from "../../util/monotonic";
 import type { Placeable } from "../_node";
-import { axisIndex, isPlacedOn, type Axis } from "../constraints/shared";
+import {
+  axisIndex,
+  isPlacedOn,
+  type Axis,
+  type KeyOf,
+} from "../constraints/shared";
 import { getValue, isValue, type MaybeValue } from "../data";
 import { computeAesthetic, envFlag } from "../../util";
 import { pxOf } from "../domain";
 import { localAnchorPoint } from "../dims";
 import type { ConstraintSpec, ConstraintPosScales } from "../constraints";
-import type { AlignAnchor } from "../constraints/shared";
+import type { AlignAnchor, ConstraintRef } from "../constraints/shared";
 import { distributePlacementAnchors } from "../constraints/distribute";
 import { originIs } from "../underlyingSpace";
 import type { Extent } from "../extent";
@@ -120,7 +125,7 @@ function shadowCheckDistribute(
 interface NestLike {
   x?: number;
   y?: number;
-  children: { name: string }[];
+  children: ConstraintRef[];
 }
 
 /**
@@ -165,7 +170,7 @@ interface GridLike {
   numCols: number;
   xSpacing: number;
   ySpacing: number;
-  children: { name: string }[];
+  children: ConstraintRef[];
 }
 
 /**
@@ -182,12 +187,16 @@ interface GridLike {
  */
 function shadowCheckGrid(
   constraint: GridLike,
-  targetByName: Map<string, Placeable>
+  targetByKey: Map<string, Placeable>,
+  keyOf: KeyOf
 ): void {
   const numCols = constraint.numCols;
   const numRows = Math.ceil(constraint.children.length / numCols);
-  const targetOf = (i: number): Placeable | undefined =>
-    targetByName.get(constraint.children[i]?.name);
+  // A cell past the last child (a partial last row) is empty: absent.
+  const targetOf = (i: number): Placeable | undefined => {
+    const ref = constraint.children[i];
+    return ref === undefined ? undefined : targetByKey.get(keyOf(ref));
+  };
   const centerOf = (i: number, idx: 0 | 1): number | undefined => {
     const t = targetOf(i);
     return t ? anchorCoord(t, idx, "middle") : undefined;
@@ -411,15 +420,16 @@ export function shadowCheckScaleRoot(
  * dispatches by constraint type. `prePlaced` is the per-target `[x, y]`
  * placement snapshot the caller takes BEFORE the placement solve (only when the
  * check is enabled); it's `undefined` (and this no-ops) in production.
- * `nameToPlaceable` is the layer's resolved children by name, read by the `nest`
- * and `grid` checks.
+ * `keyToPlaceable` is the layer's resolved children by operand key
+ * (`keyOf`), read by the `nest` and `grid` checks.
  */
 export function shadowCheckConstraint(
   constraint: ConstraintSpec,
   targets: Placeable[],
   posScales: ConstraintPosScales | undefined,
   prePlaced: [boolean, boolean][] | undefined,
-  nameToPlaceable: Map<string, Placeable>
+  keyToPlaceable: Map<string, Placeable>,
+  keyOf: KeyOf
 ): void {
   if (!SOLVER_CHECK || !prePlaced) return;
   const c = constraint as { type?: string; dir?: Axis };
@@ -438,10 +448,10 @@ export function shadowCheckConstraint(
     const nest = constraint as NestLike;
     shadowCheckNest(
       nest,
-      nameToPlaceable.get(nest.children[0]?.name),
-      nameToPlaceable.get(nest.children[1]?.name)
+      keyToPlaceable.get(keyOf(nest.children[0])),
+      keyToPlaceable.get(keyOf(nest.children[1]))
     );
   } else if (c.type === "grid") {
-    shadowCheckGrid(constraint as GridLike, nameToPlaceable);
+    shadowCheckGrid(constraint as GridLike, keyToPlaceable, keyOf);
   }
 }

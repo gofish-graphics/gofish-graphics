@@ -16,6 +16,7 @@ import {
   type RenderSession,
 } from "./_node";
 import type { GoFishAST } from "./_ast";
+import { resolveReferences } from "./_ref";
 import { axisScale, pxOf, type AxisMap, type AxisScale } from "./domain";
 import { lowerToDisplayList } from "./displayList/lower";
 import { paintSVG } from "./displayList/paintSVG";
@@ -401,11 +402,13 @@ export async function layout(
 
   const __tResolve = perfNow();
   child.resolveColorScale();
-  child.resolveNames();
   // Resolve axis names (polar theta/r, geo lon/lat, …) BEFORE space inference
   // reads the dims: run each node's deferred axis-scope work (a mark's `dims`,
   // spread's `dir`, scatter's `dims`). Top-down + scope-bounded (see resolveAliases).
   await child.resolveAliases();
+  // Then every reference, the operands of the constraints that pass
+  // installed included (one round of the fixed point; see `reresolve`).
+  resolveReferences(child);
   child.resolveUnderlyingSpace();
   perfAdd("resolve", perfNow() - __tResolve);
 
@@ -418,10 +421,10 @@ export async function layout(
   // (the legend shows it), and chrome adds no data colors.
   const reresolve = async (n: GoFishNode) => {
     n.setRenderSession(contexts.session);
-    n.resolveNames();
     // The inserted chrome is built from operators (Spread) whose constraints
     // install in this pass; nodes resolved before are consumed and untouched.
     await n.resolveAliases();
+    resolveReferences(n);
     n.clearUnderlyingSpace();
     n.resolveUnderlyingSpace();
   };

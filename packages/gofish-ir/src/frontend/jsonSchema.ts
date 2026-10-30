@@ -207,10 +207,7 @@ function buildLeafMarkDefs(): Record<string, unknown> {
         ...properties,
         name: { type: "string" },
         label: { $ref: "#/$defs/LabelIR" },
-        relate: {
-          type: "array",
-          items: { $ref: "#/$defs/RelateClauseIR" },
-        },
+        relate: fieldTypeToSchema(MARK_BASE_FIELDS.relate.type),
         zOrder: fieldTypeToSchema(MARK_BASE_FIELDS.zOrder.type),
         debug: { type: "boolean" },
         translate: { $ref: "#/$defs/Translate" },
@@ -607,10 +604,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         children: { type: "array", items: { $ref: "#/$defs/MarkIR" } },
         name: { type: "string" },
         label: { $ref: "#/$defs/LabelIR" },
-        relate: {
-          type: "array",
-          items: { $ref: "#/$defs/RelateClauseIR" },
-        },
+        relate: fieldTypeToSchema(MARK_BASE_FIELDS.relate.type),
         zOrder: fieldTypeToSchema(MARK_BASE_FIELDS.zOrder.type),
         debug: { type: "boolean" },
         translate: { $ref: "#/$defs/Translate" },
@@ -632,6 +626,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             },
           ],
         },
+        scope: { type: "string" },
         name: { type: "string" },
         label: { $ref: "#/$defs/LabelIR" },
         translate: { $ref: "#/$defs/Translate" },
@@ -700,10 +695,32 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         mode: { enum: ["one", "all"] },
       },
     },
+    RelateIR: {
+      description:
+        "A .relate() call: a binding form with a fresh scope id, which every operand it hands out carries, and the clauses its callback returned.",
+      type: "object",
+      required: ["scope", "clauses"],
+      additionalProperties: false,
+      properties: {
+        scope: { type: "string" },
+        clauses: {
+          type: "array",
+          items: { $ref: "#/$defs/RelateClauseIR" },
+        },
+      },
+    },
     RelateClauseIR: {
       description:
-        "One clause of a .relate() callback: a constraint over names (carries refs), or a mark that draws, whose children may reference the layer's names.",
+        "One clause of a .relate() callback: a constraint over operands (carries refs), or a mark that draws, whose children may hold operands of this call or of an enclosing one.",
       oneOf: [{ $ref: "#/$defs/ConstraintIR" }, { $ref: "#/$defs/MarkIR" }],
+    },
+    RelateOperandIR: {
+      description:
+        "A .relate() operand: a ref by name that carries the id of the .relate() call that bound it.",
+      allOf: [
+        { $ref: "#/$defs/RefMarkIR" },
+        { required: ["scope"], properties: { selection: { type: "string" } } },
+      ],
     },
     ConstraintIR: {
       type: "object",
@@ -713,7 +730,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           enum: ["align", "distribute", "position", "nest", "zAbove", "zBelow"],
         },
         options: { type: "object" },
-        refs: { type: "array", items: { type: "string" } },
+        refs: { type: "array", items: { $ref: "#/$defs/RelateOperandIR" } },
       },
     },
     ChannelValue: {

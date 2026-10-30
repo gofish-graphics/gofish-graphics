@@ -120,11 +120,13 @@ def _named(children: List[Any], prefix: str) -> List[Mark]:
     return [layer([c]).name(f"{prefix}-{i}") for i, c in enumerate(children)]
 
 
-def _refs(prefix: str, n: int) -> List[RefSentinel]:
-    # The references a `.relate()` callback receives for these names, built
-    # directly. A `**c` catch-all would make `.relate()` collect every name
-    # in the subtree at every level, which is quadratic in the tree's depth.
-    return [RefSentinel(f"{prefix}-{i}") for i in range(n)]
+def _refs(
+    operand: Callable[[str], RefSentinel], prefix: str, n: int
+) -> List[RefSentinel]:
+    # The operands of these names, asked for by name (`_relate_env`). A `**c`
+    # catch-all would make `.relate()` collect every name in the subtree at
+    # every level, which is quadratic in the tree's depth.
+    return [operand(f"{prefix}-{i}") for i in range(n)]
 
 
 def distribute(
@@ -147,10 +149,10 @@ def distribute(
     def combine_children(children: List[Any]) -> Mark:
         n = len(children)
 
-        def clauses() -> List[Any]:
+        def clauses(operand: Callable[[str], RefSentinel]) -> List[Any]:
             cs: List[Any] = [
                 Constraint.distribute(
-                    _refs(prefix, n),
+                    _refs(operand, prefix, n),
                     dir=dir,
                     spacing=_or(spacing, 0),
                     anchor=_or(anchor, "edge"),
@@ -158,10 +160,10 @@ def distribute(
                 )
             ]
             if alignment is not None:
-                cs.append(Constraint.align(_refs(prefix, n), **{other: alignment}))
+                cs.append(Constraint.align(_refs(operand, prefix, n), **{other: alignment}))
             return cs
 
-        return layer(_named(children, prefix)).relate(clauses)
+        return layer(_named(children, prefix))._relate_env(clauses)
 
     return Combiner(combine_children, dir)
 
@@ -214,7 +216,7 @@ def combine(
     def combine_children(children: List[Any]) -> Mark:
         n = len(children)
 
-        def clauses() -> List[Any]:
+        def clauses(operand: Callable[[str], RefSentinel]) -> List[Any]:
             cs: List[Any] = []
             for axis, spec in axes.items():
                 if spec is None:
@@ -223,14 +225,14 @@ def combine(
                 if kind == "align":
                     cs.append(
                         Constraint.align(
-                            _refs(prefix, n),
+                            _refs(operand, prefix, n),
                             **{axis: _or(spec.get("alignment"), "middle")},
                         )
                     )
                 elif kind == "distribute":
                     cs.append(
                         Constraint.distribute(
-                            _refs(prefix, n),
+                            _refs(operand, prefix, n),
                             dir=axis,
                             spacing=_or(spec.get("spacing"), 0),
                             order=_or(spec.get("order"), "forward"),
@@ -245,13 +247,13 @@ def combine(
                         )
                     cs.append(
                         Constraint.nest(
-                            _refs(prefix, 2),
+                            _refs(operand, prefix, 2),
                             **{axis: _or(spec.get("pad"), 0)},
                         )
                     )
             return cs
 
-        return layer(_named(children, prefix)).relate(clauses)
+        return layer(_named(children, prefix))._relate_env(clauses)
 
     # The growth axis is the lone distribute axis; with both or neither it is
     # ambiguous, and links infer the bend from the geometry.
@@ -272,10 +274,10 @@ def nest(*, x: Optional[float] = None, y: Optional[float] = None) -> Combiner:
         outer, inner = children
         return layer(
             [layer([outer]).name("__nest-outer"), layer([inner]).name("__nest-inner")]
-        ).relate(
-            lambda: [
+        )._relate_env(
+            lambda operand: [
                 Constraint.nest(
-                    [RefSentinel("__nest-outer"), RefSentinel("__nest-inner")], x=x, y=y
+                    [operand("__nest-outer"), operand("__nest-inner")], x=x, y=y
                 )
             ]
         )

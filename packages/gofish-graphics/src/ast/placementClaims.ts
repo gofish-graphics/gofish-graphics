@@ -4,7 +4,7 @@
 
 import type { GoFishNode } from "./_node";
 import * as Monotonic from "../util/monotonic";
-import { literalSeats, type Placement } from "./constraints/claimPlacement";
+import type { Placement } from "./constraints/claimPlacement";
 
 /**
  * Placement claims (#493): where a node lands in another node's frame, as a
@@ -41,13 +41,12 @@ function seatIn(
 ): number | undefined {
   const seating = parent.claimWalk?.seating();
   if (seating === undefined) return undefined;
-  const i = seating.indexOf(child);
+  const i = parent.indexOfChild(child) ?? -1;
   const acting = seating.acting[axis].get(i) ?? [];
   const start = child.claimWalk?.literalStart[axis] ?? 0;
   if (acting.length === 0) return start;
-  const name = seating.operandName.get(i);
-  const seat =
-    name === undefined ? undefined : literalSeats(acting).get(name)?.[axis];
+  const key = seating.operandKey.get(i);
+  const seat = key === undefined ? undefined : seating.seats.get(key)?.[axis];
   return seat === undefined ? undefined : seat + start;
 }
 
@@ -101,7 +100,7 @@ export function placementIn(
     const p = n.parent!;
     if (!passable(p, axis, direction)) return undefined;
     const walk = p.claimWalk!;
-    const box = walk.childBoxes(axis)?.get(walk.seating().indexOf(n));
+    const box = walk.childBoxes(axis)?.get(p.indexOfChild(n) ?? -1);
     if (box === undefined) return undefined;
     if (n === target) {
       lo = box.lo;

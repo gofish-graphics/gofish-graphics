@@ -22,8 +22,15 @@ import {
 import type { AxesOptions, View } from "../ast/gofish";
 import { createName, type Token } from "../ast/createName";
 import { Constraint, RelateOperand } from "../ast/constraints";
+import type {
+  RelateClause,
+  RelateEnv,
+  RelateFn,
+} from "../ast/constraints/relate";
+import type { GoFishNode } from "../ast/_node";
 import { palette, gradient } from "../families/color";
 import { ref } from "../ast/shapes/ref";
+import { GoFishRef } from "../ast/_ref";
 import { sealComponent } from "../ast/withGoFish";
 import {
   forwardInputsResolver,
@@ -55,7 +62,7 @@ export type OperatorSpec = Frontend.OperatorIR;
  *  union) because every reapplication site below works entry-by-entry. */
 export type LabelSpec = Frontend.LabelSpecIR;
 export type ConstraintSpec = Frontend.ConstraintIR;
-type RelateClauseIR = Frontend.RelateClauseIR;
+type RelateIR = Frontend.RelateIR;
 
 /**
  * What rebuilding any part of a document needs besides the part itself.
@@ -76,16 +83,51 @@ export interface IRContext {
    *  `encodeInputRefs`), which an `{__inputRef: i}` sentinel in its reply
    *  resolves back to. */
   inputRefs?: any[];
+  /** The operands each enclosing `.relate()` call bound (the env it
+   *  handed its callback), by the call's wire scope id (`RelateIR.scope`):
+   *  an operand on the wire names its scope by that id. Set per instance,
+   *  as each `.relate()` callback runs, so a layer drawn once per group
+   *  binds its own. */
+  relateScopes?: Readonly<Record<string, RelateEnv>>;
+}
+
+/** The part of an {@link IRContext} that rebuilding a held node list or a
+ *  ref needs: tokens, and the scopes of the enclosing `.relate()` calls. */
+type HeldNodesContext = Pick<IRContext, "resolveToken" | "relateScopes">;
+
+/**
+ * The operand a wire `(scope, name)` names: the one the `.relate()` call
+ * with that scope id bound to the name, for the instance being rebuilt (see
+ * `IRContext.relateScopes`). A name the call did not bind is an operand that
+ * means no node, which the layer reports by name where it is used.
+ */
+function relateOperandFor(
+  scope: string,
+  name: string,
+  ctx: HeldNodesContext
+): RelateOperand {
+  const env = ctx.relateScopes?.[scope];
+  if (!env)
+    throw new Error(
+      `a .relate() operand of scope "${scope}" is used outside the .relate() ` +
+        `call that bound it.`
+    );
+  return env[name] ?? new RelateOperand(name, []);
 }
 
 /**
  * Rebuild one constraint clause of a `.relate()` from its IR. The wire
- * carries operand NAMES; each becomes a `RelateOperand`, which the layer
- * resolves at layout like any other, so a name that matches no node inside
- * the layer is reported there, by name.
+ * carries operands as a name plus the id of the `.relate()` call that bound
+ * it; each is the operand that call bound to the name, so a name that
+ * matches no node is reported where it is used, by name.
  */
-export function constraintFromIR(c: Frontend.ConstraintIR): unknown {
-  const operands = c.refs.map((name) => new RelateOperand(name));
+export function constraintFromIR(
+  c: Frontend.ConstraintIR,
+  ctx: IRContext
+): unknown {
+  const operands = c.refs.map((r) =>
+    relateOperandFor(r.scope, r.selection, ctx)
+  );
   if (c.type === "zAbove" || c.type === "zBelow") {
     return (Constraint as any)[c.type](...operands);
   }
@@ -273,11 +315,19 @@ export function resolveNodeRefs(
   kind: Frontend.NodeKind,
   type: string,
   opts: Record<string, any>,
-  resolveToken: TokenResolver
+  ctx: HeldNodesContext
 ): Record<string, any> {
   const accepted = Frontend.acceptedFields(kind, type);
   if (accepted === undefined) return opts;
-  return resolveHeldNodes(accepted, opts, resolveToken);
+  return resolveHeldNodes(accepted, opts, ctx);
+}
+
+/** A `ref` from its IR. A `.relate()` operand (it carries `scope`) is the
+ *  ref of the operand that `.relate()` call bound. */
+function refFromIR(r: Frontend.RefMarkIR, ctx: HeldNodesContext): GoFishRef {
+  if (r.scope === undefined)
+    return ref(resolveRefSelection(r.selection, ctx.resolveToken));
+  return relateOperandFor(r.scope, r.selection as string, ctx).toRef();
 }
 
 /** `opts` with the nodes held by the fields `accepted` declares rebuilt as
@@ -286,12 +336,10 @@ export function resolveNodeRefs(
 function resolveHeldNodes(
   accepted: Readonly<Record<string, { type: Frontend.FieldType }>>,
   opts: Record<string, any>,
-  resolveToken: TokenResolver
+  ctx: HeldNodesContext
 ): Record<string, any> {
   const nodes = (v: any): any =>
-    Array.isArray(v)
-      ? v.map((r) => ref(resolveRefSelection(r.selection, resolveToken)))
-      : refOfSelect(v);
+    Array.isArray(v) ? v.map((r) => refFromIR(r, ctx)) : refOfSelect(v);
   const out: Record<string, any> = { ...opts };
   for (const [key, value] of Object.entries(opts)) {
     const field = accepted[key];
@@ -333,9 +381,23 @@ export function resolveOptions(raw: Record<string, any>): Record<string, any> {
  *  `undefined`/`{}`, reproducing the pre-array-form suppression behavior. */
 export function mapOperator(
   op: OperatorSpec,
-  bridge?: DeriveBridge,
-  resolveToken: TokenResolver = makeTokenResolver()
+  bridge?: DeriveBridge
 ): Operator<any, any> | null {
+  return operatorFromIR(op, {
+    bridge,
+    resolveToken: makeTokenResolver(),
+    tables: {},
+  });
+}
+
+/** {@link mapOperator} inside a document: a `.label()` call's held nodes
+ *  (`avoiding`) are rebuilt in `ctx`, as a mark's are, so an operand of an
+ *  enclosing `.relate()` there is the one that call bound. */
+function operatorFromIR(
+  op: OperatorSpec,
+  ctx: IRContext
+): Operator<any, any> | null {
+  const { bridge } = ctx;
   const { type, translate, label, ...opts } = op as Record<string, any>;
   let operator = rebuild("operator", type as string, unwrapOpts(opts, bridge), {
     bridge,
@@ -355,7 +417,7 @@ export function mapOperator(
       operator = (operator as any).label(
         accessor,
         Object.keys(labelOpts).length > 0
-          ? resolveHeldNodes(Frontend.LABEL_OPTIONS, labelOpts, resolveToken)
+          ? resolveHeldNodes(Frontend.LABEL_OPTIONS, labelOpts, ctx)
           : undefined
       );
     }
@@ -404,16 +466,25 @@ export function mapMarkChildren(specs: MarkSpec[], ctx: IRContext): any[] {
 }
 
 /**
- * Rebuild the clauses of a `.relate()` callback, in order: a constraint
- * (it carries `refs`, operand names) through {@link constraintFromIR}, a mark
- * that draws like any other mark.
+ * A `.relate()` callback rebuilt from its IR. The call's wire scope id is
+ * bound to the operands the call hands it (its env); then the
+ * clauses are rebuilt in order: a constraint (it carries `refs`, its
+ * operands) through {@link constraintFromIR}, a mark that draws like any
+ * other mark. Rebuilt per call: a `ref(...)` clause is a live GoFishRef that
+ * `.name()` mutates in place, so calls must not share one.
  */
-function relateClauses(clauses: RelateClauseIR[], ctx: IRContext): unknown[] {
-  return clauses.map((c) =>
-    Frontend.isConstraintIR(c)
-      ? constraintFromIR(c)
-      : mapMark(c as MarkSpec, ctx)
-  );
+function relateCallback(relate: RelateIR, ctx: IRContext): RelateFn {
+  return (env) => {
+    const inner: IRContext = {
+      ...ctx,
+      relateScopes: { ...ctx.relateScopes, [relate.scope]: env },
+    };
+    return relate.clauses.map((c) =>
+      Frontend.isConstraintIR(c)
+        ? constraintFromIR(c, inner)
+        : mapMark(c as MarkSpec, inner)
+    ) as RelateClause[];
+  };
 }
 
 /** Build a single mark from its IR spec. Recurses into combinator children.
@@ -547,7 +618,7 @@ function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
 
   // Leaf-form `ref(name)` — not a combinator, not a mark factory.
   if (spec.type === "ref" && !spec.__combinator) {
-    const refNode = ref(resolveRefSelection(spec.selection, resolveToken));
+    const refNode = refFromIR(spec, ctx);
     // A named ref stand-in, `ref(token).name("a")`. GoFishRef's
     // `.name()` mutates in place and returns `this`, making the ref a
     // relate operand of the enclosing layer (RefMarkIR carries `name`;
@@ -608,7 +679,7 @@ function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
       "combinator-mark",
       spec.type,
       resolveOptions(unwrapOpts(spec.options ?? {}, bridge)),
-      resolveToken
+      ctx
     );
     let mark = rebuild("combinator-mark", spec.type, opts, {
       children: childMarks,
@@ -617,10 +688,7 @@ function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
       throw new Error(`Unknown combinator mark type: ${spec.type}`);
     }
     if (spec.relate && typeof (mark as any).relate === "function") {
-      // Rebuilt per call: a `ref(...)` clause is a live GoFishRef that
-      // `.name()` mutates in place, so calls must not share one.
-      const clauses = spec.relate as RelateClauseIR[];
-      mark = (mark as any).relate(() => relateClauses(clauses, ctx));
+      mark = (mark as any).relate(relateCallback(spec.relate, ctx));
     }
     if (spec.__scope) {
       mark = wrapWithScope(mark);
@@ -651,12 +719,7 @@ function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
   let mark = rebuild(
     "leaf-mark",
     type as string,
-    resolveNodeRefs(
-      "leaf-mark",
-      type as string,
-      unwrapOpts(opts, bridge),
-      resolveToken
-    )
+    resolveNodeRefs("leaf-mark", type as string, unwrapOpts(opts, bridge), ctx)
   );
   if (mark === undefined) {
     throw new Error(`Unknown mark type: ${String(type)}`);
@@ -667,7 +730,7 @@ function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
       mark = (mark as any).label(
         accessor,
         Object.keys(labelOpts).length > 0
-          ? resolveHeldNodes(Frontend.LABEL_OPTIONS, labelOpts, resolveToken)
+          ? resolveHeldNodes(Frontend.LABEL_OPTIONS, labelOpts, ctx)
           : undefined
       );
     }
@@ -734,7 +797,7 @@ function chartFromIR(chartSpec: ChartSpec, ctx: IRContext): ChartBuilder<any> {
       operators.push(mapMark(opSpec as MarkSpec, ctx) as any);
       continue;
     }
-    const op = mapOperator(opSpec, ctx.bridge, ctx.resolveToken);
+    const op = operatorFromIR(opSpec, ctx);
     if (op) operators.push(op);
   }
   const mark = mapMark(chartSpec.mark, ctx);

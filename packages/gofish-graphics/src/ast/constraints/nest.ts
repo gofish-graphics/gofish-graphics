@@ -4,7 +4,7 @@
 
 import { UnderlyingSpace, isCONTINUOUS } from "../underlyingSpace";
 import { padExtent, type Extent } from "../extent";
-import type { ConstraintRef } from "./shared";
+import { type ConstraintRef, type KeyOf } from "./shared";
 import type { PlacementFactEmitter } from "./placementFacts";
 
 /**
@@ -70,15 +70,16 @@ export const isNestConstraint = (
 export function lowerNestPlacement(
   constraint: NestConstraint,
   owner: string,
-  emitter: PlacementFactEmitter
+  emitter: PlacementFactEmitter,
+  keyOf: KeyOf
 ): void {
   const [outer, inner] = constraint.children;
   for (const axis of ["x", "y"] as const) {
     if (constraint[axis] === undefined) continue;
     emitter.relate({
       axis,
-      from: { name: outer.name, anchor: "middle" },
-      to: { name: inner.name, anchor: "middle" },
+      from: { key: keyOf(outer), anchor: "middle" },
+      to: { key: keyOf(inner), anchor: "middle" },
       gap: 0,
       owner,
     });

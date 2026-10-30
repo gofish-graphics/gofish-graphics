@@ -107,7 +107,7 @@ reads no size for it. It should claim its children's union grown by
 
 The outline paints under its members. Among a layer's children that is the
 default `zBelow` every relational mark gets; as a `.relate()` clause it is
-the same default installed by name (see
+the same default, installed for the clause's operands (see
 [Names and Scoping](/internals/core/names-and-scoping)).
 
 ## Reading members

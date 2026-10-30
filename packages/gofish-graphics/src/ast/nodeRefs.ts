@@ -36,15 +36,9 @@ export function avoidedRefs(
     items = Array.isArray(resolved) ? resolved : [resolved];
   } else items = selection.items;
   return items.map((item) => {
-    if (item instanceof GoFishRef) {
-      const target = item.targetNode;
-      return target !== undefined
-        ? new GoFishRef({ node: target })
-        : new GoFishRef({ selection: item.selection! });
-    }
+    if (item instanceof GoFishRef) return item.fresh();
     if (item instanceof GoFishNode) return new GoFishRef({ node: item });
-    if (item instanceof RelateOperand)
-      return new GoFishRef({ selection: item.name });
+    if (item instanceof RelateOperand) return item.toRef();
     throw new Error(
       `[gofish] ${where} lists placed nodes or refs (a .relate() operand, ref(...)); a fresh mark has no place to avoid.`
     );

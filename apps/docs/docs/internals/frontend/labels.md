@@ -135,7 +135,7 @@ finds through `_attachedTo`, so it follows its mark's timing
 Concretely, `wrapWithLabels` builds:
 
 ```
-wrap = Layer([ content.name("__labelContent"), ...refs, ...texts ])
+wrap = Layer([ content, ...refs, ...texts ])
 ```
 
 and constrains it in this order (constraints apply in sequence and placement
@@ -352,8 +352,8 @@ When a spec omits `color`, `autoLabelColor` picks one when the label is drawn,
 from the style its target painted. The label layer is a ring whose content, which
 holds the target, paints before its labels, so the target has lowered by then. Nothing
 reorders a ring's children: the content's own `.zOrder()` moves to the ring with its
-name and key (`wrapPreservingIdentity`), since it orders the content among its own
-siblings, and the label's names are not ones a z constraint can reach. Each lowering
+key (`wrapPreservingIdentity`), since it orders the content among its own siblings,
+and the label's nodes have no names, so no z constraint can reach them. Each lowering
 records, as `GoFishNode.paintedStyle`, the style of the node's first own item that
 puts down paint (a fill or a stroke). An own item with no paint of its own, such as a
 scaled box's `group` or a compositor's `composite` or `mask`, is skipped, so a label

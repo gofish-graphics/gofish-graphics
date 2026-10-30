@@ -23,6 +23,7 @@ import { ref } from "../ast/shapes/ref";
 import { intersect, mask } from "../ast/graphicalOperators/porterDuff";
 import { pack } from "../ast/graphicalOperators/pack";
 import { toDisplayList } from "../ast/displayList/toDisplayList";
+import { resolveReferences } from "../ast/_ref";
 
 let passed = 0;
 let failed = 0;
@@ -41,6 +42,7 @@ function ok(name: string, cond: boolean, detail?: string): void {
 async function paintOrder(layerNode: any): Promise<any[]> {
   const root: any = await coord({ transform: polar() }, [layerNode]);
   await root.resolveAliases();
+  resolveReferences(root);
   root.resolveUnderlyingSpace();
   root.resolveEmbedding();
   root.layout([400, 400], [undefined, undefined]);
