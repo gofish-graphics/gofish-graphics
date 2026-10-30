@@ -34,8 +34,9 @@ stories/**/*.stories.tsx
         │
    Normalize DOM (round floats, stable IDs, sort attrs)
         │
-        ├──► tmp/js/<path>.html   (normalized DOM)
-        └──► tmp/js/<path>.png    (screenshot)
+        ├──► tmp/js/<path>.html           (normalized DOM)
+        ├──► tmp/js/<path>.warnings.txt   (layout warnings + console errors)
+        └──► tmp/js/<path>.png            (screenshot)
                     │
           ┌─────────┴──────────────────────┐
           ▼                                ▼
@@ -51,6 +52,12 @@ stories/**/*.stories.tsx
 
 The regression check compares the JS capture against the accepted baselines. The parity check compares the Python capture against the JS capture of the same commit, not against the baselines, so it does not depend on whether a JS change has been reviewed yet.
 
+### Warnings
+
+A story's warnings are part of its snapshot. They are every line the story printed to the browser console that says something is wrong: each layout warning (a `[gofish:layout]` line, see `packages/gofish-graphics/src/ast/layoutWarnings.ts`), each `console.error` and each uncaught page error. The capture writes them, sorted, one per line, to `<path>.warnings.txt` next to `<path>.html`. The file is written even when it is empty. Only the first line of a message is kept, with the dev server's port and cache-busting query strings removed, so two captures of the same story agree. The snapshot branch stores the file next to the DOM baseline in `dom/`, and an accept copies it with the DOM and the screenshot (`scripts/story-warnings.ts`).
+
+A change in a story's warnings is a regression to review, like a DOM change, even when the DOM is identical. A baseline recorded before warnings were captured has no warnings file. Its warnings are "unrecorded", which is not a diff on its own, so such a story does not fail. When the story is a diff for another reason, the review shows its current warnings as the new baseline that accepting it records. `snapshots/main` gets every story's warnings file on the first push to main after this change, since that push accepts every capture.
+
 ### DOM Normalization
 
 Both JS and Python DOM go through identical normalization (`scripts/normalize-dom.ts`):
@@ -63,14 +70,14 @@ Both JS and Python DOM go through identical normalization (`scripts/normalize-do
 
 ## Commands
 
-| Command                       | Description                                                                 |
-| ----------------------------- | --------------------------------------------------------------------------- |
-| `pnpm test:visual:js`         | Capture JS snapshots and compare against baselines                          |
-| `pnpm test:visual:update`     | Capture and accept as new baselines                                         |
-| `pnpm test:visual`            | Full test: JS capture + Python capture + compare                            |
-| `pnpm test:visual:python`     | Capture Python snapshots and compare against the JS capture (needs tmp/js/) |
-| `pnpm test:visual:check-sync` | Check that changed JS stories have updated Python equivalents               |
-| `pnpm capture-diff <ref>`     | Diff HEAD's rendered DOM against `<ref>` — no baselines, any OS             |
+| Command                       | Description                                                                  |
+| ----------------------------- | ---------------------------------------------------------------------------- |
+| `pnpm test:visual:js`         | Capture JS snapshots and compare against baselines                           |
+| `pnpm test:visual:update`     | Capture and accept as new baselines                                          |
+| `pnpm test:visual`            | Full test: JS capture + Python capture + compare                             |
+| `pnpm test:visual:python`     | Capture Python snapshots and compare against the JS capture (needs tmp/js/)  |
+| `pnpm test:visual:check-sync` | Check that changed JS stories have updated Python equivalents                |
+| `pnpm capture-diff <ref>`     | Diff HEAD's rendered DOM and warnings against `<ref>` — no baselines, any OS |
 
 ## Local regression signal: `capture-diff`
 
@@ -82,7 +89,9 @@ there is no pass/fail signal for a layout change.
 `capture-diff` fills that gap. It answers **"did my change move anything I didn't
 intend?"** by capturing the normalized DOM of every story twice — once from the
 current worktree (HEAD) and once from a throwaway git worktree checked out at a
-base ref — and diffing the two per story. Both captures use the current
+base ref — and diffing the two per story. It diffs each story's warnings
+too (see [Warnings](#warnings)): a story whose warnings changed has changed,
+even when its DOM is identical. Both captures use the current
 worktree's capture tooling (`tests/harness/` and `tests/scripts/`), so only the
 library and the stories come from the base ref:
 
@@ -102,13 +111,15 @@ second argument is a case-insensitive substring filter (matched against
 Output:
 
 ```
-tests/tmp/capture-diff/head/<path>.html   normalized DOM at HEAD
-tests/tmp/capture-diff/base/<path>.html   normalized DOM at <ref>
-tests/tmp/capture-diff/report.html        side-by-side DOM diff (changed stories)
+tests/tmp/capture-diff/head/<path>.html           normalized DOM at HEAD
+tests/tmp/capture-diff/head/<path>.warnings.txt   its warnings
+tests/tmp/capture-diff/base/...                   the same at <ref>
+tests/tmp/capture-diff/report.html                DOM diff and warnings diff (changed stories)
 ```
 
-It prints the changed/added/removed stories and exits non-zero when anything
-moved, so it can gate an agent's inner loop. The base capture installs deps in
+It prints the changed/added/removed stories, with the warnings lines each one
+gained or lost, and exits non-zero when anything moved (a warnings-only change
+counts), so it can gate an agent's inner loop. The base capture installs deps in
 the temp worktree (`pnpm install --ignore-scripts`, mostly links from the shared
 pnpm store) and is torn down automatically. Requires Playwright's chromium
 (`npx playwright install chromium`).
@@ -169,7 +180,7 @@ The `Visual Tests` workflow splits the work into these jobs:
 
 - `js-capture` captures every story once (the slow part). It runs as a matrix of shards on parallel runners (`capture-js-dom.ts --shard i/N`), each uploading a `js-dom-capture-<i>` artifact; the job's comment in `visual-tests.yml` says how they merge.
 - `python-capture` captures the Python stories at the same time, and uploads `tests/tmp/python/` as the `python-dom-capture` artifact.
-- `visual-test` downloads the JS capture and runs `compare.ts --js-only` against the snapshot baselines. On failure it deploys the review site. Accepting diffs there sends only the run id and the accepted story paths, as a `visual-baselines-accept` repository_dispatch. The `Accept Visual Baselines` workflow (`accept-visual-baselines.yml`) has two jobs. The `accept` job runs `scripts/accept-baselines.ts`. It first checks that the run is a Visual Tests run of that branch in this repository, and only then marks the PR's `Visual Diff Review` status as pending. It copies the accepted files from the run's `js-dom-capture-<i>` artifacts to `snapshots/<branch>` in one commit, through the same writer (`commitToSnapshotBranch` in `snapshot-branch.ts`) that updates `snapshots/main` after a merge. An accept that finds the branch moved is redone on top of the new head. A full update of `snapshots/main` fails instead, so older captures never overwrite newer baselines. The `rerun` job waits for the original run to finish, since GitHub refuses to rerun jobs while any job of the run is still in progress, and then re-runs its failed jobs. That re-runs only this job, which reuses the capture from the first attempt instead of capturing again. You can accept by hand too: `pnpm --filter @gofish/tests accept-baselines <run-id> <branch> --all [--dry-run]`, or `--accept-file`/`--remove-file` with one story path per line (absolute paths, since the command runs in `tests/`). `--all` accepts exactly the diffs the run reported, which are the ones its review site lists. The diff report writes that list to `diff-list.json`, which CI uploads in the `visual-diff-report` artifact next to `diff-report.html`. `--all` fails if the file is missing.
+- `visual-test` downloads the JS capture and runs `compare.ts --js-only` against the snapshot baselines. On failure it deploys the review site. For every story it lists, the review site shows the story's warnings before and after, with added and removed lines highlighted; the panel is open when the warnings changed and collapsed when they are unchanged. The "Warnings only" filter lists the stories whose DOM is identical and only their warnings changed. Accepting diffs there sends only the run id and the accepted story paths, as a `visual-baselines-accept` repository_dispatch. The `Accept Visual Baselines` workflow (`accept-visual-baselines.yml`) has two jobs. The `accept` job runs `scripts/accept-baselines.ts`. It first checks that the run is a Visual Tests run of that branch in this repository, and only then marks the PR's `Visual Diff Review` status as pending. It copies the accepted files from the run's `js-dom-capture-<i>` artifacts to `snapshots/<branch>` in one commit, through the same writer (`commitToSnapshotBranch` in `snapshot-branch.ts`) that updates `snapshots/main` after a merge. An accept that finds the branch moved is redone on top of the new head. A full update of `snapshots/main` fails instead, so older captures never overwrite newer baselines. The `rerun` job waits for the original run to finish, since GitHub refuses to rerun jobs while any job of the run is still in progress, and then re-runs its failed jobs. That re-runs only this job, which reuses the capture from the first attempt instead of capturing again. You can accept by hand too: `pnpm --filter @gofish/tests accept-baselines <run-id> <branch> --all [--dry-run]`, or `--accept-file`/`--remove-file` with one story path per line (absolute paths, since the command runs in `tests/`). `--all` accepts exactly the diffs the run reported, which are the ones its review site lists. The diff report writes that list to `diff-list.json`, which CI uploads in the `visual-diff-report` artifact next to `diff-report.html`. `--all` fails if the file is missing.
 - `python-parity` downloads both captures and runs `compare-python.ts` on them. It runs at the same time as `visual-test` and does not wait on the visual review.
 
 #### Which baselines a branch gets
