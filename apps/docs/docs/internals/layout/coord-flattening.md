@@ -263,10 +263,10 @@ its children share. A free child is seated at the scope's `originPx`.
 
 The fit departs from the root only where the coordinate space's domain has
 structure that layout must keep. The transform declares it per axis as
-`axisClasses`, a record keyed by class name in the style of a column type
+`axisTraits`, a record keyed by trait name in the style of a column type
 (`ColumnType` in `schema.ts`, whose `HasZero` and `HasCycle` these anticipate;
-whether columns get them too is #1195). Each class is an independent fact, and
-`fitAxis` reads nothing else. An axis with no classes (both axes of `linear`,
+whether columns get them too is #1195). Each trait is an independent fact, and
+`fitAxis` reads nothing else. An axis with no traits (both axes of `linear`,
 `wavy` and a fitted `geo`) may shift and scale, so it fits as the root does: the
 claim's low edge sits at the box's low edge (`originPx = claim.descent(σ)`), and
 a pixel offset inside it is taken up. `polarPreset` declares θ
@@ -293,7 +293,7 @@ the scope dump): `fitAxis` passes it to `solveScope` as the scope's
 **`HasZero`: literal offsets are distances from 0.** On an axis whose 0 is a
 fixed point (the polar center), the content's data starts at 0, whatever
 value it starts at: a radius of 30 to 90 runs from the center, with no hole the author
-did not ask for, as on an axis with no classes. A literal pixel offset, though,
+did not ask for, as on an axis with no traits. A literal pixel offset, though,
 stays a distance from 0 instead of being taken up, so a ring moved out with
 `.translate({ y: 50 })` keeps a 50 px gap to the center. The claim alone cannot
 tell the two apart, because a pixel offset moves the claim (`offsetExtent` in
@@ -305,7 +305,7 @@ outward leaves the data start as the hull's low edge, so the gap is inside the
 budget and σ fits the rest. An offset inward, or a mark's own pixel box below
 its datum, reaches past the data start; the hull's low edge is then the
 claim's, so the content is moved out until it starts at the center, as on an
-axis with no classes, since nothing can reach below 0.
+axis with no traits, since nothing can reach below 0.
 
 The
 coord's type is its children's overlay, kept for its own scope; upward it

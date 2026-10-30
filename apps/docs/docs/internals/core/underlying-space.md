@@ -1709,21 +1709,21 @@ concrete units on one axis are a type error. The concrete units are:
 
 Each declared unit is a `HasUnit` (the column type, `schema.ts`): a `unit`
 name, which says which units are the same, an optional **symbol**, which
-an axis title shows, and the unit's **classes**, what its amounts can do,
+an axis title shows, and the unit's **traits**, what its amounts can do,
 when they are known. A user's unit `u` has the symbol `u`. A `Unit(u)`
-definition writes its classes; a unit declared by its name alone writes
-none, so its classes are unknown. The engine's own units (`INSTANT`,
+definition writes its traits; a unit declared by its name alone writes
+none, so its traits are unknown. The engine's own units (`INSTANT`,
 `DURATION`, `COUNT` in `measure.ts`, a share) have no symbol, since a count
 or a share is a plain number and a time axis's ticks already read as
-dates, and their classes are known: a duration, a count and a share add
+dates, and their traits are known: a duration, a count and a share add
 up, and an instant does not.
 
-**Which amounts add up.** `CanAdd` (#1197) is a class of the unit, not of a
+**Which amounts add up.** `CanAdd` (#1197) is a trait of the unit, not of a
 column: `Unit(name, { traits: [Trait.summable()] })` defines it, and it rides on the unit
-(`HasUnit.classes`) into the `Quantity` read from a column. A unit is its
+(`HasUnit.traits`) into the `Quantity` read from a column. A unit is its
 name, so every occurrence of one name is one unit, and where two
-occurrences meet their classes meet by one rule, `meetUnitClasses`
-(`measure.ts`): unknown classes and known ones are the known ones, and two
+occurrences meet their traits meet by one rule, `meetUnitTraits`
+(`measure.ts`): unknown traits and known ones are the known ones, and two
 known definitions that disagree throw an error naming both columns. They
 meet in two places. When a chart's schema is applied, its columns of one
 unit name meet (`meetChartUnits`, `schema.ts`), so a column declared
@@ -1732,7 +1732,7 @@ declared unit read (`unitOf`) meets the figure's other occurrences of its
 name in the walk's `Units`, wherever they are, so two charts that define
 one unit differently throw. `addsUp` (`measure.ts`) is the rule for one
 quantity: it adds up when its unit has `CanAdd`, when it has no declared
-unit, or when its unit's classes are unknown. Every place that adds values
+unit, or when its unit's traits are unknown. Every place that adds values
 while a chart is built sums them with `sumIn` (`fieldExpr.ts`), which
 checks it with `checkSummable`: a size channel's sum over its rows
 (`inferNumeric`; when an aggregate op already folded the rows, the channel
@@ -1747,7 +1747,7 @@ chart knows it. A stack adds spaces, not values, in the type walk, so a
 space's `UnitRecord` carries `summands`, the quantities of its values in a
 declared unit (`quantityUnits`; a shared `joinUnits` unions them, each once),
 and `distributeSpaceFold` sums each free part's own list with `Units.sum`,
-which reads the unit's classes as the figure knows them. While they are
+which reads the unit's traits as the figure knows them. While they are
 unknown the sum waits, and it is checked when an occurrence that knows
 them is met, so a stack of `"USD"` in one chart throws beside a
 `Unit("USD")` in another, whichever the walk meets first. The stack reads
@@ -2003,7 +2003,7 @@ keyed by `spaceUnit` (cf. issues #452, #386).
 ## Column types: the chart schema
 
 `chart(data, { schema })` (`schema.ts`, #984) declares, per column, the
-classes the column's values have, in the style of typeclasses. A column's
+traits the column's values have (`HasLevels`, `HasUnit`, ...). A column's
 entry is a unit definition, a unit's name, or a column record
 `{ name, unit }`:
 
@@ -2016,21 +2016,21 @@ chart(survey, { schema: { response: Likert } });
 ```
 
 A unit definition (`Unit(name?, { domain?, traits? })`, #1197) separates
-what its values are, its `domain`, from the capabilities they have, its
+what its values are, its `domain`, from the traits they have, its
 `traits`, as Rust separates a type from the traits it implements. `Domain`
 and `Trait` are strategy families (`families/domain.ts`,
 `families/trait.ts`), but they are not in `STRATEGIES`: a domain and the
 traits are read when the `Unit` is made (`unitTypeOf`) and never reach the
-wire, which carries only the classes they expand into
+wire, which carries only the traits they expand into
 (`UnitDefinition.type`, a `UnitType`):
 
-| Definition                   | Classes                                   |
-| ---------------------------- | ----------------------------------------- |
-| a name `u`                   | `HasUnit { unit: u, symbol: u, classes }` |
-| `Domain.discrete(levels)`    | `HasLevels { levels }`                    |
-| `Domain.ordered(levels)`     | `HasLevels { levels }`, `HasOrder {}`     |
-| `Trait.diverging(midpoint?)` | `HasMidpoint { at }`                      |
-| `Trait.summable()`           | `CanAdd` in `HasUnit.classes`             |
+| Definition                   | Traits                                   |
+| ---------------------------- | ---------------------------------------- |
+| a name `u`                   | `HasUnit { unit: u, symbol: u, traits }` |
+| `Domain.discrete(levels)`    | `HasLevels { levels }`                   |
+| `Domain.ordered(levels)`     | `HasLevels { levels }`, `HasOrder {}`    |
+| `Trait.diverging(midpoint?)` | `HasMidpoint { at }`                     |
+| `Trait.summable()`           | `CanAdd` in `HasUnit.traits`             |
 
 `unitTypeOf` checks the definition: a unit needs a name or a domain; a
 domain is a `Domain` value (a bare list or an interval is an error: an
@@ -2039,13 +2039,13 @@ least one level and no level twice (`levelsDomain`, which the `Domain`
 factories call and `unitTypeOf` calls again on a domain written as a
 record); a trait appears once;
 `Trait.diverging` needs `Domain.ordered` (no domain, the reals, is "not
-supported yet"); `Trait.summable` needs a name, since adding up is a class
+supported yet"); `Trait.summable` needs a name, since adding up is a trait
 of a unit and a unit is known by its name. A unit with no name writes no
 `HasUnit`, so its columns are typed one by one, as before the unit existed.
 Two units of one name with different domains are not compared yet.
 
-A column type is a record keyed by class name (`ColumnType`), and the engine
-reads only the classes, never the definition. Nine classes exist:
+A column type is a record keyed by trait name (`ColumnType`), and the engine
+reads only the traits, never the definition. Nine traits exist:
 
 - `HasLevels` (`{ levels }`, from a domain): the values are the levels of a
   fixed list. `splitEntries` groups a `by` over the column in that order
@@ -2089,7 +2089,7 @@ reads only the classes, never the definition. Nine classes exist:
   is neither the order nor its reverse is an error.
 - A time (`Unit.time({ zone })`, #1057) is a `HasUnit` with a `zone`: the
   values are instants, read on the calendar of the IANA zone `zone` (UTC by
-  default). There is no separate calendar class: the zone is a parameter of
+  default). There is no separate calendar trait: the zone is a parameter of
   the unit, and nothing needs a calendar without a unit. It is the one unit
   that changes the data: `applySchema` (now async, because it
   loads Temporal; see `calendar.ts`) copies the rows and turns each value
@@ -2138,21 +2138,21 @@ reads only the classes, never the definition. Nine classes exist:
   The values a user writes are the `Calendar` strategy family
   (`families/calendar.ts`): each kind is a `CalendarPartition` used bare or
   called with its options (`Calendar.month({ every: 3 })`, #1133).
-- `HasUnit` (`{ unit, symbol?, classes?, zone?, difference? }`, #994, #955,
+- `HasUnit` (`{ unit, symbol?, traits?, zone?, difference? }`, #994, #955,
   #1197): the values
   are amounts in the declared unit `unit`. A column's entry declares it with
-  a `Unit(u)` definition, which writes the unit's `classes` (`{ CanAdd: {} }`
+  a `Unit(u)` definition, which writes the unit's `traits` (`{ CanAdd: {} }`
   with `Trait.summable()`, else `{}`), or with the name `u` alone, which writes
-  no `classes`: what the unit can do is unknown. Either writes the symbol
+  no `traits`: what the unit can do is unknown. Either writes the symbol
   `u`. The engine's units are definitions too, with no symbol:
   `Unit.time({ zone })` (the instant, with its `zone` and its `difference`,
   a duration) and `Unit.duration`. A column
   without it has an unknown unit, a unit variable (see
   [measures](#measures-units-are-types)). A column's levels must fit its
-  other classes, so a text-level column takes no unit (`checkLevelsFit` in
+  other traits, so a text-level column takes no unit (`checkLevelsFit` in
   `schema.ts`, which only a wire record can break).
-- `CanAdd` (`{}`, #1197) is not a column class: it is a class of the unit,
-  in `HasUnit.classes`. See [which units add up](#measures-units-are-types).
+- `CanAdd` (`{}`, #1197) is not a column trait: it is a trait of the unit,
+  in `HasUnit.traits`. See [which units add up](#measures-units-are-types).
 - `HasQuantity` (`{ name }`, #955): the values are amounts of the quantity
   `name` (a column record's `name`, `{ name, unit }`), when it is not the
   column's own name. It titles the axis and
@@ -2163,7 +2163,7 @@ reads only the classes, never the definition. Nine classes exist:
   from the least to the greatest, in the data it was typed with. Nothing
   declares it: `applySchema` computes it for every column whose
   values are all finite numbers (missing values aside; a time's values are
-  epoch milliseconds by then), after the other classes. It is what a binned
+  epoch milliseconds by then), after the other traits. It is what a binned
   key's cells cover (see [Cells](#cells-a-binned-key)). `sorted()` gives
   the same values in order, for the cells of `Bin.quantiles`: it reads them
   off the typed rows on its first call only and keeps them, so a column no
@@ -2186,11 +2186,11 @@ split leaf, and each data-transform operator (`mapOperator` in
 (`typeLikeChartData`, also `resolve` and `join`) types its result with
 `applySchema` too, passing the input's types as `applySchema`'s `inherited`
 types, whether or not the function returned its input array. It keeps only
-those that still fit the result's values: each class has one predicate for
+those that still fit the result's values: each trait has one predicate for
 the values it accepts as they stand (`ACCEPTS` in `schema.ts`: a time holds
 instants, epoch milliseconds or `Date`s, an order holds text or numbers,
 and a unit holds numbers, plus `Date`s in the instant unit), and a type
-fits a value when every class it has accepts it. A `Date` is an instant, so a time column
+fits a value when every trait it has accepts it. A `Date` is an instant, so a time column
 of `Date`s keeps its inherited type, zone included, and its Dates become
 epoch milliseconds; a string needs a zone to read, so it does not fit. The
 inherited types never reinterpret or check values, so a date rewritten to
@@ -2216,16 +2216,16 @@ otherwise it tags a shallow copy of the array. So the stack's split reads
 its `by` column's type off the data it splits, and a color channel's
 `DatumValueImpl` records the type of the field it read (`fieldType`), which
 lets the categorical color scale list its domain in the column's order. A
-later class (`HasZero`, `HasCycle`, ...) is one more key on the record.
+later trait (`HasZero`, `HasCycle`, ...) is one more key on the record.
 
-A column's unit is one of these classes, `HasUnit`, so a unit moves with
+A column's unit is one of these traits, `HasUnit`, so a unit moves with
 the rest of the column's type, by the same rules: it survives a split, a
 `filter`, and a `derive` whose column still holds numbers, and a `schema`
 entry that names the column replaces it with the rest of the type (#994).
 `chart(data, { schema })` and `derive(fn, { schema })` declare it with a
 `Unit(u)` or the name `u`. `columnTypeOf` turns every entry (a builder, a
 column record `{ name, unit }`, a `Unit`, a unit's name) into its record of
-classes, the wire form, in one place (`classesOf`), which Python's `chart`
+traits, the wire form, in one place (`traitsOf`), which Python's `chart`
 mirrors before it serializes.
 
 A column's **domain** (`HasDomain`) moves with the rest of its type, by the
@@ -2233,7 +2233,7 @@ rules above, with one difference: it is of the rows it was computed over.
 `applySchema` computes it for the chart's data and for each `derive`'s
 result over the rows it types, and drops the domains it inherits or finds on
 the array, so a `derive` never keeps its input's. `copyColumnTypes` hands it
-to each split leaf and to a `filter`'s result with the other classes, the
+to each split leaf and to a `filter`'s result with the other traits, the
 same record, so a split leaf holds one group's rows and its column still has
 the domain of the whole data. A chart over a selection
 (`chart(selectAll(...))`) types a list of refs, so `ChartBuilder` passes

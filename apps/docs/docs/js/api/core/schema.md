@@ -26,13 +26,13 @@ Unit.duration; // the unit of a span of time, which adds up
 
 {
   (name, unit);
-} // a column record: HasQuantity and the unit's classes
+} // a column record: HasQuantity and the unit's traits
 unit; // a Unit: the same as { unit }
 ("km²"); // a unit's name: the same as { unit: "km²" }
 ```
 
-A column type is a set of classes. A unit definition separates what its
-values are, its `domain`, from the capabilities they have, its `traits`.
+A column type is a set of traits. A unit definition separates what its
+values are, its `domain`, from the traits they have, its `traits`.
 `Domain` and `Trait` are families: a unit takes one domain and a list of
 traits. A `Unit` is declared once and used by every column in it, so its
 columns agree on what it can do:
@@ -60,7 +60,7 @@ chart(survey, {
 A column record takes the keys `name` and `unit`. Any other key is an error.
 `unit` is a `Unit` or a unit's name.
 
-| Entry                        | Class                   | Meaning                                                 |
+| Entry                        | Trait                   | Meaning                                                 |
 | ---------------------------- | ----------------------- | ------------------------------------------------------- |
 | `Domain.discrete(levels)`    | `HasLevels`             | The column's values are `levels`, listed in this order. |
 | `Domain.ordered(levels)`     | `HasLevels`, `HasOrder` | The same, and the levels are ordered, first to last.    |
@@ -78,7 +78,7 @@ A column record takes the keys `name` and `unit`. Any other key is an error.
 | ---------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `name`     | `string`               | `Unit`'s name, e.g. `"USD"` or `"mm"`. Two units are the same when their names are equal. A record's `name` is its quantity, e.g. `"Pay"`, which titles the axis in place of the column's name. |
 | `domain`   | `Domain`               | What the unit's values are: `Domain.discrete(levels)` or `Domain.ordered(levels)`. Without it, a named unit's values are amounts (numbers).                                                     |
-| `traits`   | `Trait[]`              | The capabilities of the unit's values. Each trait appears at most once.                                                                                                                         |
+| `traits`   | `Trait[]`              | The traits of the unit's values. Each trait appears at most once.                                                                                                                               |
 | `levels`   | `(string \| number)[]` | Every value the column takes, in the order to lay them out in.                                                                                                                                  |
 | `midpoint` | `number`               | Where the midpoint lies along the order, from 0 (before the first level) to `n` (after the last). Default `n / 2`.                                                                              |
 | `zone`     | `string`               | The IANA time zone the column's instants are read in, e.g. `"America/New_York"`. Default `"UTC"`.                                                                                               |

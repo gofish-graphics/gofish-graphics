@@ -188,8 +188,8 @@ stalled #290: `.stack()` on a bare `rect` is ill-defined, but on a template it i
 Normalized (percentage) stacking stays a data-side transform per the field-expression work (#709),
 so there is no `.normalize()` modifier.
 
-The `Stackable` interface from PR #70 is the right idea when read as a typeclass: it names a
-capability that some templates have and others don't. A bar chart is stackable and a line chart is
+The `Stackable` interface from PR #70 is the right idea when read as a trait: a named
+property that some templates have and others don't. A bar chart is stackable and a line chart is
 not, so `.stack()` should exist exactly on the templates that implement `Stackable`, and its
 absence on `lineChart` is a type error rather than a runtime error. Whether the instance is carried
 by a wrapper builder like `BarChartBuilder`, by a `ChartBuilder` subclass, or by modifiers attached
@@ -201,7 +201,7 @@ carrier must still be something `.mark()` accepts.
 - `barChart(data, { x, y, orientation, fill, mark })` in `src/charts/bar.ts` (PR #70), exported
   from `lib.ts` and mirrored to Python as `gofish.charts.bar_chart`. Docs follow-up is #704.
 - It returns a `BarChartBuilder` wrapper class implementing `Stackable`, with a `.stack(field)`
-  method. No story exercises `.stack()` yet. The `Stackable` typeclass stays; whether the wrapper
+  method. No story exercises `.stack()` yet. The `Stackable` trait stays; whether the wrapper
   class does is an open question below (as written it is not a `ChartBuilder` instance, so it
   cannot be nested via `.mark()`).
 - `src/templates/` (rectTemplate, waffle, and friends) predates the fluent builder, is not exported anywhere, and
@@ -287,7 +287,7 @@ Templates have no such split, so they don't need the tag.
 
 # Open Questions
 
-- How a template carries its modifiers. The `Stackable` typeclass stays either way, but the
+- How a template carries its modifiers. The `Stackable` trait stays either way, but the
   instance needs a home. Candidates: keep `BarChartBuilder` but make it a `ChartBuilder` subclass
   (so `instanceof` recognition in `.mark()` keeps working and nothing re-exposes the builder
   surface by hand), attach the methods to `ChartBuilder` via the existing prototype-mixin pattern

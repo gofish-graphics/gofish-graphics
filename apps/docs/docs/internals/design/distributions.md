@@ -19,7 +19,7 @@ status: speculative
 
 GoFish has no way to show uncertain data. A cell in a table is always one number or one
 category. This note asks what happens if a distribution is one more kind of value in a
-cell, with its own capabilities, and how many uncertainty visualizations we get from that
+cell, with its own traits, and how many uncertainty visualizations we get from that
 type and the operators we already have.
 
 The note uses a few terms of art. Each one is defined here once.
@@ -27,11 +27,11 @@ The note uses a few terms of art. Each one is defined here once.
 - **Distribution.** A rule that gives a probability to each set of possible values. We
   write `Dist<T>` for a distribution over values of type `T`.
 - **Draw.** One value picked at random from a distribution. A set of draws is a sample.
-- **Typeclass.** A named set of operations that a type provides, plus rules (laws) those
+- **Trait.** A named set of operations that a type provides, plus rules (laws) those
   operations obey. This is the style of the
   [Lean mathlib](https://leanprover-community.github.io/mathlib4_docs/) algebra
-  hierarchy. A type can provide many typeclasses, and a typeclass can extend another.
-  We also call a typeclass a capability.
+  hierarchy. A type can provide many traits, and a trait can extend another.
+  Lean and Haskell call a trait a typeclass.
 - **Monoid.** A type with an addition that is associative and has a zero, e.g., counts.
 - **Torsor.** A type of points that you can subtract to get a difference, and to which
   you can add a difference, but which has no zero of its own, e.g., dates or temperatures.
@@ -47,7 +47,7 @@ This note does not use the Stevens scale types. It describes data the way
 (TVCG 20(12), 2014) and the Flint note ([What GoFish can learn from Flint](./flint-chart-notes.md))
 do, by the operations the data supports. An axis or a layout is a picture of a datatype,
 so a mark can show a value only when the picture keeps the operations the value has. This
-is Mackinlay's expressiveness rule in typeclass form.
+is Mackinlay's expressiveness rule in trait form.
 
 These rules were already agreed in the #773 discussion, and this note takes them as given.
 
@@ -84,7 +84,7 @@ it as `FieldOpIR` (`packages/gofish-ir/src/frontend/schema.ts:639`).
 **Channel types.** A channel is `size`, `pos`, `color`, `raw` or `dims`
 (`channels.ts:37`). A size channel folds its rows with `sumBy` and a position channel
 folds them with `meanBy` (`channels.ts:280` and `channels.ts:283`). This is the closest
-thing GoFish has to a capability today. A size channel assumes its values add, and a
+thing GoFish has to a trait today. A size channel assumes its values add, and a
 position channel assumes its values average. Both assume the values are numbers.
 
 **How GoFish decides what a column is.** No column has a declared type. When a channel
@@ -125,8 +125,8 @@ is a spread on the time axis, which is the direction a hypothetical outcome plot
 1. **A column type.** Something has to record that a column holds `Dist<T>` and what `T`
    is. Today the only per-column record is the measure string and the provenance symbol.
    Either the measure grows into a structured type (a carrier type, a unit and a set of
-   capabilities), or a second sidecar like the provenance symbol carries column types.
-   (Since #994 there is one record: the unit is the `HasUnit` class of a column type.) The
+   traits), or a second sidecar like the provenance symbol carries column types.
+   (Since #994 there is one record: the unit is the `HasUnit` trait of a column type.) The
    #773 work on putting the origin on the datatype needs the same record, so the two
    should share it.
 2. **Channel inference.** `inferNumeric` in `channels.ts` is where a `Dist<T>` value would
@@ -246,7 +246,7 @@ parts: groups, monoids, and the algebra of graphics, statistics, and interaction
 2025 ([doi:10.1080/10618600.2024.2429708](https://doi.org/10.1080/10618600.2024.2429708)).
 It argues that a stacked plot is valid when the statistic is a monoid, and that stacking
 is the direction that works for selection. We take its examples and not its fixed list of
-structures, because typeclasses can be combined and refined.
+structures, because traits can be combined and refined.
 
 **Named techniques.** Hypothetical outcome plots (HOPs) animate draws (Hullman, Resnick
 and Adar, [PLOS ONE 2015](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4646698/)).
@@ -301,8 +301,8 @@ the joint is in the shared draws, as in rvar and Uncertain&lt;T&gt;.
 
 ### What Dist&lt;T&gt; can do depends on T
 
-The operations on `Dist<T>` depend on the capabilities of `T`. A mark asks for an
-operation, and the operation asks for a capability of `T`.
+The operations on `Dist<T>` depend on the traits of `T`. A mark asks for an
+operation, and the operation asks for a trait of `T`.
 
 | Operation on `Dist<T>`          | Needs from `T`                                  | Result type            |
 | ------------------------------- | ----------------------------------------------- | ---------------------- |
@@ -334,7 +334,7 @@ This matches ggdibbler's Figure 5.
 
 ### Dist&lt;T&gt; is not a T
 
-`Dist<T>` does not inherit the capabilities of `T`.
+`Dist<T>` does not inherit the traits of `T`.
 
 - **It has no linear order.** One distribution is above another only in the partial
   sense of stochastic dominance. So `Dist<T>` is not a position type, and it cannot be
@@ -398,7 +398,7 @@ placement the chart already has. These are the options in GoFish terms.
 - **t, animation.** `time.sequence({ by: "draw" })`. This exists.
 - **y, a stack on the measured axis.** This is a type error, by the rule in section 4.
 
-These are the capability rules for lifting.
+These are the trait rules for lifting.
 
 1. The channel's requirement on `T` applies to each draw.
 2. Every statistic in the flow (a `derive`, an aggregate field op, a `bin`) runs once per
@@ -411,7 +411,7 @@ These are the capability rules for lifting.
 ### (b) Consume, or uncertainty as signal
 
 Some marks take `Dist<T>` itself. These are the ggdist geometries. Each one needs certain
-capabilities of `T`.
+traits of `T`.
 
 | Mark                | Draws                                          | Needs from `T`               |
 | ------------------- | ---------------------------------------------- | ---------------------------- |
@@ -631,7 +631,7 @@ the Python bridge.
 **Shape 1. A `sample()` operator in the flow.** `sample({ n })` turns every distribution
 cell into `n` rows with a `draw` key. After it, the draw key is a normal `by` key, so the
 placement is whatever operator the user writes. The stack error falls out of the `by`
-capability check.
+trait check.
 
 ```js
 // ggdibbler uncertain stacked bar, dodge version
@@ -693,7 +693,7 @@ for completeness.
 
 **Strongest.** Shape 1 with Shape 3 feels strongest. The draw key is a normal `by` key,
 so every placement direction is an operator the user can see, and the stacking error is the
-ordinary capability check on `by`. Signal marks choose themselves by their channel type.
+ordinary trait check on `by`. Signal marks choose themselves by their channel type.
 
 ## 8. Open questions
 
@@ -707,7 +707,7 @@ ordinary capability check on `by`. Signal marks choose themselves by their chann
    assumes shared draws. If a chart mixes a Shape A cell with a Shape C rvar, do we treat
    them as independent, or is that an error?
 3. **How does this sit with the #773 origin work?** Both need a per-column type record
-   that holds a carrier type, a unit and capabilities. Should that record exist first, with
+   that holds a carrier type, a unit and traits. Should that record exist first, with
    `Dist<T>` as one of its constructors? The measure is a plain string today
    (`data.ts:11`). A related question is whether subtracting a reference point
    (`field("temp").minus(ref)`) acts per draw, and what happens when the reference is

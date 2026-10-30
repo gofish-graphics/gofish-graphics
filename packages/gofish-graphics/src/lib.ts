@@ -109,13 +109,13 @@ export { pluck, projectPath as project } from "./ast/datumProjection";
 // definition, its domain and its traits (`Unit("USD", { traits:
 // [Trait.summable()] })`), declared once and used by every column in it.
 // `Domain` is the family of what a unit's values are (one choice), and
-// `Trait` the family of their capabilities (a set).
+// `Trait` the family of their traits (a set).
 export { Unit } from "./ast/schema";
 export * as Domain from "./families/domain";
 export * as Trait from "./families/trait";
 export type {
   ColumnRecord,
-  UnitClasses,
+  UnitTraits,
   UnitOptions,
   LevelsDomain,
   UnitType,

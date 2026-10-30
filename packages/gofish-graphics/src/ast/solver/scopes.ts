@@ -157,7 +157,7 @@ export interface ScopeMeta {
    * claim puts it, `claim.descent(σ)` above the box's low edge, as the root
    * does; "start" at the box's low edge, whatever the claim, so data 0 is
    * the start of the budget (the angular axis of the polar family, whose
-   * data 0 is its baseline angle; see `AxisClasses.HasCycle`).
+   * data 0 is its baseline angle; see `AxisTraits.HasCycle`).
    */
   dataZero?: "claim" | "start";
 }

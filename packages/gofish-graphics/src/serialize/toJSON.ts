@@ -324,7 +324,7 @@ async function chartBuilderToChartIR(
     }
   }
   if (options && Object.keys(options).length > 0) {
-    // A schema crosses the wire as its records of classes, as Python writes
+    // A schema crosses the wire as its records of traits, as Python writes
     // it (`schemaToWire`).
     ir.options = (
       options.schema === undefined

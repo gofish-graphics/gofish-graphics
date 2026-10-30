@@ -492,8 +492,8 @@ async function main() {
         JSON.stringify({
           HasUnit: {
             unit: "instant",
-            classes: {},
-            difference: { unit: "duration", classes: { CanAdd: {} } },
+            traits: {},
+            difference: { unit: "duration", traits: { CanAdd: {} } },
             zone: "Asia/Tokyo",
           },
         })
@@ -510,7 +510,7 @@ async function main() {
     );
     check(
       "Unit.duration adds up",
-      SrcUnit.duration.type.HasUnit?.classes?.CanAdd !== undefined &&
+      SrcUnit.duration.type.HasUnit?.traits?.CanAdd !== undefined &&
         SrcUnit.duration.name === "duration"
     );
     // The levels-fit rule: text levels are not amounts, numbers are.
@@ -542,7 +542,7 @@ async function main() {
       "a named unit with a domain is a unit with levels",
       JSON.stringify(Stars.type) ===
         JSON.stringify({
-          HasUnit: { unit: "stars", symbol: "stars", classes: {} },
+          HasUnit: { unit: "stars", symbol: "stars", traits: {} },
           HasLevels: { levels: [1, 2, 3, 4, 5] },
           HasOrder: {},
         }) && Stars.name === "stars",
@@ -566,7 +566,7 @@ async function main() {
       "Unit(name, { traits: [Trait.summable()] }) has CanAdd",
       JSON.stringify(Unit("USD", { traits: [Trait.summable()] }).type) ===
         JSON.stringify({
-          HasUnit: { unit: "USD", symbol: "USD", classes: { CanAdd: {} } },
+          HasUnit: { unit: "USD", symbol: "USD", traits: { CanAdd: {} } },
         })
     );
     check(
@@ -1032,7 +1032,7 @@ async function main() {
     );
   }
 
-  console.log("\n# units and column records cross the wire as classes");
+  console.log("\n# units and column records cross the wire as traits");
   {
     // The same schema, spelled in Python, writes the same wire form: Python's
     // test_ast.py compares its `to_ir()` against this one fixture.
@@ -1118,8 +1118,8 @@ async function main() {
     const back = await applySchema([{ balance: 1 }], schemaWireFixture as any);
     check(
       "and the wire form reads back with the area's unit name alone",
-      getColumnTypes(back)?.area?.HasUnit?.classes === undefined &&
-        getColumnTypes(back)?.revenue?.HasUnit?.classes?.CanAdd !== undefined
+      getColumnTypes(back)?.area?.HasUnit?.traits === undefined &&
+        getColumnTypes(back)?.revenue?.HasUnit?.traits?.CanAdd !== undefined
     );
   }
 

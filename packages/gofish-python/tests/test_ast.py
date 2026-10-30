@@ -99,8 +99,8 @@ class TestOperators:
             "at": {
                 "HasUnit": {
                     "unit": "instant",
-                    "classes": {},
-                    "difference": {"unit": "duration", "classes": {"CanAdd": {}}},
+                    "traits": {},
+                    "difference": {"unit": "duration", "traits": {"CanAdd": {}}},
                     "zone": "America/New_York",
                 },
             },
@@ -1049,7 +1049,7 @@ class TestSchema:
         assert repr(party) == "Unit(domain=Domain.discrete(['Dem', 'Rep', 'Ind']))"
         stars = Unit("stars", domain=Domain.ordered([1, 2, 3, 4, 5]))
         assert stars.type == {
-            "HasUnit": {"unit": "stars", "symbol": "stars", "classes": {}},
+            "HasUnit": {"unit": "stars", "symbol": "stars", "traits": {}},
             "HasLevels": {"levels": [1, 2, 3, 4, 5]},
             "HasOrder": {},
         }
@@ -1178,10 +1178,10 @@ class TestSchema:
         schema_of = lambda **schema: ir(chart([], schema=schema).mark(rect()))[
             "options"
         ]["schema"]
-        # A Unit is `{ unit }` with the unit's classes, a name alone is a
-        # unit whose classes are unknown (no `classes`), and a record adds
+        # A Unit is `{ unit }` with the unit's traits, a name alone is a
+        # unit whose traits are unknown (no `traits`), and a record adds
         # the quantity.
-        summable_usd = {"unit": "USD", "symbol": "USD", "classes": {"CanAdd": {}}}
+        summable_usd = {"unit": "USD", "symbol": "USD", "traits": {"CanAdd": {}}}
         assert schema_of(revenue=usd) == {"revenue": {"HasUnit": summable_usd}}
         assert schema_of(area="km²") == {
             "area": {"HasUnit": {"unit": "km²", "symbol": "km²"}}
@@ -1189,7 +1189,7 @@ class TestSchema:
         assert schema_of(temp={"name": "Temperature", "unit": Unit("°C")}) == {
             "temp": {
                 "HasQuantity": {"name": "Temperature"},
-                "HasUnit": {"unit": "°C", "symbol": "°C", "classes": {}},
+                "HasUnit": {"unit": "°C", "symbol": "°C", "traits": {}},
             }
         }
         assert schema_of(q1={"name": "Pay"}) == {"q1": {"HasQuantity": {"name": "Pay"}}}
@@ -1342,15 +1342,15 @@ class TestTime:
 
         assert schema_of(Unit.time()) == {"HasUnit": {
             "unit": "instant",
-            "classes": {},
-            "difference": {"unit": "duration", "classes": {"CanAdd": {}}},
+            "traits": {},
+            "difference": {"unit": "duration", "traits": {"CanAdd": {}}},
             "zone": "UTC",
         }}
         assert schema_of(Unit.time(zone="America/New_York")) == {
             "HasUnit": {
                 "unit": "instant",
-                "classes": {},
-                "difference": {"unit": "duration", "classes": {"CanAdd": {}}},
+                "traits": {},
+                "difference": {"unit": "duration", "traits": {"CanAdd": {}}},
                 "zone": "America/New_York",
             }
         }
@@ -1358,7 +1358,7 @@ class TestTime:
             "name": "Sold"
         }
         assert schema_of(Unit.duration) == {
-            "HasUnit": {"unit": "duration", "classes": {"CanAdd": {}}}
+            "HasUnit": {"unit": "duration", "traits": {"CanAdd": {}}}
         }
         assert Unit.duration.name == "duration"
         assert repr(Unit.time(zone="Asia/Tokyo")) == "Unit.time(zone='Asia/Tokyo')"
@@ -1495,8 +1495,8 @@ class TestTime:
         assert node["options"]["schema"] == {
             "t": {"HasUnit": {
                 "unit": "instant",
-                "classes": {},
-                "difference": {"unit": "duration", "classes": {"CanAdd": {}}},
+                "traits": {},
+                "difference": {"unit": "duration", "traits": {"CanAdd": {}}},
                 "zone": "Asia/Tokyo",
             }}
         }

@@ -164,9 +164,9 @@ console.log("# measure: quantities on the source array");
     "a record's name names the quantity in place of the column",
     columnQuantity("q1", columnTypeOf("q1", { name: "Pay" })).name === "Pay"
   );
-  // A column type is a record keyed by class, so compare it with its classes
+  // A column type is a record keyed by trait, so compare it with its traits
   // in a fixed order: the order the builders ran in is not part of the type.
-  const classes = (t: Record<string, unknown>) =>
+  const traits = (t: Record<string, unknown>) =>
     JSON.stringify(Object.entries(t).sort(([a], [b]) => a.localeCompare(b)));
   ok(
     "a record and its key order write the same column type",
@@ -174,12 +174,12 @@ console.log("# measure: quantities on the source array");
       { name: "Pay", unit: SrcUnit("USD") },
       { unit: SrcUnit("USD"), name: "Pay" },
     ]
-      .map((s) => classes(columnTypeOf("q1", s)))
+      .map((s) => traits(columnTypeOf("q1", s)))
       .every(
         (c) =>
           c ===
-          classes({
-            HasUnit: { unit: "USD", symbol: "USD", classes: {} },
+          traits({
+            HasUnit: { unit: "USD", symbol: "USD", traits: {} },
             HasQuantity: { name: "Pay" },
           })
       )
@@ -1190,7 +1190,7 @@ console.log("# measure: CanAdd");
   );
 
   // A name and a definition of one unit are one unit: they share an axis,
-  // and the name takes the definition's classes.
+  // and the name takes the definition's traits.
   const both = (schema: object, op: unknown) =>
     chart(
       sales.map((d) => ({ ...d, cost: d.usd / 2 })),
@@ -1490,7 +1490,7 @@ console.log("# measure: CanAdd");
   // A stack checks only the columns it adds (#1197 review): a stack on one
   // axis of a `start` point in days and a `width` in days. The parts join
   // into one class of "day", but the stack adds only the free part, the
-  // width. `start` names its unit only, so it takes the width's classes.
+  // width. `start` names its unit only, so it takes the width's traits.
   const dayPart = (rows: any[]) =>
     (rows[0].start !== undefined
       ? rect({ x: "start", w: 1, h: 10 })
@@ -1554,7 +1554,7 @@ console.log("# measure: CanAdd");
     meanBar
   );
 
-  // CanAdd is a class of the unit, not of the column.
+  // CanAdd is a trait of the unit, not of the column.
   const columnCanAdd = await errorOf(() =>
     chart(sales, { schema: { usd: { CanAdd: {} } } })
       .flow(spread({ by: "region", dir: "x" }))
@@ -1562,13 +1562,13 @@ console.log("# measure: CanAdd");
       .toDisplayList(SIZE)
   );
   ok(
-    "a column-level CanAdd is not a column class, and throws",
+    "a column-level CanAdd is not a column trait, and throws",
     columnCanAdd !== undefined && /unknown key "CanAdd"/.test(columnCanAdd),
     columnCanAdd
   );
   const wire = await errorOf(() =>
     chart(sales, {
-      schema: { usd: { HasUnit: { unit: "USD", classes: { CanAdd: {} } } } },
+      schema: { usd: { HasUnit: { unit: "USD", traits: { CanAdd: {} } } } },
     })
       .flow(
         spread({ by: "region", dir: "x" }),
@@ -1577,7 +1577,7 @@ console.log("# measure: CanAdd");
       .mark(rect({ h: "usd" }))
       .toDisplayList(SIZE)
   );
-  ok("the wire form HasUnit.classes.CanAdd sums", wire === undefined, wire);
+  ok("the wire form HasUnit.traits.CanAdd sums", wire === undefined, wire);
 
   // A unit is its name across the whole figure: two charts that share an
   // axis meet their occurrences of "USD" in the type walk. Chart `defines`

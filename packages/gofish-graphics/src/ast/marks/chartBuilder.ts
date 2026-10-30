@@ -79,7 +79,7 @@ export type ChartOptions = {
   /** Extra padding (px) between the polar circle and the SVG edge. Default 30. */
   padding?: number;
   /**
-   * Column types, keyed by column name: the classes each column has (#984),
+   * Column types, keyed by column name: the traits each column has (#984),
    * e.g. `{ response: Unit({ domain: Domain.ordered(LEVELS), traits: [Trait.diverging()] }) }`.
    * A column with levels (`HasLevels`, a unit's `domain`) splits in the
    * order of its levels, and a value outside them is an error where the
