@@ -6,6 +6,7 @@ import type { GoFishNode } from "./_node";
 import type { DistributeConstraint } from "./constraints/distribute";
 import { spacingOn } from "./constraints/gap";
 import { axisIndex, axisName } from "./constraints/shared";
+import { cellsByName, isGridConstraint, shareTracks } from "./constraints/grid";
 import type { Extent } from "./extent";
 import { room } from "../util";
 import * as Pwl from "./solver/pwl";
@@ -293,6 +294,7 @@ const frGaps = (node: GoFishNode, axis: 0 | 1): (Length | LengthValue)[] =>
  * Check the flexible sizes `node` lays out along `axis` once (#1176 steps 5
  * and 6): its parts whose claim is one share of their scope
  * (`GoFishNode.isShare`: a part with no size of its own, or an `fr` size),
+ * its table's tracks that no cell sizes, each one share (`shareTracks`),
  * and its `fr` gaps (a chain's spacing, a table's gap between tracks).
  *
  * In a scope that data sizes there, a flexible size has no data type, so it
@@ -307,7 +309,12 @@ export function warnFlexibleSizes(node: GoFishNode, axis: 0 | 1): void {
   const parts = node.children.filter(
     (c): c is GoFishNode => "isShare" in c && (c as GoFishNode).isShare(axis)
   );
-  if (gaps.length === 0 && parts.length === 0) return;
+  const grid = node.constraints.find(isGridConstraint);
+  const tracks =
+    grid === undefined
+      ? []
+      : shareTracks(grid, axis, cellsByName(node.children));
+  if (gaps.length === 0 && parts.length === 0 && tracks.length === 0) return;
   // The default canvas gives a data σ room but gives shares none
   // (`sharesHaveNoRoom`), so the fit is not asked: an `fr` gap there is 0.
   if (gaps.length > 0 && node.sharesHaveNoRoom(axis)) {
@@ -315,7 +322,7 @@ export function warnFlexibleSizes(node: GoFishNode, axis: 0 | 1): void {
     return;
   }
   if (node.scopeOf(axis).carriesData(axis))
-    warnLayout(node, mixedSizes(node, axis, parts, gaps));
+    warnLayout(node, mixedSizes(node, axis, parts, tracks, gaps));
 }
 
 /** A clause list: `a`, `a and b`, `a, b and c`. */
@@ -327,14 +334,16 @@ const listed = (items: string[]): string =>
 /**
  * A `mixed-sizes` warning for the flexible sizes the chain `chain` lays out
  * along `axis` in a scope that data sizes there ({@link warnFlexibleSizes}):
- * `parts`, its parts with no size of its own or with an `fr` size, and
- * `gaps`, its `fr` spacings. It names the chain's parts that data sizes, or
- * the scope when none of them is.
+ * `parts`, its parts with no size of its own or with an `fr` size,
+ * `tracks`, its table's tracks that no cell sizes (by index), and `gaps`,
+ * its `fr` spacings. It names the chain's parts that data sizes, or the
+ * scope when none of them is.
  */
 function mixedSizes(
   chain: GoFishNode,
   axis: 0 | 1,
   parts: GoFishNode[],
+  tracks: number[],
   gaps: (Length | LengthValue)[]
 ): LayoutWarning {
   const name = axisName(axis);
@@ -353,6 +362,11 @@ function mixedSizes(
       `${what} is drawn ` +
         `${own === undefined ? "one data unit" : "its weight in data units"} wide`
     );
+  }
+  for (const t of tracks) {
+    const what = `its ${axis === 0 ? "column" : "row"} ${t + 1}`;
+    flexible.push(`${what} has no cell that sizes it, so its size is flexible`);
+    drawn.push(`${what} is drawn one data unit wide`);
   }
   for (const g of gaps) {
     const what = `its spacing ${printLength(g)}`;

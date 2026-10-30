@@ -514,6 +514,72 @@ async function main() {
     );
   }
 
+  console.log("\n# an unsized table's fill tracks keep the default, as bands do");
+  {
+    // With no size on an axis the root gives shares no room
+    // (`sharesHaveNoRoom`), so a fill cell keeps rect's default 16 px
+    // there, as the same rect does in a spread's band.
+    const cellsAt = async (opts: Record<string, unknown>) =>
+      rectsOf(
+        await chart(grid, { axes: false, ...opts })
+          .flow(table({ by: { x: "c", y: "r" }, spacing: 10 }))
+          .mark(rect({}))
+          .toDisplayList()
+      );
+    const band = rectsOf(
+      await chart(grid, { axes: false })
+        .flow(spread({ by: "c", dir: "x" }))
+        .mark(rect({}))
+        .toDisplayList()
+    );
+    const unsized = await cellsAt({});
+    check(
+      "a spread's unsized bands are 16 × 16",
+      band.length === 2 && band.every((r) => r.w === 16 && r.h === 16),
+      band.map((r) => [r.w, r.h])
+    );
+    check(
+      "an unsized table's cells are 16 × 16, 10 px apart",
+      unsized.length === 4 &&
+        unsized.every((r) => r.w === 16 && r.h === 16) &&
+        close(unsized[1].x, 26) &&
+        close(unsized[2].y, 26),
+      unsized.map((r) => [r.x, r.y, r.w, r.h])
+    );
+    const wide = await cellsAt({ w: 200 });
+    check(
+      "with w: 200 the columns share it, and the rows keep 16 px",
+      wide.length === 4 &&
+        wide.every((r) => close(r.w, 95) && r.h === 16),
+      wide.map((r) => [r.x, r.y, r.w, r.h])
+    );
+  }
+
+  console.log("\n# a table's track no cell sizes, in a scope data sizes, warns");
+  {
+    // Three columns and two cells: the third column is one share, one data
+    // unit wide beside the data-sized cells.
+    const warned = await warningsOf(() =>
+      layer([
+        rect({ w: value(100), h: 10 }),
+        table({ numCols: 3, spacing: 0 }, [
+          rect({ w: value(10), h: 10 }),
+          rect({ w: value(10), h: 10 }),
+        ]),
+      ]).toDisplayList({ w: 400, h: 100 })
+    );
+    check(
+      "the table warns mixed sizes, naming its third column",
+      warned.some(
+        (m) =>
+          m.includes("mixes data-driven and flexible") &&
+          m.includes("its column 3 has no cell that sizes it") &&
+          m.includes("its column 3 is drawn one data unit wide")
+      ),
+      warned
+    );
+  }
+
   report();
 }
 

@@ -248,7 +248,8 @@ export function placementConstraints(
  *
  * Priority is explicit and single-owner:
  *   1. grid: each cell is proposed ITS (column, row) track's extent (its cells'
- *      claims at the layer's σ, `gridTracksAt`), keyed by name;
+ *      claims at the layer's σ, `gridCellSizesAt`), keyed by name, on each
+ *      axis where its track has one, and the layer's box on any other;
  *   2. the child's own room in a share scope (`own`, where defined): its
  *      claim at the layer's σ, when σ is the size of a share
  *      (`GoFishNode.sharesRoom`), so a band is one σ and what hangs off it
@@ -265,7 +266,7 @@ export function placementConstraints(
 export function childLayoutSizeProposal(
   childName: string | undefined,
   layerSize: Size,
-  gridCellByName: Map<string, Size> | undefined,
+  gridCellByName: Map<string, Size<number | undefined>> | undefined,
   spanByName?: Map<string, Size<number | undefined>>,
   region?: Region,
   own: Size<number | undefined> = [undefined, undefined]
@@ -276,7 +277,8 @@ export function childLayoutSizeProposal(
     childName !== undefined &&
     gridCellByName.has(childName)
   ) {
-    proposal = gridCellByName.get(childName)!;
+    const cell = gridCellByName.get(childName)!;
+    proposal = [cell[0] ?? layerSize[0], cell[1] ?? layerSize[1]];
   } else if (own[0] !== undefined || own[1] !== undefined) {
     proposal = [own[0] ?? proposal[0], own[1] ?? proposal[1]];
   }

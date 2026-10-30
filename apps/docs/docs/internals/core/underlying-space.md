@@ -997,9 +997,17 @@ column or row key gives an ordinal over its cells, as a spread's does: the
 split runs `splitEntries` once per key, as `spread` does, and each cell of
 the table holds the rows in both groups) while its claim is the tracks'.
 Layout reads the same track rule at the σ the layer lays its cells out at
-(`gridTracksAt`) and proposes each cell its track's extent; the plan then
+(`gridCellSizesAt`) and proposes each cell its track's extent; the plan then
 centers each cell in its track from the laid-out cell sizes, one source
-every reader of the placement shares, so they cannot drift.
+every reader of the placement shares, so they cannot drift. Where the layer
+has no σ on an axis (an unsized root, where shares have no room), a claim
+that grows with σ sizes no track, as the layer proposes a spread's band no
+size from its claim; a track no claim sizes has no extent, and its cells
+keep their default size there, as a spread's bands do. Every reader finds a
+cell by the grid's own refs (`CellOf`), in the grid's row-major order. A
+track no cell sizes, in a scope that data sizes, is one data unit wide, and
+the table warns `mixed-sizes` as a chain with a flexible part does
+(`shareTracks`, `warnFlexibleSizes`).
 
 The grid now **genuinely composes** with sibling constraints: its per-track claim
 participates in the fold and its cell-center pins solve jointly with any align /

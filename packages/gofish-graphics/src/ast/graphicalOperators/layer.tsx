@@ -32,8 +32,8 @@ import {
   type ResolvedOperand,
   collectPositionDomains,
   gridSpaces,
-  gridTracksAt,
-  gridCellSizeByName,
+  gridCellSizesAt,
+  cellsByName,
   relateScheduleForLayout,
   type ConstraintSpec,
   type ZOrderConstraint,
@@ -411,7 +411,9 @@ export const layer = createNodeOperatorSequential(
       // with a sibling constraint keeps that sibling's fold on any axis the
       // grid leaves UNDEFINED (no keys).
       const gridAxes =
-        gridC !== undefined ? gridSpaces(gridC, childNodes) : undefined;
+        gridC !== undefined
+          ? gridSpaces(gridC, cellsByName(childNodes))
+          : undefined;
       if (gridAxes !== undefined) {
         for (const axis of [0, 1] as const) {
           if (!isUNDEFINED(gridAxes[axis])) resolved[axis] = gridAxes[axis];
@@ -742,16 +744,15 @@ export const layer = createNodeOperatorSequential(
             [scopes.fixedSolve(node, 0), scopes.fixedSolve(node, 1)]
           );
           const childScaleFactors = layerScales.sigmas;
-          // A grid's tracks at the σ its cells are laid out at
-          // (`gridTracksAt`): each cell is proposed its track's extent, and
-          // the plan centers it in its track from its laid-out size.
+          // A grid's cells at the σ they are laid out at
+          // (`gridCellSizesAt`): each cell is proposed its track's extent,
+          // and the plan centers it in its track from its laid-out size.
           const gridC = selectGridConstraint(node.constraints);
           const gridCellByName = gridC
-            ? gridCellSizeByName(
+            ? gridCellSizesAt(
                 gridC,
-                gridTracksAt(gridC, node.children, childScaleFactors, (c, a) =>
-                  node.gapOf(c, a)
-                )
+                cellsByName(node.children),
+                childScaleFactors
               )
             : undefined;
           // A node dressed in chrome reads its gutters off its chrome forms

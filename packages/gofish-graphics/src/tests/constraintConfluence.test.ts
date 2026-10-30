@@ -10,10 +10,7 @@ import type { AlignConstraint } from "../ast/constraints/align";
 import type { DistributeConstraint } from "../ast/constraints/distribute";
 import type { GapOf } from "../ast/constraints/gap";
 import type { GridConstraint, TrackLayout } from "../ast/constraints/grid";
-import {
-  gridCellSizeByName,
-  gridTracks,
-} from "../ast/constraints/grid";
+import { gridTracks } from "../ast/constraints/grid";
 import type { NestConstraint } from "../ast/constraints/nest";
 import {
   compilePlacementCoordinate,
@@ -468,7 +465,7 @@ console.log("# constraint confluence: nest and grid placement");
       numbers,
       grid,
       axis,
-      [],
+      () => undefined,
       grid.spacing[axis] as number,
       axis === 0 ? 145 : 200
     )
@@ -509,12 +506,24 @@ console.log("# constraint confluence: grid content-sized tracks (Stage 6e)");
     { starts: [0], extents: [30] },
   ];
 
-  // The per-cell budget map hands each cell its own track's extent.
-  const cellSizes = gridCellSizeByName(grid, tracks);
+  // The track rule reads each cell by the grid's ref: each column is as
+  // wide as its cell, laid end to end with the spacing between.
+  const sizeOf = new Map([
+    ["A", 40],
+    ["B", 100],
+  ]);
+  const cols = gridTracks(
+    numbers,
+    grid,
+    0,
+    (ref) => sizeOf.get(ref.name),
+    10,
+    0
+  );
   ok(
-    "grid cell budget = per-cell track extents",
-    JSON.stringify(cellSizes.get("A")) === "[40,30]" &&
-      JSON.stringify(cellSizes.get("B")) === "[100,30]"
+    "grid tracks size to their cells, by the grid's refs",
+    JSON.stringify(cols) === JSON.stringify(tracks[0]),
+    JSON.stringify(cols)
   );
 
   const contentTargets = () =>
@@ -584,12 +593,15 @@ console.log("# constraint confluence: grid content-sized tracks (Stage 6e)");
       numbers,
       grid2x2,
       axis,
-      [
-        [40, 30],
-        [100, 30],
-        [20, 12],
-        [60, 8],
-      ].map((size) => size[axis]),
+      (ref) =>
+        (
+          ({
+            A: [40, 30],
+            B: [100, 30],
+            C: [20, 12],
+            D: [60, 8],
+          }) as Record<string, number[]>
+        )[ref.name]?.[axis],
       grid2x2.spacing[axis] as number,
       0
     )
@@ -782,17 +794,28 @@ console.log("# constraint confluence: child size proposals");
 {
   const layerSize: [number, number] = [300, 200];
   const gridCell: [number, number] = [90, 40];
-  const gridCellByName = new Map<string, [number, number]>([["A", gridCell]]);
+  const gridCellByName = new Map<string, [number | undefined, number | undefined]>([
+    ["A", gridCell],
+    ["U", [90, undefined]],
+  ]);
+  const cell = childLayoutSizeProposal(
+    "A",
+    layerSize,
+    gridCellByName,
+    undefined,
+    undefined,
+    [100, undefined]
+  );
   ok(
     "a grid cell is proposed its track extent, whatever its own room",
-    childLayoutSizeProposal(
-      "A",
-      layerSize,
-      gridCellByName,
-      undefined,
-      undefined,
-      [100, undefined]
-    ) === gridCell
+    cell[0] === 90 && cell[1] === 40
+  );
+  // A track with no extent (an unsized axis no claim sizes) proposes
+  // nothing there: the cell is laid out in the layer's size, its default.
+  const unsized = childLayoutSizeProposal("U", [300, NaN], gridCellByName);
+  ok(
+    "a grid cell whose track has no extent is proposed the layer's size there",
+    unsized[0] === 90 && Number.isNaN(unsized[1])
   );
   const shared = childLayoutSizeProposal(
     "B",

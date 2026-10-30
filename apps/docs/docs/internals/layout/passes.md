@@ -996,7 +996,8 @@ those lines, so `pnpm capture-one` prints them under the story.
   with no size of its own beside parts sized by data has a flexible size,
   which is a data type with no name: no one scale fits it and the data. The
   claim walk gives it one σ, one data unit (`GoFishNode.isShare`). An
-  `fr(k)` part or an `fr` spacing in such a chain is flexible too. The chain
+  `fr(k)` part or an `fr` spacing in such a chain is flexible too, and so is
+  a table's track that no cell sizes (`shareTracks`). The chain
   checks its parts and gaps once per axis (`warnFlexibleSizes`), and warns
   once, naming the chain, the axis, each flexible part and gap, and the
   data-driven parts.

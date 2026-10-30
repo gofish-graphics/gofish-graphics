@@ -154,7 +154,7 @@ once over an `Arith<T>` (`solver/arith.ts`), the operations it needs on `T`: `ad
 `sub`, `scale`, `negate`, `abs`, `max` (the upper envelope), `near`, a test that two
 amounts agree within a tolerance, and `agree`, the same test where a constraint
 over-determines a box. `numbers` is plain arithmetic, which the layout `BBox` of a node
-and the grid tracks at layout (`gridTracksAt`) use. `values` is this module, where `near` and `agree` are
+and the grid cells' proposed sizes at layout (`gridCellSizesAt`) use. `values` is this module, where `near` and `agree` are
 `approxEqual`, so a cycle in the solve closes only when its two sides agree at every σ.
 `fromValue` reads a value in σ (a σ-term gap, the σ of a data map) in an arithmetic: a
 number solve reads it at σ = 0.

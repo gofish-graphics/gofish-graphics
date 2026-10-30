@@ -93,8 +93,9 @@ export type TableOptions = {
    *  takes, a field name or a `field(...)` key (binned, chained, a product,
    *  a part of a cycle). */
   by?: { x: SplitBy; y: SplitBy };
-  /** The gap between columns and rows: pixels or a percent of the table's
-   *  room, one for both axes or `[x, y]` (#1176 step 6). */
+  /** The gap between columns and rows: pixels, a percent of the table's
+   *  room, or an `fr` weight of its scope's share, one for both axes or
+   *  `[x, y]` (#1176 step 6). */
   spacing?: Gap | [Gap, Gap];
   numCols?: number;
 };

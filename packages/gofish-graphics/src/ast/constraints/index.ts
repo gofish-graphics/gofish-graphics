@@ -86,8 +86,9 @@ export { isNestConstraint, nestedSpace } from "./nest";
 export {
   isGridConstraint,
   gridSpaces,
-  gridTracksAt,
-  gridCellSizeByName,
+  gridCellSizesAt,
+  cellsByName,
+  shareTracks,
   gridTracks,
   type TrackLayout,
 } from "./grid";

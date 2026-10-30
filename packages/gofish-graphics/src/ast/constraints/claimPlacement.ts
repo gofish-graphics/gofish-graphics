@@ -569,11 +569,13 @@ export function placeByClaims(
           T,
           grid,
           axis,
-          childIndices.map((i) =>
-            children[i].extent === undefined
+          // A cell by the grid's ref, as every reader of a grid finds it.
+          (ref) => {
+            const i = indexOf.get(ref.name);
+            return i === undefined || children[i].extent === undefined
               ? undefined
-              : (targets.get(keyOf(i))!.dims[axis].size ?? T.zero)
-          ),
+              : (targets.get(keyOf(i))!.dims[axis].size ?? T.zero);
+          },
           T.fromValue(gapOf(grid, axis)),
           T.fromValue(Pwl.SIGMA)
         );
