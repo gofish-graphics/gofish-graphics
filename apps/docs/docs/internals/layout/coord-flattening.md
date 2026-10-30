@@ -103,8 +103,8 @@ names a child itself means that whole child.
 The node where two operands part can be any node, not only a plain layer: a `coord`,
 an `enclose`, an `arrow`, or a `box` layer. So every place that paints a node's
 children gets their order from `orderChildrenForPaint`, never from the raw children
-array: the bake walks, `coord`'s own lowering, `lowerChildrenOffset` (behind `enclose`,
-`offset` and `arrow`), and `bakeChildren` (behind `box`). A constraint pushed down into
+array: the bake walks, `coord`'s own lowering, and `bakeChildren` (behind `box`, and
+behind `lowerChildrenOffset`, which `enclose`, `offset` and `arrow` share). A constraint pushed down into
 any of them takes effect there, and a boundary that declares its own constraints (a
 `box` layer's `.relate()`) resolves them when it orders its children. Before
 [#982](https://github.com/gofish-graphics/gofish-graphics/issues/982) settled this, a
@@ -196,7 +196,12 @@ which the render entry maps over directly.
 
 **`bakeChildren` — the same flatten, reused by boundaries.** `bake`'s per-transparent-layer
 children-flatten (the z-order resolution + transform composition) is factored into an
-exported `bakeChildren(node, translate, scale)`. A pure translate-only boundary
+exported `bakeChildren(node, translate, scale)`, which runs `bakeSubtree(child,
+translate, scale)` on each child in paint order. A compositor bakes each of its two
+operands with `bakeSubtree` alone. Both flatten through every node that only places
+its children, so a node whose lowering does more is a boundary
+(`BAKE_BOUNDARY_TYPES`): an `offset`, whose pixel shift is no translate, lowers its
+child itself, or a `cut` slice's source would lose its shift. A pure translate-only boundary
 (`box`/`frame`) calls it on its _own_ subtree, seeded at the
 boundary's absolute translate, and lowers each returned entry at its baked absolute
 transform. This is stage 6d of [#39](https://github.com/gofish-graphics/gofish-graphics/issues/39):

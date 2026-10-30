@@ -17,6 +17,11 @@
  *    of mixed sizes; it tilts to follow a diagonal; one member gives a
  *    circle; members on a line give a thin ellipse; it is fast on the
  *    penguins.
+ *  - `Shape.arcs()` (`enclose/arcs.ts`): radius 0 is the padded union; it
+ *    matches the bubble treemap paper's construction on packed discs; a
+ *    growing radius nears the padded convex hull; two discs join at exactly
+ *    the radius 2·a·radius ≥ a·g + g²/4 says (flat members at a gap of
+ *    2 × radius); holes are filled; an unfilled ring member is its edges.
  *
  * Run: `tsx src/tests/enclose.test.ts` (wired as `pnpm test:enclose`).
  */
@@ -34,7 +39,10 @@ import {
   paddedHull,
   type Ellipse,
 } from "../ast/graphicalOperators/enclose/oval";
+import { arcsOutline } from "../ast/graphicalOperators/enclose/arcs";
 import { penguins } from "../data/penguins";
+import { countryPopulations } from "../data/countryPopulations";
+import { packSiblings } from "d3-hierarchy";
 
 declare const process: { exit(code: number): never };
 
@@ -528,6 +536,255 @@ console.log("# Shape.oval(): the minimum-area enclosing ellipse");
     for (const members of species) ovalOutline(members, 6);
     const ms = performance.now() - t0;
     check("the three penguin species take under 100 ms", ms < 100, `${ms.toFixed(1)} ms`);
+  }
+}
+
+// ── Shape.arcs(): the closing of the padded members by a disc ──────────────
+console.log("\n# Shape.arcs() (enclose/arcs.ts)");
+{
+  /** The farthest any point of `a` lies from the polyline ring `b`. */
+  const farthest = (a: Pt[], b: Pt[]) =>
+    Math.max(
+      ...a.map((p) => {
+        let d = Infinity;
+        for (let i = 0; i < b.length; i++)
+          d = Math.min(d, segDist(p, b[i], b[(i + 1) % b.length]));
+        return d;
+      })
+    );
+  /** How far a point is from the padded union's boundary (0 on it). */
+  const unionGap = (discs: Disc[], pad: number) => (p: Pt) =>
+    Math.min(...discs.map((d) => Math.hypot(p[0] - d.cx, p[1] - d.cy) - d.r - pad));
+
+  // The construction of Görtler et al. on discs, written independently of
+  // arcs.ts: trace the outer boundary of the union of the discs grown by
+  // padding + s, then replace each of its arcs by the padded disc's arc and
+  // each vertex by a concave arc of radius s. Correct where the result is one
+  // piece and every vertex of the grown union is a concave corner.
+  const paperContour = (discs: Disc[], pad: number, s: number): Pt[] => {
+    const TAU = 2 * Math.PI;
+    const mod = (a: number) => ((a % TAU) + TAU) % TAU;
+    const P = discs.map((d) => ({ x: d.cx, y: d.cy, r: d.r + pad }));
+    const G = P.map((d) => ({ ...d, r: d.r + s }));
+    const arcs: { k: number; a0: number; a1: number }[] = [];
+    G.forEach((c, k) => {
+      const cover: [number, number][] = [];
+      let inside = false;
+      G.forEach((o, j) => {
+        if (j === k) return;
+        const d = Math.hypot(o.x - c.x, o.y - c.y);
+        if (d >= c.r + o.r) return;
+        if (d + c.r <= o.r) return void (inside = true);
+        if (d + o.r <= c.r) return;
+        const al = Math.acos((c.r * c.r + d * d - o.r * o.r) / (2 * c.r * d));
+        const a = mod(Math.atan2(o.y - c.y, o.x - c.x) - al);
+        const b = a + 2 * al;
+        if (b > TAU) cover.push([a, TAU], [0, b - TAU]);
+        else cover.push([a, b]);
+      });
+      if (inside) return;
+      cover.sort((p, q) => p[0] - q[0]);
+      const gaps: [number, number][] = [];
+      let at = 0;
+      for (const [a, b] of cover) {
+        if (a > at) gaps.push([at, a]);
+        at = Math.max(at, b);
+      }
+      if (at < TAU) gaps.push([at, TAU]);
+      if (gaps.length > 1 && gaps[0][0] === 0 && gaps.at(-1)![1] === TAU) {
+        const last = gaps.pop()!;
+        gaps[0] = [last[0], gaps[0][1] + TAU];
+      }
+      for (const [a0, a1] of gaps) arcs.push({ k, a0, a1 });
+    });
+    const end = (k: number, a: number): Pt => [
+      G[k].x + G[k].r * Math.cos(a),
+      G[k].y + G[k].r * Math.sin(a),
+    ];
+    const used = new Set<number>();
+    let loop: typeof arcs = [];
+    for (let s0 = 0; s0 < arcs.length; s0++) {
+      if (used.has(s0)) continue;
+      const l: typeof arcs = [];
+      let i = s0;
+      while (!used.has(i)) {
+        used.add(i);
+        l.push(arcs[i]);
+        const e = end(arcs[i].k, arcs[i].a1);
+        let next = -1,
+          best = Infinity;
+        arcs.forEach((q, j) => {
+          const d = dist(end(q.k, q.a0), e);
+          if (d < best) [best, next] = [d, j];
+        });
+        i = next;
+      }
+      if (l.length > loop.length) loop = l;
+    }
+    const out: Pt[] = [];
+    const sample = (cx: number, cy: number, r: number, a: number, b: number) => {
+      const n = Math.max(2, Math.ceil((Math.abs(b - a) * r) / 0.5));
+      for (let i = 0; i <= n; i++) {
+        const t = a + ((b - a) * i) / n;
+        out.push([cx + r * Math.cos(t), cy + r * Math.sin(t)]);
+      }
+    };
+    loop.forEach((arc, i) => {
+      const c = P[arc.k];
+      sample(c.x, c.y, c.r, arc.a0, arc.a1);
+      const nxt = loop[(i + 1) % loop.length];
+      const [vx, vy] = end(arc.k, arc.a1);
+      const f0 = Math.atan2(c.y - vy, c.x - vx);
+      let f1 = Math.atan2(P[nxt.k].y - vy, P[nxt.k].x - vx);
+      while (f1 - f0 > Math.PI) f1 -= TAU;
+      while (f1 - f0 < -Math.PI) f1 += TAU;
+      sample(vx, vy, s, f0, f1);
+    });
+    return out;
+  };
+
+  // Africa's countries in the bubble treemap stories, packed 6 px apart.
+  const AFRICA: Disc[] = packSiblings(
+    countryPopulations
+      .filter((d) => d.continent === "Africa")
+      .map((d) => ({ r: 1.6 * Math.sqrt(d.pop) + 3, x: 0, y: 0 }))
+  ).map((p) => C(p.x + 170, p.y + 170, p.r - 3));
+
+  {
+    const loops = arcsOutline(AFRICA, { padding: 6, radius: 0 });
+    const gap = unionGap(AFRICA, 6);
+    const worst = Math.max(...loops.flat().map((p) => Math.abs(gap(p))));
+    check(
+      "radius 0 is the padded union: every outline point is on a padded circle",
+      worst < 1e-6,
+      `${worst.toExponential(2)} px off`
+    );
+    const t = topology(loops);
+    check("radius 0 on packed discs is one piece", t.pieces === 1 && t.holes === 0, show(t));
+  }
+
+  for (const radius of [6, 12, 40]) {
+    const loops = arcsOutline(AFRICA, { padding: 6, radius });
+    const ref = paperContour(AFRICA, 6, radius);
+    const off = Math.max(farthest(loops[0], ref), farthest(ref, loops[0]));
+    check(
+      `radius ${radius} matches the paper's construction within 0.25 px`,
+      loops.length === 1 && off <= 0.25,
+      `${loops.length} loops, ${off.toFixed(3)} px apart`
+    );
+  }
+
+  {
+    const sd = discsHullDistance(MIXED, 6);
+    const off = [200, 2000, 20000].map((radius) =>
+      Math.max(
+        ...arcsOutline(MIXED, { padding: 6, radius })
+          .flat()
+          .map((p) => Math.abs(sd(p)))
+      )
+    );
+    check(
+      "a growing radius nears the padded convex hull (within 0.5 px at 20000)",
+      off[0] > off[1] && off[1] > off[2] && off[2] <= 0.5,
+      off.map((o) => o.toFixed(2)).join(", ") + " px"
+    );
+  }
+
+  {
+    // Two discs of radius a = 10 with a gap g = 30: they join only when
+    // 2·a·radius ≥ a·g + g²/4, at radius 26.25.
+    const pair = [C(0, 0, 10), C(50, 0, 10)];
+    const below = topology(arcsOutline(pair, { padding: 0, radius: 25.5 }));
+    const above = topology(arcsOutline(pair, { padding: 0, radius: 27 }));
+    check(
+      "two discs 30 px apart stay apart at radius 25.5 and join at 27 (threshold 26.25)",
+      below.pieces === 2 && above.pieces === 1,
+      `${show(below)}; ${show(above)}`
+    );
+    // Flat members join once the gap is narrower than 2 × radius.
+    const boxes: BlobMember[] = [
+      { kind: "box", x: 0, y: 0, w: 40, h: 60 },
+      { kind: "box", x: 70, y: 0, w: 40, h: 60 },
+    ];
+    const flatBelow = topology(arcsOutline(boxes, { padding: 0, radius: 14.5 }));
+    const flatAbove = topology(arcsOutline(boxes, { padding: 0, radius: 15.5 }));
+    check(
+      "two boxes 30 px apart stay apart at radius 14.5 and join at 15.5",
+      flatBelow.pieces === 2 && flatAbove.pieces === 1,
+      `${show(flatBelow)}; ${show(flatAbove)}`
+    );
+  }
+
+  {
+    // A ring of discs around an empty middle: the closing joins them, and
+    // the hole in the middle is filled.
+    const loops = arcsOutline(RING, { padding: 2, radius: 40 });
+    const t = topology(loops);
+    check(
+      "holes are always filled: a ring of discs is one piece with no hole",
+      t.pieces === 1 && t.holes === 0 && inPoly([150, 120], loops[0]),
+      show(t)
+    );
+  }
+
+  {
+    // An unfilled ring member (a square drawn with a 2 px stroke) is its
+    // edges, and its inside is filled like any hole.
+    const sq: Pt[] = [
+      [0, 0],
+      [100, 0],
+      [100, 100],
+      [0, 100],
+    ];
+    const edges: BlobMember[] = sq.map((a, i) => ({
+      kind: "segment",
+      a,
+      b: sq[(i + 1) % 4],
+      w: 2,
+    }));
+    const loops = arcsOutline(edges, { padding: 4, radius: 12 });
+    const xs = loops.flat().map((p) => p[0]);
+    const t = topology(loops);
+    check(
+      "a ring member gives one outline around it, 5 px out (padding + half the stroke)",
+      t.pieces === 1 &&
+        t.holes === 0 &&
+        Math.abs(Math.min(...xs) + 5) < 1e-6 &&
+        Math.abs(Math.max(...xs) - 105) < 1e-6,
+      `${show(t)}, x from ${Math.min(...xs).toFixed(3)} to ${Math.max(...xs).toFixed(3)}`
+    );
+  }
+
+  {
+    // Where a neck pinches the shrunk boundary off right after a joint of
+    // two of its curves, the cut is bisected on the curve the crossing is
+    // on, not snapped to the nearest sample: no chord of the outline is
+    // longer than the 4 px sampling step. (Found by fuzzing random discs.)
+    const necked: BlobMember[] = [
+      [31.3494, 88.86991, 17.78187],
+      [11.10857, 63.92406, 20.93944],
+      [83.17891, 85.1449, 4.81323],
+      [52.5148, 37.24622, 13.05148],
+      [90.87762, 35.05257, 15.0036],
+    ].map(([cx, cy, r]) => ({ kind: "disc", cx, cy, r }));
+    const loops = arcsOutline(necked, { padding: 2.70188, radius: 12.57987 });
+    const longest = Math.max(
+      ...loops.flatMap((L) =>
+        L.map((p, i) => {
+          const q = L[(i + 1) % L.length];
+          return Math.hypot(p[0] - q[0], p[1] - q[1]);
+        })
+      )
+    );
+    check(
+      "a cut next to a joint of two curves lies on the outline (no chord over 4 px)",
+      loops.length > 0 && longest <= 4 + 1e-6,
+      `longest chord ${longest.toFixed(3)} px`
+    );
+  }
+
+  {
+    check("no members, no outline", arcsOutline([], { padding: 4, radius: 12 }).length === 0);
   }
 }
 

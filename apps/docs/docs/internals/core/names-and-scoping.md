@@ -223,6 +223,11 @@ pin (`pinAnchor`) does.
 A clause that is not a constraint draws: an operator or mark such as `arrow`,
 a relational `enclose` or `line`, or an open term that mixes operands with
 fresh marks, e.g., `spread({ dir: "y" }, [bar, text(...)])`.
+A drawing clause is a mark position over the rows the layer was drawn for,
+as the layer's children are: when the layer is a mark (one per cell of a
+partition), its `.relate` modifier passes those rows to `GoFishNode.relate`,
+so an empty-scope `chart()` in a clause binds the cell's rows.
+
 `resolveRelateClauses` (`constraints/relate.ts`) awaits and flattens the
 callback's result the way an operator treats its children (with the shared
 `flattenAndAwaitPromises`; it also awaits any thenable and drops `false`, and

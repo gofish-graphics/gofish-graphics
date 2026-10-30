@@ -21,7 +21,7 @@
  * DOM (11 <text> els, 1 <svg>) as the real GoFishVue docs page.
  *
  * The harness is served from apps/docs as Vite root so bare imports
- * (gofish-graphics, lodash, spectral.js, fast-kde) resolve from apps/docs/node_modules.
+ * (gofish-graphics, lodash, fast-kde) resolve from apps/docs/node_modules.
  *
  * USAGE
  *   node prototypes/gallery/capture-renders.mjs [baseUrl]
@@ -67,7 +67,6 @@ const argBase = process.argv[2] || null;
 // ---------------------------------------------------------------------------
 const HARNESS_JS = `
 import * as gf from "gofish-graphics";
-import { mix } from "spectral.js";
 import _ from "lodash";
 import { streamgraphData } from "../components/data/streamgraphData";
 import { titanic } from "../components/data/titanic";
@@ -95,7 +94,7 @@ window.renderExample = (code) => {
     _, root, size, gf,
     streamgraphData, titanic, nightingale, drivingShifts,
     newCarColors, caltrain, caltrainStopOrder, penguins,
-    density1d, genderPayGap, payGrade, mix, seafood, lakeLocations
+    density1d, genderPayGap, payGrade, gf.mix, seafood, lakeLocations
   );
   const app = document.getElementById("app");
   app.innerHTML = "";

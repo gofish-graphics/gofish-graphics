@@ -25,7 +25,12 @@ counterpart — the single value when the row-bag agrees on the field (the same
 homogeneity collapse `by:` performs), else `undefined`. Reach for `project` to
 read a field off the datum a mark is bound to (e.g. inside a `.zOrder(d => …)`
 callback) without indexing `pluck(...)[0]`; reach for `pluck` when the field is
-genuinely multi-valued in the bag.
+genuinely multi-valued in the bag. It also exports `quantileRows(rows, { x,
+density, n })`, a data helper for `derive` that turns the grid rows of a
+density curve into `n` rows at its quantiles, so `Bin.quantiles` and
+`field(x).median()` read the curve. It is a declared shortcut, kept in its
+own module (`ast/quantileRows.ts`), until first-class distributions (#980)
+replace it.
 
 A naming note before anything else: internally, these surfaces were "v1",
 "v2", and "v3", and a lot of code still uses those names. The wiki has

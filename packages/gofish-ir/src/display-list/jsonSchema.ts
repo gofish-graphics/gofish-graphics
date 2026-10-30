@@ -191,6 +191,7 @@ export const DISPLAY_LIST_JSON_SCHEMA = {
       additionalProperties: false,
       properties: {
         kind: { const: "mask" },
+        mode: { enum: ["luminance", "alpha"] },
         bbox: BBOX,
         mask: { type: "array", items: { $ref: "#/$defs/DisplayItem" } },
         content: { type: "array", items: { $ref: "#/$defs/DisplayItem" } },

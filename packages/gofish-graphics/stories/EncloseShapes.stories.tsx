@@ -8,17 +8,20 @@ import {
   group,
   layer,
   line,
+  pack,
   position,
   project,
   ref,
   scatter,
   selectAll,
   spread,
+  text,
   Color,
   Shape,
 } from "../src/lib";
 import { penguins } from "../src/data/penguins";
 import { gapminderCountries } from "../src/data/gapminderCountries";
+import { countryPopulations } from "../src/data/countryPopulations";
 
 const meta: Meta = { title: "Enclose/Shapes" };
 export default meta;
@@ -428,6 +431,48 @@ export const Hyperedges: StoryObj = {
         )
       )
       .render(container);
+    return container;
+  },
+};
+
+// ── 8. Shape.arcs: the radius of the closing disc ───────────────────────────
+
+// Africa's countries packed 6 px apart (pixel radius, area proportional to
+// population), outlined with `Shape.arcs` at growing radii. At radius 0 the
+// outline is the padded circles' union; each concave corner becomes an arc
+// of `radius`, and a large radius nears the convex hull.
+const africa = countryPopulations
+  .filter((d) => d.continent === "Africa")
+  .map((d) => 1.6 * Math.sqrt(d.pop));
+
+const arcsPanel = (radius: number) =>
+  spread({ dir: "y", spacing: 8, alignment: "middle" }, [
+    text({ text: `Shape.arcs({ radius: ${radius} })`, fontSize: 12 }),
+    enclose(
+      {
+        shape: Shape.arcs({ radius }),
+        padding: 6,
+        fill: "#f2c14e",
+        fillOpacity: 0.25,
+        stroke: "#333",
+        strokeWidth: 1.5,
+      },
+      [
+        pack(
+          { spacing: 6 },
+          africa.map((r) => circle({ r, fill: "#f2c14e" }))
+        ),
+      ]
+    ),
+  ]);
+
+export const ArcsRadiusSweep: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    spread({ dir: "y", spacing: 24 }, [
+      spread({ dir: "x", spacing: 24 }, [0, 6, 12].map(arcsPanel)),
+      spread({ dir: "x", spacing: 24 }, [24, 48, 200].map(arcsPanel)),
+    ]).render(container);
     return container;
   },
 };

@@ -36,14 +36,14 @@ _OPTION_TYPES: Dict[str, Any] = {
     "Length": ("object", {"type": ("type", None), "percent": ("percent", None), "px": ("px", None), "fr": ("fr", None)}),
     "ChartOptions": ("object", {"w": ("w", ("ref", "Length")), "h": ("h", ("ref", "Length")), "coord": ("coord", None), "color": ("color", None), "axes": ("axes", ("ref", "AxesOptions")), "legend": ("legend", None), "padding": ("padding", None), "schema": ("schema", None)}),
     "AxisDimsValue": ("ref", "AxisInterval"),
-    "Partition": ("tagged", "kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)}), "step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)})}),
+    "Partition": ("tagged", "kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)}), "step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)}), "quantiles": ("object", {"kind": ("kind", None), "quantiles": ("quantiles", None)})}),
     "StructBin": ("tagged", "kind", {"hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),
     "Tile": ("tagged", "kind", {"squarify": ("object", {"kind": ("kind", None), "ratio": ("ratio", None)}), "slice": ("object", {"kind": ("kind", None)}), "dice": ("object", {"kind": ("kind", None)}), "binary": ("object", {"kind": ("kind", None)}), "sliceDice": ("object", {"kind": ("kind", None)})}),
     "Overlap": ("tagged", "kind", {"separate": ("object", {"kind": ("kind", None), "padding": ("padding", None)}), "noise": ("object", {"kind": ("kind", None), "randomness": ("randomness", None), "smoothing": ("smoothing", None), "padding": ("padding", None), "seed": ("seed", None)})}),
     "Curve": ("tagged", "kind", {"linear": ("object", {"kind": ("kind", None)}), "step": ("object", {"kind": ("kind", None)}), "monotone": ("object", {"kind": ("kind", None)}), "smooth": ("object", {"kind": ("kind", None)}), "catmullRom": ("object", {"kind": ("kind", None)}), "bezier": ("object", {"kind": ("kind", None)}), "orthogonal": ("object", {"kind": ("kind", None), "bend": ("bend", None)}), "arc": ("object", {"kind": ("kind", None), "direction": ("direction", None)}), "perfectArrows": ("object", {"kind": ("kind", None), "bow": ("bow", None), "stretch": ("stretch", None), "stretch_min": ("stretchMin", None), "stretch_max": ("stretchMax", None), "pad_start": ("padStart", None), "pad_end": ("padEnd", None), "flip": ("flip", None), "straights": ("straights", None)})}),
-    "Bin": ("tagged", "kind", {"step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)}), "hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),
+    "Bin": ("tagged", "kind", {"step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)}), "quantiles": ("object", {"kind": ("kind", None), "quantiles": ("quantiles", None)}), "hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),
     "Calendar": ("tagged", "kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)})}),
-    "Shape": ("tagged", "kind", {"box": ("object", {"kind": ("kind", None), "rx": ("rx", None), "ry": ("ry", None)}), "oval": ("object", {"kind": ("kind", None)}), "blob": ("object", {"kind": ("kind", None), "convexity": ("convexity", None), "holes": ("holes", None), "roundness": ("roundness", None), "neck": ("neck", None), "avoiding": ("avoiding", None), "clearance": ("clearance", None)})}),
+    "Shape": ("tagged", "kind", {"box": ("object", {"kind": ("kind", None), "rx": ("rx", None), "ry": ("ry", None)}), "oval": ("object", {"kind": ("kind", None)}), "arcs": ("object", {"kind": ("kind", None), "radius": ("radius", None)}), "blob": ("object", {"kind": ("kind", None), "convexity": ("convexity", None), "holes": ("holes", None), "roundness": ("roundness", None), "neck": ("neck", None), "avoiding": ("avoiding", None), "clearance": ("clearance", None)})}),
     "Place": ("tagged", "kind", {"around": ("object", {"kind": ("kind", None), "directions": ("directions", None), "side": ("side", None), "offset": ("offset", None)}), "along": ("object", {"kind": ("kind", None), "at": ("at", None), "side": ("side", None), "orient": ("orient", None), "offset": ("offset", None)}), "start": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "end": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "interior": ("object", {"kind": ("kind", None)})}),
 }
 
@@ -344,7 +344,7 @@ def text(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
         font_weight: CSS font-weight (e.g. 300, 700, "bold").
         debug_bounding_box: Draw the text's bounding box, for layout debugging. Default false.
         rotate: Rotation in degrees, clockwise on screen, about the text anchor. Default 0.
-        text_anchor: Where the text anchor — the local origin `rotate` pivots about and dims channels position — sits along the string: its first character, center, or last character. Default "start".
+        text_anchor: Where the text anchor — the local origin `rotate` pivots about and `x` places — sits along the string: its first character, center, or last character. `cx` places the center of the text's box whatever the anchor. Default "start".
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
@@ -472,8 +472,8 @@ def blank(*, debug: Optional[bool] = None, em_x: Optional[bool] = None, em_y: Op
             _kw[_k] = _v
     return Mark("blank", **_kw)
 
-def region(*, debug: Optional[bool] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None) -> Mark:
-    """Draws the region its parent gives it, such as a partition's cell. It has no size or position of its own: it fills the space it is given on both axes. It draws the region's outline when the region has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.
+def region(*, debug: Optional[bool] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None, inset: Optional[float] = None) -> Mark:
+    """Draws the cell it is in, such as a partition's cell. It has no size or position of its own: on each axis where it is in a cell, it is that cell, placed by its data through the partition's scale, and on an axis where it is in no cell, it fills the space it is given. It draws the cell's outline when the cell has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.
 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
@@ -482,6 +482,7 @@ def region(*, debug: Optional[bool] = None, fill: Optional[str] = None, stroke: 
         stroke_width: Stroke width in pixels. Default 0.
         opacity: Opacity, 0 to 1. Default 1.
         filter: Raw SVG filter attribute.
+        inset: Pixels drawn in from each side of the cell it is in, on each axis where it is in a cell. Paint only: layout still reads the whole cell. A cell thinner than twice the inset draws nothing. Default 0.
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
@@ -491,6 +492,7 @@ def region(*, debug: Optional[bool] = None, fill: Optional[str] = None, stroke: 
         ("strokeWidth", stroke_width),
         ("opacity", opacity),
         ("filter", filter),
+        ("inset", inset),
     ]:
         if _v is not None:
             _kw[_k] = _v
@@ -513,15 +515,23 @@ def over(children: List["Mark"], *, blend_mode: Optional[str] = None) -> Mark:
             kwargs[_k] = _v
     return Mark("over", _children=list(children), **kwargs)
 
-def intersect(children: List["Mark"], *, blend_mode: Optional[str] = None) -> Mark:
-    """Draw only where both regions overlap: A ∩ B. Binary only.
+def intersect(children: List["Mark"], *, blend_mode: Optional[str] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
+    """Draw only where both regions overlap: A ∩ B. Binary only. With no `fill` or `stroke`, it draws the operands' own paint where they overlap. With either, it draws the overlap as one shape in its own paint: an exact path when both operands trace their outlines and one of them is convex, and with no exact path a fill of the overlapping ink, while a stroke is then an error.
 
     Args:
-        blend_mode: Blend used where the two regions combine. Default "color".
+        blend_mode: Blend used where the two regions combine. Unused when the result is painted. Default "color".
+        fill: Fill color of the overlap, or a field name or accessor for a color scale. Default none when `stroke` is given.
+        stroke: Stroke color of the overlap's outline, or a field name or accessor for a color scale. Default none. It needs an exact outline: both operands must trace their shape (a rect, ellipse, polygon, ribbon, area or region, or a ref to one; not an image, a text or a group), and at least one of them must be convex. Otherwise it is an error.
+        stroke_width: Stroke width in pixels. Without `stroke` it draws nothing. Default 1.
+        opacity: Opacity of the result, 0 to 1: of the painted overlap, fill and stroke, or with no `fill` or `stroke`, of the operands as drawn where they overlap. Default 1.
     """
     kwargs: Dict[str, Any] = {}
     for _k, _v in [
         ("blendMode", blend_mode),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
+        ("strokeWidth", stroke_width),
+        ("opacity", opacity),
     ]:
         if _v is not None:
             kwargs[_k] = _v
@@ -820,16 +830,18 @@ def _treemap_opts(*, x: Optional[int | float | str] = None, y: Optional[int | fl
             opts[_k] = _v
     return opts
 
-def _pack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _pack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, spacing: Optional[float] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Circle packing: place the flow's groups (or rows) so their enclosing circles touch without overlapping, with d3's front-chain algorithm. Children keep their pixel size; the pack does not fit itself to the available space yet (#967).
 
     Args:
         by: Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
+        spacing: Gap between sibling circles, in pixels: each child's enclosing circle is packed as if its radius were `spacing / 2` larger. Default 0.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
         ("by", by),
+        ("spacing", spacing),
         ("debug", debug),
     ]:
         if _v is not None:
@@ -840,7 +852,7 @@ def _partition_opts(*, by: FieldAccessor | StructAccessor, dir: Optional[str] = 
     """Divide the space into the cells of a binned key, and give each group its cell. Each cell sits at its true place on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size of its own fills its cell, and a mark with a size of its own is centered in it.
 
     Args:
-        by: A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error.
+        by: A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), Bin.quantiles(countOrProbabilities), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error.
         dir: Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r). Required with a single key, and not allowed with a key per axis.
         alignment: Alignment of the children on the other axis ("start" | "middle" | "end" | "baseline"). Applies only where nothing gives the children a cell on that axis: inside a cell of another partition, each child is placed in that cell. Not allowed with a key per axis. Default "baseline".
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
@@ -1129,12 +1141,12 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
             opts[_k] = _v
     return opts
 
-def _enclose_opts(*, padding: Optional[float] = None, shape: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, stroke_dasharray: Optional[str] = None, opacity: Optional[float] = None, fill_opacity: Optional[float] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
-    """Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.oval()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs.
+def _enclose_opts(*, padding: Optional[int | float | str] = None, shape: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, stroke_dasharray: Optional[str] = None, opacity: Optional[float] = None, fill_opacity: Optional[float] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.oval()`), the padded members with arc corners (`Shape.arcs()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs. Flow-step form `.flow(..., enclose(opts), ...)`: an outline around each group's subtree, laid out with it, so the operator above packs or places the outlined group and an outer `enclose` hugs this outline; in a chart's `operators`, its IR is this mark's.
 
     Args:
-        padding: Pixels between the members and the outline. For a blob, the distance from each member's own outline (around a line's whole length). Default 2.
-        shape: The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset.
+        padding: Pixels between the members and the outline: a number, or a field name or accessor read once per enclosed group (constant within the group). For a blob or arcs, the distance from each member's own outline (around a line's whole length). Default 2.
+        shape: The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.arcs({radius}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset.
         fill: Fill color of the outline, or a field name or accessor for a color scale (constant within the enclosed group).
         stroke: Stroke color of the outline, or a field name or accessor for a color scale (constant within the enclosed group). Default a light gray.
         stroke_width: Stroke width in pixels. Default 1.
@@ -1145,7 +1157,7 @@ def _enclose_opts(*, padding: Optional[float] = None, shape: Optional[dict] = No
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
-        ("padding", padding),
+        ("padding", _channel(padding)),
         ("shape", _to_wire(("ref", "Shape"), shape, "shape")),
         ("fill", _channel(fill)),
         ("stroke", _channel(stroke)),

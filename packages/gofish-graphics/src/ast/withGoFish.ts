@@ -448,8 +448,9 @@ export function createMark(
   cfg?: { kind?: MarkKind }
 ): any {
   const kind: MarkKind = cfg?.kind ?? "per-item";
-  // A strategy kind used bare is read as its value from here on.
-  return (markOpts: Record<string, any>) =>
+  // A strategy kind used bare is read as its value from here on. A mark
+  // whose options are all optional may be called with none (`region()`).
+  return (markOpts: Record<string, any> = {}) =>
     buildCreatedMark(
       shapeFn,
       channels,

@@ -145,9 +145,12 @@ export interface CompositeItem extends BaseDisplayItem {
   dest: DisplayItem[];
 }
 
-/** Clip `content` by the alpha of `mask`. */
+/** Clip `content` by `mask`: by its luminance (SVG's default mask), or by
+ *  its alpha when `mode` is `"alpha"` (where `mask` draws any ink at all). */
 export interface MaskItem extends BaseDisplayItem {
   kind: "mask";
+  /** What of `mask` clips: its luminance (the default) or its alpha. */
+  mode?: "luminance" | "alpha";
   bbox: { x: number; y: number; w: number; h: number };
   mask: DisplayItem[];
   content: DisplayItem[];

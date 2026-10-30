@@ -22,7 +22,7 @@ import {
   type ClaimPlacement,
   type Placement,
 } from "../constraints/claimPlacement";
-import { type AlignConstraint, type ConstraintSpec } from "../constraints";
+import { type ConstraintSpec } from "../constraints";
 
 /** What a child is to its parent's plan on one axis, about its data 0, in
  *  the parent's axis order. */
@@ -137,37 +137,6 @@ const placesItself = (c: GoFishAST, axis: 0 | 1): boolean => {
     return c.claimWalk.literalStart(axis) !== undefined;
   const d = (c.args?.dims as { min?: unknown; center?: unknown }[])?.[axis];
   return d?.min !== undefined || d?.center !== undefined;
-};
-
-/**
- * `constraints` as the solve sees them once layout has handed each child
- * its region (`placementConstraints`): an `align` loses each axis on which
- * every one of its operands is handed a region (`handsRegion`), since the
- * region placed them there, and goes when it has no axis left. A partition
- * inside another partition's cell is such a case.
- */
-const withoutSpannedAligns = (
-  node: GoFishNode,
-  constraints: ConstraintSpec[],
-  operands: Map<string, { child: number; direct: boolean }>
-): ConstraintSpec[] => {
-  const spanned = (c: AlignConstraint, axis: 0 | 1) =>
-    c.children.every((r) => {
-      const op = operands.get(r.name);
-      return op?.direct === true && node.handsRegion(op.child, axis);
-    });
-  const out: ConstraintSpec[] = [];
-  for (const c of constraints) {
-    if (c.type !== "align") {
-      out.push(c);
-      continue;
-    }
-    const x = c.x !== undefined && spanned(c, 0) ? undefined : c.x;
-    const y = c.y !== undefined && spanned(c, 1) ? undefined : c.y;
-    if (x === c.x && y === c.y) out.push(c);
-    else if (x !== undefined || y !== undefined) out.push({ ...c, x, y });
-  }
-  return out;
 };
 
 /**
@@ -298,7 +267,7 @@ export function buildPlan(
         chrome: ring && i > 0,
       };
     }),
-    withoutSpannedAligns(node, constraints, operands),
+    constraints,
     operands,
     // Into this layer's reading of the container: moved by its data 0 there
     // and reflected where its y runs the other way, as `formsOf` reads it.

@@ -199,7 +199,10 @@ How the re-walk lands descendants in absolute coordinates splits by boundary kin
 Whatever its kind, a boundary that paints its children in turn (`coord`, `box`,
 `enclose`, `offset`, `arrow`) takes their order from `orderChildrenForPaint`, the same
 rule the bake uses, so a z constraint that parts inside a boundary takes effect there.
-A compositor paints one result from a source and a destination child, so it has no
+A compositor lowers each of its two operands as a subtree (`lowerSubtree`, over
+`bakeSubtree` in `bake.ts`, the one-child walk `bakeChildren` runs per child), so an
+operand that only places its children, a `pack` or a `treemap`, lowers its leaves.
+It paints one result from a source and a destination child, so it has no
 order to take: it calls `assertNoPaintOrder`, which throws if a z constraint parts at
 it (see [How a layer orders its children](/internals/layout/coord-flattening#how-a-layer-orders-its-children)).
 
@@ -243,7 +246,16 @@ flat-absolute fold cannot express on its own:
   additionally mask the source by the destination's alpha or inverse alpha.
   Only `over`/`atop`/`in` add a `mix-blend-mode` to the destination layer. A
   Canvas/WebGPU backend would map the operator to its own blend state instead.
-- **`mask`** — clip `content` by the alpha of `mask`.
+- **`mask`** — clip `content` by `mask`: by its luminance, as an SVG mask
+  does by default, or by its alpha when `mode` is `"alpha"`
+  (`mask-type: alpha`). A painted `intersect` with no exact outline fills the
+  overlap through two nested alpha masks, one per operand. An operand gives
+  shape only, so its shape items are lowered into the mask opaque and
+  unstroked (`shapeOnly`); an image keeps its own alpha, which is its shape.
+
+A `composite` may carry `style.opacity` (`intersect`'s `opacity` with no
+paint), which both SVG backends put on the composite's outer group, so the
+composited result fades as a whole.
 
 Each item also carries optional **provenance** — `datum` (the source row(s) the
 primitive was elaborated from, the hit-testing / accessibility target) and `role`

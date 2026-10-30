@@ -127,7 +127,8 @@ async function flattenClausesAsync(c: unknown): Promise<unknown[]> {
  */
 export async function resolveRelateClauses(
   result: unknown,
-  env: RelateEnv
+  env: RelateEnv,
+  rows?: unknown
 ): Promise<{ constraints: ConstraintSpec[]; nodes: GoFishNode[] }> {
   const awaited = isThenable(result) ? await result : result;
   if (!Array.isArray(awaited)) {
@@ -160,7 +161,9 @@ export async function resolveRelateClauses(
   // have effects (a mark function or builder runs), so their order is kept.
   const nodes: GoFishNode[] = [];
   for (const { term, position } of terms) {
-    const node = await resolveMarkResult(term as any, {});
+    // A drawing clause is a mark position over the layer's rows, as the
+    // layer's children are: an empty-scope `chart()` in it binds them.
+    const node = await resolveMarkResult(term as any, {}, rows);
     if (!(node instanceof GoFishNode)) {
       throw new Error(
         `.relate(): clause ${position} is neither a constraint nor a mark or ` +

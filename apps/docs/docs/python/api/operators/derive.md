@@ -94,11 +94,35 @@ GoFish ships small helpers that pair well with `derive`:
 
 - `normalize(data, field)` — scale `field` so the values sum to 1.
 - `repeat(row, field)` — repeat a row `row[field]` times.
+- `quantile_rows(rows, x=..., density=..., n=...)` — `n` rows at the
+  quantiles of a density curve, one at each probability `(i + 0.5) / n`.
+  `rows` is a grid of one curve, each row a position `x` and the `density`
+  there, in any order, with no two rows at one position (call it after the split into curves). The density is integrated by the trapezoid rule. Each
+  row made holds `x` and every column whose value is the same in all of
+  `rows` (a group's `month`). [`Bin.quantiles`](/python/api/bin#bin-quantiles)
+  and `field(x).median()` over the result read the curve instead of the
+  grid. It stands in for first-class distributions
+  ([#980](https://github.com/gofish-graphics/gofish-graphics/issues/980)),
+  which will replace it.
 
 ```python
 from gofish import derive, normalize
 
 derive(lambda d: normalize(d, "count"))
+```
+
+```python
+from gofish import Bin, chart, circle, derive, field, partition, quantile_rows
+
+# The quantiles of a drawn density, cut into ten equal-mass cells
+(
+    chart(grid)
+    .flow(
+        derive(lambda rows: quantile_rows(rows, x="x", density="pdf", n=1000)),
+        partition(by=field("x").bin(Bin.quantiles(10)), dir="x"),
+    )
+    .mark(circle(cx=field("x").median(), r=3))
+)
 ```
 
 ## Notes

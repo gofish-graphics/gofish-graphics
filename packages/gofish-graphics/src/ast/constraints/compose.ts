@@ -63,7 +63,6 @@ import {
   type StackOrigin,
 } from "./distribute";
 import { type AlignConstraint } from "./align";
-import { getPositioningConstraintRefs } from "./proposalPlan";
 import {
   axisCoordinates,
   isPositionInterval,
@@ -374,52 +373,6 @@ export type SharingPlan = {
    *  absent. */
   rooms?: [Set<number>, Set<number>];
 };
-
-/** What layout hands a child as its region on one axis
- *  ({@link HandedRegions}). */
-export type Handed = "cell" | "passed";
-
-/** Per axis: the region a layer's layout hands each of its children there
- *  (`buildChildProposals`): `"cell"` for a child its `position` gives a
- *  cell that spans the axis, `"passed"` for a child that gets the region
- *  the layer was handed (one whose cell leaves the axis open, or that no
- *  constraint places). A child with no entry is handed none
- *  (`GoFishNode.handsRegion`). */
-export type HandedRegions = [Map<number, Handed>, Map<number, Handed>];
-
-/** The regions a layer with `constraints` hands `childNodes`
- *  ({@link HandedRegions}): every child no constraint places gets the
- *  region the layer was handed, and a child a `position` gives a region
- *  gets its cell on each axis the cell spans, and the layer's region on an
- *  axis it leaves open. A name that is not a child's takes no part. */
-export function handedRegions(
-  constraints: readonly ConstraintSpec[],
-  childNodes: readonly GoFishAST[]
-): HandedRegions {
-  const index = buildNameIndex(childNodes);
-  const handed: HandedRegions = [new Map(), new Map()];
-  const placed = new Set<number | undefined>(
-    [...getPositioningConstraintRefs(constraints)].map((name) =>
-      index.get(name)
-    )
-  );
-  childNodes.forEach((_, i) => {
-    if (!placed.has(i)) for (const h of handed) h.set(i, "passed");
-  });
-  for (const c of constraints) {
-    if (c.type !== "position" || c.region === undefined) continue;
-    for (const r of c.children) {
-      const i = index.get(r.name);
-      if (i === undefined) continue;
-      for (const axis of [0, 1] as const)
-        handed[axis].set(
-          i,
-          c.region.spans[axis] !== undefined ? "cell" : "passed"
-        );
-    }
-  }
-  return handed;
-}
 
 /** What a child is to its parent on one axis, by the parent's plan:
  *

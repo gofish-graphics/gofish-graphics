@@ -33,7 +33,7 @@
  */
 import { Delaunay } from "d3-delaunay";
 import { ringExtent } from "../../geometry/box";
-import { pointInRing, signedArea2 } from "../../geometry/plane";
+import { cross, pointInRing, segDist, signedArea2 } from "../../geometry/plane";
 
 /** A point in pixels. */
 export type Pt = [number, number];
@@ -76,9 +76,6 @@ const samples = (m: Exclude<Member, { kind: "disc" }>, pad: number): Pt[] => {
     }
   return out;
 };
-
-const cross = (o: Pt, a: Pt, b: Pt) =>
-  (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
 
 /** Andrew's monotone chain. */
 export const convexHull = (pts: Pt[]): Pt[] => {
@@ -399,7 +396,7 @@ const circumR = (a: Pt, b: Pt, c: Pt) =>
   (2 * Math.abs(cross(a, b, c)) || 1e-12);
 /** A uniform grid over boxes [x0, y0, x1, y1], about one box per cell. `query` lists, in index
  *  order, every box that may meet a rectangle (a superset: callers still test exactly). */
-const boxGrid = (bbs: number[][]) => {
+export const boxGrid = (bbs: number[][]) => {
   let X0 = Infinity,
     Y0 = Infinity,
     X1 = -Infinity,
@@ -809,7 +806,14 @@ const skeleton = (members: Member[], o: SkelOpts, zones: Prim[]): Skeleton => {
       if (
         mg === 0 &&
         avoid.radius[k] > 0 &&
-        segD(avoid.center[k][0], avoid.center[k][1], p[0], p[1], q[0], q[1]) >
+        segDist(
+          avoid.center[k][0],
+          avoid.center[k][1],
+          p[0],
+          p[1],
+          q[0],
+          q[1]
+        ) >
           (avoid.radius[k] + h) / Math.cos(Math.PI / 32) + 0.02
       )
         continue;
@@ -1086,7 +1090,7 @@ const skeleton = (members: Member[], o: SkelOpts, zones: Prim[]): Skeleton => {
 // grown by r), a tapered capsule (the convex hull of two discs), a box (a rectangle grown by r), a
 // triangle, or a tube bent along an arc. Its outline is traced exactly, and
 // each traced point records the circle it lies on (its center and radius), or none on a straight side.
-type Prim = {
+export type Prim = {
   k: 0 | 1 | 2 | 3 | 4 | 5;
   x1: number;
   y1: number;
@@ -1307,7 +1311,7 @@ const triPrim = (q: Pt[]): Prim => {
   };
 };
 /** A member, or an avoided node, grown by r, as a primitive. */
-const grownPrim = (m: Member, r: number): Prim =>
+export const grownPrim = (m: Member, r: number): Prim =>
   m.kind === "disc"
     ? discPrim(m.cx, m.cy, m.r + r)
     : m.kind === "segment"
@@ -1317,25 +1321,8 @@ const grownPrim = (m: Member, r: number): Prim =>
  *  straight side, and then the nearest point of its core), and 1 when that is a keep-out zone's edge;
  *  then (outline points only) the half-width of the piece it lies on, and 1 when that is a member's bulge. */
 const ARC = new Float64Array(6);
-const segD = (
-  x: number,
-  y: number,
-  ax: number,
-  ay: number,
-  bx: number,
-  by: number
-) => {
-  const ex = bx - ax,
-    ey = by - ay,
-    L = ex * ex + ey * ey;
-  const t =
-    L > 0 ? Math.max(0, Math.min(1, ((x - ax) * ex + (y - ay) * ey) / L)) : 0;
-  const dx = x - ax - t * ex,
-    dy = y - ay - t * ey;
-  return Math.sqrt(dx * dx + dy * dy);
-};
 /** Signed distance from (x, y) to a primitive; with `arc`, also fills ARC. */
-const primD = (p: Prim, x: number, y: number, arc: boolean): number => {
+export const primD = (p: Prim, x: number, y: number, arc: boolean): number => {
   if (p.k === 0) {
     if (arc) {
       ARC[0] = p.x1;
@@ -1385,9 +1372,9 @@ const primD = (p: Prim, x: number, y: number, arc: boolean): number => {
   if (p.k === 5) return taperD(p.x1, p.y1, p.x2, p.y2, p.r, p.x3, x, y, arc);
   if (arc) ARC[2] = 0;
   const d = Math.min(
-    segD(x, y, p.x1, p.y1, p.x2, p.y2),
-    segD(x, y, p.x2, p.y2, p.x3, p.y3),
-    segD(x, y, p.x3, p.y3, p.x1, p.y1)
+    segDist(x, y, p.x1, p.y1, p.x2, p.y2),
+    segDist(x, y, p.x2, p.y2, p.x3, p.y3),
+    segDist(x, y, p.x3, p.y3, p.x1, p.y1)
   );
   const inside =
     (p.x2 - p.x1) * (y - p.y1) - (p.y2 - p.y1) * (x - p.x1) >= 0 &&
@@ -1441,9 +1428,9 @@ const primV = (F: Float64Array, i: number, x: number, y: number): number => {
   const x3 = F[o + 5],
     y3 = F[o + 6];
   const d = Math.min(
-    segD(x, y, x1, y1, x2, y2),
-    segD(x, y, x2, y2, x3, y3),
-    segD(x, y, x3, y3, x1, y1)
+    segDist(x, y, x1, y1, x2, y2),
+    segDist(x, y, x2, y2, x3, y3),
+    segDist(x, y, x3, y3, x1, y1)
   );
   const inside =
     (x2 - x1) * (y - y1) - (y2 - y1) * (x - x1) >= 0 &&

@@ -30,6 +30,11 @@ import {
   relationFact,
 } from "../ast/constraints/placementFacts";
 import type { PositionConstraint } from "../ast/constraints/position";
+import {
+  createPositionConstraint,
+  PositionRegion,
+} from "../ast/constraints/position";
+import { Cell } from "../ast/cells";
 import type { ZAboveConstraint } from "../ast/constraints/zorder";
 import type { Anchor, Dimensions, FancyDirection } from "../ast/dims";
 import { elaborateDirection, localAnchorPoint } from "../ast/dims";
@@ -794,7 +799,10 @@ console.log("# constraint confluence: child size proposals");
 {
   const layerSize: [number, number] = [300, 200];
   const gridCell: [number, number] = [90, 40];
-  const gridCellByName = new Map<string, [number | undefined, number | undefined]>([
+  const gridCellByName = new Map<
+    string,
+    [number | undefined, number | undefined]
+  >([
     ["A", gridCell],
     ["U", [90, undefined]],
   ]);
@@ -802,7 +810,6 @@ console.log("# constraint confluence: child size proposals");
     "A",
     layerSize,
     gridCellByName,
-    undefined,
     undefined,
     [100, undefined]
   );
@@ -821,7 +828,6 @@ console.log("# constraint confluence: child size proposals");
     "B",
     layerSize,
     gridCellByName,
-    undefined,
     undefined,
     [100, undefined]
   );
@@ -1231,6 +1237,41 @@ console.log("# constraint confluence: interval position + align");
   );
 }
 
+console.log("# constraint confluence: region cell + align on the cell's axis");
+{
+  // A region's cell pins its target's middle at the cell's middle, as an
+  // interval pins its edges, so the ownership plan records it pinned there:
+  // an align on that axis defers to it. A and B sit in the cells [10, 30]
+  // and [50, 90] on x (pixel literals: a column that reads a value as
+  // itself); an align of their starts cannot move either, so both stay in
+  // their cells, and C, which has no cell, aligns to the first.
+  const regionOf = (lo: number, hi: number) =>
+    new PositionRegion(new Cell(lo, hi, `${lo}`), [(v) => v, undefined]);
+  const inCell = (name: string, lo: number, hi: number): PositionConstraint =>
+    createPositionConstraint({ region: regionOf(lo, hi) }, [child(name)]);
+  const alignStarts: AlignConstraint = {
+    type: "align",
+    x: "start",
+    children: [A, B, C],
+  };
+  expectConfluent(
+    "region/align",
+    solve(
+      [inCell("A", 10, 30), inCell("B", 50, 90), alignStarts],
+      ["A", "B", "C"]
+    ),
+    solve(
+      [alignStarts, inCell("B", 50, 90), inCell("A", 10, 30)],
+      ["A", "B", "C"]
+    ),
+    {
+      A: { min: 15, center: 20, max: 25 },
+      B: { min: 65, center: 70, max: 75 },
+      C: { min: 15, center: 20, max: 25 },
+    }
+  );
+}
+
 console.log("# constraint confluence: interval inside a distribute chain");
 {
   // An interval sizes A (size-strong cell); a distribute chains B off A. The
@@ -1394,8 +1435,7 @@ console.log("# constraint confluence: sized nodes solve, the rest inherit");
   ok(
     // Only pixels (fixed boxes): nothing to solve, and not a failure.
     "a claim with no σ in it is not solved, and inherits",
-    unscaled.solved.length === 1 &&
-      unscaled.sigmas[1] === undefined
+    unscaled.solved.length === 1 && unscaled.sigmas[1] === undefined
   );
 
   // A node whose room is given to it (`GoFishNode.isScope`: a pinned

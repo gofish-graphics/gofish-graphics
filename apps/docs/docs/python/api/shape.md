@@ -42,6 +42,7 @@ from gofish import Shape, circle, enclose, layer, spread
 ```python
 Shape.box(rx=None, ry=None)
 Shape.oval()
+Shape.arcs(radius=None)
 Shape.blob(convexity=None, holes=None, roundness=None, neck=None, avoiding=None, clearance=None)
 Shape.hull(convexity=None, holes=None, roundness=None, neck=None, avoiding=None, clearance=None)
 Shape.spine(convexity=None, holes=None, roundness=None, neck=None, avoiding=None, clearance=None)
@@ -69,6 +70,7 @@ from gofish.shape import hull  # the same function as Shape.hull
 | --------------- | ----------------------------------------- | --------------------------------------------------------------- |
 | `Shape.box()`   | its own kind                              | The members' bounding box, grown by `padding`, rounded corners. |
 | `Shape.oval()`  | its own kind                              | The smallest-area ellipse around the padded members.            |
+| `Shape.arcs()`  | its own kind                              | The padded members, with every concave corner an arc.           |
 | `Shape.blob()`  | the general region                        | Members, links between them and filled gaps, rounded.           |
 | `Shape.hull()`  | `Shape.blob(convexity=1, neck=1, **opts)` | The padded convex hull, rounded.                                |
 | `Shape.spine()` | `Shape.blob(convexity=0, **opts)`         | A tree of tubes that links the members, and nothing else.       |
@@ -110,6 +112,32 @@ enclose(
     fill_opacity=0.15,
     stroke="#1f3b63",
 ).render(w=260, h=160)
+```
+
+## `Shape.arcs()`
+
+::: gofish-ref Shape.arcs
+:::
+
+The outline is the members grown by `padding`, closed by a disc of `radius`:
+every gap the disc cannot pass through is filled, and every concave corner is a
+circular arc of `radius`. At radius 0 it is the padded members' union, and a
+large radius nears the padded convex hull. Holes are always filled. Around
+circles, the outline is made of circular arcs only, which is the contour of a
+bubble treemap (Görtler et al. 2018). Two discs of radius `a` whose padded edges
+are `g` apart join only when `2 · a · radius ≥ a · g + g² / 4`.
+
+```python
+from gofish import Shape, circle, enclose, pack
+
+enclose(
+    [pack([circle(r=r, fill="#f2c14e") for r in (30, 18, 22, 10, 14, 8)], spacing=6)],
+    shape=Shape.arcs(radius=12),
+    padding=6,
+    fill="#f2c14e",
+    fill_opacity=0.25,
+    stroke="#333",
+).render(w=220, h=220)
 ```
 
 ## `Shape.blob()`

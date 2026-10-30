@@ -96,8 +96,7 @@ export type ClaimChild = {
    *  data position in the layer's own set), as layout's `dataPositioned`. */
   dataPositioned: boolean;
   /** It places itself as it is laid out, before the solve (a position of
-   *  its own, a node placed from the refs it reads, or a child in a region
-   *  its layer passes on: `placesItself`, `GoFishNode.handsRegion`).
+   *  its own, or a node placed from the refs it reads: `placesItself`).
    *  The solve takes it where layout put it (`at:`) unless a `position`
    *  override owns the axis. */
   placesItself?: boolean;
@@ -240,27 +239,41 @@ const formulaPlaceable = (
 /** The constraints that act on `axis`, each as it acts on that axis alone
  *  (a position's or an align's other coordinate places nothing there). A
  *  region (a `partition` cell) places its child across its datum span on
- *  the axis, as an interval does. */
+ *  the axis, as an interval does, but only a child `inCell` names: one
+ *  placed by its data in the layer's frame is in its cell already, and one
+ *  that placed itself is where it put itself. */
 export const constraintsOn = (
   constraints: ConstraintSpec[],
-  axis: 0 | 1
+  axis: 0 | 1,
+  inCell: (name: string) => boolean = () => true
 ): ConstraintSpec[] => {
   const own = axisName(axis);
   const other = axisName((1 - axis) as 0 | 1);
-  return constraints
-    .filter((c) => actsOn(c, axis))
-    .map((c) =>
-      c.type === "position"
-        ? {
-            ...c,
-            [own]: c[own] ?? c.region?.spans[axis],
-            [other]: undefined,
-            region: undefined,
-          }
-        : c.type === "align" && c[other] !== undefined
+  const out: ConstraintSpec[] = [];
+  for (const c of constraints) {
+    if (!actsOn(c, axis)) continue;
+    if (c.type !== "position") {
+      out.push(
+        c.type === "align" && c[other] !== undefined
           ? { ...c, [other]: undefined }
           : c
-    );
+      );
+      continue;
+    }
+    const children =
+      c[own] === undefined
+        ? c.children.filter((r) => inCell(r.name))
+        : c.children;
+    if (children.length === 0) continue;
+    out.push({
+      ...c,
+      children,
+      [own]: c[own] ?? c.region?.spans[axis],
+      [other]: undefined,
+      region: undefined,
+    });
+  }
+  return out;
 };
 
 /** The children a constraint places on `axis` (a position, an align, a
@@ -301,12 +314,23 @@ export function placeByClaims(
   // frame without one maps no datum and seats no baseline.
   framed = true
 ): ClaimPlacement {
-  const onAxis = constraintsOn(constraints, axis);
+  // A cell places a child that neither its data places in the layer's
+  // frame nor placed itself (`constraintsOn`). A child with no claim of
+  // its own (a `region`) fills its cell, which is where its data puts it,
+  // so the cell is its span.
+  const inCell = (name: string): boolean => {
+    const op = operands.get(name);
+    if (op === undefined || !op.direct) return true;
+    const c = children[op.child];
+    return (
+      c.extent === undefined || (!c.dataPositioned && c.placesItself !== true)
+    );
+  };
+  const onAxis = constraintsOn(constraints, axis, inCell);
   const own = axisName(axis);
-  // The children a region's cell places on the axis: each lays itself out
-  // in the cell, as layout hands it the cell (`GoFishNode.layout`). One
-  // with no size of its own fills it, and any other keeps its size in the
-  // middle of it.
+  // The children a region's cell places on the axis: each is laid out in
+  // the cell's length (`buildChildSpans`). One with no size of its own
+  // fills it, and any other keeps its size in the middle of it.
   const celled = constrainedOn(
     axis,
     constraints,
@@ -316,6 +340,8 @@ export function placeByClaims(
       c[own] === undefined &&
       c.region?.spans[axis] !== undefined
   );
+  for (const [name, op] of operands)
+    if (op.direct && !inCell(name)) celled.delete(op.child);
   // A child an interval pins (across a span, or a region's cell it fills)
   // has a size from it, whatever its own claim.
   const spanned = new Set(

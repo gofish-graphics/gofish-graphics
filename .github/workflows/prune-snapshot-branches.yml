@@ -1,0 +1,134 @@
+# Deletes visual baseline branches that nobody needs any more.
+#
+# Every PR that accepts visual diffs gets an LFS-backed branch
+# `snapshots/<code-branch>` (see accept-visual-baselines.yml and
+# tests/scripts/snapshot-branch.ts). Once the PR is closed or merged, that
+# branch is dead weight. This job deletes `snapshots/<head>` when either:
+#
+#   - there is at least one PR in this repository whose head is `<head>`,
+#     none of them is open, and the latest close or merge is 30 or more days
+#     ago; or
+#   - there is no such PR, no code branch `<head>` exists, and the snapshot
+#     branch's head commit is 30 or more days old.
+#
+# Everything else is kept. `snapshots/main` is never deleted. Every keep and
+# delete decision is logged with its reason. A failed delete is logged and
+# the job carries on, then fails at the end.
+#
+# Run it by hand from the Actions tab to see what it would do: a manual run
+# is a dry run unless you untick `dry_run`.
+name: Prune Snapshot Branches
+
+on:
+  schedule:
+    - cron: "37 7 * * *" # daily, off-peak
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only log what would be deleted"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write # delete snapshots/* branches
+  pull-requests: read # look up each branch's PRs
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Delete stale snapshot branches
+        uses: actions/github-script@v8
+        env:
+          # A scheduled run has no inputs, so it is never a dry run.
+          DRY_RUN: ${{ inputs.dry_run == true }}
+          MAX_AGE_DAYS: 30
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const dryRun = process.env.DRY_RUN === "true";
+            const maxAgeMs = Number(process.env.MAX_AGE_DAYS) * 24 * 60 * 60 * 1000;
+            const now = Date.now();
+            const PREFIX = "refs/heads/snapshots/";
+            // Branch names may contain slashes; encode each segment on its own.
+            const encodePath = (name) => name.split("/").map(encodeURIComponent).join("/");
+            const days = (ms) => Math.floor(ms / (24 * 60 * 60 * 1000));
+
+            const refs = await github.paginate(
+              `GET /repos/${owner}/${repo}/git/matching-refs/heads/snapshots/`,
+              { per_page: 100 },
+            );
+            core.info(`Found ${refs.length} snapshot branch(es).${dryRun ? " Dry run: nothing will be deleted." : ""}`);
+
+            async function codeBranchExists(head) {
+              try {
+                await github.request(`GET /repos/${owner}/${repo}/git/ref/heads/${encodePath(head)}`);
+                return true;
+              } catch (e) {
+                if (e.status === 404) return false;
+                throw e;
+              }
+            }
+
+            // Returns a reason string when the branch should go, or null to keep it.
+            async function decide(head, sha) {
+              const prs = await github.paginate(`GET /repos/${owner}/${repo}/pulls`, {
+                state: "all",
+                head: `${owner}:${head}`,
+                per_page: 100,
+              });
+              if (prs.length > 0) {
+                const open = prs.filter((pr) => pr.state === "open");
+                if (open.length > 0) {
+                  return { keep: `PR ${open.map((pr) => `#${pr.number}`).join(", ")} is open` };
+                }
+                const latest = Math.max(...prs.map((pr) => Date.parse(pr.merged_at ?? pr.closed_at)));
+                const age = now - latest;
+                const nums = prs.map((pr) => `#${pr.number}`).join(", ");
+                if (age >= maxAgeMs) return { del: `PR ${nums} closed ${days(age)} days ago` };
+                return { keep: `PR ${nums} closed only ${days(age)} days ago` };
+              }
+              if (await codeBranchExists(head)) {
+                return { keep: `no PR, but code branch ${head} exists` };
+              }
+              const { data: commit } = await github.request(
+                `GET /repos/${owner}/${repo}/git/commits/${sha}`,
+              );
+              const age = now - Date.parse(commit.committer.date);
+              if (age >= maxAgeMs) return { del: `no PR, no code branch, last commit ${days(age)} days ago` };
+              return { keep: `no PR, no code branch, but last commit only ${days(age)} days ago` };
+            }
+
+            const failed = [];
+            let deleted = 0;
+            for (const ref of refs) {
+              const head = ref.ref.slice(PREFIX.length);
+              const name = `snapshots/${head}`;
+              if (head === "main") {
+                core.info(`keep   ${name}: the main baselines are never deleted`);
+                continue;
+              }
+              try {
+                const decision = await decide(head, ref.object.sha);
+                if (decision.keep) {
+                  core.info(`keep   ${name}: ${decision.keep}`);
+                  continue;
+                }
+                if (dryRun) {
+                  core.info(`would delete ${name}: ${decision.del}`);
+                  continue;
+                }
+                await github.request(`DELETE /repos/${owner}/${repo}/git/refs/heads/${encodePath(name)}`);
+                deleted++;
+                core.info(`delete ${name}: ${decision.del}`);
+              } catch (e) {
+                failed.push(name);
+                core.error(`failed ${name}: ${e.message}`);
+              }
+            }
+
+            core.info(`Deleted ${deleted}, failed ${failed.length}.`);
+            if (failed.length > 0) {
+              core.setFailed(`Could not process: ${failed.join(", ")}`);
+            }

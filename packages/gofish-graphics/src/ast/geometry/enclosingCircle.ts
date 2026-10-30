@@ -1,3 +1,5 @@
+import { packEnclose } from "d3-hierarchy";
+import type { AxisDirection } from "../axisDirection";
 import type { Box } from "./box";
 import type { Geometry } from "./index";
 
@@ -30,4 +32,19 @@ export function enclosingCircle(g: Geometry): Circle {
  *  frame. */
 export function translateCircle(c: Circle, [dx, dy]: [number, number]): Circle {
   return { cx: c.cx + dx, cy: c.cy + dy, r: c.r };
+}
+
+/** The smallest circle through the points of `rings` (Welzl, via d3's
+ *  `packEnclose` over zero-radius circles), in a node's axis order: each
+ *  point's y is turned by `direction`, as `ringOutline` turns it. */
+export function ringsEnclosingCircle(
+  rings: readonly (readonly (readonly [number, number])[])[],
+  direction: AxisDirection
+): Circle {
+  const e = packEnclose(
+    rings.flatMap((ring) =>
+      ring.map(([x, y]) => ({ x, y: direction * y, r: 0 }))
+    )
+  );
+  return { cx: e.x, cy: e.y, r: e.r };
 }

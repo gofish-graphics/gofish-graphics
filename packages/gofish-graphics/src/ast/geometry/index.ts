@@ -20,17 +20,19 @@ import type { HasOutline } from "./outline";
 
 export interface Geometry extends HasBox, HasEnclosingCircle, HasOutline {}
 
-export { boxOfDims, ringExtent } from "./box";
+export { boxOfDims, insetBox, ringExtent } from "./box";
 export type { Box, HasBox } from "./box";
 export {
   enclosingCircle,
   circleAroundBox,
   translateCircle,
+  ringsEnclosingCircle,
 } from "./enclosingCircle";
 export type { Circle, HasEnclosingCircle } from "./enclosingCircle";
 export {
   boxOutline,
   ellipseOutline,
+  roundedBoxOutline,
   outlinePaint,
   flattenPath,
   translateOutline,
@@ -39,6 +41,7 @@ export {
   openRing,
   outlineSegments,
   ringOutline,
+  simplifyRing,
   pathOutline,
   orderToPixel,
 } from "./outline";
@@ -47,7 +50,7 @@ export type {
   OutlinePaint,
   OutlinePart,
   OutlinePoint,
+  Point,
   HasOutline,
 } from "./outline";
-export { reflectRegionY, rebaseRegion, hasSpan } from "./region";
-export type { Region, Span, Point } from "./region";
+export { insetConvex, intersectRings } from "./clip";

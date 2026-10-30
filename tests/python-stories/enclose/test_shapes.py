@@ -2,8 +2,8 @@
 
 `enclose` in every form: the combinator over fresh children, over
 `.relate()` operands and over explicit `ref(...)` children; the chart mark
-form with one outline per group; avoiding with holes off and on; and graph
-edges as members. PenguinsFourShapes (a DOM grid of four charts) and
+form with one outline per group; avoiding with holes off and on; graph
+edges as members; and the radius of ``Shape.arcs``. PenguinsFourShapes (a DOM grid of four charts) and
 ChartAccentSubSaharanAfrica (a JS lambda filter over refs) are exempt, see
 tests/.python-sync-exempt.
 """
@@ -19,12 +19,14 @@ from gofish import (
     layer,
     line,
     position,
+    pack,
     ref,
     scatter,
     select_all,
     spread,
+    text,
 )
-from python_stories.data import PENGUINS
+from python_stories.data import COUNTRY_POPULATIONS, PENGUINS
 
 # ── 1. Combinator form, fresh children ───────────────────────────────────────
 
@@ -291,5 +293,46 @@ def story_hyperedges():
             )
             for s in SETS
         ]),
+        {},
+    )
+
+
+# ── 8. Shape.arcs: the radius of the closing disc ────────────────────────────
+
+AFRICA = [
+    1.6 * math.sqrt(d["pop"]) for d in COUNTRY_POPULATIONS if d["continent"] == "Africa"
+]
+
+
+def _arcs_panel(radius):
+    return spread(
+        [
+            text(text=f"Shape.arcs({{ radius: {radius} }})", font_size=12),
+            enclose(
+                [pack([circle(r=r, fill="#f2c14e") for r in AFRICA], spacing=6)],
+                shape=Shape.arcs(radius=radius),
+                padding=6,
+                fill="#f2c14e",
+                fill_opacity=0.25,
+                stroke="#333",
+                stroke_width=1.5,
+            ),
+        ],
+        dir="y",
+        spacing=8,
+        alignment="middle",
+    )
+
+
+def story_arcs_radius_sweep():
+    return (
+        spread(
+            [
+                spread([_arcs_panel(r) for r in (0, 6, 12)], dir="x", spacing=24),
+                spread([_arcs_panel(r) for r in (24, 48, 200)], dir="x", spacing=24),
+            ],
+            dir="y",
+            spacing=24,
+        ),
         {},
     )

@@ -114,8 +114,8 @@ export const Ellipse = ({
           }
         }
 
-        const x = positionOf(dims[0], posFn(scales[0]?.map), w);
-        const y = positionOf(dims[1], posFn(scales[1]?.map), h);
+        const x = positionOf(dims[0], posFn(scales[0]?.map), w / 2);
+        const y = positionOf(dims[1], posFn(scales[1]?.map), h / 2);
 
         return {
           intrinsicDims: [

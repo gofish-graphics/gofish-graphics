@@ -239,4 +239,4 @@ language toggle (`LanguageToggle.vue` hides itself on `/internals/` routes). See
 - **Core**: `gofish-graphics` - The graphics library being documented
 - **Documentation**: `vitepress`, `vitepress-plugin-sandpack`
 - **Interactive features**: `sandpack-vue3`, `monaco-editor`
-- **Data processing**: `lodash`, `fast-kde`, `spectral.js`
+- **Data processing**: `lodash`, `fast-kde`

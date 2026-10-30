@@ -498,6 +498,29 @@ function rejectAlongWithoutFlow(
   }
 }
 
+/** Check a relational mark that connects EXISTING marks instead of fusing:
+ *  one in `.mark(...)` of a chart over refs, or of an empty `chart()` scope
+ *  bound to the previous `.layer(...)` tier's marks. `along` (which names a
+ *  tier of a flow that doesn't apply here) and any anchor keys the mark
+ *  carries (`w`/`h`/`emX`/`emY`, which have nothing to anchor) would
+ *  otherwise silently do nothing, so each is a loud error. A no-op for any
+ *  other mark. */
+function rejectUnfusedOptions(fusable: RelationalFusable | undefined): void {
+  rejectAlongWithoutFlow(fusable);
+  if (fusable && fusable.anchorKeys.length > 0) {
+    const keys = fusable.anchorKeys;
+    const plural = keys.length > 1;
+    throw new Error(
+      `${fusable.type}({ ${keys.join(", ")} }): anchor channel${plural ? "s" : ""} ` +
+        `(${keys.join(", ")}) ${plural ? "have" : "has"} no effect here — this ` +
+        `${fusable.type} connects EXISTING marks (an empty-scope chart() tier ` +
+        `in .layer(...), or a chart over refs), so there's nothing to anchor. ` +
+        `Remove ${plural ? "them" : "it"}, or chart() over raw rows so ` +
+        `${fusable.type} can synthesize its own anchor tier.`
+    );
+  }
+}
+
 /* ---- END default grouping for relational marks ---- */
 
 /** The chart-level config a builder threads through to every terminal. */
@@ -523,8 +546,15 @@ type RenderMeta = {
  * binds the rows of the partition it sits in ({@link inScope}, which
  * `resolveMarkResult` applies wherever a mark position resolves its child).
  * So each also says whether it is an empty scope (`usesPreviousLayerMarks`),
- * binds rows to it (`withData`), and resolves into an enclosing scope's
- * registry (`withLayerContext`).
+ * binds data to it (`inScope` for a partition's rows, `withData` for a
+ * `.layer(...)` chain's previous tier's marks), and resolves into an
+ * enclosing scope's registry (`withLayerContext`).
+ *
+ * The two bindings differ in one way: what a relational mark placed directly
+ * in the empty scope's `.mark(...)` does. Over rows it fuses (it draws its
+ * own anchors); over the previous tier's marks it connects them. Which one an
+ * empty scope gets is known only where it is bound, so `ChartBuilder.mark`
+ * defers that decision to the binding (#1232).
  *
  * The methods are `declare`d (their bodies come from `attachBuilderTerminals`
  * below) so the terminal list stays defined in exactly one place. Their
@@ -537,16 +567,16 @@ export abstract class RenderableBuilder {
   /** True when this builder's rows are the enclosing scope's: an empty
    *  `chart()`, or a chain whose first tier is one. */
   abstract usesPreviousLayerMarks(): boolean;
-  /** A copy of this builder with the enclosing scope's rows bound to it. */
+  /** A copy of this builder with the previous `.layer(...)` tier's marks bound
+   *  to its empty scope. A relational mark in that scope connects them. */
   abstract withData(data: unknown): RenderableBuilder;
   /** A copy of this builder that resolves into `layerContext`. */
   abstract withLayerContext(layerContext: LayerContext): RenderableBuilder;
 
   /** This builder in a mark position whose partition holds `rows`: an empty
-   *  scope binds them; any other builder keeps its own data. */
-  inScope(rows: unknown): RenderableBuilder {
-    return this.usesPreviousLayerMarks() ? this.withData(rows) : this;
-  }
+   *  scope binds them, and a relational mark in it fuses over them; any other
+   *  builder keeps its own data. */
+  abstract inScope(rows: unknown): RenderableBuilder;
 
   declare render: TerminalMethods<BuildClockOptions>["render"];
   declare toSVG: TerminalMethods<BuildClockOptions>["toSVG"];
@@ -669,6 +699,14 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   // only it gets the `ChartBuilder | LayerBuilder` result (fusion also
   // depends on `hasOwnFlow()`, which the types do not track). Every other
   // mark returns this `ChartBuilder`, so `.name(...)` stays available on it.
+  //
+  // An empty scope (`chart()`) does not know its data yet, so it cannot
+  // decide (#1232). Bound to a partition's rows in a mark position
+  // (`inScope`), the rows need anchors and the mark fuses; bound to the
+  // previous tier's marks by `.layer(...)` (`withData`), it connects them. So
+  // here the mark is kept as given, and the binding decides: `inScope`
+  // replays this call once the rows are bound, and `withData` checks the
+  // mark the way a chart over refs is checked here (`rejectUnfusedOptions`).
   mark(mark: RelationalMark): ChartBuilder<TInput, TOutput> | LayerBuilder;
   mark(
     mark: Mark<TOutput> | ChartBuilder<any, any> | LayerBuilder
@@ -689,10 +727,13 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     // to anchor: the incoming data already IS (or will become) the refs bag
     // the connector reads. `hasOwnFlow()` is exactly "this chart was built
     // from genuine row data flowing through its own operators" — see its doc
-    // comment, shared with the `.layer()` fusion guard below.
+    // comment, shared with the `.layer()` fusion guard below. An empty scope
+    // defers the decision to its binding (see above).
     const fusable = (mark as any)?.__relationalFusable as
       | RelationalFusable
       | undefined;
+    if (fusable && this.usesPreviousLayerMarks())
+      return this.with({ finalMark: mark });
     if (fusable && this.hasOwnFlow()) {
       // Default grouping (issue #752): this mark fuses over THIS chart's own
       // flow, so a default split/travel-direction can be computed from its
@@ -705,27 +746,9 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
       );
     }
 
-    // Fusion was skipped — this mark connects existing marks (an empty-scope
-    // `chart()` tier, or a chart whose data is already refs), so `along`
-    // (which names a tier of a flow that doesn't apply here) and any anchor
-    // keys it's still carrying (`w`/`h`/`emX`/`emY`, which have nothing to
-    // anchor) would otherwise silently do nothing. That's exactly the kind
-    // of user-wrote-X/system-did-Y disagreement that should be a loud error
-    // rather than a quiet no-op.
-    rejectAlongWithoutFlow(fusable);
-    if (fusable && fusable.anchorKeys.length > 0) {
-      const keys = fusable.anchorKeys;
-      const plural = keys.length > 1;
-      throw new Error(
-        `${fusable.type}({ ${keys.join(", ")} }): anchor channel${plural ? "s" : ""} ` +
-          `(${keys.join(", ")}) ${plural ? "have" : "has"} no effect here — this ` +
-          `${fusable.type} connects EXISTING marks (an empty-scope chart() tier, ` +
-          `or a chart over refs), so there's nothing to anchor. Remove ${
-            plural ? "them" : "it"
-          }, or chart() over raw rows so ${fusable.type} can synthesize its own anchor tier.`
-      );
-    }
-
+    // Fusion was skipped — this mark connects existing marks (a chart whose
+    // data is already refs).
+    rejectUnfusedOptions(fusable);
     return this.with({ finalMark: mark });
   }
 
@@ -847,10 +870,31 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
   }
 
   /** A copy of this builder with its data replaced — used by `LayerBuilder` to
-   *  bind an empty `Chart()` scope to `selectAll(previousTierMarkName)`, and
-   *  in a mark position to bind it to the partition's rows. */
+   *  bind an empty `Chart()` scope to the previous tier's marks. A relational
+   *  mark kept for the binding to decide (see `mark`) connects them, so it is
+   *  checked as one over refs is. */
   withData(data: TInput): ChartBuilder<TInput, TOutput> {
+    rejectUnfusedOptions(this.deferredRelational());
     return this.with({ data });
+  }
+
+  /** This builder in a mark position whose partition holds `rows` (see
+   *  `RenderableBuilder.inScope`). An empty scope binds them, and the mark it
+   *  kept for its binding to decide (see `mark`) is attached again over the
+   *  rows, so a relational mark fuses: the result is then the fused
+   *  `LayerBuilder`. */
+  inScope(rows: unknown): ChartBuilder<TInput, TOutput> | LayerBuilder {
+    if (!this.usesPreviousLayerMarks()) return this;
+    const bound = this.with({ data: rows as TInput, finalMark: undefined });
+    const mark = this.state.finalMark;
+    return mark === undefined ? bound : bound.mark(mark as Mark<TOutput>);
+  }
+
+  /** The relational mark an empty scope kept for its binding to decide (see
+   *  `mark`), if it has one. */
+  private deferredRelational(): RelationalFusable | undefined {
+    if (!this.usesPreviousLayerMarks()) return undefined;
+    return (this.state.finalMark as any)?.__relationalFusable;
   }
 
   /** Ensure this tier's mark carries a name so a later tier can `selectAll` its
@@ -1241,13 +1285,29 @@ export class LayerBuilder extends RenderableBuilder {
     return first instanceof ChartBuilder && first.usesPreviousLayerMarks();
   }
 
-  /** A copy of this chain with `data` bound to its first tier, the one tier
-   *  whose scope is the enclosing one: in a mark position, the partition's
-   *  rows. Every later tier keeps the previous tier's marks as its scope, so
-   *  `previous-tier` keeps its one meaning. */
+  /** A copy of this chain with `data`, the previous tier's marks of an
+   *  enclosing `.layer(...)` chain, bound to its first tier, the one tier whose
+   *  scope is the enclosing one. Every later tier keeps the previous tier's
+   *  marks as its scope, so `previous-tier` keeps its one meaning. */
   withData(data: unknown): LayerBuilder {
     return new LayerBuilder(
       [this.rootChart().withData(data), ...this.tiers.slice(1)],
+      this.layerContext
+    );
+  }
+
+  /** This chain in a mark position whose partition holds `rows`: its first
+   *  tier binds them as an empty `chart()` does (`ChartBuilder.inScope`). A
+   *  first tier whose relational mark fuses over them becomes two tiers, its
+   *  anchors and its connector, as `.mark(R)` over rows always does. */
+  inScope(rows: unknown): LayerBuilder {
+    if (!this.usesPreviousLayerMarks()) return this;
+    const first = this.rootChart().inScope(rows);
+    return new LayerBuilder(
+      [
+        ...(first instanceof LayerBuilder ? first.tiers : [first]),
+        ...this.tiers.slice(1),
+      ],
       this.layerContext
     );
   }
@@ -1301,6 +1361,10 @@ export class LayerBuilder extends RenderableBuilder {
             "sure the previous tier actually produced nodes."
         );
       }
+      // Bound here, not as a mark position binds (`inScope`): what it binds
+      // is marks, not rows, so a relational mark in it connects them.
+      if (tier instanceof RenderableBuilder && tier.usesPreviousLayerMarks())
+        tier = tier.withData(prevRefs);
 
       if (tier instanceof ChartBuilder) {
         // The root tier's clock, offered to every later tier the way the
@@ -1309,8 +1373,6 @@ export class LayerBuilder extends RenderableBuilder {
         // sequence's chart, even when it is written as a nested
         // `chart(selectAll(...))` pipeline.
         if (i > 0) tier.adoptTimeTier(root);
-        if (tier.usesPreviousLayerMarks())
-          tier = tier.withData(prevRefs as any);
         // Auto-name this tier's mark (unless already named) whenever a later
         // tier exists, so its produced nodes are addressable as the next
         // tier's scope — uniformly, regardless of whether the next tier is an
@@ -1340,8 +1402,8 @@ export class LayerBuilder extends RenderableBuilder {
         // previous tier's bag as its datum, uniformly. A relational mark
         // (e.g. `ribbon()`) reads it as the refs it connects; a leaf mark
         // (e.g. `rect({...})`) ignores its datum argument and renders exactly
-        // as before. A chain binds the bag as an empty `chart()` does
-        // (`inScope`). With no previous bag (the previous tier named
+        // as before. A chain whose first tier is an empty scope was bound to
+        // the bag above. With no previous bag (the previous tier named
         // nothing), the tier has no rows.
         nodes.push(
           await resolveMarkResult(tier, sharedContext, prevRefs ?? NO_ROWS)

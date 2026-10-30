@@ -111,11 +111,7 @@ import {
 } from "./axisDirection";
 import { isToken, Token } from "./createName";
 import type { ConstraintSpec } from "./constraints";
-import {
-  childRole,
-  type HandedRegions,
-  type SharingPlan,
-} from "./constraints/compose";
+import { childRole, type SharingPlan } from "./constraints/compose";
 import type { KeyedDomains } from "./keyedDomains";
 import {
   chainOn,
@@ -154,11 +150,9 @@ import {
   boxOfDims,
   boxOutline,
   enclosingCircle,
-  reflectRegionY,
   translateCircle,
   type Geometry,
   type Outline,
-  type Region,
 } from "./geometry";
 
 export type RenderSession = {
@@ -374,18 +368,11 @@ export function placeUnplacedChild(child: Placeable): void {
 // applied; `transform.translate` is its offset in the parent's frame. `dims`
 // composes the two exactly once (`combineDims`), so a layout must never fold
 // its translate into `intrinsicDims.min` too (#755).
-//
-// `region` is the space the parent gives the node, when it gives one (#1059,
-// `geometry/region.ts`), in the node's axis order and measured from the
-// parent's origin, as `translate` is. A layout may place itself by it (a
-// `region` mark fills it, a `layer` that hands regions on passes it to its
-// children); one that does not is centered in it by `GoFishNode.layout`.
 export type Layout = (
   size: Size,
   scales: Size<AxisScale | undefined>,
   children: GoFishAST[],
-  node: GoFishNode,
-  region?: Region
+  node: GoFishNode
 ) => { intrinsicDims: FancyDims; transform: FancyTransform; renderData?: any };
 
 /** Map a layout pixel (y-down, layout origin) to a final absolute canvas
@@ -440,6 +427,23 @@ export type GeometryFn = (
   node: GoFishNode
 ) => Omit<Geometry, "outline"> & Partial<Pick<Geometry, "outline">>;
 
+/** Where `child` sits in `node`'s frame: its translate, read when a geometry
+ *  query moves the child's shape into the node's frame. A child not placed
+ *  yet has no position there, so that is a loud error. */
+export const placedTranslate = (
+  child: GoFishAST,
+  node: GoFishNode
+): [number, number] => {
+  const tx = child.projectedTranslate(0);
+  const ty = child.projectedTranslate(1);
+  if (tx === undefined || ty === undefined)
+    throw new Error(
+      `[gofish] geometry(): a child of ${node.type} was not placed, so ` +
+        `its position in the ${node.type}'s frame is unknown`
+    );
+  return [tx, ty];
+};
+
 /** The geometry a node has when its definition supplies none. A leaf answers
  *  only `box`. A node with children also answers `enclosingCircle`, lazily: the
  *  smallest circle around its children's enclosing circles, each moved by the
@@ -455,14 +459,10 @@ export const defaultGeometry: GeometryFn = (
     box,
     enclosingCircle: () => {
       const circles = children.map((child) => {
-        const tx = child.projectedTranslate(0);
-        const ty = child.projectedTranslate(1);
-        if (tx === undefined || ty === undefined)
-          throw new Error(
-            `[gofish] geometry(): a child of ${node.type} was not placed, so ` +
-              `its position in the ${node.type}'s frame is unknown`
-          );
-        const c = translateCircle(enclosingCircle(child.geometry()), [tx, ty]);
+        const c = translateCircle(
+          enclosingCircle(child.geometry()),
+          placedTranslate(child, node)
+        );
         return { x: c.cx, y: c.cy, r: c.r };
       });
       const e = packEnclose(circles);
@@ -492,13 +492,6 @@ export type ResolveSharing = (
   childNodes: (GoFishNode | GoFishRef)[],
   constraints: ConstraintSpec[]
 ) => SharingPlan;
-
-/** A node kind's rule for the regions its layout hands its children
- *  ({@link GoFishNode.handed}). */
-export type ResolveHanded = (
-  childNodes: (GoFishNode | GoFishRef)[],
-  constraints: ConstraintSpec[]
-) => HandedRegions;
 
 /** Every child in the own set on both axes, nothing nested. */
 export const shareAll: ResolveSharing = (childNodes) => ({
@@ -650,8 +643,6 @@ export class GoFishNode {
   private _resolveUnderlyingSpace: ResolveUnderlyingSpace;
   private _resolveSharing: ResolveSharing;
   private _sharing?: SharingPlan;
-  private _resolveHanded?: ResolveHanded;
-  private _handed?: HandedRegions;
   private _resolveExtent: ResolveExtent;
   public _underlyingSpace?: Size<UnderlyingSpace> = undefined;
   public _extent?: Size<Extent | undefined> = undefined;
@@ -696,6 +687,13 @@ export class GoFishNode {
   public renderData?: any;
   public coordinateTransform?: CoordinateTransform;
   public color?: MaybeValue<string>;
+  /** The style of the first item this node painted itself that puts down
+   *  paint (a fill or a stroke), at rest, before any paint-time animation.
+   *  Cleared by every `layout()` and set by the node's first lowering after
+   *  it, so it is never stale; undefined while the node has painted nothing
+   *  (not yet lowered, silenced, or no own paint, as on a compositor). Its
+   *  labels lower after it and read it (see `autoLabelColorForStyle`). */
+  public paintedStyle?: DisplayList.Style;
   public constraints: ConstraintSpec[] = [];
   public colorConfig?: ColorConfig;
   public _labels?: LabelSpec[];
@@ -720,7 +718,7 @@ export class GoFishNode {
   // in `graphicalOperators/layer.tsx`). Readers that need a numeric paint-
   // order key apply `?? 0` at the comparison site so unset behaves exactly
   // like an explicit 0 for sorting purposes.
-  private _zOrder: number | undefined = undefined;
+  public _zOrder: number | undefined = undefined;
   private renderSession?: RenderSession;
   // Axis state per dimension. Set by `resolveAxes` and consumed by the axis
   // elaboration pass (`elaborateChrome`), which wraps owning nodes in a Layer of
@@ -895,7 +893,6 @@ export class GoFishNode {
       resolveUnderlyingSpace,
       resolveExtent,
       resolveSharing,
-      resolveHanded,
       layout,
       lower,
       geometry,
@@ -909,9 +906,6 @@ export class GoFishNode {
       resolveUnderlyingSpace: ResolveUnderlyingSpace;
       resolveExtent?: ResolveExtent;
       resolveSharing?: ResolveSharing;
-      /** The regions its layout hands its children (a layer's
-       *  `handedRegions`); none when absent. */
-      resolveHanded?: ResolveHanded;
       layout: Layout;
       lower?: Lower;
       geometry?: GeometryFn;
@@ -932,7 +926,6 @@ export class GoFishNode {
     this.uid = `node-${GoFishNode.uidCounter++}`;
     this._resolveUnderlyingSpace = resolveUnderlyingSpace;
     this._resolveSharing = resolveSharing ?? shareAll;
-    this._resolveHanded = resolveHanded;
     this._resolveExtent =
       resolveExtent ?? ((_ce, _cs, spaces) => impliedExtents(spaces));
     this._layout = layout;
@@ -957,16 +950,6 @@ export class GoFishNode {
    *  Callers must not mutate it. */
   public sharing(): SharingPlan {
     return (this._sharing ??= this._resolveSharing(
-      this.children,
-      this.constraints
-    ));
-  }
-
-  /** The regions this node's layout hands its children
-   *  ({@link HandedRegions}), or undefined when it hands none. Memoized and
-   *  cleared as {@link sharing} is. */
-  public handed(): HandedRegions | undefined {
-    return (this._handed ??= this._resolveHanded?.(
       this.children,
       this.constraints
     ));
@@ -1456,28 +1439,24 @@ export class GoFishNode {
     return false;
   }
 
-  /** Whether layout hands this node's `child`-th child a region on `axis`
-   *  ({@link handed}): its cell, or the region this node was handed, which
-   *  it passes on. */
-  public handsRegion(child: number, axis: 0 | 1): boolean {
-    const h = this.handed()?.[axis].get(child);
-    const p = this.parent;
-    return (
-      h === "cell" ||
-      (h === "passed" &&
-        p !== undefined &&
-        p.handsRegion(p.children.indexOf(this), axis))
-    );
-  }
-
   /** Whether this node's parent gives it its room on `axis`, from outside
    *  its content: a region's cell (a `partition` cell) or a treemap tile
-   *  (`SharingPlan.rooms`). */
+   *  (`SharingPlan.rooms`). A child its data places in its parent's frame
+   *  (pinned data in the parent's own set: a layer of marks in a cell, or a
+   *  partition inside another's cell) is in its cell already and reads the
+   *  parent's frame, so the cell is not its room. */
   public givenRoom(axis: 0 | 1): boolean {
     const p = this.parent;
-    return (
-      p !== undefined &&
-      p.sharing().rooms?.[axis].has(p.children.indexOf(this)) === true
+    if (p === undefined) return false;
+    const i = p.children.indexOf(this);
+    const plan = p.sharing();
+    if (plan.rooms?.[axis].has(i) !== true) return false;
+    const space = this._underlyingSpace?.[axis];
+    return !(
+      plan.sets[axis][i] === 0 &&
+      space !== undefined &&
+      isCONTINUOUS(space) &&
+      space.origin !== "free"
     );
   }
 
@@ -1898,7 +1877,6 @@ export class GoFishNode {
     this._plotExtent = undefined;
     this._claimMemo = freshClaimMemo();
     this._sharing = undefined;
-    this._handed = undefined;
     this.children.forEach((c) => {
       if (c instanceof GoFishNode) c.clearUnderlyingSpace();
     });
@@ -2240,27 +2218,13 @@ export class GoFishNode {
    * `orientTransform`), and the node is handed back to its parent as a view in
    * the PARENT's axis order (`orientView`). The y scale is reflected on the
    * way in when the two directions differ (`orientScales`).
-   *
-   * `region` is the space the parent gives the node (#1059,
-   * `geometry/region.ts`), in the PARENT's axis order. The node's own layout
-   * reads it in its own order. On each axis where the region has a span and
-   * the node's layout did not place itself, the node is centered in the span:
-   * a node with no size of its own there was laid out in the span's length
-   * (the size proposal), so it fills the span, and any other node keeps its
-   * size and sits in the middle.
    */
-  public layout(
-    size: Size,
-    scales: Size<AxisScale | undefined>,
-    region?: Region
-  ): Placeable {
+  public layout(size: Size, scales: Size<AxisScale | undefined>): Placeable {
     // Layout re-joins a layer's position measures (`collectPositionDomains`),
     // so it reads the type walk's union-find of units, whose bindings it
     // must see. The outermost call installs it, as the walk's root does.
     if (!hasUnits()) {
-      return withUnits(this.walkUnits(), () =>
-        this.layout(size, scales, region)
-      );
+      return withUnits(this.walkUnits(), () => this.layout(size, scales));
     }
     const direction = this.yFrame.direction;
     const parentDirection = yDirection(this.parent);
@@ -2273,16 +2237,14 @@ export class GoFishNode {
       size,
       orientScales(scales, direction, parentDirection),
       this.children,
-      this,
-      region === undefined || direction === parentDirection
-        ? region
-        : reflectRegionY(region)
+      this
     );
 
     this.intrinsicDims = orientDims(elaborateDims(intrinsicDims), direction);
     this.transform = orientTransform(elaborateTransform(transform), direction);
     this.renderData = renderData;
     this._geometry = undefined;
+    this.paintedStyle = undefined;
 
     // Seed the per-axis ledger from this node's own layout: the `size` is
     // frame-invariant, and a self-placed node (`translate` defined) also records
@@ -2304,12 +2266,7 @@ export class GoFishNode {
       // `place()` short-circuits on the solved ledger, not on the translate.
       this._clearTranslateIfSolved(dir);
     }
-    const view = orientView(this, parentDirection);
-    region?.spans.forEach((span, dir) => {
-      if (span === undefined || view.dims[dir].min !== undefined) return;
-      view.place(dir === 0 ? "x" : "y", (span[0] + span[1]) / 2, "center");
-    });
-    return view;
+    return orientView(this, parentDirection);
   }
 
   /**
@@ -2333,10 +2290,17 @@ export class GoFishNode {
         this
       );
       // A node whose definition gives no outline is read as its box, its
-      // edges named in its own axis order. Its samples are kept per
-      // tolerance, for every reader of this layout.
+      // edges named in its own axis order. The box only bounds its ink
+      // (`Outline.bounds`). Its samples are kept per tolerance, for every
+      // reader of this layout.
       const outline =
-        g.outline ?? (() => [boxOutline(g.box, this.yFrame.direction)]);
+        g.outline ??
+        (() => [
+          {
+            ...boxOutline(g.box, this.yFrame.direction),
+            bounds: true as const,
+          },
+        ]);
       const sampled = new Map<number, Outline[]>();
       this._geometry = {
         ...g,
@@ -2912,7 +2876,25 @@ export class GoFishNode {
     // field predates this and was unpopulated). Boundary nodes re-walk children
     // through the children's own INTERNAL_lower, so descendants keep their own
     // ids; `??=` preserves any id a lower body sets itself. Zero-cost otherwise.
-    for (const item of items) item.id ??= this.uid;
+    //
+    // The same pass records the node's painted style: the style of its first
+    // own item that puts down paint (a fill or a stroke). A boundary's items
+    // include its children's, which carry their own ids, and an own item may
+    // carry no paint of its own (a scaled box's `group`, a compositor's
+    // `composite` or `mask`), so neither stands for the node's paint. The
+    // animation and visibility rules below replace an item's style rather
+    // than mutate it, so this stays the style at rest.
+    for (const item of items) {
+      item.id ??= this.uid;
+      const style = item.style;
+      if (
+        item.id === this.uid &&
+        style !== undefined &&
+        (style.fill !== undefined || style.stroke !== undefined)
+      ) {
+        this.paintedStyle ??= style;
+      }
+    }
     // Live channels (a `live()` value): bake a datum-bound thunk per channel
     // into the paint-time side table so paint re-evaluates it reactively. The
     // thunks are held OUTSIDE the display item (WeakMap) so the item stays pure
@@ -3091,9 +3073,12 @@ export class GoFishNode {
    * becomes a child of this layer (flagged `_relateClause`), and the layer
    * lays it out after the clauses that write the positions it reads (see
    * `scheduleRelate` in `constraints/relate.ts`). A later call replaces the
-   * clauses of an earlier one.
+   * clauses of an earlier one. `rows` are the rows the layer was drawn for,
+   * when it is a mark: a drawing clause is a mark position over them, so an
+   * empty-scope `chart()` in it binds them, as one among the layer's
+   * children does.
    */
-  public async relate(fn: RelateFn): Promise<this> {
+  public async relate(fn: RelateFn, rows?: unknown): Promise<this> {
     // Only a layer schedules clauses around its solve (layer.tsx).
     if (this.type !== "layer" && this.type !== "box") {
       throw new Error(
@@ -3104,7 +3089,11 @@ export class GoFishNode {
     // A later call replaces the drawing clauses of an earlier one.
     this.children = this.children.filter((c) => !isRelateClause(c));
     const env = relateEnv(this);
-    const { constraints, nodes } = await resolveRelateClauses(fn(env), env);
+    const { constraints, nodes } = await resolveRelateClauses(
+      fn(env),
+      env,
+      rows
+    );
     // The relate's constraints replace an earlier relate's, and the layer's
     // paint-order defaults for its own relational-mark children stay.
     this.constraints = [...(this._paintDefaults ?? []), ...constraints];

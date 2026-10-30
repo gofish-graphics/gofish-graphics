@@ -136,7 +136,7 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "sort",
     "size",
   ],
-  pack: ["by"],
+  pack: ["by", "spacing"],
   partition: ["by", "dir", "alignment", "axes"],
 };
 
@@ -303,6 +303,7 @@ const SCHEMA_STRATEGY_KEYS: Record<
   Bin: {
     step: { size: true },
     thresholds: { thresholds: true },
+    quantiles: { quantiles: true },
     hex: { radius: true },
     voronoi: { seeds: true },
   } satisfies StrategyKeys<BinIR>,
@@ -320,6 +321,7 @@ const SCHEMA_STRATEGY_KEYS: Record<
   Shape: {
     box: { rx: true, ry: true },
     oval: {},
+    arcs: { radius: true },
     blob: {
       convexity: true,
       holes: true,

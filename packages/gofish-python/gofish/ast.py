@@ -170,7 +170,17 @@ class Composed:
         self.operators: tuple = tuple(operators)
 
 
-def _expand_composed(op: Union[Operator, Composed]) -> tuple:
+def _expand_composed(op: Union[Operator, Composed, "_FlowStepMark"]) -> tuple:
+    """The operators a ``.flow(...)`` argument stands for: a fragment's own
+    operators, or the argument itself (an operator, or a mark that is also a
+    flow step, ``enclose(...)``: see ``_FlowStepMark``). Mirrors JS
+    ``expandComposedOperator`` (ast/marks/compose.ts). Any other mark is an
+    error: it belongs in ``.mark(...)``."""
+    if isinstance(op, Mark) and not isinstance(op, _FlowStepMark):
+        raise TypeError(
+            f"{op.mark_type}(...) is a mark, not a flow step: pass it to "
+            f".mark(...), not .flow(...) or compose(...)"
+        )
     return op.operators if isinstance(op, Composed) else (op,)
 
 
@@ -2259,7 +2269,7 @@ def pack(
     Operator form (no positional arg): packs each group (or row, without
     ``by``). Used inside `.flow(...)`.
 
-        chart(seafood).flow(pack(by="lake"), pack()).mark(circle(r=12))
+        chart(seafood).flow(pack(by="lake", spacing=4), pack()).mark(circle(r=12))
 
     Combinator form (positional list of marks): returns a low-level Mark that
     packs the given child marks. A pack nested in a pack is packed by the
@@ -3068,7 +3078,7 @@ class FieldAccessor(dict):
 
     - DOMAIN ops (`sort`/`reverse`/`bin`/`drop_nulls`) apply to a `by`
       grouping key, e.g. `spread(by=field("site").sort("yield"))`.
-    - AGGREGATE ops (`sum`/`mean`/`count`/`distinct`) fold a value channel's
+    - AGGREGATE ops (`sum`/`mean`/`median`/`count`/`distinct`) fold a value channel's
       rows to a single value, e.g. `rect(h=field("price").mean())`.
     - `normalize()` is valid only on an operator's (`spread`/`stack`)
       entry-flagged `size` channel — `size=field("count").normalize()` turns
@@ -3125,9 +3135,11 @@ class FieldAccessor(dict):
           ``.bin([Calendar.year, Calendar.month])``, one cell where one cell
           of each level meet, each level a part of the one before it (the
           June of 2015, labeled "Jun 2015").
-        - cells of one width (``.bin(Bin.step(0.5))``), or
+        - cells of one width (``.bin(Bin.step(0.5))``),
           ``Bin.thresholds(...)``, a cell count or a list of edges
-          (``.bin(Bin.thresholds(20))``). About 10 cells when none is given.
+          (``.bin(Bin.thresholds(20))``), or ``Bin.quantiles(...)``, a cell
+          count or a list of probabilities (``.bin(Bin.quantiles(10))``).
+          About 10 cells when none is given.
 
         A second ``.bin(...)`` splits each cell of the first, a chain:
         ``.bin(Calendar.year).bin(Calendar.month)`` gives the months of each
@@ -3180,6 +3192,12 @@ class FieldAccessor(dict):
         """Fold the group's rows to the mean of this field. Valid only in a
         value (size/pos) slot."""
         return self._with_op({"op": "mean"})
+
+    def median(self) -> "FieldAccessor":
+        """Fold the group's rows to the median of this field (the type-7
+        quantile at 0.5: the mean of the two middle values when there is an
+        even number). Valid only in a value (size/pos) slot."""
+        return self._with_op({"op": "median"})
 
     def count(self) -> "FieldAccessor":
         """Fold the group's rows to the row count (ignores the field's own
@@ -3302,7 +3320,8 @@ def chunk(size: int) -> ChunkKey:
 def _check_bin(key: str, value: Any, where: str) -> Dict[str, Any]:
     """The cells a key is binned into, in their wire form, on the key that
     takes them: ``"field"`` for ``field(x).bin(...)``, which takes a Calendar
-    value, ``Bin.step`` and ``Bin.thresholds``, and ``"struct"`` for
+    value, ``Bin.step``, ``Bin.thresholds`` and ``Bin.quantiles``, and
+    ``"struct"`` for
     ``struct(x=..., y=...).bin(...)``, which takes ``Bin.hex`` and
     ``Bin.voronoi``. A kind of the other key is a TypeError naming the key
     that takes it. The kinds of each key are the ``Partition`` and
@@ -3321,7 +3340,7 @@ def _check_bin(key: str, value: Any, where: str) -> Dict[str, Any]:
                 f"{where}: Bin.{kind} bins two fields together into cells of "
                 f"the plane. Bin them with struct(x=..., y=...).bin(Bin.{kind}(...)); "
                 "field(x).bin takes Bin.step(size), Bin.thresholds(count_or_edges), "
-                "or a Calendar value."
+                "Bin.quantiles(count_or_probabilities), or a Calendar value."
             )
         raise TypeError(
             f"{where}: Bin.{kind} bins one field. Bin each field with "
@@ -3330,8 +3349,9 @@ def _check_bin(key: str, value: Any, where: str) -> Dict[str, Any]:
         )
     if kind not in _OPTION_TYPES[own][2]:
         expected = (
-            "a Calendar value (Calendar.month, ...), Bin.step(size), or "
-            "Bin.thresholds(count_or_edges)"
+            "a Calendar value (Calendar.month, ...), Bin.step(size), "
+            "Bin.thresholds(count_or_edges), or "
+            "Bin.quantiles(count_or_probabilities)"
             if key == "field"
             else "a call in the Bin family, Bin.hex(radius=...) or "
             "Bin.voronoi(seeds=...)"
@@ -3437,6 +3457,78 @@ def repeat(row: dict, field: str) -> List[dict]:
     return [row] * n
 
 
+def quantile_rows(rows: List[dict], *, x: str, density: str, n: int) -> List[dict]:
+    """
+    ``n`` rows at the quantiles of the density that ``rows`` sample, one at
+    each probability ``(i + 0.5) / n``, so ``Bin.quantiles`` and
+    ``field(x).median()`` over them read the curve, not the grid. Mirrors JS
+    ``quantileRows``.
+
+    The rows are a grid of one curve, one row per position, in any order. The density is taken to
+    be linear between grid points, integrated by the trapezoid rule, and each
+    quantile is read off the result by linear interpolation. Each row made
+    holds ``x`` and every other column whose value is the same in all rows
+    (a group's ``month``); columns that vary are dropped.
+
+    A shortcut until first-class distributions (#980) replace it.
+
+    Args:
+        rows: The grid rows, each a dict with ``x`` and ``density``.
+        x: The column of the grid's positions.
+        density: The column of the density, finite and 0 or more. It need
+            not integrate to 1.
+        n: How many rows to make, a whole number, 1 or more.
+    """
+    where = "quantile_rows(...)"
+    if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+        raise ValueError(f"{where}: n must be a whole number, 1 or more, got {n!r}.")
+    grid = []
+    for r in rows:
+        at, d = r.get(x), r.get(density)
+        if isinstance(at, bool) or not isinstance(at, (int, float)) or not math.isfinite(at):
+            raise ValueError(f'{where}: the column "{x}" must hold finite numbers, got {at!r}.')
+        if isinstance(d, bool) or not isinstance(d, (int, float)) or not math.isfinite(d) or d < 0:
+            raise ValueError(
+                f'{where}: the column "{density}" must hold finite numbers, 0 or more, got {d!r}.'
+            )
+        grid.append((float(at), float(d)))
+    grid.sort(key=lambda p: p[0])
+    # A grid has one density at each position: two rows at one position are
+    # two curves mixed together.
+    for i in range(1, len(grid)):
+        if grid[i][0] == grid[i - 1][0]:
+            raise ValueError(
+                f'{where}: two rows have "{x}" {grid[i][0]:g}, so these rows hold '
+                f"more than one curve. Call quantile_rows on each curve's rows: "
+                f"inside derive, after the flow splits the curves apart."
+            )
+    cdf = [0.0]
+    for i in range(1, len(grid)):
+        cdf.append(cdf[-1] + (grid[i][0] - grid[i - 1][0]) * (grid[i][1] + grid[i - 1][1]) / 2)
+    total = cdf[-1]
+    if not total > 0:
+        raise ValueError(
+            f'{where}: the density "{density}" has no area over "{x}", so it has '
+            f"no quantiles. It needs two or more grid points with some density."
+        )
+    first = rows[0]
+    constant = {
+        k: v
+        for k, v in first.items()
+        if k not in (x, density) and all(k in r and r[k] == v for r in rows)
+    }
+    out = []
+    j = 0
+    for i in range(n):
+        target = (i + 0.5) / n * total
+        while cdf[j + 1] < target:
+            j += 1
+        span = cdf[j + 1] - cdf[j]
+        t = (target - cdf[j]) / span if span > 0 else 0.0
+        out.append({**constant, x: grid[j][0] + t * (grid[j + 1][0] - grid[j][0])})
+    return out
+
+
 # Mark factory functions
 #
 # rect / circle / ellipse / petal / text / image / polygon / blank are
@@ -3512,14 +3604,18 @@ def enclose(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
     """Enclose mark: an outline drawn around nodes, under them. The outline is
     a ``shape`` from the ``Shape`` family: the padded bounding box
     (``Shape.box(rx=..., ry=...)``, the default), the smallest ellipse around
-    the members (``Shape.oval()``), or a smooth region (``Shape.blob(...)``,
+    the members (``Shape.oval()``), the padded members with arc corners
+    (``Shape.arcs(radius=...)``), or a smooth region (``Shape.blob(...)``,
     ``Shape.hull(...)``, ``Shape.spine(...)``).
 
-    Two forms, like :func:`line`: combinator form ``enclose([a, c], ...)``
-    (fresh children are laid out as ``layer`` lays them out; ``ref(...)``
-    children and ``.relate()`` operands are enclosed where they are), and bag
-    form ``chart(select_all("points")).flow(group(by="species"))
-    .mark(enclose(...))``, one outline per group.
+    Three forms: combinator form ``enclose([a, c], ...)`` (fresh children are
+    laid out as ``layer`` lays them out; ``ref(...)`` children and
+    ``.relate()`` operands are enclosed where they are); bag form
+    ``chart(select_all("points")).flow(group(by="species"))
+    .mark(enclose(...))``, one outline per group; and flow-step form
+    ``.flow(pack(by="region"), enclose(...), pack())``, an outline around
+    each group's subtree, laid out with it. ``padding`` may be a field name,
+    read once per group.
 
     The options are the generated ``_enclose_opts`` core's (see the docs
     options table); an unknown option raises TypeError.
@@ -3527,7 +3623,18 @@ def enclose(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
     kwargs = _enclose_opts(**options)
     if children is not None:
         return Mark("enclose", _children=list(children), **kwargs)
-    return Mark("enclose", **kwargs)
+    return _FlowStepMark("enclose", **kwargs)
+
+
+class _FlowStepMark(Mark):
+    """A mark that is also a ``.flow(...)`` step: ``enclose(...)``, the bag
+    form in ``.mark(...)`` and, in ``.flow(...)`` (or ``compose(...)``), a
+    step around each group's subtree. Its IR is the same in both places, the
+    mark's: in ``operators`` it carries the mark's modifiers (``name``,
+    ``label``, ``zOrder``, ``translate``), which each group's outline takes.
+    Every modifier returns a mark of the same class (``type(self)``), so a
+    chain keeps the step. Mirrors JS ``withFlowStep`` (ast/marks/compose.ts).
+    """
 
 
 # ─── cut: slice a source shape into N clipped sub-shapes ────────────────────

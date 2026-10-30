@@ -147,13 +147,15 @@ class PlacementOwnershipPlan<T> {
     }
 
     for (const axis of POSITION_AXES) {
-      const coordinate = constraint[axis];
-      if (coordinate === undefined) continue;
       const idx = axisIndex(axis);
-      // An interval pins BOTH edges — mark its children pinned when the
-      // edges resolve (an align sources such a target). A point pins one
-      // anchor. (A region pins nothing: its target placed itself in the
-      // region it was handed at layout, so it is initially placed.)
+      // An interval pins BOTH edges, and a region's cell pins its target's
+      // middle at the cell's middle (`lowerPositionPlacement`): mark their
+      // children pinned when the edges resolve, so an align on the axis
+      // defers to them (sources from them, never moves them). A point pins
+      // one anchor. A position never gives both a coordinate and a region
+      // span on one axis (`createPositionConstraint`).
+      const coordinate = constraint[axis] ?? constraint.region?.spans[idx];
+      if (coordinate === undefined) continue;
       if (isPositionInterval(coordinate)) {
         const min = compilePlacementCoordinate(
           this.A,
@@ -255,9 +257,11 @@ export function lowerPlacementConstraints<T>(
         // Point axes emit a single pin; interval axes emit both edges (strong
         // start/end pins) that cell closure resolves into a size.
         lowerPositionPlacement(constraint, owner, {
+          A,
           emitter: lowerer,
           targets,
           isInitiallyPlaced,
+          isDataPositioned,
           resolveCoordinate: resolveAxisCoordinate,
         });
         return;

@@ -162,7 +162,46 @@ class TestOperators:
         assert field("x").bin(Bin.thresholds([1, 2, 5]))["ops"] == [
             {"op": "bin", "partition": {"kind": "thresholds", "thresholds": [1, 2, 5]}}
         ]
+        assert field("x").bin(Bin.quantiles(10))["ops"] == [
+            {"op": "bin", "partition": {"kind": "quantiles", "quantiles": 10}}
+        ]
+        assert field("x").bin(Bin.quantiles([0.25, 0.75]))["ops"] == [
+            {"op": "bin", "partition": {"kind": "quantiles", "quantiles": [0.25, 0.75]}}
+        ]
         assert field("x").bin()["ops"] == [{"op": "bin"}]
+
+    def test_median_fold_wire(self):
+        """`.median()` is a fold, written as its op, as `.mean()` is."""
+        assert field("y").median()["ops"] == [{"op": "median"}]
+
+    def test_quantile_rows(self):
+        """`quantile_rows` turns a density grid into rows at its quantiles,
+        keeping the columns that are constant, as JS `quantileRows` does."""
+        from statistics import NormalDist
+
+        from gofish import quantile_rows
+
+        nd = NormalDist()
+        grid = [
+            {"month": "Jan", "x": -6 + i * 0.02, "pdf": nd.pdf(-6 + i * 0.02)}
+            for i in range(601)
+        ][::-1]
+        rows = quantile_rows(grid, x="x", density="pdf", n=1000)
+        assert len(rows) == 1000
+        worst = max(abs(r["x"] - nd.inv_cdf((i + 0.5) / 1000)) for i, r in enumerate(rows))
+        assert worst < 0.005
+        assert all(r["month"] == "Jan" and "pdf" not in r for r in rows)
+        flat = quantile_rows([{"x": 0, "d": 2}, {"x": 10, "d": 2}], x="x", density="d", n=4)
+        assert [r["x"] for r in flat] == [1.25, 3.75, 6.25, 8.75]
+        with pytest.raises(ValueError, match="no area"):
+            quantile_rows([{"x": 0, "d": 1}], x="x", density="d", n=3)
+        with pytest.raises(ValueError, match="whole number"):
+            quantile_rows(grid, x="x", density="pdf", n=0)
+        # Two curves mixed together (called before the split by month): two
+        # rows at one position.
+        two_months = grid + [{**r, "month": "Feb"} for r in grid]
+        with pytest.raises(ValueError, match='"x" .*more than one curve.*inside derive'):
+            quantile_rows(two_months, x="x", density="pdf", n=10)
 
     def test_bin_product_and_chain_wire(self):
         """A product is a list partition on one bin op; a chain is one bin op
@@ -1504,3 +1543,47 @@ class TestAppliedMark:
     def test_ref_is_not_applied(self):
         with pytest.raises(TypeError, match="cannot be applied"):
             ref("a")(self.ROWS)
+
+
+class TestEncloseFlowStep:
+    """``enclose(...)`` in ``.flow(...)`` is a step, and stays one through
+    the mark's modifiers: each is written into the step's IR."""
+
+    ROWS = [{"g": "a", "r": 10}, {"g": "b", "r": 12}]
+
+    def test_modifiers_keep_the_step(self):
+        from gofish import Shape, enclose, pack
+
+        step = (
+            enclose(shape=Shape.arcs(), padding=4)
+            .name("region")
+            .label("g")
+            .z_order(-1)
+            .translate(x=5)
+        )
+        doc = chart(self.ROWS).flow(pack(by="g"), step, pack()).mark(circle(r=4))
+        op = doc.to_ir()["root"]["operators"][1]
+        assert op["type"] == "enclose"
+        assert op["padding"] == 4
+        assert op["name"] == "region"
+        assert op["zOrder"] == -1
+        assert op["translate"] == {"x": 5}
+        assert op["label"][0]["accessor"] == "g"
+
+    def test_in_compose(self):
+        from gofish import enclose, pack
+
+        frag = compose(pack(by="g"), enclose(padding=2).name("region"))
+        doc = chart(self.ROWS).flow(frag, pack()).mark(circle(r=4)).to_ir()
+        assert doc["root"]["operators"][1]["name"] == "region"
+
+    def test_other_marks_are_not_steps(self):
+        from gofish import enclose, pack, rect
+
+        with pytest.raises(TypeError, match=r"rect\(\.\.\.\) is a mark"):
+            chart(self.ROWS).flow(pack(by="g"), rect(w=4))
+        with pytest.raises(TypeError, match=r"rect\(\.\.\.\) is a mark"):
+            compose(rect(w=4).name("bars"))
+        # a combinator-form enclose is a mark too
+        with pytest.raises(TypeError, match=r"enclose\(\.\.\.\) is a mark"):
+            chart(self.ROWS).flow(enclose([circle(r=4)]))

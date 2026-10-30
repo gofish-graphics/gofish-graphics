@@ -44,6 +44,34 @@ export function boxOfDims(dims: Dimensions, nodeType = "node"): Box {
   return { min: [x0, y0], max: [x1, y1] };
 }
 
+/** The span `[lo, hi]` drawn in by `by` at each end, about its middle, and
+ *  never below zero length: `[mid, mid]` when it is thinner than `2 · by`.
+ *  Unchanged when `by` is 0. */
+function insetSpan(lo: number, hi: number, by: number): [number, number] {
+  if (by === 0) return [lo, hi];
+  const mid = (lo + hi) / 2;
+  const half = Math.max(0, Math.abs(hi - lo) - 2 * by) / 2;
+  return [mid - half, mid + half];
+}
+
+/**
+ * A box drawn in by `by[axis]` at each end of each axis ({@link insetSpan}):
+ * what a rect or a region with an `inset` draws, where `by` is the inset on
+ * each axis its parent sizes it on and 0 on the others. `empty` is true when
+ * an inset axis has nothing left.
+ */
+export function insetBox(
+  box: Box,
+  by: readonly [number, number]
+): { box: Box; empty: boolean } {
+  const [x0, x1] = insetSpan(box.min[0], box.max[0], by[0]);
+  const [y0, y1] = insetSpan(box.min[1], box.max[1], by[1]);
+  return {
+    box: { min: [x0, y0], max: [x1, y1] },
+    empty: (by[0] > 0 && x1 === x0) || (by[1] > 0 && y1 === y0),
+  };
+}
+
 /**
  * A ring's axis-aligned extent, in one pass. (`Math.min(...ring.map(...))` reads
  * nicely but allocates two arrays per axis and blows the argument limit on a

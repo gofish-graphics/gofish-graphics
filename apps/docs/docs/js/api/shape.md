@@ -39,6 +39,7 @@ gf.layer([
 ```ts
 Shape.box({ rx?, ry? });
 Shape.oval();
+Shape.arcs({ radius? });
 Shape.blob({ convexity?, holes?, roundness?, neck?, avoiding?, clearance? });
 Shape.hull({ convexity?, holes?, roundness?, neck?, avoiding?, clearance? });
 Shape.spine({ convexity?, holes?, roundness?, neck?, avoiding?, clearance? });
@@ -66,6 +67,7 @@ import { hull } from "gofish-graphics/shape"; // the same function as Shape.hull
 | --------------- | ------------------------------------------------ | --------------------------------------------------------------- |
 | `Shape.box()`   | its own kind                                     | The members' bounding box, grown by `padding`, rounded corners. |
 | `Shape.oval()`  | its own kind                                     | The smallest-area ellipse around the padded members.            |
+| `Shape.arcs()`  | its own kind                                     | The padded members, with every concave corner an arc.           |
 | `Shape.blob()`  | the general region                               | Members, links between them and filled gaps, rounded.           |
 | `Shape.hull()`  | `Shape.blob({ convexity: 1, neck: 1, ...opts })` | The padded convex hull, rounded.                                |
 | `Shape.spine()` | `Shape.blob({ convexity: 0, ...opts })`          | A tree of tubes that links the members, and nothing else.       |
@@ -109,6 +111,45 @@ gf.enclose(
     ]),
   ]
 ).render(root, { w: 260, h: 160 });
+```
+
+:::
+
+## `Shape.arcs()`
+
+::: gofish-ref Shape.arcs
+:::
+
+The outline is the members grown by `padding`, closed by a disc of `radius`:
+every gap the disc cannot pass through is filled, and every concave corner is a
+circular arc of `radius`. At radius 0 it is the padded members' union, and a
+large radius nears the padded convex hull. Holes are always filled. Around
+circles, the outline is made of circular arcs only, which is the contour of a
+bubble treemap (Görtler et al. 2018). Two discs of radius `a` whose padded edges
+are `g` apart join only when `2 · a · radius ≥ a · g + g² / 4`.
+
+::: gofish
+
+```js
+gf.enclose(
+  {
+    shape: gf.Shape.arcs({ radius: 12 }),
+    padding: 6,
+    fill: "#f2c14e",
+    fillOpacity: 0.25,
+    stroke: "#333",
+  },
+  [
+    gf.pack({ spacing: 6 }, [
+      gf.circle({ r: 30, fill: "#f2c14e" }),
+      gf.circle({ r: 18, fill: "#f2c14e" }),
+      gf.circle({ r: 22, fill: "#f2c14e" }),
+      gf.circle({ r: 10, fill: "#f2c14e" }),
+      gf.circle({ r: 14, fill: "#f2c14e" }),
+      gf.circle({ r: 8, fill: "#f2c14e" }),
+    ]),
+  ]
+).render(root, { w: 220, h: 220 });
 ```
 
 :::

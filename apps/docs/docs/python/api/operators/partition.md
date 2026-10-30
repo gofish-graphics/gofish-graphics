@@ -176,7 +176,9 @@ chart(airports, color=Color.gradient("blues"), axes=True).flow(
 ```
 
 A mark with a size of its own is centered in its cell's box, which for a
-hexagon is its center.
+hexagon is its center. In a [`layer`](/python/api/operators/layer) beside a
+`region`, the layer places it, so the example centers each count on its
+region with an `align`.
 
 ::: gofish example:airport-counts-in-hexagons hidden
 :::

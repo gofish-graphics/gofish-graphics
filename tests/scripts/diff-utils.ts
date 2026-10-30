@@ -242,9 +242,8 @@ export function collectParityDiffs(): DiffEntry[] {
  * .python-sync-exempt), as DOM paths without the `.html` suffix. A
  * file-level exemption skips Python capture entirely (capture-python-dom.ts),
  * so its DOM never reaches a parity gate. A per-export exemption is still
- * captured and IR-validated but must not be byte-gated (e.g. CroissantStack:
- * the Python port renders identically but can't reproduce the JS croissant
- * recipe's per-slice spacer rects through the flat IR cut expansion). The
+ * captured and IR-validated but must not be byte-gated (for example a port
+ * that renders identically through a different construct). The
  * DOM path is keyed by Storybook title and export name, shared by JS and
  * Python capture (see path-mapping.storyToPath).
  */
@@ -310,6 +309,21 @@ export function removeBaselineStory(
   rmSync(join(baselineDir, "screenshots", path.replace(/\.html$/, ".png")), {
     force: true,
   });
+}
+
+/**
+ * Accepts each entry into a baseline directory: a "removed" entry deletes its
+ * baseline (`removeBaselineStory`), any other copies the capture in
+ * (`acceptStory`). Same defaults as `acceptStory`.
+ */
+export function applyEntries(
+  entries: Iterable<Pick<DiffEntry, "kind" | "path">>,
+  dirs: { captureDir?: string; baselineDir?: string } = {}
+): void {
+  for (const { kind, path } of entries) {
+    if (kind === "removed") removeBaselineStory(path, dirs.baselineDir);
+    else acceptStory(path, dirs);
+  }
 }
 
 // ---------------------------------------------------------------------------

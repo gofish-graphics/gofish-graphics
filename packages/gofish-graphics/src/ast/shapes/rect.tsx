@@ -28,15 +28,21 @@ import {
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
 import { literalBoxExtents } from "../extent";
-import { boxOfDims, boxOutline, outlinePaint } from "../geometry";
+import {
+  boxOfDims,
+  insetBox,
+  outlinePaint,
+  roundedBoxOutline,
+  type Box,
+} from "../geometry";
 import { aesthetic, continuous, Domain, posFn, pxOf } from "../domain";
 import { computeAesthetic, computeSize } from "../../util";
 import {
   UNDEFINED,
   UnderlyingSpace,
-  joinUnits,
   CONTINUOUS,
   magnitude,
+  pinnedSpan,
   valueUnits,
 } from "../underlyingSpace";
 import { interval } from "../../util/interval";
@@ -62,24 +68,6 @@ import {
 } from "../displayList/lowerHelpers";
 
 const DEFAULT_RECT_SIZE = 16;
-
-/** A drawn extent moved in by `inset` pixels at each end, about the same
- *  center, and never below zero size. */
-const insetBy = (
-  d: { min: number; size: number; center: number; max: number },
-  inset: number | Length | LengthValue
-) => {
-  // A percent inset is a percent of the rect's own box on that axis
-  // (#1176 step 6): `inset: percent(10)` draws a bar at 80% of its band.
-  const px = lengthIn(inset, () => Pwl.constant(Math.abs(d.size)));
-  const size = Math.max(0, Math.abs(d.size) - 2 * Pwl.at(px, 0));
-  return {
-    min: d.center - size / 2,
-    max: d.center + size / 2,
-    center: d.center,
-    size,
-  };
-};
 
 /* TODO: what should default embedding behavior be when all values are aesthetic? */
 export const Rect = ({
@@ -143,13 +131,27 @@ export const Rect = ({
     throw new Error(
       `rect: inset must be a number of pixels, 0 or more, got ${inset}.`
     );
-  const insets = isLength(inset) || inset > 0;
   // Whether the rect fills the space its parent gives it on `axis`: it sets
   // no size and no span there (read after the resolveAliases pass, which
   // writes the axis-name-keyed `dims` onto `dims`).
   const fills = (axis: 0 | 1): boolean =>
     node.fixedSize(axis) === undefined &&
     !(dims[axis].min !== undefined && dims[axis].max !== undefined);
+  // How far its `box` is drawn in at each end of each axis: `inset` on an
+  // axis it fills, else 0. A percent inset is a percent of the box on that
+  // axis (#1176 step 6): `inset: percent(10)` draws a bar at 80% of its band.
+  const insets = (box: Box): [number, number] => {
+    const on = (axis: 0 | 1) =>
+      fills(axis)
+        ? Pwl.at(
+            lengthIn(inset, () =>
+              Pwl.constant(Math.abs(box.max[axis] - box.min[axis]))
+            ),
+            0
+          )
+        : 0;
+    return [on(0), on(1)];
+  };
   // How it paints its outline, read once.
   const paint = outlinePaint({ fill, stroke, strokeWidth });
   const node: GoFishNode = new GoFishNode(
@@ -180,16 +182,8 @@ export const Rect = ({
           // A box placed by its center is a glyph, as a text or an image is.
           const center = centerOf(d);
           if (center !== undefined) return glyphAxis(center, dSize);
-          if (isValue(d.min) && isValue(d.max)) {
-            return CONTINUOUS(
-              interval(getValue(d.min)!, getValue(d.max)!),
-              "pinned",
-              joinUnits(valueUnits(d.min), valueUnits(d.max), true, {
-                axis,
-                where: "between a rect's two ends",
-              })
-            );
-          }
+          if (isValue(d.min) && isValue(d.max))
+            return pinnedSpan(d.min, d.max, axis, "between a rect's two ends");
           if (!isValue(d.min) && !isValue(dSize)) {
             // Nothing data-driven on this axis. Literal pixel sizes are
             // handled at layout time by computeAesthetic, so contribute
@@ -272,8 +266,8 @@ export const Rect = ({
           }
         }
 
-        const x = positionOf(dims[0], pos[0], w);
-        const y = positionOf(dims[1], pos[1], h);
+        const x = positionOf(dims[0], pos[0], w / 2);
+        const y = positionOf(dims[1], pos[1], h / 2);
 
         return {
           intrinsicDims: {
@@ -310,9 +304,19 @@ export const Rect = ({
         const space = coordinateTransform ?? linear();
         const isXEmbedded = intrinsicDims![0].embedded;
         const isYEmbedded = intrinsicDims![1].embedded;
-        const displayDims = displayDimsOf(intrinsicDims, transform).map(
-          (d, axis) => (insets && fills(axis as 0 | 1) ? insetBy(d, inset) : d)
-        );
+        // Its box where its parent placed it, drawn in by its insets.
+        const placed = displayDimsOf(intrinsicDims, transform);
+        const box: Box = {
+          min: [placed[0].min, placed[1].min],
+          max: [placed[0].max, placed[1].max],
+        };
+        const by = insets(box);
+        const { box: drawn } = insetBox(box, by);
+        const displayDims = placed.map((d, axis) => {
+          if (by[axis] === 0) return d;
+          const [min, max] = [drawn.min[axis], drawn.max[axis]];
+          return { min, max, center: (min + max) / 2, size: max - min };
+        });
 
         const unitScale = node.getRenderSession().scaleContext?.unit;
         const resolvedFill = resolveColorChannel(fill, unitScale);
@@ -448,14 +452,25 @@ export const Rect = ({
           },
         ];
       },
-      // Its outline is its box (see `boxOutline`), painted as it is drawn:
-      // filled unless its fill is "none" or "transparent", and stroked as
-      // wide as `strokeWidth`.
+      // Its outline is what it draws: its box drawn in by its insets, with
+      // its corners rounded (see `roundedBoxOutline`), painted as it is
+      // drawn: filled unless its fill is "none" or "transparent", and
+      // stroked as wide as `strokeWidth`.
       geometry: ({ intrinsicDims }, _children, node) => {
         const box = boxOfDims(intrinsicDims, node.type);
+        const { box: drawn } = insetBox(box, insets(box));
         return {
           box,
-          outline: () => [boxOutline(box, node.yFrame.direction, paint)],
+          outline: (tolerance) => [
+            roundedBoxOutline(
+              drawn,
+              rx,
+              ry,
+              node.yFrame.direction,
+              tolerance,
+              paint
+            ),
+          ],
         };
       },
     },
