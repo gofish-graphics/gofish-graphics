@@ -1,0 +1,1 @@
+[gofish:layout] spread(dir: "x") on x: its fixed parts need 732 px, but its slot has 720 px. Fixed parts: layer: its own size, 216 px + 504 px = 720 px; spread(dir: "x"): spacing 12 × 1 = 12 px. The parts that scale are drawn as if the fixed parts took no room, and the graphic overflows on x.
