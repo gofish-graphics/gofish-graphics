@@ -2397,12 +2397,12 @@ def _require_str(value: Any, what: str) -> str:
 
 # The unit of a difference of two instants, ``Unit.duration``: JS
 # ``DURATION`` in measure.ts. Durations add up.
-_DURATION = {"unit": "duration", "classes": {"CanAdd": {}}}
+_DURATION = {"unit": "duration", "traits": {"CanAdd": {}}}
 
 # The unit of a time column without its zone, which ``Unit.time(zone=...)``
-# adds: JS ``INSTANT`` in measure.ts. Its classes are known: it has none,
+# adds: JS ``INSTANT`` in measure.ts. Its traits are known: it has none,
 # since two instants do not add up. Its difference is a duration.
-_INSTANT = {"unit": "instant", "classes": {}, "difference": _DURATION}
+_INSTANT = {"unit": "instant", "traits": {}, "difference": _DURATION}
 
 
 def _is_number(v: Any) -> bool:
@@ -2420,7 +2420,7 @@ def _accepts_amount(v: Any, unit: Dict[str, Any]) -> bool:
     return _is_number(v)
 
 
-# Which values each class accepts, given the class's own record: JS
+# Which values each trait accepts, given the trait's own record: JS
 # ``ACCEPTS`` in schema.ts.
 _ACCEPTS: Dict[str, Callable[[Any, Any], bool]] = {
     "HasLevels": lambda v, c: v is None or isinstance(v, str) or _is_number(v),
@@ -2433,7 +2433,7 @@ _ACCEPTS: Dict[str, Callable[[Any, Any], bool]] = {
 
 def _check_levels_fit(who: str, column_type: Dict[str, Any]) -> None:
     """Raise when one of a column's levels is not a value one of the
-    column's classes accepts, with the message of JS ``checkLevelsFit`` in
+    column's traits accepts, with the message of JS ``checkLevelsFit`` in
     schema.ts, which explains the rule."""
     for level in column_type.get("HasLevels", {}).get("levels", []):
         for cls, accepts in _ACCEPTS.items():
@@ -2495,7 +2495,7 @@ _TRAIT_KINDS = ("diverging", "summable")
 
 
 def _unit_type_of(name: Optional[str], domain: Any, traits: Any) -> Dict[str, Any]:
-    """The classes of the unit ``name`` with ``domain`` and ``traits``,
+    """The traits of the unit ``name`` with ``domain`` and ``traits``,
     checked: JS ``unitTypeOf`` in schema.ts, with the same messages."""
     who = "Unit" if name is None else f"Unit({json.dumps(name, ensure_ascii=False)})"
     if domain is not None and not (
@@ -2560,7 +2560,7 @@ def _unit_type_of(name: Optional[str], domain: Any, traits: Any) -> Dict[str, An
         type_["HasUnit"] = {
             "unit": name,
             "symbol": name,
-            "classes": {"CanAdd": {}} if "summable" in kinds else {},
+            "traits": {"CanAdd": {}} if "summable" in kinds else {},
         }
     if domain is not None:
         type_["HasLevels"] = {"levels": list(domain["levels"])}
@@ -2586,7 +2586,7 @@ class Unit:
     Its name is its identity: two units are the same when their names are
     equal. Its ``domain`` (``Domain.discrete(levels)``,
     ``Domain.ordered(levels)``) is what its values are, and its ``traits``
-    (the ``Trait`` family) the capabilities they have. It is immutable.
+    (the ``Trait`` family) the traits they have. It is immutable.
     Declare a unit once and use it for every column in it. The built-in
     units are ``Unit.time(zone=...)``, for instants, and ``Unit.duration``,
     for spans of time.
@@ -2594,7 +2594,7 @@ class Unit:
 
     __slots__ = ("_type",)
 
-    # The classes every column in the unit has: JS ``UnitDefinition.type``.
+    # The traits every column in the unit has: JS ``UnitDefinition.type``.
     _type: Dict[str, Any]
 
     # ``Unit.duration``, set below the class.
@@ -2613,7 +2613,7 @@ class Unit:
 
     @classmethod
     def _of(cls, type_: Dict[str, Any]) -> "Unit":
-        """The definition whose classes are ``type_``."""
+        """The definition whose traits are ``type_``."""
         unit = object.__new__(cls)
         object.__setattr__(unit, "_type", copy.deepcopy(type_))
         return unit
@@ -2626,7 +2626,7 @@ class Unit:
 
     @property
     def type(self) -> Dict[str, Any]:
-        """The classes every column in the unit has, as the wire writes
+        """The traits every column in the unit has, as the wire writes
         them: JS ``UnitDefinition.type``."""
         return copy.deepcopy(self._type)
 
@@ -2683,7 +2683,7 @@ class Unit:
             default = len(levels["levels"]) / 2 if levels is not None else None
             at = "" if midpoint["at"] == default else repr(midpoint["at"])
             traits.append(f"Trait.diverging({at})")
-        if unit is not None and "CanAdd" in (unit.get("classes") or {}):
+        if unit is not None and "CanAdd" in (unit.get("traits") or {}):
             traits.append("Trait.summable()")
         if traits:
             args.append(f"traits=[{', '.join(traits)}]")
@@ -2693,9 +2693,9 @@ class Unit:
 Unit.duration = Unit._of({"HasUnit": _DURATION})
 
 
-# The class names of a column type, the keys of its wire record: JS
+# The trait names of a column type, the keys of its wire record: JS
 # ``ColumnType`` in schema.ts.
-_CLASS_NAMES = (
+_TRAIT_NAMES = (
     "HasLevels",
     "HasOrder",
     "HasMidpoint",
@@ -2710,8 +2710,8 @@ _RECORD_KEYS = ("name", "unit")
 
 
 def _unit_type(unit: Union[Unit, str]) -> Dict[str, Any]:
-    """The classes of a column in ``unit``: a definition's, or a name alone,
-    whose classes are unknown (no ``classes``). JS ``unitType`` in
+    """The traits of a column in ``unit``: a definition's, or a name alone,
+    whose traits are unknown (no ``traits``). JS ``unitType`` in
     schema.ts."""
     if isinstance(unit, str):
         return {"HasUnit": {"unit": unit, "symbol": unit}}
@@ -2719,9 +2719,9 @@ def _unit_type(unit: Union[Unit, str]) -> Dict[str, Any]:
 
 
 def _column_type_of(column: str, entry: Any) -> Dict[str, Any]:
-    """The record of classes a schema entry stands for, the wire form: a
+    """The record of traits a schema entry stands for, the wire form: a
     unit's, a column record's, or a wire record as is.
-    JS ``classesOf`` in schema.ts, with the same messages."""
+    JS ``traitsOf`` in schema.ts, with the same messages."""
     who = f'schema: column "{column}"'
     if isinstance(entry, (Unit, str)):
         return _unit_type(entry)
@@ -2730,7 +2730,7 @@ def _column_type_of(column: str, entry: Any) -> Dict[str, Any]:
             f"{who} has the entry {entry!r}. A column's entry is a Unit, a "
             "unit's name, or a column record { name, unit }."
         )
-    if all(k in _CLASS_NAMES for k in entry):
+    if all(k in _TRAIT_NAMES for k in entry):
         return dict(entry)
     unknown = [k for k in entry if k not in _RECORD_KEYS]
     if unknown:
@@ -2757,7 +2757,7 @@ def _column_type_of(column: str, entry: Any) -> Dict[str, Any]:
 
 def _schema_wire(schema: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     """A chart's (or a derive's) ``schema`` as the wire carries it: each
-    entry's record of classes (``_column_type_of``), as JS ``schemaToWire``
+    entry's record of traits (``_column_type_of``), as JS ``schemaToWire``
     writes it."""
     if not isinstance(schema, dict):
         raise TypeError(f"schema must be a dict of column types, got {schema!r}")

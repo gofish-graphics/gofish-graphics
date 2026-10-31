@@ -85,7 +85,7 @@ async function errorOf(fn: () => unknown): Promise<string | undefined> {
 }
 const iso = (t: number) => new Date(t).toISOString();
 /** `types` without the domains (`HasDomain`) applySchema computes, for a
- *  check about the other classes. */
+ *  check about the other traits. */
 const withoutDomains = (types: Record<string, any> | undefined) =>
   types === undefined
     ? undefined
@@ -541,7 +541,7 @@ async function main() {
         getColumnTypes(asDates)?.t?.HasUnit?.zone === "America/New_York",
       JSON.stringify([asDates[0], getColumnTypes(asDates)])
     );
-    // A missing value fits every class, a time's included: a derive whose
+    // A missing value fits every trait, a time's included: a derive whose
     // result has a null time keeps the column's type, as Python's does.
     const withNull = await derived(
       (rows) => [

@@ -74,7 +74,7 @@ expressiveness principle: the picture should say exactly what the data says. A
 signed bar grows both ways from its measure's zero, not from an axis default of
 zero with an override knob (#773). Data types declare what they can do, marks
 and operators declare what they need, and a mismatch is a loud error that
-names the missing capability (#984). See
+names the missing trait (#984). See
 [Column types](/internals/core/underlying-space#column-types-the-chart-schema).
 
 **Units are types.** A unit of measure on a value is a type, not a preference.
@@ -84,13 +84,13 @@ not an override (#452). A bare field name with no annotation is a weak default
 and yields to either real source. See
 [Measures: units are types](/internals/core/underlying-space#measures-units-are-types).
 
-**Capabilities get plain names.** A capability is named `Has<Thing>` for a
+**Traits get plain names.** A trait is named `Has<Thing>` for a
 property and `Can<Verb>` for an operation: `HasZero`, `HasOrder`, `HasCycle`,
 `CanAdd`, `CanNegate`. These read at a glance for someone who is not a
 mathematician. Math names like monoid or torsor appear only in the docs, as
-analogies. The word that declares a capability names what the user gets,
-not the class: `Trait.summable()` declares `CanAdd`, as `Trait.diverging()`
-declares `HasMidpoint`. A capability of amounts sits on the unit, which is
+analogies. The builder word that declares a trait names what the user gets,
+not the trait itself: `Trait.summable()` declares `CanAdd`, as `Trait.diverging()`
+declares `HasMidpoint`. A trait of amounts sits on the unit, which is
 declared once and shared by its columns, so one unit cannot both add up and
 not.
 
@@ -107,8 +107,8 @@ domain (a midpoint is a point along an order, so `Trait.diverging` needs
 `Domain.ordered`) or a name (`Trait.summable` belongs to a unit, and a unit
 is known by its name); a definition that breaks that is an error when it is
 made, not when it is drawn. `Domain` and `Trait` are families, but never
-reach the wire: the wire carries the classes they expand into. Named types such as `Price` or `Revenue` are sugar over the
-capabilities, like chart templates over operators, so design the capabilities
+reach the wire: the wire carries the traits they expand into. Named types such as `Price` or `Revenue` are sugar over the
+traits, like chart templates over operators, so design the traits
 first.
 
 **Add a type only where a real example forces it.** A type earns its place by

@@ -10,8 +10,8 @@ import { levelsDomain } from "../families/domain";
 
 /**
  * Column types (#984): `chart(data, { schema })` declares, per column, the
- * classes (capabilities) its values have, in the style of typeclasses. The
- * engine reasons over the classes, never over the builder words that declare
+ * traits its values have (`HasLevels`, `HasUnit`, ...). The
+ * engine reasons over the traits, never over the builder words that declare
  * them:
  *
  *  - {@link HasLevels}: the column's values are the levels of a finite
@@ -32,12 +32,12 @@ import { levelsDomain } from "../families/domain";
  *  - {@link HasUnit}: the column's values are amounts. Declared with a
  *    unit in the column's entry: a {@link Unit} definition (`Unit("USD")`),
  *    which says what unit the values are in and what the unit can do (its
- *    {@link UnitClasses}), or a unit's name alone (`"USD"`), which says
+ *    {@link UnitTraits}), or a unit's name alone (`"USD"`), which says
  *    nothing about what the unit can do. Without it a column's unit is
- *    unknown and unifies with any other (`measure.ts`). The unit's classes
+ *    unknown and unifies with any other (`measure.ts`). The unit's traits
  *    belong to the unit, not to the column: every occurrence of one unit's
- *    name is one unit, and their classes meet by one rule
- *    (`meetUnitClasses` in measure.ts), here among one chart's columns and
+ *    name is one unit, and their traits meet by one rule
+ *    (`meetUnitTraits` in measure.ts), here among one chart's columns and
  *    in the type walk across the figure. A time is a column in a unit read
  *    on a calendar: `Unit.time({ zone })`, the instant, whose `zone` is a
  *    parameter of the unit. A column of JS `Date` values is in it without a
@@ -60,7 +60,7 @@ import { levelsDomain } from "../families/domain";
  *    Arrow), and the host's encode reads it to send the column back as
  *    integers. Nothing in the engine reads it.
  *
- * A unit definition ({@link Unit}) stands for every class but HasQuantity,
+ * A unit definition ({@link Unit}) stands for every trait but HasQuantity,
  * HasDomain and HasInteger: its name is the column's HasUnit (with CanAdd
  * when its traits say `Trait.summable()`), its `domain` is HasLevels (and
  * HasOrder for `Domain.ordered`), and `Trait.diverging()` is HasMidpoint.
@@ -69,7 +69,7 @@ import { levelsDomain } from "../families/domain";
  * `field(x).bin(p)` are amounts of `x`'s quantity, in `x`'s unit, and a
  * `.count()` is a count.
  *
- * A column type is a record keyed by class name, so a later class (`HasZero`,
+ * A column type is a record keyed by trait name, so a later trait (`HasZero`,
  * `HasCycle`, ...) is one more optional key. The record is also the wire form:
  * {@link columnTypeOf} turns every schema entry into it, {@link schemaToWire}
  * writes it, and `chart` accepts it as is (that is what arrives from Python,
@@ -82,18 +82,18 @@ import { levelsDomain } from "../families/domain";
 /** One level of a column with a declared domain. */
 export type Level = string | number;
 
-/** The class of a column whose values are the levels of a finite domain,
+/** The trait of a column whose values are the levels of a finite domain,
  *  declared with a unit's `domain` (`Domain.discrete(levels)`,
  *  `Domain.ordered(levels)`). The list's order is the order its
  *  groups are laid out and listed in. */
 export type HasLevels = { levels: readonly Level[] };
 
-/** The class of a column whose levels ({@link HasLevels}) are ordered, first
+/** The trait of a column whose levels ({@link HasLevels}) are ordered, first
  *  to last (`Domain.ordered(levels)`). It has no options: the order is the levels'
  *  list. It requires {@link HasLevels}. */
 export type HasOrder = Record<string, never>;
 
-/** The class of an ordered column whose order has a midpoint: the point `at`
+/** The trait of an ordered column whose order has a midpoint: the point `at`
  *  along the order, in edge coordinates. 0 is the first level's leading
  *  edge, `n` is the last level's trailing edge (`n` levels), and level `i`
  *  spans `[i, i + 1]`, so 2.25 has two levels and a quarter of the third
@@ -102,25 +102,25 @@ export type HasOrder = Record<string, never>;
  *  when it is even. It requires {@link HasOrder}, and `0 <= at <= n`. */
 export type HasMidpoint = { at: number };
 
-/** The class of a column whose values are integers. It has no options. */
+/** The trait of a column whose values are integers. It has no options. */
 export type HasInteger = Record<string, never>;
 
-/** The class of a column whose values are amounts in a declared unit:
+/** The trait of a column whose values are amounts in a declared unit:
  *
  *  - `unit`: the unit's name (`Unit("USD")`, or `"USD"`). Two units are the
  *    same when their names are equal, and two different units never share
- *    an axis. A column without this class has an unknown unit, a unit
+ *    an axis. A column without this trait has an unknown unit, a unit
  *    variable that unifies with any unit (`measure.ts`).
  *  - `symbol`: what an axis title appends to show the unit, "Pay (USD)". A
  *    unit the user declares has its name as its symbol. The engine's own
  *    units (the "count" of `.count()`) have none, so their axes add nothing.
- *  - `classes`: what the unit can do ({@link UnitClasses}), when it is
- *    known: a {@link Unit} definition's classes, or the engine's own for its
+ *  - `traits`: what the unit can do ({@link UnitTraits}), when it is
+ *    known: a {@link Unit} definition's traits, or the engine's own for its
  *    units (an instant has none; a count, a share and a duration add up).
  *    Absent when the unit was declared by its name alone (`"USD"`): what it
  *    can do is unknown, so a sum of it passes, as a sum of a column with no
  *    declared unit does, until an occurrence of the same name that knows it
- *    is met (`meetUnitClasses` in measure.ts).
+ *    is met (`meetUnitTraits` in measure.ts).
  *  - `zone`: set when the values are instants read on a calendar
  *    (`Unit.time({ zone })`): epoch milliseconds, UTC, read on the calendar
  *    of the IANA time zone `zone`. The zone decides where calendar cells
@@ -139,25 +139,25 @@ export type HasInteger = Record<string, never>;
 export type HasUnit = {
   unit: string;
   symbol?: string;
-  classes?: UnitClasses;
+  traits?: UnitTraits;
   zone?: string;
   difference?: HasUnit;
 };
 
-/** The class of a unit whose amounts can be added
+/** The trait of a unit whose amounts can be added
  *  (`Unit(name, { traits: [Trait.summable()] })`):
  *  a sum of them is an amount in the same unit, and it starts from 0. It has
  *  no options. The instant, a time's unit, never has it, because two
  *  instants do not add. */
 export type CanAdd = Record<string, never>;
 
-/** The class of a column whose values are amounts of the quantity `name`
+/** The trait of a column whose values are amounts of the quantity `name`
  *  (`{ name: "Pay", unit: USD }`), when that is not the column's own name.
  *  Columns of one quantity share one unit variable, and the quantity titles
  *  the axis: the five summary columns of a box plot can all be "Pay". */
 export type HasQuantity = { name: string };
 
-/** The class of a column of finite numbers (or instants, as epoch
+/** The trait of a column of finite numbers (or instants, as epoch
  *  milliseconds): its DOMAIN, the interval `[lo, hi]` from its least value
  *  to its greatest in the data it was typed with (the chart's data, or a
  *  `derive`'s result), missing values aside. {@link applySchema} computes
@@ -177,7 +177,7 @@ export type HasDomain = {
   sorted: () => readonly number[];
 };
 
-/** A column's type: the classes it has, keyed by class name. */
+/** A column's type: the traits it has, keyed by trait name. */
 export type ColumnType = {
   HasLevels?: HasLevels;
   HasOrder?: HasOrder;
@@ -193,9 +193,9 @@ export type ColumnType = {
 const isEpochMs = (v: unknown): boolean =>
   v == null || (typeof v === "number" && Number.isFinite(v));
 
-/** Which values each class accepts as they stand, without reinterpreting
- *  them, given the class's own record. A missing value (null, undefined)
- *  fits every class.
+/** Which values each trait accepts as they stand, without reinterpreting
+ *  them, given the trait's own record. A missing value (null, undefined)
+ *  fits every trait.
  *
  *  - `HasLevels`: text or numbers, the kinds its levels are. A value outside
  *    the levels still fits, so the levels stay and their stray-level error
@@ -231,33 +231,33 @@ const ACCEPTS: {
 const isDate = (v: unknown): boolean =>
   v instanceof Date && Number.isFinite(v.getTime());
 
-const CLASSES = Object.keys(ACCEPTS) as (keyof ColumnType)[];
+const TRAITS = Object.keys(ACCEPTS) as (keyof ColumnType)[];
 
-/** The first class of `type` that does not accept `v` ({@link ACCEPTS}). */
-const rejectingClass = (
+/** The first trait of `type` that does not accept `v` ({@link ACCEPTS}). */
+const rejectingTrait = (
   type: ColumnType,
   v: unknown
 ): keyof ColumnType | undefined =>
-  CLASSES.find(
+  TRAITS.find(
     (k) =>
       type[k] !== undefined &&
       !(ACCEPTS[k] as (v: unknown, c: unknown) => boolean)(v, type[k])
   );
 
-/** Whether one value fits a column type as it stands: every class the type
+/** Whether one value fits a column type as it stands: every trait the type
  *  has accepts it ({@link ACCEPTS}). */
 const fitsType =
   (type: ColumnType) =>
   (v: unknown): boolean =>
-    rejectingClass(type, v) === undefined;
+    rejectingTrait(type, v) === undefined;
 
 /** The column types of a dataset, keyed by column name. */
 export type ColumnTypes = Record<string, ColumnType>;
 
-/** The classes of a unit, what its amounts can do, keyed by class name: a
+/** The traits of a unit, what its amounts can do, keyed by trait name: a
  *  {@link Unit} definition's, which every column in the unit shares. A later
- *  class of units (`HasZero`, ...) is one more optional key. */
-export type UnitClasses = { CanAdd?: CanAdd };
+ *  trait of units (`HasZero`, ...) is one more optional key. */
+export type UnitTraits = { CanAdd?: CanAdd };
 
 /** A trait that the order of a unit's levels has a midpoint
  *  (`Trait.diverging(midpoint?)`): its columns have {@link HasMidpoint}. It
@@ -272,7 +272,7 @@ export type DivergingTrait = {
  *  {@link CanAdd}. */
 export type SummableTrait = { readonly kind: "summable" };
 
-/** A capability of a unit's values, one entry of a unit definition's
+/** A trait of a unit's values, one entry of a unit definition's
  *  `traits` (the `Trait` family, `families/trait.ts`). */
 export type Trait = DivergingTrait | SummableTrait;
 
@@ -293,20 +293,20 @@ export type LevelsDomain = {
 export type Domain = LevelsDomain;
 
 /** What a unit definition takes besides its name: its `domain`, what its
- *  values are, and its `traits`, the capabilities they have. */
+ *  values are, and its `traits`, the traits they have. */
 export type UnitOptions = {
   /** The unit's values: `Domain.discrete(levels)` or
    *  `Domain.ordered(levels)`. Without it, a named unit's values are
    *  amounts (numbers). */
   domain?: Domain;
-  /** The capabilities of the unit's values: `Trait.diverging(midpoint?)`,
+  /** The traits of the unit's values: `Trait.diverging(midpoint?)`,
    *  `Trait.summable()`. */
   traits?: readonly Trait[];
 };
 
-/** The classes a unit definition gives every column in it: its name's
- *  {@link HasUnit}, its domain's {@link HasLevels}, and the classes its
- *  traits declare. */
+/** The traits a unit definition gives every column in it: its name's
+ *  {@link HasUnit}, its domain's {@link HasLevels}, and the traits its
+ *  `traits` declare. */
 export type UnitType = Pick<
   ColumnType,
   "HasUnit" | "HasLevels" | "HasOrder" | "HasMidpoint"
@@ -314,7 +314,7 @@ export type UnitType = Pick<
 
 /**
  * A unit definition (`Unit("USD", { traits: [Trait.summable()] })`,
- * `Unit.time()`): the classes every column in the unit has (`type`). It is
+ * `Unit.time()`): the traits every column in the unit has (`type`). It is
  * immutable, and is meant to be declared once and used by every column in
  * the unit.
  */
@@ -332,7 +332,7 @@ export class UnitDefinition {
   }
 }
 
-/** Freeze a class record and every record and list in it, so every column in
+/** Freeze a trait record and every record and list in it, so every column in
  *  a unit shares the one record. */
 function freezeDeep(value: unknown): void {
   if (value === null || typeof value !== "object") return;
@@ -353,7 +353,7 @@ const unitWho = (name: string | undefined): string =>
  * the same when their names are equal, and a unit the user names has its
  * name as its symbol, which an axis title appends ("Pay (USD)"). Its
  * `domain` is a list of the levels its values take, and its `traits` the
- * capabilities its values have (the `Trait` family). A unit with a domain
+ * traits its values have (the `Trait` family). A unit with a domain
  * but no name is a type of levels for the columns that use it, with no
  * unit for an axis to show.
  */
@@ -378,7 +378,7 @@ export function Unit(
   return new UnitDefinition(unitTypeOf(undefined, nameOrOptions));
 }
 
-/** The classes of the unit `name` with `options` ({@link UnitType}),
+/** The traits of the unit `name` with `options` ({@link UnitType}),
  *  checked. Python's `Unit` raises the same messages, word for word. */
 function unitTypeOf(name: string | undefined, options: UnitOptions): UnitType {
   const who = unitWho(name);
@@ -456,7 +456,7 @@ function unitTypeOf(name: string | undefined, options: UnitOptions): UnitType {
           HasUnit: {
             unit: name,
             symbol: name,
-            classes: kinds.has("summable") ? { CanAdd: {} } : {},
+            traits: kinds.has("summable") ? { CanAdd: {} } : {},
           },
         }
       : {}),
@@ -491,7 +491,7 @@ Unit.duration = new UnitDefinition({ HasUnit: DURATION });
 
 /** A column record in `chart`'s `schema`: the quantity the column's values
  *  are amounts of (`name`, `HasQuantity`), and the unit they are in
- *  (`unit`): a {@link Unit} definition, which gives the column every class
+ *  (`unit`): a {@link Unit} definition, which gives the column every trait
  *  of the unit's type ({@link UnitType}), or a unit's name alone. */
 export type ColumnRecord = { name?: string; unit?: Unit | string };
 
@@ -500,7 +500,7 @@ const RECORD_KEYS: readonly string[] = ["name", "unit"];
 
 /** What `chart`'s `schema` option takes per column: a column record, or
  *  one of its two shorthands: a {@link Unit} for `{ unit }`, and a unit's name for
- *  `{ unit: name }`. The engine also reads the record of classes every entry
+ *  `{ unit: name }`. The engine also reads the record of traits every entry
  *  stands for (the wire form, which Python sends), which is not a user form.
  *  A column's domain ({@link HasDomain}) is computed from its values;
  *  declaring one is not supported yet. */
@@ -510,15 +510,15 @@ export type SchemaEntry =
   | ColumnRecord
   | Omit<ColumnType, "HasDomain">;
 
-/** The classes of a column in `unit`: a definition's ({@link UnitType}), or
- *  a name alone, whose classes are unknown. */
+/** The traits of a column in `unit`: a definition's ({@link UnitType}), or
+ *  a name alone, whose traits are unknown. */
 const unitType = (unit: Unit | string): ColumnType =>
   typeof unit === "string" ? { HasUnit: { unit, symbol: unit } } : unit.type;
 
-/** The record of classes a schema entry stands for, before any check: a
+/** The record of traits a schema entry stands for, before any check: a
  *  unit's ({@link unitType}), a column record's, or the record itself (the
  *  wire form). An object with any other key throws. */
-function classesOf(who: string, entry: SchemaEntry): ColumnType {
+function traitsOf(who: string, entry: SchemaEntry): ColumnType {
   if (entry instanceof UnitDefinition || typeof entry === "string")
     return unitType(entry);
   if (entry === null || typeof entry !== "object")
@@ -527,7 +527,7 @@ function classesOf(who: string, entry: SchemaEntry): ColumnType {
         `unit's name, or a column record { name, unit }.`
     );
   const keys = Object.keys(entry);
-  if (keys.every((k) => (CLASSES as string[]).includes(k)))
+  if (keys.every((k) => (TRAITS as string[]).includes(k)))
     return entry as ColumnType;
   const unknown = keys.filter((k) => !RECORD_KEYS.includes(k));
   if (unknown.length > 0)
@@ -554,26 +554,26 @@ function classesOf(who: string, entry: SchemaEntry): ColumnType {
   };
 }
 
-/** A schema as the wire carries it: each entry's record of classes
- *  ({@link classesOf}), as Python's `chart` writes it. */
+/** A schema as the wire carries it: each entry's record of traits
+ *  ({@link traitsOf}), as Python's `chart` writes it. */
 export const schemaToWire = (
   schema: Record<string, SchemaEntry>
 ): Record<string, ColumnType> =>
   Object.fromEntries(
     Object.entries(schema).map(([column, entry]) => [
       column,
-      classesOf(`schema: column "${column}"`, entry),
+      traitsOf(`schema: column "${column}"`, entry),
     ])
   );
 
-/** The record a schema entry stands for ({@link classesOf}), checked for the
+/** The record a schema entry stands for ({@link traitsOf}), checked for the
  *  rules `Unit` enforces (a record from the wire, as Python sends it, is
  *  not a `Unit`): its levels must fit ({@link checkLevelsFit}), an order
  *  needs levels, and a midpoint needs an order and must lie on it, with the
  *  same check `Trait.diverging()` runs. */
 export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
   const who = `schema: column "${column}"`;
-  const type = classesOf(who, entry);
+  const type = traitsOf(who, entry);
   if (type.HasDomain !== undefined)
     throw new Error(
       `${who} declares HasDomain ${JSON.stringify(type.HasDomain)}, but ` +
@@ -599,14 +599,14 @@ export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
   return type;
 }
 
-/** The rule that a column's levels fit its other classes: each level is one
- *  of the column's values, so every class must accept it ({@link ACCEPTS}).
+/** The rule that a column's levels fit its other traits: each level is one
+ *  of the column's values, so every trait must accept it ({@link ACCEPTS}).
  *  Text levels are not amounts, so `Unit("pts", { domain: Domain.discrete(["low", "high"]) })`
  *  throws, while a rating's levels `[1, 2, 3, 4, 5]` take a unit. Python's
  *  `Unit` and `chart` raise the same message. */
 function checkLevelsFit(who: string, type: ColumnType): void {
   for (const level of type.HasLevels?.levels ?? []) {
-    const rejects = rejectingClass(type, level);
+    const rejects = rejectingTrait(type, level);
     if (rejects !== undefined) {
       throw new Error(
         `${who} has the level ${showLevel(level)}, which is not a value ${rejects} accepts.`
@@ -824,9 +824,9 @@ export async function applySchema<T>(
 /**
  * The units of one chart's column types (its schema, and the types its data
  * carries or inherits) meet, in place: every column in units of one name is
- * in one unit, so their classes meet by THE rule (`meetUnitClasses` in
+ * in one unit, so their traits meet by THE rule (`meetUnitTraits` in
  * measure.ts). Two definitions that disagree throw, and a column whose unit
- * is a name alone takes the classes a definition of that name gives, so
+ * is a name alone takes the traits a definition of that name gives, so
  * `"USD"` beside `Unit("USD", { traits: [Trait.summable()] })` adds up.
  *
  * This is the chart's share of the meeting. A chart's channels sum their
@@ -844,16 +844,16 @@ function meetChartUnits(types: ColumnTypes): void {
     const unit = t.HasUnit;
     if (unit === undefined) continue;
     meetInto(known, unit.unit, {
-      classes: unit.classes,
+      traits: unit.traits,
       who: { name: column, column },
     });
   }
   for (const [column, t] of Object.entries(types)) {
     const unit = t.HasUnit;
-    if (unit === undefined || unit.classes !== undefined) continue;
-    const classes = known.get(unit.unit)!.classes;
-    if (classes !== undefined)
-      types[column] = { ...t, HasUnit: { ...unit, classes } };
+    if (unit === undefined || unit.traits !== undefined) continue;
+    const traits = known.get(unit.unit)!.traits;
+    if (traits !== undefined)
+      types[column] = { ...t, HasUnit: { ...unit, traits } };
   }
 }
 

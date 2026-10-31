@@ -51,22 +51,22 @@ import { empty, union } from "../../util/bbox";
 import type { AxesOptions } from "../gofish";
 
 /**
- * The classes one axis of a coordinate space's domain has: a record keyed by
- * class name, in the style of a column type (`ColumnType` in schema.ts, whose
+ * The traits one axis of a coordinate space's domain has: a record keyed by
+ * trait name, in the style of a column type (`ColumnType` in schema.ts, whose
  * `HasZero` and `HasCycle` these anticipate; whether columns get them too is
- * #1195). Each class is a fact that says what the coord's fit (`fitAxis`)
+ * #1195). Each trait is a fact that says what the coord's fit (`fitAxis`)
  * must preserve on that axis, and each is optional and independent of the
  * others. An axis with none of them (identity, wavy and geo axes) may shift
  * and scale: its content fits the budget as at the root, so its claim, pixel
  * offsets included, starts at the start of the budget.
  */
-export type AxisClasses = {
+export type AxisTraits = {
   /**
    * Coordinate 0 is a fixed point (the polar center, radius 0). The
    * content's data starts there, whatever value it starts at, and a literal
    * pixel offset stays a distance from it, so a ring moved out with
    * `.translate()` keeps its gap. No content reaches below 0, so an offset
-   * inward is taken up as on an axis with no classes.
+   * inward is taken up as on an axis with no traits.
    */
   HasZero?: Record<string, never>;
   /**
@@ -106,12 +106,12 @@ export type CoordinateTransform = {
    */
   polar?: true;
   /**
-   * The classes each axis of the space's domain has ({@link AxisClasses}),
+   * The traits each axis of the space's domain has ({@link AxisTraits}),
    * the one thing that decides how the coord fits its content to that axis.
    * Absent ⇒ neither axis has any. The polar family declares θ
    * `{ HasCycle: { period: 2π } }` and r `{ HasZero: {} }`.
    */
-  axisClasses?: [AxisClasses, AxisClasses];
+  axisTraits?: [AxisTraits, AxisTraits];
   /**
    * Donut-hole radius as a fraction [0,1) of the outer radius (polar family).
    * Default 0 (filled disc). `coord.layout` insets the radial range by this.
@@ -438,7 +438,7 @@ export const coord = createNodeOperator(
                       axis,
                       resolved
                     );
-            // The axis's classes decide the fit (`AxisClasses`). An axis
+            // The axis's traits decide the fit (`AxisTraits`). An axis
             // with none fits the content's claim alone. One with `HasZero`
             // fits the hull of that claim and the point where the content's
             // data starts (its type's low end, which no pixel offset moves):
@@ -446,9 +446,9 @@ export const coord = createNodeOperator(
             // offset outward is a gap inside the budget, and one inward is
             // taken up. One with `HasCycle` seats data 0 at its start
             // (`dataZero` below).
-            const classes = coordTransform.axisClasses?.[axis] ?? {};
+            const traits = coordTransform.axisTraits?.[axis] ?? {};
             const claim =
-              classes.HasZero === undefined ||
+              traits.HasZero === undefined ||
               content === undefined ||
               resolved === undefined ||
               !isCONTINUOUS(resolved)
@@ -469,7 +469,7 @@ export const coord = createNodeOperator(
                 kind: "coord",
                 rootKey: node.key ?? node.type,
                 axis,
-                dataZero: classes.HasCycle === undefined ? "claim" : "start",
+                dataZero: traits.HasCycle === undefined ? "claim" : "start",
               },
               node,
               resolved,
