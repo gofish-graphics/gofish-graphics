@@ -13,6 +13,9 @@ existing `x` / `x2` edges (example 2).
 
 **Round 5:** annotation styles table and key labels.
 
+**Round 6:** where the key goes (five options, six renders), and a `label(...)` mark as
+sugar for `blank().label(...)`.
+
 **Recommendation (Approach C).** Write an annotation as a **selection**, a **subject mark**
 over it, and a **`.label()`** on that mark. The label is the note. A new `leader` option on
 `.label()` draws the connector. A new `topK` flow step selects extremes, and `ref(x).part(sel)` / `.parts(sel)` select
@@ -125,8 +128,8 @@ shared helpers (the badge, the key) not counted.
 
 | #   | Style                      | Link                 | Render                        | C spelling (proposed)                                                                                             | Today needs                                                                              | Lines |
 | --- | -------------------------- | -------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ----- |
-| 1   | Proximity label            | closeness            | `img/styles/1-proximity.png`  | `topK(1, …)` tier, `blank().label(d => …, { position: Place.around({ directions: ["left"] }) })`                  | A `.label()` on an invisible `enclose`. Works today; the label reads the row.            | 11    |
-| 2   | Leader label               | line                 | `img/styles/2-leader.png`     | the same, `{ position: Place.around({ directions: ["top-left"], offset: 36 }), leader: {} }`                      | A free `text`, two `distribute`s, an `arrow` (always has a head). Text computed outside. | 14    |
+| 1   | Proximity label            | closeness            | `img/styles/1-proximity.png`  | `topK(1, …)` tier, `.mark(label(d => …, { position: Place.around({ directions: ["left"] }) }))`                   | A `.label()` on an invisible `enclose`. Works today; the label reads the row.            | 11    |
+| 2   | Leader label               | line                 | `img/styles/2-leader.png`     | `label(…, { position: Place.around({ directions: ["top-left"], offset: 36 }), leader: {} })`                      | A free `text`, two `distribute`s, an `arrow` (always has a head). Text computed outside. | 14    |
 | 3   | Subject + leader (callout) | containment + line   | `img/styles/3-callout.png`    | `enclose({ shape: Shape.oval() }).label(d => …, { position, leader: {} })`                                        | Example 1: the same plus an oval `enclose`.                                              | 16    |
 | 4   | Key label                  | shared symbol        | `img/styles/4-key.png`        | `enclose({ shape: Shape.oval() }).label("Peak before the 2008 crash", { key: {} })`                               | A hand-built badge per target, a key `spread`, six constraints in an outer `layer`.      | 20    |
 | 5   | Key + leader               | shared symbol + line | `img/styles/5-key-leader.png` | `.label("…", { position: Place.around({ offset: 26 }), key: {}, leader: {} })`                                    | As row 4, with each badge a little way off and an `arrow` to its circle.                 | 22    |
@@ -134,10 +137,11 @@ shared helpers (the badge, the key) not counted.
 | 7   | Reference rule             | position on an axis  | `img/styles/7-rule.png`       | `rect({ y: datum(mean), h: 1 }).label(() => \`mean $${mean}\`, { position: "outset-right" })`                     | Works today.                                                                             | 8     |
 | 8   | Band                       | position on an axis  | `img/styles/8-band.png`       | `rect({ x: datum("2007-11-01"), x2: datum("2009-03-01") }).label(() => "recession", { position: "outset-top" })`  | Works today, but `datum` needs epoch milliseconds on a time axis.                        | 13    |
 | 9   | Emphasis of a stretch      | color                | `img/styles/9-emphasis.png`   | `chart(ref("price").part({ x: [datum(a), datum(b)] })).mark(line({ stroke: RED }))`                               | A second red `line` over filtered months on a gray base; cut at the nearest months.      | 7     |
-| 10  | Badge only                 | symbol, no note      | `img/styles/10-badge.png`     | `blank().label(() => "A", { background: { shape: Shape.oval(), fill: RED }, color: "white" })`                    | A hand-built circle and letter, placed by two `distribute`s.                             | 9     |
+| 10  | Badge only                 | symbol, no note      | `img/styles/10-badge.png`     | `.mark(label("A", { background: { shape: Shape.oval(), fill: RED }, color: "white" }))`                           | A hand-built circle and letter, placed by two `distribute`s.                             | 9     |
 
-Rows 1, 2 and 10 hang a label on `blank()`, which is decision 5. Rows 4 and 5 use the new
-`key` option (see "Key labels" under Approach C). Row 9 colors a line part (decision 12).
+Rows 1, 2 and 10 use the `label(...)` mark, which labels the selection with no `blank()`
+stand-in (decisions 5 and 19). Rows 4 and 5 use the new `key` option (see "Key labels" and
+"Where the key goes" under Approach C). Row 9 colors a line part (decision 12).
 
 ## Approaches
 
@@ -334,6 +338,305 @@ hand-built badge per target (a circle and a letter centered by a nested `.relate
 `spread` of rows, and an outer `layer` with six constraints: 20 lines plus about 20 lines
 of helpers. The badge letters and the key rows are typed twice and can drift apart.
 Decisions 15 to 18.
+
+#### A `label(...)` mark (round 6)
+
+Josh asked: "is there a way to have some syntax sugar for blank().label() where maybe you
+could just pass label() directly?"
+
+Yes. `label(text, opts)` is a relational mark, like `enclose` and `line`. In a selection
+tier it labels the selected marks themselves, so there is no `blank()` stand-in.
+
+```js
+.layer(
+  chart(selectAll("months"))
+    .flow(topK(1, { by: "price" }))
+    .mark(
+      label((d) => `Peak $${project(d, "price")}`, {
+        position: Place.around(),
+        leader: {},
+      }),
+    ),
+)
+
+// combinator form: label one node or part
+label("variance", { position: Place.around({ directions: ["top"] }) }, [
+  ref("eq").part("Var(X)"),
+]);
+```
+
+Python: `label("Peak", position=Place.around(), leader={})`.
+
+- **It answers decision 5** (a note with no subject). The note labels the selection.
+- **It follows an existing rule.** Relational-mark fusion already rewrites `.mark(R)` into
+  `.mark(blank()).layer(R)`. With `R = label(...)` that is exactly today's
+  `blank().label(...)` idiom.
+- **The method becomes a rewrite.** `m.label(t, o)` is `label(t, o)` applied to `m`'s own
+  nodes. API Design allows an operator that is exactly a composition of others ("Overlap
+  is fine at the edges"), so the two forms cannot drift apart.
+- **One word, two forms.** `enclose` already has a flow-step form and a mark form. `label`
+  is not a top-level export today, so the name is free.
+- **Labels become nameable.** `label(...).name("notes")` names the label nodes, which the
+  key options below need. The `.label()` method names nothing new: `.name()` after it
+  still names the mark.
+
+Rows 1, 2 and 10 of the styles table now use it. Decision 19.
+
+#### Where the key goes (round 6)
+
+Josh asked: "I want to see more options for the key label, because I don't know if we want
+to hardcode placement of the key description or not. I could see the answer being yes,
+have an implicit default like the legend, or no, have it be more freeform and placeable
+anywhere via some kind of constraint/relation/operator that uses the same object or
+similar attribute as the relationship."
+
+**How the legend works today.** `legendRing` (`legends/elaborate.tsx`) builds the color
+legend from the root's color scale, once per render. It is a `spread` of rows (a swatch
+and a text), placed by one `distribute` in x past the chart and one `align` to the top. The
+only option is `legend: false`. There is no way to move it. Under #1257 the legend becomes a
+plain child of the chart's outermost layer, with the same two constraints, but the design
+does not say how a user changes them. Its recommendation for `in:` is the direction to
+follow here: "chrome is elaboration into what a user could write".
+
+**The shared base.** All options keep the same notes. `oval()` is
+`enclose({ shape: Shape.oval(), stroke: RED, fill: "none" })`.
+
+```js
+const goog = chart(prices, { schema: { date: Unit.time() }, w: 360, h: 200 })
+  .flow(scatter({ by: "date", x: "date", y: "price" }))
+  .mark(blank().name("months"))
+  .layer(line({ stroke: BLUE }).name("price"))
+  .layer(
+    chart(selectAll("months"))
+      .flow(topK(1, { by: "price" }))
+      .mark(oval().label("Peak before the 2008 crash", { key: {} }))
+  )
+  .layer(
+    chart(selectAll("months"))
+      .flow(filter(after2008), bottomK(1, { by: "price" }))
+      .mark(oval().label("Low after the crash", { key: {} }))
+  );
+```
+
+**Option 1. An implicit chrome key.** The key is its own piece of chrome, beside the legend,
+with a side enum.
+
+```js
+goog.render(el, { axes: true, key: { position: "bottom" } }); // "right" by default
+```
+
+Default: yes. Freeform: no. Each new place (inside the plot, at each badge's height) needs a
+new enum value. It overlaps the legend in the middle: a second chrome block with its own
+placement code, and a `position` the legend does not have.
+
+**Option 2. The key is the legend of a marker channel.** The markers A, B, C are the values
+of a channel with an ordinal scale. `key: {}` puts the note's text in that channel, and the
+scale gives it a marker, the way a color scale gives a category a color. The range is a
+strategy family, `Marker.letters()` (default) or `Marker.numbers()`, set like
+`Color.palette()`. The key is that channel's legend, so it goes where legends go.
+
+```js
+chart(prices, { marker: Marker.numbers(), ... })     // 1, 2, 3 instead of A, B, C
+goog.render(el, { axes: true });                     // the key sits where the legend sits
+goog.render(el, { axes: true, legend: { side: "bottom" } }); // proposed: move every legend
+```
+
+Default: yes, the legend's. Freeform: only by turning the default off and writing the key
+(option 3). Shared across charts: yes. Like color, there is one marker scale per render, so
+two panels share one key, and the same note text in two panels gets one marker.
+
+**Option 3. The key is a chart over the selected notes.** The labels are named, and the
+key is an ordinary chart over them, placed by any operator or constraint. The link is the
+same object: each key entry is drawn from the label node it lists.
+
+```js
+const notes = (sel, text) =>
+  chart(selectAll("months"))
+    .flow(...sel)
+    .mark(oval())
+    .layer(label(text, { key: {} }).name("notes"));
+
+const key = chart(selectAll("notes"))
+  .flow(spread({ by: "marker", dir: "y", spacing: 8, alignment: "start" }))
+  .mark(keyEntry()) // the marker, then the note's text
+  .name("key");
+
+layer([goog, key])
+  .relate(({ price, key }) => [
+    Constraint.align({ x: "middle", y: "start" }, [price, key]),
+  ])
+  .render(el, { axes: true, legend: false });
+```
+
+A label node carries its `marker` and its `text`. `spread({ by: "marker" })` gives one
+entry per marker, and `keyEntry()` reads the first row of each, by the channel rule that
+raw content reads the first row. So a note used twice is listed once. Default: none by
+itself. Freeform: yes.
+
+**Option 4. The notes are a data table.** The notes are rows. One tier draws a badge on
+each note's target with `resolve`, and the key is a chart over the same rows
+(`LabeledChart.stories.tsx` does this for node labels).
+
+```js
+const notes = [
+  { id: "A", date: "2007-11-01", text: "Peak before the 2008 crash" },
+  { id: "B", date: "2008-11-01", text: "Low after the crash" },
+];
+goog
+  .layer(
+    chart(notes)
+      .flow(resolve(["date"], { from: selectAll("months") }))
+      .mark(
+        label((d) => d.id, {
+          background: { shape: Shape.oval(), fill: RED },
+          color: "white",
+        })
+      )
+  )
+  .layer(
+    chart(notes)
+      .flow(spread({ dir: "y", spacing: 8 }))
+      .mark(keyEntry())
+      .name("key")
+  );
+```
+
+Default: none. Freeform: yes. No new terms beyond `keyEntry()`. But the targets are typed
+by date, so they no longer follow the data (`topK` is gone), and the markers are typed by
+hand.
+
+**Option 5. A relation between each badge and its entry.** Not a block placement: each
+entry is placed by a constraint against its own badge, like an end label. Render d puts
+each entry at its badge's height, past the plot.
+
+```js
+layer([
+  goog,
+  chart(selectAll("notes")).mark(keyEntry().name("entries")),
+]).relate(({ price, notes, entries }) => [
+  Constraint.distribute({ dir: "x", spacing: 24 }, [price, entries]),
+  Constraint.align({ y: "middle" }, [notes, entries]), // pairs row by row (proposed)
+]);
+```
+
+This is option 3 with a different placement, so it adds no new key construct. It adds one
+question: may a constraint take two plural selections of the same rows and apply pairwise?
+Today it is a `map` over the pairs.
+
+**How the options compose.** Option 2 elaborates into option 3. The default key is exactly
+the option 3 chart over all keyed labels, `spread({ by: "marker", dir: "y" })` of
+`keyEntry()`, placed as chrome by the legend's two constraints. So "default" and
+"freeform" are one mechanism, the way #1257 makes axes "elaboration into what a user could
+write". Option 5 is a placement of option 3. Option 4 is option 3 with the notes in a table
+instead of on the labels. Option 1 is the only one that adds a second path.
+
+| Option              | Default place?          | Freeform?                       | Shared across charts?                          | New terms                                    | Desugars into                                         | Overlap with existing                                     |
+| ------------------- | ----------------------- | ------------------------------- | ---------------------------------------------- | -------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------- |
+| 1 Chrome key        | yes, side enum          | no                              | only if root-owned like the legend             | `key`, `key.position`                        | a chrome block beside the legend                      | large and partial: a second legend with its own placement |
+| 2 Marker legend     | yes, the legend's place | by turning it off and writing 3 | yes: one marker scale per render, notes dedupe | `key`, `Marker` family, `legend: { side }`   | marker scale + the legend's rows = option 3 as chrome | none: it is the legend                                    |
+| 3 Chart over notes  | no                      | yes: any operator or constraint | yes: `selectAll` reaches every panel           | `keyEntry()`; label `marker` / `text` fields | `spread` of `keyEntry()` over selected labels         | reuses `selectAll`, `spread`, constraints                 |
+| 4 Notes table       | no                      | yes                             | yes: one table                                 | `keyEntry()`                                 | `resolve` + `label` mark, `spread` over the table     | the `LabeledChart` idiom; loses the data link (`topK`)    |
+| 5 Pairwise relation | no                      | per entry                       | yes, as 3                                      | pairwise constraint operands (or a `map`)    | one `align` per badge and entry                       | end labels                                                |
+
+**Renders.** The same GOOG chart and notes, built with today's primitives
+(`KeyLabelOptions.stories.tsx`, title `Proposals/Annotations/Key Options`). Today's line
+counts are for the spec, not counting the shared annotated chart (13 lines: the two ovals,
+two badges and their four constraints) or the badge and key helpers (about 20 lines).
+
+| Render                                     | Today | Opt 1                         | Opt 2                                   | Opt 3 / 4                                        | Opt 5                |
+| ------------------------------------------ | ----- | ----------------------------- | --------------------------------------- | ------------------------------------------------ | -------------------- |
+| a. right (`img/key/a-right.png`)           | 7     | default                       | default                                 | `distribute` x + `align` top (4 lines)           | -                    |
+| b. below (`img/key/b-below.png`)           | 9     | `key: { position: "bottom" }` | `legend: { side: "bottom" }`            | `distribute` y + `align` start (4 lines)         | -                    |
+| c. inside (`img/key/c-inside.png`)         | 8     | not expressible               | via 3                                   | one `align` (3 lines)                            | -                    |
+| d. at each badge (`img/key/d-aligned.png`) | 13    | not expressible               | via 5                                   | one `align` per note                             | one pairwise `align` |
+| e. two panels (`img/key/e-shared-key.png`) | 33    | one key if root-owned         | automatic; C once                       | one `selectAll` over both panels; C once by `by` | as 3                 |
+| f. formula (`img/key/f-formula.png`)       | 24    | `key: { position: "bottom" }` | `marker: Marker.numbers()`, side bottom | `distribute` y below the formula                 | -                    |
+
+Render c was meant for the top-left corner, but the A row runs into the peak there, so it
+uses the empty space under the line, bottom center. Placing a block in "the empty space" is
+not something `Place` does today: `Place` places one label at a time.
+
+The recommended spellings, under the renders:
+
+```js
+// a. the default
+goog.render(el, { axes: true });
+
+// b. a footnote list
+goog.render(el, { axes: true, legend: { side: "bottom" } });
+
+// c. inside the plot (option 3)
+layer([goog, key])
+  .relate(({ price, key }) => [
+    Constraint.align({ x: "middle", y: "start" }, [price, key]),
+  ])
+  .render(el, { axes: true, legend: false });
+
+// e. two panels, one key: same note text, same marker
+spread({ dir: "x", spacing: 40 }, [
+  panel(goog, "GOOG"),
+  panel(aapl, "AAPL"),
+]).render(el, { axes: true, legend: { side: "bottom" } });
+
+// f. a formula with numbered terms
+layer([
+  text(EQ).name("eq"),
+  label("variance: how far X spreads", { key: {} }, [ref("eq").part("Var(X)")]),
+  label("expected value: the average over X", { key: {} }, [
+    ref("eq").part(/E(?=\[)/),
+  ]),
+  label("squared distance from the mean μ", { key: {} }, [
+    ref("eq").part(/\(X − μ\)²/),
+  ]),
+]).render(el, { marker: Marker.numbers(), legend: { side: "bottom" } });
+```
+
+```python
+# c in Python
+key = (
+    chart(select_all("notes"))
+    .flow(spread(by="marker", dir="y", spacing=8, alignment="start"))
+    .mark(key_entry())
+    .name("key")
+)
+layer([goog, key]).relate(
+    lambda price, key: [Constraint.align([price, key], x="middle", y="start")]
+).render(axes=True, legend=False)
+
+# f in Python
+layer([...]).render(marker=Marker.numbers(), legend={"side": "bottom"})
+```
+
+**Precedent.** Legends: Vega-Lite's `legend.orient` ("right", "bottom", and inside corners
+such as "top-left"), ggplot2's `legend.position` (a side, or a point inside the plot),
+matplotlib's `legend(loc=...)`. Observable Plot's `plot.legend("color")` returns the legend
+as its own element that the page places, which is option 3. Markers: LaTeX footnote
+counters (`\alph`, `\arabic`, `\fnsymbol`) and Typst's `numbering("a")` / `numbering("1")`.
+
+**Recommendation: option 2, defined as option 3 placed as chrome.**
+
+- **One mechanism for default and freeform.** The default key is a chart the user could
+  write. To move it, turn it off and write that chart. This is #1257's direction ("chrome
+  is elaboration into what a user could write").
+- **One concept is one operator** (API Design). A key of markers is a legend of a channel.
+  Making it a second chrome block (option 1) is a large partial overlap with the legend.
+- **The hard case falls out.** Two panels share one key with no new rule, because the
+  marker scale is per render, like color. A note used twice gets one marker because a scale
+  maps equal values to one marker.
+- **Channels are chosen by how they aggregate.** The marker is raw content, so a key entry
+  over two labels with one marker reads the first, and lists the note once.
+- **Strategy families.** `Marker.letters()` / `Marker.numbers()` follow the family rule
+  (`Color.palette()`, `Tile.squarify()`).
+- **Simple moves stay short.** `legend: { side }` covers the right and bottom cases, and it
+  moves the color legend too, which it should.
+
+**Runner-up: option 4, the notes table.** It needs no new construct except `keyEntry()`,
+and the key is as free as option 3. What it loses: the targets are typed by date instead of
+selected from the data, the markers are typed by hand, and there is no default. What would
+change the pick: if notes in practice come from a table anyway (a CMS, a spreadsheet of
+events), option 4 is the natural spelling, and it already works through `resolve`.
+
+Decisions 20 to 27.
 
 **Example 2, rule and band:** today's spelling with two fixes and no new marks. A band is a
 `rect` with both edges given, `x` and `x2`, which rect already supports (the axis line is
@@ -583,6 +886,14 @@ These hurt every approach, ranked by how much they hurt in the prototypes:
 9. `datum("2015-06-01")` on a time axis throws. It should read through the column type.
 10. A rule tier's field joins the axis title.
 11. #802 / #1203: operators and bare tiers cannot be named, which forces wrapper layers.
+    Round 6: a chart after `.layer()` cannot be named either (`.name is not a function`), so
+    render b places its key off the line with a spacing tuned past the axis title.
+12. The legend cannot be moved. The only option is `legend: false`, and #1257 does not say
+    how a user changes the place of a chrome child.
+13. Label nodes cannot be named or selected, so no chart can be built over them. The
+    `label(...)` mark fixes this.
+14. Nothing places a block in a plot's empty space. `Place` places one label at a time, so
+    render c's key was placed by hand (the top-left corner was too narrow).
 
 ## Decisions for Josh
 
@@ -597,8 +908,8 @@ These hurt every approach, ranked by how much they hurt in the prototypes:
 4. **Extremum step name.** `topK(k, { by })` and `bottomK` (polars), `sliceMax` (dplyr), or
    `argmax`?
 5. **A note with no subject.** Label the original mark with a predicate (#804's value-keyed
-   record, `.label({ AAPL: "..." })`), or allow `.label()` on a bare selection tier with no
-   drawn subject?
+   record, `.label({ AAPL: "..." })`), or label the selection itself with the `label(...)`
+   mark (decision 19)?
 6. **Rules and bands.** Keep them as `rect` + `datum` with `x` / `x2` (no new marks), with
    the two fixes (`datum` reads ISO dates through the column type; tier fields stay out of
    the axis title)?
@@ -618,14 +929,30 @@ These hurt every approach, ranked by how much they hurt in the prototypes:
 14. **Parts and anchors.** One reference spelling for built-in, declared (anchor) and found
     parts: `.part(name)` for names with explicit pattern selectors, or the path step
     (`nodes.out`)? And design `parts` together with anchors (#47) rather than here?
-15. **Key label name.** `key`, `footnote`, or no new option and merge the notes into the
-    legend?
-16. **Marker style.** Auto letters or numbers in reading order, a given marker
-    (`key: { marker: "A" }`), or both? If auto, how do we pick letters or numbers?
-17. **Where the key goes.** Per label (`key: { position }`), or once per chart, like the
-    legend?
+15. **Key label name.** Keep `key` as the `.label()` option that puts a note in the marker
+    channel, so the key is that channel's legend (decision 20)? Or `footnote`?
+16. **Marker style.** Markers come from a scale (decision 22), with a given marker
+    (`key: { marker: "A" }`) as the override?
+17. **Where the key goes.** Replaced by decisions 20 to 27 (round 6).
 18. **Badge shape.** Let a label's background take a shape,
     `background: { shape: Shape.oval() }`, for the badge?
+19. **`label` mark.** Add `label(...)` as a relational mark, with `.label()` defined as its
+    rewrite?
+20. **Key as a legend.** Is the key the legend of a marker channel (option 2), with one
+    marker scale per render like color?
+21. **Default = freeform.** Is the default key defined as an option 3 chart over the keyed
+    labels, placed as chrome, so that writing that chart is the override?
+22. **Marker family.** `Marker.letters()` and `Marker.numbers()` (and `Marker.symbols()`),
+    or a Typst-style pattern, `Marker.pattern("a")`?
+23. **Marker order.** Declaration order (known before layout), or reading order (needs
+    layout first)?
+24. **Turning off one legend.** `legend: false` drops every legend. Do we need a per-channel
+    switch, such as `legend: { marker: false }`?
+25. **Legend side.** Add `legend: { side: "right" | "bottom" }` for the common moves?
+26. **Key entry.** Export `keyEntry()` (the legend's row: marker, then text), or have users
+    write the row?
+27. **Pairwise constraints.** May a constraint take two plural selections of the same rows
+    and apply pairwise (`align({ y: "middle" }, [notes, entries])`), or stay a `map`?
 
 ## Related issues
 

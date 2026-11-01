@@ -550,7 +550,7 @@ $x_1$ {
   chart(selectAll("months"))
     .flow(topK(1, { by: "price" }))
     .mark(
-      blank().label((d) => `Peak $${project(d, "price")}`, {
+      label((d) => `Peak $${project(d, "price")}`, {
         position: Place.around({ directions: ["left"] }),
       }),
     ),
@@ -560,7 +560,7 @@ $x_1$ {
   chart(selectAll("months"))
     .flow(topK(1, { by: "price" }))
     .mark(
-      blank().label((d) => `Peak $${project(d, "price")}`, {
+      label((d) => `Peak $${project(d, "price")}`, {
         position: Place.around({ directions: ["top-left"], offset: 36 }),
         leader: {},
       }),
@@ -638,7 +638,7 @@ $x_1$ {
   chart(selectAll("months"))
     .flow(topK(1, { by: "price" }))
     .mark(
-      blank().label(() => "A", {
+      label("A", {
         position: Place.around({ directions: ["top-left"] }),
         background: { shape: Shape.oval(), fill: RED },
         color: "white",
@@ -722,3 +722,125 @@ const key = (rows) =>
       spread({ dir: "x", spacing: 6, alignment: "middle" }, [badge(m), text({ text: t, fontSize: 11 })]),
     ),
   );
+=== lm-js ts frag
+.layer(
+  chart(selectAll("months"))
+    .flow(topK(1, { by: "price" }))
+    .mark(label((d) => `Peak $${project(d, "price")}`, { position: Place.around(), leader: {} })),
+)
+=== lm-comb ts full
+// combinator form: label one node, or one part of a node
+label("variance", { position: Place.around({ directions: ["top"] }) }, [ref("eq").part("Var(X)")]);
+=== lm-py py full
+(
+    chart(select_all("months"))
+    .flow(top_k(1, by="price"))
+    .mark(label(lambda d: f"Peak ${project(d, 'price')}", position=Place.around(), leader={}))
+)
+=== kb-base ts full
+// oval() = enclose({ shape: Shape.oval(), stroke: RED, fill: "none" })
+const goog = chart(prices, { schema: { date: Unit.time() }, w: 360, h: 200 })
+  .flow(scatter({ by: "date", x: "date", y: "price" }))
+  .mark(blank().name("months"))
+  .layer(line({ stroke: BLUE }).name("price"))
+  .layer(
+    chart(selectAll("months"))
+      .flow(topK(1, { by: "price" }))
+      .mark(oval().label("Peak before the 2008 crash", { key: {} })),
+  )
+  .layer(
+    chart(selectAll("months"))
+      .flow(filter(after2008), bottomK(1, { by: "price" }))
+      .mark(oval().label("Low after the crash", { key: {} })),
+  );
+=== ko1 ts full
+goog.render(el, { axes: true, key: { position: "bottom" } }); // "right" by default
+=== ko2 ts full
+// numbers instead of the default letters, set like Color.palette()
+chart(prices, { marker: Marker.numbers() });
+// the key sits where the legend sits
+goog.render(el, { axes: true });
+// proposed: move every legend, the key included
+goog.render(el, { axes: true, legend: { side: "bottom" } });
+=== ko3 ts full
+const notes = (sel, text) =>
+  chart(selectAll("months"))
+    .flow(...sel)
+    .mark(oval())
+    .layer(label(text, { key: {} }).name("notes"));
+
+const key = chart(selectAll("notes"))
+  .flow(spread({ by: "marker", dir: "y", spacing: 8, alignment: "start" }))
+  .mark(keyEntry()) // the marker, then the note's text
+  .name("key");
+
+layer([goog, key])
+  .relate(({ price, key }) => [Constraint.align({ x: "middle", y: "start" }, [price, key])])
+  .render(el, { axes: true, legend: false });
+=== ko4 ts full
+const notes = [
+  { id: "A", date: "2007-11-01", text: "Peak before the 2008 crash" },
+  { id: "B", date: "2008-11-01", text: "Low after the crash" },
+];
+goog
+  .layer(
+    chart(notes)
+      .flow(resolve(["date"], { from: selectAll("months") }))
+      .mark(label((d) => d.id, { background: { shape: Shape.oval(), fill: RED }, color: "white" })),
+  )
+  .layer(chart(notes).flow(spread({ dir: "y", spacing: 8 })).mark(keyEntry()).name("key"));
+=== ko5 ts full
+layer([goog, chart(selectAll("notes")).mark(keyEntry().name("entries"))]).relate(
+  ({ price, notes, entries }) => [
+    Constraint.distribute({ dir: "x", spacing: 24 }, [price, entries]),
+    Constraint.align({ y: "middle" }, [notes, entries]), // pairs row by row (proposed)
+  ],
+);
+=== kr-a ts full
+// the default: the marker legend's place
+goog.render(el, { axes: true });
+=== kr-b ts full
+// a footnote list: move every legend
+goog.render(el, { axes: true, legend: { side: "bottom" } });
+=== kr-c ts full
+// inside the plot: write the key (option 3)
+layer([goog, key])
+  .relate(({ price, key }) => [Constraint.align({ x: "middle", y: "start" }, [price, key])])
+  .render(el, { axes: true, legend: false });
+=== kr-d ts full
+// each entry at its badge's height (option 5)
+layer([goog, chart(selectAll("notes")).mark(keyEntry().name("entries"))])
+  .relate(({ price, notes, entries }) => [
+    Constraint.distribute({ dir: "x", spacing: 24 }, [price, entries]),
+    Constraint.align({ y: "middle" }, [notes, entries]),
+  ])
+  .render(el, { axes: true, legend: false });
+=== kr-e ts full
+// two panels, one key. Each panel's C note has the same text,
+// so the one marker scale gives it one marker.
+spread({ dir: "x", spacing: 40 }, [panel(goog, "GOOG"), panel(aapl, "AAPL")]).render(el, {
+  axes: true,
+  legend: { side: "bottom" },
+});
+=== kr-f ts full
+// a formula with numbered terms (label mark, combinator form)
+layer([
+  text(EQ).name("eq"),
+  label("variance: how far X spreads", { key: {} }, [ref("eq").part("Var(X)")]),
+  label("expected value: the average over X", { key: {} }, [ref("eq").part(/E(?=\[)/)]),
+  label("squared distance from the mean μ", { key: {} }, [ref("eq").part(/\(X − μ\)²/)]),
+]).render(el, { marker: Marker.numbers(), legend: { side: "bottom" } });
+=== kr-py py full
+# c: write the key
+key = (
+    chart(select_all("notes"))
+    .flow(spread(by="marker", dir="y", spacing=8, alignment="start"))
+    .mark(key_entry())
+    .name("key")
+)
+layer([goog, key]).relate(
+    lambda price, key: [Constraint.align([price, key], x="middle", y="start")]
+).render(axes=True, legend=False)
+
+# f: numbered terms, footnotes below
+layer([...]).render(marker=Marker.numbers(), legend={"side": "bottom"})

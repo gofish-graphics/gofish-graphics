@@ -1104,6 +1104,17 @@
         grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
         margin: 0 0 16px;
       }
+      .key-grid {
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
+      }
+      .key-grid figure pre {
+        margin: 10px 0 0;
+        font-size: 11px;
+        overflow-x: auto;
+      }
+      #key-place h4 {
+        margin-top: 24px;
+      }
       #key-labels details {
         margin: 0 0 16px;
       }
@@ -1150,6 +1161,14 @@
               <a class="sub" href="#key-labels">Key labels</a>
             </li>
             <li>
+              <a class="sub" href="#label-mark"
+                >A <code>label(...)</code> mark</a
+              >
+            </li>
+            <li>
+              <a class="sub" href="#key-place">Where the key goes</a>
+            </li>
+            <li>
               <a href="#approach-d"
                 ><span class="n">07</span>Approach D sketch</a
               >
@@ -1187,7 +1206,7 @@
               <span
                 >Proposal. Approach C is not implemented; renders are of A and
                 B, plus a prototype of parts of a mark. Syntax awaits sign-off
-                on <a href="#decisions">18 decisions</a>.</span
+                on <a href="#decisions">27 decisions</a>.</span
               >
             </div>
             <div class="status round2">
@@ -1213,6 +1232,15 @@
                 ><b>Round 5:</b>
                 <a href="#styles">annotation styles table</a> and
                 <a href="#key-labels">key labels</a>.</span
+              >
+            </div>
+            <div class="status round2">
+              <span
+                ><b>Round 6:</b>
+                <a href="#key-place">where the key goes</a> (five options, six
+                renders), and a
+                <a href="#label-mark"><code>label(...)</code> mark</a> as sugar
+                for <code>blank().label(...)</code>.</span
               >
             </div>
 
@@ -1581,11 +1609,16 @@
               </table>
             </div>
             <p class="small muted">
-              Rows 1, 2 and 10 hang a label on <code>blank()</code>, which is
-              <a href="#decisions">decision 5</a>. Rows 4 and 5 use the new
-              <code>key</code> option (<a href="#key-labels">key labels</a>).
-              Row 9 colors a line part, which is
-              <a href="#decisions">decision 12</a>.
+              Rows 1, 2 and 10 use the
+              <a href="#label-mark"><code>label(...)</code> mark</a>, which
+              labels the selection with no <code>blank()</code> stand-in (<a
+                href="#decisions"
+                >decisions 5 and 19</a
+              >). Rows 4 and 5 use the new <code>key</code> option (<a
+                href="#key-labels"
+                >key labels</a
+              >, <a href="#key-place">where the key goes</a>). Row 9 colors a
+              line part, which is <a href="#decisions">decision 12</a>.
             </p>
           </section>
 
@@ -3375,6 +3408,479 @@
                 </p>
               </div>
             </article>
+
+            <!-- LABEL MARK (round 6) -->
+            <article class="ex" id="label-mark">
+              <div class="ex-head">
+                <h3>A <code>label(...)</code> mark</h3>
+                <span class="muted small">round 6, Josh's question</span>
+              </div>
+              <p class="ex-intro">
+                "Is there a way to have some syntax sugar for blank().label()
+                where maybe you could just pass label() directly?"
+              </p>
+              <div class="prose">
+                <p>
+                  Yes. <code>label(text, opts)</code> is a relational mark, like
+                  <code>enclose</code> and <code>line</code>. In a selection
+                  tier it labels the selected marks themselves, so there is no
+                  <code>blank()</code> stand-in.
+                </p>
+              </div>
+              {{lm-js}} {{lm-comb}}
+              <div class="prose"><p>Python:</p></div>
+              {{lm-py}}
+              <div class="prose">
+                <ul>
+                  <li>
+                    <b>It answers <a href="#decisions">decision 5</a></b> (a
+                    note with no subject). The note labels the selection.
+                  </li>
+                  <li>
+                    <b>It follows an existing rule.</b> Relational-mark fusion
+                    already rewrites <code>.mark(R)</code> into
+                    <code>.mark(blank()).layer(R)</code>. With
+                    <code>R = label(...)</code> that is exactly today's
+                    <code>blank().label(...)</code> idiom.
+                  </li>
+                  <li>
+                    <b>The method becomes a rewrite.</b>
+                    <code>m.label(t, o)</code> is
+                    <code>label(t, o)</code> applied to <code>m</code>'s own
+                    nodes. API Design allows an operator that is exactly a
+                    composition of others ("Overlap is fine at the edges"), so
+                    the two forms cannot drift apart.
+                  </li>
+                  <li>
+                    <b>One word, two forms.</b> <code>enclose</code> already has
+                    a flow-step form and a mark form. <code>label</code> is not
+                    a top-level export today, so the name is free.
+                  </li>
+                  <li>
+                    <b>Labels become nameable.</b>
+                    <code>label(...).name("notes")</code> names the label nodes,
+                    which the key options below need.
+                  </li>
+                </ul>
+                <p>
+                  Rows 1, 2 and 10 of the
+                  <a href="#styles">styles table</a> now use it. See
+                  <a href="#decisions">decision 19</a>.
+                </p>
+              </div>
+            </article>
+
+            <!-- WHERE THE KEY GOES (round 6) -->
+            <article class="ex" id="key-place">
+              <div class="ex-head">
+                <h3>Where the key goes</h3>
+                <span class="muted small">round 6, Josh's question</span>
+              </div>
+              <p class="ex-intro">
+                "I want to see more options for the key label, because I don't
+                know if we want to hardcode placement of the key description or
+                not. I could see the answer being yes, have an implicit default
+                like the legend, or no, have it be more freeform and placeable
+                anywhere via some kind of constraint/relation/operator that uses
+                the same object or similar attribute as the relationship."
+              </p>
+              <div class="prose">
+                <p>
+                  <b>How the legend works today.</b> <code>legendRing</code>
+                  (<code>legends/elaborate.tsx</code>) builds the color legend
+                  from the root's color scale, once per render. It is a
+                  <code>spread</code> of rows (a swatch and a text), placed by
+                  one <code>distribute</code> in x past the chart and one
+                  <code>align</code> to the top. The only option is
+                  <code>legend: false</code>. There is no way to move it. Under
+                  #1257 the legend becomes a plain child of the chart's
+                  outermost layer, with the same two constraints, but the design
+                  does not say how a user changes them. Its direction is the one
+                  to follow here: "chrome is elaboration into what a user could
+                  write".
+                </p>
+                <p>
+                  <b>The shared base.</b> All options keep the same two notes.
+                </p>
+              </div>
+              {{kb-base}}
+
+              <h4>Option 1. An implicit chrome key</h4>
+              <div class="prose">
+                <p>
+                  The key is its own piece of chrome, beside the legend, with a
+                  side enum.
+                </p>
+              </div>
+              {{ko1}}
+              <div class="prose">
+                <p>
+                  Default: yes. Freeform: no. Each new place (inside the plot,
+                  at each badge's height) needs a new enum value. It overlaps
+                  the legend in the middle: a second chrome block with its own
+                  placement code, and a <code>position</code> the legend does
+                  not have.
+                </p>
+              </div>
+
+              <h4>Option 2. The key is the legend of a marker channel</h4>
+              <div class="prose">
+                <p>
+                  The markers A, B, C are the values of a channel with an
+                  ordinal scale. <code>key: {}</code> puts the note's text in
+                  that channel, and the scale gives it a marker, the way a color
+                  scale gives a category a color. The range is a strategy
+                  family, <code>Marker.letters()</code> (default) or
+                  <code>Marker.numbers()</code>, set like
+                  <code>Color.palette()</code>. The key is that channel's
+                  legend, so it goes where legends go.
+                </p>
+              </div>
+              {{ko2}}
+              <div class="prose">
+                <p>
+                  Default: yes, the legend's. Freeform: only by turning the
+                  default off and writing the key (option 3). Shared across
+                  charts: yes. Like color, there is one marker scale per render,
+                  so two panels share one key, and the same note text in two
+                  panels gets one marker.
+                </p>
+              </div>
+
+              <h4>Option 3. The key is a chart over the selected notes</h4>
+              <div class="prose">
+                <p>
+                  The labels are named, and the key is an ordinary chart over
+                  them, placed by any operator or constraint. The link is the
+                  same object: each key entry is drawn from the label node it
+                  lists.
+                </p>
+              </div>
+              {{ko3}}
+              <div class="prose">
+                <p>
+                  A label node carries its <code>marker</code> and its
+                  <code>text</code>. <code>spread({ by: "marker" })</code> gives
+                  one entry per marker, and <code>keyEntry()</code> reads the
+                  first row of each, by the channel rule that raw content reads
+                  the first row. So a note used twice is listed once. Default:
+                  none by itself. Freeform: yes.
+                </p>
+              </div>
+
+              <h4>Option 4. The notes are a data table</h4>
+              <div class="prose">
+                <p>
+                  The notes are rows. One tier draws a badge on each note's
+                  target with <code>resolve</code>, and the key is a chart over
+                  the same rows (<code>LabeledChart.stories.tsx</code> does this
+                  for node labels).
+                </p>
+              </div>
+              {{ko4}}
+              <div class="prose">
+                <p>
+                  Default: none. Freeform: yes. No new terms beyond
+                  <code>keyEntry()</code>. But the targets are typed by date, so
+                  they no longer follow the data (<code>topK</code> is gone),
+                  and the markers are typed by hand.
+                </p>
+              </div>
+
+              <h4>Option 5. A relation between each badge and its entry</h4>
+              <div class="prose">
+                <p>
+                  Not a block placement: each entry is placed by a constraint
+                  against its own badge, like an end label. Render d puts each
+                  entry at its badge's height, past the plot.
+                </p>
+              </div>
+              {{ko5}}
+              <div class="prose">
+                <p>
+                  This is option 3 with a different placement, so it adds no new
+                  key construct. It adds one question: may a constraint take two
+                  plural selections of the same rows and apply pairwise? Today
+                  it is a <code>map</code> over the pairs.
+                </p>
+                <p>
+                  <b>How the options compose.</b> Option 2 elaborates into
+                  option 3. The default key is exactly the option 3 chart over
+                  all keyed labels,
+                  <code>spread({ by: "marker", dir: "y" })</code> of
+                  <code>keyEntry()</code>, placed as chrome by the legend's two
+                  constraints. So "default" and "freeform" are one mechanism.
+                  Option 5 is a placement of option 3. Option 4 is option 3 with
+                  the notes in a table instead of on the labels. Option 1 is the
+                  only one that adds a second path.
+                </p>
+              </div>
+
+              <div class="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Option</th>
+                      <th>Default place?</th>
+                      <th>Freeform?</th>
+                      <th>Shared across charts?</th>
+                      <th>New terms</th>
+                      <th>Desugars into</th>
+                      <th>Overlap with existing</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>1 Chrome key</td>
+                      <td>yes, side enum</td>
+                      <td>no</td>
+                      <td>only if root-owned like the legend</td>
+                      <td><code>key</code>, <code>key.position</code></td>
+                      <td>a chrome block beside the legend</td>
+                      <td>
+                        large and partial: a second legend with its own
+                        placement
+                      </td>
+                    </tr>
+                    <tr>
+                      <td><b>2 Marker legend</b></td>
+                      <td>yes, the legend's place</td>
+                      <td>by turning it off and writing 3</td>
+                      <td>yes: one marker scale per render; notes dedupe</td>
+                      <td>
+                        <code>key</code>, <code>Marker</code> family,
+                        <code>legend: { side }</code>
+                      </td>
+                      <td>
+                        marker scale + the legend's rows = option 3 as chrome
+                      </td>
+                      <td>none: it is the legend</td>
+                    </tr>
+                    <tr>
+                      <td><b>3 Chart over notes</b></td>
+                      <td>no</td>
+                      <td>yes: any operator or constraint</td>
+                      <td>yes: <code>selectAll</code> reaches every panel</td>
+                      <td>
+                        <code>keyEntry()</code>; label <code>marker</code> /
+                        <code>text</code> fields
+                      </td>
+                      <td>
+                        <code>spread</code> of <code>keyEntry()</code> over
+                        selected labels
+                      </td>
+                      <td>
+                        reuses <code>selectAll</code>, <code>spread</code>,
+                        constraints
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>4 Notes table</td>
+                      <td>no</td>
+                      <td>yes</td>
+                      <td>yes: one table</td>
+                      <td><code>keyEntry()</code></td>
+                      <td>
+                        <code>resolve</code> + <code>label</code> mark,
+                        <code>spread</code> over the table
+                      </td>
+                      <td>
+                        the <code>LabeledChart</code> idiom; loses the data link
+                        (<code>topK</code>)
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>5 Pairwise relation</td>
+                      <td>no</td>
+                      <td>per entry</td>
+                      <td>yes, as 3</td>
+                      <td>
+                        pairwise constraint operands (or a <code>map</code>)
+                      </td>
+                      <td>one <code>align</code> per badge and entry</td>
+                      <td>end labels</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h4>Renders</h4>
+              <div class="prose">
+                <p>
+                  The same GOOG chart and notes, built with today's primitives
+                  (<code>KeyLabelOptions.stories.tsx</code>). The code under
+                  each render is the recommended spelling (option 2, falling
+                  back to 3 and 5). Today's line counts are for the spec, not
+                  counting the shared annotated chart (13 lines) or the badge
+                  and key helpers (about 20 lines).
+                </p>
+              </div>
+              <div class="ab-grid key-grid">
+                <figure class="paper">
+                  <img
+                    src="img/key/a-right.png"
+                    alt="GOOG line with badges A and B, the key right of the plot, top aligned"
+                    width="584"
+                    height="274"
+                    loading="lazy"
+                  />
+                  <figcaption>
+                    a. Right, like the legend. Today: 7 lines. Opt 1 and 2: the
+                    default. Opt 3/4: a distribute and an align.
+                  </figcaption>
+                  {{kr-a}}
+                </figure>
+                <figure class="paper">
+                  <img
+                    src="img/key/b-below.png"
+                    alt="The same chart with the key below it as a footnote list"
+                    width="446"
+                    height="331"
+                    loading="lazy"
+                  />
+                  <figcaption>
+                    b. Below, as footnotes. Today: 9 lines. Opt 1:
+                    <code>key: { position: "bottom" }</code>. Opt 2:
+                    <code>legend: { side: "bottom" }</code>. Opt 3/4: two
+                    constraints.
+                  </figcaption>
+                  {{kr-b}}
+                </figure>
+                <figure class="paper">
+                  <img
+                    src="img/key/c-inside.png"
+                    alt="The key inside the plot, in the empty space under the line"
+                    width="446"
+                    height="274"
+                    loading="lazy"
+                  />
+                  <figcaption>
+                    c. Inside the plot, in empty space. Today: 8 lines. Opt 1:
+                    not expressible. Opt 2: via 3. Opt 3/4: one align. (The
+                    top-left corner was too narrow: the A row runs into the
+                    peak.)
+                  </figcaption>
+                  {{kr-c}}
+                </figure>
+                <figure class="paper">
+                  <img
+                    src="img/key/d-aligned.png"
+                    alt="Each key entry right of the plot at the height of its badge"
+                    width="584"
+                    height="274"
+                    loading="lazy"
+                  />
+                  <figcaption>
+                    d. Each entry at its badge's height. Today: 13 lines. Opt 1:
+                    not expressible. Opt 3/4: one align per note. Opt 5: one
+                    pairwise align.
+                  </figcaption>
+                  {{kr-d}}
+                </figure>
+                <figure class="paper">
+                  <img
+                    src="img/key/e-shared-key.png"
+                    alt="GOOG and AAPL panels side by side; A on GOOG's peak, B on AAPL's peak, C on September 2008 in both; one key below"
+                    width="652"
+                    height="326"
+                    loading="lazy"
+                  />
+                  <figcaption>
+                    e. Hard case: two panels, one key, C in both. Today: 33
+                    lines. Opt 1: one key only if root-owned. Opt 2: automatic,
+                    C listed once. Opt 3: one <code>selectAll</code> over both
+                    panels, C once by <code>by: "marker"</code>. Opt 4: one
+                    table.
+                  </figcaption>
+                  {{kr-e}}
+                </figure>
+                <figure class="paper">
+                  <img
+                    src="img/key/f-formula.png"
+                    alt="Var(X) = E[(X − μ)²] with numbered badges 1 to 3 over its terms and a numbered footnote list below"
+                    width="318"
+                    height="164"
+                    loading="lazy"
+                  />
+                  <figcaption>
+                    f. A diagram, not a chart: numbered terms and footnotes.
+                    Today: 24 lines. Opt 2: <code>Marker.numbers()</code> and
+                    side bottom. Opt 3: a distribute below the formula.
+                  </figcaption>
+                  {{kr-f}}
+                </figure>
+              </div>
+              <div class="prose"><p>Python, where the shape differs:</p></div>
+              {{kr-py}}
+
+              <div class="prose">
+                <p>
+                  <b>Precedent.</b> Legends: Vega-Lite's
+                  <code>legend.orient</code> ("right", "bottom", and inside
+                  corners such as "top-left"), ggplot2's
+                  <code>legend.position</code> (a side, or a point inside the
+                  plot), matplotlib's <code>legend(loc=...)</code>. Observable
+                  Plot's <code>plot.legend("color")</code> returns the legend as
+                  its own element that the page places, which is option 3.
+                  Markers: LaTeX footnote counters (<code>\alph</code>,
+                  <code>\arabic</code>, <code>\fnsymbol</code>) and Typst's
+                  <code>numbering("a")</code> / <code>numbering("1")</code>.
+                </p>
+                <p>
+                  <b
+                    >Recommendation: option 2, defined as option 3 placed as
+                    chrome.</b
+                  >
+                </p>
+                <ul>
+                  <li>
+                    <b>One mechanism for default and freeform.</b> The default
+                    key is a chart the user could write. To move it, turn it off
+                    and write that chart. This is #1257's direction.
+                  </li>
+                  <li>
+                    <b>One concept is one operator</b> (API Design). A key of
+                    markers is a legend of a channel. A second chrome block
+                    (option 1) is a large partial overlap with the legend.
+                  </li>
+                  <li>
+                    <b>The hard case falls out.</b> Two panels share one key
+                    with no new rule, because the marker scale is per render,
+                    like color. A note used twice gets one marker, because a
+                    scale maps equal values to one marker.
+                  </li>
+                  <li>
+                    <b>Channels are chosen by how they aggregate.</b> The marker
+                    is raw content, so a key entry over two labels with one
+                    marker reads the first, and lists the note once.
+                  </li>
+                  <li>
+                    <b>Strategy families.</b> <code>Marker.letters()</code> /
+                    <code>Marker.numbers()</code> follow the family rule
+                    (<code>Color.palette()</code>,
+                    <code>Tile.squarify()</code>).
+                  </li>
+                  <li>
+                    <b>Simple moves stay short.</b>
+                    <code>legend: { side }</code> covers right and bottom, and
+                    it moves the color legend too, which it should.
+                  </li>
+                </ul>
+                <p>
+                  <b>Runner-up: option 4, the notes table.</b> It needs no new
+                  construct except <code>keyEntry()</code>, and the key is as
+                  free as option 3. It loses the data link (targets typed by
+                  date), the markers are typed by hand, and there is no default.
+                  If notes in practice come from a table anyway (a spreadsheet
+                  of events), option 4 is the natural spelling, and it already
+                  works through <code>resolve</code>.
+                </p>
+                <p>
+                  See <a href="#decisions">decisions 20 to 27</a>. Decisions 15
+                  to 17 are revised to match.
+                </p>
+              </div>
+            </article>
           </section>
 
           <section id="approach-d">
@@ -3708,7 +4214,23 @@
               <li>A rule tier's field joins the axis title.</li>
               <li>
                 <b>#802 / #1203</b>: operators and bare tiers cannot be named,
-                which forces wrapper layers.
+                which forces wrapper layers. Round 6: a chart after
+                <code>.layer()</code> cannot be named either, so render b places
+                its key off the line with a spacing tuned past the axis title.
+              </li>
+              <li>
+                The legend cannot be moved. The only option is
+                <code>legend: false</code>, and #1257 does not say how a user
+                changes the place of a chrome child.
+              </li>
+              <li>
+                Label nodes cannot be named or selected, so no chart can be
+                built over them. The <code>label(...)</code> mark fixes this.
+              </li>
+              <li>
+                Nothing places a block in a plot's empty space.
+                <code>Place</code> places one label at a time, so render c's key
+                was placed by hand.
               </li>
             </ol>
           </section>
@@ -3768,8 +4290,8 @@
                     <p class="d">
                       Label the original mark with a predicate (#804's
                       value-keyed record, <code>.label({ AAPL: "..." })</code>),
-                      or allow <code>.label()</code> on a bare selection tier
-                      with no drawn subject?
+                      or label the selection itself with the
+                      <code>label(...)</code> mark (decision 19)?
                     </p>
                   </div>
                 </li>
@@ -3873,8 +4395,9 @@
                   <div>
                     <p class="q">Key label name.</p>
                     <p class="d">
-                      <code>key</code>, <code>footnote</code>, or no new option
-                      and merge the notes into the legend?
+                      Keep <code>key</code> as the <code>.label()</code> option
+                      that puts a note in the marker channel, so the key is that
+                      channel's legend (decision 20)? Or <code>footnote</code>?
                     </p>
                   </div>
                 </li>
@@ -3882,9 +4405,9 @@
                   <div>
                     <p class="q">Marker style.</p>
                     <p class="d">
-                      Auto letters or numbers in reading order, a given marker
-                      (<code>key: { marker: "A" }</code>), or both? If auto, how
-                      do we pick letters or numbers?
+                      Markers come from a scale (decision 22), with a given
+                      marker (<code>key: { marker: "A" }</code>) as the
+                      override?
                     </p>
                   </div>
                 </li>
@@ -3892,8 +4415,9 @@
                   <div>
                     <p class="q">Where the key goes.</p>
                     <p class="d">
-                      Per label (<code>key: { position }</code>), or once per
-                      chart, like the legend?
+                      Replaced by decisions 20 to 27 (<a href="#key-place"
+                        >round 6</a
+                      >).
                     </p>
                   </div>
                 </li>
@@ -3904,6 +4428,96 @@
                       Let a label's background take a shape,
                       <code>background: { shape: Shape.oval() }</code>, for the
                       badge?
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q"><code>label</code> mark.</p>
+                    <p class="d">
+                      Add <code>label(...)</code> as a relational mark, with
+                      <code>.label()</code> defined as its rewrite (<a
+                        href="#label-mark"
+                        >round 6</a
+                      >)?
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q">Key as a legend.</p>
+                    <p class="d">
+                      Is the key the legend of a marker channel (option 2), with
+                      one marker scale per render like color?
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q">Default = freeform.</p>
+                    <p class="d">
+                      Is the default key defined as an option 3 chart over the
+                      keyed labels, placed as chrome, so that writing that chart
+                      is the override?
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q">Marker family.</p>
+                    <p class="d">
+                      <code>Marker.letters()</code> and
+                      <code>Marker.numbers()</code> (and
+                      <code>Marker.symbols()</code>), or a Typst-style pattern,
+                      <code>Marker.pattern("a")</code>?
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q">Marker order.</p>
+                    <p class="d">
+                      Declaration order (known before layout), or reading order
+                      (needs layout first)?
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q">Turning off one legend.</p>
+                    <p class="d">
+                      <code>legend: false</code> drops every legend. Do we need
+                      a per-channel switch, such as
+                      <code>legend: { marker: false }</code>?
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q">Legend side.</p>
+                    <p class="d">
+                      Add <code>legend: { side: "right" | "bottom" }</code> for
+                      the common moves?
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q">Key entry.</p>
+                    <p class="d">
+                      Export <code>keyEntry()</code> (the legend's row: marker,
+                      then text), or have users write the row?
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q">Pairwise constraints.</p>
+                    <p class="d">
+                      May a constraint take two plural selections of the same
+                      rows and apply pairwise (<code
+                        >align({ y: "middle" }, [notes, entries])</code
+                      >), or stay a <code>map</code>?
                     </p>
                   </div>
                 </li>
