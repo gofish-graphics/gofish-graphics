@@ -1055,6 +1055,64 @@
           scroll-behavior: auto !important;
         }
       }
+      /* annotation styles table */
+      table.styles td {
+        vertical-align: middle;
+      }
+      table.styles td.sname {
+        width: 210px;
+        line-height: 1.5;
+      }
+      .snum {
+        display: inline-block;
+        min-width: 1.6em;
+        font-family: var(--font-cond);
+        color: var(--ink-3);
+      }
+      table.styles {
+        min-width: 900px;
+      }
+      table.styles td.render {
+        width: 250px;
+      }
+      table.styles td.render img {
+        width: 230px;
+        max-width: none;
+        height: auto;
+        display: block;
+      }
+      table.styles td.code pre {
+        margin: 0;
+        font-size: 11.5px;
+      }
+      table.styles td.code pre code {
+        white-space: pre;
+      }
+      table.styles .today {
+        font-size: 13px;
+        line-height: 1.45;
+        color: var(--ink-2);
+        margin: 8px 0 0;
+      }
+      table.styles .today .count {
+        display: block;
+        margin-top: 4px;
+      }
+      .ab-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+        margin: 0 0 16px;
+      }
+      #key-labels details {
+        margin: 0 0 16px;
+      }
+      #key-labels summary {
+        cursor: pointer;
+        color: var(--ink-2);
+        font-size: 14px;
+        margin-bottom: 8px;
+      }
     </style>
   </head>
   <body>
@@ -1067,14 +1125,17 @@
               <a href="#terms"><span class="n">01</span>Terms</a>
             </li>
             <li>
-              <a href="#asked"><span class="n">02</span>What the notes asked</a>
+              <a href="#styles"><span class="n">02</span>Annotation styles</a>
             </li>
             <li>
-              <a href="#precedent"><span class="n">03</span>Precedent</a>
+              <a href="#asked"><span class="n">03</span>What the notes asked</a>
+            </li>
+            <li>
+              <a href="#precedent"><span class="n">04</span>Precedent</a>
             </li>
             <li>
               <a href="#examples"
-                ><span class="n">04</span>Examples × approaches</a
+                ><span class="n">05</span>Examples × approaches</a
               >
             </li>
             <li>
@@ -1083,34 +1144,37 @@
               >
             </li>
             <li>
-              <a href="#types"><span class="n">05</span>d3-annotation types</a>
+              <a href="#types"><span class="n">06</span>d3-annotation types</a>
+            </li>
+            <li>
+              <a class="sub" href="#key-labels">Key labels</a>
             </li>
             <li>
               <a href="#approach-d"
-                ><span class="n">06</span>Approach D sketch</a
+                ><span class="n">07</span>Approach D sketch</a
               >
             </li>
             <li>
-              <a href="#tradeoffs"><span class="n">07</span>Trade-offs</a>
+              <a href="#tradeoffs"><span class="n">08</span>Trade-offs</a>
             </li>
             <li>
-              <a href="#overlap"><span class="n">08</span>Overlap check</a>
+              <a href="#overlap"><span class="n">09</span>Overlap check</a>
             </li>
             <li>
               <a href="#recommendation"
-                ><span class="n">09</span>Recommendation</a
+                ><span class="n">10</span>Recommendation</a
               >
             </li>
             <li>
-              <a href="#gaps"><span class="n">10</span>Gaps found</a>
+              <a href="#gaps"><span class="n">11</span>Gaps found</a>
             </li>
             <li>
               <a href="#decisions"
-                ><span class="n">11</span>Decisions for Josh</a
+                ><span class="n">12</span>Decisions for Josh</a
               >
             </li>
             <li>
-              <a href="#issues"><span class="n">12</span>Related issues</a>
+              <a href="#issues"><span class="n">13</span>Related issues</a>
             </li>
           </ol>
         </nav>
@@ -1123,7 +1187,7 @@
               <span
                 >Proposal. Approach C is not implemented; renders are of A and
                 B, plus a prototype of parts of a mark. Syntax awaits sign-off
-                on <a href="#decisions">14 decisions</a>.</span
+                on <a href="#decisions">18 decisions</a>.</span
               >
             </div>
             <div class="status round2">
@@ -1142,6 +1206,13 @@
                   >how parts relates to partition, cut and anchors</a
                 >
                 (#47).</span
+              >
+            </div>
+            <div class="status round2">
+              <span
+                ><b>Round 5:</b>
+                <a href="#styles">annotation styles table</a> and
+                <a href="#key-labels">key labels</a>.</span
               >
             </div>
 
@@ -1238,9 +1309,289 @@
             </dl>
           </section>
 
+          <section id="styles">
+            <h2><span class="secnum">02</span>Annotation styles</h2>
+            <div class="prose">
+              <p>
+                The same GOOG chart, annotated ten ways. Each style is set by
+                what links the note to its target: closeness, a line, a shared
+                symbol, containment, a position on an axis, or color. The
+                renders use today's primitives. The code is the proposed C
+                spelling, written as a tier on the base chart. Line counts are
+                for today's spec, with the base chart and small shared helpers
+                (the badge, the key) not counted. The stories are in
+                <code>AnnotationStyles.stories.tsx</code>.
+              </p>
+            </div>
+            <div class="table-scroll">
+              <table class="styles">
+                <thead>
+                  <tr>
+                    <th>Style, link, today</th>
+                    <th>Render (today)</th>
+                    <th>C spelling (proposed)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="sname">
+                      <span class="snum">1</span><b>Proximity label</b
+                      ><br /><span class="chip link">closeness</span>
+                      <p class="today">
+                        A <code>.label()</code> on an invisible
+                        <code>enclose</code> over the selected month. Works
+                        today, and the label reads the row.
+                        <span class="count">11 lines</span>
+                      </p>
+                    </td>
+                    <td class="render">
+                      <figure class="paper">
+                        <img
+                          src="img/styles/1-proximity.png"
+                          alt="Peak price label set just left of the peak"
+                          width="438"
+                          height="266"
+                          loading="lazy"
+                        />
+                      </figure>
+                    </td>
+                    <td class="code">{{sty1}}</td>
+                  </tr>
+                  <tr>
+                    <td class="sname">
+                      <span class="snum">2</span><b>Leader label</b><br /><span
+                        class="chip link"
+                        >line</span
+                      >
+                      <p class="today">
+                        A free <code>text</code>, two <code>distribute</code>s
+                        and an <code>arrow</code> (which always has a head). The
+                        text is computed outside the chart.
+                        <span class="count">14 lines</span>
+                      </p>
+                    </td>
+                    <td class="render">
+                      <figure class="paper">
+                        <img
+                          src="img/styles/2-leader.png"
+                          alt="Peak price label up and left of the peak, a red line to it"
+                          width="438"
+                          height="281"
+                          loading="lazy"
+                        />
+                      </figure>
+                    </td>
+                    <td class="code">{{sty2}}</td>
+                  </tr>
+                  <tr>
+                    <td class="sname">
+                      <span class="snum">3</span
+                      ><b>Subject + leader (callout)</b><br /><span
+                        class="chip link"
+                        >containment + line</span
+                      >
+                      <p class="today">
+                        Example 1: the same, plus an oval
+                        <code>enclose</code> as the subject.
+                        <span class="count">16 lines</span>
+                      </p>
+                    </td>
+                    <td class="render">
+                      <figure class="paper">
+                        <img
+                          src="img/styles/3-callout.png"
+                          alt="Circle on the peak, a two-line note and a red leader"
+                          width="438"
+                          height="296"
+                          loading="lazy"
+                        />
+                      </figure>
+                    </td>
+                    <td class="code">{{sty3}}</td>
+                  </tr>
+                  <tr>
+                    <td class="sname">
+                      <span class="snum">4</span><b>Key label</b><br /><span
+                        class="chip link"
+                        >shared symbol</span
+                      >
+                      <p class="today">
+                        A hand-built circle and letter per target, a key
+                        <code>spread</code> of rows, and six constraints in an
+                        outer <code>layer</code>.
+                        <span class="count">20 lines</span>
+                      </p>
+                    </td>
+                    <td class="render">
+                      <figure class="paper">
+                        <img
+                          src="img/styles/4-key.png"
+                          alt="Circles on the peak and the trough with badges A and B; a key right of the plot"
+                          width="576"
+                          height="266"
+                          loading="lazy"
+                        />
+                      </figure>
+                    </td>
+                    <td class="code">{{sty4}}</td>
+                  </tr>
+                  <tr>
+                    <td class="sname">
+                      <span class="snum">5</span><b>Key + leader</b><br /><span
+                        class="chip link"
+                        >shared symbol + line</span
+                      >
+                      <p class="today">
+                        As row 4, with each badge a little way off and an
+                        <code>arrow</code> to its circle.
+                        <span class="count">22 lines</span>
+                      </p>
+                    </td>
+                    <td class="render">
+                      <figure class="paper">
+                        <img
+                          src="img/styles/5-key-leader.png"
+                          alt="Badges A and B a little way off their circles, with lines; the key right of the plot"
+                          width="576"
+                          height="277"
+                          loading="lazy"
+                        />
+                      </figure>
+                    </td>
+                    <td class="code">{{sty5}}</td>
+                  </tr>
+                  <tr>
+                    <td class="sname">
+                      <span class="snum">6</span><b>Region enclosure + label</b
+                      ><br /><span class="chip link">containment</span>
+                      <p class="today">
+                        An <code>enclose({ shape: Shape.box() })</code> over
+                        filtered months, with a <code>.label()</code>. Works
+                        today. <span class="count">18 lines</span>
+                      </p>
+                    </td>
+                    <td class="render">
+                      <figure class="paper">
+                        <img
+                          src="img/styles/6-region.png"
+                          alt="A red box around the 2007 to 2009 stretch, labeled the 2008 fall"
+                          width="438"
+                          height="268"
+                          loading="lazy"
+                        />
+                      </figure>
+                    </td>
+                    <td class="code">{{sty6}}</td>
+                  </tr>
+                  <tr>
+                    <td class="sname">
+                      <span class="snum">7</span><b>Reference rule</b
+                      ><br /><span class="chip link">axis position</span>
+                      <p class="today">
+                        Works today. <span class="count">8 lines</span>
+                      </p>
+                    </td>
+                    <td class="render">
+                      <figure class="paper">
+                        <img
+                          src="img/styles/7-rule.png"
+                          alt="A gray rule at the mean price, labeled at its right end"
+                          width="488"
+                          height="266"
+                          loading="lazy"
+                        />
+                      </figure>
+                    </td>
+                    <td class="code">{{sty7}}</td>
+                  </tr>
+                  <tr>
+                    <td class="sname">
+                      <span class="snum">8</span><b>Band</b><br /><span
+                        class="chip link"
+                        >axis position</span
+                      >
+                      <p class="today">
+                        Works today, but <code>datum</code> needs epoch
+                        milliseconds on a time axis.
+                        <span class="count">13 lines</span>
+                      </p>
+                    </td>
+                    <td class="render">
+                      <figure class="paper">
+                        <img
+                          src="img/styles/8-band.png"
+                          alt="A sand band from Nov 2007 to Mar 2009, labeled recession at its top"
+                          width="438"
+                          height="279"
+                          loading="lazy"
+                        />
+                      </figure>
+                    </td>
+                    <td class="code">{{sty8}}</td>
+                  </tr>
+                  <tr>
+                    <td class="sname">
+                      <span class="snum">9</span><b>Emphasis of a stretch</b
+                      ><br /><span class="chip link">color</span>
+                      <p class="today">
+                        A second red <code>line</code> over filtered months, on
+                        a gray base. The stretch is cut at the nearest months,
+                        not at the dates. <span class="count">7 lines</span>
+                      </p>
+                    </td>
+                    <td class="render">
+                      <figure class="paper">
+                        <img
+                          src="img/styles/9-emphasis.png"
+                          alt="The line gray except the 2008 fall in red"
+                          width="438"
+                          height="266"
+                          loading="lazy"
+                        />
+                      </figure>
+                    </td>
+                    <td class="code">{{sty9}}</td>
+                  </tr>
+                  <tr>
+                    <td class="sname">
+                      <span class="snum">10</span><b>Badge only</b><br /><span
+                        class="chip link"
+                        >symbol, no note</span
+                      >
+                      <p class="today">
+                        A hand-built circle and letter, placed by two
+                        <code>distribute</code>s.
+                        <span class="count">9 lines</span>
+                      </p>
+                    </td>
+                    <td class="render">
+                      <figure class="paper">
+                        <img
+                          src="img/styles/10-badge.png"
+                          alt="A red badge A at the peak, no text"
+                          width="438"
+                          height="267"
+                          loading="lazy"
+                        />
+                      </figure>
+                    </td>
+                    <td class="code">{{sty10}}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="small muted">
+              Rows 1, 2 and 10 hang a label on <code>blank()</code>, which is
+              <a href="#decisions">decision 5</a>. Rows 4 and 5 use the new
+              <code>key</code> option (<a href="#key-labels">key labels</a>).
+              Row 9 colors a line part, which is
+              <a href="#decisions">decision 12</a>.
+            </p>
+          </section>
+
           <section id="asked">
             <h2>
-              <span class="secnum">02</span>What the notes asked, and the
+              <span class="secnum">03</span>What the notes asked, and the
               answers
             </h2>
             <div class="table-scroll">
@@ -1310,7 +1661,7 @@
           </section>
 
           <section id="precedent">
-            <h2><span class="secnum">03</span>Precedent</h2>
+            <h2><span class="secnum">04</span>Precedent</h2>
             <div class="prose">
               <p>
                 What matters for the design. The full survey with sources is
@@ -1704,7 +2055,7 @@
           </section>
 
           <section id="examples">
-            <h2><span class="secnum">04</span>Examples × approaches</h2>
+            <h2><span class="secnum">05</span>Examples × approaches</h2>
             <div class="prose">
               <p>
                 Five hard examples. Each one is rendered with today's primitives
@@ -2815,7 +3166,7 @@
           </section>
 
           <section id="types">
-            <h2><span class="secnum">05</span>d3-annotation types</h2>
+            <h2><span class="secnum">06</span>d3-annotation types</h2>
             <div class="prose">
               <p>
                 One story draws the same 10-point line chart eight times, once
@@ -2921,11 +3272,114 @@
                 </tbody>
               </table>
             </div>
+
+            <!-- KEY LABELS -->
+            <article class="ex" id="key-labels">
+              <div class="ex-head">
+                <h3>Key labels: a symbol by the target, the text in a key</h3>
+                <span class="muted small">round 5, Josh's question</span>
+              </div>
+              <p class="ex-intro">
+                "How would we do the symbol label with the description outside
+                the chart? Like A with a circle around it next to a feature,
+                then A with a circle around it outside the chart with the text."
+              </p>
+              <div class="prose">
+                <p>A note links to its target in one of three ways.</p>
+                <ul>
+                  <li>
+                    <b>Proximity label</b>: the text sits next to the target.
+                    The link is closeness.
+                  </li>
+                  <li>
+                    <b>Leader label</b>: the text sits a little way off. The
+                    link is a line.
+                  </li>
+                  <li>
+                    <b>Key label</b>: a marker sits next to the target, and the
+                    text sits in a key outside the plot. The link is a shared
+                    symbol.
+                  </li>
+                </ul>
+                <p>
+                  Precedent: the practitioners in Rahman et al.,
+                  <i>Designing Annotations</i> (EuroVis 2026), name a numbered
+                  key as their third choice when notes do not fit by the data.
+                  Footnotes in typography work the same way.
+                </p>
+                <p>
+                  Proposed spelling: a <code>key</code> option on
+                  <code>.label()</code>, orthogonal to <code>leader</code>.
+                </p>
+              </div>
+              {{key-c}}
+              <div class="prose">
+                <p>Python: <code>key={}</code>.</p>
+              </div>
+              {{key-py}}
+              <div class="prose">
+                <p>It elaborates into two things.</p>
+                <ul>
+                  <li>
+                    <b>The badge</b>: a label whose text is the marker, with
+                    <code>background: { shape: Shape.oval() }</code>. That is a
+                    small extension: <code>background</code> takes a
+                    <code>Shape</code>.
+                  </li>
+                  <li>
+                    <b>The key entry</b>: a copy of the badge and the note text,
+                    as chart chrome like a legend. Under #1257 that chrome is a
+                    plain child of the chart layer.
+                  </li>
+                </ul>
+              </div>
+              {{key-elab}}
+              <div class="prose">
+                <p>
+                  <code>key</code> and <code>leader</code> compose. With both,
+                  the badge sits a little way off with a line to the target.
+                </p>
+              </div>
+              {{key-leader-c}}
+              <div class="ab-grid">
+                <figure class="paper">
+                  <img
+                    src="img/styles/4-key.png"
+                    alt="GOOG line with circles on the 2007 peak (badge A) and the 2009 trough (badge B), and a key right of the plot"
+                    width="576"
+                    height="266"
+                  />
+                  <figcaption>Key label (A, B). Today: 20 lines.</figcaption>
+                </figure>
+                <figure class="paper">
+                  <img
+                    src="img/styles/5-key-leader.png"
+                    alt="The same, with badges A and B a little way off their circles and joined by lines"
+                    width="576"
+                    height="277"
+                  />
+                  <figcaption>Key + leader. Today: 22 lines.</figcaption>
+                </figure>
+              </div>
+              <details>
+                <summary>Today's prototype (row 4 of the styles table)</summary>
+                {{key-today}}
+              </details>
+              <div class="prose">
+                <p>
+                  Today it takes a hand-built badge per target, a key
+                  <code>spread</code>, and an outer <code>layer</code> with six
+                  constraints. The badge letters and the key rows are typed
+                  twice and can drift apart. See
+                  <a href="#decisions">decisions 15 to 18</a>.
+                </p>
+              </div>
+            </article>
           </section>
 
           <section id="approach-d">
             <h2>
-              <span class="secnum">06</span>Approach D: target-first effect
+              <span class="secnum">07</span>Approach D: target-first effect
               lists <span class="chip">sketch, not rendered</span>
             </h2>
             <div class="prose">
@@ -2954,7 +3408,7 @@
           </section>
 
           <section id="tradeoffs">
-            <h2><span class="secnum">07</span>Trade-offs: A, B, C</h2>
+            <h2><span class="secnum">08</span>Trade-offs: A, B, C</h2>
 
             <div class="approach">
               <div class="approach-head"><h3>A. Idioms only</h3></div>
@@ -3105,7 +3559,7 @@
           </section>
 
           <section id="overlap">
-            <h2><span class="secnum">08</span>Overlap check for C</h2>
+            <h2><span class="secnum">09</span>Overlap check for C</h2>
             <div class="table-scroll" style="max-width: 960px">
               <table>
                 <thead>
@@ -3146,7 +3600,7 @@
           </section>
 
           <section id="recommendation">
-            <h2><span class="secnum">09</span>Recommendation: choose C</h2>
+            <h2><span class="secnum">10</span>Recommendation: choose C</h2>
             <ul class="args">
               <li>
                 <b>It desugars into the existing core.</b>
@@ -3204,7 +3658,7 @@
 
           <section id="gaps">
             <h2>
-              <span class="secnum">10</span>Gaps found, independent of the
+              <span class="secnum">11</span>Gaps found, independent of the
               approach
             </h2>
             <p class="prose">
@@ -3221,8 +3675,9 @@
                 is what <code>leader</code> adds.
               </li>
               <li>
-                <b>A free note cannot read the selected row.</b> C fixes this by
-                making the note a label.
+                <b>A free note cannot read the selected row.</b> A
+                <code>.label()</code> on a selection tier already can (round 5
+                found this works), so C fixes this by making the note a label.
               </li>
               <li>
                 <b>#641</b>: one emphasis is spelled three times (palette,
@@ -3259,7 +3714,7 @@
           </section>
 
           <section id="decisions">
-            <h2><span class="secnum">11</span>Decisions for Josh</h2>
+            <h2><span class="secnum">12</span>Decisions for Josh</h2>
             <div class="decisions-wrap">
               <ol class="decisions">
                 <li>
@@ -3414,12 +3869,50 @@
                     </p>
                   </div>
                 </li>
+                <li>
+                  <div>
+                    <p class="q">Key label name.</p>
+                    <p class="d">
+                      <code>key</code>, <code>footnote</code>, or no new option
+                      and merge the notes into the legend?
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q">Marker style.</p>
+                    <p class="d">
+                      Auto letters or numbers in reading order, a given marker
+                      (<code>key: { marker: "A" }</code>), or both? If auto, how
+                      do we pick letters or numbers?
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q">Where the key goes.</p>
+                    <p class="d">
+                      Per label (<code>key: { position }</code>), or once per
+                      chart, like the legend?
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q">Badge shape.</p>
+                    <p class="d">
+                      Let a label's background take a shape,
+                      <code>background: { shape: Shape.oval() }</code>, for the
+                      badge?
+                    </p>
+                  </div>
+                </li>
               </ol>
             </div>
           </section>
 
           <section id="issues">
-            <h2><span class="secnum">12</span>Related issues</h2>
+            <h2><span class="secnum">13</span>Related issues</h2>
             <ul class="issues">
               <li>
                 <span class="num">#641</span

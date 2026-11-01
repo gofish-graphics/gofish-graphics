@@ -11,6 +11,8 @@ and a few fixes, and it moves color emphasis into its own design.
 for selecting spans of a text without tokenizing it (example 5), and bands now use the
 existing `x` / `x2` edges (example 2).
 
+**Round 5:** annotation styles table and key labels.
+
 **Recommendation (Approach C).** Write an annotation as a **selection**, a **subject mark**
 over it, and a **`.label()`** on that mark. The label is the note. A new `leader` option on
 `.label()` draws the connector. A new `topK` flow step selects extremes, and `ref(x).part(sel)` / `.parts(sel)` select
@@ -112,6 +114,30 @@ stories are in `packages/gofish-graphics/stories/_proposals/annotations/`.
    staggered by hand.
 
 Plus the **d3-annotation type grid** (`d3a-grid.png`): all eight types by composition.
+
+## Annotation styles
+
+The same GOOG chart, annotated ten ways. Each style is set by what links the note to its
+target. The renders use today's primitives
+(`stories/_proposals/annotations/AnnotationStyles.stories.tsx`). The C spelling is written
+as a tier on the base chart. Line counts are for today's spec, with the base chart and small
+shared helpers (the badge, the key) not counted.
+
+| #   | Style                      | Link                 | Render                        | C spelling (proposed)                                                                                             | Today needs                                                                              | Lines |
+| --- | -------------------------- | -------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ----- |
+| 1   | Proximity label            | closeness            | `img/styles/1-proximity.png`  | `topK(1, …)` tier, `blank().label(d => …, { position: Place.around({ directions: ["left"] }) })`                  | A `.label()` on an invisible `enclose`. Works today; the label reads the row.            | 11    |
+| 2   | Leader label               | line                 | `img/styles/2-leader.png`     | the same, `{ position: Place.around({ directions: ["top-left"], offset: 36 }), leader: {} }`                      | A free `text`, two `distribute`s, an `arrow` (always has a head). Text computed outside. | 14    |
+| 3   | Subject + leader (callout) | containment + line   | `img/styles/3-callout.png`    | `enclose({ shape: Shape.oval() }).label(d => …, { position, leader: {} })`                                        | Example 1: the same plus an oval `enclose`.                                              | 16    |
+| 4   | Key label                  | shared symbol        | `img/styles/4-key.png`        | `enclose({ shape: Shape.oval() }).label("Peak before the 2008 crash", { key: {} })`                               | A hand-built badge per target, a key `spread`, six constraints in an outer `layer`.      | 20    |
+| 5   | Key + leader               | shared symbol + line | `img/styles/5-key-leader.png` | `.label("…", { position: Place.around({ offset: 26 }), key: {}, leader: {} })`                                    | As row 4, with each badge a little way off and an `arrow` to its circle.                 | 22    |
+| 6   | Region enclosure + label   | containment          | `img/styles/6-region.png`     | `filter(inFall)` tier, `enclose({ shape: Shape.box() }).label(() => "the 2008 fall", { position: "outset-top" })` | Works today.                                                                             | 18    |
+| 7   | Reference rule             | position on an axis  | `img/styles/7-rule.png`       | `rect({ y: datum(mean), h: 1 }).label(() => \`mean $${mean}\`, { position: "outset-right" })`                     | Works today.                                                                             | 8     |
+| 8   | Band                       | position on an axis  | `img/styles/8-band.png`       | `rect({ x: datum("2007-11-01"), x2: datum("2009-03-01") }).label(() => "recession", { position: "outset-top" })`  | Works today, but `datum` needs epoch milliseconds on a time axis.                        | 13    |
+| 9   | Emphasis of a stretch      | color                | `img/styles/9-emphasis.png`   | `chart(ref("price").part({ x: [datum(a), datum(b)] })).mark(line({ stroke: RED }))`                               | A second red `line` over filtered months on a gray base; cut at the nearest months.      | 7     |
+| 10  | Badge only                 | symbol, no note      | `img/styles/10-badge.png`     | `blank().label(() => "A", { background: { shape: Shape.oval(), fill: RED }, color: "white" })`                    | A hand-built circle and letter, placed by two `distribute`s.                             | 9     |
+
+Rows 1, 2 and 10 hang a label on `blank()`, which is decision 5. Rows 4 and 5 use the new
+`key` option (see "Key labels" under Approach C). Row 9 colors a line part (decision 12).
 
 ## Approaches
 
@@ -262,6 +288,52 @@ chart(goog, { w: 560, h: 300 })
 The leader ends on the blob's outline, at the point nearest the note. The label already
 reads its target's outline (`Outline`, #1205), so this is the same query #975 needs for
 arrows. Fixing it once fixes both.
+
+**Key labels** (round 5, from Josh's question: "How would we do the symbol label with the
+description outside the chart? Like A with a circle around it next to a feature, then A
+with a circle around it outside the chart with the text.")
+
+A note links to its target in one of three ways:
+
+- **Proximity label**: the text sits next to the target. The link is closeness.
+- **Leader label**: the text sits a little way off. The link is a line.
+- **Key label**: a marker sits next to the target, and the text sits in a key outside the
+  plot. The link is a shared symbol.
+
+Precedent: the practitioners in Rahman et al., _Designing Annotations_ (EuroVis 2026), name
+a numbered key as their third choice when notes do not fit by the data. Footnotes in
+typography work the same way.
+
+Proposed spelling: a `key` option on `.label()`, orthogonal to `leader`.
+
+```js
+enclose({ shape: Shape.oval(), stroke: RED, fill: "none" }).label(
+  "Peak before the 2008 crash",
+  {
+    position: Place.around({ directions: ["left"] }),
+    key: {}, // auto marker A, B, C… in reading order
+    // key: { marker: "A" }  // or give the symbol
+  }
+);
+```
+
+In Python it is `key={}`. It elaborates into two things:
+
+- **The badge**: a label whose text is the marker, with
+  `background: { shape: Shape.oval() }`. That is a small extension: `background` takes a
+  `Shape`.
+- **The key entry**: a copy of the badge and the note text, as chart chrome like a legend.
+  Under #1257 that chrome is a plain child of the chart layer.
+
+`key` and `leader` compose. With both, the badge sits a little way off with a line to the
+target.
+
+The prototype has two keyed notes, A on the 2007 peak and B on the 2009 trough
+(`img/styles/4-key.png`, and with leaders `img/styles/5-key-leader.png`). Today it takes a
+hand-built badge per target (a circle and a letter centered by a nested `.relate()`), a key
+`spread` of rows, and an outer `layer` with six constraints: 20 lines plus about 20 lines
+of helpers. The badge letters and the key rows are typed twice and can drift apart.
+Decisions 15 to 18.
 
 **Example 2, rule and band:** today's spelling with two fixes and no new marks. A band is a
 `rect` with both edges given, `x` and `x2`, which rect already supports (the axis line is
@@ -500,7 +572,7 @@ These hurt every approach, ranked by how much they hurt in the prototypes:
 1. **#975**: arrows end on the bounding box, not the outline. This broke example 4 and
    put elbow ends at centers.
 2. **#521**: there is no leader from a label to its target. That is what `leader` adds.
-3. **A free note cannot read the selected row.** C fixes this by making the note a label.
+3. **A free note cannot read the selected row.** A `.label()` on a selection tier already can (round 5 found `project(d, "price")` works), so C fixes this by making the note a label.
 4. **#641**: one emphasis is spelled three times (palette, `zOrder`, label test).
 5. **#796**: there is no extremum selector. That is what `topK` adds.
 6. `mask` reads its stencil's luminance, not its alpha, so a dark text stencil passes
@@ -546,6 +618,14 @@ These hurt every approach, ranked by how much they hurt in the prototypes:
 14. **Parts and anchors.** One reference spelling for built-in, declared (anchor) and found
     parts: `.part(name)` for names with explicit pattern selectors, or the path step
     (`nodes.out`)? And design `parts` together with anchors (#47) rather than here?
+15. **Key label name.** `key`, `footnote`, or no new option and merge the notes into the
+    legend?
+16. **Marker style.** Auto letters or numbers in reading order, a given marker
+    (`key: { marker: "A" }`), or both? If auto, how do we pick letters or numbers?
+17. **Where the key goes.** Per label (`key: { position }`), or once per chart, like the
+    legend?
+18. **Badge shape.** Let a label's background take a shape,
+    `background: { shape: Shape.oval() }`, for the badge?
 
 ## Related issues
 
