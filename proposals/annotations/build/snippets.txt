@@ -106,7 +106,7 @@ chart(seattle, { schema: { date: Unit.time() }, w: 560, h: 280 })
   .layer(
     rect({
       x: datum(start),
-      w: datum(end - start),
+      x2: datum(end),
       fill: "#f2b45c",
       opacity: 0.3,
     })
@@ -153,7 +153,7 @@ chart(seattle, { schema: { date: Unit.time() }, w: 560, h: 280 })
   .render(container, { axes: true });
 === ex2c ts frag
 .layer(
-  rect({ x: datum("2015-06-01"), w: datum("2015-09-01"), fill: SAND, opacity: 0.3 })
+  rect({ x: datum("2015-06-01"), x2: datum("2015-09-01"), fill: SAND, opacity: 0.3 })
     .label(() => "summer 2015", { position: "outset-top" }),
 )
 .layer(rect({ y: datum(mean), h: 1, fill: GRAY }).label(() => `mean ${mean}`, { position: "outset-right" }))
@@ -403,11 +403,47 @@ layer([
   )
   .render(container, { w: 440, h: 190 });
 === ex5c ts full
-tok("E", BLUE).name("E")
-  .label(() => "expected value: the average over X", {
-    position: Place.around({ directions: ["s"], offset: 28 }),
-    leader: {},
+layer([
+  text({ text: "Var(X) = E[(X − μ)²]", fontSize: 32 }).name("eq"),
+  chart(ref("eq").parts({ variance: "Var(X)", mean: /E(?=\[)/, deviation: "(X − μ)²" }), {
+    color: Color.palette({ variance: RED, mean: BLUE, deviation: GREEN }),
   })
+    .flow(group({ by: "part" }))
+    .mark(
+      enclose({ shape: Shape.bracket({ side: "bottom" }), stroke: "part" })
+        .label(
+          // #804 record: one note per part
+          { variance: "how far X spreads", mean: "the average over X",
+                 deviation: "squared distance from the mean μ" }, {
+          position: Place.around({ directions: ["s"], offset: 28 }),
+          leader: {},
+        }),
+    ),
+]);
+=== ex5cpy py full
+layer([
+    text("Var(X) = E[(X − μ)²]", font_size=32).name("eq"),
+    chart(ref("eq").parts(variance="Var(X)", mean=re.compile(r"E(?=\[)"),
+                          deviation="(X − μ)²"),
+          color=Color.palette(variance=RED, mean=BLUE, deviation=GREEN))
+    .flow(group(by="part"))
+    .mark(enclose(shape=Shape.bracket(side="bottom"), stroke="part")
+          .label(NOTES, position=Place.around(directions=["s"], offset=28), leader={})),
+])
+=== ex5proto ts full
+layer([
+  text({ ...EQ, x: 0, y: 0 }),
+  mask([
+    // The stencil is white: `mask` reads luminance, not alpha, so a dark
+    // stencil lets only a little of B through (a library wart, see notes).
+    text({ ...EQ, x: 0, y: 0, fill: "white" }),
+    layer(terms.map((t) => partStandIn(EQ, t.part, t.color).name(t.name))),
+  ]),
+  ...terms.map((t) => rect({ h: 2, fill: t.color }).name(`${t.name}Bar`)),
+  ...terms.map((t) => note(t.note, t.color).name(`${t.name}Note`)),
+])
+  .relate(annotate)
+  .render(container, { w: 440, h: 190 });
 === appB ts frag
 .layer(
   callout(chart(selectAll("months")).flow(argmax("price")), {

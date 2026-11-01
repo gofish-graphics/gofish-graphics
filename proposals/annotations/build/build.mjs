@@ -5,8 +5,11 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import * as prettier from "/Users/jmp/gofish-20250316/.claude/worktrees/annotation-api-proposal/node_modules/prettier/index.mjs";
 
-const T = "/Users/jmp/.claude/jobs/486a6973/tmp";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+const T = dirname(fileURLToPath(import.meta.url));
 const OUT =
+  process.env.OUT ??
   "/Users/jmp/gofish-20250316/.claude/worktrees/annotation-api-proposal/proposals/annotations/page.html";
 const cfg = JSON.parse(
   readFileSync(

@@ -3,12 +3,18 @@
 **Summary.** "Annotate" is not one primitive. Every annotation in the literature is a
 target plus some of three parts: a subject drawn on the target, a note, and a connector
 between them. GoFish already has a construct for each part except the connector, so the
-proposal adds no `annotate` or `callout` operator. It adds one option, one data step, and
-four fixes, and it moves color emphasis into its own design.
+proposal adds no `annotate` or `callout` operator. It adds one label option, one data step,
+a way to select parts of a mark (spans of text, stretches of a line), one `Shape` member,
+and a few fixes, and it moves color emphasis into its own design.
+
+**Status (round 2, 2026-11-01).** Josh approved C overall. This round adds `part` / `parts`
+for selecting spans of a text without tokenizing it (example 5), and bands now use the
+existing `x` / `x2` edges (example 2).
 
 **Recommendation (Approach C).** Write an annotation as a **selection**, a **subject mark**
 over it, and a **`.label()`** on that mark. The label is the note. A new `leader` option on
-`.label()` draws the connector. A new `topK` flow step selects extremes. Color highlights
+`.label()` draws the connector. A new `topK` flow step selects extremes, and `ref(x).part(sel)` / `.parts(sel)` select
+parts of a mark. Color highlights
 are not annotations in this sense, because they restyle marks the annotation does not own.
 They stay a separate construct (#641).
 
@@ -257,40 +263,106 @@ The leader ends on the blob's outline, at the point nearest the note. The label 
 reads its target's outline (`Outline`, #1205), so this is the same query #975 needs for
 arrows. Fixing it once fixes both.
 
-**Example 2, rule and band:** today's spelling with two fixes and no new marks.
+**Example 2, rule and band:** today's spelling with two fixes and no new marks. A band is a
+`rect` with both edges given, `x` and `x2`, which rect already supports (the axis line is
+drawn as `rect({ h: 1, x: datum(min), x2: datum(max) })`, and `x: "start", x2: "end"` is
+tested on time columns). With no `h` it spans the plot.
 
 ```js
 .layer(
-  rect({ x: datum("2015-06-01"), w: datum("2015-09-01"), fill: SAND, opacity: 0.3 })
+  rect({ x: datum("2015-06-01"), x2: datum("2015-09-01"), fill: SAND, opacity: 0.3 })
     .label(() => "summer 2015", { position: "outset-top" }),
 )
 .layer(rect({ y: datum(mean), h: 1, fill: GRAY }).label(() => `mean ${mean}`, { position: "outset-right" }))
 ```
 
 The fixes: `datum` reads its value through the axis's column type, so an ISO date works on
-a time axis (today it needs epoch milliseconds and a width in milliseconds). And a tier's
-fields stay out of the axis title (today a mean rule renames the axis "temp, mean"). The
-`w: datum(end)` form above assumes an interval reading of `datum`, which is a decision
-below. A `rule` or `band` mark name would save about one line per use (prototype B:
+a time axis (today `datum` stores the raw value, so it needs epoch milliseconds). And a
+tier's fields stay out of the axis title (today a mean rule renames the axis "temp, mean").
+Known limit: an `align` on x in the same layer drops a box placed by a data span (#1245).
+A `rule` or `band` mark name would save about one line per use (prototype B:
 15 lines against 22, mostly the millisecond conversion), so the proposal does not add
 them.
 
-**Example 5, math:** each term gets a label with a leader. Because the notes are labels,
-they avoid each other automatically, so no hand-staggered depths.
+**Example 5, math: parts of a mark.** The formula is one `text` mark. A new ref method
+selects parts of it by substring, regex or character range, so the formula is never cut
+into tokens. The research note is `research/span-selection.md`.
 
 ```js
-tok("E", BLUE)
-  .name("E")
-  .label(() => "expected value: the average over X", {
-    position: Place.around({ directions: ["s"], offset: 28 }),
-    leader: {},
-  });
+layer([
+  text({ text: "Var(X) = E[(X − μ)²]", fontSize: 32 }).name("eq"),
+  chart(
+    ref("eq").parts({
+      variance: "Var(X)",
+      mean: /E(?=\[)/,
+      deviation: "(X − μ)²",
+    }),
+    {
+      color: Color.palette({ variance: RED, mean: BLUE, deviation: GREEN }),
+    }
+  )
+    .flow(group({ by: "part" }))
+    .mark(
+      enclose({
+        shape: Shape.bracket({ side: "bottom" }),
+        stroke: "part",
+      }).label(
+        {
+          variance: "how far X spreads",
+          mean: "the average over X",
+          deviation: "squared distance from the mean μ",
+        },
+        {
+          // #804 record
+          position: Place.around({ directions: ["s"], offset: 28 }),
+          leader: {},
+        }
+      )
+    ),
+]);
 ```
 
-The bar under each term is the one subject here that has no `Shape` member. It is an
-underline the width of the term. FFL calls this `label-marker: extent`, and TikZ draws it
-as a brace decoration. A future `Shape.bracket({ side })` would cover it. Until then it
-stays a `rect` aligned to the term's span.
+```python
+layer([
+    text("Var(X) = E[(X − μ)²]", font_size=32).name("eq"),
+    chart(ref("eq").parts(variance="Var(X)", mean=re.compile(r"E(?=\[)"),
+                          deviation="(X − μ)²"),
+          color=Color.palette(variance=RED, mean=BLUE, deviation=GREEN))
+    .flow(group(by="part"))
+    .mark(enclose(shape=Shape.bracket(side="bottom"), stroke="part")
+          .label(NOTES, position=Place.around(directions=["s"], offset=28), leader={})),
+])
+```
+
+- `ref(x).part(selector)` gives one part and throws unless exactly one matches.
+  `ref(x).parts(selector)` gives a list of refs. This is the `ref` / `selectAll` singular
+  and plural pair. Each part's datum is `{ part, match, start, end }`, so it flows as data
+  like any selection.
+- **It is not only for text.** A part is a stretch of something the mark already has.
+  For text that is its characters. For a path it is a stretch of its length
+  (`ref("route").part({ at: [0.2, 0.4] })`, `Place.along`'s words). For a line in data
+  space it is a stretch of its data range (`ref("price").part({ x: [datum(a), datum(b)] })`).
+  For a box it is a named outline edge (`ref("bar").part("y-max")`, the names from #1205).
+- **Name.** "part" follows CSS `::part` and the outline parts from the label work. "span"
+  is taken: it already means an extent in `align({ x: "span" })`.
+- **Precedent.** Systems either name parts when the text is written (CSS `::part`, SVG
+  `tspan`, `\tikzmarknode`, KaTeX `\htmlId`, Typst labels) or find them later by a rule
+  (Typst `show "E": ...`, FFL selectors, DOM Ranges). The second kind keeps the formula
+  whole, which is the point here. And the selection must return geometry (tikzmark, Typst
+  `pinit`, `Range.getClientRects()`), not only a style hook as the CSS Highlight API does,
+  because underlines and leaders need a shape to point at.
+- **Not picked:** named runs written into the text (Typst, `tspan`). That is still
+  tokenizing by hand, and a line has no runs to name; it belongs with rich text (decision
+  7). A `parts()` flow step over `selectAll` is exactly `derive(refs => refs.flatMap(r =>
+r.parts(sel)))`, so it adds a name without adding power.
+- **Subject.** The bar under each term is `Shape.bracket({ side })`, a new `Shape` member.
+  FFL calls it `label-marker: extent`, and TikZ draws it as a brace decoration.
+
+The prototype (`ex5-math-spans-mask.png`) measures each span with the text mark's own
+measuring function and colors it with `mask`. The plural form is `ex5-math-spans-plural-x.png`
+(both X's), and the line part is `ex5-math-spans-line-part.png` (GOOG's 2008 fall).
+Its leaders still use the old idiom with hand-staggered depths, because `leader` is not
+built.
 
 **d3-annotation types in C:**
 
@@ -323,7 +395,7 @@ stays a `rect` aligned to the term's span.
 - **Awkward**: a note with no subject needs something to hang the label on (decision 5).
   Notes with a bold title over a body need rich text in `text` (decision 7). Placement is
   directional (`nw`, 40 px) rather than an exact pixel offset (decision 3).
-- **New terms**: `leader`, `topK`.
+- **New terms**: `leader`, `topK`, `part` / `parts` on refs, and `Shape.bracket`.
 - **Cost to extend**: a new subject is a new `Shape` member or any relational mark. A new
   connector route is a `Curve` member. A custom placement is a `Place` strategy (#1101).
 
@@ -384,11 +456,14 @@ These hurt every approach, ranked by how much they hurt in the prototypes:
 3. **A free note cannot read the selected row.** C fixes this by making the note a label.
 4. **#641**: one emphasis is spelled three times (palette, `zOrder`, label test).
 5. **#796**: there is no extremum selector. That is what `topK` adds.
-6. `arrow` cannot drop its head, and has no chart or bag form.
-7. Free notes do not avoid each other. C makes notes into labels, which do.
-8. `datum("2015-06-01")` on a time axis throws. It should read through the column type.
-9. A rule tier's field joins the axis title.
-10. #802 / #1203: operators and bare tiers cannot be named, which forces wrapper layers.
+6. `mask` reads its stencil's luminance, not its alpha, so a dark text stencil passes
+   almost no color. `.label()` on a line drawn over a selection throws ("Place.end needs an
+   open path").
+7. `arrow` cannot drop its head, and has no chart or bag form.
+8. Free notes do not avoid each other. C makes notes into labels, which do.
+9. `datum("2015-06-01")` on a time axis throws. It should read through the column type.
+10. A rule tier's field joins the axis title.
+11. #802 / #1203: operators and bare tiers cannot be named, which forces wrapper layers.
 
 ## Decisions for Josh
 
@@ -405,14 +480,20 @@ These hurt every approach, ranked by how much they hurt in the prototypes:
 5. **A note with no subject.** Label the original mark with a predicate (#804's value-keyed
    record, `.label({ AAPL: "..." })`), or allow `.label()` on a bare selection tier with no
    drawn subject?
-6. **Rules and bands.** Keep them as `rect` + `datum` (no new marks), with the two fixes?
-   Should `w: datum(end)` read as an interval end, so a band is `x: datum(a), w: datum(b)`?
+6. **Rules and bands.** Keep them as `rect` + `datum` with `x` / `x2` (no new marks), with
+   the two fixes (`datum` reads ISO dates through the column type; tier fields stay out of
+   the axis title)?
 7. **Rich notes.** A title line over a body line (d3-annotation's `title` + `label`). Is that
    a `text` feature (multi-line, spans) for a separate issue?
 8. **Emphasis.** Leave it to #641, with this survey's input that emphasis is a predicate
    that styles both the selected marks and the others?
-9. **Brackets.** Add `Shape.bracket({ side })` for underbraces in math and diagrams, now or
-   when a second example needs it?
+9. **Brackets.** Add `Shape.bracket({ side })` for underbraces in math and diagrams?
+10. **Parts of a mark.** Is `ref(x).part(sel)` / `.parts(sel)` the right pair of names?
+    Should `parts` take a record of named selectors, a list, or both?
+11. **Part selectors.** Text takes a substring, a regex or a `[start, end]` range. Should a
+    line's part take a data interval, a length fraction, or both? Is a text part's shape its
+    line box or its glyph ink?
+12. **Coloring a part.** `mask` (works today), a `fill` record on `text`, or emphasis (#641)?
 
 ## Related issues
 

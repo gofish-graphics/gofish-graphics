@@ -334,6 +334,42 @@
         background: var(--accent);
         flex: none;
       }
+      .status:has(+ .round2) {
+        margin-bottom: 10px;
+      }
+      .status.round2 {
+        display: flex;
+        width: fit-content;
+        max-width: 88ch;
+        margin-top: 0;
+        align-items: baseline;
+      }
+      .figs {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 14px;
+        margin: 14px 0 0;
+        align-items: start;
+      }
+      @media (min-width: 900px) {
+        .figs {
+          grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+        }
+      }
+      .subhead {
+        font-family: var(--font-cond);
+        font-size: 12.5px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+        margin: 18px 0 8px;
+      }
+      .codes .note {
+        font-size: 12.5px;
+        color: var(--ink-3);
+        margin: 0;
+      }
       .summary {
         display: grid;
         grid-template-columns: minmax(0, 1fr);
@@ -1077,8 +1113,17 @@
             <div class="status">
               <span
                 >Proposal. Approach C is not implemented; renders are of A and
-                B. Syntax awaits sign-off on
-                <a href="#decisions">9 decisions</a>.</span
+                B, plus a prototype of parts of a mark. Syntax awaits sign-off
+                on <a href="#decisions">12 decisions</a>.</span
+              >
+            </div>
+            <div class="status round2">
+              <span
+                ><b>Round 2, 2026-11-01.</b> Josh approved C overall. This round
+                adds <code>part</code> / <code>parts</code> for selecting spans
+                of a text without tokenizing it (<a href="#ex5">example 5</a>),
+                and bands now use the existing <code>x</code> /
+                <code>x2</code> edges (<a href="#ex2">example 2</a>).</span
               >
             </div>
 
@@ -1096,8 +1141,10 @@
                   <code>annotate</code> or <code>callout</code> operator.
                 </p>
                 <p>
-                  It adds one option, one data step, and four fixes, and it
-                  moves color emphasis into its own design.
+                  It adds one label option, one data step, a way to select parts
+                  of a mark (spans of text, stretches of a line), one
+                  <code>Shape</code> member, and a few fixes, and it moves color
+                  emphasis into its own design.
                 </p>
               </div>
               <div class="rec">
@@ -1108,10 +1155,11 @@
                   <b><code>.label()</code></b> on that mark. The label is the
                   note. A new <code>leader</code> option on
                   <code>.label()</code> draws the connector. A new
-                  <code>topK</code> flow step selects extremes. Color highlights
-                  are not annotations in this sense, because they restyle marks
-                  the annotation does not own. They stay a separate construct
-                  (#641).
+                  <code>topK</code> flow step selects extremes, and
+                  <code>ref(x).part(sel)</code> / <code>.parts(sel)</code>
+                  select parts of a mark. Color highlights are not annotations
+                  in this sense, because they restyle marks the annotation does
+                  not own. They stay a separate construct (#641).
                 </p>
                 <pre><code class="language-typescript">.layer(
   chart(selectAll("months"))
@@ -2027,7 +2075,7 @@ $x_1$ {
               <div class="arow">
                 <div class="arow-head">
                   <span class="atag">A · today</span
-                  ><span class="count">22 lines · 194 tokens</span>
+                  ><span class="count">22 lines · 192 tokens</span>
                 </div>
                 <div class="arow-body">
                   <div class="side">
@@ -2041,7 +2089,8 @@ $x_1$ {
                     </figure>
                     <ul>
                       <li>
-                        A time axis needs epoch milliseconds.
+                        A time axis needs epoch milliseconds for both
+                        <code>x</code> and <code>x2</code>.
                         <code>datum("2015-06-01")</code> is concatenated into a
                         string and the render throws.
                       </li>
@@ -2065,7 +2114,7 @@ chart(seattle, { schema: { date: Unit.time() }, w: 560, h: 280 })
   .layer(
     rect({
       x: datum(start),
-      w: datum(end - start),
+      x2: datum(end),
       fill: "#f2b45c",
       opacity: 0.3,
     })
@@ -2185,7 +2234,9 @@ chart(seattle, { schema: { date: Unit.time() }, w: 560, h: 280 })
                       <ul>
                         <li>
                           <code>datum</code> reads its value through the axis's
-                          column type, so an ISO date works on a time axis.
+                          column type, so an ISO date works on a time axis
+                          (today <code>datum</code> stores the raw value, so it
+                          needs epoch milliseconds).
                         </li>
                         <li>
                           A tier's fields stay out of the axis title, so the
@@ -2193,8 +2244,17 @@ chart(seattle, { schema: { date: Unit.time() }, w: 560, h: 280 })
                         </li>
                       </ul>
                       <p style="margin-top: 6px">
-                        The <code>w: datum(end)</code> form assumes an interval
-                        reading of <code>datum</code> (decision 6). A
+                        A band is a <code>rect</code> with both edges given,
+                        <code>x</code> and <code>x2</code>, which rect already
+                        supports: the axis line is drawn as
+                        <code
+                          >rect({ h: 1, x: datum(min), x2: datum(max) })</code
+                        >, and <code>x: "start", x2: "end"</code> is tested on
+                        time columns. With no <code>h</code> it spans the plot.
+                      </p>
+                      <p style="margin-top: 6px">
+                        Known limit: an <code>align</code> on x in the same
+                        layer drops a box placed by a data span (#1245). A
                         <code>rule</code> or <code>band</code> name would save
                         about one line per use, so the proposal does not add
                         them.
@@ -2205,7 +2265,7 @@ chart(seattle, { schema: { date: Unit.time() }, w: 560, h: 280 })
                     <pre><code class="language-typescript">.layer(
   rect({
     x: datum("2015-06-01"),
-    w: datum("2015-09-01"),
+    x2: datum("2015-09-01"),
     fill: SAND,
     opacity: 0.3,
   }).label(() =&gt; "summer 2015", { position: "outset-top" })
@@ -2731,42 +2791,286 @@ layer([
               <div class="arow c">
                 <div class="arow-head">
                   <span class="atag c">C · proposed</span
-                  ><span class="count">one term shown</span>
+                  ><span class="count">parts of a mark</span
+                  ><span class="chip">new in round 2</span>
                 </div>
+                <p class="prose" style="margin: 0 0 12px">
+                  The formula is one <code>text</code> mark. A new ref method
+                  selects parts of it by substring, regex or character range, so
+                  the formula is never cut into tokens. The research note is
+                  <code>research/span-selection.md</code>.
+                </p>
                 <div class="arow-body">
                   <div class="side">
-                    <div class="notrender">
-                      <div class="k">Not implemented, not rendered</div>
-                      <p>
-                        The expected picture is the A render with these
-                        differences:
-                      </p>
-                      <ul>
-                        <li>
-                          Each term gets a label with a leader. Because the
-                          notes are labels, they avoid each other automatically,
-                          so no hand-staggered depths.
-                        </li>
-                        <li>Leaders have no head.</li>
-                        <li>
-                          The bar under each term is the one subject with no
-                          <code>Shape</code> member. Until a future
-                          <code>Shape.bracket({ side })</code> (decision 9), it
-                          stays a <code>rect</code> aligned to the term's span.
-                          FFL calls this <code>label-marker: extent</code>; TikZ
-                          draws it as a brace.
-                        </li>
-                      </ul>
-                    </div>
+                    <figure class="paper" style="max-width: 420px">
+                      <img
+                        src="img/crop/ex5-math-spans-mask.png"
+                        alt="The variance formula as one text; Var(X) in red, E in blue and (X − μ)² in green, each underlined with a note below"
+                        width="331"
+                        height="137"
+                      />
+                      <figcaption>
+                        Prototype: one text mark, three parts found by a
+                        substring and two regexes, colored with
+                        <code>mask</code>. Each span is measured with the text
+                        mark's own measuring function. The leaders still use the
+                        old idiom with hand-staggered depths, because
+                        <code>leader</code> is not built.
+                      </figcaption>
+                    </figure>
+                    <ul>
+                      <li>
+                        <code>ref(x).part(selector)</code> gives one part and
+                        throws unless exactly one matches.
+                        <code>ref(x).parts(selector)</code> gives a list of
+                        refs. This is the <code>ref</code> /
+                        <code>selectAll</code> singular and plural pair. Each
+                        part's datum is
+                        <code>{ part, match, start, end }</code>, so it flows as
+                        data like any selection.
+                      </li>
+                      <li>
+                        <b>It is not only for text.</b> A part is a stretch of
+                        something the mark already has. For text that is its
+                        characters. For a path it is a stretch of its length
+                        (<code>ref("route").part({ at: [0.2, 0.4] })</code>,
+                        <code>Place.along</code>'s words). For a line in data
+                        space it is a stretch of its data range (<code
+                          >ref("price").part({ x: [datum(a), datum(b)] })</code
+                        >). For a box it is a named outline edge
+                        (<code>ref("bar").part("y-max")</code>, the names from
+                        #1205).
+                      </li>
+                      <li>
+                        <b>Name.</b> "part" follows CSS <code>::part</code> and
+                        the outline parts from the label work. "span" is taken:
+                        it already means an extent in
+                        <code>align({ x: "span" })</code>.
+                      </li>
+                      <li>
+                        <b>Precedent.</b> Systems either name parts when the
+                        text is written (CSS <code>::part</code>, SVG
+                        <code>tspan</code>, <code>\tikzmarknode</code>, KaTeX
+                        <code>\htmlId</code>, Typst labels) or find them later
+                        by a rule (Typst <code>show "E": ...</code>, FFL
+                        selectors, DOM Ranges). The second kind keeps the
+                        formula whole, which is the point here. And the
+                        selection must return geometry (tikzmark, Typst
+                        <code>pinit</code>,
+                        <code>Range.getClientRects()</code>), not only a style
+                        hook as the CSS Highlight API does, because underlines
+                        and leaders need a shape to point at.
+                      </li>
+                      <li>
+                        <b>Not picked:</b> named runs written into the text
+                        (Typst, <code>tspan</code>). That is still tokenizing by
+                        hand, and a line has no runs to name; it belongs with
+                        rich text (decision 7). A <code>parts()</code> flow step
+                        over <code>selectAll</code> is exactly
+                        <code
+                          >derive(refs =&gt; refs.flatMap(r =&gt;
+                          r.parts(sel)))</code
+                        >, so it adds a name without adding power.
+                      </li>
+                      <li>
+                        <b>Subject.</b> The bar under each term is
+                        <code>Shape.bracket({ side })</code>, a new
+                        <code>Shape</code> member. FFL calls it
+                        <code>label-marker: extent</code>, and TikZ draws it as
+                        a brace decoration.
+                      </li>
+                    </ul>
                   </div>
                   <div class="codes">
-                    <pre><code class="language-typescript">tok("E", BLUE)
-  .name("E")
-  .label(() =&gt; "expected value: the average over X", {
-    position: Place.around({ directions: ["s"], offset: 28 }),
-    leader: {},
-  });</code></pre>
+                    <p class="lang">Proposed C · JavaScript</p>
+                    <pre><code class="language-typescript">layer([
+  text({ text: "Var(X) = E[(X − μ)²]", fontSize: 32 }).name("eq"),
+  chart(
+    ref("eq").parts({
+      variance: "Var(X)",
+      mean: /E(?=\[)/,
+      deviation: "(X − μ)²",
+    }),
+    {
+      color: Color.palette({ variance: RED, mean: BLUE, deviation: GREEN }),
+    }
+  )
+    .flow(group({ by: "part" }))
+    .mark(
+      enclose({
+        shape: Shape.bracket({ side: "bottom" }),
+        stroke: "part",
+      }).label(
+        // #804 record: one note per part
+        {
+          variance: "how far X spreads",
+          mean: "the average over X",
+          deviation: "squared distance from the mean μ",
+        },
+        {
+          position: Place.around({ directions: ["s"], offset: 28 }),
+          leader: {},
+        }
+      )
+    ),
+]);</code></pre>
+                    <p class="lang">Proposed C · Python</p>
+                    <pre><code class="language-python">layer(
+    [
+        text("Var(X) = E[(X − μ)²]", font_size=32).name("eq"),
+        chart(
+            ref("eq").parts(
+                variance="Var(X)", mean=re.compile(r"E(?=\[)"), deviation="(X − μ)²"
+            ),
+            color=Color.palette(variance=RED, mean=BLUE, deviation=GREEN),
+        )
+        .flow(group(by="part"))
+        .mark(
+            enclose(shape=Shape.bracket(side="bottom"), stroke="part").label(
+                NOTES, position=Place.around(directions=["s"], offset=28), leader={}
+            )
+        ),
+    ]
+)</code></pre>
+                    <p class="lang">
+                      Prototype (today, with helper) · 13 lines
+                    </p>
+                    <pre><code class="language-typescript">layer([
+  text({ ...EQ, x: 0, y: 0 }),
+  mask([
+    // The stencil is white: `mask` reads luminance, not alpha, so a dark
+    // stencil lets only a little of B through (a library wart, see notes).
+    text({ ...EQ, x: 0, y: 0, fill: "white" }),
+    layer(terms.map((t) =&gt; partStandIn(EQ, t.part, t.color).name(t.name))),
+  ]),
+  ...terms.map((t) =&gt; rect({ h: 2, fill: t.color }).name(`${t.name}Bar`)),
+  ...terms.map((t) =&gt; note(t.note, t.color).name(`${t.name}Note`)),
+])
+  .relate(annotate)
+  .render(container, { w: 440, h: 190 });</code></pre>
+                    <p class="note">
+                      <code>EQ</code>, <code>terms</code>, <code>note</code> and
+                      <code>annotate</code> are defined in
+                      <code>Ex5MathSpans.stories.tsx</code>. The helper
+                      <code>partStandIn</code> (<code>textParts.ts</code>)
+                      stands in for <code>ref("eq").part(sel)</code>: an
+                      invisible box measured over the match.
+                    </p>
                   </div>
+                </div>
+
+                <div class="figs">
+                  <figure class="paper">
+                    <img
+                      src="img/crop/ex5-math-spans-plural-x.png"
+                      alt="The variance formula with both X characters boxed in purple"
+                      width="329"
+                      height="52"
+                    />
+                    <figcaption>
+                      The plural form: <code>parts("X")</code> boxes both X's.
+                      The singular <code>part("X")</code> would throw, because
+                      "X" occurs twice.
+                    </figcaption>
+                  </figure>
+                  <figure class="paper">
+                    <img
+                      src="img/crop/ex5-math-spans-line-part.png"
+                      alt="GOOG monthly price line in gray; the stretch from late 2007 to early 2009 is drawn thick red and boxed, labeled the 2008 fall"
+                      width="659"
+                      height="317"
+                    />
+                    <figcaption>
+                      Not only text: a part of GOOG's line, the 2008 fall,
+                      recolored and boxed. Today it is a filtered selection of
+                      the line's points. The proposed
+                      <code>ref("price").part({ x: [a, b] })</code> would also
+                      cut the line exactly at the two dates.
+                    </figcaption>
+                  </figure>
+                </div>
+
+                <p class="subhead">Precedent for selecting a span</p>
+                <div class="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>System</th>
+                        <th>Spelling</th>
+                        <th>Parts are</th>
+                        <th>Returns</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>CSS <code>::part</code></td>
+                        <td><code>x-card::part(label)</code></td>
+                        <td>named at authoring</td>
+                        <td>style hook</td>
+                      </tr>
+                      <tr>
+                        <td>SVG <code>tspan</code></td>
+                        <td>
+                          <code>&lt;tspan fill="red"&gt;E&lt;/tspan&gt;</code>
+                        </td>
+                        <td>named at authoring</td>
+                        <td>style hook</td>
+                      </tr>
+                      <tr>
+                        <td>LaTeX tikzmark</td>
+                        <td><code>\tikzmarknode{e}{E}</code></td>
+                        <td>named at authoring</td>
+                        <td>geometry (a node with anchors)</td>
+                      </tr>
+                      <tr>
+                        <td>KaTeX / MathJax</td>
+                        <td><code>\htmlId{e}{E}</code></td>
+                        <td>named at authoring</td>
+                        <td>geometry (through the DOM)</td>
+                      </tr>
+                      <tr>
+                        <td>Typst <code>pinit</code></td>
+                        <td><code>#pin(1)text#pin(2)</code></td>
+                        <td>named at authoring</td>
+                        <td>geometry (pin positions)</td>
+                      </tr>
+                      <tr>
+                        <td>Typst show rules</td>
+                        <td class="wrap">
+                          <code>show "E": ..</code>,
+                          <code>show regex("\w+"): ..</code>
+                        </td>
+                        <td>found by rule</td>
+                        <td>style hook (restyle or replace)</td>
+                      </tr>
+                      <tr>
+                        <td>FFL (UIST 2023)</td>
+                        <td><code>$m_?$ { color: red; }</code></td>
+                        <td>found by rule</td>
+                        <td>style hook, plus labels</td>
+                      </tr>
+                      <tr>
+                        <td>CSS Highlight API</td>
+                        <td><code>::highlight(hits) { color }</code></td>
+                        <td>found by rule (a Range)</td>
+                        <td>style hook</td>
+                      </tr>
+                      <tr>
+                        <td>DOM <code>Range</code></td>
+                        <td><code>range.getClientRects()</code></td>
+                        <td>found by rule (offsets)</td>
+                        <td>geometry</td>
+                      </tr>
+                      <tr>
+                        <td><b>GoFish (proposed)</b></td>
+                        <td>
+                          <code>ref("eq").parts({ mean: /E(?=\[)/ })</code>
+                        </td>
+                        <td>found by rule</td>
+                        <td>geometry (part refs as data)</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </article>
@@ -3058,7 +3362,10 @@ layer([
                 </div>
                 <div>
                   <div class="k">New terms</div>
-                  <div><code>leader</code>, <code>topK</code>.</div>
+                  <div>
+                    <code>leader</code>, <code>topK</code>, <code>part</code> /
+                    <code>parts</code> on refs, and <code>Shape.bracket</code>.
+                  </div>
                 </div>
                 <div>
                   <div class="k">Cost to extend</div>
@@ -3202,6 +3509,12 @@ layer([
                 <code>topK</code> adds.
               </li>
               <li>
+                <code>mask</code> reads its stencil's luminance, not its alpha,
+                so a dark text stencil passes almost no color.
+                <code>.label()</code> on a line drawn over a selection throws
+                ("Place.end needs an open path").
+              </li>
+              <li>
                 <code>arrow</code> cannot drop its head, and has no chart or bag
                 form.
               </li>
@@ -3285,10 +3598,10 @@ layer([
                   <div>
                     <p class="q">Rules and bands.</p>
                     <p class="d">
-                      Keep them as <code>rect</code> + <code>datum</code> (no
-                      new marks), with the two fixes? Should
-                      <code>w: datum(end)</code> read as an interval end, so a
-                      band is <code>x: datum(a), w: datum(b)</code>?
+                      Keep them as <code>rect</code> + <code>datum</code> with
+                      <code>x</code> / <code>x2</code> (no new marks), with the
+                      two fixes (<code>datum</code> reads ISO dates through the
+                      column type; tier fields stay out of the axis title)?
                     </p>
                   </div>
                 </li>
@@ -3318,8 +3631,39 @@ layer([
                     <p class="q">Brackets.</p>
                     <p class="d">
                       Add <code>Shape.bracket({ side })</code> for underbraces
-                      in math and diagrams, now or when a second example needs
-                      it?
+                      in math and diagrams?
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q">Parts of a mark.</p>
+                    <p class="d">
+                      Is <code>ref(x).part(sel)</code> /
+                      <code>.parts(sel)</code> the right pair of names? Should
+                      <code>parts</code> take a record of named selectors, a
+                      list, or both?
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q">Part selectors.</p>
+                    <p class="d">
+                      Text takes a substring, a regex or a
+                      <code>[start, end]</code> range. Should a line's part take
+                      a data interval, a length fraction, or both? Is a text
+                      part's shape its line box or its glyph ink?
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q">Coloring a part.</p>
+                    <p class="d">
+                      <code>mask</code> (works today), a
+                      <code>fill</code> record on <code>text</code>, or emphasis
+                      (#641)?
                     </p>
                   </div>
                 </li>

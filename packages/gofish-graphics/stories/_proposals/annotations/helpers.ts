@@ -77,7 +77,7 @@ export const rule = (
     : rect({ x: datum(num(unwrap(o.x!))), w: sw, fill, opacity: o.opacity });
 };
 
-/** `band({ x: [a, b] })` ≡ `rect({ x: datum(a), w: datum(b - a), fill })`,
+/** `band({ x: [a, b] })` ≡ `rect({ x: datum(a), x2: datum(b), fill })`,
  *  and the same in y. Returns the rect. */
 export const band = (
   o: { x?: [Scalar, Scalar]; y?: [Scalar, Scalar] } & Paint
@@ -85,7 +85,7 @@ export const band = (
   const paint = { fill: o.fill ?? "#f2b45c", opacity: o.opacity ?? 0.25 };
   if (o.x) {
     const [a, b] = o.x.map((v) => num(unwrap(v)));
-    return rect({ x: datum(a), w: datum(b - a), ...paint });
+    return rect({ x: datum(a), x2: datum(b), ...paint });
   }
   const [a, b] = o.y!.map((v) => num(unwrap(v)));
   return rect({ y: datum(a), h: datum(b - a), ...paint });

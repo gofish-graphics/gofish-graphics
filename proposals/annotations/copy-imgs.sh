@@ -15,4 +15,8 @@ cp $S/ex4-enclosure-note--aaim-at-member.png $D/ex4-enclosure-a-aim-at-member.pn
 cp $S/ex4-enclosure-note--b.png $D/ex4-enclosure-b.png
 cp $S/ex5-math-augmentation--a.png $D/ex5-math-a.png
 cp $S/d3-annotation-types--grid.png $D/d3a-grid.png
+cp $S/ex5-math-spans--overlay.png $D/ex5-math-spans-overlay.png
+cp $S/ex5-math-spans--mask.png $D/ex5-math-spans-mask.png
+cp $S/ex5-math-spans--plural-x.png $D/ex5-math-spans-plural-x.png
+cp $S/ex5-math-spans--line-part.png $D/ex5-math-spans-line-part.png
 ls $D

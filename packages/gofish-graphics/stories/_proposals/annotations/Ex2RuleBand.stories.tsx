@@ -35,7 +35,7 @@ export const A: StoryObj = {
       .layer(
         rect({
           x: datum(start),
-          w: datum(end - start),
+          x2: datum(end),
           fill: "#f2b45c",
           opacity: 0.3,
         })
