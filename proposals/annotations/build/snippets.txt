@@ -1,0 +1,511 @@
+=== rec ts frag
+.layer(
+  chart(selectAll("months"))
+    .flow(topK(1, { by: "price" }))                                  // selection
+    .mark(
+      enclose({ shape: Shape.oval(), padding: 6, fill: "none", stroke: RED })  // subject
+        // note
+        .label((d) => `Peak: $${project(d, "price")}`, {
+          position: Place.around({ directions: ["nw"], offset: 40 }),
+          leader: { stroke: RED },                                   // connector (new)
+        }),
+    ),
+)
+=== ex1a ts full
+layer([
+  chart(goog, { schema: { date: Unit.time() }, w: 560, h: 300 })
+    .flow(scatter({ by: "date", x: "date", y: "price" }))
+    .mark(blank().name("months"))
+    .layer(line({ stroke: "#467DA8", strokeWidth: 2 }))
+    .layer(
+      chart(selectAll("months"))
+        .flow(derive((ms) => [maxBy(ms, (m) => project(m, "price"))]))
+        .mark(
+          enclose({
+            shape: Shape.oval(),
+            padding: 6,
+            fill: "none",
+            stroke: RED,
+            strokeWidth: 1.5,
+          }).name("peak")
+        )
+    ),
+  spread({ dir: "y", spacing: 2, alignment: "start" }, [
+    text({ text: "Peak", fontSize: 13, fontWeight: 700 }),
+    text({ text: `$${peak.price} in ${monthYear(peak.date)}` }),
+  ]).name("note"),
+])
+  .relate(({ peak, note }) => [
+    Constraint.distribute({ dir: "x", spacing: 40 }, [note, peak]),
+    Constraint.distribute({ dir: "y", spacing: 30 }, [peak, note]),
+    arrow(
+      {
+        bow: 0,
+        stretch: 0,
+        strokeWidth: 1,
+        padStart: 4,
+        padEnd: 2,
+        stroke: RED,
+      },
+      [note, peak]
+    ),
+  ])
+  .render(container, { axes: true });
+=== ex1b ts full
+chart(goog, { schema: { date: Unit.time() }, w: 560, h: 300 })
+  .flow(scatter({ by: "date", x: "date", y: "price" }))
+  .mark(blank().name("months"))
+  .layer(line({ stroke: "#467DA8", strokeWidth: 2 }))
+  .layer(
+    callout(chart(selectAll("months")).flow(argmax("price")), {
+      note: ["Peak", `$${peak.price} in ${monthYear(peak.date)}`],
+      dx: -40,
+      dy: 30,
+    })
+  )
+  .render(container, { axes: true });
+=== ex1c ts full
+chart(goog, { w: 560, h: 300 })
+  .flow(scatter({ by: "date", x: "date", y: "price" }))
+  .mark(blank().name("months"))
+  .layer(line({ stroke: BLUE, strokeWidth: 2 }))
+  .layer(
+    chart(selectAll("months"))
+      .flow(topK(1, { by: "price" }))
+      .mark(
+        enclose({ shape: Shape.oval(), padding: 6, fill: "none", stroke: RED })
+          .label((d) => `Peak: $${project(d, "price")}`, {
+            position: Place.around({ directions: ["nw"], offset: 40 }),
+            leader: { stroke: RED },
+          }),
+      ),
+  );
+=== ex1cpy py full
+(
+    chart(goog, w=560, h=300)
+    .flow(scatter(by="date", x="date", y="price"))
+    .mark(blank().name("months"))
+    .layer(line(stroke=BLUE, stroke_width=2))
+    .layer(
+        chart(select_all("months"))
+        .flow(top_k(1, by="price"))
+        .mark(
+            enclose(shape=Shape.oval(), padding=6, fill="none", stroke=RED)
+            # a field accessor: Python lambdas do not cross the bridge
+            .label("price", position=Place.around(directions=["nw"], offset=40),
+                   leader={"stroke": RED})
+        )
+    )
+)
+=== ex2a ts full
+const start = Date.parse("2015-06-01");
+const end = Date.parse("2015-09-01");
+chart(seattle, { schema: { date: Unit.time() }, w: 560, h: 280 })
+  .flow(scatter({ by: "date", x: "date", y: "temp" }))
+  .mark(line({ stroke: "#467DA8", strokeWidth: 2 }))
+  .layer(
+    rect({
+      x: datum(start),
+      w: datum(end - start),
+      fill: "#f2b45c",
+      opacity: 0.3,
+    })
+      .label(() => "summer 2015", { position: "outset-top", fontSize: 11 })
+      .zOrder(-1)
+  )
+  .layer(
+    rect({ y: datum(mean), h: 1, fill: "#555" }).label(
+      () => `mean ${mean}`,
+      { position: "outset-right", fontSize: 11 }
+    )
+  )
+  .render(container, { axes: true });
+=== ex2a2 ts full
+chart(seattle, { schema: { date: Unit.time() }, w: 560, h: 280 })
+  .flow(scatter({ by: "date", x: "date", y: "temp" }))
+  .mark(line({ stroke: "#467DA8", strokeWidth: 2 }))
+  .layer(
+    chart(seattle)
+      .flow(derive((rows) => [{ mean: meanBy(rows, "temp") }]))
+      .mark(
+        rect({ y: "mean", h: 1, fill: "#555" }).label(
+          (d) => `mean ${project(d, "mean").toFixed(1)}`,
+          { position: "outset-right", fontSize: 11 }
+        )
+      )
+  )
+  .render(container, { axes: true });
+=== ex2b ts full
+chart(seattle, { schema: { date: Unit.time() }, w: 560, h: 280 })
+  .flow(scatter({ by: "date", x: "date", y: "temp" }))
+  .mark(line({ stroke: "#467DA8", strokeWidth: 2 }))
+  .layer(
+    band({ x: ["2015-06-01", "2015-09-01"], opacity: 0.3 })
+      .label(() => "summer 2015", { position: "outset-top", fontSize: 11 })
+      .zOrder(-1)
+  )
+  .layer(
+    rule({ y: mean, stroke: "#555" }).label(() => `mean ${mean}`, {
+      position: "outset-right",
+      fontSize: 11,
+    })
+  )
+  .render(container, { axes: true });
+=== ex2c ts frag
+.layer(
+  rect({ x: datum("2015-06-01"), w: datum("2015-09-01"), fill: SAND, opacity: 0.3 })
+    .label(() => "summer 2015", { position: "outset-top" }),
+)
+.layer(rect({ y: datum(mean), h: 1, fill: GRAY }).label(() => `mean ${mean}`, { position: "outset-right" }))
+=== ex3a ts full
+const isAAPL = (d: any) => project(d, "symbol") === "AAPL";
+chart(stocks, {
+  schema: { date: Unit.time() },
+  w: 560,
+  h: 300,
+  color: Color.palette({ AAPL: "#d62728" }), // unmapped series fall to gray
+})
+  .flow(
+    group({ by: "symbol" }),
+    scatter({ by: "date", x: "date", y: "price" })
+  )
+  .mark(
+    line({ stroke: "symbol", strokeWidth: 2 })
+      .zOrder((d) => (isAAPL(d) ? 1 : 0))
+      .label((d) => (isAAPL(d) ? "AAPL" : ""), { position: Place.end() })
+  )
+  .render(container, { axes: true, legend: false });
+=== ex3b ts full
+const hi = emphasize(
+  "symbol",
+  { AAPL: "#d62728" },
+  ["color", "z", "label"],
+  {
+    position: Place.end(),
+  }
+);
+chart(stocks, {
+  schema: { date: Unit.time() },
+  w: 560,
+  h: 300,
+  ...hi.chart,
+})
+  .flow(
+    group({ by: "symbol" }),
+    scatter({ by: "date", x: "date", y: "price" })
+  )
+  .mark(hi.mark(line({ stroke: "symbol", strokeWidth: 2 })))
+  .render(container, { axes: true, legend: false });
+=== ex4a ts full
+layer([
+  chart(gapminderCountries, {
+    w: 520,
+    h: 320,
+    color: Color.palette(REGION_COLORS),
+  })
+    .flow(scatter({ x: "FertilityRate", y: "LifeExpectancy" }))
+    .mark(
+      circle({ r: 3.5, fill: "Region", opacity: 0.8 }).name("countries")
+    )
+    .layer(
+      chart(selectAll("countries"))
+        .flow(filter((c) => project(c, "Region") === "Sub-Saharan Africa"))
+        .mark(
+          enclose({
+            shape: Shape.blob({ convexity: 0.1, neck: 0.6 }),
+            padding: 6,
+            fill: "#47b8a0",
+            stroke: "#47b8a0",
+            fillOpacity: 0.3,
+          }).name("africa")
+        )
+    ),
+  spread({ dir: "y", spacing: 2, alignment: "start" }, [
+    text({ text: "Sub-Saharan Africa", fontSize: 13, fontWeight: 700 }),
+    text({ text: "high fertility, short lives" }),
+  ]).name("note"),
+])
+  .relate(({ africa, note }) => [
+    Constraint.distribute({ dir: "x", spacing: 16 }, [africa, note]),
+    Constraint.align({ y: "end" }, [africa, note]),
+    arrow(
+      {
+        bow: 0.4,
+        stretch: 0,
+        strokeWidth: 1,
+        padStart: 4,
+        padEnd: 2,
+        stroke: TEAL,
+      },
+      [note, africa]
+    ),
+  ])
+  .render(container, { axes: true, legend: false });
+=== ex4a2 ts full
+const african = (c: any) => project(c, "Region") === "Sub-Saharan Africa";
+layer([
+  chart(gapminderCountries, {
+    w: 520,
+    h: 320,
+    color: Color.palette(REGION_COLORS),
+  })
+    .flow(scatter({ x: "FertilityRate", y: "LifeExpectancy" }))
+    .mark(
+      circle({ r: 3.5, fill: "Region", opacity: 0.8 }).name("countries")
+    )
+    .layer(
+      chart(selectAll("countries"))
+        .flow(filter(african))
+        .mark(
+          enclose({
+            shape: Shape.blob({ convexity: 0.1, neck: 0.6 }),
+            padding: 6,
+            fill: "#47b8a0",
+            stroke: "#47b8a0",
+            fillOpacity: 0.3,
+          }).name("africa")
+        )
+    )
+    .layer(
+      chart(selectAll("countries"))
+        .flow(
+          filter(african),
+          derive((cs) => [maxBy(cs, (c) => project(c, "FertilityRate"))])
+        )
+        .mark(
+          enclose({ padding: 6, fill: "none", stroke: "none" }).name("tip")
+        )
+    ),
+  spread({ dir: "y", spacing: 2, alignment: "start" }, [
+    text({ text: "Sub-Saharan Africa", fontSize: 13, fontWeight: 700 }),
+    text({ text: "high fertility, short lives" }),
+  ]).name("note"),
+])
+  .relate(({ africa, tip, note }) => [
+    Constraint.distribute({ dir: "x", spacing: 24 }, [africa, note]),
+    Constraint.distribute({ dir: "y", spacing: 36 }, [tip, note]),
+    arrow(
+      {
+        bow: 0.4,
+        stretch: 0,
+        strokeWidth: 1,
+        padStart: 4,
+        padEnd: 2,
+        stroke: TEAL,
+      },
+      [note, tip]
+    ),
+  ])
+  .render(container, { axes: true, legend: false });
+=== ex4b ts full
+chart(gapminderCountries, {
+  w: 520,
+  h: 320,
+  color: Color.palette(REGION_COLORS),
+})
+  .flow(scatter({ x: "FertilityRate", y: "LifeExpectancy" }))
+  .mark(circle({ r: 3.5, fill: "Region", opacity: 0.8 }).name("countries"))
+  .layer(
+    callout(
+      chart(selectAll("countries")).flow(
+        filter((c) => project(c, "Region") === "Sub-Saharan Africa")
+      ),
+      {
+        note: ["Sub-Saharan Africa", "high fertility, short lives"],
+        subject: Shape.blob({ convexity: 0.1, neck: 0.6 }),
+        fill: "#47b8a0",
+        dx: 16,
+        connector: "curve",
+        color: TEAL,
+      }
+    )
+  )
+  .render(container, { axes: true, legend: false });
+=== ex4c ts frag
+.layer(
+  chart(selectAll("countries"))
+    .flow(filter((c) => project(c, "Region") === "Sub-Saharan Africa"))
+    .mark(
+      enclose({ shape: Shape.blob({ convexity: 0.1, neck: 0.6 }), padding: 6,
+                fill: TEAL, fillOpacity: 0.3, stroke: TEAL })
+        .label(() => "Sub-Saharan Africa: high fertility, short lives", {
+          position: Place.around({ directions: ["e"], offset: 24 }),
+          leader: { curve: Curve.natural() },
+        }),
+    ),
+)
+=== ex5a ts full
+const tok = (t: string, fill = "#222") =>
+  text({ text: t, fontSize: 32, fill, fontFamily: "Georgia, serif" });
+const note = (lines: string[], fill: string) =>
+  spread(
+    { dir: "y", spacing: 1, alignment: "middle" },
+    lines.map((t) => text({ text: t, fontSize: 12, fill }))
+  );
+const terms = [
+  // `depth` staggers the notes by hand so neighbors do not collide.
+  {
+    name: "v",
+    color: "#c0392b",
+    depth: 18,
+    note: ["variance:", "how far X spreads"],
+  },
+  {
+    name: "e",
+    color: "#2e86c1",
+    depth: 54,
+    note: ["expected value:", "the average over X"],
+  },
+  {
+    name: "d",
+    color: "#1e8449",
+    depth: 18,
+    note: ["squared distance", "from the mean μ"],
+  },
+];
+layer([
+  spread({ dir: "x", spacing: 8, alignment: "baseline" }, [
+    tok("Var(X)", terms[0].color).name("v"),
+    tok("="),
+    tok("E", terms[1].color).name("e"),
+    tok("["),
+    tok("(X − μ)²", terms[2].color).name("d"),
+    tok("]"),
+  ]),
+  ...terms.map((t) => rect({ h: 2, fill: t.color }).name(`${t.name}Bar`)),
+  ...terms.map((t) => note(t.note, t.color).name(`${t.name}Note`)),
+])
+  .relate((names) =>
+    terms.flatMap((t) => {
+      const [term, bar, n] = [
+        names[t.name],
+        names[`${t.name}Bar`],
+        names[`${t.name}Note`],
+      ];
+      return [
+        Constraint.align({ x: "span" }, [term, bar]),
+        Constraint.distribute({ dir: "y", spacing: 4 }, [term, bar]),
+        Constraint.align({ x: "middle" }, [bar, n]),
+        Constraint.distribute({ dir: "y", spacing: t.depth }, [bar, n]),
+        arrow(
+          {
+            bow: 0,
+            stretch: 0,
+            strokeWidth: 1,
+            padStart: 2,
+            padEnd: 2,
+            stroke: t.color,
+          },
+          [n, bar]
+        ),
+      ];
+    })
+  )
+  .render(container, { w: 440, h: 190 });
+=== ex5c ts full
+tok("E", BLUE).name("E")
+  .label(() => "expected value: the average over X", {
+    position: Place.around({ directions: ["s"], offset: 28 }),
+    leader: {},
+  })
+=== appB ts frag
+.layer(
+  callout(chart(selectAll("months")).flow(argmax("price")), {
+    note: ["Peak", "$707 in Nov 2007"],
+    subject: Shape.oval(),
+    connector: "straight",
+    dx: -40,
+    dy: 30,
+  }),
+)
+=== appD ts full
+annotate(chart(selectAll("months")).flow(topK(1, { by: "price" })), [
+  enclose({ shape: Shape.oval() }),
+  note("Peak", { position: Place.around({ directions: ["nw"] }), leader: {} }),
+  emphasize(["color"]),
+]);
+=== p-d3a js raw
+const annotations = [
+  {
+    note: { label: "Hi" },
+    x: 100,
+    y: 100,
+    dy: 137,
+    dx: 162,
+    type: d3.annotationCalloutElbow,
+    connector: { end: "arrow" },
+  },
+];
+
+d3.annotation().annotations(annotations);
+=== p-annogram json raw
+{ // Text: "The previous...
+  "target": {
+    "type": "data-expr",
+    "expr": "datum.date == '2021-01-11'"
+  },
+  "text": {
+    "text": "The previous...",
+    "position": {...},
+    "style": {...}
+  },
+  "connector": {
+    "curve": "natural",
+    "style": {...}
+  }
+}
+=== p-chartmark json raw
+{ "name": "opacity",
+  "target": {
+    "type": "data_items",
+    "filter": { ... }
+  },
+  "marker": {"opacity": {"selected": 1, "other": 0.5}}}
+=== p-chartaccent plaintext raw
+avg@(NewYork)
+=== p-mpl python raw
+Axes.annotate(text, xy, xytext=None, xycoords='data', textcoords=None,
+              arrowprops=None, annotation_clip=None, **kwargs)
+=== p-ggforce r raw
+ggplot(iris, aes(Petal.Length, Petal.Width)) +
+  geom_mark_ellipse(aes(fill = Species, label = Species,
+                        filter = Species == "versicolor",
+                        description = "Versicolor has medium-sized petals")) +
+  geom_point()
+=== p-gghighlight r raw
+ggplot(d) +
+  geom_line(aes(idx, value, colour = type), linewidth = 5) +
+  gghighlight(max(value) > 19,
+              unhighlighted_params = list(linewidth = 1, colour = alpha("pink", 0.4)))
+=== p-plot js raw
+Plot.tip(
+  [`Apple stock reaches a new high of $133 on Feb. 23, 2015. …`],
+  {x: new Date("2015-02-23"), y: 133, dy: -3, anchor: "bottom"}
+)
+=== p-vl json raw
+{"mark": "rule", "encoding": {"y": {"datum": 300}}}
+
+"color": {"condition": {"test": "datum.year == 2008", "value": "red"}, "value": "lightgray"}
+=== p-bluefish xml raw
+<Align alignment="centerX">
+  <Text name="label">Mercury</Text>
+  <Ref select="mercury" />
+</Align>
+<Distribute direction="vertical" spacing={60}>
+  <Ref select="label" />
+  <Ref select="mercury" />
+</Distribute>
+<Arrow>
+  <Ref select="label" />
+  <Ref select="mercury" />
+</Arrow>
+=== p-tikz latex raw
+\node[draw, circle, pin=above:{max}] (m) at (2,3) {};
+\node[draw, fit=(a) (b) (c)] {};
+=== p-ffl css raw
+$y$               { label: target    }
+$\beta_0$         { label: intercept }
+$x_1$ {
+  label: feature;
+  label-position: below
+}

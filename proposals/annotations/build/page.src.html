@@ -1,0 +1,2955 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GoFish Annotations</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      rel="preconnect"
+      href="https://fonts.gstatic.com"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&amp;family=IBM+Plex+Sans+Condensed:wght@500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap"
+    />
+    <style>
+      /* Layout idea: a review sheet. Each example is a stack of approach rows, picture left, code right. */
+      :root {
+        --bg: #f5f6f8;
+        --surface: #ffffff;
+        --ink: #15171c;
+        --ink-2: #474d59;
+        --ink-3: #6f7684;
+        --rule: #dfe2e8;
+        --rule-strong: #c3c8d1;
+        --accent: #1d5bcc;
+        --accent-soft: #e5edfc;
+        --accent-ink: #1a4aa6;
+        --code-bg: #eef0f4;
+        --code-ink: #1d2230;
+        --code-str: #0a7148;
+        --code-com: #737a88;
+        --code-num: #a3460b;
+        --code-kw: #7a3eb1;
+        --code-fn: #1a4aa6;
+        --code-attr: #0b6878;
+        --paper: #ffffff;
+        --paper-rule: #e3e6eb;
+        --chip-bg: #eceef2;
+        --chip-ink: #3a404c;
+        --chip-new-bg: #dfe9fd;
+        --chip-new-ink: #1a4aa6;
+        --chip-new-rule: #a9c2f2;
+        --mark: #b23a2e;
+        --mark-soft: #fbeceb;
+        --font-sans:
+          "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, system-ui,
+          sans-serif;
+        --font-cond:
+          "IBM Plex Sans Condensed", "Arial Narrow", "IBM Plex Sans", Arial,
+          sans-serif;
+        --font-mono:
+          "JetBrains Mono", "SFMono-Regular", Menlo, Consolas,
+          "Liberation Mono", monospace;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #101217;
+          --surface: #171a21;
+          --ink: #e6e8ed;
+          --ink-2: #b3b9c4;
+          --ink-3: #8a919e;
+          --rule: #272c36;
+          --rule-strong: #394050;
+          --accent: #79a6ff;
+          --accent-soft: #1b2741;
+          --accent-ink: #a9c4ff;
+          --code-bg: #1b1f27;
+          --code-ink: #dde1e8;
+          --code-str: #7fd1a6;
+          --code-com: #7e8696;
+          --code-num: #efa76a;
+          --code-kw: #c7a0f5;
+          --code-fn: #a9c4ff;
+          --code-attr: #6fd0dc;
+          --paper: #fafbfc;
+          --paper-rule: #394050;
+          --chip-bg: #232833;
+          --chip-ink: #c4cad4;
+          --chip-new-bg: #1c2a47;
+          --chip-new-ink: #b3cbff;
+          --chip-new-rule: #34518a;
+          --mark: #ff8a7a;
+          --mark-soft: #2e1c1b;
+          color-scheme: dark;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #101217;
+        --surface: #171a21;
+        --ink: #e6e8ed;
+        --ink-2: #b3b9c4;
+        --ink-3: #8a919e;
+        --rule: #272c36;
+        --rule-strong: #394050;
+        --accent: #79a6ff;
+        --accent-soft: #1b2741;
+        --accent-ink: #a9c4ff;
+        --code-bg: #1b1f27;
+        --code-ink: #dde1e8;
+        --code-str: #7fd1a6;
+        --code-com: #7e8696;
+        --code-num: #efa76a;
+        --code-kw: #c7a0f5;
+        --code-fn: #a9c4ff;
+        --code-attr: #6fd0dc;
+        --paper: #fafbfc;
+        --paper-rule: #394050;
+        --chip-bg: #232833;
+        --chip-ink: #c4cad4;
+        --chip-new-bg: #1c2a47;
+        --chip-new-ink: #b3cbff;
+        --chip-new-rule: #34518a;
+        --mark: #ff8a7a;
+        --mark-soft: #2e1c1b;
+        color-scheme: dark;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 16px;
+        line-height: 1.6;
+      }
+      a {
+        color: var(--accent);
+        text-underline-offset: 2px;
+      }
+      a:hover {
+        text-decoration-thickness: 2px;
+      }
+      a:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      code,
+      pre {
+        font-family: var(--font-mono);
+        font-variant-ligatures: none;
+        font-feature-settings:
+          "liga" 0,
+          "calt" 0;
+      }
+      :not(pre) > code {
+        font-size: 0.86em;
+        background: var(--code-bg);
+        color: var(--code-ink);
+        padding: 0.08em 0.32em;
+        border-radius: 3px;
+        overflow-wrap: anywhere;
+      }
+      img {
+        display: block;
+        max-width: 100%;
+        height: auto;
+      }
+
+      .page {
+        padding-left: max(16px, env(safe-area-inset-left, 0px));
+        padding-right: max(16px, env(safe-area-inset-right, 0px));
+        padding-block: 40px 96px;
+      }
+      .layout {
+        max-width: 1440px;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 48px;
+      }
+      @media (min-width: 1180px) {
+        .layout {
+          grid-template-columns: 196px minmax(0, 1fr);
+        }
+      }
+      main {
+        min-width: 0;
+        max-width: 1180px;
+      }
+
+      .toc {
+        display: none;
+      }
+      @media (min-width: 1180px) {
+        .toc {
+          display: block;
+          position: sticky;
+          top: 24px;
+          align-self: start;
+          font-size: 13.5px;
+          line-height: 1.4;
+        }
+      }
+      .toc-title {
+        font-family: var(--font-cond);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+        margin: 0 0 10px;
+      }
+      .toc ol {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        border-left: 1px solid var(--rule);
+      }
+      .toc li {
+        margin: 0;
+      }
+      .toc a {
+        display: block;
+        padding: 5px 0 5px 12px;
+        color: var(--ink-2);
+        text-decoration: none;
+        margin-left: -1px;
+        border-left: 2px solid transparent;
+      }
+      .toc a:hover {
+        color: var(--accent);
+        border-left-color: var(--accent);
+      }
+      .toc .n {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--ink-3);
+        margin-right: 6px;
+      }
+
+      .prose {
+        max-width: 72ch;
+      }
+      h1,
+      h2,
+      h3,
+      h4 {
+        line-height: 1.2;
+        margin: 0;
+        color: var(--ink);
+        text-wrap: balance;
+      }
+      h1 {
+        font-size: clamp(30px, 5vw, 44px);
+        font-weight: 700;
+        letter-spacing: -0.015em;
+      }
+      h2 {
+        font-size: clamp(22px, 3vw, 28px);
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        margin: 0 0 16px;
+      }
+      h3 {
+        font-size: 19px;
+        font-weight: 600;
+        margin: 32px 0 10px;
+      }
+      h4 {
+        font-size: 15px;
+        font-weight: 600;
+        margin: 20px 0 6px;
+      }
+      p {
+        margin: 0 0 14px;
+      }
+      ul,
+      ol {
+        margin: 0 0 14px;
+        padding-left: 1.3em;
+      }
+      li {
+        margin: 4px 0;
+      }
+      .eyebrow {
+        font-family: var(--font-cond);
+        font-size: 12.5px;
+        font-weight: 600;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--accent);
+        margin: 0 0 8px;
+      }
+      .muted {
+        color: var(--ink-3);
+      }
+      .small {
+        font-size: 14px;
+      }
+
+      section {
+        padding-top: 56px;
+        margin-top: 56px;
+        border-top: 1px solid var(--rule);
+        scroll-margin-top: 16px;
+      }
+      .secnum {
+        font-family: var(--font-mono);
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--ink-3);
+        margin-right: 10px;
+      }
+
+      header.top {
+        padding-bottom: 8px;
+      }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin: 18px 0 26px;
+        padding: 5px 10px;
+        border: 1px solid var(--rule-strong);
+        border-radius: 4px;
+        font-size: 13.5px;
+        color: var(--ink-2);
+        background: var(--surface);
+      }
+      .status::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        flex: none;
+      }
+      .summary {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        border: 1px solid var(--rule);
+        background: var(--surface);
+        border-radius: 6px;
+        max-width: 88ch;
+      }
+      .summary > div {
+        padding: 16px 20px;
+        min-width: 0;
+      }
+      .summary > div + div {
+        border-top: 1px solid var(--rule);
+      }
+      .summary .k {
+        font-family: var(--font-cond);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+        margin-bottom: 4px;
+      }
+      .summary .rec {
+        border-left: 3px solid var(--accent);
+      }
+      .summary p {
+        margin: 0 0 10px;
+      }
+      .summary p:last-child {
+        margin-bottom: 0;
+      }
+
+      /* code */
+      pre {
+        margin: 0;
+        background: var(--code-bg);
+        color: var(--code-ink);
+        font-size: 12.5px;
+        line-height: 1.55;
+        padding: 12px 14px;
+        border-radius: 4px;
+        overflow-x: auto;
+        tab-size: 2;
+      }
+      pre code {
+        white-space: pre;
+      }
+      .hljs-comment,
+      .hljs-quote,
+      .hljs-meta {
+        color: var(--code-com);
+        font-style: italic;
+      }
+      .hljs-string,
+      .hljs-regexp,
+      .hljs-template-tag {
+        color: var(--code-str);
+      }
+      .hljs-number,
+      .hljs-literal,
+      .hljs-symbol {
+        color: var(--code-num);
+      }
+      .hljs-keyword,
+      .hljs-selector-tag,
+      .hljs-name,
+      .hljs-built_in.hljs-keyword,
+      .hljs-variable.language_ {
+        color: var(--code-kw);
+      }
+      .hljs-title,
+      .hljs-title.function_,
+      .hljs-title.class_,
+      .hljs-built_in,
+      .hljs-selector-class {
+        color: var(--code-fn);
+      }
+      .hljs-attr,
+      .hljs-attribute,
+      .hljs-property,
+      .hljs-params,
+      .hljs-selector-id {
+        color: var(--code-attr);
+      }
+      .hljs-params {
+        color: inherit;
+      }
+      .hljs-subst {
+        color: inherit;
+      }
+
+      /* tables */
+      .table-scroll {
+        overflow-x: auto;
+        margin: 0 0 18px;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        background: var(--surface);
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 14px;
+      }
+      th,
+      td {
+        text-align: left;
+        vertical-align: top;
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--rule);
+      }
+      tr:last-child td {
+        border-bottom: 0;
+      }
+      th {
+        font-family: var(--font-cond);
+        font-weight: 600;
+        font-size: 12.5px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+        background: var(--bg);
+        white-space: nowrap;
+      }
+      td code {
+        white-space: nowrap;
+      }
+      td.wrap code {
+        white-space: normal;
+      }
+
+      .chip {
+        display: inline-block;
+        font-family: var(--font-cond);
+        font-size: 12.5px;
+        font-weight: 500;
+        line-height: 1.3;
+        padding: 2px 7px;
+        margin: 1px 2px 1px 0;
+        border-radius: 3px;
+        background: var(--chip-bg);
+        color: var(--chip-ink);
+        border: 1px solid transparent;
+        white-space: nowrap;
+      }
+      .chip.new {
+        background: var(--chip-new-bg);
+        color: var(--chip-new-ink);
+        border-color: var(--chip-new-rule);
+      }
+      .chip.warn {
+        background: var(--mark-soft);
+        color: var(--mark);
+        border-color: var(--mark);
+      }
+
+      .paper {
+        background: var(--paper);
+        border: 1px solid var(--paper-rule);
+        border-radius: 4px;
+        padding: 8px;
+      }
+      figure {
+        margin: 0;
+        min-width: 0;
+      }
+      figcaption {
+        font-size: 13.5px;
+        color: var(--ink-2);
+        margin-top: 8px;
+      }
+
+      /* terms */
+      .terms {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        margin: 0 0 8px;
+        border-top: 1px solid var(--rule);
+        max-width: 88ch;
+      }
+      .terms > div {
+        padding: 8px 0;
+        border-bottom: 1px solid var(--rule);
+        font-size: 14.5px;
+        min-width: 0;
+      }
+      @media (min-width: 640px) {
+        .terms > div {
+          display: grid;
+          grid-template-columns: 120px minmax(0, 1fr);
+          gap: 14px;
+        }
+      }
+      .terms dt {
+        font-weight: 600;
+      }
+      .terms dd {
+        margin: 0;
+        color: var(--ink-2);
+      }
+
+      /* precedent */
+      .lessons {
+        counter-reset: lesson;
+        list-style: none;
+        padding: 0;
+        margin: 0 0 28px;
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+      }
+      .lessons li {
+        counter-increment: lesson;
+        margin: 0;
+        padding: 14px 16px;
+        border-top: 3px solid var(--accent);
+        background: var(--surface);
+        border-radius: 0 0 6px 6px;
+        font-size: 14.5px;
+        min-width: 0;
+      }
+      .lessons li::before {
+        content: counter(lesson);
+        display: block;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--accent);
+        margin-bottom: 4px;
+      }
+      .lessons b {
+        font-weight: 600;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+        gap: 16px;
+        margin: 8px 0 28px;
+      }
+      .card {
+        border: 1px solid var(--rule);
+        background: var(--surface);
+        border-radius: 6px;
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-width: 0;
+      }
+      .card h3 {
+        font-size: 16px;
+        margin: 0;
+      }
+      .card .venue {
+        font-family: var(--font-cond);
+        font-size: 12.5px;
+        font-weight: 500;
+        color: var(--ink-3);
+        margin: -6px 0 0;
+        letter-spacing: 0.02em;
+      }
+      .card .model {
+        font-size: 14px;
+        color: var(--ink-2);
+        margin: 0;
+      }
+      .card .model b {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .card pre {
+        font-size: 11.5px;
+        padding: 9px 10px;
+      }
+      .card .thumb {
+        aspect-ratio: 16 / 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+      .card .thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+      .card .src {
+        font-size: 12.5px;
+        margin-top: auto;
+        color: var(--ink-3);
+        overflow-wrap: anywhere;
+      }
+      .card .tag {
+        font-family: var(--font-cond);
+        font-size: 11.5px;
+        color: var(--ink-3);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin: 0 0 -6px;
+      }
+
+      .bars {
+        list-style: none;
+        padding: 0;
+        margin: 8px 0 12px;
+        max-width: 640px;
+      }
+      .bars li {
+        display: grid;
+        grid-template-columns: 96px minmax(0, 1fr) 44px;
+        gap: 10px;
+        align-items: center;
+        margin: 5px 0;
+        font-size: 14px;
+      }
+      .bars .track {
+        height: 14px;
+        background: var(--chip-bg);
+        border-radius: 2px;
+        overflow: hidden;
+      }
+      .bars .fill {
+        height: 100%;
+        background: var(--accent);
+      }
+      .bars .v {
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+        color: var(--ink-2);
+        font-family: var(--font-mono);
+        font-size: 13px;
+      }
+
+      /* examples */
+      .legend-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+        margin: 0 0 24px;
+      }
+      .legend-grid > div {
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 12px 14px;
+        font-size: 14px;
+      }
+      .legend-grid .atag {
+        margin-bottom: 6px;
+      }
+      .ex {
+        margin: 40px 0 0;
+      }
+      .ex-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 6px 14px;
+        margin: 0 0 6px;
+      }
+      .ex-head h3 {
+        margin: 0;
+        font-size: 21px;
+      }
+      .ex-intro {
+        font-size: 15px;
+        color: var(--ink-2);
+        max-width: 80ch;
+        margin: 0 0 14px;
+      }
+      .arow {
+        border: 1px solid var(--rule);
+        background: var(--surface);
+        border-radius: 6px;
+        padding: 14px;
+        margin: 0 0 12px;
+      }
+      .arow.c {
+        border-color: var(--chip-new-rule);
+        box-shadow: inset 4px 0 0 var(--accent);
+      }
+      .arow-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 12px;
+        margin: 0 0 10px;
+      }
+      .atag {
+        display: inline-block;
+        font-family: var(--font-cond);
+        font-size: 12.5px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        padding: 2px 8px;
+        border-radius: 3px;
+        border: 1px solid var(--rule-strong);
+        color: var(--ink-2);
+      }
+      .atag.c {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: var(--surface);
+      }
+      .count {
+        font-family: var(--font-mono);
+        font-size: 12.5px;
+        color: var(--ink-3);
+        font-variant-numeric: tabular-nums;
+      }
+      .arow-body {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 14px;
+        align-items: start;
+      }
+      @media (min-width: 900px) {
+        .arow-body {
+          grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+        }
+      }
+      .arow-body > * {
+        min-width: 0;
+      }
+      .side {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .side ul {
+        font-size: 13.5px;
+        color: var(--ink-2);
+        margin: 0;
+      }
+      .side p {
+        font-size: 13.5px;
+        color: var(--ink-2);
+        margin: 0;
+      }
+      .codes {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .codes .lang {
+        font-family: var(--font-cond);
+        font-size: 11.5px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+        margin: 0 0 -6px;
+      }
+      .notrender {
+        border: 1.5px dashed var(--chip-new-rule);
+        border-radius: 4px;
+        padding: 12px 14px;
+        font-size: 13.5px;
+        color: var(--ink-2);
+        background: var(--accent-soft);
+      }
+      .notrender .k {
+        font-family: var(--font-cond);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--accent-ink);
+        margin: 0 0 4px;
+      }
+      .notrender ul {
+        margin: 6px 0 0;
+      }
+      .notrender p {
+        margin: 0 0 6px;
+      }
+      .nob {
+        font-size: 13.5px;
+        color: var(--ink-3);
+        border: 1px dashed var(--rule-strong);
+        border-radius: 4px;
+        padding: 10px 12px;
+      }
+
+      /* approaches */
+      .approach {
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        background: var(--surface);
+        padding: 20px;
+        margin: 0 0 22px;
+      }
+      .approach.rec {
+        border-color: var(--accent);
+        box-shadow: inset 4px 0 0 var(--accent);
+      }
+      .approach-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+      .approach-head h3 {
+        margin: 0;
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        margin: 4px 0 0;
+        border-top: 1px solid var(--rule);
+      }
+      .kv > div {
+        padding: 10px 0;
+        border-bottom: 1px solid var(--rule);
+        min-width: 0;
+        font-size: 15px;
+      }
+      .kv > div:last-child {
+        border-bottom: 0;
+      }
+      @media (min-width: 720px) {
+        .kv > div {
+          display: grid;
+          grid-template-columns: 140px minmax(0, 1fr);
+          gap: 16px;
+        }
+      }
+      .kv .k {
+        font-family: var(--font-cond);
+        font-size: 12.5px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+        padding-top: 2px;
+      }
+      .kv p:last-child,
+      .kv ul:last-child {
+        margin-bottom: 0;
+      }
+      .sketch {
+        border: 1.5px dashed var(--rule-strong);
+        border-radius: 6px;
+        padding: 16px 18px;
+        background: var(--surface);
+        margin: 0 0 16px;
+        max-width: 900px;
+      }
+
+      .args {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 20px;
+        max-width: 88ch;
+      }
+      .args li {
+        padding: 10px 0 10px 18px;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+        position: relative;
+      }
+      .args li::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 19px;
+        width: 8px;
+        height: 2px;
+        background: var(--accent);
+      }
+      .args b {
+        font-weight: 600;
+      }
+
+      .gaps {
+        max-width: 88ch;
+        padding-left: 1.6em;
+      }
+      .gaps li {
+        padding: 4px 0;
+      }
+      .gaps b {
+        font-weight: 600;
+      }
+
+      /* decisions */
+      .decisions-wrap {
+        background: var(--accent-soft);
+        border: 1px solid var(--chip-new-rule);
+        border-radius: 8px;
+        padding: 8px 22px 6px;
+        max-width: 92ch;
+      }
+      .decisions {
+        list-style: none;
+        counter-reset: dec;
+        padding: 0;
+        margin: 0;
+      }
+      .decisions > li {
+        counter-increment: dec;
+        display: grid;
+        grid-template-columns: 38px minmax(0, 1fr);
+        gap: 10px;
+        padding: 14px 0;
+        border-bottom: 1px solid var(--chip-new-rule);
+        margin: 0;
+      }
+      .decisions > li:last-child {
+        border-bottom: 0;
+      }
+      .decisions > li::before {
+        content: counter(dec);
+        font-family: var(--font-mono);
+        font-weight: 600;
+        font-size: 14px;
+        color: var(--surface);
+        background: var(--accent);
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .decisions .q {
+        font-weight: 600;
+        font-size: 16.5px;
+        margin: 2px 0 4px;
+      }
+      .decisions .d {
+        font-size: 14.5px;
+        color: var(--ink-2);
+        margin: 0;
+      }
+
+      .issues {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        font-size: 14.5px;
+        max-width: 92ch;
+      }
+      .issues li {
+        display: grid;
+        grid-template-columns: 120px minmax(0, 1fr);
+        gap: 10px;
+        padding: 7px 0;
+        border-bottom: 1px solid var(--rule);
+        margin: 0;
+      }
+      .issues li:last-child {
+        border-bottom: 0;
+      }
+      .issues .num {
+        font-family: var(--font-mono);
+        font-size: 13px;
+        color: var(--accent-ink);
+      }
+
+      .callout {
+        border-left: 3px solid var(--rule-strong);
+        padding: 4px 0 4px 14px;
+        color: var(--ink-2);
+        font-size: 14.5px;
+        max-width: 80ch;
+        margin: 0 0 18px;
+      }
+      footer {
+        margin-top: 64px;
+        font-size: 13px;
+        color: var(--ink-3);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          scroll-behavior: auto !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="layout">
+        <nav class="toc" aria-label="Contents">
+          <p class="toc-title">Contents</p>
+          <ol>
+            <li>
+              <a href="#terms"><span class="n">01</span>Terms</a>
+            </li>
+            <li>
+              <a href="#asked"><span class="n">02</span>What the notes asked</a>
+            </li>
+            <li>
+              <a href="#precedent"><span class="n">03</span>Precedent</a>
+            </li>
+            <li>
+              <a href="#examples"
+                ><span class="n">04</span>Examples × approaches</a
+              >
+            </li>
+            <li>
+              <a href="#types"><span class="n">05</span>d3-annotation types</a>
+            </li>
+            <li>
+              <a href="#approach-d"
+                ><span class="n">06</span>Approach D sketch</a
+              >
+            </li>
+            <li>
+              <a href="#tradeoffs"><span class="n">07</span>Trade-offs</a>
+            </li>
+            <li>
+              <a href="#overlap"><span class="n">08</span>Overlap check</a>
+            </li>
+            <li>
+              <a href="#recommendation"
+                ><span class="n">09</span>Recommendation</a
+              >
+            </li>
+            <li>
+              <a href="#gaps"><span class="n">10</span>Gaps found</a>
+            </li>
+            <li>
+              <a href="#decisions"
+                ><span class="n">11</span>Decisions for Josh</a
+              >
+            </li>
+            <li>
+              <a href="#issues"><span class="n">12</span>Related issues</a>
+            </li>
+          </ol>
+        </nav>
+
+        <main>
+          <header class="top">
+            <p class="eyebrow">GoFish API proposal</p>
+            <h1>GoFish Annotations</h1>
+            <div class="status">
+              <span
+                >Proposal. Approach C is not implemented; renders are of A and
+                B. Syntax awaits sign-off on
+                <a href="#decisions">9 decisions</a>.</span
+              >
+            </div>
+
+            <div class="summary">
+              <div>
+                <div class="k">Summary</div>
+                <p>
+                  "Annotate" is not one primitive. Every annotation in the
+                  literature is a target plus some of three parts: a subject
+                  drawn on the target, a note, and a connector between them.
+                </p>
+                <p>
+                  GoFish already has a construct for each part except the
+                  connector, so the proposal adds no
+                  <code>annotate</code> or <code>callout</code> operator.
+                </p>
+                <p>
+                  It adds one option, one data step, and four fixes, and it
+                  moves color emphasis into its own design.
+                </p>
+              </div>
+              <div class="rec">
+                <div class="k">Recommendation: Approach C</div>
+                <p>
+                  Write an annotation as a <b>selection</b>, a
+                  <b>subject mark</b> over it, and a
+                  <b><code>.label()</code></b> on that mark. The label is the
+                  note. A new <code>leader</code> option on
+                  <code>.label()</code> draws the connector. A new
+                  <code>topK</code> flow step selects extremes. Color highlights
+                  are not annotations in this sense, because they restyle marks
+                  the annotation does not own. They stay a separate construct
+                  (#641).
+                </p>
+                {{rec}}
+              </div>
+            </div>
+          </header>
+
+          <section id="terms">
+            <h2><span class="secnum">01</span>Terms</h2>
+            <dl class="terms">
+              <div>
+                <dt>Annotation</dt>
+                <dd>
+                  Ink added to a visualization to point out part of it, as
+                  opposed to the ink that encodes the data.
+                </dd>
+              </div>
+              <div>
+                <dt>Target</dt>
+                <dd>
+                  What an annotation is about. It can be a set of marks (one
+                  point, a group, a series), a position in data space (y = 50,
+                  the summer of 2015), or another annotation.
+                </dd>
+              </div>
+              <div>
+                <dt>Subject</dt>
+                <dd>
+                  Ink drawn on or around the target: a circle around a point, a
+                  box around a region, a blob around a group, a rule at a value.
+                  The word is d3-annotation's.
+                </dd>
+              </div>
+              <div>
+                <dt>Note</dt>
+                <dd>The text of the annotation.</dd>
+              </div>
+              <div>
+                <dt>Connector</dt>
+                <dd>The line from the note to the subject or target.</dd>
+              </div>
+              <div>
+                <dt>Leader</dt>
+                <dd>
+                  A connector from a label to the thing it labels (also "leader
+                  line"). It is the cartography and drafting term. ggrepel calls
+                  it a segment, matplotlib calls it <code>arrowprops</code>.
+                </dd>
+              </div>
+              <div>
+                <dt>Emphasis</dt>
+                <dd>
+                  Making some marks stand out by restyling them and the others
+                  (color, gray out, paint order). gghighlight and ChartMark
+                  treat it as a predicate that splits the marks into "selected"
+                  and "other".
+                </dd>
+              </div>
+            </dl>
+          </section>
+
+          <section id="asked">
+            <h2>
+              <span class="secnum">02</span>What the notes asked, and the
+              answers
+            </h2>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Question from the notes</th>
+                    <th>Answer</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Is <code>annotate</code> a primitive?</td>
+                    <td>
+                      No. It is a set of constructs with one shared interface,
+                      like the graphical operators. The label design already
+                      rejected a separate <code>annotate()</code> (API Design,
+                      "One concept is one operator").
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      Are layouts, arrows and enclosures already expressible?
+                    </td>
+                    <td>
+                      Yes, all eight d3-annotation types render with today's
+                      primitives (see <a href="#types">the grid</a>). The cost
+                      is verbosity: a callout needs an outer <code>layer</code>,
+                      two <code>Constraint.distribute</code> calls and an
+                      <code>arrow</code>.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      Do we need sugar like <code>.label()</code> and
+                      <code>.emphasize()</code>?
+                    </td>
+                    <td>
+                      Yes, but small: one <code>leader</code> option and one
+                      data step, sitting on existing constructs. No new
+                      top-level construct for callouts.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      How do we balance brevity, readability and customization?
+                    </td>
+                    <td>
+                      Brevity comes from <code>.label()</code>'s automatic
+                      placement and avoidance. Customization comes from each
+                      part being an ordinary mark the user can swap. The data
+                      link holds because the target is a selection, not a pixel
+                      position. Practitioners asked for exactly this mix (Rahman
+                      et al., <i>Designing Annotations</i>, EuroVis 2026).
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Where do color highlights fit?</td>
+                    <td>
+                      Outside this design, in #641. Emphasis restyles marks the
+                      annotation does not own and reshapes a shared color scale.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="precedent">
+            <h2><span class="secnum">03</span>Precedent</h2>
+            <div class="prose">
+              <p>
+                What matters for the design. The full survey with sources is
+                <code>research/prior-work.md</code>.
+              </p>
+            </div>
+            <ol class="lessons">
+              <li>
+                <b>The same decomposition shows up everywhere.</b>
+                d3-annotation's named types are presets over subject, connector
+                and note. AnnoGram has a target with optional <code>text</code>,
+                <code>enclosure</code>, <code>connector</code> and
+                <code>indicator</code> slots. matplotlib's
+                <code>annotate(text, xy, xytext, arrowprops)</code> and
+                Bluefish's <code>Ref</code> + <code>Arrow</code> +
+                <code>Align</code> split it the same way.
+              </li>
+              <li>
+                <b>The type and the target are independent axes</b> in every
+                taxonomy. ChartAccent's target kinds (a data item by predicate,
+                a coordinate, a chart element, another annotation) are reused by
+                AnnoGram and ChartMark.
+              </li>
+              <li>
+                <b>Targets should be rules, not positions.</b> ChartAccent
+                participants liked targets that are "semantic based", that
+                follow the data when it changes. Nine of ten practitioners in
+                <i>Designing Annotations</i> finish their annotations in
+                PowerPoint or Figma and lose the data link. They want automatic
+                placement they can override without losing the binding.
+              </li>
+              <li>
+                <b>Emphasis is a different kind of thing.</b> gghighlight,
+                ChartMark (<code>"opacity": {"selected": 1, "other": 0.5}</code
+                >) and Vega-Lite conditions all restyle the marks outside the
+                target.
+              </li>
+              <li>
+                <b>The math side follows the same shape.</b> Head et al.
+                recommend keeping the augmentation apart from the formula. FFL
+                is CSS-like:
+                <code>selector { color; label; label-marker: extent }</code>.
+                Delta (UIST 2026) keys labels by subexpression. TikZ uses
+                <code>pin</code> for a note with a leader and
+                <code>fit</code> for an enclosure.
+              </li>
+              <li>
+                <b>Nobody has tested authoring.</b> AnnoGram's evaluation counts
+                lines of code. ChartMark has no evaluation. So brevity is the
+                only measured property, and it is a weak guide on its own.
+              </li>
+            </ol>
+
+            <h3>One card per system</h3>
+            <p class="small muted">
+              Code is verbatim from the cited source unless the card says
+              "illustrative" or "from memory". Figures are third-party, for
+              internal design discussion.
+            </p>
+            <div class="cards">
+              <article class="card">
+                <h3>d3-annotation</h3>
+                <p class="venue">Susie Lu, 2017. JS library</p>
+                {{p-d3a}}
+                <p class="model">
+                  <b>Decomposition:</b> note + connector + subject. Named types
+                  (<code>callout</code>, <code>elbow</code>, <code>badge</code>,
+                  …) are presets over the three parts; the author sets
+                  <code>dx, dy</code> by hand.
+                </p>
+                <div class="paper thumb">
+                  <img
+                    src="img/ref-d3annotation-anatomy.png"
+                    alt="d3-annotation anatomy: a note, a connector and a subject"
+                    width="475"
+                    height="348"
+                    loading="lazy"
+                  />
+                </div>
+                <p class="src">
+                  Source:
+                  <a href="https://github.com/susielu/d3-annotation"
+                    >github.com/susielu/d3-annotation</a
+                  >
+                </p>
+              </article>
+
+              <article class="card">
+                <h3>AnnoGram</h3>
+                <p class="venue">
+                  Rahman, Rahat-uz-Zaman, McNutt, Rosen. VIS 2025 short
+                </p>
+                {{p-annogram}}
+                <p class="model">
+                  <b>Decomposition:</b> one target (predicate, data position,
+                  pixel, axis part, chart part) with optional <code>text</code>,
+                  <code>enclosure</code>, <code>connector</code>,
+                  <code>indicator</code> slots. Placement automatic,
+                  overridable.
+                </p>
+                <div class="paper thumb">
+                  <img
+                    src="img/ref-annogram-teaser.png"
+                    alt="AnnoGram teaser: annotated COVID chart, its spec, and a gallery on several chart types"
+                    width="1996"
+                    height="529"
+                    loading="lazy"
+                  />
+                </div>
+                <p class="src">
+                  Source:
+                  <a href="https://arxiv.org/abs/2507.04236"
+                    >arXiv 2507.04236</a
+                  >
+                </p>
+              </article>
+
+              <article class="card">
+                <h3>ChartMark</h3>
+                <p class="venue">Chen et al. VIS 2025</p>
+                {{p-chartmark}}
+                <p class="model">
+                  <b>Decomposition:</b> task + data source + a list of
+                  techniques, each a target and a marker. Emphasis is styled on
+                  the selected/other partition.
+                </p>
+                <div class="paper thumb">
+                  <img
+                    src="img/ref-chartmark-teaser.png"
+                    alt="ChartMark spec beside its rendered grouped bar chart"
+                    width="2031"
+                    height="1117"
+                    loading="lazy"
+                  />
+                </div>
+                <p class="src">
+                  Source:
+                  <a href="https://arxiv.org/abs/2507.21810"
+                    >arXiv 2507.21810</a
+                  >
+                </p>
+              </article>
+
+              <article class="card">
+                <h3>ChartAccent</h3>
+                <p class="venue">
+                  Ren, Brehmer, Lee, Höllerer, Choe. PacificVis 2017. GUI tool
+                </p>
+                <p class="tag">Target editor formula</p>
+                {{p-chartaccent}}
+                <p class="model">
+                  <b>Decomposition:</b> form (text, shape, highlight, image) ×
+                  target type (data item or set, coordinate, chart element,
+                  prior annotation). Data-driven targets re-select when the data
+                  moves.
+                </p>
+                <div class="paper thumb">
+                  <img
+                    src="img/ref-chartaccent-targets.png"
+                    alt="ChartAccent target types a to k on a temperature line chart, and its UI"
+                    width="1112"
+                    height="270"
+                    loading="lazy"
+                  />
+                </div>
+                <p class="src">
+                  Source:
+                  <a
+                    href="https://sites.cs.ucsb.edu/~holl/pubs/Ren-2017-PacificVis.pdf"
+                    >Ren et al. 2017 (PDF)</a
+                  >; figure via the 2410.05579 survey
+                </p>
+              </article>
+
+              <article class="card">
+                <h3>matplotlib <code>annotate</code></h3>
+                <p class="venue">Python library</p>
+                {{p-mpl}}
+                <p class="model">
+                  <b>Decomposition:</b> one call fuses all three:
+                  <code>xy</code> is the subject point, <code>xytext</code> the
+                  note, <code>arrowprops</code> the connector. Each point picks
+                  its own coordinate system, including another artist's box.
+                </p>
+                <p class="src">
+                  Source:
+                  <a
+                    href="https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.annotate.html"
+                    >matplotlib API reference</a
+                  >
+                </p>
+              </article>
+
+              <article class="card">
+                <h3>ggforce <code>geom_mark_*</code></h3>
+                <p class="venue">R, ggplot2 extension. Illustrative</p>
+                {{p-ggforce}}
+                <p class="model">
+                  <b>Decomposition:</b> enclosure plus callout in one geom. The
+                  target is a group of rows (<code>filter</code>); the shape is
+                  computed from the points; the label is placed off the data
+                  with an elbow connector, or dropped if nothing fits.
+                </p>
+                <p class="src">
+                  Source:
+                  <a
+                    href="https://ggforce.data-imaginist.com/reference/geom_mark_ellipse.html"
+                    >ggforce reference</a
+                  >
+                </p>
+              </article>
+
+              <article class="card">
+                <h3>gghighlight</h3>
+                <p class="venue">R, ggplot2 extension</p>
+                {{p-gghighlight}}
+                <p class="model">
+                  <b>Decomposition:</b> a predicate splits the marks;
+                  <code>unhighlighted_params</code> restyles the rest. Emphasis
+                  lands on marks the annotation does not target. Direct labels
+                  on the highlighted series by default.
+                </p>
+                <p class="src">
+                  Source:
+                  <a
+                    href="https://yutannihilation.github.io/gghighlight/articles/gghighlight.html"
+                    >gghighlight vignette</a
+                  >
+                </p>
+              </article>
+
+              <article class="card">
+                <h3>Observable Plot</h3>
+                <p class="venue">JS library. Excerpt, note text shortened</p>
+                {{p-plot}}
+                <p class="model">
+                  <b>Decomposition:</b> no annotation subsystem. Rules, rects,
+                  text, <code>arrow</code>/<code>link</code> and
+                  <code>tip</code> are ordinary marks with literal data.
+                  <code>tip</code> picks its anchor but does not avoid other
+                  tips.
+                </p>
+                <p class="src">
+                  Source:
+                  <a href="https://github.com/observablehq/plot"
+                    >observablehq/plot docs (tip.md, arrow.md)</a
+                  >
+                </p>
+              </article>
+
+              <article class="card">
+                <h3>Vega-Lite / Altair</h3>
+                <p class="venue">Grammar. Syntax from memory</p>
+                {{p-vl}}
+                <p class="model">
+                  <b>Decomposition:</b> no annotation primitive. A rule or rect
+                  layer for reference lines and bands, a text layer for notes,
+                  no arrow mark. Highlight is a conditional encoding.
+                </p>
+                <p class="src">
+                  Source: AnnoGram paper for the absence claim;
+                  <a href="https://vega.github.io/vega-lite/"
+                    >vega.github.io/vega-lite</a
+                  >
+                </p>
+              </article>
+
+              <article class="card">
+                <h3>Bluefish</h3>
+                <p class="venue">Pollock et al. UIST 2024</p>
+                {{p-bluefish}}
+                <p class="model">
+                  <b>Decomposition:</b> relations over references. Subject =
+                  <code>Ref</code>, note placement = <code>Align</code> +
+                  <code>Distribute</code>, connector = <code>Arrow</code>. This
+                  is today's GoFish Approach A.
+                </p>
+                <p class="src">
+                  Source:
+                  <a href="https://github.com/bluefishjs/bluefish"
+                    >bluefishjs/bluefish</a
+                  >
+                </p>
+              </article>
+
+              <article class="card">
+                <h3>TikZ</h3>
+                <p class="venue">LaTeX. From memory (standard)</p>
+                {{p-tikz}}
+                <p class="model">
+                  <b>Decomposition:</b> annotate named nodes.
+                  <code>pin</code> is a label with a short edge,
+                  <code>label</code> has none, <code>fit</code> encloses named
+                  nodes, a brace decoration marks a span.
+                </p>
+                <p class="src">Source: TikZ and PGF manual</p>
+              </article>
+
+              <article class="card">
+                <h3>Math Augmentation / FFL</h3>
+                <p class="venue">
+                  Head, Xie, Hearst, CHI 2022; Wu et al. (Head), UIST 2023
+                </p>
+                {{p-ffl}}
+                <p class="model">
+                  <b>Decomposition:</b> selector + properties, written apart
+                  from the formula (R6). Labels place themselves to avoid each
+                  other; <code>label-marker: extent</code> draws a margin
+                  bracket instead of a leader.
+                </p>
+                <p class="src">
+                  Source:
+                  <a href="https://andrewhead.info/">andrewhead.info</a>
+                  (augmented-formulas.pdf, ffl.pdf)
+                </p>
+              </article>
+            </div>
+
+            <h3>
+              Rahman et al.'s taxonomy: share of 1,888 annotated charts by type
+            </h3>
+            <p class="small muted">
+              TVCG 2025 (arXiv 2306.06043). A chart can carry several types, so
+              the shares add to more than 100%.
+            </p>
+            <ul class="bars">
+              <li>
+                <span>Text</span
+                ><span class="track"
+                  ><span
+                    class="fill"
+                    style="display: block; width: 76%"
+                  ></span></span
+                ><span class="v">76%</span>
+              </li>
+              <li>
+                <span>Enclosure</span
+                ><span class="track"
+                  ><span
+                    class="fill"
+                    style="display: block; width: 31%"
+                  ></span></span
+                ><span class="v">31%</span>
+              </li>
+              <li>
+                <span>Connector</span
+                ><span class="track"
+                  ><span
+                    class="fill"
+                    style="display: block; width: 21%"
+                  ></span></span
+                ><span class="v">21%</span>
+              </li>
+              <li>
+                <span>Indicator</span
+                ><span class="track"
+                  ><span
+                    class="fill"
+                    style="display: block; width: 20%"
+                  ></span></span
+                ><span class="v">20%</span>
+              </li>
+              <li>
+                <span>Glyph</span
+                ><span class="track"
+                  ><span
+                    class="fill"
+                    style="display: block; width: 14%"
+                  ></span></span
+                ><span class="v">14%</span>
+              </li>
+              <li>
+                <span>Color</span
+                ><span class="track"
+                  ><span
+                    class="fill"
+                    style="display: block; width: 14%"
+                  ></span></span
+                ><span class="v">14%</span>
+              </li>
+              <li>
+                <span>Geometric</span
+                ><span class="track"
+                  ><span
+                    class="fill"
+                    style="display: block; width: 3%"
+                  ></span></span
+                ><span class="v">3%</span>
+              </li>
+            </ul>
+          </section>
+
+          <section id="examples">
+            <h2><span class="secnum">04</span>Examples × approaches</h2>
+            <div class="prose">
+              <p>
+                Five hard examples. Each one is rendered with today's primitives
+                (A), and examples 1 to 4 also with prototype helpers (B). C is
+                not implemented, so its rows show code and say which render
+                shows the expected picture and how C would differ. Line and
+                token counts are for the spec only, after prettier, from
+                <code>prototype-notes.md</code>. The stories are in
+                <code
+                  >packages/gofish-graphics/stories/_proposals/annotations/</code
+                >.
+              </p>
+            </div>
+            <div class="legend-grid">
+              <div>
+                <span class="atag">A · today</span>
+                <p class="small" style="margin: 0">
+                  Change nothing in the API. Every part is an ordinary mark
+                  placed by constraints.
+                </p>
+              </div>
+              <div>
+                <span class="atag">B · prototype</span>
+                <p class="small" style="margin: 0">
+                  A bundled <code>callout</code> construct (the d3-annotation
+                  and AnnoGram model), prototyped as helpers that expand into A.
+                </p>
+              </div>
+              <div>
+                <span class="atag c">C · proposed</span>
+                <p class="small" style="margin: 0">
+                  Selection + subject mark + <code>.label()</code>, with a new
+                  <code>leader</code> option and a new <code>topK</code> step.
+                </p>
+              </div>
+            </div>
+            <div class="table-scroll" style="max-width: 900px">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Part</th>
+                    <th>C construct</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>target</td>
+                    <td class="wrap">
+                      <code
+                        >chart(selectAll(name)).flow(filter(...) /
+                        topK(...))</code
+                      >
+                      or <code>datum(...)</code> coordinates
+                    </td>
+                    <td><span class="chip new">topK new</span></td>
+                  </tr>
+                  <tr>
+                    <td>subject</td>
+                    <td class="wrap">
+                      any relational mark over the selection:
+                      <code>enclose({ shape: Shape.* })</code>, a
+                      <code>rect</code> rule or band, or nothing
+                    </td>
+                    <td><span class="chip">exists</span></td>
+                  </tr>
+                  <tr>
+                    <td>note</td>
+                    <td class="wrap">
+                      <code>.label(accessor, { position })</code> on the subject
+                      mark
+                    </td>
+                    <td><span class="chip">exists</span></td>
+                  </tr>
+                  <tr>
+                    <td>connector</td>
+                    <td class="wrap"><code>.label(..., { leader })</code></td>
+                    <td><span class="chip new">new option</span></td>
+                  </tr>
+                  <tr>
+                    <td>emphasis</td>
+                    <td class="wrap">separate construct</td>
+                    <td><span class="chip">#641</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- EXAMPLE 1 -->
+            <article class="ex" id="ex1">
+              <div class="ex-head">
+                <h3>1. Peak callout</h3>
+                <span class="muted small">GOOG monthly price</span>
+              </div>
+              <p class="ex-intro">
+                A circle around a line's maximum, a two-line note up and to the
+                left, and a straight leader.
+              </p>
+
+              <div class="arow">
+                <div class="arow-head">
+                  <span class="atag">A · today</span
+                  ><span class="count">39 lines · 315 tokens</span>
+                </div>
+                <div class="arow-body">
+                  <div class="side">
+                    <figure class="paper">
+                      <img
+                        src="img/crop/ex1-peak-a.png"
+                        alt="GOOG price line with a red circle on the 2007 peak and a note 'Peak, $707 in Oct 2007' joined by a red arrow"
+                        width="659"
+                        height="401"
+                      />
+                    </figure>
+                    <ul>
+                      <li>
+                        The selection is honest: <code>derive</code> +
+                        <code>maxBy</code> over
+                        <code>selectAll("months")</code>, since there is no
+                        extremum selector (#796).
+                      </li>
+                      <li>
+                        The note's text is computed outside the chart. A free
+                        note cannot read the selected row.
+                      </li>
+                      <li>
+                        Two <code>Constraint.distribute</code> calls place the
+                        note. "Above" follows the axis direction.
+                      </li>
+                      <li>
+                        The leader is an <code>arrow</code>, so it always has a
+                        head, and it ends on the bounding box (#975).
+                      </li>
+                    </ul>
+                  </div>
+                  <div class="codes">{{ex1a}}</div>
+                </div>
+              </div>
+
+              <div class="arow">
+                <div class="arow-head">
+                  <span class="atag">B · prototype <code>callout</code></span
+                  ><span class="count">12 lines · 128 tokens</span>
+                </div>
+                <div class="arow-body">
+                  <div class="side">
+                    <figure class="paper">
+                      <img
+                        src="img/crop/ex1-peak-b.png"
+                        alt="Same chart as A; the render is byte-identical"
+                        width="659"
+                        height="401"
+                      />
+                    </figure>
+                    <p>
+                      Normalized SVG is identical to A.
+                      <code>argmax(field)</code> is <code>derive</code> +
+                      <code>maxBy</code>; <code>callout</code> expands into A's
+                      layer, two distributes and an arrow. It could not be a
+                      <code>.label()</code> option, because
+                      <code>Place</code> is closed and a label is not a named
+                      node <code>arrow</code> can target. The note text is still
+                      computed outside the chart.
+                    </p>
+                  </div>
+                  <div class="codes">{{ex1b}}</div>
+                </div>
+              </div>
+
+              <div class="arow c">
+                <div class="arow-head">
+                  <span class="atag c">C · proposed</span
+                  ><span class="count"
+                    >about 12 lines for a callout (proposal estimate)</span
+                  >
+                </div>
+                <div class="arow-body">
+                  <div class="side">
+                    <div class="notrender">
+                      <div class="k">Not implemented, not rendered</div>
+                      <p>
+                        The expected picture is the A render above (B is
+                        identical). C would differ in these ways:
+                      </p>
+                      <ul>
+                        <li>The leader has no head.</li>
+                        <li>
+                          The note is a label, so it reads the selected row
+                          (<code>Peak: $707</code>) and avoids other labels and
+                          the data.
+                        </li>
+                        <li>
+                          Placement is directional (<code>nw</code>, 40 px)
+                          instead of an exact offset (decision 3).
+                        </li>
+                        <li>
+                          The note is one line. A bold title over a body needs
+                          rich text (decision 7).
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="codes">
+                    <p class="lang">JavaScript</p>
+                    {{ex1c}}
+                    <p class="lang">Python</p>
+                    {{ex1cpy}}
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <!-- EXAMPLE 2 -->
+            <article class="ex" id="ex2">
+              <div class="ex-head">
+                <h3>2. Rule and band</h3>
+                <span class="muted small"
+                  >Seattle mean daily high per month, 2012 to 2015</span
+                >
+              </div>
+              <p class="ex-intro">
+                The mean as a labeled rule and summer 2015 as a labeled band.
+              </p>
+
+              <div class="arow">
+                <div class="arow-head">
+                  <span class="atag">A · today</span
+                  ><span class="count">22 lines · 194 tokens</span>
+                </div>
+                <div class="arow-body">
+                  <div class="side">
+                    <figure class="paper">
+                      <img
+                        src="img/crop/ex2-rule-band-a.png"
+                        alt="Temperature line with a shaded summer 2015 band and a gray mean rule, both labeled"
+                        width="700"
+                        height="364"
+                      />
+                    </figure>
+                    <ul>
+                      <li>
+                        A time axis needs epoch milliseconds.
+                        <code>datum("2015-06-01")</code> is concatenated into a
+                        string and the render throws.
+                      </li>
+                      <li>
+                        A literal label needs a function,
+                        <code>.label(() => "summer 2015")</code>, because a bare
+                        string is a field name.
+                      </li>
+                      <li>
+                        <code>.zOrder(-1)</code> puts the band under the line by
+                        hand.
+                      </li>
+                    </ul>
+                  </div>
+                  <div class="codes">{{ex2a}}</div>
+                </div>
+              </div>
+
+              <div class="arow">
+                <div class="arow-head">
+                  <span class="atag">A · mean computed in the chart</span
+                  ><span class="count">14 lines · 146 tokens</span>
+                </div>
+                <div class="arow-body">
+                  <div class="side">
+                    <figure class="paper">
+                      <img
+                        src="img/crop/ex2-rule-band-a-mean-in-chart.png"
+                        alt="Temperature line with a mean rule computed inside the chart; the y axis title reads temp, mean"
+                        width="700"
+                        height="351"
+                      />
+                    </figure>
+                    <p>
+                      Vega-Lite's <code>y: mean(temp)</code> idiom. One wart:
+                      the rule's field joins the y axis title, which reads
+                      "temp, mean".
+                    </p>
+                  </div>
+                  <div class="codes">{{ex2a2}}</div>
+                </div>
+              </div>
+
+              <div class="arow">
+                <div class="arow-head">
+                  <span class="atag"
+                    >B · prototype <code>rule</code> / <code>band</code></span
+                  ><span class="count">15 lines · 155 tokens</span>
+                </div>
+                <div class="arow-body">
+                  <div class="side">
+                    <figure class="paper">
+                      <img
+                        src="img/crop/ex2-rule-band-b.png"
+                        alt="Same chart as A; the render is byte-identical"
+                        width="700"
+                        height="364"
+                      />
+                    </figure>
+                    <p>
+                      Identical to A. <code>rule</code> and
+                      <code>band</code> return a <code>rect</code>, so
+                      <code>.label()</code> and <code>.zOrder()</code> chain.
+                      The saving is small; the real gain is hiding the
+                      conversion to milliseconds.
+                    </p>
+                  </div>
+                  <div class="codes">{{ex2b}}</div>
+                </div>
+              </div>
+
+              <div class="arow c">
+                <div class="arow-head">
+                  <span class="atag c">C · proposed</span
+                  ><span class="count"
+                    >today's spelling, two fixes, no new marks</span
+                  >
+                </div>
+                <div class="arow-body">
+                  <div class="side">
+                    <div class="notrender">
+                      <div class="k">Not implemented, not rendered</div>
+                      <p>
+                        The expected picture is the A render (B is identical). C
+                        needs two fixes:
+                      </p>
+                      <ul>
+                        <li>
+                          <code>datum</code> reads its value through the axis's
+                          column type, so an ISO date works on a time axis.
+                        </li>
+                        <li>
+                          A tier's fields stay out of the axis title, so the
+                          in-chart mean leaves the title as "temp".
+                        </li>
+                      </ul>
+                      <p style="margin-top: 6px">
+                        The <code>w: datum(end)</code> form assumes an interval
+                        reading of <code>datum</code> (decision 6). A
+                        <code>rule</code> or <code>band</code> name would save
+                        about one line per use, so the proposal does not add
+                        them.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="codes">{{ex2c}}</div>
+                </div>
+              </div>
+            </article>
+
+            <!-- EXAMPLE 3 -->
+            <article class="ex" id="ex3">
+              <div class="ex-head">
+                <h3>3. Highlight one series</h3>
+                <span class="muted small"
+                  >five stocks, yearly average price (gghighlight)</span
+                >
+              </div>
+              <p class="ex-intro">
+                AAPL in red on top, the others gray, an end label on AAPL only.
+              </p>
+
+              <div class="arow">
+                <div class="arow-head">
+                  <span class="atag">A · today</span
+                  ><span class="count">17 lines · 177 tokens</span>
+                </div>
+                <div class="arow-body">
+                  <div class="side">
+                    <figure class="paper">
+                      <img
+                        src="img/crop/ex3-highlight-a.png"
+                        alt="Five stock lines; AAPL in red with an end label, the others gray"
+                        width="659"
+                        height="357"
+                      />
+                    </figure>
+                    <p>
+                      The idiom works: a partial
+                      <code>Color.palette</code> grays the rest,
+                      <code>.zOrder(fn)</code> raises AAPL, and the label
+                      accessor returns <code>""</code> for the others. One idea,
+                      "AAPL is emphasized", is spelled three times (#641).
+                    </p>
+                  </div>
+                  <div class="codes">{{ex3a}}</div>
+                </div>
+              </div>
+
+              <div class="arow">
+                <div class="arow-head">
+                  <span class="atag">B · prototype <code>emphasize</code></span
+                  ><span class="count">20 lines · 133 tokens</span>
+                </div>
+                <div class="arow-body">
+                  <div class="side">
+                    <figure class="paper">
+                      <img
+                        src="img/crop/ex3-highlight-b.png"
+                        alt="Same chart as A; the render is byte-identical"
+                        width="659"
+                        height="357"
+                      />
+                    </figure>
+                    <p>
+                      Identical to A. Fewer tokens, but it still lands in two
+                      places, because the color scale is a chart option while z
+                      and label are mark modifiers.
+                    </p>
+                  </div>
+                  <div class="codes">{{ex3b}}</div>
+                </div>
+              </div>
+
+              <div class="arow c">
+                <div class="arow-head">
+                  <span class="atag c">C · proposed</span
+                  ><span class="count">no C spelling</span>
+                </div>
+                <div class="arow-body">
+                  <div class="side">
+                    <div class="notrender">
+                      <div class="k">Out of scope for this design</div>
+                      <p>
+                        Color emphasis restyles marks the annotation does not
+                        own and reshapes a shared color scale, so it moves to
+                        #641 (decision 8). Until then the A spelling stays.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="nob">
+                    No code. See #641: one declaration drives color and paint
+                    order.
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <!-- EXAMPLE 4 -->
+            <article class="ex" id="ex4">
+              <div class="ex-head">
+                <h3>4. Group enclosure and note</h3>
+                <span class="muted small">gapminder countries</span>
+              </div>
+              <p class="ex-intro">
+                A blob around Sub-Saharan Africa with a note and an arrow.
+              </p>
+
+              <div class="arow">
+                <div class="arow-head">
+                  <span class="atag">A · today</span
+                  ><span class="count">44 lines · 307 tokens</span
+                  ><span class="chip warn">arrow misses (#975)</span>
+                </div>
+                <div class="arow-body">
+                  <div class="side">
+                    <figure class="paper">
+                      <img
+                        src="img/crop/ex4-enclosure-a.png"
+                        alt="Scatter with a teal blob around the African countries; the arrow from the note ends in empty space above the cloud"
+                        width="742"
+                        height="376"
+                      />
+                    </figure>
+                    <p>
+                      The arrow aims from box to box. The blob's bounding box
+                      covers most of the plot and its top-right corner is empty,
+                      so the arrow ends in blank space. This is the worst visual
+                      failure in the set.
+                    </p>
+                  </div>
+                  <div class="codes">{{ex4a}}</div>
+                </div>
+              </div>
+
+              <div class="arow">
+                <div class="arow-head">
+                  <span class="atag"
+                    >A · workaround, arrow aimed at one member</span
+                  ><span class="count">55 lines · 391 tokens</span>
+                </div>
+                <div class="arow-body">
+                  <div class="side">
+                    <figure class="paper">
+                      <img
+                        src="img/crop/ex4-enclosure-a-aim-at-member.png"
+                        alt="Same scatter; the arrow now ends at one African country inside the blob"
+                        width="750"
+                        height="376"
+                      />
+                    </figure>
+                    <p>
+                      This looks right only because the user picks a stand-in
+                      target by hand: a second selection (the African country
+                      with the highest fertility) in an invisible padded
+                      <code>enclose</code>, plus a second distribute.
+                    </p>
+                  </div>
+                  <div class="codes">{{ex4a2}}</div>
+                </div>
+              </div>
+
+              <div class="arow">
+                <div class="arow-head">
+                  <span class="atag">B · prototype <code>callout</code></span
+                  ><span class="count">23 lines · 161 tokens</span>
+                </div>
+                <div class="arow-body">
+                  <div class="side">
+                    <figure class="paper">
+                      <img
+                        src="img/crop/ex4-enclosure-b.png"
+                        alt="Same as A; the arrow still ends in empty space"
+                        width="742"
+                        height="376"
+                      />
+                    </figure>
+                    <p>
+                      Same elements as A; the note and arrow paint under the
+                      dots, and coordinates differ by up to 0.01 px. It inherits
+                      #975, so the arrow misses the same way.
+                    </p>
+                  </div>
+                  <div class="codes">{{ex4b}}</div>
+                </div>
+              </div>
+
+              <div class="arow c">
+                <div class="arow-head">
+                  <span class="atag c">C · proposed</span
+                  ><span class="count"
+                    >about 12 lines for a callout (proposal estimate)</span
+                  >
+                </div>
+                <div class="arow-body">
+                  <div class="side">
+                    <div class="notrender">
+                      <div class="k">Not implemented, not rendered</div>
+                      <p>
+                        The expected picture is the A render with these
+                        differences:
+                      </p>
+                      <ul>
+                        <li>
+                          The leader ends on the blob's outline, at the point
+                          nearest the note, once #975 is fixed. The label
+                          already reads its target's outline
+                          (<code>Outline</code>, #1205), so this is the same
+                          query #975 needs for arrows. Fixing it once fixes
+                          both.
+                        </li>
+                        <li>
+                          The leader is a <code>Curve.natural()</code> line with
+                          no head.
+                        </li>
+                        <li>
+                          The note is one line, placed east of the blob, 24 px
+                          off.
+                        </li>
+                      </ul>
+                      <p style="margin-top: 6px">
+                        The workaround render is the closest picture of where
+                        the leader should land.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="codes">{{ex4c}}</div>
+                </div>
+              </div>
+            </article>
+
+            <!-- EXAMPLE 5 -->
+            <article class="ex" id="ex5">
+              <div class="ex-head">
+                <h3>5. Math augmentation</h3>
+                <span class="muted small"
+                  ><code>Var(X) = E[(X − μ)²]</code></span
+                >
+              </div>
+              <p class="ex-intro">
+                Three colored terms, each with a bar, a note and a leader.
+              </p>
+
+              <div class="arow">
+                <div class="arow-head">
+                  <span class="atag">A · today</span
+                  ><span class="count">66 lines · 519 tokens</span>
+                </div>
+                <div class="arow-body">
+                  <div class="side">
+                    <figure class="paper" style="max-width: 420px">
+                      <img
+                        src="img/crop/ex5-math-a.png"
+                        alt="The variance formula with three colored terms, each underlined, with a note below joined by a small arrow; the middle note sits lower"
+                        width="356"
+                        height="194"
+                      />
+                    </figure>
+                    <ul>
+                      <li>
+                        Each term gets a 2 px bar sized by
+                        <code>Constraint.align({ x: "span" })</code>, a note
+                        under it, and an <code>arrow</code>.
+                      </li>
+                      <li>
+                        Notes do not avoid each other. The first render
+                        overlapped, so <code>depth</code> staggers them by hand.
+                      </li>
+                      <li>
+                        The connector always has a head; no headless
+                        <code>arrow</code> exists.
+                      </li>
+                    </ul>
+                  </div>
+                  <div class="codes">{{ex5a}}</div>
+                </div>
+              </div>
+
+              <div class="arow">
+                <div class="arow-head">
+                  <span class="atag">B · prototype</span
+                  ><span class="count">none</span>
+                </div>
+                <div class="nob">No B prototype for this example.</div>
+              </div>
+
+              <div class="arow c">
+                <div class="arow-head">
+                  <span class="atag c">C · proposed</span
+                  ><span class="count">one term shown</span>
+                </div>
+                <div class="arow-body">
+                  <div class="side">
+                    <div class="notrender">
+                      <div class="k">Not implemented, not rendered</div>
+                      <p>
+                        The expected picture is the A render with these
+                        differences:
+                      </p>
+                      <ul>
+                        <li>
+                          Each term gets a label with a leader. Because the
+                          notes are labels, they avoid each other automatically,
+                          so no hand-staggered depths.
+                        </li>
+                        <li>Leaders have no head.</li>
+                        <li>
+                          The bar under each term is the one subject with no
+                          <code>Shape</code> member. Until a future
+                          <code>Shape.bracket({ side })</code> (decision 9), it
+                          stays a <code>rect</code> aligned to the term's span.
+                          FFL calls this <code>label-marker: extent</code>; TikZ
+                          draws it as a brace.
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div class="codes">{{ex5c}}</div>
+                </div>
+              </div>
+            </article>
+          </section>
+
+          <section id="types">
+            <h2><span class="secnum">05</span>d3-annotation types</h2>
+            <div class="prose">
+              <p>
+                One story draws the same 10-point line chart eight times, once
+                per d3-annotation type, with today's primitives. All eight
+                render. The table gives each type's C spelling and what today's
+                composition lacks.
+              </p>
+            </div>
+            <figure class="paper" style="margin: 0 0 18px">
+              <img
+                src="img/d3a-grid.png"
+                alt="Eight small line charts: label, callout, elbow, curve, calloutCircle, calloutRect, xyThreshold, badge"
+                width="1264"
+                height="425"
+              />
+            </figure>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>d3 type</th>
+                    <th>C spelling</th>
+                    <th>Today (A): how faithful, what is missing</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>label</code></td>
+                    <td><code>.label(text, { position })</code></td>
+                    <td>Good.</td>
+                  </tr>
+                  <tr>
+                    <td><code>callout</code></td>
+                    <td>
+                      <code>.label(text, { position, leader: {} })</code
+                      ><br /><span class="small muted"
+                        >the d3 underline is a style question, see
+                        <a href="#decisions">decisions</a></span
+                      >
+                    </td>
+                    <td>
+                      The rule's width is hard-coded (44 px);
+                      <code>align({ x: "span" })</code> throws when the note is
+                      placed only by constraints. The connector has a head.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>elbow</code></td>
+                    <td><code>leader: { curve: Curve.step() }</code></td>
+                    <td>
+                      <code>line</code> runs center to center, so it ends at the
+                      dot's center (#975).
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>curve</code></td>
+                    <td><code>leader: { curve: Curve.natural() }</code></td>
+                    <td>
+                      Good (the perfect-arrows bow). The head is always on.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>calloutCircle</code></td>
+                    <td>
+                      <code
+                        >enclose({ shape: Shape.oval() }).label(..., { leader
+                        })</code
+                      >
+                    </td>
+                    <td>
+                      Good. The arrow lands on the circle's box, close enough
+                      for a small circle.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>calloutRect</code></td>
+                    <td>
+                      <code
+                        >enclose({ shape: Shape.box() }).label(..., { leader
+                        })</code
+                      >
+                    </td>
+                    <td>Good. The region is chosen by a data test.</td>
+                  </tr>
+                  <tr>
+                    <td><code>xyThreshold</code></td>
+                    <td><code>rect({ y: datum(v), h: 1 }).label(...)</code></td>
+                    <td>Good. A dashed rule is not possible.</td>
+                  </tr>
+                  <tr>
+                    <td><code>badge</code></td>
+                    <td>
+                      <code
+                        >.label("A", { position: Place.around(), background: {
+                        ... } })</code
+                      >
+                    </td>
+                    <td>
+                      Good. Needs its own nested <code>.relate()</code> to
+                      center the letter.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="approach-d">
+            <h2>
+              <span class="secnum">06</span>Approach D: target-first effect
+              lists <span class="chip">sketch, not rendered</span>
+            </h2>
+            <div class="prose">
+              <p>
+                The AnnoGram, ChartMark and FFL model: one target with a list of
+                effects, in the style of CSS.
+              </p>
+            </div>
+            <div class="sketch">{{appD}}</div>
+            <div class="prose">
+              <p>
+                GoFish already writes "one target, several effects" as a
+                <code>.layer(chart(selection)...)</code> tier with a mark and
+                its modifiers, so <code>annotate</code> would be a second
+                spelling of <code>.layer</code>. It is also the
+                <code>operator()</code>-with-options shape that bundles separate
+                constructs under one name. The one thing it adds is emphasis in
+                the same list, and emphasis needs to reach the color scale,
+                which a tier cannot do.
+              </p>
+              <p>
+                <b>Rejected</b>, but recorded because it is the dominant model
+                in the recent grammars.
+              </p>
+            </div>
+          </section>
+
+          <section id="tradeoffs">
+            <h2><span class="secnum">07</span>Trade-offs: A, B, C</h2>
+
+            <div class="approach">
+              <div class="approach-head"><h3>A. Idioms only</h3></div>
+              <p>
+                Change nothing in the API. Write a how-to page (#1109, the
+                annotation tutorial) and fix the bugs the examples hit. Code:
+                <a href="#ex1">example 1, row A</a>.
+              </p>
+              <div class="kv">
+                <div>
+                  <div class="k">Composes</div>
+                  <div>Fully. It is today's core.</div>
+                </div>
+                <div>
+                  <div class="k">Easy</div>
+                  <div>Anything. Every part is an ordinary mark.</div>
+                </div>
+                <div>
+                  <div class="k">Awkward</div>
+                  <div>
+                    A callout needs an outer <code>layer</code>, two distributes
+                    and an <code>arrow</code>. The note cannot read the selected
+                    row, so its text is computed outside the chart. "Above" in a
+                    <code>distribute</code> follows the axis direction, so it
+                    flips between a chart and a top-down diagram. Free notes do
+                    not avoid each other (the math example).
+                  </div>
+                </div>
+                <div>
+                  <div class="k">New terms</div>
+                  <div>None.</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="approach">
+              <div class="approach-head">
+                <h3>B. A bundled <code>callout</code> construct</h3>
+                <span class="muted small"
+                  >the d3-annotation and AnnoGram model</span
+                >
+              </div>
+              <p>
+                One relational mark that takes a selection and three parts.
+                Prototyped as a helper that expands into Approach A. The renders
+                are byte-identical to A for examples 1 to 3.
+              </p>
+              {{appB}}
+              <div class="kv" style="margin-top: 12px">
+                <div>
+                  <div class="k">Composes</div>
+                  <div>
+                    It is exactly the composition in A, so it can be defined by
+                    that rewrite.
+                  </div>
+                </div>
+                <div>
+                  <div class="k">Easy</div>
+                  <div>The common callout in 12 lines instead of 39.</div>
+                </div>
+                <div>
+                  <div class="k">Awkward</div>
+                  <div>
+                    It is a second way to put text next to a mark.
+                    <code>callout</code> and <code>.label()</code> cover much of
+                    the same ground by different routes. That is the "large
+                    partial overlap" API Design warns against, and the same
+                    split the label design already rejected. Its
+                    <code>subject</code> option re-lists <code>enclose</code>'s
+                    shapes, and every new subject kind (a bracket, a rule) has
+                    to be added twice. Its notes do not take part in label
+                    placement or avoidance unless it is rebuilt on
+                    <code>.label()</code>.
+                  </div>
+                </div>
+                <div>
+                  <div class="k">New terms</div>
+                  <div>
+                    <code>callout</code>, <code>subject</code>,
+                    <code>connector</code>, and a preset family if the d3 types
+                    are wanted by name.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="approach rec">
+              <div class="approach-head">
+                <h3>C. Selection + subject + label</h3>
+                <span class="atag c">recommended</span>
+              </div>
+              <p>
+                Each part of an annotation is an existing construct, and the
+                parts compose the way the graphical operators do. Code:
+                <a href="#ex1">examples 1</a>, <a href="#ex2">2</a>,
+                <a href="#ex4">4</a>, <a href="#ex5">5</a>, row C.
+              </p>
+              <div class="kv">
+                <div>
+                  <div class="k">Composes</div>
+                  <div>
+                    Everything stays the same graph of marks and refs.
+                    <code>leader</code> elaborates into a <code>line</code> in
+                    the label tier from the label's box to the target's outline,
+                    so the core gains no node kind (Principles, "Why keep the
+                    core small"). Under a coordinate transform it inherits
+                    <code>.label()</code>'s rules: Cartesian now, polar with
+                    #1201. Animation follows from labels being attached to their
+                    marks (#1206).
+                  </div>
+                </div>
+                <div>
+                  <div class="k">Easy</div>
+                  <div>
+                    Callouts in about 12 lines. Notes read the selected rows,
+                    because a label reads its mark's data. Notes avoid each
+                    other and the data. Every part is swappable.
+                  </div>
+                </div>
+                <div>
+                  <div class="k">Awkward</div>
+                  <div>
+                    A note with no subject needs something to hang the label on
+                    (decision 5). Notes with a bold title over a body need rich
+                    text in <code>text</code> (decision 7). Placement is
+                    directional (<code>nw</code>, 40 px) rather than an exact
+                    pixel offset (decision 3).
+                  </div>
+                </div>
+                <div>
+                  <div class="k">New terms</div>
+                  <div><code>leader</code>, <code>topK</code>.</div>
+                </div>
+                <div>
+                  <div class="k">Cost to extend</div>
+                  <div>
+                    A new subject is a new <code>Shape</code> member or any
+                    relational mark. A new connector route is a
+                    <code>Curve</code> member. A custom placement is a
+                    <code>Place</code> strategy (#1101).
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="overlap">
+            <h2><span class="secnum">08</span>Overlap check for C</h2>
+            <div class="table-scroll" style="max-width: 960px">
+              <table>
+                <thead>
+                  <tr>
+                    <th>New piece</th>
+                    <th>Against</th>
+                    <th>Relation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>leader</code></td>
+                    <td><code>arrow</code></td>
+                    <td>
+                      A small shared case. An arrow from a label to its target
+                      is a leader with a head. Both are built on one
+                      outline-clipped line (#975), so they cannot drift apart.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>topK</code></td>
+                    <td><code>filter</code> + <code>derive</code></td>
+                    <td>
+                      An exact composition (sort by the key, take the first k).
+                      It is defined by that rewrite.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>annotation subjects</td>
+                    <td><code>enclose</code></td>
+                    <td>
+                      Identical. The subject <i>is</i> an <code>enclose</code>.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="recommendation">
+            <h2><span class="secnum">09</span>Recommendation: choose C</h2>
+            <ul class="args">
+              <li>
+                <b>It desugars into the existing core.</b>
+                <code>leader</code> is a <code>line</code> in the label tier,
+                and <code>topK</code> is sort and take. No new node kinds
+                (Principles, "Why keep the core small").
+              </li>
+              <li>
+                <b>One concept is one operator.</b> The note stays
+                <code>.label()</code>, so there is no second text placement
+                path. The subject stays <code>enclose</code>, so there is no
+                second shape list (API Design).
+              </li>
+              <li>
+                <b>Few new terms, with precedent.</b> "Leader" is the drafting
+                and cartography word. <code>topK</code> is polars'
+                <code>top_k</code>, which is the first precedent for data
+                transforms in API Design. dplyr's <code>slice_max</code> is the
+                alternative.
+              </li>
+              <li>
+                <b>The data link holds.</b> Targets are selections, which follow
+                the data. This is the property ChartAccent's and Rahman's study
+                participants asked for.
+              </li>
+              <li>
+                <b>Customization keeps the existing families.</b> Subjects are
+                <code>Shape</code> members, leader routes are
+                <code>Curve</code> members, and placements are
+                <code>Place</code> members, each with #1101 as the escape hatch.
+              </li>
+              <li>
+                <b>Same shape in JS and Python.</b> <code>leader</code> is a
+                dict like <code>halo</code> and <code>background</code>, and
+                <code>top_k</code> is a flow step.
+              </li>
+            </ul>
+            <h3>Runner-up: B as sugar over C</h3>
+            <div class="prose">
+              <p>
+                If real use shows that people write the same callout setup again
+                and again, a <code>callout</code> preset can be added later as
+                an exact rewrite into C: subject + label + leader. It should be
+                built on <code>.label()</code>, not beside it as in the
+                prototype.
+              </p>
+              <p>
+                <b>What would change the pick:</b> user tests where people
+                cannot find "enclose + label + leader" and look for a word like
+                "annotate" or "callout". A how-to page titled "Annotate a
+                visualization" may cover that without a new name.
+              </p>
+            </div>
+          </section>
+
+          <section id="gaps">
+            <h2>
+              <span class="secnum">10</span>Gaps found, independent of the
+              approach
+            </h2>
+            <p class="prose">
+              These hurt every approach, ranked by how much they hurt in the
+              prototypes.
+            </p>
+            <ol class="gaps">
+              <li>
+                <b>#975</b>: arrows end on the bounding box, not the outline.
+                This broke example 4 and put elbow ends at centers.
+              </li>
+              <li>
+                <b>#521</b>: there is no leader from a label to its target. That
+                is what <code>leader</code> adds.
+              </li>
+              <li>
+                <b>A free note cannot read the selected row.</b> C fixes this by
+                making the note a label.
+              </li>
+              <li>
+                <b>#641</b>: one emphasis is spelled three times (palette,
+                <code>zOrder</code>, label test).
+              </li>
+              <li>
+                <b>#796</b>: there is no extremum selector. That is what
+                <code>topK</code> adds.
+              </li>
+              <li>
+                <code>arrow</code> cannot drop its head, and has no chart or bag
+                form.
+              </li>
+              <li>
+                Free notes do not avoid each other. C makes notes into labels,
+                which do.
+              </li>
+              <li>
+                <code>datum("2015-06-01")</code> on a time axis throws. It
+                should read through the column type.
+              </li>
+              <li>A rule tier's field joins the axis title.</li>
+              <li>
+                <b>#802 / #1203</b>: operators and bare tiers cannot be named,
+                which forces wrapper layers.
+              </li>
+            </ol>
+          </section>
+
+          <section id="decisions">
+            <h2><span class="secnum">11</span>Decisions for Josh</h2>
+            <div class="decisions-wrap">
+              <ol class="decisions">
+                <li>
+                  <div>
+                    <p class="q">Factoring.</p>
+                    <p class="d">
+                      Annotation = selection + subject mark +
+                      <code>.label()</code>, with no <code>annotate</code> or
+                      <code>callout</code> name (C)? Or a bundled
+                      <code>callout</code> (B) now?
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q"><code>leader</code> spelling and default.</p>
+                    <p class="d">
+                      <code>leader: {}</code> /
+                      <code>leader: { stroke, curve, head }</code>, off unless
+                      given? Or on automatically when a label lands more than
+                      some distance from its target, as ggrepel does?
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q">Far placement.</p>
+                    <p class="d">
+                      Is
+                      <code>Place.around({ directions, offset })</code> enough
+                      for callouts, or do callouts need an exact offset (<code
+                        >Place.at({ dx, dy })</code
+                      >, matplotlib's <code>xytext</code> in offset points)?
+                      "Up" must mean screen up, not the axis direction.
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q">Extremum step name.</p>
+                    <p class="d">
+                      <code>topK(k, { by })</code> and
+                      <code>bottomK</code> (polars),
+                      <code>sliceMax</code> (dplyr), or <code>argmax</code>?
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q">A note with no subject.</p>
+                    <p class="d">
+                      Label the original mark with a predicate (#804's
+                      value-keyed record, <code>.label({ AAPL: "..." })</code>),
+                      or allow <code>.label()</code> on a bare selection tier
+                      with no drawn subject?
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q">Rules and bands.</p>
+                    <p class="d">
+                      Keep them as <code>rect</code> + <code>datum</code> (no
+                      new marks), with the two fixes? Should
+                      <code>w: datum(end)</code> read as an interval end, so a
+                      band is <code>x: datum(a), w: datum(b)</code>?
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q">Rich notes.</p>
+                    <p class="d">
+                      A title line over a body line (d3-annotation's
+                      <code>title</code> + <code>label</code>). Is that a
+                      <code>text</code> feature (multi-line, spans) for a
+                      separate issue?
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q">Emphasis.</p>
+                    <p class="d">
+                      Leave it to #641, with this survey's input that emphasis
+                      is a predicate that styles both the selected marks and the
+                      others?
+                    </p>
+                  </div>
+                </li>
+                <li>
+                  <div>
+                    <p class="q">Brackets.</p>
+                    <p class="d">
+                      Add <code>Shape.bracket({ side })</code> for underbraces
+                      in math and diagrams, now or when a second example needs
+                      it?
+                    </p>
+                  </div>
+                </li>
+              </ol>
+            </div>
+          </section>
+
+          <section id="issues">
+            <h2><span class="secnum">12</span>Related issues</h2>
+            <ul class="issues">
+              <li>
+                <span class="num">#641</span
+                ><span
+                  >emphasize: one declaration drives color and paint
+                  order.</span
+                >
+              </li>
+              <li>
+                <span class="num">#796</span
+                ><span>Callouts anchored to data extremes.</span>
+              </li>
+              <li>
+                <span class="num">#521</span
+                ><span>The landing page needs a tag with a leader line.</span>
+              </li>
+              <li>
+                <span class="num">#975</span
+                ><span>Arrows should end on shape outlines (ray hit).</span>
+              </li>
+              <li>
+                <span class="num">#974</span
+                ><span>Boundary query (shared geometry interface).</span>
+              </li>
+              <li>
+                <span class="num">#1109</span><span>Annotation tutorial.</span>
+              </li>
+              <li>
+                <span class="num">#804</span
+                ><span>Value-keyed <code>.label()</code> record.</span>
+              </li>
+              <li>
+                <span class="num">#802, #1203</span
+                ><span
+                  >Operators cannot be named; a bare tier's
+                  <code>.name()</code> is not registered.</span
+                >
+              </li>
+              <li>
+                <span class="num">#803</span
+                ><span
+                  >Lower <code>.label()</code> onto public
+                  <code>selectAll</code> / <code>resolve</code>.</span
+                >
+              </li>
+              <li>
+                <span class="num">#1201</span
+                ><span>Polar and curved labels.</span>
+              </li>
+              <li>
+                <span class="num">#1206</span
+                ><span>Animated label stability.</span>
+              </li>
+              <li>
+                <span class="num">#1240</span
+                ><span>Should <code>Place</code> labels take room?</span>
+              </li>
+              <li>
+                <span class="num">#405</span
+                ><span>Old labels and annotation design notes (draft PR).</span>
+              </li>
+              <li>
+                <span class="num">#732</span
+                ><span>Span-to-span connectors (the DFSCQ funnel).</span>
+              </li>
+              <li>
+                <span class="num">#1069</span
+                ><span
+                  ><code>arrow</code>, <code>enclose</code> and
+                  <code>position</code> are not tagged for serialization.</span
+                >
+              </li>
+              <li>
+                <span class="num">#1257</span
+                ><span
+                  >Chrome as plain children of the chart layer. Annotations
+                  would be plain children too.</span
+                >
+              </li>
+              <li>
+                <span class="num">#1101</span
+                ><span>Custom strategy extensibility.</span>
+              </li>
+            </ul>
+            <footer>
+              Source: <code>proposals/annotations/proposal.md</code>. Prototype
+              code and counts:
+              <code>proposals/annotations/prototype-notes.md</code>. Prior work:
+              <code>proposals/annotations/research/prior-work.md</code>. A and B
+              renders are real GoFish output from the stories in
+              <code>stories/_proposals/annotations/</code>; C is not rendered.
+            </footer>
+          </section>
+        </main>
+      </div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/latex.min.js"></script>
+    <script>
+      if (window.hljs) {
+        hljs.configure({ ignoreUnescapedHTML: true });
+        hljs.highlightAll();
+      }
+    </script>
+  </body>
+</html>
