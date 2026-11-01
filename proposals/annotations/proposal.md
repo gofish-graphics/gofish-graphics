@@ -390,6 +390,27 @@ the operand kind (#707): `partition` arranges fresh children, `cut` makes fresh 
 
 Not prototyped. The cheap test is one line colored by yearly parts.
 
+**How `parts` relates to anchors** (round 4; the stacked-ribbons proposal, #47, branch
+`worktree-stacked-ribbons-proposal`, not signed off). There,
+`.anchor({ name, position: "x-max", slots: data(...).flow(stack(...)) })` declares a named
+region on a boundary part and lays out slots along it, and ribbons attach by anchor name.
+Anchors and parts both name a region of a mark's own geometry, with the same part names.
+They differ in where the region comes from:
+
+- **built-in** parts exist already: outline edges (`x-max`, `r-min`), a path's `at` range,
+  the label `Place` positions;
+- **declared** parts are anchors: an anchor's `position` is a part selector, and its slots
+  are a partition of that part into cells by a flow;
+- **found** parts come from `parts(selector)`: substring, regex, data interval, cell system.
+
+So "a part of a mark" is one concept with three sources, and it should have one reference
+spelling. Today the anchors proposal writes a path step (`nodes.out`) and this proposal
+writes `ref(x).part(sel)`. One option: `.part(name)` looks up built-in and declared parts by
+name, and patterns are explicit selectors (a regex, `{ text: "E" }`, `{ x: [a, b] }`), so an
+anchor named "E" and the substring "E" cannot collide. The anchors proposal's arrow rule (end
+at an anchor point, clip to the outline on the connection) is also the rule for `leader` and
+the #975 fix, so the three should be built once.
+
 **d3-annotation types in C:**
 
 | d3 type       | C spelling                                                                                     |
@@ -522,6 +543,9 @@ These hurt every approach, ranked by how much they hurt in the prototypes:
 12. **Coloring a part.** `mask` (works today), a `fill` record on `text`, or emphasis (#641)?
 13. **Shared selectors.** Should `parts` accept cell systems (`Bin`, `Calendar`, weights), and
     should `cut` later be redefined as `parts` plus `mask`?
+14. **Parts and anchors.** One reference spelling for built-in, declared (anchor) and found
+    parts: `.part(name)` for names with explicit pattern selectors, or the path step
+    (`nodes.out`)? And design `parts` together with anchors (#47) rather than here?
 
 ## Related issues
 
