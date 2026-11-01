@@ -217,6 +217,18 @@ draw it; mark any sketch as a sketch. Follow the `Artifact` tool's instructions
 beside it, so it can become an issue. Lead with a three-line summary and the
 recommendation, then the sections above.
 
+**The Design Desk.** Every proposal gets a card on the Design Desk hub
+(https://claude.ai/artifact/MGEGbycbMMfw9s3NsZegrH, slug
+`a4171b69-1be9-4796-aafd-94dd68d250ee`), without being asked. The board renders
+from the `efforts` collection; never republish the page to change a card. When
+the artifact is first published, `db_write` a `set` on `efforts/<feature-slug>`
+with `column: "designing"`, `order` (one past the column's last, from
+`db_list`), `title`, `summary` (one sentence on what the feature is; no status,
+no issue numbers), `artifact`, `issues`, and a static `thumb`
+(`img/<feature-slug>.png`, uploaded to the hub with `publish_files` in patch
+mode) plus `thumbAlt`. Update the row (with `ifVersion`) when the status
+changes: a new artifact, a PR, a merge (`column: "done"`).
+
 Write in plain American English and give the gist of each issue number you
 cite. Then give Josh the artifact link and the file path, and offer to open an
 issue labeled `API design` from it; don't open one unasked.
