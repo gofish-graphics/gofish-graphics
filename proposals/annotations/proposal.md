@@ -364,6 +364,32 @@ measuring function and colors it with `mask`. The plural form is `ex5-math-spans
 Its leaders still use the old idiom with hand-staggered depths, because `leader` is not
 built.
 
+**How `parts` relates to `partition` and `cut`** (round 3, from Josh's question).
+
+|               | `partition`                   | `cut`                                         | `part` / `parts`                                                            |
+| ------------- | ----------------------------- | --------------------------------------------- | --------------------------------------------------------------------------- |
+| input         | data rows by a key            | one drawn shape                               | one drawn mark                                                              |
+| space divided | an axis (data space)          | the shape's extent along one direction        | the mark's own parameter: characters, arc length, data range, outline edges |
+| coverage      | total, disjoint (cells)       | total, disjoint (a tiling)                    | any subset, may overlap                                                     |
+| returns       | groups, placed in their cells | new ink (masked copies), placed by the parent | refs: no ink, nothing moves                                                 |
+
+Discrete versus continuous does not separate them. Coverage does, and it is the cell versus
+region refinement from #48: a cell is a region with the no-overlap and cover guarantee.
+`partition` and `cut` need cells, and `parts` needs only regions. The larger difference is
+the operand kind (#707): `partition` arranges fresh children, `cut` makes fresh ink, and
+`parts` returns refs. So they stay three operations, and what they share is the selector:
+
+- `parts` also takes a cell system, as in
+  `ref("price").parts({ x: field("date").bin(Calendar.year) })`: a cover of the line, one
+  stretch per year.
+- `cut(src, opts)` is exactly `ref(src).parts(cover)` with each part made into
+  `mask(region, copy of src)`, which is what a slice is today. It can be defined by that
+  rewrite when #404's syntax is revisited, and its `size` weights become one more cell
+  system along a direction.
+- `partition` is unchanged. It divides an axis and places data.
+
+Not prototyped. The cheap test is one line colored by yearly parts.
+
 **d3-annotation types in C:**
 
 | d3 type       | C spelling                                                                                     |
@@ -494,6 +520,8 @@ These hurt every approach, ranked by how much they hurt in the prototypes:
     line's part take a data interval, a length fraction, or both? Is a text part's shape its
     line box or its glyph ink?
 12. **Coloring a part.** `mask` (works today), a `fill` record on `text`, or emphasis (#641)?
+13. **Shared selectors.** Should `parts` accept cell systems (`Bin`, `Calendar`, weights), and
+    should `cut` later be redefined as `parts` plus `mask`?
 
 ## Related issues
 
