@@ -22,7 +22,8 @@ const errors = [];
 const BASE = {
   neck: 1,
   holes: false,
-  connected: true,
+  shape: "blob",
+  join: Infinity,
   smooth: true,
   compare: false,
   showLinks: false,

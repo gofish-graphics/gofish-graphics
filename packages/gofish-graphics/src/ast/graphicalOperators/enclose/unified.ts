@@ -2,17 +2,22 @@
  * PROTOTYPE (scratch, not for merge): one `Shape.blob` outline built on the
  * exact arcs closing (`arcs.ts`):
  *
- *   Shape.blob({ convexity, radius, connected, holes, avoiding, clearance })
+ *   Shape.blob({ convexity, join, neck, holes, avoiding, clearance })
+ *   Shape.arcs({ radius, holes, avoiding, clearance })   (connected: false)
  *
- *  1. Links. `connected: true` joins the members by the spanning tree of
- *     their centers (zero-width segment members, as `ARCS_PROTOTYPE.spine`).
- *     `connected: false` joins only the members the closing disc cannot pass
- *     between (padded gap < 2 × radius), shortest gaps first (Kruskal), with
- *     a zero-width link between their nearest points. Either way, every two
- *     pieces of the padded members and links that the disc cannot pass
- *     between are in one piece. That is the no-cusp rule: the closing only
- *     makes a sharp tip where two outside discs overlap across a gap the
- *     disc cannot pass, and that gap is now always bridged.
+ *  1. Links. Blob: the members' spanning tree (Kruskal on the gaps between
+ *     padded members), its edges kept where the gap is under `join`, each a
+ *     tapered tube that grows in as join passes its gap (joinLinks). The
+ *     kept links split the members into pieces; each piece is filled on its
+ *     own (steps 2 to 4) and kept a padding apart from the others
+ *     (separate.ts). join = ∞ (default) is one piece, the full tree. Arcs
+ *     (`connected: false`) joins only the members the closing disc cannot
+ *     pass between (padded gap < 2 × radius), shortest gaps first (Kruskal),
+ *     with a zero-width link between their nearest points: the no-cusp
+ *     rule, the closing only makes a sharp tip where two outside discs
+ *     overlap across a gap the disc cannot pass, and that gap is now always
+ *     bridged. (A blob piece is closed at r = padding on its own, so no
+ *     closing ever spans two pieces and nearLinks has no role there.)
  *  2. The exact closing of members + links, grown by padding, by a disc of
  *     radius r. `convexity` picks r: the r whose closed area fills that share
  *     of the area between the padded union (r = 0) and the padded convex hull
@@ -30,6 +35,7 @@ import { closingRings, keepIns, withArcsTolerance } from "./arcs";
 import { buildMeshBlend, meshBlendRings } from "./meshBlend";
 import { resample, smoothOutline, type SmoothSpec } from "./arcsSmooth";
 import { beyondHull, type Beyond } from "./beyond";
+import { forbiddenRegions, cutRegion } from "./separate";
 import { buildFiltration, type Filtration } from "./filtration";
 import {
   buildBlend,
@@ -76,7 +82,7 @@ function memo<T>(key: string, f: () => T): T {
   UNIFIED_STATS.msCached =
     (UNIFIED_STATS.msCached ?? 0) + performance.now() - t0;
   CACHE.set(key, v);
-  while (CACHE.size > 64) CACHE.delete(CACHE.keys().next().value!);
+  while (CACHE.size > 1024) CACHE.delete(CACHE.keys().next().value!);
   return v;
 }
 
@@ -86,7 +92,13 @@ export type UnifiedOptions = {
   convexity?: number;
   /** The closing radius in px; when given, convexity is not used. */
   radius?: number;
+  /** false: the arcs shape (the exact closing at `radius`, links from the
+   *  closing's reach, no smoothing by the playground). Default true: blob. */
   connected?: boolean;
+  /** PROTOTYPE (blob): the longest padded gap a link may cross, px; longer
+   *  gaps leave the members in separate pieces, each filled on its own.
+   *  Default ∞ (one piece, the full spanning tree). See joinLinks. */
+  join?: number;
   holes?: boolean;
   avoiding?: BlobMember[];
   clearance?: number;
@@ -201,6 +213,13 @@ export const UNIFIED_STATS: {
   lidActive?: number;
   /** PROTOTYPE: the per-bay blend mesh's size and build times */
   meshBlend?: Record<string, number>;
+  /** PROTOTYPE (join): how many pieces, each piece's radius, the spanning
+   *  tree's edges (kept, ramping or not), and the time spent keeping the
+   *  pieces apart (0 when cached) */
+  pieces?: number;
+  radii?: number[];
+  joinTree?: JoinEdge[];
+  msSeparate?: number;
 } = {};
 
 // ── members as a core (point, segment or box) plus a radius ─────────────────
@@ -426,6 +445,142 @@ export function nearLinks(
     from = n0; // only pairs involving the new links next round
   }
   return links;
+}
+
+// ── join: which members are one piece ───────────────────────────────────────
+
+/** PROTOTYPE: one edge of the members' spanning tree (Kruskal on the gaps
+ *  between padded members), for the playground's links view. */
+export type JoinEdge = {
+  /** the padded gap in px (≤ 0: the padded members touch or overlap) */
+  gap: number;
+  /** the link's width as a share of its full (neck) width: 0 not kept, 1
+   *  full; in between it is ramping in */
+  share: number;
+  /** the link's axis (between the members' cores) */
+  a: Pt;
+  b: Pt;
+  /** whether the members themselves overlap (no link is needed) */
+  overlap: boolean;
+};
+
+/**
+ * The links for `join` (PROTOTYPE). The members' spanning tree, Kruskal on
+ * the gaps between padded members (the order in which the exact closing
+ * merges them as its radius grows: two padded members a gap g apart merge at
+ * r = g/2). An edge whose gap is under `join` is kept; the others leave the
+ * members in separate pieces. A kept edge is a tapered tube between the
+ * members' cores (as `nearLinks` with `neck`), whose padded half-width at
+ * each end is
+ *
+ *     min(neck · (ρ + pad), (join − gap) / 2),
+ *
+ * so the link is as wide as join is past its gap, up to its full neck width:
+ * it enters at width 0 as join crosses its gap and only widens as join
+ * grows. join = ∞ is the full spanning tree, the same links as
+ * `nearLinks(members, pad, ∞, neck)`. Members that overlap need no link.
+ *
+ * TODO(prototype, declared shortcut): the link grows in continuously, but a
+ * merge still steps. The merged piece's closing at r = padding fills the
+ * half-slots beside the new link where they are under 2 × padding wide (a
+ * link of width 0 is already a wall), and above convexity 0 the merged
+ * piece's new pockets (in its hull, outside both old hulls) fill share c at
+ * once. The fix: ramp that new ground in with the link (its closing radius
+ * from 0 to padding, its pockets' share from 0 to c), which needs a union of
+ * regions this prototype has no boolean operation for.
+ */
+export function joinLinks(
+  members: BlobMember[],
+  pad: number,
+  join: number,
+  neck: number
+): {
+  links: BlobMember[];
+  /** each link's piece, and each piece's member indices */
+  linkPiece: number[];
+  pieces: number[][];
+  tree: JoinEdge[];
+} {
+  const prims: Core[] = members.map(coreOf);
+  const comp = prims.map((_, i) => i);
+  const find = (i: number): number =>
+    comp[i] === i ? i : (comp[i] = find(comp[i]));
+  // the kept edges' components: the pieces
+  const kc = prims.map((_, i) => i);
+  const kfind = (i: number): number =>
+    kc[i] === i ? i : (kc[i] = kfind(kc[i]));
+  const coreSeg = (i: number): [Pt, Pt, number] => {
+    const m = members[i];
+    if (m.kind === "disc") return [[m.cx, m.cy], [m.cx, m.cy], m.r];
+    if (m.kind === "segment") return [m.a, m.b, Math.max(m.w, m.w2 ?? m.w) / 2];
+    return m.w >= m.h
+      ? [
+          [m.x + m.h / 2, m.y + m.h / 2],
+          [m.x + m.w - m.h / 2, m.y + m.h / 2],
+          m.h / 2,
+        ]
+      : [
+          [m.x + m.w / 2, m.y + m.w / 2],
+          [m.x + m.w / 2, m.y + m.h - m.w / 2],
+          m.w / 2,
+        ];
+  };
+  const pairs: [number, number, number][] = [];
+  for (let i = 0; i < prims.length; i++)
+    for (let j = i + 1; j < prims.length; j++)
+      pairs.push([i, j, nearest(prims[i], prims[j])[2]]);
+  pairs.sort((a, b) => a[2] - b[2]);
+  const raw: { link: BlobMember; i: number }[] = [];
+  const tree: JoinEdge[] = [];
+  for (const [i, j, gap] of pairs) {
+    const [ci, cj] = [find(i), find(j)];
+    if (ci === cj) continue;
+    comp[ci] = cj;
+    const g = gap - 2 * pad;
+    const [a0, a1, ra] = coreSeg(i),
+      [b0, b1, rb] = coreSeg(j);
+    const [x, y] = segSeg(a0, a1, b0, b1);
+    if (gap <= 0) {
+      kc[kfind(i)] = kfind(j);
+      tree.push({ gap: g, share: 1, a: x, b: y, overlap: true });
+      continue;
+    }
+    const room = join - g; // how far join is past the gap
+    const fa = neck * (ra + pad),
+      fb = neck * (rb + pad);
+    const ha = Math.min(fa, room / 2),
+      hb = Math.min(fb, room / 2);
+    const share = room <= 0 ? 0 : Math.min(1, room / 2 / Math.max(fa, fb));
+    tree.push({ gap: g, share, a: x, b: y, overlap: false });
+    if (room <= 0) continue;
+    kc[kfind(i)] = kfind(j);
+    raw.push({
+      link: {
+        kind: "segment",
+        a: x,
+        b: y,
+        w: 2 * (ha - pad),
+        w2: 2 * (hb - pad),
+      },
+      i,
+    });
+  }
+  const ids = new Map<number, number>();
+  const pieces: number[][] = [];
+  members.forEach((_, i) => {
+    const r = kfind(i);
+    if (!ids.has(r)) {
+      ids.set(r, pieces.length);
+      pieces.push([]);
+    }
+    pieces[ids.get(r)!].push(i);
+  });
+  return {
+    links: raw.map((l) => l.link),
+    linkPiece: raw.map((l) => ids.get(kfind(l.i))!),
+    pieces,
+    tree,
+  };
 }
 
 // ── area, hull ──────────────────────────────────────────────────────────────
@@ -705,6 +860,32 @@ export function routeAround(
 
 // ── the outline ─────────────────────────────────────────────────────────────
 
+const key = (...xs: unknown[]) => JSON.stringify(xs);
+
+/** The box of rings. */
+const boxOfRings = (rings: Pt[][]): [number, number, number, number] => {
+  let [xa, ya, xb, yb] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const r of rings)
+    for (const [x, y] of r) {
+      xa = Math.min(xa, x);
+      xb = Math.max(xb, x);
+      ya = Math.min(ya, y);
+      yb = Math.max(yb, y);
+    }
+  return [xa, ya, xb, yb];
+};
+
+/**
+ * The outline. Blob (`connected`, the default): the members split into
+ * pieces by `join` (joinLinks); each piece is filled on its own (its own
+ * spine, padded hull and convexity, `fillOne`); with more than one piece,
+ * each fill is kept out of the ground nearer the other pieces
+ * (separate.ts), so pieces never merge by filling; then each piece is cut
+ * from the keep-outs and smoothed on its own. One piece (join = ∞, or every
+ * gap under join) is the earlier blob exactly. `connected: false` is the
+ * arcs shape: the exact closing at `radius`, its links from the closing's
+ * own reach (nearLinks), one region.
+ */
 export function unifiedOutline(
   members: BlobMember[],
   o: UnifiedOptions
@@ -715,21 +896,133 @@ export function unifiedOutline(
   const holes = o.holes ?? false;
   const connected = o.connected ?? true;
   const K = keepOuts(o.avoiding ?? [], o.clearance ?? 4);
-  // connected: the same Kruskal over gaps with no limit (a spanning tree of
-  // the pieces, each link between nearest points); members that already
-  // touch get no link. Links bend around the keep-outs.
   UNIFIED_STATS.msFiltration = 0;
   UNIFIED_STATS.msCached = 0;
+  UNIFIED_STATS.msSeparate = 0;
+  UNIFIED_STATS.msGrid = 0;
+  UNIFIED_STATS.lidActive = 0;
   const filt = UNIFIED_PROTOTYPE.search === "filtration";
-  const key = (...xs: unknown[]) => JSON.stringify(xs);
-  const spineOf = () =>
-    routeAround(nearLinks(members, pad, Infinity, o.neck ?? 1), K, pad);
-  const spine = !connected
-    ? []
-    : filt
-      ? memo(key("spine", members, pad, o.neck ?? 1, K), spineOf)
+  if (!connected) {
+    const tLinks = performance.now();
+    const f = fillOne(members, [], false, o, pad, holes, K, filt);
+    const tClose = performance.now();
+    const rings = finish(f, o, pad, K);
+    Object.assign(UNIFIED_STATS, {
+      radius: f.r,
+      iterations: f.iterations,
+      ms: performance.now() - t0,
+      links: f.links.length,
+      linkMembers: f.links,
+      pieces: 1,
+      joinTree: [],
+      msLinks: tLinks - t0,
+      msClose: tClose - tLinks,
+      msSmooth: performance.now() - tClose,
+    });
+    return rings;
+  }
+  // the pieces and their links (links bend around the keep-outs)
+  const neck = o.neck ?? 1;
+  const join = Math.max(0, o.join ?? Infinity);
+  const J = memo(key("join", members, pad, join, neck), () =>
+    joinLinks(members, pad, join, neck)
+  );
+  const parts = J.pieces.map((idx, p) => {
+    const pm = idx.map((i) => members[i]);
+    const pl = J.links.filter((_, l) => J.linkPiece[l] === p);
+    const spineOf = () => routeAround(pl, K, pad);
+    const spine = filt
+      ? memo(key("spine", pm, pad, pl, K), spineOf)
       : spineOf();
+    return { pm, spine };
+  });
   const tLinks = performance.now();
+  const fills = parts.map(({ pm, spine }) =>
+    fillOne(pm, spine, true, o, pad, holes, K, filt)
+  );
+  // more than one piece: each fill kept out of the others' ground
+  if (fills.length > 1) {
+    const ts = performance.now();
+    const c = o.convexity ?? 0.5;
+    const spines = parts.map(({ pm, spine }) =>
+      memo(key("filledSpine", pm, spine, pad), () =>
+        closingRings([...pm, ...spine], pad, pad, false)
+      )
+    );
+    // the box each piece's fill stays in: its padded hull, or its oval
+    // above convexity 1
+    const beyondOne = o.radius === undefined && c > 1;
+    const boxes = parts.map(({ pm, spine }) =>
+      memo(key("fillBox", pm, spine, pad, beyondOne), () =>
+        boxOfRings([
+          beyondOne
+            ? beyondHull(
+                paddedHull([...pm, ...spine], pad),
+                pm,
+                pad,
+                2,
+                o.beyond
+              )
+            : paddedHull([...pm, ...spine], pad),
+        ])
+      )
+    );
+    const sep = pad; // PROTOTYPE: the least gap kept between two pieces
+    const F = memo(key("separate", parts, pad, sep, beyondOne, K), () =>
+      forbiddenRegions(spines, boxes, sep)
+    );
+    fills.forEach((f, p) => {
+      f.rings = cutRegion(f.rings, F[p]);
+    });
+    UNIFIED_STATS.msSeparate = performance.now() - ts;
+  }
+  const tClose = performance.now();
+  const rings = fills.flatMap((f) => finish(f, o, pad, K));
+  const radii = fills.map((f) => f.r);
+  const fin = radii.filter((r) => Number.isFinite(r));
+  Object.assign(UNIFIED_STATS, {
+    radius:
+      fills.length === 1
+        ? radii[0]
+        : fin.length
+          ? Math.max(...fin)
+          : radii.some((r) => Number.isNaN(r))
+            ? NaN
+            : Infinity,
+    radii,
+    iterations: fills.reduce((s, f) => s + f.iterations, 0),
+    ms: performance.now() - t0,
+    links: J.links.length,
+    linkMembers: parts.flatMap((p) => p.spine),
+    pieces: fills.length,
+    joinTree: J.tree,
+    msLinks: tLinks - t0,
+    msClose: tClose - tLinks,
+    msSmooth: performance.now() - tClose,
+  });
+  return rings;
+}
+
+type Fill = {
+  rings: Pt[][];
+  all: BlobMember[];
+  links: BlobMember[];
+  r: number;
+  iterations: number;
+};
+
+/** One piece's fill before the keep-out cut and the smoothing: its members,
+ *  its links (`spine`, when connected) and the convexity. */
+function fillOne(
+  members: BlobMember[],
+  spine: BlobMember[],
+  connected: boolean,
+  o: UnifiedOptions,
+  pad: number,
+  holes: boolean,
+  K: Disc[],
+  filt: boolean
+): Fill {
   const linksAt = (r: number) =>
     connected ? spine : routeAround(nearLinks(members, pad, r), K, pad);
   const closeAt = (r: number) => {
@@ -744,8 +1037,6 @@ export function unifiedOutline(
   const sealMode: Seal = o.seal ?? "jump";
   UNIFIED_STATS.means = means;
   UNIFIED_STATS.seal = means === "blend" ? undefined : sealMode;
-  UNIFIED_STATS.msGrid = 0;
-  UNIFIED_STATS.lidActive = 0;
   if (o.radius !== undefined) {
     r = o.radius;
     res = r === Infinity ? hullRes() : closeAt(r);
@@ -847,7 +1138,7 @@ export function unifiedOutline(
       const lid = lidRings(ex.rings, rr, seals, grid(), holes);
       UNIFIED_STATS.msGrid! += performance.now() - tg;
       if (!lid) return ex;
-      UNIFIED_STATS.lidActive = lid.active;
+      UNIFIED_STATS.lidActive! += lid.active;
       return { ...ex, rings: lid.rings };
     };
     if (c > 1) {
@@ -872,7 +1163,7 @@ export function unifiedOutline(
         );
         const tg = performance.now();
         res = { ...sp, rings: blendRings(B, c, holes) };
-        UNIFIED_STATS.msGrid = performance.now() - tg;
+        UNIFIED_STATS.msGrid! += performance.now() - tg;
       } else {
         // the mesh wants the spine's arcs to 0.05 px (the closing's own
         // sampling is 0.2 px)
@@ -886,7 +1177,7 @@ export function unifiedOutline(
         UNIFIED_STATS.meshBlend = MB.stats;
         const tg = performance.now();
         res = { ...sp, rings: meshBlendRings(MB, c, holes) };
-        UNIFIED_STATS.msGrid = performance.now() - tg;
+        UNIFIED_STATS.msGrid! += performance.now() - tg;
       }
       iterations = 0;
     } else if (means === "radius") {
@@ -1049,8 +1340,13 @@ export function unifiedOutline(
       links: spine,
     };
   }
+  return { ...res, r, iterations };
+}
+
+/** A piece's fill cut from the keep-outs and smoothed. */
+function finish(f: Fill, o: UnifiedOptions, pad: number, K: Disc[]): Pt[][] {
+  const res = f;
   let rings = res.rings;
-  const tClose = performance.now();
   UNIFIED_STATS.areaGot = ringsArea(rings);
   const keep = keepIns(res.all, pad);
   const cut = (rs: Pt[][], grow: number) =>
@@ -1083,15 +1379,5 @@ export function unifiedOutline(
     }
     rings = out;
   }
-  Object.assign(UNIFIED_STATS, {
-    radius: r,
-    iterations,
-    ms: performance.now() - t0,
-    links: res.links.length,
-    linkMembers: res.links,
-    msLinks: tLinks - t0,
-    msClose: tClose - tLinks,
-    msSmooth: performance.now() - tClose,
-  });
   return rings;
 }

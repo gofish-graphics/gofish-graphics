@@ -42,7 +42,8 @@ const BASE = {
   convexity: 0.5,
   neck: 1,
   holes: false,
-  connected: true,
+  shape: "blob",
+  join: Infinity,
   smooth: true,
   radius: 12,
   compare: false,
@@ -77,7 +78,7 @@ const VARIANTS = [
   ["c150", { convexity: 1.5 }],
   ["c200", { convexity: 2 }],
   ["neck060", { convexity: 0.5, neck: 0.6 }],
-  ["arcs", { connected: false, smooth: false, radius: 12 }],
+  ["arcs", { shape: "arcs", smooth: false, radius: 12 }],
   [
     "debug",
     { convexity: 0.3, showLinks: true, showMembers: true, compare: true },

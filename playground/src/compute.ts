@@ -8,6 +8,7 @@ import {
   UNIFIED_PROTOTYPE,
   type Means,
   type Seal,
+  type JoinEdge,
 } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/unified";
 import {
   blobOutline,
@@ -17,7 +18,9 @@ import {
 import { arcsOutline } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/arcs";
 import { signedArea2 } from "../../packages/gofish-graphics/src/ast/geometry/plane";
 
-export type { BlobMember, Pt, Means, Seal };
+export type { BlobMember, Pt, Means, Seal, JoinEdge };
+
+export type ShapeKind = "blob" | "arcs";
 
 // PROTOTYPE: ?search=bisection runs the earlier radius search, for comparison
 if (new URLSearchParams(location.search).get("search") === "bisection")
@@ -33,7 +36,10 @@ export type Params = {
   convexity: number;
   neck: number;
   padding: number;
-  connected: boolean;
+  /** blob: join, convexity, neck; arcs: radius (the exact closing) */
+  shape: ShapeKind;
+  /** the longest padded gap a link may cross, px (Infinity: every gap) */
+  join: number;
   radius: number;
   holes: boolean;
   avoid: boolean;
@@ -53,6 +59,8 @@ export type SetResult = {
   radius: number;
   iterations: number;
   links: BlobMember[];
+  /** blob: the spanning tree's edges (kept, ramping in, or not kept) */
+  tree: JoinEdge[];
   pieces: number;
   holes: number;
   /** cached: the part of total spent building the per-set cache (spine, hull,
@@ -65,10 +73,12 @@ export type SetResult = {
     cached: number;
     /** grid work (lid, blend), part of close */
     grid: number;
+    /** keeping the pieces apart (0 when cached) */
+    separate: number;
   };
   /** sealed bays the lid was filling */
   lidActive: number;
-  /** today's outline (Shape.blob, or Shape.arcs when not connected), when asked */
+  /** today's outline (Shape.blob, or Shape.arcs for the arcs shape), when asked */
   today?: { rings: Pt[][]; ms: number };
 };
 
@@ -85,13 +95,20 @@ const count = (rings: Pt[][]) => {
 
 export function computeSet(s: SetInput, p: Params): SetResult {
   const avoiding = p.avoid ? s.avoiding : [];
+  const blob = p.shape === "blob";
   const t0 = performance.now();
   const rings = unifiedOutline(s.members, {
     padding: p.padding,
-    ...(p.connected
-      ? { convexity: p.convexity, neck: p.neck, means: p.means, seal: p.seal }
+    ...(blob
+      ? {
+          convexity: p.convexity,
+          neck: p.neck,
+          join: p.join,
+          means: p.means,
+          seal: p.seal,
+        }
       : { radius: p.radius }),
-    connected: p.connected,
+    connected: blob,
     holes: p.holes,
     avoiding,
     clearance: p.clearance,
@@ -104,6 +121,7 @@ export function computeSet(s: SetInput, p: Params): SetResult {
     radius: S.radius ?? NaN,
     iterations: S.iterations ?? 0,
     links: S.linkMembers ?? [],
+    tree: S.joinTree ?? [],
     ...count(rings),
     ms: {
       links: S.msLinks ?? 0,
@@ -112,12 +130,13 @@ export function computeSet(s: SetInput, p: Params): SetResult {
       total,
       cached: S.msCached ?? 0,
       grid: S.msGrid ?? 0,
+      separate: S.msSeparate ?? 0,
     },
     lidActive: S.lidActive ?? 0,
   };
   if (p.compare) {
     const t1 = performance.now();
-    const today = p.connected
+    const today = blob
       ? blobOutline(s.members, {
           padding: p.padding,
           convexity: Math.min(1, p.convexity),

@@ -39,7 +39,8 @@ const open = async (opts = {}) => {
 const BASE = {
   neck: 1,
   holes: false,
-  connected: true,
+  shape: "blob",
+  join: Infinity,
   smooth: true,
   compare: false,
   showLinks: false,
@@ -69,14 +70,12 @@ for (const ds of DS) {
     const ms = [];
     for (const c of CS) {
       ms.push(+(+(await set(page, { ...m, convexity: c }))).toFixed(1));
-      await page
-        .locator("#stage")
-        .screenshot({
-          path: join(
-            out,
-            `${ds}-${name}-c${String(c * 100).padStart(3, "0")}.png`
-          ),
-        });
+      await page.locator("#stage").screenshot({
+        path: join(
+          out,
+          `${ds}-${name}-c${String(c * 100).padStart(3, "0")}.png`
+        ),
+      });
     }
     row[name] = ms;
   }

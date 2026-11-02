@@ -478,15 +478,16 @@
           <section>
             <h2>Shape</h2>
             <div class="field">
-              <label class="check" for="connected"
-                ><input type="checkbox" id="connected" /> connected</label
-              >
-              <div class="hint">
-                On: one piece, joined by spanning-tree links
-                (<code>Shape.blob</code>). Off: the arcs preset, pieces stay
-                apart where the disc passes between them
-                (<code>Shape.arcs</code>).
+              <span class="seg-name" id="shape-name">shape</span>
+              <div class="seg" role="radiogroup" aria-labelledby="shape-name">
+                <button type="button" role="radio" data-shape="blob">
+                  blob
+                </button>
+                <button type="button" role="radio" data-shape="arcs">
+                  arcs
+                </button>
               </div>
+              <div class="hint" id="shape-hint"></div>
             </div>
             <div class="field" id="convexity-field">
               <label for="convexity"
@@ -563,6 +564,35 @@
               <div class="hint">
                 The width of each link as a share of the padded members it
                 joins: 1 is no neck.
+              </div>
+            </div>
+            <div class="field" id="join-field">
+              <label for="join"
+                >join <output id="join-out" for="join"></output
+              ></label>
+              <input
+                type="range"
+                id="join"
+                min="0"
+                max="100"
+                step="1"
+                list="join-ticks"
+              />
+              <datalist id="join-ticks">
+                <option value="0"></option>
+                <option value="100"></option>
+              </datalist>
+              <div class="ticks" aria-hidden="true">
+                <span style="left: 0%">0</span><span style="left: 41%">8</span
+                ><span style="left: 71%">64</span
+                ><span style="left: 100%">∞</span>
+              </div>
+              <div class="hint">
+                The longest gap between padded members that a link crosses.
+                Longer gaps leave separate pieces, each filled to its own
+                convexity and kept a padding apart from the others. A link grows
+                in as join passes its gap: it is as wide as join is past the
+                gap, up to its neck width.
               </div>
             </div>
             <div class="field" id="radius-field">
@@ -646,8 +676,11 @@
             </div>
             <p class="hint">
               The purple dashed line is today's
-              <code>Shape.blob</code> (convexity capped at 1) or, with connected
-              off, today's <code>Shape.arcs</code>, with the same options.
+              <code>Shape.blob</code> (convexity capped at 1, one piece) or, for
+              the arcs shape, today's <code>Shape.arcs</code>, with the same
+              options. The links view draws the spanning tree: solid orange
+              links are full, light orange ones are growing in, gray dashed ones
+              are longer than join and not kept.
             </p>
           </section>
         </div>

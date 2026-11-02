@@ -9,6 +9,7 @@ import {
   type Seal,
   type Pt,
   type SetResult,
+  type ShapeKind,
 } from "./compute";
 
 // ── data ─────────────────────────────────────────────────────────────────────
@@ -54,7 +55,13 @@ type State = Omit<Params, "avoid" | "compare"> & {
   /** PROTOTYPE: small multiples of the three convexity modes */
   compareModes: boolean;
 };
-const BLOB = { convexity: 0.5, neck: 1, holes: false, connected: true };
+const BLOB = {
+  convexity: 0.5,
+  neck: 1,
+  holes: false,
+  shape: "blob" as ShapeKind,
+  join: Infinity,
+};
 const ARCS_RADIUS = 12; // Shape.arcs()'s default radius
 const CLEARANCE = 4; // Shape.blob()'s default clearance
 const ds0 = DATASETS.find((d) => d.id === "chartaccent")!;
@@ -69,7 +76,7 @@ let state: State = {
   compare: false,
   showLinks: false,
   showMembers: false,
-  means: "area",
+  means: "blend",
   seal: "jump",
   compareModes: false,
 };
@@ -95,8 +102,9 @@ const spelling = () => {
     if (avoid && !eq(state.clearance, CLEARANCE))
       o.push(`clearance: ${num(state.clearance)}`);
   };
-  if (state.connected) {
-    const plain = !state.holes && !avoid && eq(state.neck, 1);
+  if (state.shape === "blob") {
+    const plain =
+      !state.holes && !avoid && eq(state.neck, 1) && state.join === Infinity;
     const preset = plain
       ? eq(state.convexity, 0)
         ? "spine"
@@ -111,6 +119,7 @@ const spelling = () => {
       if (!eq(state.convexity, BLOB.convexity))
         o.push(`convexity: ${num(state.convexity)}`);
       if (!eq(state.neck, 1)) o.push(`neck: ${num(state.neck)}`);
+      if (state.join !== Infinity) o.push(`join: ${num(state.join)}`);
       keepOpts();
       shape = `Shape.blob(${o.length ? `{ ${o.join(", ")} }` : ""})`;
     }
@@ -120,12 +129,15 @@ const spelling = () => {
     shape = `Shape.arcs(${o.length ? `{ ${o.join(", ")} }` : ""})`;
   }
   let code = `enclose({ shape: ${shape}, padding: ${num(state.padding)} }, ${d.call})`;
-  if (state.connected && (state.means !== "area" || state.seal !== "jump")) {
+  if (
+    state.shape === "blob" &&
+    (state.means !== "blend" || state.seal !== "jump")
+  ) {
     const m = [`convexity means ${MEANS_NAME[state.means]}`];
     if (state.means !== "blend") m.push(`when a bay seals: ${state.seal}`);
     code += `\n// prototype, not an API option yet: ${m.join("; ")}`;
   }
-  if (state.smooth !== state.connected)
+  if (state.smooth !== (state.shape === "blob"))
     code += `\n// debug view: smoothing ${state.smooth ? "on" : "off"} (not an option)`;
   return code;
 };
@@ -150,15 +162,31 @@ const SEAL_HINT: Record<Seal, string> = {
   lid: "A sealed bay fills from its far end toward its mouth while r grows by the bay's depth. In between it is not an exact closing.",
 };
 
+const SHAPE_HINT: Record<ShapeKind, string> = {
+  blob: "Shape.blob: the members' spanning tree, its links kept where the gap is under join; each piece filled to the convexity and smoothed.",
+  arcs: "Shape.arcs: the exact closing by a disc of the radius; pieces join where the disc cannot pass between them. No smoothing.",
+};
+
+// ── join slider (PROTOTYPE): 0, then 0.5 · 2^((k − 1)/10) px for k = 1..99, then ∞ ───────
+const sliderToJoin = (k: number) =>
+  k <= 0 ? 0 : k >= 100 ? Infinity : +(0.5 * 2 ** ((k - 1) / 10)).toFixed(2);
+const joinToSlider = (j: number) =>
+  j <= 0
+    ? 0
+    : j === Infinity
+      ? 100
+      : Math.max(1, Math.min(99, Math.round(1 + 10 * Math.log2(j / 0.5))));
+const fmtJoin = (j: number) => (j === Infinity ? "∞" : `${num(j)} px`);
+
 // ── presets ──────────────────────────────────────────────────────────────────
 const PRESETS: Record<string, () => Partial<State>> = {
   spine: () => ({ ...BLOB, convexity: 0, smooth: true }),
   hull: () => ({ ...BLOB, convexity: 1, smooth: true }),
   oval: () => ({ ...BLOB, convexity: 2, smooth: true }),
-  blob: () => ({ ...BLOB, smooth: true, means: "area", seal: "jump" }),
+  blob: () => ({ ...BLOB, smooth: true, means: "blend", seal: "jump" }),
   arcs: () => ({
     holes: false,
-    connected: false,
+    shape: "arcs",
     radius: ARCS_RADIUS,
     smooth: false,
   }),
@@ -168,7 +196,7 @@ const PRESETS: Record<string, () => Partial<State>> = {
     return {
       ...s,
       radius: d.story.radius ?? ARCS_RADIUS,
-      smooth: s.connected,
+      smooth: s.shape === "blob",
       padding: d.padding,
       clearance: d.clearance,
       avoidOn: { ...state.avoidOn, [d.id]: d.avoidDefault },
@@ -180,7 +208,7 @@ const presetOf = (): string | null => {
     const p = PRESETS[k]();
     if (
       (Object.keys(p) as (keyof State)[]).every((key) =>
-        typeof p[key] === "number"
+        typeof p[key] === "number" && Number.isFinite(p[key])
           ? eq(p[key] as number, state[key] as number)
           : p[key] === state[key]
       ) &&
@@ -202,26 +230,31 @@ const syncControls = () => {
     $<HTMLInputElement>(k).value = String(state[k]);
     $(`${k}-out`).textContent = num(state[k]) + unit(k);
   }
-  $<HTMLInputElement>("connected").checked = state.connected;
+  const blob = state.shape === "blob";
+  for (const b of document.querySelectorAll<HTMLButtonElement>("[data-shape]"))
+    b.setAttribute("aria-checked", String(b.dataset.shape === state.shape));
+  $("shape-hint").textContent = SHAPE_HINT[state.shape];
+  $<HTMLInputElement>("join").value = String(joinToSlider(state.join));
+  $("join-out").textContent = fmtJoin(state.join);
   $<HTMLInputElement>("holes").checked = state.holes;
   $<HTMLInputElement>("smooth").checked = state.smooth;
   $<HTMLInputElement>("show-links").checked = state.showLinks;
   $<HTMLInputElement>("show-members").checked = state.showMembers;
   $<HTMLInputElement>("compare").checked = state.compare;
   $<HTMLInputElement>("compare-modes").checked = state.compareModes;
-  for (const id of ["means-field", "compare-modes-field"])
-    $(id).hidden = !state.connected;
-  $("seal-field").hidden = !state.connected || state.means === "blend";
+  for (const id of ["means-field", "compare-modes-field", "join-field"])
+    $(id).hidden = !blob;
+  $("seal-field").hidden = !blob || state.means === "blend";
   for (const b of document.querySelectorAll<HTMLButtonElement>("[data-means]"))
     b.setAttribute("aria-checked", String(b.dataset.means === state.means));
   for (const b of document.querySelectorAll<HTMLButtonElement>("[data-seal]"))
     b.setAttribute("aria-checked", String(b.dataset.seal === state.seal));
   $("means-hint").textContent = MEANS_HINT[state.means];
   $("seal-hint").textContent = SEAL_HINT[state.seal];
-  $("multiples").hidden = !(state.compareModes && state.connected);
-  $("convexity-field").hidden = !state.connected;
-  $("neck-field").hidden = !state.connected;
-  $("radius-field").hidden = state.connected;
+  $("multiples").hidden = !(state.compareModes && blob);
+  $("convexity-field").hidden = !blob;
+  $("neck-field").hidden = !blob;
+  $("radius-field").hidden = blob;
   $("avoid-field").hidden = !d.avoidable;
   $("avoid-label").textContent = d.avoidLabel;
   $<HTMLInputElement>("avoid").checked = avoiding();
@@ -270,7 +303,7 @@ const viewOf = (d: Dataset) => {
       clearance: d.clearance,
       smooth: true,
       compare: false,
-      means: "area",
+      means: "blend",
       seal: "jump",
     });
     for (const ring of r.rings)
@@ -404,18 +437,32 @@ const drawResults = (results: SetResult[]) => {
             'fill="#d62728" fill-opacity="0.08" stroke="#d62728" stroke-width="0.8" stroke-dasharray="3 2"'
           );
     }
-    if (state.showLinks)
+    if (state.showLinks) {
+      // the spanning tree's edges that are not links: longer than join (gray dashed); edges
+      // between members that overlap need no link and are not drawn
+      for (const e of r.tree)
+        if (!e.overlap && e.share === 0)
+          g += `<line x1="${f2(e.a[0])}" y1="${f2(e.a[1])}" x2="${f2(e.b[0])}" y2="${f2(e.b[1])}" stroke="#888" stroke-width="1" stroke-dasharray="2 3"/>`;
+      const ramping = new Set(
+        r.tree
+          .filter((e) => e.share > 0 && e.share < 1)
+          .map((e) => `${f2(e.a[0])},${f2(e.a[1])}`)
+      );
       for (const l of r.links) {
         if (l.kind !== "segment") continue;
+        const grow = ramping.has(`${f2(l.a[0])},${f2(l.a[1])}`);
         g += tube(
           l.a,
           l.b,
           l.w / 2 + state.padding,
           (l.w2 ?? l.w) / 2 + state.padding,
-          'fill="#ff7f0e" fill-opacity="0.14" stroke="#ff7f0e" stroke-width="0.6"'
+          grow
+            ? 'fill="#ffbb78" fill-opacity="0.3" stroke="#ffbb78" stroke-width="0.8"'
+            : 'fill="#ff7f0e" fill-opacity="0.14" stroke="#ff7f0e" stroke-width="0.6"'
         );
-        g += `<line x1="${f2(l.a[0])}" y1="${f2(l.a[1])}" x2="${f2(l.b[0])}" y2="${f2(l.b[1])}" stroke="#b35900" stroke-width="1.2" stroke-dasharray="3 2"/>`;
+        g += `<line x1="${f2(l.a[0])}" y1="${f2(l.a[1])}" x2="${f2(l.b[0])}" y2="${f2(l.b[1])}" stroke="${grow ? "#e6a05a" : "#b35900"}" stroke-width="1.2" stroke-dasharray="3 2"/>`;
       }
+    }
     if (g) debug += `<g transform="${T}">${g}</g>`;
   });
   $("outlines").innerHTML = outlines;
@@ -429,17 +476,18 @@ const drawStats = (results: SetResult[], wall: number, modeMs = "") => {
     results.reduce((s, r) => s + f(r), 0);
   const radii = results.map((r) => r.radius);
   const fin = radii.filter((r) => Number.isFinite(r));
-  const rText = !state.connected
-    ? `${num(state.radius)} px (given)`
-    : state.means === "blend" && state.convexity > 0 && state.convexity < 1
-      ? "none (per-bay blend)"
-      : fin.length === 0
-        ? state.convexity > 1
-          ? "∞ (beyond the hull)"
-          : "∞ (the hull)"
-        : fin.length === 1 && radii.length === 1
-          ? `${fin[0].toFixed(1)} px`
-          : `${Math.min(...fin).toFixed(1)} to ${Math.max(...fin).toFixed(1)} px${fin.length < radii.length ? " (some ∞)" : ""}`;
+  const rText =
+    state.shape === "arcs"
+      ? `${num(state.radius)} px (given)`
+      : state.means === "blend" && state.convexity > 0 && state.convexity < 1
+        ? "none (per-bay blend)"
+        : fin.length === 0
+          ? state.convexity > 1
+            ? "∞ (beyond the hull)"
+            : "∞ (the hull)"
+          : fin.length === 1 && radii.length === 1
+            ? `${fin[0].toFixed(1)} px`
+            : `${Math.min(...fin).toFixed(1)} to ${Math.max(...fin).toFixed(1)} px${fin.length < radii.length ? " (some ∞)" : ""}`;
   const iters = sum((r) => r.iterations);
   const today = results.some((r) => r.today)
     ? sum((r) => r.today?.ms ?? 0)
@@ -450,7 +498,7 @@ const drawStats = (results: SetResult[], wall: number, modeMs = "") => {
     stat(
       "closing radius r",
       rText,
-      state.connected
+      state.shape === "blob"
         ? state.means === "area" && state.seal === "jump"
           ? `${iters} closing${iters === 1 ? "" : "s"} in the search (${SEARCH})`
           : `${MEANS_NAME[state.means]}${state.means === "blend" ? ` (${BLEND === "grid" ? "1 px grid" : "mesh"})` : ` · ${state.seal}${state.seal === "lid" ? ` (${sum((r) => r.lidActive)} bay${sum((r) => r.lidActive) === 1 ? "" : "s"} filling)` : ""}`}`
@@ -459,16 +507,20 @@ const drawStats = (results: SetResult[], wall: number, modeMs = "") => {
     stat(
       "pieces / holes",
       `${sum((r) => r.pieces)} / ${sum((r) => r.holes)}`,
-      `${results.length} set${results.length === 1 ? "" : "s"}, ${sum((r) => r.links.length)} links`
+      `${results.length} set${results.length === 1 ? "" : "s"}, ${sum((r) => r.links.length)} links${
+        state.shape === "blob"
+          ? ` (${sum((r) => r.tree.filter((e) => e.share > 0 && e.share < 1).length)} growing in, ${sum((r) => r.tree.filter((e) => !e.overlap && e.share === 0).length)} past join)`
+          : ""
+      }`
     ) +
     stat(
       "compute",
       `${fmtMs(wall)} ms`,
-      `links ${fmtMs(sum((r) => r.ms.links))} · closing ${fmtMs(sum((r) => r.ms.close))}${sum((r) => r.ms.grid) > 0 ? ` (grid ${fmtMs(sum((r) => r.ms.grid))})` : ""} · cut+smooth ${fmtMs(sum((r) => r.ms.smooth))}${sum((r) => r.ms.cached) > 0 ? ` · cache built ${fmtMs(sum((r) => r.ms.cached))}` : ""}${modeMs ? `<br>${modeMs}` : ""}`
+      `links ${fmtMs(sum((r) => r.ms.links))} · closing ${fmtMs(sum((r) => r.ms.close))}${sum((r) => r.ms.grid) > 0 ? ` (grid ${fmtMs(sum((r) => r.ms.grid))})` : ""}${sum((r) => r.ms.separate) > 0 ? ` · apart ${fmtMs(sum((r) => r.ms.separate))}` : ""} · cut+smooth ${fmtMs(sum((r) => r.ms.smooth))}${sum((r) => r.ms.cached) > 0 ? ` · cache built ${fmtMs(sum((r) => r.ms.cached))}` : ""}${modeMs ? `<br>${modeMs}` : ""}`
     ) +
     (today !== null
       ? stat(
-          state.connected ? "today's Shape.blob" : "today's Shape.arcs",
+          state.shape === "blob" ? "today's Shape.blob" : "today's Shape.arcs",
           `${fmtMs(today)} ms`,
           "the dashed outline"
         )
@@ -493,7 +545,7 @@ const recompute = () => {
   try {
     out = d.sets.map((s) => computeSet(s, p));
     byMode.set(state.means, { out, ms: performance.now() - t0 });
-    if (state.compareModes && state.connected)
+    if (state.compareModes && state.shape === "blob")
       for (const m of MEANS) {
         if (byMode.has(m)) continue;
         const t1 = performance.now();
@@ -563,8 +615,23 @@ const check = (id: string, f: (on: boolean) => Partial<State>) =>
   $<HTMLInputElement>(id).addEventListener("change", (e) =>
     update(f((e.target as HTMLInputElement).checked))
   );
-// connected off is the arcs preset, whose outline is not smoothed
-check("connected", (on) => ({ connected: on, smooth: on }));
+// the arcs shape is not smoothed
+for (const b of document.querySelectorAll<HTMLButtonElement>("[data-shape]"))
+  b.addEventListener("click", () => {
+    const shape = b.dataset.shape as ShapeKind;
+    if (shape !== state.shape) update({ shape, smooth: shape === "blob" });
+  });
+{
+  const el = $<HTMLInputElement>("join");
+  el.addEventListener("input", () => {
+    state = { ...state, join: sliderToJoin(+el.value) };
+    syncControls();
+    if ((lastMs.get(state.dataset) ?? 0) <= SLOW) schedule();
+  });
+  el.addEventListener("change", () =>
+    update({ join: sliderToJoin(+el.value) })
+  );
+}
 check("holes", (on) => ({ holes: on }));
 check("smooth", (on) => ({ smooth: on }));
 check("compare", (on) => ({ compare: on }));

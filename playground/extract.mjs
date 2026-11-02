@@ -92,7 +92,7 @@ const DATASETS = [
     file: "bubble-treemap",
     call: "children",
     innerOnly: true,
-    story: { connected: false, radius: 8 },
+    story: { shape: "arcs", radius: 8 },
     note: "The bubble treemap's inner level: 13 groups of countries, each enclosed (the story spells Shape.arcs({ radius: 8 }), padding 4). The outer, per-continent outlines are the story's own, drawn as they are; they do not follow the sliders.",
   },
 ];
