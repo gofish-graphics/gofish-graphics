@@ -267,6 +267,39 @@
         color: var(--muted);
         font-size: 0.9rem;
       }
+      .zooms {
+        display: grid;
+        grid-template-columns: max-content repeat(5, minmax(0, 1fr));
+        gap: 8px;
+        align-items: center;
+        margin-top: 16px;
+        overflow-x: auto;
+      }
+      .zooms img {
+        width: 100%;
+        height: auto;
+        image-rendering: pixelated;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        background: #fff;
+        display: block;
+        min-width: 72px;
+      }
+      .zooms .rowlabel {
+        font-size: 0.85rem;
+        color: var(--muted);
+        font-weight: 600;
+        padding-right: 6px;
+      }
+      .zooms .collabel {
+        font-size: 0.78rem;
+        color: var(--muted);
+        text-align: center;
+      }
+      .new {
+        background: var(--accent);
+        color: var(--surface);
+      }
     </style>
   </head>
   <body>
@@ -309,7 +342,10 @@
           <code>convexity</code> and <code>roundness</code>, plus a
           <code>connected</code> switch. <code>Shape.arcs</code>,
           <code>Shape.hull</code> and <code>Shape.spine</code> become exact
-          presets. Four decisions are listed at the end.
+          presets. One smoothing pass after the closing removes the small bumps
+          the plain closing leaves (see
+          <a href="#bumps">Why the prototype has bumps</a>). Five decisions are
+          listed at the end.
         </p>
       </div>
 
@@ -372,6 +408,186 @@
           <pre><code class="language-js">// one engine: blob's links fed into the arcs closing
 Shape.blob({ radius: 24, connected: true });</code></pre>
         </figure>
+      </div>
+
+      <h2 id="bumps">Why the prototype has bumps</h2>
+      <div class="prose">
+        <p>
+          The bumps come from the closing itself, not from
+          <code>neck</code> (the prototype has none), the links, or a bug. The
+          rebuilt outline matches the render to 0.007 px, and every concave arc
+          sits exactly where the closing puts it.
+        </p>
+        <p>
+          The closing keeps the outline's direction continuous but not its
+          curvature. Where one dot sits a little outside its neighbors, the
+          outline runs along that dot's own padded circle (radius 9.5 px)
+          between two concave arcs of radius 24 px. Curvature jumps by 0.147/px
+          at each join. The bump is only about 0.3 px tall, but the edge swings
+          20° to 40° the other way over 3 to 6 px, and the eye reads that as a
+          bump. The outline has 52 changes of curvature sign, and 14 of its
+          convex runs turn less than 60°.
+        </p>
+        <p>
+          The links are not the cause. Without them, the S near the pink dot is
+          still there. Making links as wide as a dot (the job
+          <code>neck</code> would do) straightens the links but leaves the four
+          other bumps alone.
+        </p>
+        <p>
+          <b>Fix:</b> after the closing, smooth the outline with a Gaussian
+          along its length (σ = 6 px, the same as <code>padding</code>), then
+          push the whole outline outward by the smallest amount that puts every
+          padded dot back inside. Here that amount is 1.9 px, about σ² / (2 ×
+          dot radius). All five bumps go away, the outline stays one piece,
+          every dot keeps its padding, and the largest curvature step drops from
+          0.103 to 0.009. It takes 18 ms instead of 7 ms.
+        </p>
+      </div>
+      <div class="grid">
+        <figure>
+          <img
+            src="img/bumps/00-current-arcs24-spine0-cluster-2x.png"
+            alt="Current prototype, cluster at 2x"
+          />
+          <figcaption>
+            <span class="tag proto">prototype</span><b>Before:</b> the closing
+            alone.
+          </figcaption>
+        </figure>
+        <figure class="pick">
+          <img
+            src="img/bumps/10-cand-blur-s6-RECOMMENDED-cluster-2x.png"
+            alt="Smoothed outline, cluster at 2x"
+          />
+          <figcaption>
+            <span class="tag proto">prototype</span><b>After:</b> closing, then
+            Gaussian σ 6, then a 1.9 px outward push.
+          </figcaption>
+        </figure>
+      </div>
+      <div class="zooms">
+        <span></span><span class="collabel">S by the pink dot</span
+        ><span class="collabel">top edge</span
+        ><span class="collabel">S by one dot</span
+        ><span class="collabel">lower edge</span
+        ><span class="collabel">bottom edge</span>
+        <span class="rowlabel">Before</span
+        ><img
+          src="img/bumps/00-current-arcs24-spine0-z1.png"
+          alt="00-current-arcs24-spine0 crop 1"
+        /><img
+          src="img/bumps/00-current-arcs24-spine0-z2.png"
+          alt="00-current-arcs24-spine0 crop 2"
+        /><img
+          src="img/bumps/00-current-arcs24-spine0-z3.png"
+          alt="00-current-arcs24-spine0 crop 3"
+        /><img
+          src="img/bumps/00-current-arcs24-spine0-z4.png"
+          alt="00-current-arcs24-spine0 crop 4"
+        /><img
+          src="img/bumps/00-current-arcs24-spine0-z5.png"
+          alt="00-current-arcs24-spine0 crop 5"
+        />
+        <span class="rowlabel">After</span
+        ><img
+          src="img/bumps/10-cand-blur-s6-RECOMMENDED-z1.png"
+          alt="10-cand-blur-s6-RECOMMENDED crop 1"
+        /><img
+          src="img/bumps/10-cand-blur-s6-RECOMMENDED-z2.png"
+          alt="10-cand-blur-s6-RECOMMENDED crop 2"
+        /><img
+          src="img/bumps/10-cand-blur-s6-RECOMMENDED-z3.png"
+          alt="10-cand-blur-s6-RECOMMENDED crop 3"
+        /><img
+          src="img/bumps/10-cand-blur-s6-RECOMMENDED-z4.png"
+          alt="10-cand-blur-s6-RECOMMENDED crop 4"
+        /><img
+          src="img/bumps/10-cand-blur-s6-RECOMMENDED-z5.png"
+          alt="10-cand-blur-s6-RECOMMENDED crop 5"
+        />
+      </div>
+      <figure style="margin-top: 20px">
+        <img
+          src="img/bumps/10-cand-blur-s6-RECOMMENDED-full-crop.png"
+          alt="Full ChartAccent chart with the smoothed outline"
+        />
+        <figcaption>
+          <b>The whole chart with the smoothed outline.</b>
+        </figcaption>
+        <pre><code class="language-js">// proposed: smoothing is part of the outline, σ derived from padding
+enclose({ shape: Shape.blob({ radius: 24 }), padding: 6 });</code></pre>
+      </figure>
+
+      <h3>Other fixes tried</h3>
+      <div class="grid three">
+        <figure>
+          <img
+            src="img/bumps/03-cand-arcs40-spine0-cluster-2x.png"
+            alt="Radius 40"
+          />
+          <figcaption>
+            <b>Radius 40.</b> 10 short bumps left instead of 14. Still visible.
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/bumps/02-diag-arcs24-spine7-linkwidth-eq-dot-cluster-2x.png"
+            alt="Links as wide as dots"
+          />
+          <figcaption>
+            <b>Links as wide as dots.</b> Straightens the links, leaves the
+            cluster bumps.
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/bumps/06-cand-outward-only-s6-reject-cluster-2x.png"
+            alt="Outward-only smoothing"
+          />
+          <figcaption>
+            <b>Outward-only smoothing.</b> Cannot remove a convex bump, since
+            that needs moving inward.
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/bumps/07-cand-field-s4-cluster-2x.png"
+            alt="Blurred field σ 4"
+          />
+          <figcaption>
+            <b>Blurred distance field, σ 4.</b> Smooth, but 104 ms.
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/bumps/09-cand-blur-s4-cluster-2x.png"
+            alt="Gaussian σ 4"
+          />
+          <figcaption>
+            <b>Gaussian σ 4.</b> 7 short bumps left; a slight ripple on the
+            lower edge.
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/bumps/11-cand-blur-s8-cluster-2x.png"
+            alt="Gaussian σ 8"
+          />
+          <figcaption>
+            <b>Gaussian σ 8.</b> Smooth, but 18% more area: puffier.
+          </figcaption>
+        </figure>
+      </div>
+      <div class="prose">
+        <p class="note">
+          The cost of the fix: the outline sits about 1.9 px farther out on
+          straight runs (7.9 px from the dots instead of 6), and it becomes a 1
+          px polyline instead of exact arcs. In effect this brings
+          <code>roundness</code> back as σ. I suggest deriving σ from
+          <code>padding</code> rather than exposing it. Tested on this chart
+          only, not yet on the bubble treemap.
+        </p>
       </div>
 
       <h3>Other arcs settings</h3>
@@ -559,11 +775,13 @@ Shape.hull(); // blob({ radius: Infinity })</code></pre>
               </td>
               <td>
                 <code>convexity</code> and <code>roundness</code> are removed
-                and call sites migrated. Padding is the convex corner radius,
-                <code>radius</code> the concave one. Deletes the grid tracer,
-                neck pull and Gaussian from <code>blob.ts</code>.
-                <code>radius</code> is in pixels, so it does not scale with the
-                data the way <code>convexity</code> does (see radius 80 above).
+                and call sites migrated. The closing is followed by one
+                smoothing pass with σ derived from padding, so the outline is
+                curvature-continuous. Padding is the convex corner radius,
+                <code>radius</code> the concave one. Deletes the grid tracer and
+                neck pull from <code>blob.ts</code>. <code>radius</code> is in
+                pixels, so it does not scale with the data the way
+                <code>convexity</code> does (see radius 80 above).
               </td>
             </tr>
             <tr>
@@ -623,6 +841,12 @@ Shape.arcs({ radius: 24 });</code></pre>
           <li>
             <b><code>connected</code> defaults:</b> true for <code>blob</code>,
             false for the <code>arcs</code> preset.
+          </li>
+          <li>
+            <span class="tag new">new</span><b>Smoothing:</b> σ derived from
+            <code>padding</code> (recommended), or its own option. And whether
+            the <code>arcs</code> preset smooths too, which would change the
+            bubble treemap's exact Görtler contour.
           </li>
         </ol>
 
