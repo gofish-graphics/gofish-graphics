@@ -37,6 +37,12 @@ export const boxRing = (w: number, h: number): Point[] => [
 /** The area of a ring. */
 export const ringArea = (ring: Ring): number => Math.abs(signedArea2(ring)) / 2;
 
+/** Whether a ring has any area: at least three points enclosing more than
+ *  a rounding error. A ring with none (a tile rounded to no width, a cell
+ *  its spacing ate) holds nothing, as an empty ring does. */
+export const hasArea = (ring: Ring): boolean =>
+  ring.length >= 3 && ringArea(ring) > 5e-10;
+
 /** The centroid of a ring's area (its first point when it has none). */
 export function ringCentroid(ring: Ring): Point {
   let a = 0;

@@ -1651,7 +1651,7 @@ for the API.
         },
         "round": {
           "type": "boolean",
-          "description": "Round pixel positions and sizes.",
+          "description": "Round pixel positions and sizes. Applies to the rectangular tilings; Tile.voronoi cells are not rounded.",
           "default": true
         },
         "tile": {

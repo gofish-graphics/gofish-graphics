@@ -1778,7 +1778,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       round: {
         type: t.boolean,
         default: true,
-        doc: "Round pixel positions and sizes.",
+        doc: "Round pixel positions and sizes. Applies to the rectangular tilings; Tile.voronoi cells are not rounded.",
       },
       tile: {
         type: t.ref("Tile"),

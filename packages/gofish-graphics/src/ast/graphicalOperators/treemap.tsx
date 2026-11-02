@@ -40,9 +40,10 @@ import type { FieldExpr } from "../fieldExpr";
 import { checkSummable } from "../measure";
 import { squarify, type Tile } from "../../families/tile";
 import { Frontend } from "gofish-ir";
-import { insetConvex } from "../geometry/clip";
+import { insetConvex, isConvex } from "../geometry/clip";
 import {
   boxRing,
+  hasArea,
   inItsBox,
   isWholeBox,
   ringCentroid,
@@ -144,19 +145,28 @@ const d3Tiling =
 
 /** The Voronoi tiling: one convex cell per weight (`voronoiTiling`), in the
  *  region drawn in by the padding, with siblings `spacing` apart; the
- *  spacing leaves the region's own edges alone, as d3's paddingInner does. */
+ *  spacing leaves the region's own edges alone, as d3's paddingInner does.
+ *  A region with no area holds only empty cells. Its cells are not
+ *  rounded: `round` snaps a box's edges to whole pixels, and a cell's
+ *  slanted edges have no pixel to snap to. */
 const voronoiTilingOf =
   (seed: number): Tiling =>
   (region, weights, { spacing, padding, size, where }) => {
     const whole = region ?? boxRing(size[0], size[1]);
-    const inset = padding > 0 ? insetConvex(whole, padding) : whole;
-    if (inset === undefined)
+    if (!hasArea(whole)) return weights.map(() => []);
+    if (!isConvex(whole))
       throw new Error(
         `${where}: Tile.voronoi needs a convex region, and the shape this ` +
           `treemap is in is not convex.`
       );
-    return voronoiTiling(inset, weights, seed, spacing);
+    return voronoiTiling(insetConvex(whole, padding)!, weights, seed, spacing);
   };
+
+/** The center of the box that holds a ring. */
+const boxCenter = (ring: Ring): [number, number] => {
+  const { at, size } = inItsBox(ring);
+  return [at[0] + size[0] / 2, at[1] + size[1] / 2];
+};
 
 /** The tiling a `Tile` strategy names. */
 const tiling = (tile: Tile): Tiling =>
@@ -369,23 +379,41 @@ const Treemap = createNodeOperator(
           );
 
           // Each child is laid out in its cell's box, with its cell as its
-          // shape, and placed at the box's center.
+          // shape. On an axis where it fills that room it spans the box, so
+          // it is centered on the box; on an axis where it does not (a text,
+          // a circle, a sized rect) it is centered on the cell's centroid,
+          // which is inside the cell. For a box cell the two are one point.
           leafData.forEach(({ i }, k) => {
             const ring = cells[k];
-            if (ring.length < 3) {
-              // A child with no area left sits at the region's center.
-              const center = ringCentroid(
-                region ?? boxRing(resolvedSize[0], resolvedSize[1])
-              );
-              const placeable = childAsts[i].layout([0, 0], scales);
+            const child = childAsts[i];
+            const fills = (axis: Direction) =>
+              child instanceof GoFishNode && child.fillsRoom(axis);
+            if (!hasArea(ring)) {
+              // A cell with no area (a tile rounded to no width, a cell its
+              // spacing ate, or no cell at all) holds a child of no size, at
+              // the cell's center, or the region's center when it has none.
+              const center =
+                ring.length > 0
+                  ? boxCenter(ring)
+                  : ringCentroid(
+                      region ?? boxRing(resolvedSize[0], resolvedSize[1])
+                    );
+              const placeable = child.layout([0, 0], scales);
               placeable.place(0, center[0], "center");
               placeable.place(1, center[1], "center");
               return;
             }
             const box = inItsBox(ring);
-            const placeable = childAsts[i].layout(box.size, scales, box.ring);
-            placeable.place(0, box.at[0] + box.size[0] / 2, "center");
-            placeable.place(1, box.at[1] + box.size[1] / 2, "center");
+            const centroid = ringCentroid(ring);
+            const placeable = child.layout(box.size, scales, box.ring);
+            for (const axis of [0, 1] as const)
+              placeable.place(
+                axis,
+                fills(axis)
+                  ? box.at[axis] + box.size[axis] / 2
+                  : centroid[axis],
+                "center"
+              );
           });
 
           // Its box is the region it was given, `[0, w] × [0, h]`, whatever

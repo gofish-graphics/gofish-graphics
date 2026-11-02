@@ -46,7 +46,7 @@ import type { Point } from "./outline";
 import { clipToHalfPlane } from "./clip";
 import { ringExtent } from "./box";
 import { pointInRing } from "./plane";
-import { ringArea, ringCentroid, type Ring } from "./ring";
+import { hasArea, ringArea, ringCentroid, type Ring } from "./ring";
 import { lcg } from "../../util/lcg";
 
 /** The loop stops when every cell's area is within this share of its
@@ -305,8 +305,9 @@ export function fitPowerCells(
  * The cells of `values` in the convex `region`: one convex ring per value,
  * in the order of `values`, each with an area close to the value's share of
  * the region's area (within {@link TOLERANCE} of it, when the loop
- * converges). A value that is not positive gets an empty ring. The same
- * `seed` gives the same cells.
+ * converges). A value that is not positive gets an empty ring, and so does
+ * every value in a region with no area. The same `seed` gives the same
+ * cells.
  */
 export function voronoiTiling(
   region: Ring,
@@ -318,7 +319,7 @@ export function voronoiTiling(
   const live = values.flatMap((v, i) =>
     Number.isFinite(v) && v > 0 ? [i] : []
   );
-  if (region.length < 3 || live.length === 0) return cells;
+  if (!hasArea(region) || live.length === 0) return cells;
   if (live.length === 1) {
     cells[live[0]] = region.slice();
     return cells;

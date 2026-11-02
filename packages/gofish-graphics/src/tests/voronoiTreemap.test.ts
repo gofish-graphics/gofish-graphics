@@ -12,17 +12,24 @@ import {
   voronoiTiling,
   TOLERANCE,
 } from "../ast/geometry/voronoiTiling";
-import { boxRing, ovalRing, ringArea } from "../ast/geometry/ring";
+import {
+  boxRing,
+  ovalRing,
+  ringArea,
+  ringCentroid,
+} from "../ast/geometry/ring";
 import { isConvex } from "../ast/geometry/clip";
 import { pointInRing } from "../ast/geometry/plane";
 import { countryPopulations } from "../data/countryPopulations";
 import {
   chart,
+  circle,
   enclose,
   rect,
   region,
   Shape,
   spread,
+  text,
   Tile,
   treemap,
 } from "../lib";
@@ -302,6 +309,141 @@ console.log(
     message.startsWith("enclose({ shape }): Shape.arcs") &&
       message.includes("Use Shape.box or Shape.oval"),
     message
+  );
+}
+
+console.log("# a cell with no area holds an empty child, with no error");
+{
+  const empty = voronoiTiling(
+    [
+      [0, 0],
+      [100, 0],
+      [100, 0],
+      [0, 0],
+    ],
+    [1, 2, 3],
+    0
+  );
+  check(
+    "a region with no area gives every value an empty cell",
+    empty.every((c) => c.length === 0),
+    empty
+  );
+  // 1 in 10000 of a 200 px wide treemap rounds to a tile of no width.
+  const tiny = [
+    { k: "big", v: 10000 },
+    { k: "tiny", v: 1 },
+  ];
+  const rounded = await errorOf(() =>
+    chart(tiny, { axes: false })
+      .flow(treemap({ by: "k", size: "v" }))
+      .mark(region({ fill: "#888", inset: 2 }))
+      .toDisplayList({ w: 200, h: 100 })
+  );
+  check("an inset region in a tile rounded away", rounded === "", rounded);
+  const eaten = await errorOf(() =>
+    chart(tiny, { axes: false })
+      .flow(treemap({ by: "k", size: "v", spacing: 4, round: false }))
+      .mark(region({ fill: "#888", inset: 1 }))
+      .toDisplayList({ w: 200, h: 100 })
+  );
+  check("an inset region in a tile its spacing ate", eaten === "", eaten);
+  const nested = await errorOf(() =>
+    chart(
+      [
+        { g: "big", k: "a", v: 10000 },
+        { g: "tiny", k: "b", v: 1 },
+        { g: "tiny", k: "c", v: 1 },
+      ],
+      { axes: false }
+    )
+      .flow(
+        treemap({ by: "g", size: "v" }),
+        treemap({ by: "k", size: "v", padding: 1, tile: Tile.voronoi })
+      )
+      .mark(region({ fill: "#888" }))
+      .toDisplayList({ w: 200, h: 100 })
+  );
+  check(
+    "a padded Voronoi treemap in a tile rounded away",
+    nested === "",
+    nested
+  );
+}
+
+console.log("# a child that does not fill its cell sits at its centroid");
+{
+  // Cells whose box centers are well off their centroids.
+  const skew = [
+    { k: "p", v: 5 },
+    { k: "q", v: 1 },
+    { k: "r", v: 3 },
+    { k: "s", v: 2 },
+    { k: "t", v: 1 },
+  ];
+  const flow = treemap({ by: "k", size: "v", tile: Tile.voronoi });
+  const cellOf = new Map<string, Pt[]>(
+    items(
+      await chart(skew, { axes: false })
+        .flow(flow)
+        .mark(region({ fill: "#888" }))
+        .toDisplayList({ w: 300, h: 200 })
+    )
+      .filter((it) => it.kind === "path")
+      .map((it: any) => [it.datum[0].k, pathPoints(it)])
+  );
+  const offCenter = Math.max(
+    ...[...cellOf.values()].map((c) => {
+      const [gx, gy] = ringCentroid(c);
+      const xs = c.map((p) => p[0]);
+      const ys = c.map((p) => p[1]);
+      return Math.hypot(
+        (Math.min(...xs) + Math.max(...xs)) / 2 - gx,
+        (Math.min(...ys) + Math.max(...ys)) / 2 - gy
+      );
+    })
+  );
+  check(
+    "(some cell's box center is more than 2 px off its centroid)",
+    offCenter > 2,
+    offCenter
+  );
+  const circles = items(
+    await chart(skew, { axes: false })
+      .flow(flow)
+      .mark(circle({ r: 3 }))
+      .toDisplayList({ w: 300, h: 200 })
+  ).filter((it) => it.kind === "ellipse") as any[];
+  check(
+    "each circle is centered on its cell's centroid, inside the cell",
+    circles.length === skew.length &&
+      circles.every((c) => {
+        const cell = cellOf.get(c.datum[0].k)!;
+        const [gx, gy] = ringCentroid(cell);
+        return (
+          Math.hypot(c.cx - gx, c.cy - gy) < 1e-6 &&
+          pointInRing([c.cx, c.cy], cell)
+        );
+      }),
+    circles.map((c) => [c.datum[0].k, c.cx, c.cy])
+  );
+  const texts = items(
+    await chart(skew, { axes: false })
+      .flow(flow)
+      .mark(text({ text: "k" }))
+      .toDisplayList({ w: 300, h: 200 })
+  ).filter((it) => it.kind === "text") as any[];
+  check(
+    "each label is at its cell's centroid (within its own size), inside",
+    texts.length === skew.length &&
+      texts.every((t) => {
+        const cell = cellOf.get(t.datum[0].k)!;
+        const [gx, gy] = ringCentroid(cell);
+        return (
+          Math.hypot(t.x - gx, t.y - gy) < 8 && pointInRing([t.x, t.y], cell)
+        );
+      }),
+    texts.map((t) => [t.text, t.x, t.y])
   );
 }
 

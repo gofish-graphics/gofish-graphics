@@ -94,8 +94,9 @@ so they need a rectangular region: inside a Voronoi cell or the oval of an
   It tiles any convex region, so a Voronoi level can sit inside a Voronoi
   cell, inside a rectangle of a squarified level, or inside the oval of an
   `enclose`. The sites start at random positions drawn from `seed` (default
-  0), so a render is the same every time. Each cell's area is within 2% of
-  its share.
+  0), so a render is the same every time. The cells are fitted to
+  within 2% of their shares before `spacing` takes the gaps off the borders
+  between them.
 
 ```js
 gf.treemap({

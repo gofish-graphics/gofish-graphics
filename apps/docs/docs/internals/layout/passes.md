@@ -756,8 +756,16 @@ order. Three parents make one, and two nodes read it:
   `Tile` strategy is one function, a `Tiling` in `treemap.tsx`, from the
   region and the weights to one ring per child, so the treemap has one
   placement loop. The child's size is the ring's box, and the ring is
-  shifted into it (`inItsBox`). The treemap's own box is always the region
-  it was given, `[0, w] × [0, h]`, so its `padding` stays inside it.
+  shifted into it (`inItsBox`). On an axis where the child fills its room
+  (`fillsRoom`) it is centered on that box; on an axis where it does not (a
+  text, a circle) it is centered on the ring's centroid, which is inside a
+  convex cell, where a polygon's box center may not be. A ring with no area
+  (`hasArea`: a tile rounded to no width, a cell its `spacing` ate, or a
+  Voronoi region with no area, whose cells are all empty) gets a child laid
+  out at size zero with no shape, at the cell's center. `Tile.voronoi`
+  checks that its region is convex whatever the padding, and does not
+  `round` its cells. The treemap's own box is always the region it was
+  given, `[0, w] × [0, h]`, so its `padding` stays inside it.
 - An `enclose` around a member with no size of its own (`fillingLayout`,
   see [Enclose](/internals/frontend/enclose)) hands down its outline.
 

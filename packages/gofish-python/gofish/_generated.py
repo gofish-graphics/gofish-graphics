@@ -804,7 +804,7 @@ def _treemap_opts(*, x: Optional[int | float | str] = None, y: Optional[int | fl
         by: Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         spacing: Gap between sibling tiles, in pixels. Default 0.
         padding: Inset around the outer edge of the treemap, in pixels. Default 0.
-        round: Round pixel positions and sizes. Default true.
+        round: Round pixel positions and sizes. Applies to the rectangular tilings; Tile.voronoi cells are not rounded. Default true.
         tile: The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.voronoi({ seed? }). The first four are d3-hierarchy's tiling methods and need a rectangular region: inside a Voronoi cell or an oval they are an error. Tile.voronoi tiles any convex region, so it can sit inside a Voronoi cell. Default {"kind":"squarify"}.
         sort: Sort leaves by weight before layout. Default "desc".
         size: Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group.
@@ -881,7 +881,7 @@ def _treemap_combinator_opts(*, x: Optional[int | float | str] = None, y: Option
         by: Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         spacing: Gap between sibling tiles, in pixels. Default 0.
         padding: Inset around the outer edge of the treemap, in pixels. Default 0.
-        round: Round pixel positions and sizes. Default true.
+        round: Round pixel positions and sizes. Applies to the rectangular tilings; Tile.voronoi cells are not rounded. Default true.
         tile: The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.voronoi({ seed? }). The first four are d3-hierarchy's tiling methods and need a rectangular region: inside a Voronoi cell or an oval they are an error. Tile.voronoi tiles any convex region, so it can sit inside a Voronoi cell. Default {"kind":"squarify"}.
         sort: Sort leaves by weight before layout. Default "desc".
         size: Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group.

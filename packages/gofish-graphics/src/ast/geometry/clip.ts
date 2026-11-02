@@ -17,6 +17,7 @@
  */
 import type { OutlinePoint, Point } from "./outline";
 import { cross, signedArea2 } from "./plane";
+import { hasArea } from "./ring";
 
 type Pt = OutlinePoint;
 
@@ -85,7 +86,7 @@ function isConvexSimplified(pts: readonly Pt[]): boolean {
 /** A clipped ring simplified, or an empty list when it has no area left. */
 function nonDegenerate(ring: readonly Point[]): Pt[] {
   const out = simplifyRing(ring);
-  return out.length >= 3 && Math.abs(signedArea2(out)) > 1e-9 ? out : [];
+  return hasArea(out) ? out : [];
 }
 
 /** The part of `subject` where `g` is 0 or more, for a function `g` linear
