@@ -660,3 +660,39 @@ export const MaskByRef: StoryObj = {
       200
     ),
 };
+
+// ── clip vs mask: shape vs paint ────────────────────────────────────────────
+
+// Stripes behind a row of three circles.
+const wideStripes = () =>
+  layer(
+    Array.from({ length: 19 }, (_, i) =>
+      rect({
+        x: i * 20,
+        y: 0,
+        w: 10,
+        h: 120,
+        fill: i % 2 ? "#E07A5F" : "#3D5A80",
+      })
+    )
+  );
+const STENCIL_FILLS = ["white", "#808080", "#1f3b5c"];
+const stencilRow = (fills: string[]) =>
+  layer(
+    fills.map((fill, i) => circle({ cx: 60 + i * 120, cy: 60, r: 50, fill }))
+  );
+// mask today: each circle lets the stripes through by its brightness.
+export const ClipVsMaskMask: StoryObj = {
+  render: () =>
+    show(mask([stencilRow(STENCIL_FILLS), wideStripes()]), 380, 140),
+};
+// clip's output, rendered today as mask with every stencil fill white: only
+// the outlines count.
+export const ClipVsMaskClip: StoryObj = {
+  render: () =>
+    show(
+      mask([stencilRow(STENCIL_FILLS.map(() => "white")), wideStripes()]),
+      380,
+      140
+    ),
+};

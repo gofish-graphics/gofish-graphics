@@ -385,6 +385,68 @@ layer([
 
 ## Region compositing
 
+### clip vs mask: shape vs paint
+
+`clip` reads only the outline; `mask` reads the stencil's brightness, like SVG `vs`.
+
+**Shared stencil (the content is the same stripes)**
+
+```js
+const stencil = layer([
+  circle({ cx: 60, cy: 60, r: 50, fill: "white" }),
+  circle({ cx: 180, cy: 60, r: 50, fill: "#808080" }),
+  circle({ cx: 300, cy: 60, r: 50, fill: "#1f3b5c" }),
+]);
+```
+
+**clip (proposed)**
+
+![clip (proposed)](img/clip-vs-mask-clip.png)
+
+_`clip`'s output, rendered today as `mask([stencil, stripes])` with all three circles set to `fill: "white"`._
+
+```js
+clip({ to: stencil }, [stripes]);
+```
+
+**mask (today)**
+
+![mask (today)](img/clip-vs-mask-mask.png)
+
+_Real render: full, about half, and nearly nothing._
+
+```js
+mask([stencil, stripes]);
+```
+
+### Mask by ref
+
+`mask` reads its stencil as ink, so a ref gives nothing; `clip` reads the ref's shape.
+
+![Render](img/mask-by-ref.png)
+
+_Render. Today: outline only, no stripes._
+
+![Render](img/clip-mask-outline.png)
+
+_Render. Proposed: the same picture as the outline card._
+
+**Proposed**
+
+```js
+layer([circle({ cx: 100, cy: 100, r: 80, ...OUTLINE }).name("disc")]).relate(
+  ({ disc }) => [clip({ to: disc }, [stripes()])]
+);
+```
+
+**Current**
+
+```js
+layer([circle({ cx: 100, cy: 100, r: 80, ...OUTLINE }).name("disc")]).relate(
+  ({ disc }) => [mask([disc, stripes()])]
+);
+```
+
 ### Intersect with paint
 
 No change: one new shape, and the operands are not drawn.
@@ -444,34 +506,6 @@ intersect({ fill: "#5b7aa0" }, [a.hidden(), b]); // same as without .hidden()
 
 ```js
 intersect([hidden(a), b]); // prototype shim: draws nothing
-```
-
-### Mask by ref
-
-`mask` reads its stencil as ink, so a ref gives nothing; `clip` reads the ref's shape.
-
-![Render](img/mask-by-ref.png)
-
-_Render. Today: outline only, no stripes._
-
-![Render](img/clip-mask-outline.png)
-
-_Render. Proposed: the same picture as the outline card._
-
-**Proposed**
-
-```js
-layer([circle({ cx: 100, cy: 100, r: 80, ...OUTLINE }).name("disc")]).relate(
-  ({ disc }) => [clip({ to: disc }, [stripes()])]
-);
-```
-
-**Current**
-
-```js
-layer([circle({ cx: 100, cy: 100, r: 80, ...OUTLINE }).name("disc")]).relate(
-  ({ disc }) => [mask([disc, stripes()])]
-);
 ```
 
 ### Region shapes and clip
@@ -667,7 +701,7 @@ layer([
 
 1. Adopt the rule: children are drawn, operands are read and never drawn, refs draw nothing? (card: intersect-hidden)
 2. Split region compositing into region shapes plus `clip`, and drop `mask`, `paint` and the unpainted blend? (card: regions)
-3. Name it `clip` with the option `to`? (card: clip)
+3. Name the outline-only operator `clip({ to })` and keep `mask` for the paint-based case (returning only when an example needs it), or one name for both? (card: clip-vs-mask)
 4. Add `union` as a region shape, separate from `layer`? (card: regions)
 5. Warn when `.hidden()` sits on an inline operand, where it has no effect? (card: intersect-hidden)
 6. Keep `use(ref)` parked until an example needs it? (card: use-ref)

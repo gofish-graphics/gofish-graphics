@@ -422,6 +422,23 @@
         margin: 0 0 8px;
         max-width: 72ch;
       }
+      .compare {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin-top: 4px;
+      }
+      .compare .col {
+        min-width: 0;
+      }
+      .compare figure.render {
+        margin-bottom: 8px;
+      }
+      @media (max-width: 640px) {
+        .compare {
+          grid-template-columns: 1fr;
+        }
+      }
       @media (max-width: 560px) {
         h1 {
           font-size: 1.9rem;
@@ -1040,6 +1057,87 @@ layer([
       </section>
       <section class="group" id="g-regions">
         <h2>Region compositing</h2>
+        <article class="card" id="clip-vs-mask">
+          <h3><a href="#clip-vs-mask">clip vs mask: shape vs paint</a></h3>
+          <p class="say">
+            <code>clip</code> reads only the outline; <code>mask</code> reads
+            the stencil's brightness, like SVG <code>&lt;clipPath&gt;</code> vs
+            <code>&lt;mask&gt;</code>.
+          </p>
+          <p class="label">Shared stencil (the content is the same stripes)</p>
+          <pre
+            class="new"
+          ><code class="language-javascript">const stencil = layer([
+  circle({ cx: 60, cy: 60, r: 50, fill: &quot;white&quot; }),
+  circle({ cx: 180, cy: 60, r: 50, fill: &quot;#808080&quot; }),
+  circle({ cx: 300, cy: 60, r: 50, fill: &quot;#1f3b5c&quot; }),
+]);</code></pre>
+          <div class="compare">
+            <div class="col">
+              <p class="label proposed">clip (proposed)</p>
+              <figure class="render render">
+                <span class="tag tag-render">Render</span
+                ><img src="img/clip-vs-mask-clip.png" alt="" />
+                <figcaption>
+                  <code>clip</code>'s output, rendered today as
+                  <code>mask([stencil, stripes])</code> with all three circles
+                  set to <code>fill: "white"</code>.
+                </figcaption>
+              </figure>
+              <pre
+                class="new"
+              ><code class="language-javascript">clip({ to: stencil }, [stripes]);</code></pre>
+            </div>
+            <div class="col">
+              <p class="label proposed">mask (today)</p>
+              <figure class="render render">
+                <span class="tag tag-render">Render</span
+                ><img src="img/clip-vs-mask-mask.png" alt="" />
+                <figcaption>
+                  Real render: full, about half, and nearly nothing.
+                </figcaption>
+              </figure>
+              <pre
+                class="new"
+              ><code class="language-javascript">mask([stencil, stripes]);</code></pre>
+            </div>
+          </div>
+        </article>
+        <article class="card" id="mask-ref">
+          <h3><a href="#mask-ref">Mask by ref</a></h3>
+          <p class="say">
+            <code>mask</code> reads its stencil as ink, so a ref gives nothing;
+            <code>clip</code> reads the ref's shape.
+          </p>
+          <div class="figs">
+            <figure class="render render">
+              <span class="tag tag-render">Render</span
+              ><img src="img/mask-by-ref.png" alt="" />
+              <figcaption>Today: outline only, no stripes.</figcaption>
+            </figure>
+            <figure class="render render">
+              <span class="tag tag-render">Render</span
+              ><img src="img/clip-mask-outline.png" alt="" />
+              <figcaption>
+                Proposed: the same picture as the outline card.
+              </figcaption>
+            </figure>
+          </div>
+          <p class="label proposed">Proposed</p>
+          <pre
+            class="new"
+            data-changed="3"
+          ><code class="language-javascript">layer([
+  circle({ cx: 100, cy: 100, r: 80, ...OUTLINE }).name(&quot;disc&quot;),
+]).relate(({ disc }) =&gt; [clip({ to: disc }, [stripes()])]);</code></pre>
+          <p class="label current">Current</p>
+          <pre
+            class="now"
+            data-changed="3"
+          ><code class="language-javascript">layer([
+  circle({ cx: 100, cy: 100, r: 80, ...OUTLINE }).name(&quot;disc&quot;),
+]).relate(({ disc }) =&gt; [mask([disc, stripes()])]);</code></pre>
+        </article>
         <article class="card" id="intersect-painted">
           <h3><a href="#intersect-painted">Intersect with paint</a></h3>
           <p class="say">
@@ -1114,41 +1212,6 @@ clip({ to: b }, [a]); // a&#x27;s own paint, inside b</code></pre>
             class="now"
             data-changed="1"
           ><code class="language-javascript">intersect([hidden(a), b]); // prototype shim: draws nothing</code></pre>
-        </article>
-        <article class="card" id="mask-ref">
-          <h3><a href="#mask-ref">Mask by ref</a></h3>
-          <p class="say">
-            <code>mask</code> reads its stencil as ink, so a ref gives nothing;
-            <code>clip</code> reads the ref's shape.
-          </p>
-          <div class="figs">
-            <figure class="render render">
-              <span class="tag tag-render">Render</span
-              ><img src="img/mask-by-ref.png" alt="" />
-              <figcaption>Today: outline only, no stripes.</figcaption>
-            </figure>
-            <figure class="render render">
-              <span class="tag tag-render">Render</span
-              ><img src="img/clip-mask-outline.png" alt="" />
-              <figcaption>
-                Proposed: the same picture as the outline card.
-              </figcaption>
-            </figure>
-          </div>
-          <p class="label proposed">Proposed</p>
-          <pre
-            class="new"
-            data-changed="3"
-          ><code class="language-javascript">layer([
-  circle({ cx: 100, cy: 100, r: 80, ...OUTLINE }).name(&quot;disc&quot;),
-]).relate(({ disc }) =&gt; [clip({ to: disc }, [stripes()])]);</code></pre>
-          <p class="label current">Current</p>
-          <pre
-            class="now"
-            data-changed="3"
-          ><code class="language-javascript">layer([
-  circle({ cx: 100, cy: 100, r: 80, ...OUTLINE }).name(&quot;disc&quot;),
-]).relate(({ disc }) =&gt; [mask([disc, stripes()])]);</code></pre>
         </article>
         <article class="card" id="regions">
           <h3><a href="#regions">Region shapes and clip</a></h3>
@@ -1736,8 +1799,10 @@ rect({ w: 20, h: 20 }).translate({ x: 10 }); // field: translate: { x: 10 }</cod
             blend? <a class="see" href="#regions">card</a>
           </li>
           <li id="d-clipname">
-            Name it <code>clip</code> with the option <code>to</code>?
-            <a class="see" href="#clip">card</a>
+            Name the outline-only operator <code>clip({ to })</code> and keep
+            <code>mask</code> for the paint-based case (returning only when an
+            example needs it), or one name for both?
+            <a class="see" href="#clip-vs-mask">card</a>
           </li>
           <li id="d-union">
             Add <code>union</code> as a region shape, separate from
