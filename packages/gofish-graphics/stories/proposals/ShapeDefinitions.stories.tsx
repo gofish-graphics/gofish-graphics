@@ -610,3 +610,53 @@ export const ClipMaskOutline: StoryObj = {
     return container;
   },
 };
+
+// ── Round 3: children and operands ─────────────────────────────────────────
+
+const RED = { fill: "#E07A5F" };
+const BLUE = { fill: "#3D5A80" };
+const pairA = () => circle({ cx: 90, cy: 90, r: 70, ...RED });
+const pairB = () => rect({ x: 80, y: 30, w: 120, h: 120, ...BLUE });
+const show = (node: any, w = 220, h = 180) => {
+  const container = initializeContainer();
+  node.render(container, { w, h });
+  return container;
+};
+
+// The two shapes drawn as themselves, for reference.
+export const IntersectInputs: StoryObj = {
+  render: () => show(layer([pairA(), pairB()])),
+};
+// intersect with no paint: both operands draw their own paint, clipped to
+// the overlap. Here the slots behave as children.
+export const IntersectUnpainted: StoryObj = {
+  render: () => show(intersect([pairA(), pairB()])),
+};
+// The same with the circle hidden (story shim).
+export const IntersectUnpaintedHidden: StoryObj = {
+  render: () => show(intersect([hidden(pairA()), pairB()])),
+};
+// intersect with paint: one new shape; the operands' paint is not drawn.
+// Here the slots behave as operands.
+export const IntersectPainted: StoryObj = {
+  render: () =>
+    show(
+      intersect({ fill: "#D1E4F6", stroke: "#467DA8", strokeWidth: 2 }, [
+        pairA(),
+        pairB(),
+      ])
+    ),
+};
+
+// The stencil read through a ref while the circle is drawn once, as itself,
+// as an outline on top.
+export const MaskByRef: StoryObj = {
+  render: () =>
+    show(
+      layer([
+        disc({ fill: "none", stroke: "#222", strokeWidth: 3 }).name("disc"),
+      ]).relate(({ disc: d }) => [mask([d, stripes()])]),
+      220,
+      200
+    ),
+};

@@ -447,7 +447,8 @@
           An API proposal for GoFish issue #1267: a shape that other parts of
           the picture use, but that the reader does not see. It replaces the
           unseen <code>fill: "none"</code> curve in the croissant charts. Round
-          2, first below, answers Josh's three questions on round 1.
+          3, first below, records Josh's answers to round 2 and takes up his
+          open questions. Rounds 2 and 1 follow.
         </p>
         <div class="summary">
           <ul>
@@ -484,6 +485,7 @@ chart(grid)
   .mark(ribbon({ h: &quot;pdf&quot; }).name(&quot;density&quot;).hidden());</code></pre>
         </div>
         <nav class="toc" aria-label="Sections">
+          <a href="#r3-top">Round 3</a>
           <a href="#r2-top">Round 2</a>
           <a href="#terms">Terms</a>
           <a href="#precedent">Precedent</a>
@@ -495,6 +497,893 @@ chart(grid)
           <a href="#decisions">Decisions</a>
         </nav>
       </header>
+      <section class="round2" id="r3">
+        <h2 id="r3-top">
+          Round 3: children, operands, and two renames
+          <span class="badge new">new</span>
+        </h2>
+        <p class="note">
+          Josh answered round 2. His decisions are recorded first, then his four
+          open questions. Rounds 2 and 1 follow, with notes where these
+          decisions change them.
+        </p>
+        <div class="summary">
+          <ul>
+            <li>
+              <strong>The rule.</strong> Every slot of an operator is a child
+              slot or an operand slot. The operator draws a child as itself and
+              honors its <code>.hidden()</code>. It reads an operand for shape,
+              place or data and never draws it, so not drawing an operand is not
+              hiding it. No operator ever sets <code>.hidden()</code>.
+            </li>
+            <li>
+              <strong>One family breaks the rule.</strong>
+              <code>intersect</code> switches its slots between child and
+              operand with its paint option, <code>mask</code> reads its stencil
+              as ink, and <code>paint</code> uses one slot as both. The proposed
+              fix is a divergence for Josh: region shapes whose slots are all
+              operands, and one <code>clip({ to }, children)</code>. It also
+              covers #1209 (clipping to a box).
+            </li>
+            <li>
+              <strong><code>use(ref)</code> is parked.</strong> Under the rule,
+              round 2's one example no longer needs it.
+            </li>
+            <li>
+              <strong>Spine and envelope.</strong> No issue for them exists.
+              #1138 (the road-to-beta list) says "No issue yet". The sketch now
+              follows the rule: the guide is an operand, and you see it by
+              drawing it as a child.
+            </li>
+            <li>
+              <strong
+                ><code>.translate()</code> and <code>position()</code> build the
+                same node</strong
+              >
+              but go on the wire in two forms. Rename <code>position</code> to
+              <code>translate</code>. <code>cut</code> takes its source first;
+              move it to <code>cut(opts, [source])</code>. Both issues are
+              drafted.
+            </li>
+          </ul>
+        </div>
+        <nav class="toc" aria-label="Round 3 sections">
+          <a href="#r3-decided">Decided</a
+          ><a href="#r3-slots">Children and operands</a
+          ><a href="#r3-use">use(ref)</a
+          ><a href="#r3-spine">Spine and envelope</a
+          ><a href="#r3-renames">cut and translate</a
+          ><a href="#r3-walls">Walls</a><a href="#r3-decisions">Decisions</a
+          ><a href="#r2-top">Round 2</a><a href="#r1">Round 1</a>
+        </nav>
+        <h3 id="r3-decided">Decided by Josh</h3>
+        <ol class="decided">
+          <li>
+            <code>.hidden()</code> only. There is no <code>hide(x)</code>.
+          </li>
+          <li>
+            An ancestor's <code>.hidden()</code> wins over a descendant's
+            <code>.hidden(false)</code>.
+          </li>
+          <li>
+            <code>.hidden()</code> takes an optional boolean or a function of
+            the datum, <code>.hidden(fn)</code>, in the first version.
+            Conditional hiding comes with it.
+          </li>
+          <li>
+            <code>.hidden()</code> cannot be called through a ref or a
+            selection.
+          </li>
+          <li>
+            An operator never changes the <code>.hidden()</code> of anything it
+            holds. Otherwise whether a mark is drawn would depend on the program
+            around it. Only the user sets it, on a value they hold.
+          </li>
+          <li>
+            Fix <code>cut</code>'s argument order to
+            <code>op(opts, children)</code>, and fix the name mismatch between
+            <code>.translate()</code> and <code>position()</code> if they are
+            the same thing.
+          </li>
+        </ol>
+        <h3 id="r3-slots">A. Children and operands</h3>
+        <div class="prose">
+          <p>
+            Josh likes the cases where a mark is passed as an argument and so is
+            not promised to be drawn, and wants a direct child to be drawn. Here
+            is that rule, stated in terms of what the code does.
+          </p>
+        </div>
+        <section class="approach rec">
+          <ul>
+            <li>
+              <strong>A child slot</strong> holds something the operator draws
+              as itself: moved, arranged, warped or clipped, but in its own
+              paint. A hidden child is laid out as usual and draws nothing.
+            </li>
+            <li>
+              <strong>An operand slot</strong> holds something the operator
+              reads: its outline, its box, its place or its data. The operator
+              draws something of its own, or nothing. It never draws the
+              operand, so <code>.hidden()</code> on an operand changes nothing.
+            </li>
+            <li>
+              <strong>A ref</strong> draws nothing wherever it goes. It points
+              at a shape that is drawn, or hidden, where it was made. A ref is
+              how one shape is both drawn (as a child, once) and read (as an
+              operand, anywhere).
+            </li>
+            <li>
+              <strong>Decision 5 holds.</strong> Not drawing an operand is not
+              hiding it: the operand was never the operator's to draw. The
+              hidden flag is only ever set by the user.
+            </li>
+          </ul>
+        </section>
+        <pre><code class="language-javascript">// Children: drawn by the operator as themselves.
+layer([a, b]);
+spread({ dir: &quot;x&quot; }, [a, b]);
+enclose({ padding: 4 }, [a, b]); // its outline, plus a and b
+
+// Operands: read for shape, place or data. The operator draws something
+// new, or nothing.
+intersect({ fill: FILL }, [density, region({ inset: 3 })]); // one new shape
+Constraint.align({ x: &quot;middle&quot; }, [slot, content]); // draws nothing
+cut({ dir: &quot;y&quot;, size }, [image({ href, w: 193, h: 600 })]); // copies
+
+// A ref draws nothing wherever it goes. It points at a shape that is
+// drawn, or hidden, where it was made.
+arrow({}, [ref(&quot;a&quot;), ref(&quot;b&quot;)]); // draws the arrow only</code></pre>
+        <div class="prose">
+          <p>
+            <strong>How you choose.</strong> To see a guide, draw it once as a
+            child and pass a ref as the operand. Not to see it, either pass it
+            inline as the operand, or, when it must still be laid out among
+            other children, make it a hidden child. The croissant curve is the
+            second kind: it has to set the y scale and sit in the chart's frame,
+            so it is a hidden child read through a ref.
+          </p>
+        </div>
+        <pre><code class="language-javascript">// See the guide: draw it once as a child, and read it as an operand.
+layer([
+  chart(grid)
+    .flow(scatter({ x: &quot;x&quot; }))
+    .mark(ribbon({ h: &quot;pdf&quot; }).name(&quot;density&quot;)),
+]).relate(({ density }) =&gt; [
+  chart(grid)
+    .flow(slices)
+    .mark(intersect({ fill: FILL }, [density, region({ inset: 3 })])),
+]);
+
+// Do not see it, but it must still be laid out in the chart&#x27;s frame:
+// a hidden child.
+ribbon({ h: &quot;pdf&quot; }).name(&quot;density&quot;).hidden();
+
+// Do not see it, and it needs no place of its own: pass it inline.
+intersect({ fill: FILL }, [circle({ r: 40 }), region({ inset: 3 })]);</code></pre>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Operator</th>
+                <th>Slot</th>
+                <th>Kind</th>
+                <th>What the operator draws</th>
+                <th>Code</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <code>layer</code>, <code>spread</code>, <code>stack</code>,
+                  <code>scatter</code>, <code>group</code>,
+                  <code>partition</code>, <code>treemap</code>,
+                  <code>pack</code>
+                </td>
+                <td>children</td>
+                <td>child</td>
+                <td>each child as itself, placed</td>
+                <td>
+                  <code>layer.tsx</code>, <code>spread.tsx</code>,
+                  <code>stack.tsx</code>, ...
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <code>frame</code>, <code>position</code> and
+                  <code>.translate</code>, <code>offset</code>,
+                  <code>coord</code>
+                </td>
+                <td>the child or children</td>
+                <td>child</td>
+                <td>the child, moved or warped</td>
+                <td>
+                  <code>frame.tsx</code>, <code>positionNode.tsx</code>,
+                  <code>offset.tsx</code>,
+                  <code>coordinateTransforms/coord.tsx</code>
+                </td>
+              </tr>
+              <tr>
+                <td><code>enclose</code></td>
+                <td>children</td>
+                <td>child</td>
+                <td>its outline, then each child</td>
+                <td>
+                  <code>enclose.tsx</code> (<code>lowerChildrenOffset</code>)
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <code>enclose</code> with
+                  <code>Shape.blob({ avoiding })</code>
+                </td>
+                <td><code>avoiding</code></td>
+                <td>operand</td>
+                <td>nothing for these</td>
+                <td><code>families/shape.ts</code></td>
+              </tr>
+              <tr>
+                <td><code>arrow</code></td>
+                <td>two children, usually refs</td>
+                <td>child</td>
+                <td>the arrow, then the children (a ref draws nothing)</td>
+                <td><code>arrow.tsx</code></td>
+              </tr>
+              <tr>
+                <td>
+                  <code>line</code>, <code>ribbon</code> and other relational
+                  marks in <code>.layer()</code> or <code>.relate()</code>
+                </td>
+                <td>the <code>selectAll</code> or refs they connect</td>
+                <td>operand</td>
+                <td>a new path through them</td>
+                <td><code>connect.tsx</code></td>
+              </tr>
+              <tr>
+                <td><code>Constraint.*</code> in <code>.relate()</code></td>
+                <td>refs</td>
+                <td>operand</td>
+                <td>nothing</td>
+                <td><code>constraints/</code></td>
+              </tr>
+              <tr>
+                <td>
+                  <code>cut(source, opts)</code> and <code>.cut(opts)</code>
+                </td>
+                <td>the source</td>
+                <td>operand</td>
+                <td>
+                  N clipped copies of the source; the source itself is never
+                  placed
+                </td>
+                <td><code>cut.tsx</code> (<code>buildSliceNode</code>)</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>intersect</code> with <code>fill</code> or
+                  <code>stroke</code>
+                </td>
+                <td>both</td>
+                <td>operand</td>
+                <td>one new shape in its own paint</td>
+                <td>
+                  <code>porterDuff.tsx</code> (<code>placedOutlines</code>)
+                </td>
+              </tr>
+              <tr>
+                <td><code>intersect</code> without paint</td>
+                <td>both</td>
+                <td>child</td>
+                <td>both operands' own paint, blended, inside the overlap</td>
+                <td><code>porterDuff.tsx</code></td>
+              </tr>
+              <tr>
+                <td><code>subtract</code>, <code>exclude</code></td>
+                <td>both</td>
+                <td>child</td>
+                <td>
+                  the operands' own paint inside the region; no paint option
+                </td>
+                <td><code>porterDuff.tsx</code></td>
+              </tr>
+              <tr>
+                <td><code>paint([A, B])</code></td>
+                <td>A, B</td>
+                <td>A child and operand; B child</td>
+                <td>A, then B clipped to A</td>
+                <td><code>porterDuff.tsx</code></td>
+              </tr>
+              <tr>
+                <td><code>mask([A, B])</code></td>
+                <td>A, B</td>
+                <td>A operand, read as ink; B child</td>
+                <td>B clipped to A's ink</td>
+                <td><code>porterDuff.tsx</code></td>
+              </tr>
+              <tr>
+                <td><code>ref(...)</code></td>
+                <td>none</td>
+                <td>pointer</td>
+                <td>nothing</td>
+                <td><code>shapes/ref.tsx</code></td>
+              </tr>
+              <tr>
+                <td><code>Bin.voronoi({ seeds })</code></td>
+                <td><code>seeds</code></td>
+                <td>data</td>
+                <td>nothing</td>
+                <td><code>families/bin.ts</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h4>Where the code diverges: region compositing</h4>
+        <div class="prose">
+          <p>
+            Most operators fit the rule. The region-compositing family does not,
+            in three ways.
+          </p>
+          <p>
+            <strong
+              >1. <code>intersect</code>'s slots change kind with a paint
+              option.</strong
+            >
+            Without paint, it draws both operands' own paint, so they act as
+            children, and hiding one empties the result. With paint, they are
+            operands and their paint is not drawn. Real renders, in reading
+            order: the two inputs, <code>intersect</code> without paint, the
+            same with the circle hidden (the story shim), and
+            <code>intersect</code> with paint.
+          </p>
+        </div>
+        <div class="pair">
+          <div>
+            <span class="label"
+              >The two shapes, drawn by <code>layer</code></span
+            >
+            <div class="render">
+              <img
+                src="img/intersect-inputs.png"
+                alt="A red circle and a blue square overlapping"
+                width="196"
+                height="148"
+              />
+            </div>
+          </div>
+          <div>
+            <span class="label"><code>intersect([circle, square])</code></span>
+            <div class="render">
+              <img
+                src="img/intersect-unpainted.png"
+                alt="The overlap only, in a blend of both shapes&#x27; colors"
+                width="96"
+                height="136"
+              />
+            </div>
+          </div>
+        </div>
+        <div class="pair">
+          <div>
+            <span class="label">The same, circle hidden: nothing</span>
+            <div class="render">
+              <img
+                src="img/intersect-unpainted-hidden.png"
+                alt="An empty render: hiding the circle removed the overlap"
+                width="96"
+                height="136"
+              />
+            </div>
+          </div>
+          <div>
+            <span class="label"
+              ><code>intersect({ fill, stroke }, [circle, square])</code></span
+            >
+            <div class="render">
+              <img
+                src="img/intersect-painted.png"
+                alt="The overlap as one light blue shape with a blue outline"
+                width="98"
+                height="138"
+              />
+            </div>
+          </div>
+        </div>
+        <div class="prose">
+          <p>
+            <strong
+              >2. <code>mask</code> reads its stencil as ink, not as a
+              shape.</strong
+            >
+            The stencil's fill sets how much of B shows (round 2's faded
+            stripes), and a ref stencil, which has no ink, lets nothing through.
+            A painted <code>intersect</code> reads a ref's shape fine; that is
+            how the croissant works. Real render: a circle drawn once as an
+            outline and passed to <code>mask</code> through a ref. The outline
+            draws; the stripes do not.
+          </p>
+        </div>
+        <div class="pair">
+          <div>
+            <span class="label"
+              ><code>mask([ref(disc), stripes])</code>: nothing inside</span
+            >
+            <div class="render">
+              <img
+                src="img/mask-by-ref.png"
+                alt="A black circle outline with nothing inside it"
+                width="179"
+                height="171"
+              />
+            </div>
+          </div>
+          <div>
+            <span class="label">Today's way: a second circle (round 2)</span>
+            <div class="render">
+              <img
+                src="img/clip-mask-outline.png"
+                alt="Stripes clipped to a disc with a black outline on top"
+                width="179"
+                height="171"
+              />
+            </div>
+          </div>
+        </div>
+        <div class="prose">
+          <p>
+            <strong>3. <code>paint</code> uses one slot as both.</strong> A is
+            drawn as a child and also read as B's clip.
+          </p>
+          <p>
+            These are one fault: one family of operators does two different
+            jobs. One job makes a new shape from operand shapes, like Figma's
+            boolean operations. The other draws children inside a region, like
+            SVG <code>clipPath</code>, CSS <code>clip-path</code>, TikZ
+            <code>\clip</code> and Vega's <code>clip</code>. #1209 (clipping
+            content to a box) is the second job, and #1230 (the default paint of
+            a compositing operator with no fill) exists because the first job
+            has no paint of its own.
+          </p>
+        </div>
+        <section class="approach rec">
+          <p>
+            <strong
+              >Proposed factoring (a divergence from the current
+              operators).</strong
+            >
+            Region shapes take operands only and draw one new shape. Clipping
+            takes one operand region and draws its children.
+          </p>
+          <pre><code class="language-javascript">// Sketch. Region shapes: every slot is an operand, read for shape only.
+intersect({ fill: FILL, stroke: STROKE }, [a, b]);
+subtract({ fill: FILL }, [a, b]);
+exclude({ fill: FILL }, [a, b]);
+union({ stroke: STROKE }, [a, b]); // one outline, not two
+
+// Clipping: the region is an operand, the children are children.
+clip({ to: a }, [b]); // was mask([a, b])
+layer([a.name(&quot;a&quot;)]).relate(({ a }) =&gt; [clip({ to: a }, [b])]); // was paint([a, b])
+clip({ to: rect({ w, h }) }, [bars]); // a plot-box clip (#1209)</code></pre>
+          <ul>
+            <li>
+              Every slot of <code>intersect</code>, <code>subtract</code>,
+              <code>exclude</code> and a new <code>union</code> is an operand,
+              read for its shape only. Hidden or not, inline or a ref, it gives
+              the same shape. The result's default paint is #1230's question.
+            </li>
+            <li>
+              <code>union</code> is not <code>layer</code>: a stroked union has
+              one outline around both shapes, while a layer strokes each one.
+            </li>
+            <li>
+              <code>clip({ to }, children)</code> replaces <code>mask</code> and
+              <code>paint</code>. <code>to</code> is an operand read for its
+              shape, never its ink, so a ref works and its fill does not matter.
+              The children are children.
+            </li>
+            <li>
+              <code>cut</code>'s slices become
+              <code>clip({ to: sliceRect }, [offset(source)])</code>, which is
+              what <code>mask([sliceRect, offset(source)])</code> does today.
+            </li>
+            <li>
+              <code>intersect</code> without paint, the blended form, goes away.
+              The same picture is <code>clip({ to: a }, [b])</code>, or two
+              clips.
+            </li>
+          </ul>
+        </section>
+        <div class="pair">
+          <div>
+            <span class="label"
+              >Today: the outline is a second circle (real)</span
+            >
+            <pre><code class="language-javascript">// Today. mask&#x27;s stencil is read as ink, so a ref stencil gives nothing,
+// and the outline needs a second circle.
+layer([
+  mask([circle({ cx: 100, cy: 100, r: 80, fill: &quot;white&quot; }), stripes()]),
+  circle({ cx: 100, cy: 100, r: 80, fill: &quot;none&quot;, stroke: &quot;#222&quot; }),
+]);</code></pre>
+          </div>
+          <div>
+            <span class="label proposed"
+              >Proposed: one circle, drawn and read (sketch)</span
+            >
+            <pre><code class="language-javascript">// Sketch. clip reads its region for shape only. The circle is drawn
+// once, as itself, and read through a ref.
+layer([
+  circle({ cx: 100, cy: 100, r: 80, fill: &quot;none&quot;, stroke: &quot;#222&quot; }).name(
+    &quot;disc&quot;,
+  ),
+]).relate(({ disc }) =&gt; [clip({ to: disc }, [stripes()])]);</code></pre>
+          </div>
+        </div>
+        <div class="prose">
+          <p>
+            The proposed picture is the round 2 render above: the same stripes
+            inside a disc, with its outline on top. The circle is drawn once, so
+            there is no second layout and nothing to keep in sync.
+          </p>
+        </div>
+        <h3 id="r3-use">
+          B. What <code>use(ref)</code> was, and why it is parked
+        </h3>
+        <div class="prose">
+          <p>
+            In SVG, <code>&lt;use href="#a"&gt;</code> draws element
+            <code>a</code> again. It makes no new shape; it repeats one that
+            exists, and it may give the copy its own fill or stroke.
+            <code>use(ref("a"), paint)</code> would have been the same in
+            GoFish: draw a placed shape a second time in another style, without
+            laying it out again.
+          </p>
+          <p>
+            There are three ways to make a shape seen, and <code>use</code> is
+            only for the third. Un-hiding draws the shape once, at its own place
+            in paint order, in its own style. A second mark over the same data
+            draws a second shape, and it lands in the same spot when the shape
+            comes from data, like a ribbon over rows. <code>use</code> is for a
+            shape that must be painted twice, in two styles or at two depths,
+            when its shape comes from layout rather than data, so a second mark
+            might land somewhere else.
+          </p>
+          <p>
+            Round 2's one example was the clip outline. Under the children and
+            operands rule it does not need <code>use</code>: the circle is drawn
+            once as a child, as an outline, and the clip reads it through a ref
+            (the sketch above). The case that would need <code>use</code> looks
+            like this, a blob drawn as a fill below its members and as an
+            outline above them:
+          </p>
+        </div>
+        <pre><code class="language-javascript">// Sketch, parked. A blob laid out around its members, drawn twice:
+// a fill below the members and an outline above them.
+layer([
+  enclose({ shape: Shape.blob, fill: &quot;#eef3f8&quot; }, members).name(&quot;group&quot;),
+  use(ref(&quot;group&quot;), { fill: &quot;none&quot;, stroke: &quot;#467DA8&quot;, zOrder: 1 }),
+]);</code></pre>
+        <div class="prose">
+          <p>
+            No story in the corpus does this. <strong>Verdict: parked</strong>,
+            and taken out of the recommendation. It comes back as its own issue
+            if a real example needs a layout-built shape painted at two depths.
+          </p>
+        </div>
+        <h3 id="r3-spine">C. Spine and envelope transforms</h3>
+        <div class="prose">
+          <p>
+            <strong>No issue exists.</strong> I listed all open issues and pull
+            requests (572) and searched titles and bodies for envelope, spine,
+            skeletal, along, warp, deform, bend, curve, medial and path
+            coordinate, then ran <code>gh search issues</code> over all states
+            for spine, envelope, warp, deform and skeleton. The only mention is
+            #1138, the road-to-beta checklist, under better coordinate transform
+            support: "Transforms driven by a spine or envelope? No issue yet."
+            So there is no model or spelling to match. The sketch below follows
+            GoFish's own coordinate spelling (<code>chart(data, { coord })</code
+            >) and the children and operands rule.
+          </p>
+          <p>
+            <strong>How the rule applies.</strong> The guide is an operand of
+            the transform: <code>Coord.along(river)</code> reads the river's
+            shape and never draws it. You pick whether it is seen where you make
+            it. Draw it as a child of the enclosing layer to see it; add
+            <code>.hidden()</code> to keep it laid out but unseen. Round 2's
+            option (ii), where the transform owned its guide and had a
+            <code>showGuide</code> switch, is dropped: it put the choice on the
+            reader, which decision 5 rules out.
+          </p>
+        </div>
+        <div class="pair">
+          <div>
+            <span class="label">Spine drawn (sketch)</span>
+            <pre><code class="language-javascript">// Sketch: Coord.along does not exist. The river is a child of the layer,
+// drawn as itself. The transform reads it through a ref.
+layer([
+  chart(riverPoints)
+    .flow(scatter({ x: &quot;x&quot;, y: &quot;y&quot; }))
+    .mark(line({ curve: Curve.natural }))
+    .name(&quot;river&quot;),
+]).relate(({ river }) =&gt; [
+  chart(towns, { coord: Coord.along(river) })
+    .flow(scatter({ x: &quot;mile&quot;, y: &quot;bank&quot; }))
+    .mark(circle({ r: 3 })),
+]);</code></pre>
+          </div>
+          <div>
+            <span class="label proposed">Spine not drawn (sketch)</span>
+            <pre><code class="language-javascript">// Not drawn, still laid out: the same child, hidden.
+chart(riverPoints)
+  .flow(scatter({ x: &quot;x&quot;, y: &quot;y&quot; }))
+  .mark(line({ curve: Curve.natural }))
+  .name(&quot;river&quot;)
+  .hidden();</code></pre>
+          </div>
+        </div>
+        <pre><code class="language-javascript">// Sketch: an envelope reads two shapes. Each is drawn or hidden on its own.
+layer([lower.name(&quot;lower&quot;), upper.name(&quot;upper&quot;).hidden()]).relate(
+  ({ lower, upper }) =&gt; [
+    chart(rows, { coord: Coord.between(lower, upper) })
+      .flow(scatter({ x: &quot;t&quot;, y: &quot;share&quot; }))
+      .mark(circle({ r: 2 })),
+  ],
+);</code></pre>
+        <div class="prose">
+          <p>
+            The ref in a chart option sits inside <code>.relate()</code> here.
+            Outside it, it waits on #1259 (string refs outside
+            <code>.relate()</code>).
+          </p>
+        </div>
+        <h3 id="r3-renames">
+          D. <code>cut</code>, and <code>.translate()</code> with
+          <code>position()</code>
+        </h3>
+        <h4><code>.translate()</code> and <code>position()</code></h4>
+        <ul>
+          <li>
+            <strong>Same node.</strong> <code>.translate(opts)</code> is
+            attached to every mark and operator in
+            <code>attachModifiers</code>
+            (<code>ast/marks/createOperator.ts</code>), and
+            <code>translateMark</code> wraps the mark's node in
+            <code>positionNode(opts, [node])</code>.
+            <code>position(opts, children)</code>
+            (<code>graphicalOperators/position.tsx</code>) calls the same
+            <code>positionNode</code> (<code>positionNode.tsx</code>). The node
+            has type <code>"position"</code> and throws unless it has exactly
+            one child.
+          </li>
+          <li>
+            <strong>What it does.</strong> It places the child at 0 if nothing
+            placed it, then moves it by (x, y). A datum offset moves the child
+            in data, so its scale moves too. So it moves by, not places at,
+            though <code>position</code>'s docs say "Set a single child's
+            min-corner".
+          </li>
+          <li>
+            <strong>Two forms on the wire.</strong> <code>.translate</code> is a
+            <code>translate: { x, y }</code> field on the mark (<code
+              >MARK_BASE_FIELDS</code
+            >
+            in <code>gofish-ir/src/frontend/descriptors.ts</code>,
+            <code>TranslateIR</code> in <code>schema.ts</code>, numbers only),
+            and <code>fromJSON.ts</code> reapplies it by calling
+            <code>.translate</code>. <code>position</code> is its own combinator
+            node whose <code>x</code> and <code>y</code> take a datum. One fact
+            has two IR homes, and the field cannot carry the datum offset that
+            JS allows.
+          </li>
+          <li>
+            <strong>Two near names.</strong>
+            <code>offset(opts, [child])</code> (<code>offset.tsx</code>) moves
+            only the paint and keeps the reported box.
+            <code>Constraint.position</code> places a child elsewhere in a
+            layer. Neither is the same thing, and neither changes here.
+          </li>
+        </ul>
+        <div class="pair">
+          <div>
+            <span class="label">Today</span>
+            <pre><code class="language-javascript">// Today: one node, two names, two forms on the wire.
+rect({ w: 20, h: 20 }).translate({ x: 10 }); // field: translate: { x: 10 }
+position({ x: 10 }, [rect({ w: 20, h: 20 })]); // node: { type: &quot;position&quot; }</code></pre>
+          </div>
+          <div>
+            <span class="label proposed">Proposed</span>
+            <pre><code class="language-javascript">// Proposed: one operator and its method twin, one node on the wire.
+translate({ x: 10 }, [rect({ w: 20, h: 20 })]);
+rect({ w: 20, h: 20 }).translate({ x: 10 }); // the same node</code></pre>
+          </div>
+        </div>
+        <div class="pair">
+          <div>
+            <span class="label">Today (Python)</span>
+            <pre><code class="language-python">rect(w=20, h=20).translate(x=10)
+position([rect(w=20, h=20)], x=10)</code></pre>
+          </div>
+          <div>
+            <span class="label proposed">Proposed (Python)</span>
+            <pre><code class="language-python">translate([rect(w=20, h=20)], x=10)
+rect(w=20, h=20).translate(x=10)  # the same node</code></pre>
+          </div>
+        </div>
+        <div class="prose">
+          <p>
+            <strong>The fix.</strong> Rename <code>position</code> to
+            <code>translate</code>, keep <code>.translate()</code> as its method
+            twin, and put one <code>translate</code> node on the wire. The
+            <code>translate</code> field leaves the mark base fields.
+            <strong>Callsites:</strong> <code>position(...)</code> appears about
+            12 times in 4 story files (EncloseShapes, EncloseMembers,
+            OffsetRegressions, Topology), about as often in their 4 Python
+            ports, 12 times in the JS and Python API pages (<code
+              >shape.md</code
+            >
+            and <code>position.md</code> in each language), and 13 times in 2
+            internals diagrams. The API page
+            <code>operators/position.md</code> is renamed in both languages.
+            <code>.translate(...)</code> calls stay as written.
+          </p>
+        </div>
+        <h4><code>cut</code></h4>
+        <ul>
+          <li>
+            <strong>The function.</strong>
+            <code>cut(source, opts)</code> (<code>cut.tsx</code>, line 196) is a
+            plain function that returns a list of N slice promises, N being
+            <code>size.length</code>. Each slice is
+            <code>mask([sliceRect, offset(source)])</code>, so the source is
+            copied N times and never placed itself.
+          </li>
+          <li>
+            <strong>The method.</strong>
+            <code>.cut(opts)</code> (<code>attachCut</code>, on
+            <code>rect</code> and <code>image</code>) builds a different thing:
+            an expand mark from <code>createMark</code>, whose
+            <code>size</code> may be a field name or left out (equal slices, N
+            from the rows). <code>cutMark(opts)</code> builds the same expand
+            mark for the deserializer and is exported too.
+          </li>
+          <li>
+            So the method is not exact sugar for the function, and the function
+            takes its subject first.
+          </li>
+        </ul>
+        <div class="pair">
+          <div>
+            <span class="label">Today</span>
+            <pre><code class="language-javascript">// Today: the source comes first, and the method builds another thing.
+stack({ dir: &quot;y&quot; }, cut(image({ href, w: 193, h: 600 }), { dir: &quot;y&quot;, size }));
+chart(rows)
+  .flow(stack({ dir: &quot;y&quot; }))
+  .mark(image({ href, w: 193, h: 600 }).cut({ dir: &quot;y&quot;, size: &quot;amount&quot; }));</code></pre>
+          </div>
+          <div>
+            <span class="label proposed">Proposed</span>
+            <pre><code class="language-javascript">// Proposed: options first, the source as the one child.
+stack({ dir: &quot;y&quot; }, cut({ dir: &quot;y&quot;, size }, [image({ href, w: 193, h: 600 })]));
+chart(rows)
+  .flow(stack({ dir: &quot;y&quot; }))
+  .mark(image({ href, w: 193, h: 600 }).cut({ dir: &quot;y&quot;, size: &quot;amount&quot; }));</code></pre>
+          </div>
+        </div>
+        <div class="pair">
+          <div>
+            <span class="label">Today (Python)</span>
+            <pre><code class="language-python">stack([cut(image(href=href, w=193, h=600), dir=&quot;y&quot;, size=size)], dir=&quot;y&quot;)</code></pre>
+          </div>
+          <div>
+            <span class="label proposed">Proposed (Python)</span>
+            <pre><code class="language-python">stack([cut([image(href=href, w=193, h=600)], dir=&quot;y&quot;, size=size)], dir=&quot;y&quot;)</code></pre>
+          </div>
+        </div>
+        <div class="prose">
+          <p>
+            <strong>The fix, step 1:</strong>
+            <code>cut(opts, [source])</code> in JS and
+            <code>cut([source], dir=..., size=...)</code> in Python.
+            <strong>Callsites:</strong> 3 in <code>Cut.stories.tsx</code>, 3 in
+            <code>test_cut.py</code>, 9 in the JS <code>cut.md</code> and 8 in
+            the Python <code>cut.md</code> (counting the signature lines), and 2
+            in <code>internals/core/underlying-space.md</code>. The
+            <code>.cut(...)</code> calls (7 in stories, 7 in Python ports, 2 in
+            tests) stay. <strong>Step 2, a question:</strong> make
+            <code>cut(opts, [source])</code> build the same expand mark as
+            <code>.cut(opts)</code>, so that the method is a true twin and
+            <code>cutMark</code> leaves the public surface. That needs a check
+            that combinators take an expand mark's N nodes in place, as
+            <code>fromJSON.ts</code> already does for a <code>cut</code> child.
+          </p>
+        </div>
+        <div class="prose">
+          <p>
+            <strong>Which PR.</strong> Both renames are breaking spelling
+            changes under the same rule, with no tie to <code>.hidden()</code>.
+            I recommend one PR for the two, apart from the
+            <code>.hidden()</code> PR. Drafts:
+            <code>proposals/shape-definitions/issue-translate-position.md</code>
+            and <code>proposals/shape-definitions/issue-cut.md</code>.
+          </p>
+        </div>
+        <h3 id="r3-walls">Walls</h3>
+        <ul>
+          <li>
+            <strong>The spine and envelope issue does not exist,</strong> so C
+            follows GoFish's own spelling, not an issue's.
+          </li>
+          <li>
+            <strong
+              ><code>intersect</code> without paint renders a blend</strong
+            >
+            (a desaturated copy of one operand under the other's color), not two
+            paints side by side. The table describes what it draws today.
+          </li>
+          <li>
+            <strong
+              ><code>clip</code> and <code>union</code> are new names.</strong
+            >
+            They need the precedent check before the spelling is settled.
+          </li>
+          <li>
+            <strong
+              ><code>.hidden()</code> on an inline operand changes
+              nothing.</strong
+            >
+            Whether that should warn is a decision below.
+          </li>
+          <li>
+            <strong>Step 2 of the <code>cut</code> fix is unverified:</strong> I
+            have not checked that every combinator accepts an expand mark's list
+            of nodes.
+          </li>
+        </ul>
+        <div class="prose">
+          <p>
+            <strong>What round 3 changes in rounds 2 and 1.</strong> Round 2's
+            "an operator decides what is drawn only for its own children"
+            becomes the children and operands rule: an operator draws its
+            children as themselves, never draws its operands, and never sets
+            <code>.hidden()</code>. Round 2's spine option (ii) and its
+            <code>use(ref)</code> are dropped. Round 1's "region operand" term
+            now means an operand slot of a region shape.
+          </p>
+        </div>
+        <h3 id="r3-decisions">Decisions for Josh, round 3</h3>
+        <ol class="decisions">
+          <li>Adopt the children and operands rule as stated?</li>
+          <li>
+            Refactor region compositing into region shapes (operands only) and
+            <code>clip({ to }, children)</code>, replacing <code>mask</code> and
+            <code>paint</code>?
+          </li>
+          <li>
+            Is <code>clip</code> the name, and is <code>to</code> the option?
+          </li>
+          <li>
+            Add <code>union</code> as a region shape, apart from
+            <code>layer</code>?
+          </li>
+          <li>
+            Should <code>.hidden()</code> on an inline operand warn, since it
+            does nothing?
+          </li>
+          <li>Park <code>use(ref)</code> until a real example needs it?</li>
+          <li>
+            File an issue for spine and envelope transforms, using the sketch in
+            C?
+          </li>
+          <li>
+            Rename <code>position</code> to <code>translate</code> and move
+            <code>cut</code> to <code>cut(opts, [source])</code> in one PR,
+            apart from <code>.hidden()</code>?
+          </li>
+          <li>
+            For <code>cut</code>, also make the function and the method one
+            construct (step 2)?
+          </li>
+        </ol>
+      </section>
+
       <section class="round2" id="r2">
         <h2 id="r2-top">
           Round 2: methods, guides, and hiding later
@@ -1439,6 +2328,14 @@ layer([
             <strong>Runner-up:</strong> (ii) for children only, which is what
             GoFish does today, plus <code>use(ref)</code> now.
           </p>
+          <p>
+            <em>Restated in round 3.</em> Decision 5 says no operator changes
+            <code>.hidden()</code>. "An operator decides for its own children"
+            becomes the children and operands rule: an operator draws its
+            children as themselves and never draws its operands.
+            <code>use(ref)</code> is parked, and option (ii) for the spine is
+            dropped.
+          </p>
         </section>
         <h3 id="r2-later">
           Calling <code>.hidden()</code> on something already built
@@ -1577,38 +2474,49 @@ ref(&quot;density&quot;).hidden()  # error: a ref cannot change how a shape is d
             Adopt the rule: a function twin only for one-child operators, and it
             must build the same node? (Recommended yes, and add it to
             api-design.md.)
+            <em>Still open: see round 3 for how it applies.</em>
           </li>
           <li>
             So <code>.hidden()</code> only, with no <code>hide(x)</code>, in JS
             and Python? (Recommended yes. Runner-up: both, with
             <code>hide(x)</code> defined as <code>x.hidden()</code>.)
+            <em>Answered: <code>.hidden()</code> only.</em>
           </li>
           <li>
             Guides: drawn unless <code>.hidden()</code>, with operators deciding
             only for their own children? (Recommended yes.)
+            <em
+              >Answered by decision 5; restated as the children and operands
+              rule in round 3.</em
+            >
           </li>
           <li>
             Add <code>use(ref, paint)</code> for a restyled second copy now, or
             wait for a second example after the clip outline? (Recommended
             wait.)
+            <em>Round 3: parked.</em>
           </li>
           <li>
             Should <code>mask</code> and <code>paint</code> stay two operators,
             or become one operator with a switch? (Recommended stay: each is one
             computation.)
+            <em>Reopened in round 3: they mix children and operands.</em>
           </li>
           <li>
             An ancestor's <code>.hidden()</code> wins over a descendant's
             <code>.hidden(false)</code>? (Recommended yes.)
+            <em>Answered: yes.</em>
           </li>
           <li>
             Ship <code>.hidden(fn)</code> per datum in the first version, or
             later? (Recommended first version, since <code>.zOrder(fn)</code> is
             the same shape.)
+            <em>Answered: first version, with a boolean or a function.</em>
           </li>
           <li>
             Fix <code>cut</code>'s argument order to
             <code>cut(opts, [source])</code> in a separate change?
+            <em>Answered: fix it. See round 3.</em>
           </li>
         </ol>
       </section>

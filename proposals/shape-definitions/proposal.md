@@ -19,6 +19,346 @@ chart(grid)
   .mark(ribbon({ h: "pdf" }).name("density").hidden());
 ```
 
+## Round 3: children, operands, and two renames
+
+Josh answered round 2. His decisions are recorded first, then his four open questions. Rounds 2 and 1 follow, with notes where these decisions change them.
+
+- **The rule.** Every slot of an operator is a child slot or an operand slot. The operator draws a child as itself and honors its `.hidden()`. It reads an operand for shape, place or data and never draws it, so not drawing an operand is not hiding it. No operator ever sets `.hidden()`.
+- **One family breaks the rule.** `intersect` switches its slots between child and operand with its paint option, `mask` reads its stencil as ink, and `paint` uses one slot as both. The proposed fix is a divergence for Josh: region shapes whose slots are all operands, and one `clip({ to }, children)`. It also covers #1209 (clipping to a box).
+- **`use(ref)` is parked.** Under the rule, round 2's one example no longer needs it.
+- **Spine and envelope.** No issue for them exists. #1138 (the road-to-beta list) says "No issue yet". The sketch now follows the rule: the guide is an operand, and you see it by drawing it as a child.
+- **`.translate()` and `position()` build the same node** but go on the wire in two forms. Rename `position` to `translate`. `cut` takes its source first; move it to `cut(opts, [source])`. Both issues are drafted.
+
+### Decided by Josh
+
+1. `.hidden()` only. There is no `hide(x)`.
+2. An ancestor's `.hidden()` wins over a descendant's `.hidden(false)`.
+3. `.hidden()` takes an optional boolean or a function of the datum, `.hidden(fn)`, in the first version. Conditional hiding comes with it.
+4. `.hidden()` cannot be called through a ref or a selection.
+5. An operator never changes the `.hidden()` of anything it holds. Otherwise whether a mark is drawn would depend on the program around it. Only the user sets it, on a value they hold.
+6. Fix `cut`'s argument order to `op(opts, children)`, and fix the name mismatch between `.translate()` and `position()` if they are the same thing.
+
+### A. Children and operands
+
+Josh likes the cases where a mark is passed as an argument and so is not promised to be drawn, and wants a direct child to be drawn. Here is that rule, stated in terms of what the code does.
+
+- **A child slot** holds something the operator draws as itself: moved, arranged, warped or clipped, but in its own paint. A hidden child is laid out as usual and draws nothing.
+- **An operand slot** holds something the operator reads: its outline, its box, its place or its data. The operator draws something of its own, or nothing. It never draws the operand, so `.hidden()` on an operand changes nothing.
+- **A ref** draws nothing wherever it goes. It points at a shape that is drawn, or hidden, where it was made. A ref is how one shape is both drawn (as a child, once) and read (as an operand, anywhere).
+- **Decision 5 holds.** Not drawing an operand is not hiding it: the operand was never the operator's to draw. The hidden flag is only ever set by the user.
+
+```js
+// Children: drawn by the operator as themselves.
+layer([a, b]);
+spread({ dir: "x" }, [a, b]);
+enclose({ padding: 4 }, [a, b]); // its outline, plus a and b
+
+// Operands: read for shape, place or data. The operator draws something
+// new, or nothing.
+intersect({ fill: FILL }, [density, region({ inset: 3 })]); // one new shape
+Constraint.align({ x: "middle" }, [slot, content]); // draws nothing
+cut({ dir: "y", size }, [image({ href, w: 193, h: 600 })]); // copies
+
+// A ref draws nothing wherever it goes. It points at a shape that is
+// drawn, or hidden, where it was made.
+arrow({}, [ref("a"), ref("b")]); // draws the arrow only
+```
+
+**How you choose.** To see a guide, draw it once as a child and pass a ref as the operand. Not to see it, either pass it inline as the operand, or, when it must still be laid out among other children, make it a hidden child. The croissant curve is the second kind: it has to set the y scale and sit in the chart's frame, so it is a hidden child read through a ref.
+
+```js
+// See the guide: draw it once as a child, and read it as an operand.
+layer([
+  chart(grid)
+    .flow(scatter({ x: "x" }))
+    .mark(ribbon({ h: "pdf" }).name("density")),
+]).relate(({ density }) => [
+  chart(grid)
+    .flow(slices)
+    .mark(intersect({ fill: FILL }, [density, region({ inset: 3 })])),
+]);
+
+// Do not see it, but it must still be laid out in the chart's frame:
+// a hidden child.
+ribbon({ h: "pdf" }).name("density").hidden();
+
+// Do not see it, and it needs no place of its own: pass it inline.
+intersect({ fill: FILL }, [circle({ r: 40 }), region({ inset: 3 })]);
+```
+
+| Operator                                                                       | Slot                                 | Kind                            | What the operator draws                                           | Code                                                                            |
+| ------------------------------------------------------------------------------ | ------------------------------------ | ------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `layer`, `spread`, `stack`, `scatter`, `group`, `partition`, `treemap`, `pack` | children                             | child                           | each child as itself, placed                                      | `layer.tsx`, `spread.tsx`, `stack.tsx`, ...                                     |
+| `frame`, `position` and `.translate`, `offset`, `coord`                        | the child or children                | child                           | the child, moved or warped                                        | `frame.tsx`, `positionNode.tsx`, `offset.tsx`, `coordinateTransforms/coord.tsx` |
+| `enclose`                                                                      | children                             | child                           | its outline, then each child                                      | `enclose.tsx` (`lowerChildrenOffset`)                                           |
+| `enclose` with `Shape.blob({ avoiding })`                                      | `avoiding`                           | operand                         | nothing for these                                                 | `families/shape.ts`                                                             |
+| `arrow`                                                                        | two children, usually refs           | child                           | the arrow, then the children (a ref draws nothing)                | `arrow.tsx`                                                                     |
+| `line`, `ribbon` and other relational marks in `.layer()` or `.relate()`       | the `selectAll` or refs they connect | operand                         | a new path through them                                           | `connect.tsx`                                                                   |
+| `Constraint.*` in `.relate()`                                                  | refs                                 | operand                         | nothing                                                           | `constraints/`                                                                  |
+| `cut(source, opts)` and `.cut(opts)`                                           | the source                           | operand                         | N clipped copies of the source; the source itself is never placed | `cut.tsx` (`buildSliceNode`)                                                    |
+| `intersect` with `fill` or `stroke`                                            | both                                 | operand                         | one new shape in its own paint                                    | `porterDuff.tsx` (`placedOutlines`)                                             |
+| `intersect` without paint                                                      | both                                 | child                           | both operands' own paint, blended, inside the overlap             | `porterDuff.tsx`                                                                |
+| `subtract`, `exclude`                                                          | both                                 | child                           | the operands' own paint inside the region; no paint option        | `porterDuff.tsx`                                                                |
+| `paint([A, B])`                                                                | A, B                                 | A child and operand; B child    | A, then B clipped to A                                            | `porterDuff.tsx`                                                                |
+| `mask([A, B])`                                                                 | A, B                                 | A operand, read as ink; B child | B clipped to A's ink                                              | `porterDuff.tsx`                                                                |
+| `ref(...)`                                                                     | none                                 | pointer                         | nothing                                                           | `shapes/ref.tsx`                                                                |
+| `Bin.voronoi({ seeds })`                                                       | `seeds`                              | data                            | nothing                                                           | `families/bin.ts`                                                               |
+
+#### Where the code diverges: region compositing
+
+Most operators fit the rule. The region-compositing family does not, in three ways.
+
+**1. `intersect`'s slots change kind with a paint option.** Without paint, it draws both operands' own paint, so they act as children, and hiding one empties the result. With paint, they are operands and their paint is not drawn. Real renders, in reading order: the two inputs, `intersect` without paint, the same with the circle hidden (the story shim), and `intersect` with paint.
+
+![A red circle and a blue square overlapping](img/intersect-inputs.png)
+
+_The two shapes, drawn by layer_
+
+![The overlap only, in a blend of both shapes' colors](img/intersect-unpainted.png)
+
+_intersect([circle, square])_
+
+![An empty render: hiding the circle removed the overlap](img/intersect-unpainted-hidden.png)
+
+_The same, circle hidden: nothing_
+
+![The overlap as one light blue shape with a blue outline](img/intersect-painted.png)
+
+_intersect({ fill, stroke }, [circle, square])_
+
+**2. `mask` reads its stencil as ink, not as a shape.** The stencil's fill sets how much of B shows (round 2's faded stripes), and a ref stencil, which has no ink, lets nothing through. A painted `intersect` reads a ref's shape fine; that is how the croissant works. Real render: a circle drawn once as an outline and passed to `mask` through a ref. The outline draws; the stripes do not.
+
+![A black circle outline with nothing inside it](img/mask-by-ref.png)
+
+_mask([ref(disc), stripes]): nothing inside_
+
+![Stripes clipped to a disc with a black outline on top](img/clip-mask-outline.png)
+
+_Today's way: a second circle (round 2)_
+
+**3. `paint` uses one slot as both.** A is drawn as a child and also read as B's clip.
+
+These are one fault: one family of operators does two different jobs. One job makes a new shape from operand shapes, like Figma's boolean operations. The other draws children inside a region, like SVG `clipPath`, CSS `clip-path`, TikZ `\clip` and Vega's `clip`. #1209 (clipping content to a box) is the second job, and #1230 (the default paint of a compositing operator with no fill) exists because the first job has no paint of its own.
+
+**Proposed factoring (a divergence from the current operators).** Region shapes take operands only and draw one new shape. Clipping takes one operand region and draws its children.
+
+```js
+// Sketch. Region shapes: every slot is an operand, read for shape only.
+intersect({ fill: FILL, stroke: STROKE }, [a, b]);
+subtract({ fill: FILL }, [a, b]);
+exclude({ fill: FILL }, [a, b]);
+union({ stroke: STROKE }, [a, b]); // one outline, not two
+
+// Clipping: the region is an operand, the children are children.
+clip({ to: a }, [b]); // was mask([a, b])
+layer([a.name("a")]).relate(({ a }) => [clip({ to: a }, [b])]); // was paint([a, b])
+clip({ to: rect({ w, h }) }, [bars]); // a plot-box clip (#1209)
+```
+
+- Every slot of `intersect`, `subtract`, `exclude` and a new `union` is an operand, read for its shape only. Hidden or not, inline or a ref, it gives the same shape. The result's default paint is #1230's question.
+- `union` is not `layer`: a stroked union has one outline around both shapes, while a layer strokes each one.
+- `clip({ to }, children)` replaces `mask` and `paint`. `to` is an operand read for its shape, never its ink, so a ref works and its fill does not matter. The children are children.
+- `cut`'s slices become `clip({ to: sliceRect }, [offset(source)])`, which is what `mask([sliceRect, offset(source)])` does today.
+- `intersect` without paint, the blended form, goes away. The same picture is `clip({ to: a }, [b])`, or two clips.
+
+**Today: the outline is a second circle (real)**
+
+```js
+// Today. mask's stencil is read as ink, so a ref stencil gives nothing,
+// and the outline needs a second circle.
+layer([
+  mask([circle({ cx: 100, cy: 100, r: 80, fill: "white" }), stripes()]),
+  circle({ cx: 100, cy: 100, r: 80, fill: "none", stroke: "#222" }),
+]);
+```
+
+**Proposed: one circle, drawn and read (sketch)**
+
+```js
+// Sketch. clip reads its region for shape only. The circle is drawn
+// once, as itself, and read through a ref.
+layer([
+  circle({ cx: 100, cy: 100, r: 80, fill: "none", stroke: "#222" }).name(
+    "disc"
+  ),
+]).relate(({ disc }) => [clip({ to: disc }, [stripes()])]);
+```
+
+The proposed picture is the round 2 render above: the same stripes inside a disc, with its outline on top. The circle is drawn once, so there is no second layout and nothing to keep in sync.
+
+### B. What `use(ref)` was, and why it is parked
+
+In SVG, `<use href="#a">` draws element `a` again. It makes no new shape; it repeats one that exists, and it may give the copy its own fill or stroke. `use(ref("a"), paint)` would have been the same in GoFish: draw a placed shape a second time in another style, without laying it out again.
+
+There are three ways to make a shape seen, and `use` is only for the third. Un-hiding draws the shape once, at its own place in paint order, in its own style. A second mark over the same data draws a second shape, and it lands in the same spot when the shape comes from data, like a ribbon over rows. `use` is for a shape that must be painted twice, in two styles or at two depths, when its shape comes from layout rather than data, so a second mark might land somewhere else.
+
+Round 2's one example was the clip outline. Under the children and operands rule it does not need `use`: the circle is drawn once as a child, as an outline, and the clip reads it through a ref (the sketch above). The case that would need `use` looks like this, a blob drawn as a fill below its members and as an outline above them:
+
+```js
+// Sketch, parked. A blob laid out around its members, drawn twice:
+// a fill below the members and an outline above them.
+layer([
+  enclose({ shape: Shape.blob, fill: "#eef3f8" }, members).name("group"),
+  use(ref("group"), { fill: "none", stroke: "#467DA8", zOrder: 1 }),
+]);
+```
+
+No story in the corpus does this. **Verdict: parked**, and taken out of the recommendation. It comes back as its own issue if a real example needs a layout-built shape painted at two depths.
+
+### C. Spine and envelope transforms
+
+**No issue exists.** I listed all open issues and pull requests (572) and searched titles and bodies for envelope, spine, skeletal, along, warp, deform, bend, curve, medial and path coordinate, then ran `gh search issues` over all states for spine, envelope, warp, deform and skeleton. The only mention is #1138, the road-to-beta checklist, under better coordinate transform support: "Transforms driven by a spine or envelope? No issue yet." So there is no model or spelling to match. The sketch below follows GoFish's own coordinate spelling (`chart(data, { coord })`) and the children and operands rule.
+
+**How the rule applies.** The guide is an operand of the transform: `Coord.along(river)` reads the river's shape and never draws it. You pick whether it is seen where you make it. Draw it as a child of the enclosing layer to see it; add `.hidden()` to keep it laid out but unseen. Round 2's option (ii), where the transform owned its guide and had a `showGuide` switch, is dropped: it put the choice on the reader, which decision 5 rules out.
+
+**Spine drawn (sketch)**
+
+```js
+// Sketch: Coord.along does not exist. The river is a child of the layer,
+// drawn as itself. The transform reads it through a ref.
+layer([
+  chart(riverPoints)
+    .flow(scatter({ x: "x", y: "y" }))
+    .mark(line({ curve: Curve.natural }))
+    .name("river"),
+]).relate(({ river }) => [
+  chart(towns, { coord: Coord.along(river) })
+    .flow(scatter({ x: "mile", y: "bank" }))
+    .mark(circle({ r: 3 })),
+]);
+```
+
+**Spine not drawn (sketch)**
+
+```js
+// Not drawn, still laid out: the same child, hidden.
+chart(riverPoints)
+  .flow(scatter({ x: "x", y: "y" }))
+  .mark(line({ curve: Curve.natural }))
+  .name("river")
+  .hidden();
+```
+
+```js
+// Sketch: an envelope reads two shapes. Each is drawn or hidden on its own.
+layer([lower.name("lower"), upper.name("upper").hidden()]).relate(
+  ({ lower, upper }) => [
+    chart(rows, { coord: Coord.between(lower, upper) })
+      .flow(scatter({ x: "t", y: "share" }))
+      .mark(circle({ r: 2 })),
+  ]
+);
+```
+
+The ref in a chart option sits inside `.relate()` here. Outside it, it waits on #1259 (string refs outside `.relate()`).
+
+### D. `cut`, and `.translate()` with `position()`
+
+#### `.translate()` and `position()`
+
+- **Same node.** `.translate(opts)` is attached to every mark and operator in `attachModifiers` (`ast/marks/createOperator.ts`), and `translateMark` wraps the mark's node in `positionNode(opts, [node])`. `position(opts, children)` (`graphicalOperators/position.tsx`) calls the same `positionNode` (`positionNode.tsx`). The node has type `"position"` and throws unless it has exactly one child.
+- **What it does.** It places the child at 0 if nothing placed it, then moves it by (x, y). A datum offset moves the child in data, so its scale moves too. So it moves by, not places at, though `position`'s docs say "Set a single child's min-corner".
+- **Two forms on the wire.** `.translate` is a `translate: { x, y }` field on the mark (`MARK_BASE_FIELDS` in `gofish-ir/src/frontend/descriptors.ts`, `TranslateIR` in `schema.ts`, numbers only), and `fromJSON.ts` reapplies it by calling `.translate`. `position` is its own combinator node whose `x` and `y` take a datum. One fact has two IR homes, and the field cannot carry the datum offset that JS allows.
+- **Two near names.** `offset(opts, [child])` (`offset.tsx`) moves only the paint and keeps the reported box. `Constraint.position` places a child elsewhere in a layer. Neither is the same thing, and neither changes here.
+
+**Today**
+
+```js
+// Today: one node, two names, two forms on the wire.
+rect({ w: 20, h: 20 }).translate({ x: 10 }); // field: translate: { x: 10 }
+position({ x: 10 }, [rect({ w: 20, h: 20 })]); // node: { type: "position" }
+```
+
+**Proposed**
+
+```js
+// Proposed: one operator and its method twin, one node on the wire.
+translate({ x: 10 }, [rect({ w: 20, h: 20 })]);
+rect({ w: 20, h: 20 }).translate({ x: 10 }); // the same node
+```
+
+**Today (Python)**
+
+```python
+rect(w=20, h=20).translate(x=10)
+position([rect(w=20, h=20)], x=10)
+```
+
+**Proposed (Python)**
+
+```python
+translate([rect(w=20, h=20)], x=10)
+rect(w=20, h=20).translate(x=10)  # the same node
+```
+
+**The fix.** Rename `position` to `translate`, keep `.translate()` as its method twin, and put one `translate` node on the wire. The `translate` field leaves the mark base fields. **Callsites:** `position(...)` appears about 12 times in 4 story files (EncloseShapes, EncloseMembers, OffsetRegressions, Topology), about as often in their 4 Python ports, 12 times in the JS and Python API pages (`shape.md` and `position.md` in each language), and 13 times in 2 internals diagrams. The API page `operators/position.md` is renamed in both languages. `.translate(...)` calls stay as written.
+
+#### `cut`
+
+- **The function.** `cut(source, opts)` (`cut.tsx`, line 196) is a plain function that returns a list of N slice promises, N being `size.length`. Each slice is `mask([sliceRect, offset(source)])`, so the source is copied N times and never placed itself.
+- **The method.** `.cut(opts)` (`attachCut`, on `rect` and `image`) builds a different thing: an expand mark from `createMark`, whose `size` may be a field name or left out (equal slices, N from the rows). `cutMark(opts)` builds the same expand mark for the deserializer and is exported too.
+- So the method is not exact sugar for the function, and the function takes its subject first.
+
+**Today**
+
+```js
+// Today: the source comes first, and the method builds another thing.
+stack({ dir: "y" }, cut(image({ href, w: 193, h: 600 }), { dir: "y", size }));
+chart(rows)
+  .flow(stack({ dir: "y" }))
+  .mark(image({ href, w: 193, h: 600 }).cut({ dir: "y", size: "amount" }));
+```
+
+**Proposed**
+
+```js
+// Proposed: options first, the source as the one child.
+stack({ dir: "y" }, cut({ dir: "y", size }, [image({ href, w: 193, h: 600 })]));
+chart(rows)
+  .flow(stack({ dir: "y" }))
+  .mark(image({ href, w: 193, h: 600 }).cut({ dir: "y", size: "amount" }));
+```
+
+**Today (Python)**
+
+```python
+stack([cut(image(href=href, w=193, h=600), dir="y", size=size)], dir="y")
+```
+
+**Proposed (Python)**
+
+```python
+stack([cut([image(href=href, w=193, h=600)], dir="y", size=size)], dir="y")
+```
+
+**The fix, step 1:** `cut(opts, [source])` in JS and `cut([source], dir=..., size=...)` in Python. **Callsites:** 3 in `Cut.stories.tsx`, 3 in `test_cut.py`, 9 in the JS `cut.md` and 8 in the Python `cut.md` (counting the signature lines), and 2 in `internals/core/underlying-space.md`. The `.cut(...)` calls (7 in stories, 7 in Python ports, 2 in tests) stay. **Step 2, a question:** make `cut(opts, [source])` build the same expand mark as `.cut(opts)`, so that the method is a true twin and `cutMark` leaves the public surface. That needs a check that combinators take an expand mark's N nodes in place, as `fromJSON.ts` already does for a `cut` child.
+
+**Which PR.** Both renames are breaking spelling changes under the same rule, with no tie to `.hidden()`. I recommend one PR for the two, apart from the `.hidden()` PR. Drafts: `proposals/shape-definitions/issue-translate-position.md` and `proposals/shape-definitions/issue-cut.md`.
+
+### Walls
+
+- **The spine and envelope issue does not exist,** so C follows GoFish's own spelling, not an issue's.
+- **`intersect` without paint renders a blend** (a desaturated copy of one operand under the other's color), not two paints side by side. The table describes what it draws today.
+- **`clip` and `union` are new names.** They need the precedent check before the spelling is settled.
+- **`.hidden()` on an inline operand changes nothing.** Whether that should warn is a decision below.
+- **Step 2 of the `cut` fix is unverified:** I have not checked that every combinator accepts an expand mark's list of nodes.
+
+**What round 3 changes in rounds 2 and 1.** Round 2's "an operator decides what is drawn only for its own children" becomes the children and operands rule: an operator draws its children as themselves, never draws its operands, and never sets `.hidden()`. Round 2's spine option (ii) and its `use(ref)` are dropped. Round 1's "region operand" term now means an operand slot of a region shape.
+
+### Decisions for Josh, round 3
+
+1. Adopt the children and operands rule as stated?
+2. Refactor region compositing into region shapes (operands only) and `clip({ to }, children)`, replacing `mask` and `paint`?
+3. Is `clip` the name, and is `to` the option?
+4. Add `union` as a region shape, apart from `layer`?
+5. Should `.hidden()` on an inline operand warn, since it does nothing?
+6. Park `use(ref)` until a real example needs it?
+7. File an issue for spine and envelope transforms, using the sketch in C?
+8. Rename `position` to `translate` and move `cut` to `cut(opts, [source])` in one PR, apart from `.hidden()`?
+9. For `cut`, also make the function and the method one construct (step 2)?
+
+---
+
 ## Round 2: methods, guides, and hiding later
 
 Josh asked three things after round 1: how chain methods relate to operators, how a shape works as a mask or guide that is sometimes drawn, and what happens when `.hidden()` is called on something already built. Round 1 follows below, unchanged except where noted.
@@ -360,6 +700,8 @@ Making every guide hidden by default and drawn only through `use` would make the
 
 **Guides, recommended:** (i) for every shape, with (iv) where the guide is data (Voronoi seeds) and an operator's own meaning for its own children (`mask`, a painted `intersect`). No switch on the reader. `use(ref)` later, for a restyled copy. **Runner-up:** (ii) for children only, which is what GoFish does today, plus `use(ref)` now.
 
+_Restated in round 3._ Decision 5 says no operator changes `.hidden()`. "An operator decides for its own children" becomes the children and operands rule: an operator draws its children as themselves and never draws its operands. `use(ref)` is parked, and option (ii) for the spine is dropped.
+
 ### Calling `.hidden()` on something already built
 
 - **Where it can be called.** On any value you hold: a mark, a chart, a layer, or a chart that a helper returns. You hold the value, so hiding it is a fact about it, like `.zOrder()`.
@@ -412,14 +754,14 @@ ref("density").hidden()  # error: a ref cannot change how a shape is drawn
 
 ### Decisions for Josh, round 2
 
-1. Adopt the rule: a function twin only for one-child operators, and it must build the same node? (Recommended yes, and add it to api-design.md.)
-2. So `.hidden()` only, with no `hide(x)`, in JS and Python? (Recommended yes. Runner-up: both, with `hide(x)` defined as `x.hidden()`.)
-3. Guides: drawn unless `.hidden()`, with operators deciding only for their own children? (Recommended yes.)
-4. Add `use(ref, paint)` for a restyled second copy now, or wait for a second example after the clip outline? (Recommended wait.)
-5. Should `mask` and `paint` stay two operators, or become one operator with a switch? (Recommended stay: each is one computation.)
-6. An ancestor's `.hidden()` wins over a descendant's `.hidden(false)`? (Recommended yes.)
-7. Ship `.hidden(fn)` per datum in the first version, or later? (Recommended first version, since `.zOrder(fn)` is the same shape.)
-8. Fix `cut`'s argument order to `cut(opts, [source])` in a separate change?
+1. Adopt the rule: a function twin only for one-child operators, and it must build the same node? (Recommended yes, and add it to api-design.md.) _Still open: see round 3 for how it applies._
+2. So `.hidden()` only, with no `hide(x)`, in JS and Python? (Recommended yes. Runner-up: both, with `hide(x)` defined as `x.hidden()`.) _Answered: `.hidden()` only._
+3. Guides: drawn unless `.hidden()`, with operators deciding only for their own children? (Recommended yes.) _Answered by decision 5; restated as the children and operands rule in round 3._
+4. Add `use(ref, paint)` for a restyled second copy now, or wait for a second example after the clip outline? (Recommended wait.) _Round 3: parked._
+5. Should `mask` and `paint` stay two operators, or become one operator with a switch? (Recommended stay: each is one computation.) _Reopened in round 3: they mix children and operands._
+6. An ancestor's `.hidden()` wins over a descendant's `.hidden(false)`? (Recommended yes.) _Answered: yes._
+7. Ship `.hidden(fn)` per datum in the first version, or later? (Recommended first version, since `.zOrder(fn)` is the same shape.) _Answered: first version, with a boolean or a function._
+8. Fix `cut`'s argument order to `cut(opts, [source])` in a separate change? _Answered: fix it. See round 3._
 
 ---
 
