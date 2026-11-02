@@ -12,7 +12,16 @@ import { boxRing, ovalRing, ringArea } from "../ast/geometry/ring";
 import { isConvex } from "../ast/geometry/clip";
 import { pointInRing } from "../ast/geometry/plane";
 import { countryPopulations } from "../data/countryPopulations";
-import { chart, enclose, rect, region, Shape, Tile, treemap } from "../lib";
+import {
+  chart,
+  enclose,
+  rect,
+  region,
+  Shape,
+  spread,
+  Tile,
+  treemap,
+} from "../lib";
 import { check, items, report } from "./testHelpers";
 
 type Pt = readonly [number, number];
@@ -117,13 +126,16 @@ console.log("# values that are not positive get no cell");
   check("one value is the whole region", ringArea(one[0]) === 5000);
 }
 
-/** The area of a path item's points (one closed loop of M/L commands). */
-const pathArea = (it: any): number => {
+/** A path item's points (one closed loop of M/L commands). */
+const pathPoints = (it: any): Pt[] => {
   const nums = (it.d as string).match(/-?[\d.]+(e-?\d+)?/g)!.map(Number);
   const pts: Pt[] = [];
   for (let i = 0; i + 1 < nums.length; i += 2) pts.push([nums[i], nums[i + 1]]);
-  return ringArea(pts);
+  return pts;
 };
+
+/** The area of a path item's points. */
+const pathArea = (it: any): number => ringArea(pathPoints(it));
 
 /** The message `run` throws, or "" when it does not. */
 const errorOf = async (run: () => Promise<unknown>): Promise<string> => {
@@ -191,6 +203,34 @@ console.log("# enclose hands its oval down to a treemap");
     "the cells fill the circle (within its polygon's area)",
     paths.length === 5 && Math.abs(total - oval) / oval < 0.01,
     { count: paths.length, total, oval }
+  );
+}
+
+console.log("# a treemap's box is its whole region, its padding inside it");
+for (const tile of [Tile.squarify, Tile.voronoi]) {
+  // Two 200 x 100 treemaps side by side, nothing between them: the second
+  // starts where the first one's box ends.
+  const dl = await chart(rows, { axes: false })
+    .flow(
+      spread({ by: "g", dir: "x", spacing: 0 }),
+      treemap({ by: "k", size: "v", padding: 10, w: 200, h: 100, tile })
+    )
+    .mark(region({ fill: "#888" }))
+    .toDisplayList({ w: 400, h: 100 });
+  const pts = items(dl).flatMap(pathPoints);
+  const extent = (ps: Pt[]) => {
+    const xs = ps.map((p) => p[0]);
+    const ys = ps.map((p) => p[1]);
+    return [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  };
+  const first = extent(pts.filter((p) => p[0] < 200));
+  const second = extent(pts.filter((p) => p[0] >= 200));
+  const near = (got: number[], want: number[]) =>
+    got.every((v, i) => Math.abs(v - want[i]) < 0.5);
+  check(
+    `${tile.kind}: each box is its full 200 x 100 slot, its tiles 10 px inside`,
+    near(first, [10, 190, 10, 90]) && near(second, [210, 390, 10, 90]),
+    { first, second }
   );
 }
 

@@ -750,9 +750,12 @@ order. Three parents make one, and two nodes read it:
   (`boxRing`), a convex polygon for `Tile.voronoi`
   (`src/ast/geometry/voronoiTiling.ts`: a power diagram of the region,
   clipped half-plane by half-plane with `clipToHalfPlane`, its sites and
-  weights moved until each cell's area is within 2% of its share). The
-  child's size is the polygon's box, and the polygon is shifted into it
-  (`inItsBox`).
+  weights moved until each cell's area is within 2% of its share). Every
+  `Tile` strategy is one function, a `Tiling` in `treemap.tsx`, from the
+  region and the weights to one ring per child, so the treemap has one
+  placement loop. The child's size is the ring's box, and the ring is
+  shifted into it (`inItsBox`). The treemap's own box is always the region
+  it was given, `[0, w] × [0, h]`, so its `padding` stays inside it.
 - An `enclose` around a member with no size of its own (`fillingLayout`,
   see [Enclose](/internals/frontend/enclose)) hands down its outline.
 
