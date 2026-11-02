@@ -5,6 +5,7 @@
 import {
   unifiedOutline,
   UNIFIED_STATS,
+  UNIFIED_PROTOTYPE,
 } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/unified";
 import {
   blobOutline,
@@ -15,6 +16,11 @@ import { arcsOutline } from "../../packages/gofish-graphics/src/ast/graphicalOpe
 import { signedArea2 } from "../../packages/gofish-graphics/src/ast/geometry/plane";
 
 export type { BlobMember, Pt };
+
+// PROTOTYPE: ?search=bisection runs the earlier radius search, for comparison
+if (new URLSearchParams(location.search).get("search") === "bisection")
+  UNIFIED_PROTOTYPE.search = "bisection";
+export const SEARCH = UNIFIED_PROTOTYPE.search;
 
 export type Params = {
   convexity: number;
@@ -39,7 +45,15 @@ export type SetResult = {
   links: BlobMember[];
   pieces: number;
   holes: number;
-  ms: { links: number; close: number; smooth: number; total: number };
+  /** cached: the part of total spent building the per-set cache (spine, hull,
+   *  filtration), which a convexity change on the same set skips */
+  ms: {
+    links: number;
+    close: number;
+    smooth: number;
+    total: number;
+    cached: number;
+  };
   /** today's outline (Shape.blob, or Shape.arcs when not connected), when asked */
   today?: { rings: Pt[][]; ms: number };
 };
@@ -82,6 +96,7 @@ export function computeSet(s: SetInput, p: Params): SetResult {
       close: S.msClose ?? 0,
       smooth: S.msSmooth ?? 0,
       total,
+      cached: S.msCached ?? 0,
     },
   };
   if (p.compare) {

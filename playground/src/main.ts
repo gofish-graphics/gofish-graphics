@@ -1,5 +1,6 @@
 import DATA from "./datasets.json";
 import {
+  SEARCH,
   computeSet,
   type BlobMember,
   type Params,
@@ -363,7 +364,7 @@ const drawStats = (results: SetResult[], wall: number) => {
       "closing radius r",
       rText,
       state.connected
-        ? `${iters} closing${iters === 1 ? "" : "s"} in the search`
+        ? `${iters} closing${iters === 1 ? "" : "s"} in the search (${SEARCH})`
         : ""
     ) +
     stat(
@@ -374,7 +375,7 @@ const drawStats = (results: SetResult[], wall: number) => {
     stat(
       "compute",
       `${fmtMs(wall)} ms`,
-      `links ${fmtMs(sum((r) => r.ms.links))} · closing ${fmtMs(sum((r) => r.ms.close))} · cut+smooth ${fmtMs(sum((r) => r.ms.smooth))}`
+      `links ${fmtMs(sum((r) => r.ms.links))} · closing ${fmtMs(sum((r) => r.ms.close))} · cut+smooth ${fmtMs(sum((r) => r.ms.smooth))}${sum((r) => r.ms.cached) > 0 ? ` · cache built ${fmtMs(sum((r) => r.ms.cached))}` : ""}`
     ) +
     (today !== null
       ? stat(
@@ -387,9 +388,12 @@ const drawStats = (results: SetResult[], wall: number) => {
 
 // ── recompute scheduling ─────────────────────────────────────────────────────
 // Every set is computed in one task, at most once per animation frame. A dataset whose last
-// compute took longer than SLOW ms redraws only when a slider is released.
+// compute took longer than SLOW ms redraws only when a slider is released. Dragging convexity
+// reuses the per-set cache (spine, hull, filtration), so it is judged by the last compute less
+// the time spent building that cache; the other sliders rebuild it.
 const SLOW = 120;
 const lastMs = new Map<string, number>();
+const lastWarm = new Map<string, number>();
 let pending: number | null = null;
 const recompute = () => {
   const d = dataset();
@@ -404,16 +408,21 @@ const recompute = () => {
     return;
   }
   const ms = performance.now() - t0;
+  const warm = ms - out.reduce((t, r) => t + r.ms.cached, 0);
   lastMs.set(d.id, ms);
+  lastWarm.set(d.id, warm);
   drawResults(out);
   drawStats(out, ms);
   $("status").textContent = `computed in ${fmtMs(ms)} ms`;
   $("status").dataset.ms = String(ms);
-  const slow = ms > SLOW;
-  $("slow").hidden = !slow;
-  $("slow").textContent = slow
-    ? "Slow at these settings: sliders redraw when released."
-    : "";
+  const msg =
+    warm > SLOW
+      ? "Slow at these settings: sliders redraw when released."
+      : ms > SLOW
+        ? "Convexity drags live; the other sliders redraw when released."
+        : "";
+  $("slow").hidden = !msg;
+  $("slow").textContent = msg;
 };
 const schedule = () => {
   if (pending !== null) cancelAnimationFrame(pending);
@@ -434,7 +443,8 @@ for (const k of SLIDERS) {
   el.addEventListener("input", () => {
     state = { ...state, [k]: +el.value };
     syncControls();
-    if ((lastMs.get(state.dataset) ?? 0) <= SLOW) schedule();
+    const last = (k === "convexity" ? lastWarm : lastMs).get(state.dataset);
+    if ((last ?? 0) <= SLOW) schedule();
   });
   el.addEventListener("change", () => update({ [k]: +el.value }));
 }

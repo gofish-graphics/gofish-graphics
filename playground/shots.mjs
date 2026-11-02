@@ -1,6 +1,6 @@
 // SCRATCH: open dist/index.html headlessly, screenshot a set of states, print timings and
 // console errors.   node playground/shots.mjs <outdir>
-import { readdirSync, mkdirSync } from "node:fs";
+import { readdirSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -15,7 +15,10 @@ const { chromium } = await import(
 );
 const out = process.argv[2] ?? join(here, "shots");
 mkdirSync(out, { recursive: true });
-const url = pathToFileURL(join(here, "dist/index.html")).href;
+// SEARCH=bisection: the earlier radius search, for comparison
+const url =
+  pathToFileURL(join(here, "dist/index.html")).href +
+  (process.env.SEARCH ? `?search=${process.env.SEARCH}` : "");
 
 const browser = await chromium.launch();
 const errors = [];
@@ -68,6 +71,7 @@ const DS = [
 ];
 const VARIANTS = [
   ["c000", { convexity: 0 }],
+  ["c025", { convexity: 0.25 }],
   ["c050", { convexity: 0.5 }],
   ["c100", { convexity: 1 }],
   ["c150", { convexity: 1.5 }],
@@ -114,6 +118,7 @@ for (const ds of DS) {
   }
 }
 console.log(JSON.stringify(timing, null, 1));
+writeFileSync(join(out, "timing.json"), JSON.stringify(timing, null, 1));
 await page.close();
 
 // dark mode and phone width

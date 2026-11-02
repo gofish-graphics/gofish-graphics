@@ -583,6 +583,44 @@ function taperKeepIns(a: Pt, b: Pt, ra: number, rb: number): KeepIn[] {
 }
 
 /**
+ * PROTOTYPE (filtration.ts): points on the boundary of the union of
+ * `members` grown by `padding`, at most `h` apart along each grown member's
+ * exact edges. A point strictly inside another grown member is left out, so
+ * the points lie on the union's boundary (and on the boundary of its holes).
+ */
+export function unionBoundarySamples(
+  members: BlobMember[],
+  padding: number,
+  h: number
+): Pt[] {
+  const prims = members.map((m) => grown(m, Math.max(0, padding)));
+  const near = boxGrid(prims.map((p) => p.prim.bb));
+  const out: Pt[] = [];
+  prims.forEach((P, i) => {
+    const [xa, ya, xb, yb] = P.prim.bb;
+    const others = near.query(xa, ya, xb, yb).filter((j) => j !== i);
+    for (const e of P.edges) {
+      const [s0, s1] = range(e);
+      const len =
+        e.t === "line"
+          ? Math.hypot(e.bx - e.ax, e.by - e.ay)
+          : e.R * Math.abs(s1 - s0);
+      const n = Math.max(1, Math.ceil(len / h));
+      // the edge's end is the next edge's start: leave it to that edge
+      for (let k = 0; k < n; k++) {
+        const s = s0 + ((s1 - s0) * k) / n;
+        const x = atX(e, s),
+          y = atY(e, s);
+        if (others.some((j) => primD(prims[j].prim, x, y, false) < -1e-6))
+          continue;
+        out.push([x, y]);
+      }
+    }
+  });
+  return out;
+}
+
+/**
  * The exact closing (steps 1-4 above) of `members` grown by `padding`, by a
  * disc of `radius`. Its outer loops wind as the members do. With `holes`
  * (PROTOTYPE), a hole of the closing stays open, as a loop that winds the

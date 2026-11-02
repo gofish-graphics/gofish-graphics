@@ -29,6 +29,43 @@ import { convexHull, type BlobMember, type Pt } from "./blob";
 import { closingRings, keepIns } from "./arcs";
 import { resample, smoothOutline, type SmoothSpec } from "./arcsSmooth";
 import { beyondHull, type Beyond } from "./beyond";
+import { buildFiltration, type Filtration } from "./filtration";
+
+/**
+ * PROTOTYPE: how `convexity` finds its closing radius.
+ *  - "filtration" (default): the closed area as a function of the radius is
+ *    precomputed once per member set (filtration.ts), so a convexity is one
+ *    lookup and one exact closing. The spine, the padded hull and the
+ *    filtration are cached per member set, padding, neck and keep-outs, so
+ *    dragging convexity reuses them.
+ *  - "bisection": the earlier search, 6-14 exact closings per call, nothing
+ *    cached (kept for comparison).
+ * `h` is the filtration's sample spacing in px (default 1).
+ */
+export const UNIFIED_PROTOTYPE: {
+  search: "filtration" | "bisection";
+  h?: number;
+} = { search: "filtration" };
+
+/** PROTOTYPE: a small cache of per-member-set work (spine, hull, filtration),
+ *  keyed by the inputs it depends on; `clearUnifiedCache` empties it. */
+const CACHE = new Map<string, unknown>();
+export const clearUnifiedCache = () => CACHE.clear();
+function memo<T>(key: string, f: () => T): T {
+  if (CACHE.has(key)) {
+    const v = CACHE.get(key) as T;
+    CACHE.delete(key); // most recent last
+    CACHE.set(key, v);
+    return v;
+  }
+  const t0 = performance.now();
+  const v = f();
+  UNIFIED_STATS.msCached =
+    (UNIFIED_STATS.msCached ?? 0) + performance.now() - t0;
+  CACHE.set(key, v);
+  while (CACHE.size > 64) CACHE.delete(CACHE.keys().next().value!);
+  return v;
+}
 
 export type UnifiedOptions = {
   padding: number;
@@ -69,6 +106,13 @@ export const UNIFIED_STATS: {
   msLinks?: number;
   msClose?: number;
   msSmooth?: number;
+  /** PROTOTYPE (filtration): its build time when this call built it (0
+   *  when it came from the cache), and its size */
+  msFiltration?: number;
+  /** PROTOTYPE: the time this call spent building what it cached (spine,
+   *  hull, filtration); a convexity change on the same set skips it */
+  msCached?: number;
+  filtration?: Pick<Filtration, "samples" | "triangles" | "knots" | "h">;
 } = {};
 
 // ── members as a core (point, segment or box) plus a radius ─────────────────
@@ -586,9 +630,17 @@ export function unifiedOutline(
   // connected: the same Kruskal over gaps with no limit (a spanning tree of
   // the pieces, each link between nearest points); members that already
   // touch get no link. Links bend around the keep-outs.
-  const spine = connected
-    ? routeAround(nearLinks(members, pad, Infinity, o.neck ?? 1), K, pad)
-    : [];
+  UNIFIED_STATS.msFiltration = 0;
+  UNIFIED_STATS.msCached = 0;
+  const filt = UNIFIED_PROTOTYPE.search === "filtration";
+  const key = (...xs: unknown[]) => JSON.stringify(xs);
+  const spineOf = () =>
+    routeAround(nearLinks(members, pad, Infinity, o.neck ?? 1), K, pad);
+  const spine = !connected
+    ? []
+    : filt
+      ? memo(key("spine", members, pad, o.neck ?? 1, K), spineOf)
+      : spineOf();
   const tLinks = performance.now();
   const linksAt = (r: number) =>
     connected ? spine : routeAround(nearLinks(members, pad, r), K, pad);
@@ -603,6 +655,44 @@ export function unifiedOutline(
   if (o.radius !== undefined) {
     r = o.radius;
     res = r === Infinity ? hullRes() : closeAt(r);
+  } else if (filt) {
+    // the radius from the precomputed filtration: one exact closing. Not
+    // connected, the links depend on r, so the filtration is the members'
+    // alone (PROTOTYPE shortcut: the links the closing then adds are thin
+    // and mostly inside it; the closing itself still has them).
+    const c = Math.max(0, Math.min(2, o.convexity ?? 0.5));
+    const rMin = pad;
+    const fm = connected ? [...members, ...spine] : members;
+    const h = UNIFIED_PROTOTYPE.h ?? 1;
+    const F = memo(key("filtration", fm, pad, holes, h), () => {
+      const F = buildFiltration(fm, pad, rMin, holes, h);
+      UNIFIED_STATS.msFiltration = F.ms;
+      return F;
+    });
+    const { r: rc } = F.radiusFor(Math.min(1, c));
+    Object.assign(UNIFIED_STATS, {
+      areaUnion: F.A0,
+      areaHull: F.A1,
+      areaTarget: F.A0 + Math.min(1, c) * (F.A1 - F.A0),
+      filtration: {
+        samples: F.samples,
+        triangles: F.triangles,
+        knots: F.knots,
+        h,
+      },
+    });
+    if (c > 1) {
+      r = Infinity;
+      res = {
+        all: [...members, ...spine],
+        rings: [beyondHull(hullOf(), members, pad, c, o.beyond)],
+        links: spine,
+      };
+    } else {
+      r = rc;
+      res = r === Infinity ? hullRes() : closeAt(r);
+      iterations = 1;
+    }
   } else {
     const c = Math.max(0, Math.min(2, o.convexity ?? 0.5));
     // The least radius is the padding: every concave corner is then an arc
@@ -671,10 +761,14 @@ export function unifiedOutline(
       }
     }
   }
+  function hullOf() {
+    const f = () => paddedHull([...members, ...spine], pad);
+    return filt ? memo(key("hull", members, spine, pad), f) : f();
+  }
   function hullRes() {
     return {
       all: [...members, ...spine],
-      rings: [paddedHull([...members, ...spine], pad)],
+      rings: [hullOf()],
       links: spine,
     };
   }
