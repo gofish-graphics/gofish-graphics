@@ -2696,12 +2696,14 @@ shape the `boundary` geometry query (#974) returns, but given from parent to
 child: a `PositionRegion` holds the cell's outline in datums (`outline`,
 `[x, y]` per corner) when the cell has one and is placed along both axes.
 The layer of the partition maps it through both of the child's scales into
-the child's frame (`buildChildShapes`, `constraints/proposalPlan.ts`) and
-hands it to the child as its shape, the same channel a `treemap` hands its
+the child's frame, in the same walk that gives the child its span
+(`buildChildSpans`, `constraints/proposalPlan.ts`), and hands it to the
+child as its shape, the same channel a `treemap` hands its
 tiles down and an `enclose` its outline (see
 [The shape a parent gives a child](/internals/layout/passes#the-shape-a-parent-gives-a-child)).
-A layer passes its shape on to a child laid out at its full size, so a
-`region` in a layer in a cell gets it too. A corner that does not map is an
+A layer passes its shape on to a child it proposes its own box
+(`childLayoutSizeProposal`), so a `region` in a layer in a cell gets it
+too. A corner that does not map is an
 error that names the axis. The `region` mark draws its shape as a path
 when it has one, and its box otherwise (under a
 nonlinear coordinate space, resampled, so a hexagon in polar coordinates

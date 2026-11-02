@@ -78,7 +78,7 @@ export type ColumnDatum = (v: number) => MaybeValue<number>;
  * read from it does, and they make the layer's position domain on that axis.
  * `outline` is the cell's outline in datums, `[x, y]` per corner, when the
  * cell has one and is placed along both axes. The layer hands it to the
- * child as its shape (`buildChildShapes`, `geometry/ring.ts`).
+ * child as its shape with its span (`buildChildSpans`, `geometry/ring.ts`).
  *
  * A partition inside another partition's cell divides that cell. On each
  * axis its key does not place, the region's span is the span of the cell

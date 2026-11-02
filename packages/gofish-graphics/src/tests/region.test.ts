@@ -342,7 +342,7 @@ async function main() {
   {
     // A cell whose box maps but one of whose corners is not a number: the
     // layer that maps the outline into the shape it hands the region
-    // (`buildChildShapes`) throws rather than put NaN in the path it draws.
+    // (`buildChildSpans`) throws rather than put NaN in the path it draws.
     class BadCell extends RegionCell {
       readonly id = "bad";
       readonly label = undefined;

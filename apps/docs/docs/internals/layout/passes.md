@@ -741,8 +741,9 @@ child's y runs the other way, so every `Layout` reads it in its own axis
 order. Three parents make one, and two nodes read it:
 
 - A `partition`'s layer maps each cell's outline to pixels through the
-  child's scales (`buildChildShapes`, `src/ast/constraints/proposalPlan.ts`)
-  and hands it to the child in that cell. The cell's span and placement
+  child's scales, in the walk that gives the child its span
+  (`buildChildSpans`, `src/ast/constraints/proposalPlan.ts`), and hands it
+  to the child in that cell. The cell's span and placement
   still go through the data position above; only the outline goes through
   the shape.
 - A `treemap` hands each child its tile: a box for a rectangular tiling
@@ -755,8 +756,12 @@ order. Three parents make one, and two nodes read it:
 - An `enclose` around a member with no size of its own (`fillingLayout`,
   see [Enclose](/internals/frontend/enclose)) hands down its outline.
 
-A layer hands its own shape to a child it lays out at the layer's full
-size, so a `layer([region, text])` in a cell still finds the cell. A
+The shape travels with the room a layer proposes a child
+(`childLayoutSizeProposal`): the layer's own shape with the layer's box, so
+a `layer([region, text])` in a cell still finds the cell; a cell's outline
+with the cell's span; and no shape with any other room (a grid cell, a
+share of a scope, a span with no outline, a size a `nest` derives, or what
+chrome's gutters leave). A
 `treemap` with no size of its own reads its shape as the region it tiles
 (a rectangular tiling there is an error unless the shape is the whole
 box), and a `region` draws it. Every other node ignores it.
