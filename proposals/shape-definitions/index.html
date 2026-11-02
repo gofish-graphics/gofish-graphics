@@ -1,0 +1,1697 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Defined, Not Drawn</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* Layout idea: a review memo. One reading column, with code pairs and
+   renders breaking wider; Current | Proposed always side by side, stacked on phones. */
+      :root {
+        --bg: #f6f7f9;
+        --surface: #ffffff;
+        --ink: #1c2430;
+        --muted: #5a6676;
+        --line: #d9dee6;
+        --accent: #2f6a98;
+        --accent-soft: #e3eef7;
+        --good: #2e7d4f;
+        --warn: #a15c00;
+        --bad: #b3372e;
+        --code-bg: #f0f3f7;
+        --tok-keyword: #8a3ab9;
+        --tok-string: #2e7d4f;
+        --tok-number: #a15c00;
+        --tok-comment: #7b8794;
+        --tok-title: #2f6a98;
+        --tok-attr: #b3372e;
+        --font-display: "Newsreader", Georgia, "Times New Roman", serif;
+        --font-body:
+          "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+        --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #12161c;
+          --surface: #1a2029;
+          --ink: #e4e9f0;
+          --muted: #9aa6b5;
+          --line: #2d3644;
+          --accent: #7fb3dd;
+          --accent-soft: #1f3245;
+          --good: #6cc48f;
+          --warn: #e0a54d;
+          --bad: #ee8279;
+          --code-bg: #151a22;
+          --tok-keyword: #cf9cf0;
+          --tok-string: #8fd1a6;
+          --tok-number: #e8b66f;
+          --tok-comment: #7d8a9a;
+          --tok-title: #8cc0ea;
+          --tok-attr: #f19a91;
+          color-scheme: dark;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #12161c;
+        --surface: #1a2029;
+        --ink: #e4e9f0;
+        --muted: #9aa6b5;
+        --line: #2d3644;
+        --accent: #7fb3dd;
+        --accent-soft: #1f3245;
+        --good: #6cc48f;
+        --warn: #e0a54d;
+        --bad: #ee8279;
+        --code-bg: #151a22;
+        --tok-keyword: #cf9cf0;
+        --tok-string: #8fd1a6;
+        --tok-number: #e8b66f;
+        --tok-comment: #7d8a9a;
+        --tok-title: #8cc0ea;
+        --tok-attr: #f19a91;
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--font-body);
+        font-size: 16px;
+        line-height: 1.55;
+      }
+      main {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 32px 16px 64px;
+      }
+      .prose {
+        max-width: 68ch;
+      }
+      h1,
+      h2,
+      h3 {
+        font-family: var(--font-display);
+        line-height: 1.2;
+        text-wrap: balance;
+        font-weight: 600;
+      }
+      h1 {
+        font-size: 2.3rem;
+        margin: 0 0 6px;
+      }
+      h2 {
+        font-size: 1.65rem;
+        margin: 48px 0 12px;
+        padding-top: 8px;
+        border-top: 1px solid var(--line);
+      }
+      h3 {
+        font-size: 1.25rem;
+        margin: 28px 0 8px;
+      }
+      p,
+      li {
+        max-width: 68ch;
+      }
+      a {
+        color: var(--accent);
+      }
+      a:focus-visible,
+      button:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      code {
+        font-family: var(--font-mono);
+        font-size: 0.88em;
+      }
+      :not(pre) > code {
+        background: var(--code-bg);
+        padding: 1px 4px;
+        border-radius: 4px;
+        overflow-wrap: anywhere;
+      }
+      pre {
+        margin: 0;
+        background: var(--code-bg);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px 14px;
+        overflow-x: auto;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      pre code {
+        font-size: inherit;
+        background: none;
+        padding: 0;
+      }
+      .hljs-keyword,
+      .hljs-built_in,
+      .hljs-literal {
+        color: var(--tok-keyword);
+      }
+      .hljs-string,
+      .hljs-regexp {
+        color: var(--tok-string);
+      }
+      .hljs-number {
+        color: var(--tok-number);
+      }
+      .hljs-comment {
+        color: var(--tok-comment);
+        font-style: italic;
+      }
+      .hljs-title,
+      .hljs-title.function_ {
+        color: var(--tok-title);
+      }
+      .hljs-attr,
+      .hljs-property,
+      .hljs-params {
+        color: var(--tok-attr);
+      }
+      .dek {
+        color: var(--muted);
+        margin: 0 0 20px;
+      }
+      .summary {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--accent);
+        border-radius: 8px;
+        padding: 16px 20px;
+        display: grid;
+        gap: 12px;
+      }
+      .summary ul {
+        margin: 0;
+        padding-left: 20px;
+      }
+      .summary p {
+        margin: 0;
+      }
+      nav.toc {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 20px 0 0;
+      }
+      nav.toc a {
+        text-decoration: none;
+        font-size: 14px;
+        padding: 4px 10px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--surface);
+        color: var(--ink);
+      }
+      dl.terms {
+        display: grid;
+        grid-template-columns: minmax(0, 12rem) minmax(0, 1fr);
+        gap: 6px 16px;
+        max-width: 80ch;
+      }
+      dl.terms dt {
+        font-weight: 600;
+      }
+      dl.terms dd {
+        margin: 0;
+        color: var(--ink);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+        gap: 12px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px 14px;
+        display: grid;
+        gap: 8px;
+        align-content: start;
+      }
+      .card h4 {
+        margin: 0;
+        font-size: 15px;
+      }
+      .card p {
+        margin: 0;
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .card pre {
+        font-size: 12px;
+        padding: 8px 10px;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .chip {
+        font-size: 12px;
+        padding: 1px 8px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+      }
+      .chip.yes {
+        color: var(--good);
+        border-color: currentColor;
+      }
+      .chip.no {
+        color: var(--muted);
+      }
+      .chip.model {
+        background: var(--accent-soft);
+        color: var(--accent);
+        border-color: transparent;
+        font-weight: 600;
+      }
+      .chip.workaround {
+        color: var(--warn);
+        border-color: currentColor;
+        font-weight: 600;
+      }
+      .example {
+        display: grid;
+        gap: 12px;
+        margin: 16px 0 8px;
+      }
+      .pair {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 12px;
+      }
+      .pair > div {
+        display: grid;
+        gap: 6px;
+        align-content: start;
+        min-width: 0;
+      }
+      .label {
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .label.proposed {
+        color: var(--accent);
+      }
+      .render {
+        background: #ffffff;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px;
+        overflow-x: auto;
+      }
+      .render img {
+        display: block;
+        max-width: 100%;
+        height: auto;
+        margin: 0 auto;
+      }
+      .note {
+        font-size: 14px;
+        color: var(--muted);
+        max-width: 80ch;
+      }
+      .badge {
+        display: inline-block;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 1px 8px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        margin-left: 6px;
+        vertical-align: middle;
+        font-family: var(--font-body);
+      }
+      .badge.new {
+        background: transparent;
+        border: 1px solid var(--warn);
+        color: var(--warn);
+      }
+      .approach {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 16px 18px;
+        margin: 16px 0;
+        display: grid;
+        gap: 10px;
+      }
+      .approach.rec {
+        border-left: 4px solid var(--accent);
+      }
+      .approach h3 {
+        margin: 0;
+      }
+      .approach p,
+      .approach ul {
+        margin: 0;
+      }
+      .wall {
+        border-left: 3px solid var(--bad);
+        padding-left: 12px;
+      }
+      table {
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      .table-wrap {
+        overflow-x: auto;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 6px 10px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      th {
+        font-weight: 600;
+      }
+      td.num {
+        font-variant-numeric: tabular-nums;
+      }
+      ol.decisions li {
+        margin: 6px 0;
+      }
+      .summary > *,
+      .approach > *,
+      .card > *,
+      .example > *,
+      .grid > * {
+        min-width: 0;
+      }
+      @media (max-width: 720px) {
+        .pair {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        dl.terms {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        dl.terms dd {
+          margin-bottom: 8px;
+        }
+        h1 {
+          font-size: 1.9rem;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          scroll-behavior: auto !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Defined, not drawn</h1>
+        <p class="dek">
+          An API proposal for GoFish issue #1267: a shape that other parts of
+          the picture use, but that the reader does not see. It replaces the
+          unseen <code>fill: "none"</code> curve in the croissant charts.
+        </p>
+        <div class="summary">
+          <ul>
+            <li>
+              GoFish already has the rule: <code>blank()</code> is laid out,
+              carries data, counts for scales, can be referred to, and draws
+              nothing. Today only rectangles get it.
+            </li>
+            <li>
+              Give it to every mark as a modifier, <code>.hidden()</code>, like
+              <code>.name()</code> and <code>.zOrder()</code>. A hidden mark is
+              laid out and counts for scales, axes and legends. It paints
+              nothing and cannot be hovered.
+            </li>
+            <li>
+              Prototypes of four gallery stories and one new example render
+              pixel for pixel the same as today, with the unseen SVG elements
+              gone.
+            </li>
+          </ul>
+          <p>
+            <strong>Recommendation:</strong> approach A,
+            <code>mark.hidden()</code>, with <code>blank(opts)</code> defined as
+            <code>rect(opts).hidden()</code>. Runner-up: the same meaning as a
+            wrapper, <code>hide(mark)</code>.
+          </p>
+          <pre><code class="language-javascript">// Before: drawn, but unseen
+chart(grid)
+  .flow(scatter({ x: &quot;x&quot; }))
+  .mark(ribbon({ h: &quot;pdf&quot;, fill: &quot;none&quot; }).name(&quot;density&quot;));
+// After: defined, not drawn
+chart(grid)
+  .flow(scatter({ x: &quot;x&quot; }))
+  .mark(ribbon({ h: &quot;pdf&quot; }).name(&quot;density&quot;).hidden());</code></pre>
+        </div>
+        <nav class="toc" aria-label="Sections">
+          <a href="#terms">Terms</a>
+          <a href="#precedent">Precedent</a>
+          <a href="#examples">Examples</a>
+          <a href="#approaches">Approaches</a>
+          <a href="#composes">How it composes</a>
+          <a href="#walls">Walls</a>
+          <a href="#recommendation">Recommendation</a>
+          <a href="#decisions">Decisions</a>
+        </nav>
+      </header>
+
+      <h2 id="terms">Terms</h2>
+      <dl class="terms">
+        <dt>Definition</dt>
+        <dd>
+          A shape that other parts use (a region to cut, a box to align to, an
+          anchor to point at) but that the reader should not see.
+        </dd>
+        <dt>Laid out</dt>
+        <dd>
+          The layout engine gives the node a size and a position, and its size
+          request takes part in its parent's layout.
+        </dd>
+        <dt>Counts for scales</dt>
+        <dd>
+          The node's data takes part in domain inference, so it moves the
+          scales, and through them the axes and legends.
+        </dd>
+        <dt>Paints</dt>
+        <dd>
+          The node puts items in the display list, which become SVG elements.
+        </dd>
+        <dt>Hit testing</dt>
+        <dd>
+          Finding which node is under the pointer. A node with no display item
+          has no entry.
+        </dd>
+        <dt>Phantom</dt>
+        <dd>
+          TeX's word for a box with the size of its content that shows nothing.
+          Here, the rule: laid out, counts for scales, paints nothing, no hit
+          testing.
+        </dd>
+        <dt>Region operand</dt>
+        <dd>
+          A child or <code>ref</code> of <code>intersect</code>,
+          <code>subtract</code>, <code>exclude</code> or <code>mask</code>. It
+          gives shape only; the operator owns the paint.
+        </dd>
+        <dt>Fusion</dt>
+        <dd>
+          The rewrite <code>.mark(ribbon(opts))</code> ⇒
+          <code>.mark(blank(anchor)).layer(ribbon(rest))</code> (#748, which
+          lets a relational mark sit in <code>.mark()</code>).
+        </dd>
+      </dl>
+      <div class="prose">
+        <p>
+          The issue asks two things at once. What does "defined but not drawn"
+          mean: a template that is not laid out until used (SVG
+          <code>&lt;defs&gt;</code>), or a shape that is laid out and not
+          painted (TikZ <code>\path</code>)? And where is it written: on the
+          mark, as a wrapper, as a slot on the container, or nowhere? The
+          croissant settles the first question. Its curve sets the y scale and
+          is cut in the chart's frame, so it must be laid out once. The rest of
+          the page is about the second.
+        </p>
+        <p>
+          The code already has the rule. <code>blank()</code>'s node is
+          <code>Rect(opts)</code> plus <code>INTERNAL_emitNothing()</code>, and
+          its comment says "Invisibility is structural, not a paint style ...
+          One rule, no flag." The same workaround appears across the gallery:
+          <code>fill: "none"</code> in the croissants,
+          <code>fill: "transparent"</code> rects in four Bluefish ports
+          (inherited from Bluefish's own source),
+          <code>opacity: 0</code> circles in the Gapminder sparklines, and a CSS
+          clip in the bar chart race.
+        </p>
+      </div>
+
+      <h2 id="precedent">Precedent</h2>
+      <p class="note">
+        One card per system: its spelling, what it keeps, and whether it is a
+        model or a workaround. There is no picture per card on purpose: every
+        system draws the same nothing. What differs is what the nothing still
+        does.
+      </p>
+      <div class="grid">
+        <article class="card">
+          <h4>CSS</h4>
+          <pre><code class="language-plaintext">visibility: hidden;</code></pre>
+          <div class="chips">
+            <span class="chip yes">laid out: yes</span
+            ><span class="chip no">painted: no</span
+            ><span class="chip no">hit-testable: no</span
+            ><span class="chip model">model</span>
+          </div>
+          <p>
+            The box keeps its place and size. It is not painted and lets the
+            pointer through.
+          </p>
+        </article>
+        <article class="card">
+          <h4>CSS</h4>
+          <pre><code class="language-plaintext">display: none;</code></pre>
+          <div class="chips">
+            <span class="chip no">laid out: no</span
+            ><span class="chip no">painted: no</span
+            ><span class="chip no">hit-testable: no</span
+            ><span class="chip model">model</span>
+          </div>
+          <p>
+            The other choice: the box leaves layout. The croissant cannot use
+            this, since its curve sets the scales.
+          </p>
+        </article>
+        <article class="card">
+          <h4>SwiftUI</h4>
+          <pre><code class="language-plaintext">Circle().hidden()</code></pre>
+          <div class="chips">
+            <span class="chip yes">laid out: yes</span
+            ><span class="chip no">painted: no</span
+            ><span class="chip no">hit-testable: no</span
+            ><span class="chip model">model</span>
+          </div>
+          <p>
+            &quot;Hidden views are invisible and can&#x27;t receive or respond
+            to interactions. However, they do remain in the view hierarchy and
+            affect layout.&quot;
+          </p>
+        </article>
+        <article class="card">
+          <h4>SwiftUI</h4>
+          <pre><code class="language-plaintext">Circle().opacity(0)</code></pre>
+          <div class="chips">
+            <span class="chip yes">laid out: yes</span
+            ><span class="chip no">painted: no</span
+            ><span class="chip yes">hit-testable: yes</span
+            ><span class="chip workaround">workaround</span>
+          </div>
+          <p>
+            Still takes taps. The same as GoFish&#x27;s opacity: 0 and fill:
+            &quot;none&quot; today.
+          </p>
+        </article>
+        <article class="card">
+          <h4>Typst</h4>
+          <pre><code class="language-plaintext">#hide[content]</code></pre>
+          <div class="chips">
+            <span class="chip yes">laid out: yes</span
+            ><span class="chip no">painted: no</span
+            ><span class="chip no">hit-testable: n/a</span
+            ><span class="chip model">model</span>
+          </div>
+          <p>
+            Hides content without affecting layout. A function, so the wrapper
+            spelling of A.
+          </p>
+        </article>
+        <article class="card">
+          <h4>TeX</h4>
+          <pre><code class="language-plaintext">\phantom{x^2}</code></pre>
+          <div class="chips">
+            <span class="chip yes">laid out: yes</span
+            ><span class="chip no">painted: no</span
+            ><span class="chip no">hit-testable: n/a</span
+            ><span class="chip model">model</span>
+          </div>
+          <p>
+            A box with the size of its content that shows nothing. \hphantom and
+            \vphantom keep one dimension.
+          </p>
+        </article>
+        <article class="card">
+          <h4>TikZ</h4>
+          <pre><code class="language-plaintext">\path[name path=c] plot ...;
+\fill[name intersections={of=c and l}] ...;</code></pre>
+          <div class="chips">
+            <span class="chip yes">laid out: yes</span
+            ><span class="chip no">painted: no</span
+            ><span class="chip no">hit-testable: n/a</span
+            ><span class="chip model">model</span>
+          </div>
+          <p>
+            A named path that draws nothing and feeds intersections. It still
+            counts for the bounding box. \draw is \path[draw].
+          </p>
+        </article>
+        <article class="card">
+          <h4>TikZ</h4>
+          <pre><code class="language-plaintext">\useasboundingbox (0,0) rectangle (4,3);</code></pre>
+          <div class="chips">
+            <span class="chip no">laid out: box only</span
+            ><span class="chip no">painted: optional</span
+            ><span class="chip no">hit-testable: n/a</span
+            ><span class="chip model">model</span>
+          </div>
+          <p>
+            Sets the picture&#x27;s box from a path. Layout from a shape, the
+            spacer case.
+          </p>
+        </article>
+        <article class="card">
+          <h4>SVG</h4>
+          <pre><code class="language-plaintext">&lt;defs&gt;&lt;path id=&quot;c&quot; .../&gt;&lt;/defs&gt;
+&lt;use href=&quot;#c&quot;/&gt;</code></pre>
+          <div class="chips">
+            <span class="chip no">laid out: no</span
+            ><span class="chip no">painted: no</span
+            ><span class="chip no">hit-testable: no</span
+            ><span class="chip model">model</span>
+          </div>
+          <p>
+            A template: no position until a &lt;use&gt; places it. A different
+            meaning from the croissant&#x27;s.
+          </p>
+        </article>
+        <article class="card">
+          <h4>Figma</h4>
+          <pre><code class="language-plaintext">Hide layer (eye icon)</code></pre>
+          <div class="chips">
+            <span class="chip no">laid out: no</span
+            ><span class="chip no">painted: no</span
+            ><span class="chip no">hit-testable: no</span
+            ><span class="chip model">model</span>
+          </div>
+          <p>A hidden layer leaves auto layout, like display: none.</p>
+        </article>
+        <article class="card">
+          <h4>Figma, Illustrator</h4>
+          <pre><code class="language-plaintext">Use as mask / Make clipping mask</code></pre>
+          <div class="chips">
+            <span class="chip yes">laid out: yes</span
+            ><span class="chip no">painted: no</span
+            ><span class="chip no">hit-testable: no</span
+            ><span class="chip model">model</span>
+          </div>
+          <p>
+            The mask shape loses its paint when it becomes a mask. Meaning from
+            use: approach C.
+          </p>
+        </article>
+        <article class="card">
+          <h4>Illustrator</h4>
+          <pre><code class="language-plaintext">View &gt; Guides &gt; Make Guides</code></pre>
+          <div class="chips">
+            <span class="chip yes">laid out: yes</span
+            ><span class="chip no">painted: no</span
+            ><span class="chip no">hit-testable: snaps</span
+            ><span class="chip model">model</span>
+          </div>
+          <p>Turns a path into a non-printing guide you can snap to.</p>
+        </article>
+        <article class="card">
+          <h4>ggplot2</h4>
+          <pre><code class="language-plaintext">geom_blank()
+expand_limits(y = 0)</code></pre>
+          <div class="chips">
+            <span class="chip no">laid out: n/a</span
+            ><span class="chip no">painted: no</span
+            ><span class="chip no">hit-testable: n/a</span
+            ><span class="chip model">model</span>
+          </div>
+          <p>
+            Draws nothing, but its data expands the scales. GoFish&#x27;s
+            blank() follows it.
+          </p>
+        </article>
+        <article class="card">
+          <h4>Vega-Lite</h4>
+          <pre><code class="language-plaintext">{&quot;mark&quot;: {&quot;type&quot;: &quot;area&quot;, &quot;opacity&quot;: 0}}</code></pre>
+          <div class="chips">
+            <span class="chip yes">laid out: yes</span
+            ><span class="chip no">painted: no</span
+            ><span class="chip yes">hit-testable: yes</span
+            ><span class="chip workaround">workaround</span>
+          </div>
+          <p>An invisible layer to extend a domain or carry a tooltip.</p>
+        </article>
+        <article class="card">
+          <h4>Bluefish</h4>
+          <pre><code class="language-plaintext">&lt;Rect fill=&quot;transparent&quot; width={10} /&gt;</code></pre>
+          <div class="chips">
+            <span class="chip yes">laid out: yes</span
+            ><span class="chip no">painted: transparent</span
+            ><span class="chip yes">hit-testable: yes</span
+            ><span class="chip workaround">workaround</span>
+          </div>
+          <p>
+            qc-text.tsx has three. GoFish&#x27;s ports copy them. Its
+            &lt;Group&gt; is a paintless box over refs.
+          </p>
+        </article>
+        <article class="card">
+          <h4>Penrose</h4>
+          <pre><code class="language-plaintext">fillColor: none()
+strokeColor: none()</code></pre>
+          <div class="chips">
+            <span class="chip yes">laid out: yes</span
+            ><span class="chip no">painted: no</span
+            ><span class="chip no">hit-testable: n/a</span
+            ><span class="chip workaround">workaround</span>
+          </div>
+          <p>
+            No hidden shapes, as far as I know; a shape with no colors is the
+            way.
+          </p>
+        </article>
+      </div>
+      <div class="prose">
+        <p>
+          Layout systems agree on the croissant's meaning: CSS
+          <code>visibility: hidden</code>, SwiftUI <code>.hidden()</code>, Typst
+          <code>hide</code> and TeX <code>\phantom</code> keep the layout and
+          drop the paint, and CSS and SwiftUI also drop the pointer. TikZ is the
+          closest match in use: a named <code>\path</code> that draws nothing
+          and feeds <code>name intersections</code>. SVG's
+          <code>&lt;defs&gt;</code> and Figma's hidden layer are the other
+          model, not laid out at all. Design-tool masks are a third, where use
+          decides. Statistics grammars mostly use a workaround, except ggplot2's
+          <code>geom_blank()</code>, the model for "counts for scales, draws
+          nothing".
+        </p>
+        <p>
+          Names: <code>hidden</code> is SwiftUI's method and CSS's value;
+          Typst's verb is <code>hide</code>. <code>def</code> reads as SVG's
+          template and is a Python keyword. <code>guide</code> is Illustrator's
+          word, but in ggplot2 "guides" are axes and legends.
+          <code>phantom</code> is TeX jargon.
+        </p>
+      </div>
+
+      <h2 id="examples">Examples</h2>
+      <div class="prose">
+        <p>
+          Each <strong>Proposed</strong> render is real. It comes from
+          <code>stories/proposals/ShapeDefinitions.stories.tsx</code>, which
+          uses a story-local shim, <code>hidden(mark)</code>: it lays the mark
+          out as usual, then calls <code>INTERNAL_emitNothing()</code> on its
+          whole subtree. The shim wraps a mark function, so it cannot sit on a
+          mark that <code>.mark()</code> fuses; those stories write the fusion
+          out by hand. A real <code>.hidden()</code> would be a modifier and
+          fuse like <code>.name()</code>. Each pair was compared with pixelmatch
+          at threshold 0.
+        </p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Example</th>
+              <th>Kind</th>
+              <th>Differing pixels</th>
+              <th>SVG shape elements</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Croissant</td>
+              <td>improvement, gallery</td>
+              <td class="num">0</td>
+              <td class="num">41 → 40</td>
+            </tr>
+            <tr>
+              <td>Croissant ridgeline</td>
+              <td>improvement, gallery, hard case</td>
+              <td class="num">0</td>
+              <td class="num">158 → 146</td>
+            </tr>
+            <tr>
+              <td>Seattle highs cut by month</td>
+              <td>improvement, gallery, axis from the hidden shape</td>
+              <td class="num">0</td>
+              <td class="num">59 → 58</td>
+            </tr>
+            <tr>
+              <td>Quantum circuit</td>
+              <td>improvement, gallery, diagram</td>
+              <td class="num">0</td>
+              <td class="num">29 → 21</td>
+            </tr>
+            <tr>
+              <td>Venn lenses</td>
+              <td>new, diagram</td>
+              <td class="num">0</td>
+              <td class="num">6 → 3</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Croissant <span class="badge">improves a gallery story</span></h3>
+      <div class="example">
+        <div class="pair">
+          <div>
+            <span class="label">Current</span>
+            <pre><code class="language-javascript">layer([
+  chart(grid)
+    .flow(scatter({ x: &quot;x&quot; }))
+    .mark(ribbon({ h: &quot;pdf&quot;, fill: &quot;none&quot; }).name(&quot;density&quot;)),
+]).relate(({ density }) =&gt; [
+  chart(grid)
+    .flow(
+      derive((rows) =&gt; quantileRows(rows, { x: &quot;x&quot;, density: &quot;pdf&quot;, n: 1000 })),
+      partition({ by: field(&quot;x&quot;).bin(Bin.quantiles(10)), dir: &quot;x&quot; })
+    )
+    .mark(
+      layer([
+        intersect({ fill: FILL, stroke: STROKE, strokeWidth: 2 }, [
+          density,
+          region({ inset: 3 }),
+        ]),
+        circle({ cx: field(&quot;x&quot;).median(), cy: 6, r: 3, fill: STROKE }),
+      ])
+    ),
+]);</code></pre>
+          </div>
+          <div>
+            <span class="label proposed">Proposed</span>
+            <pre><code class="language-javascript">layer([
+  chart(grid)
+    .flow(scatter({ x: &quot;x&quot; }))
+    .mark(ribbon({ h: &quot;pdf&quot; }).name(&quot;density&quot;).hidden()),
+]).relate(({ density }) =&gt; [
+  chart(grid)
+    .flow(
+      derive((rows) =&gt; quantileRows(rows, { x: &quot;x&quot;, density: &quot;pdf&quot;, n: 1000 })),
+      partition({ by: field(&quot;x&quot;).bin(Bin.quantiles(10)), dir: &quot;x&quot; })
+    )
+    .mark(
+      layer([
+        intersect({ fill: FILL, stroke: STROKE, strokeWidth: 2 }, [
+          density,
+          region({ inset: 3 }),
+        ]),
+        circle({ cx: field(&quot;x&quot;).median(), cy: 6, r: 3, fill: STROKE }),
+      ])
+    ),
+]);</code></pre>
+          </div>
+        </div>
+        <div class="pair">
+          <div>
+            <span class="label">Current render</span>
+            <div class="render">
+              <img
+                src="img/croissant-current.png"
+                alt="A croissant chart of the standard normal: ten equal-probability slices with a dot at each slice&#x27;s median, over an x axis from -4 to 4, current spelling"
+                width="496"
+                height="204"
+              />
+            </div>
+          </div>
+          <div>
+            <span class="label proposed">Proposed render (story shim)</span>
+            <div class="render">
+              <img
+                src="img/croissant-proposed.png"
+                alt="A croissant chart of the standard normal: ten equal-probability slices with a dot at each slice&#x27;s median, over an x axis from -4 to 4, proposed spelling"
+                width="496"
+                height="204"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="note">
+        What the hidden curve is: the same spec with the curve given a light
+        fill. The definition spans the whole chart and sets the scales.
+      </p>
+      <div class="render">
+        <img
+          src="img/croissant-shown.png"
+          alt="The croissant with the full density curve shown in light gray behind the ten slices"
+          width="496"
+          height="204"
+        />
+      </div>
+      <p class="note">
+        With #1259 as well (a string <code>ref</code> outside
+        <code>.relate()</code>), the outer
+        <code>layer([...]).relate(...)</code> goes away too:
+      </p>
+      <pre><code class="language-javascript">chart(grid)
+  .flow(scatter({ x: &quot;x&quot; }))
+  .mark(ribbon({ h: &quot;pdf&quot; }).name(&quot;density&quot;).hidden())
+  .layer(
+    chart(grid)
+      .flow(
+        derive((rows) =&gt;
+          quantileRows(rows, { x: &quot;x&quot;, density: &quot;pdf&quot;, n: 1000 })
+        ),
+        partition({ by: field(&quot;x&quot;).bin(Bin.quantiles(10)), dir: &quot;x&quot; })
+      )
+      .mark(
+        layer([
+          intersect({ fill: FILL, stroke: STROKE, strokeWidth: 2 }, [
+            ref(&quot;density&quot;),
+            region({ inset: 3 }),
+          ]),
+          circle({ cx: field(&quot;x&quot;).median(), cy: 6, r: 3, fill: STROKE }),
+        ])
+      )
+  );</code></pre>
+      <p class="note">Python, proposed:</p>
+      <pre><code class="language-python">layer(
+    [chart(grid).flow(scatter(x=&quot;x&quot;)).mark(ribbon(h=&quot;pdf&quot;).name(&quot;density&quot;).hidden())]
+).relate(lambda density: [cells(grid, density, n=10, inset=3)])</code></pre>
+
+      <h3>
+        Croissant ridgeline <span class="badge">improves a gallery story</span>
+        <span class="badge">hard case</span>
+      </h3>
+      <p class="note">
+        One definition per row. <code>density</code> in each row's clause means
+        that row's curve, by the name lookup #1237 built (one resolver, nearest
+        scope wins). The modifier is per node, so nothing else changes.
+        <code>cells(density, { n, inset })</code> stands for the row's partition
+        chart.
+      </p>
+      <div class="example">
+        <div class="pair">
+          <div>
+            <span class="label">Current</span>
+            <pre><code class="language-javascript">chart(monthlyDensity, {
+  w: 520,
+  axes: { x: { title: &quot;Daily high (°C)&quot; }, y: false },
+})
+  .flow(
+    spread({
+      by: field(&quot;month&quot;).sort(months),
+      dir: &quot;y&quot;,
+      anchor: &quot;baseline&quot;,
+      spacing: 36,
+    })
+  )
+  .mark(
+    layer({ h: 34 }, [
+      chart()
+        .flow(scatter({ x: &quot;temp_max&quot; }))
+        .mark(ribbon({ h: &quot;pdf&quot;, fill: &quot;none&quot; }).name(&quot;density&quot;)),
+    ]).relate(({ density }) =&gt; [cells(density, { n: 5, inset: 2 })])
+  );</code></pre>
+          </div>
+          <div>
+            <span class="label proposed">Proposed</span>
+            <pre><code class="language-javascript">chart(monthlyDensity, {
+  w: 520,
+  axes: { x: { title: &quot;Daily high (°C)&quot; }, y: false },
+})
+  .flow(
+    spread({
+      by: field(&quot;month&quot;).sort(months),
+      dir: &quot;y&quot;,
+      anchor: &quot;baseline&quot;,
+      spacing: 36,
+    })
+  )
+  .mark(
+    layer({ h: 34 }, [
+      chart()
+        .flow(scatter({ x: &quot;temp_max&quot; }))
+        .mark(ribbon({ h: &quot;pdf&quot; }).name(&quot;density&quot;).hidden()),
+    ]).relate(({ density }) =&gt; [cells(density, { n: 5, inset: 2 })])
+  );</code></pre>
+          </div>
+        </div>
+        <div class="pair">
+          <div>
+            <span class="label">Current render</span>
+            <div class="render">
+              <img
+                src="img/ridgeline-current.png"
+                alt="Twelve croissant rows, one per month of Seattle&#x27;s daily highs, each cut into five slices, current spelling"
+                width="550"
+                height="480"
+              />
+            </div>
+          </div>
+          <div>
+            <span class="label proposed">Proposed render (story shim)</span>
+            <div class="render">
+              <img
+                src="img/ridgeline-proposed.png"
+                alt="Twelve croissant rows, one per month of Seattle&#x27;s daily highs, each cut into five slices, proposed spelling"
+                width="550"
+                height="480"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+      <pre><code class="language-python">chart(monthly_density, w=520).flow(
+    spread(by=field(&quot;month&quot;).sort(MONTHS), dir=&quot;y&quot;, anchor=&quot;baseline&quot;, spacing=36)
+).mark(
+    layer(
+        [
+            chart()
+            .flow(scatter(x=&quot;temp_max&quot;))
+            .mark(ribbon(h=&quot;pdf&quot;).name(&quot;density&quot;).hidden())
+        ],
+        h=34,
+    ).relate(lambda density: [cells(None, density, n=5, inset=2)])
+)</code></pre>
+
+      <h3>
+        Seattle highs cut by month
+        <span class="badge">improves a gallery story</span>
+        <span class="badge">axis from the hidden shape</span>
+      </h3>
+      <p class="note">
+        The y axis and its title come from the hidden area. Its
+        <code>temp_smooth</code> values set the y domain, and nothing else in
+        the picture has a y position in data.
+        <code>monthCells(temps)</code> stands for the calendar-month partition.
+      </p>
+      <div class="example">
+        <div class="pair">
+          <div>
+            <span class="label">Current</span>
+            <pre><code class="language-javascript">layer([
+  chart(highs2012, { schema })
+    .flow(scatter({ x: &quot;date&quot; }))
+    .mark(ribbon({ h: &quot;temp_smooth&quot;, fill: &quot;none&quot; }).name(&quot;temps&quot;)),
+])
+  .relate(({ temps }) =&gt; [monthCells(temps)])
+  .render(container, {
+    w: 560,
+    h: 220,
+    axes: { x: false, y: { title: &quot;Daily high, 15-day mean (°C)&quot; } },
+  });</code></pre>
+          </div>
+          <div>
+            <span class="label proposed">Proposed</span>
+            <pre><code class="language-javascript">layer([
+  chart(highs2012, { schema })
+    .flow(scatter({ x: &quot;date&quot; }))
+    .mark(ribbon({ h: &quot;temp_smooth&quot; }).name(&quot;temps&quot;).hidden()),
+])
+  .relate(({ temps }) =&gt; [monthCells(temps)])
+  .render(container, {
+    w: 560,
+    h: 220,
+    axes: { x: false, y: { title: &quot;Daily high, 15-day mean (°C)&quot; } },
+  });</code></pre>
+          </div>
+        </div>
+        <div class="pair">
+          <div>
+            <span class="label">Current render</span>
+            <div class="render">
+              <img
+                src="img/seattle-current.png"
+                alt="Seattle&#x27;s smoothed daily highs in 2012 as an area cut into twelve monthly slices with month initials, and a y axis in degrees, current spelling"
+                width="573"
+                height="224"
+              />
+            </div>
+          </div>
+          <div>
+            <span class="label proposed">Proposed render (story shim)</span>
+            <div class="render">
+              <img
+                src="img/seattle-proposed.png"
+                alt="Seattle&#x27;s smoothed daily highs in 2012 as an area cut into twelve monthly slices with month initials, and a y axis in degrees, proposed spelling"
+                width="573"
+                height="224"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3>
+        Quantum circuit <span class="badge">improves a gallery story</span>
+        <span class="badge">diagram</span>
+      </h3>
+      <p class="note">
+        Three transparent rects: a 50×50 slot that centers a gate or a dot, an
+        empty slot, and a 10px leader that pushes the gates right. Today they
+        emit eight SVG elements that can be hovered.
+        <code>blank({ w, h })</code> already works here; under A it is the same
+        as <code>rect({ w, h }).hidden()</code>.
+      </p>
+      <div class="example">
+        <div class="pair">
+          <div>
+            <span class="label">Current</span>
+            <pre><code class="language-javascript">const WireSlot = createMark(({ content }) =&gt;
+  layer([
+    rect({ w: GATE, h: GATE, fill: &quot;transparent&quot; }).name(&quot;slot&quot;),
+    content.name(&quot;content&quot;),
+  ]).relate(({ slot, content }) =&gt; [
+    Constraint.align({ x: &quot;middle&quot;, y: &quot;middle&quot; }, [slot, content]),
+  ])
+);
+const EmptySlot = () =&gt; rect({ w: GATE, h: GATE, fill: &quot;transparent&quot; });
+// In Wire: the 10px leader before the gates.
+spread({ dir: &quot;x&quot;, spacing: SLOT - GATE, alignment: &quot;middle&quot; }, [
+  rect({ w: 10, h: GATE, fill: &quot;transparent&quot; }),
+  ...slots,
+]);</code></pre>
+          </div>
+          <div>
+            <span class="label proposed">Proposed</span>
+            <pre><code class="language-javascript">const WireSlot = createMark(({ content }) =&gt;
+  layer([
+    rect({ w: GATE, h: GATE }).name(&quot;slot&quot;).hidden(),
+    content.name(&quot;content&quot;),
+  ]).relate(({ slot, content }) =&gt; [
+    Constraint.align({ x: &quot;middle&quot;, y: &quot;middle&quot; }, [slot, content]),
+  ])
+);
+const EmptySlot = () =&gt; rect({ w: GATE, h: GATE }).hidden();
+// In Wire: the 10px leader before the gates.
+spread({ dir: &quot;x&quot;, spacing: SLOT - GATE, alignment: &quot;middle&quot; }, [
+  rect({ w: 10, h: GATE }).hidden(),
+  ...slots,
+]);</code></pre>
+          </div>
+        </div>
+        <div class="pair">
+          <div>
+            <span class="label">Current render</span>
+            <div class="render">
+              <img
+                src="img/quantum-current.png"
+                alt="A quantum circuit: a controlled-Z gate shown equivalent to H, CNOT, H, with the CNOT highlighted, current spelling"
+                width="576"
+                height="128"
+              />
+            </div>
+          </div>
+          <div>
+            <span class="label proposed">Proposed render (story shim)</span>
+            <div class="render">
+              <img
+                src="img/quantum-proposed.png"
+                alt="A quantum circuit: a controlled-Z gate shown equivalent to H, CNOT, H, with the CNOT highlighted, proposed spelling"
+                width="576"
+                height="128"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+      <pre><code class="language-python">empty_slot = rect(w=GATE, h=GATE).hidden()
+spread(
+    [rect(w=10, h=GATE).hidden(), *slots],
+    dir=&quot;x&quot;,
+    spacing=SLOT - GATE,
+    alignment=&quot;middle&quot;,
+)</code></pre>
+
+      <h3>
+        Venn lenses <span class="badge new">new example</span>
+        <span class="badge">diagram</span>
+      </h3>
+      <p class="note">
+        Three circles, each used by two lenses, never drawn. A shape used by
+        several regions needs one node and a name, which is why passing it by
+        value (approach D) does not work.
+      </p>
+      <div class="example">
+        <div class="pair">
+          <div>
+            <span class="label">Current</span>
+            <pre><code class="language-javascript">const LENS = { stroke: &quot;#444&quot;, strokeWidth: 1.5, opacity: 0.75 };
+layer([
+  circle({ cx: 100, cy: 100, r: 90, fill: &quot;none&quot; }).name(&quot;a&quot;),
+  circle({ cx: 205, cy: 100, r: 90, fill: &quot;none&quot; }).name(&quot;b&quot;),
+  circle({ cx: 152, cy: 190, r: 90, fill: &quot;none&quot; }).name(&quot;c&quot;),
+]).relate(({ a, b, c }) =&gt; [
+  intersect({ fill: &quot;#9ecae1&quot;, ...LENS }, [a, b]),
+  intersect({ fill: &quot;#fdd0a2&quot;, ...LENS }, [b, c]),
+  intersect({ fill: &quot;#c7e9c0&quot;, ...LENS }, [a, c]),
+]);</code></pre>
+          </div>
+          <div>
+            <span class="label proposed">Proposed</span>
+            <pre><code class="language-javascript">const LENS = { stroke: &quot;#444&quot;, strokeWidth: 1.5, opacity: 0.75 };
+layer([
+  circle({ cx: 100, cy: 100, r: 90 }).name(&quot;a&quot;).hidden(),
+  circle({ cx: 205, cy: 100, r: 90 }).name(&quot;b&quot;).hidden(),
+  circle({ cx: 152, cy: 190, r: 90 }).name(&quot;c&quot;).hidden(),
+]).relate(({ a, b, c }) =&gt; [
+  intersect({ fill: &quot;#9ecae1&quot;, ...LENS }, [a, b]),
+  intersect({ fill: &quot;#fdd0a2&quot;, ...LENS }, [b, c]),
+  intersect({ fill: &quot;#c7e9c0&quot;, ...LENS }, [a, c]),
+]);</code></pre>
+          </div>
+        </div>
+        <div class="pair">
+          <div>
+            <span class="label">Current render</span>
+            <div class="render">
+              <img
+                src="img/venn-current.png"
+                alt="Three overlapping lenses in blue, orange and green, the pairwise overlaps of three circles that are not drawn, current spelling"
+                width="198"
+                height="181"
+              />
+            </div>
+          </div>
+          <div>
+            <span class="label proposed">Proposed render (story shim)</span>
+            <div class="render">
+              <img
+                src="img/venn-proposed.png"
+                alt="Three overlapping lenses in blue, orange and green, the pairwise overlaps of three circles that are not drawn, proposed spelling"
+                width="198"
+                height="181"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h2 id="approaches">Approaches</h2>
+      <p class="note">
+        <code>cells(grid, density)</code> stands for the partition-and-intersect
+        chart, the same in every approach.
+      </p>
+
+      <section class="approach rec">
+        <h3>
+          A. <code>.hidden()</code>, a modifier on any mark
+          <span class="badge">recommended</span>
+        </h3>
+        <pre><code class="language-javascript">// A. A modifier on any mark, like .name() and .zOrder().
+ribbon({ h: &quot;pdf&quot; }).name(&quot;density&quot;).hidden();
+rect({ w: 10, h: GATE }).hidden(); // a spacer
+chart(grid)
+  .flow(scatter({ x: &quot;x&quot; }))
+  .mark(ribbon({ h: &quot;pdf&quot; }))
+  .hidden(); // a whole chart, axes included
+// blank() is exactly this:
+blank({ w, h }); // ≡ rect({ w, h }).hidden()</code></pre>
+        <pre><code class="language-python">ribbon(h=&quot;pdf&quot;).name(&quot;density&quot;).hidden()
+rect(w=10, h=GATE).hidden()</code></pre>
+        <p>
+          <strong>Meaning.</strong> Laid out exactly as without it. Its data
+          counts for scales, axes and legends. It keeps its name and datum, so
+          <code>ref</code>, <code>selectAll</code>, constraints and region
+          operands read it. It paints nothing where it stands and has no
+          hit-test entry. The rule covers its whole subtree and its labels.
+        </p>
+        <p>
+          <strong>Desugars into</strong> <code>INTERNAL_emitNothing()</code> on
+          every node of the subtree, which is <code>blank()</code>'s rule. On
+          the wire, <code>hidden: true</code> beside <code>zOrder</code>.
+        </p>
+        <ul>
+          <li>
+            One new method, with SwiftUI and CSS precedent for the same meaning.
+          </li>
+          <li>
+            Reaches every whole-mark case in the corpus: curves, spacers, slots,
+            anchors.
+          </li>
+          <li>
+            Cannot hide a container's own paint while showing its children. That
+            stays a paint option.
+          </li>
+          <li>
+            A later value argument (as <code>.zOrder(fn)</code> has) is an
+            argument, not a new name.
+          </li>
+        </ul>
+      </section>
+
+      <section class="approach">
+        <h3>
+          A, wrapper spelling: <code>hide(mark)</code>
+          <span class="badge">runner-up</span>
+        </h3>
+        <pre><code class="language-javascript">// A, wrapper spelling (Typst&#x27;s hide): the same meaning as a function.
+layer([
+  hide(
+    chart(grid)
+      .flow(scatter({ x: &quot;x&quot; }))
+      .mark(ribbon({ h: &quot;pdf&quot; }).name(&quot;density&quot;))
+  ),
+]).relate(({ density }) =&gt; [cells(grid, density)]);</code></pre>
+        <pre><code class="language-python">layer(
+    [hide(chart(grid).flow(scatter(x=&quot;x&quot;)).mark(ribbon(h=&quot;pdf&quot;).name(&quot;density&quot;)))]
+).relate(lambda density: [cells(grid, density)])</code></pre>
+        <p>
+          Same meaning, as in Typst. It reads well around a whole chart. It is
+          worse here because GoFish's per-node adjectives are already methods
+          (<code>.name()</code>, <code>.label()</code>, <code>.zOrder()</code>),
+          because a function call says its parts are independent while hiding
+          transforms its one argument, and because a wrapper needs a node of its
+          own.
+        </p>
+      </section>
+
+      <section class="approach">
+        <h3>B. A <code>defs</code> slot on the container</h3>
+        <pre><code class="language-javascript">// B. A definitions slot on the container, like SVG &lt;defs&gt;.
+layer({
+  defs: [
+    chart(grid)
+      .flow(scatter({ x: &quot;x&quot; }))
+      .mark(ribbon({ h: &quot;pdf&quot; }).name(&quot;density&quot;)),
+  ],
+}).relate(({ density }) =&gt; [cells(grid, density)]);
+
+// Or on the chart builder, in place of .mark():
+chart(grid)
+  .flow(scatter({ x: &quot;x&quot; }))
+  .def(ribbon({ h: &quot;pdf&quot; }).name(&quot;density&quot;))
+  .layer(cells(grid, ref(&quot;density&quot;))); // also needs #1259
+
+// The wall: a spacer has a place in its spread&#x27;s order,
+// so it cannot move to a defs list.
+spread({ dir: &quot;x&quot; }, [rect({ w: 10, h: GATE }), ...slots]);</code></pre>
+        <pre><code class="language-python">layer(
+    [], defs=[chart(grid).flow(scatter(x=&quot;x&quot;)).mark(ribbon(h=&quot;pdf&quot;).name(&quot;density&quot;))]
+).relate(lambda density: [cells(grid, density)])
+chart(grid).flow(scatter(x=&quot;x&quot;)).define(ribbon(h=&quot;pdf&quot;).name(&quot;density&quot;)).layer(
+    cells(grid, ref(&quot;density&quot;))
+)</code></pre>
+        <p>
+          Definitions sit in their own list, like SVG
+          <code>&lt;defs&gt;</code> or a <code>let</code>. Laid out in the
+          container's frame, not painted.
+        </p>
+        <p class="wall">
+          <strong>Wall.</strong> A spacer has a place in its parent's order: the
+          quantum circuit's leader is the first child of a <code>spread</code>,
+          and its width pushes the gates right. In a <code>defs</code> list it
+          pushes nothing. So B still needs A, and then there are two spellings
+          for one rule. It also needs a slot on every container, and its builder
+          method cannot be named <code>def</code> in Python.
+        </p>
+      </section>
+
+      <section class="approach">
+        <h3>C. A shape hides itself when a region operator reads it</h3>
+        <pre><code class="language-javascript">// C. A shape that is used as a region operand stops painting where it stands.
+layer([
+  chart(grid)
+    .flow(scatter({ x: &quot;x&quot; }))
+    .mark(ribbon({ h: &quot;pdf&quot; }).name(&quot;density&quot;)), // not drawn: intersect reads it
+]).relate(({ density }) =&gt; [cells(grid, density)]);</code></pre>
+        <pre><code class="language-python">layer([chart(grid).flow(scatter(x=&quot;x&quot;)).mark(ribbon(h=&quot;pdf&quot;).name(&quot;density&quot;))]).relate(
+    lambda density: [cells(grid, density)]
+)</code></pre>
+        <p>The Figma and Illustrator mask model, with no new syntax.</p>
+        <p class="wall">
+          <strong>Walls.</strong> What a node draws depends on who reads it
+          elsewhere in the tree, an intent rule of the kind #745 rejected. It
+          cannot say "draw the curve and also cut it" (the light-gray render
+          above) without a second copy. It does nothing for spacers and slots,
+          which no region operator reads.
+        </p>
+      </section>
+
+      <section class="approach">
+        <h3>D. No unseen copy: pass the shape by value</h3>
+        <pre><code class="language-javascript">// D. No unseen copy: each cell intersects the curve itself.
+chart(grid)
+  .flow(
+    derive((rows) =&gt; quantileRows(rows, { x: &quot;x&quot;, density: &quot;pdf&quot;, n: 1000 })),
+    partition({ by: field(&quot;x&quot;).bin(Bin.quantiles(10)), dir: &quot;x&quot; })
+  )
+  .mark(
+    intersect({ fill: FILL, stroke: STROKE }, [
+      // Laid out in which frame? The cell&#x27;s, so it does not line up.
+      chart(grid)
+        .flow(scatter({ x: &quot;x&quot; }))
+        .mark(ribbon({ h: &quot;pdf&quot; })),
+      region({ inset: 3 }),
+    ])
+  );</code></pre>
+        <p>
+          Each cell's <code>intersect</code> holds the curve itself, as
+          <code>cut</code> holds an offset copy of its source. Direct operands
+          give shape only, so nothing needs hiding.
+        </p>
+        <p class="wall">
+          <strong>Wall.</strong> A child is laid out in its parent's frame, so
+          the curve would be laid out in each cell at the cell's width. Lining
+          it up needs the chart's frame before layout (#1244, a cell read across
+          a node with its own scale), the curve is laid out ten times, and it no
+          longer sets the y scale once. The Venn example needs two copies of
+          each circle. D stays true where a shape is used once, in place:
+          <code>intersect([circle(...), rect(...)])</code> needs no hiding
+          today.
+        </p>
+      </section>
+
+      <section class="approach">
+        <h3>Dropped</h3>
+        <ul>
+          <li>
+            <strong>A paint value</strong> (<code>paint: false</code>, or making
+            <code>fill: "none"</code> with no stroke emit nothing). It keeps the
+            meaning in paint, it would silently stop transparent hover targets
+            from being hit-testable, and <code>blank()</code>'s comment already
+            argues against a flag.
+          </li>
+          <li>
+            <strong><code>.def()</code> in place of <code>.mark()</code></strong
+            >. It covers only marks in <code>.mark()</code> position, not
+            combinator children or a ridgeline row's <code>layer([...])</code>,
+            and <code>def</code> is a Python keyword.
+          </li>
+        </ul>
+      </section>
+
+      <h2 id="composes">How it composes</h2>
+      <ul>
+        <li>
+          <strong>Layout engine.</strong> No change: same node, same size
+          request, empty lowering. The 0-pixel diffs show nothing moved.
+        </li>
+        <li>
+          <strong>Scales, axes, legends.</strong> A hidden node's data counts,
+          as <code>blank()</code>'s does. A hidden mark with
+          <code>fill: "species"</code> still puts species in the legend, as
+          <code>geom_blank()</code> expands scales.
+        </li>
+        <li>
+          <strong>Chrome and labels.</strong> <code>.hidden()</code> on a whole
+          chart hides the axes and legend that chart owns; hiding only the mark
+          keeps them. A <code>.label()</code> is an attachment of its mark and
+          is hidden with it.
+        </li>
+        <li>
+          <strong>Refs, constraints, region operands.</strong> Unchanged: they
+          read placement and geometry. The exact path of
+          <code>intersect</code> reads <code>geometry()</code>, which a hidden
+          node keeps. The fallback mask path re-lowers operands, so it must
+          lower the operand's own drawing (<code>INTERNAL_lendDrawing</code>),
+          or a hidden operand gives an empty mask. Found by reading
+          <code>porterDuff.tsx</code>, not rendered.
+        </li>
+        <li>
+          <strong>Fusion.</strong>
+          <code>.mark(ribbon(...).hidden())</code> fuses to
+          <code>.mark(blank(anchor)).layer(ribbon(...).hidden())</code>; the
+          anchors are blank already.
+        </li>
+        <li>
+          <strong>Animation.</strong> Keyframe visibility is paint-time;
+          <code>.hidden()</code> is fixed at resolve, and emitting nothing wins,
+          so they compose. A <code>time.transition()</code> paints its own copy
+          of a keyframe's mark through <code>INTERNAL_lendDrawing</code>, which
+          lends a silenced node on purpose. A user-hidden mark must lend
+          nothing, so "hidden by the user" must stay apart from "silenced
+          because a transition took it over".
+        </li>
+        <li>
+          <strong>Interaction.</strong> No hit-test entry. A transparent rect
+          stays the way to make an invisible hover target.
+        </li>
+        <li>
+          <strong>Python and the IR.</strong> One boolean <code>hidden</code> in
+          <code>MARK_BASE_FIELDS</code> (gofish-ir descriptors), written by
+          <code>.hidden()</code> as <code>zOrder</code> is by
+          <code>.zOrder()</code>. Python gets <code>.hidden()</code> beside
+          <code>.name()</code> and <code>.z_order()</code>. No new construct
+          crosses the bridge.
+        </li>
+      </ul>
+      <h3>Overlap check</h3>
+      <ul>
+        <li>
+          <strong><code>blank()</code></strong
+          >: exact composition, <code>rect(opts).hidden()</code>. Fine; keep as
+          sugar or delete (decision 5).
+        </li>
+        <li>
+          <strong
+            ><code>fill: "none"</code>, <code>"transparent"</code>,
+            <code>opacity: 0</code></strong
+          >: paint values that happen to be invisible. They keep their meaning;
+          they stop being used as definitions.
+        </li>
+        <li>
+          <strong>Keyframe visibility</strong>: a small degenerate shared case
+          (a keyframe that never shows), different tier and purpose. Fine.
+        </li>
+        <li>
+          <strong>Clipping (#1209)</strong> and
+          <strong>region compositing</strong>: no overlap. A clip hides part of
+          a mark by region; compositing owns paint over shapes;
+          <code>.hidden()</code> makes a shape with no paint of its own.
+        </li>
+      </ul>
+
+      <h2 id="walls">Walls</h2>
+      <ul>
+        <li>
+          <strong
+            >The bar chart race (#889, its 11th slot) is not covered.</strong
+          >
+          A bar entering the top ten slides up out of slot 11, and D3 shows half
+          a bar as it crosses the edge. <code>.hidden()</code> hides whole
+          marks, so the bar would pop in, and so would a per-datum
+          <code>.hidden(d =&gt; d.rank &gt; 10)</code>. #889 needs a clip on the
+          plot box (#1209, where content is clipped to a box).
+        </li>
+        <li>
+          <strong>A container's own paint is a different thing.</strong>
+          BakingRecipes' <code>Pad</code> is
+          <code
+            >enclose({ padding: 5, fill: "transparent", stroke: "none" },
+            [text(...)])</code
+          >: the box must not paint, the text must. <code>.hidden()</code> hides
+          the subtree, so it is the wrong tool; the enclose's paint options are
+          right. Its <code>union</code> helper wraps only refs, so
+          <code>.hidden()</code> fits there.
+        </li>
+        <li>
+          <strong>The shim cannot sit on a fused mark.</strong> A prototype
+          limit, not a design limit.
+        </li>
+        <li>
+          <strong>Found on the way, outside this proposal.</strong>
+          <code>subtract</code> over two <code>ref</code> circles drew nothing
+          even with painted circles, so the Venn example uses only
+          <code>intersect</code>. A stroked <code>intersect</code> whose operand
+          is another <code>intersect</code> throws "a stroke needs the exact
+          outline" (#1201, one convex operand needed), so there is no
+          triple-overlap region.
+        </li>
+      </ul>
+
+      <h2 id="recommendation">Recommendation</h2>
+      <div class="prose">
+        <p>
+          I recommend <strong>A, <code>.hidden()</code></strong
+          >.
+        </p>
+        <ul>
+          <li>
+            <strong>It desugars into the existing core</strong> (principles.md,
+            "Why keep the core small"): <code>blank()</code>'s rule on a
+            subtree. No node kind, no pass, no layout change.
+          </li>
+          <li>
+            <strong>One rule replaces five workarounds</strong> (api-design.md,
+            "Prefer the simple general rule"): <code>blank()</code>,
+            <code>fill: "none"</code>, <code>fill: "transparent"</code>,
+            <code>opacity: 0</code> and a CSS clip, with
+            <code>blank()</code> becoming an exact composition.
+          </li>
+          <li>
+            <strong>It passes the hard examples</strong> (api-design.md, "Hard
+            examples are central"): per-row definitions, an axis from a hidden
+            area, spacers in a <code>spread</code>, a shape used by two regions.
+          </li>
+          <li>
+            <strong
+              >The method form fits the calls, methods and options rule</strong
+            >: a universal transformation of the node, like
+            <code>.name()</code>.
+          </li>
+          <li>
+            <strong>The name has the same meaning elsewhere</strong> (SwiftUI,
+            CSS, Typst) and avoids <code>def</code>, which means a template and
+            is a Python keyword.
+          </li>
+          <li><strong>Same shape in Python</strong>, one IR field.</li>
+        </ul>
+        <p>
+          <strong>Runner-up: <code>hide(mark)</code>.</strong> Pick it if hiding
+          should read as a visible boundary around a whole chart. B would win
+          only if many diagrams want all their definitions in one list, and it
+          still needs A for spacers.
+        </p>
+      </div>
+
+      <h2 id="decisions">Decisions for Josh</h2>
+      <ol class="decisions">
+        <li>
+          Is a definition "laid out, counts for scales, axes and legends, paints
+          nothing, cannot be hovered"?
+        </li>
+        <li>
+          Spelling: <code>.hidden()</code> (recommended), <code>hide(x)</code>,
+          or something else?
+        </li>
+        <li>
+          Does a hidden mark's color field still feed the legend? (Recommended
+          yes, as <code>blank()</code> does.)
+        </li>
+        <li>
+          Does <code>.hidden()</code> hide the mark's labels, and on a chart its
+          axes and legend? (Recommended yes.)
+        </li>
+        <li>
+          Keep <code>blank()</code> as sugar for
+          <code>rect(...).hidden()</code>, or delete it?
+        </li>
+        <li>Land this with #1259 in one PR?</li>
+        <li>
+          Migrate the gallery stories (four croissants, QuantumCircuit,
+          OhmParseTree, DFSCQ, the BakingRecipes <code>union</code>) in the same
+          change?
+        </li>
+        <li>
+          Leave #889 to a clip (#1209), with no value argument on
+          <code>.hidden()</code> for now?
+        </li>
+      </ol>
+      <p class="note">
+        Repo copy: <code>proposals/shape-definitions/proposal.md</code>.
+        Prototype:
+        <code
+          >packages/gofish-graphics/stories/proposals/ShapeDefinitions.stories.tsx</code
+        >. No library code changed.
+      </p>
+    </main>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      if (window.hljs) {
+        document.querySelectorAll("pre code").forEach(function (el) {
+          window.hljs.highlightElement(el);
+        });
+      }
+    </script>
+  </body>
+</html>
