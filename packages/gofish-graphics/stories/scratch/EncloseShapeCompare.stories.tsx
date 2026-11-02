@@ -134,3 +134,53 @@ export const CA_Proto_ArcsSpine24W4 = withSpine(
   4,
   chartAccent(Shape.arcs({ radius: 24 }))
 );
+
+// (e) PROTOTYPE: candidates against the "bumps" over single padded dots in
+// CA_Proto_ArcsSpine24 (see scratch-bumps/ and arcsSmooth.ts).
+const withProto = (
+  proto: typeof ARCS_PROTOTYPE,
+  story: StoryObj
+): StoryObj => ({
+  render: (...args: any[]) => {
+    ARCS_PROTOTYPE.spine = proto.spine;
+    ARCS_PROTOTYPE.smooth = proto.smooth;
+    return (story.render as any)(...args);
+  },
+});
+const ca = (radius: number) => chartAccent(Shape.arcs({ radius }));
+export const CA_Bump_NoSpine24 = withProto({}, ca(24));
+export const CA_Bump_Spine7R24 = withProto({ spine: 7 }, ca(24));
+export const CA_Bump_Spine0R40 = withProto({ spine: 0 }, ca(40));
+export const CA_Bump_Spine0R60 = withProto({ spine: 0 }, ca(60));
+export const CA_Bump_Relax6 = withProto(
+  { spine: 0, smooth: { kind: "relax", sigma: 6, iters: 3 } },
+  ca(24)
+);
+export const CA_Bump_Outward6 = withProto(
+  { spine: 0, smooth: { kind: "outward", sigma: 6, iters: 3 } },
+  ca(24)
+);
+export const CA_Bump_Field4 = withProto(
+  { spine: 0, smooth: { kind: "field", sigma: 4 } },
+  ca(24)
+);
+export const CA_Bump_Field8 = withProto(
+  { spine: 0, smooth: { kind: "field", sigma: 8 } },
+  ca(24)
+);
+export const CA_Bump_Blur4 = withProto(
+  { spine: 0, smooth: { kind: "blur", sigma: 4 } },
+  ca(24)
+);
+export const CA_Bump_Blur6 = withProto(
+  { spine: 0, smooth: { kind: "blur", sigma: 6 } },
+  ca(24)
+);
+export const CA_Bump_Blur6Local20 = withProto(
+  { spine: 0, smooth: { kind: "blur", sigma: 6, local: 20 } },
+  ca(24)
+);
+export const CA_Bump_Blur8 = withProto(
+  { spine: 0, smooth: { kind: "blur", sigma: 8 } },
+  ca(24)
+);

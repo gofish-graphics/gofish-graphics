@@ -38,6 +38,7 @@
  */
 import { signedArea2, pointInRing, segDist } from "../../geometry/plane";
 import { ringExtent } from "../../geometry/box";
+import { smoothOutline, type KeepIn, type SmoothSpec } from "./arcsSmooth";
 import {
   boxGrid,
   grownPrim,
@@ -432,7 +433,7 @@ export type ArcsOutlineOptions = {
  *  link a segment member `spine` px wide, before the closing. The arcs
  *  outline then stays in one piece, as the blob's spine does. Set from the
  *  scratch story `Scratch/Enclose Shape Compare`. */
-export const ARCS_PROTOTYPE: { spine?: number } = {};
+export const ARCS_PROTOTYPE: { spine?: number; smooth?: SmoothSpec } = {};
 
 const centerOfMember = (m: BlobMember): Pt =>
   m.kind === "disc"
@@ -442,7 +443,7 @@ const centerOfMember = (m: BlobMember): Pt =>
       : [m.x + m.w / 2, m.y + m.h / 2];
 
 /** PROTOTYPE: Prim's MST over the members' centers, as segment members. */
-function spineLinks(members: BlobMember[], w: number): BlobMember[] {
+export function spineLinks(members: BlobMember[], w: number): BlobMember[] {
   const c = members.map(centerOfMember);
   const n = c.length;
   const inTree = new Array(n).fill(false);
@@ -475,7 +476,13 @@ export function arcsOutline(
   if (ARCS_PROTOTYPE.spine !== undefined)
     members = [...members, ...spineLinks(members, ARCS_PROTOTYPE.spine)];
   const r = Math.max(0, o.radius);
-  const prims = members.map((m) => grown(m, Math.max(0, o.padding) + r));
+  // PROTOTYPE: a "blur" smoothing with `inset` runs the closing that much
+  // nearer the members; the blur's outward offset brings it back out.
+  const sm = ARCS_PROTOTYPE.smooth;
+  const inset = sm?.kind === "blur" ? (sm.inset ?? 0) : 0;
+  const prims = members.map((m) =>
+    grown(m, Math.max(0, o.padding - inset) + r)
+  );
   const sdf = (j: number, x: number, y: number) =>
     primD(prims[j].prim, x, y, false);
 
@@ -663,5 +670,30 @@ export function arcsOutline(
   ).map((loop) => loop.flat());
   // A loop of the closing winds as the members do (it has no holes); a tiny
   // or backward one is a sliver from a cut, not part of the region.
-  return out.filter((ring) => ring.length > 2 && signedArea2(ring) > 1e-3);
+  const closed = out.filter(
+    (ring) => ring.length > 2 && signedArea2(ring) > 1e-3
+  );
+  // PROTOTYPE: a smoothing pass after the closing (see arcsSmooth.ts). It
+  // keeps every member, and each spine link, grown by padding inside.
+  if (ARCS_PROTOTYPE.smooth === undefined) return closed;
+  const pad = Math.max(0, o.padding);
+  const keep: KeepIn[] = members.map((m) =>
+    m.kind === "disc"
+      ? { a: [m.cx, m.cy], b: [m.cx, m.cy], R: m.r + pad }
+      : m.kind === "segment"
+        ? { a: m.a, b: m.b, R: m.w / 2 + pad }
+        : // a box: its center line along the long side (scratch only)
+          m.w >= m.h
+          ? {
+              a: [m.x + m.h / 2, m.y + m.h / 2],
+              b: [m.x + m.w - m.h / 2, m.y + m.h / 2],
+              R: m.h / 2 + pad,
+            }
+          : {
+              a: [m.x + m.w / 2, m.y + m.w / 2],
+              b: [m.x + m.w / 2, m.y + m.h - m.w / 2],
+              R: m.w / 2 + pad,
+            }
+  );
+  return smoothOutline(closed, keep, ARCS_PROTOTYPE.smooth);
 }
