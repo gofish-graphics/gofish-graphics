@@ -569,15 +569,15 @@ export interface PartitionOperator
 // type, e.g. `Curve.Curve`) and on the wire. descriptors.test.ts checks that
 // these kinds and params agree with the table.
 
-/** How `treemap` tiles its box, made by a call in the `Tile` family
+/** How `treemap` tiles its region, made by a call in the `Tile` family
  *  (`Tile.squarify()`, `Tile.slice()`, `Tile.dice()`, `Tile.binary()`,
- *  `Tile.sliceDice()`). */
+ *  `Tile.voronoi()`). */
 export type TileIR =
   | { kind: "squarify"; ratio?: number }
   | { kind: "slice" }
   | { kind: "dice" }
   | { kind: "binary" }
-  | { kind: "sliceDice" };
+  | { kind: "voronoi"; seed?: number };
 
 /** How `scatter` keeps its children clear of each other, made by a call in
  *  the `Overlap` family (`Overlap.separate()`, `Overlap.noise()`;

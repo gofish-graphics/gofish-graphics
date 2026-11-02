@@ -274,7 +274,7 @@ const SCHEMA_STRATEGY_KEYS: Record<
     slice: {},
     dice: {},
     binary: {},
-    sliceDice: {},
+    voronoi: { seed: true },
   } satisfies StrategyKeys<TileIR>,
   Overlap: {
     separate: { padding: true },

@@ -302,11 +302,11 @@ def test_treemap_serializes_tile_strategy_and_gaps():
     assert d["spacing"] == 2
     assert d["padding"] == 3
     assert Tile.squarify() == {"kind": "squarify"}
-    assert [f()["kind"] for f in (Tile.slice, Tile.dice, Tile.binary, Tile.slice_dice)] == [
+    assert [f()["kind"] for f in (Tile.slice, Tile.dice, Tile.binary, Tile.voronoi)] == [
         "slice",
         "dice",
         "binary",
-        "sliceDice",
+        "voronoi",
     ]
     assert "tile" not in ir(treemap())
 
@@ -318,9 +318,11 @@ def test_treemap_tile_is_a_tagged_union():
         "kind": "squarify",
         "ratio": 1,
     }
-    assert ir(treemap(by="g", tile=Tile.slice_dice()))["tile"] == {
-        "kind": "sliceDice"
+    assert ir(treemap(by="g", tile=Tile.voronoi(seed=7)))["tile"] == {
+        "kind": "voronoi",
+        "seed": 7,
     }
+    assert ir(treemap(by="g", tile=Tile.voronoi))["tile"] == {"kind": "voronoi"}
     with pytest.raises(TypeError, match="ratio"):
         treemap(by="g", tile={"kind": "slice", "ratio": 2})
     with pytest.raises(TypeError, match="'nope'"):
