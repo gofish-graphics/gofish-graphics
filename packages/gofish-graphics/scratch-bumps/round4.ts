@@ -7,12 +7,18 @@ import {
   ringsArea,
   UNIFIED_STATS,
 } from "../src/ast/graphicalOperators/enclose/unified";
-import { beyondHull, type Beyond } from "../src/ast/graphicalOperators/enclose/beyond";
+import {
+  beyondHull,
+  type Beyond,
+} from "../src/ast/graphicalOperators/enclose/beyond";
 import { ovalOutline } from "../src/ast/graphicalOperators/enclose/oval";
 import { keepIns } from "../src/ast/graphicalOperators/enclose/arcs";
 import { pointInRing, segDist, signedArea2 } from "../src/ast/geometry/plane";
 import { resample } from "../src/ast/graphicalOperators/enclose/arcsSmooth";
-import type { BlobMember, Pt } from "../src/ast/graphicalOperators/enclose/blob";
+import type {
+  BlobMember,
+  Pt,
+} from "../src/ast/graphicalOperators/enclose/blob";
 
 const distRing = (p: Pt, r: Pt[]) => {
   let d = Infinity;
@@ -69,7 +75,8 @@ const kappaJump = (R: Pt[]) => {
     kap.push((2 * cr) / (la * lb * lc || 1e-12));
   }
   let j = 0;
-  for (let i = 0; i < n; i++) j = Math.max(j, Math.abs(kap[i] - kap[(i + 4) % n]));
+  for (let i = 0; i < n; i++)
+    j = Math.max(j, Math.abs(kap[i] - kap[(i + 4) % n]));
   return j;
 };
 
@@ -89,7 +96,9 @@ for (const [label, dump] of sets) {
     const E = ovalOutline(ms, pad)[0];
     for (const how of ["ellipse", "circle", "corner", "firey"] as Beyond[]) {
       const t0 = performance.now();
-      const rings = CS.map((c) => (c === 1 ? H : beyondHull(H, ms, pad, c, how)));
+      const rings = CS.map((c) =>
+        c === 1 ? H : beyondHull(H, ms, pad, c, how)
+      );
       const ms_ = (performance.now() - t0) / (CS.length - 1);
       const areas = rings.map((r) => Math.abs(signedArea2(r)) / 2);
       const pokes = rings.map((r) => poke(r, ms, pad));
@@ -104,7 +113,9 @@ for (const [label, dump] of sets) {
           ` | worst member poke ${f(Math.max(...pokes), 3)} | H outside ${f(Math.max(...holdsH), 3)}` +
           ` | nesting worst ${f(nest, 3)}` +
           ` | d(1.01,H) ${f(hausdorff(rings[1], H), 3)}` +
-          (how === "ellipse" ? ` | d(2,oval) ${f(hausdorff(rings.at(-1)!, E), 4)}` : "") +
+          (how === "ellipse"
+            ? ` | d(2,oval) ${f(hausdorff(rings.at(-1)!, E), 4)}`
+            : "") +
           ` | ${f(ms_, 1)} ms/eval`
       );
     }
@@ -114,7 +125,11 @@ for (const [label, dump] of sets) {
     );
     const piped = [1, 1.05, 1.5, 2].map((c) => {
       const t0 = performance.now();
-      const r = unifiedOutline(ms, { padding: pad, convexity: c, connected: true });
+      const r = unifiedOutline(ms, {
+        padding: pad,
+        convexity: c,
+        connected: true,
+      });
       return [kappaJump(r[0]), performance.now() - t0, r] as const;
     });
     console.log(

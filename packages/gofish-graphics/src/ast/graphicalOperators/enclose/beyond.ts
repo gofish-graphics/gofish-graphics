@@ -64,8 +64,14 @@ export function minkowski(P0: Pt[], a: number, Q0: Pt[], b: number): Pt[] {
     j = 0;
   while (i < n || j < m) {
     out.push([P[i % n][0] + Q[j % m][0], P[i % n][1] + Q[j % m][1]]);
-    const ep = [P[(i + 1) % n][0] - P[i % n][0], P[(i + 1) % n][1] - P[i % n][1]];
-    const eq = [Q[(j + 1) % m][0] - Q[j % m][0], Q[(j + 1) % m][1] - Q[j % m][1]];
+    const ep = [
+      P[(i + 1) % n][0] - P[i % n][0],
+      P[(i + 1) % n][1] - P[i % n][1],
+    ];
+    const eq = [
+      Q[(j + 1) % m][0] - Q[j % m][0],
+      Q[(j + 1) % m][1] - Q[j % m][1],
+    ];
     const cr = ep[0] * eq[1] - ep[1] * eq[0];
     if (j >= m || (i < n && cr > 0)) i++;
     else if (i >= n || cr < 0) j++;
@@ -161,8 +167,12 @@ const near = (p: Pt, S: Pt[]) => {
     const ex = b[0] - a[0],
       ey = b[1] - a[1];
     const L2 = ex * ex + ey * ey || 1;
-    const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * ex + (p[1] - a[1]) * ey) / L2));
-    if (Math.hypot(a[0] + t * ex - p[0], a[1] + t * ey - p[1]) < 1e-3) return true;
+    const t = Math.max(
+      0,
+      Math.min(1, ((p[0] - a[0]) * ex + (p[1] - a[1]) * ey) / L2)
+    );
+    if (Math.hypot(a[0] + t * ex - p[0], a[1] + t * ey - p[1]) < 1e-3)
+      return true;
   }
   return false;
 };
@@ -171,9 +181,15 @@ const near = (p: Pt, S: Pt[]) => {
  *  directions and drawn as the intersection of the support half-planes
  *  (the polygon around the shape). */
 function firey(H: Pt[], E: Pt[], c: number, p: number, k = 720): Pt[] {
-  const o = E.reduce((s, q) => [s[0] + q[0] / E.length, s[1] + q[1] / E.length], [0, 0]);
+  const o = E.reduce(
+    (s, q) => [s[0] + q[0] / E.length, s[1] + q[1] / E.length],
+    [0, 0]
+  );
   const h = (R: Pt[], ux: number, uy: number) =>
-    R.reduce((m, q) => Math.max(m, (q[0] - o[0]) * ux + (q[1] - o[1]) * uy), -Infinity);
+    R.reduce(
+      (m, q) => Math.max(m, (q[0] - o[0]) * ux + (q[1] - o[1]) * uy),
+      -Infinity
+    );
   const hs: number[] = [];
   for (let i = 0; i < k; i++) {
     const t = (2 * Math.PI * i) / k,
@@ -192,7 +208,10 @@ function firey(H: Pt[], E: Pt[], c: number, p: number, k = 720): Pt[] {
     const [a1, b1, c1] = [Math.cos(t1), Math.sin(t1), hs[i]];
     const [a2, b2, c2] = [Math.cos(t2), Math.sin(t2), hs[j]];
     const det = a1 * b2 - a2 * b1;
-    out.push([o[0] + (c1 * b2 - c2 * b1) / det, o[1] + (a1 * c2 - a2 * c1) / det]);
+    out.push([
+      o[0] + (c1 * b2 - c2 * b1) / det,
+      o[1] + (a1 * c2 - a2 * c1) / det,
+    ]);
   }
   return out;
 }
@@ -212,8 +231,7 @@ export function beyondHull(
     const Rc = Math.hypot(C[0][0] - mean(C)[0], C[0][1] - mean(C)[1]);
     return cornerRounded(Hc, pad + s * (Rc - pad), pad);
   }
-  const E =
-    how === "circle" ? circleRing(Hc) : (ovalRing(members, pad) ?? Hc);
+  const E = how === "circle" ? circleRing(Hc) : (ovalRing(members, pad) ?? Hc);
   if (how === "firey") return firey(Hc, E, c, 4);
   return minkowski(Hc, 1 - s, E, s);
 }

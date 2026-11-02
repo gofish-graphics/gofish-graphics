@@ -1,12 +1,20 @@
 // SCRATCH round 4: concave curvature and runtime of ChartAccent / Munkres /
 // penguin spines at neck 1 and 0.6, raw (exact closing) and smoothed.
 import { loadDump, measure } from "./round3";
-import { unifiedOutline, UNIFIED_STATS } from "../src/ast/graphicalOperators/enclose/unified";
+import {
+  unifiedOutline,
+  UNIFIED_STATS,
+} from "../src/ast/graphicalOperators/enclose/unified";
 
-for (const name of ["chart-accent", "munkres-figure", "penguin-spines", "cusp-r40"]) {
+for (const name of [
+  "chart-accent",
+  "munkres-figure",
+  "penguin-spines",
+  "cusp-r40",
+]) {
   for (const call of loadDump(name)) {
     if (call.shape.kind !== "blob" && call.shape.kind !== "arcs") continue;
-    for (const neck of (process.argv[2] ? [+process.argv[2]] : [1, 0.6]))
+    for (const neck of process.argv[2] ? [+process.argv[2]] : [1, 0.6])
       for (const smooth of [null, undefined]) {
         const rings = unifiedOutline(call.members, {
           padding: call.padding,
@@ -14,7 +22,8 @@ for (const name of ["chart-accent", "munkres-figure", "penguin-spines", "cusp-r4
           avoiding: call.avoiding,
           clearance: call.shape.clearance,
           connected: call.shape.kind === "blob",
-          radius: call.shape.kind === "arcs" ? (call.shape.radius ?? 12) : undefined,
+          radius:
+            call.shape.kind === "arcs" ? (call.shape.radius ?? 12) : undefined,
           neck,
           smooth,
         } as any);
