@@ -1,5 +1,10 @@
 # Voronoi treemaps (#1222)
 
+> **Settled and implemented (2026-11-02).** `Tile.voronoi` / `Tile.voronoi({ seed })`, with only `seed` exposed (default 0).
+> A parent hands its child a convex shape at layout: treemap cells, partition cell outlines and enclose outlines all go through it, and `region()` draws it.
+> A rectangular tiling in a non-rectangular region is a loud error that names `Tile.voronoi`. `enclose({ shape })` around a member with no size hands its outline down (box or oval only; in a Voronoi cell, `Shape.box` is the cell).
+> `spacing` insets each cell by spacing/2, `padding` the outer region. `Tile.sliceDice` is deleted. Final renders are in `img/final/`.
+
 **Summary.**
 
 - GoFish's `treemap` already lays out one level per flow step, like `pack`, and each level can already use its own tiling.

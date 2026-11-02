@@ -17,6 +17,9 @@ covers:
   - packages/gofish-graphics/src/ast/perf.ts
   - packages/gofish-graphics/src/ast/geometry/index.ts
   - packages/gofish-graphics/src/ast/geometry/clip.ts
+  - packages/gofish-graphics/src/ast/geometry/ring.ts
+  - packages/gofish-graphics/src/ast/geometry/voronoiTiling.ts
+  - packages/gofish-graphics/src/ast/graphicalOperators/treemap.tsx
   - packages/gofish-graphics/src/ast/graphicalOperators/pack.tsx
   - packages/gofish-graphics/src/ast/graphicalOperators/overlap.ts
   - packages/gofish-graphics/src/ast/constraints/overlap.ts
@@ -727,6 +730,36 @@ See
 [Underlying Space](/internals/core/underlying-space#partition-each-group-in-its-cell).
 A cell of a binned struct (`struct({ x, y }).bin(Bin.hex(...))`) also has
 an outline, the cell's polygon; every other cell is a box.
+
+#### The shape a parent gives a child
+
+Beside a size, a parent may hand a child a shape: `layout(size, scales,
+shape)`, where `shape` is a convex ring (`Ring`, `src/ast/geometry/ring.ts`)
+in the child's own frame, inside the box `[0, w] × [0, h]`. No shape means
+the box itself. `GoFishNode.layout` flips the ring with the scales when the
+child's y runs the other way, so every `Layout` reads it in its own axis
+order. Three parents make one, and two nodes read it:
+
+- A `partition`'s layer maps each cell's outline to pixels through the
+  child's scales (`buildChildShapes`, `src/ast/constraints/proposalPlan.ts`)
+  and hands it to the child in that cell. The cell's span and placement
+  still go through the data position above; only the outline goes through
+  the shape.
+- A `treemap` hands each child its tile: a box for a rectangular tiling
+  (`boxRing`), a convex polygon for `Tile.voronoi`
+  (`src/ast/geometry/voronoiTiling.ts`: a power diagram of the region,
+  clipped half-plane by half-plane with `clipToHalfPlane`, its sites and
+  weights moved until each cell's area is within 2% of its share). The
+  child's size is the polygon's box, and the polygon is shifted into it
+  (`inItsBox`).
+- An `enclose` around a member with no size of its own (`fillingLayout`,
+  see [Enclose](/internals/frontend/enclose)) hands down its outline.
+
+A layer hands its own shape to a child it lays out at the layer's full
+size, so a `layer([region, text])` in a cell still finds the cell. A
+`treemap` with no size of its own reads its shape as the region it tiles
+(a rectangular tiling there is an error unless the shape is the whole
+box), and a `region` draws it. Every other node ignores it.
 
 #### Chrome gutters
 
