@@ -77,7 +77,8 @@ export type ColumnDatum = (v: number) => MaybeValue<number>;
  * of its column, so they carry the column's measure and type as any datum
  * read from it does, and they make the layer's position domain on that axis.
  * `outline` is the cell's outline in datums, `[x, y]` per corner, when the
- * cell has one and is placed along both axes.
+ * cell has one and is placed along both axes. The layer hands it to the
+ * child as its shape (`buildChildShapes`, `geometry/ring.ts`).
  *
  * A partition inside another partition's cell divides that cell. On each
  * axis its key does not place, the region's span is the span of the cell
@@ -87,7 +88,9 @@ export type ColumnDatum = (v: number) => MaybeValue<number>;
  * enclosing cell is the outer partition's, and its axis draws it.
  * TODO(#1059): the outline is the key's own, so a 1D partition inside a
  * hexagon gives its children the hexagon's box, cut down to their cells,
- * and not the hexagon clipped to them.
+ * and not the hexagon clipped to them. The fix is to clip the shape the
+ * inner layer is handed (the hexagon) to each cell's box with
+ * `intersectRings`, the way `enclose` cuts its oval to a treemap cell.
  */
 export class PositionRegion {
   readonly spans: readonly [

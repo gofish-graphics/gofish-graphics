@@ -98,6 +98,7 @@ import type { AxisScale } from "./domain";
 import { envFlag } from "../util";
 import type { AxesOptions, AxisOptions, ScaleContext } from "./gofish";
 import type { LabelRow } from "./axes/elaborate";
+import type { Ring } from "./geometry/ring";
 import type { ChromeRing } from "./elaborationUtils";
 import type { TokenContext } from "./tokenContext";
 import {
@@ -361,11 +362,18 @@ export function placeUnplacedChild(child: Placeable): void {
 // applied; `transform.translate` is its offset in the parent's frame. `dims`
 // composes the two exactly once (`combineDims`), so a layout must never fold
 // its translate into `intrinsicDims.min` too (#755).
+//
+// `shape` is the shape of the space proposed (#1222, `geometry/ring.ts`): a
+// convex ring inside the box `[0, w] × [0, h]` of `size`, in the node's axis
+// order, or undefined for the box itself. A node that fills its space (a
+// `treemap`, a `region`) fills it, and hands its children the shapes it cuts
+// it into; any other node reads only `size`.
 export type Layout = (
   size: Size,
   scales: Size<AxisScale | undefined>,
   children: readonly GoFishAST[],
-  node: GoFishNode
+  node: GoFishNode,
+  shape?: Ring
 ) => { intrinsicDims: FancyDims; transform: FancyTransform; renderData?: any };
 
 /** Map a layout pixel (y-down, layout origin) to a final absolute canvas
@@ -2257,14 +2265,21 @@ export class GoFishNode {
    * own direction. Here that result is stored in pixels (`orientDims`,
    * `orientTransform`), and the node is handed back to its parent as a view in
    * the PARENT's axis order (`orientView`). The y scale is reflected on the
-   * way in when the two directions differ (`orientScales`).
+   * way in when the two directions differ (`orientScales`), and so is the
+   * proposed `shape` (see {@link Layout}), about the middle of its box.
    */
-  public layout(size: Size, scales: Size<AxisScale | undefined>): Placeable {
+  public layout(
+    size: Size,
+    scales: Size<AxisScale | undefined>,
+    shape?: Ring
+  ): Placeable {
     // Layout re-joins a layer's position measures (`collectPositionDomains`),
     // so it reads the type walk's union-find of units, whose bindings it
     // must see. The outermost call installs it, as the walk's root does.
     if (!hasUnits()) {
-      return withUnits(this.walkUnits(), () => this.layout(size, scales));
+      return withUnits(this.walkUnits(), () =>
+        this.layout(size, scales, shape)
+      );
     }
     const direction = this.yFrame.direction;
     const parentDirection = yDirection(this.parent);
@@ -2277,7 +2292,10 @@ export class GoFishNode {
       size,
       orientScales(scales, direction, parentDirection),
       this.children,
-      this
+      this,
+      shape === undefined || direction === parentDirection
+        ? shape
+        : shape.map(([x, y]) => [x, size[1] - y] as const)
     );
 
     this.intrinsicDims = orientDims(elaborateDims(intrinsicDims), direction);

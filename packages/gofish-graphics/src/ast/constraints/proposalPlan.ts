@@ -3,7 +3,10 @@
 // </gofish-wiki>
 
 import { type Size } from "../dims";
-import { isValue } from "../data";
+import { getValue, isValue } from "../data";
+import type { Point } from "../geometry/outline";
+import { ringExtent } from "../geometry/box";
+import type { Ring } from "../geometry/ring";
 import { isPositionInterval, type PositionRegion } from "./position";
 import { compilePlacementCoordinate } from "./placementLowering";
 import { numbers } from "../solver/arith";
@@ -134,6 +137,49 @@ export function buildChildSpans(
     }
   }
   return spanByKey.size === 0 ? undefined : spanByKey;
+}
+
+/**
+ * The shape each child is laid out in (#1222, `geometry/ring.ts`), from a
+ * layer's `position` constraints: the outline of the cell a `region` gives
+ * it, when the cell has one (a hexagon of `Bin.hex`, a cell of
+ * `Bin.voronoi`). The outline maps through `posScales` as the cell's span
+ * does ({@link buildChildSpans}), and is given in the frame of the box the
+ * child is laid out in, the cell's span on each axis, with its corner at
+ * `[0, 0]`.
+ */
+export function buildChildShapes(
+  constraints: readonly ConstraintSpec[],
+  keyOf: KeyOf,
+  posScales: ConstraintPosScales
+): Map<string, Ring> | undefined {
+  const shapeByKey = new Map<string, Ring>();
+  for (const c of constraints) {
+    if (c.type !== "position" || c.region?.outline === undefined) continue;
+    // With no frame on an axis, the cell has no place: its span gives no
+    // room there either.
+    if (posScales[0] === undefined || posScales[1] === undefined) continue;
+    const ring: Point[] = c.region.outline.map(([vx, vy]) => {
+      const x = compilePlacementCoordinate(numbers, vx, posScales[0]);
+      const y = compilePlacementCoordinate(numbers, vy, posScales[1]);
+      // A corner that is not a number would put NaN in what the child
+      // draws, so it is an error, not a guess.
+      const bad = [x, y].findIndex(
+        (p) => p === undefined || !Number.isFinite(p)
+      );
+      if (bad >= 0)
+        throw new Error(
+          `a cell's outline on ${bad === 0 ? "x" : "y"} does not map to ` +
+            `pixels: its corner [${getValue(vx)}, ${getValue(vy)}] maps to ` +
+            `[${x}, ${y}].`
+        );
+      return [x!, y!] as const;
+    });
+    const { minX, minY } = ringExtent(ring);
+    const shape = ring.map(([x, y]) => [x - minX, y - minY] as const);
+    for (const ref of c.children) if (ref) shapeByKey.set(keyOf(ref), shape);
+  }
+  return shapeByKey.size === 0 ? undefined : shapeByKey;
 }
 
 /** Choose the concrete size proposed to one child in a layer.

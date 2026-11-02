@@ -58,6 +58,7 @@ import {
 } from "../constraints/compose";
 import {
   buildLayerConstraintLayoutPlan,
+  buildChildShapes,
   buildChildSpans,
   childLayoutSizeProposal,
   childPosScalesFor,
@@ -653,7 +654,7 @@ export const layer = createNodeOperatorSequential(
                 ) as [Extent | undefined, Extent | undefined]);
           return claims;
         },
-        layout: (size, scales, children, node) => {
+        layout: (size, scales, children, node, shape) => {
           // This layer's y direction: its children and constraints are read
           // in this axis order (see `axisDirection.ts`).
           const direction = node.yFrame.direction;
@@ -750,6 +751,13 @@ export const layer = createNodeOperatorSequential(
           // The span each child's position constraints hand it, which it is
           // laid out in: an interval it is pinned across, or its cell (#1059).
           const spanByKey = buildChildSpans(
+            node.constraints,
+            keyOf,
+            effectivePosScales
+          );
+          // The shape each child is laid out in (#1222): its cell's outline,
+          // for a cell of the plane.
+          const shapeByKey = buildChildShapes(
             node.constraints,
             keyOf,
             effectivePosScales
@@ -921,10 +929,22 @@ export const layer = createNodeOperatorSequential(
               seats
             );
             childFrames[i] = layoutSize[1];
-            const childPlaceable = child.layout(layoutSize, [
-              axisScale(childScaleFactors[0], childMaps[0]),
-              axisScale(childScaleFactors[1], childMaps[1]),
-            ]);
+            // The shape it is laid out in: its cell's outline, else, when it
+            // is laid out in the layer's own box, the layer's own shape, as
+            // the children of a layer share its space.
+            const childShape =
+              shapeByKey?.get(childKey) ??
+              (layoutSize[0] === size[0] && layoutSize[1] === size[1]
+                ? shape
+                : undefined);
+            const childPlaceable = child.layout(
+              layoutSize,
+              [
+                axisScale(childScaleFactors[0], childMaps[0]),
+                axisScale(childScaleFactors[1], childMaps[1]),
+              ],
+              childShape
+            );
             if (!constrainedChildren.has(i)) {
               seatChild(childPlaceable, i);
             } else {

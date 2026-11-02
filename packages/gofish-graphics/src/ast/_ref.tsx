@@ -23,6 +23,7 @@ import { ORDINAL, UnderlyingSpace } from "./underlyingSpace";
 import type { Extent } from "./extent";
 import type { Placeable, RenderSession } from "./_node";
 import type { Geometry } from "./geometry";
+import type { Ring } from "./geometry/ring";
 import type { DisplayList } from "gofish-ir";
 type DisplayListItem = DisplayList.DisplayItem;
 import { isToken, Token } from "./createName";
@@ -336,7 +337,12 @@ export class GoFishRef {
     return this.selectedNode?.resolveExtent() ?? [undefined, undefined];
   }
 
-  public layout(_size: Size, _scales?: Size<AxisScale | undefined>): Placeable {
+  /** A ref is laid out where its target is, so it reads no size or shape. */
+  public layout(
+    _size: Size,
+    _scales?: Size<AxisScale | undefined>,
+    _shape?: Ring
+  ): Placeable {
     if (!this.selectedNode) {
       throw new Error("Selected node not found");
     }
