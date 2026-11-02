@@ -355,9 +355,17 @@ const bGray = circle({ cx: 130, cy: 70, r: 50, fill: "gray" });
 | `exclude`   | a         | b         | none             |
 | `atop`      | a         | none      | a and b, blended |
 
+#### inputs: a and b
+
+a and b drawn as outlines only, nothing composited, so the overlap is plain. Every card below starts from them.
+
+![inputs: a and b](img/in-outlines.png)
+
 #### union, filled
 
 One shape: everything in a or b, with one outline.
+
+Inputs: ![`a`](img/in-a.png) `a` ![`b`](img/in-b.png) `b` → result
 
 ![union, filled](img/grid-union.png)
 
@@ -374,6 +382,8 @@ union({ fill: FILL }, [a, b]);
 #### union, no fill
 
 a, b, and in the overlap b over a.
+
+Inputs: ![`a`](img/in-a.png) `a` ![`b`](img/in-b.png) `b` → result
 
 ![union, no fill](img/no-fill-union.png)
 
@@ -395,6 +405,8 @@ layer([a, b]);
 
 One shape: where a and b overlap.
 
+Inputs: ![`a`](img/in-a.png) `a` ![`b`](img/in-b.png) `b` → result
+
 ![intersect, filled](img/grid-intersect.png)
 
 **Proposed**
@@ -408,6 +420,8 @@ intersect({ fill: FILL }, [a, b]);
 #### intersect, no fill
 
 Only the overlap, with b over a.
+
+Inputs: ![`a`](img/in-a.png) `a` ![`b`](img/in-b.png) `b` → result
 
 ![intersect, no fill](img/no-fill-intersect.png)
 
@@ -433,6 +447,8 @@ mask([aWhite, b]);
 
 One shape: a with b cut out.
 
+Inputs: ![`a`](img/in-a.png) `a` ![`b`](img/in-b.png) `b` → result
+
 ![subtract, filled](img/grid-subtract.png)
 
 _Rendered today as `subtract([b, a])`. Bug: today `subtract([a, b])` draws b minus a, the reverse of its doc comment._
@@ -452,6 +468,8 @@ subtract([b, a]); // both filled FILL
 #### subtract, no fill
 
 a's part outside b, in a's paint.
+
+Inputs: ![`a`](img/in-a.png) `a` ![`b`](img/in-b.png) `b` → result
 
 ![subtract, no fill](img/no-fill-subtract.png)
 
@@ -473,6 +491,8 @@ subtract([b, a]);
 
 One shape: in a or b, not both.
 
+Inputs: ![`a`](img/in-a.png) `a` ![`b`](img/in-b.png) `b` → result
+
 ![exclude, filled](img/grid-exclude.png)
 
 _Rendered today as two `subtract`s._
@@ -493,6 +513,8 @@ layer([subtract([b, a]), subtract([a, b])]);
 #### exclude, no fill
 
 Each lobe in its own paint.
+
+Inputs: ![`a`](img/in-a.png) `a` ![`b`](img/in-b.png) `b` → result
 
 ![exclude, no fill](img/no-fill-exclude.png)
 
@@ -518,6 +540,8 @@ layer([subtract([b, a]), subtract([a, b])]);
 
 One shape: a's region. b adds nothing outside a.
 
+Inputs: ![`a`](img/in-a.png) `a` ![`b`](img/in-b.png) `b` → result
+
 ![atop, filled](img/filled-atop.png)
 
 _Rendered as a alone, filled._
@@ -533,6 +557,8 @@ atop({ fill: FILL }, [a, b]);
 #### atop, no fill
 
 All of a, and b over it only inside a.
+
+Inputs: ![`a`](img/in-a.png) `a` ![`b`](img/in-b.png) `b` → result
 
 ![atop, no fill](img/no-fill-atop.png)
 
@@ -558,6 +584,8 @@ layer([a, mask([aWhite, b])]);
 
 A hidden operand adds its shape and no paint, so this is the stripes inside a.
 
+Inputs: ![`stripes`](img/in-band-stripes.png) `stripes` ![`a.hidden()`](img/in-a-hidden-band.png) `a.hidden()` → result
+
 ![Masking: intersect](img/masking-intersect.png)
 
 _Rendered today as `mask` with a white a._
@@ -578,6 +606,8 @@ mask([aWhite, stripes]);
 
 The stripes everywhere in their box except inside a: an inverted mask.
 
+Inputs: ![`stripes`](img/in-band-stripes.png) `stripes` ![`a.hidden()`](img/in-a-hidden-band.png) `a.hidden()` → result
+
 ![Masking: subtract](img/masking-subtract.png)
 
 _Real render of today's `subtract([a, stripes])`: the operand order is reversed today._
@@ -597,6 +627,8 @@ subtract([a, stripes]);
 #### Masking: luminance
 
 `mode` sets how a stencil is read. White shows all of the stripes, gray about half.
+
+Inputs: ![`stripes`](img/in-band-stripes.png) `stripes` ![`fade.hidden()`](img/in-fade.png) `fade.hidden()` → result
 
 ![Masking: luminance](img/masking-luminance.png)
 
@@ -619,6 +651,8 @@ mask([fade, stripes]);
 #### union, multiply
 
 Three circles, each overlap in the product of the paints over it.
+
+Inputs: ![`r`](img/in-venn-r.png) `r` ![`g`](img/in-venn-g.png) `g` ![`b`](img/in-venn-b.png) `b` → result
 
 ![union, multiply](img/venn-multiply.png)
 
@@ -644,6 +678,8 @@ Earlier rounds had separate operators for drawing content inside a stencil. A hi
 ### The bottle: one inline atop
 
 The image grays itself with its own `filter`, which `image` has today. The rect is then blended over it in `"color"`, inside the image.
+
+Inputs: ![`image`, grayed by its `filter`](img/in-bottle-image.png) `image`, grayed by its `filter` ![`rect`](img/in-bottle-rect.png) `rect` → result
 
 ![Render](img/bottle-atop.png)
 
@@ -768,6 +804,8 @@ Vega's image mark has no filter (checked); matplotlib has none either (from memo
 
 Alpha reads the stencil's ink, so a stencil of any color works. Luminance reads its brightness, as SVG `<mask>` does. The stencil is hidden, so it adds shape and no paint.
 
+Inputs: ![`stencil.hidden()`](img/in-stencil.png) `stencil.hidden()` ![`stripes`](img/in-wide-stripes.png) `stripes` → result
+
 **Shared stencil (the content is the same stripes)**
 
 ```js
@@ -801,6 +839,8 @@ intersect({ mode: "luminance" }, [stripes, stencil.hidden()]);
 ### A hidden operand vs a transparent one
 
 `.hidden()` keeps the shape and paints nothing, so a hidden operand adds area and no color. A `fill: "none"` operand has no ink, so in alpha mode it adds no area.
+
+Inputs: ![`stripes`](img/in-band-stripes.png) `stripes` ![`a.hidden()`](img/in-a-hidden-band.png) `a.hidden()` → result
 
 ![Render](img/masking-intersect.png)
 

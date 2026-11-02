@@ -577,6 +577,55 @@
           margin-right: -130px;
         }
       }
+
+      /* inputs → result: each operand drawn alone, then the result */
+      figure.render .inputs {
+        display: flex;
+        gap: 6px;
+        justify-content: center;
+        align-items: flex-end;
+        margin: 4px 0 0;
+      }
+      figure.render .inputs .in {
+        flex: 1 1 0;
+        min-width: 0;
+        max-width: 200px;
+        text-align: center;
+        border: 1px dashed var(--line);
+        border-radius: 4px;
+        padding: 3px;
+      }
+      figure.render .inputs .in img,
+      .opgrid figure.render .inputs .in img {
+        width: 100%;
+        height: auto;
+        max-height: none;
+        margin: 0;
+        display: block;
+      }
+      figure.render .inputs .lbl {
+        display: block;
+        font-size: 0.72rem;
+        line-height: 1.3;
+        margin-top: 2px;
+        color: var(--ink);
+      }
+      figure.render .arrow {
+        text-align: center;
+        color: var(--muted);
+        font-size: 1.1rem;
+        line-height: 1.2;
+        margin: 2px 0;
+      }
+      figure.render-inputs .arrow {
+        font-size: 0.85rem;
+      }
+      #bottle figure.render .inputs .in {
+        max-width: 400px;
+      }
+      #mask-modes figure.render .inputs .in {
+        max-width: 356px;
+      }
     </style>
   </head>
   <body>
@@ -1184,13 +1233,37 @@ const bGray = circle({ cx: 130, cy: 70, r: 50, fill: &quot;gray&quot; });</code>
           </div>
           <div class="opgrid">
             <div class="op">
+              <h4>inputs: a and b</h4>
+              <p class="say">
+                a and b drawn as outlines only, nothing composited, so the
+                overlap is plain. Every card below starts from them.
+              </p>
+              <figure class="render render">
+                <span class="tag tag-render">Render</span
+                ><img src="img/in-outlines.png" alt="" />
+              </figure>
+            </div>
+            <div class="op">
               <h4>union, filled</h4>
               <p class="say">
                 One shape: everything in a or b, with one outline.
               </p>
               <figure class="render render">
-                <span class="tag tag-render">Render</span
-                ><img src="img/grid-union.png" alt="" />
+                <span class="tag tag-render">Render</span>
+                <div class="inputs">
+                  <div class="in">
+                    <img src="img/in-a.png" alt="" /><span class="lbl"
+                      ><code>a</code></span
+                    >
+                  </div>
+                  <div class="in">
+                    <img src="img/in-b.png" alt="" /><span class="lbl"
+                      ><code>b</code></span
+                    >
+                  </div>
+                </div>
+                <div class="arrow" aria-hidden="true">↓</div>
+                <img src="img/grid-union.png" alt="" />
                 <figcaption>
                   Rendered today as <code>layer([a, b])</code>, both filled: the
                   same pixels with no stroke.
@@ -1211,8 +1284,21 @@ const bGray = circle({ cx: 130, cy: 70, r: 50, fill: &quot;gray&quot; });</code>
               <h4>union, no fill</h4>
               <p class="say">a, b, and in the overlap b over a.</p>
               <figure class="render render">
-                <span class="tag tag-render">Render</span
-                ><img src="img/no-fill-union.png" alt="" />
+                <span class="tag tag-render">Render</span>
+                <div class="inputs">
+                  <div class="in">
+                    <img src="img/in-a.png" alt="" /><span class="lbl"
+                      ><code>a</code></span
+                    >
+                  </div>
+                  <div class="in">
+                    <img src="img/in-b.png" alt="" /><span class="lbl"
+                      ><code>b</code></span
+                    >
+                  </div>
+                </div>
+                <div class="arrow" aria-hidden="true">↓</div>
+                <img src="img/no-fill-union.png" alt="" />
                 <figcaption>
                   Real render of today's <code>layer([a, b])</code>: the same
                   pixels.
@@ -1233,8 +1319,21 @@ const bGray = circle({ cx: 130, cy: 70, r: 50, fill: &quot;gray&quot; });</code>
               <h4>intersect, filled</h4>
               <p class="say">One shape: where a and b overlap.</p>
               <figure class="render render">
-                <span class="tag tag-render">Render</span
-                ><img src="img/grid-intersect.png" alt="" />
+                <span class="tag tag-render">Render</span>
+                <div class="inputs">
+                  <div class="in">
+                    <img src="img/in-a.png" alt="" /><span class="lbl"
+                      ><code>a</code></span
+                    >
+                  </div>
+                  <div class="in">
+                    <img src="img/in-b.png" alt="" /><span class="lbl"
+                      ><code>b</code></span
+                    >
+                  </div>
+                </div>
+                <div class="arrow" aria-hidden="true">↓</div>
+                <img src="img/grid-intersect.png" alt="" />
               </figure>
               <p class="label proposed">Proposed</p>
               <pre
@@ -1247,8 +1346,21 @@ const bGray = circle({ cx: 130, cy: 70, r: 50, fill: &quot;gray&quot; });</code>
               <h4>intersect, no fill</h4>
               <p class="say">Only the overlap, with b over a.</p>
               <figure class="render render">
-                <span class="tag tag-render">Render</span
-                ><img src="img/no-fill-intersect.png" alt="" />
+                <span class="tag tag-render">Render</span>
+                <div class="inputs">
+                  <div class="in">
+                    <img src="img/in-a.png" alt="" /><span class="lbl"
+                      ><code>a</code></span
+                    >
+                  </div>
+                  <div class="in">
+                    <img src="img/in-b.png" alt="" /><span class="lbl"
+                      ><code>b</code></span
+                    >
+                  </div>
+                </div>
+                <div class="arrow" aria-hidden="true">↓</div>
+                <img src="img/no-fill-intersect.png" alt="" />
                 <figcaption>
                   Rendered today as <code>mask</code> with a white a.
                 </figcaption>
@@ -1276,8 +1388,21 @@ const bGray = circle({ cx: 130, cy: 70, r: 50, fill: &quot;gray&quot; });</code>
               <h4>subtract, filled</h4>
               <p class="say">One shape: a with b cut out.</p>
               <figure class="render render">
-                <span class="tag tag-render">Render</span
-                ><img src="img/grid-subtract.png" alt="" />
+                <span class="tag tag-render">Render</span>
+                <div class="inputs">
+                  <div class="in">
+                    <img src="img/in-a.png" alt="" /><span class="lbl"
+                      ><code>a</code></span
+                    >
+                  </div>
+                  <div class="in">
+                    <img src="img/in-b.png" alt="" /><span class="lbl"
+                      ><code>b</code></span
+                    >
+                  </div>
+                </div>
+                <div class="arrow" aria-hidden="true">↓</div>
+                <img src="img/grid-subtract.png" alt="" />
                 <figcaption>
                   Rendered today as <code>subtract([b, a])</code>. Bug: today
                   <code>subtract([a, b])</code> draws b minus a, the reverse of
@@ -1299,8 +1424,21 @@ const bGray = circle({ cx: 130, cy: 70, r: 50, fill: &quot;gray&quot; });</code>
               <h4>subtract, no fill</h4>
               <p class="say">a's part outside b, in a's paint.</p>
               <figure class="render render">
-                <span class="tag tag-render">Render</span
-                ><img src="img/no-fill-subtract.png" alt="" />
+                <span class="tag tag-render">Render</span>
+                <div class="inputs">
+                  <div class="in">
+                    <img src="img/in-a.png" alt="" /><span class="lbl"
+                      ><code>a</code></span
+                    >
+                  </div>
+                  <div class="in">
+                    <img src="img/in-b.png" alt="" /><span class="lbl"
+                      ><code>b</code></span
+                    >
+                  </div>
+                </div>
+                <div class="arrow" aria-hidden="true">↓</div>
+                <img src="img/no-fill-subtract.png" alt="" />
                 <figcaption>
                   Real render of today's <code>subtract([b, a])</code>: the
                   operand order is reversed today.
@@ -1321,8 +1459,21 @@ const bGray = circle({ cx: 130, cy: 70, r: 50, fill: &quot;gray&quot; });</code>
               <h4>exclude, filled</h4>
               <p class="say">One shape: in a or b, not both.</p>
               <figure class="render render">
-                <span class="tag tag-render">Render</span
-                ><img src="img/grid-exclude.png" alt="" />
+                <span class="tag tag-render">Render</span>
+                <div class="inputs">
+                  <div class="in">
+                    <img src="img/in-a.png" alt="" /><span class="lbl"
+                      ><code>a</code></span
+                    >
+                  </div>
+                  <div class="in">
+                    <img src="img/in-b.png" alt="" /><span class="lbl"
+                      ><code>b</code></span
+                    >
+                  </div>
+                </div>
+                <div class="arrow" aria-hidden="true">↓</div>
+                <img src="img/grid-exclude.png" alt="" />
                 <figcaption>
                   Rendered today as two <code>subtract</code>s.
                 </figcaption>
@@ -1346,8 +1497,21 @@ layer([
               <h4>exclude, no fill</h4>
               <p class="say">Each lobe in its own paint.</p>
               <figure class="render render">
-                <span class="tag tag-render">Render</span
-                ><img src="img/no-fill-exclude.png" alt="" />
+                <span class="tag tag-render">Render</span>
+                <div class="inputs">
+                  <div class="in">
+                    <img src="img/in-a.png" alt="" /><span class="lbl"
+                      ><code>a</code></span
+                    >
+                  </div>
+                  <div class="in">
+                    <img src="img/in-b.png" alt="" /><span class="lbl"
+                      ><code>b</code></span
+                    >
+                  </div>
+                </div>
+                <div class="arrow" aria-hidden="true">↓</div>
+                <img src="img/no-fill-exclude.png" alt="" />
                 <figcaption>
                   Rendered today as two <code>subtract</code>s.
                 </figcaption>
@@ -1379,8 +1543,21 @@ layer([
                 One shape: a's region. b adds nothing outside a.
               </p>
               <figure class="render render">
-                <span class="tag tag-render">Render</span
-                ><img src="img/filled-atop.png" alt="" />
+                <span class="tag tag-render">Render</span>
+                <div class="inputs">
+                  <div class="in">
+                    <img src="img/in-a.png" alt="" /><span class="lbl"
+                      ><code>a</code></span
+                    >
+                  </div>
+                  <div class="in">
+                    <img src="img/in-b.png" alt="" /><span class="lbl"
+                      ><code>b</code></span
+                    >
+                  </div>
+                </div>
+                <div class="arrow" aria-hidden="true">↓</div>
+                <img src="img/filled-atop.png" alt="" />
                 <figcaption>Rendered as a alone, filled.</figcaption>
               </figure>
               <p class="label proposed">Proposed</p>
@@ -1397,8 +1574,21 @@ layer([
               <h4>atop, no fill</h4>
               <p class="say">All of a, and b over it only inside a.</p>
               <figure class="render render">
-                <span class="tag tag-render">Render</span
-                ><img src="img/no-fill-atop.png" alt="" />
+                <span class="tag tag-render">Render</span>
+                <div class="inputs">
+                  <div class="in">
+                    <img src="img/in-a.png" alt="" /><span class="lbl"
+                      ><code>a</code></span
+                    >
+                  </div>
+                  <div class="in">
+                    <img src="img/in-b.png" alt="" /><span class="lbl"
+                      ><code>b</code></span
+                    >
+                  </div>
+                </div>
+                <div class="arrow" aria-hidden="true">↓</div>
+                <img src="img/no-fill-atop.png" alt="" />
                 <figcaption>
                   Rendered today as a, then <code>mask([aWhite, b])</code>.
                 </figcaption>
@@ -1429,8 +1619,23 @@ layer([
                 stripes inside a.
               </p>
               <figure class="render render">
-                <span class="tag tag-render">Render</span
-                ><img src="img/masking-intersect.png" alt="" />
+                <span class="tag tag-render">Render</span>
+                <div class="inputs">
+                  <div class="in">
+                    <img src="img/in-band-stripes.png" alt="" /><span
+                      class="lbl"
+                      ><code>stripes</code></span
+                    >
+                  </div>
+                  <div class="in">
+                    <img src="img/in-a-hidden-band.png" alt="" /><span
+                      class="lbl"
+                      ><code>a.hidden()</code></span
+                    >
+                  </div>
+                </div>
+                <div class="arrow" aria-hidden="true">↓</div>
+                <img src="img/masking-intersect.png" alt="" />
                 <figcaption>
                   Rendered today as <code>mask</code> with a white a.
                 </figcaption>
@@ -1453,8 +1658,23 @@ layer([
                 mask.
               </p>
               <figure class="render render">
-                <span class="tag tag-render">Render</span
-                ><img src="img/masking-subtract.png" alt="" />
+                <span class="tag tag-render">Render</span>
+                <div class="inputs">
+                  <div class="in">
+                    <img src="img/in-band-stripes.png" alt="" /><span
+                      class="lbl"
+                      ><code>stripes</code></span
+                    >
+                  </div>
+                  <div class="in">
+                    <img src="img/in-a-hidden-band.png" alt="" /><span
+                      class="lbl"
+                      ><code>a.hidden()</code></span
+                    >
+                  </div>
+                </div>
+                <div class="arrow" aria-hidden="true">↓</div>
+                <img src="img/masking-subtract.png" alt="" />
                 <figcaption>
                   Real render of today's <code>subtract([a, stripes])</code>:
                   the operand order is reversed today.
@@ -1478,8 +1698,22 @@ layer([
                 the stripes, gray about half.
               </p>
               <figure class="render render">
-                <span class="tag tag-render">Render</span
-                ><img src="img/masking-luminance.png" alt="" />
+                <span class="tag tag-render">Render</span>
+                <div class="inputs">
+                  <div class="in">
+                    <img src="img/in-band-stripes.png" alt="" /><span
+                      class="lbl"
+                      ><code>stripes</code></span
+                    >
+                  </div>
+                  <div class="in">
+                    <img src="img/in-fade.png" alt="" /><span class="lbl"
+                      ><code>fade.hidden()</code></span
+                    >
+                  </div>
+                </div>
+                <div class="arrow" aria-hidden="true">↓</div>
+                <img src="img/masking-luminance.png" alt="" />
                 <figcaption>
                   Rendered today as <code>mask</code>: a white, b gray.
                 </figcaption>
@@ -1507,8 +1741,26 @@ mask([fade, stripes]);</code></pre>
                 it.
               </p>
               <figure class="render svg">
-                <span class="tag tag-svg">Plain SVG</span
-                ><img src="img/venn-multiply.png" alt="" />
+                <span class="tag tag-svg">Plain SVG</span>
+                <div class="inputs">
+                  <div class="in">
+                    <img src="img/in-venn-r.png" alt="" /><span class="lbl"
+                      ><code>r</code></span
+                    >
+                  </div>
+                  <div class="in">
+                    <img src="img/in-venn-g.png" alt="" /><span class="lbl"
+                      ><code>g</code></span
+                    >
+                  </div>
+                  <div class="in">
+                    <img src="img/in-venn-b.png" alt="" /><span class="lbl"
+                      ><code>b</code></span
+                    >
+                  </div>
+                </div>
+                <div class="arrow" aria-hidden="true">↓</div>
+                <img src="img/venn-multiply.png" alt="" />
                 <figcaption>
                   Drawn in plain SVG with <code>mix-blend-mode: multiply</code>.
                 </figcaption>
@@ -1574,8 +1826,21 @@ union({ blendMode: &quot;multiply&quot; }, [
           </p>
           <div class="figs">
             <figure class="render render">
-              <span class="tag tag-render">Render</span
-              ><img src="img/bottle-atop.png" alt="" />
+              <span class="tag tag-render">Render</span>
+              <div class="inputs">
+                <div class="in">
+                  <img src="img/in-bottle-image.png" alt="" /><span class="lbl"
+                    ><code>image</code>, grayed by its <code>filter</code></span
+                  >
+                </div>
+                <div class="in">
+                  <img src="img/in-bottle-rect.png" alt="" /><span class="lbl"
+                    ><code>rect</code></span
+                  >
+                </div>
+              </div>
+              <div class="arrow" aria-hidden="true">↓</div>
+              <img src="img/bottle-atop.png" alt="" />
               <figcaption>
                 Real render: today's <code>paint</code> over an image that grays
                 itself. Graying it again does nothing, so these are the
@@ -1796,6 +2061,22 @@ await PICCL.show([[chart, data1]], container, { pictures });</code></pre>
   circle({ cx: 180, cy: 60, r: 50, fill: &quot;#808080&quot; }),
   circle({ cx: 300, cy: 60, r: 50, fill: &quot;#1f3b5c&quot; }),
 ]);</code></pre>
+          <figure class="render render-inputs">
+            <span class="tag tag-render">Inputs</span>
+            <div class="inputs">
+              <div class="in">
+                <img src="img/in-stencil.png" alt="" /><span class="lbl"
+                  ><code>stencil.hidden()</code></span
+                >
+              </div>
+              <div class="in">
+                <img src="img/in-wide-stripes.png" alt="" /><span class="lbl"
+                  ><code>stripes</code></span
+                >
+              </div>
+            </div>
+            <div class="arrow" aria-hidden="true">↓ each result</div>
+          </figure>
           <div class="compare">
             <div class="col">
               <p class="label proposed">alpha, the default</p>
@@ -1841,8 +2122,21 @@ await PICCL.show([[chart, data1]], container, { pictures });</code></pre>
           </p>
           <div class="figs">
             <figure class="render render">
-              <span class="tag tag-render">Render</span
-              ><img src="img/masking-intersect.png" alt="" />
+              <span class="tag tag-render">Render</span>
+              <div class="inputs">
+                <div class="in">
+                  <img src="img/in-band-stripes.png" alt="" /><span class="lbl"
+                    ><code>stripes</code></span
+                  >
+                </div>
+                <div class="in">
+                  <img src="img/in-a-hidden-band.png" alt="" /><span class="lbl"
+                    ><code>a.hidden()</code></span
+                  >
+                </div>
+              </div>
+              <div class="arrow" aria-hidden="true">↓</div>
+              <img src="img/masking-intersect.png" alt="" />
               <figcaption>
                 Proposed <code>intersect([stripes, a.hidden()])</code>, rendered
                 today as <code>mask</code> with a white a.

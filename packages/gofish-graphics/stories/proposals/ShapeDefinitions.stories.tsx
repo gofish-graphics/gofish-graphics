@@ -583,7 +583,7 @@ export const VoronoiSeeds: StoryObj<Args> = {
 // `mask` declares "my first operand is a stencil" and never draws it;
 // `paint` is its twin that draws the first operand as a surface. Today the
 // choice is two operators.
-const stripes = () =>
+const stripes = (style: Record<string, any> = {}) =>
   layer(
     Array.from({ length: 11 }, (_, i) =>
       rect({
@@ -592,6 +592,7 @@ const stripes = () =>
         w: 10,
         h: 200,
         fill: i % 2 ? "#E07A5F" : "#3D5A80",
+        ...style,
       })
     )
   );
@@ -670,7 +671,7 @@ export const MaskByRef: StoryObj = {
 // ── clip vs mask: shape vs paint ────────────────────────────────────────────
 
 // Stripes behind a row of three circles.
-const wideStripes = () =>
+const wideStripes = (style: Record<string, any> = {}) =>
   layer(
     Array.from({ length: 19 }, (_, i) =>
       rect({
@@ -679,6 +680,7 @@ const wideStripes = () =>
         w: 10,
         h: 120,
         fill: i % 2 ? "#E07A5F" : "#3D5A80",
+        ...style,
       })
     )
   );
@@ -811,15 +813,7 @@ export const FilledAtop: StoryObj = {
 
 // Proposed `intersect([stripes, a.hidden()])`: the stripes inside a. Today:
 // `mask` with a white a.
-export const MaskingIntersect: StoryObj = {
-  render: () => grid(mask([gridA({ fill: "white" }), stripes()])),
-};
-// Proposed `subtract([stripes, a.hidden()])`: the stripes outside a. Today's
-// `subtract` draws its second operand minus its first, in the second's own
-// paint, so `subtract([a, stripes])` draws exactly this.
-// The stripes are cut to a 110 px band around a so the hole reads in the
-// crop; the band is the stripes' own box.
-const bandStripes = () =>
+const bandStripes = (style: Record<string, any> = {}) =>
   layer(
     Array.from({ length: 10 }, (_, i) =>
       rect({
@@ -828,9 +822,25 @@ const bandStripes = () =>
         w: 10,
         h: 110,
         fill: i % 2 ? "#E07A5F" : "#3D5A80",
+        ...style,
       })
     )
   );
+// Framed like its inputs: the unpainted band keeps the band's box.
+export const MaskingIntersect: StoryObj = {
+  render: () =>
+    grid(
+      layer([
+        mask([gridA({ fill: "white" }), bandStripes()]),
+        bandStripes({ opacity: 0 }),
+      ])
+    ),
+};
+// Proposed `subtract([stripes, a.hidden()])`: the stripes outside a. Today's
+// `subtract` draws its second operand minus its first, in the second's own
+// paint, so `subtract([a, stripes])` draws exactly this.
+// The stripes are cut to a 110 px band around a so the hole reads in the
+// crop; the band is the stripes' own box.
 export const MaskingSubtract: StoryObj = {
   render: () => grid(subtract([gridA(), bandStripes()])),
 };
@@ -839,9 +849,12 @@ export const MaskingSubtract: StoryObj = {
 export const MaskingLuminance: StoryObj = {
   render: () =>
     grid(
-      mask([
-        layer([gridA({ fill: "white" }), gridB({ fill: "#808080" })]),
-        stripes(),
+      layer([
+        mask([
+          layer([gridA({ fill: "white" }), gridB({ fill: "#808080" })]),
+          bandStripes(),
+        ]),
+        bandStripes({ opacity: 0 }),
       ])
     ),
 };
@@ -886,4 +899,126 @@ export const BottleGrayImage: StoryObj = {
       .render(container, {});
     return container;
   },
+};
+
+// ── Inputs: each operand drawn alone, at the result's position and scale ───
+// The proposal page shows these beside each result. Nothing is composited.
+const HIDDEN = {
+  fill: "none",
+  stroke: "#888",
+  strokeWidth: 1.5,
+  strokeDasharray: "5 4",
+};
+// An unpainted partner keeps the card's frame, so each input sits where it
+// sits in the result. Layout frames a lone shape at its own box.
+const GHOST = { opacity: 0 };
+// Story-local shim: circles take no strokeDasharray today, so a style rule
+// dashes the hidden outline (stroke #888) after render.
+const dashHidden = (container: HTMLElement) => {
+  const style = document.createElement("style");
+  style.textContent = 'ellipse[stroke="#888"] { stroke-dasharray: 5 4; }';
+  container.appendChild(style);
+  return container;
+};
+export const InA: StoryObj = {
+  render: () => grid(layer([gridA(RED), gridB(GHOST)])),
+};
+export const InB: StoryObj = {
+  render: () => grid(layer([gridA(GHOST), gridB(BLUE)])),
+};
+export const InOutlines: StoryObj = {
+  render: () =>
+    grid(
+      layer([
+        gridA({ fill: "none", stroke: "#E07A5F", strokeWidth: 2 }),
+        gridB({ fill: "none", stroke: "#3D5A80", strokeWidth: 2 }),
+      ])
+    ),
+};
+export const InStripes: StoryObj = {
+  render: () => grid(layer([stripes(), gridA(GHOST)])),
+};
+export const InAHidden: StoryObj = {
+  render: () => dashHidden(grid(layer([stripes(GHOST), gridA(HIDDEN)]))),
+};
+export const InBandStripes: StoryObj = {
+  render: () => grid(layer([bandStripes(), gridA(GHOST)])),
+};
+export const InAHiddenBand: StoryObj = {
+  render: () => dashHidden(grid(layer([bandStripes(GHOST), gridA(HIDDEN)]))),
+};
+// fade is read for its brightness, so it is drawn in its paint, with a
+// dashed edge to mark it hidden.
+export const InFade: StoryObj = {
+  render: () =>
+    dashHidden(
+      grid(
+        layer([
+          bandStripes(GHOST),
+          gridA({ ...HIDDEN, fill: "white" }),
+          gridB({ ...HIDDEN, fill: "#808080" }),
+        ])
+      )
+    ),
+};
+export const InStencil: StoryObj = {
+  render: () =>
+    dashHidden(
+      show(
+        layer([
+          wideStripes(GHOST),
+          ...STENCIL_FILLS.map((fill, i) =>
+            circle({ cx: 60 + i * 120, cy: 60, r: 50, ...HIDDEN, fill })
+          ),
+        ]),
+        380,
+        140
+      )
+    ),
+};
+export const InWideStripes: StoryObj = {
+  render: () =>
+    show(
+      layer([
+        wideStripes(),
+        ...STENCIL_FILLS.map((fill, i) =>
+          circle({ cx: 60 + i * 120, cy: 60, r: 50, fill, ...GHOST })
+        ),
+      ]),
+      380,
+      140
+    ),
+};
+// The bottle's inputs, in the same chart so the scale matches: the gray
+// image alone, and the rect alone (the image kept for scale, unpainted).
+const bottleChart = (showImage: boolean, showRect: boolean) => {
+  const container = initializeContainer();
+  chart(bottles, { axes: false })
+    .flow(
+      spread({ by: "category", dir: "x", spacing: 20, axes: { x: false } })
+    )
+    .mark(
+      layer([
+        image({
+          href: bottlePng,
+          h: v(100),
+          filter: "grayscale(1)",
+          opacity: showImage ? 1 : 0,
+        }),
+        rect({
+          h: "amount",
+          w: 175,
+          fill: "#00ff00",
+          opacity: showRect ? 1 : 0,
+        }),
+      ])
+    )
+    .render(container, {});
+  return container;
+};
+export const InBottleImage: StoryObj = {
+  render: () => bottleChart(true, false),
+};
+export const InBottleRect: StoryObj = {
+  render: () => bottleChart(false, true),
 };
