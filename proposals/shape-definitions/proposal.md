@@ -9,8 +9,9 @@ A shape that is laid out and read by other marks, but not painted.
 - **decided.** An ancestor's `.hidden()` wins over a child's `.hidden(false)`. On one value, the last call wins.
 - **decided.** Only on a value you hold: not through `ref` or `selectAll`, and no operator sets it.
 - **proposed.** A child slot draws its child. An operand slot is read for shape, place or data and never drawn. A ref draws nothing.
+- **proposed.** Which frame is an operand in? The frame the operator sits in, never the frame it makes for its children. An inline operand is laid out there; a ref is read where it was placed and mapped into that frame.
 - **proposed.** Region shapes (`intersect`, `subtract`, `exclude`, `union`) draw one new shape. `clip({ to }, children)` replaces `mask` and `paint`.
-- **proposed.** Bend and envelope are per-shape operators, not coordinate transforms. Filed, and deferred.
+- **decided.** Bend and envelope are coordinate transforms with a shape argument: `Coord.bend({ along })`, `Coord.envelope({ top, bottom })`. The coord reads the shape and never draws it. Deferred.
 - **decided.** Renames: `position` becomes `translate`; `cut(opts, [source])`.
 
 ## Hiding
@@ -508,6 +509,16 @@ intersect({ fill: "#5b7aa0" }, [a.hidden(), b]); // same as without .hidden()
 intersect([hidden(a), b]); // prototype shim: draws nothing
 ```
 
+**Today's code, by case**
+
+| `intersect` case                                                                              | Transparent operand (`fill: "none"`, no stroke) | Hidden operand       |
+| --------------------------------------------------------------------------------------------- | ----------------------------------------------- | -------------------- |
+| No paint (`porterDuff.tsx` 396 to 427): composites the operands with their own paint          | Empty                                           | Empty (same)         |
+| Paint, exact outline (338 to 358): draws the computed overlap                                 | Overlap drawn                                   | Overlap drawn (same) |
+| Paint, no exact outline (361 to 393): `shapeOnly` redraws each operand solid as an alpha mask | Overlap drawn                                   | Empty (differs)      |
+
+Hidden should behave like transparent for shape. The third row is the implementation fix already noted (feed that path the operand's geometry, as `INTERNAL_lendDrawing` does for transitions), not a new rule.
+
 ### Region shapes and clip
 
 `intersect`, `subtract`, `exclude` and a new `union` take operands only; `clip` replaces `mask` and `paint`.
@@ -538,11 +549,25 @@ paint([a, b]); // draws a, washed out
 // no plot-box clip (#1209)
 ```
 
-## Bend and envelope
+## Coordinate transforms with a shape argument
 
-### Gecko bent along a drawn spine
+### Which frame is an operand in?
 
-A sketch of `bend` (#75, generic warping): the gecko is the child, the spine an operand drawn once as its own child.
+An operand is read in the frame the operator sits in, never in the frame it makes for its children. An inline operand is laid out there; a ref is read where it was placed and mapped into that frame.
+
+**The rule, by operator**
+
+| Operator                                                   | Operand         | Frame it is read in                                                                                                      |
+| ---------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `Coord.bend({ along })`, `Coord.envelope({ top, bottom })` | the guide shape | Outside the coord. The coord's inner frame is defined by the guide, so laying the guide out inside it would be circular. |
+| `clip({ to }, children)`                                   | the region      | The clip's own frame. `clip` makes no new frame, so the region and the children share it.                                |
+| `Bin.voronoi({ seeds })`                                   | seed rows       | The chart's frame, placed by its scales. Cells are computed there; under polar, from the warped positions.               |
+
+Blocker: a ref spine drawn under one coord and read by a bend in another depends on #605 (a ref across a coord boundary reads the target's box in the coord's own space, such as θ and r under polar, not its warped screen position). The code still does this: `src/ast/_ref.tsx` copies `selectedNode.intrinsicDims` (line 350), and `coord.tsx` computes warped boxes only for its own bounding box (lines 307 and 551), never for the child. The issue's description holds; its line numbers and its `shapes/_ref.tsx` path are out of date. #1225 (a symbolic port for refs through affine coords) would cover affine coords only; a bend is not affine, so it needs #605.
+
+### Bend: the spine drawn, read through a ref
+
+`Coord.bend` reads the spine and never draws it; here the spine is drawn once, where it was made.
 
 ![Not GoFish](img/bend-gecko-warpjs15.png)
 
@@ -557,15 +582,15 @@ layer([
     .mark(line({ curve: Curve.natural, stroke: "green" }))
     .name("spine"),
 ]).relate(({ spine }) => [
-  bend({ along: spine }, [
+  layer({ coord: Coord.bend({ along: spine }) }, [
     polygon({ points: gecko, fill: "none", stroke: "black" }),
   ]),
 ]);
 ```
 
-**Current:** Not expressible today. Deferred; see the draft issue.
+**Current:** Not expressible today. It stays deferred, as `notes/design/polar-coordinate-spaces.md` records; see the draft issue.
 
-### Gecko bent along a hidden spine
+### Bend: the spine hidden
 
 The usual output: the spine is a hidden child, laid out and not drawn.
 
@@ -581,7 +606,7 @@ layer([
     .name("spine")
     .hidden(),
 ]).relate(({ spine }) => [
-  bend({ along: spine }, [
+  layer({ coord: Coord.bend({ along: spine }) }, [
     polygon({ points: gecko, fill: "none", stroke: "black" }),
   ]),
 ]);
@@ -589,28 +614,9 @@ layer([
 
 **Current:** Not expressible today.
 
-### Arrows along a route
-
-A 1D arrow is a new path along a route; a 2D arrow is a wide shape, bent.
-
-_Sketch: drawn in the HTML page._
-
-**Proposed**
-
-```js
-// 1D: a new path along the route, with a head. Nothing is bent.
-layer([a.name("a"), b.name("b"), route.name("route").hidden()]).relate(
-  ({ a, b, route }) => [arrow({ along: route }, [a, b])]
-);
-// 2D: a straight, wide arrow shape, bent like the gecko.
-bend({ along: spine }, [polygon({ points: fatArrow, fill: "#467DA8" })]);
-```
-
-**Current:** Not expressible today.
-
 ### Envelope between two curves
 
-The child's box maps into the region between two hidden curves.
+`Coord.envelope` maps its children into the region between two shapes, here both hidden.
 
 _Sketch: drawn in the HTML page._
 
@@ -619,7 +625,7 @@ _Sketch: drawn in the HTML page._
 ```js
 layer([upper.name("upper").hidden(), lower.name("lower").hidden()]).relate(
   ({ upper, lower }) => [
-    envelope({ top: upper, bottom: lower }, [
+    layer({ coord: Coord.envelope({ top: upper, bottom: lower }) }, [
       text({ text: "WORD", fontSize: 96 }),
     ]),
   ]
@@ -705,7 +711,7 @@ layer([
 4. Add `union` as a region shape, separate from `layer`? (card: regions)
 5. Warn when `.hidden()` sits on an inline operand, where it has no effect? (card: intersect-hidden)
 6. Keep `use(ref)` parked until an example needs it? (card: use-ref)
-7. File the bend and envelope issue as deferred? Two operators, or one `warp({ to: Warp.along(spine) })` with a `Warp` family? (card: gecko)
+7. File the bend and envelope issue, kept deferred? (Decided: a coord with a shape argument, not an operator.) (card: gecko)
 8. Do both renames in one PR, separate from `.hidden()`? (card: translate)
 9. Step 2 for `cut`: unify it with the `.cut()` mark method? (card: cut)
 10. Add the method-twin rule to api-design.md: a method has a function twin only for a one-child operator, and both build one node? (card: translate)

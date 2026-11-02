@@ -13,24 +13,27 @@ GoFish cannot bend a shape along a path or fit a shape into a region. This issue
 
 ## Proposal
 
-A bend is an operator on one shape, not a coordinate transform.
+Josh chose a coordinate transform that takes a shape as its argument: `Coord.bend({ along })` and `Coord.envelope({ top, bottom })`. It is applied the way every coord is applied today, as the `coord` option of a `layer` or a `chart`.
 
-- A `coord` is a frame: its children are laid out in its coordinates, with scales and axes. A bend takes a shape already laid out in pixels and maps the shape's own box onto a spine, as every tool above does to one object.
-- Its parameter is a placed shape. The spine is laid out in the surrounding frame, and its length sets how far the shape stretches. A `Coord.*` strategy is a fixed function.
-- It changes how the child is drawn, not where it is laid out. It can share the code that `coord` uses to draw a path through a mapping (adaptive sampling, #121).
+- The shape argument is an operand. The coord reads it and never draws it. To see the spine, draw it somewhere else and pass a ref; that other place draws it. To not see it, hide it or pass it inline.
+- The guide is read in the frame the coord sits in, never in the frame the coord makes for its children. The coord's inner frame is defined by the guide, so laying the guide out inside it would be circular.
+- The mapping is Barraud's: a point (x, y) of the inner frame goes to U(x) + y·N(x) on the spine. The envelope maps the inner box into the region between `top` and `bottom`.
+- Drawing a path through the mapping can share the code `coord` already uses (adaptive sampling, #121).
+
+**This keeps the deferral.** `notes/design/polar-coordinate-spaces.md` defers bend and skeleton warp, possibly forever. This issue only fixes the spelling for when a real example asks for it. Nothing here is scheduled.
 
 Sketch:
 
 ```js
-// The gecko is the child, drawn bent. The spine is an operand, read for
-// its shape only. Here it is also drawn, once, as a child of the layer.
+// The spine is drawn once, as a child of the outer layer. The bend reads
+// it through a ref and draws only its own children.
 layer([
   chart(spinePoints)
     .flow(scatter({ x: "x", y: "y" }))
     .mark(line({ curve: Curve.natural, stroke: "green" }))
     .name("spine"),
 ]).relate(({ spine }) => [
-  bend({ along: spine }, [
+  layer({ coord: Coord.bend({ along: spine }) }, [
     polygon({ points: gecko, fill: "none", stroke: "black" }),
   ]),
 ]);
@@ -38,7 +41,7 @@ layer([
 
 ```js
 // The usual output: the spine is not drawn. It still needs its place in
-// the frame, so it is a hidden child.
+// the outer frame, so it is a hidden child there.
 chart(spinePoints)
   .flow(scatter({ x: "x", y: "y" }))
   .mark(line({ curve: Curve.natural }))
@@ -47,30 +50,22 @@ chart(spinePoints)
 ```
 
 ```js
-// Envelope: the child's box is mapped into the region between two curves.
+// Envelope: the children map into the region between two hidden curves.
 layer([upper.name("upper").hidden(), lower.name("lower").hidden()]).relate(
   ({ upper, lower }) => [
-    envelope({ top: upper, bottom: lower }, [
+    layer({ coord: Coord.envelope({ top: upper, bottom: lower }) }, [
       text({ text: "WORD", fontSize: 96 }),
     ]),
   ]
 );
 ```
 
-Arrows take both readings from #75:
-
-```js
-// 1D: the route is the arrow's own path. Nothing is warped.
-arrow({ along: route }, [a, b]);
-// 2D: a wide arrow shape, bent like the gecko.
-bend({ along: spine }, [polygon({ points: fatArrow, fill: "#467DA8" })]);
-```
-
-The guide follows the children and operands rule from the #1267 proposal (a way to define a shape without drawing it). The operator draws its child and never draws its operands, and no operator changes `.hidden()`. Whether the spine shows is decided where the spine is made: draw it as a child and pass a ref, or hide it.
+This follows the children and operands rule from the #1267 proposal (a way to define a shape without drawing it): an operator draws its children and never its operands, and no operator changes `.hidden()`.
 
 ## Open questions
 
-- Two operators, `bend` and `envelope`, or one `warp({ to: Warp.along(spine) }, [shape])` with a `Warp` family?
-- Does the shape's length stretch to the spine's length, or keep its own (Inkscape offers both)?
+- A ref spine drawn under one coord and read by a bend under another depends on #605. Today a ref across a coord boundary reads the target's box in that coord's own space (θ and r under polar), not its warped screen position. `src/ast/_ref.tsx` copies `selectedNode.intrinsicDims` (line 350), and `coord.tsx` computes warped boxes only for its own bounding box (lines 307 and 551). #1225 (a symbolic port for refs through affine coords) would not cover a bend, which is not affine.
+- Does the shape's length stretch to the spine's length, or keep its own? Inkscape offers both.
 - Images and text: warp them as raster images, or convert text to paths first? SVG cannot warp an image directly.
+- Arrows (#75's 1D and 2D readings): is a 2D arrow just a wide polygon under `Coord.bend`?
 - The refs above sit inside `.relate()`. Outside it, they wait on #1259 (a string ref outside `.relate()`).

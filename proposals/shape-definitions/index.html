@@ -431,6 +431,12 @@
       .compare .col {
         min-width: 0;
       }
+      .card .note {
+        color: var(--muted);
+        font-size: 0.9rem;
+        margin: 10px 0 0;
+        max-width: 76ch;
+      }
       .compare figure.render {
         margin-bottom: 8px;
       }
@@ -520,6 +526,13 @@
             <a class="see" href="#intersect-hidden">see</a>
           </li>
           <li>
+            <span class="badge proposed">proposed</span> Which frame is an
+            operand in? The frame the operator sits in, never the frame it makes
+            for its children. An inline operand is laid out there; a ref is read
+            where it was placed and mapped into that frame.
+            <a class="see" href="#operand-frame">see</a>
+          </li>
+          <li>
             <span class="badge proposed">proposed</span> Region shapes
             (<code>intersect</code>, <code>subtract</code>,
             <code>exclude</code>, <code>union</code>) draw one new shape.
@@ -527,8 +540,11 @@
             <code>paint</code>. <a class="see" href="#regions">see</a>
           </li>
           <li>
-            <span class="badge proposed">proposed</span> Bend and envelope are
-            per-shape operators, not coordinate transforms. Filed, and deferred.
+            <span class="badge decided">decided</span> Bend and envelope are
+            coordinate transforms with a shape argument:
+            <code>Coord.bend({ along })</code>,
+            <code>Coord.envelope({ top, bottom })</code>. The coord reads the
+            shape and never draws it. Deferred.
             <a class="see" href="#gecko">see</a>
           </li>
           <li>
@@ -547,7 +563,7 @@
         <a href="#g-hiding">Hiding</a> ·
         <a href="#g-guides">Guides drawn or not</a> ·
         <a href="#g-regions">Region compositing</a> ·
-        <a href="#g-bend">Bend and envelope</a> ·
+        <a href="#g-bend">Coordinate transforms with a shape argument</a> ·
         <a href="#g-renames">Renames</a> · <a href="#g-parked">Parked</a> ·
         <a href="#errors">Errors</a> · <a href="#decisions">Decisions</a> ·
         <a href="#why">Why</a>
@@ -1041,14 +1057,14 @@ layer([
           <p class="label proposed">Proposed</p>
           <pre
             class="new"
-            data-changed="2,3"
-          ><code class="language-javascript">layer([
-  circle({ cx: 100, cy: 100, r: 80, ...OUTLINE }).name(&quot;disc&quot;),
-]).relate(({ disc }) =&gt; [clip({ to: disc }, [stripes()])]);</code></pre>
+            data-changed="1,2,3"
+          ><code class="language-javascript">layer([circle({ cx: 100, cy: 100, r: 80, ...OUTLINE }).name(&quot;disc&quot;)]).relate(
+  ({ disc }) =&gt; [clip({ to: disc }, [stripes()])],
+);</code></pre>
           <p class="label current">Current</p>
           <pre
             class="now"
-            data-changed="2,3,4"
+            data-changed="1,2,3,4"
           ><code class="language-javascript">layer([
   mask([circle({ cx: 100, cy: 100, r: 80, fill: &quot;white&quot; }), stripes()]),
   circle({ cx: 100, cy: 100, r: 80, ...OUTLINE }),
@@ -1126,17 +1142,17 @@ layer([
           <p class="label proposed">Proposed</p>
           <pre
             class="new"
-            data-changed="3"
-          ><code class="language-javascript">layer([
-  circle({ cx: 100, cy: 100, r: 80, ...OUTLINE }).name(&quot;disc&quot;),
-]).relate(({ disc }) =&gt; [clip({ to: disc }, [stripes()])]);</code></pre>
+            data-changed="2"
+          ><code class="language-javascript">layer([circle({ cx: 100, cy: 100, r: 80, ...OUTLINE }).name(&quot;disc&quot;)]).relate(
+  ({ disc }) =&gt; [clip({ to: disc }, [stripes()])],
+);</code></pre>
           <p class="label current">Current</p>
           <pre
             class="now"
-            data-changed="3"
-          ><code class="language-javascript">layer([
-  circle({ cx: 100, cy: 100, r: 80, ...OUTLINE }).name(&quot;disc&quot;),
-]).relate(({ disc }) =&gt; [mask([disc, stripes()])]);</code></pre>
+            data-changed="2"
+          ><code class="language-javascript">layer([circle({ cx: 100, cy: 100, r: 80, ...OUTLINE }).name(&quot;disc&quot;)]).relate(
+  ({ disc }) =&gt; [mask([disc, stripes()])],
+);</code></pre>
         </article>
         <article class="card" id="intersect-painted">
           <h3><a href="#intersect-painted">Intersect with paint</a></h3>
@@ -1212,6 +1228,53 @@ clip({ to: b }, [a]); // a&#x27;s own paint, inside b</code></pre>
             class="now"
             data-changed="1"
           ><code class="language-javascript">intersect([hidden(a), b]); // prototype shim: draws nothing</code></pre>
+          <p class="label">Today's code, by case</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th><code>intersect</code> case</th>
+                  <th>
+                    Transparent operand (<code>fill: "none"</code>, no stroke)
+                  </th>
+                  <th>Hidden operand</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    No paint (<code>porterDuff.tsx</code> 396 to 427):
+                    composites the operands with their own paint
+                  </td>
+                  <td>Empty</td>
+                  <td>Empty (same)</td>
+                </tr>
+                <tr>
+                  <td>
+                    Paint, exact outline (338 to 358): draws the computed
+                    overlap
+                  </td>
+                  <td>Overlap drawn</td>
+                  <td>Overlap drawn (same)</td>
+                </tr>
+                <tr>
+                  <td>
+                    Paint, no exact outline (361 to 393):
+                    <code>shapeOnly</code> redraws each operand solid as an
+                    alpha mask
+                  </td>
+                  <td>Overlap drawn</td>
+                  <td>Empty (differs)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="note">
+            Hidden should behave like transparent for shape. The third row is
+            the implementation fix already noted (feed that path the operand's
+            geometry, as <code>INTERNAL_lendDrawing</code> does for
+            transitions), not a new rule.
+          </p>
         </article>
         <article class="card" id="regions">
           <h3><a href="#regions">Region shapes and clip</a></h3>
@@ -1326,12 +1389,77 @@ paint([a, b]); // draws a, washed out
         </article>
       </section>
       <section class="group" id="g-bend">
-        <h2>Bend and envelope</h2>
-        <article class="card" id="gecko">
-          <h3><a href="#gecko">Gecko bent along a drawn spine</a></h3>
+        <h2>Coordinate transforms with a shape argument</h2>
+        <article class="card" id="operand-frame">
+          <h3><a href="#operand-frame">Which frame is an operand in?</a></h3>
           <p class="say">
-            A sketch of <code>bend</code> (#75, generic warping): the gecko is
-            the child, the spine an operand drawn once as its own child.
+            An operand is read in the frame the operator sits in, never in the
+            frame it makes for its children. An inline operand is laid out
+            there; a ref is read where it was placed and mapped into that frame.
+          </p>
+          <p class="label">The rule, by operator</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Operator</th>
+                  <th>Operand</th>
+                  <th>Frame it is read in</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <code>Coord.bend({ along })</code>,
+                    <code>Coord.envelope({ top, bottom })</code>
+                  </td>
+                  <td>the guide shape</td>
+                  <td>
+                    Outside the coord. The coord's inner frame is defined by the
+                    guide, so laying the guide out inside it would be circular.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>clip({ to }, children)</code></td>
+                  <td>the region</td>
+                  <td>
+                    The clip's own frame. <code>clip</code> makes no new frame,
+                    so the region and the children share it.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>Bin.voronoi({ seeds })</code></td>
+                  <td>seed rows</td>
+                  <td>
+                    The chart's frame, placed by its scales. Cells are computed
+                    there; under polar, from the warped positions.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="note">
+            Blocker: a ref spine drawn under one coord and read by a bend in
+            another depends on #605 (a ref across a coord boundary reads the
+            target's box in the coord's own space, such as θ and r under polar,
+            not its warped screen position). The code still does this:
+            <code>src/ast/_ref.tsx</code> copies
+            <code>selectedNode.intrinsicDims</code> (line 350), and
+            <code>coord.tsx</code> computes warped boxes only for its own
+            bounding box (lines 307 and 551), never for the child. The issue's
+            description holds; its line numbers and its
+            <code>shapes/_ref.tsx</code> path are out of date. #1225 (a symbolic
+            port for refs through affine coords) would cover affine coords only;
+            a bend is not affine, so it needs #605.
+          </p>
+        </article>
+        <article class="card" id="gecko">
+          <h3>
+            <a href="#gecko">Bend: the spine drawn, read through a ref</a>
+          </h3>
+          <p class="say">
+            <code>Coord.bend</code> reads the spine and never draws it; here the
+            spine is drawn once, where it was made.
           </p>
           <div class="figs">
             <figure class="render precedent">
@@ -1353,17 +1481,19 @@ paint([a, b]); // draws a, washed out
     .mark(line({ curve: Curve.natural, stroke: &quot;green&quot; }))
     .name(&quot;spine&quot;),
 ]).relate(({ spine }) =&gt; [
-  bend({ along: spine }, [
+  layer({ coord: Coord.bend({ along: spine }) }, [
     polygon({ points: gecko, fill: &quot;none&quot;, stroke: &quot;black&quot; }),
   ]),
 ]);</code></pre>
           <p class="label current">Current</p>
           <p class="none">
-            Not expressible today. Deferred; see the draft issue.
+            Not expressible today. It stays deferred, as
+            <code>notes/design/polar-coordinate-spaces.md</code> records; see
+            the draft issue.
           </p>
         </article>
         <article class="card" id="gecko-hidden">
-          <h3><a href="#gecko-hidden">Gecko bent along a hidden spine</a></h3>
+          <h3><a href="#gecko-hidden">Bend: the spine hidden</a></h3>
           <p class="say">
             The usual output: the spine is a hidden child, laid out and not
             drawn.
@@ -1404,92 +1534,18 @@ paint([a, b]); // draws a, washed out
     .name(&quot;spine&quot;)
     .hidden(),
 ]).relate(({ spine }) =&gt; [
-  bend({ along: spine }, [
+  layer({ coord: Coord.bend({ along: spine }) }, [
     polygon({ points: gecko, fill: &quot;none&quot;, stroke: &quot;black&quot; }),
   ]),
 ]);</code></pre>
           <p class="label current">Current</p>
           <p class="none">Not expressible today.</p>
         </article>
-        <article class="card" id="arrow">
-          <h3><a href="#arrow">Arrows along a route</a></h3>
-          <p class="say">
-            A 1D arrow is a new path along a route; a 2D arrow is a wide shape,
-            bent.
-          </p>
-          <div class="figs">
-            <figure class="render sketch">
-              <span class="tag tag-sketch">Sketch</span
-              ><svg
-                viewBox="0 0 480 140"
-                width="480"
-                height="140"
-                role="img"
-                aria-label="Sketch: a thin arrow along a route, and a wide arrow bent along a spine"
-              >
-                <rect
-                  x="10"
-                  y="26"
-                  width="36"
-                  height="28"
-                  fill="#D1E4F6"
-                  stroke="#467DA8"
-                />
-                <rect
-                  x="196"
-                  y="26"
-                  width="36"
-                  height="28"
-                  fill="#D1E4F6"
-                  stroke="#467DA8"
-                />
-                <path
-                  d="M46,40 C100,120 150,120 194,43"
-                  fill="none"
-                  stroke="#222"
-                  stroke-width="1.5"
-                />
-                <polygon
-                  points="196.0,40.0 187.5,45.3 195.1,50.0"
-                  fill="#222"
-                />
-                <text x="10" y="134" font-size="10" fill="#888">
-                  1D: a path along the hidden route
-                </text>
-                <g transform="translate(240,0)">
-                  <polyline
-                    points="0.0,70.0 4.0,72.7 8.0,75.4 12.0,78.0 16.0,80.6 20.0,83.0 24.0,85.3 28.0,87.4 32.0,89.3 36.0,91.0 40.0,92.5 44.0,93.8 48.0,94.7 52.0,95.4 56.0,95.9 60.0,96.0 64.0,95.9 68.0,95.4 72.0,94.7 76.0,93.8 80.0,92.5 84.0,91.0 88.0,89.3 92.0,87.4 96.0,85.3 100.0,83.0 104.0,80.6 108.0,78.0 112.0,75.4 116.0,72.7 120.0,70.0 124.0,67.3 128.0,64.6 132.0,62.0 136.0,59.4 140.0,57.0 144.0,54.7 148.0,52.6 152.0,50.7 156.0,49.0 160.0,47.5 164.0,46.2 168.0,45.3 172.0,44.6 176.0,44.1 180.0,44.0 184.0,44.1 188.0,44.6 192.0,45.3 196.0,46.2 200.0,47.5 204.0,49.0 208.0,50.7 212.0,52.6 216.0,54.7 220.0,57.0 224.0,59.4 228.0,62.0 232.0,64.6 236.0,67.3 240.0,70.0"
-                    fill="none"
-                    stroke="#bbb"
-                    stroke-dasharray="4 4"
-                  />
-                  <polygon
-                    points="23.0,77.8 28.5,80.9 33.9,83.6 39.2,85.8 44.4,87.6 49.5,88.9 54.6,89.7 59.7,90.0 64.8,89.8 69.9,89.0 75.0,87.8 80.2,86.1 85.5,83.9 90.9,81.2 96.3,78.2 101.8,74.9 107.4,71.3 113.0,67.5 118.6,63.7 124.3,59.8 130.1,56.1 135.9,52.4 141.8,49.1 147.7,46.0 153.8,43.4 159.9,41.2 166.0,39.6 172.3,38.5 178.5,38.0 184.8,38.2 191.0,39.0 191.1,38.6 191.2,38.3 191.2,38.0 191.3,37.7 191.3,37.3 191.4,37.0 191.4,36.7 191.5,36.4 191.6,36.0 191.6,35.7 191.7,35.4 191.7,35.0 191.8,34.7 191.9,34.4 191.9,34.1 192.0,33.7 192.0,33.4 192.1,33.1 192.1,32.7 192.2,32.4 192.3,32.1 192.3,31.8 192.4,31.4 192.4,31.1 192.5,30.8 192.5,30.4 192.6,30.1 192.7,29.8 192.7,29.5 192.8,29.1 194.1,29.9 195.5,30.7 196.8,31.6 198.1,32.5 199.4,33.3 200.6,34.2 201.8,35.2 203.0,36.1 204.2,37.1 205.3,38.1 206.5,39.0 207.6,40.1 208.7,41.1 209.7,42.1 210.8,43.2 211.8,44.2 212.8,45.3 213.8,46.4 214.8,47.5 215.8,48.6 216.8,49.7 217.7,50.8 218.7,51.9 219.6,53.1 220.5,54.2 221.4,55.4 222.3,56.5 223.2,57.7 224.1,58.9 225.0,60.1 223.6,59.8 222.1,59.5 220.7,59.3 219.2,59.0 217.8,58.8 216.4,58.6 215.0,58.4 213.6,58.3 212.2,58.1 210.9,58.0 209.5,57.9 208.2,57.8 206.8,57.8 205.5,57.8 204.2,57.8 202.9,57.8 201.7,57.8 200.4,57.9 199.2,58.0 198.0,58.1 196.8,58.2 195.7,58.4 194.5,58.6 193.4,58.8 192.3,59.1 191.2,59.3 190.2,59.6 189.2,59.9 188.2,60.3 187.2,60.6 187.3,60.3 187.3,60.0 187.4,59.7 187.5,59.3 187.5,59.0 187.6,58.7 187.6,58.3 187.7,58.0 187.7,57.7 187.8,57.4 187.9,57.0 187.9,56.7 188.0,56.4 188.0,56.0 188.1,55.7 188.1,55.4 188.2,55.1 188.3,54.7 188.3,54.4 188.4,54.1 188.4,53.7 188.5,53.4 188.6,53.1 188.6,52.8 188.7,52.4 188.7,52.1 188.8,51.8 188.8,51.5 188.9,51.1 189.0,50.8 183.9,50.1 178.8,50.0 173.7,50.4 168.6,51.3 163.5,52.7 158.2,54.5 152.9,56.9 147.5,59.6 142.1,62.7 136.6,66.2 131.0,69.8 125.4,73.6 119.7,77.5 114.0,81.3 108.2,85.0 102.4,88.6 96.5,91.8 90.5,94.8 84.4,97.3 78.3,99.3 72.1,100.8 65.9,101.7 59.6,102.0 53.4,101.6 47.1,100.7 41.0,99.1 34.8,97.0 28.8,94.5 22.8,91.5 17.0,88.2 17.2,87.8 17.4,87.5 17.6,87.1 17.8,86.8 18.0,86.4 18.2,86.1 18.4,85.8 18.6,85.4 18.8,85.1 19.0,84.7 19.2,84.4 19.4,84.0 19.6,83.7 19.8,83.3 20.0,83.0 20.2,82.7 20.4,82.3 20.6,82.0 20.8,81.6 21.0,81.3 21.2,80.9 21.4,80.6 21.6,80.2 21.8,79.9 22.0,79.6 22.2,79.2 22.4,78.9 22.6,78.5 22.8,78.2 23.0,77.8"
-                    fill="#467DA8"
-                  />
-                  <text x="10" y="134" font-size="10" fill="#888">
-                    2D: a wide arrow, bent
-                  </text>
-                </g>
-              </svg>
-            </figure>
-          </div>
-          <p class="label proposed">Proposed</p>
-          <pre
-            class="new"
-          ><code class="language-javascript">// 1D: a new path along the route, with a head. Nothing is bent.
-layer([a.name(&quot;a&quot;), b.name(&quot;b&quot;), route.name(&quot;route&quot;).hidden()]).relate(
-  ({ a, b, route }) =&gt; [arrow({ along: route }, [a, b])],
-);
-// 2D: a straight, wide arrow shape, bent like the gecko.
-bend({ along: spine }, [polygon({ points: fatArrow, fill: &quot;#467DA8&quot; })]);</code></pre>
-          <p class="label current">Current</p>
-          <p class="none">Not expressible today.</p>
-        </article>
         <article class="card" id="envelope">
           <h3><a href="#envelope">Envelope between two curves</a></h3>
           <p class="say">
-            The child's box maps into the region between two hidden curves.
+            <code>Coord.envelope</code> maps its children into the region
+            between two shapes, here both hidden.
           </p>
           <div class="figs">
             <figure class="render sketch">
@@ -1636,7 +1692,7 @@ bend({ along: spine }, [polygon({ points: fatArrow, fill: &quot;#467DA8&quot; })
             class="new"
           ><code class="language-javascript">layer([upper.name(&quot;upper&quot;).hidden(), lower.name(&quot;lower&quot;).hidden()]).relate(
   ({ upper, lower }) =&gt; [
-    envelope({ top: upper, bottom: lower }, [
+    layer({ coord: Coord.envelope({ top: upper, bottom: lower }) }, [
       text({ text: &quot;WORD&quot;, fontSize: 96 }),
     ]),
   ],
@@ -1817,9 +1873,9 @@ rect({ w: 20, h: 20 }).translate({ x: 10 }); // field: translate: { x: 10 }</cod
             <a class="see" href="#use-ref">card</a>
           </li>
           <li id="d-bend">
-            File the bend and envelope issue as deferred? Two operators, or one
-            <code>warp({ to: Warp.along(spine) })</code> with a
-            <code>Warp</code> family? <a class="see" href="#gecko">card</a>
+            File the bend and envelope issue, kept deferred? (Decided: a coord
+            with a shape argument, not an operator.)
+            <a class="see" href="#gecko">card</a>
           </li>
           <li id="d-renames">
             Do both renames in one PR, separate from <code>.hidden()</code>?
