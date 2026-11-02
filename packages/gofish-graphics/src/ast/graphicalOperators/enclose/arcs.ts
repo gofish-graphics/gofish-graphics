@@ -49,10 +49,14 @@ import {
 } from "./blob";
 
 /** How far a chord may stray from the arc it samples, in pixels. */
-const TOL = 0.2;
+let TOL = 0.2;
 /** The longest straight run between two samples, in pixels (the cut search
  *  of step 4 works between samples). */
-const MAX_STEP = 4;
+let MAX_STEP = 4;
+/** PROTOTYPE: fine sampling, for curvature measurement only. */
+export function setArcsSampling(fine: boolean): void {
+  [TOL, MAX_STEP] = fine ? [0.002, 0.25] : [0.2, 4];
+}
 const EPS = 1e-7;
 const TAU = 2 * Math.PI;
 
@@ -475,14 +479,62 @@ export function arcsOutline(
   if (members.length === 0) return [];
   if (ARCS_PROTOTYPE.spine !== undefined)
     members = [...members, ...spineLinks(members, ARCS_PROTOTYPE.spine)];
-  const r = Math.max(0, o.radius);
   // PROTOTYPE: a "blur" smoothing with `inset` runs the closing that much
   // nearer the members; the blur's outward offset brings it back out.
   const sm = ARCS_PROTOTYPE.smooth;
   const inset = sm?.kind === "blur" ? (sm.inset ?? 0) : 0;
-  const prims = members.map((m) =>
-    grown(m, Math.max(0, o.padding - inset) + r)
+  const closed = closingRings(
+    members,
+    Math.max(0, o.padding - inset),
+    o.radius
   );
+  // PROTOTYPE: a smoothing pass after the closing (see arcsSmooth.ts). It
+  // keeps every member, and each spine link, grown by padding inside.
+  if (ARCS_PROTOTYPE.smooth === undefined) return closed;
+  return smoothOutline(
+    closed,
+    keepIns(members, Math.max(0, o.padding)),
+    ARCS_PROTOTYPE.smooth
+  );
+}
+
+/** PROTOTYPE: each member grown by pad, as a keep-in capsule. */
+export function keepIns(members: BlobMember[], pad: number): KeepIn[] {
+  return members.map((m) =>
+    m.kind === "disc"
+      ? { a: [m.cx, m.cy], b: [m.cx, m.cy], R: m.r + pad }
+      : m.kind === "segment"
+        ? { a: m.a, b: m.b, R: m.w / 2 + pad }
+        : // a box: its center line along the long side (scratch only)
+          m.w >= m.h
+          ? {
+              a: [m.x + m.h / 2, m.y + m.h / 2],
+              b: [m.x + m.w - m.h / 2, m.y + m.h / 2],
+              R: m.h / 2 + pad,
+            }
+          : {
+              a: [m.x + m.w / 2, m.y + m.w / 2],
+              b: [m.x + m.w / 2, m.y + m.h - m.w / 2],
+              R: m.w / 2 + pad,
+            }
+  );
+}
+
+/**
+ * The exact closing (steps 1-4 above) of `members` grown by `padding`, by a
+ * disc of `radius`. Its outer loops wind as the members do. With `holes`
+ * (PROTOTYPE), a hole of the closing stays open, as a loop that winds the
+ * other way; otherwise every hole is filled.
+ */
+export function closingRings(
+  members: BlobMember[],
+  padding: number,
+  radius: number,
+  holes = false
+): Pt[][] {
+  if (members.length === 0) return [];
+  const r = Math.max(0, radius);
+  const prims = members.map((m) => grown(m, Math.max(0, padding) + r));
   const sdf = (j: number, x: number, y: number) =>
     primD(prims[j].prim, x, y, false);
 
@@ -551,9 +603,20 @@ export function arcsOutline(
   const outer = loops
     .filter(({ ring }) => signedArea2(ring) > 0)
     .sort((a, b) => signedArea2(b.ring) - signedArea2(a.ring));
-  const kept = outer.filter(
+  const keptOuter = outer.filter(
     (L, k) => !outer.slice(0, k).some((B) => pointInRing(L.ring[0], B.ring))
   );
+  // PROTOTYPE holes: a hole loop of the grown union inside a kept outer one.
+  const kept = holes
+    ? [
+        ...keptOuter,
+        ...loops.filter(
+          ({ ring }) =>
+            signedArea2(ring) < 0 &&
+            keptOuter.some((B) => pointInRing(ring[0], B.ring))
+        ),
+      ]
+    : keptOuter;
   const boundary = kept.flatMap((L) => L.loop);
 
   // 3. Shrink by r: offset each piece inward, with an arc of r at each corner.
@@ -669,31 +732,17 @@ export function arcsOutline(
     (r) => r.at(-1)!
   ).map((loop) => loop.flat());
   // A loop of the closing winds as the members do (it has no holes); a tiny
-  // or backward one is a sliver from a cut, not part of the region.
+  // or backward one is a sliver from a cut, not part of the region. With
+  // holes, a backward loop of some size inside an outer one is a hole.
   const closed = out.filter(
     (ring) => ring.length > 2 && signedArea2(ring) > 1e-3
   );
-  // PROTOTYPE: a smoothing pass after the closing (see arcsSmooth.ts). It
-  // keeps every member, and each spine link, grown by padding inside.
-  if (ARCS_PROTOTYPE.smooth === undefined) return closed;
-  const pad = Math.max(0, o.padding);
-  const keep: KeepIn[] = members.map((m) =>
-    m.kind === "disc"
-      ? { a: [m.cx, m.cy], b: [m.cx, m.cy], R: m.r + pad }
-      : m.kind === "segment"
-        ? { a: m.a, b: m.b, R: m.w / 2 + pad }
-        : // a box: its center line along the long side (scratch only)
-          m.w >= m.h
-          ? {
-              a: [m.x + m.h / 2, m.y + m.h / 2],
-              b: [m.x + m.w - m.h / 2, m.y + m.h / 2],
-              R: m.h / 2 + pad,
-            }
-          : {
-              a: [m.x + m.w / 2, m.y + m.w / 2],
-              b: [m.x + m.w / 2, m.y + m.h - m.w / 2],
-              R: m.w / 2 + pad,
-            }
+  if (!holes) return closed;
+  const holeRings = out.filter(
+    (ring) =>
+      ring.length > 2 &&
+      signedArea2(ring) < -2 &&
+      closed.some((B) => pointInRing(ring[0], B))
   );
-  return smoothOutline(closed, keep, ARCS_PROTOTYPE.smooth);
+  return [...closed, ...holeRings];
 }

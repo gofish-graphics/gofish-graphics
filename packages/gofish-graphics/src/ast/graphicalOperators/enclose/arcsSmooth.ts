@@ -126,9 +126,11 @@ function pushOut(p: Pt, keep: KeepIn[]): Pt {
 
 /** The outward normals of a ring (winding positive in screen coordinates,
  *  as the arcs outline does). */
-function normals(ring: Pt[]): Pt[] {
+function normals(ring: Pt[], material = false): Pt[] {
   const n = ring.length;
-  const sgn = signedArea2(ring) > 0 ? 1 : -1;
+  // material: the region is on the left of travel on every ring (an outer
+  // ring winds positive, a hole the other way), so outward is always right.
+  const sgn = material || signedArea2(ring) > 0 ? 1 : -1;
   return ring.map((_, i) => {
     const [p, q] = [ring[(i - 1 + n) % n], ring[(i + 1) % n]];
     const tx = q[0] - p[0],
@@ -468,7 +470,7 @@ export function blur(rings: Pt[][], keep: KeepIn[], sigma: number): Pt[][] {
   const sm = rings.map((ring) => gauss(resample(ring, 1), sigma));
   const c = needed(sm, keep) + 0.05;
   return sm.map((r) => {
-    const N = normals(r);
+    const N = normals(r, true);
     return r.map((p, i) => [p[0] + c * N[i][0], p[1] + c * N[i][1]] as Pt);
   });
 }

@@ -46,6 +46,18 @@ import { blobOutline, type BlobMember, type Pt } from "./enclose/blob";
 import { membersOf } from "./enclose/members";
 import { ovalOutline } from "./enclose/oval";
 import { arcsOutline } from "./enclose/arcs";
+import { unifiedOutline, type UnifiedOptions } from "./enclose/unified";
+
+/** PROTOTYPE (scratch, not for merge): route Shape.blob/hull/spine (and,
+ *  with `arcs`, Shape.arcs) through the unified outline (enclose/unified.ts),
+ *  and record each call's geometry in `dump` for the scratch scripts. */
+export const ENCLOSE_PROTOTYPE: {
+  unified?: boolean;
+  arcs?: boolean;
+  overrides?: Partial<UnifiedOptions>;
+  dump?: unknown[];
+  dumpEl?: { textContent: string | null };
+} = {};
 import { targetOf } from "../constraints/relationalPaint";
 import { boxOfDims, ringExtent } from "../geometry/box";
 import { RelateOperand } from "../constraints/relate";
@@ -183,7 +195,33 @@ function Enclose(
                 : membersOf(placed[from + i])
             );
         let loops: Pt[][] | undefined;
-        if (shape.kind === "blob")
+        const P = ENCLOSE_PROTOTYPE;
+        if (P.dump && (shape.kind === "blob" || shape.kind === "arcs"))
+          P.dump.push({
+            shape: { ...shape, avoiding: undefined },
+            padding,
+            members: geometry(0, memberCount),
+            avoiding: geometry(memberCount, children.length),
+          });
+        if (P.dump && P.dumpEl) P.dumpEl.textContent = JSON.stringify(P.dump);
+        if (P.unified && shape.kind === "blob")
+          loops = unifiedOutline(geometry(0, memberCount), {
+            padding,
+            convexity: shape.convexity ?? 0.5,
+            holes: shape.holes,
+            clearance: shape.clearance,
+            avoiding: geometry(memberCount, children.length),
+            connected: true,
+            ...P.overrides,
+          });
+        else if (P.unified && P.arcs && shape.kind === "arcs")
+          loops = unifiedOutline(geometry(0, memberCount), {
+            padding,
+            radius: shape.radius ?? ARCS_RADIUS,
+            connected: false,
+            ...P.overrides,
+          });
+        else if (shape.kind === "blob")
           loops = blobOutline(geometry(0, memberCount), {
             convexity: shape.convexity,
             holes: shape.holes,
