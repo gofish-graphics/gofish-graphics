@@ -46,7 +46,10 @@ const fmt = (s) =>
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-await page.goto(pathToFileURL(join(here, "dist/index.html")).href);
+// DIST=<file>: check another build (e.g. an older commit's), for a before/after diff
+await page.goto(
+  pathToFileURL(process.env.DIST ?? join(here, "dist/index.html")).href
+);
 await page.waitForFunction(() => document.getElementById("status")?.dataset.ms);
 const CASES = [
   ["chartaccent", "ca", 6],

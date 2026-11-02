@@ -30,6 +30,15 @@ import { closingRings, keepIns } from "./arcs";
 import { resample, smoothOutline, type SmoothSpec } from "./arcsSmooth";
 import { beyondHull, type Beyond } from "./beyond";
 import { buildFiltration, type Filtration } from "./filtration";
+import {
+  buildBlend,
+  blendRings,
+  buildSeal,
+  gridFor,
+  lidRings,
+  sealOpenShare,
+  type Seal as SealBay,
+} from "./localFill";
 
 /**
  * PROTOTYPE: how `convexity` finds its closing radius.
@@ -87,7 +96,73 @@ export type UnifiedOptions = {
   neck?: number;
   /** null: no smoothing. Default: the approved blur, sigma 6. */
   smooth?: SmoothSpec | null;
+  /** PROTOTYPE: what convexity in [0, 1] means (not an API option yet).
+   *  - "area" (default): the share of the area between the spine and the
+   *    padded hull that is filled; picks one closing radius for the set.
+   *  - "radius": the closing radius itself, r = padding + s·c / (1 − c),
+   *    with s = the padded hull's area over its perimeter (RADIUS_SCALE).
+   *    0 is the spine, 1 (r = ∞) the padded hull.
+   *  - "blend": every pocket of hull − spine fills at the same rate, by
+   *    the level sets of a harmonic field (localFill.ts); no closing
+   *    radius, and nothing seals. */
+  means?: Means;
+  /** PROTOTYPE: what a bay does when the closing disc stops fitting through
+   *  its mouth (for "area" and "radius"; not an API option yet).
+   *  - "jump" (default): it fills at once (the exact closing, holes
+   *    filled).
+   *  - "lake": it stays open as a hole for as long as an r-disc fits inside
+   *    it (the exact closing with the sealed bays' holes kept). The members'
+   *    own holes stay filled unless `holes`.
+   *  - "lid": it fills from its far end to its mouth as r grows from the
+   *    seal r_s to r_s + the bay's depth (localFill.ts); not an exact
+   *    closing in between. */
+  seal?: Seal;
 };
+
+export type Means = "area" | "radius" | "blend";
+export type Seal = "jump" | "lake" | "lid";
+
+/** PROTOTYPE: the length s of the "radius" convexity, r = padding +
+ *  s·c / (1 − c), so c = 0.5 is r = padding + s. The padded hull's area
+ *  over its perimeter: half the width of a long strip, half the radius of a
+ *  disc. At 0.5 the closing disc is then about as wide as the hull is
+ *  thick. Scale-free: the whole picture scaled scales r with it. */
+export function radiusScale(hull: Pt[]): number {
+  let P = 0;
+  for (let i = 0; i < hull.length; i++) {
+    const a = hull[i],
+      b = hull[(i + 1) % hull.length];
+    P += Math.hypot(b[0] - a[0], b[1] - a[1]);
+  }
+  return P > 0 ? Math.abs(ringsArea([hull])) / P : 1;
+}
+
+/** A point inside a ring: the middle of the widest run of a horizontal
+ *  line through its box's middle that lies inside it. */
+function interiorPoint(ring: Pt[]): Pt {
+  let [ya, yb] = [Infinity, -Infinity];
+  for (const p of ring) {
+    ya = Math.min(ya, p[1]);
+    yb = Math.max(yb, p[1]);
+  }
+  const y = (ya + yb) / 2 + 1e-7;
+  const xs: number[] = [];
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i],
+      b = ring[(i + 1) % ring.length];
+    if (a[1] <= y !== b[1] <= y)
+      xs.push(a[0] + ((y - a[1]) * (b[0] - a[0])) / (b[1] - a[1]));
+  }
+  xs.sort((p, q) => p - q);
+  let best: Pt = ring[0],
+    w = -1;
+  for (let i = 0; i + 1 < xs.length; i += 2)
+    if (xs[i + 1] - xs[i] > w) {
+      w = xs[i + 1] - xs[i];
+      best = [(xs[i] + xs[i + 1]) / 2, y];
+    }
+  return best;
+}
 
 /** Stats from the last call, for the scratch measurement scripts. */
 export const UNIFIED_STATS: {
@@ -113,6 +188,13 @@ export const UNIFIED_STATS: {
    *  hull, filtration); a convexity change on the same set skips it */
   msCached?: number;
   filtration?: Pick<Filtration, "samples" | "triangles" | "knots" | "h">;
+  /** PROTOTYPE (convexity modes): the mode and seal treatment used, the
+   *  time spent on grid work this call (lid, blend), and how many sealed
+   *  bays the lid was filling */
+  means?: Means;
+  seal?: Seal;
+  msGrid?: number;
+  lidActive?: number;
 } = {};
 
 // ── members as a core (point, segment or box) plus a radius ─────────────────
@@ -652,9 +734,176 @@ export function unifiedOutline(
   let iterations = 0;
   let r: number;
   let res: { all: BlobMember[]; rings: Pt[][]; links: BlobMember[] };
+  const means: Means = o.means ?? "area";
+  const sealMode: Seal = o.seal ?? "jump";
+  UNIFIED_STATS.means = means;
+  UNIFIED_STATS.seal = means === "blend" ? undefined : sealMode;
+  UNIFIED_STATS.msGrid = 0;
+  UNIFIED_STATS.lidActive = 0;
   if (o.radius !== undefined) {
     r = o.radius;
     res = r === Infinity ? hullRes() : closeAt(r);
+  } else if (means !== "area" || sealMode !== "jump") {
+    // PROTOTYPE: the convexity modes and seal treatments (see Means, Seal).
+    // Always the cached path: the filtration, never the bisection, picks
+    // the radius of "area" here.
+    const c = Math.max(0, Math.min(2, o.convexity ?? 0.5));
+    const rMin = pad;
+    const fm = connected ? [...members, ...spine] : members;
+    const h = UNIFIED_PROTOTYPE.h ?? 1;
+    const spineRes = () =>
+      memo(key("spineRes", members, spine, pad, holes), () => closeAt(rMin));
+    // the filled spine, for telling the members' own holes from lakes
+    const filledSpine = () =>
+      memo(key("filledSpine", members, spine, pad), () =>
+        closingRings([...members, ...linksAt(rMin)], pad, rMin, false)
+      );
+    const filtOf = (hm: boolean | "lake") =>
+      memo(key("filtration", fm, pad, hm, h), () => {
+        const F = buildFiltration(fm, pad, rMin, hm, h);
+        UNIFIED_STATS.msFiltration = F.ms;
+        return F;
+      });
+    const grid = () =>
+      memo(key("grid", members, spine, pad), () => gridFor([hullOf()]));
+    // the bays that seal (the filtration's big jumps), for the lid
+    const sealsOf = () =>
+      memo(key("seals", fm, pad, holes, h), () => {
+        const F = filtOf(holes);
+        const M = 0.1; // the sampled seal radius is off the exact one by less
+        const G = grid();
+        const inside = (rings: Pt[][], p: Pt) => pointInRingAny(rings, p);
+        const out: SealBay[] = [];
+        for (const j of F.jumps) {
+          let lo = Math.max(rMin, j.r - M),
+            hi = j.r + M;
+          const first = buildSeal(
+            closeAt(lo).rings,
+            closeAt(hi).rings,
+            j.r,
+            j.dA,
+            G
+          );
+          if (!first) continue;
+          // the exact seal radius: the bisection on whether the bay's deepest
+          // point is closed, so the closing before the seal is the last one
+          // with the bay open (the lid then starts from it, no step back)
+          const p: Pt = [
+            G.x0 + G.h * (first.seed % G.nx),
+            G.y0 + G.h * Math.floor(first.seed / G.nx),
+          ];
+          let loRings = closeAt(lo).rings;
+          for (let k = 0; k < 6 && inside(loRings, p) && lo > rMin; k++) {
+            lo = Math.max(rMin, lo - 2 * M);
+            loRings = closeAt(lo).rings;
+          }
+          if (inside(loRings, p)) continue;
+          let hiRings = closeAt(hi).rings;
+          for (let k = 0; k < 18 && hi - lo > 1e-5; k++) {
+            const m = (lo + hi) / 2;
+            const mr = closeAt(m).rings;
+            if (inside(mr, p)) [hi, hiRings] = [m, mr];
+            else [lo, loRings] = [m, mr];
+          }
+          const s = buildSeal(loRings, hiRings, hi, j.dA, G);
+          if (s) out.push({ ...s, rk: j.r });
+        }
+        return out;
+      });
+    // a sealed bay left open as a hole; the members' own holes are filled
+    // unless `holes`
+    const lakeAt = (rr: number) => {
+      const links = linksAt(rr);
+      const all = [...members, ...links];
+      const open = closingRings(all, pad, rr, true);
+      if (holes) return { all, rings: open, links };
+      const fs = filledSpine();
+      const rings = open.filter(
+        (g) =>
+          signedArea2(g) > 0 ||
+          !fs.some((B) => pointInRing(interiorPoint(g), B))
+      );
+      return { all, rings, links };
+    };
+    const drawAt = (rr: number) => {
+      if (rr === Infinity) return hullRes();
+      if (sealMode === "lake") return lakeAt(rr);
+      const ex = closeAt(rr);
+      if (sealMode !== "lid") return ex;
+      const tg = performance.now();
+      const seals = sealsOf();
+      const lid = lidRings(ex.rings, rr, seals, grid(), holes);
+      UNIFIED_STATS.msGrid! += performance.now() - tg;
+      if (!lid) return ex;
+      UNIFIED_STATS.lidActive = lid.active;
+      return { ...ex, rings: lid.rings };
+    };
+    if (c > 1) {
+      r = Infinity;
+      res = {
+        all: [...members, ...spine],
+        rings: [beyondHull(hullOf(), members, pad, c, o.beyond)],
+        links: spine,
+      };
+    } else if (c >= 1) {
+      r = Infinity;
+      res = hullRes();
+    } else if (c <= 0) {
+      r = rMin;
+      res = spineRes();
+    } else if (means === "blend") {
+      r = NaN;
+      const sp = spineRes();
+      const B = memo(key("blend", members, spine, pad, holes), () =>
+        buildBlend(sp.rings, hullOf())
+      );
+      const tg = performance.now();
+      res = { ...sp, rings: blendRings(B, c, holes) };
+      UNIFIED_STATS.msGrid = performance.now() - tg;
+      iterations = 0;
+    } else if (means === "radius") {
+      const s = memo(key("scale", members, spine, pad), () =>
+        radiusScale(hullOf())
+      );
+      r = rMin + (s * c) / (1 - c);
+      res = drawAt(r);
+      iterations = 1;
+    } else {
+      // "area" with a seal treatment: the area-vs-radius curve that
+      // treatment draws. lake: the holes-open filtration, the members' own
+      // holes kept filled unless `holes`. lid: the filled filtration less,
+      // in each bay still filling, the share of its seal's area still open.
+      const F = filtOf(sealMode === "lake" ? (holes ? true : "lake") : holes);
+      Object.assign(UNIFIED_STATS, {
+        areaUnion: F.A0,
+        areaHull: F.A1,
+        areaTarget: F.A0 + c * (F.A1 - F.A0),
+      });
+      if (sealMode === "lake") r = F.radiusFor(c).r;
+      else {
+        const seals = sealsOf();
+        const target = F.A0 + c * (F.A1 - F.A0);
+        const proxy = (x: number) =>
+          F.area(x) - seals.reduce((t, s) => t + s.dA * sealOpenShare(s, x), 0);
+        let lo = rMin,
+          hi = Math.max(2 * rMin, 1);
+        while (proxy(hi) < target && hi < 1e6) [lo, hi] = [hi, 2 * hi];
+        if (proxy(hi) < target) r = Infinity;
+        else {
+          // tight: a looser stop lets r step back as c steps up (two
+          // targets landing in one tolerance window), and the closed area
+          // grows by up to ~1000 px² per px of r near a seal
+          for (let it = 0; it < 80 && hi - lo > 1e-7 * Math.max(1, lo); it++) {
+            const m = (lo + hi) / 2;
+            if (proxy(m) >= target) hi = m;
+            else lo = m;
+          }
+          r = hi;
+        }
+      }
+      res = drawAt(r);
+      iterations = 1;
+    }
   } else if (filt) {
     // the radius from the precomputed filtration: one exact closing. Not
     // connected, the links depend on r, so the filtration is the members'

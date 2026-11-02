@@ -3,7 +3,9 @@ import {
   SEARCH,
   computeSet,
   type BlobMember,
+  type Means,
   type Params,
+  type Seal,
   type Pt,
   type SetResult,
 } from "./compute";
@@ -48,6 +50,8 @@ type State = Omit<Params, "avoid" | "compare"> & {
   compare: boolean;
   showLinks: boolean;
   showMembers: boolean;
+  /** PROTOTYPE: small multiples of the three convexity modes */
+  compareModes: boolean;
 };
 const BLOB = { convexity: 0.5, neck: 1, holes: false, connected: true };
 const ARCS_RADIUS = 12; // Shape.arcs()'s default radius
@@ -64,6 +68,9 @@ let state: State = {
   compare: false,
   showLinks: false,
   showMembers: false,
+  means: "area",
+  seal: "jump",
+  compareModes: false,
 };
 const dataset = (): Dataset => DATASETS.find((x) => x.id === state.dataset)!;
 const avoiding = () => dataset().avoidable && !!state.avoidOn[state.dataset];
@@ -112,9 +119,34 @@ const spelling = () => {
     shape = `Shape.arcs(${o.length ? `{ ${o.join(", ")} }` : ""})`;
   }
   let code = `enclose({ shape: ${shape}, padding: ${num(state.padding)} }, ${d.call})`;
+  if (state.connected && (state.means !== "area" || state.seal !== "jump")) {
+    const m = [`convexity means ${MEANS_NAME[state.means]}`];
+    if (state.means !== "blend") m.push(`when a bay seals: ${state.seal}`);
+    code += `\n// prototype, not an API option yet: ${m.join("; ")}`;
+  }
   if (state.smooth !== state.connected)
     code += `\n// debug view: smoothing ${state.smooth ? "on" : "off"} (not an option)`;
   return code;
+};
+
+// ── convexity modes (PROTOTYPE) ─────────────────────────────────────────────
+const MEANS: Means[] = ["area", "radius", "blend"];
+const MEANS_NAME: Record<Means, string> = {
+  area: "area share",
+  radius: "radius",
+  blend: "per-bay blend",
+};
+const MEANS_HINT: Record<Means, string> = {
+  area: "The share of the room between the spine and the hull that is filled, counted over the whole set. It picks one closing radius, so one region's shape depends on the others, and it can stand still while a bay elsewhere fills.",
+  radius:
+    "The closing disc's radius itself: r = padding + s·c / (1 − c), where s is the hull's area over its perimeter (about half its thickness). Each region depends only on the members near it.",
+  blend:
+    "Every pocket between the spine and the hull fills the same share of its own area, rising from its floor to its mouth. There is no closing radius, so nothing seals.",
+};
+const SEAL_HINT: Record<Seal, string> = {
+  jump: "A bay that the disc can no longer get into fills all at once (the exact closing).",
+  lake: "A sealed bay stays open as a hole while a disc of radius r still fits inside it. On these datasets the hole is gone at once, so this looks like jump.",
+  lid: "A sealed bay fills from its far end toward its mouth while r grows by the bay's depth. In between it is not an exact closing.",
 };
 
 // ── presets ──────────────────────────────────────────────────────────────────
@@ -122,7 +154,7 @@ const PRESETS: Record<string, () => Partial<State>> = {
   spine: () => ({ ...BLOB, convexity: 0, smooth: true }),
   hull: () => ({ ...BLOB, convexity: 1, smooth: true }),
   oval: () => ({ ...BLOB, convexity: 2, smooth: true }),
-  blob: () => ({ ...BLOB, smooth: true }),
+  blob: () => ({ ...BLOB, smooth: true, means: "area", seal: "jump" }),
   arcs: () => ({
     holes: false,
     connected: false,
@@ -175,6 +207,17 @@ const syncControls = () => {
   $<HTMLInputElement>("show-links").checked = state.showLinks;
   $<HTMLInputElement>("show-members").checked = state.showMembers;
   $<HTMLInputElement>("compare").checked = state.compare;
+  $<HTMLInputElement>("compare-modes").checked = state.compareModes;
+  for (const id of ["means-field", "compare-modes-field"])
+    $(id).hidden = !state.connected;
+  $("seal-field").hidden = !state.connected || state.means === "blend";
+  for (const b of document.querySelectorAll<HTMLButtonElement>("[data-means]"))
+    b.setAttribute("aria-checked", String(b.dataset.means === state.means));
+  for (const b of document.querySelectorAll<HTMLButtonElement>("[data-seal]"))
+    b.setAttribute("aria-checked", String(b.dataset.seal === state.seal));
+  $("means-hint").textContent = MEANS_HINT[state.means];
+  $("seal-hint").textContent = SEAL_HINT[state.seal];
+  $("multiples").hidden = !(state.compareModes && state.connected);
   $("convexity-field").hidden = !state.connected;
   $("neck-field").hidden = !state.connected;
   $("radius-field").hidden = state.connected;
@@ -206,10 +249,16 @@ const frame = (s: DataSet) => `matrix(1 0 0 ${s.T[2]} ${s.T[0]} ${s.T[1]})`;
 /** The view: the story's own canvas, grown to hold each set's oval (convexity 2), so the
  *  outline is never cut off as convexity rises. Computed once per dataset. */
 const views = new Map<string, number[]>();
+/** PROTOTYPE: the small multiples' view: the sets' ovals only (not the whole canvas). */
+const tight = new Map<string, number[]>();
+const tightOf = (d: Dataset) => {
+  viewOf(d);
+  return tight.get(d.id)!;
+};
 const viewOf = (d: Dataset) => {
   let v = views.get(d.id);
   if (v) return v;
-  let [x0, y0, x1, y1] = [0, 0, d.width, d.height];
+  let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
   for (const s of d.sets) {
     const r = computeSet(s, {
       ...BLOB,
@@ -220,6 +269,8 @@ const viewOf = (d: Dataset) => {
       clearance: d.clearance,
       smooth: true,
       compare: false,
+      means: "area",
+      seal: "jump",
     });
     for (const ring of r.rings)
       for (const [x, y] of ring) {
@@ -232,6 +283,9 @@ const viewOf = (d: Dataset) => {
       }
   }
   const m = 10;
+  tight.set(d.id, [x0 - m, y0 - m, x1 - x0 + 2 * m, y1 - y0 + 2 * m]);
+  [x0, y0] = [Math.min(0, x0), Math.min(0, y0)];
+  [x1, y1] = [Math.max(d.width, x1), Math.max(d.height, y1)];
   v = [x0 - m, y0 - m, x1 - x0 + 2 * m, y1 - y0 + 2 * m];
   views.set(d.id, v);
   return v;
@@ -285,16 +339,46 @@ const tube = (a: Pt, b: Pt, ra: number, rb: number, style: string) => {
   return `<polygon points="${pts.map((p) => `${f2(p[0])},${f2(p[1])}`).join(" ")}" ${style}/>`;
 };
 
+const outlineMarkup = (results: SetResult[]) => {
+  const d = dataset();
+  return results
+    .map((r, i) => {
+      const s = d.sets[i],
+        P = s.paint;
+      return `<path transform="${frame(s)}" d="${pathOf(r.rings)}" fill="${P.fill}" fill-opacity="${P.fillOpacity}" stroke="${P.stroke}" stroke-width="${Math.max(1, P.strokeWidth)}" stroke-linejoin="round"/>`;
+    })
+    .join("");
+};
+
+/** PROTOTYPE: the three convexity modes side by side, each with the seal choice where it
+ *  applies; the current mode's result is reused. */
+const drawMultiples = (
+  byMode: Map<Means, { out: SetResult[]; ms: number }>
+) => {
+  const d = dataset();
+  const vb = tightOf(d).map(f2).join(" ");
+  $("multiples").innerHTML = MEANS.map((m) => {
+    const x = byMode.get(m)!;
+    const radii = x.out.map((r) => r.radius).filter((v) => Number.isFinite(v));
+    const rTxt =
+      m === "blend"
+        ? "no radius"
+        : radii.length
+          ? `r ${Math.min(...radii).toFixed(1)}${radii.length > 1 ? `–${Math.max(...radii).toFixed(1)}` : ""}`
+          : "r ∞";
+    const seal = m === "blend" ? "" : ` · ${state.seal}`;
+    return `<figure data-current="${m === state.means}"><svg viewBox="${vb}" role="img" aria-label="${MEANS_NAME[m]}"><g>${outlineMarkup(x.out)}</g><g>${d.scenery}</g></svg><figcaption><b>${MEANS_NAME[m]}</b>${seal}<br>${rTxt} · ${fmtMs(x.ms)} ms</figcaption></figure>`;
+  }).join("");
+};
+
 const drawResults = (results: SetResult[]) => {
   const d = dataset();
-  let outlines = "",
-    today = "",
+  const outlines = outlineMarkup(results);
+  let today = "",
     debug = "";
   results.forEach((r, i) => {
     const s = d.sets[i],
-      P = s.paint,
       T = frame(s);
-    outlines += `<path transform="${T}" d="${pathOf(r.rings)}" fill="${P.fill}" fill-opacity="${P.fillOpacity}" stroke="${P.stroke}" stroke-width="${Math.max(1, P.strokeWidth)}" stroke-linejoin="round"/>`;
     if (r.today)
       today += `<path transform="${T}" d="${pathOf(r.today.rings)}" fill="none" stroke="#6a3d9a" stroke-width="1.4" stroke-dasharray="5 3" stroke-linejoin="round"/>`;
     let g = "";
@@ -339,20 +423,22 @@ const drawResults = (results: SetResult[]) => {
 };
 
 const fmtMs = (v: number) => (v < 10 ? v.toFixed(1) : v.toFixed(0));
-const drawStats = (results: SetResult[], wall: number) => {
+const drawStats = (results: SetResult[], wall: number, modeMs = "") => {
   const sum = (f: (r: SetResult) => number) =>
     results.reduce((s, r) => s + f(r), 0);
   const radii = results.map((r) => r.radius);
   const fin = radii.filter((r) => Number.isFinite(r));
   const rText = !state.connected
     ? `${num(state.radius)} px (given)`
-    : fin.length === 0
-      ? state.convexity > 1
-        ? "∞ (beyond the hull)"
-        : "∞ (the hull)"
-      : fin.length === 1 && radii.length === 1
-        ? `${fin[0].toFixed(1)} px`
-        : `${Math.min(...fin).toFixed(1)} to ${Math.max(...fin).toFixed(1)} px${fin.length < radii.length ? " (some ∞)" : ""}`;
+    : state.means === "blend" && state.convexity > 0 && state.convexity < 1
+      ? "none (per-bay blend)"
+      : fin.length === 0
+        ? state.convexity > 1
+          ? "∞ (beyond the hull)"
+          : "∞ (the hull)"
+        : fin.length === 1 && radii.length === 1
+          ? `${fin[0].toFixed(1)} px`
+          : `${Math.min(...fin).toFixed(1)} to ${Math.max(...fin).toFixed(1)} px${fin.length < radii.length ? " (some ∞)" : ""}`;
   const iters = sum((r) => r.iterations);
   const today = results.some((r) => r.today)
     ? sum((r) => r.today?.ms ?? 0)
@@ -364,7 +450,9 @@ const drawStats = (results: SetResult[], wall: number) => {
       "closing radius r",
       rText,
       state.connected
-        ? `${iters} closing${iters === 1 ? "" : "s"} in the search (${SEARCH})`
+        ? state.means === "area" && state.seal === "jump"
+          ? `${iters} closing${iters === 1 ? "" : "s"} in the search (${SEARCH})`
+          : `${MEANS_NAME[state.means]}${state.means === "blend" ? "" : ` · ${state.seal}${state.seal === "lid" ? ` (${sum((r) => r.lidActive)} bay${sum((r) => r.lidActive) === 1 ? "" : "s"} filling)` : ""}`}`
         : ""
     ) +
     stat(
@@ -375,7 +463,7 @@ const drawStats = (results: SetResult[], wall: number) => {
     stat(
       "compute",
       `${fmtMs(wall)} ms`,
-      `links ${fmtMs(sum((r) => r.ms.links))} · closing ${fmtMs(sum((r) => r.ms.close))} · cut+smooth ${fmtMs(sum((r) => r.ms.smooth))}${sum((r) => r.ms.cached) > 0 ? ` · cache built ${fmtMs(sum((r) => r.ms.cached))}` : ""}`
+      `links ${fmtMs(sum((r) => r.ms.links))} · closing ${fmtMs(sum((r) => r.ms.close))}${sum((r) => r.ms.grid) > 0 ? ` (grid ${fmtMs(sum((r) => r.ms.grid))})` : ""} · cut+smooth ${fmtMs(sum((r) => r.ms.smooth))}${sum((r) => r.ms.cached) > 0 ? ` · cache built ${fmtMs(sum((r) => r.ms.cached))}` : ""}${modeMs ? `<br>${modeMs}` : ""}`
     ) +
     (today !== null
       ? stat(
@@ -399,20 +487,42 @@ const recompute = () => {
   const d = dataset();
   const p: Params = { ...state, avoid: avoiding() };
   let out: SetResult[];
+  const byMode = new Map<Means, { out: SetResult[]; ms: number }>();
   const t0 = performance.now();
   try {
     out = d.sets.map((s) => computeSet(s, p));
+    byMode.set(state.means, { out, ms: performance.now() - t0 });
+    if (state.compareModes && state.connected)
+      for (const m of MEANS) {
+        if (byMode.has(m)) continue;
+        const t1 = performance.now();
+        const o = d.sets.map((s) =>
+          computeSet(s, { ...p, means: m, compare: false })
+        );
+        byMode.set(m, { out: o, ms: performance.now() - t1 });
+      }
   } catch (err) {
     $("status").textContent = `error: ${(err as Error).message}`;
     console.error(err);
     return;
   }
   const ms = performance.now() - t0;
-  const warm = ms - out.reduce((t, r) => t + r.ms.cached, 0);
+  // the cache each mode built this time (compare modes builds the others' too)
+  let cached = 0;
+  for (const { out: o } of byMode.values())
+    cached += o.reduce((t, r) => t + r.ms.cached, 0);
+  const warm = ms - cached;
   lastMs.set(d.id, ms);
   lastWarm.set(d.id, warm);
   drawResults(out);
-  drawStats(out, ms);
+  const modeMs =
+    byMode.size > 1
+      ? MEANS.map((m) => `${MEANS_NAME[m]} ${fmtMs(byMode.get(m)!.ms)}`).join(
+          " · "
+        )
+      : "";
+  if (byMode.size > 1) drawMultiples(byMode);
+  drawStats(out, ms, modeMs);
   $("status").textContent = `computed in ${fmtMs(ms)} ms`;
   $("status").dataset.ms = String(ms);
   const msg =
@@ -458,6 +568,13 @@ check("holes", (on) => ({ holes: on }));
 check("smooth", (on) => ({ smooth: on }));
 check("compare", (on) => ({ compare: on }));
 check("show-links", (on) => ({ showLinks: on }));
+check("compare-modes", (on) => ({ compareModes: on }));
+for (const b of document.querySelectorAll<HTMLButtonElement>("[data-means]"))
+  b.addEventListener("click", () =>
+    update({ means: b.dataset.means as Means })
+  );
+for (const b of document.querySelectorAll<HTMLButtonElement>("[data-seal]"))
+  b.addEventListener("click", () => update({ seal: b.dataset.seal as Seal }));
 check("show-members", (on) => ({ showMembers: on }));
 check("avoid", (on) => ({
   avoidOn: { ...state.avoidOn, [state.dataset]: on },

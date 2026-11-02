@@ -66,6 +66,9 @@ export type Filtration = {
   /** the least radius ≥ rMin whose sampled area holds share c of A1 − A0,
    *  with the area it reaches */
   radiusFor: (c: number) => { r: number; area: number };
+  /** PROTOTYPE: the big jumps (a pocket sealing, over 2 % of A1 − A0 at one
+   *  knot): the sampled critical radius and the area it adds */
+  jumps: { r: number; dA: number }[];
 };
 
 /** The circular segment that a disc of radius r cuts off a chord L. */
@@ -81,7 +84,7 @@ export function buildFiltration(
   members: BlobMember[],
   pad: number,
   rMin: number,
-  holes: boolean,
+  holes: boolean | "lake",
   h = 1
 ): Filtration {
   const t0 = performance.now();
@@ -138,7 +141,7 @@ export function buildFiltration(
 
   // t(T): the radius from which T is closed
   const t = new Float64Array(nT);
-  if (!holes) {
+  if (holes !== true) {
     // max-min flood from outside the hull (a binary max-heap of triangles)
     t.fill(-1);
     const heapT: number[] = [],
@@ -203,6 +206,11 @@ export function buildFiltration(
       }
     }
     for (let T = 0; T < nT; T++) if (t[T] < 0) t[T] = 0;
+    // PROTOTYPE "lake": a triangle closed at rMin (in the spine, its own
+    // holes filled) stays closed; one outside closes at its circumradius,
+    // as with holes open, so a sealed bay stays open while a disc fits
+    if (holes === "lake")
+      for (let T = 0; T < nT; T++) t[T] = t[T] <= rMin ? 0 : rho[T];
   } else {
     // holes stay open: a triangle outside U closes at its circumradius
     const prims = members.map((m) => grownPrim(m, pad));
@@ -319,8 +327,12 @@ export function buildFiltration(
   // monotone in c.
   const JUMP = 0.1;
   const jumps: number[] = [];
+  const jumpsAt: { r: number; dA: number }[] = [];
   for (let k = 1; k < nK; k++)
-    if (gK[k] - leftK[k] > 0.02 * (A1 - A0)) jumps.push(knots[k]);
+    if (gK[k] - leftK[k] > 0.02 * (A1 - A0)) {
+      jumps.push(knots[k]);
+      jumpsAt.push({ r: knots[k], dA: gK[k] - leftK[k] });
+    }
   const clear = (r: number) => {
     for (const b of jumps)
       if (r > b - JUMP && r < b) r = Math.max(rMin, b - JUMP);
@@ -386,5 +398,6 @@ export function buildFiltration(
     A1,
     area: areaAt,
     radiusFor,
+    jumps: jumpsAt,
   };
 }

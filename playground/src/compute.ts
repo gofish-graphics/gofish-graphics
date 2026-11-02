@@ -6,6 +6,8 @@ import {
   unifiedOutline,
   UNIFIED_STATS,
   UNIFIED_PROTOTYPE,
+  type Means,
+  type Seal,
 } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/unified";
 import {
   blobOutline,
@@ -15,7 +17,7 @@ import {
 import { arcsOutline } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/arcs";
 import { signedArea2 } from "../../packages/gofish-graphics/src/ast/geometry/plane";
 
-export type { BlobMember, Pt };
+export type { BlobMember, Pt, Means, Seal };
 
 // PROTOTYPE: ?search=bisection runs the earlier radius search, for comparison
 if (new URLSearchParams(location.search).get("search") === "bisection")
@@ -33,6 +35,9 @@ export type Params = {
   clearance: number;
   smooth: boolean;
   compare: boolean;
+  /** PROTOTYPE: what convexity means, and what a sealing bay does */
+  means: Means;
+  seal: Seal;
 };
 
 export type SetInput = { members: BlobMember[]; avoiding: BlobMember[] };
@@ -53,7 +58,11 @@ export type SetResult = {
     smooth: number;
     total: number;
     cached: number;
+    /** grid work (lid, blend), part of close */
+    grid: number;
   };
+  /** sealed bays the lid was filling */
+  lidActive: number;
   /** today's outline (Shape.blob, or Shape.arcs when not connected), when asked */
   today?: { rings: Pt[][]; ms: number };
 };
@@ -75,7 +84,7 @@ export function computeSet(s: SetInput, p: Params): SetResult {
   const rings = unifiedOutline(s.members, {
     padding: p.padding,
     ...(p.connected
-      ? { convexity: p.convexity, neck: p.neck }
+      ? { convexity: p.convexity, neck: p.neck, means: p.means, seal: p.seal }
       : { radius: p.radius }),
     connected: p.connected,
     holes: p.holes,
@@ -97,7 +106,9 @@ export function computeSet(s: SetInput, p: Params): SetResult {
       smooth: S.msSmooth ?? 0,
       total,
       cached: S.msCached ?? 0,
+      grid: S.msGrid ?? 0,
     },
+    lidActive: S.lidActive ?? 0,
   };
   if (p.compare) {
     const t1 = performance.now();
