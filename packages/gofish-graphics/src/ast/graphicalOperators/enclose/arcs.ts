@@ -127,6 +127,47 @@ function capsuleEdges(
   ];
 }
 
+/** PROTOTYPE: the edges of a tapered tube, the hull of the disc of radius ra
+ *  at a and the disc of radius rb at b: its two outer tangent lines and the
+ *  two end arcs. A disc when one disc holds the other. */
+function taperEdges(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  ra: number,
+  rb: number
+): Edge[] {
+  const L = Math.hypot(bx - ax, by - ay);
+  if (L <= Math.abs(ra - rb) + 1e-9)
+    return ra >= rb
+      ? [{ t: "arc", cx: ax, cy: ay, R: ra, a0: 0, a1: TAU }]
+      : [{ t: "arc", cx: bx, cy: by, R: rb, a0: 0, a1: TAU }];
+  const phi = Math.atan2(by - ay, bx - ax);
+  // a tangent's normal n has n·u = (ra - rb) / L: at phi ± al
+  const al = Math.acos((ra - rb) / L);
+  const nr: Pt = [Math.cos(phi - al), Math.sin(phi - al)],
+    nl: Pt = [Math.cos(phi + al), Math.sin(phi + al)];
+  return [
+    {
+      t: "line",
+      ax: ax + ra * nr[0],
+      ay: ay + ra * nr[1],
+      bx: bx + rb * nr[0],
+      by: by + rb * nr[1],
+    },
+    { t: "arc", cx: bx, cy: by, R: rb, a0: phi - al, a1: phi + al },
+    {
+      t: "line",
+      ax: bx + rb * nl[0],
+      ay: by + rb * nl[1],
+      bx: ax + ra * nl[0],
+      by: ay + ra * nl[1],
+    },
+    { t: "arc", cx: ax, cy: ay, R: ra, a0: phi + al, a1: phi + TAU - al },
+  ];
+}
+
 /** The edges of box [x0, x1] × [y0, y1] grown by g: a rounded box (sharp
  *  when g = 0). */
 function roundedBoxEdges(
@@ -164,7 +205,9 @@ function grown(m: BlobMember, g: number): Grown {
       ? [{ t: "arc", cx: p.x1, cy: p.y1, R: p.r, a0: 0, a1: TAU } as Edge]
       : p.k === 1
         ? capsuleEdges(p.x1, p.y1, p.x2, p.y2, p.r)
-        : roundedBoxEdges(p.x1, p.y1, p.x2, p.y2, p.r);
+        : p.k === 5
+          ? taperEdges(p.x1, p.y1, p.x2, p.y2, p.r, p.x3)
+          : roundedBoxEdges(p.x1, p.y1, p.x2, p.y2, p.r);
   return { prim: p, edges };
 }
 
@@ -500,11 +543,13 @@ export function arcsOutline(
 
 /** PROTOTYPE: each member grown by pad, as a keep-in capsule. */
 export function keepIns(members: BlobMember[], pad: number): KeepIn[] {
-  return members.map((m) =>
+  return members.flatMap((m): KeepIn | KeepIn[] =>
     m.kind === "disc"
       ? { a: [m.cx, m.cy], b: [m.cx, m.cy], R: m.r + pad }
       : m.kind === "segment"
-        ? { a: m.a, b: m.b, R: m.w / 2 + pad }
+        ? m.w2 !== undefined && m.w2 !== m.w
+          ? taperKeepIns(m.a, m.b, m.w / 2 + pad, m.w2 / 2 + pad)
+          : { a: m.a, b: m.b, R: Math.max(0, m.w / 2 + pad) }
         : // a box: its center line along the long side (scratch only)
           m.w >= m.h
           ? {
@@ -518,6 +563,23 @@ export function keepIns(members: BlobMember[], pad: number): KeepIn[] {
               R: m.w / 2 + pad,
             }
   );
+}
+
+/** PROTOTYPE: a tapered tube as short capsules along it (each inside it),
+ *  about 2 px long, of the tube's radius at their thinner end. */
+function taperKeepIns(a: Pt, b: Pt, ra: number, rb: number): KeepIn[] {
+  const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const n = Math.max(1, Math.ceil(L / 2));
+  const at = (t: number): Pt => [
+    a[0] + t * (b[0] - a[0]),
+    a[1] + t * (b[1] - a[1]),
+  ];
+  const R = (t: number) => ra + (rb - ra) * t;
+  return Array.from({ length: n }, (_, i) => ({
+    a: at(i / n),
+    b: at((i + 1) / n),
+    R: Math.max(0, Math.min(R(i / n), R((i + 1) / n))),
+  }));
 }
 
 /**

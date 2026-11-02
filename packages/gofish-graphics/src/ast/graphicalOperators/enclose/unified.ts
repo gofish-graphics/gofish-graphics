@@ -28,6 +28,7 @@ import { signedArea2, pointInRing, segDist } from "../../geometry/plane";
 import { convexHull, type BlobMember, type Pt } from "./blob";
 import { closingRings, keepIns } from "./arcs";
 import { resample, smoothOutline, type SmoothSpec } from "./arcsSmooth";
+import { beyondHull, type Beyond } from "./beyond";
 
 export type UnifiedOptions = {
   padding: number;
@@ -41,6 +42,12 @@ export type UnifiedOptions = {
   clearance?: number;
   /** Width of the spine links (connected), px. Default 0. */
   linkWidth?: number;
+  /** PROTOTYPE: how convexity in (1, 2] rounds the hull (beyond.ts).
+   *  Default "ellipse". */
+  beyond?: Beyond;
+  /** The spine links' width, as a share of the padded members' they join:
+   *  1 (default) is no neck. PROTOTYPE. */
+  neck?: number;
   /** null: no smoothing. Default: the approved blur, sigma 6. */
   smooth?: SmoothSpec | null;
 };
@@ -67,7 +74,7 @@ const coreOf = (m: BlobMember): Core =>
   m.kind === "disc"
     ? { k: "seg", a: [m.cx, m.cy], b: [m.cx, m.cy], rho: m.r }
     : m.kind === "segment"
-      ? { k: "seg", a: m.a, b: m.b, rho: m.w / 2 }
+      ? { k: "seg", a: m.a, b: m.b, rho: Math.max(m.w, m.w2 ?? m.w) / 2 }
       : { k: "box", x0: m.x, y0: m.y, x1: m.x + m.w, y1: m.y + m.h };
 
 const segsOf = (c: Core): [Pt, Pt][] =>
@@ -174,11 +181,20 @@ function nearest(A: Core, B: Core): [Pt, Pt, number] {
  * by a zero-width segment between their nearest points. A link is a member
  * too, so a piece near a link (not near its ends) is joined as well; repeat
  * until no two pieces are that near.
+ *
+ * With `neck` (the connected spine), a link is instead a tapered tube
+ * between the nearest points of the two members' cores (a disc's center, a
+ * segment's own line, a box's center line along its long side), whose
+ * half-width once grown by padding is `neck` times the padded member's at
+ * each end: 1 is a tube as wide as the members it joins (no neck). Its core
+ * width is then 2 (neck (rho + pad) - pad), below 0 when the tube is to be
+ * thinner than the padding.
  */
 export function nearLinks(
   members: BlobMember[],
   pad: number,
-  r: number
+  r: number,
+  neck?: number
 ): BlobMember[] {
   const prims: Core[] = members.map(coreOf);
   const comp = prims.map((_, i) => i);
@@ -197,6 +213,45 @@ export function nearLinks(
           Math.max(c.a[1], c.b[1]) + c.rho,
         ];
   const boxes = prims.map(bb);
+  // a member's core as a segment and the half-width around it (a link: its
+  // own, already necked)
+  const linkCore = (i: number): [Pt, Pt, number, boolean] => {
+    if (i >= members.length) {
+      const c = prims[i] as Extract<Core, { k: "seg" }>;
+      return [c.a, c.b, c.rho, false];
+    }
+    const m = members[i];
+    if (m.kind === "disc") return [[m.cx, m.cy], [m.cx, m.cy], m.r, true];
+    if (m.kind === "segment")
+      return [m.a, m.b, Math.max(m.w, m.w2 ?? m.w) / 2, true];
+    return m.w >= m.h
+      ? [
+          [m.x + m.h / 2, m.y + m.h / 2],
+          [m.x + m.w - m.h / 2, m.y + m.h / 2],
+          m.h / 2,
+          true,
+        ]
+      : [
+          [m.x + m.w / 2, m.y + m.w / 2],
+          [m.x + m.w / 2, m.y + m.h - m.w / 2],
+          m.w / 2,
+          true,
+        ];
+  };
+  const tube = (i: number, j: number, nk: number): BlobMember => {
+    const [a0, a1, ra, ma] = linkCore(i),
+      [b0, b1, rb, mb] = linkCore(j);
+    const [x, y] = segSeg(a0, a1, b0, b1);
+    const half = (rho: number, member: boolean) =>
+      member ? nk * (rho + pad) - pad : rho;
+    return {
+      kind: "segment",
+      a: x,
+      b: y,
+      w: 2 * half(ra, ma),
+      w2: 2 * half(rb, mb),
+    };
+  };
   const close = (i: number, j: number) =>
     boxes[i][0] - reach <= boxes[j][2] &&
     boxes[j][0] - reach <= boxes[i][2] &&
@@ -219,7 +274,10 @@ export function nearLinks(
       if (ci === cj) continue;
       comp[ci] = cj;
       if (gap <= 0) continue; // overlapping: joined already
-      const link: BlobMember = { kind: "segment", a: p, b: q, w: 0 };
+      const link: BlobMember =
+        neck === undefined
+          ? { kind: "segment", a: p, b: q, w: 0 }
+          : tube(i, j, neck);
       links.push(link);
       prims.push(coreOf(link));
       boxes.push(bb(prims.at(-1)!));
@@ -249,8 +307,8 @@ function paddedSamples(members: BlobMember[], pad: number): Pt[] {
   for (const m of members) {
     if (m.kind === "disc") circle([m.cx, m.cy], m.r + pad);
     else if (m.kind === "segment") {
-      circle(m.a, m.w / 2 + pad);
-      circle(m.b, m.w / 2 + pad);
+      circle(m.a, Math.max(0, m.w / 2 + pad));
+      circle(m.b, Math.max(0, (m.w2 ?? m.w) / 2 + pad));
     } else {
       // a box grown by pad: its corners' circles
       for (const c of [
@@ -421,7 +479,7 @@ export function routeAround(
     let hd = Infinity;
     for (const k of K) {
       const d = segDist(k.c[0], k.c[1], a[0], a[1], b[0], b[1]);
-      const Rd = k.R + pad + l.w / 2;
+      const Rd = k.R + pad + Math.max(l.w, l.w2 ?? l.w) / 2;
       const da = Math.hypot(a[0] - k.c[0], a[1] - k.c[1]);
       const db = Math.hypot(b[0] - k.c[0], b[1] - k.c[1]);
       if (d < Rd - 1e-6 && da > Rd + 0.5 && db > Rd + 0.5 && d < hd) {
@@ -434,7 +492,7 @@ export function routeAround(
       continue;
     }
     const c = hit.c;
-    const Rd = hit.R + pad + l.w / 2 + 0.5;
+    const Rd = hit.R + pad + Math.max(l.w, l.w2 ?? l.w) / 2 + 0.5;
     // the side: the normal of ab pointing away from c (below on a tie)
     const ex = b[0] - a[0],
       ey = b[1] - a[1];
@@ -483,9 +541,24 @@ export function routeAround(
       pts.push([c[0] + R * Math.cos(t), c[1] + R * Math.sin(t)]);
     }
     pts.push(b);
+    // the widths along the route, by arclength, from w at a to w2 at b
+    const cum = [0];
+    for (let i = 1; i < pts.length; i++)
+      cum.push(
+        cum[i - 1] +
+          Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])
+      );
+    const w2 = l.w2 ?? l.w;
+    const wAt = (i: number) => l.w + ((w2 - l.w) * cum[i]) / (cum.at(-1) || 1);
     const segs: BlobMember[] = [];
     for (let i = 0; i + 1 < pts.length; i++)
-      segs.push({ kind: "segment", a: pts[i], b: pts[i + 1], w: l.w });
+      segs.push({
+        kind: "segment",
+        a: pts[i],
+        b: pts[i + 1],
+        w: wAt(i),
+        w2: wAt(i + 1),
+      });
     out.push(...routeAround(segs, K, pad, depth + 1));
   }
   return out;
@@ -507,7 +580,7 @@ export function unifiedOutline(
   // the pieces, each link between nearest points); members that already
   // touch get no link. Links bend around the keep-outs.
   const spine = connected
-    ? routeAround(nearLinks(members, pad, Infinity), K, pad)
+    ? routeAround(nearLinks(members, pad, Infinity, o.neck ?? 1), K, pad)
     : [];
   const linksAt = (r: number) =>
     connected ? spine : routeAround(nearLinks(members, pad, r), K, pad);
@@ -523,7 +596,7 @@ export function unifiedOutline(
     r = o.radius;
     res = r === Infinity ? hullRes() : closeAt(r);
   } else {
-    const c = Math.max(0, Math.min(1, o.convexity ?? 0.5));
+    const c = Math.max(0, Math.min(2, o.convexity ?? 0.5));
     // The least radius is the padding: every concave corner is then an arc
     // of at least padding, as every convex one is (convexity 0).
     const rMin = pad;
@@ -537,7 +610,15 @@ export function unifiedOutline(
       areaHull: A1,
       areaTarget: target,
     });
-    if (c >= 1) {
+    if (c > 1) {
+      // PROTOTYPE: rounder than the hull, toward Shape.oval() at 2
+      r = Infinity;
+      res = {
+        all: [...members, ...spine],
+        rings: [beyondHull(hull, members, pad, c, o.beyond)],
+        links: spine,
+      };
+    } else if (c >= 1) {
       r = Infinity;
       res = hullRes();
     } else if (c <= 0 || target <= A0) {
@@ -594,8 +675,22 @@ export function unifiedOutline(
   const keep = keepIns(res.all, pad);
   const cut = (rs: Pt[][], grow: number) =>
     K.reduce((acc, k) => cutDisc(acc, { c: k.c, R: k.R + grow }), rs);
-  const spec: SmoothSpec | null =
+  // PROTOTYPE: above convexity 1 the blur fades out, σ·(2 − c): the outline
+  // is (2 − c)·hull ⊕ (c − 1)·oval, whose curvature jumps (where the hull's
+  // straight sides meet its arcs) shrink to none at 2, so convexity 2 is
+  // Shape.oval() exactly.
+  const fade =
+    o.radius === undefined && (o.convexity ?? 0.5) > 1
+      ? Math.max(0, 2 - Math.min(2, o.convexity!))
+      : 1;
+  const spec0: SmoothSpec | null =
     o.smooth === undefined ? { kind: "blur", sigma: 6 } : o.smooth;
+  const spec: SmoothSpec | null =
+    spec0 && "sigma" in spec0 && fade < 1
+      ? spec0.sigma * fade < 1e-6
+        ? null
+        : { ...spec0, sigma: spec0.sigma * fade }
+      : spec0;
   if (spec === null) rings = cut(rings, 0);
   else {
     let grow = 0;

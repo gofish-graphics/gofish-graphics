@@ -45,7 +45,16 @@ export type Pt = [number, number];
 export type BlobMember =
   | { kind: "disc"; cx: number; cy: number; r: number; axes?: [number, number] }
   | { kind: "box"; x: number; y: number; w: number; h: number }
-  | { kind: "segment"; a: Pt; b: Pt; w: number };
+  | {
+      kind: "segment";
+      a: Pt;
+      b: Pt;
+      w: number;
+      /** PROTOTYPE: the width at b, when it differs from w at a (a tapered
+       *  tube, the hull of its two end discs). A link's widths may be below
+       *  0: it is then thinner than padding once grown by padding. */
+      w2?: number;
+    };
 type Member = BlobMember;
 
 /** A box's or a segment's outline grown by `pad`, sampled as points (a disc's
@@ -1315,7 +1324,9 @@ export const grownPrim = (m: Member, r: number): Prim =>
   m.kind === "disc"
     ? discPrim(m.cx, m.cy, m.r + r)
     : m.kind === "segment"
-      ? capsulePrim(m.a, m.b, m.w / 2 + r)
+      ? m.w2 !== undefined && m.w2 !== m.w
+        ? taperPrim(m.a, m.b, m.w / 2 + r, m.w2 / 2 + r)
+        : capsulePrim(m.a, m.b, m.w / 2 + r)
       : boxPrim(m.x, m.y, m.w, m.h, r);
 /** The circle that the nearest point of the last primitive measured lies on: center, radius (0: a
  *  straight side, and then the nearest point of its core), and 1 when that is a keep-out zone's edge;

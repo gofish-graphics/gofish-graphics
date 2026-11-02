@@ -208,6 +208,7 @@ function Enclose(
           loops = unifiedOutline(geometry(0, memberCount), {
             padding,
             convexity: shape.convexity ?? 0.5,
+            neck: shape.neck,
             holes: shape.holes,
             clearance: shape.clearance,
             avoiding: geometry(memberCount, children.length),

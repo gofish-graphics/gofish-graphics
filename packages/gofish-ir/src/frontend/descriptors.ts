@@ -941,7 +941,7 @@ export const STRATEGIES = {
         doc: "A smooth region around the members: each member grown by `padding`, the links of a spanning tree between them (routed around avoided nodes, so the set stays in one piece), and the Delaunay triangles of their points, filled smallest gaps first up to `convexity` of their convex hull. The outline is rounded so its curvature never jumps.",
         params: {
           convexity: {
-            type: t.num({ min: 0, max: 1 }),
+            type: t.num({ min: 0, max: 2 } /* PROTOTYPE round 4: was max 1 */),
             default: 0.5,
             doc: "The share of the members' convex hull that is filled, smallest gaps first, from 0 (the spanning tree alone) to 1 (the whole hull). It is the only option that fills gaps between members, so it decides the pieces and the filled area.",
           },
