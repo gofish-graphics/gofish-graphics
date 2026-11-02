@@ -13,19 +13,34 @@
  * every cell is convex and can be the region of the next level.
  *
  * The loop follows Nocaj and Brandes 2012 ("Computing Voronoi treemaps:
- * faster, simpler, and resolution-independent"), simplified:
+ * faster, simpler, and resolution-independent"), as d3-voronoi-map does:
+ * move each site to its cell's centroid, then fit the weights to the
+ * target areas. It fits the weights with a Newton step instead of their
+ * ratio rule (#1274):
  *
  *  1. Place one site per value at random in the region, from a seeded
- *     generator (`lcg`), so the same seed gives the same cells.
- *  2. Give every site a small weight and compute the power diagram.
- *  3. Move each site to the centroid of its cell, which keeps cells round.
- *  4. Grow each weight's square root (its radius) by the radius of the
- *     cell's target area less the radius of its area, then lower any weight
- *     that beats a neighbor's by more than their squared distance, since
- *     that site would swallow its neighbor's.
- *  5. Repeat 3 and 4 until every cell's area is within {@link TOLERANCE} of
- *     its target, or {@link MAX_ITERATIONS} have run, and keep the
- *     iteration with the least error.
+ *     generator (`lcg`), so the same seed gives the same cells. Every
+ *     weight starts at 0, so the first diagram is a plain Voronoi diagram.
+ *  2. Move each site to the centroid of its cell, which keeps cells round,
+ *     and lower any weight that beats a neighbor's by more than their
+ *     squared distance, since that site would swallow its neighbor's cell
+ *     (as d3-voronoi-map does).
+ *  3. Take one Newton step on the weights ({@link newtonStep}). With the
+ *     sites fixed, each cell's area is a function of the weights whose
+ *     derivatives are known exactly: raising `wᵢ` by `δ` moves the border
+ *     with each neighbor `j` out by `δ / 2dᵢⱼ`, so cell `i` gains
+ *     `δ · Lᵢⱼ / 2dᵢⱼ` of area from `j`, where `Lᵢⱼ` is the border's length
+ *     and `dᵢⱼ` the distance between the sites. The step solves that
+ *     linear system for the weight change that gives every cell its target
+ *     area (Aurenhammer, Hoffmann and Aronov 1998; the damped Newton method
+ *     of Kitagawa, Mérigot and Thibert 2019). It halves the step until no
+ *     cell loses more than half its area, so no cell vanishes.
+ *  4. Repeat 2 and 3 until every cell's area is within {@link TOLERANCE}
+ *     of its target and no site moved more than {@link SETTLED} of a mean
+ *     cell's side, or {@link MAX_ITERATIONS} have run. A Newton step meets
+ *     the tolerance within a few iterations, so the second test is what
+ *     gives the sites time to relax into round cells. When the loop runs
+ *     out, it keeps the iteration with the least error.
  */
 import type { Point } from "./outline";
 import { clipToHalfPlane } from "./clip";
@@ -35,11 +50,32 @@ import { ringArea, ringCentroid, type Ring } from "./ring";
 import { lcg } from "../../util/lcg";
 
 /** The loop stops when every cell's area is within this share of its
- *  target area. */
+ *  target area (and the sites have settled). */
 export const TOLERANCE = 0.02;
+
+/** The loop stops when no site moved more than this share of a mean
+ *  cell's side, `√(area / count)`, in an iteration (and the areas are
+ *  within tolerance). */
+const SETTLED = 0.02;
 
 /** The loop stops after this many iterations, whatever the error. */
 const MAX_ITERATIONS = 300;
+
+/** The half-plane `a·x + b·y ≤ c` of the points nearer, in power distance,
+ *  to `si` with weight `wi` than to `sj` with weight `wj`:
+ *  `|p − sᵢ|² − wᵢ ≤ |p − sⱼ|² − wⱼ ⇔ 2p · (sⱼ − sᵢ) ≤ |sⱼ|² − |sᵢ|² − wⱼ + wᵢ`. */
+function bisector(
+  si: Point,
+  sj: Point,
+  wi: number,
+  wj: number
+): [number, number, number] {
+  return [
+    2 * (sj[0] - si[0]),
+    2 * (sj[1] - si[1]),
+    sj[0] ** 2 + sj[1] ** 2 - si[0] ** 2 - si[1] ** 2 - wj + wi,
+  ];
+}
 
 /** The power cells of `sites` with `weights`, clipped to the convex
  *  `region`: a point `p` is in site `i`'s cell when
@@ -56,23 +92,8 @@ export function powerCells(
     let cell = region;
     for (let j = 0; j < sites.length && cell.length > 0; j++) {
       if (j === i) continue;
-      const sj = sites[j];
-      // |p − sᵢ|² − wᵢ ≤ |p − sⱼ|² − wⱼ
-      //   ⇔ 2p · (sⱼ − sᵢ) ≤ |sⱼ|² − |sᵢ|² − wⱼ + wᵢ
-      const a = 2 * (sj[0] - si[0]);
-      const b = 2 * (sj[1] - si[1]);
-      cell = clipToHalfPlane(
-        cell,
-        a,
-        b,
-        sj[0] ** 2 +
-          sj[1] ** 2 -
-          si[0] ** 2 -
-          si[1] ** 2 -
-          weights[j] +
-          weights[i] -
-          (gap / 2) * Math.hypot(a, b)
-      );
+      const [a, b, c] = bisector(si, sites[j], weights[i], weights[j]);
+      cell = clipToHalfPlane(cell, a, b, c - (gap / 2) * Math.hypot(a, b));
     }
     return cell;
   });
@@ -126,6 +147,160 @@ function capWeights(sites: readonly Point[], weights: number[]): void {
   }
 }
 
+/** For each cell, its neighbors `j` with `Lᵢⱼ / 2dᵢⱼ`: the area it gains
+ *  from `j` per unit its weight rises. A border with `j` is an edge of the
+ *  cell on the line of {@link bisector}; `scale` sets how near a point must
+ *  be to that line to be on it. */
+function couplings(
+  sites: readonly Point[],
+  weights: readonly number[],
+  cells: readonly Ring[],
+  scale: number
+): [number, number][][] {
+  const near = 1e-7 * scale;
+  return cells.map((cell, i) => {
+    const out: [number, number][] = [];
+    for (let j = 0; j < sites.length && cell.length >= 3; j++) {
+      if (j === i) continue;
+      const [a, b, c] = bisector(sites[i], sites[j], weights[i], weights[j]);
+      const norm = Math.hypot(a, b); // 2dᵢⱼ
+      const tol = near * norm;
+      let length = 0;
+      for (let k = 0; k < cell.length; k++) {
+        const p = cell[k];
+        const q = cell[(k + 1) % cell.length];
+        if (
+          Math.abs(a * p[0] + b * p[1] - c) <= tol &&
+          Math.abs(a * q[0] + b * q[1] - c) <= tol
+        )
+          length += Math.hypot(q[0] - p[0], q[1] - p[1]);
+      }
+      if (length > 0) out.push([j, length / norm]);
+    }
+    return out;
+  });
+}
+
+const dot = (u: readonly number[], v: readonly number[]): number => {
+  let s = 0;
+  for (let i = 0; i < u.length; i++) s += u[i] * v[i];
+  return s;
+};
+
+/** The Laplacian of the weighted neighbor graph `links` times `v`. */
+function laplacian(
+  links: [number, number][][],
+  v: readonly number[]
+): number[] {
+  return links.map((list, i) => {
+    let s = 0;
+    for (const [j, h] of list) s += h * (v[i] - v[j]);
+    return s;
+  });
+}
+
+/** The weight change `δ` with `Σⱼ hᵢⱼ (δᵢ − δⱼ) = gainᵢ` for every cell,
+ *  by conjugate gradients. The matrix is the Laplacian of the cells'
+ *  neighbor graph, weighted by {@link couplings}: symmetric, and singular
+ *  only along adding one constant to every weight, which moves no border.
+ *  The gains sum to 0 (the cells tile the region), so a solution exists. */
+function newtonStep(links: [number, number][][], gain: number[]): number[] {
+  const n = gain.length;
+  const mean = gain.reduce((s, g) => s + g, 0) / n;
+  const x = new Array<number>(n).fill(0);
+  const r = gain.map((g) => g - mean);
+  const p = r.slice();
+  let rr = dot(r, r);
+  const stop = 1e-20 * rr;
+  for (let k = 0; k < n && rr > stop; k++) {
+    const ap = laplacian(links, p);
+    const alpha = rr / dot(p, ap);
+    if (!Number.isFinite(alpha)) break;
+    for (let i = 0; i < n; i++) {
+      x[i] += alpha * p[i];
+      r[i] -= alpha * ap[i];
+    }
+    const next = dot(r, r);
+    for (let i = 0; i < n; i++) p[i] = r[i] + (next / rr) * p[i];
+    rr = next;
+  }
+  return x;
+}
+
+/** The power diagram of `targets` in the convex `region`, fitted by the
+ *  loop above: its sites, weights and cells, the cells' worst relative area
+ *  error, and how many iterations it took. */
+export function fitPowerCells(
+  region: Ring,
+  targets: readonly number[],
+  seed: number
+): {
+  sites: Point[];
+  weights: number[];
+  cells: Ring[];
+  error: number;
+  iterations: number;
+} {
+  const n = targets.length;
+  const { minX, maxX, minY, maxY } = ringExtent(region);
+  const scale = Math.max(maxX - minX, maxY - minY);
+  const side = Math.sqrt(ringArea(region) / n);
+  const sites = placeSites(region, n, lcg(seed));
+  let weights = targets.map(() => 0);
+  let cells = powerCells(region, sites, weights);
+  const errorOf = (cs: readonly Ring[]) =>
+    Math.max(
+      ...cs.map((c, k) => Math.abs(ringArea(c) - targets[k]) / targets[k])
+    );
+  let best = {
+    sites: sites.slice(),
+    weights: weights.slice(),
+    cells,
+    error: errorOf(cells),
+  };
+  for (let it = 1; it <= MAX_ITERATIONS; it++) {
+    // 2. Each site to the centroid of its cell.
+    let moved = 0;
+    cells.forEach((c, k) => {
+      if (c.length < 3) return;
+      const g = ringCentroid(c);
+      moved = Math.max(
+        moved,
+        Math.hypot(g[0] - sites[k][0], g[1] - sites[k][1])
+      );
+      sites[k] = g;
+    });
+    capWeights(sites, weights);
+    cells = powerCells(region, sites, weights);
+    // 3. One damped Newton step on the weights.
+    const areas = cells.map(ringArea);
+    const step = newtonStep(
+      couplings(sites, weights, cells, scale),
+      targets.map((t, k) => t - areas[k])
+    );
+    // Halve the step until every cell keeps half its area; after 30
+    // halvings, take that tiny step.
+    for (let tau = 1, tries = 0; tries < 30; tau /= 2, tries++) {
+      const tried = weights.map((w, k) => w + tau * step[k]);
+      const triedCells = powerCells(region, sites, tried);
+      const kept = triedCells.every(
+        (c, k) => ringArea(c) >= 0.5 * Math.min(targets[k], areas[k])
+      );
+      if (kept || tries === 29) {
+        weights = tried;
+        cells = triedCells;
+        break;
+      }
+    }
+    const error = errorOf(cells);
+    if (error < TOLERANCE && moved < SETTLED * side)
+      return { sites, weights, cells, error, iterations: it };
+    if (error < best.error)
+      best = { sites: sites.slice(), weights: weights.slice(), cells, error };
+  }
+  return { ...best, iterations: MAX_ITERATIONS };
+}
+
 /**
  * The cells of `values` in the convex `region`: one convex ring per value,
  * in the order of `values`, each with an area close to the value's share of
@@ -150,48 +325,15 @@ export function voronoiTiling(
   }
   const area = ringArea(region);
   const total = live.reduce((s, i) => s + values[i], 0);
-  const targets = live.map((i) => (values[i] / total) * area);
-  const sites = placeSites(region, live.length, lcg(seed));
-  const weights = targets.map((t) => (t / Math.PI) * 0.1);
-  let best:
-    | { sites: Point[]; weights: number[]; cells: Ring[]; error: number }
-    | undefined;
-  let current = powerCells(region, sites, weights);
-  for (let it = 0; it < MAX_ITERATIONS; it++) {
-    // Each site to the centroid of its cell.
-    current.forEach((c, k) => {
-      if (c.length >= 3) sites[k] = ringCentroid(c);
-    });
-    current = powerCells(region, sites, weights);
-    // Each weight toward its target area, by the radius of the area it
-    // lacks (or has too much of).
-    current.forEach((c, k) => {
-      const r =
-        Math.sqrt(Math.max(weights[k], 0)) +
-        Math.sqrt(targets[k] / Math.PI) -
-        Math.sqrt(ringArea(c) / Math.PI);
-      weights[k] = Math.max(r, 1e-3) ** 2;
-    });
-    capWeights(sites, weights);
-    current = powerCells(region, sites, weights);
-    const error = Math.max(
-      ...current.map((c, k) => Math.abs(ringArea(c) - targets[k]) / targets[k])
-    );
-    if (best === undefined || error < best.error)
-      best = {
-        sites: sites.slice(),
-        weights: weights.slice(),
-        cells: current,
-        error,
-      };
-    if (error < TOLERANCE) break;
-  }
+  const fit = fitPowerCells(
+    region,
+    live.map((i) => (values[i] / total) * area),
+    seed
+  );
   // The gap comes off the borders between cells only, after the areas
   // are fitted, as d3's paddingInner does for the rectangular tilings.
   const fitted =
-    gap === 0
-      ? best!.cells
-      : powerCells(region, best!.sites, best!.weights, gap);
+    gap === 0 ? fit.cells : powerCells(region, fit.sites, fit.weights, gap);
   live.forEach((i, k) => (cells[i] = fitted[k]));
   return cells;
 }

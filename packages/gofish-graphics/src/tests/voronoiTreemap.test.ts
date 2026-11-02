@@ -7,7 +7,11 @@
  * Run: `tsx src/tests/voronoiTreemap.test.ts` (wired as
  * `pnpm test:voronoi-treemap`).
  */
-import { voronoiTiling, TOLERANCE } from "../ast/geometry/voronoiTiling";
+import {
+  fitPowerCells,
+  voronoiTiling,
+  TOLERANCE,
+} from "../ast/geometry/voronoiTiling";
 import { boxRing, ovalRing, ringArea } from "../ast/geometry/ring";
 import { isConvex } from "../ast/geometry/clip";
 import { pointInRing } from "../ast/geometry/plane";
@@ -82,6 +86,22 @@ for (const [name, region, values] of [
         )
     )
   );
+}
+
+console.log("# the fitting loop converges in far fewer than its cap (#1274)");
+{
+  const region = boxRing(320, 320);
+  const values = countryPopulations.map((d) => d.pop);
+  const total = values.reduce((a, b) => a + b, 0);
+  const targets = values.map((v) => (v / total) * ringArea(region));
+  for (let seed = 0; seed < 3; seed++) {
+    const fit = fitPowerCells(region, targets, seed);
+    check(
+      `70 countries in a box, seed ${seed}: within ${TOLERANCE * 100}% in at most 100 iterations`,
+      fit.error < TOLERANCE && fit.iterations <= 100,
+      { error: fit.error, iterations: fit.iterations }
+    );
+  }
 }
 
 console.log("# the same seed gives the same cells, another seed others");
