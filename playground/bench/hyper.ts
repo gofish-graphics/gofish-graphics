@@ -7,12 +7,18 @@ import {
   nearLinks,
 } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/unified";
 import { closingRings } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/arcs";
-const d = (DATA as any[]).find((x) => x.id === "hyperedges");
+const d = (DATA as any[]).find(
+  (x) => x.id === (process.env.DS ?? "hyperedges")
+);
 d.sets.forEach((s: any, i: number) => {
   console.log(
     `set ${i} stroke ${s.paint.stroke} members ${s.members.length} kinds ${[...new Set(s.members.map((m: any) => m.kind))]}`
   );
-  for (const c of [0.15, 0.18, 0.19, 0.2, 0.205, 0.21, 0.22, 0.25, 0.3]) {
+  for (const c of (
+    process.env.C ?? "0.15,0.18,0.19,0.2,0.205,0.21,0.22,0.25,0.3"
+  )
+    .split(",")
+    .map(Number)) {
     const rings = unifiedOutline(s.members, {
       padding: d.padding,
       convexity: c,
