@@ -5,8 +5,7 @@
 import { type Size } from "../dims";
 import { getValue, isValue } from "../data";
 import type { Point } from "../geometry/outline";
-import { ringExtent } from "../geometry/box";
-import type { Ring } from "../geometry/ring";
+import { inItsBox, type Ring } from "../geometry/ring";
 import { isPositionInterval, type PositionRegion } from "./position";
 import { compilePlacementCoordinate } from "./placementLowering";
 import { numbers } from "../solver/arith";
@@ -175,8 +174,7 @@ export function buildChildShapes(
         );
       return [x!, y!] as const;
     });
-    const { minX, minY } = ringExtent(ring);
-    const shape = ring.map(([x, y]) => [x - minX, y - minY] as const);
+    const shape = inItsBox(ring).ring;
     for (const ref of c.children) if (ref) shapeByKey.set(keyOf(ref), shape);
   }
   return shapeByKey.size === 0 ? undefined : shapeByKey;

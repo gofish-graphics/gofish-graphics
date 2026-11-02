@@ -19,7 +19,7 @@
  * hands it its own shape. A `layer` hands its shape on to each child it
  * proposes its own box.
  */
-import type { Point } from "./outline";
+import { ellipseRing, type Point } from "./outline";
 import { signedArea2 } from "./plane";
 import { ringExtent } from "./box";
 
@@ -54,15 +54,14 @@ export function ringCentroid(ring: Ring): Point {
   return [cx / (3 * a), cy / (3 * a)];
 }
 
-/** How many corners {@link ovalRing} gives an oval. */
-const OVAL_CORNERS = 96;
+/** How far, in pixels, the sides of an {@link ovalRing} may stray from
+ *  the oval. */
+const OVAL_TOLERANCE = 0.25;
 
-/** The oval inscribed in the box `[0, w] × [0, h]`, as a convex ring. */
+/** The oval inscribed in the box `[0, w] × [0, h]`, as a convex ring
+ *  ({@link ellipseRing}). */
 export const ovalRing = (w: number, h: number): Point[] =>
-  Array.from({ length: OVAL_CORNERS }, (_, i) => {
-    const t = (2 * Math.PI * i) / OVAL_CORNERS;
-    return [(w / 2) * (1 + Math.cos(t)), (h / 2) * (1 + Math.sin(t))] as const;
-  });
+  ellipseRing(w / 2, h / 2, w / 2, h / 2, OVAL_TOLERANCE);
 
 /** Whether `ring` is the whole box `[0, w] × [0, h]`, within `eps`: a
  *  shape a rectangular tiling can tile, since it is the box it reads. */

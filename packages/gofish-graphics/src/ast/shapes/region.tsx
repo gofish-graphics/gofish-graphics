@@ -13,9 +13,8 @@ import {
   insetConvex,
   outlinePaint,
   ringOutline,
-  type OutlinePoint,
-  type Point,
 } from "../geometry";
+import type { Ring } from "../geometry/ring";
 import {
   lowerStyle,
   rectItemFromBox,
@@ -100,7 +99,7 @@ export const Region = ({
   // The outline in the node's local frame and axis order: the shape it is
   // laid out in, drawn in by `inset`, or none for a box. Empty when the
   // inset leaves nothing.
-  let outline: Point[] | undefined;
+  let outline: Ring | undefined;
   // Per axis, how far its box is drawn in at each end: `inset` where the
   // cell gives a span, else 0.
   let boxInset: [number, number] = [0, 0];
@@ -179,10 +178,11 @@ export const Region = ({
         // The shape it is laid out in (#1222), in its local frame, whose box
         // is its own: the outline of a partition's cell of the plane, or a
         // treemap's or an enclosure's cell. None is its box.
-        const ring = shape?.map(([sx, sy]): OutlinePoint => [sx, sy]);
         outline =
-          ring === undefined || inset === 0 ? ring : insetConvex(ring, inset);
-        if (outline === undefined && ring !== undefined)
+          shape === undefined || inset === 0
+            ? shape
+            : insetConvex(shape, inset);
+        if (outline === undefined && shape !== undefined)
           // TODO(#1201): drawing in a ring that is not convex needs a
           // general polygon offset. Every partition cell is convex.
           throw new Error(

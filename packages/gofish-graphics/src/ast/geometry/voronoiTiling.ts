@@ -34,14 +34,12 @@ import { pointInRing } from "./plane";
 import { ringArea, ringCentroid, type Ring } from "./ring";
 import { lcg } from "../../util/lcg";
 
-type Pt = [number, number];
-
 /** The loop stops when every cell's area is within this share of its
  *  target area. */
 export const TOLERANCE = 0.02;
 
 /** The loop stops after this many iterations, whatever the error. */
-export const MAX_ITERATIONS = 300;
+const MAX_ITERATIONS = 300;
 
 /** The power cells of `sites` with `weights`, clipped to the convex
  *  `region`: a point `p` is in site `i`'s cell when
@@ -53,9 +51,9 @@ export function powerCells(
   sites: readonly Point[],
   weights: readonly number[],
   gap = 0
-): Pt[][] {
+): Ring[] {
   return sites.map((si, i) => {
-    let cell: Pt[] = region.map(([x, y]) => [x, y]);
+    let cell = region;
     for (let j = 0; j < sites.length && cell.length > 0; j++) {
       if (j === i) continue;
       const sj = sites[j];
@@ -82,14 +80,14 @@ export function powerCells(
 
 /** One site per target, at random in `region`, from `rand`. A thin region
  *  that rejects every try puts the site near its centroid instead. */
-function placeSites(region: Ring, count: number, rand: () => number): Pt[] {
+function placeSites(region: Ring, count: number, rand: () => number): Point[] {
   const { minX, maxX, minY, maxY } = ringExtent(region);
   const [cx, cy] = ringCentroid(region);
-  const sites: Pt[] = [];
+  const sites: Point[] = [];
   for (let i = 0; i < count; i++) {
-    let site: Pt | undefined;
+    let site: Point | undefined;
     for (let tries = 0; tries < 200 && site === undefined; tries++) {
-      const p: Pt = [
+      const p: Point = [
         minX + rand() * (maxX - minX),
         minY + rand() * (maxY - minY),
       ];
@@ -109,7 +107,7 @@ function placeSites(region: Ring, count: number, rand: () => number): Pt[] {
 /** Lower each weight that beats another's by more than the squared distance
  *  between their sites: that site's cell would hold the other site, and the
  *  other cell could empty (as d3-voronoi-map does). */
-function capWeights(sites: readonly Pt[], weights: number[]): void {
+function capWeights(sites: readonly Point[], weights: number[]): void {
   const n = sites.length;
   for (let pass = 0; pass < 10; pass++) {
     let lowered = false;
@@ -140,14 +138,14 @@ export function voronoiTiling(
   values: readonly number[],
   seed: number,
   gap = 0
-): Pt[][] {
-  const cells: Pt[][] = values.map(() => []);
+): Ring[] {
+  const cells: Ring[] = values.map(() => []);
   const live = values.flatMap((v, i) =>
     Number.isFinite(v) && v > 0 ? [i] : []
   );
   if (region.length < 3 || live.length === 0) return cells;
   if (live.length === 1) {
-    cells[live[0]] = region.map(([x, y]) => [x, y]);
+    cells[live[0]] = region.slice();
     return cells;
   }
   const area = ringArea(region);
@@ -155,12 +153,14 @@ export function voronoiTiling(
   const targets = live.map((i) => (values[i] / total) * area);
   const sites = placeSites(region, live.length, lcg(seed));
   const weights = targets.map((t) => (t / Math.PI) * 0.1);
-  let best: { sites: Pt[]; weights: number[]; error: number } | undefined;
+  let best:
+    | { sites: Point[]; weights: number[]; cells: Ring[]; error: number }
+    | undefined;
   let current = powerCells(region, sites, weights);
   for (let it = 0; it < MAX_ITERATIONS; it++) {
     // Each site to the centroid of its cell.
     current.forEach((c, k) => {
-      if (c.length >= 3) sites[k] = ringCentroid(c) as Pt;
+      if (c.length >= 3) sites[k] = ringCentroid(c);
     });
     current = powerCells(region, sites, weights);
     // Each weight toward its target area, by the radius of the area it
@@ -178,12 +178,20 @@ export function voronoiTiling(
       ...current.map((c, k) => Math.abs(ringArea(c) - targets[k]) / targets[k])
     );
     if (best === undefined || error < best.error)
-      best = { sites: sites.slice(), weights: weights.slice(), error };
+      best = {
+        sites: sites.slice(),
+        weights: weights.slice(),
+        cells: current,
+        error,
+      };
     if (error < TOLERANCE) break;
   }
   // The gap comes off the borders between cells only, after the areas
   // are fitted, as d3's paddingInner does for the rectangular tilings.
-  const fitted = powerCells(region, best!.sites, best!.weights, gap);
+  const fitted =
+    gap === 0
+      ? best!.cells
+      : powerCells(region, best!.sites, best!.weights, gap);
   live.forEach((i, k) => (cells[i] = fitted[k]));
   return cells;
 }

@@ -83,38 +83,53 @@ function isConvexSimplified(pts: readonly Pt[]): boolean {
 }
 
 /** A clipped ring simplified, or an empty list when it has no area left. */
-function nonDegenerate(ring: Pt[]): Pt[] {
+function nonDegenerate(ring: readonly Point[]): Pt[] {
   const out = simplifyRing(ring);
   return out.length >= 3 && Math.abs(signedArea2(out)) > 1e-9 ? out : [];
 }
 
 /** The part of `subject` where `g` is 0 or more, for a function `g` linear
- *  in the point (one Sutherland–Hodgman step): the side of one line. */
-function clipByLinear(subject: readonly Pt[], g: (p: Pt) => number): Pt[] {
-  const out: Pt[] = [];
-  const meet = (p: Pt, q: Pt): Pt => {
-    const dp = g(p);
-    const dq = g(q);
-    const t = dp / (dp - dq);
-    return [p[0] + t * (q[0] - p[0]), p[1] + t * (q[1] - p[1])];
-  };
+ *  in the point, given as its value at each of `subject`'s points (one
+ *  Sutherland–Hodgman step): the side of one line. `subject` itself when
+ *  all of it is on that side. */
+function clipByLinear(
+  subject: readonly Point[],
+  g: readonly number[]
+): readonly Point[] {
+  let allIn = true;
+  for (let i = 0; i < g.length && allIn; i++) allIn = g[i] >= 0;
+  if (allIn) return subject;
+  const out: Point[] = [];
   for (let i = 0; i < subject.length; i++) {
+    const j = (i - 1 + subject.length) % subject.length;
     const cur = subject[i];
-    const prev = subject[(i - 1 + subject.length) % subject.length];
-    const curIn = g(cur) >= 0;
-    const prevIn = g(prev) >= 0;
-    if (curIn) {
-      if (!prevIn) out.push(meet(prev, cur));
-      out.push(cur);
-    } else if (prevIn) out.push(meet(prev, cur));
+    const prev = subject[j];
+    const curIn = g[i] >= 0;
+    const prevIn = g[j] >= 0;
+    if (curIn !== prevIn) {
+      const t = g[j] / (g[j] - g[i]);
+      out.push([
+        prev[0] + t * (cur[0] - prev[0]),
+        prev[1] + t * (cur[1] - prev[1]),
+      ]);
+    }
+    if (curIn) out.push(cur);
   }
   return out;
 }
 
 /** The part of `subject` on the inside of the line through `a` and `b`,
  *  where inside is the side `side` (the sign of `cross(a, b, p)`). */
-const clipByEdge = (subject: Pt[], a: Pt, b: Pt, side: number): Pt[] =>
-  clipByLinear(subject, (p) => side * cross(a, b, p));
+const clipByEdge = (
+  subject: readonly Point[],
+  a: Point,
+  b: Point,
+  side: number
+) =>
+  clipByLinear(
+    subject,
+    subject.map((p) => side * cross(a, b, p))
+  );
 
 /**
  * The part of the convex ring `subject` in the half-plane
@@ -123,13 +138,16 @@ const clipByEdge = (subject: Pt[], a: Pt, b: Pt, side: number): Pt[] =>
  * cell by one such half-plane per other site.
  */
 export function clipToHalfPlane(
-  subject: readonly Pt[],
+  subject: readonly Point[],
   nx: number,
   ny: number,
   c: number
-): Pt[] {
+): readonly Point[] {
   if (subject.length < 3) return [];
-  const out = clipByLinear(subject, (p) => c - (nx * p[0] + ny * p[1]));
+  const g = new Array<number>(subject.length);
+  for (let i = 0; i < subject.length; i++)
+    g[i] = c - (nx * subject[i][0] + ny * subject[i][1]);
+  const out = clipByLinear(subject, g);
   return out.length < 3 ? [] : out;
 }
 
@@ -149,7 +167,7 @@ export function clipToConvex(
 function clipSimplified(subject: Pt[], clip: readonly Pt[]): Pt[] {
   if (clip.length < 3 || subject.length < 3) return [];
   const side = Math.sign(signedArea2(clip));
-  let out = subject;
+  let out: readonly Point[] = subject;
   for (let i = 0; i < clip.length && out.length > 0; i++)
     out = clipByEdge(out, clip[i], clip[(i + 1) % clip.length], side);
   return nonDegenerate(out);
@@ -185,7 +203,7 @@ export function insetConvex(
   if (!isConvexSimplified(pts)) return undefined;
   if (d <= 0) return pts;
   const side = Math.sign(signedArea2(pts));
-  let out = pts;
+  let out: readonly Point[] = pts;
   for (let i = 0; i < pts.length && out.length > 0; i++) {
     const a = pts[i];
     const b = pts[(i + 1) % pts.length];
