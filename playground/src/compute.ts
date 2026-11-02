@@ -23,6 +23,11 @@ export type { BlobMember, Pt, Means, Seal };
 if (new URLSearchParams(location.search).get("search") === "bisection")
   UNIFIED_PROTOTYPE.search = "bisection";
 export const SEARCH = UNIFIED_PROTOTYPE.search;
+// PROTOTYPE: ?blend=grid solves the per-bay blend on the old 1 px grid (localFill.ts)
+// instead of the mesh (meshBlend.ts), for comparison
+if (new URLSearchParams(location.search).get("blend") === "grid")
+  UNIFIED_PROTOTYPE.blend = "grid";
+export const BLEND = UNIFIED_PROTOTYPE.blend ?? "mesh";
 
 export type Params = {
   convexity: number;

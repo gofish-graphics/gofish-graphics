@@ -13,7 +13,7 @@ const hit = readdirSync(store)
 const esbuild = await import(
   pathToFileURL(join(store, hit, "node_modules/esbuild/lib/main.js")).href
 );
-const out = join(here, "bench/out.mjs");
+const out = join(here, `bench/out-${process.env.BENCH ?? "bench"}.mjs`);
 await esbuild.build({
   entryPoints: [join(here, `bench/${process.env.BENCH ?? "bench"}.ts`)],
   bundle: true,

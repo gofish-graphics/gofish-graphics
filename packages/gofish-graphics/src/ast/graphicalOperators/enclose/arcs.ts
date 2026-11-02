@@ -57,6 +57,17 @@ let MAX_STEP = 4;
 export function setArcsSampling(fine: boolean): void {
   [TOL, MAX_STEP] = fine ? [0.002, 0.25] : [0.2, 4];
 }
+/** PROTOTYPE: run `f` with arcs sampled to chord error `tol` px (the
+ *  per-bay blend's mesh wants its spine to 0.05 px, not TOL). */
+export function withArcsTolerance<T>(tol: number, f: () => T): T {
+  const was = TOL;
+  TOL = tol;
+  try {
+    return f();
+  } finally {
+    TOL = was;
+  }
+}
 const EPS = 1e-7;
 const TAU = 2 * Math.PI;
 

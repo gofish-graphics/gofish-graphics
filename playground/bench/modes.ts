@@ -8,6 +8,7 @@ import {
   UNIFIED_STATS,
   clearUnifiedCache,
   ringsArea,
+  UNIFIED_PROTOTYPE,
 } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/unified";
 
 const MODES = (
@@ -18,16 +19,19 @@ const ONLY = process.env.ONLY?.split(",");
 const STEP = +(process.env.STEP ?? 0.01);
 const HOLES = process.env.HOLES === "1";
 const rows: string[] = [
-  "| dataset | mode | cold ms | warm ms median (max) | area falls, before smoothing (worst px²) | after smoothing (worst px²) | A(0.01)−A(0) | A(1)−A(0.99) |",
-  "|---|---|---|---|---|---|---|---|",
+  "| dataset | mode | cold ms | warm ms median (max), unsmoothed | with smoothing | area falls, before smoothing (worst px²) | after smoothing (worst px²) | A(0.01)−A(0) | A(1)−A(0.99) |",
+  "|---|---|---|---|---|---|---|---|---|",
 ];
 for (const d of DATA as any[]) {
   if (ONLY && !ONLY.includes(d.id)) continue;
   for (const mode of MODES) {
-    const [means, seal] = mode.split("/");
+    const [mm, seal] = mode.split("/");
+    const [means, solver] = mm.split(":");
+    UNIFIED_PROTOTYPE.blend = (solver as any) ?? undefined;
     clearUnifiedCache();
-    const call = (s: any, c: number) =>
+    const call = (s: any, c: number, smooth?: null) =>
       unifiedOutline(s.members, {
+        ...(smooth === null ? { smooth: null } : {}),
         padding: d.padding,
         convexity: c,
         neck: 1,
@@ -39,7 +43,8 @@ for (const d of DATA as any[]) {
     const t0 = performance.now();
     for (const s of d.sets) call(s, 0.5);
     cold = performance.now() - t0;
-    const times: number[] = [];
+    const times: number[] = [],
+      timesRaw: number[] = [];
     let fallsPre = 0,
       worstPre = 0,
       fallsPost = 0,
@@ -52,6 +57,9 @@ for (const d of DATA as any[]) {
       const pre: number[] = [];
       for (let k = 0; k <= Math.round(1 / STEP); k++) {
         const c = Math.min(1, k * STEP);
+        const t2 = performance.now();
+        call(s, c, null);
+        timesRaw.push(performance.now() - t2);
         const t1 = performance.now();
         const rings = call(s, c);
         times.push(performance.now() - t1);
@@ -73,8 +81,9 @@ for (const d of DATA as any[]) {
       ends2.push((pre.at(-1)! - pre.at(-2)!).toFixed(0));
     });
     times.sort((a, b) => a - b);
+    timesRaw.sort((a, b) => a - b);
     rows.push(
-      `| ${d.id} | ${mode} | ${cold.toFixed(0)} | ${times[times.length >> 1].toFixed(1)} (${times.at(-1)!.toFixed(0)}) | ${fallsPre} (${worstPre.toFixed(1)}) | ${fallsPost} (${worstPost.toFixed(1)}) | ${ends.join(", ")} | ${ends2.join(", ")} |`
+      `| ${d.id} | ${mode} | ${cold.toFixed(0)} | ${timesRaw[timesRaw.length >> 1].toFixed(1)} (${timesRaw.at(-1)!.toFixed(0)}) | ${times[times.length >> 1].toFixed(1)} (${times.at(-1)!.toFixed(0)}) | ${fallsPre} (${worstPre.toFixed(1)}) | ${fallsPost} (${worstPost.toFixed(1)}) | ${ends.join(", ")} | ${ends2.join(", ")} |`
     );
     console.error(rows.at(-1));
   }

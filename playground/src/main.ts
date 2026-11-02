@@ -1,6 +1,7 @@
 import DATA from "./datasets.json";
 import {
   SEARCH,
+  BLEND,
   computeSet,
   type BlobMember,
   type Means,
@@ -452,7 +453,7 @@ const drawStats = (results: SetResult[], wall: number, modeMs = "") => {
       state.connected
         ? state.means === "area" && state.seal === "jump"
           ? `${iters} closing${iters === 1 ? "" : "s"} in the search (${SEARCH})`
-          : `${MEANS_NAME[state.means]}${state.means === "blend" ? "" : ` · ${state.seal}${state.seal === "lid" ? ` (${sum((r) => r.lidActive)} bay${sum((r) => r.lidActive) === 1 ? "" : "s"} filling)` : ""}`}`
+          : `${MEANS_NAME[state.means]}${state.means === "blend" ? ` (${BLEND === "grid" ? "1 px grid" : "mesh"})` : ` · ${state.seal}${state.seal === "lid" ? ` (${sum((r) => r.lidActive)} bay${sum((r) => r.lidActive) === 1 ? "" : "s"} filling)` : ""}`}`
         : ""
     ) +
     stat(

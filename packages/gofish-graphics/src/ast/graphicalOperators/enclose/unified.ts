@@ -26,7 +26,8 @@
  */
 import { signedArea2, pointInRing, segDist } from "../../geometry/plane";
 import { convexHull, type BlobMember, type Pt } from "./blob";
-import { closingRings, keepIns } from "./arcs";
+import { closingRings, keepIns, withArcsTolerance } from "./arcs";
+import { buildMeshBlend, meshBlendRings } from "./meshBlend";
 import { resample, smoothOutline, type SmoothSpec } from "./arcsSmooth";
 import { beyondHull, type Beyond } from "./beyond";
 import { buildFiltration, type Filtration } from "./filtration";
@@ -54,6 +55,9 @@ import {
 export const UNIFIED_PROTOTYPE: {
   search: "filtration" | "bisection";
   h?: number;
+  /** the per-bay blend's solver: P1 finite elements on a mesh (meshBlend.ts,
+   *  default) or the earlier 1 px grid (localFill.ts), kept for comparison */
+  blend?: "mesh" | "grid";
 } = { search: "filtration" };
 
 /** PROTOTYPE: a small cache of per-member-set work (spine, hull, filtration),
@@ -195,6 +199,8 @@ export const UNIFIED_STATS: {
   seal?: Seal;
   msGrid?: number;
   lidActive?: number;
+  /** PROTOTYPE: the per-bay blend mesh's size and build times */
+  meshBlend?: Record<string, number>;
 } = {};
 
 // ── members as a core (point, segment or box) plus a radius ─────────────────
@@ -860,12 +866,28 @@ export function unifiedOutline(
     } else if (means === "blend") {
       r = NaN;
       const sp = spineRes();
-      const B = memo(key("blend", members, spine, pad, holes), () =>
-        buildBlend(sp.rings, hullOf())
-      );
-      const tg = performance.now();
-      res = { ...sp, rings: blendRings(B, c, holes) };
-      UNIFIED_STATS.msGrid = performance.now() - tg;
+      if (UNIFIED_PROTOTYPE.blend === "grid") {
+        const B = memo(key("blend", members, spine, pad, holes), () =>
+          buildBlend(sp.rings, hullOf())
+        );
+        const tg = performance.now();
+        res = { ...sp, rings: blendRings(B, c, holes) };
+        UNIFIED_STATS.msGrid = performance.now() - tg;
+      } else {
+        // the mesh wants the spine's arcs to 0.05 px (the closing's own
+        // sampling is 0.2 px)
+        const MB = memo(key("meshBlend", members, spine, pad, holes), () =>
+          buildMeshBlend(
+            withArcsTolerance(0.05, () =>
+              closingRings([...members, ...linksAt(rMin)], pad, rMin, holes)
+            )
+          )
+        );
+        UNIFIED_STATS.meshBlend = MB.stats;
+        const tg = performance.now();
+        res = { ...sp, rings: meshBlendRings(MB, c, holes) };
+        UNIFIED_STATS.msGrid = performance.now() - tg;
+      }
       iterations = 0;
     } else if (means === "radius") {
       const s = memo(key("scale", members, spine, pad), () =>

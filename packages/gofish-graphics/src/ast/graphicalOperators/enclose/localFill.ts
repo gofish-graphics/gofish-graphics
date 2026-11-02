@@ -42,7 +42,13 @@ export type Grid = {
 
 /** A grid over the rings' box, grown by a margin, of at most ~maxNodes
  *  nodes and spacing at least hMin px. */
-export function gridFor(rings: Pt[][], hMin = 1, maxNodes = 250_000): Grid {
+export function gridFor(
+  rings: Pt[][],
+  hMin = 1,
+  maxNodes = 250_000,
+  /** PROTOTYPE: move the nodes off the box's edges by this share of h */
+  shift = 0
+): Grid {
   let [xa, ya, xb, yb] = [Infinity, Infinity, -Infinity, -Infinity];
   for (const r of rings)
     for (const [x, y] of r) {
@@ -52,7 +58,7 @@ export function gridFor(rings: Pt[][], hMin = 1, maxNodes = 250_000): Grid {
       if (y > yb) yb = y;
     }
   const h = Math.max(hMin, Math.sqrt(((xb - xa) * (yb - ya)) / maxNodes));
-  const m = 4 * h + 2;
+  const m = 4 * h + 2 + shift * h;
   const x0 = xa - m,
     y0 = ya - m;
   return {
@@ -431,9 +437,18 @@ export type Blend = {
  * hole of the spine, only with `holes`) gets u = its distance from its wall
  * over its greatest such distance: it shrinks evenly and is gone at 1.
  */
-export function buildBlend(spine: Pt[][], hull: Pt[], hMin = 1): Blend {
+export function buildBlend(
+  spine: Pt[][],
+  hull: Pt[],
+  hMin = 1,
+  /** PROTOTYPE (accuracy reference): the grid's node cap, and the SOR stop */
+  maxNodes = 250_000,
+  tol = 1e-6,
+  maxIt = 4000,
+  shift = 0
+): Blend {
   const t0 = performance.now();
-  const G = gridFor([hull], hMin);
+  const G = gridFor([hull], hMin, maxNodes, shift);
   const { nx, ny, h } = G;
   const n = nx * ny;
   const band = 3 * h;
@@ -528,12 +543,13 @@ export function buildBlend(spine: Pt[][], hull: Pt[], hMin = 1): Blend {
     black: number[] = [];
   for (let k = 0; k < m; k++) {
     const v = nodes[k];
-    ((v % nx) + ((v / nx) | 0)) % 2 ? black.push(k) : red.push(k);
+    if (((v % nx) + ((v / nx) | 0)) % 2) black.push(k);
+    else red.push(k);
   }
   const span = Math.max(4, Math.sqrt(m));
   const omega = 2 / (1 + Math.sin(Math.PI / span));
   let it = 0;
-  for (; it < 4000; it++) {
+  for (; it < maxIt; it++) {
     let delta = 0;
     for (const set of [red, black])
       for (const k of set) {
@@ -547,7 +563,7 @@ export function buildBlend(spine: Pt[][], hull: Pt[], hMin = 1): Blend {
         U[k] += ch;
         if (Math.abs(ch) > delta) delta = Math.abs(ch);
       }
-    if (delta < 1e-6) break;
+    if (delta < tol) break;
   }
   const u = new Float32Array(n).fill(NaN),
     slope = new Float32Array(n).fill(NaN);
