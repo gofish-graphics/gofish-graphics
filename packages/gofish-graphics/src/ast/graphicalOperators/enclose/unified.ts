@@ -817,6 +817,12 @@ export function unifiedOutline(
       const all = [...members, ...links];
       const open = closingRings(all, pad, rr, true);
       if (holes) return { all, rings: open, links };
+      // TODO(prototype): the holes-open closing (arcs.ts, holes: true) cuts
+      // its outer loop short beside a hole whose wall is thin (penguins set
+      // 0: 298 px² less than the filled closing at r = padding), so lake
+      // starts below the spine there. Pairing the filled closing's outer
+      // loop with these holes is worse (its holes then overrun the outer
+      // loop); the fix belongs in the holes path of closingRings.
       const fs = filledSpine();
       const rings = open.filter(
         (g) =>
