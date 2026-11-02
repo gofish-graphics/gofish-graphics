@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Enclose Outline Playground</title>
+    <style>
+      :root {
+        --bg: #f6f7f9;
+        --surface: #ffffff;
+        --fg: #1d232b;
+        --muted: #5b6573;
+        --line: #dde2e8;
+        --accent: #0f6e74;
+        --accent-soft: #e3f1f1;
+        --code-bg: #eef1f4;
+        --img-bg: #ffffff;
+        --warn: #9a5b00;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #14181d;
+          --surface: #1b2027;
+          --fg: #e4e8ed;
+          --muted: #9aa5b3;
+          --line: #2d343e;
+          --accent: #5cc0c4;
+          --accent-soft: #1d3134;
+          --code-bg: #20262e;
+          --img-bg: #ffffff;
+          --warn: #e0a64a;
+          color-scheme: dark;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #14181d;
+        --surface: #1b2027;
+        --fg: #e4e8ed;
+        --muted: #9aa5b3;
+        --line: #2d343e;
+        --accent: #5cc0c4;
+        --accent-soft: #1d3134;
+        --code-bg: #20262e;
+        --img-bg: #ffffff;
+        --warn: #e0a64a;
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      html,
+      body {
+        background: var(--bg);
+      }
+      body {
+        color: var(--fg);
+        margin: 0;
+        padding: 24px 16px 48px;
+        font:
+          15px/1.55 system-ui,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+      }
+      main {
+        max-width: 1180px;
+        margin: 0 auto;
+      }
+      .top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+      }
+      .eyebrow {
+        font:
+          500 12px/1 ui-monospace,
+          "SF Mono",
+          Menlo,
+          monospace;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 10px;
+      }
+      h1 {
+        font-size: 26px;
+        line-height: 1.2;
+        margin: 0 0 6px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .lede {
+        color: var(--muted);
+        margin: 0 0 18px;
+        max-width: 78ch;
+      }
+      code,
+      .mono {
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 340px;
+        gap: 20px;
+        align-items: start;
+      }
+      @media (max-width: 860px) {
+        .layout {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+      .tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        padding: 4px;
+        background: var(--code-bg);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        margin-bottom: 10px;
+      }
+      .tabs button {
+        flex: 1 1 auto;
+        font:
+          500 13px/1 system-ui,
+          sans-serif;
+        color: var(--muted);
+        background: none;
+        border: 0;
+        border-radius: 5px;
+        padding: 8px 10px;
+        cursor: pointer;
+      }
+      .tabs button[aria-selected="true"] {
+        background: var(--surface);
+        color: var(--fg);
+        box-shadow: 0 0 0 1px var(--line);
+      }
+      .card {
+        background: var(--img-bg);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px;
+      }
+      #stage {
+        display: block;
+        width: 100%;
+        height: auto;
+        max-height: 74vh;
+        font-family: system-ui, sans-serif;
+      }
+      .below {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      #ds-note {
+        margin: 8px 0 0;
+        font-size: 13.5px;
+        color: var(--muted);
+      }
+      .stats {
+        margin-top: 10px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 8px;
+      }
+      .stat {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 10px;
+      }
+      .stat .k {
+        font-size: 11.5px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .stat .v {
+        font:
+          500 15px/1.4 ui-monospace,
+          "SF Mono",
+          Menlo,
+          monospace;
+        overflow-wrap: anywhere;
+      }
+      .stat .s {
+        font:
+          11.5px/1.4 ui-monospace,
+          "SF Mono",
+          Menlo,
+          monospace;
+        color: var(--muted);
+      }
+      #slow {
+        color: var(--warn);
+      }
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 14px 16px;
+      }
+      .panel h2 {
+        font:
+          500 12px/1 ui-monospace,
+          "SF Mono",
+          Menlo,
+          monospace;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin: 0 0 12px;
+      }
+      .panel section + section {
+        margin-top: 16px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+      }
+      .field {
+        margin: 0 0 12px;
+      }
+      .field > label:not(.check) {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        font-weight: 500;
+        font-size: 14px;
+      }
+      .field output {
+        font:
+          13px ui-monospace,
+          "SF Mono",
+          Menlo,
+          monospace;
+        color: var(--accent);
+      }
+      .hint {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 2px;
+      }
+      input[type="range"] {
+        width: 100%;
+        margin: 6px 0 0;
+        accent-color: var(--accent);
+      }
+      .ticks {
+        position: relative;
+        height: 16px;
+        font:
+          11px/1 ui-monospace,
+          "SF Mono",
+          Menlo,
+          monospace;
+        color: var(--muted);
+        margin: 2px 8px 0;
+      }
+      .ticks span {
+        position: absolute;
+        top: 0;
+        transform: translateX(-50%);
+        white-space: nowrap;
+      }
+      .ticks span:first-child {
+        transform: none;
+        left: -8px !important;
+      }
+      .ticks span:last-child {
+        transform: translateX(-100%);
+        left: calc(100% + 8px) !important;
+      }
+      .presets {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      button.btn {
+        font:
+          500 13px/1 system-ui,
+          sans-serif;
+        color: var(--fg);
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 7px 10px;
+        cursor: pointer;
+      }
+      button.btn[aria-pressed="true"] {
+        background: var(--accent-soft);
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .codebox {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+        margin-top: 10px;
+      }
+      #code {
+        flex: 1;
+        min-width: 0;
+        background: var(--code-bg);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 8px 10px;
+        font:
+          12.3px/1.5 ui-monospace,
+          "SF Mono",
+          Menlo,
+          monospace;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        margin: 0;
+        color: var(--fg);
+      }
+      #code .c {
+        color: var(--muted);
+      }
+      .check {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-size: 14px;
+        cursor: pointer;
+      }
+      .check input {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--accent);
+        margin: 0;
+      }
+      .checks {
+        display: grid;
+        gap: 6px;
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="top">
+        <div>
+          <div class="eyebrow">GoFish prototype · enclose outline</div>
+          <h1>Enclose Outline Playground</h1>
+        </div>
+        <button
+          type="button"
+          class="btn"
+          id="theme"
+          style="white-space: nowrap"
+          aria-label="Color theme"
+        >
+          Theme: auto
+        </button>
+      </div>
+      <p class="lede">
+        Move the sliders to redraw the unified <code>enclose</code> outline
+        live. It is the prototype's own code: links join the members, an exact
+        closing by a disc of radius <i>r</i> fills the gaps (convexity picks
+        <i>r</i>), keep-outs are cut out, and a Gaussian smoothing rounds the
+        result. Above convexity 1 the hull blends toward the oval.
+      </p>
+      <div class="layout">
+        <div>
+          <div
+            class="tabs"
+            id="ds-tabs"
+            role="tablist"
+            aria-label="Dataset"
+          ></div>
+          <div class="card" id="stage-wrap">
+            <svg
+              id="stage"
+              xmlns="http://www.w3.org/2000/svg"
+              role="img"
+              preserveAspectRatio="xMidYMid meet"
+            >
+              <g id="outlines"></g>
+              <g id="scenery"></g>
+              <g id="today"></g>
+              <g id="debug"></g>
+            </svg>
+          </div>
+          <div class="below">
+            <span id="status" role="status" aria-live="polite"></span>
+            <span id="slow" hidden></span>
+          </div>
+          <p id="ds-note"></p>
+          <div class="stats" id="stats"></div>
+        </div>
+        <div class="panel">
+          <section>
+            <h2>Shape</h2>
+            <div class="field">
+              <label class="check" for="connected"
+                ><input type="checkbox" id="connected" /> connected</label
+              >
+              <div class="hint">
+                On: one piece, joined by spanning-tree links
+                (<code>Shape.blob</code>). Off: the arcs preset, pieces stay
+                apart where the disc passes between them
+                (<code>Shape.arcs</code>).
+              </div>
+            </div>
+            <div class="field" id="convexity-field">
+              <label for="convexity"
+                >convexity <output id="convexity-out" for="convexity"></output
+              ></label>
+              <input
+                type="range"
+                id="convexity"
+                min="0"
+                max="2"
+                step="0.01"
+                list="convexity-ticks"
+              />
+              <datalist id="convexity-ticks">
+                <option value="0"></option>
+                <option value="1"></option>
+                <option value="2"></option>
+              </datalist>
+              <div class="ticks" aria-hidden="true">
+                <span style="left: 0%">0 spine</span
+                ><span style="left: 50%">1 hull</span
+                ><span style="left: 100%">2 oval</span>
+              </div>
+              <div class="hint">
+                Up to 1: the share of the area between the padded members and
+                their padded hull that is filled (it picks the closing radius).
+                1 to 2: the hull blended toward the smallest enclosing ellipse.
+              </div>
+            </div>
+            <div class="field" id="neck-field">
+              <label for="neck"
+                >neck <output id="neck-out" for="neck"></output
+              ></label>
+              <input type="range" id="neck" min="0.05" max="1" step="0.01" />
+              <div class="hint">
+                The width of each link as a share of the padded members it
+                joins: 1 is no neck.
+              </div>
+            </div>
+            <div class="field" id="radius-field">
+              <label for="radius"
+                >radius <output id="radius-out" for="radius"></output
+              ></label>
+              <input type="range" id="radius" min="0" max="60" step="0.5" />
+              <div class="hint">
+                The closing disc's radius. Two pieces join where the disc cannot
+                pass between them.
+              </div>
+            </div>
+            <div class="field">
+              <label class="check" for="holes"
+                ><input type="checkbox" id="holes" /> holes</label
+              >
+              <div class="hint">
+                Keep a gap the outline closes around as a hole.
+              </div>
+            </div>
+            <div class="field" id="avoid-field">
+              <label class="check" for="avoid"
+                ><input type="checkbox" id="avoid" />
+                <span id="avoid-label">avoiding</span></label
+              >
+            </div>
+            <div class="field" id="clearance-field">
+              <label for="clearance"
+                >clearance <output id="clearance-out" for="clearance"></output
+              ></label>
+              <input type="range" id="clearance" min="0" max="20" step="0.5" />
+            </div>
+            <div class="field">
+              <label for="padding"
+                >padding <output id="padding-out" for="padding"></output
+              ></label>
+              <input type="range" id="padding" min="0" max="30" step="0.5" />
+              <div class="hint">
+                enclose's own option. Each dataset loads its story's padding.
+              </div>
+            </div>
+          </section>
+          <section>
+            <h2>Presets and spelling</h2>
+            <div class="presets">
+              <button type="button" class="btn" data-preset="spine">
+                spine
+              </button>
+              <button type="button" class="btn" data-preset="hull">hull</button>
+              <button type="button" class="btn" data-preset="oval">oval</button>
+              <button type="button" class="btn" data-preset="blob">
+                blob defaults
+              </button>
+              <button type="button" class="btn" data-preset="arcs">arcs</button>
+              <button type="button" class="btn" data-preset="story">
+                story's settings
+              </button>
+            </div>
+            <div class="codebox">
+              <pre id="code" aria-label="Current spelling"></pre>
+              <button type="button" class="btn" id="copy">Copy</button>
+            </div>
+          </section>
+          <section>
+            <h2>Debug</h2>
+            <div class="checks">
+              <label class="check" for="smooth"
+                ><input type="checkbox" id="smooth" /> smoothing step</label
+              >
+              <label class="check" for="show-links"
+                ><input type="checkbox" id="show-links" /> links (spine)</label
+              >
+              <label class="check" for="show-members"
+                ><input type="checkbox" id="show-members" /> member circles and
+                keep-outs</label
+              >
+              <label class="check" for="compare"
+                ><input type="checkbox" id="compare" /> today's outline
+                (dashed)</label
+              >
+            </div>
+            <p class="hint">
+              The purple dashed line is today's
+              <code>Shape.blob</code> (convexity capped at 1) or, with connected
+              off, today's <code>Shape.arcs</code>, with the same options.
+            </p>
+          </section>
+        </div>
+      </div>
+    </main>
+    <!--SCRIPT-->
+  </body>
+</html>

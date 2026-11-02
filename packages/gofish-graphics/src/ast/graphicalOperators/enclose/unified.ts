@@ -62,6 +62,13 @@ export const UNIFIED_STATS: {
   areaGot?: number;
   areaUnion?: number;
   areaHull?: number;
+  /** PROTOTYPE (playground): the links the closing used, and the time of
+   *  each stage in ms (links, closing with its radius search, cut and
+   *  smoothing). */
+  linkMembers?: BlobMember[];
+  msLinks?: number;
+  msClose?: number;
+  msSmooth?: number;
 } = {};
 
 // ── members as a core (point, segment or box) plus a radius ─────────────────
@@ -582,6 +589,7 @@ export function unifiedOutline(
   const spine = connected
     ? routeAround(nearLinks(members, pad, Infinity, o.neck ?? 1), K, pad)
     : [];
+  const tLinks = performance.now();
   const linksAt = (r: number) =>
     connected ? spine : routeAround(nearLinks(members, pad, r), K, pad);
   const closeAt = (r: number) => {
@@ -671,6 +679,7 @@ export function unifiedOutline(
     };
   }
   let rings = res.rings;
+  const tClose = performance.now();
   UNIFIED_STATS.areaGot = ringsArea(rings);
   const keep = keepIns(res.all, pad);
   const cut = (rs: Pt[][], grow: number) =>
@@ -708,6 +717,10 @@ export function unifiedOutline(
     iterations,
     ms: performance.now() - t0,
     links: res.links.length,
+    linkMembers: res.links,
+    msLinks: tLinks - t0,
+    msClose: tClose - tLinks,
+    msSmooth: performance.now() - tClose,
   });
   return rings;
 }
