@@ -557,11 +557,11 @@ An operand is read in the frame the operator sits in, never in the frame it make
 
 **The rule, by operator**
 
-| Operator                                                   | Operand         | Frame it is read in                                                                                                      |
-| ---------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `Coord.bend({ along })`, `Coord.envelope({ top, bottom })` | the guide shape | Outside the coord. The coord's inner frame is defined by the guide, so laying the guide out inside it would be circular. |
-| `clip({ to }, children)`                                   | the region      | The clip's own frame. `clip` makes no new frame, so the region and the children share it.                                |
-| `Bin.voronoi({ seeds })`                                   | seed rows       | The chart's frame, placed by its scales. Cells are computed there; under polar, from the warped positions.               |
+| Operator                                                   | Operand         | Frame it is read in                                                                                                                                                   |
+| ---------------------------------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Coord.bend({ along })`, `Coord.envelope({ top, bottom })` | the guide shape | Outside the coord. The coord's inner frame is defined by the guide, so laying the guide out inside it would be circular.                                              |
+| `clip({ to }, children)`                                   | the region      | The clip's own frame. `clip` makes no new frame, so the region and the children share it.                                                                             |
+| `Bin.voronoi({ seeds })`                                   | seed rows       | The chart's frame, placed by its scales. Cells are computed in data units over the domain (`polygonCells.ts`), so under polar they are built in θ and r, then warped. |
 
 Blocker: a ref spine drawn under one coord and read by a bend in another depends on #605 (a ref across a coord boundary reads the target's box in the coord's own space, such as θ and r under polar, not its warped screen position). The code still does this: `src/ast/_ref.tsx` copies `selectedNode.intrinsicDims` (line 350), and `coord.tsx` computes warped boxes only for its own bounding box (lines 307 and 551), never for the child. The issue's description holds; its line numbers and its `shapes/_ref.tsx` path are out of date. #1225 (a symbolic port for refs through affine coords) would cover affine coords only; a bend is not affine, so it needs #605.
 

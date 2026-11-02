@@ -1431,8 +1431,9 @@ paint([a, b]); // draws a, washed out
                   <td><code>Bin.voronoi({ seeds })</code></td>
                   <td>seed rows</td>
                   <td>
-                    The chart's frame, placed by its scales. Cells are computed
-                    there; under polar, from the warped positions.
+                    The chart's frame. Cells are computed in data units over the
+                    domain (<code>polygonCells.ts</code>), so under polar they
+                    are built in θ and r, then warped.
                   </td>
                 </tr>
               </tbody>
