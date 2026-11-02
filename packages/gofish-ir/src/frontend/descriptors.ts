@@ -555,7 +555,7 @@ export interface StrategyPreset {
 export interface StrategyFamily {
   doc: string;
   /** The kinds, by their wire `kind`. Each also has a factory of the same
-   *  name (`pyKwarg` spelling in Python: `sliceDice` → `slice_dice`). */
+   *  name (`pyKwarg` spelling in Python: `catmullRom` → `catmull_rom`). */
   kinds: Record<string, StrategyKind>;
   /** Further factories, each a kind with some params preset. */
   presets?: Record<string, StrategyPreset>;
@@ -637,7 +637,7 @@ const placeOffset = (fallback: number): FieldSpec => ({
  */
 export const STRATEGIES = {
   Tile: {
-    doc: "How `treemap` tiles its box: the value of its `tile` option. Each kind is one of d3-hierarchy's tiling methods.",
+    doc: "How `treemap` tiles its region: the value of its `tile` option. The rectangular kinds (squarify, slice, dice, binary) are d3-hierarchy's tiling methods and need a rectangular region; voronoi tiles any convex region.",
     kinds: {
       squarify: {
         doc: "Squarified tiling (d3's `treemapSquarify`): make tiles as close as possible to the aspect `ratio`. The default.",
@@ -660,9 +660,15 @@ export const STRATEGIES = {
         doc: "Split the tiles into two halves of near-equal weight, recursively (d3's `treemapBinary`).",
         params: {},
       },
-      sliceDice: {
-        doc: "Alternate slice and dice by depth (d3's `treemapSliceDice`).",
-        params: {},
+      voronoi: {
+        doc: "Voronoi tiling: cut the region into convex cells with rounded, irregular shapes, each with an area proportional to its weight, by a weighted Voronoi diagram whose sites and weights are adjusted until the areas match (Nocaj and Brandes 2012). It tiles any convex region, such as a Voronoi cell of the treemap around it or the oval of an `enclose` around it, so its cells can hold another Voronoi level.",
+        params: {
+          seed: {
+            type: t.num({ finite: true }),
+            default: 0,
+            doc: "Seed for the random starting positions of the sites, so a render is the same every time. Another seed draws other cells with the same areas.",
+          },
+        },
       },
     },
   },
@@ -1449,13 +1455,13 @@ const ENCLOSE_FIELDS: FieldGroup = group({
   padding: {
     ...ch.raw(
       "number",
-      "Pixels between the members and the outline: a number, or a field name or accessor read once per enclosed group (constant within the group). For a blob or arcs, the distance from each member's own outline (around a line's whole length)."
+      "Pixels between the members and the outline: a number, or a field name or accessor read once per enclosed group (constant within the group). For a blob or arcs, the distance from each member's own outline (around a line's whole length). Around a member with no size of its own, how far inside the outline the member's shape is."
     ),
     default: 2,
   },
   shape: {
     type: t.ref("Shape"),
-    doc: "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.arcs({radius}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset.",
+    doc: "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.arcs({radius}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset. Around a fresh member with no size of its own (a treemap, a region), the outline is the space it is given: Shape.box() is that space (a treemap's Voronoi cell, when it is in one) and Shape.oval() the oval inscribed in it, and the member fills the outline; Shape.arcs() and Shape.blob() are an error there.",
   },
   fill: ch.color(
     "Fill color of the outline, or a field name or accessor for a color scale (constant within the enclosed group)."
@@ -1772,12 +1778,12 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       round: {
         type: t.boolean,
         default: true,
-        doc: "Round pixel positions and sizes.",
+        doc: "Round pixel positions and sizes. Applies to the rectangular tilings; Tile.voronoi cells are not rounded.",
       },
       tile: {
         type: t.ref("Tile"),
         default: { kind: "squarify" },
-        doc: "The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.sliceDice(). Each is one of d3-hierarchy's tiling methods.",
+        doc: "The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.voronoi({ seed? }). The first four are d3-hierarchy's tiling methods and need a rectangular region: inside a Voronoi cell or an oval they are an error. Tile.voronoi tiles any convex region, so it can sit inside a Voronoi cell.",
       },
       sort: {
         type: t.enum("asc", "desc", "none"),

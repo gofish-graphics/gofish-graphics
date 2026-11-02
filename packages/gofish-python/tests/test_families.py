@@ -32,7 +32,7 @@ FAMILIES = {
     ),
     "Overlap": ("overlap", ["separate", "noise", "sina", "jitter"]),
     "Place": ("place", ["around", "along", "start", "end", "interior"]),
-    "Tile": ("tile", ["squarify", "slice", "dice", "binary", "slice_dice"]),
+    "Tile": ("tile", ["squarify", "slice", "dice", "binary", "voronoi"]),
     "Bin": ("bin", ["step", "thresholds", "quantiles", "hex", "voronoi"]),
     "Calendar": (
         "calendar",
@@ -216,7 +216,7 @@ BARE = [
     (Curve, "monotone"),
     (Curve, "perfect_arrows"),
     (Tile, "squarify"),
-    (Tile, "slice_dice"),
+    (Tile, "voronoi"),
     (Overlap, "separate"),
     (Overlap, "jitter"),
     (Calendar, "month"),

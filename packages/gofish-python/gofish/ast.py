@@ -2271,7 +2271,7 @@ def treemap(
             options table. ``size`` sizes each leaf's tile area, one value
             per split entry. ``tile`` takes a strategy from the ``Tile``
             family: ``Tile.squarify()`` (the default), ``Tile.slice()``,
-            ``Tile.dice()``, ``Tile.binary()``, or ``Tile.slice_dice()``.
+            ``Tile.dice()``, ``Tile.binary()``, or ``Tile.voronoi()``.
 
     The largest tile (under the default sort) lands at the top left.
 

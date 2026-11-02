@@ -653,7 +653,7 @@ export const layer = createNodeOperatorSequential(
                 ) as [Extent | undefined, Extent | undefined]);
           return claims;
         },
-        layout: (size, scales, children, node) => {
+        layout: (size, scales, children, node, shape) => {
           // This layer's y direction: its children and constraints are read
           // in this axis order (see `axisDirection.ts`).
           const direction = node.yFrame.direction;
@@ -747,8 +747,9 @@ export const layer = createNodeOperatorSequential(
           // the layer's frame. A child such a constraint places at a datum
           // point gets no map on that axis (`childPosScalesFor`).
           const effectivePosScales = layerScales.frames;
-          // The span each child's position constraints hand it, which it is
-          // laid out in: an interval it is pinned across, or its cell (#1059).
+          // The room each child's position constraints hand it, which it is
+          // laid out in: an interval it is pinned across, or its cell
+          // (#1059), with the cell's outline as its shape (#1222).
           const spanByKey = buildChildSpans(
             node.constraints,
             keyOf,
@@ -886,15 +887,18 @@ export const layer = createNodeOperatorSequential(
                 ? Pwl.at(claim.width, sigma)
                 : undefined;
             }) as Size<number | undefined>;
+            const proposal = childLayoutSizeProposal(
+              childKey,
+              size,
+              gridCellByKey,
+              spanByKey,
+              own,
+              shape
+            );
+            const nestEdges = layoutPlan.nestPlan?.byDerived.get(i);
             const proposed = applyNestLayoutProposal(
-              childLayoutSizeProposal(
-                childKey,
-                size,
-                gridCellByKey,
-                spanByKey,
-                own
-              ),
-              layoutPlan.nestPlan?.byDerived.get(i),
+              proposal.size,
+              nestEdges,
               childPlaceables
             );
             // A node dressed in chrome hands its content (its first child)
@@ -905,10 +909,15 @@ export const layer = createNodeOperatorSequential(
             // unsized.
             const inside = (axis: 0 | 1) =>
               Math.max(0, proposed[axis] - sum(node.chromeGutters(axis)));
-            const layoutSize: Size =
-              i === 0 && node.chrome !== undefined
-                ? [own[0] ?? inside(0), own[1] ?? inside(1)]
-                : proposed;
+            const dressed = i === 0 && node.chrome !== undefined;
+            const layoutSize: Size = dressed
+              ? [own[0] ?? inside(0), own[1] ?? inside(1)]
+              : proposed;
+            // The shape travels with the room it was proposed with: a room
+            // a nest derives from its source, or that chrome's gutters cut
+            // down, is not that room, so it has no shape.
+            const childShape =
+              nestEdges === undefined && !dressed ? proposal.shape : undefined;
             // Recombine the two forwarding decisions into the single carrier: σ
             // forwards uniformly (childScaleFactors), the anchored map forwards
             // per child (childPosScalesFor — stripped where a constraint consumed
@@ -921,10 +930,14 @@ export const layer = createNodeOperatorSequential(
               seats
             );
             childFrames[i] = layoutSize[1];
-            const childPlaceable = child.layout(layoutSize, [
-              axisScale(childScaleFactors[0], childMaps[0]),
-              axisScale(childScaleFactors[1], childMaps[1]),
-            ]);
+            const childPlaceable = child.layout(
+              layoutSize,
+              [
+                axisScale(childScaleFactors[0], childMaps[0]),
+                axisScale(childScaleFactors[1], childMaps[1]),
+              ],
+              childShape
+            );
             if (!constrainedChildren.has(i)) {
               seatChild(childPlaceable, i);
             } else {

@@ -1651,12 +1651,12 @@ for the API.
         },
         "round": {
           "type": "boolean",
-          "description": "Round pixel positions and sizes.",
+          "description": "Round pixel positions and sizes. Applies to the rectangular tilings; Tile.voronoi cells are not rounded.",
           "default": true
         },
         "tile": {
           "$ref": "#/$defs/Tile",
-          "description": "The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.sliceDice(). Each is one of d3-hierarchy's tiling methods.",
+          "description": "The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.voronoi({ seed? }). The first four are d3-hierarchy's tiling methods and need a rectangular region: inside a Voronoi cell or an oval they are an error. Tile.voronoi tiles any convex region, so it can sit inside a Voronoi cell.",
           "default": {
             "kind": "squarify"
           }
@@ -2991,12 +2991,12 @@ for the API.
         },
         "padding": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Pixels between the members and the outline: a number, or a field name or accessor read once per enclosed group (constant within the group). For a blob or arcs, the distance from each member's own outline (around a line's whole length).",
+          "description": "Pixels between the members and the outline: a number, or a field name or accessor read once per enclosed group (constant within the group). For a blob or arcs, the distance from each member's own outline (around a line's whole length). Around a member with no size of its own, how far inside the outline the member's shape is.",
           "default": 2
         },
         "shape": {
           "$ref": "#/$defs/Shape",
-          "description": "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.arcs({radius}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset."
+          "description": "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.arcs({radius}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset. Around a fresh member with no size of its own (a treemap, a region), the outline is the space it is given: Shape.box() is that space (a treemap's Voronoi cell, when it is in one) and Shape.oval() the oval inscribed in it, and the member fills the outline; Shape.arcs() and Shape.blob() are an error there."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -3717,13 +3717,18 @@ for the API.
           "type": "object",
           "properties": {
             "kind": {
-              "const": "sliceDice"
+              "const": "voronoi"
+            },
+            "seed": {
+              "type": "number",
+              "description": "Seed for the random starting positions of the sites, so a render is the same every time. Another seed draws other cells with the same areas.",
+              "default": 0
             }
           },
           "required": ["kind"]
         }
       ],
-      "description": "How `treemap` tiles its box: the value of its `tile` option. Each kind is one of d3-hierarchy's tiling methods."
+      "description": "How `treemap` tiles its region: the value of its `tile` option. The rectangular kinds (squarify, slice, dice, binary) are d3-hierarchy's tiling methods and need a rectangular region; voronoi tiles any convex region."
     },
     "Overlap": {
       "anyOf": [

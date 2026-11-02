@@ -171,7 +171,7 @@ column types (#1088). Operators are a flat list (`derive`, `resolve`,
 `join`, `filter`, `spread`, `stack`, `group`, `scatter`, `table`, `log`, `treemap`,
 `pack`). `treemap`'s `tile` is a strategy object made by a call in the `Tile`
 family (`Tile.squarify({ ratio })`, `Tile.slice()`, `Tile.dice()`,
-`Tile.binary()`, `Tile.sliceDice()` in both languages). Every strategy has
+`Tile.binary()`, `Tile.voronoi({ seed })` in both languages). Every strategy has
 one shape, `{ kind, ...params }`, which is both the JS value and the wire
 form, e.g. `{ "kind": "squarify", "ratio": 1 }`, and the JS layout
 dispatches on `kind`. `scatter`'s `overlap` (the `Overlap` family) and a
@@ -990,7 +990,7 @@ It emits:
   `gofish/overlap.py`, `gofish/curve.py`, `gofish/bin.py`,
   `gofish/calendar.py`, `gofish/shape.py`), bound in `__init__.py` under the family name
   (`Tile`, `Overlap`, `Curve`, `Bin`, `Calendar`, `Shape`): one factory per kind and
-  per preset, named by `pyKwarg` (`Tile.slice_dice`, `Curve.catmull_rom`).
+  per preset, named by `pyKwarg` (`Curve.catmull_rom`, `Overlap.separate`).
   A factory with no required param is decorated with `bare_kind`, so it is
   also the value its call with no arguments makes.
   Each returns `{"kind": ..., **params}` with snake_case param keys, and the

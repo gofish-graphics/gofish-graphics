@@ -2609,8 +2609,9 @@ Its type on each axis its cell spans is the cell's interval, `CONTINUOUS`
 and `pinned`, so it shares the frame of the layer it is in, as a rect with a
 data `x` and `x2` does, and the partition hands it the map of its scale
 through the one seating rule (`childPosScalesFor`, `seatInScope`,
-`frameOf`). It maps the cell's edges, and the outline of a cell of the
-plane, through that map. Since its type claimed the cell, its parent
+`frameOf`). It maps the cell's edges through that map, and draws the
+outline of a cell of the plane as the shape its parent hands it (see
+below). Since its type claimed the cell, its parent
 leaves it where its data puts it (`placedByOwnData`, `_node.ts`, the one
 rule for a child its own data places: its cell is not its room, and no
 constraint in its parent but a `position` moves it, a `middle` align
@@ -2693,8 +2694,17 @@ count over one is 0 and is drawn.
 **Regions with an outline.** A region may also hold an outline, the same
 shape the `boundary` geometry query (#974) returns, but given from parent to
 child: a `PositionRegion` holds the cell's outline in datums (`outline`,
-`[x, y]` per corner) when the cell has one and is placed along both axes,
-and the `region` mark maps it through both scales and draws it as a path
+`[x, y]` per corner) when the cell has one and is placed along both axes.
+The layer of the partition maps it through both of the child's scales into
+the child's frame, in the same walk that gives the child its span
+(`buildChildSpans`, `constraints/proposalPlan.ts`), and hands it to the
+child as its shape, the same channel a `treemap` hands its
+tiles down and an `enclose` its outline (see
+[The shape a parent gives a child](/internals/layout/passes#the-shape-a-parent-gives-a-child)).
+A layer passes its shape on to a child it proposes its own box
+(`childLayoutSizeProposal`), so a `region` in a layer in a cell gets it
+too. A corner that does not map is an
+error that names the axis. The `region` mark draws its shape as a path
 when it has one, and its box otherwise (under a
 nonlinear coordinate space, resampled, so a hexagon in polar coordinates
 draws curved). The cells of a binned struct, below, are what make outlines.
