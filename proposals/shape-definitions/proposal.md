@@ -26,7 +26,7 @@ Josh answered round 2. His decisions are recorded first, then his four open ques
 - **The rule.** Every slot of an operator is a child slot or an operand slot. The operator draws a child as itself and honors its `.hidden()`. It reads an operand for shape, place or data and never draws it, so not drawing an operand is not hiding it. No operator ever sets `.hidden()`.
 - **One family breaks the rule.** `intersect` switches its slots between child and operand with its paint option, `mask` reads its stencil as ink, and `paint` uses one slot as both. The proposed fix is a divergence for Josh: region shapes whose slots are all operands, and one `clip({ to }, children)`. It also covers #1209 (clipping to a box).
 - **`use(ref)` is parked.** Under the rule, round 2's one example no longer needs it.
-- **Spine and envelope.** No issue for them exists. #1138 (the road-to-beta list) says "No issue yet". The sketch now follows the rule: the guide is an operand, and you see it by drawing it as a child.
+- **Bend and envelope.** The issue is #75, filed as "rendering IR". Following it and warpjs#15, a bend is a per-shape operator, `bend({ along: spine }, [shape])`, not a coordinate transform. The spine is an operand, and you see it by drawing it as a child.
 - **`.translate()` and `position()` build the same node** but go on the wire in two forms. Rename `position` to `translate`. `cut` takes its source first; move it to `cut(opts, [source])`. Both issues are drafted.
 
 ### Decided by Josh
@@ -108,7 +108,7 @@ intersect({ fill: FILL }, [circle({ r: 40 }), region({ inset: 3 })]);
 
 Most operators fit the rule. The region-compositing family does not, in three ways.
 
-**1. `intersect`'s slots change kind with a paint option.** Without paint, it draws both operands' own paint, so they act as children, and hiding one empties the result. With paint, they are operands and their paint is not drawn. Real renders, in reading order: the two inputs, `intersect` without paint, the same with the circle hidden (the story shim), and `intersect` with paint.
+**1. `intersect`'s slots change kind with a paint option.** Without paint, it draws both operands' own paint, so they act as children, and hiding one empties the result. With paint, they are operands and their paint is not drawn. Real renders, left to right: the two inputs, `intersect` without paint, the same with the circle hidden (the story shim), and `intersect` with paint.
 
 ![A red circle and a blue square overlapping](img/intersect-inputs.png)
 
@@ -205,52 +205,104 @@ layer([
 
 No story in the corpus does this. **Verdict: parked**, and taken out of the recommendation. It comes back as its own issue if a real example needs a layout-built shape painted at two depths.
 
-### C. Spine and envelope transforms
+### C. Bend and envelope: a per-shape operator, not a coordinate transform
 
-**No issue exists.** I listed all open issues and pull requests (572) and searched titles and bodies for envelope, spine, skeletal, along, warp, deform, bend, curve, medial and path coordinate, then ran `gh search issues` over all states for spine, envelope, warp, deform and skeleton. The only mention is #1138, the road-to-beta checklist, under better coordinate transform support: "Transforms driven by a spine or envelope? No issue yet." So there is no model or spelling to match. The sketch below follows GoFish's own coordinate spelling (`chart(data, { coord })`) and the children and operands rule.
+**The issue is #75.** Its title is "rendering IR", but its body asks for generic warping of rects, paths, images and text, so that the warp is not written again for each mark. It links two warp.js threads. Josh's comment adds that arrows have a natural one-dimensional spine reading, and a two-dimensional one where the arrow is warped like an image.
 
-**How the rule applies.** The guide is an operand of the transform: `Coord.along(river)` reads the river's shape and never draws it. You pick whether it is seen where you make it. Draw it as a child of the enclosing layer to see it; add `.hidden()` to keep it laid out but unseen. Round 2's option (ii), where the transform owned its guide and had a `showGuide` switch, is dropped: it put the choice on the reader, which decision 5 rules out.
+**warpjs#15, bend path.** A path is bent along another path, its skeleton, the way Inkscape's Bend live path effect does it. The picture below is from that thread: a gecko, the gecko with a straight green spine, and the gecko bent along a curved spine. J.F. Barraud's theory, quoted from Inkscape's `lpe-bendpath.cpp`, is short: reparametrize the skeleton by arc length as U(s), take its unit normal N(s), and map each point (x, y) of the shape to U(x) + y·N(x). You go x along the spine, then y along its normal.
 
-**Spine drawn (sketch)**
+**warpjs#11, envelope.** A word is fitted into an arbitrary closed shape, as Illustrator's Envelope Distort does. The thread finds that Illustrator builds a mesh over the shape's box and deforms it, and points to generalized barycentric and mean value coordinates for the math.
+
+**The recorded decision.** `notes/design/polar-coordinate-spaces.md`, in "Bend / skeleton warp: explicitly deferred (maybe never)", calls this a separate capability that deforms a shape so its centerline follows a target path, "independent of the ambient coordinate space". It is out of scope for GoTree, and the note says that even GoTree's arc-length midpoint case is a plain coordinate transform. This round respects that: it says what the operator would look like so the idea has a correct home, and it does not schedule it.
+
+![A gecko outline; the same gecko with a straight green spine through it; the gecko bent along a curved green spine](img/bend-gecko-warpjs15.png)
+
+_Precedent: Inkscape's Bend effect (image from warpjs#15)_
+
+_Image: github.com/benjamminf/warpjs/issues/15, posted by the issue's author to show Inkscape's Bend live path effect. Not drawn by GoFish._
+
+| Tool         | Bend (one spine)                                                                                       | Envelope (a region)                                                                         |
+| ------------ | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| Inkscape     | Bend and Pattern Along Path live path effects: one path follows a skeleton path, stretched or repeated | Envelope Deformation: four bend paths, top, right, bottom and left                          |
+| Illustrator  | Art brush: artwork stretched along a stroke                                                            | Envelope Distort: make with warp presets, with a mesh, or with a top object as the envelope |
+| Figma        | None built in; plugins add it                                                                          | None built in; plugins add it                                                               |
+| warp.js      | Asked in #15; not built in                                                                             | A proof of concept in #11, polygons only                                                    |
+| GoFish today | None. `Coord.wavy` is a fixed formula over the whole frame                                             | None                                                                                        |
+
+**Coordinate transform or operator? An operator.** Barraud's map is a map of the plane, so it could look like a coordinate transform. Three things say it is not one in GoFish.
+
+- **It is per shape.** A `coord` is a frame: its children are laid out in its coordinates, with its scales and axes. A bend takes one shape that is already laid out in ordinary pixels and maps that shape's own box onto a spine. Every tool above applies it to one object, and the deferred note calls it independent of the ambient coordinate space.
+- **Its parameter is a placed shape.** The spine is laid out in the surrounding frame, and its length sets how far the shape stretches. A `Coord.*` strategy is a fixed function that needs nothing from the scene.
+- **It comes after layout.** It changes how the child is drawn, not where it is laid out, so it needs no scales or axes. It can still share the warp code that `coord` uses to draw a path through a mapping (adaptive sampling, from #121).
+
+So bend and envelope are operators with one child and an operand: `bend({ along: spine }, [shape])` and `envelope({ top, bottom }, [shape])`. Round 3's first sketch, `chart(towns, { coord: Coord.along(river) })`, is withdrawn. If one operator is wanted, the two are one idea, "map the child's box onto a guide", and could be `warp({ to: Warp.along(spine) }, [shape])` with a `Warp` family.
+
+**Children and operands.** The shape is the child: the operator draws it as itself, bent. The spine and the envelope's sides are operands, read for their shape only, and never drawn by the operator. The user decides whether the guide shows, where the guide is made. In the gecko picture the green spine is drawn, so it is a child of the layer, read through a ref. In a usual output the spine is not drawn, so it is a hidden child (it still needs its place in the frame) or an inline operand.
+
+**Gecko, spine drawn (sketch)**
 
 ```js
-// Sketch: Coord.along does not exist. The river is a child of the layer,
-// drawn as itself. The transform reads it through a ref.
+// Sketch: bend does not exist. The gecko is the child; it is drawn,
+// bent. The spine is an operand, read for its shape. Here it is also
+// drawn, once, as a child of the layer, as in the warpjs#15 picture.
 layer([
-  chart(riverPoints)
+  chart(spinePoints)
     .flow(scatter({ x: "x", y: "y" }))
-    .mark(line({ curve: Curve.natural }))
-    .name("river"),
-]).relate(({ river }) => [
-  chart(towns, { coord: Coord.along(river) })
-    .flow(scatter({ x: "mile", y: "bank" }))
-    .mark(circle({ r: 3 })),
+    .mark(line({ curve: Curve.natural, stroke: "green" }))
+    .name("spine"),
+]).relate(({ spine }) => [
+  bend({ along: spine }, [
+    polygon({ points: gecko, fill: "none", stroke: "black" }),
+  ]),
 ]);
 ```
 
 **Spine not drawn (sketch)**
 
 ```js
-// Not drawn, still laid out: the same child, hidden.
-chart(riverPoints)
+// The usual output: the spine is not drawn. It is still laid out in the
+// layer's frame, so it is a hidden child.
+chart(spinePoints)
   .flow(scatter({ x: "x", y: "y" }))
   .mark(line({ curve: Curve.natural }))
-  .name("river")
+  .name("spine")
   .hidden();
 ```
 
+**Arrows.** Josh's two readings are two different operations. In the one-dimensional reading the spine is the arrow's route: the arrow draws a new path along it and puts its head at the end, and nothing is warped. That is an `along` option on `arrow`, with the route as an operand. In the two-dimensional reading a straight, wide arrow shape is bent like the gecko.
+
+**Arrow, 1D: routed along a path (sketch)**
+
 ```js
-// Sketch: an envelope reads two shapes. Each is drawn or hidden on its own.
-layer([lower.name("lower"), upper.name("upper").hidden()]).relate(
-  ({ lower, upper }) => [
-    chart(rows, { coord: Coord.between(lower, upper) })
-      .flow(scatter({ x: "t", y: "share" }))
-      .mark(circle({ r: 2 })),
+// Sketch. 1D: the spine is the arrow's own route. The arrow draws a new
+// path along it, with a head at the end; nothing is bent.
+layer([a.name("a"), b.name("b"), route.name("route").hidden()]).relate(
+  ({ a, b, route }) => [arrow({ along: route }, [a, b])]
+);
+```
+
+**Arrow, 2D: bent like a shape (sketch)**
+
+```js
+// Sketch. 2D: a straight, wide arrow shape, bent like the gecko.
+bend({ along: spine }, [polygon({ points: fatArrow, fill: "#467DA8" })]);
+```
+
+**Envelope.** The child's box is mapped into the region between two curves. Both curves are operands, and each is drawn or hidden on its own where it is made.
+
+```js
+// Sketch. Envelope: the child's box is mapped into the region between
+// two curves (Inkscape uses four sides; two is the common case).
+layer([upper.name("upper").hidden(), lower.name("lower").hidden()]).relate(
+  ({ upper, lower }) => [
+    envelope({ top: upper, bottom: lower }, [
+      text({ text: "WORD", fontSize: 96 }),
+    ]),
   ]
 );
 ```
 
-The ref in a chart option sits inside `.relate()` here. Outside it, it waits on #1259 (string refs outside `.relate()`).
+The refs here sit inside `.relate()`. Outside it, they wait on #1259 (string refs outside `.relate()`). The draft issue for this capability is `proposals/shape-definitions/issue-spine-envelope.md`.
 
 ### D. `cut`, and `.translate()` with `position()`
 
@@ -337,7 +389,7 @@ stack([cut([image(href=href, w=193, h=600)], dir="y", size=size)], dir="y")
 
 ### Walls
 
-- **The spine and envelope issue does not exist,** so C follows GoFish's own spelling, not an issue's.
+- **No bend or envelope exists in GoFish,** so C has only sketches and a credited precedent image. A recorded decision defers the capability (maybe never).
 - **`intersect` without paint renders a blend** (a desaturated copy of one operand under the other's color), not two paints side by side. The table describes what it draws today.
 - **`clip` and `union` are new names.** They need the precedent check before the spelling is settled.
 - **`.hidden()` on an inline operand changes nothing.** Whether that should warn is a decision below.
@@ -353,7 +405,7 @@ stack([cut([image(href=href, w=193, h=600)], dir="y", size=size)], dir="y")
 4. Add `union` as a region shape, apart from `layer`?
 5. Should `.hidden()` on an inline operand warn, since it does nothing?
 6. Park `use(ref)` until a real example needs it?
-7. File an issue for spine and envelope transforms, using the sketch in C?
+7. File the drafted issue for bend and envelope (`issue-spine-envelope.md`) so the capability stops sitting under #75's "rendering IR" title, while keeping it deferred as the note records? And is it two operators, `bend` and `envelope`, or one `warp` with a `Warp` family?
 8. Rename `position` to `translate` and move `cut` to `cut(opts, [source])` in one PR, apart from `.hidden()`?
 9. For `cut`, also make the function and the method one construct (step 2)?
 
@@ -580,7 +632,7 @@ _Seeds drawn_
 
 #### Spine and envelope coordinate transforms
 
-Sketch: GoFish has no spine transform. `Coord.wavy` is a fixed formula with no guide, and `Shape.spine` is an `enclose` outline, not a transform.
+_Superseded in round 3: the issue is #75, and a bend is a per-shape operator, not a coordinate transform._ Sketch: GoFish has no spine transform. `Coord.wavy` is a fixed formula with no guide, and `Shape.spine` is an `enclose` outline, not a transform.
 
 **(i) The spine is an ordinary mark**
 
