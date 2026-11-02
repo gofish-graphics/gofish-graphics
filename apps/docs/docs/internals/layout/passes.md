@@ -749,8 +749,10 @@ order. Three parents make one, and two nodes read it:
 - A `treemap` hands each child its tile: a box for a rectangular tiling
   (`boxRing`), a convex polygon for `Tile.voronoi`
   (`src/ast/geometry/voronoiTiling.ts`: a power diagram of the region,
-  clipped half-plane by half-plane with `clipToHalfPlane`, its sites and
-  weights moved until each cell's area is within 2% of its share). Every
+  clipped half-plane by half-plane with `clipToHalfPlane`. Each round
+  moves every site to its cell's centroid, then fits the weights with a
+  damped Newton step, until each cell's area is within 2% of its share
+  and the sites have settled). Every
   `Tile` strategy is one function, a `Tiling` in `treemap.tsx`, from the
   region and the weights to one ring per child, so the treemap has one
   placement loop. The child's size is the ring's box, and the ring is
