@@ -591,7 +591,7 @@ Union, intersection, difference, symmetric difference, shape-only clip, paint-ba
 | GoFish today       | none                | intersect         | subtract         | exclude                  | none                     | mask                           | the first child   |
 | GoFish proposed    | union               | intersect         | subtract         | exclude                  | clip({ to })             | mask({ mode }), parked         | to                |
 
-Names as each system documents them, from my knowledge, not re-checked online. The least certain: Figma's mask types, Affinity's clipping and mask layers, and Bluefish and Penrose having none.
+Checked against the docs for the three least certain rows: [Figma](https://help.figma.com/hc/en-us/articles/360040450253) has three mask types, Alpha (the default), Vector (outline only) and Luminance, so Figma also separates clip from mask, as a type on one command; [Sketch](https://go.sketch.com/docs/designing/shapes/masking-shapes/) has Outline and Alpha masks; [Affinity](https://affinity.help/designer2/en-US.lproj/pages/Layers/layerClip.html) has nested clipping and [mask layers](https://affinity.help/designer2/English.lproj/pages/Layers/LayerMasks.html) by gray level or opacity. The other rows are from each system's documented names and were not re-checked.
 
 **Recommendations**
 

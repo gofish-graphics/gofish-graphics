@@ -1759,9 +1759,29 @@ paint([a, b]); // draws a, washed out
             </table>
           </div>
           <p class="note">
-            Names as each system documents them, from my knowledge, not
-            re-checked online. The least certain: Figma's mask types, Affinity's
-            clipping and mask layers, and Bluefish and Penrose having none.
+            Checked against the docs for the three least certain rows:
+            <a href="https://help.figma.com/hc/en-us/articles/360040450253"
+              >Figma</a
+            >
+            has three mask types, Alpha (the default), Vector (outline only) and
+            Luminance, so Figma also separates clip from mask, as a type on one
+            command;
+            <a
+              href="https://go.sketch.com/docs/designing/shapes/masking-shapes/"
+              >Sketch</a
+            >
+            has Outline and Alpha masks;
+            <a
+              href="https://affinity.help/designer2/en-US.lproj/pages/Layers/layerClip.html"
+              >Affinity</a
+            >
+            has nested clipping and
+            <a
+              href="https://affinity.help/designer2/English.lproj/pages/Layers/LayerMasks.html"
+              >mask layers</a
+            >
+            by gray level or opacity. The other rows are from each system's
+            documented names and were not re-checked.
           </p>
           <p class="label">Recommendations</p>
           <ul class="recs">
