@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+  <body style="margin: 0; background: white">
+    <svg width="420" height="320" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <mask
+          id="m"
+          mask-type="alpha"
+          maskUnits="userSpaceOnUse"
+          x="0"
+          y="0"
+          width="80"
+          height="300"
+        >
+          <image
+            href="../../../packages/gofish-graphics/stories/assets/wilsonblanco.png"
+            width="72.5"
+            height="300"
+          />
+        </mask>
+        <filter id="g"><feColorMatrix type="saturate" values="0" /></filter>
+      </defs>
+      <g transform="translate(10,10)" style="isolation: isolate">
+        <image
+          href="../../../packages/gofish-graphics/stories/assets/wilsonblanco.png"
+          width="72.5"
+          height="300"
+          filter="url(#g)"
+        />
+        <rect
+          x="0"
+          y="180"
+          width="72.5"
+          height="120"
+          fill="#00ff00"
+          mask="url(#m)"
+          style="mix-blend-mode: color"
+        />
+      </g>
+      <g transform="translate(150,10)" style="isolation: isolate">
+        <image
+          href="../../../packages/gofish-graphics/stories/assets/wilsonblanco.png"
+          width="72.5"
+          height="300"
+        />
+        <rect
+          x="0"
+          y="180"
+          width="72.5"
+          height="120"
+          fill="#00ff00"
+          mask="url(#m)"
+          style="mix-blend-mode: color"
+        />
+      </g>
+      <g transform="translate(290,10)" style="isolation: isolate">
+        <image
+          href="../../../packages/gofish-graphics/stories/assets/wilsonblanco.png"
+          width="72.5"
+          height="300"
+        />
+        <rect
+          x="0"
+          y="180"
+          width="72.5"
+          height="120"
+          fill="#00ff00"
+          mask="url(#m)"
+        />
+      </g>
+    </svg>
+  </body>
+</html>
