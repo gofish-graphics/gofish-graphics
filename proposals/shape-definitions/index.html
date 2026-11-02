@@ -628,16 +628,15 @@
             <a class="see" href="#operand-frame">see</a>
           </li>
           <li>
-            <span class="badge proposed">proposed</span> Two jobs. Region shapes
-            (<code>intersect</code>, <code>subtract</code>,
-            <code>exclude</code>, <code>union</code>) draw one new shape from
-            operands. <code>mask([stencil, ...content])</code> draws its content
-            inside its first child. The stencil is a child, drawn unless
-            <code>.hidden()</code>; a ref stencil draws nothing here.
-            <code>mode</code>: <code>"alpha"</code> (default),
-            <code>"outline"</code> or <code>"luminance"</code>. It replaces
-            <code>paint</code> and today's <code>mask</code>.
-            <a class="see" href="#ops">see</a>
+            <span class="badge proposed">proposed</span> Region compositing is
+            one family of four set operations: <code>union</code>,
+            <code>intersect</code>, <code>subtract</code>, <code>exclude</code>.
+            Their operands are never drawn. A <code>fill</code> gives one new
+            shape; no fill keeps the first operand's paint, which is masking.
+            <code>mode</code> (<code>"alpha"</code>, <code>"outline"</code>,
+            <code>"luminance"</code>) sets how stencils are read, and the
+            operator has a <code>blendMode</code>. <code>paint</code> and
+            <code>mask</code> are deleted. <a class="see" href="#ops">see</a>
           </li>
           <li>
             <span class="badge decided">decided</span> Bend and envelope are
@@ -1122,12 +1121,13 @@ layer([
       <section class="group" id="g-regions">
         <h2>Region compositing</h2>
         <article class="card" id="ops">
-          <h3><a href="#ops">The operators</a></h3>
+          <h3><a href="#ops">The four set operations</a></h3>
           <p class="say">
-            Two jobs. Region shapes draw one new shape from two operands, which
-            are never drawn. <code>mask</code> draws its content inside its
-            first child, the stencil: a child, drawn as itself unless
-            <code>.hidden()</code>. Every card uses the same <code>a</code>,
+            <code>union</code>, <code>intersect</code>,
+            <code>subtract</code> and <code>exclude</code>. Their operands are
+            read and never drawn. With a <code>fill</code>, the result is one
+            new shape in that paint. With no fill, it keeps the first operand's
+            own paint: that is masking. Every card uses the same <code>a</code>,
             <code>b</code> and <code>stripes</code>.
           </p>
           <p class="label">Shared by every card</p>
@@ -1135,10 +1135,10 @@ layer([
             class="new"
           ><code class="language-javascript">const a = circle({ cx: 70, cy: 70, r: 50 });
 const b = circle({ cx: 130, cy: 70, r: 50 });
-const stripes = layer(bars); // 11 vertical bars</code></pre>
+const stripes = layer(bars); // vertical bars</code></pre>
           <div class="opgrid">
             <div class="op">
-              <h4>union</h4>
+              <h4>union, filled</h4>
               <p class="say">
                 One shape: everything in a or b, with one outline.
               </p>
@@ -1162,7 +1162,32 @@ const stripes = layer(bars); // 11 vertical bars</code></pre>
               </p>
             </div>
             <div class="op">
-              <h4>intersect</h4>
+              <h4>union, masking</h4>
+              <p class="say">
+                The stripes inside a ∪ b. <code>union([stripes, a])</code> alone
+                draws just the stripes, since a adds none of their paint, so the
+                stencil is both circles.
+              </p>
+              <figure class="render render">
+                <span class="tag tag-render">Render</span
+                ><img src="img/masking-union.png" alt="" />
+                <figcaption>
+                  Rendered today as <code>mask</code> with both circles white.
+                </figcaption>
+              </figure>
+              <p class="label proposed">Proposed</p>
+              <pre
+                class="new"
+                data-changed="1"
+              ><code class="language-javascript">intersect([stripes, layer([a, b])]);</code></pre>
+              <p class="label current">Current</p>
+              <pre
+                class="now"
+                data-changed="1"
+              ><code class="language-javascript">mask([layer([a, b]), stripes]); // white</code></pre>
+            </div>
+            <div class="op">
+              <h4>intersect, filled</h4>
               <p class="say">One shape: where a and b overlap.</p>
               <figure class="render render">
                 <span class="tag tag-render">Render</span
@@ -1176,7 +1201,33 @@ const stripes = layer(bars); // 11 vertical bars</code></pre>
               <p class="none">The same code. No change.</p>
             </div>
             <div class="op">
-              <h4>subtract</h4>
+              <h4>intersect, masking</h4>
+              <p class="say">
+                The stripes inside a, in their own paint. Today's
+                <code>mask</code>, with a stencil of any color.
+              </p>
+              <figure class="render render">
+                <span class="tag tag-render">Render</span
+                ><img src="img/masking-intersect.png" alt="" />
+                <figcaption>
+                  Rendered today as <code>mask</code> with a white a. Today's
+                  <code>intersect([stripes, a])</code> draws a gray blend
+                  instead.
+                </figcaption>
+              </figure>
+              <p class="label proposed">Proposed</p>
+              <pre
+                class="new"
+                data-changed="1"
+              ><code class="language-javascript">intersect([stripes, a]);</code></pre>
+              <p class="label current">Current</p>
+              <pre
+                class="now"
+                data-changed="1"
+              ><code class="language-javascript">mask([a, stripes]); // a white</code></pre>
+            </div>
+            <div class="op">
+              <h4>subtract, filled</h4>
               <p class="say">One shape: a with b cut out.</p>
               <figure class="render render">
                 <span class="tag tag-render">Render</span
@@ -1199,15 +1250,41 @@ const stripes = layer(bars); // 11 vertical bars</code></pre>
               ><code class="language-javascript">subtract([b, a]); // both filled</code></pre>
             </div>
             <div class="op">
-              <h4>exclude</h4>
+              <h4>subtract, masking</h4>
+              <p class="say">
+                The stripes everywhere in their box except inside a: an inverted
+                mask.
+              </p>
+              <figure class="render render">
+                <span class="tag tag-render">Render</span
+                ><img src="img/masking-subtract.png" alt="" />
+                <figcaption>
+                  Real render of today's <code>subtract([a, stripes])</code>:
+                  the operand order is reversed today.
+                </figcaption>
+              </figure>
+              <p class="label proposed">Proposed</p>
+              <pre
+                class="new"
+                data-changed="1"
+              ><code class="language-javascript">subtract([stripes, a]);</code></pre>
+              <p class="label current">Current</p>
+              <pre
+                class="now"
+                data-changed="1"
+              ><code class="language-javascript">subtract([a, stripes]);</code></pre>
+            </div>
+            <div class="op">
+              <h4>exclude, filled</h4>
               <p class="say">One shape: in a or b, not both.</p>
               <figure class="render render">
                 <span class="tag tag-render">Render</span
                 ><img src="img/grid-exclude.png" alt="" />
                 <figcaption>
-                  Rendered today as two <code>subtract</code>s. Bug: today
-                  <code>exclude</code> draws a's half gray, through a
-                  <code>saturate(0)</code> filter.
+                  Rendered today as two <code>subtract</code>s. Today
+                  <code>exclude</code> draws a's half gray: every composite
+                  grays its first operand (PICCL's model,
+                  <code>paintSVG.tsx</code>).
                 </figcaption>
               </figure>
               <p class="label proposed">Proposed</p>
@@ -1222,110 +1299,44 @@ const stripes = layer(bars); // 11 vertical bars</code></pre>
               ><code class="language-javascript">exclude([a, b]); // both filled</code></pre>
             </div>
             <div class="op">
-              <h4>mask, drawn stencil</h4>
+              <h4>exclude, masking</h4>
               <p class="say">
-                Alpha, the default: the image is drawn, and the rect shows only
-                where it has ink.
+                The stripes inside a xor b.
+                <code>exclude([stripes, a])</code> alone draws the same as
+                <code>subtract([stripes, a])</code>, so the xor is a filled
+                stencil.
               </p>
               <figure class="render render">
                 <span class="tag tag-render">Render</span
-                ><img src="img/bottle-paint.png" alt="" />
+                ><img src="img/masking-exclude.png" alt="" />
                 <figcaption>
-                  Rendered today as <code>paint</code>, the PICCL bottle
-                  (<code>stories/piccl/Bottle.stories.tsx</code>).
+                  Rendered today as <code>mask</code> over a white
+                  <code>exclude</code>.
                 </figcaption>
               </figure>
               <p class="label proposed">Proposed</p>
               <pre
                 class="new"
-                data-changed="1,7"
-              ><code class="language-javascript">mask([
-  image({ href: bottle, h: v(100) }),
-  rect({
-    h: &quot;amount&quot;,
-    w: 175,
-    fill: &quot;#00ff00&quot;,
-    mixBlendMode: &quot;color&quot;,
-  }),
-]);</code></pre>
-              <p class="label current">Current</p>
-              <pre
-                class="now"
-                data-changed="1"
-              ><code class="language-javascript">paint({ blendMode: &quot;color&quot; }, [
-  image({ href: bottle, h: v(100) }),
-  rect({
-    h: &quot;amount&quot;,
-    w: 175,
-    fill: &quot;#00ff00&quot;,
-  }),
-]);</code></pre>
-            </div>
-            <div class="op">
-              <h4>mask, hidden stencil</h4>
-              <p class="say">
-                The stencil is read for ink and not drawn, so any color works.
-                <code>"outline"</code> draws the same here.
-              </p>
-              <figure class="render render">
-                <span class="tag tag-render">Render</span
-                ><img src="img/grid-mask-hidden.png" alt="" />
-                <figcaption>
-                  Rendered today as <code>mask</code> with a white a.
-                </figcaption>
-              </figure>
-              <p class="label proposed">Proposed</p>
-              <pre
-                class="new"
-                data-changed="1"
-              ><code class="language-javascript">mask([a.hidden(), stripes]);</code></pre>
-              <p class="label current">Current</p>
-              <pre
-                class="now"
-                data-changed="1"
-              ><code class="language-javascript">mask([a, stripes]); // a white</code></pre>
-            </div>
-            <div class="op">
-              <h4>mask, ref stencil</h4>
-              <p class="say">
-                a is drawn elsewhere, unfilled. A ref draws nothing here.
-                <code>"outline"</code> reads a's geometry; alpha would read only
-                its stroke.
-              </p>
-              <figure class="render render">
-                <span class="tag tag-render">Render</span
-                ><img src="img/grid-mask-outline.png" alt="" />
-                <figcaption>
-                  Rendered today as a white mask and a second, outlined a. Today
-                  <code>mask([ref, ...])</code> draws nothing.
-                </figcaption>
-              </figure>
-              <p class="label proposed">Proposed</p>
-              <pre
-                class="new"
-                data-changed="1,2,3"
-              ><code class="language-javascript">mask({ mode: &quot;outline&quot; }, [
-  ref(&quot;a&quot;),
+                data-changed="1,2,3,4"
+              ><code class="language-javascript">intersect([
   stripes,
+  exclude({ fill: &quot;black&quot; }, [a, b]),
 ]);</code></pre>
               <p class="label current">Current</p>
               <pre
                 class="now"
-                data-changed="1,2,3"
-              ><code class="language-javascript">layer([
-  mask([a, stripes]), // a white
-  a, // again, outlined
-]);</code></pre>
+                data-changed="1"
+              ><code class="language-javascript">mask([exclude([a, b]), stripes]); // white</code></pre>
             </div>
             <div class="op">
-              <h4>mask, luminance</h4>
+              <h4>intersect, luminance</h4>
               <p class="say">
-                Today's <code>mask</code>: white shows all of the content, gray
-                about half.
+                <code>mode</code> sets how a stencil is read. White shows all of
+                the stripes, gray about half.
               </p>
               <figure class="render render">
                 <span class="tag tag-render">Render</span
-                ><img src="img/grid-mask-luminance.png" alt="" />
+                ><img src="img/masking-luminance.png" alt="" />
                 <figcaption>
                   Rendered today as <code>mask</code>: a white, b gray.
                 </figcaption>
@@ -1335,9 +1346,9 @@ const stripes = layer(bars); // 11 vertical bars</code></pre>
                 class="new"
                 data-changed="2,3,4,5"
               ><code class="language-javascript">const fade = layer([aWhite, bGray]);
-mask({ mode: &quot;luminance&quot; }, [
-  fade.hidden(),
+intersect({ mode: &quot;luminance&quot; }, [
   stripes,
+  fade,
 ]);</code></pre>
               <p class="label current">Current</p>
               <pre
@@ -1346,36 +1357,107 @@ mask({ mode: &quot;luminance&quot; }, [
               ><code class="language-javascript">const fade = layer([aWhite, bGray]);
 mask([fade, stripes]);</code></pre>
             </div>
+            <div class="op">
+              <h4>intersect, drawn stencil</h4>
+              <p class="say">
+                The image is drawn once, as a child, and read by ref. The
+                operator's <code>blendMode</code> blends the result with the
+                image behind it.
+              </p>
+              <figure class="render render">
+                <span class="tag tag-render">Render</span
+                ><img src="img/bottle-paint.png" alt="" />
+                <figcaption>
+                  Rendered today as <code>paint</code>, the PICCL bottle
+                  (<code>stories/piccl/Bottle.stories.tsx</code>).
+                  <code>paint</code> grays the image first.
+                </figcaption>
+              </figure>
+              <p class="label proposed">Proposed</p>
+              <pre
+                class="new"
+                data-changed="1,2,3,4,5,6,7,8,9,10,11,12,13"
+              ><code class="language-javascript">layer([
+  image({
+    href: bottle,
+    h: v(100),
+  }).name(&quot;glass&quot;),
+  intersect({ blendMode: &quot;color&quot; }, [
+    rect({
+      h: &quot;amount&quot;,
+      w: 175,
+      fill: &quot;#00ff00&quot;,
+    }),
+    ref(&quot;glass&quot;),
+  ]),
+]);</code></pre>
+              <p class="label current">Current</p>
+              <pre
+                class="now"
+                data-changed="1,2,3,4,5,6,7"
+              ><code class="language-javascript">paint({ blendMode: &quot;color&quot; }, [
+  image({ href: bottle, h: v(100) }),
+  rect({
+    h: &quot;amount&quot;,
+    w: 175,
+    fill: &quot;#00ff00&quot;,
+  }),
+]);</code></pre>
+              <details class="current">
+                <summary>
+                  Before #1259 (string refs outside <code>.relate()</code>)
+                </summary>
+                <pre class="new"><code class="language-javascript">layer([
+  image({
+    href: bottle,
+    h: v(100),
+  }).name(&quot;glass&quot;),
+]).relate(({ glass }) =&gt; [
+  intersect({ blendMode: &quot;color&quot; }, [
+    rect({
+      h: &quot;amount&quot;,
+      w: 175,
+      fill: &quot;#00ff00&quot;,
+    }),
+    glass,
+  ]),
+]);</code></pre>
+              </details>
+            </div>
           </div>
           <p class="note">
             <code>"outline"</code> needs an exact outline and errors without one
-            (an image, text). Implementation: a hidden or ref stencil must still
-            lend its drawing to be read, as
-            <code>INTERNAL_lendDrawing</code> does for transitions. Moving the
-            blend to the content needs a <code>mixBlendMode</code> option on
-            <code>rect</code> and the other marks: today only
-            <code>line</code> and <code>ribbon</code> have one, typed
-            <code>"normal" | "multiply"</code> (<code>chart.ts</code> lines 973
-            and 1037), and the operator's <code>blendMode</code> takes
-            <code>"color" | "multiply" | "screen" | "overlay"</code> (line
-            1164).
+            (an image, text). Alpha goes through the alpha-mask path that
+            painted <code>intersect</code> already falls back to (<code
+              >porterDuff.tsx</code
+            >
+            361 to 393), so images and text work. Implementation: no fill must
+            draw the first operand's paint as it is; today every composite grays
+            its first operand and blends the second over it in
+            <code>"color"</code> (PICCL's model). For the bottle, the result's
+            <code>blendMode</code> must reach the image behind it, but today a
+            composite is drawn in an isolated group (<code
+              >isolation: isolate</code
+            >), so the blend goes on the outer group.
           </p>
           <details class="merged">
             <summary>
-              Merged: <code>paint</code>, <code>drawInside</code>,
-              <code>clip({ to })</code> and <code>mask({ mode })</code>
+              Merged and removed: <code>paint</code>, <code>mask</code> and
+              <code>clip</code>
             </summary>
             <p class="note">
-              Earlier rounds had four operators for one job, drawing content
-              inside a stencil. They differed only in whether the stencil is
-              drawn and what is read of it. <code>.hidden()</code> already says
-              whether a child is drawn, so one operator with
-              <code>mode</code> covers all four.
+              Earlier rounds had separate operators for drawing content inside a
+              stencil. A set operation with no fill already keeps its first
+              operand's paint, so <code>intersect</code> is the mask,
+              <code>subtract</code> the inverted mask, and a drawn stencil is a
+              ref. <code>paint</code> and today's <code>mask</code> are deleted,
+              and <code>mode: "luminance"</code> covers today's
+              <code>mask</code>.
             </p>
           </details>
         </article>
         <article class="card" id="mask-modes">
-          <h3><a href="#mask-modes">mask modes: alpha vs luminance</a></h3>
+          <h3><a href="#mask-modes">mode: alpha vs luminance</a></h3>
           <p class="say">
             Alpha reads the stencil's ink, so a stencil of any color works.
             Luminance reads its brightness, as SVG
@@ -1402,7 +1484,7 @@ mask([fade, stripes]);</code></pre>
               </figure>
               <pre
                 class="new"
-              ><code class="language-javascript">mask([stencil.hidden(), stripes]); // mode: &quot;alpha&quot;, the default</code></pre>
+              ><code class="language-javascript">intersect([stripes, stencil]); // mode: &quot;alpha&quot;, the default</code></pre>
             </div>
             <div class="col">
               <p class="label proposed">luminance</p>
@@ -1416,77 +1498,33 @@ mask([fade, stripes]);</code></pre>
               </figure>
               <pre
                 class="new"
-              ><code class="language-javascript">mask({ mode: &quot;luminance&quot; }, [stencil.hidden(), stripes]);</code></pre>
+              ><code class="language-javascript">intersect({ mode: &quot;luminance&quot; }, [stripes, stencil]);</code></pre>
             </div>
           </div>
-        </article>
-        <article class="card" id="stencil-slot">
-          <h3>
-            <a href="#stencil-slot"
-              >The stencil: the first child, or an option</a
-            >
-          </h3>
-          <p class="say">
-            As the first child, the stencil is a child like any other: drawn as
-            itself unless <code>.hidden()</code>, and a ref draws nothing. No
-            new rule is needed.
-          </p>
-          <details class="alts">
-            <summary>The option form, and why it is worse</summary>
-            <pre
-              class="new"
-            ><code class="language-javascript">// (a) The stencil as an option: a named sibling, read through `to`.
-layer([image({ href: bottlePng, h: v(100) }).name(&quot;glass&quot;)]).relate(
-  ({ glass }) =&gt; [
-    mask({ to: glass }, [
-      rect({ h: &quot;amount&quot;, w: 175, fill: &quot;#00ff00&quot;, mixBlendMode: &quot;color&quot; }),
-    ]),
-  ],
-);</code></pre>
-            <p class="note">
-              (a) needs a name and a <code>.relate()</code>, or #1259 (<code
-                >.layer()</code
-              >
-              reads names), to reach the image.
-            </p>
-            <pre
-              class="new"
-            ><code class="language-javascript">// (b) The stencil inline in `to`, and again as a drawn sibling.
-layer([
-  image({ href: bottlePng, h: v(100) }),
-  mask({ to: image({ href: bottlePng, h: v(100) }) }, [
-    rect({ h: &quot;amount&quot;, w: 175, fill: &quot;#00ff00&quot;, mixBlendMode: &quot;color&quot; }),
-  ]),
-]);</code></pre>
-            <p class="note">
-              (b) writes the image twice: two nodes that can drift apart.
-            </p>
-          </details>
         </article>
         <article class="card" id="intersect-unpainted">
           <h3><a href="#intersect-unpainted">Intersect without paint</a></h3>
           <p class="say">
-            The blend goes away: <code>intersect</code> always draws one new
-            shape, and <code>mask</code> with a hidden stencil keeps an
-            operand's own paint.
+            The blend goes away. With no fill, <code>intersect</code> keeps a's
+            own paint; with a fill, it draws one new shape. The slots are
+            operands either way.
           </p>
           <div class="figs">
             <figure class="render render">
               <span class="tag tag-render">Render</span
               ><img src="img/intersect-unpainted.png" alt="" />
-              <figcaption>Today: a blend of a and b.</figcaption>
+              <figcaption>Today: a gray a, blended with b's color.</figcaption>
             </figure>
           </div>
           <p class="label proposed">Proposed</p>
           <pre
             class="new"
-            data-changed="1,2"
-          ><code class="language-javascript">intersect({ fill: &quot;#5b7aa0&quot; }, [a, b]); // one new shape; default paint open (#1230)
-mask([b.hidden(), a]); // a&#x27;s own paint, inside b</code></pre>
+            data-changed="2"
+          ><code class="language-javascript">intersect([a, b]); // no fill: a&#x27;s own paint, inside b
+intersect({ fill: &quot;#5b7aa0&quot; }, [a, b]); // a fill: one new shape in it</code></pre>
           <p class="label current">Current</p>
           <pre
             class="now"
-            data-changed="1"
           ><code class="language-javascript">intersect([a, b]); // a blend of a&#x27;s and b&#x27;s paint, each clipped to the other</code></pre>
         </article>
         <article class="card" id="intersect-hidden">
@@ -1587,22 +1625,15 @@ mask([b.hidden(), a]); // a&#x27;s own paint, inside b</code></pre>
                     <code>pack</code>, <code>frame</code>,
                     <code>translate</code>, <code>offset</code>, a coord's
                     children, <code>enclose</code>'s children,
-                    <code>arrow</code>'s ends, <code>mask</code>'s content
-                  </td>
-                </tr>
-                <tr>
-                  <td>Child, also read</td>
-                  <td>
-                    <code>mask</code>'s first child, the stencil: read for its
-                    alpha, outline or luminance
+                    <code>arrow</code>'s ends
                   </td>
                 </tr>
                 <tr>
                   <td>Operand: read, never drawn</td>
                   <td>
-                    <code>intersect</code>, <code>subtract</code>,
-                    <code>exclude</code>, <code>union</code>,
-                    <code>Shape.blob({ avoiding })</code>, relational
+                    <code>union</code>, <code>intersect</code>,
+                    <code>subtract</code>, <code>exclude</code> (with or without
+                    a fill), <code>Shape.blob({ avoiding })</code>, relational
                     <code>line</code> and <code>ribbon</code>,
                     <code>Constraint.*</code>, <code>cut</code>'s source,
                     <code>Coord.bend</code>'s <code>along</code>,
@@ -1622,196 +1653,15 @@ mask([b.hidden(), a]); // a&#x27;s own paint, inside b</code></pre>
             </table>
           </div>
           <p class="note">
-            Today two operators break this: <code>intersect</code> switches its
-            slots from children to operands with its paint option, and
-            <code>mask</code> never draws its first child and reads only
-            luminance, so a ref or a colored stencil fails.
-            <code>paint</code> follows it: its first child is drawn and also
-            read, as <code>Constraint.align</code> reads the boxes of marks that
-            are drawn where they were made.
+            No exceptions. Today <code>intersect</code> switches its slots from
+            children to operands with its paint option, and
+            <code>paint</code> draws its first child; both go away. A stencil
+            you also want to see is drawn once as a child and read by ref.
           </p>
         </article>
       </section>
       <section class="group" id="g-naming">
         <h2>Naming</h2>
-        <article class="card" id="naming-mask">
-          <h3>
-            <a href="#naming-mask">Naming the one operator: mask or clip</a>
-          </h3>
-          <p class="say">
-            How other systems name "draw content inside a stencil", whether the
-            stencil is drawn, and what they call the modes.
-          </p>
-          <p class="label">Precedent</p>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>System</th>
-                  <th>Name</th>
-                  <th>Stencil drawn?</th>
-                  <th>Reads</th>
-                  <th>Checked against docs</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Sketch</td>
-                  <td>Mask; Mask Mode: Outline, Alpha</td>
-                  <td>yes: the fill shows until you turn it off</td>
-                  <td>outline, alpha</td>
-                  <td>
-                    partly: the docs say you can toggle the fill off and the
-                    mask still works
-                  </td>
-                </tr>
-                <tr>
-                  <td>Figma</td>
-                  <td>
-                    Use as mask; mask type: Alpha (default), Vector, Luminance
-                  </td>
-                  <td>no: the mask layer is hidden</td>
-                  <td>alpha, vector, luminance</td>
-                  <td>types, yes; hidden, from help and forum answers</td>
-                </tr>
-                <tr>
-                  <td>Photoshop</td>
-                  <td>Clipping mask</td>
-                  <td>yes: the base layer stays visible</td>
-                  <td>alpha of the base</td>
-                  <td>yes (Photoshop Elements help page)</td>
-                </tr>
-                <tr>
-                  <td>Procreate</td>
-                  <td>Clipping Mask</td>
-                  <td>yes</td>
-                  <td>alpha of the layer below</td>
-                  <td>yes</td>
-                </tr>
-                <tr>
-                  <td>Affinity Designer</td>
-                  <td>
-                    clipping (child on the name), mask (child on the thumbnail)
-                  </td>
-                  <td>clipping yes, mask no</td>
-                  <td>alpha; luminance for masks</td>
-                  <td>partly (tutorials)</td>
-                </tr>
-                <tr>
-                  <td>Illustrator</td>
-                  <td>Draw Inside; Clipping Mask; Opacity Mask</td>
-                  <td>Draw Inside yes; the other two no</td>
-                  <td>outline; luminance for Opacity Mask</td>
-                  <td>Draw Inside, yes; the others not re-checked</td>
-                </tr>
-                <tr>
-                  <td>Krita</td>
-                  <td>Inherit Alpha</td>
-                  <td>yes</td>
-                  <td>alpha</td>
-                  <td>yes</td>
-                </tr>
-                <tr>
-                  <td>After Effects</td>
-                  <td>Preserve Underlying Transparency</td>
-                  <td>yes</td>
-                  <td>alpha</td>
-                  <td>yes</td>
-                </tr>
-                <tr>
-                  <td>CSS</td>
-                  <td>mask, mask-mode</td>
-                  <td>no</td>
-                  <td>alpha, luminance, match-source (initial)</td>
-                  <td>yes (MDN)</td>
-                </tr>
-                <tr>
-                  <td>SVG</td>
-                  <td>&lt;mask&gt;, mask-type</td>
-                  <td>no</td>
-                  <td>luminance (initial), alpha</td>
-                  <td>yes (MDN)</td>
-                </tr>
-                <tr>
-                  <td>CSS, SVG</td>
-                  <td>clip-path, &lt;clipPath&gt;</td>
-                  <td>no</td>
-                  <td>outline only</td>
-                  <td>not re-checked</td>
-                </tr>
-                <tr>
-                  <td>ggfx (R)</td>
-                  <td>with_mask(x, mask, invert)</td>
-                  <td>no: the mask is a reference layer</td>
-                  <td>luminance by default; ch_alpha() picks alpha</td>
-                  <td>
-                    yes; it has no mask_type argument, which the earlier grid
-                    said
-                  </td>
-                </tr>
-                <tr>
-                  <td>Canvas 2D</td>
-                  <td>source-atop; clip()</td>
-                  <td>source-atop yes; clip() no</td>
-                  <td>alpha; outline</td>
-                  <td>not re-checked</td>
-                </tr>
-                <tr>
-                  <td>GoFish today</td>
-                  <td>paint; mask</td>
-                  <td>paint yes; mask no</td>
-                  <td>paint alpha; mask luminance</td>
-                  <td>from the code</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p class="note">
-            Checked with a web search on 2026-11-02 against the Sketch, Figma,
-            Adobe, Procreate and Krita help pages, MDN for CSS and SVG, and the
-            ggfx reference.
-          </p>
-          <p class="label">Recommendations</p>
-          <ul class="recs">
-            <li>
-              <b>Recommend <code>mask</code>.</b> The deciding precedent is
-              Sketch: its Mask is this design. The mask shape keeps its fill
-              unless you turn it off, and it has two modes, Outline and Alpha.
-              The mode values are mask words everywhere: CSS
-              <code>mask-mode</code> (alpha, luminance), SVG
-              <code>mask-type</code> (luminance, alpha) and Figma's mask types
-              (Alpha, Vector, Luminance).
-            </li>
-            <li>
-              <b>Why not <code>clip</code>.</b> It is the most common word, and
-              Photoshop and Procreate draw the base. But their term is "clipping
-              mask", which is a kind of mask. In every code API, clip is outline
-              only and all or nothing: SVG <code>&lt;clipPath&gt;</code>, CSS
-              <code>clip-path</code>, Canvas <code>clip()</code>, SwiftUI
-              <code>.clipShape</code>, Flutter <code>ClipPath</code>. So
-              <code>clip({ mode: "luminance" })</code> contradicts its own name,
-              and an image stencil's soft edge is not a clip.
-            </li>
-            <li>
-              <b>Against <code>mask</code>.</b> Figma hides the mask layer, so
-              Figma users expect a mask's stencil not to draw. Here that is one
-              call: <code>.hidden()</code> on the stencil. Today's GoFish
-              <code>mask</code> also never draws its stencil, so every current
-              call needs <code>.hidden()</code> on its first child.
-            </li>
-            <li>
-              <b>The option is <code>mode</code>.</b> CSS calls it
-              <code>mask-mode</code> and Sketch calls it Mask Mode.
-              <code>type</code> (Figma's mask type, SVG <code>mask-type</code>)
-              is the runner-up; it is a Python builtin, so
-              <code>mask(type=...)</code> shadows it. ggfx has no option; it
-              picks a channel with <code>ch_alpha()</code>. The values:
-              <code>"alpha"</code> (CSS, SVG, Figma, Sketch),
-              <code>"luminance"</code> (CSS, SVG, Figma) and
-              <code>"outline"</code> (Sketch; Figma says Vector).
-            </li>
-          </ul>
-        </article>
         <article class="card" id="naming-grid">
           <h3><a href="#naming-grid">Compositing names elsewhere</a></h3>
           <p class="say">
@@ -2131,7 +1981,7 @@ mask([b.hidden(), a]); // a&#x27;s own paint, inside b</code></pre>
                   <td>subtract</td>
                   <td>exclude</td>
                   <td class="nil">none</td>
-                  <td>mask</td>
+                  <td>mask, luminance only</td>
                   <td>the first child</td>
                 </tr>
                 <tr>
@@ -2140,19 +1990,19 @@ mask([b.hidden(), a]); // a&#x27;s own paint, inside b</code></pre>
                   <td>intersect</td>
                   <td>subtract</td>
                   <td>exclude</td>
-                  <td>mask({ mode: "outline" })</td>
-                  <td>mask, mode alpha or luminance</td>
-                  <td>the first child</td>
+                  <td>intersect, mode "outline"</td>
+                  <td>intersect, no fill, mode alpha or luminance</td>
+                  <td>the second operand</td>
                 </tr>
               </tbody>
             </table>
           </div>
           <p class="note">
             Names as each system documents them, from my knowledge, not
-            re-checked online, except the mask column, checked in the card
-            above: Figma's mask types and the ggfx row (it has no
-            <code>mask_type</code>). The least certain: Affinity's clipping and
-            mask layers, and Bluefish and Penrose having none.
+            re-checked online, except the mask column: Figma's mask types, and
+            the ggfx row (it has no <code>mask_type</code>). The least certain:
+            Affinity's clipping and mask layers, and Bluefish and Penrose having
+            none.
           </p>
           <p class="label">Recommendations</p>
           <ul class="recs">
@@ -2176,9 +2026,22 @@ mask([b.hidden(), a]); // a&#x27;s own paint, inside b</code></pre>
               verb-named operators.
             </li>
             <li>
-              <b>Clip and mask columns.</b> One operator, <code>mask</code>,
-              covers both, with <code>mode: "outline"</code> for the clip
-              column. See the card above.
+              <b>Clip and mask columns.</b> No separate name. A set operation
+              with no fill keeps its first operand's paint, so
+              <code>intersect</code> is the mask and <code>subtract</code> the
+              inverted mask. CSS does the same:
+              <code>mask-composite</code> takes <code>add</code>,
+              <code>subtract</code>, <code>intersect</code> and
+              <code>exclude</code> (MDN). ggfx inverts a mask with
+              <code>with_mask(invert = TRUE)</code>.
+            </li>
+            <li>
+              <b>mode.</b> How a stencil operand is read:
+              <code>"alpha"</code> (default), <code>"outline"</code> or
+              <code>"luminance"</code>. CSS calls it
+              <code>mask-mode</code> (alpha, luminance) and Sketch calls it Mask
+              Mode (Outline, Alpha). <code>type</code> (Figma's mask type, SVG
+              <code>mask-type</code>) is the runner-up; it is a Python builtin.
             </li>
           </ul>
         </article>
@@ -2613,25 +2476,33 @@ rect({ w: 20, h: 20 }).translate({ x: 10 }); // field: translate: { x: 10 }</cod
                 </td>
               </tr>
               <tr>
-                <td><code>mask([stencil.hidden(), b])</code></td>
-                <td>
-                  Proposed: the stencil is read and not drawn. Today: no effect;
-                  the stencil is never drawn.
-                </td>
-              </tr>
-              <tr>
                 <td>
                   <code
-                    >mask({ mode: &quot;outline&quot; }, [image(o), b])</code
+                    >intersect({ mode: &quot;outline&quot; }, [b,
+                    image(o)])</code
                   >
                 </td>
                 <td>Error: an image has no exact outline. Use alpha.</td>
               </tr>
               <tr>
-                <td><code>mask([ref(&quot;a&quot;), b])</code></td>
+                <td><code>intersect([b, ref(&quot;a&quot;)])</code></td>
                 <td>
                   Alpha reads a's ink. If a is unfilled, that is only its
                   stroke; use <code>mode: "outline"</code>.
+                </td>
+              </tr>
+              <tr>
+                <td><code>union([stripes, a])</code></td>
+                <td>
+                  No fill: just the stripes, since a adds none of their paint.
+                  Error? (<a href="#d-degenerate">open</a>)
+                </td>
+              </tr>
+              <tr>
+                <td><code>exclude([stripes, a])</code></td>
+                <td>
+                  No fill: the same as <code>subtract([stripes, a])</code>.
+                  Error? (<a href="#d-degenerate">open</a>)
                 </td>
               </tr>
               <tr>
@@ -2654,33 +2525,46 @@ rect({ w: 20, h: 20 }).translate({ x: 10 }); // field: translate: { x: 10 }</cod
             read), operands are read and never drawn, refs draw nothing?
             <a class="see" href="#slots">card</a>
           </li>
-          <li id="d-one">
-            (a) Adopt one operator for drawing content inside a stencil,
-            replacing <code>paint</code> and today's <code>mask</code>? Region
-            shapes from operands stay the other job, and the unpainted
-            <code>intersect</code> blend is dropped.
+          <li id="d-a">
+            (a) Adopt design A: region compositing is four set operations whose
+            operands are never drawn, deleting <code>paint</code> and
+            <code>mask</code>? <a class="see" href="#ops">card</a>
+          </li>
+          <li id="d-default">
+            (b) With no fill, the result keeps the first operand's paint (closes
+            #1230, the default paint of a compositing operator with no fill)? It
+            drops today's gray-and-color blend.
+            <a class="see" href="#intersect-unpainted">card</a>
+          </li>
+          <li id="d-mode">
+            (c) Name the option <code>mode</code> (CSS <code>mask-mode</code>,
+            Sketch's Mask Mode), or <code>type</code> (Figma's mask type, SVG
+            <code>mask-type</code>)? <a class="see" href="#mask-modes">card</a>
+          </li>
+          <li id="d-blendname">
+            (d) <code>line</code> and <code>ribbon</code> say
+            <code>mixBlendMode</code> (<code>"normal" | "multiply"</code>,
+            <code>chart.ts</code> lines 973 and 1037); the set operations say
+            <code>blendMode</code> (<code
+              >"color" | "multiply" | "screen" | "overlay"</code
+            >, line 1164; Python <code>blend_mode</code>). Unify on one name?
             <a class="see" href="#ops">card</a>
           </li>
-          <li id="d-name">
-            (b) Name it <code>mask</code> (recommended: Sketch's Mask draws its
-            stencil and has Outline and Alpha modes; CSS, SVG and Figma use mask
-            with alpha and luminance; clip is outline only in every code API),
-            or <code>clip</code>? And the option <code>mode</code> (CSS
-            <code>mask-mode</code>, Sketch's Mask Mode), or
-            <code>type</code> (Figma, SVG <code>mask-type</code>)?
-            <a class="see" href="#naming-mask">card</a>
+          <li id="d-migrate-pd">
+            (e) Migrate every <code>paint</code> and <code>mask</code> call in
+            the same change: 7 calls in code (the Bottle story, two
+            PorterDuffRelations stories, one test in
+            <code>coordPaintOrder.test.ts</code>, and three Python stories), the
+            internal <code>Mask</code> in <code>cut.tsx</code>, and 5 docs pages
+            (region-compositing and cut, JS and Python, and the handwritten
+            pictorial-charts tutorial, which gets an issue)?
+            <a class="see" href="#ops">card</a>
           </li>
-          <li id="d-stencil">
-            (c) The stencil as the first child (recommended: drawn unless
-            hidden, no new rule), or as an option,
-            <code>mask({ to }, content)</code>?
-            <a class="see" href="#stencil-slot">card</a>
-          </li>
-          <li id="d-blend">
-            (d) Move <code>blendMode</code> from the operator to the content as
-            <code>mixBlendMode</code>? Today only <code>line</code> and
-            <code>ribbon</code> have it, as <code>"normal" | "multiply"</code>,
-            so every mark would get it, with <code>"color"</code> added.
+          <li id="d-degenerate">
+            (f) With no fill, <code>union</code> draws only its first operand
+            and <code>exclude</code> draws the same as <code>subtract</code>.
+            Make both an error when drawn with no fill, pointing to a fill or to
+            <code>intersect</code> with the shapes as the stencil?
             <a class="see" href="#ops">card</a>
           </li>
           <li id="d-union">
@@ -2869,8 +2753,8 @@ rect({ w: 20, h: 20 }).translate({ x: 10 }); // field: translate: { x: 10 }</cod
               does this operator draw this slot? In region compositing the
               answer is muddled today: <code>intersect</code> switches its slots
               with its paint option, and <code>mask</code> reads luminance. So
-              it splits into two jobs: region shapes from operands, and
-              <code>mask</code>, whose stencil is a child.
+              it becomes one family: four set operations whose operands are
+              never drawn, with no fill as masking.
             </li>
           </ul>
         </details>

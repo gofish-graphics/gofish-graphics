@@ -723,9 +723,10 @@ export const GridIntersect: StoryObj = {
 export const GridSubtract: StoryObj = {
   render: () => grid(subtract([gridB(GRID_FILL), gridA(GRID_FILL)])),
 };
-// Proposed `exclude({ fill }, [a, b])`. Today `exclude` draws its first
-// operand's half desaturated (a `saturate(0)` filter in the SVG output), so
-// the two halves are drawn as two subtracts instead.
+// Proposed `exclude({ fill }, [a, b])`. Today's composites gray their first
+// operand (the grayscale-then-composite lowering in `paintSVG.tsx`, from
+// PICCL), so `exclude` draws a's half gray; the two halves are drawn as two
+// subtracts instead.
 export const GridExclude: StoryObj = {
   render: () =>
     grid(
@@ -744,24 +745,60 @@ export const ExcludeDesaturatedToday: StoryObj = {
 export const GridUnion: StoryObj = {
   render: () => grid(layer([gridA(GRID_FILL), gridB(GRID_FILL)])),
 };
-// Proposed `mask([a.hidden(), stripes])`: today's `mask` with a white a.
-export const GridMaskHidden: StoryObj = {
-  render: () => grid(mask([gridA({ fill: "white" }), stripes()])),
-};
-// Proposed `mask({ mode: "outline" }, [ref("a"), stripes])` with a drawn
-// elsewhere as an outline: today, the circle written twice.
-export const GridMaskOutline: StoryObj = {
+
+// ── Design A, masking: no fill keeps the first operand's paint ─────────────
+
+// Proposed `intersect([stripes, layer([a, b])])`: the stripes inside a ∪ b.
+// Today: `mask` with both circles white.
+export const MaskingUnion: StoryObj = {
   render: () =>
     grid(
-      layer([
-        mask([gridA({ fill: "white" }), stripes()]),
-        gridA({ fill: "none", stroke: "#222", strokeWidth: 3 }),
+      mask([
+        layer([gridA({ fill: "white" }), gridB({ fill: "white" })]),
+        stripes(),
       ])
     ),
 };
-// Proposed `mask({ mode: "luminance" }, [fade.hidden(), stripes])`: today's
+// Proposed `intersect([stripes, a])`: the stripes inside a. Today: `mask`
+// with a white a.
+export const MaskingIntersect: StoryObj = {
+  render: () => grid(mask([gridA({ fill: "white" }), stripes()])),
+};
+// Proposed `subtract([stripes, a])`: the stripes outside a. Today's
+// `subtract` draws its second operand minus its first, in the second's own
+// paint, so `subtract([a, stripes])` draws exactly this.
+// The stripes are cut to a 110 px band around a so the hole reads in the
+// crop; the band is the stripes' own box.
+const bandStripes = () =>
+  layer(
+    Array.from({ length: 10 }, (_, i) =>
+      rect({
+        x: i * 20,
+        y: 15,
+        w: 10,
+        h: 110,
+        fill: i % 2 ? "#E07A5F" : "#3D5A80",
+      })
+    )
+  );
+export const MaskingSubtract: StoryObj = {
+  render: () => grid(subtract([gridA(), bandStripes()])),
+};
+// Proposed `intersect([stripes, exclude({ fill }, [a, b])])`: the stripes
+// inside a xor b. Today: `mask` over a white exclude (gray of white is
+// white, so the grayscale step does not show).
+export const MaskingExclude: StoryObj = {
+  render: () =>
+    grid(
+      mask([
+        exclude([gridA({ fill: "white" }), gridB({ fill: "white" })]),
+        stripes(),
+      ])
+    ),
+};
+// Proposed `intersect({ mode: "luminance" }, [stripes, fade])`: today's
 // `mask`, a white and a gray circle.
-export const GridMaskLuminance: StoryObj = {
+export const MaskingLuminance: StoryObj = {
   render: () =>
     grid(
       mask([
