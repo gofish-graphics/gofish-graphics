@@ -11,6 +11,7 @@ import {
   createName,
   derive,
   enclose,
+  exclude,
   field,
   intersect,
   layer,
@@ -26,6 +27,7 @@ import {
   Shape,
   spread,
   struct,
+  subtract,
   text,
   blank,
   Unit,
@@ -694,5 +696,77 @@ export const ClipVsMaskClip: StoryObj = {
       mask([stencilRow(STENCIL_FILLS.map(() => "white")), wideStripes()]),
       380,
       140
+    ),
+};
+
+// ── Operator grid: the same two circles on every card ──────────────────────
+// Each story draws, with today's operators, the pixels the proposed spelling
+// would draw. The proposal page names the spelling under each render.
+
+const gridA = (style: Record<string, any> = {}) =>
+  circle({ cx: 70, cy: 70, r: 50, ...style });
+const gridB = (style: Record<string, any> = {}) =>
+  circle({ cx: 130, cy: 70, r: 50, ...style });
+const GRID_FILL = { fill: FILL };
+const GRID_W = 200;
+const GRID_H = 140;
+const grid = (node: any) => show(node, GRID_W, GRID_H);
+
+// Proposed `intersect({ fill }, [a, b])`: the same today.
+export const GridIntersect: StoryObj = {
+  render: () => grid(intersect(GRID_FILL, [gridA(), gridB()])),
+};
+// Proposed `subtract({ fill }, [a, b])`. `subtract` takes no paint today,
+// so both operands carry the fill and it composites their own paint.
+// Today `subtract([a, b])` draws b − a, the reverse of its doc comment
+// ("A − B"), so the operands are swapped here to draw a − b.
+export const GridSubtract: StoryObj = {
+  render: () => grid(subtract([gridB(GRID_FILL), gridA(GRID_FILL)])),
+};
+// Proposed `exclude({ fill }, [a, b])`. Today `exclude` draws its first
+// operand's half desaturated (a `saturate(0)` filter in the SVG output), so
+// the two halves are drawn as two subtracts instead.
+export const GridExclude: StoryObj = {
+  render: () =>
+    grid(
+      layer([
+        subtract([gridB(GRID_FILL), gridA(GRID_FILL)]),
+        subtract([gridA(GRID_FILL), gridB(GRID_FILL)]),
+      ])
+    ),
+};
+// Today's `exclude([a, b])` as it draws now, for the record.
+export const ExcludeDesaturatedToday: StoryObj = {
+  render: () => grid(exclude([gridA(GRID_FILL), gridB(GRID_FILL)])),
+};
+// Proposed `union({ fill }, [a, b])`. With fill only, `layer` draws the same
+// pixels; with a stroke it would draw two outlines, not one.
+export const GridUnion: StoryObj = {
+  render: () => grid(layer([gridA(GRID_FILL), gridB(GRID_FILL)])),
+};
+// Proposed `mask([a.hidden(), stripes])`: today's `mask` with a white a.
+export const GridMaskHidden: StoryObj = {
+  render: () => grid(mask([gridA({ fill: "white" }), stripes()])),
+};
+// Proposed `mask({ mode: "outline" }, [ref("a"), stripes])` with a drawn
+// elsewhere as an outline: today, the circle written twice.
+export const GridMaskOutline: StoryObj = {
+  render: () =>
+    grid(
+      layer([
+        mask([gridA({ fill: "white" }), stripes()]),
+        gridA({ fill: "none", stroke: "#222", strokeWidth: 3 }),
+      ])
+    ),
+};
+// Proposed `mask({ mode: "luminance" }, [fade.hidden(), stripes])`: today's
+// `mask`, a white and a gray circle.
+export const GridMaskLuminance: StoryObj = {
+  render: () =>
+    grid(
+      mask([
+        layer([gridA({ fill: "white" }), gridB({ fill: "#808080" })]),
+        stripes(),
+      ])
     ),
 };
