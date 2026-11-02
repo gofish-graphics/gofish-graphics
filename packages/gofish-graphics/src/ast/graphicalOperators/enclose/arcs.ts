@@ -427,11 +427,53 @@ export type ArcsOutlineOptions = {
  * disc passes through leaves the pieces apart, one loop each. No members, no
  * outline.
  */
+/** PROTOTYPE (scratch, not for merge): when `spine` is a number, the members
+ *  are joined by the Euclidean minimum spanning tree of their centers, each
+ *  link a segment member `spine` px wide, before the closing. The arcs
+ *  outline then stays in one piece, as the blob's spine does. Set from the
+ *  scratch story `Scratch/Enclose Shape Compare`. */
+export const ARCS_PROTOTYPE: { spine?: number } = {};
+
+const centerOfMember = (m: BlobMember): Pt =>
+  m.kind === "disc"
+    ? [m.cx, m.cy]
+    : m.kind === "segment"
+      ? [(m.a[0] + m.b[0]) / 2, (m.a[1] + m.b[1]) / 2]
+      : [m.x + m.w / 2, m.y + m.h / 2];
+
+/** PROTOTYPE: Prim's MST over the members' centers, as segment members. */
+function spineLinks(members: BlobMember[], w: number): BlobMember[] {
+  const c = members.map(centerOfMember);
+  const n = c.length;
+  const inTree = new Array(n).fill(false);
+  const best = new Array(n).fill(Infinity);
+  const from = new Array(n).fill(-1);
+  best[0] = 0;
+  const out: BlobMember[] = [];
+  for (let it = 0; it < n; it++) {
+    let u = -1;
+    for (let i = 0; i < n; i++)
+      if (!inTree[i] && (u < 0 || best[i] < best[u])) u = i;
+    inTree[u] = true;
+    if (from[u] >= 0) out.push({ kind: "segment", a: c[from[u]], b: c[u], w });
+    for (let i = 0; i < n; i++) {
+      const d = Math.hypot(c[i][0] - c[u][0], c[i][1] - c[u][1]);
+      if (!inTree[i] && d < best[i]) {
+        best[i] = d;
+        from[i] = u;
+      }
+    }
+  }
+  return out;
+}
+
 export function arcsOutline(
   members: BlobMember[],
   o: ArcsOutlineOptions
 ): Pt[][] {
   if (members.length === 0) return [];
+  if (ARCS_PROTOTYPE.spine !== undefined)
+    members = [...members, ...spineLinks(members, ARCS_PROTOTYPE.spine)];
   const r = Math.max(0, o.radius);
   const prims = members.map((m) => grown(m, Math.max(0, o.padding) + r));
   const sdf = (j: number, x: number, y: number) =>
