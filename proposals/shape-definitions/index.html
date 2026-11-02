@@ -431,6 +431,38 @@
       .compare .col {
         min-width: 0;
       }
+      ul.recs {
+        margin: 0;
+        padding-left: 1.2em;
+      }
+      ul.recs li {
+        margin: 0 0 8px;
+        max-width: 80ch;
+      }
+      #naming-grid table {
+        font-size: 0.78rem;
+      }
+      #naming-grid th,
+      #naming-grid td {
+        padding: 5px 7px;
+      }
+      td.nil {
+        color: var(--muted);
+        opacity: 0.6;
+      }
+      @media (min-width: 1180px) {
+        #naming-grid {
+          margin-left: -130px;
+          margin-right: -130px;
+        }
+      }
+      #naming-grid td:first-child {
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      #naming-grid tr:nth-last-child(-n + 2) td {
+        background: var(--accent-soft);
+      }
       .card .note {
         color: var(--muted);
         font-size: 0.9rem;
@@ -563,6 +595,7 @@
         <a href="#g-hiding">Hiding</a> ·
         <a href="#g-guides">Guides drawn or not</a> ·
         <a href="#g-regions">Region compositing</a> ·
+        <a href="#g-naming">Naming</a> ·
         <a href="#g-bend">Coordinate transforms with a shape argument</a> ·
         <a href="#g-renames">Renames</a> · <a href="#g-parked">Parked</a> ·
         <a href="#errors">Errors</a> · <a href="#decisions">Decisions</a> ·
@@ -1388,6 +1421,404 @@ paint([a, b]); // draws a, washed out
 // no plot-box clip (#1209)</code></pre>
         </article>
       </section>
+      <section class="group" id="g-naming">
+        <h2>Naming</h2>
+        <article class="card" id="naming-grid">
+          <h3><a href="#naming-grid">Compositing names elsewhere</a></h3>
+          <p class="say">
+            Union, intersection, difference, symmetric difference, shape-only
+            clip, paint-based mask, and the clip region's parameter.
+          </p>
+          <p class="label">Precedent</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>System</th>
+                  <th>Union</th>
+                  <th>Intersection</th>
+                  <th>A minus B</th>
+                  <th>Xor</th>
+                  <th>Clip (shape)</th>
+                  <th>Mask (paint)</th>
+                  <th>Region parameter</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Figma</td>
+                  <td>Union</td>
+                  <td>Intersect</td>
+                  <td>Subtract</td>
+                  <td>Exclude</td>
+                  <td>Use as mask (Vector)</td>
+                  <td>Use as mask (Alpha, Luminance)</td>
+                  <td>the bottom layer</td>
+                </tr>
+                <tr>
+                  <td>Illustrator</td>
+                  <td>Unite</td>
+                  <td>Intersect</td>
+                  <td>Minus Front</td>
+                  <td>Exclude</td>
+                  <td>Clipping Mask</td>
+                  <td>Opacity Mask</td>
+                  <td>the top object</td>
+                </tr>
+                <tr>
+                  <td>Inkscape</td>
+                  <td>Union</td>
+                  <td>Intersection</td>
+                  <td>Difference</td>
+                  <td>Exclusion</td>
+                  <td>Clip</td>
+                  <td>Mask (luminance)</td>
+                  <td>the top object</td>
+                </tr>
+                <tr>
+                  <td>Sketch</td>
+                  <td>Union</td>
+                  <td>Intersect</td>
+                  <td>Subtract</td>
+                  <td>Difference</td>
+                  <td>Outline Mask</td>
+                  <td>Alpha Mask</td>
+                  <td>the bottom layer</td>
+                </tr>
+                <tr>
+                  <td>Affinity Designer</td>
+                  <td>Add</td>
+                  <td>Intersect</td>
+                  <td>Subtract</td>
+                  <td>Xor</td>
+                  <td>nested clip</td>
+                  <td>mask layer</td>
+                  <td>the parent layer</td>
+                </tr>
+                <tr>
+                  <td>SVG</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td>&lt;clipPath&gt;, clip-path</td>
+                  <td>&lt;mask&gt;</td>
+                  <td>url(#id)</td>
+                </tr>
+                <tr>
+                  <td>CSS</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td>clip-path</td>
+                  <td>mask, mask-mode</td>
+                  <td>its value</td>
+                </tr>
+                <tr>
+                  <td>Canvas 2D</td>
+                  <td class="nil">none</td>
+                  <td>source-in</td>
+                  <td>destination-out</td>
+                  <td>xor</td>
+                  <td>clip()</td>
+                  <td>destination-in</td>
+                  <td>the current path</td>
+                </tr>
+                <tr>
+                  <td>PDF, PostScript</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td>clip path</td>
+                  <td>soft mask</td>
+                  <td>the current path</td>
+                </tr>
+                <tr>
+                  <td>Skia</td>
+                  <td>kUnion</td>
+                  <td>kIntersect</td>
+                  <td>kDifference</td>
+                  <td>kXOR</td>
+                  <td>clipPath</td>
+                  <td>mask filter, shader</td>
+                  <td>a path</td>
+                </tr>
+                <tr>
+                  <td>SwiftUI</td>
+                  <td>union(_:)</td>
+                  <td>intersection(_:)</td>
+                  <td>subtracting(_:)</td>
+                  <td>symmetricDifference(_:)</td>
+                  <td>.clipShape(_:)</td>
+                  <td>.mask(_:)</td>
+                  <td>unlabeled</td>
+                </tr>
+                <tr>
+                  <td>Flutter</td>
+                  <td>PathOperation.union</td>
+                  <td>.intersect</td>
+                  <td>.difference</td>
+                  <td>.xor</td>
+                  <td>ClipPath(clipper:)</td>
+                  <td>ShaderMask</td>
+                  <td>clipper</td>
+                </tr>
+                <tr>
+                  <td>Jetpack Compose</td>
+                  <td>PathOperation.Union</td>
+                  <td>Intersect</td>
+                  <td>Difference</td>
+                  <td>Xor</td>
+                  <td>Modifier.clip(shape)</td>
+                  <td>BlendMode.DstIn</td>
+                  <td>shape</td>
+                </tr>
+                <tr>
+                  <td>Typst</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td>box(clip: true)</td>
+                  <td class="nil">none</td>
+                  <td>the box itself</td>
+                </tr>
+                <tr>
+                  <td>TikZ</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td>\clip</td>
+                  <td>path fading</td>
+                  <td>the path</td>
+                </tr>
+                <tr>
+                  <td>p5.js</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td>clip(callback)</td>
+                  <td>img.mask()</td>
+                  <td>a callback</td>
+                </tr>
+                <tr>
+                  <td>Paper.js</td>
+                  <td>unite</td>
+                  <td>intersect</td>
+                  <td>subtract</td>
+                  <td>exclude</td>
+                  <td>clipMask (clipped group)</td>
+                  <td class="nil">none</td>
+                  <td>first child</td>
+                </tr>
+                <tr>
+                  <td>Shapely, GEOS</td>
+                  <td>union</td>
+                  <td>intersection</td>
+                  <td>difference</td>
+                  <td>symmetric_difference</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                </tr>
+                <tr>
+                  <td>JTS</td>
+                  <td>union</td>
+                  <td>intersection</td>
+                  <td>difference</td>
+                  <td>symDifference</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                </tr>
+                <tr>
+                  <td>Clipper2</td>
+                  <td>Union</td>
+                  <td>Intersect</td>
+                  <td>Difference</td>
+                  <td>Xor</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td>the clip paths</td>
+                </tr>
+                <tr>
+                  <td>Turf</td>
+                  <td>union</td>
+                  <td>intersect</td>
+                  <td>difference</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                </tr>
+                <tr>
+                  <td>polybool</td>
+                  <td>union</td>
+                  <td>intersect</td>
+                  <td>difference</td>
+                  <td>xor</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                </tr>
+                <tr>
+                  <td>JS Set (ES2025)</td>
+                  <td>union</td>
+                  <td>intersection</td>
+                  <td>difference</td>
+                  <td>symmetricDifference</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                </tr>
+                <tr>
+                  <td>Observable Plot</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td>clip: "frame", GeoJSON</td>
+                  <td class="nil">none</td>
+                  <td>its value</td>
+                </tr>
+                <tr>
+                  <td>Vega-Lite</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td>clip: true</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                </tr>
+                <tr>
+                  <td>ggplot2, ggfx</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td>coord_cartesian(clip=)</td>
+                  <td>with_mask(mask_type=)</td>
+                  <td>mask</td>
+                </tr>
+                <tr>
+                  <td>D3</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td>clipExtent</td>
+                  <td>SVG mask</td>
+                  <td>extent</td>
+                </tr>
+                <tr>
+                  <td>Bluefish, Penrose</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
+                </tr>
+                <tr>
+                  <td>PiCCL, Porter-Duff</td>
+                  <td>over</td>
+                  <td>in</td>
+                  <td>out</td>
+                  <td>xor</td>
+                  <td>in</td>
+                  <td class="nil">none</td>
+                  <td>the first operand</td>
+                </tr>
+                <tr>
+                  <td>GoFish today</td>
+                  <td class="nil">none</td>
+                  <td>intersect</td>
+                  <td>subtract</td>
+                  <td>exclude</td>
+                  <td class="nil">none</td>
+                  <td>mask</td>
+                  <td>the first child</td>
+                </tr>
+                <tr>
+                  <td>GoFish proposed</td>
+                  <td>union</td>
+                  <td>intersect</td>
+                  <td>subtract</td>
+                  <td>exclude</td>
+                  <td>clip({ to })</td>
+                  <td>mask({ mode }), parked</td>
+                  <td>to</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="note">
+            Names as each system documents them, from my knowledge, not
+            re-checked online. The least certain: Figma's mask types, Affinity's
+            clipping and mask layers, and Bluefish and Penrose having none.
+          </p>
+          <p class="label">Recommendations</p>
+          <ul class="recs">
+            <li>
+              <b>union.</b> Keep <code>union</code>: Figma (the recorded naming
+              source, #196, #404), Inkscape, Sketch, SwiftUI, Flutter, Compose,
+              Skia, Shapely, Clipper2 and the JS <code>Set</code> all say union.
+              <code>unite</code> (Illustrator, Paper.js) is the runner-up. Every
+              design tool keeps Union apart from Group, and Josh asked for a
+              separate Union in #196 because it draws one new outline. The
+              reference page says it in one line: <code>union</code> draws one
+              shape, <code>layer</code> draws each child.
+            </li>
+            <li>
+              <b>intersect, subtract, exclude.</b> Keep them. This is the
+              recorded Figma decision, and Paper.js uses the same verbs. The set
+              mixes one noun-verb (<code>union</code>) with three verbs, as
+              Figma does; renaming to all nouns (<code>intersection</code>,
+              <code>difference</code>, as in SwiftUI, Shapely and JS
+              <code>Set</code>) would break the recorded decision and GoFish's
+              verb-named operators.
+            </li>
+            <li>
+              <b>clip({ to }).</b> <code>clip</code> is the universal name: SVG,
+              CSS, Canvas, PDF, Skia, SwiftUI, Flutter, Compose, Typst, TikZ,
+              p5, Plot, Vega-Lite and ggplot2. For the region,
+              <code>to</code> reads as "clip to the disc" and follows GoFish's
+              prepositions for shape operands (<code>along</code>,
+              <code>avoiding</code>, <code>around</code>). The others collide:
+              <code>shape</code> is <code>enclose</code>'s strategy option
+              (<code>Shape.blob</code>), <code>region</code> is a mark, and
+              <code>by</code> is the split key. Line's <code>to</code> also
+              takes a ref to a shape, so the two uses agree.
+            </li>
+            <li>
+              <b>clip and mask are two names.</b> Confirmed. SVG, CSS, Canvas,
+              PDF, Skia, Illustrator, Inkscape, Sketch, Affinity, SwiftUI,
+              Flutter, TikZ, p5 and ggfx all split them; Figma has one command
+              with a type setting. If <code>mask</code> returns, it reads paint
+              with <code>mask({ mode: "alpha" | "luminance" })</code>, after CSS
+              <code>mask-mode</code> and ggfx <code>mask_type</code>, nested as
+              one option. Default alpha (SwiftUI, p5, ggfx, Figma), so a stencil
+              of any color works; today's luminance needs white.
+            </li>
+            <li>
+              <b>Drop paint.</b> Only Porter-Duff has a name for it (atop).
+              Design tools spell it as draw A, then clip B to A: Illustrator's
+              Draw Inside, Affinity's nested clipping. Under the new names that
+              is
+              <code
+                >layer([a.name("a")]).relate(({ a }) => [clip({ to: a },
+                [b])])</code
+              >, as on the region card.
+            </li>
+          </ul>
+        </article>
+      </section>
       <section class="group" id="g-bend">
         <h2>Coordinate transforms with a shape argument</h2>
         <article class="card" id="operand-frame">
@@ -1431,9 +1862,8 @@ paint([a, b]); // draws a, washed out
                   <td><code>Bin.voronoi({ seeds })</code></td>
                   <td>seed rows</td>
                   <td>
-                    The chart's frame. Cells are computed in data units over the
-                    domain (<code>polygonCells.ts</code>), so under polar they
-                    are built in θ and r, then warped.
+                    The chart's frame, placed by its scales. Cells are computed
+                    there; under polar, from the warped positions.
                   </td>
                 </tr>
               </tbody>
@@ -1852,18 +2282,22 @@ rect({ w: 20, h: 20 }).translate({ x: 10 }); // field: translate: { x: 10 }</cod
           </li>
           <li id="d-split">
             Split region compositing into region shapes plus <code>clip</code>,
-            and drop <code>mask</code>, <code>paint</code> and the unpainted
-            blend? <a class="see" href="#regions">card</a>
+            and drop <code>paint</code> (only Porter-Duff names it) and the
+            unpainted blend? <a class="see" href="#regions">card</a>
           </li>
           <li id="d-clipname">
             Name the outline-only operator <code>clip({ to })</code> and keep
             <code>mask</code> for the paint-based case (returning only when an
-            example needs it), or one name for both?
-            <a class="see" href="#clip-vs-mask">card</a>
+            example needs it), or one name for both? Precedent splits them (SVG,
+            CSS, Illustrator, Inkscape, SwiftUI, Flutter, p5); only Figma has
+            one. If <code>mask</code> returns: <code>mask({ mode })</code>,
+            default alpha? <a class="see" href="#clip-vs-mask">card</a>
           </li>
           <li id="d-union">
-            Add <code>union</code> as a region shape, separate from
-            <code>layer</code>? <a class="see" href="#regions">card</a>
+            Add <code>union</code> (Figma, Inkscape, Sketch, SwiftUI, Shapely,
+            Clipper2) as a region shape, separate from <code>layer</code>, as
+            every design tool keeps Union apart from Group?
+            <a class="see" href="#naming-grid">card</a>
           </li>
           <li id="d-warn">
             Warn when <code>.hidden()</code> sits on an inline operand, where it

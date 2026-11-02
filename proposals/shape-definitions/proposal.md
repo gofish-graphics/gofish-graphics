@@ -549,6 +549,58 @@ paint([a, b]); // draws a, washed out
 // no plot-box clip (#1209)
 ```
 
+## Naming
+
+### Compositing names elsewhere
+
+Union, intersection, difference, symmetric difference, shape-only clip, paint-based mask, and the clip region's parameter.
+
+**Precedent**
+
+| System             | Union               | Intersection      | A minus B        | Xor                      | Clip (shape)             | Mask (paint)                   | Region parameter  |
+| ------------------ | ------------------- | ----------------- | ---------------- | ------------------------ | ------------------------ | ------------------------------ | ----------------- |
+| Figma              | Union               | Intersect         | Subtract         | Exclude                  | Use as mask (Vector)     | Use as mask (Alpha, Luminance) | the bottom layer  |
+| Illustrator        | Unite               | Intersect         | Minus Front      | Exclude                  | Clipping Mask            | Opacity Mask                   | the top object    |
+| Inkscape           | Union               | Intersection      | Difference       | Exclusion                | Clip                     | Mask (luminance)               | the top object    |
+| Sketch             | Union               | Intersect         | Subtract         | Difference               | Outline Mask             | Alpha Mask                     | the bottom layer  |
+| Affinity Designer  | Add                 | Intersect         | Subtract         | Xor                      | nested clip              | mask layer                     | the parent layer  |
+| SVG                | none                | none              | none             | none                     | <clipPath>, clip-path    | <mask>                         | url(#id)          |
+| CSS                | none                | none              | none             | none                     | clip-path                | mask, mask-mode                | its value         |
+| Canvas 2D          | none                | source-in         | destination-out  | xor                      | clip()                   | destination-in                 | the current path  |
+| PDF, PostScript    | none                | none              | none             | none                     | clip path                | soft mask                      | the current path  |
+| Skia               | kUnion              | kIntersect        | kDifference      | kXOR                     | clipPath                 | mask filter, shader            | a path            |
+| SwiftUI            | union(\_:)          | intersection(\_:) | subtracting(\_:) | symmetricDifference(\_:) | .clipShape(\_:)          | .mask(\_:)                     | unlabeled         |
+| Flutter            | PathOperation.union | .intersect        | .difference      | .xor                     | ClipPath(clipper:)       | ShaderMask                     | clipper           |
+| Jetpack Compose    | PathOperation.Union | Intersect         | Difference       | Xor                      | Modifier.clip(shape)     | BlendMode.DstIn                | shape             |
+| Typst              | none                | none              | none             | none                     | box(clip: true)          | none                           | the box itself    |
+| TikZ               | none                | none              | none             | none                     | \clip                    | path fading                    | the path          |
+| p5.js              | none                | none              | none             | none                     | clip(callback)           | img.mask()                     | a callback        |
+| Paper.js           | unite               | intersect         | subtract         | exclude                  | clipMask (clipped group) | none                           | first child       |
+| Shapely, GEOS      | union               | intersection      | difference       | symmetric_difference     | none                     | none                           | none              |
+| JTS                | union               | intersection      | difference       | symDifference            | none                     | none                           | none              |
+| Clipper2           | Union               | Intersect         | Difference       | Xor                      | none                     | none                           | the clip paths    |
+| Turf               | union               | intersect         | difference       | none                     | none                     | none                           | none              |
+| polybool           | union               | intersect         | difference       | xor                      | none                     | none                           | none              |
+| JS Set (ES2025)    | union               | intersection      | difference       | symmetricDifference      | none                     | none                           | none              |
+| Observable Plot    | none                | none              | none             | none                     | clip: "frame", GeoJSON   | none                           | its value         |
+| Vega-Lite          | none                | none              | none             | none                     | clip: true               | none                           | none              |
+| ggplot2, ggfx      | none                | none              | none             | none                     | coord_cartesian(clip=)   | with_mask(mask_type=)          | mask              |
+| D3                 | none                | none              | none             | none                     | clipExtent               | SVG mask                       | extent            |
+| Bluefish, Penrose  | none                | none              | none             | none                     | none                     | none                           | none              |
+| PiCCL, Porter-Duff | over                | in                | out              | xor                      | in                       | none                           | the first operand |
+| GoFish today       | none                | intersect         | subtract         | exclude                  | none                     | mask                           | the first child   |
+| GoFish proposed    | union               | intersect         | subtract         | exclude                  | clip({ to })             | mask({ mode }), parked         | to                |
+
+Names as each system documents them, from my knowledge, not re-checked online. The least certain: Figma's mask types, Affinity's clipping and mask layers, and Bluefish and Penrose having none.
+
+**Recommendations**
+
+- **union.** Keep `union`: Figma (the recorded naming source, #196, #404), Inkscape, Sketch, SwiftUI, Flutter, Compose, Skia, Shapely, Clipper2 and the JS `Set` all say union. `unite` (Illustrator, Paper.js) is the runner-up. Every design tool keeps Union apart from Group, and Josh asked for a separate Union in #196 because it draws one new outline. The reference page says it in one line: `union` draws one shape, `layer` draws each child.
+- **intersect, subtract, exclude.** Keep them. This is the recorded Figma decision, and Paper.js uses the same verbs. The set mixes one noun-verb (`union`) with three verbs, as Figma does; renaming to all nouns (`intersection`, `difference`, as in SwiftUI, Shapely and JS `Set`) would break the recorded decision and GoFish's verb-named operators.
+- **clip({ to }).** `clip` is the universal name: SVG, CSS, Canvas, PDF, Skia, SwiftUI, Flutter, Compose, Typst, TikZ, p5, Plot, Vega-Lite and ggplot2. For the region, `to` reads as "clip to the disc" and follows GoFish's prepositions for shape operands (`along`, `avoiding`, `around`). The others collide: `shape` is `enclose`'s strategy option (`Shape.blob`), `region` is a mark, and `by` is the split key. Line's `to` also takes a ref to a shape, so the two uses agree.
+- **clip and mask are two names.** Confirmed. SVG, CSS, Canvas, PDF, Skia, Illustrator, Inkscape, Sketch, Affinity, SwiftUI, Flutter, TikZ, p5 and ggfx all split them; Figma has one command with a type setting. If `mask` returns, it reads paint with `mask({ mode: "alpha" | "luminance" })`, after CSS `mask-mode` and ggfx `mask_type`, nested as one option. Default alpha (SwiftUI, p5, ggfx, Figma), so a stencil of any color works; today's luminance needs white.
+- **Drop paint.** Only Porter-Duff has a name for it (atop). Design tools spell it as draw A, then clip B to A: Illustrator's Draw Inside, Affinity's nested clipping. Under the new names that is `layer([a.name("a")]).relate(({ a }) => [clip({ to: a }, [b])])`, as on the region card.
+
 ## Coordinate transforms with a shape argument
 
 ### Which frame is an operand in?
@@ -557,11 +609,11 @@ An operand is read in the frame the operator sits in, never in the frame it make
 
 **The rule, by operator**
 
-| Operator                                                   | Operand         | Frame it is read in                                                                                                                                                   |
-| ---------------------------------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Coord.bend({ along })`, `Coord.envelope({ top, bottom })` | the guide shape | Outside the coord. The coord's inner frame is defined by the guide, so laying the guide out inside it would be circular.                                              |
-| `clip({ to }, children)`                                   | the region      | The clip's own frame. `clip` makes no new frame, so the region and the children share it.                                                                             |
-| `Bin.voronoi({ seeds })`                                   | seed rows       | The chart's frame, placed by its scales. Cells are computed in data units over the domain (`polygonCells.ts`), so under polar they are built in θ and r, then warped. |
+| Operator                                                   | Operand         | Frame it is read in                                                                                                      |
+| ---------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `Coord.bend({ along })`, `Coord.envelope({ top, bottom })` | the guide shape | Outside the coord. The coord's inner frame is defined by the guide, so laying the guide out inside it would be circular. |
+| `clip({ to }, children)`                                   | the region      | The clip's own frame. `clip` makes no new frame, so the region and the children share it.                                |
+| `Bin.voronoi({ seeds })`                                   | seed rows       | The chart's frame, placed by its scales. Cells are computed there; under polar, from the warped positions.               |
 
 Blocker: a ref spine drawn under one coord and read by a bend in another depends on #605 (a ref across a coord boundary reads the target's box in the coord's own space, such as θ and r under polar, not its warped screen position). The code still does this: `src/ast/_ref.tsx` copies `selectedNode.intrinsicDims` (line 350), and `coord.tsx` computes warped boxes only for its own bounding box (lines 307 and 551), never for the child. The issue's description holds; its line numbers and its `shapes/_ref.tsx` path are out of date. #1225 (a symbolic port for refs through affine coords) would cover affine coords only; a bend is not affine, so it needs #605.
 
@@ -706,9 +758,9 @@ layer([
 ## Open decisions
 
 1. Adopt the rule: children are drawn, operands are read and never drawn, refs draw nothing? (card: intersect-hidden)
-2. Split region compositing into region shapes plus `clip`, and drop `mask`, `paint` and the unpainted blend? (card: regions)
-3. Name the outline-only operator `clip({ to })` and keep `mask` for the paint-based case (returning only when an example needs it), or one name for both? (card: clip-vs-mask)
-4. Add `union` as a region shape, separate from `layer`? (card: regions)
+2. Split region compositing into region shapes plus `clip`, and drop `paint` (only Porter-Duff names it) and the unpainted blend? (card: regions)
+3. Name the outline-only operator `clip({ to })` and keep `mask` for the paint-based case (returning only when an example needs it), or one name for both? Precedent splits them (SVG, CSS, Illustrator, Inkscape, SwiftUI, Flutter, p5); only Figma has one. If `mask` returns: `mask({ mode })`, default alpha? (card: clip-vs-mask)
+4. Add `union` (Figma, Inkscape, Sketch, SwiftUI, Shapely, Clipper2) as a region shape, separate from `layer`, as every design tool keeps Union apart from Group? (card: naming-grid)
 5. Warn when `.hidden()` sits on an inline operand, where it has no effect? (card: intersect-hidden)
 6. Keep `use(ref)` parked until an example needs it? (card: use-ref)
 7. File the bend and envelope issue, kept deferred? (Decided: a coord with a shape argument, not an operator.) (card: gecko)
