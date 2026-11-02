@@ -258,9 +258,10 @@ const Treemap = createNodeOperator(
           const placed: Placeable[] = new Array(childAsts.length);
           if (tile.kind === "voronoi") {
             // One convex cell per child (`voronoiTiling`), in the region
-            // drawn in by the padding, each cell drawn in by half the
-            // spacing, so siblings are `spacing` apart. Each child is laid
-            // out in its cell's box, with its cell as its shape.
+            // drawn in by the padding, with siblings `spacing` apart; the
+            // spacing leaves the region's own edges alone, as d3's
+            // paddingInner does. Each child is laid out in its cell's box,
+            // with its cell as its shape.
             const outer =
               padding > 0
                 ? insetConvex(
@@ -285,14 +286,12 @@ const Treemap = createNodeOperator(
             const tiled = voronoiTiling(
               outer,
               order.map((i) => leafData[i].weight),
-              tile.seed ?? VORONOI_SEED
+              tile.seed ?? VORONOI_SEED,
+              spacing
             );
             const center = ringCentroid(outer);
             order.forEach((i, k) => {
-              const cell =
-                spacing > 0
-                  ? (insetConvex(tiled[k], spacing / 2) ?? [])
-                  : tiled[k];
+              const cell = tiled[k];
               if (cell.length < 3) {
                 // A child with no area left sits at the region's center.
                 const placeable = childAsts[i].layout([0, 0], scales);

@@ -45,11 +45,14 @@ export const MAX_ITERATIONS = 300;
 
 /** The power cells of `sites` with `weights`, clipped to the convex
  *  `region`: a point `p` is in site `i`'s cell when
- *  `|p − sᵢ|² − wᵢ ≤ |p − sⱼ|² − wⱼ` for every other site `j`. */
+ *  `|p − sᵢ|² − wᵢ ≤ |p − sⱼ|² − wⱼ` for every other site `j`. A `gap`
+ *  moves each border between two cells back by half of it on each side,
+ *  so neighbors are `gap` apart; the region's own edges do not move. */
 export function powerCells(
   region: Ring,
   sites: readonly Point[],
-  weights: readonly number[]
+  weights: readonly number[],
+  gap = 0
 ): Pt[][] {
   return sites.map((si, i) => {
     let cell: Pt[] = region.map(([x, y]) => [x, y]);
@@ -58,16 +61,19 @@ export function powerCells(
       const sj = sites[j];
       // |p − sᵢ|² − wᵢ ≤ |p − sⱼ|² − wⱼ
       //   ⇔ 2p · (sⱼ − sᵢ) ≤ |sⱼ|² − |sᵢ|² − wⱼ + wᵢ
+      const a = 2 * (sj[0] - si[0]);
+      const b = 2 * (sj[1] - si[1]);
       cell = clipToHalfPlane(
         cell,
-        2 * (sj[0] - si[0]),
-        2 * (sj[1] - si[1]),
+        a,
+        b,
         sj[0] ** 2 +
           sj[1] ** 2 -
           si[0] ** 2 -
           si[1] ** 2 -
           weights[j] +
-          weights[i]
+          weights[i] -
+          (gap / 2) * Math.hypot(a, b)
       );
     }
     return cell;
@@ -132,7 +138,8 @@ function capWeights(sites: readonly Pt[], weights: number[]): void {
 export function voronoiTiling(
   region: Ring,
   values: readonly number[],
-  seed: number
+  seed: number,
+  gap = 0
 ): Pt[][] {
   const cells: Pt[][] = values.map(() => []);
   const live = values.flatMap((v, i) =>
@@ -148,7 +155,7 @@ export function voronoiTiling(
   const targets = live.map((i) => (values[i] / total) * area);
   const sites = placeSites(region, live.length, lcg(seed));
   const weights = targets.map((t) => (t / Math.PI) * 0.1);
-  let best: { cells: Pt[][]; error: number } | undefined;
+  let best: { sites: Pt[]; weights: number[]; error: number } | undefined;
   let current = powerCells(region, sites, weights);
   for (let it = 0; it < MAX_ITERATIONS; it++) {
     // Each site to the centroid of its cell.
@@ -171,9 +178,12 @@ export function voronoiTiling(
       ...current.map((c, k) => Math.abs(ringArea(c) - targets[k]) / targets[k])
     );
     if (best === undefined || error < best.error)
-      best = { cells: current, error };
+      best = { sites: sites.slice(), weights: weights.slice(), error };
     if (error < TOLERANCE) break;
   }
-  live.forEach((i, k) => (cells[i] = best!.cells[k]));
+  // The gap comes off the borders between cells only, after the areas
+  // are fitted, as d3's paddingInner does for the rectangular tilings.
+  const fitted = powerCells(region, best!.sites, best!.weights, gap);
+  live.forEach((i, k) => (cells[i] = fitted[k]));
   return cells;
 }

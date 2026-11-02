@@ -85,6 +85,24 @@ console.log("# the same seed gives the same cells, another seed others");
   check("seed 4 is not seed 3", JSON.stringify(a) !== JSON.stringify(c));
 }
 
+console.log("# spacing parts siblings and leaves the region's edges alone");
+{
+  const values = sums("continent");
+  const cells = voronoiTiling(boxRing(300, 200), values, 0, 10);
+  const xs = cells.flat().map((p) => p[0]);
+  const ys = cells.flat().map((p) => p[1]);
+  check(
+    "the cells still reach all four sides of the box",
+    Math.min(...xs) < 1e-6 &&
+      Math.max(...xs) > 300 - 1e-6 &&
+      Math.min(...ys) < 1e-6 &&
+      Math.max(...ys) > 200 - 1e-6,
+    [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)]
+  );
+  const total = cells.reduce((s, c) => s + ringArea(c), 0);
+  check("the gaps take area away", total < 300 * 200 - 1000, total);
+}
+
 console.log("# values that are not positive get no cell");
 {
   const cells = voronoiTiling(boxRing(100, 100), [3, 0, 1, -2], 0);
