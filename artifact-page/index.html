@@ -330,10 +330,11 @@
           arcs, not straight chords.
         </li>
         <li>
-          <b>Convexity stays.</b> 0 is the spine, 1 is the padded convex hull.
-          The closing radius is found from it: the closed area fills
-          <code>convexity</code> of the gap between the spine and the hull. So
-          the radius scales with the data, and users never set pixels.
+          <b>Convexity stays, and goes past the hull.</b> 0 is the spine, 1 is
+          the padded convex hull, 2 is the oval. The closing radius is found
+          from it: the closed area fills <code>convexity</code> of the gap
+          between the spine and the hull. So the radius scales with the data,
+          and users never set pixels.
         </li>
         <li>
           <b>No bumps.</b> After the closing, a Gaussian along the outline (σ =
@@ -346,14 +347,16 @@
           least as round as the padding, and the outline never has a corner.
         </li>
         <li>
-          <b>Presets.</b> <code>Shape.hull()</code> is convexity 1,
-          <code>Shape.spine()</code> is convexity 0.
-          <code>Shape.arcs({ radius })</code> keeps a pixel radius, allows
-          separate pieces, and skips smoothing, for the bubble treemap.
+          <b>Presets.</b> <code>Shape.spine()</code> is convexity 0,
+          <code>Shape.hull()</code> is convexity 1, <code>Shape.oval()</code> is
+          convexity 2. <code>Shape.arcs({ radius })</code> keeps a pixel radius,
+          allows separate pieces, and skips smoothing, for the bubble treemap.
         </li>
         <li>
-          <b>Removed:</b> <code>neck</code> and <code>roundness</code>. Most
-          existing specs are unchanged.
+          <b>Links are as wide as the members they join.</b>
+          <code>neck</code> stays: 1 (the default) means no waist, lower values
+          thin the links. <b>Removed:</b> <code>roundness</code>. Most existing
+          specs are unchanged.
         </li>
       </ul>
 
@@ -389,16 +392,16 @@
         />
         <span class="rowlab">New</span>
         <img
-          src="img/round3/convexity-U-000-new.png"
+          src="img/round4/convexity-U-000-new.png"
           alt="U new, convexity 0"
         /><img
-          src="img/round3/convexity-U-025-new.png"
+          src="img/round4/convexity-U-025-new.png"
           alt="U new, convexity 0.25"
         /><img
-          src="img/round3/convexity-U-050-new.png"
+          src="img/round4/convexity-U-050-new.png"
           alt="U new, convexity 0.5"
         /><img
-          src="img/round3/convexity-U-075-new.png"
+          src="img/round4/convexity-U-075-new.png"
           alt="U new, convexity 0.75"
         /><img
           src="img/round3/convexity-U-100-new.png"
@@ -431,7 +434,7 @@ Shape.blob({ convexity: 0.5 });</code></pre>
               src="img/round3/convexity-ChartAccent-000-current.png"
               alt="ChartAccent today, convexity 0"
             /><img
-              src="img/round3/convexity-ChartAccent-000-new.png"
+              src="img/round4/convexity-ChartAccent-000-new.png"
               alt="ChartAccent new, convexity 0"
             />
             <span class="rowlab">0.5</span
@@ -439,7 +442,7 @@ Shape.blob({ convexity: 0.5 });</code></pre>
               src="img/round3/convexity-ChartAccent-050-current.png"
               alt="ChartAccent today, convexity 0.5"
             /><img
-              src="img/round3/convexity-ChartAccent-050-new.png"
+              src="img/round4/convexity-ChartAccent-050-new.png"
               alt="ChartAccent new, convexity 0.5"
             />
             <span class="rowlab">1</span
@@ -451,6 +454,122 @@ Shape.blob({ convexity: 0.5 });</code></pre>
               alt="ChartAccent new, convexity 1"
             />
           </div>
+        </div>
+      </div>
+
+      <h3 style="margin-top: 28px">Past the hull: convexity 1 to 2</h3>
+      <div class="prose">
+        <p>
+          Between 1 and 2 the outline blends the padded hull into the smallest
+          enclosing ellipse: in every direction its edge sits at a weighted mix
+          of where the hull and the ellipse reach. The result is always convex,
+          always contains the hull, and only grows as convexity rises. At 2 it
+          equals today's <code>Shape.oval()</code> exactly (0.000 px), so
+          <code>Shape.oval()</code> becomes a preset. It adds about 2 ms.
+        </p>
+      </div>
+      <div
+        class="sweep"
+        style="grid-template-columns: max-content repeat(4, minmax(0, 1fr))"
+      >
+        <span></span><span class="lab">1</span><span class="lab">1.25</span
+        ><span class="lab">1.5</span><span class="lab">1.75</span>
+        <span class="rowlab">U</span
+        ><img src="img/round4/conv-u-100.png" alt="U convexity 1" /><img
+          src="img/round4/conv-u-125.png"
+          alt="U convexity 1.25"
+        /><img src="img/round4/conv-u-150.png" alt="U convexity 1.5" /><img
+          src="img/round4/conv-u-175.png"
+          alt="U convexity 1.75"
+        />
+      </div>
+      <div class="cards">
+        <div class="card">
+          <header><h3>U, convexity 2</h3></header>
+          <div class="pair">
+            <figure>
+              <figcaption>Convexity 2</figcaption>
+              <img src="img/round4/conv-u-200.png" alt="U convexity 2" />
+            </figure>
+            <figure>
+              <figcaption>Today's Shape.oval()</figcaption>
+              <img src="img/round4/oval-u.png" alt="U oval" />
+            </figure>
+          </div>
+          <div class="code-pair">
+            <span class="lab">Proposed</span>
+            <pre><code class="language-js">Shape.blob({ convexity: 2 }); // = Shape.oval()</code></pre>
+          </div>
+        </div>
+        <div class="card">
+          <header><h3>Penguins</h3></header>
+          <div class="pair">
+            <figure>
+              <figcaption>Convexity 1.5</figcaption>
+              <img
+                src="img/round4/conv-penguins-150.png"
+                alt="Penguins convexity 1.5"
+              />
+            </figure>
+            <figure>
+              <figcaption>Convexity 2</figcaption>
+              <img
+                src="img/round4/conv-penguins-200.png"
+                alt="Penguins convexity 2"
+              />
+            </figure>
+          </div>
+          <div class="code-pair">
+            <span class="lab">Proposed</span>
+            <pre><code class="language-js">Shape.blob({ convexity: 1.5 });</code></pre>
+          </div>
+        </div>
+        <div class="card">
+          <header><h3>ChartAccent</h3></header>
+          <div class="pair">
+            <figure>
+              <figcaption>Convexity 1.5</figcaption>
+              <img
+                src="img/round4/conv-chartaccent-150.png"
+                alt="ChartAccent convexity 1.5"
+              />
+            </figure>
+            <figure>
+              <figcaption>Convexity 2</figcaption>
+              <img
+                src="img/round4/conv-chartaccent-200.png"
+                alt="ChartAccent convexity 2"
+              />
+            </figure>
+          </div>
+        </div>
+        <div class="card">
+          <header>
+            <h3>Rejected: toward a circle</h3>
+            <span class="chip worse">rejected</span>
+          </header>
+          <div class="pair">
+            <figure>
+              <figcaption>Circle at 2</figcaption>
+              <img
+                src="img/round4/alt-circle-penguins-200.png"
+                alt="Penguins blended toward circles"
+              />
+            </figure>
+            <figure>
+              <figcaption>Corner radius grows</figcaption>
+              <img
+                src="img/round4/alt-corner-penguins-200.png"
+                alt="Penguins with growing corner radius"
+              />
+            </figure>
+          </div>
+          <p class="note">
+            Circles lose the cluster's direction and reach 2 to 2.6 times the
+            hull's area. Growing the corner radius doesn't nest and looks lumpy.
+            A superellipse blend looked almost like the ellipse blend but has
+            messier math.
+          </p>
         </div>
       </div>
 
@@ -480,15 +599,13 @@ Shape.blob({ convexity: 0.5 });</code></pre>
             <figure>
               <figcaption>New</figcaption>
               <img
-                src="img/round3/chart-accent-new.png"
+                src="img/round4/chart-accent-new.png"
                 alt="ChartAccent new"
               />
             </figure>
           </div>
           <div class="code-pair">
-            <span class="lab">Proposed</span>
-            <pre><code class="language-js">Shape.blob({ convexity: 0.1 });</code></pre>
-            <span class="lab">Today</span>
+            <span class="lab">Proposed and today</span>
             <pre><code class="language-js">Shape.blob({ convexity: 0.1, neck: 0.6 });</code></pre>
           </div>
           <p class="note">
@@ -513,7 +630,7 @@ Shape.blob({ convexity: 0.5 });</code></pre>
             <figure>
               <figcaption>New</figcaption>
               <img
-                src="img/round3/penguin-blobs-new.png"
+                src="img/round4/penguin-blobs-new.png"
                 alt="Penguin blobs new"
               />
             </figure>
@@ -572,7 +689,7 @@ Shape.blob({ convexity: 0.5 });</code></pre>
             <figure>
               <figcaption>New</figcaption>
               <img
-                src="img/round3/penguin-spines-new.png"
+                src="img/round4/penguin-spines-new.png"
                 alt="Penguin spines new"
               />
             </figure>
@@ -582,8 +699,8 @@ Shape.blob({ convexity: 0.5 });</code></pre>
             <pre><code class="language-js">Shape.spine(); // = Shape.blob({ convexity: 0 })</code></pre>
           </div>
           <p class="note">
-            Slightly smoother. The smoothing push tightens inner corners to
-            about 3 px, half the padding (decision 6).
+            Lumpier than today: inner corners come out at 2.5 to 4 px, tighter
+            than the 6 px padding (decision 6). This predates the neck fix.
           </p>
         </div>
 
@@ -603,7 +720,7 @@ Shape.blob({ convexity: 0.5 });</code></pre>
             <figure>
               <figcaption>New</figcaption>
               <img
-                src="img/round3/penguins-four-shapes-new.png"
+                src="img/round4/penguins-four-shapes-new.png"
                 alt="Four shapes new"
               />
             </figure>
@@ -633,7 +750,7 @@ Shape.spine();</code></pre>
             </figure>
             <figure>
               <figcaption>New</figcaption>
-              <img src="img/round3/munkres-figure-new.png" alt="Munkres new" />
+              <img src="img/round4/munkres-figure-new.png" alt="Munkres new" />
             </figure>
           </div>
           <div class="code-pair">
@@ -641,7 +758,8 @@ Shape.spine();</code></pre>
             <pre><code class="language-js">Shape.spine({ avoiding: [b], clearance: 6 });</code></pre>
           </div>
           <p class="note">
-            Routes around b, but hugs it closely instead of today's wide V.
+            Links are now as wide as the dots, so no waist. Routes around b, but
+            hugs it closely instead of today's wide V.
           </p>
         </div>
 
@@ -661,7 +779,7 @@ Shape.spine();</code></pre>
             <figure>
               <figcaption>New</figcaption>
               <img
-                src="img/round3/holes-filled-new.png"
+                src="img/round4/holes-filled-new.png"
                 alt="Holes filled new"
               />
             </figure>
@@ -692,7 +810,7 @@ Shape.spine();</code></pre>
             </figure>
             <figure>
               <figcaption>New</figcaption>
-              <img src="img/round3/holes-kept-new.png" alt="Holes kept new" />
+              <img src="img/round4/holes-kept-new.png" alt="Holes kept new" />
             </figure>
           </div>
           <div class="code-pair">
@@ -771,7 +889,7 @@ Shape.spine();</code></pre>
             </figure>
             <figure>
               <figcaption>New</figcaption>
-              <img src="img/round3/members-circles-new.png" alt="Circles new" />
+              <img src="img/round4/members-circles-new.png" alt="Circles new" />
             </figure>
           </div>
           <div class="code-pair">
@@ -796,7 +914,7 @@ Shape.spine();</code></pre>
             <figure>
               <figcaption>New</figcaption>
               <img
-                src="img/round3/members-thick-curves-new.png"
+                src="img/round4/members-thick-curves-new.png"
                 alt="Thick curves new"
               />
             </figure>
@@ -823,7 +941,7 @@ Shape.spine();</code></pre>
             <figure>
               <figcaption>New</figcaption>
               <img
-                src="img/round3/members-polygons-new.png"
+                src="img/round4/members-polygons-new.png"
                 alt="Polygons new"
               />
             </figure>
@@ -850,7 +968,7 @@ Shape.spine();</code></pre>
             <figure>
               <figcaption>New</figcaption>
               <img
-                src="img/round3/members-ribbon-band-new.png"
+                src="img/round4/members-ribbon-band-new.png"
                 alt="Ribbon band new"
               />
             </figure>
@@ -876,7 +994,7 @@ Shape.spine();</code></pre>
             </figure>
             <figure>
               <figcaption>New</figcaption>
-              <img src="img/round3/pack-enclosed-new.png" alt="Pack new" />
+              <img src="img/round4/pack-enclosed-new.png" alt="Pack new" />
             </figure>
           </div>
           <div class="code-pair">
@@ -948,6 +1066,59 @@ Shape.arcs({ radius: 8 }); // inner</code></pre>
             the nested contours, because the outward push is set by the thin
             stroked rings. So the arcs preset skips smoothing (decision 4).
           </p>
+        </div>
+      </div>
+
+      <h2>Neck</h2>
+      <div class="prose">
+        <p>
+          The earlier prototype joined members with zero-width links, so every
+          link pinched into a waist where it left a dot (0.72 of the dot's width
+          on Munkres). Links are now tapered tubes as wide as the member at each
+          end, which is today's <code>neck: 1</code>. Lower
+          <code>neck</code> thins them. Links that only prevent cusps in
+          <code>Shape.arcs</code> stay zero-width, so its concave arcs are kept.
+        </p>
+      </div>
+      <div class="cards">
+        <div class="card">
+          <header><h3>Munkres</h3></header>
+          <div class="pair">
+            <figure>
+              <figcaption>Neck 1 (default)</figcaption>
+              <img src="img/round4/munkres-neck-100.png" alt="Munkres neck 1" />
+            </figure>
+            <figure>
+              <figcaption>Neck 0.6</figcaption>
+              <img
+                src="img/round4/munkres-neck-060.png"
+                alt="Munkres neck 0.6"
+              />
+            </figure>
+          </div>
+          <div class="code-pair">
+            <span class="lab">Proposed and today</span>
+            <pre><code class="language-js">Shape.spine({ avoiding: [b], clearance: 6, neck: 0.6 });</code></pre>
+          </div>
+        </div>
+        <div class="card">
+          <header><h3>ChartAccent</h3></header>
+          <div class="pair">
+            <figure>
+              <figcaption>Neck 1</figcaption>
+              <img
+                src="img/round4/chart-accent-neck-100.png"
+                alt="ChartAccent neck 1"
+              />
+            </figure>
+            <figure>
+              <figcaption>Neck 0.6</figcaption>
+              <img
+                src="img/round4/chart-accent-neck-060.png"
+                alt="ChartAccent neck 0.6"
+              />
+            </figure>
+          </div>
         </div>
       </div>
 
@@ -1115,14 +1286,21 @@ Shape.arcs({ radius: 8 }); // inner</code></pre>
           keeps the exact bubble treemap contour), or on with σ scaled to member
           size.
         </li>
+
         <li>
-          <b>Drop <code>neck</code>.</b> Links are zero-width now. A link-width
-          option exists in the prototype but is not wired in.
+          <b>Convexity from 0 to 2.</b> One knob with three anchors (spine 0,
+          hull 1, oval 2), so <code>Shape.oval()</code> becomes a preset. Below
+          1 it means "share of the hull filled", above 1 "toward the ellipse".
+          Recommended over a separate knob, since the two ranges never overlap.
+          Above 1, <code>avoiding</code>, <code>holes</code> and
+          <code>connected</code> do nothing useful, so the oval preset would not
+          accept them.
         </li>
         <li>
-          <b>Spine inner corners.</b> At convexity 0 the smoothing push tightens
-          inner corners to about half the padding. Accept, or cap the push
-          there.
+          <b>Spine inner corners.</b> Penguin spines have inner corners of 2.5
+          to 4 px, tighter than the padding, which looks lumpy. Needs its own
+          fix: cap the smoothing push there, or round inner corners to at least
+          the padding.
         </li>
       </ol>
 
