@@ -8,9 +8,9 @@ A shape that is laid out and read by other marks, but not painted.
 - **decided.** `.hidden(fn)` hides per datum. Toggling only repaints; layout never moves.
 - **decided.** An ancestor's `.hidden()` wins over a child's `.hidden(false)`. On one value, the last call wins.
 - **decided.** Only on a value you hold: not through `ref` or `selectAll`, and no operator sets it.
-- **proposed.** A child slot draws its child. An operand slot is read for shape, place or data and never drawn. A ref draws nothing.
+- **proposed.** A child slot draws its child as itself. An operand slot is read for shape, place or data and never drawn. A ref draws nothing. Reading a child's shape or ink is allowed; drawing it differently, or not at all, is not.
 - **proposed.** Which frame is an operand in? The frame the operator sits in, never the frame it makes for its children. An inline operand is laid out there; a ref is read where it was placed and mapped into that frame.
-- **proposed.** Region shapes (`intersect`, `subtract`, `exclude`, `union`) draw one new shape. `clip({ to }, children)` replaces `mask` and `paint`.
+- **proposed.** Three jobs. Region shapes (`intersect`, `subtract`, `exclude`, `union`) draw one new shape from operands. `clip({ to }, children)` clips to an outline it never draws. `drawInside` (today `paint`) draws its first child and clips the rest to that child's ink. `mask` is parked.
 - **decided.** Bend and envelope are coordinate transforms with a shape argument: `Coord.bend({ along })`, `Coord.envelope({ top, bottom })`. The coord reads the shape and never draws it. Deferred.
 - **decided.** Renames: `position` becomes `translate`; `cut(opts, [source])`.
 
@@ -519,9 +519,64 @@ intersect([hidden(a), b]); // prototype shim: draws nothing
 
 Hidden should behave like transparent for shape. The third row is the implementation fix already noted (feed that path the operand's geometry, as `INTERNAL_lendDrawing` does for transitions), not a new rule.
 
-### Region shapes and clip
+### Bottle: draw inside a drawn shape
 
-`intersect`, `subtract`, `exclude` and a new `union` take operands only; `clip` replaces `mask` and `paint`.
+The image is a child, drawn as itself, and its alpha clips the rect. Only the name changes.
+
+![Render](img/bottle-paint.png)
+
+_Render. Today's render of the PICCL gallery story (`stories/piccl/Bottle.stories.tsx`). It stays the same._
+
+**Proposed**
+
+```js
+drawInside({ blendMode: "color" }, [
+  image({ href: bottlePng, h: v(100) }),
+  rect({ h: "amount", w: 175, fill: "#00ff00" }),
+]);
+```
+
+**Current**
+
+```js
+paint({ blendMode: "color" }, [
+  image({ href: bottlePng, h: v(100) }),
+  rect({ h: "amount", w: 175, fill: "#00ff00" }),
+]);
+```
+
+<details><summary>Alternatives, and why they are worse</summary>
+
+```js
+// (a) The image as a named sibling, read as an alpha stencil.
+layer([image({ href: bottlePng, h: v(100) }).name("glass")]).relate(
+  ({ glass }) => [
+    mask({ mode: "alpha", to: glass }, [
+      rect({ h: "amount", w: 175, fill: "#00ff00", mixBlendMode: "color" }),
+    ]),
+  ]
+);
+```
+
+(a) needs a name and a `.relate()`, or #1259, to reach the image. It needs `mixBlendMode: "color"` on the rect, and marks only allow `"normal" | "multiply"` today (`chart.ts` line 973). It also needs `mask({ mode })`, which is parked.
+
+```js
+// (b) The image inline in `to`, and again as a drawn sibling.
+layer([
+  image({ href: bottlePng, h: v(100) }),
+  mask({ mode: "alpha", to: image({ href: bottlePng, h: v(100) }) }, [
+    rect({ h: "amount", w: 175, fill: "#00ff00", mixBlendMode: "color" }),
+  ]),
+]);
+```
+
+(b) writes the image twice: two nodes that can drift apart. It has the same blend-mode problem.
+
+</details>
+
+### Region shapes, clip and drawInside
+
+`intersect`, `subtract`, `exclude` and a new `union` take operands only; `clip` replaces `mask`; `drawInside` is today's `paint`.
 
 _Sketch: drawn in the HTML page._
 
@@ -532,8 +587,8 @@ intersect({ fill: FILL, stroke: STROKE }, [a, b]);
 subtract({ fill: FILL }, [a, b]);
 exclude({ fill: FILL }, [a, b]);
 union({ stroke: STROKE }, [a, b]); // one outline
-clip({ to: a }, [b]);
-layer([a.name("a")]).relate(({ a }) => [clip({ to: a }, [b])]);
+clip({ to: a }, [b]); // a's outline; a is not drawn
+drawInside([a, b]); // a drawn; b inside a's ink
 clip({ to: rect({ w, h }) }, [bars]); // a plot-box clip (#1209)
 ```
 
@@ -544,12 +599,59 @@ intersect({ fill: FILL, stroke: STROKE }, [a, b]);
 subtract({ fill: FILL }, [a, b]);
 exclude({ fill: FILL }, [a, b]);
 layer([a, b]); // two outlines
-mask([a, b]); // a read as ink: a ref or a non-white a fails
-paint([a, b]); // draws a, washed out
+mask([a, b]); // a read as luminance: a ref or a non-white a fails
+paint([a, b]); // a drawn; b inside a's ink
 // no plot-box clip (#1209)
 ```
 
+### Slots, by operator
+
+What each operator does with each slot. A child may also be read; it is still drawn as itself.
+
+**The rule, by operator**
+
+| Slot kind                  | Operators                                                                                                                                                                                                             |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Child: drawn as itself     | `layer`, `spread`, `stack`, `scatter`, `group`, `partition`, `treemap`, `pack`, `frame`, `translate`, `offset`, a coord's children, `enclose`'s children, `arrow`'s ends, `clip`'s children                           |
+| Child, also read for ink   | `drawInside` (today `paint`): its first child; the rest are plain children                                                                                                                                            |
+| Operand: read, never drawn | `clip`'s `to`, `intersect`, `subtract`, `exclude`, `union`, `Shape.blob({ avoiding })`, relational `line` and `ribbon`, `Constraint.*`, `cut`'s source, `Coord.bend`'s `along`, `Coord.envelope`'s `top` and `bottom` |
+| Pointer: draws nothing     | `ref`                                                                                                                                                                                                                 |
+| Data                       | `Bin.voronoi`'s `seeds`                                                                                                                                                                                               |
+| Parked                     | `mask`'s stencil (an undrawn alpha stencil, such as a gradient fade)                                                                                                                                                  |
+
+Today two operators break this: `intersect` switches its slots from children to operands with its paint option, and `mask` reads luminance, so a ref or a colored stencil fails. `paint` does not: its first child is drawn and also read, as `Constraint.align` reads the boxes of marks that are drawn where they were made.
+
 ## Naming
+
+### Naming: draw inside a drawn shape
+
+How other systems name "draw A, then draw B clipped to A's ink, with A still visible".
+
+**Precedent**
+
+| System                                | Name                                        | What it does                                                                                                | Checked against docs                                                    |
+| ------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Photoshop                             | Create Clipping Mask                        | Base layer stays visible; layers above show only where it has pixels, and take its opacity and blend mode.  | yes (Photoshop Elements help page)                                      |
+| Procreate                             | Clipping Mask                               | Clips to the layer below; that layer stays visible.                                                         | yes                                                                     |
+| Affinity Designer                     | Clipping (drop on the layer's name)         | Parent stays visible; the child is clipped to it. Dropping on the thumbnail makes a mask instead.           | partly (tutorials)                                                      |
+| Illustrator                           | Draw Inside                                 | Content drawn into a selected object is clipped to it, and the object stays.                                | clipping, yes (help page); the object keeping its paint, not re-checked |
+| After Effects                         | Preserve Underlying Transparency (T switch) | A layer takes its transparency from the layers below; Adobe says it behaves like a Photoshop clipping mask. | yes                                                                     |
+| Krita                                 | Inherit Alpha                               | A layer is confined to the alpha of the layers below it in its group.                                       | yes                                                                     |
+| Canvas 2D                             | globalCompositeOperation = "source-atop"    | New paint only where the canvas already has paint.                                                          | from MDN, not re-checked                                                |
+| Porter-Duff                           | atop                                        | B atop A: A drawn, B inside A.                                                                              | not re-checked                                                          |
+| CSS                                   | background-clip: text                       | The background shows only inside the text glyphs; text only.                                                | not re-checked                                                          |
+| Figma                                 | none                                        | Use as mask, types Alpha (default), Vector, Luminance: a stencil, not a drawn base.                         | mask types, yes                                                         |
+| Sketch                                | none clear                                  | Use as Mask, Outline or Alpha mode.                                                                         | partly                                                                  |
+| Inkscape, SVG, GIMP, SwiftUI, Flutter | none                                        | Clip and mask hide the stencil; draw it again yourself.                                                     | not re-checked                                                          |
+
+Checked with a web search on 2026-11-02 against the Adobe, Procreate, Krita and Figma help pages; Affinity from tutorials.
+
+**Recommendations**
+
+- **Precedent.** Raster tools call this a clipping mask (Photoshop, Procreate) or clipping (Affinity), and the base stays visible. That word is taken: in GoFish, `clip` is the operator whose stencil is not drawn. Other names: Draw Inside (Illustrator), Inherit Alpha (Krita), Preserve Underlying Transparency (After Effects), atop (Porter-Duff, Canvas).
+- **Recommend `drawInside`.** It is Illustrator's name for exactly this, it is a verb like the other operators, and it says both halves: the base is drawn, and the rest goes inside it. Next to `clip` it cannot be misread. `clip({ to: a }, [b])` draws only b; `drawInside([a, b])` draws a, then b inside it.
+- **Why not keep `paint`.** GoFish already uses "paint" for fill and stroke: the Paint options group, `intersect`'s paint, and "paints nothing" on this page. The operator name does not say that its first child is the stencil.
+- **Rejected.** `clipTo` reads as `clip` with an argument. `inside` is `intersect`'s wire name. `atop` is the Porter-Duff jargon #196 replaced. `inherit` needs Krita to make sense.
 
 ### Compositing names elsewhere
 
@@ -591,7 +693,7 @@ Union, intersection, difference, symmetric difference, shape-only clip, paint-ba
 | GoFish today       | none                | intersect         | subtract         | exclude                  | none                     | mask                           | the first child   |
 | GoFish proposed    | union               | intersect         | subtract         | exclude                  | clip({ to })             | mask({ mode }), parked         | to                |
 
-Checked against the docs for the three least certain rows: [Figma](https://help.figma.com/hc/en-us/articles/360040450253) has three mask types, Alpha (the default), Vector (outline only) and Luminance, so Figma also separates clip from mask, as a type on one command; [Sketch](https://go.sketch.com/docs/designing/shapes/masking-shapes/) has Outline and Alpha masks; [Affinity](https://affinity.help/designer2/en-US.lproj/pages/Layers/layerClip.html) has nested clipping and [mask layers](https://affinity.help/designer2/English.lproj/pages/Layers/LayerMasks.html) by gray level or opacity. The other rows are from each system's documented names and were not re-checked.
+Names as each system documents them, from my knowledge, not re-checked online. The least certain: Figma's mask types, Affinity's clipping and mask layers, and Bluefish and Penrose having none.
 
 **Recommendations**
 
@@ -599,7 +701,7 @@ Checked against the docs for the three least certain rows: [Figma](https://help.
 - **intersect, subtract, exclude.** Keep them. This is the recorded Figma decision, and Paper.js uses the same verbs. The set mixes one noun-verb (`union`) with three verbs, as Figma does; renaming to all nouns (`intersection`, `difference`, as in SwiftUI, Shapely and JS `Set`) would break the recorded decision and GoFish's verb-named operators.
 - **clip({ to }).** `clip` is the universal name: SVG, CSS, Canvas, PDF, Skia, SwiftUI, Flutter, Compose, Typst, TikZ, p5, Plot, Vega-Lite and ggplot2. For the region, `to` reads as "clip to the disc" and follows GoFish's prepositions for shape operands (`along`, `avoiding`, `around`). The others collide: `shape` is `enclose`'s strategy option (`Shape.blob`), `region` is a mark, and `by` is the split key. Line's `to` also takes a ref to a shape, so the two uses agree.
 - **clip and mask are two names.** Confirmed. SVG, CSS, Canvas, PDF, Skia, Illustrator, Inkscape, Sketch, Affinity, SwiftUI, Flutter, TikZ, p5 and ggfx all split them; Figma has one command with a type setting. If `mask` returns, it reads paint with `mask({ mode: "alpha" | "luminance" })`, after CSS `mask-mode` and ggfx `mask_type`, nested as one option. Default alpha (SwiftUI, p5, ggfx, Figma), so a stencil of any color works; today's luminance needs white.
-- **Drop paint.** Only Porter-Duff has a name for it (atop). Design tools spell it as draw A, then clip B to A: Illustrator's Draw Inside, Affinity's nested clipping. Under the new names that is `layer([a.name("a")]).relate(({ a }) => [clip({ to: a }, [b])])`, as on the region card.
+- **paint.** Keep the operator, renamed `drawInside`; see the card above. Its first child is drawn and also read for ink, which the children rule allows.
 
 ## Coordinate transforms with a shape argument
 
@@ -757,20 +859,21 @@ layer([
 
 ## Open decisions
 
-1. Adopt the rule: children are drawn, operands are read and never drawn, refs draw nothing? (card: intersect-hidden)
-2. Split region compositing into region shapes plus `clip`, and drop `paint` (only Porter-Duff names it) and the unpainted blend? (card: regions)
-3. Name the outline-only operator `clip({ to })` and keep `mask` for the paint-based case (returning only when an example needs it), or one name for both? Precedent splits them (SVG, CSS, Illustrator, Inkscape, SwiftUI, Flutter, p5); only Figma has one. If `mask` returns: `mask({ mode })`, default alpha? (card: clip-vs-mask)
-4. Add `union` (Figma, Inkscape, Sketch, SwiftUI, Shapely, Clipper2) as a region shape, separate from `layer`, as every design tool keeps Union apart from Group? (card: naming-grid)
-5. Warn when `.hidden()` sits on an inline operand, where it has no effect? (card: intersect-hidden)
-6. Keep `use(ref)` parked until an example needs it? (card: use-ref)
-7. File the bend and envelope issue, kept deferred? (Decided: a coord with a shape argument, not an operator.) (card: gecko)
-8. Do both renames in one PR, separate from `.hidden()`? (card: translate)
-9. Step 2 for `cut`: unify it with the `.cut()` mark method? (card: cut)
-10. Add the method-twin rule to api-design.md: a method has a function twin only for a one-child operator, and both build one node? (card: translate)
-11. Does a hidden mark's color still feed the scale and legend? (Recommended yes, as `blank()` does.) (card: venn)
-12. Keep `blank()` as sugar for `rect().hidden()`, or delete it? (card: quantum)
-13. Migrate the gallery stories (four croissants, QuantumCircuit, OhmParseTree, DFSCQ) in the same change? (card: croissant)
-14. Land with #1259 (`.layer()` reads names), so the croissant needs no outer `layer`? (card: croissant)
+1. Adopt the rule: children are drawn as themselves (and may also be read), operands are read and never drawn, refs draw nothing? (card: slots)
+2. Three jobs: region shapes from operands, `clip` (stencil not drawn) and `drawInside` (stencil drawn, its ink clips), with `mask` parked and the unpainted blend dropped? (card: regions)
+3. Rename `paint` to `drawInside` (Illustrator's Draw Inside), or keep `paint`? (card: naming-paint)
+4. Name the outline-only operator `clip({ to })` and keep `mask` for the paint-based case (returning only when an example needs it), or one name for both? Precedent splits them (SVG, CSS, Illustrator, Inkscape, SwiftUI, Flutter, p5); only Figma has one. If `mask` returns: `mask({ mode })`, default alpha? (card: clip-vs-mask)
+5. Add `union` (Figma, Inkscape, Sketch, SwiftUI, Shapely, Clipper2) as a region shape, separate from `layer`, as every design tool keeps Union apart from Group? (card: naming-grid)
+6. Warn when `.hidden()` sits on an inline operand, where it has no effect? (card: intersect-hidden)
+7. Keep `use(ref)` parked until an example needs it? (card: use-ref)
+8. File the bend and envelope issue, kept deferred? (Decided: a coord with a shape argument, not an operator.) (card: gecko)
+9. Do both renames in one PR, separate from `.hidden()`? (card: translate)
+10. Step 2 for `cut`: unify it with the `.cut()` mark method? (card: cut)
+11. Add the method-twin rule to api-design.md: a method has a function twin only for a one-child operator, and both build one node? (card: translate)
+12. Does a hidden mark's color still feed the scale and legend? (Recommended yes, as `blank()` does.) (card: venn)
+13. Keep `blank()` as sugar for `rect().hidden()`, or delete it? (card: quantum)
+14. Migrate the gallery stories (four croissants, QuantumCircuit, OhmParseTree, DFSCQ) in the same change? (card: croissant)
+15. Land with #1259 (`.layer()` reads names), so the croissant needs no outer `layer`? (card: croissant)
 
 Draft issues: `issue-cut.md`, `issue-translate-position.md`, `issue-spine-envelope.md`.
 
@@ -797,7 +900,7 @@ Draft issues: `issue-cut.md`, `issue-translate-position.md`, `issue-spine-envelo
 - It replaces five spellings of one idea: `blank()`, `fill: "none"`, `fill: "transparent"`, `opacity: 0` and a CSS clip.
 - A method, not a wrapper: it is a fact about the mark's own nodes, like `.name()` and `.zOrder()`. SwiftUI has `.hidden()` only, with no wrapper form.
 - `hidden` has precedent with this exact meaning. `def` means a template in SVG and is a keyword in Python.
-- The children and operands rule falls out of the same question: does this operator draw this slot? Region compositing is the one place the code answers both ways, which is why it splits into region shapes and `clip`.
+- The children and operands rule falls out of the same question: does this operator draw this slot? In region compositing the answer is muddled today: `intersect` switches its slots with its paint option, and `mask` reads luminance. So it splits into three jobs: region shapes, `clip` and `drawInside`.
 
 </details>
 

@@ -553,9 +553,10 @@
           </li>
           <li>
             <span class="badge proposed">proposed</span> A child slot draws its
-            child. An operand slot is read for shape, place or data and never
-            drawn. A ref draws nothing.
-            <a class="see" href="#intersect-hidden">see</a>
+            child as itself. An operand slot is read for shape, place or data
+            and never drawn. A ref draws nothing. Reading a child's shape or ink
+            is allowed; drawing it differently, or not at all, is not.
+            <a class="see" href="#slots">see</a>
           </li>
           <li>
             <span class="badge proposed">proposed</span> Which frame is an
@@ -565,11 +566,13 @@
             <a class="see" href="#operand-frame">see</a>
           </li>
           <li>
-            <span class="badge proposed">proposed</span> Region shapes
-            (<code>intersect</code>, <code>subtract</code>,
-            <code>exclude</code>, <code>union</code>) draw one new shape.
-            <code>clip({ to }, children)</code> replaces <code>mask</code> and
-            <code>paint</code>. <a class="see" href="#regions">see</a>
+            <span class="badge proposed">proposed</span> Three jobs. Region
+            shapes (<code>intersect</code>, <code>subtract</code>,
+            <code>exclude</code>, <code>union</code>) draw one new shape from
+            operands. <code>clip({ to }, children)</code> clips to an outline it
+            never draws. <code>drawInside</code> (today <code>paint</code>)
+            draws its first child and clips the rest to that child's ink.
+            <code>mask</code> is parked. <a class="see" href="#regions">see</a>
           </li>
           <li>
             <span class="badge decided">decided</span> Bend and envelope are
@@ -1309,13 +1312,81 @@ clip({ to: b }, [a]); // a&#x27;s own paint, inside b</code></pre>
             transitions), not a new rule.
           </p>
         </article>
+        <article class="card" id="bottle">
+          <h3><a href="#bottle">Bottle: draw inside a drawn shape</a></h3>
+          <p class="say">
+            The image is a child, drawn as itself, and its alpha clips the rect.
+            Only the name changes.
+          </p>
+          <div class="figs">
+            <figure class="render render">
+              <span class="tag tag-render">Render</span
+              ><img src="img/bottle-paint.png" alt="" />
+              <figcaption>
+                Today's render of the PICCL gallery story
+                (<code>stories/piccl/Bottle.stories.tsx</code>). It stays the
+                same.
+              </figcaption>
+            </figure>
+          </div>
+          <p class="label proposed">Proposed</p>
+          <pre
+            class="new"
+            data-changed="1"
+          ><code class="language-javascript">drawInside({ blendMode: &quot;color&quot; }, [
+  image({ href: bottlePng, h: v(100) }),
+  rect({ h: &quot;amount&quot;, w: 175, fill: &quot;#00ff00&quot; }),
+]);</code></pre>
+          <p class="label current">Current</p>
+          <pre
+            class="now"
+            data-changed="1"
+          ><code class="language-javascript">paint({ blendMode: &quot;color&quot; }, [
+  image({ href: bottlePng, h: v(100) }),
+  rect({ h: &quot;amount&quot;, w: 175, fill: &quot;#00ff00&quot; }),
+]);</code></pre>
+          <details class="alts">
+            <summary>Alternatives, and why they are worse</summary>
+            <pre
+              class="new"
+            ><code class="language-javascript">// (a) The image as a named sibling, read as an alpha stencil.
+layer([image({ href: bottlePng, h: v(100) }).name(&quot;glass&quot;)]).relate(
+  ({ glass }) =&gt; [
+    mask({ mode: &quot;alpha&quot;, to: glass }, [
+      rect({ h: &quot;amount&quot;, w: 175, fill: &quot;#00ff00&quot;, mixBlendMode: &quot;color&quot; }),
+    ]),
+  ],
+);</code></pre>
+            <p class="note">
+              (a) needs a name and a <code>.relate()</code>, or #1259, to reach
+              the image. It needs <code>mixBlendMode: "color"</code> on the
+              rect, and marks only allow
+              <code>"normal" | "multiply"</code> today (<code>chart.ts</code>
+              line 973). It also needs <code>mask({ mode })</code>, which is
+              parked.
+            </p>
+            <pre
+              class="new"
+            ><code class="language-javascript">// (b) The image inline in `to`, and again as a drawn sibling.
+layer([
+  image({ href: bottlePng, h: v(100) }),
+  mask({ mode: &quot;alpha&quot;, to: image({ href: bottlePng, h: v(100) }) }, [
+    rect({ h: &quot;amount&quot;, w: 175, fill: &quot;#00ff00&quot;, mixBlendMode: &quot;color&quot; }),
+  ]),
+]);</code></pre>
+            <p class="note">
+              (b) writes the image twice: two nodes that can drift apart. It has
+              the same blend-mode problem.
+            </p>
+          </details>
+        </article>
         <article class="card" id="regions">
-          <h3><a href="#regions">Region shapes and clip</a></h3>
+          <h3><a href="#regions">Region shapes, clip and drawInside</a></h3>
           <p class="say">
             <code>intersect</code>, <code>subtract</code>,
             <code>exclude</code> and a new <code>union</code> take operands
-            only; <code>clip</code> replaces <code>mask</code> and
-            <code>paint</code>.
+            only; <code>clip</code> replaces <code>mask</code>;
+            <code>drawInside</code> is today's <code>paint</code>.
           </p>
           <div class="figs">
             <figure class="render sketch">
@@ -1405,8 +1476,8 @@ clip({ to: b }, [a]); // a&#x27;s own paint, inside b</code></pre>
 subtract({ fill: FILL }, [a, b]);
 exclude({ fill: FILL }, [a, b]);
 union({ stroke: STROKE }, [a, b]); // one outline
-clip({ to: a }, [b]);
-layer([a.name(&quot;a&quot;)]).relate(({ a }) =&gt; [clip({ to: a }, [b])]);
+clip({ to: a }, [b]); // a&#x27;s outline; a is not drawn
+drawInside([a, b]); // a drawn; b inside a&#x27;s ink
 clip({ to: rect({ w, h }) }, [bars]); // a plot-box clip (#1209)</code></pre>
           <p class="label current">Current</p>
           <pre
@@ -1416,13 +1487,244 @@ clip({ to: rect({ w, h }) }, [bars]); // a plot-box clip (#1209)</code></pre>
 subtract({ fill: FILL }, [a, b]);
 exclude({ fill: FILL }, [a, b]);
 layer([a, b]); // two outlines
-mask([a, b]); // a read as ink: a ref or a non-white a fails
-paint([a, b]); // draws a, washed out
+mask([a, b]); // a read as luminance: a ref or a non-white a fails
+paint([a, b]); // a drawn; b inside a&#x27;s ink
 // no plot-box clip (#1209)</code></pre>
+        </article>
+        <article class="card" id="slots">
+          <h3><a href="#slots">Slots, by operator</a></h3>
+          <p class="say">
+            What each operator does with each slot. A child may also be read; it
+            is still drawn as itself.
+          </p>
+          <p class="label">The rule, by operator</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Slot kind</th>
+                  <th>Operators</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Child: drawn as itself</td>
+                  <td>
+                    <code>layer</code>, <code>spread</code>, <code>stack</code>,
+                    <code>scatter</code>, <code>group</code>,
+                    <code>partition</code>, <code>treemap</code>,
+                    <code>pack</code>, <code>frame</code>,
+                    <code>translate</code>, <code>offset</code>, a coord's
+                    children, <code>enclose</code>'s children,
+                    <code>arrow</code>'s ends, <code>clip</code>'s children
+                  </td>
+                </tr>
+                <tr>
+                  <td>Child, also read for ink</td>
+                  <td>
+                    <code>drawInside</code> (today <code>paint</code>): its
+                    first child; the rest are plain children
+                  </td>
+                </tr>
+                <tr>
+                  <td>Operand: read, never drawn</td>
+                  <td>
+                    <code>clip</code>'s <code>to</code>, <code>intersect</code>,
+                    <code>subtract</code>, <code>exclude</code>,
+                    <code>union</code>, <code>Shape.blob({ avoiding })</code>,
+                    relational <code>line</code> and <code>ribbon</code>,
+                    <code>Constraint.*</code>, <code>cut</code>'s source,
+                    <code>Coord.bend</code>'s <code>along</code>,
+                    <code>Coord.envelope</code>'s <code>top</code> and
+                    <code>bottom</code>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Pointer: draws nothing</td>
+                  <td><code>ref</code></td>
+                </tr>
+                <tr>
+                  <td>Data</td>
+                  <td><code>Bin.voronoi</code>'s <code>seeds</code></td>
+                </tr>
+                <tr>
+                  <td>Parked</td>
+                  <td>
+                    <code>mask</code>'s stencil (an undrawn alpha stencil, such
+                    as a gradient fade)
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="note">
+            Today two operators break this: <code>intersect</code> switches its
+            slots from children to operands with its paint option, and
+            <code>mask</code> reads luminance, so a ref or a colored stencil
+            fails. <code>paint</code> does not: its first child is drawn and
+            also read, as <code>Constraint.align</code> reads the boxes of marks
+            that are drawn where they were made.
+          </p>
         </article>
       </section>
       <section class="group" id="g-naming">
         <h2>Naming</h2>
+        <article class="card" id="naming-paint">
+          <h3><a href="#naming-paint">Naming: draw inside a drawn shape</a></h3>
+          <p class="say">
+            How other systems name "draw A, then draw B clipped to A's ink, with
+            A still visible".
+          </p>
+          <p class="label">Precedent</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>System</th>
+                  <th>Name</th>
+                  <th>What it does</th>
+                  <th>Checked against docs</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Photoshop</td>
+                  <td>Create Clipping Mask</td>
+                  <td>
+                    Base layer stays visible; layers above show only where it
+                    has pixels, and take its opacity and blend mode.
+                  </td>
+                  <td>yes (Photoshop Elements help page)</td>
+                </tr>
+                <tr>
+                  <td>Procreate</td>
+                  <td>Clipping Mask</td>
+                  <td>Clips to the layer below; that layer stays visible.</td>
+                  <td>yes</td>
+                </tr>
+                <tr>
+                  <td>Affinity Designer</td>
+                  <td>Clipping (drop on the layer's name)</td>
+                  <td>
+                    Parent stays visible; the child is clipped to it. Dropping
+                    on the thumbnail makes a mask instead.
+                  </td>
+                  <td>partly (tutorials)</td>
+                </tr>
+                <tr>
+                  <td>Illustrator</td>
+                  <td>Draw Inside</td>
+                  <td>
+                    Content drawn into a selected object is clipped to it, and
+                    the object stays.
+                  </td>
+                  <td>
+                    clipping, yes (help page); the object keeping its paint, not
+                    re-checked
+                  </td>
+                </tr>
+                <tr>
+                  <td>After Effects</td>
+                  <td>Preserve Underlying Transparency (T switch)</td>
+                  <td>
+                    A layer takes its transparency from the layers below; Adobe
+                    says it behaves like a Photoshop clipping mask.
+                  </td>
+                  <td>yes</td>
+                </tr>
+                <tr>
+                  <td>Krita</td>
+                  <td>Inherit Alpha</td>
+                  <td>
+                    A layer is confined to the alpha of the layers below it in
+                    its group.
+                  </td>
+                  <td>yes</td>
+                </tr>
+                <tr>
+                  <td>Canvas 2D</td>
+                  <td>globalCompositeOperation = "source-atop"</td>
+                  <td>New paint only where the canvas already has paint.</td>
+                  <td>from MDN, not re-checked</td>
+                </tr>
+                <tr>
+                  <td>Porter-Duff</td>
+                  <td>atop</td>
+                  <td>B atop A: A drawn, B inside A.</td>
+                  <td>not re-checked</td>
+                </tr>
+                <tr>
+                  <td>CSS</td>
+                  <td>background-clip: text</td>
+                  <td>
+                    The background shows only inside the text glyphs; text only.
+                  </td>
+                  <td>not re-checked</td>
+                </tr>
+                <tr>
+                  <td>Figma</td>
+                  <td class="nil">none</td>
+                  <td>
+                    Use as mask, types Alpha (default), Vector, Luminance: a
+                    stencil, not a drawn base.
+                  </td>
+                  <td>mask types, yes</td>
+                </tr>
+                <tr>
+                  <td>Sketch</td>
+                  <td>none clear</td>
+                  <td>Use as Mask, Outline or Alpha mode.</td>
+                  <td>partly</td>
+                </tr>
+                <tr>
+                  <td>Inkscape, SVG, GIMP, SwiftUI, Flutter</td>
+                  <td class="nil">none</td>
+                  <td>
+                    Clip and mask hide the stencil; draw it again yourself.
+                  </td>
+                  <td>not re-checked</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="note">
+            Checked with a web search on 2026-11-02 against the Adobe,
+            Procreate, Krita and Figma help pages; Affinity from tutorials.
+          </p>
+          <p class="label">Recommendations</p>
+          <ul class="recs">
+            <li>
+              <b>Precedent.</b> Raster tools call this a clipping mask
+              (Photoshop, Procreate) or clipping (Affinity), and the base stays
+              visible. That word is taken: in GoFish, <code>clip</code> is the
+              operator whose stencil is not drawn. Other names: Draw Inside
+              (Illustrator), Inherit Alpha (Krita), Preserve Underlying
+              Transparency (After Effects), atop (Porter-Duff, Canvas).
+            </li>
+            <li>
+              <b>Recommend <code>drawInside</code>.</b> It is Illustrator's name
+              for exactly this, it is a verb like the other operators, and it
+              says both halves: the base is drawn, and the rest goes inside it.
+              Next to <code>clip</code> it cannot be misread.
+              <code>clip({ to: a }, [b])</code> draws only b;
+              <code>drawInside([a, b])</code> draws a, then b inside it.
+            </li>
+            <li>
+              <b>Why not keep <code>paint</code>.</b> GoFish already uses
+              "paint" for fill and stroke: the Paint options group,
+              <code>intersect</code>'s paint, and "paints nothing" on this page.
+              The operator name does not say that its first child is the
+              stencil.
+            </li>
+            <li>
+              <b>Rejected.</b> <code>clipTo</code> reads as
+              <code>clip</code> with an argument. <code>inside</code> is
+              <code>intersect</code>'s wire name. <code>atop</code> is the
+              Porter-Duff jargon #196 replaced. <code>inherit</code> needs Krita
+              to make sense.
+            </li>
+          </ul>
+        </article>
         <article class="card" id="naming-grid">
           <h3><a href="#naming-grid">Compositing names elsewhere</a></h3>
           <p class="say">
@@ -1759,29 +2061,9 @@ paint([a, b]); // draws a, washed out
             </table>
           </div>
           <p class="note">
-            Checked against the docs for the three least certain rows:
-            <a href="https://help.figma.com/hc/en-us/articles/360040450253"
-              >Figma</a
-            >
-            has three mask types, Alpha (the default), Vector (outline only) and
-            Luminance, so Figma also separates clip from mask, as a type on one
-            command;
-            <a
-              href="https://go.sketch.com/docs/designing/shapes/masking-shapes/"
-              >Sketch</a
-            >
-            has Outline and Alpha masks;
-            <a
-              href="https://affinity.help/designer2/en-US.lproj/pages/Layers/layerClip.html"
-              >Affinity</a
-            >
-            has nested clipping and
-            <a
-              href="https://affinity.help/designer2/English.lproj/pages/Layers/LayerMasks.html"
-              >mask layers</a
-            >
-            by gray level or opacity. The other rows are from each system's
-            documented names and were not re-checked.
+            Names as each system documents them, from my knowledge, not
+            re-checked online. The least certain: Figma's mask types, Affinity's
+            clipping and mask layers, and Bluefish and Penrose having none.
           </p>
           <p class="label">Recommendations</p>
           <ul class="recs">
@@ -1827,14 +2109,9 @@ paint([a, b]); // draws a, washed out
               of any color works; today's luminance needs white.
             </li>
             <li>
-              <b>Drop paint.</b> Only Porter-Duff has a name for it (atop).
-              Design tools spell it as draw A, then clip B to A: Illustrator's
-              Draw Inside, Affinity's nested clipping. Under the new names that
-              is
-              <code
-                >layer([a.name("a")]).relate(({ a }) => [clip({ to: a },
-                [b])])</code
-              >, as on the region card.
+              <b>paint.</b> Keep the operator, renamed <code>drawInside</code>;
+              see the card above. Its first child is drawn and also read for
+              ink, which the children rule allows.
             </li>
           </ul>
         </article>
@@ -2296,14 +2573,20 @@ rect({ w: 20, h: 20 }).translate({ x: 10 }); // field: translate: { x: 10 }</cod
         <h2>Open decisions</h2>
         <ol class="decisions">
           <li id="d-rule">
-            Adopt the rule: children are drawn, operands are read and never
-            drawn, refs draw nothing?
-            <a class="see" href="#intersect-hidden">card</a>
+            Adopt the rule: children are drawn as themselves (and may also be
+            read), operands are read and never drawn, refs draw nothing?
+            <a class="see" href="#slots">card</a>
           </li>
           <li id="d-split">
-            Split region compositing into region shapes plus <code>clip</code>,
-            and drop <code>paint</code> (only Porter-Duff names it) and the
-            unpainted blend? <a class="see" href="#regions">card</a>
+            Three jobs: region shapes from operands, <code>clip</code> (stencil
+            not drawn) and <code>drawInside</code> (stencil drawn, its ink
+            clips), with <code>mask</code> parked and the unpainted blend
+            dropped? <a class="see" href="#regions">card</a>
+          </li>
+          <li id="d-paintname">
+            Rename <code>paint</code> to <code>drawInside</code> (Illustrator's
+            Draw Inside), or keep <code>paint</code>?
+            <a class="see" href="#naming-paint">card</a>
           </li>
           <li id="d-clipname">
             Name the outline-only operator <code>clip({ to })</code> and keep
@@ -2496,9 +2779,11 @@ rect({ w: 20, h: 20 }).translate({ x: 10 }); // field: translate: { x: 10 }</cod
             </li>
             <li>
               The children and operands rule falls out of the same question:
-              does this operator draw this slot? Region compositing is the one
-              place the code answers both ways, which is why it splits into
-              region shapes and <code>clip</code>.
+              does this operator draw this slot? In region compositing the
+              answer is muddled today: <code>intersect</code> switches its slots
+              with its paint option, and <code>mask</code> reads luminance. So
+              it splits into three jobs: region shapes, <code>clip</code> and
+              <code>drawInside</code>.
             </li>
           </ul>
         </details>
