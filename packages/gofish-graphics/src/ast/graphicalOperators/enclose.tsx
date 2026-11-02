@@ -57,6 +57,16 @@ import * as Pwl from "../solver/pwl";
 import { ringPathData } from "../geometry/plane";
 import { outlinePaint, ringOutline, simplifyRing } from "../geometry/outline";
 import { ringsEnclosingCircle } from "../geometry/enclosingCircle";
+import { insetConvex, intersectRings } from "../geometry/clip";
+import {
+  boxRing,
+  inItsBox,
+  isWholeBox,
+  ovalRing,
+  type Ring,
+} from "../geometry/ring";
+import type { Size } from "../dims";
+import type { AxisScale } from "../domain";
 
 /** `Shape.arcs()`'s radius when it is given none, as the `Shape` family
  *  declares it. */
@@ -145,7 +155,9 @@ function Enclose(
             return undefined;
           return padExtent(hullExtent(...(own as Extent[])), padding);
         }) as [Extent | undefined, Extent | undefined],
-      layout: (size, scales, children) => {
+      layout: (size, scales, children, _node, space) => {
+        if (fillsItsSpace(members))
+          return fillingLayout(shape, padding, size, scales, children, space);
         // Child placement (`placeUnplacedChild`): a FRESH child reports an
         // undefined translate until placed, so its baseline is placed at the
         // origin. An already-placed operand
@@ -312,6 +324,82 @@ function Enclose(
         padding
       );
   return node;
+}
+
+/** Whether every member fills the space it is given on both axes: it is
+ *  fresh (not a `ref`), and the claim walk says it fills its room
+ *  (`GoFishNode.fillsRoom`: a `treemap` or a `region` with no size of its
+ *  own does; a `pack` of sized circles does not). */
+const fillsItsSpace = (members: readonly GoFishAST[]): boolean =>
+  members.length > 0 &&
+  members.every(
+    (m) => m instanceof GoFishNode && m.fillsRoom(0) && m.fillsRoom(1)
+  );
+
+/**
+ * The layout of an enclosure around members that fill their space (#1222):
+ * the outline is its space, and the members fill the outline, drawn in by
+ * the padding, as their shape (see `Layout` in `_node.ts`). The outline is
+ * the box it is laid out in for `Shape.box()`, or the shape it is handed
+ * there (a treemap's cell), and the oval in that box for `Shape.oval()`,
+ * cut to the shape it is handed. Only a convex outline can be a member's
+ * shape, and `Shape.arcs()` and `Shape.blob()` hug members that have a size
+ * of their own, so around members that fill their space they are an error.
+ */
+function fillingLayout(
+  shape: Shape,
+  padding: number,
+  size: Size,
+  scales: Size<AxisScale | undefined>,
+  children: readonly GoFishAST[],
+  space: Ring | undefined
+) {
+  if (shape.kind === "arcs" || shape.kind === "blob")
+    throw new Error(
+      `enclose({ shape }): Shape.${shape.kind} hugs members that have a ` +
+        `size of their own, but this enclosure's member fills the space it ` +
+        `is given (such as a treemap), so it would fill the outline instead, ` +
+        `and only a convex outline can be filled. Use Shape.box or ` +
+        `Shape.oval, or give the member a size of its own.`
+    );
+  const [w, h] = size;
+  // The shape it is handed, unless that is its box.
+  const cell = isWholeBox(space, w, h) ? undefined : space;
+  const outline: Ring =
+    shape.kind === "box"
+      ? (cell ?? boxRing(w, h))
+      : cell === undefined
+        ? ovalRing(w, h)
+        : (intersectRings(ovalRing(w, h), cell) ?? []);
+  const inner =
+    padding > 0 && outline.length >= 3
+      ? (insetConvex(outline, padding) ?? [])
+      : outline;
+  // Each member is laid out in the inner shape's box, with that shape as
+  // its own, and its origin at the box's corner.
+  for (const child of children) {
+    if (inner.length < 3) {
+      placeUnplacedChild(child.layout([0, 0], scales));
+      continue;
+    }
+    const box = inItsBox(inner);
+    const placed = child.layout(box.size, scales, box.ring);
+    placed.place("x", box.at[0], "baseline");
+    placed.place("y", box.at[1], "baseline");
+  }
+  return {
+    intrinsicDims: { x: 0, y: 0, w, h },
+    transform: { translate: [undefined, undefined] as [undefined, undefined] },
+    // A box with no shape handed to it draws as a rect (with its corners);
+    // any other outline as its loop.
+    renderData: {
+      loops:
+        shape.kind === "box" && cell === undefined
+          ? undefined
+          : [outline.map(([x, y]): Pt => [x, y])],
+      box: [0, 0, w, h],
+    },
+  };
 }
 
 /** The box of `members` (refs) in `frame`'s frame on `axis`, grown by
