@@ -19,6 +19,414 @@ chart(grid)
   .mark(ribbon({ h: "pdf" }).name("density").hidden());
 ```
 
+## Round 2: methods, guides, and hiding later
+
+Josh asked three things after round 1: how chain methods relate to operators, how a shape works as a mask or guide that is sometimes drawn, and what happens when `.hidden()` is called on something already built. Round 1 follows below, unchanged except where noted.
+
+- **The rule.** A chain method has a function twin only when it is exact sugar for an operator with one child: `x.m(o)` builds the same node as `m(o, [x])`. A method that sets a fact on the mark's own nodes (`.name`, `.zOrder`, `.transition`) or reads the world around the mark (`.label`, `.relate`) has no twin.
+- **`.hidden()` is the second kind.** It makes no node. It sets one fact on the nodes it is called on, the same fact `blank()` sets. So it is a method only, `.hidden()` in JS and Python, and there is no `hide(x)`.
+- **Guides.** Every shape is drawn unless it says `.hidden()`. An operator decides what is drawn only for its own children, as `mask` and a painted `intersect` already do. It never hides a shape it reads through a `ref`. Voronoi seeds are rows, not shapes, so they need neither.
+- **Hiding later.** You can hide any value you hold, including a whole chart from a helper. The last call on the same value wins, an ancestor wins over a descendant, and `.hidden(fn)` hides per datum without moving layout. A `ref` or `selectAll` cannot hide what it reads.
+
+**Recommendation.** `.hidden()` only, as a method on marks, charts and layers, in JS and Python, with an optional per-datum argument. Runner-up: both spellings, with `hide(x)` defined as `x.hidden()` so that both write the same field.
+
+### Modifiers and operators elsewhere
+
+| System           | Method form                                                          | Wrapper form                                    | How the two relate                                                                                                                                                                                                                                                                                                                                        | Hiding                                                                                                                                     |
+| ---------------- | -------------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| SwiftUI          | `.padding()`, `.hidden()`, `.environment(k, v)`, `.id(x)`, `.tag(x)` | `.modifier(M)` gives `ModifiedContent<View, M>` | Every modifier method is a wrapper value. What it does varies: some lay out (`.padding`), some write settings down to the subtree (`.environment`, `.font`), some send values up to ancestors (`.preference`), some only tag the view for a parent or for accessibility (`.id`, `.tag`, `.accessibilityLabel`). The spelling is the same for all of them. | `.hidden()` keeps the view's layout and draws nothing. There is no wrapper spelling.                                                       |
+| Jetpack Compose  | `Modifier.padding().alpha(0f)`, passed as the `modifier` argument    | Layout composables such as `Box { }`            | The guidance: a modifier decorates one element, a composable arranges children. A modifier chain is a list of nodes attached to one layout node. `Modifier.layoutId(x)` is a tag the parent layout reads.                                                                                                                                                 | `Modifier.alpha(0f)` keeps layout and still takes input. Not calling the composable removes it.                                            |
+| Flutter          | None in the core library. Packages add extension methods.            | `Opacity`, `Visibility`, `Offstage`             | Everything is a wrapper widget.                                                                                                                                                                                                                                                                                                                           | `Visibility` has flags for what to keep: `maintainSize`, `maintainState`, `maintainInteractivity`. `Offstage` lays out but takes no space. |
+| Typst            | Methods on values (`.len()`), not on content                         | `hide(body)`                                    | Content changes are functions, plus `set` and `show` rules.                                                                                                                                                                                                                                                                                               | `hide` keeps layout and draws nothing.                                                                                                     |
+| CSS              | Properties on the element                                            | Wrapper elements                                | A property is a fact about one element; a wrapper adds a box.                                                                                                                                                                                                                                                                                             | `visibility: hidden` keeps layout and is inherited, and a child can set `visible` again. `display: none` removes the box.                  |
+| Lean 4           | `x.f a`                                                              | `T.f x a`                                       | One function. `x.f` looks up `f` in the namespace of `x`'s type and passes `x` as the first argument of that type. No choice per function.                                                                                                                                                                                                                | —                                                                                                                                          |
+| Rust, D, Nim     | `x.f(a)`                                                             | `T::f(x, a)` (Rust); any `f(x, a)` (D, Nim)     | Uniform call syntax: the language makes the two spellings one function.                                                                                                                                                                                                                                                                                   | —                                                                                                                                          |
+| Kotlin           | Extension functions, `fun View.f(a)`                                 | Plain functions                                 | The author picks the spelling per function.                                                                                                                                                                                                                                                                                                               | —                                                                                                                                          |
+| Haskell, Elm, F# | `x & f a`, `x \|> f a`                                               | `f a x`                                         | The function stays a function; an operator gives the left-to-right reading. Elm puts the subject last so the pipe works.                                                                                                                                                                                                                                  | —                                                                                                                                          |
+
+Two families. In Lean, Rust, D, Nim and the pipe languages, the method and the function are one thing, and the language decides; nobody picks per function. In SwiftUI and Compose the spelling is always the method, and the kinds (wraps, writes settings down, sends values up, tags) differ only in what they do. Only Kotlin lets each author pick, and that is the case to avoid.
+
+SwiftUI's kinds line up with GoFish's: wrapping (`.padding`) is kind (a), tagging (`.id`, `.tag`) is kind (b), sending values up (`.preference`) is kind (c). SwiftUI files `.hidden()` under none of the wrappers: it is a fact about the view, kept with its layout.
+
+No system lets a descendant undo a hidden ancestor except CSS `visibility`, and that rule is a known source of surprise.
+
+### GoFish's chain methods, and the rule
+
+- **(a) Sugar for a one-child operator.** `x.m(o)` builds the same node as `m(o, [x])`. The operator is the one source: one descriptor, one IR node.
+- **(b) A fact about the mark's own nodes.** No node of its own. The fact is read by someone else: the name resolver, the parent's paint order, the animation code, the renderer.
+- **(c) Elaboration.** It reads the caller's insides or adds nodes outside the caller's own subtree.
+
+| Method                     | On                                   | Kind                           | What it does                                                                        | Function twin                                                                        |
+| -------------------------- | ------------------------------------ | ------------------------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `.translate(opts)`         | marks; Python `translate`            | (a)                            | Wraps the mark in a `position` node.                                                | `position(opts, [x])`, the same node                                                 |
+| `.cut(opts)`               | `rect`, `image`                      | (a), one source to many slices | Slices the mark into masked copies.                                                 | `cut(source, opts)`. The subject comes first, out of step with `op(opts, children)`. |
+| `.name(n)`                 | marks, charts, layers; Python        | (b)                            | Registers the mark in the nearest name scope (#1237, one resolver for names).       | none                                                                                 |
+| `.zOrder(v)`               | marks, charts; Python `z_order`      | (b)                            | Sets the paint-order key on its nodes. Takes a value or a function of the datum.    | none                                                                                 |
+| `.transition(spec)`        | marks; JS only                       | (b)                            | Records enter, update and exit effects on its nodes for the animation code to read. | none                                                                                 |
+| `.hidden()` (proposed)     | marks, charts, layers; Python        | (b)                            | Its nodes draw nothing where they stand.                                            | none, under the rule                                                                 |
+| `.label(acc, opts)`        | marks, layers; Python                | (c)                            | Adds text placed in the chart's frame, placed around the other marks there.         | none                                                                                 |
+| `.relate(fn)`              | layers, `createMark` results; Python | (c)                            | Reads the caller's named children and adds constraints and marks to the caller.     | none                                                                                 |
+| `.flow`, `.mark`, `.layer` | chart builder; Python                | builder step                   | Builds the spec one step at a time.                                                 | not in scope                                                                         |
+| `.render`, `.toSVG`        | marks, charts                        | terminal                       | Draws.                                                                              | not in scope                                                                         |
+
+`.connect` is gone (#745 replaced it with `.layer()` and relational marks), and there is no `.emphasize` or `.when` in the tree. Field expressions (`.bin`, `.format`, `.sort`) are methods of the kind api-design.md describes: they read the field's type. They are not on marks, so they are outside this table.
+
+**Proposed rule.** Each fact has one home in the IR, and the kind of the home picks the spelling.
+
+- If the home is a node, the operator function is primary. A method twin is allowed when the operator takes exactly one child, and it must build the same node.
+- If the home is a field on the mark, the method is the only spelling.
+- If the construct reads or adds to the world around the mark, the method is the only spelling.
+
+```js
+// (a) An operator with one child. The method is exact sugar for it.
+position({ x: 10 }, [rect({ w: 20, h: 20 })]);
+rect({ w: 20, h: 20 }).translate({ x: 10 }); // same node
+
+// (b) A fact about the mark's own nodes. Method only.
+ribbon({ h: "pdf" }).name("density").zOrder(-1).hidden();
+
+// (c) Reads or adds to the world around the mark. Method only.
+rect({ h: "count" }).label("count");
+layer([a.name("a"), b.name("b")]).relate(({ a, b }) => [
+  Constraint.align({ y: "middle" }, [a, b]),
+]);
+```
+
+```python
+# (a) An operator with one child. The method is exact sugar for it.
+position([rect(w=20, h=20)], x=10)
+rect(w=20, h=20).translate(x=10)  # same node
+
+# (b) A fact about the mark's own nodes. Method only.
+ribbon(h="pdf").name("density").z_order(-1).hidden()
+
+# (c) Reads or adds to the world around the mark. Method only.
+rect(h="count").label("count")
+```
+
+**Against api-design.md.** The rule there says a call joins independent parts, a method reads or changes the caller's state, and an option is a local adjective. Kind (a) is a call, because the wrapper reads nothing from its child; the method twin is only a reading order, defined by the call. Kind (b) changes the caller's own state, so it is a method. Kind (c) reads the caller's state, so it is a method. The rule adds one thing to api-design.md: a one-child operator may have a method twin that builds the same node.
+
+**Against the code.** `.translate` and `position` fit (a). `.cut` fits (a) but takes its subject first; under the rule its function form would be `cut(opts, [source])`. That is a separate cleanup. Every other chain method fits (b) or (c) and has no twin today.
+
+**`.hidden()` and `hide(x)`.** `.hidden()` sets a field on the nodes it is called on, the same `INTERNAL_emitNothing()` that `blank()` uses, and on the wire it is `hidden: true` beside `zOrder`. It is kind (b), so the rule gives it one spelling, the method. A wrapper `hide(x)` would either add an IR node type for a fact that already has a field, which is two IR forms for one fact, or be `x.hidden()` with the parentheses moved. Typst has `hide(body)` because Typst content has no methods. GoFish marks do.
+
+**Python.** The same: `.hidden()` on `Mark`, `ChartBuilder` and layers, beside `.name()` and `.z_order()`, and `.hidden(False)`. No `hide`.
+
+### Shapes as masks and guides
+
+A guide is a shape that shapes something else: a mask's stencil, a region operand, the spine of a coordinate transform, the seeds of a Voronoi partition. Sometimes the reader should see it and sometimes not. The question is where that choice is written.
+
+- **(i) Drawn unless hidden.** Every shape is drawn where it stands unless it says `.hidden()`. This is round 1's approach A.
+- **(ii) The operator hides its guide.** The operator declares that its guide operand is not drawn. To draw the guide, you add a second mark that follows it (`use(ref)`), or set a switch on the operator.
+- **(iii) A switch on the reader.** The operator takes `keep: true` or `show: true` and decides for its operand.
+- **(iv) The guide is a value.** The guide is data or a shape value that the operator consumes, like CSS `clip-path: circle()` or Voronoi seeds as rows. Drawing it is a separate mark over the same value.
+
+| System       | How a guide is written                                                                                                                                         | Drawn too?                                                                                       |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Figma        | "Use as mask" on the bottom layer of a group. The mask layer's paint becomes the alpha.                                                                        | Not drawn. Duplicate the layer to show it.                                                       |
+| Illustrator  | A clipping mask loses its fill and stroke. "Make Guides" turns a path into a guide that does not print.                                                        | You can stroke the clipping path again, and it draws on top. "Release Guides" turns it back.     |
+| SVG          | Children of `<clipPath>` and `<mask>` never render.                                                                                                            | Draw it again with `<use href>`, which takes new paint for attributes the original leaves unset. |
+| TikZ         | `\path` draws nothing; `\draw` is `\path[draw]`. `[clip]` and `[name path=A]` (for `intersections`) are options on the path.                                   | `\path[draw, clip]` draws and clips. Being drawn and being a clip are separate options.          |
+| CSS          | `clip-path`, `mask`, `shape-outside` and `offset-path` take a shape value or a `url(#id)`.                                                                     | A value is never drawn. Draw it with its own element.                                            |
+| Bluefish     | Refs draw nothing. Guides are `<Rect fill="transparent">`.                                                                                                     | Drawn unless made transparent.                                                                   |
+| GoFish today | `mask([A, B])` never draws A; `paint([A, B])` draws A. A painted `intersect` does not draw its own operands. A `ref` operand's original draws where it stands. | By operator for children; by the original for refs.                                              |
+
+Two models. In one the guide is consumed (Figma masks, SVG `<clipPath>`, CSS values): the consumer decides, and showing it means a copy. In the other the guide is an ordinary shape with drawing as its own property (TikZ, Illustrator's stroked clip path): the role and the drawing are separate switches. GoFish already has both, split by ownership. An operator's own children are consumed in its meaning. A shape read through a `ref` is drawn where it was made.
+
+#### Croissant
+
+The curve is read through a `ref` by a clause somewhere else.
+
+**(i) Drawn unless hidden**
+
+```js
+// (i) Drawn unless hidden. The curve says it is not drawn.
+layer([
+  chart(grid)
+    .flow(scatter({ x: "x" }))
+    .mark(ribbon({ h: "pdf" }).name("density").hidden()),
+]).relate(({ density }) => [
+  chart(grid)
+    .flow(slices)
+    .mark(
+      intersect({ fill: FILL, stroke: STROKE }, [density, region({ inset: 3 })])
+    ),
+]);
+// Drawn as well: delete .hidden() and give the curve a fill.
+```
+
+**(ii) The operator hides it (sketch)**
+
+```js
+// (ii) Sketch. intersect declares "my operands are boundaries", so the
+// curve is not drawn because a clause elsewhere reads it.
+layer([
+  chart(grid)
+    .flow(scatter({ x: "x" }))
+    .mark(ribbon({ h: "pdf" }).name("density")),
+]).relate(({ density }) => [
+  chart(grid)
+    .flow(slices)
+    .mark(
+      intersect({ fill: FILL, stroke: STROKE }, [density, region({ inset: 3 })])
+    ),
+  // Drawn as well: a second mark that follows the curve.
+  use(density, { fill: "#eee" }),
+]);
+```
+
+![A croissant chart: ten slices of the standard normal, no curve drawn behind them](img/croissant-proposed.png)
+
+_(i) with .hidden() (story shim)_
+
+![The same croissant chart with the full curve drawn in light gray behind the slices](img/croissant-shown.png)
+
+_(i) without .hidden(), curve filled_
+
+**(iii) A switch on the reader (sketch)**
+
+```js
+// (iii) Sketch. The reader decides, with a flag.
+intersect({ fill: FILL, stroke: STROKE, keep: true }, [
+  density,
+  region({ inset: 3 }),
+]);
+// Two clauses that read the same curve can disagree:
+// one says keep: true, the other keep: false.
+```
+
+- (i) needs nothing new. The two renders are round 1's prototypes.
+- (ii) makes the curve's drawing depend on whether a clause elsewhere reads it. That is round 1's approach C under a new name.
+- (iii) puts the switch on the reader. Two readers of the same curve can disagree, and the curve has no answer of its own.
+
+#### Voronoi, with and without seeds
+
+Real renders. `Bin.voronoi({ seeds })` reads rows, not shapes, so this is model (iv) already. Drawing the seeds is one more tier over the same rows.
+
+**Seeds not drawn**
+
+```js
+// Seeds are rows, not a shape. Not drawing them is not writing them.
+layer({ w: 420, h: 300 }, [
+  chart(beaked, { color: Color.gradient("blues") })
+    .flow(partition({ by: key.bin(Bin.voronoi({ seeds })) }))
+    .mark(region({ fill: field("Species").count(), stroke: "white" })),
+]);
+```
+
+**Seeds drawn**
+
+```js
+// Drawing the seeds is one more tier over the same rows.
+layer({ w: 420, h: 300 }, [
+  chart(beaked, { color: Color.gradient("blues") })
+    .flow(partition({ by: key.bin(Bin.voronoi({ seeds })) }))
+    .mark(region({ fill: field("Species").count(), stroke: "white" })),
+  chart(seeds)
+    .flow(scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
+    .mark(circle({ r: 3.5, fill: "black" })),
+]);
+```
+
+![Voronoi cells of fifteen seed penguins over beak length and depth, shaded by how many penguins fall in each cell, no dots](img/voronoi-no-seeds.png)
+
+_Seeds not drawn_
+
+![The same Voronoi cells with the fifteen seed penguins drawn as black dots](img/voronoi-seeds.png)
+
+_Seeds drawn_
+
+- No hiding in either. If seeds could one day be marks, as in `Bin.voronoi({ seeds: selectAll("sites") })`, they would follow (i): drawn unless the site marks say `.hidden()`.
+
+#### Spine and envelope coordinate transforms
+
+Sketch: GoFish has no spine transform. `Coord.wavy` is a fixed formula with no guide, and `Shape.spine` is an `enclose` outline, not a transform.
+
+**(i) The spine is an ordinary mark**
+
+```js
+// Sketch: Coord.along does not exist. (i) The spine is an ordinary
+// mark. It is drawn unless hidden.
+layer([
+  chart(riverPoints)
+    .flow(scatter({ x: "x", y: "y" }))
+    .mark(line({ curve: Curve.natural }))
+    .name("river")
+    .hidden(), // delete this line to draw the river
+]).relate(({ river }) => [
+  chart(towns, { coord: Coord.along(river) })
+    .flow(scatter({ x: "mile", y: "bank" }))
+    .mark(circle({ r: 3 })),
+]);
+// An envelope reads two shapes the same way:
+// Coord.between(lower, upper), each drawn or hidden on its own.
+```
+
+**(ii) The transform owns its guide**
+
+```js
+// Sketch. (ii) The transform owns its guide and hides it by default.
+coord(
+  {
+    transform: Coord.along(),
+    guide: chart(riverPoints)
+      .flow(scatter({ x: "x", y: "y" }))
+      .mark(line({ curve: Curve.natural })),
+    showGuide: true, // a second switch for "drawn"
+  },
+  [
+    chart(towns)
+      .flow(scatter({ x: "mile", y: "bank" }))
+      .mark(circle({ r: 3 })),
+  ]
+);
+```
+
+- (i) says "drawn or not" with the same `.hidden()` as everywhere else, and the river can be named, labeled and given a z-order like any line. It needs a ref in a chart option, which #1259 (string refs outside `.relate()`) is about.
+- (ii) is a declared default, but it needs a second switch, `showGuide`, for a fact `.hidden()` already says.
+
+#### Clip and mask
+
+Real renders for `mask` today. The stencil is drawn as well only by drawing a second circle.
+
+**mask (real)**
+
+```js
+// Real. mask's first child is its stencil. mask's meaning, B inside A,
+// does not include A, so A is not drawn. paint is the twin that draws A.
+mask([circle({ cx: 100, cy: 100, r: 80, fill: "white" }), stripes()]);
+```
+
+**Stencil drawn as well, today (real)**
+
+```js
+// Real, today. The stencil drawn as well, on top: a second circle with
+// the same geometry, laid out a second time.
+layer([
+  mask([circle({ cx: 100, cy: 100, r: 80, fill: "white" }), stripes()]),
+  circle({
+    cx: 100,
+    cy: 100,
+    r: 80,
+    fill: "none",
+    stroke: "#222",
+    strokeWidth: 3,
+  }),
+]);
+```
+
+![Orange and blue stripes clipped to a disc, no outline](img/clip-mask.png)
+
+_mask_
+
+![The same striped disc with a dark outline drawn on top](img/clip-mask-outline.png)
+
+_mask plus a second circle_
+
+**A mark that follows the stencil (sketch)**
+
+```js
+// Sketch. A mark that follows the stencil: it reads the placed outline,
+// as intersect does, and paints it in its own style. No second layout.
+layer([
+  mask([
+    circle({ cx: 100, cy: 100, r: 80, fill: "white" }).name("disc"),
+    stripes(),
+  ]),
+  use(ref("disc"), { fill: "none", stroke: "#222", strokeWidth: 3 }),
+]);
+```
+
+- `mask`'s meaning is B inside A, which does not include A. That is not a hiding rule; it is what the operator computes, like `subtract`. `paint` is the twin that keeps A.
+- The outline case is where a follower mark earns its place: the outline goes above the stripes, but the stencil must be `mask`'s first child.
+
+#### Revisiting #745 and approach C
+
+**Is a declared default the rule #745 rejected?** No, but only for an operator's own children. #745 itself chose a declared default: a relational mark paints below its operands because the operator says `zBelow`, not because GoFish guesses intent. What Josh called "spooky" was guessing. A declared default is fine when it governs what the operator itself draws.
+
+An operator's own children are part of what it draws, so `mask` not drawing its stencil is of the same kind as #745's `zBelow`. A shape read through a `ref` was made and placed somewhere else. If a reader could hide it, the shape's look would depend on who reads it, which is round 1's approach C whether it is declared or guessed. So (ii) is allowed for children, as GoFish already does, and ruled out for refs.
+
+#### A mark that follows a hidden mark
+
+**A mark that follows a hidden mark.** Josh asked about hiding guides by default and drawing them with a second mark that follows. The follower would be a new mark, `use(ref, paint)`, like SVG `<use>`.
+
+- It needs no second layout: it reads the placed outline, as a painted `intersect` already does through `placedOutlines`.
+- It can be restyled and put at its own z-order, so one shape can be a stencil below and an outline above.
+- It has the limits `intersect` has: an `image`, a `text` or a rounded `rect` has no exact outline, so `use` would fall back to drawing the original again, as SVG `<use>` does.
+- Scales count the shape once, from the original. Labels and hover belong to the follower, not to the original.
+- It needs a ref outside `.relate()` (#1259).
+
+Making every guide hidden by default and drawn only through `use` would make the common case of a drawn line need two marks, and "is this shape drawn" would be answered by searching for its followers. So `use` is a later addition for the restyled-copy case, not the default way to show a guide.
+
+**Guides, recommended:** (i) for every shape, with (iv) where the guide is data (Voronoi seeds) and an operator's own meaning for its own children (`mask`, a painted `intersect`). No switch on the reader. `use(ref)` later, for a restyled copy. **Runner-up:** (ii) for children only, which is what GoFish does today, plus `use(ref)` now.
+
+### Calling `.hidden()` on something already built
+
+- **Where it can be called.** On any value you hold: a mark, a chart, a layer, or a chart that a helper returns. You hold the value, so hiding it is a fact about it, like `.zOrder()`.
+- **Not through a ref.** `ref("density").hidden()` and `selectAll("bars").hidden()` are errors. A ref reads a shape that was made somewhere else. Under #1237 a ref reads and never writes, and if it could write, two readers could disagree. The error says to call `.hidden()` where the shape is made, or to pass a per-datum function there.
+- **Same value, called twice.** The last call wins. `.hidden().hidden()` is hidden, and `.hidden().hidden(false)` is drawn. This is how `.zOrder()` behaves, since each call sets the field again.
+- **Subtree.** Hidden covers the whole subtree and its labels and chrome, as in round 1. An ancestor wins: a `.hidden(false)` inside a hidden layer does not show. You can tell whether a shape is drawn by looking up the tree, never down. CSS `visibility` lets a child show again, and that is a known surprise.
+- **Layout.** Never changes. A hidden mark is laid out and counts for scales, axes and legends. Turning it on and off repaints and does not move anything, so labels and neighbors stay put. `filter` is the operator that removes data and lays out again.
+- **Per datum and per frame.** `.hidden(fn)` takes a function of the datum, as `.zOrder(fn)` does. An animation frame or a hover selection is data (#830, interaction as data), so per-frame hiding is the same function reading the frame. The renderer already has a paint-time rule for keyframes (`INTERNAL_visibleWhile`); `.hidden(fn)` would be its public spelling for one datum. In Python, the function goes through the bridge the way `z_order`'s does.
+- **An operator that does not draw its child.** `mask`'s stencil is not hidden; it is used. `.hidden()` on it changes nothing, since the operand gives shape either way, and `.hidden(false)` does not draw it. To draw the stencil, use `paint`, or add a mark for it. There is no `.shown()`; the opposite of `.hidden()` is `.hidden(false)`.
+
+```js
+// You hold the value: hide it.
+ribbon({ h: "pdf" }).hidden();
+ridgeline(data).hidden(); // a whole chart from a helper
+
+// The last call on the same value wins.
+ribbon({ h: "pdf" }).hidden().hidden(false); // drawn
+
+// An ancestor wins over a descendant.
+layer([a, b.hidden(false)]).hidden(); // a and b are both hidden
+
+// Per datum, like .zOrder(fn). Paint only: layout does not move.
+circle({ r: 3 }).hidden((d) => d.year !== year);
+
+// Error: a ref reads a shape and cannot change how it is drawn.
+ref("density").hidden();
+selectAll("bars").hidden();
+```
+
+```python
+ribbon(h="pdf").hidden()
+ridgeline(data).hidden()
+ribbon(h="pdf").hidden().hidden(False)  # drawn
+circle(r=3).hidden(lambda d: d["year"] != year)
+ref("density").hidden()  # error: a ref cannot change how a shape is drawn
+```
+
+### Walls
+
+- **`hidden` as a ref path.** A ref proxy treats any property as a path segment, so `ref("x").hidden` today reads a child named "hidden". Making it an error means adding `hidden` to the proxy's reserved names, and a child named "hidden" would then need `.path("hidden")`.
+- **`mask`'s stencil paint leaks.** The stencil is a luminance mask, so a stencil with the default blue fill fades the stripes. The clip renders use `fill: "white"`. A stencil should give shape only; this is a bug apart from this proposal.
+- **`paint` renders washed out** in the prototype. Its fallback path desaturates and blends, so the clip example shows `mask` only.
+- **Spine transforms do not exist,** so that example is syntax only.
+
+**What round 2 changes in round 1.**
+
+- Round 1's runner-up, `hide(mark)`, is ruled out by the rule above unless Josh picks both spellings.
+- Round 1's decision on the spelling is answered.
+- Round 1 left out a value argument. Round 2 proposes `.hidden(fn)`. The bar chart race (#889) still needs a clip, since per-datum hiding hides whole bars.
+
+### Decisions for Josh, round 2
+
+1. Adopt the rule: a function twin only for one-child operators, and it must build the same node? (Recommended yes, and add it to api-design.md.)
+2. So `.hidden()` only, with no `hide(x)`, in JS and Python? (Recommended yes. Runner-up: both, with `hide(x)` defined as `x.hidden()`.)
+3. Guides: drawn unless `.hidden()`, with operators deciding only for their own children? (Recommended yes.)
+4. Add `use(ref, paint)` for a restyled second copy now, or wait for a second example after the clip outline? (Recommended wait.)
+5. Should `mask` and `paint` stay two operators, or become one operator with a switch? (Recommended stay: each is one computation.)
+6. An ancestor's `.hidden()` wins over a descendant's `.hidden(false)`? (Recommended yes.)
+7. Ship `.hidden(fn)` per datum in the first version, or later? (Recommended first version, since `.zOrder(fn)` is the same shape.)
+8. Fix `cut`'s argument order to `cut(opts, [source])` in a separate change?
+
+---
+
+# Round 1
+
+The first round, as reviewed. Round 2 answers its spelling decision and rules out its runner-up unless both spellings are chosen.
+
 ## Terminology
 
 - **Definition.** A shape that other parts of the picture use (as a region to cut, a box to align to, an anchor to point at) but that the reader should not see.
@@ -629,13 +1037,13 @@ I recommend **A, `.hidden()`**.
 ## 11. Decisions for Josh
 
 1. Is a definition "laid out, counts for scales, axes and legends, paints nothing, cannot be hovered" (the phantom rule)?
-2. Spelling: `.hidden()` as a modifier (recommended), `hide(x)` as a wrapper, or something else?
+2. Spelling: `.hidden()` as a modifier (recommended), `hide(x)` as a wrapper, or something else? _Answered: one or both. Round 2 proposes `.hidden()` only._
 3. Does a hidden mark's color field still feed the color scale and legend? (Recommended yes, as `blank()` does.)
 4. Does `.hidden()` hide the mark's labels, and on a whole chart its axes and legend? (Recommended yes: the whole subtree and its attachments.)
 5. Keep `blank()` as sugar for `rect(...).hidden()`, or delete it from the public API and migrate its call sites?
 6. Should this land with #1259 in one PR, so the croissant becomes `chart(...).mark(ribbon(...).hidden()).layer(...)`?
 7. Migrate the gallery stories (the four croissants, QuantumCircuit, OhmParseTree, DFSCQ, the BakingRecipes `union`) in the same change?
-8. Leave #889 (the bar chart race) to a clip (#1209), with no value argument on `.hidden()` for now?
+8. Leave #889 (the bar chart race) to a clip (#1209), with no value argument on `.hidden()` for now? _Round 2 proposes `.hidden(fn)` for per-datum and per-frame hiding; #889 still needs the clip._
 
 User-facing syntax changes to review:
 

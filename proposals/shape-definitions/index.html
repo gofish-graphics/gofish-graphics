@@ -123,6 +123,21 @@
         font-size: 1.25rem;
         margin: 28px 0 8px;
       }
+      h4 {
+        font-family: var(--font-display);
+        font-size: 1.08rem;
+        font-weight: 600;
+        margin: 22px 0 6px;
+      }
+      .approach h4 {
+        margin: 0;
+      }
+      .round2 {
+        margin-top: 24px;
+      }
+      h2.round-title {
+        font-size: 2rem;
+      }
       p,
       li {
         max-width: 68ch;
@@ -431,7 +446,8 @@
         <p class="dek">
           An API proposal for GoFish issue #1267: a shape that other parts of
           the picture use, but that the reader does not see. It replaces the
-          unseen <code>fill: "none"</code> curve in the croissant charts.
+          unseen <code>fill: "none"</code> curve in the croissant charts. Round
+          2, first below, answers Josh's three questions on round 1.
         </p>
         <div class="summary">
           <ul>
@@ -468,6 +484,7 @@ chart(grid)
   .mark(ribbon({ h: &quot;pdf&quot; }).name(&quot;density&quot;).hidden());</code></pre>
         </div>
         <nav class="toc" aria-label="Sections">
+          <a href="#r2-top">Round 2</a>
           <a href="#terms">Terms</a>
           <a href="#precedent">Precedent</a>
           <a href="#examples">Examples</a>
@@ -478,6 +495,1129 @@ chart(grid)
           <a href="#decisions">Decisions</a>
         </nav>
       </header>
+      <section class="round2" id="r2">
+        <h2 id="r2-top">
+          Round 2: methods, guides, and hiding later
+          <span class="badge new">new</span>
+        </h2>
+        <p class="note">
+          Josh asked three things after round 1: how chain methods relate to
+          operators, how a shape works as a mask or guide that is sometimes
+          drawn, and what happens when <code>.hidden()</code> is called on
+          something already built. Round 1 follows below, unchanged except where
+          noted.
+        </p>
+        <div class="summary">
+          <ul>
+            <li>
+              <strong>The rule.</strong> A chain method has a function twin only
+              when it is exact sugar for an operator with one child:
+              <code>x.m(o)</code> builds the same node as
+              <code>m(o, [x])</code>. A method that sets a fact on the mark's
+              own nodes (<code>.name</code>, <code>.zOrder</code>,
+              <code>.transition</code>) or reads the world around the mark
+              (<code>.label</code>, <code>.relate</code>) has no twin.
+            </li>
+            <li>
+              <strong><code>.hidden()</code> is the second kind.</strong> It
+              makes no node. It sets one fact on the nodes it is called on, the
+              same fact <code>blank()</code> sets. So it is a method only,
+              <code>.hidden()</code> in JS and Python, and there is no
+              <code>hide(x)</code>.
+            </li>
+            <li>
+              <strong>Guides.</strong> Every shape is drawn unless it says
+              <code>.hidden()</code>. An operator decides what is drawn only for
+              its own children, as <code>mask</code> and a painted
+              <code>intersect</code> already do. It never hides a shape it reads
+              through a <code>ref</code>. Voronoi seeds are rows, not shapes, so
+              they need neither.
+            </li>
+            <li>
+              <strong>Hiding later.</strong> You can hide any value you hold,
+              including a whole chart from a helper. The last call on the same
+              value wins, an ancestor wins over a descendant, and
+              <code>.hidden(fn)</code> hides per datum without moving layout. A
+              <code>ref</code> or <code>selectAll</code> cannot hide what it
+              reads.
+            </li>
+          </ul>
+          <p>
+            <strong>Recommendation.</strong> <code>.hidden()</code> only, as a
+            method on marks, charts and layers, in JS and Python, with an
+            optional per-datum argument. Runner-up: both spellings, with
+            <code>hide(x)</code> defined as <code>x.hidden()</code> so that both
+            write the same field.
+          </p>
+        </div>
+        <nav class="toc" aria-label="Round 2 sections">
+          <a href="#r2-survey">Survey</a><a href="#r2-rule">The rule</a
+          ><a href="#r2-guides">Guides and masks</a
+          ><a href="#r2-later">Hiding later</a><a href="#r2-walls">Walls</a
+          ><a href="#r2-decisions">Decisions</a><a href="#r1">Round 1</a>
+        </nav>
+        <h3 id="r2-survey">Modifiers and operators elsewhere</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>System</th>
+                <th>Method form</th>
+                <th>Wrapper form</th>
+                <th>How the two relate</th>
+                <th>Hiding</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>SwiftUI</td>
+                <td>
+                  <code>.padding()</code>, <code>.hidden()</code>,
+                  <code>.environment(k, v)</code>, <code>.id(x)</code>,
+                  <code>.tag(x)</code>
+                </td>
+                <td>
+                  <code>.modifier(M)</code> gives
+                  <code>ModifiedContent&lt;View, M&gt;</code>
+                </td>
+                <td>
+                  Every modifier method is a wrapper value. What it does varies:
+                  some lay out (<code>.padding</code>), some write settings down
+                  to the subtree (<code>.environment</code>,
+                  <code>.font</code>), some send values up to ancestors
+                  (<code>.preference</code>), some only tag the view for a
+                  parent or for accessibility (<code>.id</code>,
+                  <code>.tag</code>, <code>.accessibilityLabel</code>). The
+                  spelling is the same for all of them.
+                </td>
+                <td>
+                  <code>.hidden()</code> keeps the view's layout and draws
+                  nothing. There is no wrapper spelling.
+                </td>
+              </tr>
+              <tr>
+                <td>Jetpack Compose</td>
+                <td>
+                  <code>Modifier.padding().alpha(0f)</code>, passed as the
+                  <code>modifier</code> argument
+                </td>
+                <td>Layout composables such as <code>Box { }</code></td>
+                <td>
+                  The guidance: a modifier decorates one element, a composable
+                  arranges children. A modifier chain is a list of nodes
+                  attached to one layout node.
+                  <code>Modifier.layoutId(x)</code> is a tag the parent layout
+                  reads.
+                </td>
+                <td>
+                  <code>Modifier.alpha(0f)</code> keeps layout and still takes
+                  input. Not calling the composable removes it.
+                </td>
+              </tr>
+              <tr>
+                <td>Flutter</td>
+                <td>
+                  None in the core library. Packages add extension methods.
+                </td>
+                <td>
+                  <code>Opacity</code>, <code>Visibility</code>,
+                  <code>Offstage</code>
+                </td>
+                <td>Everything is a wrapper widget.</td>
+                <td>
+                  <code>Visibility</code> has flags for what to keep:
+                  <code>maintainSize</code>, <code>maintainState</code>,
+                  <code>maintainInteractivity</code>. <code>Offstage</code> lays
+                  out but takes no space.
+                </td>
+              </tr>
+              <tr>
+                <td>Typst</td>
+                <td>Methods on values (<code>.len()</code>), not on content</td>
+                <td><code>hide(body)</code></td>
+                <td>
+                  Content changes are functions, plus <code>set</code> and
+                  <code>show</code> rules.
+                </td>
+                <td><code>hide</code> keeps layout and draws nothing.</td>
+              </tr>
+              <tr>
+                <td>CSS</td>
+                <td>Properties on the element</td>
+                <td>Wrapper elements</td>
+                <td>
+                  A property is a fact about one element; a wrapper adds a box.
+                </td>
+                <td>
+                  <code>visibility: hidden</code> keeps layout and is inherited,
+                  and a child can set <code>visible</code> again.
+                  <code>display: none</code> removes the box.
+                </td>
+              </tr>
+              <tr>
+                <td>Lean 4</td>
+                <td><code>x.f a</code></td>
+                <td><code>T.f x a</code></td>
+                <td>
+                  One function. <code>x.f</code> looks up <code>f</code> in the
+                  namespace of <code>x</code>'s type and passes
+                  <code>x</code> as the first argument of that type. No choice
+                  per function.
+                </td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td>Rust, D, Nim</td>
+                <td><code>x.f(a)</code></td>
+                <td>
+                  <code>T::f(x, a)</code> (Rust); any <code>f(x, a)</code> (D,
+                  Nim)
+                </td>
+                <td>
+                  Uniform call syntax: the language makes the two spellings one
+                  function.
+                </td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td>Kotlin</td>
+                <td>Extension functions, <code>fun View.f(a)</code></td>
+                <td>Plain functions</td>
+                <td>The author picks the spelling per function.</td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td>Haskell, Elm, F#</td>
+                <td><code>x &amp; f a</code>, <code>x |&gt; f a</code></td>
+                <td><code>f a x</code></td>
+                <td>
+                  The function stays a function; an operator gives the
+                  left-to-right reading. Elm puts the subject last so the pipe
+                  works.
+                </td>
+                <td>—</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p>
+            Two families. In Lean, Rust, D, Nim and the pipe languages, the
+            method and the function are one thing, and the language decides;
+            nobody picks per function. In SwiftUI and Compose the spelling is
+            always the method, and the kinds (wraps, writes settings down, sends
+            values up, tags) differ only in what they do. Only Kotlin lets each
+            author pick, and that is the case to avoid.
+          </p>
+          <p>
+            SwiftUI's kinds line up with GoFish's: wrapping
+            (<code>.padding</code>) is kind (a), tagging (<code>.id</code>,
+            <code>.tag</code>) is kind (b), sending values up
+            (<code>.preference</code>) is kind (c). SwiftUI files
+            <code>.hidden()</code> under none of the wrappers: it is a fact
+            about the view, kept with its layout.
+          </p>
+          <p>
+            No system lets a descendant undo a hidden ancestor except CSS
+            <code>visibility</code>, and that rule is a known source of
+            surprise.
+          </p>
+        </div>
+        <h3 id="r2-rule">GoFish's chain methods, and the rule</h3>
+        <ul>
+          <li>
+            <strong>(a) Sugar for a one-child operator.</strong>
+            <code>x.m(o)</code> builds the same node as <code>m(o, [x])</code>.
+            The operator is the one source: one descriptor, one IR node.
+          </li>
+          <li>
+            <strong>(b) A fact about the mark's own nodes.</strong> No node of
+            its own. The fact is read by someone else: the name resolver, the
+            parent's paint order, the animation code, the renderer.
+          </li>
+          <li>
+            <strong>(c) Elaboration.</strong> It reads the caller's insides or
+            adds nodes outside the caller's own subtree.
+          </li>
+        </ul>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Method</th>
+                <th>On</th>
+                <th>Kind</th>
+                <th>What it does</th>
+                <th>Function twin</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>.translate(opts)</code></td>
+                <td>marks; Python <code>translate</code></td>
+                <td>(a)</td>
+                <td>Wraps the mark in a <code>position</code> node.</td>
+                <td><code>position(opts, [x])</code>, the same node</td>
+              </tr>
+              <tr>
+                <td><code>.cut(opts)</code></td>
+                <td><code>rect</code>, <code>image</code></td>
+                <td>(a), one source to many slices</td>
+                <td>Slices the mark into masked copies.</td>
+                <td>
+                  <code>cut(source, opts)</code>. The subject comes first, out
+                  of step with <code>op(opts, children)</code>.
+                </td>
+              </tr>
+              <tr>
+                <td><code>.name(n)</code></td>
+                <td>marks, charts, layers; Python</td>
+                <td>(b)</td>
+                <td>
+                  Registers the mark in the nearest name scope (#1237, one
+                  resolver for names).
+                </td>
+                <td>none</td>
+              </tr>
+              <tr>
+                <td><code>.zOrder(v)</code></td>
+                <td>marks, charts; Python <code>z_order</code></td>
+                <td>(b)</td>
+                <td>
+                  Sets the paint-order key on its nodes. Takes a value or a
+                  function of the datum.
+                </td>
+                <td>none</td>
+              </tr>
+              <tr>
+                <td><code>.transition(spec)</code></td>
+                <td>marks; JS only</td>
+                <td>(b)</td>
+                <td>
+                  Records enter, update and exit effects on its nodes for the
+                  animation code to read.
+                </td>
+                <td>none</td>
+              </tr>
+              <tr>
+                <td><code>.hidden()</code> (proposed)</td>
+                <td>marks, charts, layers; Python</td>
+                <td>(b)</td>
+                <td>Its nodes draw nothing where they stand.</td>
+                <td>none, under the rule</td>
+              </tr>
+              <tr>
+                <td><code>.label(acc, opts)</code></td>
+                <td>marks, layers; Python</td>
+                <td>(c)</td>
+                <td>
+                  Adds text placed in the chart's frame, placed around the other
+                  marks there.
+                </td>
+                <td>none</td>
+              </tr>
+              <tr>
+                <td><code>.relate(fn)</code></td>
+                <td>layers, <code>createMark</code> results; Python</td>
+                <td>(c)</td>
+                <td>
+                  Reads the caller's named children and adds constraints and
+                  marks to the caller.
+                </td>
+                <td>none</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>.flow</code>, <code>.mark</code>, <code>.layer</code>
+                </td>
+                <td>chart builder; Python</td>
+                <td>builder step</td>
+                <td>Builds the spec one step at a time.</td>
+                <td>not in scope</td>
+              </tr>
+              <tr>
+                <td><code>.render</code>, <code>.toSVG</code></td>
+                <td>marks, charts</td>
+                <td>terminal</td>
+                <td>Draws.</td>
+                <td>not in scope</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">
+          <code>.connect</code> is gone (#745 replaced it with
+          <code>.layer()</code> and relational marks), and there is no
+          <code>.emphasize</code> or <code>.when</code> in the tree. Field
+          expressions (<code>.bin</code>, <code>.format</code>,
+          <code>.sort</code>) are methods of the kind api-design.md describes:
+          they read the field's type. They are not on marks, so they are outside
+          this table.
+        </p>
+        <section class="approach rec">
+          <p>
+            <strong>Proposed rule.</strong> Each fact has one home in the IR,
+            and the kind of the home picks the spelling.
+          </p>
+          <ul>
+            <li>
+              If the home is a node, the operator function is primary. A method
+              twin is allowed when the operator takes exactly one child, and it
+              must build the same node.
+            </li>
+            <li>
+              If the home is a field on the mark, the method is the only
+              spelling.
+            </li>
+            <li>
+              If the construct reads or adds to the world around the mark, the
+              method is the only spelling.
+            </li>
+          </ul>
+          <pre><code class="language-javascript">// (a) An operator with one child. The method is exact sugar for it.
+position({ x: 10 }, [rect({ w: 20, h: 20 })]);
+rect({ w: 20, h: 20 }).translate({ x: 10 }); // same node
+
+// (b) A fact about the mark&#x27;s own nodes. Method only.
+ribbon({ h: &quot;pdf&quot; }).name(&quot;density&quot;).zOrder(-1).hidden();
+
+// (c) Reads or adds to the world around the mark. Method only.
+rect({ h: &quot;count&quot; }).label(&quot;count&quot;);
+layer([a.name(&quot;a&quot;), b.name(&quot;b&quot;)]).relate(({ a, b }) =&gt; [
+  Constraint.align({ y: &quot;middle&quot; }, [a, b]),
+]);</code></pre>
+          <pre><code class="language-python"># (a) An operator with one child. The method is exact sugar for it.
+position([rect(w=20, h=20)], x=10)
+rect(w=20, h=20).translate(x=10)  # same node
+
+# (b) A fact about the mark&#x27;s own nodes. Method only.
+ribbon(h=&quot;pdf&quot;).name(&quot;density&quot;).z_order(-1).hidden()
+
+# (c) Reads or adds to the world around the mark. Method only.
+rect(h=&quot;count&quot;).label(&quot;count&quot;)</code></pre>
+        </section>
+        <div class="prose">
+          <p>
+            <strong>Against api-design.md.</strong> The rule there says a call
+            joins independent parts, a method reads or changes the caller's
+            state, and an option is a local adjective. Kind (a) is a call,
+            because the wrapper reads nothing from its child; the method twin is
+            only a reading order, defined by the call. Kind (b) changes the
+            caller's own state, so it is a method. Kind (c) reads the caller's
+            state, so it is a method. The rule adds one thing to api-design.md:
+            a one-child operator may have a method twin that builds the same
+            node.
+          </p>
+          <p>
+            <strong>Against the code.</strong> <code>.translate</code> and
+            <code>position</code> fit (a). <code>.cut</code> fits (a) but takes
+            its subject first; under the rule its function form would be
+            <code>cut(opts, [source])</code>. That is a separate cleanup. Every
+            other chain method fits (b) or (c) and has no twin today.
+          </p>
+          <p>
+            <strong><code>.hidden()</code> and <code>hide(x)</code>.</strong>
+            <code>.hidden()</code> sets a field on the nodes it is called on,
+            the same <code>INTERNAL_emitNothing()</code> that
+            <code>blank()</code> uses, and on the wire it is
+            <code>hidden: true</code> beside <code>zOrder</code>. It is kind
+            (b), so the rule gives it one spelling, the method. A wrapper
+            <code>hide(x)</code> would either add an IR node type for a fact
+            that already has a field, which is two IR forms for one fact, or be
+            <code>x.hidden()</code> with the parentheses moved. Typst has
+            <code>hide(body)</code> because Typst content has no methods. GoFish
+            marks do.
+          </p>
+          <p>
+            <strong>Python.</strong> The same: <code>.hidden()</code> on
+            <code>Mark</code>, <code>ChartBuilder</code> and layers, beside
+            <code>.name()</code> and <code>.z_order()</code>, and
+            <code>.hidden(False)</code>. No <code>hide</code>.
+          </p>
+        </div>
+        <h3 id="r2-guides">Shapes as masks and guides</h3>
+        <div class="prose">
+          <p>
+            A guide is a shape that shapes something else: a mask's stencil, a
+            region operand, the spine of a coordinate transform, the seeds of a
+            Voronoi partition. Sometimes the reader should see it and sometimes
+            not. The question is where that choice is written.
+          </p>
+        </div>
+        <dl class="terms">
+          <dt>(i) Drawn unless hidden.</dt>
+          <dd>
+            Every shape is drawn where it stands unless it says
+            <code>.hidden()</code>. This is round 1's approach A.
+          </dd>
+          <dt>(ii) The operator hides its guide.</dt>
+          <dd>
+            The operator declares that its guide operand is not drawn. To draw
+            the guide, you add a second mark that follows it
+            (<code>use(ref)</code>), or set a switch on the operator.
+          </dd>
+          <dt>(iii) A switch on the reader.</dt>
+          <dd>
+            The operator takes <code>keep: true</code> or
+            <code>show: true</code> and decides for its operand.
+          </dd>
+          <dt>(iv) The guide is a value.</dt>
+          <dd>
+            The guide is data or a shape value that the operator consumes, like
+            CSS <code>clip-path: circle()</code> or Voronoi seeds as rows.
+            Drawing it is a separate mark over the same value.
+          </dd>
+        </dl>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>System</th>
+                <th>How a guide is written</th>
+                <th>Drawn too?</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Figma</td>
+                <td>
+                  "Use as mask" on the bottom layer of a group. The mask layer's
+                  paint becomes the alpha.
+                </td>
+                <td>Not drawn. Duplicate the layer to show it.</td>
+              </tr>
+              <tr>
+                <td>Illustrator</td>
+                <td>
+                  A clipping mask loses its fill and stroke. "Make Guides" turns
+                  a path into a guide that does not print.
+                </td>
+                <td>
+                  You can stroke the clipping path again, and it draws on top.
+                  "Release Guides" turns it back.
+                </td>
+              </tr>
+              <tr>
+                <td>SVG</td>
+                <td>
+                  Children of <code>&lt;clipPath&gt;</code> and
+                  <code>&lt;mask&gt;</code> never render.
+                </td>
+                <td>
+                  Draw it again with <code>&lt;use href&gt;</code>, which takes
+                  new paint for attributes the original leaves unset.
+                </td>
+              </tr>
+              <tr>
+                <td>TikZ</td>
+                <td>
+                  <code>\path</code> draws nothing; <code>\draw</code> is
+                  <code>\path[draw]</code>. <code>[clip]</code> and
+                  <code>[name path=A]</code> (for <code>intersections</code>)
+                  are options on the path.
+                </td>
+                <td>
+                  <code>\path[draw, clip]</code> draws and clips. Being drawn
+                  and being a clip are separate options.
+                </td>
+              </tr>
+              <tr>
+                <td>CSS</td>
+                <td>
+                  <code>clip-path</code>, <code>mask</code>,
+                  <code>shape-outside</code> and <code>offset-path</code> take a
+                  shape value or a <code>url(#id)</code>.
+                </td>
+                <td>A value is never drawn. Draw it with its own element.</td>
+              </tr>
+              <tr>
+                <td>Bluefish</td>
+                <td>
+                  Refs draw nothing. Guides are
+                  <code>&lt;Rect fill="transparent"&gt;</code>.
+                </td>
+                <td>Drawn unless made transparent.</td>
+              </tr>
+              <tr>
+                <td>GoFish today</td>
+                <td>
+                  <code>mask([A, B])</code> never draws A;
+                  <code>paint([A, B])</code> draws A. A painted
+                  <code>intersect</code> does not draw its own operands. A
+                  <code>ref</code> operand's original draws where it stands.
+                </td>
+                <td>By operator for children; by the original for refs.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p>
+            Two models. In one the guide is consumed (Figma masks, SVG
+            <code>&lt;clipPath&gt;</code>, CSS values): the consumer decides,
+            and showing it means a copy. In the other the guide is an ordinary
+            shape with drawing as its own property (TikZ, Illustrator's stroked
+            clip path): the role and the drawing are separate switches. GoFish
+            already has both, split by ownership. An operator's own children are
+            consumed in its meaning. A shape read through a <code>ref</code> is
+            drawn where it was made.
+          </p>
+        </div>
+        <h4>Croissant</h4>
+        <p>
+          The curve is read through a <code>ref</code> by a clause somewhere
+          else.
+        </p>
+        <div class="example">
+          <div class="pair">
+            <div>
+              <span class="label">(i) Drawn unless hidden</span>
+              <pre><code class="language-javascript">// (i) Drawn unless hidden. The curve says it is not drawn.
+layer([
+  chart(grid)
+    .flow(scatter({ x: &quot;x&quot; }))
+    .mark(ribbon({ h: &quot;pdf&quot; }).name(&quot;density&quot;).hidden()),
+]).relate(({ density }) =&gt; [
+  chart(grid)
+    .flow(slices)
+    .mark(
+      intersect({ fill: FILL, stroke: STROKE }, [
+        density,
+        region({ inset: 3 }),
+      ]),
+    ),
+]);
+// Drawn as well: delete .hidden() and give the curve a fill.</code></pre>
+            </div>
+            <div>
+              <span class="label proposed"
+                >(ii) The operator hides it (sketch)</span
+              >
+              <pre><code class="language-javascript">// (ii) Sketch. intersect declares &quot;my operands are boundaries&quot;, so the
+// curve is not drawn because a clause elsewhere reads it.
+layer([
+  chart(grid)
+    .flow(scatter({ x: &quot;x&quot; }))
+    .mark(ribbon({ h: &quot;pdf&quot; }).name(&quot;density&quot;)),
+]).relate(({ density }) =&gt; [
+  chart(grid)
+    .flow(slices)
+    .mark(
+      intersect({ fill: FILL, stroke: STROKE }, [
+        density,
+        region({ inset: 3 }),
+      ]),
+    ),
+  // Drawn as well: a second mark that follows the curve.
+  use(density, { fill: &quot;#eee&quot; }),
+]);</code></pre>
+            </div>
+          </div>
+          <div class="pair">
+            <div>
+              <span class="label"
+                >(i) with <code>.hidden()</code> (story shim)</span
+              >
+              <div class="render">
+                <img
+                  src="img/croissant-proposed.png"
+                  alt="A croissant chart: ten slices of the standard normal, no curve drawn behind them"
+                  width="496"
+                  height="204"
+                />
+              </div>
+            </div>
+            <div>
+              <span class="label proposed"
+                >(i) without <code>.hidden()</code>, curve filled</span
+              >
+              <div class="render">
+                <img
+                  src="img/croissant-shown.png"
+                  alt="The same croissant chart with the full curve drawn in light gray behind the slices"
+                  width="496"
+                  height="204"
+                />
+              </div>
+            </div>
+          </div>
+          <div>
+            <span class="label">(iii) A switch on the reader (sketch)</span>
+            <pre><code class="language-javascript">// (iii) Sketch. The reader decides, with a flag.
+intersect({ fill: FILL, stroke: STROKE, keep: true }, [
+  density,
+  region({ inset: 3 }),
+]);
+// Two clauses that read the same curve can disagree:
+// one says keep: true, the other keep: false.</code></pre>
+          </div>
+        </div>
+        <ul>
+          <li>
+            (i) needs nothing new. The two renders are round 1's prototypes.
+          </li>
+          <li>
+            (ii) makes the curve's drawing depend on whether a clause elsewhere
+            reads it. That is round 1's approach C under a new name.
+          </li>
+          <li>
+            (iii) puts the switch on the reader. Two readers of the same curve
+            can disagree, and the curve has no answer of its own.
+          </li>
+        </ul>
+        <h4>Voronoi, with and without seeds</h4>
+        <p>
+          Real renders. <code>Bin.voronoi({ seeds })</code> reads rows, not
+          shapes, so this is model (iv) already. Drawing the seeds is one more
+          tier over the same rows.
+        </p>
+        <div class="example">
+          <div class="pair">
+            <div>
+              <span class="label">Seeds not drawn</span>
+              <pre><code class="language-javascript">// Seeds are rows, not a shape. Not drawing them is not writing them.
+layer({ w: 420, h: 300 }, [
+  chart(beaked, { color: Color.gradient(&quot;blues&quot;) })
+    .flow(partition({ by: key.bin(Bin.voronoi({ seeds })) }))
+    .mark(region({ fill: field(&quot;Species&quot;).count(), stroke: &quot;white&quot; })),
+]);</code></pre>
+            </div>
+            <div>
+              <span class="label proposed">Seeds drawn</span>
+              <pre><code class="language-javascript">// Drawing the seeds is one more tier over the same rows.
+layer({ w: 420, h: 300 }, [
+  chart(beaked, { color: Color.gradient(&quot;blues&quot;) })
+    .flow(partition({ by: key.bin(Bin.voronoi({ seeds })) }))
+    .mark(region({ fill: field(&quot;Species&quot;).count(), stroke: &quot;white&quot; })),
+  chart(seeds)
+    .flow(scatter({ x: &quot;Beak Length (mm)&quot;, y: &quot;Beak Depth (mm)&quot; }))
+    .mark(circle({ r: 3.5, fill: &quot;black&quot; })),
+]);</code></pre>
+            </div>
+          </div>
+          <div class="pair">
+            <div>
+              <span class="label">Seeds not drawn</span>
+              <div class="render">
+                <img
+                  src="img/voronoi-no-seeds.png"
+                  alt="Voronoi cells of fifteen seed penguins over beak length and depth, shaded by how many penguins fall in each cell, no dots"
+                  width="542"
+                  height="356"
+                />
+              </div>
+            </div>
+            <div>
+              <span class="label proposed">Seeds drawn</span>
+              <div class="render">
+                <img
+                  src="img/voronoi-seeds.png"
+                  alt="The same Voronoi cells with the fifteen seed penguins drawn as black dots"
+                  width="542"
+                  height="356"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+        <ul>
+          <li>
+            No hiding in either. If seeds could one day be marks, as in
+            <code>Bin.voronoi({ seeds: selectAll("sites") })</code>, they would
+            follow (i): drawn unless the site marks say <code>.hidden()</code>.
+          </li>
+        </ul>
+        <h4>Spine and envelope coordinate transforms</h4>
+        <p>
+          Sketch: GoFish has no spine transform. <code>Coord.wavy</code> is a
+          fixed formula with no guide, and <code>Shape.spine</code> is an
+          <code>enclose</code> outline, not a transform.
+        </p>
+        <div class="example">
+          <div class="pair">
+            <div>
+              <span class="label">(i) The spine is an ordinary mark</span>
+              <pre><code class="language-javascript">// Sketch: Coord.along does not exist. (i) The spine is an ordinary
+// mark. It is drawn unless hidden.
+layer([
+  chart(riverPoints)
+    .flow(scatter({ x: &quot;x&quot;, y: &quot;y&quot; }))
+    .mark(line({ curve: Curve.natural }))
+    .name(&quot;river&quot;)
+    .hidden(), // delete this line to draw the river
+]).relate(({ river }) =&gt; [
+  chart(towns, { coord: Coord.along(river) })
+    .flow(scatter({ x: &quot;mile&quot;, y: &quot;bank&quot; }))
+    .mark(circle({ r: 3 })),
+]);
+// An envelope reads two shapes the same way:
+// Coord.between(lower, upper), each drawn or hidden on its own.</code></pre>
+            </div>
+            <div>
+              <span class="label proposed"
+                >(ii) The transform owns its guide</span
+              >
+              <pre><code class="language-javascript">// Sketch. (ii) The transform owns its guide and hides it by default.
+coord(
+  {
+    transform: Coord.along(),
+    guide: chart(riverPoints)
+      .flow(scatter({ x: &quot;x&quot;, y: &quot;y&quot; }))
+      .mark(line({ curve: Curve.natural })),
+    showGuide: true, // a second switch for &quot;drawn&quot;
+  },
+  [
+    chart(towns)
+      .flow(scatter({ x: &quot;mile&quot;, y: &quot;bank&quot; }))
+      .mark(circle({ r: 3 })),
+  ],
+);</code></pre>
+            </div>
+          </div>
+        </div>
+        <ul>
+          <li>
+            (i) says "drawn or not" with the same <code>.hidden()</code> as
+            everywhere else, and the river can be named, labeled and given a
+            z-order like any line. It needs a ref in a chart option, which #1259
+            (string refs outside <code>.relate()</code>) is about.
+          </li>
+          <li>
+            (ii) is a declared default, but it needs a second switch,
+            <code>showGuide</code>, for a fact <code>.hidden()</code> already
+            says.
+          </li>
+        </ul>
+        <h4>Clip and mask</h4>
+        <p>
+          Real renders for <code>mask</code> today. The stencil is drawn as well
+          only by drawing a second circle.
+        </p>
+        <div class="example">
+          <div class="pair">
+            <div>
+              <span class="label">mask (real)</span>
+              <pre><code class="language-javascript">// Real. mask&#x27;s first child is its stencil. mask&#x27;s meaning, B inside A,
+// does not include A, so A is not drawn. paint is the twin that draws A.
+mask([circle({ cx: 100, cy: 100, r: 80, fill: &quot;white&quot; }), stripes()]);</code></pre>
+            </div>
+            <div>
+              <span class="label proposed"
+                >Stencil drawn as well, today (real)</span
+              >
+              <pre><code class="language-javascript">// Real, today. The stencil drawn as well, on top: a second circle with
+// the same geometry, laid out a second time.
+layer([
+  mask([circle({ cx: 100, cy: 100, r: 80, fill: &quot;white&quot; }), stripes()]),
+  circle({
+    cx: 100,
+    cy: 100,
+    r: 80,
+    fill: &quot;none&quot;,
+    stroke: &quot;#222&quot;,
+    strokeWidth: 3,
+  }),
+]);</code></pre>
+            </div>
+          </div>
+          <div class="pair">
+            <div>
+              <span class="label">mask</span>
+              <div class="render">
+                <img
+                  src="img/clip-mask.png"
+                  alt="Orange and blue stripes clipped to a disc, no outline"
+                  width="166"
+                  height="168"
+                />
+              </div>
+            </div>
+            <div>
+              <span class="label proposed">mask plus a second circle</span>
+              <div class="render">
+                <img
+                  src="img/clip-mask-outline.png"
+                  alt="The same striped disc with a dark outline drawn on top"
+                  width="179"
+                  height="171"
+                />
+              </div>
+            </div>
+          </div>
+          <div>
+            <span class="label">A mark that follows the stencil (sketch)</span>
+            <pre><code class="language-javascript">// Sketch. A mark that follows the stencil: it reads the placed outline,
+// as intersect does, and paints it in its own style. No second layout.
+layer([
+  mask([
+    circle({ cx: 100, cy: 100, r: 80, fill: &quot;white&quot; }).name(&quot;disc&quot;),
+    stripes(),
+  ]),
+  use(ref(&quot;disc&quot;), { fill: &quot;none&quot;, stroke: &quot;#222&quot;, strokeWidth: 3 }),
+]);</code></pre>
+          </div>
+        </div>
+        <ul>
+          <li>
+            <code>mask</code>'s meaning is B inside A, which does not include A.
+            That is not a hiding rule; it is what the operator computes, like
+            <code>subtract</code>. <code>paint</code> is the twin that keeps A.
+          </li>
+          <li>
+            The outline case is where a follower mark earns its place: the
+            outline goes above the stripes, but the stencil must be
+            <code>mask</code>'s first child.
+          </li>
+        </ul>
+        <section class="approach">
+          <h4>Revisiting #745 and approach C</h4>
+          <p>
+            <strong>Is a declared default the rule #745 rejected?</strong> No,
+            but only for an operator's own children. #745 itself chose a
+            declared default: a relational mark paints below its operands
+            because the operator says <code>zBelow</code>, not because GoFish
+            guesses intent. What Josh called "spooky" was guessing. A declared
+            default is fine when it governs what the operator itself draws.
+          </p>
+          <p>
+            An operator's own children are part of what it draws, so
+            <code>mask</code> not drawing its stencil is of the same kind as
+            #745's <code>zBelow</code>. A shape read through a
+            <code>ref</code> was made and placed somewhere else. If a reader
+            could hide it, the shape's look would depend on who reads it, which
+            is round 1's approach C whether it is declared or guessed. So (ii)
+            is allowed for children, as GoFish already does, and ruled out for
+            refs.
+          </p>
+        </section>
+        <section class="approach">
+          <h4>A mark that follows a hidden mark</h4>
+          <p>
+            <strong>A mark that follows a hidden mark.</strong> Josh asked about
+            hiding guides by default and drawing them with a second mark that
+            follows. The follower would be a new mark,
+            <code>use(ref, paint)</code>, like SVG <code>&lt;use&gt;</code>.
+          </p>
+          <ul>
+            <li>
+              It needs no second layout: it reads the placed outline, as a
+              painted <code>intersect</code> already does through
+              <code>placedOutlines</code>.
+            </li>
+            <li>
+              It can be restyled and put at its own z-order, so one shape can be
+              a stencil below and an outline above.
+            </li>
+            <li>
+              It has the limits <code>intersect</code> has: an
+              <code>image</code>, a <code>text</code> or a rounded
+              <code>rect</code> has no exact outline, so <code>use</code> would
+              fall back to drawing the original again, as SVG
+              <code>&lt;use&gt;</code> does.
+            </li>
+            <li>
+              Scales count the shape once, from the original. Labels and hover
+              belong to the follower, not to the original.
+            </li>
+            <li>It needs a ref outside <code>.relate()</code> (#1259).</li>
+          </ul>
+          <p>
+            Making every guide hidden by default and drawn only through
+            <code>use</code> would make the common case of a drawn line need two
+            marks, and "is this shape drawn" would be answered by searching for
+            its followers. So <code>use</code> is a later addition for the
+            restyled-copy case, not the default way to show a guide.
+          </p>
+        </section>
+        <section class="approach rec">
+          <p>
+            <strong>Guides, recommended:</strong> (i) for every shape, with (iv)
+            where the guide is data (Voronoi seeds) and an operator's own
+            meaning for its own children (<code>mask</code>, a painted
+            <code>intersect</code>). No switch on the reader.
+            <code>use(ref)</code> later, for a restyled copy.
+            <strong>Runner-up:</strong> (ii) for children only, which is what
+            GoFish does today, plus <code>use(ref)</code> now.
+          </p>
+        </section>
+        <h3 id="r2-later">
+          Calling <code>.hidden()</code> on something already built
+        </h3>
+        <ul>
+          <li>
+            <strong>Where it can be called.</strong> On any value you hold: a
+            mark, a chart, a layer, or a chart that a helper returns. You hold
+            the value, so hiding it is a fact about it, like
+            <code>.zOrder()</code>.
+          </li>
+          <li>
+            <strong>Not through a ref.</strong>
+            <code>ref("density").hidden()</code> and
+            <code>selectAll("bars").hidden()</code> are errors. A ref reads a
+            shape that was made somewhere else. Under #1237 a ref reads and
+            never writes, and if it could write, two readers could disagree. The
+            error says to call <code>.hidden()</code> where the shape is made,
+            or to pass a per-datum function there.
+          </li>
+          <li>
+            <strong>Same value, called twice.</strong> The last call wins.
+            <code>.hidden().hidden()</code> is hidden, and
+            <code>.hidden().hidden(false)</code> is drawn. This is how
+            <code>.zOrder()</code> behaves, since each call sets the field
+            again.
+          </li>
+          <li>
+            <strong>Subtree.</strong> Hidden covers the whole subtree and its
+            labels and chrome, as in round 1. An ancestor wins: a
+            <code>.hidden(false)</code> inside a hidden layer does not show. You
+            can tell whether a shape is drawn by looking up the tree, never
+            down. CSS <code>visibility</code> lets a child show again, and that
+            is a known surprise.
+          </li>
+          <li>
+            <strong>Layout.</strong> Never changes. A hidden mark is laid out
+            and counts for scales, axes and legends. Turning it on and off
+            repaints and does not move anything, so labels and neighbors stay
+            put. <code>filter</code> is the operator that removes data and lays
+            out again.
+          </li>
+          <li>
+            <strong>Per datum and per frame.</strong>
+            <code>.hidden(fn)</code> takes a function of the datum, as
+            <code>.zOrder(fn)</code> does. An animation frame or a hover
+            selection is data (#830, interaction as data), so per-frame hiding
+            is the same function reading the frame. The renderer already has a
+            paint-time rule for keyframes (<code>INTERNAL_visibleWhile</code>);
+            <code>.hidden(fn)</code> would be its public spelling for one datum.
+            In Python, the function goes through the bridge the way
+            <code>z_order</code>'s does.
+          </li>
+          <li>
+            <strong>An operator that does not draw its child.</strong>
+            <code>mask</code>'s stencil is not hidden; it is used.
+            <code>.hidden()</code> on it changes nothing, since the operand
+            gives shape either way, and <code>.hidden(false)</code> does not
+            draw it. To draw the stencil, use <code>paint</code>, or add a mark
+            for it. There is no <code>.shown()</code>; the opposite of
+            <code>.hidden()</code> is <code>.hidden(false)</code>.
+          </li>
+        </ul>
+        <div class="pair">
+          <div>
+            <span class="label">JS</span>
+            <pre><code class="language-javascript">// You hold the value: hide it.
+ribbon({ h: &quot;pdf&quot; }).hidden();
+ridgeline(data).hidden(); // a whole chart from a helper
+
+// The last call on the same value wins.
+ribbon({ h: &quot;pdf&quot; }).hidden().hidden(false); // drawn
+
+// An ancestor wins over a descendant.
+layer([a, b.hidden(false)]).hidden(); // a and b are both hidden
+
+// Per datum, like .zOrder(fn). Paint only: layout does not move.
+circle({ r: 3 }).hidden((d) =&gt; d.year !== year);
+
+// Error: a ref reads a shape and cannot change how it is drawn.
+ref(&quot;density&quot;).hidden();
+selectAll(&quot;bars&quot;).hidden();</code></pre>
+          </div>
+          <div>
+            <span class="label">Python</span>
+            <pre><code class="language-python">ribbon(h=&quot;pdf&quot;).hidden()
+ridgeline(data).hidden()
+ribbon(h=&quot;pdf&quot;).hidden().hidden(False)  # drawn
+circle(r=3).hidden(lambda d: d[&quot;year&quot;] != year)
+ref(&quot;density&quot;).hidden()  # error: a ref cannot change how a shape is drawn</code></pre>
+          </div>
+        </div>
+        <h3 id="r2-walls">Walls</h3>
+        <ul>
+          <li>
+            <strong><code>hidden</code> as a ref path.</strong> A ref proxy
+            treats any property as a path segment, so
+            <code>ref("x").hidden</code> today reads a child named "hidden".
+            Making it an error means adding <code>hidden</code> to the proxy's
+            reserved names, and a child named "hidden" would then need
+            <code>.path("hidden")</code>.
+          </li>
+          <li>
+            <strong><code>mask</code>'s stencil paint leaks.</strong> The
+            stencil is a luminance mask, so a stencil with the default blue fill
+            fades the stripes. The clip renders use <code>fill: "white"</code>.
+            A stencil should give shape only; this is a bug apart from this
+            proposal.
+          </li>
+          <li>
+            <strong><code>paint</code> renders washed out</strong> in the
+            prototype. Its fallback path desaturates and blends, so the clip
+            example shows <code>mask</code> only.
+          </li>
+          <li>
+            <strong>Spine transforms do not exist,</strong> so that example is
+            syntax only.
+          </li>
+        </ul>
+        <p><strong>What round 2 changes in round 1.</strong></p>
+        <ul>
+          <li>
+            Round 1's runner-up, <code>hide(mark)</code>, is ruled out by the
+            rule above unless Josh picks both spellings.
+          </li>
+          <li>Round 1's decision on the spelling is answered.</li>
+          <li>
+            Round 1 left out a value argument. Round 2 proposes
+            <code>.hidden(fn)</code>. The bar chart race (#889) still needs a
+            clip, since per-datum hiding hides whole bars.
+          </li>
+        </ul>
+        <h3 id="r2-decisions">Decisions for Josh, round 2</h3>
+        <ol class="decisions">
+          <li>
+            Adopt the rule: a function twin only for one-child operators, and it
+            must build the same node? (Recommended yes, and add it to
+            api-design.md.)
+          </li>
+          <li>
+            So <code>.hidden()</code> only, with no <code>hide(x)</code>, in JS
+            and Python? (Recommended yes. Runner-up: both, with
+            <code>hide(x)</code> defined as <code>x.hidden()</code>.)
+          </li>
+          <li>
+            Guides: drawn unless <code>.hidden()</code>, with operators deciding
+            only for their own children? (Recommended yes.)
+          </li>
+          <li>
+            Add <code>use(ref, paint)</code> for a restyled second copy now, or
+            wait for a second example after the clip outline? (Recommended
+            wait.)
+          </li>
+          <li>
+            Should <code>mask</code> and <code>paint</code> stay two operators,
+            or become one operator with a switch? (Recommended stay: each is one
+            computation.)
+          </li>
+          <li>
+            An ancestor's <code>.hidden()</code> wins over a descendant's
+            <code>.hidden(false)</code>? (Recommended yes.)
+          </li>
+          <li>
+            Ship <code>.hidden(fn)</code> per datum in the first version, or
+            later? (Recommended first version, since <code>.zOrder(fn)</code> is
+            the same shape.)
+          </li>
+          <li>
+            Fix <code>cut</code>'s argument order to
+            <code>cut(opts, [source])</code> in a separate change?
+          </li>
+        </ol>
+      </section>
+
+      <h2 class="round-title" id="r1">Round 1</h2>
+      <p class="note">
+        The first round, as reviewed. Round 2 answers its spelling decision and
+        rules out its runner-up unless both spellings are chosen.
+      </p>
 
       <h2 id="terms">Terms</h2>
       <dl class="terms">
@@ -1342,7 +2482,7 @@ rect(w=10, h=GATE).hidden()</code></pre>
       <section class="approach">
         <h3>
           A, wrapper spelling: <code>hide(mark)</code>
-          <span class="badge">runner-up</span>
+          <span class="badge">runner-up; see round 2</span>
         </h3>
         <pre><code class="language-javascript">// A, wrapper spelling (Typst&#x27;s hide): the same meaning as a function.
 layer([
@@ -1653,6 +2793,10 @@ chart(grid)
         <li>
           Spelling: <code>.hidden()</code> (recommended), <code>hide(x)</code>,
           or something else?
+          <em
+            >Answered: one or both. Round 2 proposes
+            <code>.hidden()</code> only.</em
+          >
         </li>
         <li>
           Does a hidden mark's color field still feed the legend? (Recommended
@@ -1675,6 +2819,10 @@ chart(grid)
         <li>
           Leave #889 to a clip (#1209), with no value argument on
           <code>.hidden()</code> for now?
+          <em
+            >Round 2 proposes <code>.hidden(fn)</code> for per-datum and
+            per-frame hiding; #889 still needs the clip.</em
+          >
         </li>
       </ol>
       <p class="note">

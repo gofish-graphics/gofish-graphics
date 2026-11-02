@@ -5,6 +5,7 @@ import {
   Calendar,
   chart,
   circle,
+  Color,
   Constraint,
   createMark,
   createName,
@@ -14,6 +15,7 @@ import {
   intersect,
   layer,
   line,
+  mask,
   partition,
   quantileRows,
   rect,
@@ -23,6 +25,7 @@ import {
   scatter,
   Shape,
   spread,
+  struct,
   text,
   blank,
   Unit,
@@ -530,6 +533,80 @@ export const DiagUnfused: StoryObj<Args> = {
         cells(normalGrid, density, "x", 10, 3, 2, 3, 6),
       ])
       .render(container, { w: args.w, h: args.h, axes: { x: true, y: false } });
+    return container;
+  },
+};
+
+// ── Round 2: guides and masks ───────────────────────────────────────────────
+
+// Voronoi. The seeds are data, not a shape: `Bin.voronoi({ seeds })` reads
+// rows. Drawing the seeds is a second chart over the same rows, so there is
+// no hidden mark either way.
+const seedPenguins = penguins
+  .filter((d) => d["Beak Length (mm)"] !== null && d["Beak Depth (mm)"] !== null)
+  .filter((_, i) => i % 23 === 0);
+const beaked2 = penguins.filter(
+  (d) => d["Beak Length (mm)"] !== null && d["Beak Depth (mm)"] !== null
+);
+const voronoi = (args: Args, drawSeeds: boolean) => {
+  const container = initializeContainer();
+  const key = struct({ x: "Beak Length (mm)", y: "Beak Depth (mm)" });
+  const cellsTier = chart(beaked2, { color: Color.gradient("blues") })
+    .flow(partition({ by: key.bin(Bin.voronoi({ seeds: seedPenguins })) }))
+    .mark(region({ fill: field("Species").count(), stroke: "white" }));
+  const seedsTier = chart(seedPenguins)
+    .flow(scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
+    .mark(circle({ r: 3.5, fill: "black" }));
+  layer(
+    { w: args.w, h: args.h },
+    drawSeeds ? [cellsTier, seedsTier] : [cellsTier]
+  ).render(container, { axes: true });
+  return container;
+};
+export const VoronoiNoSeeds: StoryObj<Args> = {
+  args: { w: 420, h: 300 },
+  render: (args: Args) => voronoi(args, false),
+};
+export const VoronoiSeeds: StoryObj<Args> = {
+  args: { w: 420, h: 300 },
+  render: (args: Args) => voronoi(args, true),
+};
+
+// Clip. The stencil is a luminance mask today, so its fill must be white or
+// the stripes fade (a quirk of the SVG-mask lowering, noted in round 2).
+// `mask` declares "my first operand is a stencil" and never draws it;
+// `paint` is its twin that draws the first operand as a surface. Today the
+// choice is two operators.
+const stripes = () =>
+  layer(
+    Array.from({ length: 11 }, (_, i) =>
+      rect({
+        x: i * 20,
+        y: 0,
+        w: 10,
+        h: 200,
+        fill: i % 2 ? "#E07A5F" : "#3D5A80",
+      })
+    )
+  );
+const disc = (style: Record<string, any> = {}) =>
+  circle({ cx: 100, cy: 100, r: 80, ...style });
+export const ClipMask: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    mask([disc({ fill: "white" }), stripes()]).render(container, { w: 220, h: 200 });
+    return container;
+  },
+};
+// The stencil drawn too, today: a second circle with the same geometry,
+// laid out a second time.
+export const ClipMaskOutline: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    layer([
+      mask([disc({ fill: "white" }), stripes()]),
+      disc({ fill: "none", stroke: "#222", strokeWidth: 3 }),
+    ]).render(container, { w: 220, h: 200 });
     return container;
   },
 };
