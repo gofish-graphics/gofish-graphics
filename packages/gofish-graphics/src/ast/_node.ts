@@ -2754,8 +2754,9 @@ export class GoFishNode {
    * its ref-anchoring role, but contributes no display items. Every lower path
    * goes through {@link INTERNAL_lower}, so replacing the lowering — rather than
    * consulting a "visible" flag at paint — makes the node invisible everywhere by
-   * construction. `blank()` is built this way (`shapes/rect.tsx`); `GoFishRef`
-   * draws nothing for the same reason.
+   * construction. A mark with no value is built this way (`withGoFish.ts`);
+   * `GoFishRef` draws nothing for the same reason. Unlike {@link hidden}, it
+   * gives no shape to a compositor either.
    */
   public INTERNAL_emitNothing(): void {
     this._lower = () => [];
@@ -2794,7 +2795,7 @@ export class GoFishNode {
    *
    * This is the other half of the pair with {@link INTERNAL_emitNothing}, and
    * the difference is which tier decides. A node that must not draw AT ALL
-   * (`blank()`, a `ref`, a keyframe a transition moves when its sequence
+   * (a mark with no value, a `ref`, a keyframe a transition moves when its sequence
    * keeps no history) is hidden by construction, at resolve. A node whose
    * drawing comes and goes with a signal — a `time.sequence`'s keyframe
    * groups, where the clock picks which band is showing, or the keyframe marks

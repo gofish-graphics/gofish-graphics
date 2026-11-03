@@ -596,7 +596,9 @@ function buildCreatedMark(
     if (liveChannels) node.__gfLive = liveChannels;
     applyFilter(node, filter);
     // Its whole drawing, not only its own lowering: a component's children
-    // lower on their own.
+    // lower on their own. TODO(#1267): a mark with no value draws no shape
+    // either, even under a compositor; should it be `.hidden()`, giving its
+    // shape as a blank does?
     if (noValue) for (const n of breadthFirst(node)) n.INTERNAL_emitNothing();
     return sealComponent(node, d);
   };

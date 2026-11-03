@@ -482,26 +482,25 @@ export const rect: typeof baseRect = ((opts: any) =>
   attachCut(baseRect(opts))) as typeof baseRect;
 
 /**
- * `blank()`'s node: a rect in every respect that matters to the pipeline —
- * same dims, same underlying-space resolution, same layout, same datum, so it
- * anchors refs and fuses exactly as a rect does — except that it DRAWS
- * NOTHING. Invisibility is structural, not a paint style: the node emits no
- * display items at all (`INTERNAL_emitNothing`), the same rule `GoFishRef`
- * already follows as a placement stand-in. One rule, no flag — there is no
- * configuration under which a blank paints, so `blank()` accepts no paint-only
- * options (stroke, corner radius); its `fill` only seeds the color scale.
+ * `blank()`'s node: a hidden rect (`GoFishNode.hidden`). It is a rect in
+ * every respect that matters to the pipeline — same dims, same
+ * underlying-space resolution, same layout, same datum — so it anchors refs
+ * and fuses exactly as a rect does, and, being hidden, paints nothing: it is
+ * `rect().hidden()` with blank's own defaults. Like any hidden mark it keeps
+ * its shape, so under a compositor (`intersect`, `cut`, …) a blank operand
+ * gives its box. `blank()` accepts no paint-only options (stroke, corner
+ * radius); its `fill` only seeds the color scale.
  *
  * This is what keeps an anchor tier free: the blank-fusion rewrite
  * (`.mark(line(opts))` ⇒ `.mark(blank(anchor)).layer(line(opts))`, see
- * `marks/chart.ts`) synthesizes one anchor per row, and a 26k-row chart used
- * to pay for 26k invisible zero-size `<rect>`s in the DOM — and 26k entries in
- * the interaction hit-test map.
+ * `marks/chart.ts`) synthesizes one anchor per row, and the bake stops at a
+ * hidden node no compositor reads, so a 26k-row chart pays for no invisible
+ * `<rect>`s in the DOM and no entries in the interaction hit-test map.
  */
 export const Blank = (opts: Parameters<typeof Rect>[0]): GoFishNode => {
   const node = Rect(opts);
   node.type = "blank";
-  node.INTERNAL_emitNothing();
-  return node;
+  return node.hidden();
 };
 
 /** The `blank` mark factory — `marks/chart.ts`'s `blank()` is the typed,

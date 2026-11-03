@@ -638,8 +638,8 @@ One slice of §5's table exists: the `time` namespace
   and it covers the group's whole subtree, including marks a later elaboration
   pass adds to it, such as `.label()` text. So a labeled keyframe shows its
   labels only while it is held. The marks a transition moves use the
-  structural rule instead (`INTERNAL_emitNothing`, the same one `blank()`
-  uses): they emit no display items and no hit-test targets, because the
+  structural rule instead (`INTERNAL_emitNothing`, the same one a mark with
+  no value uses): they emit no display items and no hit-test targets, because the
   moving mark is their drawing. A trail behind the moving mark is a separate
   layer of the same mark, a `time.history` of the keyframe marks (#903), so
   head and tail are layered rather than coupled.

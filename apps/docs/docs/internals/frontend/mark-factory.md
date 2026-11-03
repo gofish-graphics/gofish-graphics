@@ -582,10 +582,11 @@ plus a connector tier —
 .mark(R(opts))  ⇒  .mark(blank(anchor(opts))).layer(R(opts))
 ```
 
-The anchor tier is invisible in the strong sense: a `blank` node lowers to no
-display items at all (see [Render Pass 4](/internals/layout/passes)), so the one
+The anchor tier is invisible in the strong sense: a `blank` node is a hidden
+rect, and the bake stops at a hidden node no compositor reads, so it lowers to
+no display items at all (see [Render Pass 4](/internals/layout/passes)). The one
 anchor per row costs layout and a `selectAll` target but no DOM element and no
-hit-test entry. Since nothing can make it paint, `blank()` takes no paint-only
+hit-test entry. Since no option makes it paint, `blank()` takes no paint-only
 options (no stroke or corner radius); its `fill` stays only to seed the color
 scale.
 

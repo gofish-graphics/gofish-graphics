@@ -1447,22 +1447,27 @@ to pick its color (see [Labels](/internals/frontend/labels#auto-color)).
 
 **Nodes that draw nothing.** A node can take part in layout without contributing any
 pixels: it keeps its dims, its datum and its role as a `selectAll` anchor, and emits
-an empty fragment. `GoFishRef` (a placement stand-in) has always lowered this way, and
-`blank()` now does too — `Blank` in `src/ast/shapes/rect.tsx` builds a `rect` node,
-renames its type to `blank` and calls `INTERNAL_emitNothing()` (`_node.ts`), which
-replaces the node's lowering with one that returns `[]`. Because every draw path — the
-SVG paint pass, the `toDisplayList` export, and a bake boundary's re-walk of its
-subtree — goes through `INTERNAL_lower`, one rule makes the node invisible everywhere,
-with no "visible" flag for paint to consult and no option that can turn drawing back
-on. For the same reason `blank()` takes no paint-only options (stroke, corner radius):
-its `fill` survives only because it seeds the color scale. This matters at scale: the [blank-fusion
+an empty fragment. There are two ways. A **hidden** node (`.hidden()`, `_hidden` on
+`_node.ts`) draws nothing unless a compositor reads its shape: the root bake and
+`bakeSubtree` stop at it, so it makes no draw entry at all, and under a compositor it
+lowers as its shape only (see [Rendering](/internals/core/rendering)). `blank()` is
+one: `Blank` in `src/ast/shapes/rect.tsx` builds a `rect` node, renames its type to
+`blank` and hides it. `INTERNAL_emitNothing()` (`_node.ts`) is the other: it replaces
+the node's lowering with one that returns `[]`, so the node gives no shape either. A
+mark with no value is built this way, and `GoFishRef` (a placement stand-in) has
+always lowered the same way. Because every draw path — the SVG paint pass, the
+`toDisplayList` export, and a bake boundary's re-walk of its subtree — goes through
+the bake and `INTERNAL_lower`, each rule holds everywhere. `blank()` takes no
+paint-only options (stroke, corner radius): its `fill` survives only because it seeds
+the color scale. This matters at scale: the [blank-fusion
 rewrite](/internals/frontend/mark-factory) synthesizes one anchor `blank` per row, so a
 26,000-row line chart used to emit 26,000 zero-size `<rect>` elements (and 26,000
 entries in the interaction hit-test map) that nobody could see or click.
 
 Its sibling is **`INTERNAL_visibleWhile(owner, visible)`**, and the pair is worth reading
-together because the difference is which tier decides. `INTERNAL_emitNothing` is
-for a node that must never draw, and it answers at resolve. `INTERNAL_visibleWhile`
+together because the difference is which tier decides. `.hidden()` and
+`INTERNAL_emitNothing` are for a node that must never draw, and they answer at
+resolve. `INTERNAL_visibleWhile`
 is for a node whose drawing comes and goes with a signal — a `time.sequence`'s
 keyframe groups, where the clock picks which band is showing — and it answers at
 paint: the items are lowered either way and their opacity is patched through

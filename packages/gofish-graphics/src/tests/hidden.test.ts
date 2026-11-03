@@ -9,7 +9,7 @@
 import * as GoFish from "../../dist/index.js";
 import { check, items, report } from "./testHelpers";
 
-const { chart, circle, intersect, layer, rect, spread, Serialize } =
+const { blank, chart, circle, intersect, layer, rect, spread, Serialize } =
   GoFish as any;
 
 const kinds = (dl: any) => items(dl).map((i) => i.kind);
@@ -131,6 +131,25 @@ console.log("# a hidden operand gives its shape and no paint");
     "the shown operand: its paint, and no separate shape",
     c?.operands[1].paint.length === 1 && c?.operands[1].shape === undefined,
     c?.operands[1]
+  );
+}
+{
+  // A blank is a hidden rect: alone it draws nothing, and as an operand it
+  // gives its box.
+  const alone = await layer([
+    blank({ w: 40, h: 40 }),
+    rect({ w: 10, h: 10, fill: "red" }),
+  ]).toDisplayList({ w: 100, h: 100 });
+  check("a blank draws nothing", items(alone).length === 1, kinds(alone));
+  const dl = await intersect([
+    blank({ x: 0, y: 0, w: 40, h: 40 }),
+    rect({ x: 20, y: 0, w: 40, h: 40, fill: "red" }),
+  ]).toDisplayList({ w: 100, h: 100 });
+  const c = dl.items.find((i: any) => i.kind === "composite");
+  check(
+    "a blank operand: no paint, its box as shape",
+    c?.operands[0].paint.length === 0 && c?.operands[0].shape?.length === 1,
+    c?.operands[0]
   );
 }
 {
