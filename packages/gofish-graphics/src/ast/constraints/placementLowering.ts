@@ -93,7 +93,7 @@ class PlacementOwnershipPlan<T> {
     targets: Map<string, SolvePlaceable<T>>,
     constraints: PlacementConstraint[],
     private readonly keyOf: KeyOf,
-    posScales: ConstraintPosScales<T> | undefined,
+    scaleOf: (c: PositionConstraint, axis: 0 | 1) => AxisMap<T> | undefined,
     sizes: readonly [T, T],
     dataPositioned?: [Set<string>, Set<string>]
   ) {
@@ -108,7 +108,9 @@ class PlacementOwnershipPlan<T> {
 
     for (const constraint of constraints) {
       if (constraint.type !== "position") continue;
-      this.notePositionConstraint(constraint, posScales);
+      this.notePositionConstraint(constraint, (idx) =>
+        scaleOf(constraint, idx)
+      );
     }
   }
 
@@ -139,7 +141,7 @@ class PlacementOwnershipPlan<T> {
 
   private notePositionConstraint(
     constraint: PositionConstraint,
-    posScales: ConstraintPosScales<T> | undefined
+    scale: (axis: 0 | 1) => AxisMap<T> | undefined
   ): void {
     const keys = constraint.children.map(this.keyOf);
     if (constraint.override)
@@ -164,19 +166,19 @@ class PlacementOwnershipPlan<T> {
         const min = compilePlacementCoordinate(
           this.A,
           coordinate[0],
-          posScales?.[idx]
+          scale(idx)
         );
         const max = compilePlacementCoordinate(
           this.A,
           coordinate[1],
-          posScales?.[idx]
+          scale(idx)
         );
         if (min === undefined || max === undefined) continue;
       } else {
         const value = compilePlacementCoordinate(
           this.A,
           coordinate,
-          posScales?.[idx],
+          scale(idx),
           this.sizes[idx]
         );
         if (value === undefined) continue;
@@ -197,8 +199,14 @@ export function lowerPlacementConstraints<T>(
   posScales?: ConstraintPosScales<T>,
   // Per axis, the grid's resolved tracks, where the grid places its cells.
   gridTracks: GridTracks<T> = [undefined, undefined],
-  dataPositioned?: [Set<string>, Set<string>]
+  dataPositioned?: [Set<string>, Set<string>],
+  // The frame a `position` with `in` reads its datums in, on one axis: the
+  // map of the node it names into this layer's frame (`PositionOptions.in`).
+  inScale?: (c: PositionConstraint, axis: 0 | 1) => AxisMap<T> | undefined
 ): LoweredPlacement<T> {
+  // The frame a position constraint's datums map through on an axis.
+  const scaleOf = (c: PositionConstraint, axis: 0 | 1) =>
+    c.in !== undefined ? inScale?.(c, axis) : posScales?.[axis];
   // A `position` pin on a grid cell overrides that cell's track centering on the
   // pinned axis (the authoritative-pin pattern) — collect which (cell, axis) a
   // position constraint owns so the grid skips its center pin there.
@@ -219,21 +227,22 @@ export function lowerPlacementConstraints<T>(
     targets,
     constraints,
     keyOf,
-    posScales,
+    scaleOf,
     sizes,
     dataPositioned
   );
 
   const lowerer = new PlacementProgramLowerer(targets);
-  const resolveAxisCoordinate = (axis: Axis, coordinate: PositionValue) => {
-    const idx = axisIndex(axis);
-    return compilePlacementCoordinate(
-      A,
-      coordinate,
-      posScales?.[idx],
-      sizes[idx]
-    );
-  };
+  const resolveIn =
+    (c: PositionConstraint) => (axis: Axis, coordinate: PositionValue) => {
+      const idx = axisIndex(axis);
+      return compilePlacementCoordinate(
+        A,
+        coordinate,
+        scaleOf(c, idx),
+        sizes[idx]
+      );
+    };
   const isInitiallyPlaced = ownership.isInitiallyPlaced.bind(ownership);
   const isPinned = ownership.isPinned.bind(ownership);
   const isDataPositioned = ownership.isDataPositioned.bind(ownership);
@@ -268,7 +277,7 @@ export function lowerPlacementConstraints<T>(
           keyOf,
           isInitiallyPlaced,
           isDataPositioned,
-          resolveCoordinate: resolveAxisCoordinate,
+          resolveCoordinate: resolveIn(constraint),
         });
         return;
       case "align":

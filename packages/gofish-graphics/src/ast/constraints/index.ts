@@ -244,7 +244,9 @@ export function collectPositionDomains(
 ): PositionDomains {
   const axes = [newAxisDomain(), newAxisDomain()] as const;
   for (const c of constraints) {
-    if (c.type !== "position") continue;
+    // A datum read in another node's frame (`in`) is no part of this
+    // layer's domain.
+    if (c.type !== "position" || c.in !== undefined) continue;
     for (const axis of [0, 1] as const) {
       if (!counts(c, axis)) continue;
       const acc = axes[axis];

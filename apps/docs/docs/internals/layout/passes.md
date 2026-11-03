@@ -801,6 +801,12 @@ report their size).
   runs once in formulas (`Tape`), so each box's edges are piecewise-linear
   in σ, and the hull is their envelope (`buildPlan` in `solver/plan.ts`). A ring is such a layer, so its claim holds its axis, titles or
   legend around what it wraps, and so does a scatter's around its marks.
+- **Frames read across layers.** A `position` with `in: ref` places a
+  datum in the frame of the node `ref` names (#1257). The claim walk reads
+  that frame's data 0 and one data unit up the plans from the node to the
+  layer (`frameIn` in `solver/plan.ts`), crossing each scope at the σ it
+  solved (`leaving`), and layout measures them (`in0:`, `in1:`). Where a
+  scope between cannot be read out of, what the datum places is ink.
 - **Placement claims.** A `ref` stand-in, or an operand nested in a child,
   stands where its node lands in the layer's frame. The claim walk knows
   that (`planPlacement` in `solver/plan.ts`): it takes the node's box and

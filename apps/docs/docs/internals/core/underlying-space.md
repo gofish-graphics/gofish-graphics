@@ -798,6 +798,19 @@ composes its targets' spaces into the layer's claim on that axis:
   `i / count · axisSize`; those are placement coordinates, not datum values, so
   they become numeric placement facts without affecting the layer's data domain.
 
+- A `Constraint.position` may read its datums in **another node's frame**
+  (`in: ref`, #1257): `datum(v)` is then the point `v` in the frame of the
+  node `ref` names, wherever that node sits below the layer, not in the
+  layer's own frame. Chrome uses it: an axis's ticks sit on the plot's
+  scale even when the plot is a scope of its own that the ticks are outside
+  of. Such a datum is no part of the layer's domain and does not join its
+  target to the layer's set (`planSharing` treats it as a pixel). The claim
+  walk reads the frame as two points of the named node's plan, its data 0
+  and its data 1, carried up the plans to the layer (`frameIn` in
+  `solver/plan.ts`); layout measures the same two points off the laid-out
+  node (`GoFishNode.layoutFrames`) and the translates between. It is
+  internal for now (#1289).
+
 - `align`'s `"span"`/`"size"` values (#726, `constraints/align.ts`) are the
   **third** size-setting mechanism — ships the unbound-target case from the
   "lingering open item" [[operators-vs-constraints]] flags (a bound target is

@@ -747,6 +747,7 @@ export const layer = createNodeOperatorSequential(
           // the layer's frame. A child such a constraint places at a datum
           // point gets no map on that axis (`childPosScalesFor`).
           const effectivePosScales = layerScales.frames;
+          node.layoutFrames = [effectivePosScales[0], effectivePosScales[1]];
           // The room each child's position constraints hand it, which it is
           // laid out in: an interval it is pinned across, or its cell
           // (#1059), with the cell's outline as its shape (#1222).
@@ -1024,6 +1025,40 @@ export const layer = createNodeOperatorSequential(
             // container (`gap`), the pixel a literal position seats a
             // child's origin at (`lit`), the pixel of data 0 (`origin`), and
             // the layer's box (`size`).
+            // Where the frame a `position` with `in` names sits, as laid
+            // out (`InFrame`): its data 0 from the origin of the child of
+            // this layer that holds it, and one data unit, in this layer's
+            // axis order. A point of a node's frame is at `dir·(σ·v +
+            // originPx)` in its local pixels (a node that reads y upward
+            // stores it reflected), which each node between moves by its
+            // translate.
+            const inTargets = new Map<string, GoFishNode>();
+            for (const c of node.constraints) {
+              if (c.type !== "position" || c.in === undefined) continue;
+              const t = c.in.means(node)[0];
+              if (t instanceof GoFishNode) inTargets.set(t.uid, t);
+            }
+            const frameAt = (
+              uid: string,
+              axis: 0 | 1
+            ): [number, number] | undefined => {
+              const t = inTargets.get(uid);
+              const frame = t?.layoutFrames?.[axis];
+              if (t === undefined || frame === undefined) return undefined;
+              const dirOf = (n: GoFishNode) =>
+                axis === 0 ? 1 : n.yFrame.direction;
+              // Up to the child that holds `t`, whose own translate is its
+              // origin, which the plan adds.
+              let px = dirOf(t) * frame.originPx;
+              for (let n = t; n.parent !== node; n = n.parent) {
+                const tr = n.projectedTranslate(axis);
+                if (n.parent === undefined || tr === undefined)
+                  return undefined;
+                px += tr;
+              }
+              const dir = axis === 0 ? 1 : direction;
+              return [dir * px, dir * dirOf(t) * frame.sigma];
+            };
             const inputOf =
               (axis: 0 | 1) =>
               (key: string): number | undefined => {
@@ -1033,6 +1068,8 @@ export const layer = createNodeOperatorSequential(
                 const colon = key.indexOf(":");
                 const kind = key.slice(0, colon);
                 const who = key.slice(colon + 1);
+                if (kind === "in0" || kind === "in1")
+                  return frameAt(who, axis)?.[kind === "in0" ? 0 : 1];
                 const nestedKey = who.startsWith("@")
                   ? who.slice(1)
                   : undefined;

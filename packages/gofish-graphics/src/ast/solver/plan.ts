@@ -17,6 +17,7 @@ import * as Pwl from "./pwl";
 import { values } from "./arith";
 import {
   placeByClaims,
+  type InFrame,
   type ClaimChild,
   type ClaimPlacement,
   type Placement,
@@ -290,7 +291,13 @@ export function buildPlan(
       return placementOf(lo, hi, zero);
     },
     (c, a) => node.gapOf(c, a),
-    hasOrigin(node._underlyingSpace?.[axis])
+    hasOrigin(node._underlyingSpace?.[axis]),
+    (c) => {
+      const target = c.in?.means(node)[0];
+      return target instanceof GoFishNode
+        ? frameIn(target, node, axis)
+        : undefined;
+    }
   );
   const box: [Pwl.Value[], Pwl.Value[]] = [[], []];
   const whole: [Pwl.Value[], Pwl.Value[]] = [[], []];
@@ -536,4 +543,54 @@ export function planPlacementInChild(
     container.parent && throughPlans(target, container.parent, axis);
   if (walked === undefined || walked.n !== container) return undefined;
   return placementOf(...walked.at);
+}
+
+/**
+ * Where `target`'s frame sits in `layer`'s plan on `axis` (`InFrame`, the
+ * frame a `position` with `in` reads its datums in): its data 0 and the
+ * length of one of its data units, from the origin of the child of `layer`
+ * that holds it, in `layer`'s axis order and σ. Its data 0 and data 1 are
+ * two points of its own plan (0 and σ), read out of it into the frame its
+ * parent places it by (`leaving`), and up the plans between, as
+ * `throughPlans` moves a box. Undefined where `target` is not below
+ * `layer`; the two values are undefined where a scope between does not let
+ * the claim walk read out of it (a room its parent gives it), or `target`
+ * is no layer.
+ */
+export function frameIn(
+  target: GoFishNode,
+  layer: GoFishNode,
+  axis: 0 | 1
+): InFrame | undefined {
+  let child: GoFishNode = target;
+  while (child.parent !== undefined && child.parent !== layer)
+    child = child.parent;
+  const i = child.parent === layer ? layer.indexOfChild(child) : undefined;
+  if (i === undefined) return undefined;
+  const unknown = {
+    key: target.uid,
+    child: i,
+    zero: undefined,
+    unit: undefined,
+  };
+  const out = leaving(target, axis);
+  if (out === undefined) return unknown;
+  let pts = [out(Pwl.ZERO), out(Pwl.SIGMA)];
+  for (let n = target; n !== child; ) {
+    const p = n.parent!;
+    const plan = p.claimWalk?.plan(axis);
+    const k = p.indexOfChild(n) ?? -1;
+    const box = plan?.placement.boxes().get(k);
+    const f = plan?.forms[k];
+    const up = leaving(p, axis);
+    if (box === undefined || f === undefined || up === undefined)
+      return unknown;
+    const base = Pwl.add(Pwl.add(box.lo, f.box.descent), f.zero);
+    const sign = flips(p, n, axis) ? -1 : 1;
+    pts = pts.map((x) => up(Pwl.add(base, sign === 1 ? x : Pwl.negate(x))));
+    n = p;
+  }
+  const sign = flips(layer, child, axis) ? -1 : 1;
+  const [zero, one] = pts.map((x) => (sign === 1 ? x : Pwl.negate(x)));
+  return { key: target.uid, child: i, zero, unit: sub(one, zero) };
 }

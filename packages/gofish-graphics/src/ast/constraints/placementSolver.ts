@@ -3,6 +3,8 @@
 // </gofish-wiki>
 
 import { BBox } from "./bbox";
+import type { PositionConstraint } from "./position";
+import type { AxisMap } from "../domain";
 import type { Arith } from "../solver/arith";
 import {
   lowerPlacementConstraints,
@@ -383,7 +385,10 @@ export function solvePlacementCells<T>(
   freeOrigin?: FreeOrigin<T>,
   // Per axis, the targets that are no part of the plot (dressing, chrome):
   // a chain edge between two others lays them by their plots.
-  apart?: [Set<string>, Set<string>]
+  apart?: [Set<string>, Set<string>],
+  // The frame a `position` with `in` reads its datums in
+  // (`PositionOptions.in`).
+  inScale?: (c: PositionConstraint, axis: 0 | 1) => AxisMap<T> | undefined
 ): readonly [SolvedAxis<T>, SolvedAxis<T>] {
   const lowered = lowerPlacementConstraints(
     A,
@@ -394,7 +399,8 @@ export function solvePlacementCells<T>(
     gapOf,
     posScales,
     gridTracks,
-    dataPositioned
+    dataPositioned,
+    inScale
   );
   // Tie each nested operand to its container on every axis it takes part in,
   // so the solve moves the container with it (one rigid body).

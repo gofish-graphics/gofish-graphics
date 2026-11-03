@@ -21,7 +21,7 @@ import {
   type ConstraintRef,
   type KeyOf,
 } from "./shared";
-import { isPositionInterval } from "./position";
+import { isPositionInterval, type PositionConstraint } from "./position";
 import { gridTracks } from "./grid";
 import type { GapOf } from "./gap";
 import type { ConstraintSpec } from ".";
@@ -116,6 +116,23 @@ export type ClaimChild = {
   /** It is chrome (a ring's shapes): no part of the plot, so a chain
    *  places it past the whole box of what it dresses. */
   chrome?: boolean;
+};
+
+/**
+ * Where the frame a `position` reads its datums in (`PositionOptions.in`)
+ * sits in a layer's plan on one axis: `child`, the layer's child that holds
+ * the node it names (or is it), and that node's data 0 and the length of
+ * one data unit from that child's origin, in the layer's axis order and σ.
+ * Both are undefined where the claim walk does not know them (the node is
+ * in a scope it cannot read out of): the datums it places are then ink.
+ * `key` names the node, for the inputs layout measures them by (`in0:`,
+ * `in1:`).
+ */
+export type InFrame = {
+  key: string;
+  child: number;
+  zero: Pwl.Value | undefined;
+  unit: Pwl.Value | undefined;
 };
 
 export type ClaimPlacement = {
@@ -322,7 +339,9 @@ export function placeByClaims(
   gapOf: GapOf,
   // Whether the layer's frame on the axis has a data 0 (`frameOf`): a
   // frame without one maps no datum and seats no baseline.
-  framed = true
+  framed = true,
+  // The frame a `position` with `in` reads its datums in ({@link InFrame}).
+  inFrame: (c: PositionConstraint) => InFrame | undefined = () => undefined
 ): ClaimPlacement {
   // A cell places a child, by its index, that neither its data places in
   // the layer's frame nor placed itself (`constraintsOn`).
@@ -377,7 +396,17 @@ export function placeByClaims(
     children[i].standIn || children[i].fromRefs
       ? children[i].placed
       : undefined;
+  // What a `position` places at datums of a frame the claim walk cannot
+  // read here (`InFrame`) lands only where layout puts it: ink.
+  const inUnknown = new Set<string>();
+  for (const c of onAxis)
+    if (c.type === "position" && c.in !== undefined) {
+      const f = inFrame(c);
+      if (f?.zero === undefined || f.unit === undefined)
+        for (const r of c.children) inUnknown.add(keyOf(r));
+    }
   const inkKey = (key: string): boolean => {
+    if (inUnknown.has(key)) return true;
     const op = operands.get(key);
     if (op === undefined) return true;
     if (!op.direct) return !nestedPlaced.has(key);
@@ -431,6 +460,10 @@ export function placeByClaims(
     (c) => c.type === "position" && typeof c[own] !== "number"
   );
   const unplaced = new Set<number>();
+  for (const key of inUnknown) {
+    const op = operands.get(key);
+    if (op?.direct) ink.add(op.child);
+  }
   children.forEach((c, i) => {
     if (c.inkOn) ink.add(i);
     if (c.standIn) ink.delete(i);
@@ -519,6 +552,9 @@ export function placeByClaims(
   // Where each child placed before the solve has its box start, for a
   // nested operand's container.
   const presetMin = new Map<number, F>();
+  // Where each child placed before the solve has its origin, for a frame
+  // read through it (`inFrame`).
+  const presetOrigin = new Map<number, F>();
   const childIndices = children.map((_, i) => i);
   for (const i of childIndices) {
     const c = children[i];
@@ -563,6 +599,7 @@ export function placeByClaims(
           })();
     const min = origin === undefined ? undefined : T.add(origin, lo);
     if (min !== undefined) presetMin.set(i, min);
+    if (origin !== undefined) presetOrigin.set(i, origin);
     targets.set(key, formulaPlaceable(T, axis, lo, hi, c.space, min, plot));
     indexOf.set(key, i);
     if (c.dataPositioned) dataPositioned.add(key);
@@ -633,6 +670,20 @@ export function placeByClaims(
     origin === undefined
       ? undefined
       : { sigma: T.fromValue(Pwl.SIGMA), originPx: origin };
+  // The frame a `position` with `in` maps its datums through: the named
+  // node's data 0 from the origin of the child that holds it, and its data
+  // unit, which layout measures (`in0:`, `in1:`). The child must be placed
+  // before the solve (a frame read through a child the solve moves would
+  // need a relation, not a pin), else nothing places the datums.
+  const inScale = (c: PositionConstraint, a: 0 | 1) => {
+    if (a !== axis) return undefined;
+    const f = inFrame(c);
+    const o = f && presetOrigin.get(f.child);
+    if (f === undefined || o === undefined) return undefined;
+    const zero = tape.input(`in0:${f.key}`, f.zero ?? Pwl.ZERO);
+    const unit = tape.input(`in1:${f.key}`, f.unit ?? Pwl.ZERO);
+    return { sigma: unit, originPx: T.add(o, zero) };
+  };
   // The layer's box on the axis, which layout lays it out in: a discrete
   // position divides it.
   const box = tape.input("size", Pwl.ZERO);
@@ -648,7 +699,8 @@ export function placeByClaims(
     axis === 0 ? [dataPositioned, new Set()] : [new Set(), dataPositioned],
     rigid,
     axis === 0 ? [origin, undefined] : [undefined, origin],
-    axis === 0 ? [apart, new Set()] : [new Set(), apart]
+    axis === 0 ? [apart, new Set()] : [new Set(), apart],
+    inScale
   )[axis];
   // Two constraints that place one child at two places on the axis are an
   // error, which layout finds where it evaluates the plan: the solve keeps

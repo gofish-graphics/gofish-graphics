@@ -138,7 +138,9 @@ export function buildChildSpans(
     return cur;
   };
   for (const c of constraints) {
-    if (c.type !== "position") continue;
+    // A span read in another node's frame (`in`) is not this layer's to
+    // size: its pins set the child's extent once that frame is laid out.
+    if (c.type !== "position" || c.in !== undefined) continue;
     for (const axis of [0, 1] as const) {
       const coord = axis === 0 ? c.x : c.y;
       const edges = isPositionInterval(coord) ? coord : c.region?.spans[axis];

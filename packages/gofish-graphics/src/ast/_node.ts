@@ -94,7 +94,7 @@ import type { Placement } from "./constraints/claimPlacement";
 import type { LayerPlan } from "./solver/plan";
 import { aroundShare, setChromeForms, type ChromeForms } from "./chromeGutters";
 import { toJSON } from "../util/interval";
-import type { AxisScale } from "./domain";
+import type { AxisMap, AxisScale } from "./domain";
 import { envFlag } from "../util";
 import type { AxesOptions, AxisOptions, ScaleContext } from "./gofish";
 import type { LabelRow } from "./axes/elaborate";
@@ -840,6 +840,12 @@ export class GoFishNode {
    *  label is a layer of text on the nearest one around its mark
    *  (`elaborateLabels`). */
   public _chartContent?: true;
+  /** The frame a layer lays its children out in on each axis, once laid
+   *  out: data `v` is at `σ·v + originPx` in its own axis order, from its
+   *  local origin. Undefined on an axis with no data 0, and on a node that
+   *  is no layer. A `position` with `in` reads a datum through it
+   *  (`PositionOptions.in`). */
+  public layoutFrames?: [AxisMap | undefined, AxisMap | undefined];
   /** Set on the node a `chart()` resolves to, next to {@link _chartBox}: the
    *  chart's own `axes` option (default `true`). It applies at the chart and
    *  below it, down to the next chart (`resolveAxes`). The render root's

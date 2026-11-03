@@ -205,6 +205,17 @@ export interface PositionOptions {
    *  own the position anchor, and a second writer would be a named conflict
    *  rather than a silent no-op needing a per-call opt-out. */
   override?: boolean;
+  /**
+   * The node whose frame a datum coordinate is read in (#1257): `datum(v)`
+   * is the point `v` in that node's frame, wherever the node sits below the
+   * layer, instead of in the layer's own frame. So a tick beside a plot sits
+   * on the plot's scale whether or not it shares the plot's frame (chrome
+   * around a sized plot). It names a node by handle, as any operand does,
+   * and its datums take no part in the layer's own domain or type.
+   * TODO(#1289): internal for now, used by chrome elaboration; making it
+   * public needs a syntax proposal.
+   */
+  in?: ConstraintRef;
 }
 
 export interface PositionConstraint {
@@ -212,6 +223,8 @@ export interface PositionConstraint {
   x?: PositionCoordinate;
   y?: PositionCoordinate;
   region?: PositionRegion;
+  /** See {@link PositionOptions.in}. */
+  in?: ConstraintRef;
   anchor: AlignAnchor;
   override: boolean;
   children: ConstraintRef[];
@@ -229,7 +242,7 @@ const validateInterval = (axis: Axis, interval: PositionInterval): void => {
 };
 
 export const createPositionConstraint = (
-  { x, y, region, anchor, override }: PositionOptions,
+  { x, y, region, anchor, override, in: frame }: PositionOptions,
   children: ConstraintRef[]
 ): PositionConstraint => {
   if (x === undefined && y === undefined && region === undefined) {
@@ -264,6 +277,7 @@ export const createPositionConstraint = (
     x,
     y,
     ...(region !== undefined ? { region } : {}),
+    ...(frame !== undefined ? { in: frame } : {}),
     anchor: anchor ?? "middle",
     override: override ?? false,
     children,
