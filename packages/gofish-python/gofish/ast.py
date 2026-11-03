@@ -1472,6 +1472,15 @@ class ChartBuilder(_Root):
         self._hidden = hidden
         self._name: Optional[Union[str, "Token"]] = None
 
+    def _with(self, **changes: Any) -> "ChartBuilder":
+        """A copy of this builder with `changes` set (attribute names, such
+        as ``_mark``). Every builder method returns one, so a builder is
+        never changed in place."""
+        new_builder = copy.copy(self)
+        for field, value in changes.items():
+            setattr(new_builder, field, value)
+        return new_builder
+
     def flow(self, *ops: Union[Operator, Composed]) -> "ChartBuilder":
         """
         Add operators to the flow pipeline.
@@ -1483,15 +1492,13 @@ class ChartBuilder(_Root):
         Returns:
             New ChartBuilder with operators added
         """
-        return ChartBuilder(
-            self.data,
-            self.options,
+        return self._with(
             operators=[
                 *self.operators,
                 *(o for op in ops for o in _expand_composed(op)),
             ],
-            z_order=self._z_order,
-            hidden=self._hidden,
+            _mark=None,
+            _name=None,
         )
 
     def mark(self, mark) -> "ChartBuilder":
@@ -1512,15 +1519,7 @@ class ChartBuilder(_Root):
         Returns:
             New ChartBuilder with mark set
         """
-        new_builder = ChartBuilder(
-            self.data,
-            self.options,
-            self.operators,
-            z_order=self._z_order,
-            hidden=self._hidden,
-        )
-        new_builder._mark = _as_mark(mark)
-        return new_builder
+        return self._with(_mark=_as_mark(mark), _name=None)
 
     def layer(self, child: Any) -> "LayerBuilder":
         """Stack another tier over this one. A tier is a mark position: it
@@ -1555,41 +1554,18 @@ class ChartBuilder(_Root):
         Returns:
             New ChartBuilder carrying the name.
         """
-        new_builder = ChartBuilder(
-            self.data,
-            self.options,
-            self.operators,
-            z_order=self._z_order,
-            hidden=self._hidden,
-        )
-        new_builder._mark = self._mark
-        new_builder._name = name_or_token
-        return new_builder
+        return self._with(_name=name_or_token)
 
     def z_order(self, value: float) -> "ChartBuilder":
         """Set z-order for this chart when rendered inside a Layer. Mirrors
         JS ``chart(...).zOrder(n)``."""
-        new_builder = ChartBuilder(
-            self.data, self.options, self.operators, z_order=value, hidden=self._hidden
-        )
-        new_builder._mark = self._mark
-        new_builder._name = self._name
-        return new_builder
+        return self._with(_z_order=value)
 
     def hidden(self, value: bool = True) -> "ChartBuilder":
         """Lay the whole chart out, axes and legend included, and paint none
         of it. Its marks can still be read by name. Mirrors JS
         ``chart(...).hidden()``."""
-        new_builder = ChartBuilder(
-            self.data,
-            self.options,
-            self.operators,
-            z_order=self._z_order,
-            hidden=value,
-        )
-        new_builder._mark = self._mark
-        new_builder._name = self._name
-        return new_builder
+        return self._with(_hidden=value)
 
     def facet(self, *, by: str, **kwargs: Any) -> "ChartBuilder":
         """

@@ -57,7 +57,7 @@ import {
   type Outline,
   type OutlinePoint,
 } from "../geometry";
-import { inks } from "../geometry/outline";
+import { foldFinite } from "../../util";
 import type { AxisScale } from "../domain";
 import type { CoordinateTransform } from "../coordinateTransforms/coord";
 import type { BlendMode } from "../blendMode";
@@ -168,19 +168,16 @@ function compositeBounds(
   placed: Placeable[],
   axis: 0 | 1
 ): { min: number; max: number } {
-  const of = (ps: Placeable[]) => ({
-    mins: ps.map((p) => p.dims[axis].min ?? 0),
-    maxs: ps.map((p) => p.dims[axis].max ?? 0),
-  });
-  if (sizing === "first") {
-    const { mins, maxs } = of([placed[0]]);
-    return { min: mins[0], max: maxs[0] };
+  // An operand with no finite box on this axis takes no part (`foldFinite`,
+  // as `layer` folds its children).
+  const ps = sizing === "first" ? [placed[0]] : placed;
+  const mins = ps.map((p) => p.dims[axis].min);
+  const maxs = ps.map((p) => p.dims[axis].max);
+  if (sizing === "overlap") {
+    const min = foldFinite(mins, Math.max);
+    return { min, max: Math.max(min, foldFinite(maxs, Math.min)) };
   }
-  const { mins, maxs } = of(placed);
-  if (sizing === "union")
-    return { min: Math.min(...mins), max: Math.max(...maxs) };
-  const min = Math.max(...mins);
-  return { min, max: Math.max(min, Math.min(...maxs)) };
+  return { min: foldFinite(mins, Math.min), max: foldFinite(maxs, Math.max) };
 }
 
 /** How far the samples of a curved operand may stray from it, in pixels. */
@@ -208,8 +205,7 @@ function operandRing(p: Placeable): OutlinePoint[] | undefined {
 /**
  * Whether lowered items cover exactly their traced shape: each is a rect,
  * an ellipse or a path filled in opaque paint, with no stroke, no opacity
- * and no blend (`"normal"` is none), so its alpha is 1 inside its outline
- * and 0 outside. Only then is
+ * and no blend, so its alpha is 1 inside its outline and 0 outside. Only then is
  * an operand's outline its region, and an exact path the result's.
  */
 function coversItsOutline(items: DisplayList.DisplayItem[]): boolean {
@@ -217,13 +213,14 @@ function coversItsOutline(items: DisplayList.DisplayItem[]): boolean {
     if (item.kind !== "rect" && item.kind !== "ellipse" && item.kind !== "path")
       return false;
     const s = item.style ?? {};
+    const { filled, width } = outlinePaint(s);
     return (
       s.fill !== undefined &&
-      inks(s.fill) &&
+      filled &&
+      width === undefined &&
       (s.opacity ?? 1) === 1 &&
       (s.fillOpacity ?? 1) === 1 &&
-      (s.stroke === undefined || !inks(s.stroke) || !(s.strokeWidth ?? 0)) &&
-      (s.mixBlendMode ?? "normal") === "normal"
+      s.mixBlendMode === undefined
     );
   });
 }
@@ -313,15 +310,18 @@ function compositeNode(
   const exactRing = () =>
     (exact ??= { ring: exactResult(operator, placed) }).ring;
   const painted = paint.fill !== undefined || paint.stroke !== undefined;
-  const strokeWidth = paint.strokeWidth ?? 1;
-  const strokes =
-    paint.stroke !== undefined && inks(paint.stroke) && strokeWidth > 0;
   // The paint the result is drawn in, read by `lower` and `geometry`: no
-  // fill unless one is given, and a stroke width only where the stroke inks.
+  // fill unless one is given, and a stroke width (1 by default) only where
+  // the stroke inks.
+  const { width: strokeWidth } = outlinePaint({
+    stroke: paint.stroke ?? "none",
+    strokeWidth: paint.strokeWidth ?? 1,
+  });
+  const strokes = strokeWidth !== undefined;
   const drawn = {
     fill: paint.fill ?? "none",
     stroke: paint.stroke,
-    strokeWidth: strokes ? strokeWidth : undefined,
+    strokeWidth,
   };
   const node = new GoFishNode(
     {

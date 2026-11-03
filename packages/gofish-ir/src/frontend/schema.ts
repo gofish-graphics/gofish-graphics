@@ -588,6 +588,20 @@ export type FilterIR =
   | { kind: "grayscale"; amount?: number }
   | { kind: "luminanceToAlpha" };
 
+/** How a paint mixes with what is under it where they overlap: the CSS
+ *  `mix-blend-mode` values a `blendMode` option takes. `"normal"` draws the
+ *  later paint over the earlier one. The one list: `BLEND_MODE` in
+ *  descriptors.ts and gofish-graphics' `BlendMode` are made from it. */
+export const BLEND_MODES = [
+  "normal",
+  "multiply",
+  "screen",
+  "overlay",
+  "color",
+  "luminosity",
+] as const;
+export type BlendModeIR = (typeof BLEND_MODES)[number];
+
 /** How `scatter` keeps its children clear of each other, made by a call in
  *  the `Overlap` family (`Overlap.separate()`, `Overlap.noise()`;
  *  `Overlap.sina()` and `Overlap.jitter()` make kind `"noise"` with other

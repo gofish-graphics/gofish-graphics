@@ -938,9 +938,9 @@ export const connect = createNodeOperator(
             ...paintOf(resolvedFill, resolvedStroke),
             strokeDasharray,
             opacity: opacity ?? 1,
-            // Normal by default for both modes; a ribbon that wants overlaps to
-            // darken opts into `blendMode: "multiply"` explicitly.
-            mixBlendMode: blendMode ?? "normal",
+            // Normal (none) by default for both modes; a ribbon that wants
+            // overlaps to darken opts into `blendMode: "multiply"` explicitly.
+            mixBlendMode: blendMode,
           });
 
           /** A path's pixel-space path data. The paths were built in the

@@ -29,6 +29,8 @@
  * keep authored.
  */
 
+import { BLEND_MODES } from "./schema.js";
+
 // ---------------------------------------------------------------------------
 // Field-type DSL
 // ---------------------------------------------------------------------------
@@ -1440,15 +1442,8 @@ export const filtered: FieldGroup = group({
 });
 
 /** How a paint mixes with what is under it: the CSS `mix-blend-mode` values
- *  GoFish takes. One type for every `blendMode` option. */
-export const BLEND_MODE = t.enum(
-  "normal",
-  "multiply",
-  "screen",
-  "overlay",
-  "color",
-  "luminosity"
-);
+ *  GoFish takes (`BLEND_MODES`). One type for every `blendMode` option. */
+export const BLEND_MODE = t.enum(...BLEND_MODES);
 
 /** The shared groups above, with the heading a docs consumer shows them under.
  *  Membership is tested by FieldSpec identity (`resolveFields` copies the same

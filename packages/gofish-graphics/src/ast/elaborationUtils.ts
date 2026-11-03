@@ -24,20 +24,26 @@ export async function wrapPreservingIdentity(
   build: (node: GoFishNode) => GoFishNode | Promise<GoFishNode>
 ): Promise<GoFishNode> {
   const origKey = node.key;
-  const origVisible = node.__gfVisible;
-  const origZOrder = node._zOrder;
-  const origHidden = node._hidden;
   node.key = undefined;
-  node.__gfVisible = undefined;
-  node._zOrder = undefined;
-  node._hidden = false;
+  const moved = MOVED_FIELDS.map(([field, unset]) => {
+    const value = node[field];
+    (node as any)[field] = unset;
+    return [field, unset, value] as const;
+  });
   const root = await build(node);
   if (origKey !== undefined) root.setKey(origKey);
-  if (origVisible !== undefined) root.__gfVisible = origVisible;
-  if (origZOrder !== undefined) root._zOrder = origZOrder;
-  if (origHidden) root._hidden = true;
+  for (const [field, unset, value] of moved)
+    if (value !== unset) (root as any)[field] = value;
   return root;
 }
+
+/** The fields `wrapPreservingIdentity` moves from the node onto its
+ *  wrapper, each with its unset value. */
+const MOVED_FIELDS = [
+  ["__gfVisible", undefined],
+  ["_zOrder", undefined],
+  ["_hidden", false],
+] as const satisfies readonly (readonly [keyof GoFishNode, unknown])[];
 
 /** Builds a ring's constraints from handles: `at(node)` is the handle on
  *  one of the ring's shapes, and `inner` the handle on the box inside the

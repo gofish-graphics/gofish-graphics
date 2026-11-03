@@ -131,7 +131,8 @@ export const rectItemFromBox = (
 });
 
 /** Assemble a `Style` from resolved presentation values, dropping undefined
- *  keys (and a zero/undefined stroke-width, which the legacy render omitted). */
+ *  keys. A `"normal"` blend is no blend, so it is dropped too: a style
+ *  carries `mixBlendMode` only when it mixes. */
 export const lowerStyle = (vals: {
   fill?: string;
   stroke?: string;
@@ -147,7 +148,8 @@ export const lowerStyle = (vals: {
   if (vals.strokeWidth !== undefined) style.strokeWidth = vals.strokeWidth;
   if (vals.opacity !== undefined) style.opacity = vals.opacity;
   if (vals.fillOpacity !== undefined) style.fillOpacity = vals.fillOpacity;
-  if (vals.mixBlendMode !== undefined) style.mixBlendMode = vals.mixBlendMode;
+  if (vals.mixBlendMode !== undefined && vals.mixBlendMode !== "normal")
+    style.mixBlendMode = vals.mixBlendMode;
   if (vals.strokeDasharray !== undefined)
     style.strokeDasharray = vals.strokeDasharray;
   return style;

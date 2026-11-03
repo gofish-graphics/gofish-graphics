@@ -166,7 +166,9 @@ function walkChart(
     walkFieldType(t.ref("ChartOptions"), v, p, ctx)
   );
   optionalField(node, "zOrder", path, ctx, expectNumber);
-  optionalField(node, "hidden", path, ctx, expectBoolean);
+  optionalField(node, "hidden", path, ctx, (v, p) =>
+    walkFieldType(t.boolean, v, p, ctx)
+  );
   optionalField(node, "name", path, ctx, expectNameOrToken);
   rejectUnknown(
     node,
@@ -1522,14 +1524,6 @@ function expectString(value: unknown, path: string, ctx: Context): void {
 
 function expectNumber(value: unknown, path: string, ctx: Context): void {
   if (!isIRNumber(value)) ctx.errors.push({ path, message: notANumber(value) });
-}
-
-function expectBoolean(value: unknown, path: string, ctx: Context): void {
-  if (typeof value !== "boolean")
-    ctx.errors.push({
-      path,
-      message: `expected a boolean, got ${typeof value}`,
-    });
 }
 
 /**

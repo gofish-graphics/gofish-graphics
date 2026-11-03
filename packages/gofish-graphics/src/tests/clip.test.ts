@@ -281,8 +281,8 @@ console.log("# intersect with paint");
 
 console.log("# intersect: a ribbon operand gives its exact outline");
 {
-  // A ribbon lowers through `connect`, which writes `mixBlendMode:
-  // "normal"`: no blend, so its outline is still its region.
+  // A ribbon lowers through `connect`; its default blend, "normal", is no
+  // blend, so its outline is still its region.
   const dl = await layer([
     rect({ x: 0, y: 0, w: 1, h: 10 }).name("a"),
     rect({ x: 100, y: 0, w: 1, h: 50 }).name("b"),
