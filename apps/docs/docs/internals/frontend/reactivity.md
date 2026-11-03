@@ -257,6 +257,12 @@ layout put that node?" by reading the box the frame already carries for it:
 `publishFrame` records one box per node uid during the same walk that builds the
 hit-test map, folding in any enclosing `group` transform (display items are
 absolute pixels except inside a group, whose children are in its local space).
+The walk goes into a region composite (#1267) only where its operands' paint
+shows: an unpainted composite's operands, whose paint has nothing a hidden node
+drew, so a hidden part takes no pointer. A painted composite is one mark: its
+operands give it shape only, so the walk records the composite item itself,
+which carries the result's datum, and the SVG backend puts its `data-gf-id` on
+the composite's group, since a pointer over a `<use>` targets the `<use>`.
 Primitives that carry no box of their own — a `path` (an SVG `d` string) and a
 `text` (an anchor plus a string) — are left out rather than guessed at. The
 alternative was reading a rendered element's screen CTM back out of the DOM,

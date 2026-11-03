@@ -49,6 +49,7 @@ import {
 import type { GoFishExportOptions, GoFishRenderOptions } from "./gofish";
 import { toDisplayList } from "./displayList/toDisplayList";
 import { markShapeOnly } from "./displayList/shapeOnly";
+import { lowerChildrenOffset } from "./displayList/lowerHelpers";
 import type { DisplayList } from "gofish-ir";
 import { setLiveSlots } from "../interaction/liveSlots";
 import { readLive, sharedDecision } from "../interaction/live";
@@ -2778,7 +2779,11 @@ export class GoFishNode {
     // but without the visibility rule: the node painting the copy owns when
     // it shows.
     return (transform, toPixel) =>
-      own ? this.lowerWith(own, transform, toPixel, undefined, false) : [];
+      own
+        ? this.filtered(
+            this.lowerWith(own, transform, toPixel, undefined, false)
+          )
+        : [];
   }
 
   /**
@@ -2886,16 +2891,10 @@ export class GoFishNode {
     // a boundary must re-walk its subtree with that transform composed in (via
     // `flattenLayout`) so descendants land in absolute coordinates before
     // `toPixel`. Pre-recursed, parent-relative child items would be mispositioned.
-    if (!this._lower) {
-      // A node with no lowering of its own draws only its children (the bake
-      // lowers them directly), so with no children it draws nothing: an
-      // operator over a group with no rows, such as an empty cell's.
-      if (this.children.length === 0) return [];
-      throw new Error(
-        `[gofish] node type "${this.type}" has no lower() yet — cannot ` +
-          `emit the display list.`
-      );
-    }
+    // A node with no lowering of its own draws only its children, so with
+    // no children it draws nothing: an operator over a group with no rows,
+    // such as an empty cell's.
+    if (!this._lower && this.children.length === 0) return [];
     const session = this.getRenderSession();
     // A hidden node draws nothing, or, under a compositor, its shape only.
     const visibility = this.visibility();
@@ -2905,13 +2904,19 @@ export class GoFishNode {
       throw new Error("[gofish] toPixel not set on the render session");
     }
 
-    const items = this.lowerWith(
-      this._lower,
-      transformOverride ?? this._displayTransform,
-      toPixel,
-      coordinateTransform,
-      true
-    );
+    const transform = transformOverride ?? this._displayTransform;
+    // The bake lowers the children of a node with no lowering of its own
+    // directly, unless the node is a boundary for another reason (a
+    // `filter`): then it lowers them here, where it put them.
+    const items = this._lower
+      ? this.lowerWith(
+          this._lower,
+          transform,
+          toPixel,
+          coordinateTransform,
+          true
+        )
+      : lowerChildrenOffset(this, transform, coordinateTransform);
     const drawn = this.filtered(items);
     if (visibility === "shape") markShapeOnly(drawn);
     return drawn;

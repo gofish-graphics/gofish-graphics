@@ -9,7 +9,8 @@ import * as GoFish from "../../dist/index.js";
 import { DisplayList } from "gofish-ir";
 import { check, report } from "./testHelpers";
 
-const { layer, rect, circle, Filter, Serialize } = GoFish as any;
+const { layer, rect, circle, spread, createMark, Filter, Serialize } =
+  GoFish as any;
 
 const groups = (dl: any) =>
   dl.items.filter((i: any) => i.kind === "group" && i.filter !== undefined);
@@ -67,6 +68,32 @@ console.log("# a layer's filter wraps its whole subtree");
     svg.includes('<feColorMatrix type="luminanceToAlpha"/>') &&
       svg.includes('color-interpolation-filters="sRGB"'),
     svg
+  );
+}
+
+console.log("# a mark built from an operator takes a filter");
+{
+  // An operator that only places its children has no lowering of its own;
+  // filtered, it draws its children where it put them, in one group.
+  const pair = createMark(() =>
+    spread({ dir: "x", spacing: 0 }, [
+      rect({ w: 10, h: 10, fill: "red" }),
+      rect({ w: 10, h: 10, fill: "blue" }),
+    ])
+  );
+  const dl = await layer([pair({ filter: "blur(2px)" })]).toDisplayList({
+    w: 100,
+    h: 100,
+  });
+  const g = groups(dl);
+  const xs = g[0]?.children.map((c: any) => c.x);
+  check(
+    "one blur group holding both rects, side by side",
+    g.length === 1 &&
+      g[0].filter.value === "blur(2px)" &&
+      g[0].children.length === 2 &&
+      xs[1] - xs[0] === 10,
+    dl.items
   );
 }
 

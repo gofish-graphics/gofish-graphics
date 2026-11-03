@@ -76,9 +76,11 @@ function walkItems(
         break;
       }
       case "composite": {
-        // Its operands' paint is what shows, so a hidden part takes no
-        // pointer.
-        for (const o of item.operands) walkItems(o.paint, visit, at);
+        // A painted result is one mark, the composite itself: its operands
+        // give it shape only. Otherwise the operands' paint is what shows,
+        // and a hidden part has none, so it takes no pointer.
+        if (item.fill === undefined)
+          for (const o of item.operands) walkItems(o.paint, visit, at);
         break;
       }
     }

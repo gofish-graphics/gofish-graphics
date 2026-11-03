@@ -235,7 +235,10 @@ flat-absolute fold cannot express on its own:
   `{ kind: "luminanceToAlpha" }`, which has no CSS function, so each backend writes an
   SVG `<filter>` def with an `feColorMatrix type="luminanceToAlpha"` in sRGB. A
   filtered node is a bake boundary (`isTransparent` in `bake.ts`): a filtered `layer`
-  lowers its own subtree, so the filter sees it as one picture.
+  lowers its own subtree, so the filter sees it as one picture, and a filtered
+  node with no lowering of its own (a `spread` a `createMark` returns) lowers its
+  children where it put them. A lent drawing (`INTERNAL_lendDrawing`, the copy a
+  `time.transition()` moves) is filtered the same way.
 - **`composite`** — a region composite (#1267): one of the five set operations
   over its `operands`, named by its Porter-Duff `operator` (`over` for `union`,
   `in` for `intersect`, `out` for `subtract`, `xor` for `exclude`, and `atop`).

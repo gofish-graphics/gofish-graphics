@@ -221,7 +221,9 @@ export function paintSVG(
       // operands' shapes, or an inverse one (a white rect with the shapes in
       // black over it). Layers that blend carry `mix-blend-mode`. The layers
       // sit in a group `isolate`d so a blend mixes the layers only, not what
-      // is behind the composite. The items are in absolute pixels, as
+      // is behind the composite. A painted result is one mark, so the group
+      // carries its id for hit-testing: a pointer over a `<use>` targets the
+      // `<use>`, not the def it draws. The items are in absolute pixels, as
       // everywhere else: drawing an image under a fractional translate that
       // its own fractional x cancels makes the browser resample it. A shape
       // is referenced by each mask that reads it, so it rasterizes once per
@@ -288,7 +290,11 @@ export function paintSVG(
         );
       });
       return (
-        <g style="isolation:isolate" opacity={item.style?.opacity}>
+        <g
+          style="isolation:isolate"
+          opacity={item.style?.opacity}
+          data-gf-id={item.fill ? gfId : undefined}
+        >
           <defs>
             {item.operands.map((o, i) => (
               <>

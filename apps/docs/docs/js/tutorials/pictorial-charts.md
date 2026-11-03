@@ -141,8 +141,8 @@ boolean operations. They combine the silhouettes of two children:
 
 | Operator            | What you get                                  |
 | ------------------- | --------------------------------------------- |
+| `union([A, B])`     | everywhere either of them covers              |
 | `atop([A, B])`      | A, with B drawn on top of it and clipped to A |
-| `mask([A, B])`      | B clipped to A, with A itself never drawn     |
 | `intersect([A, B])` | only where the two overlap                    |
 | `subtract([A, B])`  | A with B's shape cut out of it                |
 | `exclude([A, B])`   | everywhere exactly one of them covers         |

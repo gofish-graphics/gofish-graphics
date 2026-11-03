@@ -207,8 +207,9 @@ function operandRing(p: Placeable): OutlinePoint[] | undefined {
 
 /**
  * Whether lowered items cover exactly their traced shape: each is a rect,
- * an ellipse or a path filled in opaque paint, with no stroke and no
- * opacity, so its alpha is 1 inside its outline and 0 outside. Only then is
+ * an ellipse or a path filled in opaque paint, with no stroke, no opacity
+ * and no blend (`"normal"` is none), so its alpha is 1 inside its outline
+ * and 0 outside. Only then is
  * an operand's outline its region, and an exact path the result's.
  */
 function coversItsOutline(items: DisplayList.DisplayItem[]): boolean {
@@ -222,7 +223,7 @@ function coversItsOutline(items: DisplayList.DisplayItem[]): boolean {
       (s.opacity ?? 1) === 1 &&
       (s.fillOpacity ?? 1) === 1 &&
       (s.stroke === undefined || !inks(s.stroke) || !(s.strokeWidth ?? 0)) &&
-      s.mixBlendMode === undefined
+      (s.mixBlendMode ?? "normal") === "normal"
     );
   });
 }
@@ -435,6 +436,8 @@ function compositeNode(
             bbox,
             operands: shapes.map((s) => ({ paint: s })),
             fill: [fill],
+            // The result is one mark: it is what a pointer hits.
+            datum: node.datum,
           },
         ];
       },

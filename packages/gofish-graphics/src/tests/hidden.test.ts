@@ -9,7 +9,8 @@
 import * as GoFish from "../../dist/index.js";
 import { check, items, report } from "./testHelpers";
 
-const { chart, intersect, layer, rect, spread, Serialize } = GoFish as any;
+const { chart, circle, intersect, layer, rect, spread, Serialize } =
+  GoFish as any;
 
 const kinds = (dl: any) => items(dl).map((i) => i.kind);
 
@@ -67,6 +68,32 @@ console.log("# per datum");
     .mark(rect({ h: "v" }).hidden((d: any) => d[0].k === "b"))
     .toDisplayList({ w: 300, h: 100, axes: false });
   check("two of three bars paint", items(dl).length === 2, kinds(dl));
+}
+
+console.log("# a hidden mark's label hides with it");
+{
+  // A label lives out of its mark's subtree, attached to it.
+  const rows = [
+    { name: "a", year: 1990 },
+    { name: "b", year: 2000 },
+    { name: "c", year: 2010 },
+  ];
+  const dl = await chart(rows)
+    .flow(spread({ by: "name", dir: "x" }))
+    .mark(
+      circle({ r: 5 })
+        .label("name")
+        .hidden((d: any) => d[0].year !== 2000)
+    )
+    .toDisplayList({ w: 300, h: 100, axes: false });
+  const texts = items(dl).filter((i: any) => i.kind === "text");
+  check(
+    "one circle and its one label paint",
+    items(dl).filter((i: any) => i.kind === "ellipse").length === 1 &&
+      texts.length === 1 &&
+      (texts[0] as any).text === "b",
+    items(dl)
+  );
 }
 
 console.log("# a hidden chart still sets its scale");

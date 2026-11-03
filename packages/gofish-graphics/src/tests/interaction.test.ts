@@ -50,6 +50,8 @@ const {
   frame,
   layer,
   Coord,
+  intersect,
+  image,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -582,6 +584,50 @@ async function main() {
     ok("hover caused zero re-runs", resolves === 1, `resolves=${resolves}`);
   }
 
+  console.log("\npointer hit-test on a painted composite");
+  {
+    // A painted intersect is one mark: a pointer over it reports its datum,
+    // and its operands, a hidden one included, take no pointer.
+    const container = makeContainer();
+    const p = pointer();
+    await chart(data, { axes: false })
+      .flow(spread({ by: "cat", dir: "x" }))
+      .mark(
+        layer([
+          rect({ w: 4, h: 4, fill: live(() => (p.datum() ? "#f00" : "#00f")) }),
+          intersect({ fill: "#467DA8" }, [
+            image({ href: "x.png", x: 0, y: 0, w: 40, h: 40 }),
+            rect({ x: 20, y: 0, w: 40, h: 40 }).hidden(),
+          ]),
+        ])
+      )
+      .render(container, { w: 300, h: 120 });
+    await settle();
+    const groups = Array.from(
+      container.querySelectorAll("g[data-gf-id]")
+    ) as any[];
+    ok(
+      "each painted composite's group carries its id",
+      groups.length === 3,
+      String(groups.length)
+    );
+    const use = groups[1]?.querySelector(":scope > use, :scope > g use");
+    use?.dispatchEvent(
+      new (globalThis as any).PointerEvent("pointermove", {
+        clientX: 5,
+        clientY: 5,
+        bubbles: true,
+      })
+    );
+    await nextTick();
+    const hit = p.datum() as any;
+    ok(
+      "the pointer reports the composite's datum",
+      Array.isArray(hit) && hit[0]?.cat === "b",
+      JSON.stringify(hit)
+    );
+  }
+
   /* ------------------------- drag lifecycle ------------------------ */
   console.log("\ndrag lifecycle");
   {
@@ -591,7 +637,10 @@ async function main() {
       // Read drag.isActive() inside live() so the input registers + attaches.
       .flow(spread({ by: "cat", dir: "x" }))
       .mark(
-        rect({ h: "count", fill: live(() => (dr.isActive() ? "#f00" : "#00f")) })
+        rect({
+          h: "count",
+          fill: live(() => (dr.isActive() ? "#f00" : "#00f")),
+        })
       )
       .render(container, { w: 200, h: 120 });
     await settle();
@@ -635,7 +684,10 @@ async function main() {
     await chart(data, { axes: false })
       .flow(spread({ by: "cat", dir: "x" }))
       .mark(
-        rect({ h: "count", fill: live(() => (dr.isActive() ? "#f00" : "#00f")) })
+        rect({
+          h: "count",
+          fill: live(() => (dr.isActive() ? "#f00" : "#00f")),
+        })
       )
       .render(container, { w: 200, h: 120 });
     await settle();
@@ -743,7 +795,10 @@ async function main() {
       playing: false,
     });
     ok("band timer emits its first value", phase() === "spring", `${phase()}`);
-    ok("band timer starts paused when playing:false", phase.isPlaying() === false);
+    ok(
+      "band timer starts paused when playing:false",
+      phase.isPlaying() === false
+    );
     phase.set("fall");
     ok("set() seeks to a band value", phase() === "fall", `${phase()}`);
     ok("band step is undefined", phase.step === undefined);
@@ -761,7 +816,11 @@ async function main() {
       playing: false,
     });
     year.set(365);
-    ok("set(hi) reads back hi on a quantized domain", year() === 365, `${year()}`);
+    ok(
+      "set(hi) reads back hi on a quantized domain",
+      year() === 365,
+      `${year()}`
+    );
     year.set(1);
     ok("set(lo) reads back lo", year() === 1, `${year()}`);
     const bandEnd = timer({
@@ -824,14 +883,28 @@ async function main() {
     const once = timer({ domain: [0, 10], step: 1, duration: 60, loop: false });
     once();
     await realDelay(140);
-    ok("a non-looping clock clamps at the domain's end", once() === 10, `${once()}`);
-    ok("a non-looping clock pauses itself at the end", once.isPlaying() === false);
+    ok(
+      "a non-looping clock clamps at the domain's end",
+      once() === 10,
+      `${once()}`
+    );
+    ok(
+      "a non-looping clock pauses itself at the end",
+      once.isPlaying() === false
+    );
 
     // -- no domain: elapsed milliseconds, the degenerate case --
     const ms = timer({ duration: 1000, playing: false });
-    ok("a domainless timer's domain is [0, duration]", JSON.stringify(ms.domain) === "[0,1000]");
+    ok(
+      "a domainless timer's domain is [0, duration]",
+      JSON.stringify(ms.domain) === "[0,1000]"
+    );
     ms.set(250);
-    ok("a domainless timer reads milliseconds", Math.round(ms()) === 250, `${ms()}`);
+    ok(
+      "a domainless timer reads milliseconds",
+      Math.round(ms()) === 250,
+      `${ms()}`
+    );
   }
 
   console.log("\ntimer regimes (live vs derive)");
@@ -848,9 +921,7 @@ async function main() {
         }),
         spread({ by: "cat", dir: "x" })
       )
-      .mark(
-        rect({ h: "count", fill: live(() => (tLive() ? "#f00" : "#00f")) })
-      )
+      .mark(rect({ h: "count", fill: live(() => (tLive() ? "#f00" : "#00f")) }))
       .render(liveContainer, { w: 200, h: 120 });
     await settle();
     ok(
@@ -1016,7 +1087,11 @@ async function main() {
     bar.dispatchEvent(
       new P("pointerup", { clientX: 5, clientY: 5, bubbles: true })
     );
-    ok("the release commits one click", press.count() === 1, `${press.count()}`);
+    ok(
+      "the release commits one click",
+      press.count() === 1,
+      `${press.count()}`
+    );
     await settle();
     ok(
       "arming re-runs the spec that reads it",
@@ -1408,7 +1483,11 @@ async function main() {
 
     const first = await liveChart(makeContainer());
     await settle();
-    ok("a chart reading the timer at paint ticks it", alive.size === 1, `${alive.size}`);
+    ok(
+      "a chart reading the timer at paint ticks it",
+      alive.size === 1,
+      `${alive.size}`
+    );
     first.unmount();
     await realDelay(40);
     ok(
@@ -1602,7 +1681,7 @@ async function main() {
     ok(
       "exactly the current day's positions are at full opacity",
       opacities.filter((o: string) => o === "1").length === SPECIES.length,
-      opacities.join(","),
+      opacities.join(",")
     );
     ok(
       "the rest of the trail is faded",
@@ -1774,7 +1853,11 @@ async function main() {
       new P("pointermove", { clientX: 900, clientY: 50, bubbles: true })
     );
     await settle();
-    ok("a drag past the end clamps to the domain", level() === 100, String(level()));
+    ok(
+      "a drag past the end clamps to the domain",
+      level() === 100,
+      String(level())
+    );
     svg().dispatchEvent(
       new P("pointermove", { clientX: -900, clientY: 50, bubbles: true })
     );
@@ -1825,7 +1908,11 @@ async function main() {
       new P("pointerup", { clientX: 300, clientY: 90, bubbles: true })
     );
     await settle();
-    ok("a press released elsewhere is not a click", clicks === 1, `clicks=${clicks}`);
+    ok(
+      "a press released elsewhere is not a click",
+      clicks === 1,
+      `clicks=${clicks}`
+    );
   }
 
   /* ------------- widgets: a wrapping slider over a cyclic domain ------------- */
@@ -1858,21 +1945,41 @@ async function main() {
       (container.querySelectorAll("text")[1] as any)?.textContent ?? "";
 
     const { track, travel, startX } = sliderPx(container, 240, [0, 355]);
-    ok("the wrapping slider shows its formatted value", readout() === "45°", readout());
+    ok(
+      "the wrapping slider shows its formatted value",
+      readout() === "45°",
+      readout()
+    );
 
     // Press the far end of the travel: the last slot is reachable (355, not 0).
     track().dispatchEvent(
-      new P("pointerdown", { clientX: startX + travel, clientY: 50, bubbles: true })
+      new P("pointerdown", {
+        clientX: startX + travel,
+        clientY: 50,
+        bubbles: true,
+      })
     );
     await settle();
-    ok("the wrapping slider reaches its top value", bearing() === 355, String(bearing()));
+    ok(
+      "the wrapping slider reaches its top value",
+      bearing() === 355,
+      String(bearing())
+    );
 
     // 4px past the end: 1.0177 · 355 = 361.3, quantized to 360, folded mod 360.
     svg().dispatchEvent(
-      new P("pointermove", { clientX: startX + travel + 4, clientY: 50, bubbles: true })
+      new P("pointermove", {
+        clientX: startX + travel + 4,
+        clientY: 50,
+        bubbles: true,
+      })
     );
     await settle();
-    ok("a drag past the end wraps to the start", bearing() === 0, String(bearing()));
+    ok(
+      "a drag past the end wraps to the start",
+      bearing() === 0,
+      String(bearing())
+    );
     ok("the readout wrapped with it", readout() === "0°", readout());
 
     // 4px before the start: −6.28, quantized to −5, folded mod 360 onto 355.
@@ -1880,7 +1987,11 @@ async function main() {
       new P("pointermove", { clientX: startX - 4, clientY: 50, bubbles: true })
     );
     await settle();
-    ok("a drag past the start wraps to the end", bearing() === 355, String(bearing()));
+    ok(
+      "a drag past the start wraps to the end",
+      bearing() === 355,
+      String(bearing())
+    );
     svg().dispatchEvent(
       new P("pointerup", { clientX: startX - 4, clientY: 50, bubbles: true })
     );
@@ -1930,7 +2041,8 @@ async function main() {
     day.pause();
     day.set(10);
     await settle();
-    ok("the map drew the wrapped trail",
+    ok(
+      "the map drew the wrapped trail",
       container.querySelectorAll('ellipse[rx="3"]').length ===
         WINDOW * SPECIES.length,
       String(container.querySelectorAll('ellipse[rx="3"]').length)
@@ -1943,10 +2055,18 @@ async function main() {
     // clock first (the delegation rule).
     const { xFor: xForDay } = sliderPx(container, 200, [1, DAYS]);
     handle().dispatchEvent(
-      new P("pointerdown", { clientX: xForDay(10), clientY: 340, bubbles: true })
+      new P("pointerdown", {
+        clientX: xForDay(10),
+        clientY: 340,
+        bubbles: true,
+      })
     );
     svg().dispatchEvent(
-      new P("pointermove", { clientX: xForDay(25), clientY: 340, bubbles: true })
+      new P("pointermove", {
+        clientX: xForDay(25),
+        clientY: 340,
+        bubbles: true,
+      })
     );
     await settle();
     ok("dragging the slider pauses the clock", day.isPlaying() === false);

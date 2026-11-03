@@ -279,6 +279,31 @@ console.log("# intersect with paint");
   check("a croissant 150 pixels wide renders", message === "", message);
 }
 
+console.log("# intersect: a ribbon operand gives its exact outline");
+{
+  // A ribbon lowers through `connect`, which writes `mixBlendMode:
+  // "normal"`: no blend, so its outline is still its region.
+  const dl = await layer([
+    rect({ x: 0, y: 0, w: 1, h: 10 }).name("a"),
+    rect({ x: 100, y: 0, w: 1, h: 50 }).name("b"),
+  ])
+    .relate(({ a, b }: any) => [
+      intersect({ fill: "#D1E4F6", stroke: "#467DA8" }, [
+        ribbon({ fill: "#000" }, [a, b]),
+        rect({ x: 0, y: 0, w: 60, h: 100 }),
+      ]),
+    ])
+    .toDisplayList({ w: 200, h: 100 });
+  const drawn = items(dl);
+  check(
+    "a stroked intersect of a ribbon and a rect is one exact path",
+    drawn.filter(
+      (it) => it.kind === "path" && it.style?.stroke === "#467DA8"
+    ).length === 1 && !drawn.some((it) => it.kind === "composite"),
+    drawn.map((it) => it.kind)
+  );
+}
+
 console.log("# intersect paint from data");
 {
   const rows = [
