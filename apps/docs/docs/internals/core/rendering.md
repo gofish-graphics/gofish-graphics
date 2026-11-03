@@ -247,7 +247,7 @@ flat-absolute fold cannot express on its own:
   its walk up at the compositor, so a hidden composite still gives its region to
   a composite that reads it. A `fill` sub-list is the result's own paint, a box
   in the composite's `fill`, drawn through the result's region instead of the
-  operands' paint. Items are relative to the composite's `bbox`.
+  operands' paint. Items are in absolute pixels, like every other item.
 
   `compositeLayers(operator, n, filled)` (`composite.ts`) is the one layer plan
   both SVG backends draw: each layer draws an operand's paint (or the fill),
