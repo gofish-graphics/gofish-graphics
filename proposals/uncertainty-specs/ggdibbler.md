@@ -15,7 +15,7 @@ R scripts and data: `ggdibbler-r/` beside this page (`export-mpg.R`, `export-est
 - `position_subdivide` becomes a small grid of draws in each region, `table({ by: "draw", numCols })`. This works for rectangles only. GoFish cannot cut a map polygon into cells yet.
 - A HOP, which ggdibbler makes with gganimate's `transition_states(after_stat(drawID))`, becomes `time.sequence({ by: "draw" })`.
 - Convergence holds for the same reason as in ggdibbler. The draws are placed by ordinary operators, so as every sd goes to zero, each spec draws the plain chart.
-- Two things differ. The proposal checks the draw key, so it rejects `stack` by `draw` (ggdibbler leaves stack out as a draw position for a similar reason, [#34](https://github.com/harriet-mason/ggdibbler/issues/34)) and a line that joins independent draws. It also draws a distribution directly with marks such as `slab` and `interval`, which ggdibbler leaves to ggdist.
+- Two things differ. The proposal checks the draw key, so it rejects `stack` by `draw` (ggdibbler leaves stack out as a draw position for a similar reason, [#34](https://github.com/harriet-mason/ggdibbler/issues/34)). It also draws a distribution directly with marks such as `slab` and `interval`, which ggdibbler leaves to ggdist.
 
 ## Part 1. Side by side
 
@@ -184,40 +184,37 @@ forecast |>
 
 **GoFish, proposed**
 
-![](img/gf-forecast-points.png)
+![](img/gf-forecast-lines.png)
 
 ```js
 const value = dist.normal({ mean: "mean", sd: "sd" });
 chart(forecast)
-  .flow(sample({ n: 30 }), scatter({ x: "h", y: value }))
-  .mark(circle({ r: 2.5, opacity: 0.3 }));
-```
-
-The line form is an error in the proposal:
-
-```js
-chart(forecast)
   .flow(
     sample({ n: 30 }),
-    group({ by: "draw" }),
+    overlay({ by: "draw" }),
     scatter({ by: "h", x: "h", y: value })
   )
   .mark(line());
 ```
 
-```
-line joins draw k of independent cells, so the line is not a possible
-path. Use joint draws, or summarize first with .interval(p) and draw a ribbon.
-```
-
 ```python
 value = dist.normal(mean="mean", sd="sd")
-chart(forecast).flow(sample(n=30), scatter(x="h", y=value)).mark(
-    circle(r=2.5, opacity=0.3)
-)
+chart(forecast).flow(
+    sample(n=30), overlay(by="draw"), scatter(by="h", x="h", y=value)
+).mark(line())
 ```
 
-This is where the two differ. Each step here is its own normal, so draw 3 at one step has no tie to draw 3 at the next. The proposal draws the draws as points. The line form above is an error in the proposal, and a line needs draws that are shared across rows (see Part 2). ggdibbler draws the line, and its how-to guide uses it for a fable forecast. Open question 1 asks which is right.
+Today, on the precomputed draws (story `ForecastLines`):
+
+```js
+chart(forecastDraws)
+  .flow(group({ by: "draw" }), scatter({ by: "h", x: "h", y: "value" }))
+  .mark(line({ stroke: "#333", strokeWidth: 1.5, opacity: 0.3 }));
+```
+
+This is the multiline chart with the draw as the series. It follows `LineEndLabels` in `packages/gofish-graphics/stories/forwardsyntax/LabelPlacement.stories.tsx`, which splits by `symbol`, then scatters by date, then draws a `line`. Here `overlay({ by: "draw" })` splits the rows into one line chart per draw and lays the draws over each other in one frame. Each line stays inside one draw, so the checker allows it. Without the split, one line would run across all 30 draws, and that is the error. The image uses opacity 0.3, as ggdibbler does. `overlay`'s rule would give 0.05.
+
+There is one caveat. Each step here is its own normal, and `sample` draws each step on its own, so draw 3 at one step has no tie to draw 3 at the next. The lines show the steps moving independently, which the data does not say. So they zigzag more than real forecast paths would (compare the shared draws in Part 2). ggdibbler draws the same lines. Open question 1 asks whether that needs a warning.
 
 ### Uncertain map, subdivided
 
@@ -299,7 +296,7 @@ chart(paths, { schema: { value: { draws: "draw" } } })
   .mark(line());
 ```
 
-Thirty random walk paths. Each step has the same normal as in the Part 1 forecast, but the steps of one path move together, so every line is a possible future. The record says `draw` is a draw key, so a line over it is allowed. The image uses opacity 0.3. `overlay`'s rule would give 0.05. **ggdibbler would need:** a way to say that rows share draws. Its `seed` argument ([#39](https://github.com/harriet-mason/ggdibbler/issues/39)) keeps the same draws across layers, not across rows. [#31](https://github.com/harriet-mason/ggdibbler/issues/31) also argues the other side: that rows should stay independent, and a dependent table should be split into a fixed part and a random part. Open question 1.
+Thirty random walk paths. Each step has the same normal as in the Part 1 forecast, but the steps of one path move together, so every line is a possible future. As in Part 1, `overlay` splits by `draw`, so each line stays inside one draw. Here the draws are shared, so the lines do not zigzag as Part 1's do. The image uses opacity 0.3. `overlay`'s rule would give 0.05. **ggdibbler would need:** a way to say that rows share draws. Its `seed` argument ([#39](https://github.com/harriet-mason/ggdibbler/issues/39)) keeps the same draws across layers, not across rows. [#31](https://github.com/harriet-mason/ggdibbler/issues/31) also argues the other side: that rows should stay independent, and a dependent table should be split into a fixed part and a random part. Open question 1.
 
 ### Uncertain dates on a time axis
 
@@ -376,7 +373,7 @@ Six budget lines, each a normal, six draws side by side. Swapping `spread` for `
 
 ## Open questions for Harriet
 
-1. **Lines over independent draws.** ggdibbler joins draw k at each x into a line, and the proposal calls that an error unless the draws are shared. Your comment on [#31](https://github.com/harriet-mason/ggdibbler/issues/31) argues that the unit of an uncertainty visualization is an independent distribution. Is the error wrong for a fable forecast, where each step is a marginal?
+1. **Lines over independent draws.** ggdibbler and the proposal both join draw k at each x into one line per draw. With independent cells, the lines show the steps moving independently, a joint the data does not give. Your comment on [#31](https://github.com/harriet-mason/ggdibbler/issues/31) argues that the unit of an uncertainty visualization is an independent distribution. For a fable forecast, where each step is a marginal, should the line carry a warning or a note in the docs, or is it fine as it is?
 2. **Default opacity.** ggdibbler leaves `alpha` to the user and warns about `times` ([#59](https://github.com/harriet-mason/ggdibbler/issues/59)). The proposal's `overlay` sets 1/n with a floor of 0.05. Is 1/n a good default, and should the legend then use full opacity by itself ([#67](https://github.com/harriet-mason/ggdibbler/issues/67))?
 3. **Blending.** Alpha compositing favors the last draw. Would an order-free blend, as in ggblend ([#48](https://github.com/harriet-mason/ggdibbler/issues/48)), be a better default for `overlay`?
 4. **Subdividing regions.** GoFish cannot cut a polygon into cells yet. Of the grid, random points with Voronoi cells ([#16](https://github.com/harriet-mason/ggdibbler/issues/16)) and a noise fill ([#23](https://github.com/harriet-mason/ggdibbler/issues/23)), which would you build first?

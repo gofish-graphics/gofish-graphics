@@ -223,7 +223,7 @@ Four checks, each at a place that already reads column types:
 | A Dist in a T channel with no lift                         | `inferNumeric`, `channels.ts:248`                               | static        |
 | `stack` by a draw key                                      | `spread`'s split, `spread.tsx:259`                              | static        |
 | A sum over several draws (size channel, `.sum()`, treemap) | beside `checkSummable`, `measure.ts:142`                        | from the rows |
-| A connecting mark over independent draws                   | the path-tier choice, `classifyOperator`, `chartBuilder.ts:210` | static        |
+| A connecting mark across draws (no split by the draw key)  | the path-tier choice, `classifyOperator`, `chartBuilder.ts:210` | static        |
 | `quantile` on a nominal T, `mean` on an ordinal T          | `evalFieldValues`, `fieldExpr.ts:488`                           | static        |
 
 The error texts are the design note's, word for word where the note has one.

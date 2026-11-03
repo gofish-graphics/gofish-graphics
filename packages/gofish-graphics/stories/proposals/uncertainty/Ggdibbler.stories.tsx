@@ -66,13 +66,15 @@ export const MpgStackOverlay: StoryObj = {
   },
 };
 
-/** A forecast whose steps are independent normals: the draws as points. */
-export const ForecastPoints: StoryObj = {
+/** A forecast whose steps are independent normals: one line per draw.
+ *  The multiline chart idiom (LabelPlacement.stories.tsx, LineEndLabels:
+ *  group by series, then scatter by x, then line) with series = draw. */
+export const ForecastLines: StoryObj = {
   render: () => {
     const container = initializeContainer();
     chart(forecastDraws, { w: 480, h: 260 })
-      .flow(scatter({ x: "h", y: "value" }))
-      .mark(circle({ r: 2.5, fill: "#333", opacity: 0.3 }))
+      .flow(group({ by: "draw" }), scatter({ by: "h", x: "h", y: "value" }))
+      .mark(line({ stroke: "#333", strokeWidth: 1.5, opacity: 0.3 }))
       .render(container, { axes: true });
     return container;
   },

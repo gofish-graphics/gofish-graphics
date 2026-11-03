@@ -36,10 +36,10 @@ page is the review copy of the proposal. The work behind it is in this folder.
   equally (or by its weight). A group of rows is the empirical distribution of its
   values. `.mean()` on a group of rows is the mean of that distribution.
 - **Shared (joint) draws and independent draws.** Draws are shared when draw 3 of one
-  value and draw 3 of another come from the same run of a model, so their correlation is
-  kept. Posterior draws and bootstrap resamples are shared. Draws are independent when
-  each value is sampled on its own, as `sample` does for a `dist.normal` cell. Only shared
-  draws can be joined into lines or ranked as whole curves.
+  value and draw 3 of another come from one run of a model. Posterior draws and bootstrap
+  resamples are shared. Draws are independent when each value is sampled on its own, as
+  `sample` does for a `dist.normal` cell. A line or a whole curve inside one draw is a
+  possible path for shared draws. For independent ones it shows a joint the data lacks.
 - **Fold.** Combining a group's rows into one value. A size channel folds by summing, a
   position channel by averaging. The new `dist` channel folds rows into one distribution,
   the mixture of the rows' distributions.
@@ -1175,14 +1175,17 @@ texts are from the sketch and the design note.
    rect h sums 20 draws of "draw". A sum of draws grows with their number. Split by
    "draw" first, or take .mean().
    ```
-4. **A connecting mark over independent draws.** Where a relational mark picks its path
-   tier (`classifyOperator`). Static.
+4. **A connecting mark across draws.** Where a relational mark picks its path tier
+   (`classifyOperator`). Static. A line must sit inside a split by the draw key, such as
+   `overlay({ by: "draw" })`, so that each line joins the marks of one draw. This holds
+   for shared and independent draws alike. Over independent cells each line is one draw
+   of the whole table with every cell drawn on its own, so the lines show a joint the
+   data does not give (`theory.md` Section 1.6). That is a caveat, not an error.
    ```
-   line({ along: "t" }) joins draw 3 of "value" in one t to draw 3 in the next, but each
-   t's "value" is an independent distribution. Draw 3 in one t has no relation to draw 3
-   in the next, so the line is not a possible path.
-   Use draws from one joint sample (a column record { draws: "draw" }), or summarize
-   first with field("value").interval(0.8) and draw a ribbon.
+   line({ along: "t" }) joins 30 draws of "value" into one path. Draw 3 in one t has no
+   relation to draw 7 in the next, so the path runs across draws.
+   Split by the draw key first, with overlay({ by: "draw" }), so each line stays in one
+   draw. Or summarize first with field("value").interval(0.8) and draw a ribbon.
    ```
 5. **A summary that `T` cannot support.** In `evalFieldValues` (`fieldExpr.ts`).
    Static.
@@ -1241,8 +1244,7 @@ Adopt the synthesis. These are the reasons, against the design principles in
   plain columns are not a second path, they are the same fold.
 - **Meaning lives on the data type.** Whether rows are draws, and whether those draws are
   shared, is in the column record, like units after #1200. The stack-by-draw error and
-  the line-over-independent-draws error come from the type, not from the user
-  remembering.
+  the line-across-draws error come from the type, not from the user remembering.
 - **Few new terms.** The user learns `dist.*`, `sample`, `overlay`, two record keys and
   the signal marks. `rvar` and `dist.kde` are gone. The marks keep ggdist's names.
 - **The same shape in JS and Python.** Every example above has a Python form with the
