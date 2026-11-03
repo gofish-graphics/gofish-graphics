@@ -70,7 +70,7 @@ All paths are relative to `packages/gofish-graphics/`:
 - `src/ast/graphicalOperators/` - Composition operators (stack, stackX, stackY, spread, spreadX, spreadY, layer, connect, wrap, arrow, enclose, frame, position)
 - `src/ast/coordinateTransforms/` - Coordinate system transformations (polar, clock, wavy, geo; plus the internal identity `linear`)
 - `src/ast/marks/` - Fluent chart builder (`chart(data).flow(...).mark(...)`) and the mark factories
-- `src/tests/` - Example charts and visual test cases, plus the library's unit tests (`*.test.ts`, run by the `test` / `test:*` scripts in `packages/gofish-graphics/package.json`)
+- `src/tests/` - Example charts, visual test cases, and the `*.test.ts` unit tests
 - `src/data/` - Sample datasets used in examples
 - `src/templates/` - Reusable chart templates
 - `stories/` - Storybook stories for visual development
