@@ -453,7 +453,6 @@ const RETIRED_CAPITALIZED_NAMES = [
   "SpreadX",
   "SpreadY",
   "Enclose",
-  "Frame",
   "Position",
   "Arrow",
   "Cut",
@@ -469,6 +468,9 @@ const RETIRED_API_NAMES: Record<string, string> = {
     ])
   ),
   For: "map",
+  // Frame was folded into layer (#156).
+  Frame: "layer",
+  frame: "layer",
 };
 const RETIRED_API_NAMES_RE = new RegExp(
   `\\b(${Object.keys(RETIRED_API_NAMES).join("|")})\\b`,
