@@ -23,7 +23,7 @@ const BASE = {
   neck: 1,
   holes: false,
   shape: "blob",
-  join: Infinity,
+  reach: Infinity,
   smooth: true,
   compare: false,
   showLinks: false,

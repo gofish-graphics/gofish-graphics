@@ -10,21 +10,21 @@ import {
   ringsArea,
   clearUnifiedCache,
   joinLinks,
-  type JoinMeasure,
+  type ReachMeasure,
 } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/unified";
 
 const IDS = (
   process.env.DS ?? "chartaccent,u,penguins,hyperedges,munkres,bubble,holes"
 ).split(",");
-const MEASURES: JoinMeasure[] = ["px", "share", "typical", "local"];
-const RANGE: Record<JoinMeasure, number[]> = {
+const MEASURES: ReachMeasure[] = ["px", "share", "typical", "local"];
+const RANGE: Record<ReachMeasure, number[]> = {
   px: [0, 2, 4, 8, 12, 16, 24, 32, 48, 64, 96, 128, Infinity],
   share: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1],
   typical: [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 6, 10, Infinity],
   local: [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 6, 10, Infinity],
 };
 // the playground's slider per measure (0..100)
-const SLIDER: Record<JoinMeasure, number[]> = {
+const SLIDER: Record<ReachMeasure, number[]> = {
   px: [
     0,
     ...Array.from({ length: 99 }, (_, k) => 0.5 * 2 ** (k / 10)),
@@ -43,7 +43,7 @@ const SLIDER: Record<JoinMeasure, number[]> = {
   ],
 };
 // the fixed joins of the scale test
-const FIXED: Record<JoinMeasure, number[]> = {
+const FIXED: Record<ReachMeasure, number[]> = {
   px: [8, 24],
   share: [0.5, 0.9],
   typical: [1, 2],
@@ -68,7 +68,7 @@ const scaled = (ms: Member[], s: number): Member[] =>
     return { ...m, x: cx - m.w / 2, y: cy - m.h / 2 };
   });
 
-const piecesOf = (d: any, measure: JoinMeasure, join: number, s = 1) =>
+const piecesOf = (d: any, measure: ReachMeasure, join: number, s = 1) =>
   d.sets.reduce(
     (t: number, set: any) =>
       t +
@@ -84,7 +84,7 @@ const piecesOf = (d: any, measure: JoinMeasure, join: number, s = 1) =>
 
 const run = (
   d: any,
-  measure: JoinMeasure,
+  measure: ReachMeasure,
   join: number,
   smooth: boolean
 ): { area: number; ms: number; rings: string } => {
@@ -96,8 +96,8 @@ const run = (
       padding: d.padding,
       convexity: C,
       neck: d.story?.neck ?? 1,
-      join,
-      joinMeasure: measure,
+      reach: join,
+      reachMeasure: measure,
       means: "blend",
       holes: d.story?.holes ?? false,
       avoiding: [],
@@ -169,7 +169,7 @@ for (const id of IDS) {
     }
   }
   // where the pieces change on 0..∞ (slider position) vs 0..1 (j = r / (1 + r))
-  for (const m of ["typical", "local"] as JoinMeasure[]) {
+  for (const m of ["typical", "local"] as ReachMeasure[]) {
     const ts = d.sets
       .flatMap(
         (set: any) =>

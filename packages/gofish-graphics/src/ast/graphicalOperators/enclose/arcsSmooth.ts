@@ -8,6 +8,7 @@
  */
 import type { Pt } from "./blob";
 import { pointInRing, segDist, signedArea2 } from "../../geometry/plane";
+import { SegGrid, Inside, segsOf } from "./meshBlend";
 
 /** A keep-in constraint: a segment ab (a disc when a = b) grown to `R`. The
  *  outline must keep every point of it inside. */
@@ -42,6 +43,9 @@ export type SmoothSpec =
       /** When set, the outward offset is local (see blurLocal), tapering
        *  over this many px along the outline, instead of one uniform offset. */
       local?: number;
+      /** The offset's margin past the least that holds every capsule, px
+       *  (default 0.05). */
+      margin?: number;
     }
   | {
       /** The signed distance to the closing, blurred by a Gaussian of sigma
@@ -449,26 +453,37 @@ function sdfRings(rings: Pt[][], p: Pt): number {
   return ringsSdf(rings, p[0], p[1]);
 }
 
-/** The least outward offset that holds every keep-in capsule. */
+/** The least outward offset that holds every keep-in capsule: the most
+ *  any capsule's axis sample (every 2 px) needs, signed distance to the
+ *  rings (negative inside, nonzero winding) plus its radius. The distances
+ *  from a segment grid (exact, as the brute-force sdf it replaces). */
 function needed(rings: Pt[][], keep: KeepIn[]): number {
-  let c = 0;
+  if (!keep.length) return 0;
+  const S = segsOf(rings);
+  const G = new SegGrid(S, 4),
+    In = new Inside(S);
+  let c = -Infinity;
   for (const k of keep) {
     const L = Math.hypot(k.b[0] - k.a[0], k.b[1] - k.a[1]);
     const n = Math.max(1, Math.ceil(L / 2));
     for (let t = 0; t <= n; t++) {
-      const p: Pt = [
-        k.a[0] + ((k.b[0] - k.a[0]) * t) / n,
-        k.a[1] + ((k.b[1] - k.a[1]) * t) / n,
-      ];
-      c = Math.max(c, sdfRings(rings, p) + k.R);
+      const x = k.a[0] + ((k.b[0] - k.a[0]) * t) / n,
+        y = k.a[1] + ((k.b[1] - k.a[1]) * t) / n;
+      const d = G.nearest(x, y)[0];
+      c = Math.max(c, (In.has(x, y) ? -d : d) + k.R);
     }
   }
-  return c;
+  return Math.max(0, c);
 }
 
-export function blur(rings: Pt[][], keep: KeepIn[], sigma: number): Pt[][] {
+export function blur(
+  rings: Pt[][],
+  keep: KeepIn[],
+  sigma: number,
+  margin = 0.05
+): Pt[][] {
   const sm = rings.map((ring) => gauss(resample(ring, 1), sigma));
-  const c = needed(sm, keep) + 0.05;
+  const c = needed(sm, keep) + margin;
   return sm.map((r) => {
     const N = normals(r, true);
     return r.map((p, i) => [p[0] + c * N[i][0], p[1] + c * N[i][1]] as Pt);
@@ -544,11 +559,102 @@ export function smoothOutline(
   if (spec.kind === "blur")
     return spec.local
       ? blurLocal(rings, keep, spec.sigma, spec.local)
-      : blur(rings, keep, spec.sigma);
+      : blur(rings, keep, spec.sigma, spec.margin);
   return rings.map((ring) => {
     const own = keep.filter((k) => pointInRing(k.a, ring));
     return spec.kind === "relax"
       ? relax(ring, own, spec.sigma, spec.iters)
       : outward(ring, own, spec.sigma, spec.iters);
   });
+}
+
+/** Resample a closed ring at about ds, each sample marked when the edge it
+ *  lies on has a marked end. */
+function resampleMarked(
+  ring: Pt[],
+  mk: boolean[],
+  ds: number
+): [Pt[], boolean[]] {
+  const n = ring.length;
+  const cum = [0];
+  for (let i = 0; i < n; i++) {
+    const [a, b] = [ring[i], ring[(i + 1) % n]];
+    cum.push(cum[i] + Math.hypot(b[0] - a[0], b[1] - a[1]));
+  }
+  const L = cum[n];
+  const m = Math.max(8, Math.round(L / ds));
+  const out: Pt[] = [],
+    om: boolean[] = [];
+  let k = 0;
+  for (let j = 0; j < m; j++) {
+    const s = (L * j) / m;
+    while (cum[k + 1] < s) k++;
+    const t = (s - cum[k]) / (cum[k + 1] - cum[k] || 1);
+    const [a, b] = [ring[k], ring[(k + 1) % n]];
+    out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+    om.push(mk[k] || mk[(k + 1) % n]);
+  }
+  return [out, om];
+}
+
+/**
+ * PROTOTYPE: the rounding of the corners a cut leaves (unified.ts, finish).
+ * Near the cut (`marks`: the points that came from the forbidden region's
+ * boundary), each point moves by the inward part of a Gaussian along
+ * arclength (sigma px) and no further: convex corners and spikes (where the
+ * outline meets a clipped side or a keep-out, or two keep-outs meet) round
+ * off; nothing moves outward, so the rounded outline stays inside the cut
+ * one and out of what was cut. Then every point is pushed out of the
+ * padded members again (pushOut), so they stay inside. The weight is 1
+ * within 3σ of a cut point and tapers to 0 over the next 3σ, so the rest of
+ * the outline does not move. A ring the rounding turns inside out was
+ * narrower than the rounding (an opening would remove it too): dropped.
+ */
+export function roundCut(
+  rings: Pt[][],
+  marks: boolean[][],
+  keep: KeepIn[],
+  sigma: number
+): Pt[][] {
+  const out: Pt[][] = [];
+  rings.forEach((ring, ri) => {
+    const mk0 = marks[ri];
+    if (sigma <= 0 || ring.length < 3 || !mk0.some((x) => x)) {
+      out.push(ring);
+      return;
+    }
+    const [r, mk] = resampleMarked(ring, mk0, 1);
+    const n = r.length;
+    // samples to the nearest mark, around the ring
+    const dist = new Float64Array(n).fill(Infinity);
+    for (let pass = 0; pass < 2; pass++) {
+      let d = Infinity;
+      for (let q = 0; q < 2 * n; q++) {
+        const i = q % n;
+        d = mk[i] ? 0 : d + 1;
+        if (d < dist[i]) dist[i] = d;
+      }
+      d = Infinity;
+      for (let q = 2 * n - 1; q >= 0; q--) {
+        const i = q % n;
+        d = mk[i] ? 0 : d + 1;
+        if (d < dist[i]) dist[i] = d;
+      }
+    }
+    const W = 3 * sigma;
+    const g = gauss(r, sigma);
+    const N = normals(r, true);
+    const res = r.map((p, i) => {
+      const w = dist[i] <= W ? 1 : dist[i] >= 2 * W ? 0 : 2 - dist[i] / W;
+      if (w <= 0) return p;
+      const t = (g[i][0] - p[0]) * N[i][0] + (g[i][1] - p[1]) * N[i][1];
+      if (t >= 0) return p;
+      return pushOut([p[0] + w * t * N[i][0], p[1] + w * t * N[i][1]], keep);
+    });
+    const a0 = signedArea2(ring),
+      a1 = signedArea2(res);
+    if (Math.sign(a1) !== Math.sign(a0) || Math.abs(a1) < 1e-6) return;
+    out.push(res);
+  });
+  return out;
 }

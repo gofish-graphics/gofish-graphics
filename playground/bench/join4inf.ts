@@ -8,7 +8,7 @@ import {
   unifiedOutline,
   ringsArea,
   joinLinks,
-  JOIN_PROTOTYPE,
+  REACH_PROTOTYPE,
 } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/unified";
 import {
   pointInRing,
@@ -22,14 +22,14 @@ const inside = (rings: any[], p: [number, number]) => {
   return w > 0;
 };
 const run = (d: any, s: any, links: "tree" | "gap") => {
-  JOIN_PROTOTYPE.links = links;
+  REACH_PROTOTYPE.links = links;
   return unifiedOutline(s.members, {
     padding: d.padding,
     convexity: 0.5,
     neck: 1,
-    join: Infinity,
-    joinMeasure: "typical",
-    joinDistance: "reach",
+    reach: Infinity,
+    reachMeasure: "typical",
+    reachDistance: "mutual",
     means: "blend",
     avoiding: d.avoidDefault ? s.avoiding : [],
     clearance: d.clearance,
@@ -49,7 +49,7 @@ for (const d of DATA as any[]) {
       Infinity,
       1,
       "typical",
-      "reach"
+      "mutual"
     ).tree;
     const ek = (e: any) => `${Math.min(e.i, e.j)}-${Math.max(e.i, e.j)}`;
     const gs = new Set(gt.map(ek));
@@ -80,4 +80,4 @@ for (const d of DATA as any[]) {
     );
   });
 }
-JOIN_PROTOTYPE.links = "tree";
+REACH_PROTOTYPE.links = "tree";

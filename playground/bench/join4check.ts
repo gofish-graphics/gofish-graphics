@@ -14,8 +14,8 @@ import {
   ringsArea,
   clearUnifiedCache,
   joinLinks,
-  type JoinMeasure,
-  type JoinDistance,
+  type ReachMeasure,
+  type ReachDistance,
 } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/unified";
 
 const IDS = (process.env.DS ?? "chartaccent,u,penguins,hyperedges,holes").split(
@@ -25,8 +25,8 @@ const opts = (d: any, s: any, o: any) => ({
   padding: d.padding,
   convexity: 0.5,
   neck: 1,
-  joinMeasure: "typical" as JoinMeasure,
-  joinDistance: "reach" as JoinDistance,
+  reachMeasure: "typical" as ReachMeasure,
+  reachDistance: "mutual" as ReachDistance,
   means: "blend" as const,
   avoiding: d.avoidDefault ? s.avoiding : [],
   clearance: d.clearance,
@@ -38,7 +38,7 @@ const fails: string[] = [];
 const say = (ok: boolean, msg: string) => {
   if (!ok) fails.push(msg);
 };
-const entries = (s: any, d: any, m: JoinMeasure, dist: JoinDistance) =>
+const entries = (s: any, d: any, m: ReachMeasure, dist: ReachDistance) =>
   [
     ...new Set(
       joinLinks(s.members, d.padding, Infinity, 1, m, dist)
@@ -53,7 +53,7 @@ for (const id of IDS) {
     samples = 0,
     changes = 0;
   for (const s of d.sets) {
-    const ts = entries(s, d, "typical", "reach");
+    const ts = entries(s, d, "typical", "mutual");
     const bounds = [0, ...ts, ts.at(-1)! * 2];
     let prev = "";
     for (let k = 0; k + 1 < bounds.length; k++) {
@@ -65,7 +65,7 @@ for (const id of IDS) {
         // inside [lo, hi): the entry lo itself is kept (join ≥ t keeps)
         const j = q === 0 ? lo : lo + ((hi - lo) * q) / 5;
         clearUnifiedCache();
-        const r = JSON.stringify(out(d, s, { join: j }));
+        const r = JSON.stringify(out(d, s, { reach: j }));
         samples++;
         if (q === 0) ref = r;
         else
@@ -85,12 +85,12 @@ for (const id of IDS) {
   );
   // 2. area along join
   for (const [m, dist] of [
-    ["typical", "reach"],
+    ["typical", "mutual"],
     ["typical", "plain"],
     ["px", "plain"],
-    ["share", "reach"],
-    ["local", "reach"],
-  ] as [JoinMeasure, JoinDistance][]) {
+    ["share", "mutual"],
+    ["local", "mutual"],
+  ] as [ReachMeasure, ReachDistance][]) {
     let worst = 0,
       steps = 0;
     for (const s of d.sets) {
@@ -100,9 +100,9 @@ for (const id of IDS) {
       for (const j of js) {
         const a = ringsArea(
           out(d, s, {
-            join: Math.max(0, j),
-            joinMeasure: m,
-            joinDistance: dist,
+            reach: Math.max(0, j),
+            reachMeasure: m,
+            reachDistance: dist,
           })
         );
         if (a < a0) worst = Math.max(worst, a0 - a);
@@ -124,7 +124,7 @@ for (const id of IDS) {
     for (const s of d.sets) {
       let a0 = -Infinity;
       for (let k = 0; k <= 40; k++) {
-        const a = ringsArea(out(d, s, { join, convexity: k / 20 }));
+        const a = ringsArea(out(d, s, { reach: join, convexity: k / 20 }));
         if (a < a0) worst = Math.max(worst, a0 - a);
         a0 = Math.max(a0, a);
       }
@@ -138,7 +138,7 @@ for (const id of IDS) {
     );
   }
   // 4. pieces
-  for (const dist of ["plain", "reach"] as JoinDistance[]) {
+  for (const dist of ["plain", "mutual"] as ReachDistance[]) {
     let bad = 0,
       tried = 0;
     for (const s of d.sets) {
@@ -187,7 +187,7 @@ for (const id of IDS) {
               join,
               1,
               "typical",
-              "reach"
+              "mutual"
             ).pieces.length
         )
         .join("+");
@@ -201,7 +201,7 @@ for (const id of IDS) {
               join,
               1,
               "typical",
-              "reach"
+              "mutual"
             ).tree.filter((e) => e.floor).length
         )
         .join("+");

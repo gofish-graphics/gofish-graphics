@@ -217,6 +217,21 @@ function firey(H: Pt[], E: Pt[], c: number, p: number, k = 720): Pt[] {
 }
 
 /** The outline for convexity c in (1, 2] from the padded hull H. */
+/** The two ends of the Minkowski blend (the counterclockwise hull and the
+ *  oval, or the hull's circle), for the ways that blend them; null for the
+ *  others ("corner", "firey"). */
+export function beyondEnds(
+  H: Pt[],
+  members: BlobMember[],
+  pad: number,
+  how: Beyond = "ellipse"
+): { Hc: Pt[]; E: Pt[] } | null {
+  if (how === "corner" || how === "firey") return null;
+  const Hc = ccw(H);
+  const E = how === "circle" ? circleRing(Hc) : (ovalRing(members, pad) ?? Hc);
+  return { Hc, E };
+}
+
 export function beyondHull(
   H: Pt[],
   members: BlobMember[],

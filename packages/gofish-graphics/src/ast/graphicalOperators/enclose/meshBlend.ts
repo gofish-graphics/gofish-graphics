@@ -60,6 +60,18 @@ export const MESH_BLEND = {
   tol: 1e-7,
 };
 
+/** PROTOTYPE: the coarser mesh drawn while a slider is dragged (about a
+ *  third of the vertices; see UNIFIED_PROTOTYPE.draft). */
+export const MESH_DRAFT = {
+  ...MESH_BLEND,
+  s0: 4,
+  beta: 2,
+  alpha: 0.6,
+  hMax: 12,
+};
+
+export const MESH_FAIL: { miss?: number[][]; spine?: Pt[][] } = {};
+
 // ── spatial helpers ─────────────────────────────────────────────────────────
 
 /** Segments bucketed on a grid, for nearest-distance queries. */
@@ -153,6 +165,75 @@ export class SegGrid {
       if (bs >= 0 && Math.sqrt(best) <= k * cell - off) break;
     }
     return [Math.sqrt(best), bs];
+  }
+}
+
+/** Segments of rings as the flat array SegGrid takes. */
+export const segsOf = (rings: Pt[][]): Float64Array => {
+  let n = 0;
+  for (const r of rings) n += r.length;
+  const S = new Float64Array(4 * n);
+  let k = 0;
+  for (const r of rings)
+    for (let i = 0; i < r.length; i++) {
+      const a = r[i],
+        b = r[(i + 1) % r.length];
+      S[k++] = a[0];
+      S[k++] = a[1];
+      S[k++] = b[0];
+      S[k++] = b[1];
+    }
+  return S;
+};
+
+/** Nonzero winding of a point over rings, by edges bucketed into rows. */
+export class Inside {
+  y0: number;
+  h: number;
+  rows: number[][];
+  S: Float64Array;
+  constructor(S: Float64Array, h = 2) {
+    this.S = S;
+    const n = S.length / 4;
+    let ya = Infinity,
+      yb = -Infinity;
+    for (let s = 0; s < n; s++) {
+      ya = Math.min(ya, S[4 * s + 1], S[4 * s + 3]);
+      yb = Math.max(yb, S[4 * s + 1], S[4 * s + 3]);
+    }
+    if (!n) [ya, yb] = [0, 1];
+    this.y0 = ya;
+    this.h = h;
+    this.rows = Array.from(
+      { length: Math.ceil((yb - ya) / h) + 1 },
+      () => [] as number[]
+    );
+    for (let s = 0; s < n; s++) {
+      const lo = Math.min(S[4 * s + 1], S[4 * s + 3]),
+        hi = Math.max(S[4 * s + 1], S[4 * s + 3]);
+      for (
+        let j = Math.floor((lo - ya) / h);
+        j <= Math.floor((hi - ya) / h);
+        j++
+      )
+        this.rows[j].push(s);
+    }
+  }
+  has(x: number, y: number): boolean {
+    const j = Math.floor((y - this.y0) / this.h);
+    if (j < 0 || j >= this.rows.length) return false;
+    const S = this.S;
+    let w = 0;
+    for (const s of this.rows[j]) {
+      const ay = S[4 * s + 1],
+        by = S[4 * s + 3];
+      if (ay <= y !== by <= y) {
+        const ax = S[4 * s],
+          bx = S[4 * s + 2];
+        if (ax + ((y - ay) * (bx - ax)) / (by - ay) > x) w += by > ay ? 1 : -1;
+      }
+    }
+    return w !== 0;
   }
 }
 
@@ -324,8 +405,12 @@ const footOn = (A: Pt, B: Pt, p: Pt): Pt => {
  * The blend's field on a mesh, for the spine rings (outer rings winding
  * positive; holes, with `holes`, the other way).
  */
-export function buildMeshBlend(spine: Pt[][]): MeshBlend {
+export function buildMeshBlend(
+  spine: Pt[][],
+  knobs: typeof MESH_BLEND = MESH_BLEND
+): MeshBlend {
   const t0 = performance.now();
+  MESH_FAIL.spine = spine;
   const PH: Record<string, number> = {};
   let tl = t0;
   const lap = (k: string) => {
@@ -333,15 +418,17 @@ export function buildMeshBlend(spine: Pt[][]): MeshBlend {
     PH[k] = t - tl;
     tl = t;
   };
-  const { delta, s0, sMin, beta, alpha, hMax } = MESH_BLEND;
-  // drop points within 1e-4 px of the next (arc joins can repeat a point
-  // to within rounding, and a near-zero edge defeats the Delaunay's edge
-  // recovery), and split outer rings from holes
+  const { delta, s0, sMin, beta, alpha, hMax } = knobs;
+  // drop points within 0.01 px of the next (arc joins can repeat a point
+  // to within rounding, or step back by a few thousandths of a px: a
+  // near-zero edge or a zig-zag that crosses itself defeats the Delaunay's
+  // edge recovery, which can never recover two crossing edges), and split
+  // outer rings from holes
   const clean = spine
     .map((r) =>
       r.filter((p, i) => {
         const q = r[(i + 1) % r.length];
-        return Math.hypot(p[0] - q[0], p[1] - q[1]) > 1e-4;
+        return Math.hypot(p[0] - q[0], p[1] - q[1]) > 0.01;
       })
     )
     .filter((r) => r.length >= 3);
@@ -763,7 +850,23 @@ export function buildMeshBlend(spine: Pt[][]): MeshBlend {
       L.corner = nc;
     }
   }
-  if (rounds === 40) throw new Error("meshBlend: boundary edges not recovered");
+  if (rounds === 40) {
+    // SCRATCH diagnostics: the edges still missing
+    const nB = BX.length;
+    const miss: number[][] = [];
+    const found = new Uint8Array(nB);
+    for (let e = 0; e < T.length; e++) {
+      const a = T[e],
+        b = T[nextHe(e)];
+      if (a >= nB || b >= nB) continue;
+      if (nxt[a] === b) found[a] = 1;
+      if (nxt[b] === a) found[b] = 1;
+    }
+    for (let a = 0; a < nB; a++)
+      if (!found[a]) miss.push([BX[a], BY[a], BX[nxt[a]], BY[nxt[a]], pos[a]]);
+    (MESH_FAIL as any).miss = miss;
+    throw new Error("meshBlend: boundary edges not recovered");
+  }
   const nB = BX.length;
   const nT = T.length / 3;
   // boundary halfedges; the triangles on a boundary edge's left (its loop's

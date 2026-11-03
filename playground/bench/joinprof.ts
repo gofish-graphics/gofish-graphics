@@ -20,7 +20,7 @@ for (const join of [4, 4.3, 4.6, 5, 5.3, 16, 17, 18]) {
       padding: d.padding,
       convexity: c,
       neck: d.story?.neck ?? 1,
-      join,
+      reach: join,
       means: "blend",
       avoiding: [],
     });

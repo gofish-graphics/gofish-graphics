@@ -6,9 +6,9 @@ import { writeFileSync } from "node:fs";
 import DATA from "../src/datasets.json";
 import {
   unifiedOutline,
-  JOIN_PROTOTYPE,
+  REACH_PROTOTYPE,
 } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/unified";
-if (process.env.LINKS) JOIN_PROTOTYPE.links = process.env.LINKS as any;
+if (process.env.LINKS) REACH_PROTOTYPE.links = process.env.LINKS as any;
 
 const out: Record<string, string> = {};
 for (const d of DATA as any[]) {
@@ -25,7 +25,7 @@ for (const d of DATA as any[]) {
   ];
   for (const [vn, v] of variants)
     for (const [m, dist] of [
-      ["typical", "reach"],
+      ["typical", "mutual"],
       ["typical", "plain"],
       ["px", "plain"],
     ])
@@ -34,9 +34,9 @@ for (const d of DATA as any[]) {
           unifiedOutline(s.members, {
             padding: d.padding,
             ...v,
-            join: Infinity,
-            joinMeasure: m,
-            joinDistance: dist,
+            reach: Infinity,
+            reachMeasure: m,
+            reachDistance: dist,
             means: "blend",
             avoiding: d.avoidDefault ? s.avoiding : [],
             clearance: d.clearance,

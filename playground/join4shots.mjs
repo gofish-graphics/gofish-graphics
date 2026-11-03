@@ -41,9 +41,9 @@ const BASE = {
   compareModes: false,
   showMembers: false,
   joinRange: "inf",
-  joinMeasure: "typical",
-  joinDistance: "reach",
-  joinCore: 4,
+  reachMeasure: "typical",
+  reachDistance: "mutual",
+  reachCore: 4,
 };
 const caption = () =>
   page.evaluate(() =>
@@ -53,7 +53,7 @@ const caption = () =>
   );
 // join ∞ with the links drawn, every dataset
 for (const ds of ["chartaccent", "penguins", "u", "hyperedges", "holes"]) {
-  await set({ dataset: ds, ...BASE, join: Infinity, showLinks: true });
+  await set({ dataset: ds, ...BASE, reach: Infinity, showLinks: true });
   await page
     .locator("#stage-wrap")
     .screenshot({ path: join(out, `inf-${ds}.png`) });
@@ -64,7 +64,7 @@ if (!infOnly) {
     ["penguins", [1.5, 2.397]],
   ])
     for (const j of joins) {
-      await set({ dataset: ds, ...BASE, join: j, showLinks: false });
+      await set({ dataset: ds, ...BASE, reach: j, showLinks: false });
       console.log(`${ds} ${j}: ${await caption()}`);
       await page.screenshot({
         path: join(out, `page-${ds}-${j}.png`),

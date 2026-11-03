@@ -23,7 +23,7 @@ const stats = (xs) => {
   return `mean ${(xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(1)} · p90 ${s[Math.floor(0.9 * s.length)].toFixed(1)} · max ${s.at(-1).toFixed(0)}`;
 };
 const sweep = (page, kind) =>
-  page.evaluate((kind) => {
+  page.evaluate(async (kind) => {
     const P = window.__playground;
     const out = [];
     const js = [
@@ -34,8 +34,11 @@ const sweep = (page, kind) =>
       ),
       0,
     ];
-    if (kind === "join") for (const j of js) out.push(+P.set({ join: j }));
-    else for (let k = 0; k <= 50; k++) out.push(+P.set({ convexity: k / 50 }));
+    if (kind === "join")
+      for (const j of js) out.push(await P.set({ reach: j }));
+    else
+      for (let k = 0; k <= 50; k++)
+        out.push(await P.set({ convexity: k / 50 }));
     return out;
   }, kind);
 console.log(
@@ -53,9 +56,9 @@ for (const ds of ["chartaccent", "u", "penguins", "hyperedges", "holes"]) {
     const t0 = Date.now();
     // open the dataset and sweep at once (no idle time in between)
     const cold = await page.evaluate(
-      ([ds, kind]) => {
+      async ([ds, kind]) => {
         const P = window.__playground;
-        P.set({ dataset: ds, convexity: 0.5, join: Infinity });
+        await P.set({ dataset: ds, convexity: 0.5, reach: Infinity });
         const out = [];
         const js = [
           Infinity,
@@ -65,17 +68,18 @@ for (const ds of ["chartaccent", "u", "penguins", "hyperedges", "holes"]) {
           ),
           0,
         ];
-        if (kind === "join") for (const j of js) out.push(+P.set({ join: j }));
+        if (kind === "join")
+          for (const j of js) out.push(await P.set({ reach: j }));
         else
           for (let k = 0; k <= 50; k++)
-            out.push(+P.set({ convexity: k / 50, join: Infinity }));
+            out.push(await P.set({ convexity: k / 50, reach: Infinity }));
         return out;
       },
       [ds, kind]
     );
     // back to the opening state, let the idle warm-up finish, sweep again
     await page.evaluate(() =>
-      window.__playground.set({ convexity: 0.5, join: Infinity })
+      window.__playground.set({ convexity: 0.5, reach: Infinity })
     );
     await page.waitForFunction(
       () => document.getElementById("status")?.dataset.warm === "1",

@@ -64,7 +64,7 @@ for (const [ds, key, padding] of CASES)
       neck: 1,
       holes: false,
       shape: "blob",
-      join: Infinity,
+      reach: Infinity,
       means: "area",
       seal: "jump",
       smooth: true,

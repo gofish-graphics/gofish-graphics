@@ -64,7 +64,7 @@ for (const [ds, { neck, joins }] of Object.entries(CASES))
         dataset: ds,
         ...BASE,
         neck,
-        join: j,
+        reach: j,
         showLinks: links,
       });
       const pieces = await page.evaluate(
@@ -93,7 +93,7 @@ for (const [ds, neck, j] of [
       ...BASE,
       convexity: c,
       neck,
-      join: j,
+      reach: j,
       showLinks: false,
     });
     console.log(`${ds} join ${j} c ${c}: ${(+ms).toFixed(0)} ms`);
@@ -109,7 +109,7 @@ await set(page, {
   dataset: "chartaccent",
   ...BASE,
   neck: 0.6,
-  join: 24,
+  reach: 24,
   showLinks: true,
 });
 await page.screenshot({
@@ -133,7 +133,7 @@ await set(page, {
   dataset: "penguins",
   ...BASE,
   neck: 1,
-  join: 16,
+  reach: 16,
   compareModes: true,
   compare: true,
   showLinks: false,
@@ -148,13 +148,13 @@ await set(page, {
   dataset: "chartaccent",
   ...BASE,
   neck: 0.6,
-  join: 8,
+  reach: 8,
   showLinks: true,
 });
 await page.screenshot({ path: join(out, "page-dark.png"), fullPage: true });
 await page.close();
 page = await open({ viewport: { width: 390, height: 844 } });
-await set(page, { dataset: "penguins", ...BASE, neck: 1, join: 6 });
+await set(page, { dataset: "penguins", ...BASE, neck: 1, reach: 6 });
 await page.screenshot({ path: join(out, "page-phone.png"), fullPage: true });
 await page.close();
 await browser.close();

@@ -49,8 +49,8 @@ const BASE = {
   showMembers: false,
   showLinks: false,
   joinRange: "inf",
-  joinMeasure: "pieces",
-  joinCore: 4,
+  reachMeasure: "pieces",
+  reachCore: 4,
 };
 const CASES = JSON.parse(
   process.env.CASES ??
@@ -67,13 +67,13 @@ const caption = (page) =>
   );
 let page = await open();
 for (const [ds, { neck, k }] of Object.entries(CASES)) {
-  for (const dist of ["plain", "reach"]) {
+  for (const dist of ["plain", "mutual"]) {
     await set(page, {
       dataset: ds,
       ...BASE,
       neck,
-      join: k,
-      joinDistance: dist,
+      reach: k,
+      reachDistance: dist,
     });
     console.log(`${ds} k ${k} ${dist}: ${await caption(page)}`);
     await page.locator("#stage-wrap").screenshot({
@@ -87,8 +87,8 @@ for (const [ds, { neck, k }] of Object.entries(CASES)) {
     dataset: ds,
     ...BASE,
     neck,
-    join: k,
-    joinDistance: "reach",
+    reach: k,
+    reachDistance: "mutual",
   });
   await page.screenshot({ path: join(out, `page-${ds}.png`), fullPage: true });
 }
@@ -98,14 +98,14 @@ const TYPICAL = {
   penguins: { neck: 1, plain: 3.805, reach: 2.397 },
 };
 for (const [ds, c] of Object.entries(TYPICAL))
-  for (const dist of ["plain", "reach"]) {
+  for (const dist of ["plain", "mutual"]) {
     await set(page, {
       dataset: ds,
       ...BASE,
       neck: c.neck,
-      joinMeasure: "typical",
-      join: c[dist],
-      joinDistance: dist,
+      reachMeasure: "typical",
+      reach: c[dist],
+      reachDistance: dist,
     });
     console.log(`${ds} typical ${c[dist]} ${dist}: ${await caption(page)}`);
     await page.locator("#stage-wrap").screenshot({
@@ -114,7 +114,7 @@ for (const [ds, c] of Object.entries(TYPICAL))
     await page.locator("#join-field").screenshot({
       path: join(out, `${ds}-typical-${dist}-barcode.png`),
     });
-    if (dist === "reach")
+    if (dist === "mutual")
       await page.screenshot({
         path: join(out, `page-${ds}-typical-reach.png`),
         fullPage: true,
@@ -125,9 +125,9 @@ await set(page, {
   dataset: "chartaccent",
   ...BASE,
   neck: 0.6,
-  joinMeasure: "typical",
-  join: 0.8,
-  joinDistance: "plain",
+  reachMeasure: "typical",
+  reach: 0.8,
+  reachDistance: "plain",
 });
 await page.locator("#join-field").screenshot({
   path: join(out, `chartaccent-typical-0.8-barcode.png`),
@@ -137,8 +137,8 @@ await set(page, {
   dataset: "chartaccent",
   ...BASE,
   neck: 0.6,
-  join: 4,
-  joinDistance: "reach",
+  reach: 4,
+  reachDistance: "mutual",
 });
 await page.locator('#barcode .bar[data-set="0"][data-bar="0"]').hover();
 await page.screenshot({
@@ -151,9 +151,9 @@ await set(page, {
   dataset: "penguins",
   ...BASE,
   neck: 1,
-  joinMeasure: "typical",
-  join: 2.397,
-  joinDistance: "reach",
+  reachMeasure: "typical",
+  reach: 2.397,
+  reachDistance: "mutual",
 });
 await page.screenshot({ path: join(out, "page-dark.png"), fullPage: true });
 await page.locator(".panel").screenshot({ path: join(out, "panel-dark.png") });
@@ -163,9 +163,9 @@ await set(page, {
   dataset: "penguins",
   ...BASE,
   neck: 1,
-  joinMeasure: "typical",
-  join: 2.397,
-  joinDistance: "reach",
+  reachMeasure: "typical",
+  reach: 2.397,
+  reachDistance: "mutual",
 });
 await page.screenshot({ path: join(out, "page-phone.png"), fullPage: true });
 await page

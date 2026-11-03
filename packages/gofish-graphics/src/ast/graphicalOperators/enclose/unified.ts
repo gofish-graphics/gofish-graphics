@@ -2,17 +2,17 @@
  * PROTOTYPE (scratch, not for merge): one `Shape.blob` outline built on the
  * exact arcs closing (`arcs.ts`):
  *
- *   Shape.blob({ convexity, join, neck, holes, avoiding, clearance })
+ *   Shape.blob({ convexity, reach, neck, holes, avoiding, clearance })
  *   Shape.arcs({ radius, holes, avoiding, clearance })   (connected: false)
  *
  *  1. Links. Blob: the members' join tree (a minimum spanning tree over
  *     all pairs: on the padded gaps for "px", else on the centre distance
  *     or HDBSCAN's mutual reachability; joinTree), its edges kept where
- *     they have entered at `join`, each a tapered tube at its full neck
- *     width (joinLinks; join is discrete, no link grows in). The kept
+ *     they have entered at `reach`, each a tapered tube at its full neck
+ *     width (joinLinks; reach is discrete, no link grows in). The kept
  *     links split the members into pieces; each piece is filled on its
  *     own (steps 2 to 4) and kept a padding apart from the others
- *     (separate.ts). join = ∞ (default) is one piece, the full tree. Arcs
+ *     (separate.ts). reach = ∞ (default) is one piece, the full tree. Arcs
  *     (`connected: false`) joins only the members the closing disc cannot
  *     pass between (padded gap < 2 × radius), shortest gaps first (Kruskal),
  *     with a zero-width link between their nearest points: the no-cusp
@@ -34,10 +34,22 @@
 import { signedArea2, pointInRing, segDist } from "../../geometry/plane";
 import { convexHull, type BlobMember, type Pt } from "./blob";
 import { closingRings, keepIns, withArcsTolerance } from "./arcs";
-import { buildMeshBlend, meshBlendRings } from "./meshBlend";
-import { resample, smoothOutline, type SmoothSpec } from "./arcsSmooth";
-import { beyondHull, type Beyond } from "./beyond";
-import { forbiddenOne, nearPieces, spineBox, cutRegion } from "./separate";
+import {
+  buildMeshBlend,
+  meshBlendRings,
+  MESH_BLEND,
+  MESH_DRAFT,
+} from "./meshBlend";
+import { roundCut, smoothOutline, type SmoothSpec } from "./arcsSmooth";
+import { beyondHull, beyondEnds, minkowski, type Beyond } from "./beyond";
+import {
+  cutField,
+  cutRings,
+  nearPieces,
+  spineBox,
+  SEPARATE,
+  type CutField,
+} from "./separate";
 import { buildFiltration, type Filtration } from "./filtration";
 import {
   buildBlend,
@@ -66,6 +78,9 @@ export const UNIFIED_PROTOTYPE: {
   /** the per-bay blend's solver: P1 finite elements on a mesh (meshBlend.ts,
    *  default) or the earlier 1 px grid (localFill.ts), kept for comparison */
   blend?: "mesh" | "grid";
+  /** a coarser blend mesh (MESH_DRAFT) and spine (0.2 px arcs), for the
+   *  playground while a slider is dragged; the exact one when it is let go */
+  draft?: boolean;
 } = { search: "filtration" };
 
 /** PROTOTYPE: a small cache of per-member-set work (spine, hull, filtration),
@@ -111,26 +126,27 @@ export type UnifiedOptions = {
   /** false: the arcs shape (the exact closing at `radius`, links from the
    *  closing's reach, no smoothing by the playground). Default true: blob. */
   connected?: boolean;
-  /** PROTOTYPE (blob): where the join tree is cut, in `joinMeasure` (px:
-   *  the longest padded gap a link may cross); cut edges leave the members
-   *  in separate pieces, each filled on its own. Discrete: the outline
-   *  changes only where join crosses an edge's entry. Default ∞ (one piece,
-   *  the full tree). See joinLinks. */
-  join?: number;
-  /** PROTOTYPE: what `join` is measured in (not an API option yet); see
-   *  JoinMeasure. Default "px". With "pieces", join = k pieces kept, and
+  /** PROTOTYPE (blob): how far links reach: where the join tree is cut, in
+   *  `reachMeasure` (px: the longest padded gap a link may cross; typical:
+   *  this many times the usual spacing); cut edges leave the members in
+   *  separate pieces, each filled on its own. Discrete: the outline changes
+   *  only where reach crosses an edge's entry. Default ∞ (one piece, the
+   *  full tree). See joinLinks. */
+  reach?: number;
+  /** PROTOTYPE: what `reach` is measured in (not an API option yet); see
+   *  ReachMeasure. Default "px". With "pieces", reach = k pieces kept, and
    *  the default is 1 (one piece, the full spanning tree). */
-  joinMeasure?: JoinMeasure;
+  reachMeasure?: ReachMeasure;
   /** PROTOTYPE: the distance the join tree of the relative measures and
    *  "pieces" is built on (not "px", whose tree is on the padded gap): the
    *  centre distance ("plain", the Euclidean MST) or HDBSCAN's mutual
-   *  reachability ("reach", its MST over all pairs). Default "plain". See
+   *  reachability ("mutual", its MST over all pairs). Default "plain". See
    *  joinTree. */
-  joinDistance?: JoinDistance;
-  /** PROTOTYPE: "reach"'s k: the core distance is the centre distance to
+  reachDistance?: ReachDistance;
+  /** PROTOTYPE: "mutual"'s k: the core distance is the centre distance to
    *  the k-th nearest other member (HDBSCAN's min_samples = k + 1, which
-   *  counts the member itself). Default JOIN_CORE_K. */
-  joinCore?: number;
+   *  counts the member itself). Default REACH_CORE_K. */
+  reachCore?: number;
   holes?: boolean;
   avoiding?: BlobMember[];
   clearance?: number;
@@ -179,14 +195,14 @@ export type Means = "area" | "radius" | "blend";
  *    links (that do not touch) are cut, the rest kept; 1..(the pieces left
  *    when only touching members are joined).
  *  In all of these but "px", members whose padding touches stay one piece. */
-export type JoinMeasure = "px" | "share" | "typical" | "local" | "pieces";
+export type ReachMeasure = "px" | "share" | "typical" | "local" | "pieces";
 /** PROTOTYPE: the distance the join tree of "share", "typical", "local"
- *  and "pieces" is built on: "plain" the centre distance d, "reach" the
+ *  and "pieces" is built on: "plain" the centre distance d, "mutual" the
  *  mutual reachability max(core(a), core(b), d) (joinTree). */
-export type JoinDistance = "plain" | "reach";
-/** PROTOTYPE: the default k of the "reach" core distance (the k-th nearest
+export type ReachDistance = "plain" | "mutual";
+/** PROTOTYPE: the default k of the "mutual" core distance (the k-th nearest
  *  other member; HDBSCAN's min_samples = 5 counts the point itself). */
-export const JOIN_CORE_K = 4;
+export const REACH_CORE_K = 4;
 export type Seal = "jump" | "lake" | "lid";
 
 /** PROTOTYPE: the length s of the "radius" convexity, r = padding +
@@ -239,6 +255,8 @@ export const UNIFIED_STATS: {
   links?: number;
   areaTarget?: number;
   areaGot?: number;
+  /** the area after the cut, before its corners are rounded */
+  areaCut?: number;
   areaUnion?: number;
   areaHull?: number;
   /** PROTOTYPE (playground): the links the closing used, and the time of
@@ -523,19 +541,19 @@ export type JoinEdge = {
   overlap: boolean;
   /** the join value, in each measure, from which this edge is kept (for any join ≥ it;
    *  "pieces", which counts down: for any join < it); −∞: always kept */
-  enter: Record<JoinMeasure, number>;
+  enter: Record<ReachMeasure, number>;
   /** the two members it joins */
   i: number;
   j: number;
   /** its weight in the tree's distance: the padded gap ("px"), the centre distance
-   *  ("plain") or the mutual reachability ("reach") */
+   *  ("plain") or the mutual reachability ("mutual") */
   w: number;
   /** the padded members touch or overlap: kept at every join */
   floor: boolean;
 };
 
 /** PROTOTYPE: the depth of Zahn's neighbourhood ("local"). */
-export const JOIN_DEPTH = 2;
+export const REACH_DEPTH = 2;
 
 /** One tree edge before it is measured. */
 type TreeEdge = {
@@ -558,7 +576,7 @@ type Pair = TreeEdge;
 /** The join tree of a member set: what every join of one measure × distance cuts. */
 type JoinTree = {
   E: TreeEdge[];
-  enter: Record<JoinMeasure, number>[];
+  enter: Record<ReachMeasure, number>[];
   /** "typical"'s unit: the median w of the tree's edges (joinEntries) */
   D: number;
   /** every pair, by padded gap (the closing's merge order), for gap-tree links */
@@ -575,7 +593,7 @@ type JoinTree = {
  *    radius grows (two padded members g apart merge at r = g/2): single linkage on the gaps.
  *  - "plain": the centre distance d (between the members' core axes: the centres, for
  *    dots). The Euclidean MST: single linkage, as Zahn (1971) and Gower and Ross (1969).
- *  - "reach": HDBSCAN's mutual reachability (Campello, Moulavi and Sander 2013; McInnes,
+ *  - "mutual": HDBSCAN's mutual reachability (Campello, Moulavi and Sander 2013; McInnes,
  *    Healy and Astels, the hdbscan library), w = max(core(a), core(b), d), with core(m) the
  *    centre distance from m to its k-th nearest OTHER member. HDBSCAN counts the point itself
  *    among its min_samples nearest (Campello et al.: "the distance from x_p to its m_pts-
@@ -596,7 +614,7 @@ type JoinTree = {
  * so the floor changes no piece; it only makes the tree hold the touching edges, so cutting
  * the k − 1 longest of the rest gives exactly k pieces.
  *
- * Ties in w (common in "reach": every pair nearer than both cores has w = the larger core)
+ * Ties in w (common in "mutual": every pair nearer than both cores has w = the larger core)
  * are broken by the centre distance, then by index: among the edges that merge at one
  * distance the tree takes the nearest pair. The pieces at any join do not depend on it;
  * only the edges drawn do.
@@ -604,33 +622,39 @@ type JoinTree = {
 function joinTree(
   members: BlobMember[],
   pad: number,
-  measure: JoinMeasure,
-  distance: JoinDistance,
+  measure: ReachMeasure,
+  distance: ReachDistance,
   coreK: number
 ): JoinTree {
   const n = members.length;
-  const prims = members.map(coreOf);
   const ax = members.map(coreAxis);
-  const P: Pair[] = [];
-  for (let i = 0; i < n; i++)
-    for (let j = i + 1; j < n; j++) {
-      const gap = nearest(prims[i], prims[j])[2];
-      const [x, y] = segSeg(ax[i][0], ax[i][1], ax[j][0], ax[j][1]);
-      P.push({
-        i,
-        j,
-        g: gap - 2 * pad,
-        d: Math.hypot(x[0] - y[0], x[1] - y[1]),
-        w: 0,
-        overlap: gap <= 0,
-        a: x,
-        b: y,
-      });
-    }
+  // every pair's gap and axis do not depend on the padding: cached per
+  // member set, so a padding drag only re-sorts them
+  const P0 = memo(key("pairs", members), () => {
+    const prims = members.map(coreOf);
+    const out: Pair[] = [];
+    for (let i = 0; i < n; i++)
+      for (let j = i + 1; j < n; j++) {
+        const gap = nearest(prims[i], prims[j])[2];
+        const [x, y] = segSeg(ax[i][0], ax[i][1], ax[j][0], ax[j][1]);
+        out.push({
+          i,
+          j,
+          g: gap,
+          d: Math.hypot(x[0] - y[0], x[1] - y[1]),
+          w: 0,
+          overlap: gap <= 0,
+          a: x,
+          b: y,
+        });
+      }
+    return out;
+  });
+  const P: Pair[] = P0.map((p) => ({ ...p, g: p.g - 2 * pad }));
   const byGap = P.slice().sort((p, q) => p.g - q.g);
   const px = measure === "px";
   const core =
-    !px && distance === "reach" ? coreFromPairs(P, n, coreK) : undefined;
+    !px && distance === "mutual" ? coreFromPairs(P, n, coreK) : undefined;
   const W = (p: Pair) =>
     px ? p.g : core ? Math.max(core[p.i], core[p.j], p.d) : p.d;
   const order = px
@@ -679,13 +703,13 @@ export function coreDistances(members: BlobMember[], coreK: number): number[] {
 }
 
 /**
- * PROTOTYPE: where each tree edge enters, in each measure of `join` (JoinMeasure): it is
+ * PROTOTYPE: where each tree edge enters, in each measure of `join` (ReachMeasure): it is
  * kept for any join ≥ its entry ("pieces": any join < it). Every entry is a function of the
  * whole tree, computed once, so an edge's entry never moves when others are cut, and the set
  * of kept edges only grows with join. An edge of the touching floor (g ≤ 0) enters at −∞ in
  * every relative measure (in "px" at its gap, ≤ 0, so from join 0 up).
  *
- * The relative measures rank by w, which (for "plain" and "reach") scales with the chart: a
+ * The relative measures rank by w, which (for "plain" and "mutual") scales with the chart: a
  * chart resized by s moves the members' centres by s and keeps their sizes and the padding,
  * so d (and every core distance) scales by s and g does not. The floor is the one place they
  * depend on scale, on purpose: a chart shrunk until its members' paddings touch becomes one
@@ -702,7 +726,7 @@ export function coreDistances(members: BlobMember[], coreK: number): number[] {
  *    thins, edges leave the floor, so a median over the free edges alone changes which
  *    edges it counts as well as their lengths (joinsens: typical × reach keeps one
  *    cluster per set in 12 of 12 subsamples on penguins and ChartAccent with all edges,
- *    10 of 12 with the free ones). JOIN_PROTOTYPE.typical = "free" is the other.
+ *    10 of 12 with the free ones). REACH_PROTOTYPE.typical = "free" is the other.
  *  - "local" (Zahn 1971, "inconsistent edges"): for each side of the edge, the mean w of the
  *    tree edges within depth 2 of that endpoint, not crossing the edge. t = w / L with L the
  *    larger of the two side means (one side when the other has none; D when neither has).
@@ -714,7 +738,7 @@ export function coreDistances(members: BlobMember[], coreK: number): number[] {
 function joinEntries(
   E: TreeEdge[],
   n: number
-): { enter: Record<JoinMeasure, number>[]; D: number } {
+): { enter: Record<ReachMeasure, number>[]; D: number } {
   const median = (xs: number[]) => {
     const s = xs.slice().sort((a, b) => a - b);
     return s.length
@@ -725,7 +749,7 @@ function joinEntries(
   };
   const free = E.filter((e) => e.g > 0).map((e) => e.w);
   const Dall = median(E.map((e) => e.w));
-  const D0 = JOIN_PROTOTYPE.typical === "all" ? Dall : median(free);
+  const D0 = REACH_PROTOTYPE.typical === "all" ? Dall : median(free);
   const D = Number.isFinite(D0) && D0 > 0 ? D0 : Dall > 0 ? Dall : 1;
   const rank = new Map(
     E.map((_, k) => k)
@@ -743,12 +767,12 @@ function joinEntries(
     adj[e.i].push([e.j, k]);
     adj[e.j].push([e.i, k]);
   });
-  // the mean w within depth JOIN_DEPTH of `from`, not crossing edge `skip`
+  // the mean w within depth REACH_DEPTH of `from`, not crossing edge `skip`
   const sideMean = (from: number, skip: number): number => {
     let sum = 0,
       cnt = 0;
     const walk = (u: number, du: number, via: number) => {
-      if (du === JOIN_DEPTH) return;
+      if (du === REACH_DEPTH) return;
       for (const [v, k] of adj[u]) {
         if (k === skip || k === via) continue;
         sum += E[k].w;
@@ -789,7 +813,7 @@ function joinEntries(
 }
 
 /** PROTOTYPE: whether a tree edge entering at t is kept at `join`. */
-const keptAt = (measure: JoinMeasure, t: number, join: number) =>
+const keptAt = (measure: ReachMeasure, t: number, join: number) =>
   measure === "pieces" ? t > join : t <= join;
 
 /** PROTOTYPE (join): choices compared by the benches.
@@ -799,7 +823,7 @@ const keptAt = (measure: JoinMeasure, t: number, join: number) =>
  *    the piece. "gap": the gap spanning tree of the piece's own members (the closing's merge
  *    order, as "px" draws), so the join tree picks the pieces and the gap tree draws them;
  *    at join ∞ that is the earlier blob exactly. Same in "px", whose tree is the gap tree. */
-export const JOIN_PROTOTYPE: {
+export const REACH_PROTOTYPE: {
   typical: "free" | "all";
   links: "tree" | "gap";
 } = { typical: "all", links: "tree" };
@@ -808,7 +832,7 @@ export const JOIN_PROTOTYPE: {
  * The pieces and links for `join` (PROTOTYPE). The join tree (joinTree, cached per member
  * set, padding, measure and distance) cut where its edges have not entered (joinEntries):
  * the kept edges' components are the pieces. Each piece is drawn with links (see
- * JOIN_PROTOTYPE.links), each a tapered tube between the two members' cores whose padded
+ * REACH_PROTOTYPE.links), each a tapered tube between the two members' cores whose padded
  * half-width at each end is neck · (ρ + pad), ρ that member's core radius (as nearLinks
  * with `neck`); members that overlap need no link. join = ∞ keeps the whole tree in every
  * measure (pieces: join 1).
@@ -821,9 +845,9 @@ export function joinLinks(
   pad: number,
   join: number,
   neck: number,
-  measure: JoinMeasure = "px",
-  distance: JoinDistance = "plain",
-  coreK: number = JOIN_CORE_K
+  measure: ReachMeasure = "px",
+  distance: ReachDistance = "plain",
+  coreK: number = REACH_CORE_K
 ): {
   links: BlobMember[];
   /** each link's piece, and each piece's member indices */
@@ -841,8 +865,8 @@ export function joinLinks(
       members,
       pad,
       measure === "px" ? "px" : distance,
-      distance === "reach" && measure !== "px" ? coreK : 0,
-      JOIN_PROTOTYPE.typical
+      distance === "mutual" && measure !== "px" ? coreK : 0,
+      REACH_PROTOTYPE.typical
     ),
     () => joinTree(members, pad, measure, distance, coreK)
   );
@@ -877,7 +901,7 @@ export function joinLinks(
   }
   // the links: the kept tree edges, or each piece's own gap tree
   const drawn: TreeEdge[] = [];
-  if (JOIN_PROTOTYPE.links === "gap" && measure !== "px") {
+  if (REACH_PROTOTYPE.links === "gap" && measure !== "px") {
     const c = Array.from({ length: n }, (_, i) => i);
     const f = (i: number): number => (c[i] === i ? i : (c[i] = f(c[i])));
     let left = n - pieces.length;
@@ -1001,100 +1025,12 @@ export function keepOuts(avoiding: BlobMember[], clearance: number): Disc[] {
   return out;
 }
 
-/** Cut disc K out of the rings: a run inside K becomes the arc of K's circle
- *  that lies in the region; a disc wholly inside a ring becomes a hole. */
-function cutDisc(rings: Pt[][], K: Disc): Pt[][] {
-  const inK = (p: Pt) => Math.hypot(p[0] - K.c[0], p[1] - K.c[1]) < K.R;
-  const out: Pt[][] = [];
-  let touched = false;
-  for (const ring0 of rings) {
-    const ring = resample(ring0, 0.5);
-    const n = ring.length;
-    const ins = ring.map(inK);
-    if (!ins.some((x) => x)) {
-      out.push(ring0);
-      continue;
-    }
-    touched = true;
-    if (ins.every((x) => x)) continue; // the ring is inside K: gone
-    const first = ins.findIndex((x) => !x);
-    const res: Pt[] = [];
-    const ang = (p: Pt) => Math.atan2(p[1] - K.c[1], p[0] - K.c[0]);
-    const onK = (a: number): Pt => [
-      K.c[0] + K.R * Math.cos(a),
-      K.c[1] + K.R * Math.sin(a),
-    ];
-    let k = 0;
-    while (k < n) {
-      const i = (first + k) % n;
-      if (!ins[i]) {
-        res.push(ring[i]);
-        k++;
-        continue;
-      }
-      // a run inside K: from the last outside point to the next
-      const enter = res.at(-1)!;
-      let m = k;
-      while (m < n && ins[(first + m) % n]) m++;
-      const exit = ring[(first + m) % n];
-      const mid = ring[(first + Math.floor((k + m) / 2)) % n];
-      const a0 = ang(enter),
-        a1 = ang(exit);
-      // the arc whose middle is inside the ring (the region side) — two
-      // candidates, ccw and cw
-      let d = a1 - a0;
-      while (d <= 0) d += 2 * Math.PI;
-      const cands = [d, d - 2 * Math.PI];
-      const holeSide = (dd: number) => pointInRingAny(rings, onK(a0 + dd / 2));
-      void mid;
-      const dd = holeSide(cands[0]) ? cands[0] : cands[1];
-      const steps = Math.max(2, Math.ceil((Math.abs(dd) * K.R) / 0.5));
-      for (let s = 1; s < steps; s++) res.push(onK(a0 + (dd * s) / steps));
-      k = m;
-    }
-    out.push(res);
-  }
-  if (!touched) {
-    // K wholly inside the region (not touching its boundary): a hole
-    const inside = rings.some((r) => signedArea2(r) > 0 && pointInRing(K.c, r));
-    const inHole = rings.some((r) => signedArea2(r) < 0 && pointInRing(K.c, r));
-    if (inside && !inHole) {
-      const n = Math.max(16, Math.ceil((2 * Math.PI * K.R) / 0.5));
-      const hole: Pt[] = [];
-      for (let i = 0; i < n; i++) {
-        const a = (-2 * Math.PI * i) / n; // winds the other way
-        hole.push([K.c[0] + K.R * Math.cos(a), K.c[1] + K.R * Math.sin(a)]);
-      }
-      out.push(signedArea2(hole) < 0 ? hole : hole.reverse());
-    }
-  }
-  return out;
-}
-
 /** Whether p is inside the region (nonzero over all rings). */
 function pointInRingAny(rings: Pt[][], p: Pt): boolean {
   let w = 0;
   for (const r of rings)
     if (pointInRing(p, r)) w += signedArea2(r) > 0 ? 1 : -1;
   return w > 0;
-}
-
-/** How far the rings reach into the keep-outs (0 when clear). */
-export function intrusion(rings: Pt[][], K: Disc[]): number {
-  let worst = 0;
-  for (const k of K) {
-    // the region's points within k: the nearest ring point, if k's center
-    // is outside the region; if inside, the whole disc intrudes
-    let dmin = Infinity;
-    for (const r of rings)
-      for (let i = 0; i < r.length; i++) {
-        const [a, b] = [r[i], r[(i + 1) % r.length]];
-        dmin = Math.min(dmin, segDist(k.c[0], k.c[1], a[0], a[1], b[0], b[1]));
-      }
-    const inside = pointInRingAny(rings, k.c);
-    worst = Math.max(worst, inside ? k.R + dmin : Math.max(0, k.R - dmin));
-  }
-  return worst;
 }
 
 /**
@@ -1254,7 +1190,16 @@ export function unifiedOutline(
     const tLinks = performance.now();
     const f = fillOne(members, [], false, o, pad, holes, K, filt);
     const tClose = performance.now();
-    const rings = finish(f, o, pad, K);
+    const F = K.length
+      ? cutField(
+          closingRings(f.all, pad, pad, false),
+          boxOfRings(f.rings),
+          [],
+          0,
+          K
+        )
+      : null;
+    const rings = finish(f, o, pad, F);
     Object.assign(UNIFIED_STATS, {
       radius: f.r,
       iterations: f.iterations,
@@ -1271,11 +1216,11 @@ export function unifiedOutline(
   }
   // the pieces and their links (links bend around the keep-outs)
   const neck = o.neck ?? 1;
-  const measure = o.joinMeasure ?? "px";
+  const measure = o.reachMeasure ?? "px";
   // "pieces" counts down: its default, every link, is one piece
-  const join = Math.max(0, o.join ?? (measure === "pieces" ? 1 : Infinity));
-  const distance = o.joinDistance ?? "plain";
-  const coreK = o.joinCore ?? JOIN_CORE_K;
+  const join = Math.max(0, o.reach ?? (measure === "pieces" ? 1 : Infinity));
+  const distance = o.reachDistance ?? "plain";
+  const coreK = o.reachCore ?? REACH_CORE_K;
   const J = joinLinks(members, pad, join, neck, measure, distance, coreK);
   // PROTOTYPE: the per-piece cache. A piece's links, fill and outline depend on its members
   // (and, through the tree its links come from, the measure and distance), the padding, neck
@@ -1288,21 +1233,24 @@ export function unifiedOutline(
       members,
       pad,
       neck,
-      measure === "px" ? "px" : [distance, distance === "reach" ? coreK : 0],
-      JOIN_PROTOTYPE,
-      K
+      measure === "px" ? "px" : [distance, distance === "mutual" ? coreK : 0],
+      REACH_PROTOTYPE
     )
   );
+  // the keep-outs: a piece's spine depends on them only where a link bends
+  // around one, so the fill's caches are keyed by the spine itself
+  const kid = K.length ? intern(key(K)) : -1;
   const parts = J.pieces.map((idx, p) => {
     const pm = idx.map((i) => members[i]);
-    const pk = key("piece", ctx, J.pieceKeys[p]);
+    const pk0 = key("piece", ctx, J.pieceKeys[p]);
     const spineOf = () =>
       routeAround(
         J.links.filter((_, l) => J.linkPiece[l] === p),
         K,
         pad
       );
-    const spine = filt ? memo(key("spine", pk), spineOf) : spineOf();
+    const spine = filt ? memo(key("spine", pk0, kid), spineOf) : spineOf();
+    const pk = K.length ? key(pk0, intern(JSON.stringify(spine))) : pk0;
     return { pm, spine, pk };
   });
   const tLinks = performance.now();
@@ -1311,9 +1259,9 @@ export function unifiedOutline(
   const c = o.convexity ?? 0.5;
   const beyondOne = o.radius === undefined && c > 1;
   const sep = pad; // PROTOTYPE: the least gap kept between two pieces
-  let forbidden: (() => Pt[][])[] = parts.map(() => () => []);
+  let forbidden: (() => CutField | null)[] = parts.map(() => () => null);
   let fKeys = parts.map(() => "");
-  if (parts.length > 1) {
+  if (parts.length > 1 || K.length) {
     const spines = parts.map(({ pm, spine, pk }) =>
       memo(key("filledSpine", pk, pad), () =>
         closingRings([...pm, ...spine], pad, pad, false)
@@ -1327,7 +1275,7 @@ export function unifiedOutline(
           beyondOne
             ? beyondHull(
                 paddedHull([...pm, ...spine], pad),
-                pm,
+                [...pm, ...spine],
                 pad,
                 2,
                 o.beyond
@@ -1346,16 +1294,19 @@ export function unifiedOutline(
         pk,
         beyondOne,
         sep,
-        near[p].map((q) => J.pieceKeys[q])
+        near[p].map((q) => parts[q].pk),
+        kid,
+        SEPARATE
       )
     );
     forbidden = parts.map((_, p) => () => {
       const ts = performance.now();
-      const F = forbiddenOne(
+      const F = cutField(
         spines[p],
         boxes[p],
         near[p].map((q) => spines[q]),
-        sep
+        sep,
+        K
       );
       UNIFIED_STATS.msSeparate! += performance.now() - ts;
       return F;
@@ -1363,13 +1314,15 @@ export function unifiedOutline(
   }
   // each piece's outline: filled, kept out of the others' ground, cut from the keep-outs
   // and smoothed
+  // (smooth: undefined is the default blur and null none; JSON would spell
+  // both null)
   const optKey = key(
     o.convexity,
     o.radius,
     o.means,
     o.seal,
     o.beyond,
-    o.smooth,
+    o.smooth === undefined ? "blur" : o.smooth,
     holes,
     UNIFIED_PROTOTYPE
   );
@@ -1379,12 +1332,14 @@ export function unifiedOutline(
     const make = () => {
       const t1 = performance.now();
       const f = fillOne(pm, spine, true, o, pad, holes, K, filt, pk);
-      if (parts.length > 1) {
-        const F = filt ? memo(fKeys[p], forbidden[p]) : forbidden[p]();
-        f.rings = cutRegion(f.rings, F);
-      }
+      const F =
+        parts.length > 1 || K.length
+          ? filt
+            ? memo(fKeys[p], forbidden[p])
+            : forbidden[p]()
+          : null;
       const t2 = performance.now();
-      const rings = finish(f, o, pad, K);
+      const rings = finish(f, o, pad, F);
       msFill += t2 - t1;
       msFinish += performance.now() - t2;
       return { rings, r: f.r, iterations: f.iterations };
@@ -1426,6 +1381,9 @@ type Fill = {
   links: BlobMember[];
   r: number;
   iterations: number;
+  /** above convexity 1: the padded hull and the oval it blends toward
+   *  (finish draws the blend from the smoothed hull) */
+  beyond?: { Hc: Pt[]; E: Pt[]; s: number };
 };
 
 /** One piece's fill before the keep-out cut and the smoothing: its members,
@@ -1452,7 +1410,12 @@ function fillOne(
   };
   let iterations = 0;
   let r: number;
-  let res: { all: BlobMember[]; rings: Pt[][]; links: BlobMember[] };
+  let res: {
+    all: BlobMember[];
+    rings: Pt[][];
+    links: BlobMember[];
+    beyond?: Fill["beyond"];
+  };
   const means: Means = o.means ?? "area";
   const sealMode: Seal = o.seal ?? "jump";
   UNIFIED_STATS.means = means;
@@ -1562,10 +1525,15 @@ function fillOne(
     };
     if (c > 1) {
       r = Infinity;
+      const all = [...members, ...spine];
+      const ends = memo(key("beyondEnds", id, pad, o.beyond ?? null), () =>
+        beyondEnds(hullOf(), all, pad, o.beyond)
+      );
       res = {
-        all: [...members, ...spine],
-        rings: [beyondHull(hullOf(), members, pad, c, o.beyond)],
+        all,
+        rings: [beyondHull(hullOf(), all, pad, c, o.beyond)],
         links: spine,
+        ...(ends ? { beyond: { ...ends, s: Math.min(1, c - 1) } } : {}),
       };
     } else if (c >= 1) {
       r = Infinity;
@@ -1575,8 +1543,8 @@ function fillOne(
       res = spineRes();
     } else if (means === "blend") {
       r = NaN;
-      const sp = spineRes();
       if (UNIFIED_PROTOTYPE.blend === "grid") {
+        const sp = spineRes();
         const B = memo(key("blend", id, pad, holes), () =>
           buildBlend(sp.rings, hullOf())
         );
@@ -1586,16 +1554,25 @@ function fillOne(
       } else {
         // the mesh wants the spine's arcs to 0.05 px (the closing's own
         // sampling is 0.2 px)
-        const MB = memo(key("meshBlend", id, pad, holes), () =>
+        const draft = !!UNIFIED_PROTOTYPE.draft;
+        const MB = memo(key("meshBlend", id, pad, holes, draft), () =>
           buildMeshBlend(
-            withArcsTolerance(0.05, () =>
+            withArcsTolerance(draft ? 0.2 : 0.05, () =>
               closingRings([...members, ...linksAt(rMin)], pad, rMin, holes)
-            )
+            ),
+            draft ? MESH_DRAFT : MESH_BLEND
           )
         );
         UNIFIED_STATS.meshBlend = MB.stats;
         const tg = performance.now();
-        res = { ...sp, rings: meshBlendRings(MB, c, holes) };
+        // (the mesh holds its own spine: no closing at the default
+        // tolerance is needed here)
+        const links = linksAt(rMin);
+        res = {
+          all: [...members, ...links],
+          links,
+          rings: meshBlendRings(MB, c, holes),
+        };
         UNIFIED_STATS.msGrid! += performance.now() - tg;
       }
       iterations = 0;
@@ -1670,7 +1647,7 @@ function fillOne(
       r = Infinity;
       res = {
         all: [...members, ...spine],
-        rings: [beyondHull(hullOf(), members, pad, c, o.beyond)],
+        rings: [beyondHull(hullOf(), [...members, ...spine], pad, c, o.beyond)],
         links: spine,
       };
     } else {
@@ -1698,7 +1675,7 @@ function fillOne(
       r = Infinity;
       res = {
         all: [...members, ...spine],
-        rings: [beyondHull(hull, members, pad, c, o.beyond)],
+        rings: [beyondHull(hull, [...members, ...spine], pad, c, o.beyond)],
         links: spine,
       };
     } else if (c >= 1) {
@@ -1760,41 +1737,60 @@ function fillOne(
   return { ...res, r, iterations };
 }
 
-/** A piece's fill cut from the keep-outs and smoothed. */
-function finish(f: Fill, o: UnifiedOptions, pad: number, K: Disc[]): Pt[][] {
-  const res = f;
-  let rings = res.rings;
+/**
+ * A piece's fill smoothed, then cut once by its field `F` (separate.ts: the
+ * other pieces' ground and the keep-outs, never the piece's own spine). The
+ * cut comes after the smoothing, so the smoothing's outward offset (which
+ * holds every padded member again) never pushes the outline back across
+ * it, and a clipped side is the same curve at every convexity. The corners
+ * the cut leaves (where the outline meets a clipped side or a keep-out, and
+ * between two keep-outs) are rounded inward only (roundCut), so the
+ * rounding never crosses F either.
+ *
+ * Above convexity 1 the outline is (2 − c)·S ⊕ (c − 1)·oval, S the convex
+ * hull of the smoothed padded hull (the outline at convexity 1): no blur of
+ * its own, so convexity 2 is Shape.oval() exactly, the curvature jumps of
+ * the hull's sides never come back, and the area grows with c (a Minkowski
+ * blend of nested convex sets grows toward the larger).
+ */
+function finish(
+  f: Fill,
+  o: UnifiedOptions,
+  pad: number,
+  F: CutField | null
+): Pt[][] {
+  let rings = f.rings;
   UNIFIED_STATS.areaGot = ringsArea(rings);
-  const keep = keepIns(res.all, pad);
-  const cut = (rs: Pt[][], grow: number) =>
-    K.reduce((acc, k) => cutDisc(acc, { c: k.c, R: k.R + grow }), rs);
-  // PROTOTYPE: above convexity 1 the blur fades out, σ·(2 − c): the outline
-  // is (2 − c)·hull ⊕ (c − 1)·oval, whose curvature jumps (where the hull's
-  // straight sides meet its arcs) shrink to none at 2, so convexity 2 is
-  // Shape.oval() exactly.
-  const fade =
-    o.radius === undefined && (o.convexity ?? 0.5) > 1
-      ? Math.max(0, 2 - Math.min(2, o.convexity!))
-      : 1;
-  const spec0: SmoothSpec | null =
-    o.smooth === undefined ? { kind: "blur", sigma: 6 } : o.smooth;
+  const keep = keepIns(f.all, pad);
   const spec: SmoothSpec | null =
-    spec0 && "sigma" in spec0 && fade < 1
-      ? spec0.sigma * fade < 1e-6
-        ? null
-        : { ...spec0, sigma: spec0.sigma * fade }
-      : spec0;
-  if (spec === null) rings = cut(rings, 0);
-  else {
-    let grow = 0;
-    let out = rings;
-    for (let round = 0; round < 4; round++) {
-      out = smoothOutline(cut(rings, grow), keep, spec);
-      const into = K.length ? intrusion(out, K) : 0;
-      if (into < 0.05) break;
-      grow += into + 0.1;
-    }
-    rings = out;
+    o.smooth === undefined ? { kind: "blur", sigma: 6 } : o.smooth;
+  if (spec !== null && f.beyond) {
+    const { Hc, E, s } = f.beyond;
+    rings = [minkowski(smoothHull(Hc, keep, spec), 1 - s, E, s)];
+  } else if (spec !== null) rings = smoothOutline(rings, keep, spec);
+  if (F) {
+    const c = cutRings(F, rings);
+    UNIFIED_STATS.areaCut = ringsArea(c.rings);
+    rings = roundCut(c.rings, c.cut, keep, SEPARATE.round);
   }
   return rings;
+}
+
+/** PROTOTYPE: the convex hull of the smoothed padded hull, per hull ring
+ *  (the memoized hull: one object per piece) and smoothing. */
+const SMOOTH_HULL = new WeakMap<Pt[], Map<string, Pt[]>>();
+function smoothHull(
+  Hc: Pt[],
+  keep: ReturnType<typeof keepIns>,
+  spec: SmoothSpec
+): Pt[] {
+  let m = SMOOTH_HULL.get(Hc);
+  if (!m) SMOOTH_HULL.set(Hc, (m = new Map()));
+  const k = JSON.stringify(spec);
+  let S = m.get(k);
+  if (!S) {
+    S = convexHull(smoothOutline([Hc], keep, spec).flat());
+    m.set(k, S);
+  }
+  return S;
 }

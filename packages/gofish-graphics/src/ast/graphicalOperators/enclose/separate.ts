@@ -1,41 +1,52 @@
 /**
- * PROTOTYPE (scratch, not for merge): keeping the pieces of one `Shape.blob`
- * apart as convexity fills them (`join` below ∞ leaves several pieces).
+ * PROTOTYPE (scratch, not for merge): where one piece of a `Shape.blob` may
+ * be drawn: kept apart from the set's other pieces (`join` below ∞) and out
+ * of the keep-outs (`avoiding`, grown by `clearance`). One field per piece,
+ * on a grid over the box its fill stays in; the piece's smoothed outline is
+ * cut by it once, after the smoothing (unified.ts, finish), so neither the
+ * smoothing nor its outward offset ever moves an outline back across it.
  *
- * Each piece i fills toward its own padded hull, so two pieces' fills can
- * meet. The rule: piece i may only fill where it is nearer than every other
- * piece by at least s,
+ * Allowed for piece i: its own filled spine (always: the members win over
+ * every other rule), or a point that is
  *
- *     allowed_i = { x : d_i(x) ≤ max(0, d_¬i(x) − s) },
+ *   - nearer piece i than the others by at least s, smoothly: G(x) ≤ −s,
+ *     G the Gaussian blur (SEPARATE.sigma px) of g = d_i − d_¬i (d_i the
+ *     distance to piece i's spine, 0 inside it; d_¬i to the nearest other
+ *     piece's). The blur takes the bumps out of the bisector between two
+ *     rows of discs, so a clipped side is a clean curve at every convexity
+ *     (convexity 2 has no outline blur of its own to hide them);
+ *   - at least s from every other piece (d_¬i ≥ s);
+ *   - outside every keep-out disc.
  *
- * d_i the distance to piece i's spine (0 inside it), d_¬i the distance to
- * the nearest other piece's spine. Its own spine is always allowed
- * (d_i = 0), so the fill still holds every member. d_i − d_j is 2-Lipschitz,
- * so a point of allowed_i (d_i − d_j ≤ −s) and one of allowed_j (≥ s) are at
- * least s apart: two fills stay s apart, or as far apart as their spines are
- * where those are already nearer. allowed_i does not depend on convexity, so
- * a clipped fill still grows with convexity.
+ * Two pieces' regions stay s apart (or as near as their spines already
+ * are): d_i − d_j is 2-Lipschitz, so is its blur, and g_i ≥ d_i − d_j, so
+ * a point with G_i ≤ −s and one with G_j ≤ −s are s apart; a point of
+ * piece j's region is s from piece i's spine by the second rule. Neither
+ * rule depends on convexity, so a clipped fill still grows with it.
  *
- * The forbidden region's boundary is the zero level of
- * f = d_i − max(0, d_¬i − s), traced by marching squares on a grid of step h
- * over the box the piece can fill (its hull, or its oval above convexity 1).
- * f is evaluated exactly (nearest spine segment) at the grid's nodes, but
- * only in the coarse cells the level can cross (f is 2-Lipschitz, so a
- * coarse cell whose corners all have |f| > √2·H keeps its sign).
+ * As one field, negative where allowed:
  *
- * `sigma` > 0 smooths the level set (Gaussian along arclength). Off by
- * default: between two bumpy spines (rows of discs) the level is bumpy, and
- * above convexity 1 the outline's own blur fades out (to land on the oval at
- * 2), so near 2 a clipped side shows the bumps. But the smoothed level bites
- * into a spine where two pieces are nearer than s, and the piece's uniform
- * outward push then grows the whole piece, so area stops growing with join
- * (U: −606 px² at join 4, c 0). TODO(prototype): smooth the level without
- * crossing the spine.
+ *   Ψ = smin(sd_i, max(G + s, s − d_¬i, k)),
+ *
+ * smin a smooth min of width SEPARATE.fillet (a fillet where the spine
+ * sticks out past the rest, at most fillet/4 px past either; there the gap
+ * kept may close by as much),
+ * sd_i the signed distance to piece i's spine, k = max over the keep-out
+ * discs of (R − distance to the centre). Ψ is 2-Lipschitz.
+ *
+ * The cut outline is the zero level of max(sd_R, Ψ), sd_R the signed
+ * distance to the outline, traced by marching squares on a grid of step h
+ * (1 px) (cutRings): one field, so the cut has no crossings and grows with
+ * the outline. Fields are evaluated exactly only near that level: blocks of
+ * the grid are refined by halves (a quadtree) where it can cross; Ψ once
+ * per node and kept with the piece (a convexity change reuses it); g only
+ * where its blur can come near −s (within CL of it; elsewhere a clamped
+ * value of the right sign, which the blur, truncated at 3σ, never carries
+ * to the level).
  */
 import type { Pt } from "./blob";
-import { SegGrid } from "./meshBlend";
+import { SegGrid, Inside, segsOf } from "./meshBlend";
 import { signedArea2, pointInRing } from "../../geometry/plane";
-import { resample, blur } from "./arcsSmooth";
 
 type Box = [number, number, number, number];
 
@@ -51,107 +62,20 @@ const boxOf = (rings: Pt[][]): Box => {
   return [xa, ya, xb, yb];
 };
 
-/** Segments of rings as the flat array SegGrid takes. */
-const segsOf = (rings: Pt[][]): Float64Array => {
-  let n = 0;
-  for (const r of rings) n += r.length;
-  const S = new Float64Array(4 * n);
-  let k = 0;
-  for (const r of rings)
-    for (let i = 0; i < r.length; i++) {
-      const a = r[i],
-        b = r[(i + 1) % r.length];
-      S[k++] = a[0];
-      S[k++] = a[1];
-      S[k++] = b[0];
-      S[k++] = b[1];
-    }
-  return S;
-};
-
-/** Nonzero winding of a point over rings, by edges bucketed into rows. */
-class Inside {
-  y0: number;
-  h: number;
-  rows: number[][];
-  S: Float64Array;
-  constructor(S: Float64Array, h = 2) {
-    this.S = S;
-    const n = S.length / 4;
-    let ya = Infinity,
-      yb = -Infinity;
-    for (let s = 0; s < n; s++) {
-      ya = Math.min(ya, S[4 * s + 1], S[4 * s + 3]);
-      yb = Math.max(yb, S[4 * s + 1], S[4 * s + 3]);
-    }
-    if (!n) [ya, yb] = [0, 1];
-    this.y0 = ya;
-    this.h = h;
-    this.rows = Array.from(
-      { length: Math.ceil((yb - ya) / h) + 1 },
-      () => [] as number[]
-    );
-    for (let s = 0; s < n; s++) {
-      const lo = Math.min(S[4 * s + 1], S[4 * s + 3]),
-        hi = Math.max(S[4 * s + 1], S[4 * s + 3]);
-      for (
-        let j = Math.floor((lo - ya) / h);
-        j <= Math.floor((hi - ya) / h);
-        j++
-      )
-        this.rows[j].push(s);
-    }
-  }
-  has(x: number, y: number): boolean {
-    const j = Math.floor((y - this.y0) / this.h);
-    if (j < 0 || j >= this.rows.length) return false;
-    const S = this.S;
-    let w = 0;
-    for (const s of this.rows[j]) {
-      const ay = S[4 * s + 1],
-        by = S[4 * s + 3];
-      if (ay <= y !== by <= y) {
-        const ax = S[4 * s],
-          bx = S[4 * s + 2];
-        if (ax + ((y - ay) * (bx - ax)) / (by - ay) > x) w += by > ay ? 1 : -1;
-      }
-    }
-    return w !== 0;
-  }
-}
+/** PROTOTYPE: the field's knobs. sigma: the blur of g, px (the bisector's
+ *  smoothing); h: the grid step, px; round: the width, px, of the rounding
+ *  of the convex corners the cut leaves (arcsSmooth.ts, roundCut); fillet:
+ *  the width k, px, of the smooth union of the spine with the rest, which
+ *  fills the concave corners where a spine sticks out past a clipped side
+ *  (they cannot be rounded inward), reaching at most k/4 past either. */
+export const SEPARATE = { sigma: 4, h: 1, round: 3, fillet: 6 };
 
 export const SEPARATE_STATS: { ms?: number; evals?: number; nodes?: number } =
   {};
 
-/**
- * The forbidden region of each piece, as rings (even-odd), within the box
- * each piece can fill. `spines[i]`: piece i's filled spine rings (outer
- * rings, winding positive); `boxes[i]`: the box its fill stays in.
- */
-export function forbiddenRegions(
-  spines: Pt[][][],
-  boxes: Box[],
-  s: number,
-  h = 1,
-  sigma = 0
-): Pt[][][] {
-  const t0 = performance.now();
-  SEPARATE_STATS.evals = 0;
-  SEPARATE_STATS.nodes = 0;
-  const sb = spines.map(boxOf);
-  const out = spines.map((sp, i) =>
-    forbiddenOne(
-      sp,
-      boxes[i],
-      nearPieces(i, sb, boxes[i], s).map((j) => spines[j]),
-      s,
-      h,
-      sigma
-    )
-  );
-  SEPARATE_STATS.ms = performance.now() - t0;
-  return out;
-}
+/** A keep-out: a disc the outline stays out of (an avoided member grown by
+ *  the clearance). */
+export type KeepDisc = { c: Pt; R: number };
 
 /** A spine's box (for nearPieces). */
 export const spineBox = (rings: Pt[][]): Box => boxOf(rings);
@@ -182,104 +106,286 @@ export function nearPieces(
   return near;
 }
 
-/** One piece's forbidden region (forbiddenRegions): `spine` its filled spine
- *  rings, `box` the box its fill stays in, `near` the spines of the pieces
- *  nearPieces finds, in piece order. A function of these alone, so it is
- *  cached per piece and its neighbours. */
-export function forbiddenOne(
+/** Keep-out discs bucketed on a grid: k(x) = max over discs of
+ *  (R − |x − c|), or −cap when no disc comes within cap. */
+class DiscGrid {
+  x0: number;
+  y0: number;
+  cell: number;
+  nx: number;
+  ny: number;
+  start: Int32Array;
+  items: Int32Array;
+  D: Float64Array;
+  rmax: number;
+  constructor(K: KeepDisc[], cell = 8) {
+    const n = K.length;
+    this.D = new Float64Array(3 * n);
+    let [xa, ya, xb, yb] = [Infinity, Infinity, -Infinity, -Infinity];
+    this.rmax = 0;
+    K.forEach((k, i) => {
+      this.D[3 * i] = k.c[0];
+      this.D[3 * i + 1] = k.c[1];
+      this.D[3 * i + 2] = k.R;
+      xa = Math.min(xa, k.c[0]);
+      xb = Math.max(xb, k.c[0]);
+      ya = Math.min(ya, k.c[1]);
+      yb = Math.max(yb, k.c[1]);
+      this.rmax = Math.max(this.rmax, k.R);
+    });
+    this.cell = cell;
+    this.x0 = xa;
+    this.y0 = ya;
+    this.nx = Math.floor((xb - xa) / cell) + 1;
+    this.ny = Math.floor((yb - ya) / cell) + 1;
+    const cellOf = (i: number) =>
+      Math.floor((this.D[3 * i + 1] - ya) / cell) * this.nx +
+      Math.floor((this.D[3 * i] - xa) / cell);
+    const count = new Int32Array(this.nx * this.ny + 1);
+    for (let i = 0; i < n; i++) count[cellOf(i) + 1]++;
+    for (let c = 0; c < this.nx * this.ny; c++) count[c + 1] += count[c];
+    this.start = count;
+    this.items = new Int32Array(n);
+    const fill = count.slice();
+    for (let i = 0; i < n; i++) this.items[fill[cellOf(i)]++] = i;
+  }
+  k(x: number, y: number, cap: number): number {
+    const { x0, y0, cell, nx, ny, start, items, D } = this;
+    const reach = this.rmax + cap;
+    const i0 = Math.max(0, Math.floor((x - reach - x0) / cell)),
+      i1 = Math.min(nx - 1, Math.floor((x + reach - x0) / cell)),
+      j0 = Math.max(0, Math.floor((y - reach - y0) / cell)),
+      j1 = Math.min(ny - 1, Math.floor((y + reach - y0) / cell));
+    let best = -cap;
+    for (let j = j0; j <= j1; j++)
+      for (let i = i0; i <= i1; i++) {
+        const c = j * nx + i;
+        for (let q = start[c]; q < start[c + 1]; q++) {
+          const s = items[q];
+          const v = D[3 * s + 2] - Math.hypot(x - D[3 * s], y - D[3 * s + 1]);
+          if (v > best) best = v;
+        }
+      }
+    return best;
+  }
+}
+
+/** One piece's allowed ground (see the top of the file) on its grid, with
+ *  what the cut evaluates lazily and keeps between calls: Ψ at each node
+ *  once asked (it does not depend on the outline being cut, so a convexity
+ *  drag reuses it). */
+export type CutField = {
+  x0: number;
+  y0: number;
+  nx: number;
+  ny: number;
+  W: number;
+  h: number;
+  /** Ψ at the nodes asked so far (NaN: not yet) */
+  PSI: Float64Array;
+  psi: (q: number) => number;
+  stats: { ms: number; evals: number };
+};
+
+/** Values past this are only kept as signs (the quadtree's blocks are at
+ *  most B = 8 steps, so a sign is sure past √2·8·h). */
+const B = 8;
+const SURE = Math.SQRT2 * B + 4;
+
+/** Refine blocks of B steps by halves where `at` can change sign (it is
+ *  2-Lipschitz; a block whose corners all have one sign and |value| >
+ *  margin + √2 · its side keeps that sign, and |value| > margin), then fill
+ *  the sure blocks (after: their nodes may be shared with blocks that need
+ *  them exactly). */
+function quad(
+  at: (q: number) => number,
+  A: Float64Array,
+  W: number,
+  nx: number,
+  ny: number,
+  h: number,
+  margin: number,
+  value: (sign: number) => number
+) {
+  const later: number[] = [];
+  const refine = (i0: number, j0: number, n: number) => {
+    const q = j0 * W + i0;
+    const a = at(q),
+      b = at(q + n),
+      c = at(q + n * W),
+      d = at(q + n * W + n);
+    if (
+      Math.min(Math.abs(a), Math.abs(b), Math.abs(c), Math.abs(d)) >
+        margin + Math.SQRT2 * n * h &&
+      Math.sign(a) === Math.sign(b) &&
+      Math.sign(b) === Math.sign(c) &&
+      Math.sign(c) === Math.sign(d)
+    ) {
+      later.push(q, n, Math.sign(a));
+      return;
+    }
+    if (n === 1) return;
+    const k = n >> 1;
+    refine(i0, j0, k);
+    refine(i0 + k, j0, k);
+    refine(i0, j0 + k, k);
+    refine(i0 + k, j0 + k, k);
+  };
+  for (let j = 0; j < ny; j += B)
+    for (let i = 0; i < nx; i += B) refine(i, j, B);
+  for (let k = 0; k < later.length; k += 3) {
+    const [q0, n, sg] = [later[k], later[k + 1], later[k + 2]];
+    const v = value(sg);
+    for (let j = 0; j <= n; j++)
+      for (let i = 0; i <= n; i++) {
+        const q = q0 + j * W + i;
+        if (Number.isNaN(A[q])) A[q] = v;
+      }
+  }
+}
+
+/**
+ * One piece's allowed ground (see the top of the file), on a grid over the
+ * box its fill stays in. `spine`: its filled spine rings (outer rings
+ * winding positive); `near`: the spines of the pieces nearPieces finds, in
+ * piece order; `s`: the gap kept between pieces; `keep`: the keep-out
+ * discs. A function of these alone, so it is cached per piece, its
+ * neighbours and the keep-outs. null when nothing is near and no keep-out
+ * reaches the box: nothing to cut.
+ */
+export function cutField(
   spine: Pt[][],
   box: Box,
   near: Pt[][][],
   s: number,
-  h = 1,
-  sigma = 0
-): Pt[][] {
-  if (!near.length) return [];
-  {
-    const [bx0, by0, bx1, by1] = box;
-    const S0 = segsOf(spine);
-    const me = { grid: new SegGrid(S0, 4), inside: new Inside(S0) };
-    const others = near.flat();
-    const S = segsOf(others);
-    const og = new SegGrid(S, 4),
-      oin = new Inside(S);
-
-    // f exactly where |f| < SURE; elsewhere a value of the right sign with
-    // |f| ≥ SURE (the searches stop early), enough for the refinement below
-    // and for the level set (f is 2-Lipschitz, so no crossing within a step
-    // of such a node)
-    const SURE = 24;
-    const f = (x: number, y: number) => {
-      SEPARATE_STATS.evals!++;
-      const di = me.inside.has(x, y) ? 0 : me.grid.nearest(x, y)[0];
-      const dj = oin.has(x, y) ? 0 : capped(og, x, y, di + s + SURE);
-      if (dj >= di + s + SURE) return -SURE;
-      return di - Math.max(0, dj - s);
-    };
-    // the grid: step h, the box grown by 2 steps and the smoothing's reach
-    // (so the smoothing's rounding of a loop where it is closed along the
-    // border stays off the fill), the border forced allowed
-    const m = Math.ceil(2 + (3 * sigma) / h);
-    const x0 = bx0 - m * h,
-      y0 = by0 - m * h;
-    // blocks of K steps, refined by halves (a quadtree) where the level can
-    // cross: a block whose corners all have one sign and |f| > √2 · its side
-    // keeps that sign inside (every point is within side/√2 of a corner)
-    const K = 8;
-    const nx = K * Math.ceil((Math.ceil((bx1 - bx0) / h) + 2 * m) / K),
-      ny = K * Math.ceil((Math.ceil((by1 - by0) / h) + 2 * m) / K);
-    const W = nx + 1;
-    SEPARATE_STATS.nodes! += W * (ny + 1);
-    const V = new Float64Array(W * (ny + 1)).fill(NaN);
-    const at = (ii: number, j: number) => {
-      const q = j * W + ii;
-      if (Number.isNaN(V[q])) V[q] = f(x0 + ii * h, y0 + j * h);
-      return V[q];
-    };
-    // the blocks found sure, filled after (their nodes may be shared with
-    // blocks that need them exactly)
-    const sure: number[] = [];
-    const refine = (i0: number, j0: number, n: number) => {
-      const a = at(i0, j0),
-        b = at(i0 + n, j0),
-        c = at(i0, j0 + n),
-        d = at(i0 + n, j0 + n);
-      if (
-        Math.min(Math.abs(a), Math.abs(b), Math.abs(c), Math.abs(d)) >
-          Math.SQRT2 * n * h &&
-        Math.sign(a) === Math.sign(b) &&
-        Math.sign(b) === Math.sign(c) &&
-        Math.sign(c) === Math.sign(d)
-      ) {
-        sure.push(i0, j0, n, a > 0 ? 1 : -1);
-        return;
+  keep: KeepDisc[]
+): CutField | null {
+  const t0 = performance.now();
+  const h = SEPARATE.h;
+  const [bx0, by0, bx1, by1] = box;
+  const K = keep.filter(
+    (k) =>
+      k.c[0] + k.R >= bx0 &&
+      k.c[0] - k.R <= bx1 &&
+      k.c[1] + k.R >= by0 &&
+      k.c[1] - k.R <= by1
+  );
+  if (!near.length && !K.length) return null;
+  const stats = { ms: 0, evals: 0 };
+  const S0 = segsOf(spine);
+  const meG = new SegGrid(S0, 4),
+    meIn = new Inside(S0);
+  const S1 = near.length ? segsOf(near.flat()) : new Float64Array(0);
+  const og = near.length ? new SegGrid(S1, 4) : null,
+    oin = near.length ? new Inside(S1) : null;
+  const dg = K.length ? new DiscGrid(K) : null;
+  // the grid: step h over the box grown by the blur's reach twice and 8
+  // steps (the smoothed outline's offset stays well inside that)
+  const sig = near.length ? SEPARATE.sigma / h : 0;
+  const J = Math.ceil(3 * sig);
+  const m = 8 + 2 * J;
+  const x0 = bx0 - m * h,
+    y0 = by0 - m * h;
+  const nx = B * Math.ceil((Math.ceil((bx1 - bx0) / h) + 2 * m) / B),
+    ny = B * Math.ceil((Math.ceil((by1 - by0) / h) + 2 * m) / B);
+  const W = nx + 1,
+    N = W * (ny + 1);
+  const X = (q: number) => x0 + (q % W) * h,
+    Y = (q: number) => y0 + Math.floor(q / W) * h;
+  // d_i (unsigned), where computed, for reuse
+  const DI = new Float64Array(N).fill(NaN);
+  const di = (q: number) => {
+    if (Number.isNaN(DI[q])) {
+      const x = X(q),
+        y = Y(q);
+      DI[q] = meIn.has(x, y) ? 0 : meG.nearest(x, y)[0];
+    }
+    return DI[q];
+  };
+  // g + s, with g = d_i − d_¬i, exact where its blur can reach the level;
+  // clamped to ±CL elsewhere (the blur reaches 3σ, over which g moves by
+  // 6σ), then blurred
+  let Gb: Float64Array | null = null;
+  if (og && oin) {
+    const CL = 6 * sig * h + 4;
+    const g = new Float64Array(N).fill(NaN);
+    const gAt = (q: number) => {
+      if (Number.isNaN(g[q])) {
+        stats.evals++;
+        const a = di(q);
+        const x = X(q),
+          y = Y(q);
+        const dj = oin.has(x, y) ? 0 : capped(og, x, y, a + s + CL + SURE);
+        g[q] = a - dj + s;
       }
-      if (n === 1) return;
-      const k = n >> 1;
-      refine(i0, j0, k);
-      refine(i0 + k, j0, k);
-      refine(i0, j0 + k, k);
-      refine(i0 + k, j0 + k, k);
+      return g[q];
     };
-    for (let j = 0; j < ny; j += K)
-      for (let ii = 0; ii < nx; ii += K) refine(ii, j, K);
-    for (let q = 0; q < sure.length; q += 4) {
-      const [i0, j0, n, sg] = [sure[q], sure[q + 1], sure[q + 2], sure[q + 3]];
-      for (let j = j0; j <= j0 + n; j++)
-        for (let ii = i0; ii <= i0 + n; ii++)
-          if (Number.isNaN(V[j * W + ii])) V[j * W + ii] = sg * 1e9;
+    quad(gAt, g, W, nx, ny, h, CL, (sg) => sg * CL);
+    for (let q = 0; q < N; q++) g[q] = Math.max(-CL, Math.min(CL, g[q]));
+    const w: number[] = [];
+    let z = 0;
+    for (let k = -J; k <= J; k++) {
+      const v = Math.exp(-(k * k) / (2 * sig * sig));
+      w.push(v);
+      z += v;
     }
-    for (let ii = 0; ii <= nx; ii++) {
-      V[ii] = -1;
-      V[ny * W + ii] = -1;
-    }
+    for (let k = 0; k < w.length; k++) w[k] /= z;
+    const tmp = new Float64Array(N);
     for (let j = 0; j <= ny; j++) {
-      V[j * W] = -1;
-      V[j * W + nx] = -1;
+      const r = j * W;
+      for (let i = 0; i <= nx; i++) {
+        let acc = 0;
+        for (let k = -J; k <= J; k++) {
+          const ii = i + k < 0 ? 0 : i + k > nx ? nx : i + k;
+          acc += w[k + J] * g[r + ii];
+        }
+        tmp[r + i] = acc;
+      }
     }
-    const loops = march(V, nx, ny, x0, y0, h);
-    return sigma > 0 ? blur(loops, [], sigma) : loops;
+    Gb = new Float64Array(N);
+    for (let j = 0; j <= ny; j++)
+      for (let i = 0; i <= nx; i++) {
+        let acc = 0;
+        for (let k = -J; k <= J; k++) {
+          const jj = j + k < 0 ? 0 : j + k > ny ? ny : j + k;
+          acc += w[k + J] * tmp[jj * W + i];
+        }
+        Gb[j * W + i] = acc;
+      }
   }
+  // Ψ = smin(sd_i, max(G + s, s − d_¬i, k)), capped to ±SURE
+  const PSI = new Float64Array(N).fill(NaN);
+  const psi = (q: number) => {
+    if (!Number.isNaN(PSI[q])) return PSI[q];
+    stats.evals++;
+    const x = X(q),
+      y = Y(q);
+    let sd: number;
+    if (meIn.has(x, y)) sd = -capped(meG, x, y, SURE);
+    else
+      sd = Math.min(
+        SURE,
+        Number.isNaN(DI[q]) ? capped(meG, x, y, SURE) : DI[q]
+      );
+    let v = sd;
+    if (sd > -SURE) {
+      let rest = -SURE;
+      if (Gb) rest = Math.max(rest, Gb[q]);
+      if (og && oin) {
+        const dj = oin.has(x, y) ? 0 : capped(og, x, y, s + SURE);
+        rest = Math.max(rest, s - dj);
+      }
+      if (dg) rest = Math.max(rest, dg.k(x, y, SURE));
+      // the quadratic smooth min (Quílez): min(a, b) − k/4 · u², u =
+      // max(0, 1 − |a − b|/k); 2-Lipschitz as both are
+      const k = SEPARATE.fillet;
+      const u = k > 0 ? Math.max(0, 1 - Math.abs(sd - rest) / k) : 0;
+      v = Math.min(sd, rest) - (k / 4) * u * u;
+    }
+    return (PSI[q] = Math.max(-SURE, Math.min(SURE, v)));
+  };
+  stats.ms = performance.now() - t0;
+  return { x0, y0, nx, ny, W, h, PSI, psi, stats };
 }
 
 /** The distance from (x, y) to the grid's nearest segment, or `cap` when
@@ -327,7 +433,8 @@ function capped(G: SegGrid, x: number, y: number, cap: number): number {
   return Math.min(cap, Math.sqrt(best));
 }
 
-/** Marching squares: the closed loops of {V > 0} (the border is ≤ 0). */
+/** Marching squares: the closed loops of {V > 0} (the border is ≤ 0), and
+ *  each point's grid edge (2 (j W + i), + 1 for a vertical edge). */
 function march(
   V: Float64Array,
   nx: number,
@@ -335,7 +442,7 @@ function march(
   x0: number,
   y0: number,
   h: number
-): Pt[][] {
+): { loops: Pt[][]; ids: number[][] } {
   const W = nx + 1;
   // edge ids: horizontal (i, j)-(i+1, j) is 2 (j W + i); vertical
   // (i, j)-(i, j+1) is 2 (j W + i) + 1
@@ -415,179 +522,107 @@ function march(
     }
   const seen = new Set<number>();
   const loops: Pt[][] = [];
+  const ids: number[][] = [];
   for (const e0 of adj.keys()) {
     if (seen.has(e0)) continue;
     const loop: Pt[] = [];
+    const id: number[] = [];
     let prev = -1,
       e = e0;
     for (let guard = 0; guard < 1e7; guard++) {
       seen.add(e);
       loop.push(pos.get(e)!);
+      id.push(e);
       const nb = adj.get(e)!;
       const nxt = nb[0] !== prev ? nb[0] : nb[1];
       prev = e;
       e = nxt;
       if (e === e0 || e === undefined || seen.has(e)) break;
     }
-    if (loop.length >= 3) loops.push(loop);
+    if (loop.length >= 3) {
+      loops.push(loop);
+      ids.push(id);
+    }
   }
-  return loops;
+  return { loops, ids };
 }
 
-// ── cutting a region out of rings ───────────────────────────────────────────
-
-const inEvenOdd = (F: Pt[][], boxes: Box[], p: Pt) => {
-  let c = false;
-  for (let k = 0; k < F.length; k++) {
-    const b = boxes[k];
-    if (p[0] < b[0] || p[0] > b[2] || p[1] < b[1] || p[1] > b[3]) continue;
-    if (pointInRing(p, F[k])) c = !c;
-  }
-  return c;
-};
-
-const inNonzero = (rings: Pt[][], p: Pt) => {
-  let w = 0;
-  for (const r of rings)
-    if (pointInRing(p, r)) w += signedArea2(r) > 0 ? 1 : -1;
-  return w > 0;
-};
-
-/** Where segment pq crosses ring F: [t on pq, edge index of F, point]. */
-function crossing(p: Pt, q: Pt, F: Pt[]): [number, number, Pt] | null {
-  let best: [number, number, Pt] | null = null;
-  const ex = q[0] - p[0],
-    ey = q[1] - p[1];
-  for (let i = 0; i < F.length; i++) {
-    const a = F[i],
-      b = F[(i + 1) % F.length];
-    const fx = b[0] - a[0],
-      fy = b[1] - a[1];
-    const den = ex * fy - ey * fx;
-    if (Math.abs(den) < 1e-15) continue;
-    const t = ((a[0] - p[0]) * fy - (a[1] - p[1]) * fx) / den;
-    const u = ((a[0] - p[0]) * ey - (a[1] - p[1]) * ex) / den;
-    if (t < -1e-9 || t > 1 + 1e-9 || u < -1e-9 || u > 1 + 1e-9) continue;
-    if (!best || Math.abs(t - 0.5) < Math.abs(best[0] - 0.5))
-      best = [t, i, [p[0] + t * ex, p[1] + t * ey]];
-  }
-  return best;
-}
-
-export const CUT_STATS: { skipped: number } = { skipped: 0 };
+// ── cutting the rings by the field ─────────────────────────────────────────
 
 /**
- * The rings less the region F (even-odd rings): a run of a ring inside F
- * becomes the run of F's boundary between where it enters and leaves, the
- * way that lies inside the rings (as cutDisc does with a disc). A loop of F
- * wholly inside the rings becomes a hole.
+ * The rings less what the field forbids: the zero level of max(sd_R, Ψ),
+ * sd_R the signed distance to the rings (negative inside, nonzero
+ * winding), traced by marching squares on the field's grid, outer loops
+ * winding positive and holes the other way. One field, so the result has
+ * no crossings whatever the rings and the forbidden ground do (a keep-out
+ * wholly inside becomes a hole, parts of the outline fenced off by
+ * keep-outs stay parts), and it is monotone in the rings: a larger outline
+ * cuts to a larger one. Each point is marked where Ψ binds (it lies on a
+ * clipped side or a keep-out) for roundCut. Where the outline is not cut it
+ * is its own distance field's zero level, off it by marching squares'
+ * error (≲ 0.03 px on the smoothed outlines; up to ~h/2 at a sharp corner).
  */
-export function cutRegion(rings: Pt[][], F: Pt[][]): Pt[][] {
-  if (!F.length) return rings;
-  const fb = F.map((r) => boxOf([r]));
-  const all = boxOf(F);
-  const out: Pt[][] = [];
-  const touchedF = new Set<number>();
-  for (const ring0 of rings) {
-    const rb = boxOf([ring0]);
-    if (rb[2] < all[0] || rb[0] > all[2] || rb[3] < all[1] || rb[1] > all[3]) {
-      out.push(ring0);
-      continue;
-    }
-    const ring = resample(ring0, 0.5);
-    const n = ring.length;
-    const ins = ring.map((p) => inEvenOdd(F, fb, p));
-    if (!ins.some((x) => x)) {
-      out.push(ring0);
-      continue;
-    }
-    if (ins.every((x) => x)) continue;
-    const first = ins.findIndex((x) => !x);
-    const res: Pt[] = [];
-    let k = 0;
-    while (k < n) {
-      const i = (first + k) % n;
-      if (!ins[i]) {
-        res.push(ring[i]);
-        k++;
-        continue;
-      }
-      let m = k;
-      while (m < n && ins[(first + m) % n]) m++;
-      const p0 = ring[(first + k - 1 + n) % n],
-        p1 = ring[i];
-      const q0 = ring[(first + m - 1) % n],
-        q1 = ring[(first + m) % n];
-      // the F loop it enters and leaves through
-      let enter: [number, number, Pt] | null = null,
-        exit: [number, number, Pt] | null = null,
-        loop = -1;
-      for (let L = 0; L < F.length && loop < 0; L++) {
-        const e = crossing(p0, p1, F[L]);
-        const x = e && crossing(q0, q1, F[L]);
-        if (e && x) [enter, exit, loop] = [e, x, L];
-      }
-      if (!enter || !exit) {
-        // leaves through another loop than it entered: keep the run
-        CUT_STATS.skipped++;
-        for (let q = k; q < m; q++) res.push(ring[(first + q) % n]);
-        k = m;
-        continue;
-      }
-      touchedF.add(loop);
-      const R = F[loop],
-        N = R.length;
-      // forward: enter.edge+1 .. exit.edge; backward: enter.edge .. exit.edge+1
-      const fwd: Pt[] = [];
-      for (let q = (enter[1] + 1) % N, g = 0; g < N; q = (q + 1) % N, g++) {
-        fwd.push(R[q]);
-        if (q === exit[1]) break;
-      }
-      if (enter[1] === exit[1]) fwd.length = 0;
-      const bwd: Pt[] = [];
-      for (let q = enter[1], g = 0; g < N; q = (q - 1 + N) % N, g++) {
-        if (q === exit[1] && g > 0) break;
-        if (enter[1] === exit[1]) break;
-        bwd.push(R[q]);
-      }
-      // bwd should end at exit.edge + 1
-      const pick = (A: Pt[], B: Pt[]) => {
-        const mid = (P: Pt[], e0: Pt, e1: Pt): Pt =>
-          P.length
-            ? P[Math.floor(P.length / 2)]
-            : [(e0[0] + e1[0]) / 2, (e0[1] + e1[1]) / 2];
-        const ia = inNonzero(rings, mid(A, enter![2], exit![2]));
-        const ib = inNonzero(rings, mid(B, enter![2], exit![2]));
-        if (ia !== ib) return ia ? A : B;
-        return A.length <= B.length ? A : B;
-      };
-      res.push(enter[2], ...pick(fwd, bwd), exit[2]);
-      k = m;
-    }
-    out.push(res);
+export function cutRings(
+  F: CutField,
+  rings: Pt[][]
+): { rings: Pt[][]; cut: boolean[][] } {
+  const { x0, y0, nx, ny, W, h, PSI, psi } = F;
+  const N = W * (ny + 1);
+  const S = segsOf(rings);
+  const rg = new SegGrid(S, 4),
+    rin = new Inside(S);
+  const SD = new Float64Array(N).fill(NaN);
+  const V = new Float64Array(N).fill(NaN);
+  const at = (q: number) => {
+    if (!Number.isNaN(V[q])) return V[q];
+    const x = x0 + (q % W) * h,
+      y = y0 + Math.floor(q / W) * h;
+    const d = capped(rg, x, y, SURE);
+    const sd = rin.has(x, y) ? -d : d;
+    SD[q] = sd;
+    return (V[q] = sd >= SURE ? sd : Math.max(sd, psi(q)));
+  };
+  quad(at, V, W, nx, ny, h, 0, (sg) => sg * 1e9);
+  // marching squares traces {−V > 0}; the border is outside, so every
+  // loop closes
+  const U = new Float64Array(N);
+  for (let q = 0; q < N; q++) U[q] = -V[q];
+  for (let i = 0; i <= nx; i++) {
+    U[i] = -1;
+    U[ny * W + i] = -1;
   }
-  // a loop of F wholly inside the rings (no crossing): a hole
-  F.forEach((R, L) => {
-    if (touchedF.has(L)) return;
-    if (signedArea2(R) === 0) return;
-    if (!inNonzero(out, R[0])) return;
-    // only loops that bound forbidden ground from outside (not F's own holes)
-    const inside = inEvenOdd(F, fb, interior(R));
-    if (!inside) return;
-    out.push(signedArea2(R) < 0 ? R : R.slice().reverse());
+  for (let j = 0; j <= ny; j++) {
+    U[j * W] = -1;
+    U[j * W + nx] = -1;
+  }
+  const { loops, ids } = march(U, nx, ny, x0, y0, h);
+  // where Ψ binds: at each point (on a grid edge), Ψ against sd_R there
+  const cut = loops.map((L, k) =>
+    ids[k].map((e) => {
+      const q0 = e >> 1,
+        q1 = e & 1 ? q0 + W : q0 + 1;
+      const t = U[q0] / (U[q0] - U[q1]);
+      const p0 = PSI[q0],
+        p1 = PSI[q1];
+      if (Number.isNaN(p0) || Number.isNaN(p1)) return false;
+      return (1 - t) * p0 + t * p1 >= (1 - t) * SD[q0] + t * SD[q1] - 1e-9;
+    })
+  );
+  // orient by nesting: a loop inside an even number of others is an outer
+  // loop (positive), an odd number a hole
+  const boxes = loops.map((L) => boxOf([L]));
+  loops.forEach((L, k) => {
+    const [px, py] = L[0];
+    let depth = 0;
+    loops.forEach((M, m) => {
+      const b = boxes[m];
+      if (m === k || px < b[0] || px > b[2] || py < b[1] || py > b[3]) return;
+      if (pointInRing(L[0], M)) depth++;
+    });
+    if (signedArea2(L) > 0 !== (depth % 2 === 0)) {
+      L.reverse();
+      cut[k].reverse();
+    }
   });
-  return out;
-}
-
-/** A point just inside ring R (beside its first edge, on its inner side). */
-function interior(R: Pt[]): Pt {
-  const a = R[0],
-    b = R[1];
-  const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
-  const sgn = signedArea2(R) > 0 ? 1 : -1;
-  // inner side: left of travel for positive winding (cross > 0)
-  const nx = (-(b[1] - a[1]) / L) * sgn,
-    ny = ((b[0] - a[0]) / L) * sgn;
-  const m: Pt = [(a[0] + b[0]) / 2 + nx * 0.05, (a[1] + b[1]) / 2 + ny * 0.05];
-  return m;
+  return { rings: loops, cut };
 }

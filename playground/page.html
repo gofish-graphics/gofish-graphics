@@ -428,6 +428,19 @@
       .bc-cap2 {
         padding-left: 16px;
       }
+      .reach-groups {
+        font-size: 12.5px;
+        margin: 4px 0 2px;
+        font-variant-numeric: tabular-nums;
+      }
+      .reach-groups .sw {
+        display: inline-block;
+        width: 9px;
+        height: 9px;
+        border-radius: 2px;
+        margin-right: 4px;
+        vertical-align: baseline;
+      }
       .join-rug {
         margin: 1px 8px 0;
       }
@@ -640,7 +653,7 @@
             </div>
             <div class="field" id="join-field">
               <label for="join"
-                >join <output id="join-out" for="join"></output
+                >reach <output id="join-out" for="join"></output
               ></label>
               <input
                 type="range"
@@ -660,32 +673,38 @@
                 aria-hidden="true"
                 id="join-ticks-labels"
               ></div>
+              <div
+                class="reach-groups"
+                id="reach-groups"
+                aria-live="polite"
+                title="A group is a piece of 3 or more members; an outlier is a piece of 1 or 2 members."
+              ></div>
               <div class="hint" id="join-hint"></div>
               <div id="barcode" class="barcode"></div>
               <div class="hint" id="bc-hover" aria-live="polite"></div>
             </div>
             <div class="field" id="join-measure-field">
               <span class="seg-name" id="join-measure-name"
-                >join measured as</span
+                >reach measured as</span
               >
               <div
                 class="seg"
                 role="radiogroup"
                 aria-labelledby="join-measure-name"
               >
-                <button type="button" role="radio" data-join-measure="px">
+                <button type="button" role="radio" data-reach-measure="px">
                   pixels
                 </button>
-                <button type="button" role="radio" data-join-measure="share">
+                <button type="button" role="radio" data-reach-measure="share">
                   share of links
                 </button>
-                <button type="button" role="radio" data-join-measure="typical">
+                <button type="button" role="radio" data-reach-measure="typical">
                   typical gap
                 </button>
-                <button type="button" role="radio" data-join-measure="local">
+                <button type="button" role="radio" data-reach-measure="local">
                   nearby gaps
                 </button>
-                <button type="button" role="radio" data-join-measure="pieces">
+                <button type="button" role="radio" data-reach-measure="pieces">
                   pieces
                 </button>
               </div>
@@ -698,10 +717,10 @@
                 role="radiogroup"
                 aria-labelledby="join-distance-name"
               >
-                <button type="button" role="radio" data-join-distance="plain">
+                <button type="button" role="radio" data-reach-distance="plain">
                   plain
                 </button>
-                <button type="button" role="radio" data-join-distance="reach">
+                <button type="button" role="radio" data-reach-distance="mutual">
                   mutual reachability
                 </button>
               </div>
@@ -712,16 +731,16 @@
               <div class="hint" id="join-distance-hint"></div>
             </div>
             <div class="field" id="join-range-field">
-              <span class="seg-name" id="join-range-name">join range</span>
+              <span class="seg-name" id="join-range-name">reach range</span>
               <div
                 class="seg"
                 role="radiogroup"
                 aria-labelledby="join-range-name"
               >
-                <button type="button" role="radio" data-join-range="inf">
+                <button type="button" role="radio" data-reach-range="inf">
                   0..∞ (the multiple)
                 </button>
-                <button type="button" role="radio" data-join-range="unit">
+                <button type="button" role="radio" data-reach-range="unit">
                   0..1 (j / (1 − j))
                 </button>
               </div>
@@ -809,8 +828,8 @@
               The purple dashed line is today's
               <code>Shape.blob</code> (convexity capped at 1, one piece) or, for
               the arcs shape, today's <code>Shape.arcs</code>, with the same
-              options. The links view draws the join tree: orange links are
-              kept (at their full neck width), gray dashed edges are cut.
+              options. The links view draws the join tree: orange links are kept
+              (at their full neck width), gray dashed edges are cut.
             </p>
           </section>
         </div>

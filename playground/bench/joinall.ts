@@ -10,9 +10,9 @@ const run = (m: any, dist: any, join: number | undefined) =>
         padding: d.padding,
         convexity: 0.25,
         neck: d.story?.neck ?? 1,
-        join,
-        joinMeasure: m,
-        joinDistance: dist,
+        reach: join,
+        reachMeasure: m,
+        reachDistance: dist,
         means: "blend",
         holes: d.story?.holes ?? false,
         avoiding: [],
@@ -22,6 +22,6 @@ const run = (m: any, dist: any, join: number | undefined) =>
   );
 const base = run("px", "plain", Infinity);
 for (const m of ["px", "share", "typical", "local", "pieces"])
-  for (const dist of ["plain", "reach"])
+  for (const dist of ["plain", "mutual"])
     for (const j of [Infinity, 1, undefined])
       console.log(m, dist, j, run(m, dist, j) === base);

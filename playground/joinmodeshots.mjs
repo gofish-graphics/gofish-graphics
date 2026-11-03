@@ -68,8 +68,8 @@ for (const [ds, { neck, joins }] of Object.entries(CASES))
         dataset: ds,
         ...BASE,
         neck,
-        joinMeasure: m,
-        join: j,
+        reachMeasure: m,
+        reach: j,
         showLinks: links,
       });
       const pieces = await page.evaluate(
@@ -87,9 +87,9 @@ await set(page, {
   dataset: "chartaccent",
   ...BASE,
   neck: 0.6,
-  joinMeasure: "typical",
+  reachMeasure: "typical",
   joinRange: "unit",
-  join: 2.54,
+  reach: 2.54,
   showLinks: true,
 });
 await page.screenshot({
@@ -100,8 +100,8 @@ await set(page, {
   dataset: "penguins",
   ...BASE,
   neck: 1,
-  joinMeasure: "local",
-  join: 2.136,
+  reachMeasure: "local",
+  reach: 2.136,
   showLinks: true,
 });
 await page.screenshot({ path: join(out, "page-local.png"), fullPage: true });
@@ -111,8 +111,8 @@ await set(page, {
   dataset: "chartaccent",
   ...BASE,
   neck: 0.6,
-  joinMeasure: "share",
-  join: 0.88,
+  reachMeasure: "share",
+  reach: 0.88,
 });
 await page.screenshot({ path: join(out, "page-dark.png"), fullPage: true });
 await page.close();
@@ -121,8 +121,8 @@ await set(page, {
   dataset: "penguins",
   ...BASE,
   neck: 1,
-  joinMeasure: "typical",
-  join: 3.592,
+  reachMeasure: "typical",
+  reach: 3.592,
 });
 await page.screenshot({ path: join(out, "page-phone.png"), fullPage: true });
 await page.close();

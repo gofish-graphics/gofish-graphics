@@ -26,7 +26,7 @@ const esbuild = await import(
 );
 
 const js = await esbuild.build({
-  entryPoints: [join(here, "src/main.ts")],
+  entryPoints: [join(here, "src/entry.ts")],
   bundle: true,
   format: "iife",
   minify: true,

@@ -6,12 +6,12 @@ import {
   unifiedOutline,
   UNIFIED_STATS,
   UNIFIED_PROTOTYPE,
-  JOIN_PROTOTYPE,
+  REACH_PROTOTYPE,
   type Means,
   type Seal,
   type JoinEdge,
-  type JoinMeasure,
-  type JoinDistance,
+  type ReachMeasure,
+  type ReachDistance,
 } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/unified";
 import {
   blobOutline,
@@ -27,43 +27,41 @@ export type {
   Means,
   Seal,
   JoinEdge,
-  JoinMeasure,
-  JoinDistance,
+  ReachMeasure,
+  ReachDistance,
 };
 
 export type ShapeKind = "blob" | "arcs";
 
-// PROTOTYPE: ?search=bisection runs the earlier radius search, for comparison
-if (new URLSearchParams(location.search).get("search") === "bisection")
-  UNIFIED_PROTOTYPE.search = "bisection";
-export const SEARCH = UNIFIED_PROTOTYPE.search;
-// PROTOTYPE: ?blend=grid solves the per-bay blend on the old 1 px grid (localFill.ts)
-// instead of the mesh (meshBlend.ts), for comparison
-if (new URLSearchParams(location.search).get("blend") === "grid")
-  UNIFIED_PROTOTYPE.blend = "grid";
-export const BLEND = UNIFIED_PROTOTYPE.blend ?? "mesh";
-// PROTOTYPE: ?links=gap draws each piece with its own gap tree (the join tree still picks the
-// pieces); ?typical=all takes "typical"'s unit over every tree edge, touching ones too
-{
-  const q = new URLSearchParams(location.search);
-  if (q.get("links") === "gap") JOIN_PROTOTYPE.links = "gap";
-  if (q.get("typical") === "all") JOIN_PROTOTYPE.typical = "all";
+// PROTOTYPE: the comparison switches, from the page's query string (a worker is told it by
+// the page: it has no query of its own). ?search=bisection: the earlier radius search;
+// ?blend=grid: the per-bay blend on the old 1 px grid (localFill.ts) instead of the mesh
+// (meshBlend.ts); ?links=gap: each piece drawn with its own gap tree (the join tree still
+// picks the pieces); ?typical=all: "typical"'s unit over every tree edge, touching ones too.
+export function configure(search: string) {
+  const q = new URLSearchParams(search);
+  if (q.get("search") === "bisection") UNIFIED_PROTOTYPE.search = "bisection";
+  if (q.get("blend") === "grid") UNIFIED_PROTOTYPE.blend = "grid";
+  if (q.get("links") === "gap") REACH_PROTOTYPE.links = "gap";
+  if (q.get("typical") === "all") REACH_PROTOTYPE.typical = "all";
 }
+export const searchOf = () => UNIFIED_PROTOTYPE.search;
+export const blendOf = () => UNIFIED_PROTOTYPE.blend ?? "mesh";
 
 export type Params = {
   convexity: number;
   neck: number;
   padding: number;
-  /** blob: join, convexity, neck; arcs: radius (the exact closing) */
+  /** blob: reach, convexity, neck; arcs: radius (the exact closing) */
   shape: ShapeKind;
   /** the longest padded gap a link may cross, px (Infinity: every gap) */
-  join: number;
-  /** PROTOTYPE: what join is measured in */
-  joinMeasure: JoinMeasure;
+  reach: number;
+  /** PROTOTYPE: what reach is measured in */
+  reachMeasure: ReachMeasure;
   /** PROTOTYPE: the distance the relative measures and pieces rank by, and
    *  the mutual reachability's k */
-  joinDistance: JoinDistance;
-  joinCore: number;
+  reachDistance: ReachDistance;
+  reachCore: number;
   radius: number;
   holes: boolean;
   avoid: boolean;
@@ -73,6 +71,8 @@ export type Params = {
   /** PROTOTYPE: what convexity means, and what a sealing bay does */
   means: Means;
   seal: Seal;
+  /** PROTOTYPE: a slider is being dragged: the coarser mesh (UNIFIED_PROTOTYPE.draft) */
+  draft?: boolean;
 };
 
 export type SetInput = { members: BlobMember[]; avoiding: BlobMember[] };
@@ -120,6 +120,7 @@ const count = (rings: Pt[][]) => {
 };
 
 export function computeSet(s: SetInput, p: Params): SetResult {
+  UNIFIED_PROTOTYPE.draft = !!p.draft;
   const avoiding = p.avoid ? s.avoiding : [];
   const blob = p.shape === "blob";
   const t0 = performance.now();
@@ -129,10 +130,10 @@ export function computeSet(s: SetInput, p: Params): SetResult {
       ? {
           convexity: p.convexity,
           neck: p.neck,
-          join: p.join,
-          joinMeasure: p.joinMeasure,
-          joinDistance: p.joinDistance,
-          joinCore: p.joinCore,
+          reach: p.reach,
+          reachMeasure: p.reachMeasure,
+          reachDistance: p.reachDistance,
+          reachCore: p.reachCore,
           means: p.means,
           seal: p.seal,
         }

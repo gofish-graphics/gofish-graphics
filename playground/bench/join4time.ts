@@ -30,8 +30,8 @@ const step = (d: any, o: any) => {
       padding: d.padding,
       convexity: 0.5,
       neck: 1,
-      joinMeasure: "typical",
-      joinDistance: "reach",
+      reachMeasure: "typical",
+      reachDistance: "mutual",
       means: "blend",
       avoiding: d.avoidDefault ? s.avoiding : [],
       clearance: d.clearance,
@@ -53,11 +53,11 @@ for (const id of IDS) {
     ["join (typical, c 0.5)", JOINS.map((join) => ({ join }))],
     [
       "convexity (join ∞)",
-      CONV.map((convexity) => ({ convexity, join: Infinity })),
+      CONV.map((convexity) => ({ convexity, reach: Infinity })),
     ],
     [
       "convexity (join 1.5)",
-      CONV.map((convexity) => ({ convexity, join: 1.5 })),
+      CONV.map((convexity) => ({ convexity, reach: 1.5 })),
     ],
   ] as [string, any[]][]) {
     clearUnifiedCache();

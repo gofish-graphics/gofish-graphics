@@ -8,15 +8,15 @@
 import DATA from "../src/datasets.json";
 import {
   joinLinks,
-  JOIN_PROTOTYPE,
-  type JoinMeasure,
-  type JoinDistance,
+  REACH_PROTOTYPE,
+  type ReachMeasure,
+  type ReachDistance,
 } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/unified";
 
-if (process.env.TYPICAL) JOIN_PROTOTYPE.typical = process.env.TYPICAL as any;
+if (process.env.TYPICAL) REACH_PROTOTYPE.typical = process.env.TYPICAL as any;
 const IDS = (process.env.DS ?? "penguins,chartaccent").split(",");
 const MAIN = +(process.env.MAIN ?? 0.85);
-const SL: Record<Exclude<JoinMeasure, "pieces">, number[]> = {
+const SL: Record<Exclude<ReachMeasure, "pieces">, number[]> = {
   px: [
     0,
     ...Array.from({ length: 99 }, (_, k) => +(0.5 * 2 ** (k / 10)).toFixed(2)),
@@ -34,11 +34,11 @@ const SL: Record<Exclude<JoinMeasure, "pieces">, number[]> = {
     Infinity,
   ],
 };
-const COMBOS: [JoinMeasure, JoinDistance][] = [
+const COMBOS: [ReachMeasure, ReachDistance][] = [
   ["px", "plain"],
-  ...(["share", "typical", "local", "pieces"] as JoinMeasure[]).flatMap((m) =>
-    (["plain", "reach"] as JoinDistance[]).map(
-      (d) => [m, d] as [JoinMeasure, JoinDistance]
+  ...(["share", "typical", "local", "pieces"] as ReachMeasure[]).flatMap((m) =>
+    (["plain", "mutual"] as ReachDistance[]).map(
+      (d) => [m, d] as [ReachMeasure, ReachDistance]
     )
   ),
 ];
@@ -65,8 +65,8 @@ type G = { clusters: number; small: number; main: number };
 const group = (
   ms: any[],
   pad: number,
-  m: JoinMeasure,
-  d: JoinDistance,
+  m: ReachMeasure,
+  d: ReachDistance,
   j: number
 ): G => {
   const P = joinLinks(ms, pad, j, 1, m, d, 4).pieces.map((p) => p.length);
@@ -78,7 +78,7 @@ const group = (
 };
 // the natural cut: bars (non-touching edges) longest first; the largest drop between
 // consecutive bars; k = bars above it + 1
-const natural = (ms: any[], pad: number, d: JoinDistance): number => {
+const natural = (ms: any[], pad: number, d: ReachDistance): number => {
   const xs = joinLinks(ms, pad, 1, 1, "pieces", d, 4)
     .tree.filter((e) => !e.floor)
     .map((e) => e.w)
@@ -110,7 +110,7 @@ for (const id of IDS) {
     const cands =
       m === "pieces"
         ? Array.from({ length: 40 }, (_, k) => k + 1)
-        : SL[m as Exclude<JoinMeasure, "pieces">];
+        : SL[m as Exclude<ReachMeasure, "pieces">];
     let best: number | null = null,
       bestSmall = -1;
     for (const j of cands) {
@@ -142,7 +142,7 @@ for (const id of IDS) {
   console.log(
     `\nnatural cut (largest gap between bars) per set, k: full | 75% s1 s2 s3 | 50% s1 s2 s3`
   );
-  for (const d of ["plain", "reach"] as JoinDistance[]) {
+  for (const d of ["plain", "mutual"] as ReachDistance[]) {
     const ks = SAMPLES.map(([f, seed]) =>
       ds.sets
         .map((s: any) =>

@@ -3,7 +3,7 @@
 //  - pieces: exactly k pieces per set at every whole k from (pieces at the floor) down to 1
 //  - area monotone along each measure × distance's slider (smoothed and raw)
 //  - scale test: positions × 0.5 / × 2, sizes kept: pieces at fixed joins
-//  - "reach" on the gap tree vs HDBSCAN's own tree (single linkage over all pairs on the
+//  - "mutual" on the gap tree vs HDBSCAN's own tree (single linkage over all pairs on the
 //    mutual reachability, touching pairs first): the same pieces at each k?
 //  - the time of a join drag (warm cache)
 //   BENCH=joinbar node playground/bench.mjs   (DS=<ids>, NOAREA=1 to skip the slow area check)
@@ -14,8 +14,8 @@ import {
   clearUnifiedCache,
   joinLinks,
   coreDistances,
-  type JoinMeasure,
-  type JoinDistance,
+  type ReachMeasure,
+  type ReachDistance,
 } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/unified";
 
 const IDS = (
@@ -23,11 +23,11 @@ const IDS = (
 ).split(",");
 const C = 0.25;
 const f = (v: number) => (v === Infinity ? "∞" : String(+v.toFixed(2)));
-const COMBOS: [JoinMeasure, JoinDistance][] = [
+const COMBOS: [ReachMeasure, ReachDistance][] = [
   ["px", "plain"],
-  ...(["share", "typical", "local", "pieces"] as JoinMeasure[]).flatMap((m) =>
-    (["plain", "reach"] as JoinDistance[]).map(
-      (d) => [m, d] as [JoinMeasure, JoinDistance]
+  ...(["share", "typical", "local", "pieces"] as ReachMeasure[]).flatMap((m) =>
+    (["plain", "mutual"] as ReachDistance[]).map(
+      (d) => [m, d] as [ReachMeasure, ReachDistance]
     )
   ),
 ];
@@ -40,7 +40,7 @@ const scaled = (ms: any[], s: number): any[] =>
       cy = (m.y + m.h / 2) * s;
     return { ...m, x: cx - m.w / 2, y: cy - m.h / 2 };
   });
-const floorPieces = (d: any, set: any, dist: JoinDistance, s = 1) =>
+const floorPieces = (d: any, set: any, dist: ReachDistance, s = 1) =>
   1 +
   joinLinks(
     scaled(set.members, s),
@@ -51,7 +51,7 @@ const floorPieces = (d: any, set: any, dist: JoinDistance, s = 1) =>
     dist
   ).tree.filter((e) => !e.floor).length;
 // each measure's slider, in slider order (joined more to the right)
-const slider = (d: any, m: JoinMeasure, dist: JoinDistance): number[] => {
+const slider = (d: any, m: ReachMeasure, dist: ReachDistance): number[] => {
   if (m === "px")
     return [
       0,
@@ -74,8 +74,8 @@ const slider = (d: any, m: JoinMeasure, dist: JoinDistance): number[] => {
 };
 const run = (
   d: any,
-  m: JoinMeasure,
-  dist: JoinDistance,
+  m: ReachMeasure,
+  dist: ReachDistance,
   join: number,
   smooth: boolean
 ) => {
@@ -87,9 +87,9 @@ const run = (
       padding: d.padding,
       convexity: C,
       neck: d.story?.neck ?? 1,
-      join,
-      joinMeasure: m,
-      joinDistance: dist,
+      reach: join,
+      reachMeasure: m,
+      reachDistance: dist,
       means: "blend",
       holes: d.story?.holes ?? false,
       avoiding: [],
@@ -147,7 +147,7 @@ const canon = (lab: number[]) => {
     .join("|");
 };
 const oursPieces = (d: any, set: any, k: number) => {
-  const P = joinLinks(set.members, d.padding, k, 1, "pieces", "reach").pieces;
+  const P = joinLinks(set.members, d.padding, k, 1, "pieces", "mutual").pieces;
   const lab = new Array(set.members.length);
   P.forEach((p, pi) => p.forEach((i) => (lab[i] = pi)));
   return canon(lab);
@@ -166,32 +166,34 @@ for (const id of IDS) {
     return run(d, m, dist, j, true).rings !== base;
   }).map(([m, dist]) => `${m} ${dist}`);
   const allSame = !notSame.length;
-  const piecesDefault = (["plain", "reach"] as JoinDistance[]).every((dist) => {
-    const r = unifiedOutline(d.sets[0].members, {
-      padding: d.padding,
-      convexity: C,
-      neck: d.story?.neck ?? 1,
-      joinMeasure: "pieces",
-      joinDistance: dist,
-      means: "blend",
-      holes: d.story?.holes ?? false,
-      clearance: d.clearance,
-    });
-    const r0 = unifiedOutline(d.sets[0].members, {
-      padding: d.padding,
-      convexity: C,
-      neck: d.story?.neck ?? 1,
-      means: "blend",
-      holes: d.story?.holes ?? false,
-      clearance: d.clearance,
-    });
-    return JSON.stringify(r) === JSON.stringify(r0);
-  });
+  const piecesDefault = (["plain", "mutual"] as ReachDistance[]).every(
+    (dist) => {
+      const r = unifiedOutline(d.sets[0].members, {
+        padding: d.padding,
+        convexity: C,
+        neck: d.story?.neck ?? 1,
+        reachMeasure: "pieces",
+        reachDistance: dist,
+        means: "blend",
+        holes: d.story?.holes ?? false,
+        clearance: d.clearance,
+      });
+      const r0 = unifiedOutline(d.sets[0].members, {
+        padding: d.padding,
+        convexity: C,
+        neck: d.story?.neck ?? 1,
+        means: "blend",
+        holes: d.story?.holes ?? false,
+        clearance: d.clearance,
+      });
+      return JSON.stringify(r) === JSON.stringify(r0);
+    }
+  );
   out.push(
     `join all (∞ / share 1 / pieces 1) one outline in every measure × distance: ${allSame ? "yes" : "NO " + notSame.join(", ")}; pieces with join left out = the default: ${piecesDefault ? "yes" : "NO"}`
   );
   // pieces: exactly k at whole k
-  for (const dist of ["plain", "reach"] as JoinDistance[]) {
+  for (const dist of ["plain", "mutual"] as ReachDistance[]) {
     const bad: string[] = [];
     const seq: string[] = [];
     d.sets.forEach((set: any, si: number) => {
@@ -219,7 +221,7 @@ for (const id of IDS) {
   ) {
     const rows: string[] = [];
     d.sets.forEach((set: any, si: number) => {
-      const P0 = floorPieces(d, set, "reach");
+      const P0 = floorPieces(d, set, "mutual");
       let same = 0;
       const diff: number[] = [];
       for (let k = 1; k <= P0; k++)
@@ -253,12 +255,12 @@ for (const id of IDS) {
       );
     }
   // scale test
-  const FIX: [JoinMeasure, number[]][] = [
+  const FIX: [ReachMeasure, number[]][] = [
     ["pieces", [2, 4, 6]],
     ["typical", [1.5, 2.5]],
   ];
   for (const [m, js] of FIX)
-    for (const dist of ["plain", "reach"] as JoinDistance[])
+    for (const dist of ["plain", "mutual"] as ReachDistance[])
       for (const j of js)
         scale.push(
           `| ${d.label} | ${m} ${dist} ${f(j)} | ${[0.5, 1, 2]

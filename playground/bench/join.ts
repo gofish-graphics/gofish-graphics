@@ -49,7 +49,7 @@ const run = (d: any, join: number, c: number, smooth: boolean) => {
       padding: d.padding,
       convexity: c,
       neck: d.story?.neck ?? 1,
-      join,
+      reach: join,
       means: "blend",
       holes: false,
       avoiding: [],
@@ -152,7 +152,7 @@ if (process.env.JUMP)
           padding: d.padding,
           convexity: c,
           neck: d.story?.neck ?? 1,
-          join,
+          reach: join,
           means: "blend",
           avoiding: [],
           smooth: process.env.RAW ? null : undefined,
@@ -160,7 +160,7 @@ if (process.env.JUMP)
       );
     unifiedOutline(s.members, {
       padding: d.padding,
-      join: Infinity,
+      reach: Infinity,
       neck: d.story?.neck ?? 1,
     });
     const gaps = (UNIFIED_STATS.joinTree ?? [])

@@ -4,7 +4,7 @@
 import DATA from "../src/datasets.json";
 import {
   joinLinks,
-  type JoinDistance,
+  type ReachDistance,
 } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/unified";
 
 const IDS = (process.env.DS ?? "chartaccent,penguins").split(",");
@@ -12,7 +12,7 @@ const K = +(process.env.K ?? 4);
 for (const id of IDS) {
   const d = (DATA as any[]).find((x) => x.id === id);
   d.sets.forEach((s: any, si: number) => {
-    for (const dist of ["plain", "reach"] as JoinDistance[]) {
+    for (const dist of ["plain", "mutual"] as ReachDistance[]) {
       const J = joinLinks(s.members, d.padding, 1, 1, "pieces", dist, K);
       const free = J.tree.filter((e) => !e.floor).sort((a, b) => b.w - a.w);
       const floor = J.tree.filter((e) => e.floor);
