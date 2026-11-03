@@ -100,8 +100,17 @@ export type UnifiedOptions = {
    *  Default ∞ (one piece, the full spanning tree). See joinLinks. */
   join?: number;
   /** PROTOTYPE: what `join` is measured in (not an API option yet); see
-   *  joinShares. Default "px". */
+   *  joinShares. Default "px". With "pieces", join = k pieces kept, and
+   *  the default is 1 (one piece, the full spanning tree). */
   joinMeasure?: JoinMeasure;
+  /** PROTOTYPE: the distance the relative measures and "pieces" rank the
+   *  spanning tree's edges by (not "px", which is the padded gap): the
+   *  centre distance ("plain") or HDBSCAN's mutual reachability ("reach").
+   *  Default "plain". See joinWeights. */
+  joinDistance?: JoinDistance;
+  /** PROTOTYPE: "reach"'s k: the core distance is the centre distance to
+   *  the k-th nearest other member. Default JOIN_CORE_K. */
+  joinCore?: number;
   holes?: boolean;
   avoiding?: BlobMember[];
   clearance?: number;
@@ -147,8 +156,18 @@ export type Means = "area" | "radius" | "blend";
  *    distance of the spanning tree's edges, 0..∞.
  *  - "local": a multiple of each link's nearby links (Zahn 1971: the mean
  *    centre distance of the tree edges within depth 2 on each side), 0..∞.
- *  In all three, members whose padding touches stay one piece. */
-export type JoinMeasure = "px" | "share" | "typical" | "local";
+ *  - "pieces": join = k, the number of pieces kept: the k − 1 longest
+ *    links (that do not touch) are cut, the rest kept; 1..(the pieces left
+ *    when only touching members are joined).
+ *  In all of these but "px", members whose padding touches stay one piece. */
+export type JoinMeasure = "px" | "share" | "typical" | "local" | "pieces";
+/** PROTOTYPE: the distance "share", "typical", "local" and "pieces" rank
+ *  the tree's edges by: "plain" the centre distance d, "reach" the mutual
+ *  reachability max(core(a), core(b), d) (joinWeights). */
+export type JoinDistance = "plain" | "reach";
+/** PROTOTYPE: the default k of the "reach" core distance (the k-th nearest
+ *  other member; HDBSCAN's min_samples = 5 counts the point itself). */
+export const JOIN_CORE_K = 4;
 export type Seal = "jump" | "lake" | "lid";
 
 /** PROTOTYPE: the length s of the "radius" convexity, r = padding +
@@ -232,6 +251,8 @@ export const UNIFIED_STATS: {
   pieces?: number;
   radii?: number[];
   joinTree?: JoinEdge[];
+  /** the median tree edge in the ranked distance ("typical"'s unit) */
+  joinTypical?: number;
   msSeparate?: number;
 } = {};
 
@@ -476,8 +497,17 @@ export type JoinEdge = {
   /** whether the members themselves overlap (no link is needed) */
   overlap: boolean;
   /** the join value, in each measure, at which this link enters (it is
-   *  kept for any join above it); ≤ 0 or −∞: always kept */
+   *  kept for any join above it; "pieces": cut for any join at or above
+   *  it, kept at or below it − 1); ≤ 0 or −∞: always kept */
   enter: Record<JoinMeasure, number>;
+  /** the two members it joins */
+  i: number;
+  j: number;
+  /** its length in the distance the measures rank by (joinWeights): the
+   *  centre distance, or the mutual reachability */
+  w: number;
+  /** the padded members touch or overlap: kept at every join */
+  floor: boolean;
 };
 
 /** PROTOTYPE: how far past its entry a link ramps from width 0 to full in
@@ -496,6 +526,8 @@ type TreeEdge = {
   g: number;
   /** centre distance: between the members' core axes, px */
   d: number;
+  /** the distance the relative measures rank by (joinWeights) */
+  w: number;
   overlap: boolean;
   a: Pt;
   b: Pt;
@@ -539,8 +571,11 @@ type TreeEdge = {
  *    fringe; "either side" would cut every edge from a dense core to its
  *    fringe.
  */
-function joinEntries(E: TreeEdge[], n: number): Record<JoinMeasure, number>[] {
-  const ds = E.map((e) => e.d).sort((a, b) => a - b);
+function joinEntries(
+  E: TreeEdge[],
+  n: number
+): { enter: Record<JoinMeasure, number>[]; D: number } {
+  const ds = E.map((e) => e.w).sort((a, b) => a - b);
   const D = ds.length
     ? ds.length % 2
       ? ds[ds.length >> 1]
@@ -548,8 +583,16 @@ function joinEntries(E: TreeEdge[], n: number): Record<JoinMeasure, number>[] {
     : 1;
   const rank = new Map(
     E.map((_, k) => k)
-      .sort((a, b) => E[a].d - E[b].d || a - b)
+      .sort((a, b) => E[a].w - E[b].w || a - b)
       .map((k, r) => [k, r])
+  );
+  // "pieces": the edges that do not touch, longest first; the r-th
+  // (from 0) is cut at k >= r + 2 and kept at k <= r + 1
+  const longest = new Map(
+    E.map((_, k) => k)
+      .filter((k) => !(E[k].overlap || E[k].g <= 0))
+      .sort((a, b) => E[b].w - E[a].w || b - a)
+      .map((k, r) => [k, r + 2])
   );
   // the tree's adjacency, for the local means
   const adj: [number, number][][] = Array.from({ length: n }, () => []);
@@ -557,7 +600,7 @@ function joinEntries(E: TreeEdge[], n: number): Record<JoinMeasure, number>[] {
     adj[e.i].push([e.j, k]);
     adj[e.j].push([e.i, k]);
   });
-  // the mean d within depth JOIN_DEPTH of `from`, not crossing edge `skip`
+  // the mean w within depth JOIN_DEPTH of `from`, not crossing edge `skip`
   // (a tree: every node is reached by one path)
   const sideMean = (from: number, skip: number): number => {
     let sum = 0,
@@ -566,7 +609,7 @@ function joinEntries(E: TreeEdge[], n: number): Record<JoinMeasure, number>[] {
       if (du === JOIN_DEPTH) return;
       for (const [v, k] of adj[u]) {
         if (k === skip || k === via) continue;
-        sum += E[k].d;
+        sum += E[k].w;
         cnt++;
         walk(v, du + 1, k);
       }
@@ -574,13 +617,14 @@ function joinEntries(E: TreeEdge[], n: number): Record<JoinMeasure, number>[] {
     walk(from, 0, -1);
     return cnt ? sum / cnt : NaN;
   };
-  return E.map((e, k) => {
+  const enter = E.map((e, k) => {
     if (e.overlap || e.g <= 0)
       return {
         px: e.g,
         share: -Infinity,
         typical: -Infinity,
         local: -Infinity,
+        pieces: -Infinity,
       };
     const mi = sideMean(e.i, k),
       mj = sideMean(e.j, k);
@@ -594,10 +638,79 @@ function joinEntries(E: TreeEdge[], n: number): Record<JoinMeasure, number>[] {
     return {
       px: e.g,
       share: rank.get(k)! / E.length,
-      typical: e.d / D,
-      local: e.d / L,
+      typical: e.w / D,
+      local: e.w / L,
+      pieces: longest.get(k)!,
     };
   });
+  return { enter, D };
+}
+
+/**
+ * PROTOTYPE: the length each spanning-tree edge is ranked by in the
+ * relative measures and "pieces" (TreeEdge.w).
+ *
+ *  - "plain": the centre distance d (between the members' core axes).
+ *  - "reach" (HDBSCAN, Campello et al. 2013): the mutual reachability
+ *    max(core(a), core(b), d), with core(m) the centre distance from m to
+ *    its k-th nearest other member (k clamped to n − 1). In a dense run
+ *    core is small and w ≈ d; a member far from the others has a large
+ *    core, so every edge to it is long, and it is cut before the gaps
+ *    between dense runs of about the same d.
+ *
+ * TODO(prototype, declared shortcut): the tree stays the members' gap
+ * spanning tree (the links drawn) and only its edges' lengths change, so
+ * "reach" is single linkage on the mutual reachability restricted to that
+ * tree, not over all pairs as HDBSCAN builds it. Building the tree on w
+ * would change the links drawn at join ∞ (a dense run's tree picks
+ * members of small core, not the nearest ones), so join ∞ would no longer
+ * be one outline in every measure. On equal dots with "plain" the two
+ * trees are the same; the bench (joinbar) counts where "reach" differs.
+ */
+export function joinWeights(
+  members: BlobMember[],
+  E: { i: number; j: number; d: number }[],
+  distance: JoinDistance,
+  coreK: number
+): number[] {
+  if (distance === "plain" || members.length < 3) return E.map((e) => e.d);
+  const c = coreDistances(members, coreK);
+  return E.map((e) => Math.max(c[e.i], c[e.j], e.d));
+}
+
+/** PROTOTYPE: each member's core distance: the centre distance (between
+ *  core axes) to its k-th nearest other member, k clamped to 1..n − 1. */
+export function coreDistances(members: BlobMember[], coreK: number): number[] {
+  const n = members.length;
+  const seg = members.map(coreAxis);
+  const k = Math.max(1, Math.min(n - 1, Math.round(coreK)));
+  return seg.map(([a0, a1], i) => {
+    const ds: number[] = [];
+    for (let j = 0; j < n; j++) {
+      if (j === i) continue;
+      const [x, y] = segSeg(a0, a1, seg[j][0], seg[j][1]);
+      ds.push(Math.hypot(x[0] - y[0], x[1] - y[1]));
+    }
+    ds.sort((a, b) => a - b);
+    return ds[k - 1] ?? 0;
+  });
+}
+
+/** A member's core axis (two points, equal for a disc) and radius. */
+function coreAxis(m: BlobMember): [Pt, Pt, number] {
+  if (m.kind === "disc") return [[m.cx, m.cy], [m.cx, m.cy], m.r];
+  if (m.kind === "segment") return [m.a, m.b, Math.max(m.w, m.w2 ?? m.w) / 2];
+  return m.w >= m.h
+    ? [
+        [m.x + m.h / 2, m.y + m.h / 2],
+        [m.x + m.w - m.h / 2, m.y + m.h / 2],
+        m.h / 2,
+      ]
+    : [
+        [m.x + m.w / 2, m.y + m.w / 2],
+        [m.x + m.w / 2, m.y + m.h - m.w / 2],
+        m.w / 2,
+      ];
 }
 
 /** PROTOTYPE: an edge's width share at `join` in a relative measure, from
@@ -608,7 +721,11 @@ export function relativeShare(
   join: number,
   n: number
 ): number {
-  if (t === -Infinity || join === Infinity) return 1;
+  if (t === -Infinity) return 1;
+  // "pieces": k counts down; the edge cut at k >= t ramps in over k from t
+  // down to t − 1
+  if (measure === "pieces") return Math.max(0, Math.min(1, t - join));
+  if (join === Infinity) return 1;
   if (measure === "share")
     return join >= 1 ? 1 : Math.max(0, Math.min(1, (join - t) * n));
   return Math.max(0, Math.min(1, (join - t) / (JOIN_RAMP * t)));
@@ -646,13 +763,17 @@ export function joinLinks(
   pad: number,
   join: number,
   neck: number,
-  measure: JoinMeasure = "px"
+  measure: JoinMeasure = "px",
+  distance: JoinDistance = "plain",
+  coreK: number = JOIN_CORE_K
 ): {
   links: BlobMember[];
   /** each link's piece, and each piece's member indices */
   linkPiece: number[];
   pieces: number[][];
   tree: JoinEdge[];
+  /** the median edge length in the ranked distance ("typical"'s unit) */
+  typical: number;
 } {
   const prims: Core[] = members.map(coreOf);
   const comp = prims.map((_, i) => i);
@@ -662,22 +783,7 @@ export function joinLinks(
   const kc = prims.map((_, i) => i);
   const kfind = (i: number): number =>
     kc[i] === i ? i : (kc[i] = kfind(kc[i]));
-  const coreSeg = (i: number): [Pt, Pt, number] => {
-    const m = members[i];
-    if (m.kind === "disc") return [[m.cx, m.cy], [m.cx, m.cy], m.r];
-    if (m.kind === "segment") return [m.a, m.b, Math.max(m.w, m.w2 ?? m.w) / 2];
-    return m.w >= m.h
-      ? [
-          [m.x + m.h / 2, m.y + m.h / 2],
-          [m.x + m.w - m.h / 2, m.y + m.h / 2],
-          m.h / 2,
-        ]
-      : [
-          [m.x + m.w / 2, m.y + m.w / 2],
-          [m.x + m.w / 2, m.y + m.h - m.w / 2],
-          m.w / 2,
-        ];
-  };
+  const coreSeg = (i: number) => coreAxis(members[i]);
   const pairs: [number, number, number][] = [];
   for (let i = 0; i < prims.length; i++)
     for (let j = i + 1; j < prims.length; j++)
@@ -696,6 +802,7 @@ export function joinLinks(
       j,
       g: gap - 2 * pad,
       d: Math.hypot(x[0] - y[0], x[1] - y[1]),
+      w: 0,
       overlap: gap <= 0,
       a: x,
       b: y,
@@ -703,14 +810,16 @@ export function joinLinks(
       fb: neck * (rb + pad),
     });
   }
-  const enter = joinEntries(E, prims.length);
+  joinWeights(members, E, distance, coreK).forEach((w, k) => (E[k].w = w));
+  const { enter, D } = joinEntries(E, prims.length);
   const raw: { link: BlobMember; i: number }[] = [];
   const tree: JoinEdge[] = [];
   E.forEach((e, k) => {
-    const { i, j, g, a, b, fa, fb } = e;
+    const { i, j, g, a, b, fa, fb, w } = e;
+    const at = { i, j, w, floor: g <= 0, enter: enter[k] };
     if (e.overlap) {
       kc[kfind(i)] = kfind(j);
-      tree.push({ gap: g, share: 1, a, b, overlap: true, enter: enter[k] });
+      tree.push({ gap: g, share: 1, a, b, overlap: true, ...at });
       return;
     }
     // how far join is past the gap, px (relative measures: the room their
@@ -724,7 +833,7 @@ export function joinLinks(
     const ha = Math.min(fa, room / 2),
       hb = Math.min(fb, room / 2);
     const share = room <= 0 ? 0 : Math.min(1, room / 2 / Math.max(fa, fb));
-    tree.push({ gap: g, share, a, b, overlap: false, enter: enter[k] });
+    tree.push({ gap: g, share, a, b, overlap: false, ...at });
     if (room <= 0) return;
     kc[kfind(i)] = kfind(j);
     raw.push({
@@ -753,6 +862,7 @@ export function joinLinks(
     linkPiece: raw.map((l) => ids.get(kfind(l.i))!),
     pieces,
     tree,
+    typical: D,
   };
 }
 
@@ -1096,10 +1206,14 @@ export function unifiedOutline(
   }
   // the pieces and their links (links bend around the keep-outs)
   const neck = o.neck ?? 1;
-  const join = Math.max(0, o.join ?? Infinity);
   const measure = o.joinMeasure ?? "px";
-  const J = memo(key("join", members, pad, join, neck, measure), () =>
-    joinLinks(members, pad, join, neck, measure)
+  // "pieces" counts down: its default, every link, is one piece
+  const join = Math.max(0, o.join ?? (measure === "pieces" ? 1 : Infinity));
+  const distance = o.joinDistance ?? "plain";
+  const coreK = o.joinCore ?? JOIN_CORE_K;
+  const J = memo(
+    key("join", members, pad, join, neck, measure, distance, coreK),
+    () => joinLinks(members, pad, join, neck, measure, distance, coreK)
   );
   const parts = J.pieces.map((idx, p) => {
     const pm = idx.map((i) => members[i]);
@@ -1170,6 +1284,7 @@ export function unifiedOutline(
     linkMembers: parts.flatMap((p) => p.spine),
     pieces: fills.length,
     joinTree: J.tree,
+    joinTypical: J.typical,
     msLinks: tLinks - t0,
     msClose: tClose - tLinks,
     msSmooth: performance.now() - tClose,

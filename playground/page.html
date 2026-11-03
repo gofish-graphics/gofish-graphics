@@ -413,6 +413,66 @@
         font-family: system-ui, sans-serif;
         color: #1d232b;
       }
+      .barcode {
+        margin-top: 10px;
+      }
+      .bc-cap {
+        font:
+          12px/1.35 ui-monospace,
+          "SF Mono",
+          Menlo,
+          monospace;
+        color: var(--muted);
+        margin-top: 6px;
+      }
+      .bc-cap b {
+        color: var(--fg);
+        font-weight: 600;
+      }
+      .bc-sw {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+        margin-right: 6px;
+        vertical-align: -1px;
+      }
+      .bc-nat {
+        stroke: var(--accent);
+      }
+      .bc-nat-fill {
+        fill: var(--accent);
+      }
+      .bc-nat-txt {
+        color: var(--accent);
+      }
+      svg.bc {
+        display: block;
+        width: 100%;
+        height: auto;
+        color: var(--fg);
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      svg.bc .bar:hover rect + rect {
+        stroke: var(--fg);
+        stroke-width: 0.6;
+      }
+      .core-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        margin-top: 6px;
+      }
+      .core-row input {
+        width: 56px;
+        font: inherit;
+        padding: 3px 6px;
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        background: var(--surface);
+        color: var(--fg);
+      }
       :focus-visible {
         outline: 2px solid var(--accent);
         outline-offset: 2px;
@@ -464,6 +524,7 @@
               <g id="scenery"></g>
               <g id="today"></g>
               <g id="debug"></g>
+              <g id="hover"></g>
             </svg>
           </div>
           <div class="multiples" id="multiples" hidden></div>
@@ -588,6 +649,8 @@
                 id="join-ticks-labels"
               ></div>
               <div class="hint" id="join-hint"></div>
+              <div id="barcode" class="barcode"></div>
+              <div class="hint" id="bc-hover" aria-live="polite"></div>
             </div>
             <div class="field" id="join-measure-field">
               <span class="seg-name" id="join-measure-name"
@@ -610,8 +673,31 @@
                 <button type="button" role="radio" data-join-measure="local">
                   nearby gaps
                 </button>
+                <button type="button" role="radio" data-join-measure="pieces">
+                  pieces
+                </button>
               </div>
               <div class="hint" id="join-measure-hint"></div>
+            </div>
+            <div class="field" id="join-distance-field">
+              <span class="seg-name" id="join-distance-name">distance</span>
+              <div
+                class="seg"
+                role="radiogroup"
+                aria-labelledby="join-distance-name"
+              >
+                <button type="button" role="radio" data-join-distance="plain">
+                  plain
+                </button>
+                <button type="button" role="radio" data-join-distance="reach">
+                  mutual reachability
+                </button>
+              </div>
+              <label class="core-row" id="join-core-row" for="join-core"
+                >core: the k-th nearest member, k
+                <input type="number" id="join-core" min="1" max="30" step="1"
+              /></label>
+              <div class="hint" id="join-distance-hint"></div>
             </div>
             <div class="field" id="join-range-field">
               <span class="seg-name" id="join-range-name">join range</span>

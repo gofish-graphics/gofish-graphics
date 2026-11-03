@@ -10,6 +10,7 @@ import {
   type Seal,
   type JoinEdge,
   type JoinMeasure,
+  type JoinDistance,
 } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/unified";
 import {
   blobOutline,
@@ -19,7 +20,15 @@ import {
 import { arcsOutline } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/arcs";
 import { signedArea2 } from "../../packages/gofish-graphics/src/ast/geometry/plane";
 
-export type { BlobMember, Pt, Means, Seal, JoinEdge, JoinMeasure };
+export type {
+  BlobMember,
+  Pt,
+  Means,
+  Seal,
+  JoinEdge,
+  JoinMeasure,
+  JoinDistance,
+};
 
 export type ShapeKind = "blob" | "arcs";
 
@@ -43,6 +52,10 @@ export type Params = {
   join: number;
   /** PROTOTYPE: what join is measured in */
   joinMeasure: JoinMeasure;
+  /** PROTOTYPE: the distance the relative measures and pieces rank by, and
+   *  the mutual reachability's k */
+  joinDistance: JoinDistance;
+  joinCore: number;
   radius: number;
   holes: boolean;
   avoid: boolean;
@@ -64,6 +77,8 @@ export type SetResult = {
   links: BlobMember[];
   /** blob: the spanning tree's edges (kept, ramping in, or not kept) */
   tree: JoinEdge[];
+  /** the median tree edge in the ranked distance ("typical"'s unit) */
+  typical: number;
   pieces: number;
   holes: number;
   /** cached: the part of total spent building the per-set cache (spine, hull,
@@ -108,6 +123,8 @@ export function computeSet(s: SetInput, p: Params): SetResult {
           neck: p.neck,
           join: p.join,
           joinMeasure: p.joinMeasure,
+          joinDistance: p.joinDistance,
+          joinCore: p.joinCore,
           means: p.means,
           seal: p.seal,
         }
@@ -126,6 +143,7 @@ export function computeSet(s: SetInput, p: Params): SetResult {
     iterations: S.iterations ?? 0,
     links: S.linkMembers ?? [],
     tree: S.joinTree ?? [],
+    typical: S.joinTypical ?? NaN,
     ...count(rings),
     ms: {
       links: S.msLinks ?? 0,
