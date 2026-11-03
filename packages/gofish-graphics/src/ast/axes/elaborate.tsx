@@ -120,12 +120,21 @@ const ROW_GAP = 2; // gap between two label rows of an axis on one dim
  *  given (an option) or no axis on that dim (an owner's result). */
 type AxisSides = ["start" | "end" | undefined, "start" | "end" | undefined];
 
+/** Builds an axis's constraints: `at` is the handle on one of its shapes,
+ *  `inner` the handle on the box inside the ring, and `plot` the handle on
+ *  the node the axis describes, whose frame its datums are read in
+ *  (`position`'s `in`). */
+type AxisConstraints = (
+  at: Parameters<RingConstraints>[0],
+  inner: ConstraintRef,
+  plot: ConstraintRef | undefined
+) => any[];
+
 export type AxisElaboration = {
   /** Shapes to add as siblings of the content inside the wrapping layer. */
   nodes: GoFishNode[];
-  /** Builds this axis's constraints: `at` is the handle on one of its
-   *  `nodes`, and `inner` the handle on the box inside the ring. */
-  constraints: RingConstraints;
+  /** Builds this axis's constraints ({@link AxisConstraints}). */
+  constraints: AxisConstraints;
   /** The node the axis's title centers on: the axis's own span. A
    *  position-like axis (continuous/difference) sets its line; an ordinal
    *  axis sets the span from its first slot to its last (`axisSpan`), so
@@ -289,12 +298,11 @@ function tickMark(
   ) as GoFishNode;
 }
 
-/** The axis line: a 1px rect auto-spanning [min,max] via datum endpoints. */
-function axisLine(dim: 0 | 1, min: number, max: number): GoFishNode {
+/** The axis line: a 1px rect, which `positionAxis` spans across
+ *  [min, max] of the plot's frame. */
+function axisLine(dim: 0 | 1): GoFishNode {
   return Rect(
-    dim === 1
-      ? { w: 1, y: datum(min), y2: datum(max), fill: AXIS_COLOR }
-      : { h: 1, x: datum(min), x2: datum(max), fill: AXIS_COLOR }
+    dim === 1 ? { w: 1, fill: AXIS_COLOR } : { h: 1, fill: AXIS_COLOR }
   );
 }
 
@@ -319,6 +327,7 @@ function axisLine(dim: 0 | 1, min: number, max: number): GoFishNode {
 function gutterConstraints(
   dim: 0 | 1,
   inner: ConstraintRef,
+  plot: ConstraintRef | undefined,
   line: ConstraintRef,
   ticks: ConstraintRef[],
   crossFloor?: number,
@@ -349,6 +358,7 @@ function gutterConstraints(
               atEnd ? AXIS_CONTENT_GAP : -AXIS_CONTENT_GAP
             ),
             anchor: innerEdge,
+            ...(plot ? { in: plot } : {}),
           } as any,
           [line]
         )
@@ -413,10 +423,13 @@ function positionAxis(opts: {
 }): AxisElaboration {
   const { dim, lineMin, lineMax, tickValues } = opts;
   const side = opts.side ?? "start";
-  const pos = (v: number) =>
-    (dim === 1 ? { y: datum(v) } : { x: datum(v) }) as any;
+  // A point or span of the plot's frame: ticks sit on the plot's scale
+  // wherever the plot is (a sized plot is a scope of its own, outside of
+  // which the ring sits).
+  const at = (v: unknown, plot: ConstraintRef | undefined) =>
+    ({ [axisName(dim)]: v, ...(plot ? { in: plot } : {}) }) as any;
 
-  const line = axisLine(dim, lineMin, lineMax);
+  const line = axisLine(dim);
   const tickNodes = tickValues.map((v, i) => opts.tickNode(v, i));
   const tickLabelNodes = opts.tickLabel
     ? tickValues.map((v, i) => opts.tickLabel!(v, i))
@@ -428,23 +441,35 @@ function positionAxis(opts: {
     Text({ text: e.text, fontSize: LABEL_FONT_SIZE, fill: AXIS_COLOR })
   );
 
-  const constraints: RingConstraints = (at, inner) => {
-    const lineRef = at(line);
-    const ticks = tickNodes.map(at);
+  const constraints: AxisConstraints = (slot, inner, plot) => {
+    const lineRef = slot(line);
+    const ticks = tickNodes.map(slot);
+    const pos = (v: number) => at(datum(v), plot);
     // Data pin: always the bare tick's own bbox (its "middle" anchor is its
     // TRUE center regardless of what a sibling `tickLabel` does — see
     // `tickMark`'s doc comment for why an oblique label can't be nested
     // inside the pinned node).
-    const cs: any[] = tickValues.map((v, i) =>
-      Constraint.position(pos(v), [ticks[i]])
-    );
+    const cs: any[] = [
+      Constraint.position(at([datum(lineMin), datum(lineMax)], plot), [
+        lineRef,
+      ]),
+      ...tickValues.map((v, i) => Constraint.position(pos(v), [ticks[i]])),
+    ];
     // Seat the gutter FIRST: constraints apply in order and placement is
     // first-write-wins, so the line must be placed before anything
     // distributes off it — an unplaced-anchor distribute would walk from 0
     // and drag the line into the plot. Tick marks align flush with the line
     // (their inner edge IS the tick).
     cs.push(
-      ...gutterConstraints(dim, inner, lineRef, ticks, opts.crossFloor, side)
+      ...gutterConstraints(
+        dim,
+        inner,
+        plot,
+        lineRef,
+        ticks,
+        opts.crossFloor,
+        side
+      )
     );
     if (opts.tickLabel) {
       const trackAxis = axisName(dim);
@@ -457,7 +482,7 @@ function positionAxis(opts: {
           ? ["baseline", "middle"]
           : ["middle", "middle"];
       tickValues.forEach((_, i) => {
-        const label = at(tickLabelNodes[i]);
+        const label = slot(tickLabelNodes[i]);
         const tick = ticks[i];
         cs.push(
           Constraint.align({ [trackAxis]: anchors } as any, [label, tick])
@@ -475,7 +500,7 @@ function positionAxis(opts: {
     // (now seated) line, by default at the same outer offset as the
     // continuous labels (tick + gap).
     extra.forEach((e, i) => {
-      const label = at(labelNodes[i]);
+      const label = slot(labelNodes[i]);
       cs.push(Constraint.position(pos(e.value), [label]));
       cs.push(
         Constraint.distribute(
@@ -689,17 +714,21 @@ function elaborateDifferenceAxis(
     value: (v + tickValues[i + 1]) / 2,
     text: fmtNum(tickValues[i + 1] - v),
   }));
+  const axis = positionAxis({
+    dim,
+    lineMin: 0,
+    lineMax: width,
+    tickValues,
+    tickNode: () => tickRect(dim),
+    extraLabels,
+    crossFloor,
+    side,
+  });
   return {
-    ...positionAxis({
-      dim,
-      lineMin: 0,
-      lineMax: width,
-      tickValues,
-      tickNode: () => tickRect(dim),
-      extraLabels,
-      crossFloor,
-      side,
-    }),
+    ...axis,
+    // Its plot has no data 0, so no frame to read datums in: the axis's
+    // frame is the ring's own, which seats the plot in it (`contentAt`).
+    constraints: (slot, inner) => axis.constraints(slot, inner, undefined),
     contentAt: { dim, at: contentAt },
   };
 }
@@ -1775,7 +1804,8 @@ export async function elaborateChrome(
         {
           nodes: constrained.flatMap((e) => e.nodes),
           constraints: (at, inner) =>
-            constrained.flatMap((e) => e.constraints(at, inner)),
+            // Ticks read their datums in the content's frame.
+            constrained.flatMap((e) => e.constraints(at, inner, inner)),
         },
         { x: contentAt(0), y: contentAt(1) }
       );
@@ -1792,7 +1822,7 @@ export async function elaborateChrome(
       ring = await wrapRing(ring, {
         nodes: refBased.flatMap((e) => e.nodes),
         constraints: (at, inner) =>
-          refBased.flatMap((e) => e.constraints(at, inner)),
+          refBased.flatMap((e) => e.constraints(at, inner, inner)),
       });
       rings.push(ring);
     }

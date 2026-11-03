@@ -71,8 +71,8 @@ export async function wrapRing(
   // domains seat the ring where its content was (`KeyedDomains`, built
   // before chrome, #1114). The ring's shapes (an axis's ticks and line, a
   // legend, a title) are each a set of their own: none joins the content's
-  // type, whatever constraint seats it. Ticks still sit at data positions in
-  // the ring's frame, through their position constraints. Its sets read no
+  // type, whatever constraint seats it. Ticks sit at data positions in the
+  // content's frame (`position`'s `in`), which is no part of the ring's. Its sets read no
   // constraint: whatever seats the content (a literal pin, or a delta axis's
   // datum `contentAt`), the content is neither nested nor datum-placed. The
   // content is the ring's first child, by construction, and the rule reads

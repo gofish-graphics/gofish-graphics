@@ -9,6 +9,7 @@ import {
   isValue,
   type PositionValue,
 } from "../data";
+import { unplaceableValue } from "../../util";
 import type { AlignConstraint } from "./align";
 import { lowerAlignPlacement } from "./align";
 import type { DistributeConstraint } from "./distribute";
@@ -71,8 +72,9 @@ export function compilePlacementCoordinate<T>(
   // A map takes only a number to a pixel: a datum that is not one (a value
   // of a field whose values are not numbers) has no place on the axis.
   const value = getValue(coordinate);
-  if (scale === undefined || typeof value !== "number" || Number.isNaN(value))
-    return undefined;
+  if (typeof value !== "number" || Number.isNaN(value))
+    throw unplaceableValue(coordinate);
+  if (scale === undefined) return undefined;
   // `pxOf`, in `A`.
   return A.add(
     A.scale(value, scale.sigma),

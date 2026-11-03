@@ -163,8 +163,9 @@ export function buildChildSpans(
     const ring: Point[] = outline.map(([vx, vy]) => {
       const x = compilePlacementCoordinate(numbers, vx, posScales[0]);
       const y = compilePlacementCoordinate(numbers, vy, posScales[1]);
-      // A corner that is not a number would put NaN in what the child
-      // draws, so it is an error, not a guess.
+      // A corner that is not a number throws as it maps; one that maps off
+      // the plane (an infinite value) would put it in what the child draws,
+      // so it is an error, not a guess.
       const bad = [x, y].findIndex(
         (p) => p === undefined || !Number.isFinite(p)
       );
