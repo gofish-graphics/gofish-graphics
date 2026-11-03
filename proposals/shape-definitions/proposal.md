@@ -1186,7 +1186,7 @@ layer([
 14. `cut` step 2, unifying it with the `.cut()` mark method. Deferred to #1282. (card: cut)
 15. Add the method-twin rule to `api-design.md`. Yes. (card: translate)
 16. A hidden mark's color still feeds scales and legends. Yes. (card: venn)
-17. `blank()`. Delete it in favor of `rect().hidden()`, after counting its uses; revisit if it is widely used as the stand-in for "no mark". First count: 122 matches of `blank(` in 44 files (6 story files, 21 docs files, 8 Python files, the rest in `src`). (card: quantum)
+17. `blank()`. Keep it. It is the empty ("nil") mark that operators and relational desugaring build on, a concept of its own rather than sugar for `rect().hidden()`. (card: quantum)
 18. Migrate the gallery stories (four croissants, QuantumCircuit, OhmParseTree, DFSCQ) in the same change. Yes. (card: croissant)
 19. Wait for #1259 (`.layer()` reads names)? No. The croissant keeps its outer `layer` until #1259 lands. (card: croissant)
 

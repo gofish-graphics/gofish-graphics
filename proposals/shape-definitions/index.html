@@ -3550,11 +3550,9 @@ rect({ w: 20, h: 20 }).translate({ x: 10 }); // field: translate: { x: 10 }</cod
             <a class="see" href="#venn">card</a>
           </li>
           <li id="d-blank">
-            <code>blank()</code>. <b>Delete it</b> in favor of
-            <code>rect().hidden()</code>, after counting its uses; revisit if it
-            is widely used as the stand-in for "no mark". First count: 122
-            matches of <code>blank(</code> in 44 files (6 story files, 21 docs
-            files, 8 Python files, the rest in <code>src</code>).
+            <code>blank()</code>. <b>Keep it.</b> It is the empty ("nil") mark
+            that operators and relational desugaring build on, a concept of its
+            own rather than sugar for <code>rect().hidden()</code>.
             <a class="see" href="#quantum">card</a>
           </li>
           <li id="d-migrate">
