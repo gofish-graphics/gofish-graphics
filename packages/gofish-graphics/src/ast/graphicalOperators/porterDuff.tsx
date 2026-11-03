@@ -465,7 +465,6 @@ function compositeNode(
     children
   );
   node.clipsToBox = sizing !== "union";
-  node._readsShapes = true;
   return node;
 }
 

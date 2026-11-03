@@ -133,19 +133,26 @@ export const flattenLayout = (
 // TODO: like `flattenLayout`, a baked entry still references its source node as the
 // renderer; the end-state (#75) is self-contained primitives (`DisplayItem`).
 
-// TODO(#75 follow-up): "is this a bake boundary?" is currently a centralized
-// string set — a new self-drawing operator not listed here silently mis-renders
-// (its draw is dropped, its children hoisted). The right altitude is a flag the
-// operator factory sets on the node (like `_isComponent` / `_zOrder`), read once
-// via a polymorphic `node.isBakeBoundary()`; that would also subsume
-// `flattenLayout`'s inline `connect`/`box` cases.
-const BAKE_BOUNDARY_TYPES = new Set([
-  "coord",
+/** The compositors (`graphicalOperators/porterDuff.tsx`): they read their
+ *  operands' shapes, so a hidden node under one lowers as its shape
+ *  (`GoFishNode.visibility`). */
+export const COMPOSITE_TYPES: ReadonlySet<string> = new Set([
   "over",
   "atop",
   "in",
   "out",
   "xor",
+]);
+
+/** The node types that are bake boundaries whatever their options
+ *  (`GoFishNode.isBakeBoundary`, which adds a filtered node). TODO(#75
+ *  follow-up): a new self-drawing operator not listed here silently
+ *  mis-renders (its draw is dropped, its children hoisted); a flag the
+ *  operator factory sets would not, and would also subsume `flattenLayout`'s
+ *  inline `connect`/`box` cases. */
+export const BAKE_BOUNDARY_TYPES: ReadonlySet<string> = new Set([
+  "coord",
+  ...COMPOSITE_TYPES,
   ...RELATIONAL_TYPES,
   "arrow",
   "axisSpan",
@@ -166,10 +173,7 @@ const isTransparent = (node: GoFishAST): boolean =>
   "children" in node &&
   !!node.children &&
   node.children.length > 0 &&
-  !BAKE_BOUNDARY_TYPES.has((node as { type?: string }).type ?? "") &&
-  // A filtered node draws its subtree as one filtered picture
-  // (`drawFilter.ts`), so it lowers its children itself.
-  (node as { _filter?: unknown })._filter === undefined;
+  !node.isBakeBoundary();
 
 /**
  * Flatten a resolved scenegraph into an ordered list of `DisplayObject`s.
@@ -191,6 +195,9 @@ export const bake = (root: GoFishAST): DisplayObject[] => {
     transform: [number, number],
     scale: [number, number]
   ): void => {
+    // A hidden subtree draws nothing: the root bake never reaches into a
+    // compositor, the one place a hidden node still gives its shape.
+    if (node._hidden) return;
     const [ownTx, ownTy] = bakeTranslate(node);
     const composedTranslate: [number, number] = [
       ownTx + transform[0],
@@ -241,6 +248,8 @@ export const bakeSubtree = (
     transform: [number, number],
     sc: [number, number]
   ): void => {
+    // A hidden subtree draws nothing, unless a compositor reads its shape.
+    if (n._hidden && n.visibility() === "none") return;
     const [ownTx, ownTy] = bakeTranslate(n);
     const composedTranslate: [number, number] = [
       ownTx + transform[0],
