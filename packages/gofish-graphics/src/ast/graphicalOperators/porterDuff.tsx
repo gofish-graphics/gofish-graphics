@@ -110,6 +110,11 @@ function checkArity(operator: CompositeOperator, n: number): void {
     );
 }
 
+/** Whether a claim reaches nowhere: both sides are -∞, the claim of an
+ *  overlay of nothing. */
+const claimsNothing = (e: Extent): boolean =>
+  Pwl.at(e.ascent, 1) === -Infinity && Pwl.at(e.descent, 1) === -Infinity;
+
 /** The least of σ-affine values: the upper envelope of their negations,
  *  negated. */
 const lowest = (vs: Pwl.Value[]): Pwl.Value =>
@@ -120,7 +125,10 @@ const lowest = (vs: Pwl.Value[]): Pwl.Value =>
  * `layer` does; `first` its first operand's. `overlap` takes their overlap:
  * a claim is the interval from its descent below data 0 to its ascent above
  * it, so the overlap of claims takes the least of each side. An operand
- * that makes no claim (it takes the room it is given) does not narrow it.
+ * that makes no claim does not narrow it: one that takes the room it is
+ * given (no extent), or one that claims nothing here, as a ref placed by its
+ * own target does (the claim of an overlay of nothing, `Pwl.envelope([])`,
+ * whose sides are both -∞).
  */
 function compositeClaim(
   sizing: Sizing,
@@ -140,8 +148,11 @@ function compositeClaim(
       );
     const claims = childExtents
       .map((e, i) => unionChildExtents([e], [childSpaces[i]], a, spaces[a]))
-      .filter((e): e is Extent => e !== undefined);
-    if (claims.length <= 1) return claims[0];
+      .filter((e): e is Extent => e !== undefined && !claimsNothing(e));
+    // With no operand that narrows it, the overlap claims what they all do.
+    if (claims.length === 0)
+      return unionChildExtents(childExtents, childSpaces, a, spaces[a]);
+    if (claims.length === 1) return claims[0];
     return Extent(
       lowest(claims.map((c) => c.ascent)),
       lowest(claims.map((c) => c.descent))

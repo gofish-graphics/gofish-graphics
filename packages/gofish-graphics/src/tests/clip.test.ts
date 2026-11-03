@@ -426,4 +426,44 @@ console.log("# intersect under a partition");
   );
 }
 
+console.log("# intersect: a ref operand claims no room");
+{
+  // The density is laid out by its own chart and read through a ref, so it
+  // claims nothing in each cell, and the overlap is the cell region's: on a
+  // domain far from 0, as well as on one around it (#1267).
+  const gauss = (x: number) => Math.exp(-0.5 * ((x - 4500) / 500) ** 2);
+  const grid = Array.from({ length: 121 }, (_, i) => {
+    const x = 2200 + (4600 * i) / 120;
+    return { x, pdf: gauss(x) };
+  });
+  let message = "";
+  let paths = 0;
+  try {
+    const dl = await layer([
+      chart(grid)
+        .flow(scatter({ x: "x" }))
+        .mark(ribbon({ h: "pdf" }).name("density").hidden()),
+    ])
+      .relate(({ density }: any) => [
+        chart(grid)
+          .flow(
+            derive((rows: any) =>
+              quantileRows(rows, { x: "x", density: "pdf", n: 200 })
+            ),
+            partition({ by: field("x").bin(Bin.quantiles(4)), dir: "x" })
+          )
+          .mark(intersect({ fill: "#ddd" }, [density, region({ inset: 2 })])),
+      ])
+      .toDisplayList({ w: 400, h: 200 });
+    paths = items(dl).filter((it) => it.kind === "path").length;
+  } catch (e) {
+    message = e instanceof Error ? e.message : String(e);
+  }
+  check(
+    "a croissant on a domain away from 0 draws its four cells",
+    message === "" && paths === 4,
+    message || paths
+  );
+}
+
 report();
