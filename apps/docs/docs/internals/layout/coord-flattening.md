@@ -207,8 +207,13 @@ exported `bakeChildren(node, translate, scale)`, which runs `bakeSubtree(child,
 translate, scale)` on each child in paint order. A compositor bakes each of its two
 operands with `bakeSubtree` alone. Both flatten through every node that only places
 its children, so a node whose lowering does more is a boundary
-(`BAKE_BOUNDARY_TYPES`): an `offset`, whose pixel shift is no translate, lowers its
-child itself, or a `cut` slice's source would lose its shift. A pure translate-only boundary
+(`GoFishNode.isBakeBoundary()`: a type in `BAKE_BOUNDARY_TYPES`, or a node with a
+`filter`): an `offset`, whose pixel shift is no translate, lowers its
+child itself, or a `cut` slice's source would lose its shift. Both stop at a
+hidden node no compositor reads (`.hidden()`): it draws nothing, so its subtree
+makes no entries. The root bake never reaches into a compositor, so there a
+hidden node is simply skipped; `bakeSubtree` asks the node's `visibility()`,
+since under a compositor a hidden node still gives its shape. A pure translate-only boundary
 (`box`/`frame`) calls it on its _own_ subtree, seeded at the
 boundary's absolute translate, and lowers each returned entry at its baked absolute
 transform. This is stage 6d of [#39](https://github.com/gofish-graphics/gofish-graphics/issues/39):

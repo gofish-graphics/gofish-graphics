@@ -502,7 +502,9 @@ a Python `zOrder` makes one bridge call per operator call, as the operator's
 own channel accessors do. `hiddenModifier` (`.hidden(value = true)`, #1267)
 works the same way: `value` is a boolean or a callback on the datum, resolved
 per instance and through `resolveArgs`, and only a constant crosses the IR.
-It sets the node's hidden flag and nothing else, so it has no function form.
+The two are made by one maker, `datumValueModifier(name, set, isConstant)`.
+`.hidden()` sets the node's hidden flag and nothing else, so it has no
+function form.
 `nameableMark` attaches one list of modifiers, `NAMEABLE_MODIFIERS` (`name`,
 `label`, `zOrder`, `hidden`, `transition`), and exports their method names as
 `NAMEABLE_METHODS`, so a wrapper around a mark that must forward its chain

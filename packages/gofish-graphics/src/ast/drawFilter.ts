@@ -17,13 +17,14 @@ export type FilterOption = Filter | string;
 /** The `filter` option, as every mark's and `layer`'s options hold it. */
 export type FilterOptions = { filter?: FilterOption };
 
-/** The display-list filter a `filter` option draws with. `grayscale` is a
- *  CSS function; `luminanceToAlpha` has none, so a backend draws its SVG
- *  def. */
+/** The display-list filter a `filter` option draws with, checked once per
+ *  spec: undefined when none is given. `grayscale` is a CSS function;
+ *  `luminanceToAlpha` has none, so a backend draws its SVG def. */
 export function displayFilter(
-  value: FilterOption,
+  value: FilterOption | undefined,
   where: string
-): DisplayList.DisplayFilter {
+): DisplayList.DisplayFilter | undefined {
+  if (value === undefined) return undefined;
   if (typeof value === "string") return { kind: "css", value };
   const filter = kindValue(value) as Filter;
   Frontend.checkStrategy("Filter", filter, where);
@@ -35,12 +36,12 @@ export function displayFilter(
   }
 }
 
-/** Give `node` the filter of a `filter` option; `undefined` leaves it. */
+/** Give `node` a filter made by {@link displayFilter}; `undefined` leaves
+ *  it. */
 export function applyFilter<N extends GoFishNode>(
   node: N,
-  value: FilterOption | undefined,
-  where: string
+  filter: DisplayList.DisplayFilter | undefined
 ): N {
-  if (value !== undefined) node._filter = displayFilter(value, where);
+  if (filter !== undefined) node._filter = filter;
   return node;
 }

@@ -2,7 +2,7 @@
 // @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
-import { applyFilter, type FilterOptions } from "./drawFilter";
+import { applyFilter, displayFilter, type FilterOptions } from "./drawFilter";
 import { Frontend } from "gofish-ir";
 import { checkLengths } from "./length";
 
@@ -499,6 +499,10 @@ function buildCreatedMark(
       serialize,
       markOpts
     );
+  // `filter` is no channel: it filters the built node's whole drawing
+  // (`drawFilter.ts`), whatever the mark draws. It is checked once, here.
+  const { filter: filterOpt, ...channelOpts } = markOpts;
+  const filter = displayFilter(filterOpt, `${serialize ?? "mark"}({ filter })`);
   const baseMark: Mark<any> = async (
     d: unknown[],
     key?: string | number,
@@ -520,9 +524,6 @@ function buildCreatedMark(
     // resolve-time value; the paint layer re-evaluates it reactively per frame
     // via the datum-bound thunk baked at lower time. One split, shared with
     // every other mark factory — see `splitLiveChannels`.
-    // `filter` is no channel: it filters the built node's whole drawing
-    // (`drawFilter.ts`), whatever the mark draws.
-    const { filter, ...channelOpts } = markOpts;
     const { static: staticOpts, live: liveChannels } = splitLiveChannels(
       channelOpts,
       d
@@ -587,13 +588,13 @@ function buildCreatedMark(
               ? setColumnTypes([d[i]], types)
               : [d[i]];
         if (liveChannels) node.__gfLive = liveChannels;
-        applyFilter(node, filter, `${serialize ?? "mark"}({ filter })`);
+        applyFilter(node, filter);
       }
       return result as unknown as GoFishNode;
     }
     const node = await resolveMarkResult(raw, new LayerContext());
     if (liveChannels) node.__gfLive = liveChannels;
-    applyFilter(node, filter, `${serialize ?? "mark"}({ filter })`);
+    applyFilter(node, filter);
     // Its whole drawing, not only its own lowering: a component's children
     // lower on their own.
     if (noValue) for (const n of breadthFirst(node)) n.INTERNAL_emitNothing();

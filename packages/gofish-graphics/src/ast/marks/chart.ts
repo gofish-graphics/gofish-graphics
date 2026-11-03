@@ -65,6 +65,7 @@ import { layer as Layer } from "../graphicalOperators/layer";
 import type { BlendMode } from "../blendMode";
 import {
   applyFilter,
+  displayFilter,
   type FilterOption,
   type FilterOptions,
 } from "../drawFilter";
@@ -776,6 +777,11 @@ export function createRelationalMark<O extends Record<string, unknown>>(
     // A strategy kind used bare is read as its value from here on.
     const opts = withKindValues((options ?? {}) as O);
     const liveChannels = liveChannelsOf(opts);
+    // Its `filter` filters each connector's whole drawing; checked once.
+    const filter = displayFilter(
+      opts.filter as FilterOption | undefined,
+      `${type}({ filter })`
+    );
     /** The cell `ChartBuilder` writes the computed split / travel direction /
      *  time tier into — see `tagRelationalFusable`'s doc comment. Declared
      *  here, not inside the bag branch below, because `produce` reads it on
@@ -821,11 +827,7 @@ export function createRelationalMark<O extends Record<string, unknown>>(
         (node as any).datum = datum;
       if (liveChannels)
         (node as any).__gfLive = { ...(node as any).__gfLive, ...liveChannels };
-      return applyFilter(
-        node,
-        opts.filter as FilterOption | undefined,
-        `${type}({ filter })`
-      );
+      return applyFilter(node, filter);
     };
     /** Build one connector over `operands` from `o`: its paint (and other
      *  per-group channels) read off the rows `group` reaches, its live
