@@ -62,6 +62,9 @@ a node's paint and keeps its shape, so a hidden child of a compositing
 operator is a mask, and a filter that writes alpha
 (`Filter.luminanceToAlpha`) makes a luminance mask (#1267).
 
+**A node's box is as tight as the visible result allows, while staying cheap
+to compute.** An intersect's box is the overlap (#1267).
+
 **Data always flows as lists.** Every step takes a list and gives back a list.
 A split turns a list into a list of groups and never looks inside an item, so
 an item may itself be an array. With no `by`, a split puts each item in its own

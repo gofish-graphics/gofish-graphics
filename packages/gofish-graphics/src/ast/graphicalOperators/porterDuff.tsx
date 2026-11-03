@@ -361,8 +361,7 @@ function compositeNode(
       // A composite is a bake boundary, so its children are not lowered
       // before it: it lowers them itself, under its baked translate, and
       // emits one composite item (or, for an exact painted result, one
-      // path). The composite's items are in pixels relative to its bbox's
-      // origin, where both SVG backends draw them.
+      // path). Its items are in absolute pixels, like every other item.
       lower: (
         { intrinsicDims, transform, coordinateTransform, toPixel, local },
         _children,
@@ -384,10 +383,7 @@ function compositeNode(
           node,
           [tx, ty],
           coordinateTransform,
-          (p) => {
-            const [ax, ay] = outer(p);
-            return [ax - bbox.x, ay - bbox.y];
-          }
+          outer
         );
         const opacity =
           paint.opacity !== undefined ? { opacity: paint.opacity } : {};
@@ -430,13 +426,20 @@ function compositeNode(
         }
         if (strokes) throw noExactGeometry(operator, "a stroke");
         // Otherwise the fill, drawn over the result's region.
-        const fill = rectItemFromBox(0, bbox.w, 0, bbox.h, (p) => p, {
-          rx: 0,
-          ry: 0,
-          style: { ...style, stroke: undefined, strokeWidth: undefined },
-          datum: node.datum,
-          role: roleFor(node.datum),
-        });
+        const fill = rectItemFromBox(
+          bbox.x,
+          bbox.x + bbox.w,
+          bbox.y,
+          bbox.y + bbox.h,
+          (p) => p,
+          {
+            rx: 0,
+            ry: 0,
+            style: { ...style, stroke: undefined, strokeWidth: undefined },
+            datum: node.datum,
+            role: roleFor(node.datum),
+          }
+        );
         return [
           {
             kind: "composite",

@@ -159,8 +159,8 @@ export type DisplayFilter =
  * drawn where, and which masks clip it, is `compositeLayers` (composite.ts),
  * the one table both SVG backends read.
  *
- * The items of `operands` and `fill` are in pixels relative to the `bbox`
- * origin.
+ * The items of `operands` and `fill` are in absolute pixels, like every
+ * other item.
  */
 export interface CompositeItem extends BaseDisplayItem {
   kind: "composite";

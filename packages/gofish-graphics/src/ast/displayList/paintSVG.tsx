@@ -220,10 +220,12 @@ export function paintSVG(
       // one of them, clipped by nested masks: an alpha mask of the listed
       // operands' shapes, or an inverse one (a white rect with the shapes in
       // black over it). Layers that blend carry `mix-blend-mode`. The layers
-      // sit in a group at the bbox origin (the items are lowered relative to
-      // it), `isolate`d so a blend mixes the layers only, not what is behind
-      // the composite. A shape is referenced by each mask that reads it, so
-      // it rasterizes once per mask: the price of SVG's mask model.
+      // sit in a group `isolate`d so a blend mixes the layers only, not what
+      // is behind the composite. The items are in absolute pixels, as
+      // everywhere else: drawing an image under a fractional translate that
+      // its own fractional x cancels makes the browser resample it. A shape
+      // is referenced by each mask that reads it, so it rasterizes once per
+      // mask: the price of SVG's mask model.
       // gofish-ir's `render.ts` draws the same SVG.
       const uid = `gf-comp-${compositeIdCounter++}`;
       const { x, y, w, h } = item.bbox;
@@ -256,7 +258,7 @@ export function paintSVG(
                 maskUnits="userSpaceOnUse"
                 maskContentUnits="userSpaceOnUse"
               >
-                <rect x={0} y={0} width={w} height={h} fill="#fff" />
+                <rect x={x} y={y} width={w} height={h} fill="#fff" />
                 {uses}
               </mask>
             ) : (
@@ -286,11 +288,7 @@ export function paintSVG(
         );
       });
       return (
-        <g
-          transform={`translate(${x} ${y})`}
-          style="isolation:isolate"
-          opacity={item.style?.opacity}
-        >
+        <g style="isolation:isolate" opacity={item.style?.opacity}>
           <defs>
             {item.operands.map((o, i) => (
               <>

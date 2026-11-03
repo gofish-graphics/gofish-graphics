@@ -76,14 +76,9 @@ function walkItems(
         break;
       }
       case "composite": {
-        // Its operands are lowered relative to its bbox origin; their
-        // paint is what shows, so a hidden part takes no pointer.
-        const inner = {
-          ...at,
-          tx: at.tx + at.sx * item.bbox.x,
-          ty: at.ty + at.sy * item.bbox.y,
-        };
-        for (const o of item.operands) walkItems(o.paint, visit, inner);
+        // Its operands' paint is what shows, so a hidden part takes no
+        // pointer.
+        for (const o of item.operands) walkItems(o.paint, visit, at);
         break;
       }
     }

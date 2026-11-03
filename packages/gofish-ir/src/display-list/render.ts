@@ -142,11 +142,11 @@ const luminanceToAlphaFilterSVG = (id: string): string =>
  *  `<feImage>`: see `paintSVG.tsx` in gofish-graphics for why, issue #795).
  *  The layers and their masks are `compositeLayers` (composite.ts), shared
  *  with that backend. Each operand's paint and shape, and the fill, are
- *  written once as defs and drawn by `<use>`; the layers sit in a group at
- *  the bbox origin, `isolate`d so a blend mixes the layers only. */
+ *  written once as defs and drawn by `<use>`; the layers sit in a group
+ *  `isolate`d so a blend mixes the layers only. */
 const compositeToSVG = (item: CompositeItem): string => {
   const uid = `gf-comp-${compositeIdCounter++}`;
-  const { w, h } = item.bbox;
+  const { x, y, w, h } = item.bbox;
   const blendMode = item.blendMode ?? "normal";
   const paintId = (i: number) => `${uid}-p${i}`;
   const shapeId = (i: number) =>
@@ -175,7 +175,7 @@ const compositeToSVG = (item: CompositeItem): string => {
         key,
         m.invert
           ? `<mask id="${id}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">` +
-              `<rect x="0" y="0" width="${w}" height="${h}" fill="#fff"/>${uses}</mask>`
+              `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#fff"/>${uses}</mask>`
           : `<mask id="${id}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" style="mask-type:alpha">${uses}</mask>`
       );
     }
@@ -201,7 +201,7 @@ const compositeToSVG = (item: CompositeItem): string => {
     (item.fill ? group(fillId, item.fill) : "") +
     [...masks.values()].join("");
   return (
-    `<g transform="translate(${item.bbox.x} ${item.bbox.y})" style="isolation:isolate"${item.style?.opacity !== undefined ? ` opacity="${item.style.opacity}"` : ""}>` +
+    `<g style="isolation:isolate"${item.style?.opacity !== undefined ? ` opacity="${item.style.opacity}"` : ""}>` +
     `<defs>${defs}</defs>${drawn.join("")}</g>`
   );
 };
