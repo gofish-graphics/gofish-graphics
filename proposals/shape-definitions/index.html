@@ -684,10 +684,20 @@
             <code>fill</code> gives one new shape. With no fill, each part takes
             the paint of the operands that cover it, blended by
             <code>blendMode</code> (default <code>"normal"</code>) where they
-            overlap, as in PiCCL. A hidden operand adds its shape and no paint,
-            so it is a stencil. <code>mode</code> sets how a stencil is read.
+            overlap, as in PiCCL. <code>blendMode</code> is on
+            <code>union</code>, <code>intersect</code> and
+            <code>atop</code> only; <code>atop</code> takes no fill. A hidden
+            operand adds its shape and no paint, so it is a stencil. There is no
+            <code>mode</code>: a luminance stencil filters itself to alpha.
             <code>paint</code> is renamed <code>atop</code>;
             <code>mask</code> is deleted. <a class="see" href="#ops">see</a>
+          </li>
+          <li>
+            <span class="badge proposed">proposed</span> Alpha is shape. An
+            operand gives its shape, which is its alpha, partial coverage
+            included, and its paint. <code>.hidden()</code> removes the paint
+            and keeps the shape; no brightness leaks out of a hidden mark.
+            <a class="see" href="#alpha-shape">see</a>
           </li>
           <li>
             <span class="badge decided">decided</span> Bend and envelope are
@@ -1538,41 +1548,11 @@ layer([
 ]);</code></pre>
             </div>
             <div class="op">
-              <h4>atop, filled</h4>
+              <h4>atop</h4>
               <p class="say">
-                One shape: a's region. b adds nothing outside a.
+                All of a, and b over it only inside a. atop takes no fill: its
+                region is always a's.
               </p>
-              <figure class="render render">
-                <span class="tag tag-render">Render</span>
-                <div class="inputs">
-                  <div class="in">
-                    <img src="img/in-a.png" alt="" /><span class="lbl"
-                      ><code>a</code></span
-                    >
-                  </div>
-                  <div class="in">
-                    <img src="img/in-b.png" alt="" /><span class="lbl"
-                      ><code>b</code></span
-                    >
-                  </div>
-                </div>
-                <div class="arrow" aria-hidden="true">↓</div>
-                <img src="img/filled-atop.png" alt="" />
-                <figcaption>Rendered as a alone, filled.</figcaption>
-              </figure>
-              <p class="label proposed">Proposed</p>
-              <pre
-                class="new"
-              ><code class="language-javascript">atop({ fill: FILL }, [a, b]);</code></pre>
-              <p class="label current">Current</p>
-              <p class="none">
-                Not expressible as an operator today. a filled with
-                <code>FILL</code> draws the same pixels.
-              </p>
-            </div>
-            <div class="op">
-              <h4>atop, no fill</h4>
-              <p class="say">All of a, and b over it only inside a.</p>
               <figure class="render render">
                 <span class="tag tag-render">Render</span>
                 <div class="inputs">
@@ -1694,8 +1674,9 @@ layer([
             <div class="op">
               <h4>Masking: luminance</h4>
               <p class="say">
-                <code>mode</code> sets how a stencil is read. White shows all of
-                the stripes, gray about half.
+                The stencil turns its brightness into alpha before it is hidden,
+                as the bottle image grays itself. White keeps all of the
+                stripes, gray about half.
               </p>
               <figure class="render render">
                 <span class="tag tag-render">Render</span>
@@ -1707,25 +1688,31 @@ layer([
                     >
                   </div>
                   <div class="in">
-                    <img src="img/in-fade.png" alt="" /><span class="lbl"
-                      ><code>fade.hidden()</code></span
+                    <img src="img/in-fade-alpha.png" alt="" /><span class="lbl"
+                      ><code
+                        >fade.filter("luminance-to-alpha").hidden()</code
+                      ></span
                     >
                   </div>
                 </div>
                 <div class="arrow" aria-hidden="true">↓</div>
                 <img src="img/masking-luminance.png" alt="" />
                 <figcaption>
-                  Rendered today as <code>mask</code>: a white, b gray.
+                  Rendered today as <code>mask</code>, which reads luminance:
+                  the same values, if the filter works in sRGB as a luminance
+                  mask does.
                 </figcaption>
               </figure>
               <p class="label proposed">Proposed</p>
               <pre
                 class="new"
-                data-changed="2,3,4,5"
+                data-changed="2,3,4,5,6,7"
               ><code class="language-javascript">const fade = layer([aWhite, bGray]);
-intersect({ mode: &quot;luminance&quot; }, [
+intersect([
   stripes,
-  fade.hidden(),
+  fade
+    .filter(&quot;luminance-to-alpha&quot;)
+    .hidden(),
 ]);</code></pre>
               <p class="label current">Current</p>
               <pre
@@ -1795,10 +1782,14 @@ union({ blendMode: &quot;multiply&quot; }, [
               href="https://github.com/PiCCL/PiCCL_core/blob/main/src/library/operator.ts"
               >operator.ts</a
             >). Issue #196 (boolean operators after PiCCL and Porter-Duff)
-            writes atop as A ∪ (B ∩ A). <code>"outline"</code> needs an exact
-            outline and errors without one (an image, text). A composite is
-            drawn in an isolated group today (<code>isolation: isolate</code>),
-            so a blend reaches only its own operands.
+            writes atop as A ∪ (B ∩ A). <code>blendMode</code> applies where two
+            operands overlap, so <code>union</code>, <code>intersect</code> and
+            <code>atop</code> take it; <code>subtract</code> and
+            <code>exclude</code> never put two paints in one place, and passing
+            it to them is a type error. Using an exact outline, for strokes and
+            hit-testing, is an internal choice made when one exists. A composite
+            is drawn in an isolated group today (<code>isolation: isolate</code
+            >), so a blend reaches only its own operands.
           </p>
           <details class="merged">
             <summary>
@@ -1810,10 +1801,10 @@ union({ blendMode: &quot;multiply&quot; }, [
               stencil. A hidden operand adds shape and no paint, so
               <code>intersect</code> with a hidden operand is the mask and
               <code>subtract</code> the inverted mask. Today's
-              <code>mask</code> is deleted, and
-              <code>mode: "luminance"</code> covers it.
-              <code>paint</code> stays, as <code>atop</code>: its wire name is
-              already <code>"atop"</code>.
+              <code>mask</code> is deleted; a luminance mask is a stencil
+              filtered by <code>"luminance-to-alpha"</code>, and there is no
+              <code>mode</code> option. <code>paint</code> stays, as
+              <code>atop</code>: its wire name is already <code>"atop"</code>.
             </p>
           </details>
         </article>
@@ -2046,12 +2037,16 @@ await PICCL.show([[chart, data1]], container, { pictures });</code></pre>
           </p>
         </article>
         <article class="card" id="mask-modes">
-          <h3><a href="#mask-modes">mode: alpha vs luminance</a></h3>
+          <h3>
+            <a href="#mask-modes"
+              >Luminance: the stencil converts its own brightness</a
+            >
+          </h3>
           <p class="say">
-            Alpha reads the stencil's ink, so a stencil of any color works.
-            Luminance reads its brightness, as SVG
-            <code>&lt;mask&gt;</code> does. The stencil is hidden, so it adds
-            shape and no paint.
+            A stencil's shape is its alpha, so a stencil of any color works. To
+            read brightness instead, as SVG <code>&lt;mask&gt;</code> does, the
+            stencil filters itself to alpha before it is hidden. No option on
+            the operator. No brightness leaks out of a hidden mark.
           </p>
           <p class="label">Shared stencil (the content is the same stripes)</p>
           <pre
@@ -2079,7 +2074,7 @@ await PICCL.show([[chart, data1]], container, { pictures });</code></pre>
           </figure>
           <div class="compare">
             <div class="col">
-              <p class="label proposed">alpha, the default</p>
+              <p class="label proposed">as it is: alpha</p>
               <figure class="render render">
                 <span class="tag tag-render">Render</span
                 ><img src="img/clip-vs-mask-clip.png" alt="" />
@@ -2090,10 +2085,11 @@ await PICCL.show([[chart, data1]], container, { pictures });</code></pre>
               </figure>
               <pre
                 class="new"
-              ><code class="language-javascript">intersect([stripes, stencil.hidden()]); // mode: &quot;alpha&quot;</code></pre>
+              ><code class="language-javascript">// its alpha: all three circles
+intersect([stripes, stencil.hidden()]);</code></pre>
             </div>
             <div class="col">
-              <p class="label proposed">luminance</p>
+              <p class="label proposed">after luminance-to-alpha</p>
               <figure class="render render">
                 <span class="tag tag-render">Render</span
                 ><img src="img/clip-vs-mask-mask.png" alt="" />
@@ -2102,9 +2098,10 @@ await PICCL.show([[chart, data1]], container, { pictures });</code></pre>
                   full, about half, and nearly nothing.
                 </figcaption>
               </figure>
-              <pre
-                class="new"
-              ><code class="language-javascript">intersect({ mode: &quot;luminance&quot; }, [stripes, stencil.hidden()]);</code></pre>
+              <pre class="new"><code class="language-javascript">intersect([
+  stripes,
+  stencil.filter(&quot;luminance-to-alpha&quot;).hidden(),
+]);</code></pre>
             </div>
           </div>
         </article>
@@ -2115,10 +2112,10 @@ await PICCL.show([[chart, data1]], container, { pictures });</code></pre>
             >
           </h3>
           <p class="say">
-            <code>.hidden()</code> keeps the shape and paints nothing, so a
-            hidden operand adds area and no color. A
-            <code>fill: "none"</code> operand has no ink, so in alpha mode it
-            adds no area.
+            An operand gives two things: its shape, which is its alpha, partial
+            coverage included, and its paint. <code>.hidden()</code> removes the
+            paint and keeps the shape. A <code>fill: "none"</code> operand has
+            no alpha inside, so its interior is no shape.
           </p>
           <div class="figs">
             <figure class="render render">
@@ -2148,7 +2145,7 @@ await PICCL.show([[chart, data1]], container, { pictures });</code></pre>
             class="new"
             data-changed="1,2"
           ><code class="language-javascript">intersect([stripes, a.hidden()]); // a adds its shape, no paint: a mask
-intersect([stripes, aNone]); // fill: &quot;none&quot;: no ink, so no area</code></pre>
+intersect([stripes, aNone.hidden()]); // fill: &quot;none&quot;: only the stroke has alpha</code></pre>
           <p class="label current">Current</p>
           <pre
             class="now"
@@ -2160,8 +2157,8 @@ intersect([stripes, aNone]); // fill: &quot;none&quot;: no ink, so no area</code
               <thead>
                 <tr>
                   <th>Operand</th>
-                  <th>Adds area</th>
-                  <th>Adds paint</th>
+                  <th>Shape (its alpha)</th>
+                  <th>Paint</th>
                 </tr>
               </thead>
               <tbody>
@@ -2172,20 +2169,27 @@ intersect([stripes, aNone]); // fill: &quot;none&quot;: no ink, so no area</code
                 </tr>
                 <tr>
                   <td><code>a.hidden()</code></td>
-                  <td>yes, its shape</td>
+                  <td>yes</td>
                   <td>no</td>
+                </tr>
+                <tr>
+                  <td><code>a</code> with <code>opacity: 0.5</code></td>
+                  <td>half coverage</td>
+                  <td>yes, at half</td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>a</code> with <code>fill: "none"</code> and a stroke
+                  </td>
+                  <td>the stroke only, a ring</td>
+                  <td>the stroke</td>
                 </tr>
                 <tr>
                   <td>
                     <code>a</code> with <code>fill: "none"</code>, no stroke
                   </td>
-                  <td>no: no ink, so no alpha</td>
-                  <td>no</td>
-                </tr>
-                <tr>
-                  <td>the same, with <code>mode: "outline"</code></td>
-                  <td>yes, its outline</td>
-                  <td>no</td>
+                  <td class="nil">none</td>
+                  <td class="nil">none</td>
                 </tr>
               </tbody>
             </table>
@@ -2194,6 +2198,209 @@ intersect([stripes, aNone]); // fill: &quot;none&quot;: no ink, so no area</code
             Implementation: today's shim draws a hidden operand as nothing, so
             the result is empty. The alpha path must read a hidden operand's
             geometry, as <code>INTERNAL_lendDrawing</code> does for transitions.
+          </p>
+        </article>
+        <article class="card" id="alpha-shape">
+          <h3><a href="#alpha-shape">Alpha is shape</a></h3>
+          <p class="say">
+            A shape's edge is sometimes fuzzy. Its alpha says how much of each
+            point it covers, and that is its shape for every operation. Here a
+            blurred rect, hidden, fades the stripes out at its edge.
+          </p>
+          <div class="figs">
+            <figure class="render render">
+              <span class="tag tag-render">Render</span>
+              <div class="inputs">
+                <div class="in">
+                  <img src="img/in-band-stripes.png" alt="" /><span class="lbl"
+                    ><code>stripes</code></span
+                  >
+                </div>
+                <div class="in">
+                  <img src="img/in-soft.png" alt="" /><span class="lbl"
+                    ><code>soft.hidden()</code></span
+                  >
+                </div>
+              </div>
+              <div class="arrow" aria-hidden="true">↓</div>
+              <img src="img/soft-edge.png" alt="" />
+              <figcaption>
+                Rendered today as <code>mask</code> with the rect white.
+              </figcaption>
+            </figure>
+          </div>
+          <p class="label proposed">Proposed</p>
+          <pre
+            class="new"
+            data-changed="8"
+          ><code class="language-javascript">const soft = rect({
+  x: 40,
+  y: 30,
+  w: 120,
+  h: 80,
+  filter: &quot;blur(8px)&quot;,
+});
+intersect([stripes, soft.hidden()]);</code></pre>
+          <p class="label current">Current</p>
+          <pre
+            class="now"
+            data-changed="6,9"
+          ><code class="language-javascript">const soft = rect({
+  x: 40,
+  y: 30,
+  w: 120,
+  h: 80,
+  fill: &quot;white&quot;,
+  filter: &quot;blur(8px)&quot;,
+});
+mask([soft, stripes]);</code></pre>
+          <p class="label">Precedent</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  <th>What gives the shape</th>
+                  <th>Hidden or invisible content</th>
+                  <th>Checked</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    Porter and Duff 1984, <i>Compositing Digital Images</i>
+                  </td>
+                  <td>
+                    Alpha: "0 to indicate no coverage, 1 to mean full coverage,
+                    with fractions corresponding to partial coverage"
+                  </td>
+                  <td>n/a</td>
+                  <td>yes, the paper</td>
+                </tr>
+                <tr>
+                  <td>Porter and Duff 1984, premultiplied alpha</td>
+                  <td>Color is stored already multiplied by coverage</td>
+                  <td>n/a</td>
+                  <td>yes, the paper</td>
+                </tr>
+                <tr>
+                  <td>
+                    Smith 1995,
+                    <i>Alpha and the History of Digital Compositing</i>
+                  </td>
+                  <td>
+                    The alpha channel is the matte; separates binary masking
+                    from subtle matting
+                  </td>
+                  <td>n/a</td>
+                  <td>partly: the abstract and excerpts</td>
+                </tr>
+                <tr>
+                  <td>Smith and Blinn 1996, <i>Blue Screen Matting</i></td>
+                  <td>
+                    Keying pulls a matte; "alpha channel" and "matte" are used
+                    interchangeably
+                  </td>
+                  <td>n/a</td>
+                  <td>partly: summaries</td>
+                </tr>
+                <tr>
+                  <td>Film and VFX "matte"</td>
+                  <td>A holdout matte is the analog of the alpha channel</td>
+                  <td>n/a</td>
+                  <td>partly, via Smith and Blinn</td>
+                </tr>
+                <tr>
+                  <td>CSS <code>mask-mode: alpha</code></td>
+                  <td>
+                    "the alpha (transparency) values of the mask image"; a
+                    gradient <code>mask-image</code> gives a soft mask
+                  </td>
+                  <td>n/a</td>
+                  <td>yes for alpha; gradients from memory</td>
+                </tr>
+                <tr>
+                  <td>CSS Masking spec, mask</td>
+                  <td>
+                    Alpha mask value is the alpha; luminance mask value is
+                    luminance times alpha
+                  </td>
+                  <td>n/a</td>
+                  <td>yes</td>
+                </tr>
+                <tr>
+                  <td>SVG <code>clipPath</code> (counter)</td>
+                  <td>
+                    "The raw geometry of each child element exclusive of
+                    rendering properties such as fill, stroke, stroke-width"
+                  </td>
+                  <td>
+                    "made invisible by display or visibility it does not
+                    contribute"
+                  </td>
+                  <td>yes, CSS Masking spec</td>
+                </tr>
+                <tr>
+                  <td>Figma, Alpha mask</td>
+                  <td>
+                    Opacity: "the higher the opacity, the more that is
+                    revealed"; fills, strokes and gradients with varying opacity
+                    count
+                  </td>
+                  <td>The mask layer is not drawn, but shapes the result</td>
+                  <td>yes</td>
+                </tr>
+                <tr>
+                  <td>Figma, Vector mask (counter)</td>
+                  <td>Outline only; any opacity above zero counts as full</td>
+                  <td>same</td>
+                  <td>yes</td>
+                </tr>
+                <tr>
+                  <td>SwiftUI <code>.mask</code></td>
+                  <td>The mask view's alpha</td>
+                  <td>
+                    <code>.hidden()</code> keeps layout and draws nothing, so
+                    inside a mask it likely reveals nothing
+                  </td>
+                  <td>
+                    alpha from memory; <code>.hidden()</code> yes; inside a mask
+                    not confirmed
+                  </td>
+                </tr>
+                <tr>
+                  <td>Flutter <code>ShaderMask</code></td>
+                  <td>
+                    Default <code>BlendMode.modulate</code>, which applies the
+                    shader's alpha to the child
+                  </td>
+                  <td>n/a</td>
+                  <td>yes</td>
+                </tr>
+                <tr>
+                  <td>Flutter <code>ClipPath</code> (counter)</td>
+                  <td>Geometry, anti-aliased</td>
+                  <td>n/a</td>
+                  <td>yes</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="note">
+            Verdict: the precedent supports alpha as shape. Every compositing
+            source and every mask (Porter and Duff, Smith, CSS and Figma alpha
+            masks, SwiftUI, Flutter's ShaderMask) treats alpha as coverage. The
+            counter-precedent is clipping: SVG <code>clipPath</code>, Figma's
+            Vector mask and Flutter's <code>ClipPath</code> use raw geometry.
+            That splits on the clip and mask line, and GoFish takes the mask
+            side; an exact outline is an internal choice where one exists. One
+            conflict: in CSS and SVG, invisible content adds nothing to a clip,
+            and SwiftUI's <code>.hidden()</code> most likely adds nothing to a
+            mask. Figma's mask layer, and SVG's own mask and clip content, are
+            used for shape without being drawn, which is the role
+            <code>.hidden()</code> takes here (<a href="#d-hidden-op">open</a>).
+            When implemented, the rule goes in <code>api-design.md</code> and
+            the concepts docs (<a href="#d-alpha">open</a>).
           </p>
         </article>
         <article class="card" id="slots">
@@ -2597,9 +2804,10 @@ intersect([stripes, aNone]); // fill: &quot;none&quot;: no ink, so no area</code
                   <td>intersect</td>
                   <td>subtract</td>
                   <td>exclude</td>
-                  <td>intersect with a hidden operand, mode "outline"</td>
+                  <td>intersect with a hidden operand</td>
                   <td>
-                    intersect with a hidden operand, mode alpha or luminance
+                    intersect with a hidden operand; luminance by a filter on
+                    the stencil
                   </td>
                   <td>the hidden operand</td>
                 </tr>
@@ -2639,16 +2847,6 @@ intersect([stripes, aNone]); // fill: &quot;none&quot;: no ink, so no area</code
               <code>subtract</code>, <code>intersect</code> and
               <code>exclude</code>, and ggfx inverts a mask with
               <code>invert = TRUE</code>.
-            </li>
-            <li>
-              <b>mode.</b> How a stencil operand is read:
-              <code>"alpha"</code> (default), <code>"outline"</code> or
-              <code>"luminance"</code>. CSS calls it
-              <code>mask-mode</code> (alpha, luminance) and Sketch calls it Mask
-              Mode (Outline, Alpha). <code>type</code> (Figma's mask type, SVG
-              <code>mask-type</code>) is the alternative (<a href="#d-mode"
-                >open</a
-              >).
             </li>
           </ul>
         </article>
@@ -3211,17 +3409,26 @@ rect({ w: 20, h: 20 }).translate({ x: 10 }); // field: translate: { x: 10 }</cod
               <tr>
                 <td>
                   <code
-                    >intersect({ mode: &quot;outline&quot; }, [b,
-                    image(o)])</code
+                    >subtract({ blendMode: &quot;multiply&quot; }, [a, b])</code
                   >
                 </td>
-                <td>Error: an image has no exact outline. Use alpha.</td>
+                <td>
+                  Type error: <code>subtract</code> and
+                  <code>exclude</code> never put two paints in one place.
+                </td>
+              </tr>
+              <tr>
+                <td><code>atop({ fill: &quot;red&quot; }, [a, b])</code></td>
+                <td>
+                  Type error: <code>atop</code>'s region is always a's. Fill a
+                  instead.
+                </td>
               </tr>
               <tr>
                 <td><code>intersect([b, aNone.hidden()])</code></td>
                 <td>
-                  Alpha reads a's ink. If a has <code>fill: "none"</code>, that
-                  is only its stroke; use <code>mode: "outline"</code>.
+                  aNone has <code>fill: "none"</code>: its alpha, and so its
+                  shape, is only its stroke. b shows in a ring.
                 </td>
               </tr>
               <tr>
@@ -3255,7 +3462,9 @@ rect({ w: 20, h: 20 }).translate({ x: 10 }); // field: translate: { x: 10 }</cod
           </li>
           <li id="d-normal">
             (2) Default <code>blendMode</code> to <code>"normal"</code>, the
-            later operand over the earlier, as PiCCL, Canvas, Cairo and SVG
+            later operand over the earlier, on <code>union</code>,
+            <code>intersect</code> and <code>atop</code> (the only operations
+            that take it), as PiCCL, Canvas, Cairo and SVG
             <code>feComposite</code> default to over? Today the default is
             <code>"color"</code> (<code>porterDuff.tsx</code> lines 460 and
             505), and the type,
@@ -3265,38 +3474,58 @@ rect({ w: 20, h: 20 }).translate({ x: 10 }); // field: translate: { x: 10 }</cod
             line 1164), has no <code>"normal"</code>; it gets one.
             <a class="see" href="#ops">card</a>
           </li>
+          <li id="d-alpha">
+            (3) Adopt "alpha is shape": an operand gives its shape, which is its
+            alpha, partial coverage included, and its paint? Precedent supports
+            it on the mask side (Porter and Duff, Smith, CSS and Figma alpha
+            masks, Flutter's ShaderMask); clips use raw geometry. Document it in
+            <code>api-design.md</code> and the concepts docs when it lands?
+            <a class="see" href="#alpha-shape">card</a>
+          </li>
           <li id="d-hidden-op">
-            (3) A hidden operand keeps its shape and paints nothing, so
-            <code>intersect([stripes, a.hidden()])</code> is a mask and
-            <code>subtract</code> an inverted one? This replaces the old
-            decision to warn on <code>.hidden()</code> on an operand.
+            (4) What does a hidden operand give? (A) Its shape and no paint, so
+            <code>intersect([stripes, a.hidden()])</code> is a mask: Figma's
+            mask layer and SVG's mask content are used without being drawn. (B)
+            Nothing, as invisible content adds nothing to an SVG clip and
+            SwiftUI's <code>.hidden()</code> most likely adds nothing to a mask;
+            a stencil would then need another way to drop its paint.
+            Recommended: A, since <code>.hidden()</code> already means laid out
+            and not painted. This replaces the old decision to warn on
+            <code>.hidden()</code> on an operand.
             <a class="see" href="#intersect-hidden">card</a>
           </li>
           <li id="d-atop">
-            (4) Name the fifth operation <code>atop</code> (Porter-Duff, PiCCL,
+            (5) Name the fifth operation <code>atop</code> (Porter-Duff, PiCCL,
             SVG, Canvas, Cairo, Flutter, Android, and today's wire name), or
             keep <code>paint</code> (#202)? Recommended: <code>atop</code>.
             <a class="see" href="#naming-atop">card</a>
           </li>
           <li id="d-gray">
-            (5) The bottle grays its image with the existing
-            <code>filter: "grayscale(1)"</code>, adding no API? Or add a recolor
-            option like PiCCL's <code>Picture({ color })</code>, which is more
-            general and takes data, or <code>saturate: 0</code>, or
-            <code>grayscale: true</code>? Recommended: <code>filter</code> now,
-            and a recolor when an example maps data to an image's color.
-            <a class="see" href="#bottle">card</a>
-          </li>
-          <li id="d-mode">
-            (6) Name the stencil option <code>mode</code> (CSS
-            <code>mask-mode</code>, Sketch's Mask Mode), or
-            <code>type</code> (Figma's mask type, SVG <code>mask-type</code>)?
-            <a class="see" href="#mask-modes">card</a>
+            (6) One spelling for a mark that filters itself. The bottle grays
+            its image with the existing
+            <code>filter: "grayscale(1)"</code> option (on
+            <code>image</code> and <code>rect</code> today, a CSS filter
+            string). A luminance stencil needs <code>luminance-to-alpha</code>,
+            which has no CSS function (it is SVG
+            <code>feColorMatrix type="luminanceToAlpha"</code>). Today a rect
+            renders it as <code>filter: "url(#lumToAlpha)"</code> pointing at a
+            hand-written SVG filter (checked: white gives alpha 1,
+            <code>#808080</code> about 0.5 in sRGB, black 0), so the option
+            carries it but the user must write the filter. And
+            <code>circle</code> and <code>layer</code> have no filter option.
+            Options: a <code>.filter()</code> method on any mark, chart or
+            layer, like <code>.hidden()</code>, with the option folded in; or
+            the option on every mark and layer. The value: a string, or a family
+            (<code>Filter.grayscale()</code>,
+            <code>Filter.luminanceToAlpha()</code>), as option values that
+            choose a strategy are. A recolor like PiCCL's
+            <code>Picture({ color })</code> can follow when an example maps data
+            to an image's color. <a class="see" href="#mask-modes">card</a>
           </li>
           <li id="d-blendname">
             (7) <code>line</code> and <code>ribbon</code> say
             <code>mixBlendMode</code> (<code>"normal" | "multiply"</code>,
-            <code>chart.ts</code> lines 973 and 1037); the set operations say
+            <code>chart.ts</code> lines 973 and 1037); the operations say
             <code>blendMode</code> (Python <code>blend_mode</code>). Unify on
             one name? <a class="see" href="#ops">card</a>
           </li>
@@ -3306,10 +3535,11 @@ rect({ w: 20, h: 20 }).translate({ x: 10 }); // field: translate: { x: 10 }</cod
             <code>filter: "grayscale(1)"</code>; the PorterDuffRelations paint
             story; two Python stories), with the wire name unchanged.
             <code>mask</code> is rewritten as <code>intersect</code> with a
-            hidden operand: 3 calls (the PorterDuffRelations mask story,
-            <code>coordPaintOrder.test.ts</code> line 411, one Python story),
-            plus the internal <code>Mask</code> in <code>cut.tsx</code>. The
-            <code>mask</code> entries in <code>descriptors.ts</code>,
+            hidden operand filtered by <code>luminance-to-alpha</code>, since
+            today's mask reads luminance: 3 calls (the PorterDuffRelations mask
+            story, <code>coordPaintOrder.test.ts</code> line 411, one Python
+            story), plus the internal <code>Mask</code> in <code>cut.tsx</code>.
+            The <code>mask</code> entries in <code>descriptors.ts</code>,
             <code>jsonSchema.ts</code> and <code>_generated.py</code> go. 5 docs
             pages: region-compositing and cut, JS and Python, and the
             handwritten pictorial-charts tutorial, which gets an issue.

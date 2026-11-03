@@ -804,10 +804,6 @@ export const NoFillAtop: StoryObj = {
 export const TodayAtop: StoryObj = {
   render: () => grid(paint([noFillA(), noFillB()])),
 };
-// Proposed `atop({ fill }, [a, b])`: one shape, a's region.
-export const FilledAtop: StoryObj = {
-  render: () => grid(gridA(GRID_FILL)),
-};
 
 // ── Masking: a hidden operand adds area and no paint ───────────────────────
 
@@ -916,7 +912,7 @@ const GHOST = { opacity: 0 };
 // dashes the hidden outline (stroke #888) after render.
 const dashHidden = (container: HTMLElement) => {
   const style = document.createElement("style");
-  style.textContent = 'ellipse[stroke="#888"] { stroke-dasharray: 5 4; }';
+  style.textContent = '[stroke="#888"] { stroke-dasharray: 5 4; }';
   container.appendChild(style);
   return container;
 };
@@ -1021,4 +1017,89 @@ export const InBottleImage: StoryObj = {
 };
 export const InBottleRect: StoryObj = {
   render: () => bottleChart(false, true),
+};
+
+// ── Alpha is shape: a soft edge ────────────────────────────────────────────
+// Proposed `intersect([stripes, soft.hidden()])`, where `soft` is a rect
+// blurred by its existing `filter` option. Its alpha is its shape, so the
+// stripes fade out at its edge. Today: `mask` with the rect white (white's
+// luminance is 1, so luminance and alpha agree).
+const SOFT = { x: 40, y: 30, w: 120, h: 80, filter: "blur(8px)" };
+export const SoftEdge: StoryObj = {
+  render: () =>
+    grid(
+      layer([
+        mask([rect({ ...SOFT, fill: "white" }), bandStripes()]),
+        bandStripes({ opacity: 0 }),
+      ])
+    ),
+};
+// The input: the blurred rect's alpha, drawn gray, with a dashed edge for
+// hidden.
+export const InSoft: StoryObj = {
+  render: () =>
+    dashHidden(
+      grid(
+        layer([
+          bandStripes(GHOST),
+          rect({ ...SOFT, fill: "#888" }),
+          rect({
+            x: 40,
+            y: 30,
+            w: 120,
+            h: 80,
+            fill: "none",
+            stroke: "#888",
+            strokeWidth: 1.5,
+          }),
+        ])
+      )
+    ),
+};
+// The luminance card's input after `.filter("luminance-to-alpha")`: white
+// gives alpha 1, mid gray about 0.5. Drawn dark, at that opacity.
+export const InFadeAlpha: StoryObj = {
+  render: () =>
+    dashHidden(
+      grid(
+        layer([
+          bandStripes(GHOST),
+          // b is drawn over a in fade, so the overlap has b's brightness.
+          // Today's subtract([b, a]) draws a minus b.
+          subtract([gridB(), gridA({ fill: "#444" })]),
+          gridB({ fill: "#444", opacity: 0.5 }),
+          gridA(HIDDEN),
+          gridB(HIDDEN),
+        ])
+      )
+    ),
+};
+
+// Spelling check: luminance-to-alpha through the existing `filter` option.
+// There is no CSS filter function for it, so the rect points at a
+// story-local SVG <filter> with feColorMatrix type="luminanceToAlpha".
+// Rendered: white gives alpha 1, #808080 about 0.5 (in sRGB, as a luminance
+// mask reads it), black 0. The result is black at that alpha.
+const lumToAlphaDef = (container: HTMLElement) => {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("width", "0");
+  svg.setAttribute("height", "0");
+  svg.innerHTML =
+    '<filter id="lumToAlpha" color-interpolation-filters="sRGB"><feColorMatrix type="luminanceToAlpha"/></filter>';
+  container.appendChild(svg);
+  return container;
+};
+const L2A = { y: 20, w: 55, h: 80, filter: "url(#lumToAlpha)" };
+export const LumToAlphaCheck: StoryObj = {
+  render: () =>
+    lumToAlphaDef(
+      grid(
+        layer([
+          rect({ ...L2A, x: 10, fill: "white" }),
+          rect({ ...L2A, x: 72, fill: "#808080" }),
+          rect({ ...L2A, x: 134, fill: "black" }),
+        ])
+      )
+    ),
 };

@@ -10,7 +10,8 @@ A shape that is laid out and read by other marks, but not painted.
 - **decided.** Only on a value you hold: not through `ref` or `selectAll`, and no operator sets it.
 - **proposed.** A child slot draws its child as itself. An operand slot is read for shape, place, paint or data, and the operator draws its result from what it read, never the operand as itself. A ref draws nothing.
 - **proposed.** Which frame is an operand in? The frame the operator sits in, never the frame it makes for its children. An inline operand is laid out there; a ref is read where it was placed and mapped into that frame.
-- **proposed.** Region compositing is five operations: `union`, `intersect`, `subtract`, `exclude` and `atop`. The result is drawn from the operands' coverage. A `fill` gives one new shape. With no fill, each part takes the paint of the operands that cover it, blended by `blendMode` (default `"normal"`) where they overlap, as in PiCCL. A hidden operand adds its shape and no paint, so it is a stencil. `mode` sets how a stencil is read. `paint` is renamed `atop`; `mask` is deleted.
+- **proposed.** Region compositing is five operations: `union`, `intersect`, `subtract`, `exclude` and `atop`. The result is drawn from the operands' coverage. A `fill` gives one new shape. With no fill, each part takes the paint of the operands that cover it, blended by `blendMode` (default `"normal"`) where they overlap, as in PiCCL. `blendMode` is on `union`, `intersect` and `atop` only; `atop` takes no fill. A hidden operand adds its shape and no paint, so it is a stencil. There is no `mode`: a luminance stencil filters itself to alpha. `paint` is renamed `atop`; `mask` is deleted.
+- **proposed.** Alpha is shape. An operand gives its shape, which is its alpha, partial coverage included, and its paint. `.hidden()` removes the paint and keeps the shape; no brightness leaks out of a hidden mark.
 - **decided.** Bend and envelope are coordinate transforms with a shape argument: `Coord.bend({ along })`, `Coord.envelope({ top, bottom })`. The coord reads the shape and never draws it. Deferred.
 - **decided.** Renames: `position` becomes `translate`; `cut(opts, [source])`.
 
@@ -536,31 +537,13 @@ exclude([a, b]);
 layer([subtract([b, a]), subtract([a, b])]);
 ```
 
-#### atop, filled
+#### atop
 
-One shape: a's region. b adds nothing outside a.
-
-Inputs: ![`a`](img/in-a.png) `a` ![`b`](img/in-b.png) `b` → result
-
-![atop, filled](img/filled-atop.png)
-
-_Rendered as a alone, filled._
-
-**Proposed**
-
-```js
-atop({ fill: FILL }, [a, b]);
-```
-
-**Current:** Not expressible as an operator today. a filled with `FILL` draws the same pixels.
-
-#### atop, no fill
-
-All of a, and b over it only inside a.
+All of a, and b over it only inside a. atop takes no fill: its region is always a's.
 
 Inputs: ![`a`](img/in-a.png) `a` ![`b`](img/in-b.png) `b` → result
 
-![atop, no fill](img/no-fill-atop.png)
+![atop](img/no-fill-atop.png)
 
 _Rendered today as a, then `mask([aWhite, b])`._
 
@@ -626,19 +609,19 @@ subtract([a, stripes]);
 
 #### Masking: luminance
 
-`mode` sets how a stencil is read. White shows all of the stripes, gray about half.
+The stencil turns its brightness into alpha before it is hidden, as the bottle image grays itself. White keeps all of the stripes, gray about half.
 
-Inputs: ![`stripes`](img/in-band-stripes.png) `stripes` ![`fade.hidden()`](img/in-fade.png) `fade.hidden()` → result
+Inputs: ![`stripes`](img/in-band-stripes.png) `stripes` ![`fade.filter("luminance-to-alpha").hidden()`](img/in-fade-alpha.png) `fade.filter("luminance-to-alpha").hidden()` → result
 
 ![Masking: luminance](img/masking-luminance.png)
 
-_Rendered today as `mask`: a white, b gray._
+_Rendered today as `mask`, which reads luminance: the same values, if the filter works in sRGB as a luminance mask does._
 
 **Proposed**
 
 ```js
 const fade = layer([aWhite, bGray]);
-intersect({ mode: "luminance" }, [stripes, fade.hidden()]);
+intersect([stripes, fade.filter("luminance-to-alpha").hidden()]);
 ```
 
 **Current**
@@ -667,11 +650,11 @@ union({ blendMode: "multiply" }, [r, g, b]);
 
 **Current:** Not expressible today. Only `line` and `ribbon` take a blend mode.
 
-Today every composite grays its first operand and blends the second over it in `"color"` (`paintSVG.tsx`). That is GoFish's own lowering. PiCCL draws each operand in its own paint: `GroupShape.renderSVG` in [PiCCL_core/src/compiler/shape.ts](https://github.com/PiCCL/PiCCL_core/blob/main/src/compiler/shape.ts) masks each operand by the others and blends them by `blend`, default `"normal"` ([operator.ts](https://github.com/PiCCL/PiCCL_core/blob/main/src/library/operator.ts)). Issue #196 (boolean operators after PiCCL and Porter-Duff) writes atop as A ∪ (B ∩ A). `"outline"` needs an exact outline and errors without one (an image, text). A composite is drawn in an isolated group today (`isolation: isolate`), so a blend reaches only its own operands.
+Today every composite grays its first operand and blends the second over it in `"color"` (`paintSVG.tsx`). That is GoFish's own lowering. PiCCL draws each operand in its own paint: `GroupShape.renderSVG` in [PiCCL_core/src/compiler/shape.ts](https://github.com/PiCCL/PiCCL_core/blob/main/src/compiler/shape.ts) masks each operand by the others and blends them by `blend`, default `"normal"` ([operator.ts](https://github.com/PiCCL/PiCCL_core/blob/main/src/library/operator.ts)). Issue #196 (boolean operators after PiCCL and Porter-Duff) writes atop as A ∪ (B ∩ A). `blendMode` applies where two operands overlap, so `union`, `intersect` and `atop` take it; `subtract` and `exclude` never put two paints in one place, and passing it to them is a type error. Using an exact outline, for strokes and hit-testing, is an internal choice made when one exists. A composite is drawn in an isolated group today (`isolation: isolate`), so a blend reaches only its own operands.
 
 <details><summary>Merged and removed: `mask` and `clip`; `paint` becomes `atop`</summary>
 
-Earlier rounds had separate operators for drawing content inside a stencil. A hidden operand adds shape and no paint, so `intersect` with a hidden operand is the mask and `subtract` the inverted mask. Today's `mask` is deleted, and `mode: "luminance"` covers it. `paint` stays, as `atop`: its wire name is already `"atop"`.
+Earlier rounds had separate operators for drawing content inside a stencil. A hidden operand adds shape and no paint, so `intersect` with a hidden operand is the mask and `subtract` the inverted mask. Today's `mask` is deleted; a luminance mask is a stencil filtered by `"luminance-to-alpha"`, and there is no `mode` option. `paint` stays, as `atop`: its wire name is already `"atop"`.
 
 </details>
 
@@ -800,9 +783,9 @@ PiCCL grays the picture with its own option, `Picture({ color: "#fff" })`. It re
 
 Vega's image mark has no filter (checked); matplotlib has none either (from memory). Recommended: the existing `filter`, since it adds no API and renders today. A recolor like PiCCL's `color` is the general one; add it when an example maps data to an image's color ([open](#d-gray)).
 
-### mode: alpha vs luminance
+### Luminance: the stencil converts its own brightness
 
-Alpha reads the stencil's ink, so a stencil of any color works. Luminance reads its brightness, as SVG `<mask>` does. The stencil is hidden, so it adds shape and no paint.
+A stencil's shape is its alpha, so a stencil of any color works. To read brightness instead, as SVG `<mask>` does, the stencil filters itself to alpha before it is hidden. No option on the operator. No brightness leaks out of a hidden mark.
 
 Inputs: ![`stencil.hidden()`](img/in-stencil.png) `stencil.hidden()` ![`stripes`](img/in-wide-stripes.png) `stripes` → result
 
@@ -816,29 +799,30 @@ const stencil = layer([
 ]);
 ```
 
-**alpha, the default**
+**as it is: alpha**
 
-![alpha, the default](img/clip-vs-mask-clip.png)
+![as it is: alpha](img/clip-vs-mask-clip.png)
 
 _Rendered today as `mask([stencil, stripes])` with all three circles white._
 
 ```js
-intersect([stripes, stencil.hidden()]); // mode: "alpha"
+// its alpha: all three circles
+intersect([stripes, stencil.hidden()]);
 ```
 
-**luminance**
+**after luminance-to-alpha**
 
-![luminance](img/clip-vs-mask-mask.png)
+![after luminance-to-alpha](img/clip-vs-mask-mask.png)
 
 _Real render of today's `mask([stencil, stripes])`: full, about half, and nearly nothing._
 
 ```js
-intersect({ mode: "luminance" }, [stripes, stencil.hidden()]);
+intersect([stripes, stencil.filter("luminance-to-alpha").hidden()]);
 ```
 
 ### A hidden operand vs a transparent one
 
-`.hidden()` keeps the shape and paints nothing, so a hidden operand adds area and no color. A `fill: "none"` operand has no ink, so in alpha mode it adds no area.
+An operand gives two things: its shape, which is its alpha, partial coverage included, and its paint. `.hidden()` removes the paint and keeps the shape. A `fill: "none"` operand has no alpha inside, so its interior is no shape.
 
 Inputs: ![`stripes`](img/in-band-stripes.png) `stripes` ![`a.hidden()`](img/in-a-hidden-band.png) `a.hidden()` → result
 
@@ -850,7 +834,7 @@ _Render. Proposed `intersect([stripes, a.hidden()])`, rendered today as `mask` w
 
 ```js
 intersect([stripes, a.hidden()]); // a adds its shape, no paint: a mask
-intersect([stripes, aNone]); // fill: "none": no ink, so no area
+intersect([stripes, aNone.hidden()]); // fill: "none": only the stroke has alpha
 ```
 
 **Current**
@@ -861,14 +845,72 @@ mask([aWhite, stripes]);
 
 **What an operand adds**
 
-| Operand                            | Adds area               | Adds paint                     |
-| ---------------------------------- | ----------------------- | ------------------------------ |
-| `a`                                | yes                     | yes, blended where it overlaps |
-| `a.hidden()`                       | yes, its shape          | no                             |
-| `a` with `fill: "none"`, no stroke | no: no ink, so no alpha | no                             |
-| the same, with `mode: "outline"`   | yes, its outline        | no                             |
+| Operand                              | Shape (its alpha)       | Paint                          |
+| ------------------------------------ | ----------------------- | ------------------------------ |
+| `a`                                  | yes                     | yes, blended where it overlaps |
+| `a.hidden()`                         | yes                     | no                             |
+| `a` with `opacity: 0.5`              | half coverage           | yes, at half                   |
+| `a` with `fill: "none"` and a stroke | the stroke only, a ring | the stroke                     |
+| `a` with `fill: "none"`, no stroke   | none                    | none                           |
 
 Implementation: today's shim draws a hidden operand as nothing, so the result is empty. The alpha path must read a hidden operand's geometry, as `INTERNAL_lendDrawing` does for transitions.
+
+### Alpha is shape
+
+A shape's edge is sometimes fuzzy. Its alpha says how much of each point it covers, and that is its shape for every operation. Here a blurred rect, hidden, fades the stripes out at its edge.
+
+Inputs: ![`stripes`](img/in-band-stripes.png) `stripes` ![`soft.hidden()`](img/in-soft.png) `soft.hidden()` → result
+
+![Render](img/soft-edge.png)
+
+_Render. Rendered today as `mask` with the rect white._
+
+**Proposed**
+
+```js
+const soft = rect({
+  x: 40,
+  y: 30,
+  w: 120,
+  h: 80,
+  filter: "blur(8px)",
+});
+intersect([stripes, soft.hidden()]);
+```
+
+**Current**
+
+```js
+const soft = rect({
+  x: 40,
+  y: 30,
+  w: 120,
+  h: 80,
+  fill: "white",
+  filter: "blur(8px)",
+});
+mask([soft, stripes]);
+```
+
+**Precedent**
+
+| Source                                                   | What gives the shape                                                                                                  | Hidden or invisible content                                                            | Checked                                                         |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Porter and Duff 1984, Compositing Digital Images         | Alpha: "0 to indicate no coverage, 1 to mean full coverage, with fractions corresponding to partial coverage"         | n/a                                                                                    | yes, the paper                                                  |
+| Porter and Duff 1984, premultiplied alpha                | Color is stored already multiplied by coverage                                                                        | n/a                                                                                    | yes, the paper                                                  |
+| Smith 1995, Alpha and the History of Digital Compositing | The alpha channel is the matte; separates binary masking from subtle matting                                          | n/a                                                                                    | partly: the abstract and excerpts                               |
+| Smith and Blinn 1996, Blue Screen Matting                | Keying pulls a matte; "alpha channel" and "matte" are used interchangeably                                            | n/a                                                                                    | partly: summaries                                               |
+| Film and VFX "matte"                                     | A holdout matte is the analog of the alpha channel                                                                    | n/a                                                                                    | partly, via Smith and Blinn                                     |
+| CSS `mask-mode: alpha`                                   | "the alpha (transparency) values of the mask image"; a gradient `mask-image` gives a soft mask                        | n/a                                                                                    | yes for alpha; gradients from memory                            |
+| CSS Masking spec, mask                                   | Alpha mask value is the alpha; luminance mask value is luminance times alpha                                          | n/a                                                                                    | yes                                                             |
+| SVG `clipPath` (counter)                                 | "The raw geometry of each child element exclusive of rendering properties such as fill, stroke, stroke-width"         | "made invisible by display or visibility it does not contribute"                       | yes, CSS Masking spec                                           |
+| Figma, Alpha mask                                        | Opacity: "the higher the opacity, the more that is revealed"; fills, strokes and gradients with varying opacity count | The mask layer is not drawn, but shapes the result                                     | yes                                                             |
+| Figma, Vector mask (counter)                             | Outline only; any opacity above zero counts as full                                                                   | same                                                                                   | yes                                                             |
+| SwiftUI `.mask`                                          | The mask view's alpha                                                                                                 | `.hidden()` keeps layout and draws nothing, so inside a mask it likely reveals nothing | alpha from memory; `.hidden()` yes; inside a mask not confirmed |
+| Flutter `ShaderMask`                                     | Default `BlendMode.modulate`, which applies the shader's alpha to the child                                           | n/a                                                                                    | yes                                                             |
+| Flutter `ClipPath` (counter)                             | Geometry, anti-aliased                                                                                                | n/a                                                                                    | yes                                                             |
+
+Verdict: the precedent supports alpha as shape. Every compositing source and every mask (Porter and Duff, Smith, CSS and Figma alpha masks, SwiftUI, Flutter's ShaderMask) treats alpha as coverage. The counter-precedent is clipping: SVG `clipPath`, Figma's Vector mask and Flutter's `ClipPath` use raw geometry. That splits on the clip and mask line, and GoFish takes the mask side; an exact outline is an internal choice where one exists. One conflict: in CSS and SVG, invisible content adds nothing to a clip, and SwiftUI's `.hidden()` most likely adds nothing to a mask. Figma's mask layer, and SVG's own mask and clip content, are used for shape without being drawn, which is the role `.hidden()` takes here ([open](#d-hidden-op)). When implemented, the rule goes in `api-design.md` and the concepts docs ([open](#d-alpha)).
 
 ### Slots, by operator
 
@@ -894,39 +936,39 @@ Union, intersection, difference, symmetric difference, shape-only clip, paint-ba
 
 **Precedent**
 
-| System            | Union               | Intersection      | A minus B        | Xor                      | Clip (shape)                                    | Mask (paint)                                             | Region parameter   |
-| ----------------- | ------------------- | ----------------- | ---------------- | ------------------------ | ----------------------------------------------- | -------------------------------------------------------- | ------------------ |
-| Figma             | Union               | Intersect         | Subtract         | Exclude                  | Use as mask (Vector)                            | Use as mask (Alpha, Luminance)                           | the bottom layer   |
-| Illustrator       | Unite               | Intersect         | Minus Front      | Exclude                  | Clipping Mask                                   | Opacity Mask                                             | the top object     |
-| Inkscape          | Union               | Intersection      | Difference       | Exclusion                | Clip                                            | Mask (luminance)                                         | the top object     |
-| Sketch            | Union               | Intersect         | Subtract         | Difference               | Outline Mask                                    | Alpha Mask                                               | the bottom layer   |
-| Affinity Designer | Add                 | Intersect         | Subtract         | Xor                      | nested clip                                     | mask layer                                               | the parent layer   |
-| SVG               | none                | none              | none             | none                     | <clipPath>, clip-path                           | <mask>                                                   | url(#id)           |
-| CSS               | none                | none              | none             | none                     | clip-path                                       | mask, mask-mode                                          | its value          |
-| Canvas 2D         | none                | source-in         | destination-out  | xor                      | clip()                                          | destination-in                                           | the current path   |
-| PDF, PostScript   | none                | none              | none             | none                     | clip path                                       | soft mask                                                | the current path   |
-| Skia              | kUnion              | kIntersect        | kDifference      | kXOR                     | clipPath                                        | mask filter, shader                                      | a path             |
-| SwiftUI           | union(\_:)          | intersection(\_:) | subtracting(\_:) | symmetricDifference(\_:) | .clipShape(\_:)                                 | .mask(\_:)                                               | unlabeled          |
-| Flutter           | PathOperation.union | .intersect        | .difference      | .xor                     | ClipPath(clipper:)                              | ShaderMask                                               | clipper            |
-| Jetpack Compose   | PathOperation.Union | Intersect         | Difference       | Xor                      | Modifier.clip(shape)                            | BlendMode.DstIn                                          | shape              |
-| Typst             | none                | none              | none             | none                     | box(clip: true)                                 | none                                                     | the box itself     |
-| TikZ              | none                | none              | none             | none                     | \clip                                           | path fading                                              | the path           |
-| p5.js             | none                | none              | none             | none                     | clip(callback)                                  | img.mask()                                               | a callback         |
-| Paper.js          | unite               | intersect         | subtract         | exclude                  | clipMask (clipped group)                        | none                                                     | first child        |
-| Shapely, GEOS     | union               | intersection      | difference       | symmetric_difference     | none                                            | none                                                     | none               |
-| JTS               | union               | intersection      | difference       | symDifference            | none                                            | none                                                     | none               |
-| Clipper2          | Union               | Intersect         | Difference       | Xor                      | none                                            | none                                                     | the clip paths     |
-| Turf              | union               | intersect         | difference       | none                     | none                                            | none                                                     | none               |
-| polybool          | union               | intersect         | difference       | xor                      | none                                            | none                                                     | none               |
-| JS Set (ES2025)   | union               | intersection      | difference       | symmetricDifference      | none                                            | none                                                     | none               |
-| Observable Plot   | none                | none              | none             | none                     | clip: "frame", GeoJSON                          | none                                                     | its value          |
-| Vega-Lite         | none                | none              | none             | none                     | clip: true                                      | none                                                     | none               |
-| ggplot2, ggfx     | none                | none              | none             | none                     | coord_cartesian(clip=)                          | with_mask(), luminance; ch_alpha()                       | mask               |
-| D3                | none                | none              | none             | none                     | clipExtent                                      | SVG mask                                                 | extent             |
-| Bluefish, Penrose | none                | none              | none             | none                     | none                                            | none                                                     | none               |
-| PiCCL             | union, over         | intersect, In     | subtract, out    | xor                      | intersect                                       | none                                                     | the first operand  |
-| GoFish today      | none                | intersect         | subtract         | exclude                  | none                                            | mask, luminance only                                     | the first child    |
-| GoFish proposed   | union               | intersect         | subtract         | exclude                  | intersect with a hidden operand, mode "outline" | intersect with a hidden operand, mode alpha or luminance | the hidden operand |
+| System            | Union               | Intersection      | A minus B        | Xor                      | Clip (shape)                    | Mask (paint)                                                          | Region parameter   |
+| ----------------- | ------------------- | ----------------- | ---------------- | ------------------------ | ------------------------------- | --------------------------------------------------------------------- | ------------------ |
+| Figma             | Union               | Intersect         | Subtract         | Exclude                  | Use as mask (Vector)            | Use as mask (Alpha, Luminance)                                        | the bottom layer   |
+| Illustrator       | Unite               | Intersect         | Minus Front      | Exclude                  | Clipping Mask                   | Opacity Mask                                                          | the top object     |
+| Inkscape          | Union               | Intersection      | Difference       | Exclusion                | Clip                            | Mask (luminance)                                                      | the top object     |
+| Sketch            | Union               | Intersect         | Subtract         | Difference               | Outline Mask                    | Alpha Mask                                                            | the bottom layer   |
+| Affinity Designer | Add                 | Intersect         | Subtract         | Xor                      | nested clip                     | mask layer                                                            | the parent layer   |
+| SVG               | none                | none              | none             | none                     | <clipPath>, clip-path           | <mask>                                                                | url(#id)           |
+| CSS               | none                | none              | none             | none                     | clip-path                       | mask, mask-mode                                                       | its value          |
+| Canvas 2D         | none                | source-in         | destination-out  | xor                      | clip()                          | destination-in                                                        | the current path   |
+| PDF, PostScript   | none                | none              | none             | none                     | clip path                       | soft mask                                                             | the current path   |
+| Skia              | kUnion              | kIntersect        | kDifference      | kXOR                     | clipPath                        | mask filter, shader                                                   | a path             |
+| SwiftUI           | union(\_:)          | intersection(\_:) | subtracting(\_:) | symmetricDifference(\_:) | .clipShape(\_:)                 | .mask(\_:)                                                            | unlabeled          |
+| Flutter           | PathOperation.union | .intersect        | .difference      | .xor                     | ClipPath(clipper:)              | ShaderMask                                                            | clipper            |
+| Jetpack Compose   | PathOperation.Union | Intersect         | Difference       | Xor                      | Modifier.clip(shape)            | BlendMode.DstIn                                                       | shape              |
+| Typst             | none                | none              | none             | none                     | box(clip: true)                 | none                                                                  | the box itself     |
+| TikZ              | none                | none              | none             | none                     | \clip                           | path fading                                                           | the path           |
+| p5.js             | none                | none              | none             | none                     | clip(callback)                  | img.mask()                                                            | a callback         |
+| Paper.js          | unite               | intersect         | subtract         | exclude                  | clipMask (clipped group)        | none                                                                  | first child        |
+| Shapely, GEOS     | union               | intersection      | difference       | symmetric_difference     | none                            | none                                                                  | none               |
+| JTS               | union               | intersection      | difference       | symDifference            | none                            | none                                                                  | none               |
+| Clipper2          | Union               | Intersect         | Difference       | Xor                      | none                            | none                                                                  | the clip paths     |
+| Turf              | union               | intersect         | difference       | none                     | none                            | none                                                                  | none               |
+| polybool          | union               | intersect         | difference       | xor                      | none                            | none                                                                  | none               |
+| JS Set (ES2025)   | union               | intersection      | difference       | symmetricDifference      | none                            | none                                                                  | none               |
+| Observable Plot   | none                | none              | none             | none                     | clip: "frame", GeoJSON          | none                                                                  | its value          |
+| Vega-Lite         | none                | none              | none             | none                     | clip: true                      | none                                                                  | none               |
+| ggplot2, ggfx     | none                | none              | none             | none                     | coord_cartesian(clip=)          | with_mask(), luminance; ch_alpha()                                    | mask               |
+| D3                | none                | none              | none             | none                     | clipExtent                      | SVG mask                                                              | extent             |
+| Bluefish, Penrose | none                | none              | none             | none                     | none                            | none                                                                  | none               |
+| PiCCL             | union, over         | intersect, In     | subtract, out    | xor                      | intersect                       | none                                                                  | the first operand  |
+| GoFish today      | none                | intersect         | subtract         | exclude                  | none                            | mask, luminance only                                                  | the first child    |
+| GoFish proposed   | union               | intersect         | subtract         | exclude                  | intersect with a hidden operand | intersect with a hidden operand; luminance by a filter on the stencil | the hidden operand |
 
 Names as each system documents them, from my knowledge, not re-checked online, except the mask column (Figma's mask types), the ggfx row (it has no `mask_type`), and the PiCCL row, read from its source. The least certain: Affinity's clipping and mask layers, and Bluefish and Penrose having none.
 
@@ -935,7 +977,6 @@ Names as each system documents them, from my knowledge, not re-checked online, e
 - **union.** Keep `union`: Figma (the recorded naming source, #196, #404), Inkscape, Sketch, SwiftUI, Flutter, Compose, Skia, Shapely, Clipper2, PiCCL and the JS `Set` all say union. `unite` (Illustrator, Paper.js) is the runner-up. Every design tool keeps Union apart from Group, as `union` stays apart from `layer`.
 - **intersect, subtract, exclude.** Keep them. This is the recorded Figma decision; Paper.js uses the same verbs, and PiCCL says `intersect` and `subtract`. The set mixes one noun-verb (`union`) with verbs, as Figma does.
 - **Clip and mask columns.** No separate name. A hidden operand adds shape and no paint, so `intersect([stripes, a.hidden()])` is the mask and `subtract` the inverted mask. CSS does the same: `mask-composite` takes `add`, `subtract`, `intersect` and `exclude`, and ggfx inverts a mask with `invert = TRUE`.
-- **mode.** How a stencil operand is read: `"alpha"` (default), `"outline"` or `"luminance"`. CSS calls it `mask-mode` (alpha, luminance) and Sketch calls it Mask Mode (Outline, Alpha). `type` (Figma's mask type, SVG `mask-type`) is the alternative ([open](#d-mode)).
 
 ### atop or paint
 
@@ -1109,30 +1150,31 @@ layer([
 
 ## Errors and edge cases
 
-| Call                                            | Result                                                                                        |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `ref("x").hidden()`                             | Error: a ref reads a shape and cannot change its paint.                                       |
-| `selectAll("bars").hidden()`                    | Error, for the same reason.                                                                   |
-| `.hidden().hidden(false)`                       | Drawn. The last call wins.                                                                    |
-| `.hidden().hidden()`                            | Hidden.                                                                                       |
-| `layer([a, b.hidden(false)]).hidden()`          | Both hidden. The ancestor wins.                                                               |
-| `intersect([b, a.hidden()])`                    | b inside a: a adds its shape and no paint. A mask.                                            |
-| `intersect({ mode: "outline" }, [b, image(o)])` | Error: an image has no exact outline. Use alpha.                                              |
-| `intersect([b, aNone.hidden()])`                | Alpha reads a's ink. If a has `fill: "none"`, that is only its stroke; use `mode: "outline"`. |
-| `circle(o).hidden((d) => ...)`                  | Per datum. Repaint only, no new layout.                                                       |
-| `ridgeline(data).hidden()`                      | The whole chart, axes and legend included.                                                    |
+| Call                                          | Result                                                                                        |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `ref("x").hidden()`                           | Error: a ref reads a shape and cannot change its paint.                                       |
+| `selectAll("bars").hidden()`                  | Error, for the same reason.                                                                   |
+| `.hidden().hidden(false)`                     | Drawn. The last call wins.                                                                    |
+| `.hidden().hidden()`                          | Hidden.                                                                                       |
+| `layer([a, b.hidden(false)]).hidden()`        | Both hidden. The ancestor wins.                                                               |
+| `intersect([b, a.hidden()])`                  | b inside a: a adds its shape and no paint. A mask.                                            |
+| `subtract({ blendMode: "multiply" }, [a, b])` | Type error: `subtract` and `exclude` never put two paints in one place.                       |
+| `atop({ fill: "red" }, [a, b])`               | Type error: `atop`'s region is always a's. Fill a instead.                                    |
+| `intersect([b, aNone.hidden()])`              | aNone has `fill: "none"`: its alpha, and so its shape, is only its stroke. b shows in a ring. |
+| `circle(o).hidden((d) => ...)`                | Per datum. Repaint only, no new layout.                                                       |
+| `ridgeline(data).hidden()`                    | The whole chart, axes and legend included.                                                    |
 
 ## Open decisions
 
 1. Adopt the rule: children are drawn as themselves (and may also be read); an operand is read, and the operator draws its result from what it read, never the operand as itself; refs draw nothing? (card: slots)
 2. (1) Adopt the coverage-blend rule: with no fill, each part of the result takes the paint of the operands that cover it, blended by `blendMode` where they overlap? It is PiCCL's rule (`GroupShape.renderSVG`), drops today's gray step, and closes #1230 (what a compositing operator with no fill paints). (card: ops)
-3. (2) Default `blendMode` to `"normal"`, the later operand over the earlier, as PiCCL, Canvas, Cairo and SVG `feComposite` default to over? Today the default is `"color"` (`porterDuff.tsx` lines 460 and 505), and the type, `"color" | "multiply" | "screen" | "overlay"` (`chart.ts` line 1164), has no `"normal"`; it gets one. (card: ops)
-4. (3) A hidden operand keeps its shape and paints nothing, so `intersect([stripes, a.hidden()])` is a mask and `subtract` an inverted one? This replaces the old decision to warn on `.hidden()` on an operand. (card: intersect-hidden)
-5. (4) Name the fifth operation `atop` (Porter-Duff, PiCCL, SVG, Canvas, Cairo, Flutter, Android, and today's wire name), or keep `paint` (#202)? Recommended: `atop`. (card: naming-atop)
-6. (5) The bottle grays its image with the existing `filter: "grayscale(1)"`, adding no API? Or add a recolor option like PiCCL's `Picture({ color })`, which is more general and takes data, or `saturate: 0`, or `grayscale: true`? Recommended: `filter` now, and a recolor when an example maps data to an image's color. (card: bottle)
-7. (6) Name the stencil option `mode` (CSS `mask-mode`, Sketch's Mask Mode), or `type` (Figma's mask type, SVG `mask-type`)? (card: mask-modes)
-8. (7) `line` and `ribbon` say `mixBlendMode` (`"normal" | "multiply"`, `chart.ts` lines 973 and 1037); the set operations say `blendMode` (Python `blend_mode`). Unify on one name? (card: ops)
-9. (8) Migrate in the same change? `paint` becomes a rename to `atop`: 4 calls (the Bottle story, which also gains `filter: "grayscale(1)"`; the PorterDuffRelations paint story; two Python stories), with the wire name unchanged. `mask` is rewritten as `intersect` with a hidden operand: 3 calls (the PorterDuffRelations mask story, `coordPaintOrder.test.ts` line 411, one Python story), plus the internal `Mask` in `cut.tsx`. The `mask` entries in `descriptors.ts`, `jsonSchema.ts` and `_generated.py` go. 5 docs pages: region-compositing and cut, JS and Python, and the handwritten pictorial-charts tutorial, which gets an issue. (card: ops)
+3. (2) Default `blendMode` to `"normal"`, the later operand over the earlier, on `union`, `intersect` and `atop` (the only operations that take it), as PiCCL, Canvas, Cairo and SVG `feComposite` default to over? Today the default is `"color"` (`porterDuff.tsx` lines 460 and 505), and the type, `"color" | "multiply" | "screen" | "overlay"` (`chart.ts` line 1164), has no `"normal"`; it gets one. (card: ops)
+4. (3) Adopt "alpha is shape": an operand gives its shape, which is its alpha, partial coverage included, and its paint? Precedent supports it on the mask side (Porter and Duff, Smith, CSS and Figma alpha masks, Flutter's ShaderMask); clips use raw geometry. Document it in `api-design.md` and the concepts docs when it lands? (card: alpha-shape)
+5. (4) What does a hidden operand give? (A) Its shape and no paint, so `intersect([stripes, a.hidden()])` is a mask: Figma's mask layer and SVG's mask content are used without being drawn. (B) Nothing, as invisible content adds nothing to an SVG clip and SwiftUI's `.hidden()` most likely adds nothing to a mask; a stencil would then need another way to drop its paint. Recommended: A, since `.hidden()` already means laid out and not painted. This replaces the old decision to warn on `.hidden()` on an operand. (card: intersect-hidden)
+6. (5) Name the fifth operation `atop` (Porter-Duff, PiCCL, SVG, Canvas, Cairo, Flutter, Android, and today's wire name), or keep `paint` (#202)? Recommended: `atop`. (card: naming-atop)
+7. (6) One spelling for a mark that filters itself. The bottle grays its image with the existing `filter: "grayscale(1)"` option (on `image` and `rect` today, a CSS filter string). A luminance stencil needs `luminance-to-alpha`, which has no CSS function (it is SVG `feColorMatrix type="luminanceToAlpha"`). Today a rect renders it as `filter: "url(#lumToAlpha)"` pointing at a hand-written SVG filter (checked: white gives alpha 1, `#808080` about 0.5 in sRGB, black 0), so the option carries it but the user must write the filter. And `circle` and `layer` have no filter option. Options: a `.filter()` method on any mark, chart or layer, like `.hidden()`, with the option folded in; or the option on every mark and layer. The value: a string, or a family (`Filter.grayscale()`, `Filter.luminanceToAlpha()`), as option values that choose a strategy are. A recolor like PiCCL's `Picture({ color })` can follow when an example maps data to an image's color. (card: mask-modes)
+8. (7) `line` and `ribbon` say `mixBlendMode` (`"normal" | "multiply"`, `chart.ts` lines 973 and 1037); the operations say `blendMode` (Python `blend_mode`). Unify on one name? (card: ops)
+9. (8) Migrate in the same change? `paint` becomes a rename to `atop`: 4 calls (the Bottle story, which also gains `filter: "grayscale(1)"`; the PorterDuffRelations paint story; two Python stories), with the wire name unchanged. `mask` is rewritten as `intersect` with a hidden operand filtered by `luminance-to-alpha`, since today's mask reads luminance: 3 calls (the PorterDuffRelations mask story, `coordPaintOrder.test.ts` line 411, one Python story), plus the internal `Mask` in `cut.tsx`. The `mask` entries in `descriptors.ts`, `jsonSchema.ts` and `_generated.py` go. 5 docs pages: region-compositing and cut, JS and Python, and the handwritten pictorial-charts tutorial, which gets an issue. (card: ops)
 10. Add `union` (Figma, Inkscape, Sketch, SwiftUI, Shapely, Clipper2, PiCCL) as a region shape, separate from `layer`, as every design tool keeps Union apart from Group? (card: naming-grid)
 11. Keep `use(ref)` parked until an example needs it? (card: use-ref)
 12. File the bend and envelope issue, kept deferred? (Decided: a coord with a shape argument, not an operator.) (card: gecko)
