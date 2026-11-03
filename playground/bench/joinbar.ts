@@ -160,14 +160,12 @@ for (const id of IDS) {
   const d = (DATA as any[]).find((x) => x.id === id);
   out.push(`\n## ${d.label}`);
   // join all: one outline
-  const base = run(d, "px", Infinity, true).rings;
-  const allSame = COMBOS.every(([m, dist]) => {
-    const j = m === "pieces" ? 1 : m === "share" ? 1 : Infinity;
-    return (
-      run(d, m, dist, j, true).rings === base &&
-      run(d, m, dist, Infinity === j ? Infinity : j, true).rings === base
-    );
-  });
+  const base = run(d, "px", "plain", Infinity, true).rings;
+  const notSame = COMBOS.filter(([m, dist]) => {
+    const j = m === "pieces" || m === "share" ? 1 : Infinity;
+    return run(d, m, dist, j, true).rings !== base;
+  }).map(([m, dist]) => `${m} ${dist}`);
+  const allSame = !notSame.length;
   const piecesDefault = (["plain", "reach"] as JoinDistance[]).every((dist) => {
     const r = unifiedOutline(d.sets[0].members, {
       padding: d.padding,
@@ -190,7 +188,7 @@ for (const id of IDS) {
     return JSON.stringify(r) === JSON.stringify(r0);
   });
   out.push(
-    `join all (∞ / share 1 / pieces 1) one outline in every measure × distance: ${allSame ? "yes" : "NO"}; pieces with join left out = the default: ${piecesDefault ? "yes" : "NO"}`
+    `join all (∞ / share 1 / pieces 1) one outline in every measure × distance: ${allSame ? "yes" : "NO " + notSame.join(", ")}; pieces with join left out = the default: ${piecesDefault ? "yes" : "NO"}`
   );
   // pieces: exactly k at whole k
   for (const dist of ["plain", "reach"] as JoinDistance[]) {
