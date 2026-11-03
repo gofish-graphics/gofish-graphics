@@ -9,6 +9,7 @@ import {
   type Means,
   type Seal,
   type JoinEdge,
+  type JoinMeasure,
 } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/unified";
 import {
   blobOutline,
@@ -18,7 +19,7 @@ import {
 import { arcsOutline } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/arcs";
 import { signedArea2 } from "../../packages/gofish-graphics/src/ast/geometry/plane";
 
-export type { BlobMember, Pt, Means, Seal, JoinEdge };
+export type { BlobMember, Pt, Means, Seal, JoinEdge, JoinMeasure };
 
 export type ShapeKind = "blob" | "arcs";
 
@@ -40,6 +41,8 @@ export type Params = {
   shape: ShapeKind;
   /** the longest padded gap a link may cross, px (Infinity: every gap) */
   join: number;
+  /** PROTOTYPE: what join is measured in */
+  joinMeasure: JoinMeasure;
   radius: number;
   holes: boolean;
   avoid: boolean;
@@ -104,6 +107,7 @@ export function computeSet(s: SetInput, p: Params): SetResult {
           convexity: p.convexity,
           neck: p.neck,
           join: p.join,
+          joinMeasure: p.joinMeasure,
           means: p.means,
           seal: p.seal,
         }

@@ -99,6 +99,9 @@ export type UnifiedOptions = {
    *  gaps leave the members in separate pieces, each filled on its own.
    *  Default ∞ (one piece, the full spanning tree). See joinLinks. */
   join?: number;
+  /** PROTOTYPE: what `join` is measured in (not an API option yet); see
+   *  joinShares. Default "px". */
+  joinMeasure?: JoinMeasure;
   holes?: boolean;
   avoiding?: BlobMember[];
   clearance?: number;
@@ -136,6 +139,16 @@ export type UnifiedOptions = {
 };
 
 export type Means = "area" | "radius" | "blend";
+/** PROTOTYPE: what `join` is measured in (joinShares).
+ *  - "px": the longest padded gap a link crosses, in px (scales with nothing).
+ *  - "share": the share of the spanning tree's links kept, shortest first
+ *    (by centre distance), 0..1.
+ *  - "typical": a multiple of the set's typical link: the median centre
+ *    distance of the spanning tree's edges, 0..∞.
+ *  - "local": a multiple of each link's nearby links (Zahn 1971: the mean
+ *    centre distance of the tree edges within depth 2 on each side), 0..∞.
+ *  In all three, members whose padding touches stay one piece. */
+export type JoinMeasure = "px" | "share" | "typical" | "local";
 export type Seal = "jump" | "lake" | "lid";
 
 /** PROTOTYPE: the length s of the "radius" convexity, r = padding +
@@ -462,22 +475,161 @@ export type JoinEdge = {
   b: Pt;
   /** whether the members themselves overlap (no link is needed) */
   overlap: boolean;
+  /** the join value, in each measure, at which this link enters (it is
+   *  kept for any join above it); ≤ 0 or −∞: always kept */
+  enter: Record<JoinMeasure, number>;
 };
+
+/** PROTOTYPE: how far past its entry a link ramps from width 0 to full in
+ *  the relative measures ("typical", "local"): over join ∈ [t, t·(1 + RAMP)]
+ *  for a link entering at t. ("share" ramps over one link's rank, 1/n;
+ *  "px" over its own neck width, as before.) */
+export const JOIN_RAMP = 0.5;
+/** PROTOTYPE: the depth of Zahn's neighbourhood ("local"). */
+export const JOIN_DEPTH = 2;
+
+/** One spanning-tree edge before it is measured. */
+type TreeEdge = {
+  i: number;
+  j: number;
+  /** padded gap, px */
+  g: number;
+  /** centre distance: between the members' core axes, px */
+  d: number;
+  overlap: boolean;
+  a: Pt;
+  b: Pt;
+  fa: number;
+  fb: number;
+};
+
+/**
+ * PROTOTYPE: when each spanning-tree edge enters, in each measure of `join`
+ * (JoinMeasure). All four are functions of the full tree, computed once, so
+ * a link's entry never moves when others are cut: its share is continuous
+ * and non-decreasing in join, and so is the set of kept links.
+ *
+ * The relative measures ("share", "typical", "local") compare the edges'
+ * centre distances d (between the two members' core axes: the centres, for
+ * dots), not their padded gaps g = d − ρ_a − ρ_b − 2·pad. A chart resized
+ * by s moves the members' centres by s but keeps their sizes and the
+ * padding, so d scales by s exactly and g does not: a ratio of gaps changes
+ * with the chart's size (on ChartAccent, join 1 × the median gap is 6, 11
+ * and 20 pieces at × 0.5, × 1, × 2), a ratio of centre distances does not.
+ * The padding stays a floor in px: an edge whose padded members touch or
+ * overlap (g ≤ 0) is kept at every join, in every measure (as "px" has it
+ * from join = 0 up), so a chart shrunk until its members' paddings touch
+ * becomes one piece by contact. That floor is the one place the relative
+ * measures depend on scale, on purpose.
+ *
+ *  - "share": the n tree edges ranked by d, edge k enters at join = k/n and
+ *    is full at (k + 1)/n, so join = 1 keeps all. Touching edges hold their
+ *    ranks (kept anyway), so the ranks do not change when a resize makes
+ *    them touch or part.
+ *  - "typical": t = d / D, D the median of the tree edges' centre
+ *    distances. The median, not the mean, so a few long edges (outliers,
+ *    the gaps between clusters) do not set the scale.
+ *  - "local" (Zahn 1971, "inconsistent edges"): for each side of the edge,
+ *    the mean d of the tree edges within depth 2 of that endpoint, not
+ *    crossing the edge itself. t = d / L with L the larger of the two side
+ *    means (the one side when the other has none, e.g. a leaf; D when
+ *    neither has, a tree of one edge). Larger: the edge is cut only where it
+ *    is long next to BOTH sides (Zahn's rule), so a sparse fringe stays
+ *    attached to a dense core through an edge that is ordinary for the
+ *    fringe; "either side" would cut every edge from a dense core to its
+ *    fringe.
+ */
+function joinEntries(E: TreeEdge[], n: number): Record<JoinMeasure, number>[] {
+  const ds = E.map((e) => e.d).sort((a, b) => a - b);
+  const D = ds.length
+    ? ds.length % 2
+      ? ds[ds.length >> 1]
+      : (ds[ds.length / 2 - 1] + ds[ds.length / 2]) / 2
+    : 1;
+  const rank = new Map(
+    E.map((_, k) => k)
+      .sort((a, b) => E[a].d - E[b].d || a - b)
+      .map((k, r) => [k, r])
+  );
+  // the tree's adjacency, for the local means
+  const adj: [number, number][][] = Array.from({ length: n }, () => []);
+  E.forEach((e, k) => {
+    adj[e.i].push([e.j, k]);
+    adj[e.j].push([e.i, k]);
+  });
+  // the mean d within depth JOIN_DEPTH of `from`, not crossing edge `skip`
+  // (a tree: every node is reached by one path)
+  const sideMean = (from: number, skip: number): number => {
+    let sum = 0,
+      cnt = 0;
+    const walk = (u: number, du: number, via: number) => {
+      if (du === JOIN_DEPTH) return;
+      for (const [v, k] of adj[u]) {
+        if (k === skip || k === via) continue;
+        sum += E[k].d;
+        cnt++;
+        walk(v, du + 1, k);
+      }
+    };
+    walk(from, 0, -1);
+    return cnt ? sum / cnt : NaN;
+  };
+  return E.map((e, k) => {
+    if (e.overlap || e.g <= 0)
+      return {
+        px: e.g,
+        share: -Infinity,
+        typical: -Infinity,
+        local: -Infinity,
+      };
+    const mi = sideMean(e.i, k),
+      mj = sideMean(e.j, k);
+    const L = Number.isNaN(mi)
+      ? Number.isNaN(mj)
+        ? D
+        : mj
+      : Number.isNaN(mj)
+        ? mi
+        : Math.max(mi, mj);
+    return {
+      px: e.g,
+      share: rank.get(k)! / E.length,
+      typical: e.d / D,
+      local: e.d / L,
+    };
+  });
+}
+
+/** PROTOTYPE: an edge's width share at `join` in a relative measure, from
+ *  its entry t (joinEntries): 0 up to t, ramping to 1. */
+export function relativeShare(
+  measure: Exclude<JoinMeasure, "px">,
+  t: number,
+  join: number,
+  n: number
+): number {
+  if (t === -Infinity || join === Infinity) return 1;
+  if (measure === "share")
+    return join >= 1 ? 1 : Math.max(0, Math.min(1, (join - t) * n));
+  return Math.max(0, Math.min(1, (join - t) / (JOIN_RAMP * t)));
+}
 
 /**
  * The links for `join` (PROTOTYPE). The members' spanning tree, Kruskal on
  * the gaps between padded members (the order in which the exact closing
  * merges them as its radius grows: two padded members a gap g apart merge at
- * r = g/2). An edge whose gap is under `join` is kept; the others leave the
- * members in separate pieces. A kept edge is a tapered tube between the
- * members' cores (as `nearLinks` with `neck`), whose padded half-width at
- * each end is
+ * r = g/2). An edge kept by `join` (in its measure, joinEntries) is a link;
+ * the others leave the members in separate pieces. A kept edge is a tapered
+ * tube between the members' cores (as `nearLinks` with `neck`), whose
+ * padded half-width at each end is
  *
- *     min(neck · (ρ + pad), (join − gap) / 2),
+ *     px:        min(neck · (ρ + pad), (join − gap) / 2),
+ *     relative:  min(neck · (ρ + pad), s · the wider end's neck · (ρ + pad)),
  *
- * so the link is as wide as join is past its gap, up to its full neck width:
- * it enters at width 0 as join crosses its gap and only widens as join
- * grows. join = ∞ is the full spanning tree, the same links as
+ * with s the edge's share (relativeShare): the same tube, with the room
+ * join is past the gap counted in the measure's own units. The link is 0
+ * wide as join crosses its entry and only widens as join grows. join = ∞ is
+ * the full spanning tree in every measure, the same links as
  * `nearLinks(members, pad, ∞, neck)`. Members that overlap need no link.
  *
  * TODO(prototype, declared shortcut): the link grows in continuously, but a
@@ -493,7 +645,8 @@ export function joinLinks(
   members: BlobMember[],
   pad: number,
   join: number,
-  neck: number
+  neck: number,
+  measure: JoinMeasure = "px"
 ): {
   links: BlobMember[];
   /** each link's piece, and each piece's member indices */
@@ -530,41 +683,61 @@ export function joinLinks(
     for (let j = i + 1; j < prims.length; j++)
       pairs.push([i, j, nearest(prims[i], prims[j])[2]]);
   pairs.sort((a, b) => a[2] - b[2]);
-  const raw: { link: BlobMember; i: number }[] = [];
-  const tree: JoinEdge[] = [];
+  const E: TreeEdge[] = [];
   for (const [i, j, gap] of pairs) {
     const [ci, cj] = [find(i), find(j)];
     if (ci === cj) continue;
     comp[ci] = cj;
-    const g = gap - 2 * pad;
     const [a0, a1, ra] = coreSeg(i),
       [b0, b1, rb] = coreSeg(j);
     const [x, y] = segSeg(a0, a1, b0, b1);
-    if (gap <= 0) {
+    E.push({
+      i,
+      j,
+      g: gap - 2 * pad,
+      d: Math.hypot(x[0] - y[0], x[1] - y[1]),
+      overlap: gap <= 0,
+      a: x,
+      b: y,
+      fa: neck * (ra + pad),
+      fb: neck * (rb + pad),
+    });
+  }
+  const enter = joinEntries(E, prims.length);
+  const raw: { link: BlobMember; i: number }[] = [];
+  const tree: JoinEdge[] = [];
+  E.forEach((e, k) => {
+    const { i, j, g, a, b, fa, fb } = e;
+    if (e.overlap) {
       kc[kfind(i)] = kfind(j);
-      tree.push({ gap: g, share: 1, a: x, b: y, overlap: true });
-      continue;
+      tree.push({ gap: g, share: 1, a, b, overlap: true, enter: enter[k] });
+      return;
     }
-    const room = join - g; // how far join is past the gap
-    const fa = neck * (ra + pad),
-      fb = neck * (rb + pad);
+    // how far join is past the gap, px (relative measures: the room their
+    // share stands for, so both ends cap as they do in px)
+    const room =
+      measure === "px"
+        ? join - g
+        : 2 *
+          Math.max(fa, fb) *
+          relativeShare(measure, enter[k][measure], join, E.length);
     const ha = Math.min(fa, room / 2),
       hb = Math.min(fb, room / 2);
     const share = room <= 0 ? 0 : Math.min(1, room / 2 / Math.max(fa, fb));
-    tree.push({ gap: g, share, a: x, b: y, overlap: false });
-    if (room <= 0) continue;
+    tree.push({ gap: g, share, a, b, overlap: false, enter: enter[k] });
+    if (room <= 0) return;
     kc[kfind(i)] = kfind(j);
     raw.push({
       link: {
         kind: "segment",
-        a: x,
-        b: y,
+        a,
+        b,
         w: 2 * (ha - pad),
         w2: 2 * (hb - pad),
       },
       i,
     });
-  }
+  });
   const ids = new Map<number, number>();
   const pieces: number[][] = [];
   members.forEach((_, i) => {
@@ -924,8 +1097,9 @@ export function unifiedOutline(
   // the pieces and their links (links bend around the keep-outs)
   const neck = o.neck ?? 1;
   const join = Math.max(0, o.join ?? Infinity);
-  const J = memo(key("join", members, pad, join, neck), () =>
-    joinLinks(members, pad, join, neck)
+  const measure = o.joinMeasure ?? "px";
+  const J = memo(key("join", members, pad, join, neck, measure), () =>
+    joinLinks(members, pad, join, neck, measure)
   );
   const parts = J.pieces.map((idx, p) => {
     const pm = idx.map((i) => members[i]);

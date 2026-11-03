@@ -5,6 +5,7 @@ import {
   computeSet,
   type BlobMember,
   type Means,
+  type JoinMeasure,
   type Params,
   type Seal,
   type Pt,
@@ -54,6 +55,10 @@ type State = Omit<Params, "avoid" | "compare"> & {
   showMembers: boolean;
   /** PROTOTYPE: small multiples of the three convexity modes */
   compareModes: boolean;
+  /** PROTOTYPE: how the relative join measures are spelled: "inf" the ratio itself, 0..∞;
+   *  "unit" j in 0..1 with ratio = j / (1 − j) (as the radius convexity mode maps c to r).
+   *  state.join is always the ratio. */
+  joinRange: "inf" | "unit";
 };
 const BLOB = {
   convexity: 0.5,
@@ -78,6 +83,8 @@ let state: State = {
   showMembers: false,
   means: "blend",
   seal: "jump",
+  joinMeasure: "px",
+  joinRange: "inf",
   compareModes: false,
 };
 const dataset = (): Dataset => DATASETS.find((x) => x.id === state.dataset)!;
@@ -104,7 +111,7 @@ const spelling = () => {
   };
   if (state.shape === "blob") {
     const plain =
-      !state.holes && !avoid && eq(state.neck, 1) && state.join === Infinity;
+      !state.holes && !avoid && eq(state.neck, 1) && joinIsAll(state.join);
     const preset = plain
       ? eq(state.convexity, 0)
         ? "spine"
@@ -119,7 +126,7 @@ const spelling = () => {
       if (!eq(state.convexity, BLOB.convexity))
         o.push(`convexity: ${num(state.convexity)}`);
       if (!eq(state.neck, 1)) o.push(`neck: ${num(state.neck)}`);
-      if (state.join !== Infinity) o.push(`join: ${num(state.join)}`);
+      if (!joinIsAll(state.join)) o.push(`join: ${joinNum(state.join)}`);
       keepOpts();
       shape = `Shape.blob(${o.length ? `{ ${o.join(", ")} }` : ""})`;
     }
@@ -137,6 +144,12 @@ const spelling = () => {
     if (state.means !== "blend") m.push(`when a bay seals: ${state.seal}`);
     code += `\n// prototype, not an API option yet: ${m.join("; ")}`;
   }
+  if (
+    state.shape === "blob" &&
+    state.joinMeasure !== "px" &&
+    !joinIsAll(state.join)
+  )
+    code += `\n// prototype: join measured as ${JOIN_MEASURE_NAME[state.joinMeasure]}${unitRange() ? ", spelled 0..1: join / (1 − join) × the gap" : ""}`;
   if (state.smooth !== (state.shape === "blob"))
     code += `\n// debug view: smoothing ${state.smooth ? "on" : "off"} (not an option)`;
   return code;
@@ -167,16 +180,118 @@ const SHAPE_HINT: Record<ShapeKind, string> = {
   arcs: "Shape.arcs: the exact closing by a disc of the radius; pieces join where the disc cannot pass between them. No smoothing.",
 };
 
-// ── join slider (PROTOTYPE): 0, then 0.5 · 2^((k − 1)/10) px for k = 1..99, then ∞ ───────
-const sliderToJoin = (k: number) =>
-  k <= 0 ? 0 : k >= 100 ? Infinity : +(0.5 * 2 ** ((k - 1) / 10)).toFixed(2);
-const joinToSlider = (j: number) =>
-  j <= 0
-    ? 0
-    : j === Infinity
-      ? 100
-      : Math.max(1, Math.min(99, Math.round(1 + 10 * Math.log2(j / 0.5))));
-const fmtJoin = (j: number) => (j === Infinity ? "∞" : `${num(j)} px`);
+// ── join slider (PROTOTYPE): each measure has its own range on 0..100 ──────────
+//   px:               0, then 0.5 · 2^((k − 1)/10) px for k = 1..99, then ∞
+//   share:            k / 100 (100: every link)
+//   typical, local:   0, then 0.05 · 2^((k − 1)/12) × for k = 1..99 (0.05 to 14), then ∞
+const JOIN_MEASURES: JoinMeasure[] = ["px", "share", "typical", "local"];
+const JOIN_MEASURE_NAME: Record<JoinMeasure, string> = {
+  px: "pixels",
+  share: "share of links",
+  typical: "typical gap",
+  local: "nearby gaps",
+};
+const JOIN_MEASURE_HINT: Record<JoinMeasure, string> = {
+  px: "The longest gap between padded members that a link crosses, in px. Dots keep their size when a chart is resized but their gaps do not, so the same join can group a resized chart differently.",
+  share:
+    "The share of the spanning tree's links kept, shortest first by the distance between the members' centres: 1 keeps every link. Members whose padding touches are always one piece. A link grows in over one link's step.",
+  typical:
+    "A multiple of the set's typical link: the median distance between the centres of the members each spanning-tree link joins. Centre distances scale with the chart and the members do not, so the grouping stays when the chart is resized, until the members' padding touches (then they are one piece).",
+  local:
+    "A multiple of each link's nearby links (Zahn's inconsistent edges): the mean centre distance of the tree links within two steps of each end. A link is cut where it is over join × the larger of its two sides' means, so it must be long next to both sides. Members whose padding touches are always one piece.",
+};
+const JOIN_RAMP_NOTE: Record<JoinMeasure, string> = {
+  px: " A link grows in as join passes its gap: it is as wide as join is past the gap, up to its neck width.",
+  share: "",
+  typical:
+    " A link entering at t grows in over join from t to 1.5 t, up to its neck width.",
+  local:
+    " A link entering at t grows in over join from t to 1.5 t, up to its neck width.",
+};
+const JOIN_TICKS: Record<JoinMeasure, [number, string][]> = {
+  px: [
+    [0, "0"],
+    [41, "8"],
+    [71, "64"],
+    [100, "∞"],
+  ],
+  share: [
+    [0, "0"],
+    [25, "25%"],
+    [50, "50%"],
+    [75, "75%"],
+    [100, "100%"],
+  ],
+  typical: [
+    [0, "0"],
+    [53, "1×"],
+    [77, "4×"],
+    [100, "∞"],
+  ],
+  local: [
+    [0, "0"],
+    [53, "1×"],
+    [77, "4×"],
+    [100, "∞"],
+  ],
+};
+/** every link kept: the default (∞, or 100% of the links) */
+const joinIsAll = (j: number) =>
+  j === Infinity || (state.joinMeasure === "share" && j >= 1);
+/** the relative measures spelled 0..1 (joinRange "unit") */
+const unitRange = () =>
+  state.joinRange === "unit" &&
+  (state.joinMeasure === "typical" || state.joinMeasure === "local");
+const toUnit = (r: number) => (r === Infinity ? 1 : r / (1 + r));
+const fromUnit = (j: number) => (j >= 1 ? Infinity : j / (1 - j));
+const sliderToJoin = (k: number) => {
+  const m = state.joinMeasure;
+  if (m === "share") return k / 100;
+  if (unitRange()) return fromUnit(k / 100);
+  if (k <= 0) return 0;
+  if (k >= 100) return Infinity;
+  return m === "px"
+    ? +(0.5 * 2 ** ((k - 1) / 10)).toFixed(2)
+    : +(0.05 * 2 ** ((k - 1) / 12)).toFixed(3);
+};
+const joinToSlider = (j: number) => {
+  const m = state.joinMeasure;
+  if (m === "share") return Math.round(Math.min(1, j) * 100);
+  if (unitRange()) return Math.round(toUnit(j) * 100);
+  if (j <= 0) return 0;
+  if (j === Infinity) return 100;
+  const k =
+    m === "px" ? 1 + 10 * Math.log2(j / 0.5) : 1 + 12 * Math.log2(j / 0.05);
+  return Math.max(1, Math.min(99, Math.round(k)));
+};
+const joinNum = (j: number) =>
+  state.joinMeasure === "px"
+    ? num(j)
+    : String(+(unitRange() ? toUnit(j) : j).toFixed(3));
+const fmtJoin = (j: number) => {
+  const m = state.joinMeasure;
+  if (m === "share") return `${+(Math.min(1, j) * 100).toFixed(1)}% of links`;
+  if (unitRange())
+    return `${joinNum(j)} (${j === Infinity ? "∞" : String(+j.toFixed(2))} × ${m === "typical" ? "typical" : "local"})`;
+  if (j === Infinity) return "∞";
+  return m === "px"
+    ? `${num(j)} px`
+    : `${joinNum(j)} × ${m === "typical" ? "typical" : "local"}`;
+};
+/** PROTOTYPE: the join in measure `to` that keeps as many links as `join` keeps now (the
+ *  last results' trees): the same links for px, share and typical (one order), the same count
+ *  for nearby gaps. */
+const convertJoin = (to: JoinMeasure): number => {
+  const all = (lastOut ?? []).flatMap((r) =>
+    r.tree.filter((e) => !e.overlap && e.enter.share !== -Infinity)
+  );
+  const kept = all.filter((e) => e.share > 0).length;
+  if (joinIsAll(state.join) || kept === all.length) return Infinity;
+  if (kept === 0) return 0;
+  const t = all.map((e) => e.enter[to]).sort((a, b) => a - b);
+  // entered where join > t: between the kept-th and the next entry
+  return (t[kept - 1] + t[kept]) / 2;
+};
 
 // ── presets ──────────────────────────────────────────────────────────────────
 const PRESETS: Record<string, () => Partial<State>> = {
@@ -236,13 +351,55 @@ const syncControls = () => {
   $("shape-hint").textContent = SHAPE_HINT[state.shape];
   $<HTMLInputElement>("join").value = String(joinToSlider(state.join));
   $("join-out").textContent = fmtJoin(state.join);
+  $("join-ticks-labels").innerHTML = (
+    unitRange()
+      ? ([
+          [0, "0"],
+          [50, "0.5 (1×)"],
+          [80, "0.8 (4×)"],
+          [100, "1"],
+        ] as [number, string][])
+      : JOIN_TICKS[state.joinMeasure]
+  )
+    .map(([k, t]) => `<span style="left: ${k}%">${t}</span>`)
+    .join("");
+  $("join-hint").textContent =
+    (state.joinMeasure === "px"
+      ? "The longest gap between padded members that a link crosses."
+      : "Which links of the members' spanning tree are kept, in the measure below.") +
+    " Longer gaps leave separate pieces, each filled to its own convexity and kept a padding apart from the others." +
+    JOIN_RAMP_NOTE[state.joinMeasure];
+  $("join-measure-hint").textContent = JOIN_MEASURE_HINT[state.joinMeasure];
+  $("join-range-field").hidden = !(
+    blob &&
+    (state.joinMeasure === "typical" || state.joinMeasure === "local")
+  );
+  for (const b of document.querySelectorAll<HTMLButtonElement>(
+    "[data-join-range]"
+  ))
+    b.setAttribute(
+      "aria-checked",
+      String(b.dataset.joinRange === state.joinRange)
+    );
+  for (const b of document.querySelectorAll<HTMLButtonElement>(
+    "[data-join-measure]"
+  ))
+    b.setAttribute(
+      "aria-checked",
+      String(b.dataset.joinMeasure === state.joinMeasure)
+    );
   $<HTMLInputElement>("holes").checked = state.holes;
   $<HTMLInputElement>("smooth").checked = state.smooth;
   $<HTMLInputElement>("show-links").checked = state.showLinks;
   $<HTMLInputElement>("show-members").checked = state.showMembers;
   $<HTMLInputElement>("compare").checked = state.compare;
   $<HTMLInputElement>("compare-modes").checked = state.compareModes;
-  for (const id of ["means-field", "compare-modes-field", "join-field"])
+  for (const id of [
+    "means-field",
+    "compare-modes-field",
+    "join-field",
+    "join-measure-field",
+  ])
     $(id).hidden = !blob;
   $("seal-field").hidden = !blob || state.means === "blend";
   for (const b of document.querySelectorAll<HTMLButtonElement>("[data-means]"))
@@ -536,6 +693,8 @@ const SLOW = 120;
 const lastMs = new Map<string, number>();
 const lastWarm = new Map<string, number>();
 let pending: number | null = null;
+/** the last results, for converting join between measures */
+let lastOut: SetResult[] | null = null;
 const recompute = () => {
   const d = dataset();
   const p: Params = { ...state, avoid: avoiding() };
@@ -567,6 +726,7 @@ const recompute = () => {
   const warm = ms - cached;
   lastMs.set(d.id, ms);
   lastWarm.set(d.id, warm);
+  lastOut = out;
   drawResults(out);
   const modeMs =
     byMode.size > 1
@@ -632,6 +792,20 @@ for (const b of document.querySelectorAll<HTMLButtonElement>("[data-shape]"))
     update({ join: sliderToJoin(+el.value) })
   );
 }
+for (const b of document.querySelectorAll<HTMLButtonElement>(
+  "[data-join-measure]"
+))
+  b.addEventListener("click", () => {
+    const to = b.dataset.joinMeasure as JoinMeasure;
+    if (to !== state.joinMeasure)
+      update({ join: convertJoin(to), joinMeasure: to });
+  });
+for (const b of document.querySelectorAll<HTMLButtonElement>(
+  "[data-join-range]"
+))
+  b.addEventListener("click", () =>
+    update({ joinRange: b.dataset.joinRange as State["joinRange"] })
+  );
 check("holes", (on) => ({ holes: on }));
 check("smooth", (on) => ({ smooth: on }));
 check("compare", (on) => ({ compare: on }));

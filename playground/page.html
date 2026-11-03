@@ -582,17 +582,50 @@
                 <option value="0"></option>
                 <option value="100"></option>
               </datalist>
-              <div class="ticks" aria-hidden="true">
-                <span style="left: 0%">0</span><span style="left: 41%">8</span
-                ><span style="left: 71%">64</span
-                ><span style="left: 100%">∞</span>
+              <div
+                class="ticks"
+                aria-hidden="true"
+                id="join-ticks-labels"
+              ></div>
+              <div class="hint" id="join-hint"></div>
+            </div>
+            <div class="field" id="join-measure-field">
+              <span class="seg-name" id="join-measure-name"
+                >join measured as</span
+              >
+              <div
+                class="seg"
+                role="radiogroup"
+                aria-labelledby="join-measure-name"
+              >
+                <button type="button" role="radio" data-join-measure="px">
+                  pixels
+                </button>
+                <button type="button" role="radio" data-join-measure="share">
+                  share of links
+                </button>
+                <button type="button" role="radio" data-join-measure="typical">
+                  typical gap
+                </button>
+                <button type="button" role="radio" data-join-measure="local">
+                  nearby gaps
+                </button>
               </div>
-              <div class="hint">
-                The longest gap between padded members that a link crosses.
-                Longer gaps leave separate pieces, each filled to its own
-                convexity and kept a padding apart from the others. A link grows
-                in as join passes its gap: it is as wide as join is past the
-                gap, up to its neck width.
+              <div class="hint" id="join-measure-hint"></div>
+            </div>
+            <div class="field" id="join-range-field">
+              <span class="seg-name" id="join-range-name">join range</span>
+              <div
+                class="seg"
+                role="radiogroup"
+                aria-labelledby="join-range-name"
+              >
+                <button type="button" role="radio" data-join-range="inf">
+                  0..∞ (the multiple)
+                </button>
+                <button type="button" role="radio" data-join-range="unit">
+                  0..1 (j / (1 − j))
+                </button>
               </div>
             </div>
             <div class="field" id="radius-field">
