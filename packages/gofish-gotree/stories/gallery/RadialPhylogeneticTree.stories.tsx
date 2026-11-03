@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { ellipse, line, layer, frame, Curve } from "gofish-graphics";
+import { ellipse, line, layer, Curve } from "gofish-graphics";
 import { initializeContainer } from "../helper";
 import { flareVis, type FlareNode } from "./_flareVis";
 
@@ -9,7 +9,7 @@ import { flareVis, type FlareNode } from "./_flareVis";
 //   Like the sibling RadialDeep port, this story intentionally BYPASSES the
 //   gotree tree()/combine() DSL for node placement and instead runs a small
 //   story-local data pass that computes each node's polar position directly,
-//   then places marks inside frame({coord: polar()}, ...). GoTree's polar
+//   then places marks inside layer({coord: polar()}, ...). GoTree's polar
 //   angular allocation (dsl X: Root=include / Subtree=flatten) allots angle by
 //   subtree leaf-count, which the constraint primitives can't express today
 //   (the old tree()/combine() version wrapped into an illegible blob because
@@ -45,7 +45,7 @@ import { flareVis, type FlareNode } from "./_flareVis";
 //
 //   Links: dsl Link=straight ⇒ straight screen-space edges. GoTree draws every
 //   edge (root→child AND fork→leaf) as a straight CHORD. Routing those chords
-//   through a frame({coord: polar()}) — RadialDeep's approach — bows each one
+//   through a layer({coord: polar()}) — RadialDeep's approach — bows each one
 //   into a polar arc (the straight-vs-curved gap RadialDeep leaves to PR #637):
 //   fine for its near-radial fans, but here a multi-leaf fork's chord spans
 //   enough Δθ that the bow is plainly visible and wrong versus the reference.
@@ -166,7 +166,7 @@ export const RadialPhylogeneticTree: StoryObj = {
   render: () => {
     const container = initializeContainer();
     // Node=hidden: the layer holds only links.
-    frame({}, [layer([...links])]).render(container, { w: CANVAS, h: CANVAS });
+    layer({}, [layer([...links])]).render(container, { w: CANVAS, h: CANVAS });
     return container;
   },
 };

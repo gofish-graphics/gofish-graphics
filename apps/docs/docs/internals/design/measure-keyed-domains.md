@@ -171,7 +171,7 @@ The marginal histogram needs this order (section 6).
 | `ref`                                                | The target's type takes part where the ref sits.                                                                                                                                                                                |
 | relate drawing clauses (`arrow`, `background`)       | Nothing. They read positions and carry no data.                                                                                                                                                                                 |
 | Porter-Duff operators, `enclose`                     | Like a layer.                                                                                                                                                                                                                   |
-| `coord`, `frame({ coord })`                          | A space root. It reports nothing upward, as today, and each instance starts its own space, so repeated instances of one spec do not share.                                                                                      |
+| `coord`, `layer({ coord })`                          | A space root. It reports nothing upward, as today, and each instance starts its own space, so repeated instances of one spec do not share.                                                                                      |
 | `chart()`                                            | Nothing. A chart is a frame with one child. A chart draws axes (section 5), and its `w`/`h` is a literal size.                                                                                                                  |
 | render root                                          | A space root, and a sized node on each axis the render sizes. On any other axis it maps its keyed domain at the σ the nodes with a literal size below solve it at (section 5).                                                  |
 
@@ -595,9 +595,9 @@ const sparkSamples = (samples: Sample[]) =>
     .mark(circle({ r: 2.5, opacity: 0 }));
 
 const sparkRow = (samples, clock, w) =>
-  frame({ w, h: SPARK_H_PX, coord: linear(), padding: 0 }, [
-    frame({ w, h: SPARK_H_PX }, [sparkSamples(samples).layer(line({ ... }))]),
-    frame({ w, h: SPARK_H_PX }, [sparkSamples(samples).layer(time.transition({ ... }))]),
+  layer({ w, h: SPARK_H_PX, coord: linear(), padding: 0 }, [
+    layer({ w, h: SPARK_H_PX }, [sparkSamples(samples).layer(line({ ... }))]),
+    layer({ w, h: SPARK_H_PX }, [sparkSamples(samples).layer(time.transition({ ... }))]),
   ]);
 ```
 
@@ -674,7 +674,7 @@ under question 1. Each decision is marked **Decided**. The others stay open.
 
    **Decided** for long-format data: the Gapminder kinematics rows plot one
    `value` column for several quantities, and they keep the
-   `frame({ coord: linear() })` for now, with the internal identity transform. A unit that comes from a key
+   `layer({ coord: linear() })` for now, with the internal identity transform. A unit that comes from a key
    column is
    [#1122](https://github.com/gofish-graphics/gofish-graphics/issues/1122).
 

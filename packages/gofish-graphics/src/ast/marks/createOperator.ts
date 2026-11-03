@@ -14,7 +14,7 @@ import { checkLengths } from "../length";
  * captures that shape once so each operator is a short config:
  *
  *   split    : (opts, data) -> [ (key, subdata), ... ] + optional meta
- *   layout   : the low-level node builder (e.g. Spread, Scatter, Frame, Table)
+ *   layout   : the low-level node builder (e.g. Spread, Scatter, layer, Table)
  *   channels?: { w: "size" } — auto-apply inferSize/inferPos/inferColor
  *
  * High-level opts are passed to `layout` directly (after channels apply and

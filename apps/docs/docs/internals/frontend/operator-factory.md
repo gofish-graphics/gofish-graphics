@@ -11,7 +11,7 @@ covers:
 # `createOperator`: turning a layout into a frontend operator
 
 `createOperator` is the factory that wraps a low-level layout node-builder
-(`Spread`, `Scatter`, `Table`, `Frame`) and produces the frontend operator
+(`Spread`, `Scatter`, `Table`, `Layer`) and produces the frontend operator
 (`spread`, `scatter`, `table`, `group`, plus `stack` as a thin wrapper over
 `spread`) used inside `chart(...).flow(...)` and as a combinator inside
 `.mark(...)`.
@@ -87,7 +87,7 @@ into N pieces, followed by a fan-in back to a single node:
 2. **fmap.** Apply the user's mark to each piece, producing one
    `GoFishNode` per piece.
 3. **Combine.** Hand the array of nodes to the low-level layout function
-   (`Spread`, `Table`, `Scatter`, `Frame`), which positions them.
+   (`Spread`, `Table`, `Scatter`, `Layer`), which positions them.
 
 The combinator form skips `split` entirely — the user already supplied the
 array of marks. The factory loops over them, applies each to the shared
@@ -589,7 +589,7 @@ to `createOperator`; Encodable doesn't address layout multiplicity.
   - `spread` and `stack` — `graphicalOperators/spread.tsx`.
   - `scatter` — `graphicalOperators/scatter.tsx`.
   - `table` — `graphicalOperators/table.tsx`.
-  - `group` — `graphicalOperators/group.ts` (sibling of `frame.tsx`,
+  - `group` — `graphicalOperators/group.ts` (sibling of `layer.tsx`,
     extracted to keep the chartBuilder ↔ createOperator import graph
     acyclic).
 - The companion mark factory: [The Mark Factory](/internals/frontend/mark-factory).

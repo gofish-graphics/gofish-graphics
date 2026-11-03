@@ -8,7 +8,6 @@ import { withKindValues } from "../strategyKind";
 import { rowsReached } from "../datumProjection";
 import type { AxesOptions } from "../gofish";
 import { Mark, Operator } from "../types";
-import { Frame } from "../graphicalOperators/frame";
 import { layer as Layer } from "../graphicalOperators/layer";
 import { GoFishRef, visibleNodes } from "../_ref";
 import { ref } from "../shapes/ref";
@@ -1167,8 +1166,8 @@ function isChartOptions(x: unknown): x is ChartOptions {
 }
 
 /**
- * A chart's node: a `Frame` with the chart's options over one layer of
- * `children`, its content. `Frame` picks out what it needs (`coord`, `axes`,
+ * A chart's node: a `layer` with the chart's options over one layer of
+ * `children`, its content. The layer picks out what it needs (`coord`, `axes`,
  * `padding`, and the dims, which size it), so this is the whole bag rather
  * than a key list. A chart is where its axes are drawn (#1114 step 6): on an
  * axis it has a size of its own, it solves σ there and draws them around its
@@ -1188,7 +1187,7 @@ async function frameChart(
 ): Promise<GoFishNode> {
   const content = await Layer({}, children);
   content._chartContent = true;
-  const node = await Frame(options, [content]);
+  const node = await Layer(options, [content]);
   // A chart with a size of its own draws its axes inside its box. An `fr`
   // size is a share of the scope around it, which it is given from
   // outside, so it draws them around itself, as a facet panel does.

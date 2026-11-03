@@ -6,7 +6,7 @@ import {
   spreadX,
   rect,
   v,
-  frame,
+  layer,
   ribbon,
   ref,
 } from "../lib";
@@ -15,7 +15,7 @@ export const testRidgeline = () =>
   spreadY(
     { spacing: -30 },
     map(groupBy(streamgraphData, "c"), (items, c) =>
-      frame([
+      layer([
         spreadX(
           { spacing: 20 },
           map(items, (d) =>

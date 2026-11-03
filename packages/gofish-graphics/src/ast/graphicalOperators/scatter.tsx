@@ -218,7 +218,7 @@ const Scatter = createNodeOperator(
     // delegates to distribute/align):
     //   - plain x / y      → point Constraint.position (centers the child on its
     //                        datum; `override` repositions a child that
-    //                        self-placed in its own layout, e.g. a Frame / coord
+    //                        self-placed in its own layout, e.g. a layer / coord
     //                        glyph).
     //   - range xMin/xMax  → interval Constraint.position ({ x: [min, max] }):
     //                        two edges DETERMINE the size via the linsys bbox

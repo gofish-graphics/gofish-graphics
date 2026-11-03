@@ -20,7 +20,6 @@ import { Rect } from "../ast/shapes/rect";
 import { value } from "../ast/data";
 import { layer as Layer } from "../ast/graphicalOperators/layer";
 import { Constraint } from "../ast/constraints";
-import { Frame } from "../ast/graphicalOperators/frame";
 import { resolveReferences } from "../ast/_ref";
 
 let passed = 0;
@@ -156,7 +155,7 @@ console.log("# coord confluence: mixed data-driven + static children");
 
 console.log("# a frame with a coord honors its explicit w/h (#535)");
 {
-  const root: any = await Frame({ coord: polar(), w: 120, h: 80, axes: true }, [
+  const root: any = await Layer({ coord: polar(), w: 120, h: 80, axes: true }, [
     dist([wedge(), wedge()]),
   ]);
   await root.resolveAliases();

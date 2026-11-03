@@ -302,9 +302,9 @@ const panel = (curve) =>
 
 gofish(container, { w: 1160, h: 400, legend: false, axes: true }, () =>
   spreadX({ spacing: 16 }, [
-    frame({ w: 240, h: 280 }, [panel(Curve.step())]),
-    frame({ w: 240, h: 280 }, [panel(Curve.linear())]),
-    frame({ w: 240, h: 280 }, [panel(Curve.monotone())]),
+    layer({ w: 240, h: 280 }, [panel(Curve.step())]),
+    layer({ w: 240, h: 280 }, [panel(Curve.linear())]),
+    layer({ w: 240, h: 280 }, [panel(Curve.monotone())]),
   ])
 );
 ```

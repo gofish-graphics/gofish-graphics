@@ -10,7 +10,6 @@
 import { Rect as rect } from "../ast/shapes/rect";
 import { Text } from "../ast/shapes/text";
 import { layer } from "../ast/graphicalOperators/layer";
-import { Frame } from "../ast/graphicalOperators/frame";
 import { stackX } from "../ast/graphicalOperators/stackX";
 import { spreadX } from "../ast/graphicalOperators/spreadX";
 import { Constraint } from "../ast/constraints";
@@ -261,7 +260,7 @@ async function main() {
     // Nested in a frame, as in the story: at the root the padding would be
     // only canvas margin.
     const inFrame = async (b: any) =>
-      toDisplayList((Frame as any)({ w: 300, h: 300 }, [await b.resolve()]), {
+      toDisplayList((layer as any)({ w: 300, h: 300 }, [await b.resolve()]), {
         w: 300,
         h: 300,
       });

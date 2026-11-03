@@ -16,9 +16,7 @@ import {
 import { titanic } from "../data/titanic";
 import { layer } from "../ast/graphicalOperators/layer";
 import { ref } from "../ast/shapes/ref";
-import { frame } from "../ast/graphicalOperators/frame";
 import {
-  frame,
   stackY,
   stackX,
   rect,
@@ -66,7 +64,7 @@ const layerSpacing = 64;
 const internalSpacing = 2;
 
 export const testSankeyIcicle = () =>
-  frame([
+  layer([
     spread({ dir: "x", spacing: layerSpacing, alignment: "middle" }, [
       stackY(
         { alignment: "middle" },
@@ -280,7 +278,7 @@ export const testSankeyIcicle = () =>
   ]);
 
 export const testSankeyIcicleWithFor = () =>
-  frame([
+  layer([
     spreadX({ spacing: layerSpacing, alignment: "middle" }, [
       stackY(
         { alignment: "middle" },

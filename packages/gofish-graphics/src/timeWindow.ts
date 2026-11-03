@@ -320,10 +320,10 @@ export function sequenceWindow(
  *  keyframes, and the sequence. */
 export type Keyframe = { t: number; index: number; sequence: SequenceWindow };
 
-/** Each sequence's record, on the Frame it lays its keyframes out in. */
+/** Each sequence's record, on the layer it lays its keyframes out in. */
 const sequences = new WeakMap<object, SequenceWindow>();
 
-/** Record that `frame` is the Frame a sequence lays its keyframes out in. */
+/** Record that `frame` is the layer a sequence lays its keyframes out in. */
 export function markSequence(frame: object, sequence: SequenceWindow): void {
   sequences.set(frame, sequence);
 }
@@ -338,8 +338,8 @@ type TreeNode = {
 
 /**
  * The keyframe `node` is part of. A sequence lays its keyframes out as the
- * children of one Frame, each keyed by its time, so this walks up to the node
- * whose parent is a sequence's Frame and reads that node's key. A pass that
+ * children of one layer, each keyed by its time, so this walks up to the node
+ * whose parent is a sequence's layer and reads that node's key. A pass that
  * wraps a keyframe in a new node gives the wrapper the keyframe's key
  * (`wrapPreservingIdentity`), so what the pass adds beside the keyframe, e.g.
  * its label texts, is part of the keyframe too. A key the sequence could not
@@ -383,7 +383,7 @@ export function lifetimeRule(keyframe: Keyframe, last: number): () => boolean {
 
 /**
  * The `time.history` nodes inside a keyframe, `node` itself included. The
- * walk stops at another sequence's Frame: the keyframes inside it belong to
+ * walk stops at another sequence's layer: the keyframes inside it belong to
  * that sequence, which reads its own.
  */
 export function historiesIn(node: TreeNode): TreeNode[] {
@@ -417,7 +417,7 @@ export function lifetimeOf(mark: TreeNode): number {
       break;
     }
     const parent = n.parent as TreeNode | undefined;
-    // The keyframe is the node whose parent is a sequence's Frame; nothing
+    // The keyframe is the node whose parent is a sequence's layer; nothing
     // above it is part of the keyframe.
     if (parent === undefined || sequences.has(parent)) break;
     n = parent;

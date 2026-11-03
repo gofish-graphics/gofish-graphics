@@ -1,8 +1,8 @@
-// The fluent `group` operator. Lives in its own file (not in frame.tsx with the
-// low-level `Frame`) because chartBuilder.ts imports `Frame` and we don't
+// The fluent `group` operator. Lives in its own file (not in layer.tsx with the
+// node `layer`) because chartBuilder.ts imports `layer` and we don't
 // want that import to transitively pull in createOperator → ChartBuilder.
 import { createOperator } from "../marks/createOperator";
-import { Frame } from "./frame";
+import { layer } from "./layer";
 import { SplitBy, splitEntries } from "../datumProjection";
 
 export type GroupOptions = {
@@ -10,7 +10,7 @@ export type GroupOptions = {
 };
 
 export const group = createOperator<any, GroupOptions>(
-  (_opts, children) => Frame({}, children),
+  (_opts, children) => layer({}, children),
   {
     split: ({ by }, d) => {
       if (!by) throw new Error("group requires opts.by = fieldName");

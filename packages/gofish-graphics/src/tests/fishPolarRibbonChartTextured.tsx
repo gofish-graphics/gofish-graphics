@@ -18,7 +18,6 @@ import { clock } from "../ast/coordinateTransforms/clock";
 import { stackX } from "../ast/graphicalOperators/stackX";
 import { stackY } from "../ast/graphicalOperators/stackY";
 import { ribbon } from "../lib";
-import { frame } from "../ast/graphicalOperators/frame";
 // import { fishData } from "../data/fish";
 
 const fishColors = {
@@ -195,7 +194,7 @@ export const testFishPolarRibbonChartTextured = (
   gofish(
     container,
     { w: size.width, h: size.height, transform: { x: 500, y: 500 }, defs },
-    frame({ coord: clock() }, [
+    layer({ coord: clock() }, [
       stackX(
         {
           y: 50,

@@ -30,7 +30,7 @@
  */
 import { createOperator } from "./createOperator";
 import { createRelationalMark } from "./chart";
-import { Frame } from "../graphicalOperators/frame";
+import { layer } from "../graphicalOperators/layer";
 import { tween } from "../graphicalOperators/tween";
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
@@ -258,8 +258,8 @@ export function sequence(opts: SequenceOptions) {
       // paint-time — untracked and flagged, so the clock wires up for events
       // without becoming a pipeline dependency (see `src/interaction/live.ts`).
       readLive(tier.clock);
-      const frame = await Frame({}, children);
-      // The keyframes are this Frame's children, so a node finds the keyframe
+      const frame = await layer({}, children);
+      // The keyframes are this layer's children, so a node finds the keyframe
       // it is part of by walking up to it (`keyframeOf`).
       markSequence(frame, shown);
       // WHICH keyframes are shown is then decided per frame, in paint
@@ -497,7 +497,7 @@ export const transition = createRelationalMark<TransitionOptions>(
  * itself and overlapping it is containing it.
  *
  * Which keyframe a group is comes from its key, the value of `by` the
- * operator stamped it with, read by `keyframeOf` through the Frame the groups
+ * operator stamped it with, read by `keyframeOf` through the layer the groups
  * sit in. That is also what a connector over the keyframes reads to find out
  * that it threads them in time (see `connect.tsx`), and from it, the same
  * window.
@@ -536,13 +536,13 @@ export type HistoryOptions = {
   last?: number;
 };
 
-/** The one operator both forms of `time.history` build: a Frame over its
+/** The one operator both forms of `time.history` build: a layer over its
  *  children, recorded with its `last` (`markHistory`) for the enclosing
  *  sequence to read. The flow form splits nothing: the marks below it are
  *  drawn over all of its data, and it wraps them. */
 const historyOperator = createOperator<any, HistoryOptions>(
   async (o, children) => {
-    const node = await Frame({}, children);
+    const node = await layer({}, children);
     markHistory(node, o.last!);
     return node;
   },

@@ -13,7 +13,6 @@ import _ from "lodash";
 import { ref } from "../ast/shapes/ref";
 import { connect } from "../ast/graphicalOperators/connect";
 import { streamgraphColorPalette, streamgraphData } from "../data/streamgraphData";
-import { frame } from "../ast/graphicalOperators/frame";
 
 // const data = [
 //   { x: 0, y: 28, c: 0 },
@@ -43,7 +42,7 @@ const data = streamgraphData;
 const colorPalette = streamgraphColorPalette;
 
 export const testScatterplot = () =>
-  frame(
+  layer(
     {},
     _(data)
       .map((d) =>

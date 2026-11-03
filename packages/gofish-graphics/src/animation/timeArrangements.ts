@@ -24,7 +24,7 @@
  */
 import type { DisplayList } from "gofish-ir";
 import { createOperator } from "../ast/marks/createOperator";
-import { Frame } from "../ast/graphicalOperators/frame";
+import { layer } from "../ast/graphicalOperators/layer";
 import { targetOf } from "../ast/constraints/relationalPaint";
 import { GoFishAST } from "../ast/_ast";
 import { GoFishNode } from "../ast/_node";
@@ -66,7 +66,7 @@ type TimeArrangementOperator = Operator<any, any> & TimeArrangement;
 function timeOperator(spec: ArrangementSpec): TimeArrangementOperator {
   const operator = createOperator<any, ArrangementSpec>(
     async (_opts, children) => {
-      const node = (await Frame({}, children)) as GoFishNode;
+      const node = (await layer({}, children)) as GoFishNode;
       // The split below already put each group in its own child.
       const { by: _spent, ...arrangement } = spec;
       setNodeTransition(node, { kind: "operator", enter: arrangement });

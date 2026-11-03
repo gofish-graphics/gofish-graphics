@@ -218,7 +218,6 @@ export * as Overlap from "./families/overlap";
 export type { EncloseOptions } from "./ast/graphicalOperators/enclose";
 export * as Shape from "./families/shape";
 export * as Place from "./families/place";
-export { Frame as frame } from "./ast/graphicalOperators/frame";
 export { group } from "./ast/graphicalOperators/group";
 export { position } from "./ast/graphicalOperators/position";
 export { arrow } from "./ast/graphicalOperators/arrow";

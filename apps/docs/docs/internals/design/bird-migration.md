@@ -456,7 +456,7 @@ const playButton = button({
 
 gofish(container, { w: 600, h: 660, legend: false }, () =>
   spreadY({ spacing: 12 }, [
-    frame({ w: 600, h: 600 }, [map]),
+    layer({ w: 600, h: 600 }, [map]),
     spreadX({ spacing: 8 }, [playButton, timeSlider]),
   ])
 );
@@ -549,7 +549,7 @@ siblings are stacked against - in panel E the controls first landed inside the
 map. `padding: 0` on a composed chart is the fix, and the spacing then belongs
 to the composition. Related: under a low-level operator the geo coord's box
 follows the proposal it gets rather than its lon/lat window, so panel E wraps
-the map in `frame({ w: 600, h: 600 })` to say how big the map is. Both deserve a
+the map in `layer({ w: 600, h: 600 })` to say how big the map is. Both deserve a
 follow-up: a composed chart should report the box it actually paints.
 
 ### Sequencing
@@ -575,7 +575,7 @@ a `rescale: false` spelling for domains that must ignore a filter.
    `LayerBuilder` as well as `ChartBuilder` (step 5). What it exposed is that a
    composed chart's box does not cover what it paints — its padding is drawn
    outside the box — so a composed chart wants `padding: 0` and an explicit
-   `frame({ w, h })`. That is the real open question now.
+   `layer({ w, h })`. That is the real open question now.
 3. Basemap relayout every frame. Josh: ignore performance for now.
 4. Holes in the basemap drawn as filled rings (declared shortcut).
 5. `circle({ r })` takes a number only, so panel E has no hover-size highlight

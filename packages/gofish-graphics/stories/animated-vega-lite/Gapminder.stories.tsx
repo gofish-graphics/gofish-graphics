@@ -25,7 +25,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import {
-  frame,
   gofish,
   chart,
   circle,
@@ -617,7 +616,7 @@ const sparkSamples = (samples: Sample[]) =>
 const sparkRow = (samples: Sample[], clock: any, w: number) =>
   // A sparkline is a chart with no axes, and the coordinate frame is what says
   // so here: the whole picture is rendered with `axes: true`, and the chart's
-  // own `axes: false` turns off only the axes the chart owns. The `frame`
+  // own `axes: false` turns off only the axes the chart owns. The `layer`
   // above it still claims the ordinal method axis (an ordinal axis is claimed
   // at any node, not only at a chart, until #1115), and an `axes: false` on
   // the operators only silences the operator that carries it. A coordinate
@@ -627,8 +626,8 @@ const sparkRow = (samples: Sample[], clock: any, w: number) =>
   // TODO(#1115, #1122): this borrows the internal identity transform, which
   // has no public `Coord` since #1156; the frame needs no coord once an
   // ordinal axis is claimed only at a chart and a unit can come from a key.
-  frame({ w, h: SPARK_H_PX, coord: linear(), padding: 0 }, [
-    frame({ w, h: SPARK_H_PX }, [
+  layer({ w, h: SPARK_H_PX, coord: linear(), padding: 0 }, [
+    layer({ w, h: SPARK_H_PX }, [
       sparkSamples(samples)
         // `curve: "linear"` is not a default worth leaning on here, it is
         // the whole point: an omitted curve is `auto`, and `auto` over a
@@ -638,7 +637,7 @@ const sparkRow = (samples: Sample[], clock: any, w: number) =>
         // differ. The samples are already dense wherever a curve bends.
         .layer(line({ stroke: "#999", strokeWidth: 1, curve: Curve.linear() })),
     ]),
-    frame({ w, h: SPARK_H_PX }, [
+    layer({ w, h: SPARK_H_PX }, [
       sparkSamples(samples).layer(
         time.transition({
           along: "t",
@@ -665,11 +664,11 @@ const kinematicsBlock = (rows: any[], clock: any) => {
         spreadX({ spacing: PANEL_GAP, alignment: "middle" }, [
           // The label's cell is as wide as the row's lead cell plus the first
           // panel's chrome, and an empty `rect` is what gives it that width:
-          // a `frame`'s own `w` sizes the box it lays out in, but a lone text
+          // a `layer`'s own `w` sizes the box it lays out in, but a lone text
           // mark does not fill it, so the cell would collapse to the word.
           // The word sits at the middle of the row's height, beside its
           // sparklines.
-          frame({ w: LEAD_W + PANEL_CHROME, h: SPARK_H_PX }, [
+          layer({ w: LEAD_W + PANEL_CHROME, h: SPARK_H_PX }, [
             rect({ w: LEAD_W + PANEL_CHROME, h: SPARK_H_PX, fill: "none" }),
             text({ text: q, fontSize: 11, fill: "#888", cy: SPARK_H_PX / 2 }),
           ]),

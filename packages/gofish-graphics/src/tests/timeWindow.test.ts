@@ -357,7 +357,7 @@ console.log("# the keyframe record");
     keyframeOf({ parent: frame, key: "1998" }) === undefined
   );
   // A pass that wraps the keyframe moves its key onto the wrapper, which
-  // takes the keyframe's place under the Frame.
+  // takes the keyframe's place under the layer.
   const wrapper = { parent: frame, key: "2000" };
   group.parent = wrapper;
   group.key = undefined;

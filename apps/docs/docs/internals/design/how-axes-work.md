@@ -202,7 +202,7 @@ constraints that place nodes, not cut at every `chart()` boundary (see
 [Measure-keyed domains](/internals/design/measure-keyed-domains)). The rule below is
 the first form of #1114. Rules 2 and 4 hold as built. Rules 1 and 3 do not: two
 separate charts that plot the same column share a domain wherever they sit, unless a
-`frame({ coord })` starts a new space. The note's section 10 says why.
+`layer({ coord })` starts a new space. The note's section 10 says why.
 
 ### The problem
 

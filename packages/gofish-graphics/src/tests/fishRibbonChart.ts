@@ -14,7 +14,6 @@ import { ref } from "../ast/shapes/ref";
 import { stackX } from "../ast/graphicalOperators/stackX";
 import { stackY } from "../ast/graphicalOperators/stackY";
 import { ribbon } from "../lib";
-import { frame } from "../ast/graphicalOperators/frame";
 const fishColors = {
   Bass: color.blue[5],
   Trout: color.red[5],
@@ -24,7 +23,7 @@ const fishColors = {
 };
 
 export const testFishRibbonChart = () =>
-  frame([
+  layer([
     stackX(
       { spacing: 64 },
       _(seafood)

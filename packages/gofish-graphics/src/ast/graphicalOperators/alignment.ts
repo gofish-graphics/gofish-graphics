@@ -116,7 +116,7 @@ export function unionChildSpaces(
       if (ord.domain) for (const k of ord.domain) keys.add(k);
     }
     // Carry the grouping fields through the union so a category axis keeps
-    // naming itself off its own space — e.g. a `Frame` wrapping a
+    // naming itself off its own space — e.g. a `layer` wrapping a
     // `spread(lake)` preserves "lake".
     const titles = ordinals.reduce<string[]>(
       (acc, o) => unionInOrder(acc, o.titles ?? []),

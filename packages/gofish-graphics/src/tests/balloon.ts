@@ -12,7 +12,6 @@ import { seafood } from "../data/catch";
 import _ from "lodash";
 import { layer } from "../ast/graphicalOperators/layer";
 import { ellipse } from "../ast/shapes/ellipse";
-import { frame } from "../ast/graphicalOperators/frame";
 /*  From Claude :)
 <!-- Balloon body (ellipse) -->
 <ellipse cx="200" cy="150" rx="120" ry="150" fill="#ff5555" />
@@ -38,7 +37,7 @@ export const balloon = (options?: {
   scale?: number;
   color?: string[];
 }) =>
-  frame(
+  layer(
     {
       x: options?.x - 15 * (options?.scale ?? 1),
       y: options?.y + 27 * (options?.scale ?? 1),

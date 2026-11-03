@@ -4,7 +4,7 @@ import _ from "lodash";
 import { stackY } from "../ast/graphicalOperators/stackY";
 import { stackX } from "../ast/graphicalOperators/stackX";
 import { seattleWeather } from "../data/seatle-weather";
-import { frame } from "../ast/graphicalOperators/frame";
+import { layer } from "../ast/graphicalOperators/layer";
 import { ribbon } from "../lib";
 import { ref } from "../ast/shapes/ref";
 
@@ -36,7 +36,7 @@ const stackedBarDataset = _(seattleWeather).groupBy((d) => {
 });
 
 export const testVLStackedBar = () =>
-  frame([
+  layer([
     stackX(
       { spacing: 20 },
       _(stackedBarDataset)

@@ -47,7 +47,6 @@ const {
   slider,
   button,
   spreadY,
-  frame,
   layer,
   Coord,
 } = GoFish as any;
@@ -1913,7 +1912,7 @@ async function main() {
     });
     await gofish(container, { w: 400, h: 400, legend: false }, () =>
       spreadY({ spacing: 12 }, [
-        frame({ w: 300, h: 300 }, [map]),
+        layer({ w: 300, h: 300 }, [map]),
         spreadX({ spacing: 8 }, [playButton, timeSlider]),
       ])
     );

@@ -19,6 +19,7 @@ import { coord } from "../coordinateTransforms/coord";
 import { bakeChildren } from "../coordinateTransforms/bake";
 import { createNodeOperatorSequential } from "../withGoFish";
 import { GoFishAST } from "../_ast";
+import type { AxesOptions } from "../gofish";
 import { NestedOperand, nestedGap } from "../constraints/nestedOperand";
 import { fromFrameStart, orientView, rawPlaceable } from "../axisDirection";
 import {
@@ -119,40 +120,40 @@ const isRing = (node: GoFishNode): boolean => {
   return false;
 };
 
+export type LayerOptions = {
+  key?: string;
+  /** Lays the children out in this coordinate space: the layer is then the
+   *  space's box (`coord`), and takes its `axes` and `padding`. */
+  coord?: CoordinateTransform;
+  axes?: AxesOptions;
+  padding?: number;
+  transform?: { scale?: { x?: number; y?: number } };
+  box?: boolean;
+} & FancyDims;
+
 export const layer = createNodeOperatorSequential(
   async (
-    childrenOrOptions:
-      | ({
-          key?: string;
-          coord?: CoordinateTransform;
-          transform?: { scale?: { x?: number; y?: number } };
-          box?: boolean;
-        } & FancyDims)
-      | GoFishAST[],
+    childrenOrOptions: LayerOptions | GoFishAST[],
     maybeChildren?: GoFishAST[]
   ) => {
-    const options = Array.isArray(childrenOrOptions) ? {} : childrenOrOptions;
+    const options: LayerOptions = Array.isArray(childrenOrOptions)
+      ? {}
+      : childrenOrOptions;
     const children = Array.isArray(childrenOrOptions)
       ? childrenOrOptions
       : maybeChildren || [];
 
-    // If coord is provided, delegate to coord transform (similar to frame but without transform/box)
-    if (!Array.isArray(childrenOrOptions) && options.coord !== undefined) {
+    // With a coord, the layer is the coordinate space's box: the space takes
+    // the layer's dims (`w`, `h`, `dims`, ...), key, axes and padding (#535).
+    // `transform` (a pixel scale) and `box` have no counterpart in a space.
+    if (options.coord !== undefined) {
       const {
         coord: coordTransform,
-        key,
         transform: _transform,
         box: _box,
-        ...restDims
+        ...rest
       } = options;
-      return coord(
-        {
-          key,
-          transform: coordTransform,
-          ...restDims,
-        },
-        children.filter((c): c is GoFishNode => c instanceof GoFishNode)
-      );
+      return coord({ ...rest, transform: coordTransform }, children);
     }
 
     // A length for its own size (`w: percent(30)`, `w: fr(2)`, #1176 step

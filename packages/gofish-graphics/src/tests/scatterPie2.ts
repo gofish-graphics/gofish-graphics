@@ -16,7 +16,6 @@ import _ from "lodash";
 import { clock } from "../ast/coordinateTransforms/clock";
 import { stackX } from "../ast/graphicalOperators/stackX";
 import { seafood, catchLocations } from "../data/catch";
-import { frame } from "../ast/graphicalOperators/frame";
 
 const scatterData = _(seafood)
   .groupBy("lake")
@@ -32,10 +31,10 @@ const scatterData = _(seafood)
   .value();
 
 export const testScatterPie2 = () =>
-  frame(
+  layer(
     {},
     scatterData.map((sample) =>
-      frame(
+      layer(
         {
           x: sample.x,
           y: sample.y,

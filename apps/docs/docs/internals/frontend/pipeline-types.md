@@ -127,7 +127,7 @@ A general layout combinator has the shape:
 Layout: (children: GoFishNode[]) => GoFishNode;
 ```
 
-`Spread`, `Stack`, `Layer`, `Frame` all fit this pattern. There is a
+`Spread`, `Stack`, `Layer` all fit this pattern. There is a
 systematic way to turn a layout combinator into an operator:
 
 ```ts
