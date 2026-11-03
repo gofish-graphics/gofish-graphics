@@ -48,6 +48,7 @@ import {
 } from "./gofish";
 import type { GoFishExportOptions, GoFishRenderOptions } from "./gofish";
 import { toDisplayList } from "./displayList/toDisplayList";
+import { markShapeOnly } from "./displayList/shapeOnly";
 import type { DisplayList } from "gofish-ir";
 import { setLiveSlots } from "../interaction/liveSlots";
 import { readLive, sharedDecision } from "../interaction/live";
@@ -165,14 +166,6 @@ export type RenderSession = {
    *  lowering walk: the map from layout pixels to canvas pixels (the gutter
    *  offset) every `lower` body uses. */
   toPixel?: ToPixel;
-  /** Set by a compositor while it lowers its operands' shapes: hidden nodes
-   *  lower too, as `.hidden()` drops a node's paint and keeps its shape
-   *  (`GoFishNode.hidden`, porterDuff.tsx). */
-  drawHidden?: boolean;
-  /** The compositor whose operands are being lowered. An operand reads as
-   *  itself, so a hidden flag at or above the compositor does not hide it
-   *  there: the compositor's own lowering answers for that. */
-  compositor?: GoFishNode;
   /** The σ-scope registry: the one place σ / posScale is derived,
    *  shared by every scope root in this render. Created on first use
    *  (`getScopeRegistry`). */
@@ -817,6 +810,9 @@ export class GoFishNode {
   /** Set by `.hidden()`: the node is laid out, read and counted like any
    *  other, and paints nothing (see {@link hidden}). */
   public _hidden = false;
+  /** Set on a compositor (porterDuff.tsx): it reads its children's shapes,
+   *  so a hidden node under it lowers as its shape ({@link visibility}). */
+  public _readsShapes = false;
   /** Set by a `filter` option (`drawFilter.ts`): the filter the node's
    *  whole drawing is drawn under. A filtered node is a bake boundary. */
   public _filter: DisplayList.DisplayFilter | undefined = undefined;
@@ -2901,9 +2897,9 @@ export class GoFishNode {
       );
     }
     const session = this.getRenderSession();
-    // A hidden node, or one under a hidden ancestor, paints nothing, unless
-    // a compositor is reading its shape (`drawHidden`, see `hidden`).
-    if (!session.drawHidden && this.isHidden(session.compositor)) return [];
+    // A hidden node draws nothing, or, under a compositor, its shape only.
+    const visibility = this.visibility();
+    if (visibility === "none") return [];
     const toPixel = session.toPixel;
     if (!toPixel) {
       throw new Error("[gofish] toPixel not set on the render session");
@@ -2916,7 +2912,17 @@ export class GoFishNode {
       coordinateTransform,
       true
     );
-    // A `filter` option filters the node's whole drawing as one picture.
+    const drawn = this.filtered(items);
+    if (visibility === "shape") markShapeOnly(drawn);
+    return drawn;
+  }
+
+  /** The node's drawing under its `filter` option, which filters the whole
+   *  drawing as one picture. Both {@link INTERNAL_lower} and a lent drawing
+   *  ({@link INTERNAL_lendDrawing}) draw through it. */
+  private filtered(
+    items: DisplayList.DisplayItem[]
+  ): DisplayList.DisplayItem[] {
     if (this._filter === undefined || items.length === 0) return items;
     return [
       { kind: "group", transform: {}, filter: this._filter, children: items },
@@ -3236,26 +3242,38 @@ export class GoFishNode {
    * and everything it feeds (scales, axes, legends, refs), and paints
    * nothing, so it takes no pointer either. An ancestor's hidden wins over a
    * descendant's `.hidden(false)`: a node paints only when no node on its
-   * path to the root is hidden ({@link isHidden}). On one node the last call
+   * path to the root is hidden ({@link visibility}). On one node the last call
    * wins.
    *
-   * Hidden drops paint, not shape: a compositor that reads its operands'
-   * shapes lowers them with `RenderSession.drawHidden` set, so a hidden
-   * operand still gives its alpha (porterDuff.tsx).
+   * Hidden drops paint, not shape: under a compositor, which reads its
+   * operands' shapes, a hidden node lowers as it would draw, and its items
+   * are recorded as shape only (`displayList/shapeOnly.ts`), so a hidden
+   * operand still gives its alpha (porterDuff.tsx). A label hides with its
+   * mark, though it lives out of the mark's subtree ({@link INTERNAL_attach}).
    */
   public hidden(value = true): this {
     this._hidden = value;
     return this;
   }
 
-  /** Whether this node or an ancestor is hidden ({@link hidden}). The walk
-   *  up stops at `below`, the compositor lowering this node as an operand
-   *  (`RenderSession.compositor`): a hidden flag at or above it is the
-   *  compositor's to answer for. */
-  public isHidden(below?: GoFishNode): boolean {
-    for (let n: GoFishNode | undefined = this; n && n !== below; n = n.parent)
-      if (n._hidden) return true;
-    return false;
+  /**
+   * How this node draws ({@link hidden}): `"shown"`; `"shape"`, hidden below
+   * the nearest compositor, which reads its shape; or `"none"`, hidden with
+   * no compositor reading it. A node is hidden when it, an ancestor up to
+   * the nearest compositor, or the mark one of them is attached to (a
+   * label's) is hidden. A hidden flag at or above the compositor is the
+   * compositor's own to answer for: the compositor draws nothing, or is
+   * itself a shape.
+   */
+  public visibility(): "shown" | "shape" | "none" {
+    let hidden = false;
+    for (let n: GoFishNode | undefined = this; n; n = n.parent) {
+      hidden ||=
+        n._hidden ||
+        (n._attachedTo !== undefined && n._attachedTo.visibility() !== "shown");
+      if (n.parent?._readsShapes) return hidden ? "shape" : "shown";
+    }
+    return hidden ? "none" : "shown";
   }
 
   /** The raw author-set z-order hint, or `undefined` if never set (distinct

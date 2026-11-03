@@ -9,7 +9,7 @@
 import * as GoFish from "../../dist/index.js";
 import { check, items, report } from "./testHelpers";
 
-const { chart, layer, rect, spread, Serialize } = GoFish as any;
+const { chart, intersect, layer, rect, spread, Serialize } = GoFish as any;
 
 const kinds = (dl: any) => items(dl).map((i) => i.kind);
 
@@ -86,6 +86,67 @@ console.log("# a hidden chart still sets its scale");
     items(hidden).length === 0 && items(shown).length > 1,
     [items(hidden).length, items(shown).length]
   );
+}
+
+console.log("# a hidden operand gives its shape and no paint");
+{
+  const dl = await intersect([
+    rect({ x: 0, y: 0, w: 40, h: 40 }).hidden(),
+    rect({ x: 20, y: 0, w: 40, h: 40, fill: "red" }),
+  ]).toDisplayList({ w: 100, h: 100 });
+  const c = dl.items.find((i: any) => i.kind === "composite");
+  check(
+    "the hidden operand: no paint, one rect of shape",
+    c?.operands[0].paint.length === 0 && c?.operands[0].shape?.length === 1,
+    c?.operands[0]
+  );
+  check(
+    "the shown operand: its paint, and no separate shape",
+    c?.operands[1].paint.length === 1 && c?.operands[1].shape === undefined,
+    c?.operands[1]
+  );
+}
+{
+  // An intersect hidden inside another's operand gives that one its shape;
+  // its own hidden operand is still its own shape.
+  const dl = await intersect([
+    layer([
+      intersect([
+        rect({ x: 0, y: 0, w: 40, h: 40 }).hidden(),
+        rect({ x: 20, y: 0, w: 40, h: 40 }),
+      ]),
+    ]).hidden(),
+    rect({ x: 0, y: 0, w: 100, h: 20, fill: "red" }),
+  ]).toDisplayList({ w: 100, h: 100 });
+  const outer = dl.items.find((i: any) => i.kind === "composite");
+  const inner = outer?.operands[0].shape?.[0];
+  check(
+    "the outer operand is shape only; the inner composite keeps its split",
+    outer?.operands[0].paint.length === 0 &&
+      inner?.kind === "composite" &&
+      inner.operands[0].paint.length === 0 &&
+      inner.operands[0].shape?.length === 1,
+    outer?.operands[0]
+  );
+}
+
+console.log("# a datum that does not serialize");
+{
+  // Lowering never serializes a datum: a circular one is fine.
+  const row: any = { k: "a", v: 10 };
+  row.self = row;
+  let message = "";
+  try {
+    await intersect([
+      chart([row])
+        .flow(spread({ by: "k", dir: "x" }))
+        .mark(rect({ h: "v" }).hidden()),
+      rect({ x: 0, y: 0, w: 100, h: 5 }),
+    ]).toDisplayList({ w: 100, h: 100, axes: false });
+  } catch (e) {
+    message = e instanceof Error ? e.message : String(e);
+  }
+  check("a circular datum under a composite lowers", message === "", message);
 }
 
 console.log("# the wire");

@@ -239,13 +239,16 @@ flat-absolute fold cannot express on its own:
 - **`composite`** — a region composite (#1267): one of the five set operations
   over its `operands`, named by its Porter-Duff `operator` (`over` for `union`,
   `in` for `intersect`, `out` for `subtract`, `xor` for `exclude`, and `atop`).
-  Each operand is `{ paint, shape? }`, two lowerings of the same child: `paint`
-  is what it draws (empty for a hidden child), and `shape` is what it covers,
-  lowered with hidden nodes drawn (`RenderSession.drawHidden`), and omitted when
-  it equals `paint`. Its region is its alpha as drawn: alpha is shape, and
-  `.hidden()` drops the paint but keeps the shape. `isHidden(compositor)` stops
-  its walk up at the compositor, so a hidden composite still gives its region to
-  a composite that reads it. A `fill` sub-list is the result's own paint, a box
+  Each operand is `{ paint, shape? }`, from one lowering of the child: `shape`
+  is what it covers, and `paint` is what it draws, the same items without the
+  ones hidden nodes drew (empty for a hidden child). `shape` is omitted when it
+  equals `paint`. Its region is its alpha as drawn: alpha is shape, and
+  `.hidden()` drops the paint but keeps the shape. Under a compositor
+  (`_readsShapes`), a hidden node lowers as it would draw
+  (`GoFishNode.visibility()` is `"shape"`), and its items are recorded in a
+  side table (`displayList/shapeOnly.ts`) that `paintOf` reads. The walk up
+  stops at the nearest compositor, so a hidden composite still gives its
+  region to a composite that reads it. A `fill` sub-list is the result's own paint, a box
   in the composite's `fill`, drawn through the result's region instead of the
   operands' paint. Items are in absolute pixels, like every other item.
 

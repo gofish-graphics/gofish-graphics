@@ -27,6 +27,7 @@
  */
 import type { DisplayList } from "gofish-ir";
 import { GoFishAST } from "../_ast";
+import { paintOf } from "../displayList/shapeOnly";
 import { GoFishNode, placeUnplacedChild } from "../_node";
 import type { Placeable, ToPixel } from "../_node";
 import { Size, displayTranslate } from "../dims";
@@ -264,14 +265,12 @@ const noExactGeometry = (operator: CompositeOperator, what: string) =>
 
 /**
  * Lower each operand of a composite, a bake boundary, through `toPixel`
- * (the composite's own pixel map), in order. Each operand is lowered as it
- * draws (its `paint`: hidden nodes draw nothing) and as its shape (hidden
- * nodes draw too, `RenderSession.drawHidden`); the shape is kept only where
- * it differs. A hidden flag at or above the composite does not hide its
- * operands here (`RenderSession.compositor`): the composite's own lowering
- * answered for it. Each operand's subtree is baked under the node's
- * `translate` (`lowerSubtree`), so an operand that only places its children
- * (a `pack`) lowers its leaves.
+ * (the composite's own pixel map), in order, once. A hidden node under the
+ * composite lowers as its shape (`GoFishNode.visibility`), so the items are
+ * the operand's shape, and its paint is them without what hidden nodes drew
+ * (`paintOf`); the shape is kept only where it differs. Each operand's
+ * subtree is baked under the node's `translate` (`lowerSubtree`), so an
+ * operand that only places its children (a `pack`) lowers its leaves.
  */
 function lowerOperands(
   node: GoFishNode,
@@ -281,27 +280,16 @@ function lowerOperands(
 ): DisplayList.CompositeOperand[] {
   const session = node.getRenderSession();
   assertNoPaintOrder(node);
-  const saved = {
-    toPixel: session.toPixel,
-    drawHidden: session.drawHidden,
-    compositor: session.compositor,
-  };
+  const saved = session.toPixel;
   session.toPixel = toPixel;
-  session.compositor = node;
-  const lowerAs = (child: GoFishAST, drawHidden: boolean) => {
-    session.drawHidden = drawHidden;
-    return lowerSubtree(child, translate, coordinateTransform);
-  };
   try {
     return node.children.map((child) => {
-      const paint = lowerAs(child, false);
-      const shape = lowerAs(child, true);
-      return JSON.stringify(shape) === JSON.stringify(paint)
-        ? { paint }
-        : { paint, shape };
+      const shape = lowerSubtree(child, translate, coordinateTransform);
+      const paint = paintOf(shape);
+      return paint === shape ? { paint } : { paint, shape };
     });
   } finally {
-    Object.assign(session, saved);
+    session.toPixel = saved;
   }
 }
 
@@ -474,6 +462,7 @@ function compositeNode(
     children
   );
   node.clipsToBox = sizing !== "union";
+  node._readsShapes = true;
   return node;
 }
 
