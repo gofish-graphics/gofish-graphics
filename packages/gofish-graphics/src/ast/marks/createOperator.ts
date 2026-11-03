@@ -580,6 +580,40 @@ export const zOrderModifier = {
   },
 } satisfies ModifierConfig<[value: ZOrderValue]>;
 
+/** Whether a mark is hidden: a constant, or a callback resolved per instance
+ *  against the datum the mark is bound to. */
+export type HiddenValue<T = any> = boolean | ((datum: T) => boolean);
+
+/**
+ * `.hidden(value = true)` — sets the node's hidden flag (`GoFishNode.hidden`):
+ * the mark is laid out and feeds scales, axes, legends and refs, and paints
+ * nothing. `value` is a constant or a callback resolved per instance against
+ * the datum the mark is bound to, as `.zOrder` is. It only sets a field, so
+ * it has no function form.
+ */
+export const hiddenModifier = {
+  name: "hidden",
+  bind: (value = true) => [value],
+  apply: (node, _layerContext, datum, value) => {
+    node.hidden(typeof value === "function" ? value(datum) : value);
+  },
+  // A Python callback is called through the bridge once with every input
+  // (`resolveValue`), and read back by input.
+  resolveArgs: (value) =>
+    isBatchAccessor(value)
+      ? async (inputs) => [
+          (await resolveValue(value, inputs)) as (datum: unknown) => boolean,
+        ]
+      : undefined,
+  tag: (wrapped, base, value = true) => {
+    // A constant round-trips; a callback can't be JSON-serialized, so it is
+    // dropped from the emitted IR, as `.zOrder(fn)`'s is.
+    propagateSerialize(base, wrapped, (tag) => {
+      if (typeof value === "boolean") tag.hidden = value;
+    });
+  },
+} satisfies ModifierConfig<[value?: HiddenValue]>;
+
 /**
  * `.transition({ enter, update, exit })` — how the mark looks in each phase
  * of an animation (`Animation.grow()`, `Animation.fadeIn()`, …). It records
@@ -599,7 +633,7 @@ export const transitionModifier = {
 } satisfies ModifierConfig<[spec: MarkTransition]>;
 
 /**
- * Attach chainable .name(), .label(), and .zOrder() to a mark, registering it
+ * Attach chainable .name(), .label(), .zOrder() and .hidden() to a mark, registering it
  * into the layer context when named so that ref(...)/selectAll(...) can find
  * it back.
  */
@@ -608,6 +642,7 @@ export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
     nameModifier,
     labelModifier,
     zOrderModifier,
+    hiddenModifier,
     transitionModifier,
   ]) as NameableMark<T>;
 }

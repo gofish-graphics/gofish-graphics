@@ -15,7 +15,9 @@ import type { GoFishAST } from "./_ast";
  * axis's ticks) shows and hides with it. Its `.zOrder()` moves with it too:
  * the hint orders the node among its siblings, which are now the wrapper's,
  * and left on the node it would instead reorder the node against the
- * chrome beside it (a label would paint under its mark, and before it). Shared
+ * chrome beside it (a label would paint under its mark, and before it). Its
+ * `.hidden()` moves with it the same way, so a hidden mark's label, and a
+ * hidden chart's axes and legend, are hidden with it. Shared
  * by the axis, legend and label elaboration passes. */
 export async function wrapPreservingIdentity(
   node: GoFishNode,
@@ -24,13 +26,16 @@ export async function wrapPreservingIdentity(
   const origKey = node.key;
   const origVisible = node.__gfVisible;
   const origZOrder = node._zOrder;
+  const origHidden = node._hidden;
   node.key = undefined;
   node.__gfVisible = undefined;
   node._zOrder = undefined;
+  node._hidden = false;
   const root = await build(node);
   if (origKey !== undefined) root.setKey(origKey);
   if (origVisible !== undefined) root.__gfVisible = origVisible;
   if (origZOrder !== undefined) root._zOrder = origZOrder;
+  if (origHidden) root._hidden = true;
   return root;
 }
 

@@ -54,8 +54,13 @@ import {
   nameModifier,
   labelModifier,
   zOrderModifier,
+  hiddenModifier,
 } from "./createOperator";
-import type { ModifierConfig, ZOrderValue } from "./createOperator";
+import type {
+  HiddenValue,
+  ModifierConfig,
+  ZOrderValue,
+} from "./createOperator";
 import { layer as Layer } from "../graphicalOperators/layer";
 import {
   encloseNode,
@@ -675,16 +680,20 @@ declare const relationalMarkBrand: unique symbol;
  * it may fuse: `ChartBuilder.mark()` gives a relational mark a
  * `ChartBuilder | LayerBuilder` result (it rewrites to a two-tier layer when
  * the chart has its own flow), and every other mark a plain `ChartBuilder`.
- * `.name()`, `.label()`, `.zOrder()` and `.transition()` carry the fusion tag
+ * `.name()`, `.label()`, `.zOrder()`, `.hidden()` and `.transition()` carry the fusion tag
  * forward, so they keep the brand; `.translate()` wraps the mark in a fresh
  * one without the tag, so it returns a plain `NameableMark`.
  */
 export type RelationalMark = Mark<any> &
-  Omit<NameableMark<any>, "name" | "label" | "zOrder" | "transition"> & {
+  Omit<
+    NameableMark<any>,
+    "name" | "label" | "zOrder" | "hidden" | "transition"
+  > & {
     readonly [relationalMarkBrand]: true;
     name(...args: Parameters<NameableMark<any>["name"]>): RelationalMark;
     label(...args: Parameters<NameableMark<any>["label"]>): RelationalMark;
     zOrder(...args: Parameters<NameableMark<any>["zOrder"]>): RelationalMark;
+    hidden(...args: Parameters<NameableMark<any>["hidden"]>): RelationalMark;
     transition(
       ...args: Parameters<NameableMark<any>["transition"]>
     ): RelationalMark;
@@ -697,10 +706,14 @@ export type RelationalMark = Mark<any> &
  */
 export type FlowStepMark = Mark<any> &
   Operator<any, any> &
-  Omit<RelationalMark, "name" | "label" | "zOrder" | "transition"> & {
+  Omit<
+    RelationalMark,
+    "name" | "label" | "zOrder" | "hidden" | "transition"
+  > & {
     name(...args: Parameters<NameableMark<any>["name"]>): FlowStepMark;
     label(...args: Parameters<NameableMark<any>["label"]>): FlowStepMark;
     zOrder(...args: Parameters<NameableMark<any>["zOrder"]>): FlowStepMark;
+    hidden(...args: Parameters<NameableMark<any>["hidden"]>): FlowStepMark;
     transition(
       ...args: Parameters<NameableMark<any>["transition"]>
     ): FlowStepMark;
@@ -1177,6 +1190,7 @@ export type RelatableMark<T> = Mark<T> & {
   name(layerName: string | Token): RelatableMark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): RelatableMark<T>;
   zOrder(value: ZOrderValue<T>): RelatableMark<T>;
+  hidden(value?: HiddenValue<T>): RelatableMark<T>;
   relate(fn: RelateFn): RelatableMark<T>;
   render(
     container: Parameters<GoFishNode["render"]>[0],
@@ -1211,6 +1225,7 @@ function makeRelatableMark<T>(base: Mark<T>): RelatableMark<T> {
     labelModifier,
     relateModifier,
     zOrderModifier,
+    hiddenModifier,
   ]) as unknown as RelatableMark<T>;
 }
 

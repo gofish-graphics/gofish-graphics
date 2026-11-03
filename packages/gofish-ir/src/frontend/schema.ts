@@ -108,6 +108,8 @@ export interface ChartIR extends BaseIRNode {
   mark: MarkIR;
   options?: Record<string, unknown>;
   zOrder?: number;
+  /** `chart(...).hidden(b)`: the chart is laid out and paints nothing. */
+  hidden?: boolean;
   /**
    * Chart-level name (from `chart(...).name("scatter")` in Python /
    * `node.name(...)` on a resolved chart in JS) so a sibling
@@ -804,6 +806,7 @@ export interface LeafMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   label?: LabelIR;
   relate?: RelateIR;
   zOrder?: number | BridgeLambdaSentinel;
+  hidden?: boolean | BridgeLambdaSentinel;
   translate?: TranslateIR;
   [key: string]: unknown;
 }
@@ -822,6 +825,7 @@ export interface CombinatorMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   label?: LabelIR;
   relate?: RelateIR;
   zOrder?: number | BridgeLambdaSentinel;
+  hidden?: boolean | BridgeLambdaSentinel;
   translate?: TranslateIR;
 }
 

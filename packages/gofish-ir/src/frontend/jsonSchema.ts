@@ -209,6 +209,7 @@ function buildLeafMarkDefs(): Record<string, unknown> {
         label: { $ref: "#/$defs/LabelIR" },
         relate: fieldTypeToSchema(MARK_BASE_FIELDS.relate.type),
         zOrder: fieldTypeToSchema(MARK_BASE_FIELDS.zOrder.type),
+        hidden: fieldTypeToSchema(MARK_BASE_FIELDS.hidden.type),
         debug: { type: "boolean" },
         translate: { $ref: "#/$defs/Translate" },
       },
@@ -310,6 +311,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         mark: { $ref: "#/$defs/MarkIR" },
         options: { $ref: "#/$defs/ChartOptions" },
         zOrder: { $ref: "#/$defs/Number" },
+        hidden: { type: "boolean" },
         name: {
           type: "string",
           description:
@@ -606,6 +608,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         label: { $ref: "#/$defs/LabelIR" },
         relate: fieldTypeToSchema(MARK_BASE_FIELDS.relate.type),
         zOrder: fieldTypeToSchema(MARK_BASE_FIELDS.zOrder.type),
+        hidden: fieldTypeToSchema(MARK_BASE_FIELDS.hidden.type),
         debug: { type: "boolean" },
         translate: { $ref: "#/$defs/Translate" },
       },

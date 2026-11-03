@@ -128,6 +128,9 @@ for the API.
         "zOrder": {
           "$ref": "#/$defs/Number"
         },
+        "hidden": {
+          "type": "boolean"
+        },
         "name": {
           "type": "string",
           "description": "Chart-level name so a sibling Layer relate callback can reference this chart."
@@ -584,6 +587,16 @@ for the API.
           "anyOf": [
             {
               "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
             },
             {
               "$ref": "#/$defs/BridgeLambdaSentinel"
@@ -1971,6 +1984,16 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
@@ -2074,6 +2097,16 @@ for the API.
           "anyOf": [
             {
               "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
             },
             {
               "$ref": "#/$defs/BridgeLambdaSentinel"
@@ -2203,6 +2236,16 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
@@ -2293,6 +2336,16 @@ for the API.
           "anyOf": [
             {
               "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
             },
             {
               "$ref": "#/$defs/BridgeLambdaSentinel"
@@ -2445,6 +2498,16 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "debug": {
           "type": "boolean"
         },
@@ -2566,6 +2629,16 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
@@ -2645,6 +2718,16 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
@@ -2717,6 +2800,16 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
@@ -2774,6 +2867,16 @@ for the API.
           "anyOf": [
             {
               "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
             },
             {
               "$ref": "#/$defs/BridgeLambdaSentinel"
@@ -2880,6 +2983,16 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "debug": {
           "type": "boolean"
         },
@@ -2972,6 +3085,16 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "debug": {
           "type": "boolean"
         },
@@ -3043,6 +3166,16 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "debug": {
           "type": "boolean"
         },
@@ -3076,6 +3209,16 @@ for the API.
           "anyOf": [
             {
               "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
             },
             {
               "$ref": "#/$defs/BridgeLambdaSentinel"

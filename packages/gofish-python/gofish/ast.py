@@ -528,12 +528,15 @@ class Mark(_Root):
         # Default z-order hint (sorted within siblings inside `layer`'s
         # render). Mirrors JS `node._zOrder` (`.zOrder(n)`).
         self._z_order: Optional[float] = None
+        # Set by `.hidden()`: laid out, paints nothing. Mirrors JS
+        # `node._hidden` (`.hidden(value)`).
+        self._hidden: Any = None
         self._translate: Optional[dict] = None
 
     def _write_meta(self, d: dict, payload: "_Payload") -> dict:
         """Write the modifiers every mark IR carries into ``d``: its
-        ``name``, ``zOrder`` (a function crosses as an accessor) and
-        ``translate``. The JS side applies them after building the mark
+        ``name``, ``zOrder`` and ``hidden`` (a function crosses as an
+        accessor) and ``translate``. The JS side applies them after building the mark
         (``withMarkMeta`` in fromJSON.ts). Parallel to ``_copy_meta``."""
         if self._name is not None:
             d["name"] = (
@@ -541,6 +544,8 @@ class Mark(_Root):
             )
         if self._z_order is not None:
             d["zOrder"] = _wire_accessors(self._z_order, payload)
+        if self._hidden is not None:
+            d["hidden"] = _wire_accessors(self._hidden, payload)
         if self._translate:
             d["translate"] = self._translate
         return d
@@ -554,6 +559,7 @@ class Mark(_Root):
         target._datum_set = self._datum_set
         target._key = self._key
         target._z_order = self._z_order
+        target._hidden = self._hidden
         target._translate = self._translate
         return target
 
@@ -638,6 +644,26 @@ class Mark(_Root):
         )
         self._copy_meta(new_mark)
         new_mark._z_order = _PendingAccessor(value) if _is_function(value) else value
+        return new_mark
+
+    def hidden(self, value: Union[bool, Callable[[Any], bool]] = True) -> "Mark":
+        """Lay this mark out and paint nothing. Mirrors JS ``mark.hidden(value)``.
+
+        A hidden mark still feeds scales, axes, legends and refs, and a
+        compositing operator still reads its shape. ``value`` is a bool, or a
+        function of the input a mark instance is bound to, which returns one.
+        An ancestor's ``hidden()`` wins over a descendant's ``hidden(False)``::
+
+            circle(r=3).hidden(lambda d: d["year"] != year)
+
+        Returns:
+            New Mark (same subclass as self) with the flag set.
+        """
+        new_mark = type(self)(
+            self.mark_type, _children=self._children, **self.kwargs
+        )
+        self._copy_meta(new_mark)
+        new_mark._hidden = _PendingAccessor(value) if _is_function(value) else value
         return new_mark
 
     def translate(
@@ -800,6 +826,13 @@ _REF_HAS_NO_Z_ORDER = (
     "Constraint.z_above / Constraint.z_below."
 )
 
+# Nor does a ref hide: it reads a node another mark drew, and only the value
+# you hold can change its paint (JS `GoFishRef` has no `.hidden()`).
+_REF_HAS_NO_HIDDEN = (
+    "A ref names a node that another mark drew, so it cannot hide it: call "
+    ".hidden() on the mark that draws the node."
+)
+
 
 class _InputRef(Mark):
     """A `GoFishRef` handed into a mark-fn lambda, reconstructed Python-side
@@ -852,6 +885,9 @@ class _InputRef(Mark):
 
     def z_order(self, value: Any) -> "Mark":
         raise TypeError(_REF_HAS_NO_Z_ORDER)
+
+    def hidden(self, value: Any = True) -> "Mark":
+        raise TypeError(_REF_HAS_NO_HIDDEN)
 
     def to_dict(self, payload: "_Payload") -> dict:
         d: dict = {"type": "ref", "__inputRef": self.index}
@@ -1418,6 +1454,7 @@ class ChartBuilder(_Root):
         options: Optional[dict] = None,
         operators: Optional[List[Operator]] = None,
         z_order: Optional[float] = None,
+        hidden: Optional[bool] = None,
     ):
         """
         Initialize a ChartBuilder.
@@ -1433,6 +1470,7 @@ class ChartBuilder(_Root):
         self.operators: List[Operator] = operators or []
         self._mark: Optional[Mark] = None
         self._z_order = z_order
+        self._hidden = hidden
         self._name: Optional[Union[str, "Token"]] = None
 
     def flow(self, *ops: Union[Operator, Composed]) -> "ChartBuilder":
@@ -1454,6 +1492,7 @@ class ChartBuilder(_Root):
                 *(o for op in ops for o in _expand_composed(op)),
             ],
             z_order=self._z_order,
+            hidden=self._hidden,
         )
 
     def mark(self, mark) -> "ChartBuilder":
@@ -1475,7 +1514,11 @@ class ChartBuilder(_Root):
             New ChartBuilder with mark set
         """
         new_builder = ChartBuilder(
-            self.data, self.options, self.operators, z_order=self._z_order
+            self.data,
+            self.options,
+            self.operators,
+            z_order=self._z_order,
+            hidden=self._hidden,
         )
         new_builder._mark = _as_mark(mark)
         return new_builder
@@ -1514,7 +1557,11 @@ class ChartBuilder(_Root):
             New ChartBuilder carrying the name.
         """
         new_builder = ChartBuilder(
-            self.data, self.options, self.operators, z_order=self._z_order
+            self.data,
+            self.options,
+            self.operators,
+            z_order=self._z_order,
+            hidden=self._hidden,
         )
         new_builder._mark = self._mark
         new_builder._name = name_or_token
@@ -1524,7 +1571,22 @@ class ChartBuilder(_Root):
         """Set z-order for this chart when rendered inside a Layer. Mirrors
         JS ``chart(...).zOrder(n)``."""
         new_builder = ChartBuilder(
-            self.data, self.options, self.operators, z_order=value
+            self.data, self.options, self.operators, z_order=value, hidden=self._hidden
+        )
+        new_builder._mark = self._mark
+        new_builder._name = self._name
+        return new_builder
+
+    def hidden(self, value: bool = True) -> "ChartBuilder":
+        """Lay the whole chart out, axes and legend included, and paint none
+        of it. Its marks can still be read by name. Mirrors JS
+        ``chart(...).hidden()``."""
+        new_builder = ChartBuilder(
+            self.data,
+            self.options,
+            self.operators,
+            z_order=self._z_order,
+            hidden=value,
         )
         new_builder._mark = self._mark
         new_builder._name = self._name
@@ -1600,6 +1662,8 @@ class ChartBuilder(_Root):
         }
         if self._z_order is not None:
             result["zOrder"] = self._z_order
+        if self._hidden is not None:
+            result["hidden"] = self._hidden
         # `.name(...)` lets a `layer([...]).relate(...)` callback refer to
         # this chart; JS names the resolved tier with it.
         if self._name is not None:
@@ -1853,6 +1917,9 @@ class _RefProxy(Mark):
 
     def z_order(self, value: Any) -> "Mark":
         raise TypeError(_REF_HAS_NO_Z_ORDER)
+
+    def hidden(self, value: Any = True) -> "Mark":
+        raise TypeError(_REF_HAS_NO_HIDDEN)
 
     def to_dict(self, payload: "_Payload") -> dict:
         # `select_all(...)` is a plural chart-data selector, so it has no

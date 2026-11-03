@@ -194,7 +194,7 @@ const TRACE = R("Exp", 0, 10, [addExpOuter]);
 
 const CharBox = createMark(({ ch }: { ch: string }) =>
   layer([
-    rect({ w: CHAR_W, h: CHAR_H, fill: "transparent" }).name("box"),
+    rect({ w: CHAR_W, h: CHAR_H }).hidden().name("box"),
     text({ text: ch, ...BIG_FONT }).name("glyph"),
   ]).relate(({ box, glyph }) => [
     Constraint.align({ x: "middle", y: "middle" }, [box, glyph]),
@@ -260,7 +260,7 @@ export const OhmParseTree: StoryObj<Args> = {
         { x: 0, y: 0 },
         [
           ...chars.map((ch, i) => CharBox({ ch }).name(charTokens[i])),
-          rect({ w: END_W, h: CHAR_H, fill: "transparent" }).name(endTok),
+          rect({ w: END_W, h: CHAR_H }).hidden().name(endTok),
         ]
       )
         .relate((env) => [
@@ -318,7 +318,7 @@ export const OhmParseTree: StoryObj<Args> = {
     const marker = (left: number, right: number): Ref => {
       const tok = createName(`marker-${uid++}`);
       children.push(
-        rect({ x: left, w: right - left, h: 1, fill: "transparent" }).name(tok)
+        rect({ x: left, w: right - left, h: 1 }).hidden().name(tok)
       );
       return asRef(tok);
     };

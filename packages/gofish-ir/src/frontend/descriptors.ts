@@ -340,6 +340,10 @@ export const MARK_BASE_FIELDS: FieldGroup = group({
     type: t.union(t.number, t.ref("BridgeLambdaSentinel")),
     doc: "Paint-order hint, from `.zOrder(value)`: a number, or a Python function (a bridge handle) the mark calls once per instance with the input it is bound to.",
   },
+  hidden: {
+    type: t.union(t.boolean, t.ref("BridgeLambdaSentinel")),
+    doc: "From `.hidden(value)`: the mark is laid out and feeds scales, axes, legends and refs, and paints nothing. A boolean, or a Python function (a bridge handle) the mark calls once per instance with the input it is bound to. An ancestor's `hidden` wins over a descendant's `false`.",
+  },
   translate: { type: t.ref("TranslateIR") },
   debug: {
     type: t.boolean,
@@ -362,7 +366,7 @@ export const MARK_BASE_FIELDS: FieldGroup = group({
 });
 
 /** The base fields the Python generator exposes as leaf-mark kwargs (the
- *  rest of MARK_BASE_FIELDS ride Mark methods: `.name()`, `.z_order()`,
+ *  rest of MARK_BASE_FIELDS ride Mark methods: `.name()`, `.z_order()`, `.hidden()`,
  *  `.translate()`, `.relate()`, `.label()`). Labeling a leaf mark is done
  *  exclusively via the `.label(accessor, options?)` chain — there is no
  *  leaf-mark `label` kwarg. */
@@ -398,7 +402,7 @@ export const PY_OPERATOR_BASE_KWARGS: FieldGroup = group({
 });
 
 /** The base fields that ride inside a combinator mark's `options` on the
- *  wire. The rest of MARK_BASE_FIELDS (`name`, `label`, `relate`, `zOrder`,
+ *  wire. The rest of MARK_BASE_FIELDS (`name`, `label`, `relate`, `zOrder`, `hidden`,
  *  `translate`) sit beside `options` on the node, set by Mark methods; only
  *  `debug` is a factory option (the Python combinator cores send it there). */
 export const COMBINATOR_OPTIONS_BASE_FIELDS: FieldGroup = group({

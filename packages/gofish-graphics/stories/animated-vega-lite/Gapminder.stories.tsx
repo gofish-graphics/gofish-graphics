@@ -318,7 +318,7 @@ const curvesRow = <C,>(
         spreadX({ spacing: PANEL_GAP, alignment: "end" }, [
           ...(leadW === undefined
             ? []
-            : [rect({ w: leadW, h: 1, fill: "none" })]),
+            : [rect({ w: leadW, h: 1 }).hidden()]),
           ...readings.map(({ caption, curve }) =>
             spreadY({ spacing: 8, alignment: "middle" }, [
               text({ text: caption, fontSize: 12, fill: "#555" }),
@@ -586,7 +586,7 @@ const sparkSamples = (samples: Sample[]) =>
       spread({ by: "method", dir: "x", spacing: SPARK_GAP, axes: false }),
       scatter({ by: "t", x: "t", y: "value", axes: false })
     )
-    .mark(circle({ r: 2.5, opacity: 0 }));
+    .mark(circle({ r: 2.5 }).hidden());
 
 /**
  * Sparklines for some of the readings, one per reading, and the dot that
@@ -602,7 +602,7 @@ const sparkSamples = (samples: Sample[]) =>
  * time field and `at` hands the transition the clock the panels share — so
  * the transition paints one dot per run and slides it along the sampled
  * curve. The samples' own marks are there to be moved between rather than
- * seen, so they are drawn at `opacity: 0` and the transition supplies the
+ * seen, so they are hidden (`.hidden()`) and the transition supplies the
  * paint. This is the spelled-out form of the sugar the panels use, the one
  * `GapminderTower` calls level 2, and it needs no sequence: nothing here is
  * held and then jumped from, the dot only moves.
@@ -670,7 +670,7 @@ const kinematicsBlock = (rows: any[], clock: any) => {
           // The word sits at the middle of the row's height, beside its
           // sparklines.
           frame({ w: LEAD_W + PANEL_CHROME, h: SPARK_H_PX }, [
-            rect({ w: LEAD_W + PANEL_CHROME, h: SPARK_H_PX, fill: "none" }),
+            rect({ w: LEAD_W + PANEL_CHROME, h: SPARK_H_PX }).hidden(),
             text({ text: q, fontSize: 11, fill: "#888", cy: SPARK_H_PX / 2 }),
           ]),
           // The step column is a chart of its own, with its own scale: its

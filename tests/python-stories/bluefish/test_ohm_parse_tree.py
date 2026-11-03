@@ -113,7 +113,7 @@ TRACE = R("Exp", 0, 10, [addExpOuter])
 def char_box(ch: str):
     return layer(
         [
-            rect(w=CHAR_W, h=CHAR_H, fill="transparent").name("box"),
+            rect(w=CHAR_W, h=CHAR_H).hidden().name("box"),
             text(text=ch, **BIG_FONT).name("glyph"),
         ]
     ).relate(
@@ -167,7 +167,7 @@ def story_ohm_parse_tree():
                     char_box(ch=ch).name(char_tokens[i])
                     for i, ch in enumerate(chars)
                 ],
-                rect(w=END_W, h=CHAR_H, fill="transparent").name(end_tok),
+                rect(w=END_W, h=CHAR_H).hidden().name(end_tok),
             ],
             x=0,
             y=0,
@@ -199,7 +199,7 @@ def story_ohm_parse_tree():
     def marker(left, right):
         tok = create_name(f"marker-{next(uid_counter)}")
         children.append(
-            rect(x=left, w=right - left, h=1, fill="transparent").name(tok)
+            rect(x=left, w=right - left, h=1).hidden().name(tok)
         )
         return tok.tag
 

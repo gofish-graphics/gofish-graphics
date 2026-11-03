@@ -205,7 +205,9 @@ function lowerOperands(
   const session = node.getRenderSession();
   const outer = session.toPixel!;
   assertNoPaintOrder(node);
+  const outerDrawHidden = session.drawHidden;
   session.toPixel = toPixel;
+  session.drawHidden = true;
   try {
     return [
       lowerSubtree(node.children[0], translate, coordinateTransform),
@@ -213,6 +215,7 @@ function lowerOperands(
     ];
   } finally {
     session.toPixel = outer;
+    session.drawHidden = outerDrawHidden;
   }
 }
 

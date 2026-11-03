@@ -165,6 +165,10 @@ export type RenderSession = {
    *  lowering walk: the map from layout pixels to canvas pixels (the gutter
    *  offset) every `lower` body uses. */
   toPixel?: ToPixel;
+  /** Set by a compositor while it lowers its operands' shapes: hidden nodes
+   *  lower too, as `.hidden()` drops a node's paint and keeps its shape
+   *  (`GoFishNode.hidden`, porterDuff.tsx). */
+  drawHidden?: boolean;
   /** The σ-scope registry: the one place σ / posScale is derived,
    *  shared by every scope root in this render. Created on first use
    *  (`getScopeRegistry`). */
@@ -806,6 +810,9 @@ export class GoFishNode {
   // order key apply `?? 0` at the comparison site so unset behaves exactly
   // like an explicit 0 for sorting purposes.
   public _zOrder: number | undefined = undefined;
+  /** Set by `.hidden()`: the node is laid out, read and counted like any
+   *  other, and paints nothing (see {@link hidden}). */
+  public _hidden = false;
   private renderSession?: RenderSession;
   // Axis state per dimension. Set by `resolveAxes` and consumed by the axis
   // elaboration pass (`elaborateChrome`), which wraps owning nodes in a Layer of
@@ -2886,7 +2893,11 @@ export class GoFishNode {
           `emit the display list.`
       );
     }
-    const toPixel = this.getRenderSession().toPixel;
+    const session = this.getRenderSession();
+    // A hidden node, or one under a hidden ancestor, paints nothing, unless
+    // a compositor is reading its shape (`drawHidden`, see `hidden`).
+    if (!session.drawHidden && this.isHidden()) return [];
+    const toPixel = session.toPixel;
     if (!toPixel) {
       throw new Error("[gofish] toPixel not set on the render session");
     }
@@ -3206,6 +3217,30 @@ export class GoFishNode {
   public zOrder(value: number): this {
     this._zOrder = value;
     return this;
+  }
+
+  /**
+   * `.hidden(value = true)`: the node keeps its layout, its datum, its name
+   * and everything it feeds (scales, axes, legends, refs), and paints
+   * nothing, so it takes no pointer either. An ancestor's hidden wins over a
+   * descendant's `.hidden(false)`: a node paints only when no node on its
+   * path to the root is hidden ({@link isHidden}). On one node the last call
+   * wins.
+   *
+   * Hidden drops paint, not shape: a compositor that reads its operands'
+   * shapes lowers them with `RenderSession.drawHidden` set, so a hidden
+   * operand still gives its alpha (porterDuff.tsx).
+   */
+  public hidden(value = true): this {
+    this._hidden = value;
+    return this;
+  }
+
+  /** Whether this node or an ancestor is hidden ({@link hidden}). */
+  public isHidden(): boolean {
+    for (let n: GoFishNode | undefined = this; n; n = n.parent)
+      if (n._hidden) return true;
+    return false;
   }
 
   /** The raw author-set z-order hint, or `undefined` if never set (distinct

@@ -35,6 +35,7 @@ import {
   type TranslateModifierOptions,
   type MarkKind,
   type ZOrderValue,
+  type HiddenValue,
 } from "./marks/createOperator";
 import { isValue } from "./data";
 import { splitLiveChannels } from "../interaction/live";
@@ -117,6 +118,7 @@ export interface PromiseWithRender<T> extends Promise<T> {
   setKey(key: string): PromiseWithRender<T>;
   relate(fn: RelateFn): PromiseWithRender<T>;
   zOrder(value: number): PromiseWithRender<T>;
+  hidden(value?: boolean): PromiseWithRender<T>;
   scope(): PromiseWithRender<T>;
 }
 
@@ -154,6 +156,7 @@ const CHAINABLE_NODE_METHODS = [
   "setKey",
   "relate",
   "zOrder",
+  "hidden",
 ] as const;
 
 /** Wrap a Promise so GoFishNode's chainable methods and the export terminals
@@ -367,6 +370,8 @@ export type NameableMark<T> = Mark<T> & {
   name(layerName: string | Token): NameableMark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): NameableMark<T>;
   zOrder(value: ZOrderValue<T>): NameableMark<T>;
+  /** Lay the mark out and paint nothing (`GoFishNode.hidden`). */
+  hidden(value?: HiddenValue<T>): NameableMark<T>;
   /** How the mark looks in each phase of an animation: `Animation.grow()`,
    *  `Animation.fadeIn()`, … (see `src/animation/`). */
   transition(spec: MarkTransition): NameableMark<T>;
