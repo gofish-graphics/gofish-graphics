@@ -142,11 +142,6 @@ export type AxisElaboration = {
    *  ordinal axis with no slots leaves it unset, and the title centers on
    *  the owner's content box. */
   anchor?: GoFishNode;
-  /** Where the content's baseline sits along this axis, in the axis's own
-   *  data frame: a delta axis has no data 0, so its frame is its own, and it
-   *  centers the content in its niced width. Unset: the content sits as its
-   *  type says (see the axis gutters in `elaborateChrome`). */
-  contentAt?: { dim: 0 | 1; at: number };
 };
 
 /** One row of axis labels: an axis, what kind of labels it carries, and its
@@ -693,8 +688,10 @@ function elaborateTimeAxis(
 
 /** One difference axis: bare tick marks at tick values, delta labels at
  *  midpoints. `space` is the content's space; the axis spans its niced width
- *  from 0, and the content sits centered in it (`contentAt`): a delta axis
- *  comes from centering (`middle` alignment), so its slack splits evenly. */
+ *  from 0, and the content sits centered in it: a delta axis comes from
+ *  centering (`middle` alignment), so its slack splits evenly. Its plot has
+ *  no data 0, so its frame measures from the plot's own 0 (`frameOf`), where
+ *  the plot's data starts: the axis's 0 is the slack before it. */
 function elaborateDifferenceAxis(
   dim: 0 | 1,
   content: CONTINUOUS_TYPE,
@@ -709,28 +706,21 @@ function elaborateDifferenceAxis(
   // line up with the marks they annotate. The axis line spans [0, width].
   const width = dataWidth(space);
   const tickValues = d3Ticks(0, width, ticks.count);
-  const contentAt = (width - dataWidth(content)) / 2;
+  const slack = (width - dataWidth(content)) / 2;
   const extraLabels = tickValues.slice(0, -1).map((v, i) => ({
-    value: (v + tickValues[i + 1]) / 2,
+    value: (v + tickValues[i + 1]) / 2 - slack,
     text: fmtNum(tickValues[i + 1] - v),
   }));
-  const axis = positionAxis({
+  return positionAxis({
     dim,
-    lineMin: 0,
-    lineMax: width,
-    tickValues,
+    lineMin: -slack,
+    lineMax: width - slack,
+    tickValues: tickValues.map((v) => v - slack),
     tickNode: () => tickRect(dim),
     extraLabels,
     crossFloor,
     side,
   });
-  return {
-    ...axis,
-    // Its plot has no data 0, so no frame to read datums in: the axis's
-    // frame is the ring's own, which seats the plot in it (`contentAt`).
-    constraints: (slot, inner) => axis.constraints(slot, inner, undefined),
-    contentAt: { dim, at: contentAt },
-  };
 }
 
 /** How one level of an ordinal axis is drawn, as its depth's settings say:
@@ -1794,11 +1784,8 @@ export async function elaborateChrome(
     // bbox-min would slide the marks off the tick grid by that overhang.
     if (constrained.length > 0) {
       const contentSpace = content._underlyingSpace;
-      const contentAt = (dim: 0 | 1) => {
-        const at = constrained.find((e) => e.contentAt?.dim === dim)?.contentAt;
-        if (at !== undefined) return datum(at.at);
-        return originIs(contentSpace?.[dim], "free") ? undefined : 0;
-      };
+      const contentAt = (dim: 0 | 1) =>
+        originIs(contentSpace?.[dim], "free") ? undefined : 0;
       ring = await wrapRing(
         ring,
         {

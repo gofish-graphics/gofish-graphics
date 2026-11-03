@@ -484,16 +484,11 @@ export async function layout(
         )
       : undefined,
   };
-  // A chart with a size of its own draws its axes around its content, its
-  // frame's one child (`isAxisBoundary`), so the content carries the
-  // request for their titles too; each node titles only the axes it draws.
+  // Each node titles only the axes it draws.
   for (const n of breadthFirst(child)) {
     if (n !== child && n._chartAxes === undefined) continue;
     const chartAxes = n === child ? axes : n._chartAxes;
     n._chromeRequest = { ...n._chromeRequest, axes: chartAxes };
-    const content = n.children[0];
-    if (n._chartBox?.some((sized) => sized) && content instanceof GoFishNode)
-      content._chromeRequest = { axes: chartAxes };
   }
   const elaborated = await elaborateChrome(child, {
     sides: [read[0].side, read[1].side],

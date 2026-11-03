@@ -842,8 +842,10 @@ export class GoFishNode {
   public _chartContent?: true;
   /** The frame a layer lays its children out in on each axis, once laid
    *  out: data `v` is at `σ·v + originPx` in its own axis order, from its
-   *  local origin. Undefined on an axis with no data 0, and on a node that
-   *  is no layer. A `position` with `in` reads a datum through it
+   *  local origin. On an axis with no data 0 it measures lengths of its σ
+   *  from that origin (`originPx` 0), as the claim walk reads its plan (a
+   *  difference axis). Undefined where it has no σ, and on a node that is
+   *  no layer. A `position` with `in` reads a datum through it
    *  (`PositionOptions.in`). */
   public layoutFrames?: [AxisMap | undefined, AxisMap | undefined];
   /** Set on the node a `chart()` resolves to, next to {@link _chartBox}: the
@@ -1292,35 +1294,24 @@ export class GoFishNode {
   }
 
   /** One of this node's axis spaces on `dim` as the axis machinery sees it:
-   *  placed ({@link placeBaseline}) when this node is seated by a sized scope
-   *  that places a free baseline at the scope's `originPx` — the render root,
-   *  or the content of a chart with a size of its own on `dim` — so the root
-   *  of a bar chart renders an absolute value axis over its free bars. A
-   *  chart is placed whole, its baseline with it, so it does too: a bar
-   *  chart beside a caption draws the axis it draws on its own (#1170).
-   *  Anywhere else a free space is still waiting for its parent to place it. */
+   *  placed ({@link placeBaseline}) when this node is the render root, whose
+   *  scope places a free baseline at its `originPx`, so the root of a bar
+   *  chart renders an absolute value axis over its free bars, or a chart: a
+   *  chart is placed whole, its baseline with it, so a bar chart beside a
+   *  caption draws the axis it draws on its own (#1170). Anywhere else a
+   *  free space is still waiting for its parent to place it. */
   public placedSpace(space: UnderlyingSpace, dim: 0 | 1): UnderlyingSpace {
-    return this.parent === undefined ||
-      this._chartBox !== undefined ||
-      this.isSizedChartContent(dim)
+    return this.parent === undefined || this._chartBox !== undefined
       ? placeBaseline(space)
       : space;
   }
 
-  /** This node is the content of a `chart()` with a size of its own on
-   *  `dim`: the chart solves σ there, and seats this content in its frame. A
-   *  chart's frame has one child, its content (`frameChart`). */
-  private isSizedChartContent(dim: 0 | 1): boolean {
-    return this.parent?._chartBox?.[dim] === true;
-  }
-
   /**
-   * Whether this node draws its continuous axes on `dim` (#1114 step 6):
-   * axes are drawn at `chart()` boundaries, inside the chart's own sized
-   * scope, so the ticks map with the σ the marks map with. A chart with no
-   * size of its own on `dim` draws them around itself (its σ is solved above
-   * it, at the sized node that contains it); a chart with a size of its own
-   * draws them around its content, inside the box it solves σ in. The render
+   * Whether this node draws its continuous axes (#1114 step 6):
+   * axes are drawn around `chart()` boundaries, sized or not (#1257). The
+   * ticks read their datums in the chart's frame (`position`'s `in`), so
+   * they map with the σ the marks map with wherever it is solved: inside a
+   * chart with a size of its own, or above one without. The render
    * root is an implicit chart and nothing more: it draws the axes of the
    * domains its own type covers, a bare low-level render's included. A piece
    * placed apart from it (detached, so the root's type does not cover it)
@@ -1332,9 +1323,8 @@ export class GoFishNode {
    * each axis its type covers first, and a continuous axis has one owner.
    * A nested chart draws only an axis no node above it claimed.
    */
-  private isAxisBoundary(dim: 0 | 1): boolean {
-    if (this._chartBox !== undefined) return !this._chartBox[dim];
-    return this.parent === undefined || this.isSizedChartContent(dim);
+  private isAxisBoundary(): boolean {
+    return this._chartBox !== undefined || this.parent === undefined;
   }
 
   /**
@@ -2233,7 +2223,7 @@ export class GoFishNode {
         } else if (axisOver(this.placedSpace(s, dim)) !== undefined) {
           // Continuous: single-owner — only the root-most unclaimed chart
           // boundary claims (`isAxisBoundary`).
-          if (prior === undefined && this.isAxisBoundary(dim))
+          if (prior === undefined && this.isAxisBoundary())
             sig = continuousSig(dim) ?? AXIS_CLAIM_OPAQUE;
         }
         // A node owns the axis whether or not its chart draws it: an axis

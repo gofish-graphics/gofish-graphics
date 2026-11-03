@@ -13,7 +13,7 @@ import * as Pwl from "../solver/pwl";
 import type { KeyedDomains } from "../keyedDomains";
 import { isValue } from "../data";
 import { computeSize, foldFinite } from "../../util";
-import { axisScale } from "../domain";
+import { axisScale, type AxisMap } from "../domain";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { coord } from "../coordinateTransforms/coord";
 import { bakeChildren } from "../coordinateTransforms/bake";
@@ -747,7 +747,15 @@ export const layer = createNodeOperatorSequential(
           // the layer's frame. A child such a constraint places at a datum
           // point gets no map on that axis (`childPosScalesFor`).
           const effectivePosScales = layerScales.frames;
-          node.layoutFrames = [effectivePosScales[0], effectivePosScales[1]];
+          // A frame with no data 0 measures from the layer's own 0
+          // (`GoFishNode.layoutFrames`).
+          node.layoutFrames = [0, 1].map(
+            (a) =>
+              effectivePosScales[a] ??
+              (childScaleFactors[a] === undefined
+                ? undefined
+                : { sigma: childScaleFactors[a]!, originPx: 0 })
+          ) as [AxisMap | undefined, AxisMap | undefined];
           // The room each child's position constraints hand it, which it is
           // laid out in: an interval it is pinned across, or its cell
           // (#1059), with the cell's outline as its shape (#1222).
