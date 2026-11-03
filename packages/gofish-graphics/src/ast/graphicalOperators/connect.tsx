@@ -9,6 +9,7 @@ import {
   transformPath,
 } from "../../path";
 import { GoFishAST } from "../_ast";
+import type { BlendMode } from "../blendMode";
 import { projectBy, type SplitBy } from "../datumProjection";
 import { GoFishNode, defaultGeometry, outlineOverhang } from "../_node";
 import { outlinePaint, pathOutline } from "../geometry";
@@ -199,7 +200,7 @@ export const connect = createNodeOperator(
       strokeDasharray,
       opacity,
       mode = "edge",
-      mixBlendMode,
+      blendMode,
       source,
       target,
       along,
@@ -220,7 +221,7 @@ export const connect = createNodeOperator(
       strokeDasharray?: string;
       opacity?: number;
       mode?: "edge" | "center";
-      mixBlendMode?: "multiply" | "normal";
+      blendMode?: BlendMode;
       // Per-endpoint anchor on each child's bbox. Accepts a per-axis tuple
       // `[fx, fy]` of numbers (`min + f * size`) or alignment keywords
       // (`start | middle | end` → `0 | 0.5 | 1`), with a single keyword as
@@ -938,8 +939,8 @@ export const connect = createNodeOperator(
             strokeDasharray,
             opacity: opacity ?? 1,
             // Normal by default for both modes; a ribbon that wants overlaps to
-            // darken opts into `mixBlendMode: "multiply"` explicitly.
-            mixBlendMode: mixBlendMode ?? "normal",
+            // darken opts into `blendMode: "multiply"` explicitly.
+            mixBlendMode: blendMode ?? "normal",
           });
 
           /** A path's pixel-space path data. The paths were built in the

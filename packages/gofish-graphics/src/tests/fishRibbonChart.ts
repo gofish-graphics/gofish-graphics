@@ -51,7 +51,7 @@ export const testFishRibbonChart = () =>
       .groupBy("species")
       .map((items) =>
         ribbon(
-          { dir: "x", opacity: 0.8, mixBlendMode: "multiply" },
+          { dir: "x", opacity: 0.8, blendMode: "multiply" },
           items.map((d) => ref(`${d.lake}-${d.species}`))
         )
       )

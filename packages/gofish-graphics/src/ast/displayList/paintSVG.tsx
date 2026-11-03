@@ -70,7 +70,6 @@ const styleProps = (style: Style) =>
     "stroke-dasharray": style?.strokeDasharray,
     opacity: style?.opacity,
     "fill-opacity": style?.fillOpacity,
-    filter: style?.filter,
     "paint-order": style?.paintOrder,
     "stroke-linejoin": style?.strokeLinejoin as
       | JSX.PathSVGAttributes<SVGPathElement>["stroke-linejoin"]
@@ -179,9 +178,29 @@ export function paintSVG(
       if (t.translate)
         parts.push(`translate(${t.translate[0]} ${t.translate[1]})`);
       if (t.scale) parts.push(`scale(${t.scale[0]} ${t.scale[1]})`);
+      const transform = parts.length ? parts.join(" ") : undefined;
+      const children = item.children.map((c) => paintSVG(c, interactive));
+      const f = item.filter;
+      if (f?.kind === "luminanceToAlpha") {
+        // No CSS function for it: an SVG `<filter>` def, as gofish-ir's
+        // string backend draws it (`luminanceToAlphaFilterSVG`).
+        const id = `gf-filter-${compositeIdCounter++}`;
+        return (
+          <>
+            <defs>
+              <filter id={id} color-interpolation-filters="sRGB">
+                <feColorMatrix type="luminanceToAlpha" />
+              </filter>
+            </defs>
+            <g transform={transform} filter={`url(#${id})`}>
+              {children}
+            </g>
+          </>
+        );
+      }
       return (
-        <g transform={parts.length ? parts.join(" ") : undefined}>
-          {item.children.map((c) => paintSVG(c, interactive))}
+        <g transform={transform} filter={f?.value}>
+          {children}
         </g>
       );
     }

@@ -51,7 +51,6 @@ function checkStyle(
   for (const k of [
     "mixBlendMode",
     "strokeDasharray",
-    "filter",
     "paintOrder",
     "strokeLinejoin",
   ] as const) {
@@ -205,6 +204,19 @@ function checkItem(
       errors.push({
         path: `${path}.transform`,
         message: "transform must be an object",
+      });
+    const f = item.filter;
+    if (
+      f !== undefined &&
+      !(
+        isObject(f) &&
+        ((f.kind === "css" && isStr(f.value)) || f.kind === "luminanceToAlpha")
+      )
+    )
+      errors.push({
+        path: `${path}.filter`,
+        message:
+          'filter must be { kind: "css", value: string } or { kind: "luminanceToAlpha" }',
       });
     if (!Array.isArray(item.children))
       errors.push({

@@ -120,15 +120,30 @@ export interface ImageItem extends BaseDisplayItem {
 
 /**
  * A transform group — children painted under an affine `transform` (the
- * display-list analogue of an SVG `<g transform>` / a Canvas save+transform).
- * Used for the rare cases the flat-absolute fold can't express on its own: a
- * `box`/`frame` `scale`. Children are in the group's local pixel space.
+ * display-list analogue of an SVG `<g transform>` / a Canvas save+transform),
+ * and under a `filter` when it has one. Used for the cases the flat-absolute
+ * fold can't express on its own: a `box`/`frame` `scale`, and a node with a
+ * `filter` option, whose drawing is filtered as one picture. Children are in
+ * the group's local pixel space.
  */
 export interface GroupItem extends BaseDisplayItem {
   kind: "group";
   transform: { translate?: [number, number]; scale?: [number, number] };
+  /** A filter over the group's whole drawing. */
+  filter?: DisplayFilter;
   children: DisplayItem[];
 }
+
+/**
+ * A filter over a group's drawing. `css` is a CSS `filter` value
+ * (`grayscale(1)`, `url(#shadow)`), which SVG takes as the `filter`
+ * attribute. `luminanceToAlpha` has no CSS function, so a backend draws it
+ * as an SVG `<filter>` def: an `feColorMatrix type="luminanceToAlpha"` in
+ * sRGB, which makes each pixel black with an alpha of its luminance.
+ */
+export type DisplayFilter =
+  | { kind: "css"; value: string }
+  | { kind: "luminanceToAlpha" };
 
 /**
  * A Porter-Duff composite of two sub-lists (Figma-style operator names). The
@@ -166,8 +181,6 @@ export interface Style {
   mixBlendMode?: string;
   /** SVG `stroke-dasharray`. */
   strokeDasharray?: string;
-  /** A `url(#id)` reference to a user-supplied filter def. */
-  filter?: string;
   /** SVG `paint-order`: `"stroke"` paints the stroke under the fill (a
    *  text halo). */
   paintOrder?: string;

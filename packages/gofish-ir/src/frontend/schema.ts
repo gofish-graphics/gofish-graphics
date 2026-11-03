@@ -581,6 +581,13 @@ export type TileIR =
   | { kind: "binary" }
   | { kind: "voronoi"; seed?: number };
 
+/** How a mark's or a layer's drawing is filtered, made by a call in the
+ *  `Filter` family (`Filter.grayscale()`, `Filter.luminanceToAlpha()`). The
+ *  `filter` option also takes a raw CSS filter string. */
+export type FilterIR =
+  | { kind: "grayscale"; amount?: number }
+  | { kind: "luminanceToAlpha" };
+
 /** How `scatter` keeps its children clear of each other, made by a call in
  *  the `Overlap` family (`Overlap.separate()`, `Overlap.noise()`;
  *  `Overlap.sina()` and `Overlap.jitter()` make kind `"noise"` with other

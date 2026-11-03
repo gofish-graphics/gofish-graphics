@@ -167,7 +167,10 @@ const isTransparent = (node: GoFishAST): boolean =>
   "children" in node &&
   !!node.children &&
   node.children.length > 0 &&
-  !BAKE_BOUNDARY_TYPES.has((node as { type?: string }).type ?? "");
+  !BAKE_BOUNDARY_TYPES.has((node as { type?: string }).type ?? "") &&
+  // A filtered node draws its subtree as one filtered picture
+  // (`drawFilter.ts`), so it lowers its children itself.
+  (node as { _filter?: unknown })._filter === undefined;
 
 /**
  * Flatten a resolved scenegraph into an ordered list of `DisplayObject`s.

@@ -1931,8 +1931,15 @@ for the API.
           "default": 1
         },
         "filter": {
-          "type": "string",
-          "description": "Raw SVG filter attribute."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "key": {
           "type": "string",
@@ -2055,6 +2062,17 @@ for the API.
           },
           "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+        },
         "r": {
           "$ref": "#/$defs/ChannelValue",
           "description": "Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, w, and h."
@@ -2119,7 +2137,7 @@ for the API.
       }
     },
     "EllipseMark": {
-      "description": "An ellipse. Box geometry via the shared dims channels; paint is `paint` without filter, plus fillOpacity.",
+      "description": "An ellipse. Box geometry via the shared dims channels; paint is `paint` plus fillOpacity.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -2187,6 +2205,17 @@ for the API.
             "$ref": "#/$defs/AxisDimsValue"
           },
           "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -2307,6 +2336,17 @@ for the API.
           },
           "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+        },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
           "description": "Fill color, or a field name for a color scale."
@@ -2413,6 +2453,10 @@ for the API.
           },
           "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
+        "filter": {
+          "type": "string",
+          "description": "Raw SVG filter attribute."
+        },
         "key": {
           "type": "string",
           "description": "Internal per-node key override."
@@ -2434,10 +2478,6 @@ for the API.
           "$ref": "#/$defs/Number",
           "description": "Stroke width in pixels.",
           "default": 0
-        },
-        "filter": {
-          "type": "string",
-          "description": "Raw SVG filter attribute."
         },
         "fontSize": {
           "$ref": "#/$defs/Number",
@@ -2586,6 +2626,10 @@ for the API.
           },
           "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
+        "filter": {
+          "type": "string",
+          "description": "Raw SVG filter attribute."
+        },
         "key": {
           "type": "string",
           "description": "Internal per-node key override."
@@ -2593,10 +2637,6 @@ for the API.
         "href": {
           "type": "string",
           "description": "Image URL or data URI."
-        },
-        "filter": {
-          "type": "string",
-          "description": "Raw SVG filter attribute."
         },
         "opacity": {
           "$ref": "#/$defs/Number",
@@ -2652,6 +2692,17 @@ for the API.
       "properties": {
         "type": {
           "const": "polygon"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "points": {
           "anyOf": [
@@ -2843,8 +2894,15 @@ for the API.
           "default": 1
         },
         "filter": {
-          "type": "string",
-          "description": "Raw SVG filter attribute."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "inset": {
           "$ref": "#/$defs/Number",
@@ -2897,6 +2955,17 @@ for the API.
         "type": {
           "const": "line"
         },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+        },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
           "description": "A line's path is never filled. `fill` is the channel the shared color scale reads: a field name or an accessor colors each line by group (it must be constant within the line), and it is the line color when `stroke` is omitted."
@@ -2918,9 +2987,17 @@ for the API.
           "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1."
         },
-        "mixBlendMode": {
-          "enum": ["normal", "multiply"],
-          "description": "Blend mode where connectors overlap."
+        "blendMode": {
+          "enum": [
+            "normal",
+            "multiply",
+            "screen",
+            "overlay",
+            "color",
+            "luminosity"
+          ],
+          "description": "How connectors mix where they overlap (CSS `mix-blend-mode`).",
+          "default": "normal"
         },
         "curve": {
           "$ref": "#/$defs/Curve",
@@ -3010,6 +3087,17 @@ for the API.
         "type": {
           "const": "ribbon"
         },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+        },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
           "description": "Fill color of the band, or a field name or accessor for a color scale (constant within the band). Omitted, the band takes the color of the marks it connects."
@@ -3027,9 +3115,16 @@ for the API.
           "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1."
         },
-        "mixBlendMode": {
-          "enum": ["normal", "multiply"],
-          "description": "Blend mode where bands overlap.",
+        "blendMode": {
+          "enum": [
+            "normal",
+            "multiply",
+            "screen",
+            "overlay",
+            "color",
+            "luminosity"
+          ],
+          "description": "How bands mix where they overlap (CSS `mix-blend-mode`).",
           "default": "normal"
         },
         "dir": {
@@ -3111,6 +3206,17 @@ for the API.
       "properties": {
         "type": {
           "const": "enclose"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "padding": {
           "$ref": "#/$defs/ChannelValue",
@@ -3812,6 +3918,36 @@ for the API.
         }
       ],
       "description": "The cells `struct({ x, y }).bin(...)` divides the plane of its two fields into: Bin.hex({ radius }) or Bin.voronoi({ seeds })."
+    },
+    "Filter": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "grayscale"
+            },
+            "amount": {
+              "$ref": "#/$defs/Number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "How far to gray, from 0 (unchanged) to 1 (all gray).",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "luminanceToAlpha"
+            }
+          },
+          "required": ["kind"]
+        }
+      ],
+      "description": "How a mark's or a layer's drawing is filtered as one picture: the value of its `filter` option, beside a raw CSS filter string. `luminanceToAlpha` turns a drawing into a mask shape."
     },
     "Tile": {
       "anyOf": [

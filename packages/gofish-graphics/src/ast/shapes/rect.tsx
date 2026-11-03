@@ -77,7 +77,6 @@ export const Rect = ({
   strokeWidth = 0,
   rx: rxGiven,
   ry: ryGiven,
-  filter,
   opacity = 1,
   aspectRatio,
   inset = 0,
@@ -89,7 +88,6 @@ export const Rect = ({
   strokeWidth?: number;
   rx?: number;
   ry?: number;
-  filter?: string;
   opacity?: number;
   /** w/h ratio to enforce. w = h * aspectRatio. When both dims are data-driven,
    *  the constraining axis (smaller of the two scaled sizes) is used. */
@@ -167,7 +165,6 @@ export const Rect = ({
         strokeWidth,
         rx,
         ry,
-        filter,
         opacity,
         dims,
       },
@@ -330,7 +327,6 @@ export const Rect = ({
           stroke: resolvedStroke,
           strokeWidth: strokeWidth ?? 0,
           opacity,
-          filter,
         });
         const rectExtra = {
           rx,
@@ -413,7 +409,6 @@ export const Rect = ({
                 stroke: resolvedStroke,
                 strokeWidth: thickness + 0.5,
                 opacity,
-                filter,
               }),
             },
           ];
@@ -449,7 +444,6 @@ export const Rect = ({
               stroke: resolvedStroke,
               strokeWidth: strokeWidth ?? 0,
               opacity,
-              filter,
             }),
           },
         ];

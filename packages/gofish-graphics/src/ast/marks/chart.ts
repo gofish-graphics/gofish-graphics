@@ -62,6 +62,12 @@ import type {
   ZOrderValue,
 } from "./createOperator";
 import { layer as Layer } from "../graphicalOperators/layer";
+import type { BlendMode } from "../blendMode";
+import {
+  applyFilter,
+  type FilterOption,
+  type FilterOptions,
+} from "../drawFilter";
 import {
   encloseNode,
   type EncloseOptions,
@@ -517,7 +523,7 @@ function tagRelationalOperands<T extends GoFishAST>(
 // Anchor-tier keys the blank-fusion rewrite rule (see the doc-comment above
 // and `ChartBuilder.mark`) carves off a relational mark's opts: purely
 // spatial, nothing paint- or path-related. Everything else (fill, stroke,
-// strokeWidth, strokeDasharray, opacity, curve, dir, mixBlendMode, along,
+// strokeWidth, strokeDasharray, opacity, curve, dir, blendMode, along,
 // source, target) stays with the connector.
 const ANCHOR_KEYS = ["w", "h", "emX", "emY"] as const;
 
@@ -814,7 +820,11 @@ export function createRelationalMark<O extends Record<string, unknown>>(
         (node as any).datum = datum;
       if (liveChannels)
         (node as any).__gfLive = { ...(node as any).__gfLive, ...liveChannels };
-      return node;
+      return applyFilter(
+        node,
+        opts.filter as FilterOption | undefined,
+        `${type}({ filter })`
+      );
     };
     /** Build one connector over `operands` from `o`: its paint (and other
      *  per-group channels) read off the rows `group` reaches, its live
@@ -977,13 +987,13 @@ export function createRelationalMark<O extends Record<string, unknown>>(
   return relational;
 }
 
-export type LineOptions = {
+export type LineOptions = FilterOptions & {
   fill?: MaybeValue<string> | LiveValue;
   stroke?: MaybeValue<string> | LiveValue;
   strokeWidth?: number | LiveValue;
   strokeDasharray?: string;
   opacity?: number | LiveValue;
-  mixBlendMode?: "normal" | "multiply";
+  blendMode?: BlendMode;
   // Screen-space path shape, made by a call in the Curve family
   // (`Curve.bezier()`, `Curve.orthogonal()`, `Curve.arc({ direction })`,
   // `Curve.perfectArrows({ bow })`, …). The single path-shaping key.
@@ -1029,7 +1039,7 @@ export const line = createRelationalMark<LineOptions>(
         strokeWidth: o.strokeWidth ?? 1,
         strokeDasharray: o.strokeDasharray,
         opacity: o.opacity,
-        mixBlendMode: o.mixBlendMode,
+        blendMode: o.blendMode,
         // Omitted ⇒ "auto": connect smooths (monotone) when the connected
         // points share a continuous connection axis, else a straight line.
         curve: o.curve,
@@ -1042,12 +1052,12 @@ export const line = createRelationalMark<LineOptions>(
     )
 );
 
-export type RibbonOptions = {
+export type RibbonOptions = FilterOptions & {
   fill?: MaybeValue<string> | LiveValue;
   stroke?: MaybeValue<string> | LiveValue;
   strokeWidth?: number | LiveValue;
   opacity?: number | LiveValue;
-  mixBlendMode?: "normal" | "multiply";
+  blendMode?: BlendMode;
   dir?: "x" | "y";
   // Screen-space path shape for the band edges (`"linear"` | `bezier()`).
   // Edge mode honors linear (linear band) vs bezier (S-curve band).
@@ -1081,7 +1091,7 @@ export const ribbon = createRelationalMark<RibbonOptions>(
       {
         direction: o.dir ?? "x",
         mode: "edge",
-        mixBlendMode: o.mixBlendMode ?? "normal",
+        blendMode: o.blendMode ?? "normal",
         fill: o.fill,
         stroke: o.stroke,
         strokeWidth: o.strokeWidth ?? 0,
@@ -1174,7 +1184,6 @@ export function blank<T extends Record<string, any>>({
 
 /* ---- mark-combinator forms for layer and Porter-Duff operators ---- */
 
-type BlendMode = "color" | "multiply" | "screen" | "overlay";
 type PdOptions = { blendMode?: BlendMode };
 
 /**

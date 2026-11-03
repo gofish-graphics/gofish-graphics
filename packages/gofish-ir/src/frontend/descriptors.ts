@@ -640,6 +640,25 @@ const placeOffset = (fallback: number): FieldSpec => ({
  * `_tag` and takes its one argument by position.
  */
 export const STRATEGIES = {
+  Filter: {
+    doc: "How a mark's or a layer's drawing is filtered as one picture: the value of its `filter` option, beside a raw CSS filter string. `luminanceToAlpha` turns a drawing into a mask shape.",
+    kinds: {
+      grayscale: {
+        doc: "Draw in grays: CSS `grayscale(amount)`.",
+        params: {
+          amount: {
+            type: t.num({ min: 0, max: 1 }),
+            default: 1,
+            doc: "How far to gray, from 0 (unchanged) to 1 (all gray).",
+          },
+        },
+      },
+      luminanceToAlpha: {
+        doc: 'Make each pixel black, with an alpha of its luminance: white is opaque and black is clear. A compositing operator that reads the drawing as a shape then reads its luminance, as a luminance mask does (SVG `feColorMatrix type="luminanceToAlpha"`, in sRGB).',
+        params: {},
+      },
+    },
+  },
   Tile: {
     doc: "How `treemap` tiles its region: the value of its `tile` option. The rectangular kinds (squarify, slice, dice, binary) are d3-hierarchy's tiling methods and need a rectangular region; voronoi tiles any convex region.",
     kinds: {
@@ -1401,17 +1420,35 @@ export const lengthBoxDims: FieldGroup = group({
   h: lengthSize("Height." + PERCENT_FR),
 });
 
-/** `rect`'s full paint group (the only leaf mark that supports all five —
- *  ellipse/petal/circle support a different set (no filter; ellipse and
- *  circle add fillOpacity) and declare their paint fields directly rather
- *  than including this group). */
+/** `rect`'s and `region`'s paint group. ellipse/petal/circle support a
+ *  different set (ellipse and circle add fillOpacity) and declare their
+ *  paint fields directly rather than including this group. */
 export const paint: FieldGroup = group({
   fill: ch.color("Fill color, or a field name for a color scale."),
   stroke: ch.color("Stroke color. Defaults to `fill`."),
   strokeWidth: { type: t.number, default: 0, doc: "Stroke width in pixels." },
   opacity: { type: t.number, default: 1, doc: "Opacity, 0 to 1." },
-  filter: { type: t.string, doc: "Raw SVG filter attribute." },
 });
+
+/** The `filter` option every mark and `layer` take: the node's whole drawing
+ *  is filtered as one picture (#1267). */
+export const filtered: FieldGroup = group({
+  filter: {
+    type: t.union(t.ref("Filter"), t.string),
+    doc: 'A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).',
+  },
+});
+
+/** How a paint mixes with what is under it: the CSS `mix-blend-mode` values
+ *  GoFish takes. One type for every `blendMode` option. */
+export const BLEND_MODE = t.enum(
+  "normal",
+  "multiply",
+  "screen",
+  "overlay",
+  "color",
+  "luminosity"
+);
 
 /** The shared groups above, with the heading a docs consumer shows them under.
  *  Membership is tested by FieldSpec identity (`resolveFields` copies the same
@@ -1844,7 +1881,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
 export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   rect: leafMark("rect", {
     doc: "A rectangle. Box geometry via the shared dims channels.",
-    include: [lengthBoxDims, paint],
+    include: [lengthBoxDims, paint, filtered],
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
       rx: {
@@ -1880,7 +1917,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   circle: leafMark("circle", {
     doc: "A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its diameter is set by at most one of r, w, or h and applies to both axes; with none, the circle fills the space it is given.",
-    include: [boxDims],
+    include: [boxDims, filtered],
     fields: {
       r: ch.size(
         "Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, w, and h."
@@ -1911,8 +1948,8 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   ellipse: leafMark("ellipse", {
-    doc: "An ellipse. Box geometry via the shared dims channels; paint is `paint` without filter, plus fillOpacity.",
-    include: [lengthBoxDims],
+    doc: "An ellipse. Box geometry via the shared dims channels; paint is `paint` plus fillOpacity.",
+    include: [lengthBoxDims, filtered],
     fields: {
       fill: ch.color("Fill color, or a field name for a color scale."),
       stroke: ch.color("Stroke color. Defaults to `fill`."),
@@ -1939,7 +1976,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   petal: leafMark("petal", {
     doc: "A polar-only wedge/petal shape (Petal.tsx). Box geometry via the shared dims channels.",
-    include: [boxDims],
+    include: [boxDims, filtered],
     fields: {
       fill: ch.color("Fill color, or a field name for a color scale."),
       stroke: ch.color("Stroke color. Defaults to `fill`."),
@@ -1957,7 +1994,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   text: leafMark("text", {
     doc: "A text label. Box geometry via the shared dims channels positions the text anchor.",
-    include: [boxDims],
+    include: [boxDims, filtered],
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
       text: {
@@ -2010,7 +2047,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   image: leafMark("image", {
     doc: "An embedded raster/SVG image. Box geometry via the shared dims channels.",
-    include: [lengthBoxDims],
+    include: [lengthBoxDims, filtered],
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
       href: { type: t.string, required: true, doc: "Image URL or data URI." },
@@ -2030,6 +2067,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   polygon: leafMark("polygon", {
     doc: "A closed polygon defined by local-coordinate points (in the frame the polygon sits in: top-down on a plain canvas, upward inside a continuous y), given literally or read from a field. No dims channels — the bbox is computed from `points`.",
+    include: [filtered],
     fields: {
       points: {
         type: t.union(t.array(t.tuple(t.number, t.number)), t.string),
@@ -2077,7 +2115,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   region: leafMark("region", {
     doc: "Draws the cell it is in, such as a partition's cell. It has no size or position of its own: on each axis where it is in a cell, it is that cell, placed by its data through the partition's scale, and on an axis where it is in no cell, it fills the space it is given. It draws the cell's outline when the cell has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.",
-    include: [paint],
+    include: [paint, filtered],
     fields: {
       inset: {
         type: t.number,
@@ -2093,6 +2131,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   line: leafMark("line", {
     doc: "Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.",
+    include: [filtered],
     fields: {
       // Center mode paints `fill: "none"` on the path (connect.tsx's
       // `mode === "center" ? "none" : ...`), but `fill` is still the channel the
@@ -2114,9 +2153,10 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         doc: 'Raw SVG stroke-dasharray (e.g. "12") for a dashed line.',
       },
       opacity: { type: t.number, doc: "Opacity, 0 to 1." },
-      mixBlendMode: {
-        type: t.enum("normal", "multiply"),
-        doc: "Blend mode where connectors overlap.",
+      blendMode: {
+        type: BLEND_MODE,
+        default: "normal",
+        doc: "How connectors mix where they overlap (CSS `mix-blend-mode`).",
       },
       curve: {
         type: t.ref("Curve"),
@@ -2161,6 +2201,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   ribbon: leafMark("ribbon", {
     doc: "Edge-mode connector — a filled band between the facing edges of consecutive marks (areas, streamgraphs, sankey ribbons).",
+    include: [filtered],
     fields: {
       fill: ch.color(
         "Fill color of the band, or a field name or accessor for a color scale (constant within the band). Omitted, the band takes the color of the marks it connects."
@@ -2174,10 +2215,10 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         doc: "Stroke width in pixels.",
       },
       opacity: { type: t.number, doc: "Opacity, 0 to 1." },
-      mixBlendMode: {
-        type: t.enum("normal", "multiply"),
+      blendMode: {
+        type: BLEND_MODE,
         default: "normal",
-        doc: "Blend mode where bands overlap.",
+        doc: "How bands mix where they overlap (CSS `mix-blend-mode`).",
       },
       dir: { type: t.enum("x", "y"), doc: "Connection axis." },
       curve: {
@@ -2211,6 +2252,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   enclose: leafMark("enclose", {
     doc: "Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.oval()`), the padded members with arc corners (`Shape.arcs()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs. Flow-step form `.flow(..., enclose(opts), ...)`: an outline around each group's subtree, laid out with it, so the operator above packs or places the outlined group and an outer `enclose` hugs this outline; in a chart's `operators`, its IR is this mark's.",
+    include: [filtered],
     fields: ENCLOSE_FIELDS,
     flowStep: true,
   }),
@@ -2259,7 +2301,7 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
 
   layer: combinatorMark("layer", {
     doc: "Compose children on the same canvas at (0, 0) unless placed by constraints. Also accepts explicit box dims when given a self-scaling size.",
-    include: [lengthBoxDims],
+    include: [lengthBoxDims, filtered],
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
       // A real `layer` option, not a chart-only one: `layer({ coord }, children)`

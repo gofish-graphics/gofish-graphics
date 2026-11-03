@@ -17,7 +17,6 @@ const STYLE = {
     fillOpacity: { type: "number" },
     mixBlendMode: { type: "string" },
     strokeDasharray: { type: "string" },
-    filter: { type: "string" },
     paintOrder: { type: "string" },
     strokeLinejoin: { type: "string" },
   },
@@ -92,6 +91,25 @@ export const DISPLAY_LIST_JSON_SCHEMA = {
             translate: { type: "array", items: { type: "number" } },
             scale: { type: "array", items: { type: "number" } },
           },
+        },
+        filter: {
+          oneOf: [
+            {
+              type: "object",
+              required: ["kind", "value"],
+              additionalProperties: false,
+              properties: {
+                kind: { const: "css" },
+                value: { type: "string" },
+              },
+            },
+            {
+              type: "object",
+              required: ["kind"],
+              additionalProperties: false,
+              properties: { kind: { const: "luminanceToAlpha" } },
+            },
+          ],
         },
         children: { type: "array", items: { $ref: "#/$defs/DisplayItem" } },
         ...BASE_PROPS,

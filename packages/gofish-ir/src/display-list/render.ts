@@ -44,7 +44,6 @@ const styleAttrs = (style: Style | undefined): string => {
     parts.push(`fill-opacity="${style.fillOpacity}"`);
   if (style.mixBlendMode !== undefined)
     parts.push(`style="mix-blend-mode:${esc(style.mixBlendMode)}"`);
-  if (style.filter !== undefined) parts.push(`filter="${esc(style.filter)}"`);
   if (style.paintOrder !== undefined)
     parts.push(`paint-order="${esc(style.paintOrder)}"`);
   if (style.strokeLinejoin !== undefined)
@@ -108,7 +107,16 @@ const itemToSVG = (item: DisplayItem): string => {
         parts.push(`translate(${t.translate[0]} ${t.translate[1]})`);
       if (t.scale) parts.push(`scale(${t.scale[0]} ${t.scale[1]})`);
       const tr = parts.length ? ` transform="${parts.join(" ")}"` : "";
-      return `<g${tr}${s}>${item.children.map(itemToSVG).join("")}</g>`;
+      const f = item.filter;
+      let def = "";
+      let fa = "";
+      if (f?.kind === "css") fa = ` filter="${esc(f.value)}"`;
+      else if (f?.kind === "luminanceToAlpha") {
+        const id = `gf-filter-${compositeIdCounter++}`;
+        def = `<defs>${luminanceToAlphaFilterSVG(id)}</defs>`;
+        fa = ` filter="url(#${id})"`;
+      }
+      return `${def}<g${tr}${fa}${s}>${item.children.map(itemToSVG).join("")}</g>`;
     }
     case "composite":
     case "mask":
@@ -122,6 +130,12 @@ const itemToSVG = (item: DisplayItem): string => {
  *  `displayListToSVG`; the JSX backend uses the same scheme so the two backends
  *  agree on id shape. */
 let compositeIdCounter = 0;
+
+/** The SVG def of a `luminanceToAlpha` filter (`DisplayFilter`); `paintSVG.tsx`
+ *  in gofish-graphics draws the same one. Each pixel becomes black
+ *  with an alpha of its luminance, computed in sRGB as a CSS mask would. */
+const luminanceToAlphaFilterSVG = (id: string): string =>
+  `<filter id="${id}" color-interpolation-filters="sRGB"><feColorMatrix type="luminanceToAlpha"/></filter>`;
 
 /** Reconstruct the Porter-Duff mask/blend SVG from a structured composite/mask
  *  item — ported verbatim from `paintSVG.tsx`'s `composite`/`mask` cases,

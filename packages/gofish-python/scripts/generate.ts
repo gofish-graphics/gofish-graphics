@@ -1020,7 +1020,13 @@ function writeFamilyModule(opts: {
   factories: FamilyFactory[];
 }): void {
   const { family, doc, table, wire, factories } = opts;
-  const module = family.toLowerCase();
+  // The module is the family's name in lowercase. A Python package's
+  // submodule and its attribute share one name, so importing
+  // `gofish.filter` would replace the `filter` operator: a module whose
+  // name is also an operator's takes a trailing `_` (`gofish.filter_`), as
+  // a kwarg that is a Python keyword does (`from_=`).
+  const lower = family.toLowerCase();
+  const module = Object.hasOwn(OPERATORS, lower) ? `${lower}_` : lower;
   const example = factories[0].name;
   const bareExample = wire.bare
     ? factories.find((f) =>
@@ -1049,7 +1055,7 @@ function writeFamilyModule(opts: {
     `\`\`from gofish.${module} import ${example}\`\` reach the same member. Each member`,
     `returns a plain dict, \`\`{"${wire.tag}": ..., **params}\`\`, with`,
     ...keys,
-    `Mirrors JS \`\`gofish-graphics/${module}\`\`.`,
+    `Mirrors JS \`\`gofish-graphics/${lower}\`\`.`,
     ...(bareExample !== undefined
       ? [
           ``,

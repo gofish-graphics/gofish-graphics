@@ -813,6 +813,9 @@ export class GoFishNode {
   /** Set by `.hidden()`: the node is laid out, read and counted like any
    *  other, and paints nothing (see {@link hidden}). */
   public _hidden = false;
+  /** Set by a `filter` option (`drawFilter.ts`): the filter the node's
+   *  whole drawing is drawn under. A filtered node is a bake boundary. */
+  public _filter: DisplayList.DisplayFilter | undefined = undefined;
   private renderSession?: RenderSession;
   // Axis state per dimension. Set by `resolveAxes` and consumed by the axis
   // elaboration pass (`elaborateChrome`), which wraps owning nodes in a Layer of
@@ -2902,13 +2905,18 @@ export class GoFishNode {
       throw new Error("[gofish] toPixel not set on the render session");
     }
 
-    return this.lowerWith(
+    const items = this.lowerWith(
       this._lower,
       transformOverride ?? this._displayTransform,
       toPixel,
       coordinateTransform,
       true
     );
+    // A `filter` option filters the node's whole drawing as one picture.
+    if (this._filter === undefined || items.length === 0) return items;
+    return [
+      { kind: "group", transform: {}, filter: this._filter, children: items },
+    ];
   }
 
   /**

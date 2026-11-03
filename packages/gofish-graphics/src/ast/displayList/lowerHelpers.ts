@@ -140,7 +140,6 @@ export const lowerStyle = (vals: {
   fillOpacity?: number;
   mixBlendMode?: string;
   strokeDasharray?: string;
-  filter?: string;
 }): DisplayList.Style => {
   const style: DisplayList.Style = {};
   if (vals.fill !== undefined) style.fill = vals.fill;
@@ -151,7 +150,6 @@ export const lowerStyle = (vals: {
   if (vals.mixBlendMode !== undefined) style.mixBlendMode = vals.mixBlendMode;
   if (vals.strokeDasharray !== undefined)
     style.strokeDasharray = vals.strokeDasharray;
-  if (vals.filter !== undefined) style.filter = vals.filter;
   return style;
 };
 

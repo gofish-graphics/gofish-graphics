@@ -2,6 +2,7 @@
 // @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
+import { applyFilter, type FilterOptions } from "./drawFilter";
 import { Frontend } from "gofish-ir";
 import { checkLengths } from "./length";
 
@@ -425,12 +426,12 @@ export type NameableMark<T> = Mark<T> & {
  */
 export function createMark<P extends Record<string, any>>(
   shapeFn: (props: P) => MarkChild
-): (props: P) => NameableMark<P>;
+): (props: P & FilterOptions) => NameableMark<P>;
 export function createMark<P extends Record<string, any>>(
   shapeFn: (props: P) => MarkChild,
   channels: undefined,
   serialize: string
-): (props: P) => NameableMark<P>;
+): (props: P & FilterOptions) => NameableMark<P>;
 export function createMark<
   ShapeProps extends Record<string, any>,
   C extends ChannelAnnotations<ShapeProps>,
@@ -447,7 +448,7 @@ export function createMark<
   serialize?: string,
   cfg?: { kind?: MarkKind }
 ): <T extends Record<string, any>>(
-  opts: DeriveMarkProps<ShapeProps, C, T>
+  opts: DeriveMarkProps<ShapeProps, C, T> & FilterOptions
 ) => NameableMark<T[]>;
 export function createMark(
   shapeFn: any,
@@ -519,8 +520,11 @@ function buildCreatedMark(
     // resolve-time value; the paint layer re-evaluates it reactively per frame
     // via the datum-bound thunk baked at lower time. One split, shared with
     // every other mark factory — see `splitLiveChannels`.
+    // `filter` is no channel: it filters the built node's whole drawing
+    // (`drawFilter.ts`), whatever the mark draws.
+    const { filter, ...channelOpts } = markOpts;
     const { static: staticOpts, live: liveChannels } = splitLiveChannels(
-      markOpts,
+      channelOpts,
       d
     );
     const pending = resolveChannelAccessors(staticOpts, channels, () => d);
@@ -583,11 +587,13 @@ function buildCreatedMark(
               ? setColumnTypes([d[i]], types)
               : [d[i]];
         if (liveChannels) node.__gfLive = liveChannels;
+        applyFilter(node, filter, `${serialize ?? "mark"}({ filter })`);
       }
       return result as unknown as GoFishNode;
     }
     const node = await resolveMarkResult(raw, new LayerContext());
     if (liveChannels) node.__gfLive = liveChannels;
+    applyFilter(node, filter, `${serialize ?? "mark"}({ filter })`);
     // Its whole drawing, not only its own lowering: a component's children
     // lower on their own.
     if (noValue) for (const n of breadthFirst(node)) n.INTERNAL_emitNothing();

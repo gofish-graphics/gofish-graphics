@@ -17,6 +17,7 @@ import { axisScale } from "../domain";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { coord } from "../coordinateTransforms/coord";
 import { bakeChildren } from "../coordinateTransforms/bake";
+import { applyFilter, type FilterOptions } from "../drawFilter";
 import { createNodeOperatorSequential } from "../withGoFish";
 import { GoFishAST } from "../_ast";
 import { NestedOperand, nestedGap } from "../constraints/nestedOperand";
@@ -127,7 +128,8 @@ export const layer = createNodeOperatorSequential(
           coord?: CoordinateTransform;
           transform?: { scale?: { x?: number; y?: number } };
           box?: boolean;
-        } & FancyDims)
+        } & FilterOptions &
+          FancyDims)
       | GoFishAST[],
     maybeChildren?: GoFishAST[]
   ) => {
@@ -143,15 +145,20 @@ export const layer = createNodeOperatorSequential(
         key,
         transform: _transform,
         box: _box,
+        filter,
         ...restDims
       } = options;
-      return coord(
-        {
-          key,
-          transform: coordTransform,
-          ...restDims,
-        },
-        children.filter((c): c is GoFishNode => c instanceof GoFishNode)
+      return applyFilter(
+        await coord(
+          {
+            key,
+            transform: coordTransform,
+            ...restDims,
+          },
+          children.filter((c): c is GoFishNode => c instanceof GoFishNode)
+        ),
+        filter,
+        "layer({ filter })"
       );
     }
 
@@ -1267,6 +1274,6 @@ export const layer = createNodeOperatorSequential(
     // found anywhere in this layer's subtree, kept apart so a later
     // `.relate()` keeps them (see `applyRelationalZBelowDefaults`).
     node._paintDefaults = applyRelationalZBelowDefaults(node, children);
-    return node;
+    return applyFilter(node, options.filter, "layer({ filter })");
   }
 );

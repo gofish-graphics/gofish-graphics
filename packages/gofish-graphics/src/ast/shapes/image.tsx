@@ -218,14 +218,12 @@ const resolveRenderedDimensions = (
 export const Image = ({
   key,
   href,
-  filter,
   opacity,
   preserveAspectRatio = "xMidYMid meet",
   ...fancyDims
 }: {
   key?: string;
   href: string;
-  filter?: string;
   opacity?: number;
   preserveAspectRatio?: string;
 } & FancyDims<number | LengthValue>) => {
@@ -242,7 +240,6 @@ export const Image = ({
       args: {
         key,
         href,
-        filter,
         opacity,
         preserveAspectRatio,
         dims,
@@ -331,7 +328,7 @@ export const Image = ({
           [x + width, y + height],
           toPixel
         );
-        const style = lowerStyle({ opacity, filter });
+        const style = lowerStyle({ opacity });
         const item: DisplayList.ImageItem = {
           kind: "image",
           x: px,

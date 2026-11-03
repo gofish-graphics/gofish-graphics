@@ -229,7 +229,13 @@ both backends write as SVG attributes). The last three carry structure the
 flat-absolute fold cannot express on its own:
 
 - **`group`** — an affine transform group, for the rare `box`/`frame` `scale` a flat
-  list can't fold away.
+  list can't fold away, and the group a node with a `filter` option draws its whole
+  drawing in (`drawFilter.ts`). Its `filter` is a CSS filter value
+  (`{ kind: "css", value: "grayscale(1)" }`, which `Filter.grayscale` lowers to) or
+  `{ kind: "luminanceToAlpha" }`, which has no CSS function, so each backend writes an
+  SVG `<filter>` def with an `feColorMatrix type="luminanceToAlpha"` in sRGB. A
+  filtered node is a bake boundary (`isTransparent` in `bake.ts`): a filtered `layer`
+  lowers its own subtree, so the filter sees it as one picture.
 - **`composite`** — a Porter-Duff composite of two sub-lists, named with Figma-style
   operators (`over`/`atop`/`in`/`out`/`xor` plus a CSS `mixBlendMode`). The SVG
   backends reconstruct it as plain SVG masks and `mix-blend-mode`, not an
