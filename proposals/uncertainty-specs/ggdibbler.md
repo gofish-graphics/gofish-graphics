@@ -209,7 +209,14 @@ Today, on the precomputed draws (story `ForecastLines`):
 ```js
 chart(forecastDraws)
   .flow(group({ by: "draw" }), scatter({ by: "h", x: "h", y: "value" }))
-  .mark(line({ stroke: "#333", strokeWidth: 1.5, opacity: 0.3 }));
+  .mark(
+    line({
+      stroke: "#333",
+      strokeWidth: 1.5,
+      opacity: 0.3,
+      curve: Curve.linear(),
+    })
+  );
 ```
 
 This is the multiline chart with the draw as the series. It follows `LineEndLabels` in `packages/gofish-graphics/stories/forwardsyntax/LabelPlacement.stories.tsx`, which splits by `symbol`, then scatters by date, then draws a `line`. Here `overlay({ by: "draw" })` splits the rows into one line chart per draw and lays the draws over each other in one frame. Each line stays inside one draw, so the checker allows it. Without the split, one line would run across all 30 draws, and that is the error. The image uses opacity 0.3, as ggdibbler does. `overlay`'s rule would give 0.05.

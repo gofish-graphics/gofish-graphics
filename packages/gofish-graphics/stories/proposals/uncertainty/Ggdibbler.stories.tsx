@@ -12,6 +12,7 @@ import {
   stack,
   treemap,
   Tile,
+  Curve,
   Unit,
 } from "../../../src/lib";
 import {
@@ -74,7 +75,7 @@ export const ForecastLines: StoryObj = {
     const container = initializeContainer();
     chart(forecastDraws, { w: 480, h: 260 })
       .flow(group({ by: "draw" }), scatter({ by: "h", x: "h", y: "value" }))
-      .mark(line({ stroke: "#333", strokeWidth: 1.5, opacity: 0.3 }))
+      .mark(line({ stroke: "#333", strokeWidth: 1.5, opacity: 0.3, curve: Curve.linear() }))
       .render(container, { axes: true });
     return container;
   },
@@ -86,7 +87,7 @@ export const ForecastPaths: StoryObj = {
     const container = initializeContainer();
     chart(forecastPaths, { w: 480, h: 260 })
       .flow(group({ by: "draw" }), scatter({ by: "h", x: "h", y: "value" }))
-      .mark(line({ stroke: "#333", strokeWidth: 1.5, opacity: 0.3 }))
+      .mark(line({ stroke: "#333", strokeWidth: 1.5, opacity: 0.3, curve: Curve.linear() }))
       .render(container, { axes: true });
     return container;
   },
