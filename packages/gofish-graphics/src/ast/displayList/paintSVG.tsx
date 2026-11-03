@@ -205,96 +205,86 @@ export function paintSVG(
       );
     }
     case "composite": {
-      // Porter-Duff composite, lowered to plain SVG masks + `mix-blend-mode`
-      // (no `<feImage>`). `<feImage>` referencing live SVG content has three
-      // independent browser pathologies: Chrome's GPU raster path quantizes
-      // the reference at fractional page zoom and clips the right/bottom of
-      // the composited image (issue #795); WebKit aligns the referenced
-      // element's content bbox to the filter region's origin rather than the
-      // element's own origin (diverging from Chromium's behavior); and WebKit
-      // can rasterize the filter before a data-URI `<image>` inside it has
-      // decoded, then never invalidate to repaint once it has. Masks and
-      // `mix-blend-mode` are the ordinary, well-tested rendering path — no
-      // `<feImage>` anywhere in the graph below.
+      // A region composite (#1267), drawn with plain SVG masks and
+      // `mix-blend-mode`, no `<feImage>`. `<feImage>` referencing live SVG
+      // content has three independent browser pathologies: Chrome's GPU
+      // raster path quantizes the reference at fractional page zoom and
+      // clips the right/bottom of the composited image (issue #795); WebKit
+      // aligns the referenced element's content bbox to the filter region's
+      // origin rather than the element's own origin; and WebKit can
+      // rasterize the filter before a data-URI `<image>` inside it has
+      // decoded, then never invalidate to repaint once it has.
       //
-      // Grayscale-then-composite becomes: paint the source once, grayscale it
-      // with a local `saturate(0)` filter, and paint the destination once;
-      // which of the two gets alpha-masked by the other (and whether the
-      // destination gets a `mix-blend-mode`) depends on the operator:
-      //
-      //   over:  gray(src) unmasked           + dest blended, unmasked
-      //   atop:  gray(src) unmasked           + dest blended, masked by alpha(src)
-      //   in:    gray(src) masked by alpha(dest) + dest blended, masked by alpha(src)
-      //   out:   (no source layer)            + dest NOT blended, masked by inverse-alpha(src)
-      //   xor:   gray(src) masked by inverse-alpha(dest) + dest NOT blended, masked by inverse-alpha(src)
-      //
-      // Both layers live in a group translated to the bbox origin (matching
-      // the lowered items' bbox-relative coordinates) and `isolate`d so
-      // `mix-blend-mode` only blends the two layers against each other, not
-      // against whatever is behind the composite on the page.
-      //
-      // Cost: for `atop`/`in`/`xor`, the masked layer's sublist is referenced
-      // twice (once as mask content via `<use>`, once as the visible layer),
-      // so those sublists rasterize twice per composite. That's inherent to
-      // SVG's mask model, not a bug — the accepted price of leaving
-      // `<feImage>` behind.
-      //
-      // Per-operator layer/mask wiring lives in gofish-ir's
-      // `compositeLayerConfig` (the single source of truth both SVG backends
-      // consume); see that table for the over/atop/in/out/xor breakdown.
+      // Each operand's paint and shape (and the result's fill) are written
+      // once as defs; each layer `compositeLayers` lists is a `<use>` of
+      // one of them, clipped by nested masks: an alpha mask of the listed
+      // operands' shapes, or an inverse one (a white rect with the shapes in
+      // black over it). Layers that blend carry `mix-blend-mode`. The layers
+      // sit in a group at the bbox origin (the items are lowered relative to
+      // it), `isolate`d so a blend mixes the layers only, not what is behind
+      // the composite. A shape is referenced by each mask that reads it, so
+      // it rasterizes once per mask: the price of SVG's mask model.
+      // gofish-ir's `render.ts` draws the same SVG.
       const uid = `gf-comp-${compositeIdCounter++}`;
-      const sourceId = `${uid}-source`;
-      const destinationId = `${uid}-destination`;
-      const grayId = `${uid}-gray`;
-      const maskAlphaSrcId = `${uid}-mask-alpha-src`;
-      const maskAlphaDestId = `${uid}-mask-alpha-dest`;
-      const maskInvAlphaSrcId = `${uid}-mask-invalpha-src`;
-      const maskInvAlphaDestId = `${uid}-mask-invalpha-dest`;
-      const { operator } = item;
-      const blendMode = item.blendMode ?? "color";
       const { x, y, w, h } = item.bbox;
-
-      const cfg = DisplayList.compositeLayerConfig[operator];
-      const { hasSourceLayer, hasBlend } = cfg;
-
-      const sourceMaskId =
-        cfg.sourceMask === "alphaDest"
-          ? maskAlphaDestId
-          : cfg.sourceMask === "invAlphaDest"
-            ? maskInvAlphaDestId
-            : undefined;
-      const destMaskId =
-        cfg.destMask === "alphaSrc"
-          ? maskAlphaSrcId
-          : cfg.destMask === "invAlphaSrc"
-            ? maskInvAlphaSrcId
-            : undefined;
-
-      /** `mask-type:alpha` mask that clips by the referenced layer's alpha. */
-      const alphaMask = (id: string, refId: string): JSX.Element => (
-        <mask
-          id={id}
-          maskUnits="userSpaceOnUse"
-          maskContentUnits="userSpaceOnUse"
-          style="mask-type:alpha"
-        >
-          <use href={`#${refId}`} />
-        </mask>
+      const blendMode = item.blendMode ?? "normal";
+      const paintId = (i: number) => `${uid}-p${i}`;
+      const shapeId = (i: number) =>
+        item.operands[i].shape ? `${uid}-s${i}` : paintId(i);
+      const fillId = `${uid}-fill`;
+      const layers = DisplayList.compositeLayers(
+        item.operator,
+        item.operands.length,
+        item.fill !== undefined
       );
-      /** Inverse-alpha mask: white rect (fully opaque) minus the referenced
-       *  layer's shape (blacked out via `brightness(0)`), so the mask clips
-       *  to everywhere the referenced layer is NOT. */
-      const invAlphaMask = (id: string, refId: string): JSX.Element => (
-        <mask
-          id={id}
-          maskUnits="userSpaceOnUse"
-          maskContentUnits="userSpaceOnUse"
-        >
-          <rect x={0} y={0} width={w} height={h} fill="#fff" />
-          <use href={`#${refId}`} filter="brightness(0)" />
-        </mask>
-      );
-
+      const masks = new Map<string, JSX.Element>();
+      const maskId = (m: DisplayList.CompositeMask): string => {
+        const key = DisplayList.compositeMaskKey(m);
+        const id = `${uid}-m-${key}`;
+        if (!masks.has(key)) {
+          const uses = m.operands.map((i) => (
+            <use
+              href={`#${shapeId(i)}`}
+              filter={m.invert ? "brightness(0)" : undefined}
+            />
+          ));
+          masks.set(
+            key,
+            m.invert ? (
+              <mask
+                id={id}
+                maskUnits="userSpaceOnUse"
+                maskContentUnits="userSpaceOnUse"
+              >
+                <rect x={0} y={0} width={w} height={h} fill="#fff" />
+                {uses}
+              </mask>
+            ) : (
+              <mask
+                id={id}
+                maskUnits="userSpaceOnUse"
+                maskContentUnits="userSpaceOnUse"
+                style="mask-type:alpha"
+              >
+                {uses}
+              </mask>
+            )
+          );
+        }
+        return id;
+      };
+      const drawn = layers.map((l) => {
+        let out: JSX.Element = (
+          <use href={`#${l.draw === "fill" ? fillId : paintId(l.draw)}`} />
+        );
+        for (const m of [...l.masks].reverse())
+          out = <g mask={`url(#${maskId(m)})`}>{out}</g>;
+        return l.blend && blendMode !== "normal" ? (
+          <g style={`mix-blend-mode:${blendMode}`}>{out}</g>
+        ) : (
+          out
+        );
+      });
       return (
         <g
           transform={`translate(${x} ${y})`}
@@ -302,65 +292,27 @@ export function paintSVG(
           opacity={item.style?.opacity}
         >
           <defs>
-            <g id={sourceId}>
-              {item.source.map((c) => paintSVG(c, interactive))}
-            </g>
-            <g id={destinationId}>
-              {item.dest.map((c) => paintSVG(c, interactive))}
-            </g>
-            {hasSourceLayer && (
-              <filter id={grayId} color-interpolation-filters="sRGB">
-                <feColorMatrix type="saturate" values="0" />
-              </filter>
+            {item.operands.map((o, i) => (
+              <>
+                <g id={paintId(i)}>
+                  {o.paint.map((c) => paintSVG(c, interactive))}
+                </g>
+                {o.shape && (
+                  <g id={`${uid}-s${i}`}>
+                    {o.shape.map((c) => paintSVG(c, interactive))}
+                  </g>
+                )}
+              </>
+            ))}
+            {item.fill && (
+              <g id={fillId}>
+                {item.fill.map((c) => paintSVG(c, interactive))}
+              </g>
             )}
-            {cfg.destMask === "alphaSrc" && alphaMask(maskAlphaSrcId, sourceId)}
-            {cfg.sourceMask === "alphaDest" &&
-              alphaMask(maskAlphaDestId, destinationId)}
-            {cfg.destMask === "invAlphaSrc" &&
-              invAlphaMask(maskInvAlphaSrcId, sourceId)}
-            {cfg.sourceMask === "invAlphaDest" &&
-              invAlphaMask(maskInvAlphaDestId, destinationId)}
+            {[...masks.values()]}
           </defs>
-          {hasSourceLayer && (
-            <use
-              href={`#${sourceId}`}
-              filter={`url(#${grayId})`}
-              mask={sourceMaskId ? `url(#${sourceMaskId})` : undefined}
-            />
-          )}
-          <use
-            href={`#${destinationId}`}
-            style={hasBlend ? `mix-blend-mode:${blendMode}` : undefined}
-            mask={destMaskId ? `url(#${destMaskId})` : undefined}
-          />
+          {drawn}
         </g>
-      );
-    }
-    case "mask": {
-      const uid = `gf-comp-${compositeIdCounter++}`;
-      const sourceId = `${uid}-source`;
-      const destinationId = `${uid}-destination`;
-      const maskId = `${uid}-mask`;
-      return (
-        <>
-          <defs>
-            <g id={sourceId}>
-              {item.mask.map((c) => paintSVG(c, interactive))}
-            </g>
-            <g id={destinationId}>
-              {item.content.map((c) => paintSVG(c, interactive))}
-            </g>
-            <mask
-              id={maskId}
-              maskUnits="userSpaceOnUse"
-              maskContentUnits="userSpaceOnUse"
-              style={item.mode === "alpha" ? "mask-type:alpha" : undefined}
-            >
-              <use href={`#${sourceId}`} />
-            </mask>
-          </defs>
-          <use href={`#${destinationId}`} mask={`url(#${maskId})`} />
-        </>
       );
     }
   }

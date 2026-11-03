@@ -21,7 +21,7 @@
 import {
   ribbon,
   enclose,
-  paint,
+  atop,
   blank,
   circle,
   derive,
@@ -33,9 +33,8 @@ import {
   layer,
   line,
   log,
-  mask,
   subtract,
-  over,
+  union,
   rect,
   exclude,
   type ChartBuilder,
@@ -286,14 +285,13 @@ export const FACTORIES: Record<string, (...args: any[]) => any> = {
   layer,
   position,
   arrow,
-  // The compositing wire types keep their original names; the factories were
-  // renamed (#196/#202).
-  over,
+  // The compositing wire types are the Porter-Duff names; the factories
+  // are Figma's (#196/#202, #1267).
+  over: union,
   inside: intersect,
   xor: exclude,
   out: subtract,
-  atop: paint,
-  mask,
+  atop,
   // Coordinate transforms. A transform is a JS object of functions, so the
   // wire carries only its `type` tag and options, and the factory makes it
   // again from them.

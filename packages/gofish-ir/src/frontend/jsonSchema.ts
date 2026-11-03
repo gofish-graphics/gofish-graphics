@@ -598,7 +598,6 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             "xor",
             "out",
             "atop",
-            "mask",
           ],
         },
         __combinator: { const: true },

@@ -111,11 +111,11 @@ any of them takes effect there, and a boundary that declares its own constraints
 `coord` or `enclose` lowered its children in array order, and a constraint that parted
 inside one did nothing.
 
-The compositors (`over` / `atop` / `in` / `out` / `xor` / `mask`) are the one
+The compositors (`over` / `atop` / `in` / `out` / `xor`) are the one
 exception, and the operator defines it. A compositor paints one result combined from
-its first child (the source, or the mask) and its second (the destination, or the
-content), so the index of a child names its role, and there is no paint order between
-the two to change. A compositor calls `assertNoPaintOrder` instead, which resolves the
+its operands, in the order the operation reads them (`subtract` removes the later
+operands from the first; `atop` draws the later ones over the first), so the index of
+a child names its role, and there is no paint order between them to change. A compositor calls `assertNoPaintOrder` instead, which resolves the
 compositor's own constraints and throws, naming the constraints, if any z constraint
 parts at it. The relational nodes (`connect`, `tween`) paint none of their children
 (their children are refs, which draw nothing), so they never ask for an order.
@@ -178,7 +178,7 @@ which the render entry maps over directly.
 - **Boundaries.** A node whose render is _not_ reducible to "translate its independent
   children" is a **bake boundary**: it emits a single `DisplayObject` and renders its
   own subtree internally. These are the space-remappers (`coord`), the compositors
-  (`over` / `atop` / `in` / `out` / `xor` / `mask`), and the cross-child self-drawers
+  (`over` / `atop` / `in` / `out` / `xor`), and the cross-child self-drawers
   (`connect` / `tween` / `arrow` / `enclose` / `box`, and an axis's `axisSpan`, which
   draws a divider between two `ref` stand-ins), plus any label-bearing node. So `coord`
   stays a boundary — `bake` never recurses _through_ a coordinate transform (which

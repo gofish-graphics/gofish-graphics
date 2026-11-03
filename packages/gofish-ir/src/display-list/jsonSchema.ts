@@ -75,7 +75,6 @@ export const DISPLAY_LIST_JSON_SCHEMA = {
         { $ref: "#/$defs/ImageItem" },
         { $ref: "#/$defs/GroupItem" },
         { $ref: "#/$defs/CompositeItem" },
-        { $ref: "#/$defs/MaskItem" },
       ],
     },
     GroupItem: {
@@ -191,28 +190,26 @@ export const DISPLAY_LIST_JSON_SCHEMA = {
     },
     CompositeItem: {
       type: "object",
-      required: ["kind", "operator", "bbox", "source", "dest"],
+      required: ["kind", "operator", "bbox", "operands"],
       additionalProperties: false,
       properties: {
         kind: { const: "composite" },
         operator: { enum: ["over", "atop", "in", "out", "xor"] },
         blendMode: { type: "string" },
         bbox: BBOX,
-        source: { type: "array", items: { $ref: "#/$defs/DisplayItem" } },
-        dest: { type: "array", items: { $ref: "#/$defs/DisplayItem" } },
-        ...BASE_PROPS,
-      },
-    },
-    MaskItem: {
-      type: "object",
-      required: ["kind", "bbox", "mask", "content"],
-      additionalProperties: false,
-      properties: {
-        kind: { const: "mask" },
-        mode: { enum: ["luminance", "alpha"] },
-        bbox: BBOX,
-        mask: { type: "array", items: { $ref: "#/$defs/DisplayItem" } },
-        content: { type: "array", items: { $ref: "#/$defs/DisplayItem" } },
+        operands: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["paint"],
+            additionalProperties: false,
+            properties: {
+              paint: { type: "array", items: { $ref: "#/$defs/DisplayItem" } },
+              shape: { type: "array", items: { $ref: "#/$defs/DisplayItem" } },
+            },
+          },
+        },
+        fill: { type: "array", items: { $ref: "#/$defs/DisplayItem" } },
         ...BASE_PROPS,
       },
     },

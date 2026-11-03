@@ -1878,6 +1878,35 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
 // bridge + chart.ts's circle/blank/line/ribbon factories.
 // ---------------------------------------------------------------------------
 
+/** `blendMode` on `union`, `intersect` and `atop`: how kept paint mixes
+ *  where two operands overlap. */
+const COMPOSITE_BLEND: FieldSpec = {
+  type: BLEND_MODE,
+  default: "normal",
+  doc: "How a later operand's paint mixes with an earlier one's where they overlap (CSS `mix-blend-mode`). Unused when the result has a `fill` or `stroke`.",
+};
+
+/** The paint of a compositing operator's result: given a `fill` or a
+ *  `stroke`, the result is one new shape in it. */
+const COMPOSITE_PAINT = {
+  fill: ch.color(
+    "Fill color of the result, or a field name or accessor for a color scale. Given, the result is one new shape in this paint, and the operands give shape only. Default none when `stroke` is given."
+  ),
+  stroke: ch.color(
+    "Stroke color of the result's outline, or a field name or accessor for a color scale. Default none. It needs an exact outline, which only `intersect` has: both operands must trace their shape in opaque paint (a rect, ellipse, polygon, ribbon, area or region, or a ref to one; not an image, a text or a group), and at least one of them must be convex. Otherwise it is an error."
+  ),
+  strokeWidth: {
+    type: t.number,
+    default: 1,
+    doc: "Stroke width in pixels. Without `stroke` it draws nothing.",
+  },
+  opacity: {
+    type: t.number,
+    default: 1,
+    doc: "Opacity of the whole result, 0 to 1.",
+  },
+} satisfies FieldGroup;
+
 export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   rect: leafMark("rect", {
     doc: "A rectangle. Box geometry via the shared dims channels.",
@@ -2012,7 +2041,6 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         default: 0,
         doc: "Stroke width in pixels.",
       },
-      filter: { type: t.string, doc: "Raw SVG filter attribute." },
       fontSize: { type: t.number, default: 12, doc: "Font size in pixels." },
       fontFamily: {
         type: t.string,
@@ -2051,7 +2079,6 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
       href: { type: t.string, required: true, doc: "Image URL or data URI." },
-      filter: { type: t.string, doc: "Raw SVG filter attribute." },
       opacity: { type: t.number, doc: "Opacity, 0 to 1." },
       preserveAspectRatio: {
         type: t.string,
@@ -2429,82 +2456,41 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
     fields: resolveFields(OPERATORS.pack),
   }),
 
-  // Porter-Duff-style compositing quartet + `over`/`mask`. Wire `type` stays
-  // the original Porter-Duff string; `pyName` carries the Figma-inspired
-  // JS/Python-facing rename (#196/#202).
+  // Region compositing (#1267): the five set operations. The wire `type` is
+  // the Porter-Duff name; `pyName` is the JS/Python-facing Figma name. Each
+  // reads its operands and draws its result: never an operand as itself.
   over: combinatorMark("over", {
-    doc: "Internal-only A ∪ B union compositing (not exported from lib.ts — use `layer`). Kept only so the deserializer can dispatch the wire type.",
+    pyName: "union",
+    doc: "Draw the union of the regions: A ∪ B ∪ .... With no `fill` or `stroke`, each operand draws its own paint, and where two overlap the later one is drawn over the earlier with `blendMode`. With either, the union is one new shape in that paint. A stroke is an error for now: the result has no exact outline yet (#1201).",
     fields: {
-      blendMode: {
-        type: t.enum("color", "multiply", "screen", "overlay", "luminosity"),
-        default: "color",
-        doc: "Blend used where the two regions combine.",
-      },
+      blendMode: COMPOSITE_BLEND,
+      ...COMPOSITE_PAINT,
     },
   }),
   inside: combinatorMark("inside", {
     pyName: "intersect",
-    doc: "Draw only where both regions overlap: A ∩ B. Binary only. With no `fill` or `stroke`, it draws the operands' own paint where they overlap. With either, it draws the overlap as one shape in its own paint: an exact path when both operands trace their outlines and one of them is convex, and with no exact path a fill of the overlapping ink, while a stroke is then an error.",
+    doc: "Draw only where every region overlaps: A ∩ B ∩ .... With no `fill` or `stroke`, each operand draws its own paint inside the overlap, the later over the earlier with `blendMode`; a hidden operand gives its shape and no paint, so it clips the others. With either, the overlap is one new shape in that paint: an exact path when both operands trace their outlines in opaque paint and one of them is convex, else a fill of the overlapping ink, while a stroke is then an error.",
     fields: {
-      blendMode: {
-        type: t.enum("color", "multiply", "screen", "overlay", "luminosity"),
-        default: "color",
-        doc: "Blend used where the two regions combine. Unused when the result is painted.",
-      },
-      fill: ch.color(
-        "Fill color of the overlap, or a field name or accessor for a color scale. Default none when `stroke` is given."
-      ),
-      stroke: ch.color(
-        "Stroke color of the overlap's outline, or a field name or accessor for a color scale. Default none. It needs an exact outline: both operands must trace their shape (a rect, ellipse, polygon, ribbon, area or region, or a ref to one; not an image, a text or a group), and at least one of them must be convex. Otherwise it is an error."
-      ),
-      strokeWidth: {
-        type: t.number,
-        default: 1,
-        doc: "Stroke width in pixels. Without `stroke` it draws nothing.",
-      },
-      opacity: {
-        type: t.number,
-        default: 1,
-        doc: "Opacity of the result, 0 to 1: of the painted overlap, fill and stroke, or with no `fill` or `stroke`, of the operands as drawn where they overlap.",
-      },
+      blendMode: COMPOSITE_BLEND,
+      ...COMPOSITE_PAINT,
     },
   }),
   xor: combinatorMark("xor", {
     pyName: "exclude",
-    doc: "Symmetric difference (odd-overlap parity): A ^ B. Binary only.",
-    fields: {
-      blendMode: {
-        type: t.enum("color", "multiply", "screen", "overlay", "luminosity"),
-        default: "color",
-        doc: "Blend used where the two regions combine.",
-      },
-    },
+    doc: "Draw where exactly one of two regions is: A − B and B − A. Two operands. With no `fill` or `stroke`, each operand draws its own paint where the other is not. With either, the result is one new shape in that paint. A stroke is an error for now: the result has no exact outline yet (#1201).",
+    fields: COMPOSITE_PAINT,
   }),
   out: combinatorMark("out", {
     pyName: "subtract",
-    doc: "Draw A with B removed: A − B. Binary only.",
-    fields: {
-      blendMode: {
-        type: t.enum("color", "multiply", "screen", "overlay", "luminosity"),
-        default: "color",
-        doc: "Blend used where the two regions combine.",
-      },
-    },
+    doc: "Draw the first region with the others removed: A − B − .... With no `fill` or `stroke`, A draws its own paint where no other operand is. With either, the result is one new shape in that paint. A stroke is an error for now: the result has no exact outline yet (#1201). The result is sized to A.",
+    fields: COMPOSITE_PAINT,
   }),
   atop: combinatorMark("atop", {
-    pyName: "paint",
-    doc: "A is a base surface B is painted onto, clipped to A: A ∪ (B ∩ A). Result sized to A. Binary only.",
+    doc: "Draw A, and each later operand over it, clipped to A: A, then B ∩ A, .... The later operands mix with A by `blendMode`. The result is sized to A. It takes no `fill`: it draws its operands' own paint.",
     fields: {
-      blendMode: {
-        type: t.enum("color", "multiply", "screen", "overlay", "luminosity"),
-        default: "color",
-        doc: "Blend used where the two regions combine.",
-      },
+      blendMode: COMPOSITE_BLEND,
+      opacity: COMPOSITE_PAINT.opacity,
     },
-  }),
-  mask: combinatorMark("mask", {
-    doc: "Use A's region as a clip and paint B inside it without drawing A itself: B ∩ A, reporting A's bounds. Binary only. No options.",
-    fields: {},
   }),
 };
 

@@ -637,14 +637,22 @@ export const transitionModifier = {
  * into the layer context when named so that ref(...)/selectAll(...) can find
  * it back.
  */
+/** The modifiers every mark carries (`nameableMark`). */
+const NAMEABLE_MODIFIERS = [
+  nameModifier,
+  labelModifier,
+  zOrderModifier,
+  hiddenModifier,
+  transitionModifier,
+];
+
+/** Their method names: a wrapper around a mark forwards these. */
+export const NAMEABLE_METHODS: readonly string[] = NAMEABLE_MODIFIERS.map(
+  (m) => m.name
+);
+
 export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
-  return attachModifiers(base, [
-    nameModifier,
-    labelModifier,
-    zOrderModifier,
-    hiddenModifier,
-    transitionModifier,
-  ]) as NameableMark<T>;
+  return attachModifiers(base, NAMEABLE_MODIFIERS) as NameableMark<T>;
 }
 
 /**

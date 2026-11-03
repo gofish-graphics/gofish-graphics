@@ -323,7 +323,7 @@ def petal(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None
             _kw[_k] = _v
     return Mark("petal", **_kw)
 
-def text(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, filter: Optional[str] = None, key: Optional[str] = None, text: str, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, font_size: Optional[float] = None, font_family: Optional[str] = None, font_style: Optional[str] = None, font_weight: Optional[float | str] = None, debug_bounding_box: Optional[bool] = None, rotate: Optional[float] = None, text_anchor: Optional[str] = None) -> Mark:
+def text(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, filter: Optional[dict | str] = None, key: Optional[str] = None, text: str, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, font_size: Optional[float] = None, font_family: Optional[str] = None, font_style: Optional[str] = None, font_weight: Optional[float | str] = None, debug_bounding_box: Optional[bool] = None, rotate: Optional[float] = None, text_anchor: Optional[str] = None) -> Mark:
     """A text label. Box geometry via the shared dims channels positions the text anchor.
 
     Args:
@@ -339,7 +339,7 @@ def text(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
         h: Height.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
-        filter: Raw SVG filter attribute.
+        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
         key: Internal per-node key override.
         text: Text content (raw channel — a literal, field name, or accessor).
         fill: Fill color, or a field name for a color scale. Default "black".
@@ -367,7 +367,7 @@ def text(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
         ("h", _channel(h)),
         ("emY", em_y),
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
-        ("filter", filter),
+        ("filter", _to_wire(("ref", "Filter"), filter, "filter")),
         ("key", key),
         ("text", _channel(text)),
         ("fill", _channel(fill)),
@@ -385,7 +385,7 @@ def text(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
             _kw[_k] = _v
     return Mark("text", **_kw)
 
-def image(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, filter: Optional[str] = None, key: Optional[str] = None, href: str, opacity: Optional[float] = None, preserve_aspect_ratio: Optional[str] = None) -> Mark:
+def image(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, filter: Optional[dict | str] = None, key: Optional[str] = None, href: str, opacity: Optional[float] = None, preserve_aspect_ratio: Optional[str] = None) -> Mark:
     """An embedded raster/SVG image. Box geometry via the shared dims channels.
 
     Args:
@@ -401,7 +401,7 @@ def image(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None
         h: Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
-        filter: Raw SVG filter attribute.
+        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
         key: Internal per-node key override.
         href: Image URL or data URI.
         opacity: Opacity, 0 to 1.
@@ -421,7 +421,7 @@ def image(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None
         ("h", _channel(_to_wire(("ref", "Length"), h, "h"))),
         ("emY", em_y),
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
-        ("filter", filter),
+        ("filter", _to_wire(("ref", "Filter"), filter, "filter")),
         ("key", key),
         ("href", href),
         ("opacity", opacity),
@@ -510,29 +510,37 @@ def region(*, debug: Optional[bool] = None, fill: Optional[str] = None, stroke: 
 
 # --- Combinator-only marks ---------------------------------------------------
 
-def over(children: List["Mark"], *, blend_mode: Optional[str] = None) -> Mark:
-    """Internal-only A ∪ B union compositing (not exported from lib.ts — use `layer`). Kept only so the deserializer can dispatch the wire type.
+def union(children: List["Mark"], *, blend_mode: Optional[str] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
+    """Draw the union of the regions: A ∪ B ∪ .... With no `fill` or `stroke`, each operand draws its own paint, and where two overlap the later one is drawn over the earlier with `blendMode`. With either, the union is one new shape in that paint. A stroke is not drawn yet (#1201).
 
     Args:
-        blend_mode: Blend used where the two regions combine. Default "color".
+        blend_mode: How a later operand's paint mixes with an earlier one's where they overlap (CSS `mix-blend-mode`). Unused when the result has a `fill` or `stroke`. Default "normal".
+        fill: Fill color of the result, or a field name or accessor for a color scale. Given, the result is one new shape in this paint, and the operands give shape only. Default none when `stroke` is given.
+        stroke: Stroke color of the result's outline, or a field name or accessor for a color scale. Default none. It needs an exact outline, which only `intersect` has: both operands must trace their shape in opaque paint (a rect, ellipse, polygon, ribbon, area or region, or a ref to one; not an image, a text or a group), and at least one of them must be convex. Otherwise it is an error.
+        stroke_width: Stroke width in pixels. Without `stroke` it draws nothing. Default 1.
+        opacity: Opacity of the whole result, 0 to 1. Default 1.
     """
     kwargs: Dict[str, Any] = {}
     for _k, _v in [
         ("blendMode", blend_mode),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
+        ("strokeWidth", stroke_width),
+        ("opacity", opacity),
     ]:
         if _v is not None:
             kwargs[_k] = _v
     return Mark("over", _children=list(children), **kwargs)
 
 def intersect(children: List["Mark"], *, blend_mode: Optional[str] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
-    """Draw only where both regions overlap: A ∩ B. Binary only. With no `fill` or `stroke`, it draws the operands' own paint where they overlap. With either, it draws the overlap as one shape in its own paint: an exact path when both operands trace their outlines and one of them is convex, and with no exact path a fill of the overlapping ink, while a stroke is then an error.
+    """Draw only where every region overlaps: A ∩ B ∩ .... With no `fill` or `stroke`, each operand draws its own paint inside the overlap, the later over the earlier with `blendMode`; a hidden operand gives its shape and no paint, so it clips the others. With either, the overlap is one new shape in that paint: an exact path when both operands trace their outlines in opaque paint and one of them is convex, else a fill of the overlapping ink, while a stroke is then an error.
 
     Args:
-        blend_mode: Blend used where the two regions combine. Unused when the result is painted. Default "color".
-        fill: Fill color of the overlap, or a field name or accessor for a color scale. Default none when `stroke` is given.
-        stroke: Stroke color of the overlap's outline, or a field name or accessor for a color scale. Default none. It needs an exact outline: both operands must trace their shape (a rect, ellipse, polygon, ribbon, area or region, or a ref to one; not an image, a text or a group), and at least one of them must be convex. Otherwise it is an error.
+        blend_mode: How a later operand's paint mixes with an earlier one's where they overlap (CSS `mix-blend-mode`). Unused when the result has a `fill` or `stroke`. Default "normal".
+        fill: Fill color of the result, or a field name or accessor for a color scale. Given, the result is one new shape in this paint, and the operands give shape only. Default none when `stroke` is given.
+        stroke: Stroke color of the result's outline, or a field name or accessor for a color scale. Default none. It needs an exact outline, which only `intersect` has: both operands must trace their shape in opaque paint (a rect, ellipse, polygon, ribbon, area or region, or a ref to one; not an image, a text or a group), and at least one of them must be convex. Otherwise it is an error.
         stroke_width: Stroke width in pixels. Without `stroke` it draws nothing. Default 1.
-        opacity: Opacity of the result, 0 to 1: of the painted overlap, fill and stroke, or with no `fill` or `stroke`, of the operands as drawn where they overlap. Default 1.
+        opacity: Opacity of the whole result, 0 to 1. Default 1.
     """
     kwargs: Dict[str, Any] = {}
     for _k, _v in [
@@ -546,52 +554,61 @@ def intersect(children: List["Mark"], *, blend_mode: Optional[str] = None, fill:
             kwargs[_k] = _v
     return Mark("inside", _children=list(children), **kwargs)
 
-def exclude(children: List["Mark"], *, blend_mode: Optional[str] = None) -> Mark:
-    """Symmetric difference (odd-overlap parity): A ^ B. Binary only.
+def exclude(children: List["Mark"], *, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
+    """Draw where exactly one of two regions is: A − B and B − A. Two operands. With no `fill` or `stroke`, each operand draws its own paint where the other is not. With either, the result is one new shape in that paint. A stroke is not drawn yet (#1201).
 
     Args:
-        blend_mode: Blend used where the two regions combine. Default "color".
+        fill: Fill color of the result, or a field name or accessor for a color scale. Given, the result is one new shape in this paint, and the operands give shape only. Default none when `stroke` is given.
+        stroke: Stroke color of the result's outline, or a field name or accessor for a color scale. Default none. It needs an exact outline, which only `intersect` has: both operands must trace their shape in opaque paint (a rect, ellipse, polygon, ribbon, area or region, or a ref to one; not an image, a text or a group), and at least one of them must be convex. Otherwise it is an error.
+        stroke_width: Stroke width in pixels. Without `stroke` it draws nothing. Default 1.
+        opacity: Opacity of the whole result, 0 to 1. Default 1.
     """
     kwargs: Dict[str, Any] = {}
     for _k, _v in [
-        ("blendMode", blend_mode),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
+        ("strokeWidth", stroke_width),
+        ("opacity", opacity),
     ]:
         if _v is not None:
             kwargs[_k] = _v
     return Mark("xor", _children=list(children), **kwargs)
 
-def subtract(children: List["Mark"], *, blend_mode: Optional[str] = None) -> Mark:
-    """Draw A with B removed: A − B. Binary only.
+def subtract(children: List["Mark"], *, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
+    """Draw the first region with the others removed: A − B − .... With no `fill` or `stroke`, A draws its own paint where no other operand is. With either, the result is one new shape in that paint. A stroke is not drawn yet (#1201). The result is sized to A.
 
     Args:
-        blend_mode: Blend used where the two regions combine. Default "color".
+        fill: Fill color of the result, or a field name or accessor for a color scale. Given, the result is one new shape in this paint, and the operands give shape only. Default none when `stroke` is given.
+        stroke: Stroke color of the result's outline, or a field name or accessor for a color scale. Default none. It needs an exact outline, which only `intersect` has: both operands must trace their shape in opaque paint (a rect, ellipse, polygon, ribbon, area or region, or a ref to one; not an image, a text or a group), and at least one of them must be convex. Otherwise it is an error.
+        stroke_width: Stroke width in pixels. Without `stroke` it draws nothing. Default 1.
+        opacity: Opacity of the whole result, 0 to 1. Default 1.
     """
     kwargs: Dict[str, Any] = {}
     for _k, _v in [
-        ("blendMode", blend_mode),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
+        ("strokeWidth", stroke_width),
+        ("opacity", opacity),
     ]:
         if _v is not None:
             kwargs[_k] = _v
     return Mark("out", _children=list(children), **kwargs)
 
-def paint(children: List["Mark"], *, blend_mode: Optional[str] = None) -> Mark:
-    """A is a base surface B is painted onto, clipped to A: A ∪ (B ∩ A). Result sized to A. Binary only.
+def atop(children: List["Mark"], *, blend_mode: Optional[str] = None, opacity: Optional[float] = None) -> Mark:
+    """Draw A, and each later operand over it, clipped to A: A, then B ∩ A, .... The later operands mix with A by `blendMode`. The result is sized to A. It takes no `fill`: it draws its operands' own paint.
 
     Args:
-        blend_mode: Blend used where the two regions combine. Default "color".
+        blend_mode: How a later operand's paint mixes with an earlier one's where they overlap (CSS `mix-blend-mode`). Unused when the result has a `fill` or `stroke`. Default "normal".
+        opacity: Opacity of the whole result, 0 to 1. Default 1.
     """
     kwargs: Dict[str, Any] = {}
     for _k, _v in [
         ("blendMode", blend_mode),
+        ("opacity", opacity),
     ]:
         if _v is not None:
             kwargs[_k] = _v
     return Mark("atop", _children=list(children), **kwargs)
-
-def mask(children: List["Mark"]) -> Mark:
-    """Use A's region as a clip and paint B inside it without drawing A itself: B ∩ A, reporting A's bounds. Binary only. No options.
-    """
-    return Mark("mask", _children=list(children))
 
 def position(children: List["Mark"], *, key: Optional[str] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None) -> Mark:
     """Set a single child's min-corner (x, y) in parent coordinates — an absolute-offset placement primitive, NOT center-anchored. Unlike `enclose`'s convex-hull styling, `position` draws nothing of its own; it exists for cases (e.g. the Topology story's combinator trees) that need to place one child precisely without `enclose`'s fill/stroke/hull limits.

@@ -4,65 +4,46 @@ order: 100
 
 # Region compositing
 
-Five operators combine the _regions_ (silhouettes) of two children, named
-after [Figma's boolean operations](https://help.figma.com/hc/en-us/articles/360039957534-Boolean-operations)
-(see issues [#196](https://github.com/joshpoll/gofish/issues/196) /
-[#202](https://github.com/joshpoll/gofish/issues/202)). They are the public
-primitives the [`cut`](/python/api/operators/cut) mark composes from.
+Five operators combine the _regions_ (silhouettes) of their children. Four are
+named after [Figma's boolean operations](https://help.figma.com/hc/en-us/articles/360039957534-Boolean-operations);
+the fifth, `atop`, is the Porter-Duff operator of that name. The
+[`cut`](/python/api/operators/cut) mark composes from `intersect`.
 
-Each takes **exactly two children** `[A, B]` — the binary SVG-filter
-implementations do not generalize to three or more, so passing any other
-number of children throws. The n-ary forms in the table below describe the
-_intended_ eventual semantics; today only the binary case is implemented.
+| Operator    | Region                          | Children  | Sized to         |
+| ----------- | ------------------------------- | --------- | ---------------- |
+| `union`     | `A ∪ B ∪ ...`                   | 2 or more | all the children |
+| `intersect` | `A ∩ B ∩ ...`                   | 2 or more | their overlap    |
+| `subtract`  | `A − B − ...`                   | 2 or more | A                |
+| `exclude`   | `(A − B) ∪ (B − A)`             | exactly 2 | both children    |
+| `atop`      | `A`, with `B ∩ A` drawn over it | 2 or more | A                |
 
-| Operator    | Region algebra               | Notes                                                                         |
-| ----------- | ---------------------------- | ----------------------------------------------------------------------------- |
-| `intersect` | `A ∩ B`                      | Draw only where both regions overlap.                                         |
-| `exclude`   | `A ^ B` (odd-overlap parity) | Draw the symmetric difference.                                                |
-| `subtract`  | `A − B`                      | Draw A with B's region removed.                                               |
-| `paint`     | `A ∪ (B ∩ A)`                | A is a base **surface**; B is painted onto it, clipped to A. Sized to A.      |
-| `mask`      | `B ∩ A`, A **not** drawn     | A is a **clip region**; B is painted inside it without drawing A. Sized to A. |
-
-`paint` and `mask` both clip to A but differ in intent: `paint` keeps A as a
-visible surface, while `mask` uses A only as a stencil and never draws it.
-
-Union (`A ∪ B`) is intentionally **not** part of the public surface — it is
-conceptually `layer`. Use `layer` to overlay regions.
+An operator reads its children and draws its result. It never draws a child as
+the child itself.
 
 ```python
-from gofish import paint, rect
+from gofish import atop, rect
 
-paint([
+atop([
     rect(x=0, y=0, w=120, h=120, fill="#6aa9d6"),
     rect(x=40, y=40, w=120, h=120, fill="#e06666"),
 ]).render(w=160, h=160)
 ```
 
-Here A is the blue square (the surface) and B is the red square; B is only
-drawn where it overlaps A, so the result is clipped to the blue square's
-bounds.
-
-## Renamed from the Porter-Duff spellings
-
-These were previously named after the Porter-Duff compositing operators
-(`inside` / `xor` / `out` / `atop`). The Stage-2 rename
-([#196](https://github.com/joshpoll/gofish/issues/196) /
-[#202](https://github.com/joshpoll/gofish/issues/202)) gave them the
-Figma-inspired names above — a clean break, no aliases:
-
-| Old (Porter-Duff) | New (Figma) |
-| ----------------- | ----------- |
-| `inside`          | `intersect` |
-| `xor`             | `exclude`   |
-| `out`             | `subtract`  |
-| `atop`            | `paint`     |
-| `mask`            | `mask`      |
+Here A is the blue square and B is the red square. B is drawn only where it
+overlaps A, and the result is sized to A.
 
 ## Region and paint
 
-The operands give the region. Without `fill` or `stroke`, `intersect` draws
-the operands' own paint where they overlap. With either, it draws the overlap
-as one shape in its own paint, and the operands' paint is not drawn.
+A child's region is its alpha as drawn: its fill, its stroke and its opacity.
+A child with [`.hidden()`](/python/api/core/mark#hidden) gives its region and
+draws no paint.
+
+Without `fill` or `stroke`, the operator draws the children's own paint where
+it keeps them. Where two kept children overlap, `union`, `intersect` and
+`atop` draw the later child over the earlier one with `blend_mode`.
+
+With `fill` or `stroke`, the result is one new shape in that paint, and the
+children give their regions only. `atop` takes no `fill`.
 
 ```python
 from gofish import circle, intersect, rect
@@ -75,42 +56,56 @@ intersect(
 ).render(w=220, h=180)
 ```
 
-A painted `intersect` draws one exact path when both operands trace their
-outlines (a `rect` with square corners, a `circle`, an `ellipse`, a `ribbon`,
-a `region`) and at least one of them is convex. Curves are flattened. When an
-operand has no exact outline (an `image`, a `text`, a rounded `rect`), a fill
-is drawn through a mask of the two operands' ink, and a `stroke` raises:
+A painted `intersect` of two children draws one exact path when both trace
+their outlines in opaque paint (a `rect` with square corners, a `circle`, an
+`ellipse`, a `ribbon`, a `region`) and at least one of them is convex. Curves
+are flattened. Otherwise a fill is drawn over the overlap of the children's
+regions, and a `stroke` raises:
 
 ```
 intersect: a stroke needs the exact outline of the result, and these operands
 give none. ...
 ```
 
-Two operands that are both not convex also raise on a stroke
-([#1201](https://github.com/joshpoll/gofish/issues/1201)). The stroke is
-never quietly dropped or drawn around a box. Only `intersect` takes paint
-today; `exclude` and `subtract` can leave holes or several pieces.
+`union`, `subtract` and `exclude` have no exact outline yet, so a `stroke` on
+them raises too ([#1201](https://github.com/joshpoll/gofish/issues/1201)).
+The stroke is never quietly dropped or drawn around a box.
 
 A [croissant chart](/python/examples/croissant) paints the intersection of a
 density curve with each cell of a partition, drawn in by
 [`region(inset=...)`](/python/api/marks/region).
 
+## Masks
+
+A hidden child clips the others to its region. A
+[`Filter.luminance_to_alpha`](/python/api/filter) child gives its luminance as
+its region, so a hidden one is a luminance mask.
+
+```python
+from gofish import ellipse, intersect, rect
+
+intersect([
+    ellipse(cx=80, cy=60, w=160, h=120, fill="white").hidden(),
+    rect(x=0, y=0, w=160, h=120, fill="#6aa9d6"),
+]).render(w=160, h=120)
+```
+
 ## Signatures
 
 ```python
-intersect(children, **options)   # [A, B]
+union(children, **options)       # [A, B, ...]
+intersect(children, **options)   # [A, B, ...]
+subtract(children, **options)    # [A, B, ...]
 exclude(children, **options)     # [A, B]
-subtract(children, **options)    # [A, B]
-paint(children, **options)       # [A, B]
-mask(children)                   # [A, B]
+atop(children, **options)        # [A, B, ...]
 ```
 
 ## Parameters
 
-::: gofish-ref intersect exclude subtract paint mask
+::: gofish-ref union intersect subtract exclude atop
 :::
 
 ## Arity
 
-All five operators require **exactly two children** and throw otherwise. The
-n-ary forms (`A ∩ B ∩ ...`, `A − B − C − ...`, etc.) are not yet implemented.
+`exclude` raises unless it has exactly two children. The other four raise
+with fewer than two.

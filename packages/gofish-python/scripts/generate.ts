@@ -15,7 +15,7 @@
  * What gets generated, and what stays hand-written in `gofish/ast.py`:
  *  - Closed-signature **leaf mark** factories (rect, circle, ellipse, petal,
  *    text, image, polygon, blank) — pure kwargs-collection + wire rename.
- *  - Compositing-quartet + over/mask + enclose/arrow **combinator-only**
+ *  - The five compositing operators + enclose/arrow **combinator-only**
  *    marks — pure kwargs-collection, `pyName` supplies the Python-facing
  *    rename (wire `type` stays the descriptor's `type`).
  *  - `_opts(...) -> dict` **cores** for the dual-form constructs (spread,
@@ -310,7 +310,7 @@ function renderOptsCore(
 }
 
 /** Combinator-only mark that always takes children + a small options set
- *  (compositing quartet, over, mask, enclose, arrow). */
+ *  (the five compositing operators, enclose, arrow). */
 function renderCombinatorFactory(opts: {
   pyName: string;
   wireType: string;
@@ -544,7 +544,6 @@ const COMBINATOR_ONLY = [
   "xor",
   "out",
   "atop",
-  "mask",
   "position",
   "arrow",
 ];

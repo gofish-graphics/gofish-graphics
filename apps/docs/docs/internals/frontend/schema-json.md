@@ -558,8 +558,7 @@ for the API.
             "inside",
             "xor",
             "out",
-            "atop",
-            "mask"
+            "atop"
           ]
         },
         "__combinator": {
@@ -2454,8 +2453,15 @@ for the API.
           "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
         "filter": {
-          "type": "string",
-          "description": "Raw SVG filter attribute."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "key": {
           "type": "string",
@@ -2627,8 +2633,15 @@ for the API.
           "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
         "filter": {
-          "type": "string",
-          "description": "Raw SVG filter attribute."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "key": {
           "type": "string",

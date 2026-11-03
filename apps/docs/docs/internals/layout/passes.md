@@ -1013,7 +1013,7 @@ what it draws, except a layer's ink children, which its box leaves out, and
 a shape's outline, drawn past its box: the drawing is the hull of the root's
 box, of every ink child's box, and of every node's box grown by its outline.
 A coordinate space's box stands for its interior, and a node that clips its
-content to its box (a `mask`, a `paint` composite: `GoFishNode.clipsToBox`)
+content to its box (an `intersect`, `subtract` or `atop` composite: `GoFishNode.clipsToBox`)
 draws nothing past it. The claim walk records the layers that found ink
 children on the render session, and layout records whether a shape draws an
 outline, so a render with neither skips the walk. A literal start or
@@ -1534,7 +1534,7 @@ pure-string sibling `displayListToSVG` (in `gofish-ir`) emits markup with no DOM
 consume the **same** list and a cross-check test keeps them in lockstep. Because items
 are in final absolute pixels, painting is verbatim — a `rect` item becomes
 `<rect x y width height …/>`. See [Rendering](/internals/core/rendering) for the IR's
-item kinds (`rect`/`ellipse`/`path`/`text`/`image`/`group`/`composite`/`mask`) and the
+item kinds (`rect`/`ellipse`/`path`/`text`/`image`/`group`/`composite`) and the
 `toDisplayList({ w, h })` terminal that stops at the IR for non-SVG consumers.
 
 ### Render Pass 5.5: Interaction hooks (when reactive)

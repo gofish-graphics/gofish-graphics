@@ -75,14 +75,17 @@ function walkItems(
         });
         break;
       }
-      case "composite":
-        walkItems(item.source, visit, at);
-        walkItems(item.dest, visit, at);
+      case "composite": {
+        // Its operands are lowered relative to its bbox origin; their
+        // paint is what shows, so a hidden part takes no pointer.
+        const inner = {
+          ...at,
+          tx: at.tx + at.sx * item.bbox.x,
+          ty: at.ty + at.sy * item.bbox.y,
+        };
+        for (const o of item.operands) walkItems(o.paint, visit, inner);
         break;
-      case "mask":
-        walkItems(item.mask, visit, at);
-        walkItems(item.content, visit, at);
-        break;
+      }
     }
   }
 }
@@ -113,7 +116,6 @@ function itemBox(
         2 * item.ry
       );
     case "composite":
-    case "mask":
       return local(item.bbox.x, item.bbox.y, item.bbox.w, item.bbox.h);
     default:
       return undefined;

@@ -233,6 +233,18 @@ bars = base.mark(rect(h="count"))
 dots = base.mark(circle(r="count"))
 ```
 
+## Hiding a chart: `.hidden()`
+
+`.hidden(value=True)` lays the chart out and draws none of it, as a mark's
+[`.hidden()`](/python/api/core/mark#hidden) does. A hidden chart still feeds
+scales, axes and legends, and its marks can be read by `ref` / `select_all`.
+A hidden chart hides every mark in it, whatever the marks' own
+`.hidden(False)`.
+
+```python
+chart(seafood).flow(spread(by="lake", dir="x")).mark(rect(h="count")).hidden()
+```
+
 ## Convenience methods
 
 `.facet()` and `.stack()` are shortcuts for common single-operator flows:

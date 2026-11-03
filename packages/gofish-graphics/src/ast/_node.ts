@@ -169,6 +169,10 @@ export type RenderSession = {
    *  lower too, as `.hidden()` drops a node's paint and keeps its shape
    *  (`GoFishNode.hidden`, porterDuff.tsx). */
   drawHidden?: boolean;
+  /** The compositor whose operands are being lowered. An operand reads as
+   *  itself, so a hidden flag at or above the compositor does not hide it
+   *  there: the compositor's own lowering answers for that. */
+  compositor?: GoFishNode;
   /** The σ-scope registry: the one place σ / posScale is derived,
    *  shared by every scope root in this render. Created on first use
    *  (`getScopeRegistry`). */
@@ -2899,7 +2903,7 @@ export class GoFishNode {
     const session = this.getRenderSession();
     // A hidden node, or one under a hidden ancestor, paints nothing, unless
     // a compositor is reading its shape (`drawHidden`, see `hidden`).
-    if (!session.drawHidden && this.isHidden()) return [];
+    if (!session.drawHidden && this.isHidden(session.compositor)) return [];
     const toPixel = session.toPixel;
     if (!toPixel) {
       throw new Error("[gofish] toPixel not set on the render session");
@@ -3244,9 +3248,12 @@ export class GoFishNode {
     return this;
   }
 
-  /** Whether this node or an ancestor is hidden ({@link hidden}). */
-  public isHidden(): boolean {
-    for (let n: GoFishNode | undefined = this; n; n = n.parent)
+  /** Whether this node or an ancestor is hidden ({@link hidden}). The walk
+   *  up stops at `below`, the compositor lowering this node as an operand
+   *  (`RenderSession.compositor`): a hidden flag at or above it is the
+   *  compositor's to answer for. */
+  public isHidden(below?: GoFishNode): boolean {
+    for (let n: GoFishNode | undefined = this; n && n !== below; n = n.parent)
       if (n._hidden) return true;
     return false;
   }

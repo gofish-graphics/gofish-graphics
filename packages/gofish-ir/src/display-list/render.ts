@@ -18,10 +18,13 @@ import type {
   CompositeItem,
   DisplayItem,
   DisplayListDocument,
-  MaskItem,
   Style,
 } from "./schema.js";
-import { compositeLayerConfig } from "./composite.js";
+import {
+  compositeLayers,
+  compositeMaskKey,
+  type CompositeMask,
+} from "./composite.js";
 
 const esc = (s: string): string =>
   s
@@ -119,8 +122,6 @@ const itemToSVG = (item: DisplayItem): string => {
       return `${def}<g${tr}${fa}${s}>${item.children.map(itemToSVG).join("")}</g>`;
     }
     case "composite":
-    case "mask":
-      // Reconstruct the Porter-Duff filter / mask graph (see compositeToSVG).
       return compositeToSVG(item);
   }
 };
@@ -137,112 +138,71 @@ let compositeIdCounter = 0;
 const luminanceToAlphaFilterSVG = (id: string): string =>
   `<filter id="${id}" color-interpolation-filters="sRGB"><feColorMatrix type="luminanceToAlpha"/></filter>`;
 
-/** Reconstruct the Porter-Duff mask/blend SVG from a structured composite/mask
- *  item — ported verbatim from `paintSVG.tsx`'s `composite`/`mask` cases,
- *  which carry the full rationale for the mask/blend lowering (no `<feImage>`
- *  — see that file for why: Chrome GPU-raster quantization at fractional zoom
- *  clips `<feImage>` content, issue #795; WebKit has two more `<feImage>`
- *  pathologies). The lower pass folded the legacy outer `<g transform>` into
- *  the items' absolute pixels and the `bbox`, so for `mask` no wrapper group
- *  is emitted; `composite` wraps its layers in a `<g transform="translate(…)">`
- *  at the bbox origin since its children are lowered bbox-relative. */
-const compositeToSVG = (item: CompositeItem | MaskItem): string => {
+/** Draw a composite item as SVG masks and `mix-blend-mode` (no
+ *  `<feImage>`: see `paintSVG.tsx` in gofish-graphics for why, issue #795).
+ *  The layers and their masks are `compositeLayers` (composite.ts), shared
+ *  with that backend. Each operand's paint and shape, and the fill, are
+ *  written once as defs and drawn by `<use>`; the layers sit in a group at
+ *  the bbox origin, `isolate`d so a blend mixes the layers only. */
+const compositeToSVG = (item: CompositeItem): string => {
   const uid = `gf-comp-${compositeIdCounter++}`;
-  const sourceId = `${uid}-source`;
-  const destinationId = `${uid}-destination`;
+  const { w, h } = item.bbox;
+  const blendMode = item.blendMode ?? "normal";
+  const paintId = (i: number) => `${uid}-p${i}`;
+  const shapeId = (i: number) =>
+    item.operands[i].shape ? `${uid}-s${i}` : paintId(i);
+  const fillId = `${uid}-fill`;
+  const group = (id: string, items: DisplayItem[]) =>
+    `<g id="${id}">${items.map(itemToSVG).join("")}</g>`;
 
-  if (item.kind === "mask") {
-    const maskId = `${uid}-mask`;
-    return (
-      `<defs>` +
-      `<g id="${sourceId}">${item.mask.map(itemToSVG).join("")}</g>` +
-      `<g id="${destinationId}">${item.content.map(itemToSVG).join("")}</g>` +
-      `<mask id="${maskId}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse"${item.mode === "alpha" ? ` style="mask-type:alpha"` : ""}>` +
-      `<use href="#${sourceId}"/></mask>` +
-      `</defs>` +
-      `<use href="#${destinationId}" mask="url(#${maskId})"/>`
-    );
-  }
+  const layers = compositeLayers(
+    item.operator,
+    item.operands.length,
+    item.fill !== undefined
+  );
+  const masks = new Map<string, string>();
+  const maskDef = (m: CompositeMask): string => {
+    const key = compositeMaskKey(m);
+    const id = `${uid}-m-${key}`;
+    if (!masks.has(key)) {
+      const uses = m.operands
+        .map(
+          (i) =>
+            `<use href="#${shapeId(i)}"${m.invert ? ` filter="brightness(0)"` : ""}/>`
+        )
+        .join("");
+      masks.set(
+        key,
+        m.invert
+          ? `<mask id="${id}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">` +
+              `<rect x="0" y="0" width="${w}" height="${h}" fill="#fff"/>${uses}</mask>`
+          : `<mask id="${id}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" style="mask-type:alpha">${uses}</mask>`
+      );
+    }
+    return id;
+  };
+  const drawn = layers.map((l) => {
+    let out = `<use href="#${l.draw === "fill" ? fillId : paintId(l.draw)}"/>`;
+    for (const m of [...l.masks].reverse())
+      out = `<g mask="url(#${maskDef(m)})">${out}</g>`;
+    return l.blend && blendMode !== "normal"
+      ? `<g style="mix-blend-mode:${esc(blendMode)}">${out}</g>`
+      : out;
+  });
 
-  const grayId = `${uid}-gray`;
-  const maskAlphaSrcId = `${uid}-mask-alpha-src`;
-  const maskAlphaDestId = `${uid}-mask-alpha-dest`;
-  const maskInvAlphaSrcId = `${uid}-mask-invalpha-src`;
-  const maskInvAlphaDestId = `${uid}-mask-invalpha-dest`;
-  const { operator } = item;
-  const blendMode = item.blendMode ?? "color";
-  const { x, y, w, h } = item.bbox;
-
-  const cfg = compositeLayerConfig[operator];
-  const { hasSourceLayer, hasBlend } = cfg;
-
-  const sourceMaskId =
-    cfg.sourceMask === "alphaDest"
-      ? maskAlphaDestId
-      : cfg.sourceMask === "invAlphaDest"
-        ? maskInvAlphaDestId
-        : undefined;
-  const destMaskId =
-    cfg.destMask === "alphaSrc"
-      ? maskAlphaSrcId
-      : cfg.destMask === "invAlphaSrc"
-        ? maskInvAlphaSrcId
-        : undefined;
-
-  /** `mask-type:alpha` mask that clips by the referenced layer's alpha. */
-  const alphaMask = (id: string, refId: string): string =>
-    `<mask id="${id}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" style="mask-type:alpha"><use href="#${refId}"/></mask>`;
-  /** Inverse-alpha mask: white rect (fully opaque) minus the referenced
-   *  layer's shape (blacked out via `brightness(0)`), so the mask clips to
-   *  everywhere the referenced layer is NOT. */
-  const invAlphaMask = (id: string, refId: string): string =>
-    `<mask id="${id}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">` +
-    `<rect x="0" y="0" width="${w}" height="${h}" fill="#fff"/>` +
-    `<use href="#${refId}" filter="brightness(0)"/></mask>`;
-
-  const grayFilterDef = hasSourceLayer
-    ? `<filter id="${grayId}" color-interpolation-filters="sRGB"><feColorMatrix type="saturate" values="0"/></filter>`
-    : "";
-  const alphaSrcMaskDef =
-    cfg.destMask === "alphaSrc" ? alphaMask(maskAlphaSrcId, sourceId) : "";
-  const alphaDestMaskDef =
-    cfg.sourceMask === "alphaDest"
-      ? alphaMask(maskAlphaDestId, destinationId)
-      : "";
-  const invAlphaSrcMaskDef =
-    cfg.destMask === "invAlphaSrc"
-      ? invAlphaMask(maskInvAlphaSrcId, sourceId)
-      : "";
-  const invAlphaDestMaskDef =
-    cfg.sourceMask === "invAlphaDest"
-      ? invAlphaMask(maskInvAlphaDestId, destinationId)
-      : "";
-
-  const sourceLayer = hasSourceLayer
-    ? `<use href="#${sourceId}" filter="url(#${grayId})"${
-        sourceMaskId ? ` mask="url(#${sourceMaskId})"` : ""
-      }/>`
-    : "";
-  const destLayer =
-    `<use href="#${destinationId}"` +
-    (hasBlend ? ` style="mix-blend-mode:${esc(blendMode)}"` : "") +
-    (destMaskId ? ` mask="url(#${destMaskId})"` : "") +
-    `/>`;
-
+  const defs =
+    item.operands
+      .map(
+        (o, i) =>
+          group(paintId(i), o.paint) +
+          (o.shape ? group(`${uid}-s${i}`, o.shape) : "")
+      )
+      .join("") +
+    (item.fill ? group(fillId, item.fill) : "") +
+    [...masks.values()].join("");
   return (
-    `<g transform="translate(${x} ${y})" style="isolation:isolate"${item.style?.opacity !== undefined ? ` opacity="${item.style.opacity}"` : ""}>` +
-    `<defs>` +
-    `<g id="${sourceId}">${item.source.map(itemToSVG).join("")}</g>` +
-    `<g id="${destinationId}">${item.dest.map(itemToSVG).join("")}</g>` +
-    grayFilterDef +
-    alphaSrcMaskDef +
-    alphaDestMaskDef +
-    invAlphaSrcMaskDef +
-    invAlphaDestMaskDef +
-    `</defs>` +
-    sourceLayer +
-    destLayer +
-    `</g>`
+    `<g transform="translate(${item.bbox.x} ${item.bbox.y})" style="isolation:isolate"${item.style?.opacity !== undefined ? ` opacity="${item.style.opacity}"` : ""}>` +
+    `<defs>${defs}</defs>${drawn.join("")}</g>`
   );
 };
 

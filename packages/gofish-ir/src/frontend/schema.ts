@@ -786,8 +786,7 @@ export type CombinatorMarkType =
   | "inside"
   | "xor"
   | "out"
-  | "atop"
-  | "mask";
+  | "atop";
 
 /**
  * A leaf shape mark. Channel-valued props (`h`, `w`, `fill`, `x`, `y`, …)
@@ -1237,5 +1236,4 @@ export const COMBINATOR_MARK_TYPES: readonly CombinatorMarkType[] = [
   "xor",
   "out",
   "atop",
-  "mask",
 ];

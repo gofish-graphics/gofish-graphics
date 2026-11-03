@@ -20,7 +20,7 @@ import { layer as Layer } from "../ast/graphicalOperators/layer";
 import { Constraint } from "../ast/constraints";
 import { chart, enclose, line, rect as rectMark, spread } from "../lib";
 import { ref } from "../ast/shapes/ref";
-import { intersect, mask } from "../ast/graphicalOperators/porterDuff";
+import { intersect, subtract } from "../ast/graphicalOperators/porterDuff";
 import { pack } from "../ast/graphicalOperators/pack";
 import { toDisplayList } from "../ast/displayList/toDisplayList";
 import { resolveReferences } from "../ast/_ref";
@@ -97,8 +97,9 @@ async function lowerOrder(node: any, m: Record<string, any>): Promise<string> {
     const k = byUid.get(item.id);
     if (k !== undefined && !order.includes(k)) order.push(k);
     // A group's children, and a compositor's operands.
-    for (const key of ["children", "source", "dest", "mask", "content"])
-      for (const c of item[key] ?? []) visit(c);
+    for (const c of item.children ?? []) visit(c);
+    for (const o of item.operands ?? [])
+      for (const c of o.shape ?? o.paint) visit(c);
   };
   items.forEach(visit);
   return order.join(",");
@@ -407,8 +408,8 @@ console.log("# a compositor's operand that only places its children lowers");
   const E = Rect({ w: 40, h: 40 });
   const F = Rect({ x: 0, y: 0, w: 100, h: 40 });
   await expectLowerOrder(
-    "mask over a pack operand lowers its leaves",
-    Layer([mask([pack({}, [D, E]), F])]),
+    "subtract over a pack operand lowers its leaves",
+    Layer([subtract([pack({}, [D, E]), F])]),
     { D, E, F },
     "D,E,F"
   );
@@ -416,7 +417,8 @@ console.log("# a compositor's operand that only places its children lowers");
 
 console.log("# a cut slice shows its own window of the source");
 {
-  // Each slice is mask([window, offset(source)]): the offset's shift is
+  // Each slice is intersect([window.hidden(), offset(source)]): the offset's
+  // shift is
   // render-only, so it lowers its child itself (a bake boundary). Slice i's
   // source sits i slice widths left of its window.
   const dl = await chart(
@@ -429,17 +431,22 @@ console.log("# a cut slice shows its own window of the source");
   const masks: any[] = [];
   const visit = (items: any[]) => {
     for (const it of items) {
-      if (it.kind === "mask") masks.push(it);
-      for (const key of ["children", "content"])
-        if (Array.isArray(it[key])) visit(it[key]);
+      if (it.kind === "composite") masks.push(it);
+      if (Array.isArray(it.children)) visit(it.children);
     }
   };
   visit(dl.items);
   const offsets = masks.map((m, i) => {
-    const win = m.mask.find((it: any) => it.kind === "rect");
-    const src = m.content.find((it: any) => it.kind === "rect");
+    // The window is hidden: it has a shape and no paint.
+    const win = m.operands[0].shape.find((it: any) => it.kind === "rect");
+    const src = m.operands[1].paint.find((it: any) => it.kind === "rect");
     return src.x - (win.x - i * win.w);
   });
+  ok(
+    "the window paints nothing",
+    masks.every((m) => m.operands[0].paint.length === 0),
+    JSON.stringify(masks.map((m) => m.operands[0].paint))
+  );
   ok(
     "slice i's source rect is at its window's x minus i window widths",
     masks.length === 4 && offsets.every((d) => Math.abs(d) < 1e-6),

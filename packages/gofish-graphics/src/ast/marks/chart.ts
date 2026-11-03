@@ -74,15 +74,16 @@ import {
   type Resolved as EncloseResolved,
 } from "../graphicalOperators/enclose";
 import {
-  // `over` stays internal (not re-exported from lib) — it backs the
-  // deserializer's `"over"` wire type only; user code should use `layer`.
-  over as Over,
+  union as Union,
   intersect as Intersect,
   exclude as Exclude,
   subtract as Subtract,
-  paint as Paint,
-  mask as Mask,
-  type CompositePaint,
+  atop as Atop,
+  type UnionOptions,
+  type IntersectOptions,
+  type SubtractOptions,
+  type ExcludeOptions,
+  type AtopOptions,
 } from "../graphicalOperators/porterDuff";
 import type { RelateFn } from "../constraints";
 import { splitByTiers, type InferredRelational } from "../datumProjection";
@@ -1182,9 +1183,7 @@ export function blank<T extends Record<string, any>>({
   });
 }
 
-/* ---- mark-combinator forms for layer and Porter-Duff operators ---- */
-
-type PdOptions = { blendMode?: BlendMode };
+/* ---- mark-combinator forms for layer and the compositing operators ---- */
 
 /**
  * A mark with chainable .name, .label, .relate, and a top-level .render()
@@ -1290,31 +1289,31 @@ export function layer<T>(
   return tagCombinator(makeRelatableMark(base), "layer", opts, marks);
 }
 
-function makePorterDuffCombinator<O extends PdOptions = PdOptions>(
+/** The mark-combinator form of a compositing operator (porterDuff.tsx):
+ *  `union([a, b])` or `union(opts, [a, b, ...])`. `irType` is its wire
+ *  type, the Porter-Duff name. */
+function makeCompositeCombinator<O extends object>(
   lowLevel: (opts: any, children: any) => any,
   irType: string
 ) {
-  function fn<T>(marks: [MarkChild, MarkChild]): NameableMark<T>;
-  function fn<T>(opts: O, marks: [MarkChild, MarkChild]): NameableMark<T>;
+  function fn<T>(marks: MarkChild[]): NameableMark<T>;
+  function fn<T>(opts: O, marks: MarkChild[]): NameableMark<T>;
   function fn<T>(
-    optsOrMarks: O | [MarkChild, MarkChild],
-    maybeMarks?: [MarkChild, MarkChild]
+    optsOrMarks: O | MarkChild[],
+    maybeMarks?: MarkChild[]
   ): NameableMark<T> {
     const opts = Array.isArray(optsOrMarks) ? {} : optsOrMarks;
-    const marks = (Array.isArray(optsOrMarks) ? optsOrMarks : maybeMarks) as [
-      MarkChild,
-      MarkChild,
-    ];
+    const marks = (Array.isArray(optsOrMarks) ? optsOrMarks : maybeMarks) ?? [];
     const withChildren =
       (children: readonly MarkChild[]): Mark<T> =>
       async (d, key, layerContext) => {
-        const [child0, child1] = await Promise.all(
+        const operands = await Promise.all(
           children.map((m) => resolveMarkResult(m, layerContext, d, key))
         );
-        // Its paint (`intersect`'s fill and stroke) is read off its input,
-        // as a connector's is off the group it threads.
+        // Its paint (`fill` and `stroke`) is read off its input, as a
+        // connector's is off the group it threads.
         const paintOpts = await resolveGroupPaint(irType, opts, d);
-        const node = await lowLevel(paintOpts, [child0, child1]);
+        const node = await lowLevel(paintOpts, operands);
         node.datum = datumOfInput(d as unknown[]);
         return node;
       };
@@ -1328,16 +1327,16 @@ function makePorterDuffCombinator<O extends PdOptions = PdOptions>(
 }
 
 // The second arg is the IR/serialize *wire* type: the Porter-Duff strings
-// ("atop"/"over"/"inside"/"xor"/"out"/"mask"), which the serialize bridge and
-// IR schema use. Only the JS-facing names are Figma-style.
-export const paint = makePorterDuffCombinator(Paint, "atop");
-// `over` combinator is internal (deserializer only) — not exported from lib.
-export const over = makePorterDuffCombinator(Over, "over");
-// Only `intersect` paints its result (fill, stroke): see `compositeNode`.
-export const intersect = makePorterDuffCombinator<PdOptions & CompositePaint>(
+// ("over"/"inside"/"out"/"xor"/"atop"), which the serialize bridge and IR
+// schema use. Only the JS-facing names are Figma-style.
+export const union = makeCompositeCombinator<UnionOptions>(Union, "over");
+export const intersect = makeCompositeCombinator<IntersectOptions>(
   Intersect,
   "inside"
 );
-export const exclude = makePorterDuffCombinator(Exclude, "xor");
-export const subtract = makePorterDuffCombinator(Subtract, "out");
-export const mask = makePorterDuffCombinator(Mask, "mask");
+export const subtract = makeCompositeCombinator<SubtractOptions>(
+  Subtract,
+  "out"
+);
+export const exclude = makeCompositeCombinator<ExcludeOptions>(Exclude, "xor");
+export const atop = makeCompositeCombinator<AtopOptions>(Atop, "atop");

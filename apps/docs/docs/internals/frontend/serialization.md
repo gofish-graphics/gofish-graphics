@@ -973,9 +973,9 @@ It emits:
   `petal`, `text`, `image`, `polygon`, `blank`) — pure kwargs-collection
   plus wire-key rename, with docstrings from each field's `doc`. An
   undeclared kwarg is a `TypeError` on all of them; none takes `**kwargs`.
-- Compositing-quartet and other **combinator-only** marks — the
-  Porter-Duff-style renames (`inside`→`intersect`, `xor`→`exclude`,
-  `out`→`subtract`, `atop`→`paint`) come from the descriptor's `pyName`,
+- The five compositing operators and other **combinator-only** marks — the
+  Porter-Duff-to-Figma renames (`over`→`union`, `inside`→`intersect`,
+  `xor`→`exclude`, `out`→`subtract`) come from the descriptor's `pyName`,
   killing four previously hand-copied wire-name tables.
 - `_opts(...) -> dict` **cores** for the dual-form constructs (`spread`,
   `stack`, `scatter`, `group`, `table`, `treemap`, `line`, `ribbon`,
@@ -988,9 +988,12 @@ It emits:
   `ast.py`, calling into these generated cores.
 - One module per **strategy family** in `STRATEGIES` (`gofish/tile.py`,
   `gofish/overlap.py`, `gofish/curve.py`, `gofish/bin.py`,
-  `gofish/calendar.py`, `gofish/shape.py`), bound in `__init__.py` under the family name
-  (`Tile`, `Overlap`, `Curve`, `Bin`, `Calendar`, `Shape`): one factory per kind and
-  per preset, named by `pyKwarg` (`Curve.catmull_rom`, `Overlap.separate`).
+  `gofish/calendar.py`, `gofish/shape.py`, `gofish/filter_.py`), bound in `__init__.py`
+  under the family name (`Tile`, `Overlap`, `Curve`, `Bin`, `Calendar`, `Shape`,
+  `Filter`): one factory per kind and per preset, named by `pyKwarg`
+  (`Curve.catmull_rom`, `Overlap.separate`). A module whose name is an
+  operator's gets a trailing underscore, as a keyword kwarg does: `gofish.filter`
+  is the `filter` operator, so the `Filter` family is `gofish/filter_.py`.
   A factory with no required param is decorated with `bare_kind`, so it is
   also the value its call with no arguments makes.
   Each returns `{"kind": ..., **params}` with snake_case param keys, and the

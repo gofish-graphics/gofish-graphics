@@ -422,9 +422,10 @@ was called with to `GoFishNode.relate`, so a drawing clause binds them; the
 the node's `_names`, so a drawing clause is resolved in a fresh registry
 nested in it, which the call that replaces the clause discards) and the
 combinator marks — one wiring, not three copies. The region-compositing
-combinators share one factory (`makePorterDuffCombinator`), typed by their
-options: only `intersect` takes paint (`fill`, `stroke`, `strokeWidth`,
-`opacity`). Its `fill` and `stroke` are color channels, read off the rows of
+combinators share one factory (`makeCompositeCombinator`), typed by their
+options: `union`, `intersect`, `subtract` and `exclude` take paint (`fill`,
+`stroke`, `strokeWidth`, `opacity`), and `union`, `intersect` and `atop` take
+`blendMode`. A `fill` and a `stroke` are color channels, read off the rows of
 its input by `resolveGroupPaint`, the same resolution a connector's paint
 goes through: `paintChannelsOf` finds them in `MARK_CHANNELS`, which holds
 the combinator-only marks' channels as well as the leaf marks'.

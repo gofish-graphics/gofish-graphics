@@ -110,7 +110,6 @@ const REQUIRED_FIELDS: Record<string, { num?: string[]; str?: string[] }> = {
   image: { num: ["x", "y", "w", "h"], str: ["href"] },
   group: {},
   composite: {},
-  mask: {},
 };
 
 function checkItem(
@@ -237,39 +236,27 @@ function checkItem(
         path: `${path}.operator`,
         message: "operator must be one of over, atop, in, out, xor",
       });
-    for (const key of ["source", "dest"] as const) {
-      if (!Array.isArray(item[key]))
-        errors.push({
-          path: `${path}.${key}`,
-          message: `${key} must be an array`,
-        });
-      else
-        item[key].forEach((c, i) =>
-          checkItem(c, `${path}.${key}[${i}]`, errors)
-        );
-    }
-  } else if (kind === "mask") {
-    checkBBox(item.bbox, `${path}.bbox`, errors);
-    if (
-      item.mode !== undefined &&
-      item.mode !== "luminance" &&
-      item.mode !== "alpha"
-    )
+    const list = (v: unknown, at: string): void => {
+      if (!Array.isArray(v))
+        errors.push({ path: at, message: `${at} must be an array` });
+      else v.forEach((c, i) => checkItem(c, `${at}[${i}]`, errors));
+    };
+    if (!Array.isArray(item.operands))
       errors.push({
-        path: `${path}.mode`,
-        message: `mode must be "luminance" or "alpha"`,
+        path: `${path}.operands`,
+        message: "operands must be an array",
       });
-    for (const key of ["mask", "content"] as const) {
-      if (!Array.isArray(item[key]))
-        errors.push({
-          path: `${path}.${key}`,
-          message: `${key} must be an array`,
-        });
-      else
-        item[key].forEach((c, i) =>
-          checkItem(c, `${path}.${key}[${i}]`, errors)
-        );
-    }
+    else
+      item.operands.forEach((o: unknown, i: number) => {
+        const at = `${path}.operands[${i}]`;
+        if (!isObject(o)) {
+          errors.push({ path: at, message: "an operand must be an object" });
+          return;
+        }
+        list(o.paint, `${at}.paint`);
+        if (o.shape !== undefined) list(o.shape, `${at}.shape`);
+      });
+    if (item.fill !== undefined) list(item.fill, `${path}.fill`);
   }
 
   checkBase(item, path, errors);
