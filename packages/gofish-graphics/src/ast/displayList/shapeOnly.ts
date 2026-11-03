@@ -13,11 +13,19 @@
 import type { DisplayList } from "gofish-ir";
 
 const shapeOnly = new WeakSet<DisplayList.DisplayItem>();
+/** How many times items have been recorded: a lowering during which it does
+ *  not change recorded none, so its items are all paint. */
+let recorded = 0;
 
 /** Record `items`, lowered by a hidden node, as shape and no paint. */
 export function markShapeOnly(items: DisplayList.DisplayItem[]): void {
+  recorded++;
   for (const item of items) shapeOnly.add(item);
 }
+
+/** A count that changes whenever items are recorded ({@link markShapeOnly}):
+ *  read it before and after a lowering to know if it recorded any. */
+export const shapeOnlyCount = (): number => recorded;
 
 /**
  * The paint of lowered `items`: the items without the ones a hidden node

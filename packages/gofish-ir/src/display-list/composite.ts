@@ -2,7 +2,7 @@
 // @wiki Rendering — /internals/core/rendering
 // </gofish-wiki>
 
-import type { CompositeItem } from "./schema.js";
+import type { CompositeItem, DisplayItem } from "./schema.js";
 
 /** A mask a composite layer is clipped by: the alpha of the listed
  *  operands' shapes drawn together (their union), or, with `invert`, one
@@ -103,6 +103,110 @@ export function compositeLayers(
   }
 }
 
-/** A key that names a mask, so a backend writes each distinct mask once. */
-export const compositeMaskKey = (m: CompositeMask): string =>
+/** A key that names a mask, so a plan writes each distinct mask once. */
+const maskKey = (m: CompositeMask): string =>
   `${m.invert ? "out" : "in"}-${m.operands.join("-")}`;
+
+/**
+ * A composite as SVG draws it, ids and all: the one plan both SVG backends
+ * (`render.ts` here and `paintSVG.tsx` in gofish-graphics) only write out,
+ * so they cannot drift.
+ *
+ * Each group of items in `defs` is written once, as a `<g id>` def. Each
+ * mask in `masks` is a `<mask>` of `<use>`s of defs: an alpha mask
+ * (`mask-type:alpha`) of their shapes, or, with `invert`, a white rect over
+ * the item's bbox with their shapes drawn black on it. Each layer is a
+ * `<use>` of a def, wrapped in a `<g mask>` per mask (the first mask
+ * outermost), and, with a `blendMode`, in a group that mixes by it. The
+ * layers sit in a group `isolate`d, so a blend mixes the layers only.
+ */
+export interface CompositePlan {
+  defs: { id: string; items: DisplayItem[] }[];
+  masks: { id: string; invert: boolean; uses: string[] }[];
+  layers: { use: string; masks: string[]; blendMode?: string }[];
+}
+
+/**
+ * The plan for drawing `item` ({@link CompositePlan}), its ids prefixed by
+ * `uid`. The layers are {@link compositeLayers}', less any that draws an
+ * operand with no paint (a hidden one): it would draw nothing. A def is
+ * written only when a layer or a mask uses it: an operand's paint where a
+ * layer draws it or a mask reads it as the operand's shape, and its shape,
+ * when it differs from its paint, only where a mask reads it.
+ */
+export function compositePlan(item: CompositeItem, uid: string): CompositePlan {
+  const { operands } = item;
+  const paintId = (i: number) => `${uid}-p${i}`;
+  const shapeId = (i: number) =>
+    operands[i].shape ? `${uid}-s${i}` : paintId(i);
+  const fillId = `${uid}-fill`;
+  const used = new Set<string>();
+  const masks = new Map<string, CompositePlan["masks"][number]>();
+  const maskId = (m: CompositeMask): string => {
+    const id = `${uid}-m-${maskKey(m)}`;
+    if (!masks.has(id)) {
+      const uses = m.operands.map(shapeId);
+      for (const u of uses) used.add(u);
+      masks.set(id, { id, invert: m.invert, uses });
+    }
+    return id;
+  };
+  const layers = compositeLayers(
+    item.operator,
+    operands.length,
+    item.fill !== undefined
+  )
+    .filter((l) => l.draw === "fill" || operands[l.draw].paint.length > 0)
+    .map((l) => {
+      const use = l.draw === "fill" ? fillId : paintId(l.draw);
+      used.add(use);
+      return {
+        use,
+        masks: l.masks.map(maskId),
+        ...(l.blend && item.blendMode !== undefined
+          ? { blendMode: item.blendMode }
+          : {}),
+      };
+    });
+  const defs: CompositePlan["defs"] = [];
+  const def = (id: string, items: DisplayItem[] | undefined) => {
+    if (items && used.has(id)) defs.push({ id, items });
+  };
+  operands.forEach((o, i) => {
+    def(paintId(i), o.paint);
+    def(`${uid}-s${i}`, o.shape);
+  });
+  def(fillId, item.fill);
+  return { defs, masks: [...masks.values()], layers };
+}
+
+/** The `luminanceToAlpha` filter (`DisplayFilter`) as an SVG `<filter>` of
+ *  one `feColorMatrix`: each pixel becomes black with an alpha of its
+ *  luminance, computed in sRGB as a CSS mask would. A backend writes it
+ *  once per document, under `id`, when an item uses it
+ *  ({@link usesLuminanceToAlpha}). */
+export const LUMINANCE_TO_ALPHA_FILTER = {
+  id: "gf-luminance-to-alpha",
+  colorInterpolationFilters: "sRGB",
+  matrixType: "luminanceToAlpha",
+} as const;
+
+/** Whether any of `items`, looking inside groups and composites, is drawn
+ *  under the `luminanceToAlpha` filter. */
+export function usesLuminanceToAlpha(items: readonly DisplayItem[]): boolean {
+  return items.some((item) => {
+    if (item.kind === "group")
+      return (
+        item.filter?.kind === "luminanceToAlpha" ||
+        usesLuminanceToAlpha(item.children)
+      );
+    if (item.kind === "composite")
+      return (
+        item.operands.some(
+          (o) =>
+            usesLuminanceToAlpha(o.paint) || usesLuminanceToAlpha(o.shape ?? [])
+        ) || usesLuminanceToAlpha(item.fill ?? [])
+      );
+    return false;
+  });
+}

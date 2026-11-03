@@ -27,7 +27,7 @@
  */
 import type { DisplayList } from "gofish-ir";
 import { GoFishAST } from "../_ast";
-import { paintOf } from "../displayList/shapeOnly";
+import { paintOf, shapeOnlyCount } from "../displayList/shapeOnly";
 import { GoFishNode, placeUnplacedChild } from "../_node";
 import type { Placeable, ToPixel } from "../_node";
 import { Size, displayTranslate } from "../dims";
@@ -263,28 +263,27 @@ const noExactGeometry = (operator: CompositeOperator, what: string) =>
 
 /**
  * Lower each operand of a composite, a bake boundary, through `toPixel`
- * (the composite's own pixel map), in order, once. A hidden node under the
- * composite lowers as its shape (`GoFishNode.visibility`), so the items are
- * the operand's shape, and its paint is them without what hidden nodes drew
- * (`paintOf`); the shape is kept only where it differs. Each operand's
- * subtree is baked under the node's `translate` (`lowerSubtree`), so an
- * operand that only places its children (a `pack`) lowers its leaves.
+ * (the composite's own pixel map), in order, once: each operand's shape. A
+ * hidden node under the composite lowers as its shape
+ * (`GoFishNode.visibility`), and `hidden` says whether one did. Each
+ * operand's subtree is baked under the node's `translate` (`lowerSubtree`),
+ * so an operand that only places its children (a `pack`) lowers its leaves.
  */
 function lowerOperands(
   node: GoFishNode,
   translate: [number, number],
   coordinateTransform: CoordinateTransform | undefined,
   toPixel: ToPixel
-): DisplayList.CompositeOperand[] {
+): { shape: DisplayList.DisplayItem[]; hidden: boolean }[] {
   const session = node.getRenderSession();
   assertNoPaintOrder(node);
   const saved = session.toPixel;
   session.toPixel = toPixel;
   try {
     return node.children.map((child) => {
+      const before = shapeOnlyCount();
       const shape = lowerSubtree(child, translate, coordinateTransform);
-      const paint = paintOf(shape);
-      return paint === shape ? { paint } : { paint, shape };
+      return { shape, hidden: shapeOnlyCount() !== before };
     });
   } finally {
     session.toPixel = saved;
@@ -377,6 +376,8 @@ function compositeNode(
         const opacity =
           paint.opacity !== undefined ? { opacity: paint.opacity } : {};
 
+        // Unpainted, each operand draws its paint: its shape without what
+        // hidden nodes drew (`paintOf`), kept apart only where it differs.
         if (!painted)
           return [
             {
@@ -384,13 +385,16 @@ function compositeNode(
               operator,
               ...(blendMode !== "normal" && { blendMode }),
               bbox,
-              operands,
+              operands: operands.map(({ shape, hidden }) => {
+                const paint = hidden ? paintOf(shape) : shape;
+                return paint === shape ? { paint } : { paint, shape };
+              }),
               ...(paint.opacity !== undefined && { style: opacity }),
             },
           ];
 
         // A new shape in the result's paint; the operands give shape only.
-        const shapes = operands.map((o) => o.shape ?? o.paint);
+        const shapes = operands.map((o) => o.shape);
         const unit = session.scaleContext?.unit;
         const style = lowerStyle({
           fill: resolveColorChannel(drawn.fill, unit) ?? "none",
@@ -400,8 +404,8 @@ function compositeNode(
         });
         // One exact path, painted as the composite says, when the outline
         // is exact and every operand's region is its outline.
-        const ring = shapes.every(coversItsOutline) ? exactRing() : undefined;
-        if (ring !== undefined) {
+        const ring = exactRing();
+        if (ring !== undefined && shapes.every(coversItsOutline)) {
           if (ring.length === 0) return [];
           return [
             ringItem(
@@ -434,7 +438,7 @@ function compositeNode(
             kind: "composite",
             operator,
             bbox,
-            operands: shapes.map((s) => ({ paint: s })),
+            operands: shapes.map((shape) => ({ paint: [], shape })),
             fill: [fill],
             // The result is one mark: it is what a pointer hits.
             datum: node.datum,

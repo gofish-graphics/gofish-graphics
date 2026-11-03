@@ -177,7 +177,9 @@ export interface CompositeItem extends BaseDisplayItem {
 
 /** One operand of a {@link CompositeItem}. */
 export interface CompositeOperand {
-  /** The operand as it draws: empty for a hidden one (`.hidden()`). */
+  /** The operand as it draws: empty for a hidden one (`.hidden()`), and for
+   *  every operand of a composite with a `fill`, whose operands give shape
+   *  only. */
   paint: DisplayItem[];
   /** The operand's shape, where it differs from `paint`: a hidden part is
    *  drawn here, and gives shape but no paint. Omitted, it is `paint`. */

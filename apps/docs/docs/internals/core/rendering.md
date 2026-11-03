@@ -232,9 +232,11 @@ flat-absolute fold cannot express on its own:
   list can't fold away, and the group a node with a `filter` option draws its whole
   drawing in (`drawFilter.ts`). Its `filter` is a CSS filter value
   (`{ kind: "css", value: "grayscale(1)" }`, which `Filter.grayscale` lowers to) or
-  `{ kind: "luminanceToAlpha" }`, which has no CSS function, so each backend writes an
-  SVG `<filter>` def with an `feColorMatrix type="luminanceToAlpha"` in sRGB. A
-  filtered node is a bake boundary (`isTransparent` in `bake.ts`): a filtered `layer`
+  `{ kind: "luminanceToAlpha" }`, which has no CSS function, so a backend writes an
+  SVG `<filter>` def with an `feColorMatrix type="luminanceToAlpha"` in sRGB, once per
+  document that uses it (`usesLuminanceToAlpha`), under the fixed id of
+  `LUMINANCE_TO_ALPHA_FILTER` (`composite.ts`), which both backends write from. A
+  filtered node is a bake boundary (`GoFishNode.isBakeBoundary()`): a filtered `layer`
   lowers its own subtree, so the filter sees it as one picture, and a filtered
   node with no lowering of its own (a `spread` a `createMark` returns) lowers its
   children where it put them. A lent drawing (`INTERNAL_lendDrawing`, the copy a
@@ -246,14 +248,19 @@ flat-absolute fold cannot express on its own:
   is what it covers, and `paint` is what it draws, the same items without the
   ones hidden nodes drew (empty for a hidden child). `shape` is omitted when it
   equals `paint`. Its region is its alpha as drawn: alpha is shape, and
-  `.hidden()` drops the paint but keeps the shape. Under a compositor
-  (`_readsShapes`), a hidden node lowers as it would draw
-  (`GoFishNode.visibility()` is `"shape"`), and its items are recorded in a
-  side table (`displayList/shapeOnly.ts`) that `paintOf` reads. The walk up
-  stops at the nearest compositor, so a hidden composite still gives its
-  region to a composite that reads it. A `fill` sub-list is the result's own paint, a box
-  in the composite's `fill`, drawn through the result's region instead of the
-  operands' paint. Items are in absolute pixels, like every other item.
+  `.hidden()` drops the paint but keeps the shape. Under a compositor (a node
+  of a type in `COMPOSITE_TYPES`, `bake.ts`), a hidden node lowers as it would
+  draw (`GoFishNode.visibility()` is `"shape"`), and its items are recorded in
+  a side table (`displayList/shapeOnly.ts`) that `paintOf` reads; when an
+  operand's lowering recorded none (`shapeOnlyCount`), its paint is its shape
+  and `paintOf` is skipped. The walk up stops at the nearest compositor, so a
+  hidden composite still gives its region to a composite that reads it.
+  Elsewhere a hidden node draws nothing, and the bake stops at it, so its
+  subtree makes no draw entries at all. A `fill` sub-list is the result's own
+  paint, a box in the composite's `fill`, drawn through the result's region
+  instead of the operands' paint: then every operand gives shape only, so its
+  `paint` is empty and its items are its `shape`. Items are in absolute pixels,
+  like every other item.
 
   `compositeLayers(operator, n, filled)` (`composite.ts`) is the one layer plan
   both SVG backends draw: each layer draws an operand's paint (or the fill),
@@ -271,10 +278,20 @@ flat-absolute fold cannot express on its own:
   graph: `<feImage>` referencing live SVG content has three independent browser
   pathologies (Chrome's GPU raster path clips it at fractional page zoom, issue
   #795; WebKit misaligns its content bbox; WebKit can rasterize before a
-  data-URI `<image>` inside it decodes and never invalidate). Each operand's
-  paint and shape is written once as a def, and each mask once per distinct
-  operand list (`compositeMaskKey`). A Canvas/WebGPU backend would map the plan
-  to its own blend state instead.
+  data-URI `<image>` inside it decodes and never invalidate). Both write out
+  one `compositePlan(item, uid)` (`composite.ts`), ids and all: the defs, each
+  group of items written once; the masks, each distinct one once; and the
+  layers, each a `<use>` of a def in its masks and blend. The plan drops a
+  layer that would draw an operand with no paint, and writes a def only where
+  a layer or a mask uses it, so a hidden operand's shape is written only for
+  the masks that read it. A Canvas/WebGPU backend would map the plan to its
+  own blend state instead.
+
+  The composite is the hit target: its group carries its `data-gf-id`, as every
+  item does, and the defs are painted with no ids, since a pointer over a
+  `<use>` targets the `<use>`. A painted result carries its node's `datum`, so
+  the pointer reads it; the runtime takes boxes from the operands' paint, which
+  a painted result's operands have none of.
 
   A painted `intersect` of two operands that both trace their outlines in opaque
   paint, one of them convex, lowers to one exact `path` instead

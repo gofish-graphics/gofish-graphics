@@ -51,7 +51,19 @@ const mergedStyle = (item: DisplayList.DisplayItem, live: LiveSlots): Style => {
   return (merged as Style) ?? item.style;
 };
 
-/** Deterministic id counter for composite/mask defs — same scheme as gofish-ir's
+/** The `luminanceToAlpha` filter's `<filter>` def, which a document that
+ *  uses it (`DisplayList.usesLuminanceToAlpha`) writes once; gofish-ir's
+ *  string backend writes the same one. */
+export const luminanceToAlphaDef = (): JSX.Element => {
+  const f = DisplayList.LUMINANCE_TO_ALPHA_FILTER;
+  return (
+    <filter id={f.id} color-interpolation-filters={f.colorInterpolationFilters}>
+      <feColorMatrix type={f.matrixType} />
+    </filter>
+  );
+};
+
+/** Deterministic id counter for composite defs — same scheme as gofish-ir's
  *  string backend so the two backends agree on id shape. A module-level counter
  *  (Math.random is non-reproducible); ids only need to be unique within a single
  *  painted document. */
@@ -181,25 +193,14 @@ export function paintSVG(
       const transform = parts.length ? parts.join(" ") : undefined;
       const children = item.children.map((c) => paintSVG(c, interactive));
       const f = item.filter;
-      if (f?.kind === "luminanceToAlpha") {
-        // No CSS function for it: an SVG `<filter>` def, as gofish-ir's
-        // string backend draws it (`luminanceToAlphaFilterSVG`).
-        const id = `gf-filter-${compositeIdCounter++}`;
-        return (
-          <>
-            <defs>
-              <filter id={id} color-interpolation-filters="sRGB">
-                <feColorMatrix type="luminanceToAlpha" />
-              </filter>
-            </defs>
-            <g transform={transform} filter={`url(#${id})`}>
-              {children}
-            </g>
-          </>
-        );
-      }
+      // `luminanceToAlpha` has no CSS function: it is an SVG `<filter>` def
+      // the document writes once ({@link luminanceToAlphaDef}).
+      const filter =
+        f?.kind === "luminanceToAlpha"
+          ? `url(#${DisplayList.LUMINANCE_TO_ALPHA_FILTER.id})`
+          : f?.value;
       return (
-        <g transform={transform} filter={f?.value}>
+        <g transform={transform} filter={filter}>
           {children}
         </g>
       );
@@ -215,76 +216,27 @@ export function paintSVG(
       // rasterize the filter before a data-URI `<image>` inside it has
       // decoded, then never invalidate to repaint once it has.
       //
-      // Each operand's paint and shape (and the result's fill) are written
-      // once as defs; each layer `compositeLayers` lists is a `<use>` of
-      // one of them, clipped by nested masks: an alpha mask of the listed
-      // operands' shapes, or an inverse one (a white rect with the shapes in
-      // black over it). Layers that blend carry `mix-blend-mode`. The layers
-      // sit in a group `isolate`d so a blend mixes the layers only, not what
-      // is behind the composite. A painted result is one mark, so the group
-      // carries its id for hit-testing: a pointer over a `<use>` targets the
-      // `<use>`, not the def it draws. The items are in absolute pixels, as
+      // It writes out the item's `compositePlan` (gofish-ir composite.ts):
+      // defs, masks, and layers of `<use>`s. The composite is the hit
+      // target, so its group carries its id, as every item does: a pointer
+      // over a `<use>` targets the `<use>`, not the def it draws, so the defs
+      // are painted with no ids. The items are in absolute pixels, as
       // everywhere else: drawing an image under a fractional translate that
       // its own fractional x cancels makes the browser resample it. A shape
       // is referenced by each mask that reads it, so it rasterizes once per
       // mask: the price of SVG's mask model.
       // gofish-ir's `render.ts` draws the same SVG.
-      const uid = `gf-comp-${compositeIdCounter++}`;
       const { x, y, w, h } = item.bbox;
-      const blendMode = item.blendMode ?? "normal";
-      const paintId = (i: number) => `${uid}-p${i}`;
-      const shapeId = (i: number) =>
-        item.operands[i].shape ? `${uid}-s${i}` : paintId(i);
-      const fillId = `${uid}-fill`;
-      const layers = DisplayList.compositeLayers(
-        item.operator,
-        item.operands.length,
-        item.fill !== undefined
+      const plan = DisplayList.compositePlan(
+        item,
+        `gf-comp-${compositeIdCounter++}`
       );
-      const masks = new Map<string, JSX.Element>();
-      const maskId = (m: DisplayList.CompositeMask): string => {
-        const key = DisplayList.compositeMaskKey(m);
-        const id = `${uid}-m-${key}`;
-        if (!masks.has(key)) {
-          const uses = m.operands.map((i) => (
-            <use
-              href={`#${shapeId(i)}`}
-              filter={m.invert ? "brightness(0)" : undefined}
-            />
-          ));
-          masks.set(
-            key,
-            m.invert ? (
-              <mask
-                id={id}
-                maskUnits="userSpaceOnUse"
-                maskContentUnits="userSpaceOnUse"
-              >
-                <rect x={x} y={y} width={w} height={h} fill="#fff" />
-                {uses}
-              </mask>
-            ) : (
-              <mask
-                id={id}
-                maskUnits="userSpaceOnUse"
-                maskContentUnits="userSpaceOnUse"
-                style="mask-type:alpha"
-              >
-                {uses}
-              </mask>
-            )
-          );
-        }
-        return id;
-      };
-      const drawn = layers.map((l) => {
-        let out: JSX.Element = (
-          <use href={`#${l.draw === "fill" ? fillId : paintId(l.draw)}`} />
-        );
+      const drawn = plan.layers.map((l) => {
+        let out: JSX.Element = <use href={`#${l.use}`} />;
         for (const m of [...l.masks].reverse())
-          out = <g mask={`url(#${maskId(m)})`}>{out}</g>;
-        return l.blend && blendMode !== "normal" ? (
-          <g style={`mix-blend-mode:${blendMode}`}>{out}</g>
+          out = <g mask={`url(#${m})`}>{out}</g>;
+        return l.blendMode !== undefined ? (
+          <g style={`mix-blend-mode:${l.blendMode}`}>{out}</g>
         ) : (
           out
         );
@@ -293,27 +245,39 @@ export function paintSVG(
         <g
           style="isolation:isolate"
           opacity={item.style?.opacity}
-          data-gf-id={item.fill ? gfId : undefined}
+          data-gf-id={gfId}
         >
           <defs>
-            {item.operands.map((o, i) => (
-              <>
-                <g id={paintId(i)}>
-                  {o.paint.map((c) => paintSVG(c, interactive))}
-                </g>
-                {o.shape && (
-                  <g id={`${uid}-s${i}`}>
-                    {o.shape.map((c) => paintSVG(c, interactive))}
-                  </g>
-                )}
-              </>
+            {plan.defs.map((d) => (
+              <g id={d.id}>{d.items.map((c) => paintSVG(c, false))}</g>
             ))}
-            {item.fill && (
-              <g id={fillId}>
-                {item.fill.map((c) => paintSVG(c, interactive))}
-              </g>
-            )}
-            {[...masks.values()]}
+            {plan.masks.map((m) => {
+              const uses = m.uses.map((u) => (
+                <use
+                  href={`#${u}`}
+                  filter={m.invert ? "brightness(0)" : undefined}
+                />
+              ));
+              return m.invert ? (
+                <mask
+                  id={m.id}
+                  maskUnits="userSpaceOnUse"
+                  maskContentUnits="userSpaceOnUse"
+                >
+                  <rect x={x} y={y} width={w} height={h} fill="#fff" />
+                  {uses}
+                </mask>
+              ) : (
+                <mask
+                  id={m.id}
+                  maskUnits="userSpaceOnUse"
+                  maskContentUnits="userSpaceOnUse"
+                  style="mask-type:alpha"
+                >
+                  {uses}
+                </mask>
+              );
+            })}
           </defs>
           {drawn}
         </g>
