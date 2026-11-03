@@ -153,6 +153,39 @@ console.log("# a hidden operand gives its shape and no paint");
   );
 }
 {
+  // `.hidden()` has no effect on a blank: it is always hidden.
+  const red = (dl: any) =>
+    items(dl).filter((i: any) => i.style?.fill === "red").length;
+  const unhidden = await layer([
+    blank({ w: 40, h: 40, fill: "red" }).hidden(false),
+  ]).toDisplayList({ w: 100, h: 100 });
+  check("blank().hidden(false) paints nothing", items(unhidden).length === 0, kinds(unhidden));
+  const perDatum = await chart([{ v: 1 }, { v: 2 }])
+    .flow(spread({ by: "v", dir: "x" }))
+    .mark(blank({ w: 10, h: 10, fill: "red" }).hidden(() => false))
+    .toDisplayList({ w: 100, h: 100 });
+  check("blank().hidden(fn) paints nothing", red(perDatum) === 0, kinds(perDatum));
+  const dl = await intersect([
+    blank({ x: 0, y: 0, w: 40, h: 40 }).hidden(false),
+    rect({ x: 20, y: 0, w: 40, h: 40, fill: "red" }),
+  ]).toDisplayList({ w: 100, h: 100 });
+  const c = dl.items.find((i: any) => i.kind === "composite");
+  check(
+    "a blank operand with .hidden(false): no paint, its box as shape",
+    c?.operands[0].paint.length === 0 && c?.operands[0].shape?.length === 1,
+    c?.operands[0]
+  );
+  const ir = await chart([{ v: 1 }])
+    .mark(blank({ w: 10, h: 10, fill: "red" }).hidden(false))
+    .toJSON();
+  const rebuilt = await Serialize.buildIR(ir).toDisplayList({ w: 100, h: 100 });
+  check(
+    "blank().hidden(false) round-trips as written and still paints nothing",
+    (ir.root as any)?.mark?.hidden === false && red(rebuilt) === 0,
+    [(ir.root as any)?.mark, kinds(rebuilt)]
+  );
+}
+{
   // An intersect hidden inside another's operand gives that one its shape;
   // its own hidden operand is still its own shape.
   const dl = await intersect([

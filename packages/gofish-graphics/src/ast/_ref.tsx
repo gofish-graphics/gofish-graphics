@@ -49,7 +49,12 @@ export class GoFishRef {
   public type: string = "ref";
   /** A ref draws nothing of its own: it is never hidden, and the bake never
    *  stops at it to lower a subtree. */
-  public readonly _hidden = false;
+  public isHidden(): boolean {
+    return false;
+  }
+  public visibility(): "shown" {
+    return "shown";
+  }
   public isBakeBoundary(): boolean {
     return false;
   }

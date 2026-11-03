@@ -815,6 +815,9 @@ export class GoFishNode {
   /** Set by `.hidden()`: the node is laid out, read and counted like any
    *  other, and paints nothing (see {@link hidden}). */
   public _hidden = false;
+  /** Set when a node is built as one that never paints (`blank()`): it is
+   *  hidden whatever `.hidden()` says ({@link isHidden}). */
+  public _neverPaints = false;
   /** Set by a `filter` option (`drawFilter.ts`): the filter the node's
    *  whole drawing is drawn under. A filtered node is a bake boundary. */
   public _filter: DisplayList.DisplayFilter | undefined = undefined;
@@ -3283,8 +3286,15 @@ export class GoFishNode {
    */
   public visibility(): "shown" | "shape" | "none" {
     for (const n of this.paintAncestors())
-      if (n._hidden) return this.underComposite() ? "shape" : "none";
+      if (n.isHidden()) return this.underComposite() ? "shape" : "none";
     return "shown";
+  }
+
+  /** Whether this node itself is hidden: `.hidden()` set it, or it is built
+   *  as one that never paints (`_neverPaints`, a `blank()`), which no
+   *  `.hidden()` call turns back on. */
+  public isHidden(): boolean {
+    return this._hidden || this._neverPaints;
   }
 
   /**

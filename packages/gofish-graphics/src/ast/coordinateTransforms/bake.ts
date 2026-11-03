@@ -197,7 +197,7 @@ export const bake = (root: GoFishAST): DisplayObject[] => {
   ): void => {
     // A hidden subtree draws nothing: the root bake never reaches into a
     // compositor, the one place a hidden node still gives its shape.
-    if (node._hidden) return;
+    if (node.isHidden()) return;
     const [ownTx, ownTy] = bakeTranslate(node);
     const composedTranslate: [number, number] = [
       ownTx + transform[0],
@@ -249,7 +249,7 @@ export const bakeSubtree = (
     sc: [number, number]
   ): void => {
     // A hidden subtree draws nothing, unless a compositor reads its shape.
-    if (n._hidden && n.visibility() === "none") return;
+    if (n.isHidden() && n.visibility() === "none") return;
     const [ownTx, ownTy] = bakeTranslate(n);
     const composedTranslate: [number, number] = [
       ownTx + transform[0],

@@ -482,11 +482,12 @@ export const rect: typeof baseRect = ((opts: any) =>
   attachCut(baseRect(opts))) as typeof baseRect;
 
 /**
- * `blank()`'s node: a hidden rect (`GoFishNode.hidden`). It is a rect in
+ * `blank()`'s node: a hidden rect (`GoFishNode.isHidden`). It is a rect in
  * every respect that matters to the pipeline — same dims, same
  * underlying-space resolution, same layout, same datum — so it anchors refs
  * and fuses exactly as a rect does, and, being hidden, paints nothing: it is
- * `rect().hidden()` with blank's own defaults. Like any hidden mark it keeps
+ * `rect().hidden()` with blank's own defaults, and `.hidden()` on it has no
+ * effect: it is always hidden. Like any hidden mark it keeps
  * its shape, so under a compositor (`intersect`, `cut`, …) a blank operand
  * gives its box. `blank()` accepts no paint-only options (stroke, corner
  * radius); its `fill` only seeds the color scale.
@@ -500,7 +501,11 @@ export const rect: typeof baseRect = ((opts: any) =>
 export const Blank = (opts: Parameters<typeof Rect>[0]): GoFishNode => {
   const node = Rect(opts);
   node.type = "blank";
-  return node.hidden();
+  // Never painting is what a blank is, not a setting on it, so it is built
+  // in (`_neverPaints`) rather than set through `.hidden()`: a later
+  // `.hidden(false)`, `.hidden(true)` or `.hidden(fn)` changes nothing.
+  node._neverPaints = true;
+  return node;
 };
 
 /** The `blank` mark factory — `marks/chart.ts`'s `blank()` is the typed,

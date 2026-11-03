@@ -1447,12 +1447,13 @@ to pick its color (see [Labels](/internals/frontend/labels#auto-color)).
 
 **Nodes that draw nothing.** A node can take part in layout without contributing any
 pixels: it keeps its dims, its datum and its role as a `selectAll` anchor, and emits
-an empty fragment. There are two ways. A **hidden** node (`.hidden()`, `_hidden` on
-`_node.ts`) draws nothing unless a compositor reads its shape: the root bake and
+an empty fragment. There are two ways. A **hidden** node (`isHidden()` on
+`_node.ts`: `.hidden()` set `_hidden`, or it never paints) draws nothing unless a compositor reads its shape: the root bake and
 `bakeSubtree` stop at it, so it makes no draw entry at all, and under a compositor it
 lowers as its shape only (see [Rendering](/internals/core/rendering)). `blank()` is
 one: `Blank` in `src/ast/shapes/rect.tsx` builds a `rect` node, renames its type to
-`blank` and hides it. `INTERNAL_emitNothing()` (`_node.ts`) is the other: it replaces
+`blank` and builds it as one that never paints (`_neverPaints`), so `.hidden()`
+has no effect on it. `INTERNAL_emitNothing()` (`_node.ts`) is the other: it replaces
 the node's lowering with one that returns `[]`, so the node gives no shape either. A
 mark with no value is built this way, and `GoFishRef` (a placement stand-in) has
 always lowered the same way. Because every draw path — the SVG paint pass, the
