@@ -2007,11 +2007,15 @@ def derive(fn: Callable, *, schema: Optional[dict] = None) -> DeriveOperator:
 
 def group(*, by: Union[str, "FieldAccessor"], **options: Any) -> Operator:
     """
-    Group operator — partition data by `by`, wrap each group in a frame.
+    Group operator — partition data by `by` and draw the groups in one
+    layer, which places nothing.
 
     Args:
         by: Field name to group by, or a ``field(...)`` accessor carrying
             domain ops (``field("site").sort("yield")``).
+        **options: The layer's options: ``coord`` (the groups are drawn in
+            that coordinate space), ``axes``, ``padding``, and the box
+            ``x``, ``y``, ``w``, ``h``.
 
     Returns:
         Operator object

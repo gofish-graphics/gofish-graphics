@@ -30,6 +30,21 @@ layer(options?, [child1, child2, ...])
 ::: gofish-ref layer
 :::
 
+## Coordinate space
+
+With a `coord`, the layer is the box of that coordinate space: its children are
+drawn in it, and `axes` and `padding` apply to it.
+
+```ts
+layer({ coord: Coord.clock(), w: 300, h: 300 }, [
+  chart(seafood)
+    .flow(stack({ by: "species", dir: "x" }))
+    .mark(rect({ w: "count", fill: "species" })),
+]);
+```
+
+[`group`](/js/api/operators/group) takes the same options in a flow.
+
 ## Z-ordering
 
 By default, children are drawn in the order they appear in the array — later children appear on top. You can override this with `.zOrder(n)` on any child. Children are sorted by z-order value before rendering; lower values are drawn first (underneath). Children with the same z-order value keep their original array order.

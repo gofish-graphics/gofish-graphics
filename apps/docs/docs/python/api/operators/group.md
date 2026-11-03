@@ -4,9 +4,10 @@ order: 50
 
 # group
 
-Partitions the data by a field and wraps each partition in its own frame,
-without positioning the frames. Pair it with another operator — or a nested
-mark — to lay the groups out.
+Partitions the data by a field and draws the partitions in one
+[`layer`](/python/api/operators/layer), without positioning them. Pair it with
+another operator — or a nested mark — to lay the groups out. It takes the
+layer's options, so `coord=` draws the groups in that coordinate space.
 
 ::: gofish example:grouped-bar-chart hidden
 :::
@@ -38,7 +39,7 @@ the flow's own grouping by default (see [`ribbon`'s Default
 grouping](/python/api/marks/ribbon#default-grouping)). `group()` is for nested
 splits (composing with a connector's own `by`, or an explicit `by` override)
 and for operator pipelines generally — anywhere you need a named per-partition
-frame without a connector mark driving the partitioning. `group`'s own `by` reads
+group without a connector mark driving the partitioning. `group`'s own `by` reads
 refs when it runs after a `select_all`, and a ref is read through its rows, so the
 bare field name works — `by="species"`:
 
@@ -53,12 +54,27 @@ agrees on that field (homogeneity collapse); otherwise it is `None`. See
 [`spread` → path-aware `by`](/python/api/operators/spread#path-aware-by) for the
 full explanation.
 
+With `coord=`, the layer the groups are drawn in is that coordinate space, as
+[`layer(..., coord=...)`](/python/api/operators/layer#coordinate-space) is.
+After a `spread`, a `group` with a `coord` gives each cell its own space: here,
+one pie per lake.
+
+```python
+from gofish import chart, spread, group, stack, rect, Coord
+
+chart(seafood, w=700, h=140).flow(
+    spread(by="lake", dir="x", spacing=20),
+    group(by="lake", coord=Coord.clock(), w=100, h=100, padding=0),
+    stack(by="species", dir="x"),
+).mark(rect(w="count", fill="species"))
+```
+
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 
 ## How it works
 
 `group` only **partitions** — it draws each partition's contents in a shared
-frame but does not move the frames apart. Use it when a later operator (or the
+layer but does not move the partitions apart. Use it when a later operator (or the
 mark itself) is responsible for layout, or when you need the grouping boundary
 for scales and color.
 

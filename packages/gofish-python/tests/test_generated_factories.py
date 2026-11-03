@@ -557,7 +557,7 @@ def test_data_keyed_dicts_are_untouched():
 def test_layer_of_charts_takes_js_layer_options():
     # The chart-tier `layer([...], **options)` takes JS `layer`'s option set,
     # like the mark form, so nested keys are snake_case in Python and camelCase
-    # on the wire, and a render option such as `padding` is rejected.
+    # on the wire, and a render option such as `legend` is rejected.
     c1 = chart([{"v": 1}]).mark(rect(h="v"))
     c2 = chart([{"v": 2}]).mark(rect(h="v"))
     node = layer([c1, c2], axes={"x": {"label": {"angle": 45}}}).to_ir()["root"]
@@ -567,7 +567,7 @@ def test_layer_of_charts_takes_js_layer_options():
     with pytest.raises(TypeError):
         layer([c1, c2], label_angle=45)
     with pytest.raises(TypeError):
-        layer([c1, c2], padding=80)
+        layer([c1, c2], legend=False)
 
 
 def test_render_axes_convert_on_every_render_path():

@@ -2,7 +2,7 @@
 
 import math
 
-from gofish import chart, spread, stack, derive, rect, Coord
+from gofish import chart, spread, stack, group, derive, rect, Coord
 from python_stories.data import SEAFOOD, NIGHTINGALE
 
 
@@ -19,6 +19,22 @@ def story_donut():
     return (
         chart(SEAFOOD, coord=Coord.clock(), axes=True, padding=60, w=400, h=400)
         .flow(stack(by="species", dir="x", y=50, h=50))
+        .mark(rect(w="count", fill="species")),
+        {},
+    )
+
+
+def story_small_multiples():
+    return (
+        # One pie per lake: the spread lays the lakes out, and each lake's
+        # `group` is its own polar space, so the species stack around a
+        # circle per lake.
+        chart(SEAFOOD, w=700, h=140)
+        .flow(
+            spread(by="lake", dir="x", spacing=20),
+            group(by="lake", coord=Coord.clock(), w=100, h=100, padding=0),
+            stack(by="species", dir="x"),
+        )
         .mark(rect(w="count", fill="species")),
         {},
     )

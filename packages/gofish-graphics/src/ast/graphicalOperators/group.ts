@@ -1,21 +1,30 @@
-// The fluent `group` operator. Lives in its own file (not in layer.tsx with the
-// node `layer`) because chartBuilder.ts imports `layer` and we don't
+// The fluent `group` operator. Lives in its own file (not in layer.tsx with
+// the node `layer`) because chartBuilder.ts imports `layer` and we don't
 // want that import to transitively pull in createOperator → ChartBuilder.
 import { createOperator } from "../marks/createOperator";
-import { layer } from "./layer";
+import { layer, type LayerOptions } from "./layer";
 import { SplitBy, splitEntries } from "../datumProjection";
+import type { LengthValue } from "../length";
 
+/** `by`, and the options of the one `layer` the groups are drawn in: its
+ *  coordinate space (`coord`, `axes`, `padding`) and its box. */
 export type GroupOptions = {
   by?: SplitBy;
-};
+  x?: number;
+  y?: number;
+  w?: number | string | LengthValue;
+  h?: number | string | LengthValue;
+} & Pick<LayerOptions, "coord" | "axes" | "padding">;
 
 export const group = createOperator<any, GroupOptions>(
-  (_opts, children) => layer({}, children),
+  (opts, children) => layer(opts as LayerOptions, children),
   {
     split: ({ by }, d) => {
       if (!by) throw new Error("group requires opts.by = fieldName");
       return splitEntries(by, d);
     },
+    // Its box may be sized from data, as spread's is.
+    channels: { w: "size", h: "size" },
     // Positions nothing, but its `by` is still eligible to split a relational
     // mark (see `classifyOperator`).
     arrangement: { kind: "none" },

@@ -399,9 +399,16 @@ function operatorFromIR(
 ): Operator<any, any> | null {
   const { bridge } = ctx;
   const { type, translate, label, ...opts } = op as Record<string, any>;
-  let operator = rebuild("operator", type as string, unwrapOpts(opts, bridge), {
-    bridge,
-  });
+  // An operator's coord (`group({ by, coord })`) is resolved as a
+  // combinator's is.
+  let operator = rebuild(
+    "operator",
+    type as string,
+    resolveOptions(unwrapOpts(opts, bridge)),
+    {
+      bridge,
+    }
+  );
   if (operator === undefined) return null;
   if (
     operator &&

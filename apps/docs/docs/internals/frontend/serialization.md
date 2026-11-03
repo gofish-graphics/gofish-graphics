@@ -407,7 +407,10 @@ per-option plumbing, and the descriptor's `positional` field goes first
 (`Coord.geo(opts.projection, rest)`). An unknown `type` throws. `polar` and
 `clock` share one field group and differ only in its `baselineAngle` /
 `direction` defaults, so the `type` tag is what keeps the angular convention
-across the wire when those options are left out.
+across the wire when those options are left out. The same spec rides a
+`layer`'s options and a `group` operator's (`group({ by, coord })`), and
+`resolveOptions` rebuilds it there too, for a combinator mark and an operator
+alike.
 
 Channel values (`h`, `w`, `fill`, …) accept bare primitives (the
 shorthand path) or one of three explicit tagged objects:

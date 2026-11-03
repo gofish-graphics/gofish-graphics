@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
 import { nightingale } from "../../src/data/nightingale";
-import { chart, rect, stack, spread, derive } from "../../src/lib";
+import { chart, rect, stack, spread, group, derive } from "../../src/lib";
 import { clock } from "../../src/ast/coordinateTransforms/clock";
 
 const meta: Meta = {
@@ -60,6 +60,35 @@ export const Donut: StoryObj<Args> = {
 
     chart(seafood, { coord: clock(), axes: true, padding: args.padding, w: args.w, h: args.h })
       .flow(stack({ by: "species",  dir: "x", y: 50, h: 50 }))
+      .mark(rect({ w: "count", fill: "species" }))
+      .render(container);
+
+    return container;
+  },
+};
+
+export const SmallMultiples: StoryObj<Args> = {
+  args: { w: 700, h: 140 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Small Multiple Pie Charts",
+      description:
+        "One pie chart per lake, side by side, each breaking that lake's fish catch down by species.",
+    },
+  },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    // One pie per lake: the spread lays the lakes out, and each lake's
+    // `group` is its own polar space, so the species stack around a circle
+    // per lake.
+    chart(seafood, { w: args.w, h: args.h })
+      .flow(
+        spread({ by: "lake", dir: "x", spacing: 20 }),
+        group({ by: "lake", coord: clock(), w: 100, h: 100, padding: 0 }),
+        stack({ by: "species", dir: "x" })
+      )
       .mark(rect({ w: "count", fill: "species" }))
       .render(container);
 

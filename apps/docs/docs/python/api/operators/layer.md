@@ -38,6 +38,23 @@ sibling relational mark like [`line`](/python/api/marks/line) / `ref`.
 ::: gofish-ref layer
 :::
 
+## Coordinate space
+
+With `coord=`, the layer is the box of that coordinate space: its children are
+drawn in it, and `axes` and `padding` apply to it.
+
+```python
+from gofish import layer, chart, stack, rect, Coord
+
+layer([
+    chart(seafood)
+    .flow(stack(by="species", dir="x"))
+    .mark(rect(w="count", fill="species")),
+], coord=Coord.clock(), w=300, h=300)
+```
+
+[`group`](/python/api/operators/group) takes the same options in a flow.
+
 ## Z-ordering
 
 By default, children are drawn in the order they appear in the list — later
