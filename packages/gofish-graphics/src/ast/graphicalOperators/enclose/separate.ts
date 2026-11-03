@@ -136,48 +136,81 @@ export function forbiddenRegions(
   sigma = 0
 ): Pt[][][] {
   const t0 = performance.now();
-  let evals = 0,
-    nodes = 0;
-  const n = spines.length;
+  SEPARATE_STATS.evals = 0;
+  SEPARATE_STATS.nodes = 0;
   const sb = spines.map(boxOf);
-  const own = spines.map((r) => {
-    const S = segsOf(r);
-    return { grid: new SegGrid(S, 4), inside: new Inside(S) };
-  });
-  const out: Pt[][][] = [];
-  for (let i = 0; i < n; i++) {
-    const [bx0, by0, bx1, by1] = boxes[i];
-    // the other pieces that can be nearer than piece i somewhere in its box:
-    // a point of the box is at most `reach` from piece i's spine
-    const reach = Math.hypot(bx1 - bx0, by1 - by0) + s;
-    const near: number[] = [];
-    for (let j = 0; j < n; j++) {
-      if (j === i) continue;
-      const B = sb[j];
-      if (
-        B[0] <= bx1 + reach &&
-        B[2] >= bx0 - reach &&
-        B[1] <= by1 + reach &&
-        B[3] >= by0 - reach
-      )
-        near.push(j);
-    }
-    if (!near.length) {
-      out.push([]);
-      continue;
-    }
-    const others = near.flatMap((j) => spines[j]);
+  const out = spines.map((sp, i) =>
+    forbiddenOne(
+      sp,
+      boxes[i],
+      nearPieces(i, sb, boxes[i], s).map((j) => spines[j]),
+      s,
+      h,
+      sigma
+    )
+  );
+  SEPARATE_STATS.ms = performance.now() - t0;
+  return out;
+}
+
+/** A spine's box (for nearPieces). */
+export const spineBox = (rings: Pt[][]): Box => boxOf(rings);
+
+/** The other pieces that can be nearer than piece i somewhere in the box it
+ *  fills: a point of the box is at most `reach` from piece i's spine. `sb`:
+ *  every piece's spine box. */
+export function nearPieces(
+  i: number,
+  sb: Box[],
+  box: Box,
+  s: number
+): number[] {
+  const [bx0, by0, bx1, by1] = box;
+  const reach = Math.hypot(bx1 - bx0, by1 - by0) + s;
+  const near: number[] = [];
+  for (let j = 0; j < sb.length; j++) {
+    if (j === i) continue;
+    const B = sb[j];
+    if (
+      B[0] <= bx1 + reach &&
+      B[2] >= bx0 - reach &&
+      B[1] <= by1 + reach &&
+      B[3] >= by0 - reach
+    )
+      near.push(j);
+  }
+  return near;
+}
+
+/** One piece's forbidden region (forbiddenRegions): `spine` its filled spine
+ *  rings, `box` the box its fill stays in, `near` the spines of the pieces
+ *  nearPieces finds, in piece order. A function of these alone, so it is
+ *  cached per piece and its neighbours. */
+export function forbiddenOne(
+  spine: Pt[][],
+  box: Box,
+  near: Pt[][][],
+  s: number,
+  h = 1,
+  sigma = 0
+): Pt[][] {
+  if (!near.length) return [];
+  {
+    const [bx0, by0, bx1, by1] = box;
+    const S0 = segsOf(spine);
+    const me = { grid: new SegGrid(S0, 4), inside: new Inside(S0) };
+    const others = near.flat();
     const S = segsOf(others);
     const og = new SegGrid(S, 4),
       oin = new Inside(S);
-    const me = own[i];
+
     // f exactly where |f| < SURE; elsewhere a value of the right sign with
     // |f| ≥ SURE (the searches stop early), enough for the refinement below
     // and for the level set (f is 2-Lipschitz, so no crossing within a step
     // of such a node)
     const SURE = 24;
     const f = (x: number, y: number) => {
-      evals++;
+      SEPARATE_STATS.evals!++;
       const di = me.inside.has(x, y) ? 0 : me.grid.nearest(x, y)[0];
       const dj = oin.has(x, y) ? 0 : capped(og, x, y, di + s + SURE);
       if (dj >= di + s + SURE) return -SURE;
@@ -196,7 +229,7 @@ export function forbiddenRegions(
     const nx = K * Math.ceil((Math.ceil((bx1 - bx0) / h) + 2 * m) / K),
       ny = K * Math.ceil((Math.ceil((by1 - by0) / h) + 2 * m) / K);
     const W = nx + 1;
-    nodes += W * (ny + 1);
+    SEPARATE_STATS.nodes! += W * (ny + 1);
     const V = new Float64Array(W * (ny + 1)).fill(NaN);
     const at = (ii: number, j: number) => {
       const q = j * W + ii;
@@ -245,14 +278,8 @@ export function forbiddenRegions(
       V[j * W + nx] = -1;
     }
     const loops = march(V, nx, ny, x0, y0, h);
-    out.push(sigma > 0 ? blur(loops, [], sigma) : loops);
+    return sigma > 0 ? blur(loops, [], sigma) : loops;
   }
-  Object.assign(SEPARATE_STATS, {
-    ms: performance.now() - t0,
-    evals,
-    nodes,
-  });
-  return out;
 }
 
 /** The distance from (x, y) to the grid's nearest segment, or `cap` when

@@ -8,10 +8,12 @@
 import DATA from "../src/datasets.json";
 import {
   joinLinks,
+  JOIN_PROTOTYPE,
   type JoinMeasure,
   type JoinDistance,
 } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/unified";
 
+if (process.env.TYPICAL) JOIN_PROTOTYPE.typical = process.env.TYPICAL as any;
 const IDS = (process.env.DS ?? "penguins,chartaccent").split(",");
 const MAIN = +(process.env.MAIN ?? 0.85);
 const SL: Record<Exclude<JoinMeasure, "pieces">, number[]> = {

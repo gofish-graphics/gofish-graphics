@@ -185,7 +185,7 @@ const SEAL_HINT: Record<Seal, string> = {
 };
 
 const SHAPE_HINT: Record<ShapeKind, string> = {
-  blob: "Shape.blob: the members' spanning tree, its links kept where the gap is under join; each piece filled to the convexity and smoothed.",
+  blob: "Shape.blob: the members' join tree, its edges kept as links where join keeps them; each piece filled to the convexity and smoothed.",
   arcs: "Shape.arcs: the exact closing by a disc of the radius; pieces join where the disc cannot pass between them. No smoothing.",
 };
 
@@ -210,24 +210,17 @@ const JOIN_MEASURE_NAME: Record<JoinMeasure, string> = {
 const JOIN_MEASURE_HINT: Record<JoinMeasure, string> = {
   px: "The longest gap between padded members that a link crosses, in px. Dots keep their size when a chart is resized but their gaps do not, so the same join can group a resized chart differently.",
   share:
-    "The share of the spanning tree's links kept, shortest first by the distance between the members' centres: 1 keeps every link. Members whose padding touches are always one piece. A link grows in over one link's step.",
+    "The share of the join tree's edges kept, shortest first in the distance below: 1 keeps every edge. Members whose padding touches are always one piece.",
   typical:
-    "A multiple of the set's typical link: the median distance between the centres of the members each spanning-tree link joins. Centre distances scale with the chart and the members do not, so the grouping stays when the chart is resized, until the members' padding touches (then they are one piece).",
+    "A multiple of the set's typical edge: the median length, in the distance below, of the join tree's edges. Centre distances scale with the chart and the members do not, so the grouping stays when the chart is resized, until the members' padding touches (then they are one piece).",
   local:
-    "A multiple of each link's nearby links (Zahn's inconsistent edges): the mean centre distance of the tree links within two steps of each end. A link is cut where it is over join × the larger of its two sides' means, so it must be long next to both sides. Members whose padding touches are always one piece.",
+    "A multiple of each edge's nearby edges (Zahn's inconsistent edges): the mean length of the tree edges within two steps of each end. An edge is cut where it is over join × the larger of its two sides' means, so it must be long next to both sides. Members whose padding touches are always one piece.",
   pieces:
     "The number of pieces each set keeps: join k cuts the k − 1 longest links (the k most persistent pieces in the barcode), so every step of k merges exactly one pair. It counts from the pieces left when only touching members are joined down to 1. Each set is its own enclose, so k is per set.",
 };
-const JOIN_RAMP_NOTE: Record<JoinMeasure, string> = {
-  px: " A link grows in as join passes its gap: it is as wide as join is past the gap, up to its neck width.",
-  share: "",
-  typical:
-    " A link entering at t grows in over join from t to 1.5 t, up to its neck width.",
-  local:
-    " A link entering at t grows in over join from t to 1.5 t, up to its neck width.",
-  pieces:
-    " Between two whole numbers the next link to merge grows in: at k = 2.5 the link that k = 2 keeps is half its neck width.",
-};
+/** join is discrete: the note under the slider */
+const JOIN_STEP_NOTE =
+  " Join is a step control: each edge of the tree is either cut or kept as a link at its full neck width, so the outline changes only where join crosses one of the ticks under the slider (one per bar of the barcode below).";
 const JOIN_TICKS: Record<JoinMeasure, [number, string][]> = {
   px: [
     [0, "0"],
@@ -296,19 +289,28 @@ const sliderToJoin = (k: number) => {
     ? +(0.5 * 2 ** ((k - 1) / 10)).toFixed(2)
     : +(0.05 * 2 ** ((k - 1) / 12)).toFixed(3);
 };
-const joinToSlider = (j: number) => {
+/** where join j sits on the slider, unrounded (the ticks of the edges' entries) */
+const joinPos = (j: number) => {
   const m = state.joinMeasure;
   if (m === "pieces") {
     const P = maxPieces();
     if (P <= 1 || j <= 1) return 100;
     return Math.max(0, 100 * (1 - Math.log(j) / Math.log(P)));
   }
-  if (m === "share") return Math.round(Math.min(1, j) * 100);
-  if (unitRange()) return Math.round(toUnit(j) * 100);
+  if (m === "share") return Math.min(1, j) * 100;
+  if (unitRange()) return toUnit(j) * 100;
   if (j <= 0) return 0;
   if (j === Infinity) return 100;
   const k =
     m === "px" ? 1 + 10 * Math.log2(j / 0.5) : 1 + 12 * Math.log2(j / 0.05);
+  return Math.max(0.5, Math.min(99.5, k));
+};
+const joinToSlider = (j: number) => {
+  const m = state.joinMeasure;
+  const k = joinPos(j);
+  if (m === "pieces") return k;
+  if (m === "share" || unitRange() || j <= 0 || j === Infinity)
+    return Math.round(k);
   return Math.max(1, Math.min(99, Math.round(k)));
 };
 const joinNum = (j: number) =>
@@ -320,7 +322,7 @@ const fmtJoin = (j: number) => {
   if (m === "pieces")
     return j === Infinity
       ? "every piece"
-      : `${num(j)} piece${j === 1 ? "" : "s"} per set${eq(j, Math.round(j)) ? "" : " (one merging)"}`;
+      : `${Math.floor(j)} piece${Math.floor(j) === 1 ? "" : "s"} per set`;
   if (m === "share") return `${+(Math.min(1, j) * 100).toFixed(1)}% of links`;
   if (unitRange())
     return `${joinNum(j)} (${j === Infinity ? "∞" : String(+j.toFixed(2))} × ${m === "typical" ? "typical" : "local"})`;
@@ -336,7 +338,7 @@ const convertJoin = (to: JoinMeasure): number => {
   const all = (lastOut ?? []).flatMap((r) =>
     r.tree.filter((e) => !e.overlap && e.enter.share !== -Infinity)
   );
-  const kept = all.filter((e) => e.share > 0).length;
+  const kept = all.filter((e) => e.kept).length;
   const toAll = to === "pieces" ? 1 : Infinity;
   if (joinIsAll(state.join) || kept === all.length) return toAll;
   // pieces: the mean over the sets of 1 + the links each one cuts
@@ -418,9 +420,9 @@ const syncControls = () => {
       ? "The longest gap between padded members that a link crosses."
       : state.joinMeasure === "pieces"
         ? "How many pieces each set keeps."
-        : "Which links of the members' spanning tree are kept, in the measure below.") +
+        : "Which edges of the members' join tree are kept, in the measure below.") +
     " Longer gaps leave separate pieces, each filled to its own convexity and kept a padding apart from the others." +
-    JOIN_RAMP_NOTE[state.joinMeasure];
+    JOIN_STEP_NOTE;
   $("join-measure-hint").textContent = JOIN_MEASURE_HINT[state.joinMeasure];
   $("join-distance-field").hidden = !blob || state.joinMeasure === "px";
   for (const b of document.querySelectorAll<HTMLButtonElement>(
@@ -486,6 +488,38 @@ const syncJoin = () => {
   )
     .map(([k, t]) => `<span style="left: ${k}%">${t}</span>`)
     .join("");
+  drawJoinRug();
+};
+/** PROTOTYPE: a tick under the join slider at each edge's entry (each bar's end in the
+ *  barcode), one row per set in its colour: the only joins where the outline changes. */
+const drawJoinRug = () => {
+  const box = $("join-rug");
+  const d = dataset();
+  if (state.shape !== "blob" || !lastOut || lastOut.length !== d.sets.length) {
+    box.innerHTML = "";
+    return;
+  }
+  const m = state.joinMeasure;
+  const rows = lastOut.length;
+  const rh = Math.max(3, Math.min(6, 12 / rows));
+  let g = "";
+  lastOut.forEach((r, si) => {
+    const colour =
+      d.sets[si].paint.stroke === "none" ? "#888" : d.sets[si].paint.stroke;
+    // "pieces" counts down: its ticks are the whole k where one more piece splits off
+    const ts =
+      m === "pieces"
+        ? Array.from(
+            { length: r.tree.filter((e) => !e.floor).length },
+            (_, k) => k + 2
+          )
+        : r.tree.filter((e) => !e.floor).map((e) => e.enter[m]);
+    for (const t of ts) {
+      const x = joinPos(t);
+      g += `<line x1="${f2(x)}" x2="${f2(x)}" y1="${f2(si * rh)}" y2="${f2((si + 1) * rh - 0.6)}" stroke="${colour}" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
+    }
+  });
+  box.innerHTML = `<svg viewBox="0 0 100 ${f2(rows * rh)}" preserveAspectRatio="none" style="height:${f2(rows * rh)}px">${g}</svg>`;
 };
 const syncRest = () => {
   const d = dataset();
@@ -684,29 +718,21 @@ const drawResults = (results: SetResult[]) => {
           );
     }
     if (state.showLinks) {
-      // the spanning tree's edges that are not links: longer than join (gray dashed); edges
-      // between members that overlap need no link and are not drawn
+      // the join tree's edges that are cut (gray dashed); edges between members that overlap
+      // need no link and are not drawn
       for (const e of r.tree)
-        if (!e.overlap && e.share === 0)
+        if (!e.overlap && !e.kept)
           g += `<line x1="${f2(e.a[0])}" y1="${f2(e.a[1])}" x2="${f2(e.b[0])}" y2="${f2(e.b[1])}" stroke="#888" stroke-width="1" stroke-dasharray="2 3"/>`;
-      const ramping = new Set(
-        r.tree
-          .filter((e) => e.share > 0 && e.share < 1)
-          .map((e) => `${f2(e.a[0])},${f2(e.a[1])}`)
-      );
       for (const l of r.links) {
         if (l.kind !== "segment") continue;
-        const grow = ramping.has(`${f2(l.a[0])},${f2(l.a[1])}`);
         g += tube(
           l.a,
           l.b,
           l.w / 2 + state.padding,
           (l.w2 ?? l.w) / 2 + state.padding,
-          grow
-            ? 'fill="#ffbb78" fill-opacity="0.3" stroke="#ffbb78" stroke-width="0.8"'
-            : 'fill="#ff7f0e" fill-opacity="0.14" stroke="#ff7f0e" stroke-width="0.6"'
+          'fill="#ff7f0e" fill-opacity="0.14" stroke="#ff7f0e" stroke-width="0.6"'
         );
-        g += `<line x1="${f2(l.a[0])}" y1="${f2(l.a[1])}" x2="${f2(l.b[0])}" y2="${f2(l.b[1])}" stroke="${grow ? "#e6a05a" : "#b35900"}" stroke-width="1.2" stroke-dasharray="3 2"/>`;
+        g += `<line x1="${f2(l.a[0])}" y1="${f2(l.a[1])}" x2="${f2(l.b[0])}" y2="${f2(l.b[1])}" stroke="#b35900" stroke-width="1.2" stroke-dasharray="3 2"/>`;
       }
     }
     if (g) debug += `<g transform="${T}">${g}</g>`;
@@ -755,7 +781,7 @@ const drawStats = (results: SetResult[], wall: number, modeMs = "") => {
       `${sum((r) => r.pieces)} / ${sum((r) => r.holes)}`,
       `${results.length} set${results.length === 1 ? "" : "s"}, ${sum((r) => r.links.length)} links${
         state.shape === "blob"
-          ? ` (${sum((r) => r.tree.filter((e) => e.share > 0 && e.share < 1).length)} growing in, ${sum((r) => r.tree.filter((e) => !e.overlap && e.share === 0).length)} past join)`
+          ? ` (${sum((r) => r.tree.filter((e) => !e.overlap && !e.kept).length)} edges cut)`
           : ""
       }`
     ) +
@@ -782,9 +808,9 @@ const drawStats = (results: SetResult[], wall: number, modeMs = "") => {
 // at a join are the bars still alive: the ones that cross the cut line, plus the endless one.
 const DISTANCE_HINT: Record<JoinDistance, string> = {
   plain:
-    "The distance between the members' centres (for pixels: the padded gap, always).",
+    "The distance between the members' centres: the tree is their Euclidean minimum spanning tree (single linkage). For pixels the tree is always on the padded gap.",
   reach:
-    "HDBSCAN's mutual reachability: max(core(a), core(b), d), where core is the distance to a member's k-th nearest neighbour. A member far from the rest has a large core, so it is cut before gaps between dense runs of the same length. HDBSCAN's own choice of clusters (by minimum cluster size and stability) is left out: raising it can split a piece back apart, and join must only ever merge.",
+    "HDBSCAN's mutual reachability: max(core(a), core(b), d), where core is the distance to a member's k-th nearest other member (HDBSCAN's min_samples = k + 1, as it counts the member itself). The tree is the minimum spanning tree of every pair in this distance, as HDBSCAN builds it. A member far from the rest has a large core, so it is cut before gaps between dense runs of the same length. HDBSCAN's own choice of clusters (by minimum cluster size and stability) is left out: raising it can split a piece back apart, and join must only ever merge.",
 };
 type Bar = {
   /** the edge's index in the tree */
@@ -870,8 +896,7 @@ const cutX = (bc: Barcode, r: SetResult): number | null => {
   };
   if (j === Infinity || j >= xs.length + 1)
     return xs.length ? mid(xs.length + 1) : 0;
-  const k0 = Math.floor(j);
-  return mid(k0) + (mid(k0 + 1) - mid(k0)) * (j - k0);
+  return mid(Math.floor(j));
 };
 
 let lastBarcodes: Barcode[] = [];
@@ -916,18 +941,14 @@ const drawBarcode = (results: SetResult[]) => {
         const rugY = top + rows * rh + 4;
         const H = rugY + 22;
         const cx = cutX(bc, r);
-        const alive = bc.bars.filter((b) => r.tree[b.e].share === 0).length;
-        const ramping = bc.bars.filter(
-          (b) => r.tree[b.e].share > 0 && r.tree[b.e].share < 1
-        ).length;
+        const alive = bc.bars.filter((b) => !r.tree[b.e].kept).length;
         let g = "";
         // the endless bar
         g += `<rect x="${L}" y="${top + 0.15 * rh}" width="${W - L - R + 6}" height="${f2(0.7 * rh)}" fill="${colour}"/>`;
         g += `<path d="M${W - R + 10},${f2(top + rh / 2)}l-5,-3v6z" fill="${colour}"/>`;
         bc.bars.forEach((b, k) => {
-          const s = r.tree[b.e].share;
           const y = top + (k + 1) * rh;
-          const op = s === 0 ? 1 : s >= 1 ? 0.2 : 1 - 0.8 * s;
+          const op = r.tree[b.e].kept ? 0.2 : 1;
           g += `<g class="bar" data-set="${si}" data-bar="${k}"><rect x="0" y="${f2(y)}" width="${W}" height="${f2(rh)}" fill="transparent"/><rect x="${L}" y="${f2(y + 0.15 * rh)}" width="${f2(Math.max(0.8, sx(b.x) - L))}" height="${f2(0.7 * rh)}" fill="${colour}" fill-opacity="${op.toFixed(2)}"/></g>`;
           if (state.joinMeasure === "local") {
             // this bar's own cut: join × its nearby mean (t = x / mean)
@@ -960,11 +981,11 @@ const drawBarcode = (results: SetResult[]) => {
           g += `<line x1="${f2(X)}" x2="${f2(X)}" y1="0" y2="${f2(rugY + 7)}" stroke="currentColor" stroke-width="1.4" stroke-dasharray="3 2"/>`;
         }
         const pieces = 1 + alive;
-        const cap = `<div class="bc-cap"><span class="bc-sw" style="background:${colour}"></span>${d.sets.length > 1 ? `set ${si + 1}: ` : ""}<b>${pieces} piece${pieces === 1 ? "" : "s"}</b> = 1 + ${alive} bar${alive === 1 ? "" : "s"} past the cut${ramping ? ` (+${ramping} merging)` : ""} · ${bc.bars.length} bars${nat >= 0 ? ` · <span class="bc-nat-txt">largest gap: ${nat + 2} pieces</span>` : ""}</div>`;
+        const cap = `<div class="bc-cap"><div><span class="bc-sw" style="background:${colour}"></span><b>${pieces} piece${pieces === 1 ? "" : "s"}</b> · ${alive} bar${alive === 1 ? "" : "s"} past the cut</div><div class="bc-cap2">${d.sets.length > 1 ? `set ${si + 1} · ` : ""}${bc.bars.length} bars${nat >= 0 ? ` · <span class="bc-nat-txt">largest gap: ${nat + 2} pieces</span>` : ""}</div></div>`;
         return `${cap}<svg class="bc" viewBox="0 0 ${W} ${f2(H)}" role="img" aria-label="Persistence barcode of set ${si + 1}">${g}</svg>`;
       })
       .join("") +
-    `<div class="hint">Barcode: one bar per merge of the spanning tree, as long as the ${unitName} at which two components merge (the smaller one ends there). Bars that cross the dashed cut are still separate pieces; faded bars are merged. ${state.joinMeasure === "local" ? "Nearby gaps has no single cut: each bar's tick is its own. " : ""}The gray rug is the merges of members whose padding touches: they are joined at every join, so moving the cut through the rug changes nothing. The dotted mark is the largest gap between two consecutive bar lengths: a natural place to cut. Hover a bar to see the two parts it merges.</div>`;
+    `<div class="hint">Barcode: one bar per merge of the join tree, as long as the ${unitName} at which two components merge (the smaller one ends there). Bars that cross the dashed cut are separate pieces; faded bars are merged (their link is drawn at its full neck width). There is nothing in between: each bar's end is a tick under the slider, and the outline changes only there. ${state.joinMeasure === "local" ? "Nearby gaps has no single cut: each bar's tick is its own. " : ""}The gray rug is the merges of members whose padding touches: they are joined at every join, so moving the cut through the rug changes nothing. The dotted mark is the largest gap between two consecutive bar lengths: a natural place to cut. Hover a bar to see the two parts it merges.</div>`;
 };
 
 /** Hover a bar: the part that ends there (solid) and the part it joins (dashed), and their
@@ -1003,8 +1024,10 @@ const showMerge = (si: number | null, k: number | null) => {
 // ── recompute scheduling ─────────────────────────────────────────────────────
 // Every set is computed in one task, at most once per animation frame. A dataset whose last
 // compute took longer than SLOW ms redraws only when a slider is released. Dragging convexity
-// reuses the per-set cache (spine, hull, filtration), so it is judged by the last compute less
-// the time spent building that cache; the other sliders rebuild it.
+// or join reuses the per-piece cache (spine, blend tables, separation; a join step rebuilds
+// only the pieces whose members changed), so they are judged by the last compute less the
+// time spent building that cache; the other sliders rebuild it. While the page is idle, the
+// cache is warmed for every join the slider can reach (warmJoin), nearest first.
 const SLOW = 120;
 const lastMs = new Map<string, number>();
 const lastWarm = new Map<string, number>();
@@ -1047,6 +1070,7 @@ const recompute = () => {
   // the pieces slider's range follows the data; the barcode the tree
   if (state.joinMeasure === "pieces") syncJoin();
   drawBarcode(out);
+  drawJoinRug();
   $("hover").innerHTML = "";
   const modeMs =
     byMode.size > 1
@@ -1062,10 +1086,49 @@ const recompute = () => {
     warm > SLOW
       ? "Slow at these settings: sliders redraw when released."
       : ms > SLOW
-        ? "Convexity drags live; the other sliders redraw when released."
+        ? "Convexity and join drag live; the other sliders redraw when released."
         : "";
   $("slow").hidden = !msg;
   $("slow").textContent = msg;
+  warmJoin();
+};
+/** PROTOTYPE: fill the per-piece cache for every join the slider can reach (its 101
+ *  positions, nearest the current one first) at the other settings as they are, a set at a
+ *  time while the page is idle, so a later join drag only looks the pieces up. Join is
+ *  discrete, so most positions share a state and cost nothing. Restarted by every
+ *  recompute; a set already started runs to its end (up to ~0.3 s on penguins when a large
+ *  piece is new). */
+let warmGen = 0;
+const idle: (f: (dl: { timeRemaining: () => number }) => void) => void =
+  (window as any).requestIdleCallback ??
+  ((f: any) =>
+    setTimeout(() => {
+      const t = performance.now();
+      f({ timeRemaining: () => Math.max(0, 12 - (performance.now() - t)) });
+    }, 30));
+const warmJoin = () => {
+  const gen = ++warmGen;
+  if (state.shape !== "blob") return;
+  const d = dataset();
+  const p: Params = { ...state, avoid: avoiding(), compare: false };
+  const here = joinToSlider(state.join);
+  const ks = Array.from({ length: 101 }, (_, k) => k).sort(
+    (a, b) => Math.abs(a - here) - Math.abs(b - here)
+  );
+  let q = 0,
+    si = 0;
+  const work = (dl: { timeRemaining: () => number }) => {
+    if (gen !== warmGen) return;
+    while (q < ks.length && dl.timeRemaining() > 4) {
+      computeSet(d.sets[si], { ...p, join: sliderToJoin(ks[q]) });
+      if (++si === d.sets.length) [si, q] = [0, q + 1];
+      if (gen !== warmGen) return;
+    }
+    if (q < ks.length) idle(work);
+    else $("status").dataset.warm = "1";
+  };
+  delete $("status").dataset.warm;
+  idle(work);
 };
 const schedule = () => {
   if (pending !== null) cancelAnimationFrame(pending);
@@ -1106,7 +1169,7 @@ for (const b of document.querySelectorAll<HTMLButtonElement>("[data-shape]"))
   el.addEventListener("input", () => {
     state = { ...state, join: sliderToJoin(+el.value) };
     syncControls();
-    if ((lastMs.get(state.dataset) ?? 0) <= SLOW) schedule();
+    if ((lastWarm.get(state.dataset) ?? 0) <= SLOW) schedule();
   });
   el.addEventListener("change", () =>
     update({ join: sliderToJoin(+el.value) })

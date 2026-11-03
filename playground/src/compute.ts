@@ -6,6 +6,7 @@ import {
   unifiedOutline,
   UNIFIED_STATS,
   UNIFIED_PROTOTYPE,
+  JOIN_PROTOTYPE,
   type Means,
   type Seal,
   type JoinEdge,
@@ -41,6 +42,13 @@ export const SEARCH = UNIFIED_PROTOTYPE.search;
 if (new URLSearchParams(location.search).get("blend") === "grid")
   UNIFIED_PROTOTYPE.blend = "grid";
 export const BLEND = UNIFIED_PROTOTYPE.blend ?? "mesh";
+// PROTOTYPE: ?links=gap draws each piece with its own gap tree (the join tree still picks the
+// pieces); ?typical=all takes "typical"'s unit over every tree edge, touching ones too
+{
+  const q = new URLSearchParams(location.search);
+  if (q.get("links") === "gap") JOIN_PROTOTYPE.links = "gap";
+  if (q.get("typical") === "all") JOIN_PROTOTYPE.typical = "all";
+}
 
 export type Params = {
   convexity: number;

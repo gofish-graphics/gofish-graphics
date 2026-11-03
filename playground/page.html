@@ -425,6 +425,17 @@
         color: var(--muted);
         margin-top: 6px;
       }
+      .bc-cap2 {
+        padding-left: 16px;
+      }
+      .join-rug {
+        margin: 1px 8px 0;
+      }
+      .join-rug svg {
+        display: block;
+        width: 100%;
+        overflow: visible;
+      }
       .bc-cap b {
         color: var(--fg);
         font-weight: 600;
@@ -639,6 +650,7 @@
                 step="1"
                 list="join-ticks"
               />
+              <div class="join-rug" id="join-rug" aria-hidden="true"></div>
               <datalist id="join-ticks">
                 <option value="0"></option>
                 <option value="100"></option>
@@ -797,9 +809,8 @@
               The purple dashed line is today's
               <code>Shape.blob</code> (convexity capped at 1, one piece) or, for
               the arcs shape, today's <code>Shape.arcs</code>, with the same
-              options. The links view draws the spanning tree: solid orange
-              links are full, light orange ones are growing in, gray dashed ones
-              are longer than join and not kept.
+              options. The links view draws the join tree: orange links are
+              kept (at their full neck width), gray dashed edges are cut.
             </p>
           </section>
         </div>
