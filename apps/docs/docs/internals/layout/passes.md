@@ -937,10 +937,11 @@ report their size).
   the content fits or overflows the size. Content that maps no domain is
   fitted by the same fit, which solves no scope there, and claims the size
   and the reach of what dresses it from its start edge (`aroundPlot`), and
-  layout lays the node out in the same whole. A chart's chrome dresses its content inside the chart's frame
-  (`frameChart`), so the chrome is in those forms; its content need not
-  wear chrome of its own: a label hanging off the first bar is dressing, so
-  it too adds around the plot. Labels beside a plain layer's content (and
+  layout lays the node out in the same whole. A chart's chrome goes around
+  the chart's frame (`frameChart`, #1257), so it is no part of those forms:
+  the ticks read their datums in the frame (`position`'s `in`), and the size
+  is the plot alone. What dresses the content inside the frame still is: a
+  label hanging off the first bar is dressing, so it adds around the plot. Labels beside a plain layer's content (and
   the outlines of its shapes) add around it the same way.
 - **The plot leaves out dressing.** Dressing is what is placed beside a node
   the claim walk places elsewhere: a value label beside its bar's `ref`, a

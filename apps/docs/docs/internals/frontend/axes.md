@@ -635,16 +635,21 @@ difference axis), never off the size claim:
 
 ## Axes are drawn at chart boundaries
 
-A continuous axis is drawn only at a `chart()` boundary (#1114 step 6), so its
-ticks map with the σ its marks map with. `GoFishNode.isAxisBoundary` is the
-rule: a chart with no size of its own on a dim draws the axis around itself
-(its σ is solved at the sized node that contains it); a chart with a size of
-its own (`_chartBox`, set by the chart builder) draws it around its content,
-inside the box it solves σ in, and its content's free baseline is placed there
-(`placedSpace`); the render root is the outermost boundary, which draws the
-axes of the domains it solves, a bare low-level render's included. A chart is
-placed whole, its baseline with it, so a chart's own free baseline is placed
-too (`placedSpace`): a bar chart beside a caption in a `spread` draws the
+A continuous axis is drawn only at a `chart()` boundary (#1114 step 6).
+`GoFishNode.isAxisBoundary` is the rule: a chart (`_chartBox`, set by the
+chart builder) draws its axes around itself, sized or not (#1257), and the
+render root is the outermost boundary, which draws the axes of the domains it
+solves, a bare low-level render's included. A tick does not need to share its
+plot's σ to sit on its scale: each tick, the axis line's span and the line's
+seat at the other axis's floor are `position` constraints that read their
+datums in the plot's frame (`in`, internal for now, #1289), so an axis
+outside a chart with a size of its own still maps with the σ that size
+solved. A difference axis has no data 0 to read: on such an axis a layer's
+frame measures lengths of its σ from its own 0 (`GoFishNode.layoutFrames`,
+as the claim walk reads its plan), where the plot's data starts, so the
+axis's 0 sits the axis's slack before it. A chart is placed whole, its
+baseline with it, so a chart's own free baseline is placed
+(`placedSpace`): a bar chart beside a caption in a `spread` draws the
 value axis it draws on its own (#1170). On an axis
 the render gives no size, the root maps its domain at the σ the sized nodes
 below it solve it at, when they agree, so a bare spread of 160 px mini charts
@@ -661,8 +666,8 @@ A chart's content is everything it draws. `frameChart` builds a chart's node
 as its frame over one content layer: a chart's marks and the transitions it
 draws over them, or every tier of a `.layer(...)` chart, the root tier's own
 nodes first (`LayerBuilder.resolve`). The frame (its `w`/`h` and its `coord`)
-has that one child, so a sized chart draws its axes around all of it, and
-every tier's marks and the axis map with the σ that frame solves. A tier
+has that one child, so a chart draws its axes around all of it, and every
+tier's marks and the axis map with the σ that frame solves. A tier
 that is a chart of its own is inside that content, below the node that
 claimed the axis, so it does not draw a second one. A chart nested in
 another chart's content is still a boundary, but it draws only an axis no
@@ -732,13 +737,11 @@ axes inserted below the root would change the root's space after elaboration.
 
 Each chart titles the axes it draws, wherever it sits (#1170). `layout()`
 stamps every chart's `axes` options on it as its request: the render's on the
-root, and each nested chart's own (`_chartAxes`) on it; a chart with a size of
-its own draws its axes around its content, so its content carries the request
-too. A node titles each axis it owns that its request turns on, with the
-option's `title` or else the space's title. So a chart beside a caption in a
-`spread`, or each panel of the Gapminder curves row, titles its own axes. A
-node that is no chart and no sized chart's content carries no request, so an
-axis an operator's override draws gets no title.
+root, and each nested chart's own (`_chartAxes`) on it. A node titles each
+axis it owns that its request turns on, with the option's `title` or else the
+space's title. So a chart beside a caption in a `spread`, or each panel of
+the Gapminder curves row, titles its own axes. A node that is no chart
+carries no request, so an axis an operator's override draws gets no title.
 
 A coordinate space owns no cartesian axes (`resolveAxes` clears them), so a
 pie gets no cartesian title. It titles its own axes (the radial title, see
