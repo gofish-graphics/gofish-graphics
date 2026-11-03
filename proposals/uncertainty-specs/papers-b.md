@@ -366,9 +366,9 @@ chart(activities)
   .flow(
     spread({ by: ROWS, dir: "y" }),
     sample({ n: 50 }),
-    overlay({ by: "draw" })
+    group({ by: "draw" })
   )
-  .mark(rect({ x: start, x2: end, fill: BAR }));
+  .mark(rect({ x: start, x2: end, fill: BAR, opacity: field("draw").share() }));
 
 // (b) dashed: a solid core, and a dashed box over each end's 95% interval
 chart(activities)
@@ -403,8 +403,8 @@ chart(activities).flow(spread(by=ROWS, dir="y")).mark(
 )
 
 # (a, noise form)
-chart(activities).flow(spread(by=ROWS, dir="y"), sample(n=50), overlay(by="draw")).mark(
-    rect(x=start, x2=end, fill=BAR)
+chart(activities).flow(spread(by=ROWS, dir="y"), sample(n=50), group(by="draw")).mark(
+    rect(x=start, x2=end, fill=BAR, opacity=field("draw").share())
 )
 
 # (b) dashed
@@ -448,15 +448,15 @@ chart(activityDraws)
 - `gradient` with two Dist ends (`x` and `x2`). `types.md` keeps both forms:
   `gradient` takes rect's box channels, and any of them may hold a Dist. One
   Dist end follows its density. Two ends give P(start ≤ t ≤ end).
-- The noise form (`sample` + `overlay` + plain `rect`) gives the same fade from
-  draws, and needs no new mark. Each draw is drawn at `max(0.05, 1/50)`, so
-  0.05. It shows that one opacity mechanism can serve both modes, as the notes
-  on this paper suggest. Stacked alpha is not a linear sum (see `noise.md`),
+- The noise form (`sample` + `group` + plain `rect`) gives the same fade from
+  draws, and needs no new mark. Each draw is drawn at
+  `opacity: field("draw").share()`, so 1/50. It shows that one opacity
+  mechanism can serve both modes, as the notes on this paper suggest. Stacked alpha is not a linear sum (see `noise.md`),
   so its fade is close to P(start ≤ t ≤ end), not equal to it.
 - For (b): `d.interval(0.95)` fills a `dims` entry, the one span form the IR
   already has. `rect({ x: d.interval(0.95) })` is an error, because `x` is one
   position. `rect` also needs `strokeDasharray`.
 - Overlap: `gradient` with two Dist ends desugars into today's slices with a
   computed color, up to the stepping. The lift form desugars into
-  `sample` + `overlay` over existing marks. A real opacity channel on `rect`
-  (or a gradient fill) is needed for a smooth fade.
+  `sample` + `group` over existing marks. Both forms need a real opacity
+  channel on `rect` (or a gradient fill) for a smooth fade.

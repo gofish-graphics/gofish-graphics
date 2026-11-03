@@ -20,10 +20,6 @@ export const mpgCounts = mpgCountsJson as {
   drv: string;
   n: number;
 }[];
-/** The same counts, one table per draw (for the layer-of-charts overlay). */
-export const mpgCountsByDraw = range(10).map((d) =>
-  mpgCounts.filter((r) => r.draw === d + 1)
-);
 
 // Forecast: ten steps ahead, each step a normal whose sd grows like a random
 // walk's, sd = 2 * sqrt(h).

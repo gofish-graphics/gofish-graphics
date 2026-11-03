@@ -265,6 +265,18 @@ export declare function rowsColumn<T extends ValueType>(
   name: string
 ): DistExpr<T, "independent">;
 
+/** NEW. A draw-key column (one with `HasDraws`) read in a channel. Stands
+ *  for `field("draw")` on such a column. */
+export interface DrawKeyExpr {
+  readonly type: "field";
+  /** The row's draw's share of the total weight of the draws in scope,
+   *  w / Σw, so 1 / n for n equal draws. A mark reads it as its opacity to
+   *  draw the draws of a `group({ by: "draw" })` in one frame. Whether this
+   *  stays on the mark or becomes a default is open decision 5. */
+  share(): ValueExpr<Share>;
+}
+export declare function drawKey(name: string): DrawKeyExpr;
+
 // ===========================================================================
 // 2. Data and schema
 // ===========================================================================
@@ -379,7 +391,9 @@ export type DistOpIR =
   | { op: "cdf"; at: number | string }
   | { op: "sd" }
   | { op: "prob"; level: string | number }
-  | { op: "kde"; smoothing?: number | "silverman" };
+  | { op: "kde"; smoothing?: number | "silverman" }
+  /** On a draw key, not a Dist: the draw's share of the weight. */
+  | { op: "share" };
 
 /** FieldOpIR after the change: additive. */
 export type FieldOpIR2 = FieldOpIR | DistOpIR;
@@ -423,13 +437,6 @@ type Descriptor2 = Omit<ConstructDescriptor, "fields"> & {
 
 const chDist = (doc: string): FieldSpec2 => ({
   type: { kind: "channel", inner: "number", infer: "dist" },
-  doc,
-});
-
-/** Same as descriptors.ts:1308 (not exported there). */
-const splitBy = (doc: string, required = false): FieldSpec => ({
-  type: t.union(t.string, t.ref("FieldAccessor"), t.ref("ChunkKey")),
-  ...(required ? { required: true } : {}),
   doc,
 });
 
@@ -485,28 +492,6 @@ export const NEW_OPERATORS: Record<string, Descriptor2> = {
         doc: "How many resamples.",
       },
       seed: { type: t.num({ integer: true }), doc: "The seed." },
-    },
-  },
-  overlay: {
-    type: "overlay",
-    kind: "operator",
-    doc: "Put each group in the same slot, on top of each other (the z direction). Each group is drawn at opacity max(floor, w / Σw): 1 / n for n equal weights.",
-    fields: {
-      by: splitBy("The key whose groups overlap, usually `draw`.", true),
-      weight: {
-        type: t.string,
-        doc: "The column of each group's weight. Omitted: the weight of the draws column's record, else equal weights.",
-      },
-      opacity: {
-        type: t.object({
-          min: {
-            type: t.num({ min: 0, max: 1 }),
-            default: 0.05,
-            doc: "The least opacity a group is drawn at, so small marks do not vanish.",
-          },
-        }),
-        doc: "How the groups' opacities are set.",
-      },
     },
   },
   summarize: {
@@ -723,12 +708,12 @@ declare function stack<const B extends string>(o: {
   by: B;
   dir: string;
 }): Op<"stack", B>;
-declare function overlay<const B extends string>(o: {
-  by: B;
-}): Op<"overlay", B>;
+/** Today's `group`: splits by `by` and places nothing, so the groups share
+ *  one frame. With the draw key it draws the draws on top of each other. */
+declare function group<const B extends string>(o: { by: B }): Op<"group", B>;
 
 type StackByDrawError = {
-  readonly error: 'stack({ by: "draw" }): "draw" is a sample index. Its sum grows with the number of draws. Place the draws with spread, overlay or time.sequence.';
+  readonly error: 'stack({ by: "draw" }): "draw" is a sample index. Its sum grows with the number of draws. Place the draws with spread, group or time.sequence.';
 };
 
 /** Walk the flow in order, tracking the draw keys earlier steps added. A
@@ -822,9 +807,9 @@ const spread_: ValueExpr<Amount<Duration>> = start.sd();
 void spread_;
 
 // A Dist in a T channel needs a lift in the flow.
-// @ts-expect-error rect h holds Dist<USD> and nothing draws it.
 chart([])
   .flow(spread({ by: "region", dir: "x" }))
+  // @ts-expect-error rect h holds Dist<USD> and nothing draws it.
   .mark(rect({ h: sales }));
 chart([])
   .flow(spread({ by: "region", dir: "x" }))
@@ -848,11 +833,13 @@ chart([]).flow(
   spread({ by: "draw", dir: "x" }),
   stack({ by: "product", dir: "y" })
 );
-chart([]).flow(
-  sample({ n: 20 }),
-  overlay({ by: "draw" }),
-  stack({ by: "product", dir: "y" })
-);
+chart([])
+  .flow(
+    sample({ n: 20 }),
+    group({ by: "draw" }),
+    stack({ by: "product", dir: "y" })
+  )
+  .mark(rect({ h: sales, opacity: drawKey("draw").share() }));
 
 // Connecting independent draws.
 // @ts-expect-error line over draws of independent cells.

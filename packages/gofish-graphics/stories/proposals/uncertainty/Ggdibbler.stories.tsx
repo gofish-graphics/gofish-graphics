@@ -4,7 +4,6 @@ import {
   chart,
   circle,
   group,
-  layer,
   line,
   rect,
   scatter,
@@ -22,7 +21,6 @@ import {
   forecastPaths,
   mpgCounts,
   milestoneDraws,
-  mpgCountsByDraw,
   nestedDraws,
 } from "./ggdibbler-data";
 
@@ -48,21 +46,19 @@ export const MpgStackDodge: StoryObj = {
   },
 };
 
-/** ggdibbler README: the same counts, stack_identity (draws overlaid).
- *  No in-slot overlay operator exists, so this layers one chart per draw. */
+/** ggdibbler README: the same counts, stack_identity. `group` by draw puts
+ *  the draws of a class in one slot, on top of each other. */
 export const MpgStackOverlay: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    layer(
-      mpgCountsByDraw.map((draw) =>
-        chart(draw)
-          .flow(
-            spread({ by: "class", dir: "x", spacing: 12 }),
-            stack({ by: "drv", dir: "y" })
-          )
-          .mark(rect({ h: "n", fill: "drv", opacity: 0.15 }))
+    chart(mpgCounts, { w: 560, h: 280 })
+      .flow(
+        spread({ by: "class", dir: "x", spacing: 12 }),
+        group({ by: "draw" }),
+        stack({ by: "drv", dir: "y" })
       )
-    ).render(container, { w: 560, h: 280, axes: true });
+      .mark(rect({ h: "n", fill: "drv", opacity: 0.15 }))
+      .render(container, { axes: true });
     return container;
   },
 };

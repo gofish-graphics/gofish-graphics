@@ -12,14 +12,15 @@ draw is precomputed there with a seeded RNG (mulberry32 and Box–Muller, seed 9
 
 Findings that apply to more than one example:
 
-- `time.sequence` already lays out all its keyframes on top of each other in one frame
-  ("spread with the spacing taken away", `src/ast/marks/time.ts`). That layout is exactly
-  what `overlay` needs. `overlay` would be that layout with every keyframe painted at low
-  opacity, and no clock.
-- Inside a `spread` or `stack` slot there is no overlay operator. A `layer` of one chart
-  per draw works for the stacked bar, because sibling charts share their scales. The same
-  trick failed for a `table`: the layered tables were laid out one after another (15000 px
-  tall), and the `color` option on `layer(...).render` did not reach the charts.
+- Today's `group({ by: "draw" })` draws the draws in one frame. It splits the rows by the
+  draw key and places nothing (`src/ast/graphicalOperators/group.ts`). It builds a
+  `Frame`, the same node `time.sequence` builds for its one frame (`src/ast/marks/time.ts`).
+  So no new operator is needed for the overlay. The mark sets the low opacity.
+- `group` works inside a `spread` slot and inside a `table` cell. An earlier draft used a
+  `layer` of one chart per draw instead. That worked for the stacked bar, because sibling
+  charts share their scales, but it failed for a `table`: the layered tables were laid out
+  one after another (15000 px tall), and the `color` option on `layer(...).render` did not
+  reach the charts. `layer` is not a flow step, and `group` is.
 - Alpha compositing is order-dependent: with opacity `a` and `n` layers, the last draw
   gets weight `a` and the first gets `a(1−a)^(n−1)`. ggdibbler has the same bias. It is
   inherent to transparency, not to GoFish.
@@ -157,25 +158,20 @@ the product boundaries blur where they are uncertain. This is ggdibbler's
 **Today**
 
 ```js
-layer(
-  salesDrawsByDraw.map((draw) =>
-    chart(draw)
-      .flow(
-        spread({ by: "region", dir: "x", spacing: 16 }),
-        stack({ by: "product", dir: "y" })
-      )
-      .mark(rect({ h: "sales", fill: "product", opacity: 0.1 }))
+chart(salesDraws, { w: 480, h: 260 })
+  .flow(
+    spread({ by: "region", dir: "x", spacing: 16 }),
+    group({ by: "draw" }),
+    stack({ by: "product", dir: "y" })
   )
-).render(container, { w: 480, h: 260, axes: true });
+  .mark(rect({ h: "sales", fill: "product", opacity: 0.1 }))
+  .render(container, { axes: true });
 ```
 
-Precomputed by hand: the draws, split into one table per draw in JS, and the opacity
-(0.1 for 20 draws).
+Precomputed by hand: the draws and the opacity (0.1 for 20 draws).
 
-The workaround is a `layer` of one chart per draw. It is faithful here: the 20 charts share
-the x and y scales and the fill palette, so each draw's stack lands in the same slot. It is
-not a flow step, so the draw key lives in JS and not in the chart, and it does not compose
-under another operator (see the map example below, where it fails for `table`).
+`group({ by: "draw" })` splits each region's rows by draw and places nothing, so the 20
+stacks of a region land in the same slot.
 
 **Proposed (A)**
 
@@ -184,30 +180,26 @@ chart(estimates)
   .flow(
     spread({ by: "region", dir: "x" }),
     sample({ n: 20 }),
-    overlay({ by: "draw" }),
+    group({ by: "draw" }),
     stack({ by: "product", dir: "y" })
   )
-  .mark(rect({ h: sales, fill: "product" }));
+  .mark(rect({ h: sales, fill: "product", opacity: field("draw").share() }));
 ```
 
 ```python
 chart(estimates).flow(
     spread(by="region", dir="x"),
     sample(n=20),
-    overlay(by="draw"),
+    group(by="draw"),
     stack(by="product", dir="y"),
-).mark(rect(h=sales, fill="product"))
+).mark(rect(h=sales, fill="product", opacity=field("draw").share()))
 ```
 
-**New pieces needed**: `overlay`. Overlap check: `time.sequence` already lays its groups
-out superimposed in one frame (`src/ast/marks/time.ts`), and `scatter` overlaps groups
-that share a position. So `overlay` must not get its own layout. The reconciled design is
-that `overlay` is `time.sequence`'s superimposed layout with no clock: both call one shared
-"superimpose" layout. `time.sequence` adds a clock and shows one group at a time.
-`overlay` shows every group, each at opacity `max(min, w / Σw)`, with `opacity: { min }`
-defaulting to 0.05. Equal weights give 1/n, here 1/20 = 0.05. With that, `overlay` has an
-exact overlap with the layout half of `time.sequence` through one mechanism, and no
-partial one.
+**New pieces needed**: `dist.normal`, `sample`, and the opacity rule. The layout is
+today's `group`. The opacity is written as `field("draw").share()`, the draw's share of
+the total weight, which is 1/20 = 0.05 here. That needs `opacity` to read a field. The
+other option is a default opacity for marks under a draw key. `proposal.md` lists both as
+open decision 5.
 
 ### Uncertain scatter
 
@@ -247,10 +239,9 @@ chart(points).flow(sample(n=30), scatter(x=x, y=y)).mark(
 )
 ```
 
-**New pieces needed**: `dist.normal`, `sample`. The opacity is set by hand because
-`scatter` overlaps by itself and no `overlay` step is in the flow. An alternative is
-`overlay({ by: "draw" })` before `scatter`, which would set the opacity by its rule,
-`max(0.05, 1/30)`, so 0.05: the floor decides it for 30 draws. The two independent
+**New pieces needed**: `dist.normal`, `sample`. `scatter` overlaps the draws by itself,
+so no `group` step is needed. The opacity is set by hand. The share rule,
+`opacity: field("draw").share()`, would give 1/30. The two independent
 normals stand in for one bivariate draw. A correlated (x, y) needs a joint constructor,
 which the sheet does not have. The spelling chosen here, to keep `dist.*` regular, is
 `const p = dist.mvnormal({ mean: { x: "x", y: "y" }, sd: { x: "xSe", y: "ySe" }, cor: "rho" })`,
@@ -329,7 +320,7 @@ An 8×6 grid of square regions stands in for a map; each region holds a normal w
 grows to the east. The three plates follow the choropleth comparisons in Mason et al.
 "Colour Blinded by the Noise" ([arXiv 2608.17976](https://arxiv.org/abs/2608.17976)):
 (a) the means, (b) a pixel map where each region is split into a 4×4 grid of draws,
-(c) the draws of each region overlaid with transparency. The noisy eastern tiles look
+(c) the draws of each region drawn on top of each other with transparency. The noisy eastern tiles look
 grainy in (b) and washed out in (c).
 
 ![](img/noise-map-means.png)
@@ -369,16 +360,17 @@ cells, which does not exist.
 
 ```js
 chart(tileDraws, { w: 320, h: 240, color: MAP_COLOR })
-  .flow(scatter({ x: "col", y: "rowUp" }))
-  .mark(rect({ w: 38, h: 38, fill: "value", opacity: 0.15 }))
+  .flow(
+    table({ by: { x: "col", y: "row" }, spacing: 2 }),
+    group({ by: "draw" })
+  )
+  .mark(rect({ fill: "value", opacity: 0.15 }))
   .render(container, { axes: false });
 ```
 
-This is an approximation. No overlay exists inside a `table` cell, so the tiles are
-placed with `scatter` at their grid position (`rowUp = 5 − row`, precomputed so the rows
-read top to bottom as in (a)) with a fixed 38 px size, and `scatter` overlaps the 16 draws
-by itself. The tile size is tuned by hand to the canvas, not derived from the cell. Two
-things that failed: a `table` cell with 16 rows draws one rect, not 16 (48 rects for 768
+`group({ by: "draw" })` splits each cell's 16 rows by draw, so each draw gets its own rect
+and the 16 rects land on top of each other. Two things failed before `group` was used:
+without the split, a `table` cell with 16 rows draws one rect, not 16 (48 rects for 768
 rows, with no warning), and a `layer` of 16 table charts lays them out one after another.
 
 Precomputed by hand for all three: 16 draws per tile. GoFish has no way to fix a color
@@ -412,9 +404,9 @@ chart(tiles, { color: blues })
   .flow(
     table({ by: { x: "col", y: "row" }, spacing: 2 }),
     sample({ n: 16 }),
-    overlay({ by: "draw" })
+    group({ by: "draw" })
   )
-  .mark(rect({ fill: value }));
+  .mark(rect({ fill: value, opacity: field("draw").share() }));
 ```
 
 ```python
@@ -435,11 +427,11 @@ chart(tiles, color=blues).flow(
 
 # (c) transparency
 chart(tiles, color=blues).flow(
-    table(by={"x": "col", "y": "row"}, spacing=2), sample(n=16), overlay(by="draw")
-).mark(rect(fill=value))
+    table(by={"x": "col", "y": "row"}, spacing=2), sample(n=16), group(by="draw")
+).mark(rect(fill=value, opacity=field("draw").share()))
 ```
 
-**New pieces needed**: `dist.normal`, `sample`, `d.mean()`, `overlay`, and a
+**New pieces needed**: `dist.normal`, `sample`, `d.mean()`, the opacity rule, and a
 single-key `table({ by, numCols })` in flow form (the `numCols` option exists on the node
 but the flow form rejects a single `by`). Papers B needed the same single-key grid for its
 small multiples and first wrote `spread({ wrap })`. The reconciled spelling for both is
@@ -447,5 +439,5 @@ small multiples and first wrote `spread({ wrap })`. The reconciled spelling for 
 would be a second route to the same grid. For a real map, (b) needs a "cut a shape into
 cells" operator; that is a new operator with no existing overlap. The three plates should
 share one color domain, which needs a domain option on `Color.gradient` (not on the sheet,
-and not a Dist question). Overlap check: (c) is the same `overlay` as the stacked bar; a
-fill channel under `overlay` is a color mix, which is the point of the plate.
+and not a Dist question). Overlap check: (c) is the same `group` and opacity rule as the
+stacked bar. A fill channel drawn this way is a color mix, which is the point of the plate.

@@ -44,8 +44,9 @@ root. Code paths are on this branch, which is `main` after #1237.
   render, so its kernel is the pushforward of the distribution through the whole visual
   mapping, not through the mark alone. A type that tracks whether that path is affine,
   monotone or discontinuous decides when a closed form exists. Two concrete problems in
-  the proposal came out of this analysis. The `overlay` opacity clamp stops the picture
-  from converging as the number of draws grows. And the proposal's two fades for the
+  the proposal came out of this analysis. An opacity floor for draws drawn in one frame,
+  as the earlier draft's `max(0.05, 1/n)`, stops the picture from converging as the
+  number of draws grows. And the proposal's two fades for the
   uncertain timeline converge to different pictures unless the blend mode is chosen to
   match.
 
@@ -96,15 +97,15 @@ root. Code paths are on this branch, which is `main` after #1237.
 | Changing a column's unit must not change the picture      | Units of measure and relational parametricity (Kennedy 1997), free theorems (Wadler 1989)            | exact             | unit variables that unify, `packages/gofish-graphics/src/ast/measure.ts:9`      |
 | A data symmetry must match a visual symmetry              | Equivariance as a natural transformation between group actions (Mac Lane; Aizenman et al. 2026)      | exact             | the squares in the table under Q1                                               |
 | A channel needs a trait, and the encoding must keep it    | Typeclass (trait) laws and homomorphisms (Mackinlay 1986; Bartonicek et al. 2025)                    | exact for laws    | `checkSummable`, `measure.ts:142`                                               |
-| Which summaries a `Dist<T>` allows                        | Stevens' permissible statistics: a summary must commute with the scale's transformation group        | exact             | rule 5, `proposal.md:1190`                                                      |
+| Which summaries a `Dist<T>` allows                        | Stevens' permissible statistics: a summary must commute with the scale's transformation group        | exact             | rule 5, `proposal.md:1209`                                                      |
 | A scale acting on a distribution                          | Functor action: pushforward                                                                          | exact             | the σ-affine map, `apps/docs/docs/internals/core/underlying-space.md:110`       |
 | Visual convergence as uncertainty shrinks                 | CMT; Lipschitz maps and `W1` (Kantorovich monad; continuity analysis, Chaudhuri et al. 2010)         | exact             | a continuity class per operator (option 1B below)                               |
 | How far the picture moves per unit of uncertainty         | Sensitivity types (Fuzz: Reed and Pierce 2010; DFuzz: Gaboardi et al. 2013)                          | exact, heavy      | the scale factor σ of each scope                                                |
 | Statistics must run once per draw (paper Figure 6)        | Monad laws: `fmap S` then flatten, versus flatten then `S`                                           | exact             | per-leaf marks, `packages/gofish-graphics/src/ast/marks/createOperator.ts:1218` |
-| A placement of draws must depend only on the distribution | Colimit of finite samples (Fritz and Perrone 2019); exchangeability                                  | exact             | rules 2 and 3, `proposal.md:1163` and `:1171`                                   |
+| A placement of draws must depend only on the distribution | Colimit of finite samples (Fritz and Perrone 2019); exchangeability                                  | exact             | rules 2 and 3, `proposal.md:1182` and `:1190`                                   |
 | Shared versus independent draws                           | Markov categories (Fritz 2020); TFP's batch and event shape                                          | exact             | `HasDraws { joint }`, `types.md:138`                                            |
-| `sample` makes the chart random                           | Effect systems (Lucassen and Gifford 1988); effect handlers (Plotkin and Pretnar 2009)               | exact, optional   | `sample({ seed })`, `types.md:212`                                              |
-| The overlay limit is the expected image                   | Algebras of the Kantorovich monad are convex sets; the barycenter map                                | exact if additive | `overlay`, `proposal.md:385`                                                    |
+| `sample` makes the chart random                           | Effect systems (Lucassen and Gifford 1988); effect handlers (Plotkin and Pretnar 2009)               | exact, optional   | `sample({ seed })`, `types.md:213`                                              |
+| The overlay limit is the expected image                   | Algebras of the Kantorovich monad are convex sets; the barycenter map                                | exact if additive | `group` by draw at opacity `1/n`, `proposal.md:394`                             |
 | Uncertainty too small to see                              | Just noticeable difference; not a metric (paper Proposition 3.1); perceptual kernels (Demiralp 2014) | empirical         | a lint from σ·sd in pixels                                                      |
 | Testing that a square commutes on real charts             | Metamorphic testing (McNutt, Kindlmann and Correll 2020)                                             | exact as a method | `pnpm capture-diff`                                                             |
 
@@ -131,7 +132,7 @@ Two different convergences hide under the one name "visual convergence".
    placed and blended to have a limit as `t` grows.
 
 GoFish should name and test these separately. The first constrains the visual mapping.
-The second constrains `overlay`, `sample` and the axis extent, and Q3 shows that the
+The second constrains the opacity of draws drawn in one frame, `sample` and the axis extent, and Q3 shows that the
 proposal currently fails it in two places.
 
 ### 1.2 Kindlmann and Scheidegger, and its relatives
@@ -301,7 +302,7 @@ partly analogy).** Three statements are exact.
 
    This is the paper's remark that deterministic graphics are the special case where
    every cell is degenerate (Section 4.5). In GoFish it is `pure` in the proposal: "a
-   plain value is a Dist with all its mass at one point" (`proposal.md:362` to `:364`).
+   plain value is a Dist with all its mass at one point" (`proposal.md:371` to `:373`).
 
 3. _Equivariance lifts._ If `v` is natural for a symmetry (Phrasing A), then `v_*` is
    natural for the same symmetry, because `P` maps commuting squares to commuting
@@ -385,7 +386,7 @@ changes by at most `k`. DFuzz (Gaboardi et al., POPL 2013) lets `k` depend on si
 key must have sensitivity that does not grow with `n`. A mean has sensitivity `1/n` per
 draw and `1` in total. A sum has `1` per draw and `n` in total, so the stacked total of `n`
 draws moves `n` times as far as one draw. That is rule 3's reason
-(`proposal.md:1171` to `:1176`) in sensitivity terms. The cost is high: a full
+(`proposal.md:1190` to `:1195`) in sensitivity terms. The cost is high: a full
 sensitivity type system is far heavier than GoFish needs. A table of constants per
 operator, as in 1B's first row, gets most of the value.
 
@@ -405,7 +406,7 @@ system would mark the flow as random until a seed handles the effect, the way an
 handler interprets an effect (Plotkin and Pretnar 2009; for probability, Ścibior,
 Ghahramani and Gordon, "Practical probabilistic programming with monads", Haskell
 Symposium 2015). The proposal already gives `sample` a seed shared by JS and Python
-(`types.md:212` to `:215`). The effect view adds one useful rule: a chart whose random
+(`types.md:213` to `:216`). The effect view adds one useful rule: a chart whose random
 effect is not handled by a seed is not a pure function of its data, so `capture-diff`
 and the parity tests must refuse it. This is cheap to add as a flag and does not need a
 real effect system.
@@ -422,9 +423,9 @@ it does not change under these two moves (in the limit, for the second).
 | Placement of `n` draws                                     | Permute the draws   | Repeat every draw k times            | Verdict                                    |
 | ---------------------------------------------------------- | ------------------- | ------------------------------------ | ------------------------------------------ |
 | a mean or quantile over the draws                          | same                | same                                 | a function of the distribution             |
-| `overlay`, additive blend at weight `1/n`                  | same                | same                                 | exactly a function of the distribution     |
-| `overlay`, "over" blend at opacity `1/n`, one color        | same                | same in the limit                    | converges to a fixed tone map (Q3)         |
-| `overlay` with the `0.05` floor                            | same                | changes: darkens without bound       | does not converge in `n` (Q3)              |
+| `group` by draw, additive blend at weight `1/n`            | same                | same                                 | exactly a function of the distribution     |
+| `group` by draw, "over" blend at opacity `1/n`, one color  | same                | same in the limit                    | converges to a fixed tone map (Q3)         |
+| `group` by draw, opacity with a `0.05` floor               | same                | changes: darkens without bound       | does not converge in `n` (Q3)              |
 | `spread` by draw, draws in sampled order                   | slots permute       | slots split                          | a random picture whose law is fixed        |
 | `spread` by draw, draws sorted by value                    | same                | same in the limit (a quantile curve) | a function of the distribution             |
 | `time.sequence` by draw (HOP)                              | frame order changes | duration changes                     | fixed only as "a random frame"             |
@@ -438,7 +439,7 @@ table of draws does not change if you permute the draw index separately in each 
 shared (joint) draws, only permuting whole draws keeps it. A line per draw does not change
 when you permute whole draws, the same relabeling in every cell. So with shared draws it
 is well defined, and each line is a possible path. A line across draws changes even under
-that move, so it is an error. That is all rule 4 (`proposal.md:1178` to `:1189`) checks:
+that move, so it is an error. That is all rule 4 (`proposal.md:1197` to `:1208`) checks:
 "a connecting mark needs a split by the draw key".
 
 With independent cells, a line per draw is allowed, but it has a caveat that should be
@@ -462,7 +463,7 @@ A pseudo-type rule:
   ─────────────────────────────────────────────────────────── (draw-fold)
   f is allowed  iff  f(permute(xs)) = f(xs)  and  f(repeat(xs, m)) = f(xs)
   sum, count, stack-by-k         →  error (grows with m)
-  mean, quantile, mixture, overlay(1/n, additive)  →  ok
+  mean, quantile, mixture, group by k at 1/n (additive)  →  ok
 ```
 
 This also shows something the channel kinds already encode. A `size` channel sums, so it
@@ -477,7 +478,7 @@ One silent case is not caught by any of the five proposed rules. After `sample`,
 split puts several draws in one leaf and a `pos` channel folds them, the channel takes
 their mean. That is legal and it converges, but it erases the uncertainty. In K–S terms
 it is a confuser. A sixth check could warn: "`circle` cy averages 20 draws of `value`; the
-draws are not shown. Add `spread({ by: "draw" })` or `overlay({ by: "draw" })`, or write
+draws are not shown. Add `spread({ by: "draw" })` or `group({ by: "draw" })`, or write
 `value.mean()` if a point estimate is what you want."
 
 ```js
@@ -494,9 +495,9 @@ chart(estimates)
   .flow(
     spread({ by: "category", dir: "x" }),
     sample({ n: 20 }),
-    overlay({ by: "draw" })
+    group({ by: "draw" })
   )
-  .mark(circle({ cy: value, r: 3 }));
+  .mark(circle({ cy: value, r: 3, opacity: field("draw").share() }));
 ```
 
 ### 1.7 Existing GoFish checks as K–S squares
@@ -511,10 +512,10 @@ For each check: the data symmetry `α`, the visual symmetry `ω`, and how well i
 | One unit, two definitions (`meetUnitClasses`, `measure.ts:196` to `:217`)                                                                            | none                                                                        | none                                                              | **Does not fit.** This is coherence (one trait instance per type), a well-formedness rule about the spec, not about pictures.                                                                                                                                                                                             |
 | Centered stack over `HasMidpoint` (`spread.tsx:246` to `:275`), and its nonnegative-parts error (`distribute.ts:363` to `:371`)                      | reverse the level order about the midpoint                                  | reflect about the center line                                     | **Exact for the centered layout.** The error for a negative part is closer to Phrasing B: a centered stack's sides are magnitudes, so a negative one has no reading.                                                                                                                                                      |
 | Channel kinds by aggregation (`descriptors.ts:41` to `:48`)                                                                                          | split one row into parts that sum (size); repeat a row (pos)                | the mark should not change                                        | **Exact,** as Section 1.6 shows. This is the cleanest instance: each kind is defined by which re-representation of a group it ignores.                                                                                                                                                                                    |
-| Proposed: stack by a draw key (rule 2, `proposal.md:1163`) and a sum over draws (rule 3, `proposal.md:1171`)                                         | repeat every draw (`n` to `2n` draws of the same distribution)              | the stack doubles                                                 | **Exact.** A hallucinator under a change of sample size. This is a firmer reason than "the sum has no meaning".                                                                                                                                                                                                           |
-| Proposed: a line across draws (rule 4, `proposal.md:1178`)                                                                                           | permute whole draws                                                         | the path through the draws reorders                               | **Exact.** A line per draw passes. Over independent cells it still rewires under a permutation inside one cell. That is the caveat of Section 1.6, a joint the data lacks, and not an error.                                                                                                                              |
-| Proposed: summaries need a trait of `T` (rule 5, `proposal.md:1190`; `types.md:94` to `:101`)                                                        | relabel the categories (a symmetry of a nominal type)                       | the "median category" changes                                     | **Exact.** Stevens' permissible statistics.                                                                                                                                                                                                                                                                               |
-| Proposed: a Dist in a one-value channel (rule 1, `proposal.md:1154`)                                                                                 | change the spread, keep the center                                          | none, if GoFish silently took the mean                            | **Loose.** The rule prevents a confuser by refusing to pick an implicit summary. It is a type error more than a symmetry.                                                                                                                                                                                                 |
+| Proposed: stack by a draw key (rule 2, `proposal.md:1182`) and a sum over draws (rule 3, `proposal.md:1190`)                                         | repeat every draw (`n` to `2n` draws of the same distribution)              | the stack doubles                                                 | **Exact.** A hallucinator under a change of sample size. This is a firmer reason than "the sum has no meaning".                                                                                                                                                                                                           |
+| Proposed: a line across draws (rule 4, `proposal.md:1197`)                                                                                           | permute whole draws                                                         | the path through the draws reorders                               | **Exact.** A line per draw passes. Over independent cells it still rewires under a permutation inside one cell. That is the caveat of Section 1.6, a joint the data lacks, and not an error.                                                                                                                              |
+| Proposed: summaries need a trait of `T` (rule 5, `proposal.md:1209`; `types.md:94` to `:101`)                                                        | relabel the categories (a symmetry of a nominal type)                       | the "median category" changes                                     | **Exact.** Stevens' permissible statistics.                                                                                                                                                                                                                                                                               |
+| Proposed: a Dist in a one-value channel (rule 1, `proposal.md:1173`)                                                                                 | change the spread, keep the center                                          | none, if GoFish silently took the mean                            | **Loose.** The rule prevents a confuser by refusing to pick an implicit summary. It is a type error more than a symmetry.                                                                                                                                                                                                 |
 | `HasVector` for stack (research only)                                                                                                                | reorder the parts                                                           | reorder the segments, top fixed                                   | **Loose.** `HasVector` is not in the code; a search of `packages/` finds no match. It comes from the October 2026 "space as traits" research. The rule is about the net amount, which is invariant under reordering, so it fits only for the top of the stack.                                                            |
 | No check today: a nominal key with an ordered placement                                                                                              | permute the categories                                                      | permute the slots                                                 | **A gap.** A `by` key without `HasOrder` (`packages/gofish-graphics/src/ast/schema.ts:89` to `:94`) gets slots in order. The picture permutes when the labels do, which is fine, but a viewer may read the order. This would be a lint, not an error.                                                                     |
 
@@ -532,23 +533,23 @@ render a story with one column multiplied by 2.54 and run `capture-diff`.
 Classes: **(a)** falls out of GoFish's semantics today, **(b)** needs a new piece already
 in the proposal, **(c)** needs a change to GoFish's core semantics, **(d)** unsolved.
 
-| Hurdle (paper section)                                                                                       | How the proposal answers it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Class                                                 |
-| ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| **Scales must act on distributions by change of variable** (4.1, Definition 4.1)                             | Draws are plain rows (`types.md:150` to `:151`), so each draw goes through the σ-affine map like any value (`underlying-space.md:110`). A consumed density (`slab`) under an affine scale only rescales. Under a nonlinear scale or coordinate system (`Scale.probit`, `proposal.md:457`; `Coord.polar`), the density needs the Jacobian of the map, and the proposal does not say whether `slab` draws density per data unit or per pixel.                                                                                                                      | (a) for draws; (d) for densities under nonlinear maps |
-| **The axis domain of a distribution** (4.1, the scale's domain)                                              | Open decision 8 (`proposal.md:1279`). Section 1.5 adds a constraint: the extent must be a continuous summary of the distribution, such as fixed quantiles. The largest of `n` normal draws grows like `s·√(2 ln n)`, so an extent from draws never converges as `n` grows.                                                                                                                                                                                                                                                                                       | (b), with a rule the proposal lacks                   |
-| **A point estimate hides the uncertainty** (4.2.2)                                                           | GoFish allows summaries on purpose, since the signal marks need them, but only when written (`value.mean()`). Rule 1 refuses a Dist in a one-value channel with no lift (`proposal.md:1154`). The silent case of Section 1.6, a `pos` fold over several draws after `sample`, is not caught.                                                                                                                                                                                                                                                                     | (b), plus the new warning of 1.6                      |
-| **Probability functions change the domain** (4.2.3: a density does not live on the data's scale)             | Signal marks take the whole Dist in the new `dist` channel kind (`types.md:178` to `:189`) and draw a new axis whose unit is a density or a share (`types.md:100`). Feeding a probability into a channel of the data's unit is then a unit clash, which GoFish raises today (`measure.ts:531`). So the mismatch the paper fears is a type error. GoFish does not have to ban densities, which is why it can keep both signal and noise.                                                                                                                          | (b) `dist` channel; the clash itself is (a)           |
-| **Quantiles need an order, and fail for categories** (4.2.4)                                                 | Rule 5 (`proposal.md:1190`) and the summary table (`types.md:94` to `:101`): `quantile` needs `HasOrder` or an amount; `Dist<Category>` offers `prob(level)`.                                                                                                                                                                                                                                                                                                                                                                                                    | (b)                                                   |
-| **Quantiles do not extend to several dimensions** (4.2.4, Figure 5)                                          | `dist.mvnormal` is read through its marginals `p.x` and `p.y` (`proposal.md:394` to `:395`), so a joint quantile is never formed. For whole curves, `Band.depth` (`proposal.md:1016` to `:1027`) orders curves from the center outward by band depth, which is one principled multivariate order the paper does not consider. Joint quantiles for points stay out.                                                                                                                                                                                               | (b) for curves; (d) for joint regions                 |
-| **Samples only, with the draw id in the group** (4.2.5, Figure 6)                                            | `sample` adds a `draw` key (`proposal.md:391` to `:392`), and draws are placed by operators split by that key. Statistics then run per leaf, because marks and later steps run once per leaf of a split (`createOperator.ts:1218`). So the per-draw grouping is GoFish's existing nested split, Option 1D's `fmap`. The bootstrap example's `derive(fitLine)` "runs once per draw" for this reason (`proposal.md:888` to `:889`). GoFish keeps signal marks too, which the paper excludes for EDA; the two coexist because the type says which one a channel is. | (a)                                                   |
-| **Flatten the draw array with equal weights** (4.3)                                                          | Draws are rows, so there is nothing to flatten (`types.md:150`). Unequal weights come from the column record's `weight` (`types.md:126` to `:141`).                                                                                                                                                                                                                                                                                                                                                                                                              | (a) for rows; (b) for weights                         |
-| **Nested position adjustments, within and between draws** (Definition 4.3, 4.4)                              | A flow is already a nest of operators, so `spread(region)`, `sample`, `spread(draw)`, `stack(product)` is ggdibbler's `stack_dodge` (`proposal.md:766` to `:776`). x is `spread` and t is `time.sequence`, both today. z is the new `overlay`, which shares `time.sequence`'s superimposed layout (`proposal.md:497` to `:502`). The pixel map's subdivide is a single-key `table` in flow form, a small new piece.                                                                                                                                              | (a) for x and t; (b) `overlay`, single-key `table`    |
-| **No stacking draws on the measured axis** (4.4, Figure 7)                                                   | Rule 2 (`proposal.md:1163` to `:1169`) and rule 3 (`proposal.md:1171`). Section 1.6 gives the reason as a symmetry: repeating every draw doubles the stack.                                                                                                                                                                                                                                                                                                                                                                                                      | (b)                                                   |
-| **The best adjustment depends on the aesthetic; color with transparency leaves the palette** (4.4, Figure 8) | No answer. `overlay` over a `fill` that reads a Dist blends palette colors into colors that are not in the legend. A type knows both facts (the channel is color, the placement is `overlay`), so a lint could suggest `table` or `spread` by draw instead. See Q3 for the exact limit color.                                                                                                                                                                                                                                                                    | (d), easy lint                                        |
-| **Several uncertain channels want different adjustments** (4.4, last paragraph)                              | `sample` draws every Dist channel of a drawn row together ("any Dist read on a drawn row reads that draw", `proposal.md:391` to `:392`), so there is one draw key and one placement for all of them. Placing position draws by overlay and color draws by subdivision would need two independent draw keys, one per channel. The proposal dropped `sample`'s `as` option (`proposal.md:389` to `:390`), which is what that would need.                                                                                                                           | (c): a draw key per channel, a product of samples     |
-| **The `*_sample` suffix because ggplot2 is not polymorphic** (5.1)                                           | Not a hurdle in GoFish. The same mark reads a Dist once `sample` is in the flow, so there is one surface.                                                                                                                                                                                                                                                                                                                                                                                                                                                        | (a)                                                   |
-| **Independent cells only; joint draws are future work** (6)                                                  | `HasDraws { joint }` and the column record `draws` key (`types.md:126` to `:141`); `dist.mvnormal` and `dist.dirichlet`. Mixing a `dist.*` cell with a joint draws column is open decision 3.                                                                                                                                                                                                                                                                                                                                                                    | (b), with decision 3 open                             |
-| **How many draws** (5.3, the `times` argument)                                                               | `sample({ n })` or `sample({ coverage })`. The design note's question 10 asks for a convergence test (`distributions.md:734`). Q3 below proposes one.                                                                                                                                                                                                                                                                                                                                                                                                            | (d)                                                   |
+| Hurdle (paper section)                                                                                       | How the proposal answers it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Class                                                        |
+| ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| **Scales must act on distributions by change of variable** (4.1, Definition 4.1)                             | Draws are plain rows (`types.md:150` to `:151`), so each draw goes through the σ-affine map like any value (`underlying-space.md:110`). A consumed density (`slab`) under an affine scale only rescales. Under a nonlinear scale or coordinate system (`Scale.probit`, `proposal.md:470`; `Coord.polar`), the density needs the Jacobian of the map, and the proposal does not say whether `slab` draws density per data unit or per pixel.                                                                                                                      | (a) for draws; (d) for densities under nonlinear maps        |
+| **The axis domain of a distribution** (4.1, the scale's domain)                                              | Open decision 8 (`proposal.md:1313`). Section 1.5 adds a constraint: the extent must be a continuous summary of the distribution, such as fixed quantiles. The largest of `n` normal draws grows like `s·√(2 ln n)`, so an extent from draws never converges as `n` grows.                                                                                                                                                                                                                                                                                       | (b), with a rule the proposal lacks                          |
+| **A point estimate hides the uncertainty** (4.2.2)                                                           | GoFish allows summaries on purpose, since the signal marks need them, but only when written (`value.mean()`). Rule 1 refuses a Dist in a one-value channel with no lift (`proposal.md:1173`). The silent case of Section 1.6, a `pos` fold over several draws after `sample`, is not caught.                                                                                                                                                                                                                                                                     | (b), plus the new warning of 1.6                             |
+| **Probability functions change the domain** (4.2.3: a density does not live on the data's scale)             | Signal marks take the whole Dist in the new `dist` channel kind (`types.md:179` to `:190`) and draw a new axis whose unit is a density or a share (`types.md:100`). Feeding a probability into a channel of the data's unit is then a unit clash, which GoFish raises today (`measure.ts:531`). So the mismatch the paper fears is a type error. GoFish does not have to ban densities, which is why it can keep both signal and noise.                                                                                                                          | (b) `dist` channel; the clash itself is (a)                  |
+| **Quantiles need an order, and fail for categories** (4.2.4)                                                 | Rule 5 (`proposal.md:1209`) and the summary table (`types.md:94` to `:101`): `quantile` needs `HasOrder` or an amount; `Dist<Category>` offers `prob(level)`.                                                                                                                                                                                                                                                                                                                                                                                                    | (b)                                                          |
+| **Quantiles do not extend to several dimensions** (4.2.4, Figure 5)                                          | `dist.mvnormal` is read through its marginals `p.x` and `p.y` (`proposal.md:405` to `:406`), so a joint quantile is never formed. For whole curves, `Band.depth` (`proposal.md:1035` to `:1046`) orders curves from the center outward by band depth, which is one principled multivariate order the paper does not consider. Joint quantiles for points stay out.                                                                                                                                                                                               | (b) for curves; (d) for joint regions                        |
+| **Samples only, with the draw id in the group** (4.2.5, Figure 6)                                            | `sample` adds a `draw` key (`proposal.md:402` to `:403`), and draws are placed by operators split by that key. Statistics then run per leaf, because marks and later steps run once per leaf of a split (`createOperator.ts:1218`). So the per-draw grouping is GoFish's existing nested split, Option 1D's `fmap`. The bootstrap example's `derive(fitLine)` "runs once per draw" for this reason (`proposal.md:906` to `:907`). GoFish keeps signal marks too, which the paper excludes for EDA; the two coexist because the type says which one a channel is. | (a)                                                          |
+| **Flatten the draw array with equal weights** (4.3)                                                          | Draws are rows, so there is nothing to flatten (`types.md:150`). Unequal weights come from the column record's `weight` (`types.md:126` to `:141`).                                                                                                                                                                                                                                                                                                                                                                                                              | (a) for rows; (b) for weights                                |
+| **Nested position adjustments, within and between draws** (Definition 4.3, 4.4)                              | A flow is already a nest of operators, so `spread(region)`, `sample`, `spread(draw)`, `stack(product)` is ggdibbler's `stack_dodge` (`proposal.md:784` to `:794`). x is `spread`, t is `time.sequence` and z is `group`, all today. `group({ by: "draw" })` places nothing, so the draws share one frame (`proposal.md:512` to `:520`). Only the opacity rule is new. The pixel map's subdivide is a single-key `table` in flow form, a small new piece.                                                                                                         | (a) for x, t and z; (b) the opacity rule, single-key `table` |
+| **No stacking draws on the measured axis** (4.4, Figure 7)                                                   | Rule 2 (`proposal.md:1182` to `:1188`) and rule 3 (`proposal.md:1190`). Section 1.6 gives the reason as a symmetry: repeating every draw doubles the stack.                                                                                                                                                                                                                                                                                                                                                                                                      | (b)                                                          |
+| **The best adjustment depends on the aesthetic; color with transparency leaves the palette** (4.4, Figure 8) | No answer. Draws in one frame over a `fill` that reads a Dist blend palette colors into colors that are not in the legend. A type knows both facts (the channel is color, the draws share one frame through `group`), so a lint could suggest `table` or `spread` by draw instead. See Q3 for the exact limit color.                                                                                                                                                                                                                                             | (d), easy lint                                               |
+| **Several uncertain channels want different adjustments** (4.4, last paragraph)                              | `sample` draws every Dist channel of a drawn row together ("any Dist read on a drawn row reads that draw", `proposal.md:402` to `:403`), so there is one draw key and one placement for all of them. Placing position draws in one frame and color draws by subdivision would need two independent draw keys, one per channel. The proposal dropped `sample`'s `as` option (`proposal.md:400` to `:401`), which is what that would need.                                                                                                                         | (c): a draw key per channel, a product of samples            |
+| **The `*_sample` suffix because ggplot2 is not polymorphic** (5.1)                                           | Not a hurdle in GoFish. The same mark reads a Dist once `sample` is in the flow, so there is one surface.                                                                                                                                                                                                                                                                                                                                                                                                                                                        | (a)                                                          |
+| **Independent cells only; joint draws are future work** (6)                                                  | `HasDraws { joint }` and the column record `draws` key (`types.md:126` to `:141`); `dist.mvnormal` and `dist.dirichlet`. Mixing a `dist.*` cell with a joint draws column is open decision 3.                                                                                                                                                                                                                                                                                                                                                                    | (b), with decision 3 open                                    |
+| **How many draws** (5.3, the `times` argument)                                                               | `sample({ n })` or `sample({ coverage })`. The design note's question 10 asks for a convergence test (`distributions.md:734`). Q3 below proposes one.                                                                                                                                                                                                                                                                                                                                                                                                            | (d)                                                          |
 
 ## Q3. Emergent blur versus direct blur
 
@@ -569,7 +570,7 @@ expectation has a plain form.
   complement of the radius's CDF. This is not a convolution. It is a radial gradient.
 - **A box end.** A bar from 0 to `H`. A pixel at height `y` is covered when `H ≥ y`, so
   the fade is `P(H ≥ y)`. A bar from `start` to `end` gives `P(start ≤ t ≤ end)`, which is
-  the formula in the proposal's uncertain timeline (`proposal.md:1093` to `:1097`).
+  the formula in the proposal's uncertain timeline (`proposal.md:1112` to `:1116`).
 - **Color.** A fill whose value is uncertain. The expected color is the mean of the
   palette colors in the blending space, weighted by probability. It is usually not a
   palette color, which is the paper's Figure 8 problem.
@@ -584,19 +585,19 @@ Two facts follow for the proposal.
 1. **The `0.05` floor breaks convergence.** With "over" compositing of one color at
    opacity `a`, a pixel covered by `k` of the draws shows `1 − (1 − a)^k`. With `a = 1/n`
    and `k = p·n` this tends to `1 − e^(−p)`, a fixed function of the coverage probability
-   `p`. So the over-composited overlay converges, to a tone map of `p`. With the proposal's
-   floor (`max(min, w / Σw)`, `min = 0.05`, `proposal.md:385`), any `n` above 20 uses
-   `a = 0.05`, and `1 − 0.95^(p·n)` tends to 1 for every `p > 0`. Every pixel any draw
+   `p`. So the over-composited overlay converges, to a tone map of `p`. With a floor, such
+   as the earlier draft's `max(0.05, w / Σw)`, any `n` above 20 uses `a = 0.05`, and `1 − 0.95^(p·n)` tends to 1 for every `p > 0`. Every pixel any draw
    touches goes fully dark as `n` grows. The floor exists because 8-bit alpha cannot
    hold `1/n` for large `n`, so the fix is in the renderer (accumulate coverage at higher
-   precision), not a floor.
+   precision), not a floor. Open decision 5 (`proposal.md:1290`) keeps this for both of
+   its options.
 2. **The proposal's two fades converge to different pictures.** The uncertain timeline
    gives a `gradient` with opacity `P(start ≤ t ≤ end)` and a noise form of 50 overlaid
-   draws (`proposal.md:1093` to `:1106`). Over-composited, the noise form tends to
-   `1 − e^(−P)`, not `P`. They agree only if overlay blends additively, for example by
+   draws (`proposal.md:1112` to `:1125`). Over-composited, the noise form tends to
+   `1 − e^(−P)`, not `P`. They agree only if the draws blend additively, for example by
    accumulating coverage in an SVG mask with `plus-lighter` blending and then filling
    through the mask, or if `gradient` applies the same tone map. The note in `noise.md`
-   that compositing is order-dependent (`noise.md:23` to `:25`) is true across colors.
+   that compositing is order-dependent (`noise.md:24` to `:26`) is true across colors.
    For one color the result depends only on the count, so this limit is well defined.
 
 There is a clean way to say which blend is right. Fritz and Perrone show that the algebras
@@ -620,7 +621,7 @@ is correct by construction and needs no new theory. It costs `n` times the nodes
 (design note question 11, `distributions.md:738`), it is grainy at small `n`, and it
 renders differently on every run unless seeded.
 
-**Option 3B: a direct form as an optimization of `sample` plus `overlay` (strongest).** The
+**Option 3B: a direct form as an optimization of `sample` plus `group` (strongest).** The
 user writes the noise form. The meaning is the limit. When the type says a closed form
 exists, the renderer replaces the draws with it, as a compiler rewrite rule replaces code
 with faster code that means the same thing. The type needs four facts per channel, and
@@ -631,13 +632,13 @@ GoFish has three of them already:
 | the source Dist and its family                                                  | the `DistAccessor` (`types.md:155` to `:169`)                                               |
 | the map from the Dist to pixels: affine, monotone, continuous, or discontinuous | the σ-scope (`underlying-space.md:110`) plus Option 1B's classes for every step on the path |
 | dependence between Dists that meet                                              | `HasDraws { joint }` (`types.md:138` to `:140`)                                             |
-| the blend and its limit tone map                                                | the `overlay` definition                                                                    |
+| the blend and its limit tone map                                                | the opacity rule and the blend mode (open decision 5)                                       |
 
 A pseudo-type rule:
 
 ```
   channel c reads X : Dist<T>, X = normal(m, s)       path(X → c) is affine with σ, o
-  c is a point position                                overlay blend is additive
+  c is a point position                                the draws blend additively
   ───────────────────────────────────────────────────────────────────────── (blur-normal)
   direct render = mark footprint ⊛ Gaussian(σ·m + o, σ·s)   (an SVG feGaussianBlur)
 
@@ -661,22 +662,22 @@ chart(estimates)
   .flow(
     spread({ by: "category", dir: "x" }),
     sample({ n: 200 }),
-    overlay({ by: "draw" })
+    group({ by: "draw" })
   )
-  .mark(circle({ cy: value, r: 3 }));
+  .mark(circle({ cy: value, r: 3, opacity: field("draw").share() }));
 
 // no-direct: a collision layout sits on the path, so the draws are drawn.
 chart(estimates)
   .flow(
     sample({ n: 200 }),
-    overlay({ by: "draw" }),
+    group({ by: "draw" }),
     scatter({ x: value, overlap: Overlap.separate() })
   )
-  .mark(circle({ r: 3 }));
+  .mark(circle({ r: 3, opacity: field("draw").share() }));
 ```
 
 A concrete closed form that the rule finds: the uncertain stacked bar
-(`proposal.md:778` to `:794`). Each boundary is a running sum of the parts below it. With
+(`proposal.md:796` to `:812`). Each boundary is a running sum of the parts below it. With
 independent normal parts, the boundary after `k` parts is normal with mean `Σ m_i` and
 variance `Σ s_i²`. If the parts are never negative, the chance that height `y` shows
 color `k` is `F_{k−1}(y) − F_k(y)`, the difference of two normal CDFs. So the overlaid
@@ -717,8 +718,8 @@ form exists, and CI checks that the closed form really is the limit.
    places.
 2. Does the axis extent converge? Not if it comes from the largest draw, since that grows
    with `n`. It must come from a fixed summary such as quantiles (open decision 8).
-3. Does `overlay`'s opacity rule converge as `n` grows? Not with the 0.05 floor, and the
-   blend mode decides what it converges to.
+3. Does the opacity rule for draws in one frame converge as `n` grows? Not with a 0.05
+   floor, and the blend mode decides what it converges to.
 4. Should a `pos` fold over several draws after `sample` warn, since it silently shows a
    point estimate?
 5. Does equivariance lift from plain charts to uncertain charts for free? Yes, because the
@@ -750,8 +751,9 @@ form exists, and CI checks that the closed form really is the limit.
    folds without a new rule each.
 4. Should the direct render (Option 3B) be in #980's first step, or wait until sampling is
    built and the convergence test exists?
-5. Should `overlay` blend additively in a mask so that its limit is the expected image, or
-   keep "over" compositing and give `gradient` the matching tone map?
+5. Should draws in one frame blend additively in a mask so that their limit is the expected
+   image, or keep "over" compositing and give `gradient` the matching tone map? Where the
+   blend is set, on the mark or on `group`, is part of the question.
 6. Is the `sample` effect worth tracking as an effect, or is a "has an unseeded sample"
    flag on the chart enough?
 7. How far should GoFish follow Aizenman et al.'s split into encoders and compositors? It

@@ -2,15 +2,20 @@
 
 **Summary.** GoFish should let a table cell hold a distribution, and it should treat a
 group of rows as the distribution it already is. A chart then shows uncertainty in one of
-two ways. It draws samples and places them with the operators it has today plus one new
-`overlay` step, or it draws the distribution itself with a few new marks such as `slab`
-and `interval`.
+two ways. It draws samples and places them with the operators it has today, or it draws
+the distribution itself with a few new marks such as `slab` and `interval`.
 
 **Recommendation.** Adopt the synthesis worked out in `types.md`. It is Approach A (a
 distribution type on fields) with Approach B (draws as rows only) as its plain-column
 case. One new channel kind, `dist`, folds a group's rows into one distribution. The draw
 key is a fact in the column record, `schema: { temp: { draws: "draw" } }`. Everything is
 additive for users.
+
+**Draws and samples.** A **draw** is one random value taken from a distribution. A
+**sample** is a collection of draws. `sample({ n })` takes n draws per row and adds a
+`draw` key that says which draw each new row is. With shared draws, draw i is one
+consistent world across rows: draw 3 of every row comes from the same run of a model.
+With independent draws, each row is drawn on its own, so the shared index is only a label.
 
 Issue #980 asks for distribution-valued data, with ideas from ggdist and ggdibbler. This
 page is the review copy of the proposal. The work behind it is in this folder.
@@ -60,8 +65,10 @@ page is the review copy of the proposal. The work behind it is in this folder.
 - **Band.** An interval drawn along an axis, such as a forecast fan. A **pointwise** band
   takes the quantiles at each x on its own. A **depth** band keeps the most central whole
   curves and draws their envelope.
-- **Overlay, or the z direction.** Drawing all the draws in the same place at low
-  opacity, so they blend.
+- **Overlay, or the z direction.** Drawing the draws in the same place at low opacity, so
+  they blend. It is a technique, not an operator. `group({ by: "draw" })` splits the rows
+  by the draw key and places nothing, so the draws land on top of each other, and the
+  mark sets the low opacity.
 - **HOP (hypothetical outcome plot).** An animation that shows one draw per frame.
 - **Kernel density estimate.** A smooth density curve made from a sample. Its
   **bandwidth**, called `smoothing` in GoFish, sets how smooth it is.
@@ -93,7 +100,7 @@ A field expression builds a distribution per row from parameter columns, such as
 `dist.normal({ mean: "mean", sd: "se" })`. A signal mark reads it in a `dist` channel. For
 noise, `sample({ n })` turns each row into n rows with a `draw` key, and a Dist read on a
 drawn row reads that draw. The draws are then placed with `spread`, `time.sequence` or
-`overlay`. Summaries are methods on the expression, such as `d.median()`,
+`group`. Summaries are methods on the expression, such as `d.median()`,
 `d.quantile(0.9)` and `d.interval(0.95)`.
 
 **Half-eye.** A density slab per group with a point interval on its baseline.
@@ -160,8 +167,9 @@ const model = dist.normal({ mean: "mu", sd: "sigma" }); // Dist<Dist<number>>
 chart(posterior, {
   schema: { mu: { draws: "draw" }, sigma: { draws: "draw" } },
 })
-  .flow(sample({ n: 50 }), overlay({ by: "draw" }))
-  .mark(cdf({ x: model, stroke: "#3182bd" })) // new: cdf mark
+  .flow(sample({ n: 50 }), group({ by: "draw" }))
+  // new: cdf mark; new: opacity reads a field
+  .mark(cdf({ x: model, stroke: "#3182bd", opacity: field("draw").share() }))
   .layer(
     // the empirical CDF of the observed rows
     chart(observations).mark(cdf({ x: "value", stroke: "#111" }))
@@ -173,9 +181,10 @@ chart(posterior, {
 model = dist.normal(mean="mu", sd="sigma")  # Dist[Dist[float]]
 
 chart(posterior, schema={"mu": {"draws": "draw"}, "sigma": {"draws": "draw"}}).flow(
-    sample(n=50), overlay(by="draw")
+    sample(n=50), group(by="draw")
 ).mark(
-    cdf(x=model, stroke="#3182bd")  # new: cdf mark
+    # new: cdf mark; new: opacity reads a field
+    cdf(x=model, stroke="#3182bd", opacity=field("draw").share())
 ).layer(
     chart(observations).mark(cdf(x="value", stroke="#111"))
 )
@@ -382,8 +391,10 @@ use the new ones throughout.
   `field(d).quantile(p)`, because `field()` takes a column name.
 - An interval is a span, so it fills a `dims` entry, `rect({ dims: { x: d.interval(0.95) } })`.
   `rect({ x: d.interval(0.95) })` is an error, because `x` is one position.
-- `overlay` draws each group at opacity `max(min, w / Σw)`, with `min` 0.05, and it shares
-  `time.sequence`'s layout.
+- No `overlay` step. Draws in one frame use today's `group({ by: "draw" })`, and the mark
+  sets their opacity. The specs write it as `opacity: field("draw").share()`, the draw's
+  share of the total weight, so 1/n for n equal draws. Open decision 5 asks whether
+  this stays on the mark or becomes a default.
 - A probit scale belongs on the axis, not on the `ccdf` mark, because a scale acts on
   every mark on its axis.
 - B's `sample({ value: dist.normal(...), n, as })` is dropped. `sample({ n })` with a
@@ -397,22 +408,24 @@ use the new ones throughout.
   `weight` with no `draws` key means weighted support points.
 
 **Weighted forecasts.** Nine model runs, each line's opacity from its weight. The record
-says `model` is the draw key and `weight` its weight, and `overlay` reads both.
+says `model` is the draw key and `weight` its weight. `group` splits the rows by model,
+and `line` reads the weight as its opacity.
 
 ```js
 chart(forecasts, { schema: { temp: { draws: "model", weight: "weight" } } })
-  .flow(
-    overlay({ by: "model" }), // opacity follows the record's weight
-    scatter({ by: "month", x: "month", y: "temp" })
-  )
-  .mark(line({ stroke: "#1f4e79", strokeWidth: 2 }));
+  .flow(group({ by: "model" }), scatter({ by: "month", x: "month", y: "temp" }))
+  // new: opacity reads a field
+  .mark(line({ stroke: "#1f4e79", strokeWidth: 2, opacity: "weight" }));
 ```
 
 ```python
 chart(forecasts, schema={"temp": {"draws": "model", "weight": "weight"}}).flow(
-    overlay(by="model"),  # opacity follows the record's weight
+    group(by="model"),
     scatter(by="month", x="month", y="temp"),
-).mark(line(stroke="#1f4e79", stroke_width=2))
+).mark(
+    # new: opacity reads a field
+    line(stroke="#1f4e79", stroke_width=2, opacity="weight")
+)
 ```
 
 **VMC aggregate per draw.** A histogram of each replicate's mean. Grouping by the draw
@@ -456,9 +469,11 @@ chart(epred, {
   color: Color.palette({ Control: "#7f7f7f", Treatment: "#d95f02" }),
   axes: { y: { scale: Scale.probit() } }, // new: a scale family, on the axis
 })
-  .flow(sample({ n: 40 }), group({ by: "condition" }), overlay({ by: "draw" }))
-  // new: ccdf mark; new: rule mark
-  .mark(ccdf({ x: rating, stroke: "condition" }))
+  .flow(sample({ n: 40 }), group({ by: "condition" }), group({ by: "draw" }))
+  // new: ccdf mark; new: rule mark; new: opacity reads a field
+  .mark(
+    ccdf({ x: rating, stroke: "condition", opacity: field("draw").share() })
+  )
   .layer(rule({ y: 0, strokeDasharray: "4 3" }));
 ```
 
@@ -471,8 +486,8 @@ chart(
     schema={"p": {"draws": "draw"}},
     color=Color.palette({"Control": "#7f7f7f", "Treatment": "#d95f02"}),
     axes={"y": {"scale": Scale.probit()}},  # new: a scale family, on the axis
-).flow(sample(n=40), group(by="condition"), overlay(by="draw")).mark(
-    ccdf(x=rating, stroke="condition")
+).flow(sample(n=40), group(by="condition"), group(by="draw")).mark(
+    ccdf(x=rating, stroke="condition", opacity=field("draw").share())
 ).layer(
     rule(y=0, stroke_dasharray="4 3")
 )
@@ -494,12 +509,15 @@ chart(
 Each new piece either desugars exactly into existing operators or adds a capability that
 none has. These are the cases.
 
-- **`overlay` against `time.sequence` and `layer`.** `time.sequence` already lays all its
-  groups out on top of each other in one frame (`src/ast/marks/time.ts`). `overlay` is
-  that layout with no clock. It shows every group at opacity `max(min, w / Σw)` instead
-  of one group at a time. The two must share one superimpose layout, so there is one
-  mechanism and no partial overlap. A `layer` of one chart per draw works for sibling
-  charts that share scales, but it is not a flow step and it failed inside a `table`.
+- **Drawing draws in one frame: `group`.** An earlier draft added an `overlay` step for
+  this. It is not needed. `group({ by: "draw" })` splits the rows by the draw key and
+  places nothing (`src/ast/graphicalOperators/group.ts`), so every draw lands in the same
+  frame. `group` builds a `Frame`, the same node that `time.sequence` builds for its one
+  frame (`src/ast/marks/time.ts`). `layer` also places nothing, over a list of children
+  instead of a split. The earlier workaround, a `layer` of one chart per draw, failed
+  inside a `table` because it is not a flow step. `group` is a flow step, and it works
+  inside a `table` cell and a `spread` slot today. What is left is the opacity, which is
+  open decision 5.
 - **`interval` against `ribbon`, `rect` and `scatter`'s `yMin`.** The point form is
   exactly a layer of one `rect({ dims: { x: d.interval(p) } })` per level and a
   `circle` at `d.median()`. The `along` form is a `ribbon` per level and a `line` through
@@ -778,7 +796,7 @@ chart(estimates)
 #### Uncertain stacked bar, overlaid
 
 All draws in one slot at low opacity, so product boundaries blur where they are
-uncertain. This is the first use of `overlay`. See `noise.md`.
+uncertain. `group({ by: "draw" })` puts the draws in one slot. See `noise.md`.
 
 ![](img/noise-stacked-transparency.png)
 
@@ -787,10 +805,10 @@ chart(estimates)
   .flow(
     spread({ by: "region", dir: "x" }),
     sample({ n: 20 }),
-    overlay({ by: "draw" }),
+    group({ by: "draw" }),
     stack({ by: "product", dir: "y" })
   )
-  .mark(rect({ h: sales, fill: "product" }));
+  .mark(rect({ h: sales, fill: "product", opacity: field("draw").share() }));
 ```
 
 #### Uncertain scatter
@@ -863,9 +881,9 @@ chart(tiles, { color: blues })
   .flow(
     table({ by: { x: "col", y: "row" }, spacing: 2 }),
     sample({ n: 16 }),
-    overlay({ by: "draw" })
+    group({ by: "draw" })
   )
-  .mark(rect({ fill: value }));
+  .mark(rect({ fill: value, opacity: field("draw").share() }));
 ```
 
 ### Papers
@@ -885,28 +903,26 @@ chart(points)
     chart(points)
       .flow(
         resample({ n: 39 }), // or resample({ coverage: 0.95 })
-        overlay({ by: "draw" }),
+        group({ by: "draw" }),
         derive(fitLine), // a user function; runs once per draw
         scatter({ by: "x", x: "x", y: "y" })
       )
-      .mark(line({ stroke: "#d62728" }))
+      .mark(line({ stroke: "#d62728", opacity: field("draw").share() }))
   );
 ```
 
 #### Weighted forecast lines
 
-Nine forecast lines, each line's opacity from its model weight (Zou et al., 2026). The
-settled opacity rule draws these fainter than the paper. See `papers-a.md`.
+Nine forecast lines, each line's opacity from its model weight (Zou et al., 2026). See
+`papers-a.md`.
 
 ![](img/weighted-forecasts.png)
 
 ```js
 chart(forecasts, { schema: { temp: { draws: "model", weight: "weight" } } })
-  .flow(
-    overlay({ by: "model" }), // opacity follows the record's weight
-    scatter({ by: "month", x: "month", y: "temp" })
-  )
-  .mark(line({ stroke: "#1f4e79", strokeWidth: 2 }));
+  .flow(group({ by: "model" }), scatter({ by: "month", x: "month", y: "temp" }))
+  // new: opacity reads a field
+  .mark(line({ stroke: "#1f4e79", strokeWidth: 2, opacity: "weight" }));
 ```
 
 #### VMC aggregate per draw
@@ -944,8 +960,9 @@ const model = dist.normal({ mean: "mu", sd: "sigma" }); // Dist<Dist<number>>
 chart(posterior, {
   schema: { mu: { draws: "draw" }, sigma: { draws: "draw" } },
 })
-  .flow(sample({ n: 50 }), overlay({ by: "draw" }))
-  .mark(cdf({ x: model, stroke: "#3182bd" })) // new: cdf mark
+  .flow(sample({ n: 50 }), group({ by: "draw" }))
+  // new: cdf mark; new: opacity reads a field
+  .mark(cdf({ x: model, stroke: "#3182bd", opacity: field("draw").share() }))
   .layer(
     // the empirical CDF of the observed rows
     chart(observations).mark(cdf({ x: "value", stroke: "#111" }))
@@ -990,9 +1007,11 @@ chart(epred, {
   color: Color.palette({ Control: "#7f7f7f", Treatment: "#d95f02" }),
   axes: { y: { scale: Scale.probit() } }, // new: a scale family, on the axis
 })
-  .flow(sample({ n: 40 }), group({ by: "condition" }), overlay({ by: "draw" }))
-  // new: ccdf mark; new: rule mark
-  .mark(ccdf({ x: rating, stroke: "condition" }))
+  .flow(sample({ n: 40 }), group({ by: "condition" }), group({ by: "draw" }))
+  // new: ccdf mark; new: rule mark; new: opacity reads a field
+  .mark(
+    ccdf({ x: rating, stroke: "condition", opacity: field("draw").share() })
+  )
   .layer(rule({ y: 0, strokeDasharray: "4 3" }));
 ```
 
@@ -1101,9 +1120,9 @@ chart(activities)
   .flow(
     spread({ by: ROWS, dir: "y" }),
     sample({ n: 50 }),
-    overlay({ by: "draw" })
+    group({ by: "draw" })
   )
-  .mark(rect({ x: start, x2: end, fill: BAR }));
+  .mark(rect({ x: start, x2: end, fill: BAR, opacity: field("draw").share() }));
 
 // (b) dashed: a solid core, and a dashed box over each end's 95% interval
 chart(activities)
@@ -1140,8 +1159,8 @@ records) and PR #1237 (one name resolver).
 | Value types       | `Dist<T>`, held as `pure`, `family`, `sample`, `mixture`, `truncated` or `smoothed`, and marked `independent` or `joint`. Each summary asks for a capability of `T`: `quantile` needs an order, `mean` needs values that average, `sd` returns the difference unit, `prob` needs levels. | additive             |
 | Data and schema   | The column record gets `draws` and `weight`. The column type gets `HasDraws { joint, n?, seed? }` on the draw key and `HasSample { draws, weight? }` on the value column. `DataIR` does not change.                                                                                      | additive             |
 | Internal          | `HasDomain.sorted()` becomes `HasDomain.quantile(p)`, so `Bin.quantiles` cuts a Dist with no new code, and `quantileRows` is deleted (#1231).                                                                                                                                            | internal only        |
-| Field expressions | A new `DistAccessor` beside `FieldAccessor` and `StructAccessor`, because a normal reads two columns. New ops `quantile`, `cdf`, `sd`, `prob` and `kde`. `.interval(p)` adds no op, because it returns an `AxisInterval`.                                                                | additive             |
-| Descriptors       | A `dist` channel kind. Operators `sample`, `resample`, `overlay`, `summarize`. Marks `slab`, `interval`, `dots`, `gradient`, `cdf`, `ccdf`.                                                                                                                                              | additive             |
+| Field expressions | A new `DistAccessor` beside `FieldAccessor` and `StructAccessor`, because a normal reads two columns. New ops `quantile`, `cdf`, `sd`, `prob` and `kde`, and `share` on a draw key. `.interval(p)` adds no op, because it returns an `AxisInterval`.                                     | additive             |
+| Descriptors       | A `dist` channel kind. Operators `sample`, `resample`, `summarize`. Marks `slab`, `interval`, `dots`, `gradient`, `cdf`, `ccdf`. `opacity` becomes a channel on marks, so it can read a field (open decision 5).                                                                         | additive             |
 | Strategy families | `Band.pointwise()` and `Band.depth({ outliers })`. The `dist.*` constructors get their own table in the same shape.                                                                                                                                                                      | additive             |
 | Python            | A `DistAccessor` class, the new methods, a `dist` module, and generated wrappers. `sample` and `resample` take a `seed`, and JS and Python share one seeded generator.                                                                                                                   | additive             |
 
@@ -1177,14 +1196,14 @@ texts are from the sketch and the design note.
    ```
 4. **A connecting mark across draws.** Where a relational mark picks its path tier
    (`classifyOperator`). Static. A line must sit inside a split by the draw key, such as
-   `overlay({ by: "draw" })`, so that each line joins the marks of one draw. This holds
+   `group({ by: "draw" })`, so that each line joins the marks of one draw. This holds
    for shared and independent draws alike. Over independent cells each line is one draw
    of the whole table with every cell drawn on its own, so the lines show a joint the
    data does not give (`theory.md` Section 1.6). That is a caveat, not an error.
    ```
    line({ along: "t" }) joins 30 draws of "value" into one path. Draw 3 in one t has no
    relation to draw 7 in the next, so the path runs across draws.
-   Split by the draw key first, with overlay({ by: "draw" }), so each line stays in one
+   Split by the draw key first, with group({ by: "draw" }), so each line stays in one
    draw. Or summarize first with field("value").interval(0.8) and draw a ribbon.
    ```
 5. **A summary that `T` cannot support.** In `evalFieldValues` (`fieldExpr.ts`).
@@ -1202,8 +1221,8 @@ engine runs all five, for Python and for untyped columns.
 
 These came up while drawing the examples. None depends on #980.
 
-- **`line({ opacity })` takes only a number.** Weighted lines need one layer per weight.
-  Own issue.
+- **`opacity` takes only a number, on every mark.** Weighted lines need one layer per
+  weight, and option (a) of open decision 5 needs `opacity` to read a field. Own issue.
 - **No rule mark.** A full-span reference line is a two-point `line`, and a `rect` with a
   literal height did not span the axis in data units. Own issue.
 - **`group` takes one key.** Condition by draw needs a joined key column. Own issue,
@@ -1235,18 +1254,18 @@ Adopt the synthesis. These are the reasons, against the design principles in
 `api-design.md`.
 
 - **It desugars into the core.** `slab`, `interval` and `dots` are exact shorthands for
-  marks GoFish has. Draws are placed by `spread`, `stack` and `time.sequence`, and
-  `overlay` shares `time.sequence`'s layout. `sample` and `resample` are a `derive` plus a
-  column type. Only `gradient`, `cdf`, `ccdf` and `Band.depth` add something new, and
-  each is something no operator can do today.
+  marks GoFish has. Draws are placed by `spread`, `group` and `time.sequence`, which
+  all exist today. `sample` and `resample` are a `derive` plus a column type. Only
+  `gradient`, `cdf`, `ccdf` and `Band.depth` add something new, and each is something
+  no operator can do today.
 - **One concept is one operator.** There is one fold for a distribution channel, not one
   for rows and one for cells. `.mean()` has one meaning. `quantileRows` goes away. B's
   plain columns are not a second path, they are the same fold.
 - **Meaning lives on the data type.** Whether rows are draws, and whether those draws are
   shared, is in the column record, like units after #1200. The stack-by-draw error and
   the line-across-draws error come from the type, not from the user remembering.
-- **Few new terms.** The user learns `dist.*`, `sample`, `overlay`, two record keys and
-  the signal marks. `rvar` and `dist.kde` are gone. The marks keep ggdist's names.
+- **Few new terms.** The user learns `dist.*`, `sample`, two record keys and the signal
+  marks. `rvar` and `dist.kde` are gone. The marks keep ggdist's names.
 - **The same shape in JS and Python.** Every example above has a Python form with the
   same structure, and the draws cross as plain rows.
 
@@ -1268,9 +1287,24 @@ that case B with a declared draw key is the safe subset, and A could be added la
    is it an error? (Design note question 2.)
 4. Should a group with several `dist.*` rows fold to their mixture, or should a signal
    mark draw one shape per row, as ggdist does?
-5. Should `overlay` opacity be a share of the draws, `max(min, w / Σw)`, or a per-group
-   opacity like `w / max(w)`? The weighted forecasts example wants the second, which
-   could instead come from `line({ opacity: "weight" })`.
+5. Where does the opacity of draws in one frame come from? `group({ by: "draw" })` places
+   the draws, and it sets no opacity. There are two options.
+   - **(a) On the mark**, as a field expression on the draw key:
+     `rect({ opacity: field("draw").share() })`. `share()` is the draw's share of the
+     total weight, w / Σw, so 1/n for n equal draws. This needs `opacity` to read a
+     field, which it cannot today, and a new `share` op. A weighted ensemble can read its
+     weight column directly instead, `line({ opacity: "weight" })`, as the weighted
+     forecasts do.
+   - **(b) A default.** A mark under a `sample` draw key gets opacity 1/n unless it sets
+     its own. This needs nothing new on the mark, but the opacity then depends on a step
+     elsewhere in the flow.
+
+   The specs here use (a). Two findings in `theory.md` (Q3) hold for both. A floor, such
+   as the earlier draft's `max(0.05, w / Σw)`, stops the picture from converging as n
+   grows, so the fix for faint marks belongs in the renderer. And the blend mode is open:
+   "over" compositing converges to a tone map of the coverage, and additive blending
+   converges to the expected image.
+
 6. Should `slab` and `interval` over a plain column smooth the sample by default, as
    ggdist does, or read the raw sample unless the user writes `.kde()`?
 7. What crosses the bridge from Python: `dist.*` parameters, draws as rows, or also cells
@@ -1289,6 +1323,6 @@ that case B with a declared draw key is the safe subset, and A could be added la
 
 Design note questions 4 (interaction with selection), 10 (visual convergence as a test,
 and whether `n` is a chart option) and 11 (node count and a canvas path) stay open but do
-not block the syntax. Question 6 (row folds versus cell summaries) and question 9 (the z
-direction) are settled above by the one-summary rule and by `overlay` sharing
-`time.sequence`'s layout.
+not block the syntax. Question 6 (row folds versus cell summaries) is settled above by the
+one-summary rule. Question 9 (the z direction) is settled by today's `group`, which
+already draws the draws in one frame. Only its opacity stays open, as decision 5.

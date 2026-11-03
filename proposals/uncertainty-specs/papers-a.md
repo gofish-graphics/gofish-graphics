@@ -45,11 +45,11 @@ chart(points)
     chart(points)
       .flow(
         resample({ n: 39 }), // or resample({ coverage: 0.95 })
-        overlay({ by: "draw" }),
+        group({ by: "draw" }),
         derive(fitLine), // a user function; runs once per draw
         scatter({ by: "x", x: "x", y: "y" })
       )
-      .mark(line({ stroke: "#d62728" }))
+      .mark(line({ stroke: "#d62728", opacity: field("draw").share() }))
   );
 ```
 
@@ -58,11 +58,11 @@ chart(points).flow(scatter(by="id", x="x", y="y")).mark(circle(r=3, fill="#222")
     chart(points)
     .flow(
         resample(n=39),  # or resample(coverage=0.95)
-        overlay(by="draw"),
+        group(by="draw"),
         derive(fit_line),  # a user function; runs once per draw
         scatter(by="x", x="x", y="y"),
     )
-    .mark(line(stroke="#d62728"))
+    .mark(line(stroke="#d62728", opacity=field("draw").share()))
 )
 ```
 
@@ -77,14 +77,11 @@ no Dist field here in either approach.
   `coverage` is not in the `resample` descriptor of `types-sketch.ts`. It is
   kept here with the same rule as `sample`'s, n = (1 + c) / (1 − c), because
   both make n draws and the rule is the paper's.
-- `overlay({ by: "draw" })`: new. Here the overlap is already free, because
-  `scatter` puts lines with the same x and y in the same place. What `overlay`
-  adds is the opacity rule, `max(0.05, w / Σw)` (here `max(0.05, 1/39)`, so
-  0.05), and the declaration that `draw` is a sample index. Its layout is
-  `time.sequence`'s superimposed layout with no clock (see `noise.md`), so it
-  adds no layout of its own. Over a `scatter` it is still close to
-  `group({ by: "draw" })` plus a hand-set `opacity`; the difference is the rule
-  and the type.
+- `group({ by: "draw" })` is today's, as in the Today code. The draw key's type
+  comes from `resample`, which marks `draw` as a sample index.
+- `opacity: field("draw").share()`: new. It is the draw's share of the total
+  weight, here 1/39. It needs `opacity` to read a field. The other option, a
+  default opacity under a draw key, is open decision 5 in `proposal.md`.
 - No regression transform exists in GoFish. The spelling uses a user function in
   `derive`, which the sheet's rule 2 runs once per draw. A built-in fit helper
   would be a separate decision.
@@ -118,54 +115,40 @@ model in JavaScript, because `line`'s `opacity` cannot read a field today.
 
 ```js
 chart(forecasts, { schema: { temp: { draws: "model", weight: "weight" } } })
-  .flow(
-    overlay({ by: "model" }), // opacity follows the record's weight
-    scatter({ by: "month", x: "month", y: "temp" })
-  )
-  .mark(line({ stroke: "#1f4e79", strokeWidth: 2 }));
+  .flow(group({ by: "model" }), scatter({ by: "month", x: "month", y: "temp" }))
+  // new: opacity reads a field
+  .mark(line({ stroke: "#1f4e79", strokeWidth: 2, opacity: "weight" }));
 ```
 
 ```python
 chart(forecasts, schema={"temp": {"draws": "model", "weight": "weight"}}).flow(
-    overlay(by="model"),  # opacity follows the record's weight
+    group(by="model"),
     scatter(by="month", x="month", y="temp"),
-).mark(line(stroke="#1f4e79", stroke_width=2))
+).mark(
+    # new: opacity reads a field
+    line(stroke="#1f4e79", stroke_width=2, opacity="weight")
+)
 ```
 
-**Proposed (B)**
-
-```js
-chart(forecasts)
-  .flow(
-    overlay({ by: "model", weight: "weight" }), // weight given on the step
-    scatter({ by: "month", x: "month", y: "temp" })
-  )
-  .mark(line({ stroke: "#1f4e79", strokeWidth: 2 }));
-```
+**Proposed (B)** is the same chart without the column record.
 
 **New pieces needed**
 
-- The column record's `draws` and `weight` keys, and `overlay`: new. The first
-  draft wrote `rvar("temp", { draw: "model", weight: "weight" })` and a
-  `sample()` with no `n`. With the record, the rows are already the draws, so
-  no `sample()` is needed: `sample()` with no `n` keeps every stored draw,
-  which is the identity on a draws column. A and B now differ only in where
-  the weight is written, the record or the step. The step's `weight` is the
-  override for a key that is not a draw key.
-- The weight-to-opacity rule: `types.md` settles it as `max(min, w / Σw)`,
-  which gives 1/n for equal weights. The first draft here used
-  `w / max(w)`, so the heaviest line was opaque, as in the paper, which maps
-  weights linearly into 0.1 to 1. Under the settled rule the nine weights sum
-  to about 5, so the heaviest line is drawn at about 0.2, and the chart is
-  fainter than the paper's. The paper's look is a per-line opacity, not a
-  share of the draws. That needs `line({ opacity: "weight" })` (below), and
-  the choice is listed as an open decision. A linewidth option (the paper's
-  other condition) is also open.
-- Overlap check: B is exactly "a per-group opacity". If `line({ opacity })`
-  accepted a field, B would be `group({ by: "model" })` plus
-  `line({ opacity: "weight" })`, with no new operator. That is a small library
-  change, and it is the honest overlap: weighted overlay is a data-driven
-  opacity plus the 1/n default.
+- The column record's `draws` and `weight` keys: new. The first draft wrote
+  `rvar("temp", { draw: "model", weight: "weight" })` and a `sample()` with no
+  `n`. With the record, the rows are already the draws, so no `sample()` is
+  needed: `sample()` with no `n` keeps every stored draw, which is the identity
+  on a draws column. The record tells the checker that `model` is a draw key.
+  The opacity does not need it.
+- `line({ opacity: "weight" })`: new, because `opacity` takes only a number
+  today. The paper maps the weights linearly into 0.1 to 1, so the heaviest
+  line is opaque, and the weight column holds those values. The share rule,
+  `opacity: field("model").share()`, would draw each line at w / Σw instead.
+  The nine weights sum to about 5, so the heaviest line would be drawn at about
+  0.2, fainter than the paper's. Which rule to use is the user's choice on the
+  mark. A linewidth option (the paper's other condition) is also open.
+- Overlap check: the layout is today's `group({ by: "model" })`, the same as the
+  multiline chart. The only library change is a field-valued `opacity`.
 
 ### VMC "aggregate per draw"
 
@@ -309,8 +292,9 @@ const model = dist.normal({ mean: "mu", sd: "sigma" }); // Dist<Dist<number>>
 chart(posterior, {
   schema: { mu: { draws: "draw" }, sigma: { draws: "draw" } },
 })
-  .flow(sample({ n: 50 }), overlay({ by: "draw" }))
-  .mark(cdf({ x: model, stroke: "#3182bd" })) // new: cdf mark
+  .flow(sample({ n: 50 }), group({ by: "draw" }))
+  // new: cdf mark; new: opacity reads a field
+  .mark(cdf({ x: model, stroke: "#3182bd", opacity: field("draw").share() }))
   .layer(
     // the empirical CDF of the observed rows
     chart(observations).mark(cdf({ x: "value", stroke: "#111" }))
@@ -322,9 +306,10 @@ chart(posterior, {
 model = dist.normal(mean="mu", sd="sigma")  # Dist[Dist[float]]
 
 chart(posterior, schema={"mu": {"draws": "draw"}, "sigma": {"draws": "draw"}}).flow(
-    sample(n=50), overlay(by="draw")
+    sample(n=50), group(by="draw")
 ).mark(
-    cdf(x=model, stroke="#3182bd")  # new: cdf mark
+    # new: cdf mark; new: opacity reads a field
+    cdf(x=model, stroke="#3182bd", opacity=field("draw").share())
 ).layer(
     chart(observations).mark(cdf(x="value", stroke="#111"))
 )
@@ -483,9 +468,11 @@ chart(epred, {
   color: Color.palette({ Control: "#7f7f7f", Treatment: "#d95f02" }),
   axes: { y: { scale: Scale.probit() } }, // new: a scale family, on the axis
 })
-  .flow(sample({ n: 40 }), group({ by: "condition" }), overlay({ by: "draw" }))
-  // new: ccdf mark; new: rule mark
-  .mark(ccdf({ x: rating, stroke: "condition" }))
+  .flow(sample({ n: 40 }), group({ by: "condition" }), group({ by: "draw" }))
+  // new: ccdf mark; new: rule mark; new: opacity reads a field
+  .mark(
+    ccdf({ x: rating, stroke: "condition", opacity: field("draw").share() })
+  )
   .layer(rule({ y: 0, strokeDasharray: "4 3" }));
 ```
 
@@ -498,8 +485,8 @@ chart(
     schema={"p": {"draws": "draw"}},
     color=Color.palette({"Control": "#7f7f7f", "Treatment": "#d95f02"}),
     axes={"y": {"scale": Scale.probit()}},  # new: a scale family, on the axis
-).flow(sample(n=40), group(by="condition"), overlay(by="draw")).mark(
-    ccdf(x=rating, stroke="condition")
+).flow(sample(n=40), group(by="condition"), group(by="draw")).mark(
+    ccdf(x=rating, stroke="condition", opacity=field("draw").share())
 ).layer(
     rule(y=0, stroke_dasharray="4 3")
 )
@@ -513,8 +500,8 @@ chart(epred, {
   color: Color.palette({ Control: "#7f7f7f", Treatment: "#d95f02" }),
   axes: { y: { scale: Scale.probit() } },
 })
-  .flow(group({ by: "condition" }), overlay({ by: "draw" }))
-  .mark(ccdf({ x: "k", stroke: "condition" }))
+  .flow(group({ by: "condition" }), group({ by: "draw" }))
+  .mark(ccdf({ x: "k", stroke: "condition", opacity: field("draw").share() }))
   .layer(rule({ y: 0, strokeDasharray: "4 3" }));
 ```
 
@@ -553,9 +540,10 @@ These are the spellings after reconciling with `types.md`.
   `schema: { temp: { draws: "model", weight: "weight" } }`. `rvar` is gone.
 - `sample()` with no `n` keeps every stored draw of a draws column, so it is
   the identity there and the examples leave it out.
-- `overlay` opacity is `max(min, w / Σw)`, `min` 0.05. `overlay({ by, weight })`
-  stays as the override for a key that is not a draw key. The paper's
-  `w / max(w)` look is an open decision.
+- No `overlay` step. Draws in one frame use today's `group({ by: "draw" })`,
+  and the mark sets the opacity: `field("draw").share()` for the draw's share
+  of the weight, or a column such as `"weight"` for a per-line opacity. Whether
+  the share should instead be a default is open decision 5 in `proposal.md`.
 - `resample({ coverage })` uses `sample`'s coverage rule.
 - `summarize({ name: fieldExpr })`: a new general step, one row per group, with
   the columns flat.
@@ -571,8 +559,8 @@ These are the spellings after reconciling with `types.md`.
 
 ## Gaps found in today's GoFish
 
-- `line({ opacity })` takes only a number, so weighted lines need one layer per
-  weight.
+- `opacity` takes only a number on every mark, so weighted lines need one
+  layer per weight.
 - There is no rule mark. A `rect` with a literal `h` did not span the y axis in
   data units.
 - There is no probit (or any nonlinear) y scale.

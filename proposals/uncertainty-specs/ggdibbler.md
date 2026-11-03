@@ -4,6 +4,8 @@ ggdibbler, by Harriet Mason, Dianne Cook, Sarah Goodwin and Susan VanderPlas, tu
 
 The GoFish proposal for #980 takes this idea as its noise half. This tab puts the two side by side, then shows plots that ggdibbler's own issues ask for. The ggdibbler images are real renders from ggdibbler 0.6.8.9000 (GitHub main, commit 6bca10a) with distributional 0.9.0. The GoFish images are drawn with today's GoFish on draws precomputed in JavaScript, because `dist.*` and `sample` do not exist yet. So the two columns show different random draws of the same estimates.
 
+**Draws and samples.** A **draw** is one random value taken from a distribution. A **sample** is a collection of draws. `sample({ n })` takes n draws per row and adds a `draw` key that says which draw each new row is. With shared draws, draw i is one consistent world across rows: draw 3 of every row comes from the same run of a model. With independent draws, each row is drawn on its own, so the shared index is only a label.
+
 R scripts and data: `ggdibbler-r/` beside this page (`export-mpg.R`, `export-estimates.ts`, `render.R`). Stories: `packages/gofish-graphics/stories/proposals/uncertainty/Ggdibbler.stories.tsx` (title `Proposals/Uncertainty/Ggdibbler`), data in `ggdibbler-data.ts`. The bar, scatter and map images on the GoFish side are the Noise renders (`Noise.stories.tsx`), cropped.
 
 ## How the proposal maps ggdibbler's ideas
@@ -11,7 +13,7 @@ R scripts and data: `ggdibbler-r/` beside this page (`export-mpg.R`, `export-est
 - A random variable in a column, such as `dist_normal(mean, se)`, becomes a `dist.*` expression over the parameter columns, `dist.normal({ mean: "mean", sd: "se" })`. A column that already holds draws, as `dist_sample` does, is declared with `schema: { value: { draws: "draw" } }`.
 - `times` becomes the flow step `sample({ n })`. It turns each row into n rows with a `draw` key, which plays the role of ggdibbler's `drawID`.
 - A nested position `main_draws` becomes steps in the flow. `identity_dodge` is `spread({ by: "draw", dir: "x", spacing: 0 })` after `sample`. `stack_dodge` is that spread with a `stack` inside each draw.
-- Overplotting with `_identity` and a low `alpha` becomes `overlay({ by: "draw" })`. It sets each draw's opacity to 1/n, but no lower than 0.05.
+- Overplotting with `_identity` and a low `alpha` becomes today's `group({ by: "draw" })`, which splits by the draw key and places nothing, so the draws land on top of each other. The mark sets the low opacity. The specs write it as `opacity: field("draw").share()`, the draw's share of the total weight, so 1/n for n draws.
 - `position_subdivide` becomes a small grid of draws in each region, `table({ by: "draw", numCols })`. This works for rectangles only. GoFish cannot cut a map polygon into cells yet.
 - A HOP, which ggdibbler makes with gganimate's `transition_states(after_stat(drawID))`, becomes `time.sequence({ by: "draw" })`.
 - Convergence holds for the same reason as in ggdibbler. The draws are placed by ordinary operators, so as every sd goes to zero, each spec draws the plain chart.
@@ -118,19 +120,25 @@ ggplot(uncertain_mpg, aes(class)) +
 chart(mpgDraws, draws)
   .flow(
     spread({ by: "class", dir: "x" }),
-    overlay({ by: "draw" }),
+    group({ by: "draw" }),
     stack({ by: "drv", dir: "y" })
   )
-  .mark(rect({ h: field("drv").count(), fill: "drv" }));
+  .mark(
+    rect({
+      h: field("drv").count(),
+      fill: "drv",
+      opacity: field("draw").share(),
+    })
+  );
 ```
 
 ```python
 chart(mpg_draws, schema=schema).flow(
-    spread(by="class", dir="x"), overlay(by="draw"), stack(by="drv", dir="y")
-).mark(rect(h=field("drv").count(), fill="drv"))
+    spread(by="class", dir="x"), group(by="draw"), stack(by="drv", dir="y")
+).mark(rect(h=field("drv").count(), fill="drv", opacity=field("draw").share()))
 ```
 
-`overlay` would set the opacity to 1/10. The GoFish image is a `layer` of one chart per draw at opacity 0.15, because no overlay step exists yet.
+`field("draw").share()` gives each draw opacity 1/10. The GoFish image uses today's `group` with opacity 0.15, as the ggdibbler call does.
 
 ### Uncertain scatter
 
@@ -191,17 +199,17 @@ const value = dist.normal({ mean: "mean", sd: "sd" });
 chart(forecast)
   .flow(
     sample({ n: 30 }),
-    overlay({ by: "draw" }),
+    group({ by: "draw" }),
     scatter({ by: "h", x: "h", y: value })
   )
-  .mark(line());
+  .mark(line({ opacity: field("draw").share() }));
 ```
 
 ```python
 value = dist.normal(mean="mean", sd="sd")
 chart(forecast).flow(
-    sample(n=30), overlay(by="draw"), scatter(by="h", x="h", y=value)
-).mark(line())
+    sample(n=30), group(by="draw"), scatter(by="h", x="h", y=value)
+).mark(line(opacity=field("draw").share()))
 ```
 
 Today, on the precomputed draws (story `ForecastLines`):
@@ -219,7 +227,7 @@ chart(forecastDraws)
   );
 ```
 
-This is the multiline chart with the draw as the series. It follows `LineEndLabels` in `packages/gofish-graphics/stories/forwardsyntax/LabelPlacement.stories.tsx`, which splits by `symbol`, then scatters by date, then draws a `line`. Here `overlay({ by: "draw" })` splits the rows into one line chart per draw and lays the draws over each other in one frame. Each line stays inside one draw, so the checker allows it. Without the split, one line would run across all 30 draws, and that is the error. The image uses opacity 0.3, as ggdibbler does. `overlay`'s rule would give 0.05.
+This is the multiline chart with the draw as the series. It follows `LineEndLabels` in `packages/gofish-graphics/stories/forwardsyntax/LabelPlacement.stories.tsx`, which splits by `symbol`, then scatters by date, then draws a `line`. Here `group({ by: "draw" })` splits the rows into one line chart per draw and lays the draws over each other in one frame, as the Today code does. Each line stays inside one draw, so the checker allows it. Without the split, one line would run across all 30 draws, and that is the error. The image uses opacity 0.3, as ggdibbler does. `field("draw").share()` would give 1/30.
 
 There is one caveat. Each step here is its own normal, and `sample` draws each step on its own, so draw 3 at one step has no tie to draw 3 at the next. The lines show the steps moving independently, which the data does not say. So they zigzag more than real forecast paths would (compare the shared draws in Part 2). ggdibbler draws the same lines. Open question 1 asks whether that needs a warning.
 
@@ -299,11 +307,11 @@ Eight points, each a bivariate normal with correlation 0.85, −0.85 or 0. `p.x`
 ```js
 // paths: one row per draw and step, from a model's simulated sample paths
 chart(paths, { schema: { value: { draws: "draw" } } })
-  .flow(overlay({ by: "draw" }), scatter({ by: "h", x: "h", y: "value" }))
-  .mark(line());
+  .flow(group({ by: "draw" }), scatter({ by: "h", x: "h", y: "value" }))
+  .mark(line({ opacity: field("draw").share() }));
 ```
 
-Thirty random walk paths. Each step has the same normal as in the Part 1 forecast, but the steps of one path move together, so every line is a possible future. As in Part 1, `overlay` splits by `draw`, so each line stays inside one draw. Here the draws are shared, so the lines do not zigzag as Part 1's do. The image uses opacity 0.3. `overlay`'s rule would give 0.05. **ggdibbler would need:** a way to say that rows share draws. Its `seed` argument ([#39](https://github.com/harriet-mason/ggdibbler/issues/39)) keeps the same draws across layers, not across rows. [#31](https://github.com/harriet-mason/ggdibbler/issues/31) also argues the other side: that rows should stay independent, and a dependent table should be split into a fixed part and a random part. Open question 1.
+Thirty random walk paths. Each step has the same normal as in the Part 1 forecast, but the steps of one path move together, so every line is a possible future. As in Part 1, `group` splits by `draw`, so each line stays inside one draw. Here the draws are shared, so the lines do not zigzag as Part 1's do. The image uses opacity 0.3. `field("draw").share()` would give 1/30. **ggdibbler would need:** a way to say that rows share draws. Its `seed` argument ([#39](https://github.com/harriet-mason/ggdibbler/issues/39)) keeps the same draws across layers, not across rows. [#31](https://github.com/harriet-mason/ggdibbler/issues/31) also argues the other side: that rows should stay independent, and a dependent table should be split into a fixed part and a random part. Open question 1.
 
 ### Uncertain dates on a time axis
 
@@ -318,10 +326,9 @@ chart(milestones, { schema: { date: Unit.time(), sd: Unit.duration } })
   .flow(
     spread({ by: "milestone", dir: "y" }),
     sample({ n: 30 }),
-    overlay({ by: "draw" }),
     scatter({ x: date })
   )
-  .mark(circle({ r: 3 }));
+  .mark(circle({ r: 3, opacity: field("draw").share() }));
 ```
 
 **ggdibbler today**
@@ -334,7 +341,7 @@ ggplot(milestones, aes(x = date, y = milestone)) +
   geom_point_sample(times = 30, alpha = 0.25)
 ```
 
-Five project milestones whose dates are uncertain, thirty draws each, on a date axis. The proposal types `dist.normal` over an Instant with its sd as a duration. `Unit.time()` and `Unit.duration` exist today, and the date axis is today's. The image uses opacity 0.25. **ggdibbler today:** `dist_normal` does not take a Date, and a `dist_sample` of dates is drawn on a continuous scale, so the axis shows day numbers (the ggdibbler image, from the same draws). **ggdibbler would need:** the nested scale for time that [#49](https://github.com/harriet-mason/ggdibbler/issues/49) describes.
+Five project milestones whose dates are uncertain, thirty draws each, on a date axis. The proposal types `dist.normal` over an Instant with its sd as a duration. `Unit.time()` and `Unit.duration` exist today, and the date axis is today's. `scatter` puts the draws of a milestone on one row by itself, so no `group` step is needed. The image uses opacity 0.25. **ggdibbler today:** `dist_normal` does not take a Date, and a `dist_sample` of dates is drawn on a continuous scale, so the axis shows day numbers (the ggdibbler image, from the same draws). **ggdibbler would need:** the nested scale for time that [#49](https://github.com/harriet-mason/ggdibbler/issues/49) describes.
 
 ### Two levels of uncertainty
 
@@ -351,13 +358,12 @@ chart(estimates)
     sample({ n: 8 }), // draws the outer level, mu
     spread({ by: "draw", dir: "x" }),
     sample({ n: 10, as: "inner" }), // draws the inner level
-    overlay({ by: "inner" }),
     scatter({ y: value })
   )
-  .mark(circle({ r: 2.5 }));
+  .mark(circle({ r: 2.5, opacity: field("inner").share() }));
 ```
 
-Three estimates. The mean of each is itself uncertain (sd `tau`), and each value scatters around that mean (sd `se`). Eight outer draws are dodged, and each holds ten inner draws. A wide spread of column centers means model uncertainty. Tall columns mean noise within the model. **Needs:** the proposal shows one level per `sample` only (the jk-CDF in the Proposal tab, where a `cdf` mark reads the inner level). Two `sample` steps need a rule that the first draws the outer level and the second the inner, and a name for the second draw key. `as` was in an earlier draft and was dropped. **ggdibbler would need:** the nested `dibble()` from [#55](https://github.com/harriet-mason/ggdibbler/issues/55).
+Three estimates. The mean of each is itself uncertain (sd `tau`), and each value scatters around that mean (sd `se`). Eight outer draws are dodged, and each holds ten inner draws, which `scatter` draws in one column. A wide spread of column centers means model uncertainty. Tall columns mean noise within the model. **Needs:** the proposal shows one level per `sample` only (the jk-CDF in the Proposal tab, where a `cdf` mark reads the inner level). Two `sample` steps need a rule that the first draws the outer level and the second the inner, and a name for the second draw key. `as` was in an earlier draft and was dropped. **ggdibbler would need:** the nested `dibble()` from [#55](https://github.com/harriet-mason/ggdibbler/issues/55).
 
 ### Uncertain treemap
 
@@ -381,7 +387,7 @@ Six budget lines, each a normal, six draws side by side. Swapping `spread` for `
 ## Open questions for Harriet
 
 1. **Lines over independent draws.** ggdibbler and the proposal both join draw k at each x into one line per draw. With independent cells, the lines show the steps moving independently, a joint the data does not give. Your comment on [#31](https://github.com/harriet-mason/ggdibbler/issues/31) argues that the unit of an uncertainty visualization is an independent distribution. For a fable forecast, where each step is a marginal, should the line carry a warning or a note in the docs, or is it fine as it is?
-2. **Default opacity.** ggdibbler leaves `alpha` to the user and warns about `times` ([#59](https://github.com/harriet-mason/ggdibbler/issues/59)). The proposal's `overlay` sets 1/n with a floor of 0.05. Is 1/n a good default, and should the legend then use full opacity by itself ([#67](https://github.com/harriet-mason/ggdibbler/issues/67))?
-3. **Blending.** Alpha compositing favors the last draw. Would an order-free blend, as in ggblend ([#48](https://github.com/harriet-mason/ggdibbler/issues/48)), be a better default for `overlay`?
+2. **Default opacity.** ggdibbler leaves `alpha` to the user and warns about `times` ([#59](https://github.com/harriet-mason/ggdibbler/issues/59)). In the proposal the mark sets the opacity, for example `opacity: field("draw").share()`, which is 1/n. Should 1/n instead be a default for marks under a draw key, and should the legend then use full opacity by itself ([#67](https://github.com/harriet-mason/ggdibbler/issues/67))?
+3. **Blending.** Alpha compositing favors the last draw. Would an order-free blend, as in ggblend ([#48](https://github.com/harriet-mason/ggdibbler/issues/48)), be a better default for draws drawn in one frame?
 4. **Subdividing regions.** GoFish cannot cut a polygon into cells yet. Of the grid, random points with Voronoi cells ([#16](https://github.com/harriet-mason/ggdibbler/issues/16)) and a noise fill ([#23](https://github.com/harriet-mason/ggdibbler/issues/23)), which would you build first?
 5. **Signal and noise in one system.** [#40](https://github.com/harriet-mason/ggdibbler/issues/40) settled on samples only, partly because quantiles do not extend to several random variables. The proposal also has marks that read the whole distribution. Does having both in one system risk the mix-up that the philosophy vignette warns about?

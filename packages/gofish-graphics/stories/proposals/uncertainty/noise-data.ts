@@ -57,10 +57,6 @@ export const salesDraws = range(20).flatMap((draw) =>
     sales: Math.max(0, normal(mean, se)),
   }))
 );
-/** The same draws, one table per draw (for the layer-of-charts overlay). */
-export const salesDrawsByDraw = range(20).map((d) =>
-  salesDraws.filter((r) => r.draw === d)
-);
 
 // 4. Uncertain scatter: twelve points, x and y both normal.
 export const pointEstimates = range(12).map((i) => {
@@ -115,8 +111,6 @@ export const tileDraws = tileEstimates.flatMap(({ col, row, mean, sd }) =>
   range(16).map((draw) => ({
     col,
     row,
-    /** The row counted from the bottom, for placing tiles with scatter (y up). */
-    rowUp: 5 - row,
     draw,
     sx: draw % 4,
     sy: Math.floor(draw / 4),

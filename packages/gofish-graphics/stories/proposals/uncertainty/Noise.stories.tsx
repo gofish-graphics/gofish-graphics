@@ -4,7 +4,7 @@ import {
   chart,
   circle,
   Color,
-  layer,
+  group,
   rect,
   scatter,
   spread,
@@ -17,7 +17,6 @@ import {
   hopDraws,
   pointDraws,
   salesDraws,
-  salesDrawsByDraw,
   tileDraws,
   tileEstimates,
 } from "./noise-data";
@@ -58,21 +57,19 @@ export const StackedDodge: StoryObj = {
   },
 };
 
-/** Uncertain stacked bar, transparency: all draws overlaid in one slot.
- *  No in-slot overlay operator exists, so this layers one chart per draw. */
+/** Uncertain stacked bar, transparency: all draws in one slot. `group` by
+ *  draw splits each region and places nothing, so the stacks overlap. */
 export const StackedTransparency: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    layer(
-      salesDrawsByDraw.map((draw) =>
-        chart(draw)
-          .flow(
-            spread({ by: "region", dir: "x", spacing: 16 }),
-            stack({ by: "product", dir: "y" })
-          )
-          .mark(rect({ h: "sales", fill: "product", opacity: 0.1 }))
+    chart(salesDraws, { w: 480, h: 260 })
+      .flow(
+        spread({ by: "region", dir: "x", spacing: 16 }),
+        group({ by: "draw" }),
+        stack({ by: "product", dir: "y" })
       )
-    ).render(container, { w: 480, h: 260, axes: true });
+      .mark(rect({ h: "sales", fill: "product", opacity: 0.1 }))
+      .render(container, { axes: true });
     return container;
   },
 };
@@ -148,15 +145,17 @@ export const MapPixel: StoryObj = {
   },
 };
 
-/** Uncertain map (c): transparency version, the draws of each tile overlaid.
- *  No in-slot overlay exists, so the tiles are placed by `scatter` at their
- *  grid position (scatter overlaps by itself) with a fixed pixel size. */
+/** Uncertain map (c): transparency version. `group` by draw gives each draw
+ *  its own rect in the tile's cell, so the 16 draws overlap. */
 export const MapTransparency: StoryObj = {
   render: () => {
     const container = initializeContainer();
     chart(tileDraws, { w: 320, h: 240, color: MAP_COLOR })
-      .flow(scatter({ x: "col", y: "rowUp" }))
-      .mark(rect({ w: 38, h: 38, fill: "value", opacity: 0.15 }))
+      .flow(
+        table({ by: { x: "col", y: "row" }, spacing: 2 }),
+        group({ by: "draw" })
+      )
+      .mark(rect({ fill: "value", opacity: 0.15 }))
       .render(container, { axes: false });
     return container;
   },

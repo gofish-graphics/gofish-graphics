@@ -169,7 +169,8 @@ type ChannelValue2 = ChannelValue | DistAccessor;
 ```
 
 New ops, added to `FieldOpIR` and `FieldOp`: `quantile { p }`, `cdf { at }`,
-`sd`, `prob { level }` and `kde { smoothing? }`. `mean` and `median` keep
+`sd`, `prob { level }`, `kde { smoothing? }`, and `share` on a draw key (the
+row's draw's share of the total weight, read by `opacity`). `mean` and `median` keep
 their wire form. `.interval(p)` adds no op: it returns a plain
 `{ min: q((1 − p) / 2), max: q((1 + p) / 2) }`, which is an `AxisInterval`.
 
@@ -188,8 +189,8 @@ interval: { type: "interval", kind: "leaf-mark", include: [paint],
   fields: { ...distAxis, levels, along: {...}, band: { type: t.ref("Band") } } },
 ```
 
-New operators: `sample { n?, coverage?, at, seed? }`, `resample { n, seed? }`,
-`overlay { by, weight?, opacity: { min } }` and `summarize { columns }`.
+New operators: `sample { n?, coverage?, at, seed? }`, `resample { n, seed? }`
+and `summarize { columns }`. Draws in one frame use today's `group`.
 New leaf marks: `slab { x | y, side, normalize }`, `interval { x | y, levels,
 along?, band? }`, `dots { x | y, n }`, `gradient` (rect's box channels, each
 of which may be a Dist), `cdf` and `ccdf`. The full entries are in the
@@ -232,9 +233,9 @@ time in the sketch. The engine runs all of them, for Python and for untyped
 columns:
 
 ```ts
-// @ts-expect-error rect h holds Dist<USD> and nothing draws it.
 chart([])
   .flow(spread({ by: "region", dir: "x" }))
+  // @ts-expect-error rect h holds Dist<USD> and nothing draws it.
   .mark(rect({ h: sales }));
 // @ts-expect-error stack by "draw" after sample: the sum of a sample's draws has no meaning.
 chart([]).flow(sample({ n: 20 }), stack({ by: "draw", dir: "y" }));
@@ -253,12 +254,11 @@ the repeated key. They should be one function.
   the same.
 - **`field(d).quantile(p)` on a Dist expression.** Chosen: `d.quantile(p)`.
   `field()` takes a column name. A `dist.*` value is already an expression.
-- **`rvar(field, { draw })`, B's `interval({ draw })`, and `overlay({ weight })`.**
+- **`rvar(field, { draw })` and B's `interval({ draw })`.**
   Chosen: the column record, `{ draws: "draw", weight: "w" }`. Which rows are
   one draw is a fact about the table, as #1198 argues for `entity`. With it,
-  A and B need no per-mark `draw` option, and `overlay` reads the weight. An
-  explicit `overlay({ by, weight })` stays as an override for a key that is
-  not a draw key, such as a model ensemble.
+  A and B need no per-mark `draw` option, and `field("draw").share()` reads
+  the weight.
 - **`rvar(field)` with no draw key.** Dropped. A plain column in a Dist
   channel is the group's rows as draws, by the one-fold rule.
 - **`dist.kde(field)`.** Chosen: `field("temp").kde({ smoothing })`. It folds a
@@ -268,9 +268,12 @@ the repeated key. They should be one function.
 - **`gradient({ y: d })` and `gradient({ x: start, x2: end })`.** Both. `gradient`
   takes rect's box channels, and any of them may hold a Dist. One Dist end
   follows its density. Two ends give P(start ≤ t ≤ end).
-- **Overlay opacity.** Chosen: `max(min, w / Σw)`, with `opacity: { min }`
-  defaulting to 0.05. Equal weights give 1/n, as the sheet says. Papers A's
-  `w / max(w)` makes equal weights all opaque, so it disagrees with 1/n.
+- **Overlay opacity.** No `overlay` operator: `group({ by: "draw" })` places
+  the draws, and the mark sets the opacity. The specs write
+  `opacity: field("draw").share()`, which is w / Σw, so 1/n for equal
+  weights, as the sheet says. A per-line look such as Papers A's reads a
+  column, `opacity: "weight"`. Both need `opacity` to read a field. A default
+  opacity under a draw key is the other option (`proposal.md`, decision 5).
 - **`sample()` with no `n`.** Kept: every stored draw of a draws column. For a
   `dist.*` cell, which stores none, it is an error.
 - **B's `sample({ value: dist.*, n, as })`.** Not needed. A's
