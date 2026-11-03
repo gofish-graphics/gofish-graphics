@@ -1,5 +1,7 @@
 # `cut`: options first, the source as its one child
 
+From #1267 (how to define a shape without drawing it: `.hidden()`, and region compositing). Proposal page: https://claude.ai/artifact/Pc7MBRfGfQyTWvhFTXaH3H. Signed off 2026-11-03.
+
 `cut(source, opts)` takes its subject first, unlike every other operator, which takes `op(opts, children)`. Its method form `.cut(opts)` also builds a different thing from the function. This issue proposes `cut(opts, [source])`, and asks whether the function and the method should become one construct.
 
 ## How it works today
@@ -41,7 +43,7 @@ chart(rows)
   .mark(image({ href, w: 193, h: 600 }).cut({ dir: "y", size: "amount" }));
 ```
 
-Step 2, a question: make `cut(opts, [source])` build the same expand mark as `.cut(opts)`. The method would then be a true twin, by the rule in the #1267 proposal (a way to define a shape without drawing it): a chain method has a function twin only when both build the same node. `cutMark` would leave the public surface. This needs a check that every combinator takes an expand mark's N nodes in place, as `serialize/fromJSON.ts` already does for a `cut` child.
+Step 2, **deferred**: make `cut(opts, [source])` build the same expand mark as `.cut(opts)`. The method would then be a true twin, by the rule in the #1267 proposal (a way to define a shape without drawing it): a chain method has a function twin only when both build the same node. `cutMark` would leave the public surface. This needs a check that every combinator takes an expand mark's N nodes in place, as `serialize/fromJSON.ts` already does for a `cut` child.
 
 ## Callsites
 
@@ -51,5 +53,5 @@ Step 2, a question: make `cut(opts, [source])` build the same expand mark as `.c
 
 ## Notes
 
-- This goes in one PR with the `position` to `translate` rename, apart from the `.hidden()` PR.
-- If region compositing is split as the #1267 proposal suggests, each slice becomes `clip({ to: sliceRect }, [offset(source)])`. That does not change `cut`'s spelling.
+- Step 1 goes in one PR with the `position` to `translate` rename (#1283), apart from the `.hidden()` and compositing PR. Step 2 stays open here until an example needs it.
+- #1267 deletes `mask`. Each slice becomes `intersect([offset(source), sliceRect.hidden()])`: the source inside a hidden slice rect. The #1267 implementation PR makes that change inside `cut`. It does not change `cut`'s spelling.

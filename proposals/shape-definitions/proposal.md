@@ -1,5 +1,7 @@
 # Defined, Not Drawn (#1267)
 
+**Signed off 2026-11-03; implementation PR to follow.**
+
 A shape that is laid out and read by other marks, but not painted.
 
 ## The proposal
@@ -8,12 +10,13 @@ A shape that is laid out and read by other marks, but not painted.
 - **decided.** `.hidden(fn)` hides per datum. Toggling only repaints; layout never moves.
 - **decided.** An ancestor's `.hidden()` wins over a child's `.hidden(false)`. On one value, the last call wins.
 - **decided.** Only on a value you hold: not through `ref` or `selectAll`, and no operator sets it.
-- **proposed.** A child slot draws its child as itself. An operand slot is read for shape, place, paint or data, and the operator draws its result from what it read, never the operand as itself. A ref draws nothing.
-- **proposed.** Which frame is an operand in? The frame the operator sits in, never the frame it makes for its children. An inline operand is laid out there; a ref is read where it was placed and mapped into that frame.
-- **proposed.** Region compositing is five operations: `union`, `intersect`, `subtract`, `exclude` and `atop`. The result is drawn from the operands' coverage. A `fill` gives one new shape. With no fill, each part takes the paint of the operands that cover it, blended by `blendMode` (default `"normal"`) where they overlap, as in PiCCL. `blendMode` is on `union`, `intersect` and `atop` only; `atop` takes no fill. A hidden operand adds its shape and no paint, so it is a stencil. There is no `mode`: a luminance stencil filters itself to alpha. `paint` is renamed `atop`; `mask` is deleted.
-- **proposed.** Alpha is shape. An operand gives its shape, which is its alpha, partial coverage included, and its paint. `.hidden()` removes the paint and keeps the shape; no brightness leaks out of a hidden mark.
-- **decided.** Bend and envelope are coordinate transforms with a shape argument: `Coord.bend({ along })`, `Coord.envelope({ top, bottom })`. The coord reads the shape and never draws it. Deferred.
-- **decided.** Renames: `position` becomes `translate`; `cut(opts, [source])`.
+- **decided.** A child slot draws its child as itself. An operand slot is read for shape, place, paint or data, and the operator draws its result from what it read, never the operand as itself. A ref draws nothing.
+- **decided.** Which frame is an operand in? The frame the operator sits in, never the frame it makes for its children. An inline operand is laid out there; a ref is read where it was placed and mapped into that frame.
+- **decided.** Region compositing is five operations: `union`, `intersect`, `subtract`, `exclude` and `atop`. The result is drawn from the operands' coverage. A `fill` gives one new shape. With no fill, each part takes the paint of the operands that cover it, blended by `blendMode` (default `"normal"`) where they overlap, as in PiCCL. `blendMode` is on `union`, `intersect` and `atop` only; `atop` takes no fill. A hidden operand adds its shape and no paint, so it is a stencil. There is no `mode`: a luminance stencil takes `filter: Filter.luminanceToAlpha()`. `paint` is renamed `atop`; `mask` is deleted.
+- **decided.** Alpha is shape. An operand gives its shape, which is its alpha, partial coverage included, and its paint. `.hidden()` removes the paint and keeps the shape; no brightness leaks out of a hidden mark.
+- **decided.** Bend and envelope are coordinate transforms with a shape argument: `Coord.bend({ along })`, `Coord.envelope({ top, bottom })`. The coord reads the shape and never draws it. Deferred (#1284).
+- **decided.** Renames, in their own PR: `position` becomes `translate` (#1283); `cut(opts, [source])` (#1282).
+- **decided.** `filter` is an option on every mark and on `layer`. Its value is a `Filter` family (`Filter.grayscale()`, `Filter.luminanceToAlpha()`); a raw CSS string is the escape hatch. `line` and `ribbon` rename `mixBlendMode` to `blendMode`, one shared type.
 
 ## Hiding
 
@@ -611,7 +614,7 @@ subtract([a, stripes]);
 
 The stencil turns its brightness into alpha before it is hidden, as the bottle image grays itself. White keeps all of the stripes, gray about half.
 
-Inputs: ![`stripes`](img/in-band-stripes.png) `stripes` ![`fade.filter("luminance-to-alpha").hidden()`](img/in-fade-alpha.png) `fade.filter("luminance-to-alpha").hidden()` → result
+Inputs: ![`stripes`](img/in-band-stripes.png) `stripes` ![`fade.hidden()`, with `Filter.luminanceToAlpha()`](img/in-fade-alpha.png) `fade.hidden()`, with `Filter.luminanceToAlpha()` → result
 
 ![Masking: luminance](img/masking-luminance.png)
 
@@ -620,8 +623,8 @@ _Rendered today as `mask`, which reads luminance: the same values, if the filter
 **Proposed**
 
 ```js
-const fade = layer([aWhite, bGray]);
-intersect([stripes, fade.filter("luminance-to-alpha").hidden()]);
+const fade = layer({ filter: Filter.luminanceToAlpha() }, [aWhite, bGray]);
+intersect([stripes, fade.hidden()]);
 ```
 
 **Current**
@@ -648,19 +651,19 @@ _Drawn in plain SVG with `mix-blend-mode: multiply`._
 union({ blendMode: "multiply" }, [r, g, b]);
 ```
 
-**Current:** Not expressible today. Only `line` and `ribbon` take a blend mode.
+**Current:** Not expressible today. Only `line` and `ribbon` take a blend mode, as `mixBlendMode`, which becomes `blendMode`.
 
 Today every composite grays its first operand and blends the second over it in `"color"` (`paintSVG.tsx`). That is GoFish's own lowering. PiCCL draws each operand in its own paint: `GroupShape.renderSVG` in [PiCCL_core/src/compiler/shape.ts](https://github.com/PiCCL/PiCCL_core/blob/main/src/compiler/shape.ts) masks each operand by the others and blends them by `blend`, default `"normal"` ([operator.ts](https://github.com/PiCCL/PiCCL_core/blob/main/src/library/operator.ts)). Issue #196 (boolean operators after PiCCL and Porter-Duff) writes atop as A ∪ (B ∩ A). `blendMode` applies where two operands overlap, so `union`, `intersect` and `atop` take it; `subtract` and `exclude` never put two paints in one place, and passing it to them is a type error. Using an exact outline, for strokes and hit-testing, is an internal choice made when one exists. A composite is drawn in an isolated group today (`isolation: isolate`), so a blend reaches only its own operands.
 
 <details><summary>Merged and removed: `mask` and `clip`; `paint` becomes `atop`</summary>
 
-Earlier rounds had separate operators for drawing content inside a stencil. A hidden operand adds shape and no paint, so `intersect` with a hidden operand is the mask and `subtract` the inverted mask. Today's `mask` is deleted; a luminance mask is a stencil filtered by `"luminance-to-alpha"`, and there is no `mode` option. `paint` stays, as `atop`: its wire name is already `"atop"`.
+Earlier rounds had separate operators for drawing content inside a stencil. A hidden operand adds shape and no paint, so `intersect` with a hidden operand is the mask and `subtract` the inverted mask. Today's `mask` is deleted; a luminance mask is a stencil with `filter: Filter.luminanceToAlpha()`, and there is no `mode` option. `paint` stays, as `atop`: its wire name is already `"atop"`.
 
 </details>
 
 ### The bottle: one inline atop
 
-The image grays itself with its own `filter`, which `image` has today. The rect is then blended over it in `"color"`, inside the image.
+The image grays itself with its own `filter: Filter.grayscale()`. `image` takes a CSS filter string today. The rect is then blended over it in `"color"`, inside the image.
 
 Inputs: ![`image`, grayed by its `filter`](img/in-bottle-image.png) `image`, grayed by its `filter` ![`rect`](img/in-bottle-rect.png) `rect` → result
 
@@ -675,7 +678,7 @@ atop({ blendMode: "color" }, [
   image({
     href: bottle,
     h: v(100),
-    filter: "grayscale(1)",
+    filter: Filter.grayscale(),
   }),
   rect({
     h: "amount",
@@ -781,11 +784,11 @@ PiCCL grays the picture with its own option, `Picture({ color: "#fff" })`. It re
 | `saturate: 0`              | SVG `feColorMatrix type="saturate"`, which today's gray step uses; CSS `saturate()`; Figma's Saturation adjustment (from memory) | New                                                          | no                                           |
 | `grayscale: true`          | CSS `grayscale()`; Photoshop's Desaturate (from memory)                                                                          | New                                                          | no                                           |
 
-Vega's image mark has no filter (checked); matplotlib has none either (from memory). Recommended: the existing `filter`, since it adds no API and renders today. A recolor like PiCCL's `color` is the general one; add it when an example maps data to an image's color ([open](#d-gray)).
+Vega's image mark has no filter (checked); matplotlib has none either (from memory). Decided: the `filter` option with a `Filter` family value, `Filter.grayscale()`, on every mark and on `layer`; a raw CSS string stays as an escape hatch. A recolor like PiCCL's `color` can follow when an example maps data to an image's color ([decided](#d-gray)).
 
 ### Luminance: the stencil converts its own brightness
 
-A stencil's shape is its alpha, so a stencil of any color works. To read brightness instead, as SVG `<mask>` does, the stencil filters itself to alpha before it is hidden. No option on the operator. No brightness leaks out of a hidden mark.
+A stencil's shape is its alpha, so a stencil of any color works. To read brightness instead, as SVG `<mask>` does, the stencil filters itself to alpha with `filter: Filter.luminanceToAlpha()` before it is hidden. No option on the operator. No brightness leaks out of a hidden mark.
 
 Inputs: ![`stencil.hidden()`](img/in-stencil.png) `stencil.hidden()` ![`stripes`](img/in-wide-stripes.png) `stripes` → result
 
@@ -817,7 +820,8 @@ intersect([stripes, stencil.hidden()]);
 _Real render of today's `mask([stencil, stripes])`: full, about half, and nearly nothing._
 
 ```js
-intersect([stripes, stencil.filter("luminance-to-alpha").hidden()]);
+const lum = layer({ filter: Filter.luminanceToAlpha() }, [stencil]);
+intersect([stripes, lum.hidden()]);
 ```
 
 ### A hidden operand vs a transparent one
@@ -910,7 +914,7 @@ mask([soft, stripes]);
 | Flutter `ShaderMask`                                     | Default `BlendMode.modulate`, which applies the shader's alpha to the child                                           | n/a                                                                                    | yes                                                             |
 | Flutter `ClipPath` (counter)                             | Geometry, anti-aliased                                                                                                | n/a                                                                                    | yes                                                             |
 
-Verdict: the precedent supports alpha as shape. Every compositing source and every mask (Porter and Duff, Smith, CSS and Figma alpha masks, SwiftUI, Flutter's ShaderMask) treats alpha as coverage. The counter-precedent is clipping: SVG `clipPath`, Figma's Vector mask and Flutter's `ClipPath` use raw geometry. That splits on the clip and mask line, and GoFish takes the mask side; an exact outline is an internal choice where one exists. One conflict: in CSS and SVG, invisible content adds nothing to a clip, and SwiftUI's `.hidden()` most likely adds nothing to a mask. Figma's mask layer, and SVG's own mask and clip content, are used for shape without being drawn, which is the role `.hidden()` takes here ([open](#d-hidden-op)). When implemented, the rule goes in `api-design.md` and the concepts docs ([open](#d-alpha)).
+Verdict: the precedent supports alpha as shape. Every compositing source and every mask (Porter and Duff, Smith, CSS and Figma alpha masks, SwiftUI, Flutter's ShaderMask) treats alpha as coverage. The counter-precedent is clipping: SVG `clipPath`, Figma's Vector mask and Flutter's `ClipPath` use raw geometry. That splits on the clip and mask line, and GoFish takes the mask side; an exact outline is an internal choice where one exists. One conflict: in CSS and SVG, invisible content adds nothing to a clip, and SwiftUI's `.hidden()` most likely adds nothing to a mask. Figma's mask layer, and SVG's own mask and clip content, are used for shape without being drawn, which is the role `.hidden()` takes here ([decided](#d-hidden-op)). When implemented, the rule goes in `api-design.md` and the concepts docs ([decided](#d-alpha)).
 
 ### Slots, by operator
 
@@ -1001,7 +1005,7 @@ The fifth operation keeps all of its first operand and draws the second only ins
 | Figma                | none                                                           | yes, earlier round |
 | GoFish today         | `paint` (wire `"atop"`), from #202, which renamed PiCCL's atop | yes                |
 
-Recommended: `atop` ([open](#d-atop)).
+Decided: `atop` ([decision](#d-atop)).
 
 **Recommendations**
 
@@ -1164,29 +1168,29 @@ layer([
 | `circle(o).hidden((d) => ...)`                | Per datum. Repaint only, no new layout.                                                       |
 | `ridgeline(data).hidden()`                    | The whole chart, axes and legend included.                                                    |
 
-## Open decisions
+## Decisions
 
-1. Adopt the rule: children are drawn as themselves (and may also be read); an operand is read, and the operator draws its result from what it read, never the operand as itself; refs draw nothing? (card: slots)
-2. (1) Adopt the coverage-blend rule: with no fill, each part of the result takes the paint of the operands that cover it, blended by `blendMode` where they overlap? It is PiCCL's rule (`GroupShape.renderSVG`), drops today's gray step, and closes #1230 (what a compositing operator with no fill paints). (card: ops)
-3. (2) Default `blendMode` to `"normal"`, the later operand over the earlier, on `union`, `intersect` and `atop` (the only operations that take it), as PiCCL, Canvas, Cairo and SVG `feComposite` default to over? Today the default is `"color"` (`porterDuff.tsx` lines 460 and 505), and the type, `"color" | "multiply" | "screen" | "overlay"` (`chart.ts` line 1164), has no `"normal"`; it gets one. (card: ops)
-4. (3) Adopt "alpha is shape": an operand gives its shape, which is its alpha, partial coverage included, and its paint? Precedent supports it on the mask side (Porter and Duff, Smith, CSS and Figma alpha masks, Flutter's ShaderMask); clips use raw geometry. Document it in `api-design.md` and the concepts docs when it lands? (card: alpha-shape)
-5. (4) What does a hidden operand give? (A) Its shape and no paint, so `intersect([stripes, a.hidden()])` is a mask: Figma's mask layer and SVG's mask content are used without being drawn. (B) Nothing, as invisible content adds nothing to an SVG clip and SwiftUI's `.hidden()` most likely adds nothing to a mask; a stencil would then need another way to drop its paint. Recommended: A, since `.hidden()` already means laid out and not painted. This replaces the old decision to warn on `.hidden()` on an operand. (card: intersect-hidden)
-6. (5) Name the fifth operation `atop` (Porter-Duff, PiCCL, SVG, Canvas, Cairo, Flutter, Android, and today's wire name), or keep `paint` (#202)? Recommended: `atop`. (card: naming-atop)
-7. (6) One spelling for a mark that filters itself. The bottle grays its image with the existing `filter: "grayscale(1)"` option (on `image` and `rect` today, a CSS filter string). A luminance stencil needs `luminance-to-alpha`, which has no CSS function (it is SVG `feColorMatrix type="luminanceToAlpha"`). Today a rect renders it as `filter: "url(#lumToAlpha)"` pointing at a hand-written SVG filter (checked: white gives alpha 1, `#808080` about 0.5 in sRGB, black 0), so the option carries it but the user must write the filter. And `circle` and `layer` have no filter option. Options: a `.filter()` method on any mark, chart or layer, like `.hidden()`, with the option folded in; or the option on every mark and layer. The value: a string, or a family (`Filter.grayscale()`, `Filter.luminanceToAlpha()`), as option values that choose a strategy are. A recolor like PiCCL's `Picture({ color })` can follow when an example maps data to an image's color. (card: mask-modes)
-8. (7) `line` and `ribbon` say `mixBlendMode` (`"normal" | "multiply"`, `chart.ts` lines 973 and 1037); the operations say `blendMode` (Python `blend_mode`). Unify on one name? (card: ops)
-9. (8) Migrate in the same change? `paint` becomes a rename to `atop`: 4 calls (the Bottle story, which also gains `filter: "grayscale(1)"`; the PorterDuffRelations paint story; two Python stories), with the wire name unchanged. `mask` is rewritten as `intersect` with a hidden operand filtered by `luminance-to-alpha`, since today's mask reads luminance: 3 calls (the PorterDuffRelations mask story, `coordPaintOrder.test.ts` line 411, one Python story), plus the internal `Mask` in `cut.tsx`. The `mask` entries in `descriptors.ts`, `jsonSchema.ts` and `_generated.py` go. 5 docs pages: region-compositing and cut, JS and Python, and the handwritten pictorial-charts tutorial, which gets an issue. (card: ops)
-10. Add `union` (Figma, Inkscape, Sketch, SwiftUI, Shapely, Clipper2, PiCCL) as a region shape, separate from `layer`, as every design tool keeps Union apart from Group? (card: naming-grid)
-11. Keep `use(ref)` parked until an example needs it? (card: use-ref)
-12. File the bend and envelope issue, kept deferred? (Decided: a coord with a shape argument, not an operator.) (card: gecko)
-13. Do both renames in one PR, separate from `.hidden()`? (card: translate)
-14. Step 2 for `cut`: unify it with the `.cut()` mark method? (card: cut)
-15. Add the method-twin rule to api-design.md: a method has a function twin only for a one-child operator, and both build one node? (card: translate)
-16. Does a hidden mark's color still feed the scale and legend? (Recommended yes, as `blank()` does.) (card: venn)
-17. Keep `blank()` as sugar for `rect().hidden()`, or delete it? (card: quantum)
-18. Migrate the gallery stories (four croissants, QuantumCircuit, OhmParseTree, DFSCQ) in the same change? (card: croissant)
-19. Land with #1259 (`.layer()` reads names), so the croissant needs no outer `layer`? (card: croissant)
+1. Children are drawn as themselves; an operand is only read, and the operator draws its result from what it read. Yes. (card: slots)
+2. The coverage-blend rule: with no fill, each part takes the paint of the operands that cover it, blended where they overlap. Yes; closes #1230 (what a compositing operator with no fill paints). (card: ops)
+3. The default `blendMode` is `"normal"`. Yes. The bottle passes `"color"` explicitly. (card: ops)
+4. Alpha is shape. Yes, documented in `api-design.md` and the concepts page on compositing. (card: alpha-shape)
+5. A hidden operand gives its shape and no paint. (A). (card: intersect-hidden)
+6. The fifth operation is `atop`, not `paint`. Yes. (card: naming-atop)
+7. The filter spelling is a `filter` option on every mark and on `layer`, not a `.filter()` method. Its value is a `Filter` family (`Filter.grayscale()`, `Filter.luminanceToAlpha()`), with a raw CSS string as an escape hatch. Yes. (card: mask-modes)
+8. One name, `blendMode`, everywhere: `line` and `ribbon` rename `mixBlendMode` to it, with one shared type. Yes. (card: ops)
+9. Migrate `paint` and `mask` callsites in the same change, with the `subtract` operand-order fix (#1285: `subtract([a, b])` draws b − a today). Yes. (card: ops)
+10. Add `union` as a region shape, separate from `layer`. Yes. (card: naming-grid)
+11. `use(ref)`. Stays parked. (card: use-ref)
+12. Bend and envelope. Filed as #1284, deferred. (card: gecko)
+13. The renames (`cut` argument order, #1282; `position` to `translate`, #1283). Their own PR, separate from `.hidden()` and compositing. (card: translate)
+14. `cut` step 2, unifying it with the `.cut()` mark method. Deferred to #1282. (card: cut)
+15. Add the method-twin rule to `api-design.md`. Yes. (card: translate)
+16. A hidden mark's color still feeds scales and legends. Yes. (card: venn)
+17. `blank()`. Delete it in favor of `rect().hidden()`, after counting its uses; revisit if it is widely used as the stand-in for "no mark". First count: 122 matches of `blank(` in 44 files (6 story files, 21 docs files, 8 Python files, the rest in `src`). (card: quantum)
+18. Migrate the gallery stories (four croissants, QuantumCircuit, OhmParseTree, DFSCQ) in the same change. Yes. (card: croissant)
+19. Wait for #1259 (`.layer()` reads names)? No. The croissant keeps its outer `layer` until #1259 lands. (card: croissant)
 
-Draft issues: `issue-cut.md`, `issue-translate-position.md`, `issue-spine-envelope.md`.
+Issues: #1282 (`cut` argument order), #1283 (`position` to `translate`), #1284 (bend and envelope, deferred), #1285 (`subtract` operand order).
 
 ## Why
 

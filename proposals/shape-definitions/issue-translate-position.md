@@ -1,5 +1,7 @@
 # Rename `position()` to `translate()`: one node, one name, one form on the wire
 
+From #1267 (how to define a shape without drawing it: `.hidden()`, and region compositing). Proposal page: https://claude.ai/artifact/Pc7MBRfGfQyTWvhFTXaH3H. Signed off 2026-11-03.
+
 `.translate()` and `position()` build the same node, but they have two names and go on the wire in two forms. This issue proposes one operator, `translate`, with `.translate()` as its method twin.
 
 ## How it works today
@@ -50,5 +52,6 @@ rect(w=20, h=20).translate(x=10)  # the same node
 
 ## Notes
 
-- This goes in one PR with the `cut` argument-order fix, apart from the `.hidden()` PR.
+- This goes in its own PR, together with the `cut` argument-order fix (#1282), apart from the `.hidden()` and compositing PR.
+- Related: #722 (`position()` anchors at the min-corner, which forces half-size offset math by hand).
 - Old docs that describe `position` as "set the min-corner" should say "move by".

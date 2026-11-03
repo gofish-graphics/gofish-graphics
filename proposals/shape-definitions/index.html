@@ -156,6 +156,10 @@
         letter-spacing: 0.04em;
         text-transform: uppercase;
       }
+      .status {
+        margin: 0 0 8px;
+        color: var(--ink, inherit);
+      }
       .dek {
         color: var(--muted);
         margin: 0 0 20px;
@@ -400,7 +404,7 @@
         overflow-wrap: normal;
       }
       ol.decisions {
-        padding-left: 1.4em;
+        padding-left: 2em;
       }
       ol.decisions li {
         margin: 0 0 8px;
@@ -633,6 +637,9 @@
       <header>
         <p class="kicker">GoFish proposal · #1267</p>
         <h1>Defined, Not Drawn</h1>
+        <p class="status">
+          <b>Signed off 2026-11-03; implementation PR to follow.</b>
+        </p>
         <p class="dek">
           A shape that is laid out and read by other marks, but not painted.
           Every spec is below, with its render and today's spelling.
@@ -663,21 +670,21 @@
             operator sets it.
           </li>
           <li>
-            <span class="badge proposed">proposed</span> A child slot draws its
+            <span class="badge decided">decided</span> A child slot draws its
             child as itself. An operand slot is read for shape, place, paint or
             data, and the operator draws its result from what it read, never the
             operand as itself. A ref draws nothing.
             <a class="see" href="#slots">see</a>
           </li>
           <li>
-            <span class="badge proposed">proposed</span> Which frame is an
-            operand in? The frame the operator sits in, never the frame it makes
-            for its children. An inline operand is laid out there; a ref is read
-            where it was placed and mapped into that frame.
+            <span class="badge decided">decided</span> Which frame is an operand
+            in? The frame the operator sits in, never the frame it makes for its
+            children. An inline operand is laid out there; a ref is read where
+            it was placed and mapped into that frame.
             <a class="see" href="#operand-frame">see</a>
           </li>
           <li>
-            <span class="badge proposed">proposed</span> Region compositing is
+            <span class="badge decided">decided</span> Region compositing is
             five operations: <code>union</code>, <code>intersect</code>,
             <code>subtract</code>, <code>exclude</code> and <code>atop</code>.
             The result is drawn from the operands' coverage. A
@@ -688,12 +695,13 @@
             <code>union</code>, <code>intersect</code> and
             <code>atop</code> only; <code>atop</code> takes no fill. A hidden
             operand adds its shape and no paint, so it is a stencil. There is no
-            <code>mode</code>: a luminance stencil filters itself to alpha.
+            <code>mode</code>: a luminance stencil takes
+            <code>filter: Filter.luminanceToAlpha()</code>.
             <code>paint</code> is renamed <code>atop</code>;
             <code>mask</code> is deleted. <a class="see" href="#ops">see</a>
           </li>
           <li>
-            <span class="badge proposed">proposed</span> Alpha is shape. An
+            <span class="badge decided">decided</span> Alpha is shape. An
             operand gives its shape, which is its alpha, partial coverage
             included, and its paint. <code>.hidden()</code> removes the paint
             and keeps the shape; no brightness leaks out of a hidden mark.
@@ -704,14 +712,23 @@
             coordinate transforms with a shape argument:
             <code>Coord.bend({ along })</code>,
             <code>Coord.envelope({ top, bottom })</code>. The coord reads the
-            shape and never draws it. Deferred.
+            shape and never draws it. Deferred (#1284).
             <a class="see" href="#gecko">see</a>
           </li>
           <li>
-            <span class="badge decided">decided</span> Renames:
-            <code>position</code> becomes <code>translate</code>;
-            <code>cut(opts, [source])</code>.
+            <span class="badge decided">decided</span> Renames, in their own PR:
+            <code>position</code> becomes <code>translate</code> (#1283);
+            <code>cut(opts, [source])</code> (#1282).
             <a class="see" href="#translate">see</a>
+          </li>
+          <li>
+            <span class="badge decided">decided</span> <code>filter</code> is an
+            option on every mark and on <code>layer</code>. Its value is a
+            <code>Filter</code> family (<code>Filter.grayscale()</code>,
+            <code>Filter.luminanceToAlpha()</code>); a raw CSS string is the
+            escape hatch. <code>line</code> and <code>ribbon</code> rename
+            <code>mixBlendMode</code> to <code>blendMode</code>, one shared
+            type. <a class="see" href="#mask-modes">see</a>
           </li>
         </ul>
         <p class="legend-note">
@@ -1689,9 +1706,8 @@ layer([
                   </div>
                   <div class="in">
                     <img src="img/in-fade-alpha.png" alt="" /><span class="lbl"
-                      ><code
-                        >fade.filter("luminance-to-alpha").hidden()</code
-                      ></span
+                      ><code>fade.hidden()</code>, with
+                      <code>Filter.luminanceToAlpha()</code></span
                     >
                   </div>
                 </div>
@@ -1706,18 +1722,16 @@ layer([
               <p class="label proposed">Proposed</p>
               <pre
                 class="new"
-                data-changed="2,3,4,5,6,7"
-              ><code class="language-javascript">const fade = layer([aWhite, bGray]);
-intersect([
-  stripes,
-  fade
-    .filter(&quot;luminance-to-alpha&quot;)
-    .hidden(),
-]);</code></pre>
+                data-changed="1,2,3,4,5"
+              ><code class="language-javascript">const fade = layer(
+  { filter: Filter.luminanceToAlpha() },
+  [aWhite, bGray],
+);
+intersect([stripes, fade.hidden()]);</code></pre>
               <p class="label current">Current</p>
               <pre
                 class="now"
-                data-changed="2"
+                data-changed="1,2"
               ><code class="language-javascript">const fade = layer([aWhite, bGray]);
 mask([fade, stripes]);</code></pre>
             </div>
@@ -1764,7 +1778,8 @@ union({ blendMode: &quot;multiply&quot; }, [
               <p class="label current">Current</p>
               <p class="none">
                 Not expressible today. Only <code>line</code> and
-                <code>ribbon</code> take a blend mode.
+                <code>ribbon</code> take a blend mode, as
+                <code>mixBlendMode</code>, which becomes <code>blendMode</code>.
               </p>
             </div>
           </div>
@@ -1801,8 +1816,8 @@ union({ blendMode: &quot;multiply&quot; }, [
               stencil. A hidden operand adds shape and no paint, so
               <code>intersect</code> with a hidden operand is the mask and
               <code>subtract</code> the inverted mask. Today's
-              <code>mask</code> is deleted; a luminance mask is a stencil
-              filtered by <code>"luminance-to-alpha"</code>, and there is no
+              <code>mask</code> is deleted; a luminance mask is a stencil with
+              <code>filter: Filter.luminanceToAlpha()</code>, and there is no
               <code>mode</code> option. <code>paint</code> stays, as
               <code>atop</code>: its wire name is already <code>"atop"</code>.
             </p>
@@ -1811,8 +1826,9 @@ union({ blendMode: &quot;multiply&quot; }, [
         <article class="card" id="bottle">
           <h3><a href="#bottle">The bottle: one inline atop</a></h3>
           <p class="say">
-            The image grays itself with its own <code>filter</code>, which
-            <code>image</code> has today. The rect is then blended over it in
+            The image grays itself with its own
+            <code>filter: Filter.grayscale()</code>. <code>image</code> takes a
+            CSS filter string today. The rect is then blended over it in
             <code>"color"</code>, inside the image.
           </p>
           <div class="figs">
@@ -1847,7 +1863,7 @@ union({ blendMode: &quot;multiply&quot; }, [
   image({
     href: bottle,
     h: v(100),
-    filter: &quot;grayscale(1)&quot;,
+    filter: Filter.grayscale(),
   }),
   rect({
     h: &quot;amount&quot;,
@@ -2030,10 +2046,14 @@ await PICCL.show([[chart, data1]], container, { pictures });</code></pre>
           </div>
           <p class="note">
             Vega's image mark has no filter (checked); matplotlib has none
-            either (from memory). Recommended: the existing <code>filter</code>,
-            since it adds no API and renders today. A recolor like PiCCL's
-            <code>color</code> is the general one; add it when an example maps
-            data to an image's color (<a href="#d-gray">open</a>).
+            either (from memory). Decided: the <code>filter</code> option with a
+            <code>Filter</code> family value, <code>Filter.grayscale()</code>,
+            on every mark and on <code>layer</code>; a raw CSS string stays as
+            an escape hatch. A recolor like PiCCL's <code>color</code> can
+            follow when an example maps data to an image's color (<a
+              href="#d-gray"
+              >decided</a
+            >).
           </p>
         </article>
         <article class="card" id="mask-modes">
@@ -2045,8 +2065,9 @@ await PICCL.show([[chart, data1]], container, { pictures });</code></pre>
           <p class="say">
             A stencil's shape is its alpha, so a stencil of any color works. To
             read brightness instead, as SVG <code>&lt;mask&gt;</code> does, the
-            stencil filters itself to alpha before it is hidden. No option on
-            the operator. No brightness leaks out of a hidden mark.
+            stencil filters itself to alpha with
+            <code>filter: Filter.luminanceToAlpha()</code> before it is hidden.
+            No option on the operator. No brightness leaks out of a hidden mark.
           </p>
           <p class="label">Shared stencil (the content is the same stripes)</p>
           <pre
@@ -2098,10 +2119,10 @@ intersect([stripes, stencil.hidden()]);</code></pre>
                   full, about half, and nearly nothing.
                 </figcaption>
               </figure>
-              <pre class="new"><code class="language-javascript">intersect([
-  stripes,
-  stencil.filter(&quot;luminance-to-alpha&quot;).hidden(),
-]);</code></pre>
+              <pre
+                class="new"
+              ><code class="language-javascript">const lum = layer({ filter: Filter.luminanceToAlpha() }, [stencil]);
+intersect([stripes, lum.hidden()]);</code></pre>
             </div>
           </div>
         </article>
@@ -2398,9 +2419,11 @@ mask([soft, stripes]);</code></pre>
             and SwiftUI's <code>.hidden()</code> most likely adds nothing to a
             mask. Figma's mask layer, and SVG's own mask and clip content, are
             used for shape without being drawn, which is the role
-            <code>.hidden()</code> takes here (<a href="#d-hidden-op">open</a>).
-            When implemented, the rule goes in <code>api-design.md</code> and
-            the concepts docs (<a href="#d-alpha">open</a>).
+            <code>.hidden()</code> takes here (<a href="#d-hidden-op">decided</a
+            >). When implemented, the rule goes in
+            <code>api-design.md</code> and the concepts docs (<a href="#d-alpha"
+              >decided</a
+            >).
           </p>
         </article>
         <article class="card" id="slots">
@@ -2957,7 +2980,7 @@ mask([soft, stripes]);</code></pre>
             </table>
           </div>
           <p class="note">
-            Recommended: <code>atop</code> (<a href="#d-atop">open</a>).
+            Decided: <code>atop</code> (<a href="#d-atop">decision</a>).
           </p>
           <p class="label">Recommendations</p>
           <ul class="recs">
@@ -3444,159 +3467,129 @@ rect({ w: 20, h: 20 }).translate({ x: 10 }); // field: translate: { x: 10 }</cod
         </div>
       </section>
       <section id="decisions">
-        <h2>Open decisions</h2>
+        <h2>Decisions</h2>
         <ol class="decisions">
           <li id="d-rule">
-            Adopt the rule: children are drawn as themselves (and may also be
-            read); an operand is read, and the operator draws its result from
-            what it read, never the operand as itself; refs draw nothing?
+            Children are drawn as themselves; an operand is only read, and the
+            operator draws its result from what it read. <b>Yes.</b>
             <a class="see" href="#slots">card</a>
           </li>
           <li id="d-blend">
-            (1) Adopt the coverage-blend rule: with no fill, each part of the
-            result takes the paint of the operands that cover it, blended by
-            <code>blendMode</code> where they overlap? It is PiCCL's rule
-            (<code>GroupShape.renderSVG</code>), drops today's gray step, and
+            The coverage-blend rule: with no fill, each part takes the paint of
+            the operands that cover it, blended where they overlap. <b>Yes</b>;
             closes #1230 (what a compositing operator with no fill paints).
             <a class="see" href="#ops">card</a>
           </li>
           <li id="d-normal">
-            (2) Default <code>blendMode</code> to <code>"normal"</code>, the
-            later operand over the earlier, on <code>union</code>,
-            <code>intersect</code> and <code>atop</code> (the only operations
-            that take it), as PiCCL, Canvas, Cairo and SVG
-            <code>feComposite</code> default to over? Today the default is
-            <code>"color"</code> (<code>porterDuff.tsx</code> lines 460 and
-            505), and the type,
-            <code>"color" | "multiply" | "screen" | "overlay"</code> (<code
-              >chart.ts</code
-            >
-            line 1164), has no <code>"normal"</code>; it gets one.
+            The default <code>blendMode</code> is <code>"normal"</code>.
+            <b>Yes.</b> The bottle passes <code>"color"</code> explicitly.
             <a class="see" href="#ops">card</a>
           </li>
           <li id="d-alpha">
-            (3) Adopt "alpha is shape": an operand gives its shape, which is its
-            alpha, partial coverage included, and its paint? Precedent supports
-            it on the mask side (Porter and Duff, Smith, CSS and Figma alpha
-            masks, Flutter's ShaderMask); clips use raw geometry. Document it in
-            <code>api-design.md</code> and the concepts docs when it lands?
+            Alpha is shape. <b>Yes</b>, documented in
+            <code>api-design.md</code> and the concepts page on compositing.
             <a class="see" href="#alpha-shape">card</a>
           </li>
           <li id="d-hidden-op">
-            (4) What does a hidden operand give? (A) Its shape and no paint, so
-            <code>intersect([stripes, a.hidden()])</code> is a mask: Figma's
-            mask layer and SVG's mask content are used without being drawn. (B)
-            Nothing, as invisible content adds nothing to an SVG clip and
-            SwiftUI's <code>.hidden()</code> most likely adds nothing to a mask;
-            a stencil would then need another way to drop its paint.
-            Recommended: A, since <code>.hidden()</code> already means laid out
-            and not painted. This replaces the old decision to warn on
-            <code>.hidden()</code> on an operand.
+            A hidden operand gives its shape and no paint. <b>(A).</b>
             <a class="see" href="#intersect-hidden">card</a>
           </li>
           <li id="d-atop">
-            (5) Name the fifth operation <code>atop</code> (Porter-Duff, PiCCL,
-            SVG, Canvas, Cairo, Flutter, Android, and today's wire name), or
-            keep <code>paint</code> (#202)? Recommended: <code>atop</code>.
-            <a class="see" href="#naming-atop">card</a>
+            The fifth operation is <code>atop</code>, not <code>paint</code>.
+            <b>Yes.</b> <a class="see" href="#naming-atop">card</a>
           </li>
           <li id="d-gray">
-            (6) One spelling for a mark that filters itself. The bottle grays
-            its image with the existing
-            <code>filter: "grayscale(1)"</code> option (on
-            <code>image</code> and <code>rect</code> today, a CSS filter
-            string). A luminance stencil needs <code>luminance-to-alpha</code>,
-            which has no CSS function (it is SVG
-            <code>feColorMatrix type="luminanceToAlpha"</code>). Today a rect
-            renders it as <code>filter: "url(#lumToAlpha)"</code> pointing at a
-            hand-written SVG filter (checked: white gives alpha 1,
-            <code>#808080</code> about 0.5 in sRGB, black 0), so the option
-            carries it but the user must write the filter. And
-            <code>circle</code> and <code>layer</code> have no filter option.
-            Options: a <code>.filter()</code> method on any mark, chart or
-            layer, like <code>.hidden()</code>, with the option folded in; or
-            the option on every mark and layer. The value: a string, or a family
+            The filter spelling is a <code>filter</code> option on every mark
+            and on <code>layer</code>, not a <code>.filter()</code> method. Its
+            value is a <code>Filter</code> family
             (<code>Filter.grayscale()</code>,
-            <code>Filter.luminanceToAlpha()</code>), as option values that
-            choose a strategy are. A recolor like PiCCL's
-            <code>Picture({ color })</code> can follow when an example maps data
-            to an image's color. <a class="see" href="#mask-modes">card</a>
+            <code>Filter.luminanceToAlpha()</code>), with a raw CSS string as an
+            escape hatch. <b>Yes.</b> <a class="see" href="#mask-modes">card</a>
           </li>
           <li id="d-blendname">
-            (7) <code>line</code> and <code>ribbon</code> say
-            <code>mixBlendMode</code> (<code>"normal" | "multiply"</code>,
-            <code>chart.ts</code> lines 973 and 1037); the operations say
-            <code>blendMode</code> (Python <code>blend_mode</code>). Unify on
-            one name? <a class="see" href="#ops">card</a>
+            One name, <code>blendMode</code>, everywhere: <code>line</code> and
+            <code>ribbon</code> rename <code>mixBlendMode</code> to it, with one
+            shared type. <b>Yes.</b> <a class="see" href="#ops">card</a>
           </li>
           <li id="d-migrate-pd">
-            (8) Migrate in the same change? <code>paint</code> becomes a rename
-            to <code>atop</code>: 4 calls (the Bottle story, which also gains
-            <code>filter: "grayscale(1)"</code>; the PorterDuffRelations paint
-            story; two Python stories), with the wire name unchanged.
-            <code>mask</code> is rewritten as <code>intersect</code> with a
-            hidden operand filtered by <code>luminance-to-alpha</code>, since
-            today's mask reads luminance: 3 calls (the PorterDuffRelations mask
-            story, <code>coordPaintOrder.test.ts</code> line 411, one Python
-            story), plus the internal <code>Mask</code> in <code>cut.tsx</code>.
-            The <code>mask</code> entries in <code>descriptors.ts</code>,
-            <code>jsonSchema.ts</code> and <code>_generated.py</code> go. 5 docs
-            pages: region-compositing and cut, JS and Python, and the
-            handwritten pictorial-charts tutorial, which gets an issue.
-            <a class="see" href="#ops">card</a>
+            Migrate <code>paint</code> and <code>mask</code> callsites in the
+            same change, with the <code>subtract</code> operand-order fix
+            (#1285: <code>subtract([a, b])</code> draws b − a today).
+            <b>Yes.</b> <a class="see" href="#ops">card</a>
           </li>
           <li id="d-union">
-            Add <code>union</code> (Figma, Inkscape, Sketch, SwiftUI, Shapely,
-            Clipper2, PiCCL) as a region shape, separate from
-            <code>layer</code>, as every design tool keeps Union apart from
-            Group? <a class="see" href="#naming-grid">card</a>
+            Add <code>union</code> as a region shape, separate from
+            <code>layer</code>. <b>Yes.</b>
+            <a class="see" href="#naming-grid">card</a>
           </li>
           <li id="d-use">
-            Keep <code>use(ref)</code> parked until an example needs it?
+            <code>use(ref)</code>. <b>Stays parked.</b>
             <a class="see" href="#use-ref">card</a>
           </li>
           <li id="d-bend">
-            File the bend and envelope issue, kept deferred? (Decided: a coord
-            with a shape argument, not an operator.)
+            Bend and envelope. <b>Filed as #1284, deferred.</b>
             <a class="see" href="#gecko">card</a>
           </li>
           <li id="d-renames">
-            Do both renames in one PR, separate from <code>.hidden()</code>?
-            <a class="see" href="#translate">card</a>
+            The renames (<code>cut</code> argument order, #1282;
+            <code>position</code> to <code>translate</code>, #1283).
+            <b>Their own PR</b>, separate from <code>.hidden()</code> and
+            compositing. <a class="see" href="#translate">card</a>
           </li>
           <li id="d-cut2">
-            Step 2 for <code>cut</code>: unify it with the
-            <code>.cut()</code> mark method? <a class="see" href="#cut">card</a>
+            <code>cut</code> step 2, unifying it with the
+            <code>.cut()</code> mark method. <b>Deferred to #1282.</b>
+            <a class="see" href="#cut">card</a>
           </li>
           <li id="d-twin">
-            Add the method-twin rule to api-design.md: a method has a function
-            twin only for a one-child operator, and both build one node?
+            Add the method-twin rule to <code>api-design.md</code>. <b>Yes.</b>
             <a class="see" href="#translate">card</a>
           </li>
           <li id="d-legend">
-            Does a hidden mark's color still feed the scale and legend?
-            (Recommended yes, as <code>blank()</code> does.)
+            A hidden mark's color still feeds scales and legends. <b>Yes.</b>
             <a class="see" href="#venn">card</a>
           </li>
           <li id="d-blank">
-            Keep <code>blank()</code> as sugar for <code>rect().hidden()</code>,
-            or delete it? <a class="see" href="#quantum">card</a>
+            <code>blank()</code>. <b>Delete it</b> in favor of
+            <code>rect().hidden()</code>, after counting its uses; revisit if it
+            is widely used as the stand-in for "no mark". First count: 122
+            matches of <code>blank(</code> in 44 files (6 story files, 21 docs
+            files, 8 Python files, the rest in <code>src</code>).
+            <a class="see" href="#quantum">card</a>
           </li>
           <li id="d-migrate">
             Migrate the gallery stories (four croissants, QuantumCircuit,
-            OhmParseTree, DFSCQ) in the same change?
+            OhmParseTree, DFSCQ) in the same change. <b>Yes.</b>
             <a class="see" href="#croissant">card</a>
           </li>
           <li id="d-1259">
-            Land with #1259 (<code>.layer()</code> reads names), so the
-            croissant needs no outer <code>layer</code>?
+            Wait for #1259 (<code>.layer()</code> reads names)? <b>No.</b> The
+            croissant keeps its outer <code>layer</code> until #1259 lands.
             <a class="see" href="#croissant">card</a>
           </li>
         </ol>
         <p class="files">
-          Draft issues: <code>issue-cut.md</code>,
-          <code>issue-translate-position.md</code>,
-          <code>issue-spine-envelope.md</code> (in the proposal folder).
+          Issues:
+          <a
+            href="https://github.com/gofish-graphics/gofish-graphics/issues/1282"
+            >#1282</a
+          >
+          (<code>cut</code> argument order),
+          <a
+            href="https://github.com/gofish-graphics/gofish-graphics/issues/1283"
+            >#1283</a
+          >
+          (<code>position</code> to <code>translate</code>),
+          <a
+            href="https://github.com/gofish-graphics/gofish-graphics/issues/1284"
+            >#1284</a
+          >
+          (bend and envelope, deferred),
+          <a
+            href="https://github.com/gofish-graphics/gofish-graphics/issues/1285"
+            >#1285</a
+          >
+          (<code>subtract</code> operand order).
         </p>
       </section>
       <section id="why">

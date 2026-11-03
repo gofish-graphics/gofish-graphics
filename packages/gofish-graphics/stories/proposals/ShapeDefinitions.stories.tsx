@@ -840,7 +840,7 @@ export const MaskingIntersect: StoryObj = {
 export const MaskingSubtract: StoryObj = {
   render: () => grid(subtract([gridA(), bandStripes()])),
 };
-// Proposed `intersect({ mode: "luminance" }, [stripes, fade.hidden()])`:
+// Proposed `intersect([stripes, fade.hidden()])` with `fade` filtered by `Filter.luminanceToAlpha()`:
 // today's `mask`, a white and a gray circle.
 export const MaskingLuminance: StoryObj = {
   render: () =>
@@ -1056,7 +1056,7 @@ export const InSoft: StoryObj = {
       )
     ),
 };
-// The luminance card's input after `.filter("luminance-to-alpha")`: white
+// The luminance card's input after `filter: Filter.luminanceToAlpha()`: white
 // gives alpha 1, mid gray about 0.5. Drawn dark, at that opacity.
 export const InFadeAlpha: StoryObj = {
   render: () =>

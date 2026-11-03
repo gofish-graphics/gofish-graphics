@@ -1,5 +1,7 @@
 # Bend and envelope: warp a shape along a spine or into a region
 
+From #1267 (how to define a shape without drawing it: `.hidden()`, and region compositing). Proposal page: https://claude.ai/artifact/Pc7MBRfGfQyTWvhFTXaH3H. Signed off 2026-11-03.
+
 GoFish cannot bend a shape along a path or fit a shape into a region. This issue gives that capability its own name. Until now it has sat under #75, whose title is "rendering IR".
 
 **Status: deferred.** `notes/design/polar-coordinate-spaces.md` ("Bend / skeleton warp: explicitly deferred (maybe never)") records that this is out of scope for GoTree, and that even GoTree's arc-length midpoint case is a plain coordinate transform. This issue keeps that decision. It records the design so that the idea has a correct home when a real example needs it.
@@ -7,9 +9,11 @@ GoFish cannot bend a shape along a path or fit a shape into a region. This issue
 ## Background
 
 - #75 ("rendering IR") asks for generic warping of rects, paths, images and text, so that each mark does not reimplement it. It links two warp.js threads. Josh's comment there: arrows have a natural one-dimensional "spine" reading, and a two-dimensional one where you warp them like an image.
-- warpjs#15 ("Using a Path as a 'skeleton' to another path (Bend path)") shows a gecko bent along a curved spine with Inkscape's Bend live path effect. It links the [Inkscape manual page](http://tavmjong.free.fr/INKSCAPE/MANUAL/html/Paths-LivePathEffects-BendTool.html) and [`lpe-bendpath.cpp`](https://gitlab.com/inkscape/inkscape/-/blob/master/src/live_effects/lpe-bendpath.cpp). J.F. Barraud's theory, quoted in the thread: reparametrize the skeleton by arc length as U(s), take its unit normal N(s), and map each point (x, y) of the shape to U(x) + y·N(x).
-- warpjs#11 ("Warping arbitrary coordinates?") fits a word into an arbitrary shape, as Illustrator's Envelope Distort does. The thread points to generalized barycentric and mean value coordinates, and ends with a proof of concept for polygons.
+- [warpjs#15](https://github.com/benjamminf/warpjs/issues/15) ("Using a Path as a 'skeleton' to another path (Bend path)") shows a gecko bent along a curved spine with Inkscape's Bend live path effect. It links the [Inkscape manual page](http://tavmjong.free.fr/INKSCAPE/MANUAL/html/Paths-LivePathEffects-BendTool.html) and [`lpe-bendpath.cpp`](https://gitlab.com/inkscape/inkscape/-/blob/master/src/live_effects/lpe-bendpath.cpp). J.F. Barraud's theory, quoted in the thread: reparametrize the skeleton by arc length as U(s), take its unit normal N(s), and map each point (x, y) of the shape to U(x) + y·N(x).
+- [warpjs#11](https://github.com/benjamminf/warpjs/issues/11) ("Warping arbitrary coordinates?") fits a word into an arbitrary shape, as Illustrator's Envelope Distort does. The thread points to generalized barycentric and mean value coordinates, and ends with a proof of concept for polygons.
 - Other tools: Inkscape has Bend, Pattern Along Path and Envelope Deformation (four bend paths). Illustrator has Art brushes and Envelope Distort (with warp presets, with a mesh, or with a top object as the envelope). Figma has neither built in.
+
+The gecko image on the #1267 proposal page is from warpjs#15. It was posted there by that issue's author to show Inkscape's Bend effect. GoFish did not draw it.
 
 ## Proposal
 
