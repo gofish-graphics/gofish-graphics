@@ -10,9 +10,11 @@ import { unifiedOutline } from "../../packages/gofish-graphics/src/ast/graphical
 import { SEPARATE } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/separate";
 if (process.env.ROUND) SEPARATE.round = +process.env.ROUND;
 if (process.env.FILLET) SEPARATE.fillet = +process.env.FILLET;
-// the cut never enters the padded members, and its smooth union with them (SEPARATE.fillet)
-// reaches at most fillet/4 past them: points that near the padded members are not counted
-const ZONE = process.env.ZONE ? +process.env.ZONE : SEPARATE.fillet / 4 + 0.25;
+// the cut never enters the padded members: a point on them (within ZONE px) inside a keep-out
+// is the member's own overlap with it (inherent), so "off the padded members" leaves them out
+const ZONE = process.env.ZONE ? +process.env.ZONE : 0.05;
+// SHAPES: which shapes check covers (default blob, fillet, box)
+const SHAPES = (process.env.SHAPES ?? "blob,fillet,box").split(",");
 type Pt = [number, number];
 const D = DATA as any[];
 const CS = [0, 0.1, 0.25, 0.5, 0.75, 1, 1.5, 2];
@@ -92,53 +94,64 @@ if (process.env.MODE === "base") {
       worstFree = Infinity,
       atFree = "";
     const severed: string[] = [];
-    for (const neck of [1, 0.6])
-      for (const connection of CONN)
-        for (const c of CS)
-          d.sets.forEach((s: any, si: number) => {
-            const o = { padding: d.padding, convexity: c, neck, connection };
-            const rings = unifiedOutline(s.members, {
-              ...o,
-              avoiding: s.avoiding,
-              clearance: d.clearance,
-            }) as Pt[][];
-            const n0 = outer(unifiedOutline(s.members, o) as Pt[][]);
-            const n1 = outer(rings);
-            if (n1 !== n0)
-              severed.push(
-                `set${si} c${c} k${connection} n${neck}: ${n0}→${n1}`
+    const cases: [string, Record<string, unknown>][] = [];
+    if (SHAPES.includes("blob"))
+      for (const neck of [1, 0.6])
+        for (const connection of CONN)
+          for (const c of CS)
+            cases.push([
+              `c${c} k${connection} n${neck}`,
+              { convexity: c, neck, connection },
+            ]);
+    if (SHAPES.includes("fillet"))
+      for (const radius of [d.padding, 12])
+        for (const neck of [0, 0.5])
+          cases.push([
+            `fillet r${radius} n${neck}`,
+            { shape: "fillet", radius, neck },
+          ]);
+    if (SHAPES.includes("box")) cases.push(["box", { shape: "box" }]);
+    for (const [name, co] of cases)
+      d.sets.forEach((s: any, si: number) => {
+        const o = { padding: d.padding, ...co };
+        const rings = unifiedOutline(s.members, {
+          ...o,
+          avoiding: s.avoiding,
+          clearance: d.clearance,
+        }) as Pt[][];
+        const n0 = outer(unifiedOutline(s.members, o) as Pt[][]);
+        const n1 = outer(rings);
+        if (n1 !== n0) severed.push(`set${si} ${name}: ${n0}→${n1}`);
+        for (const ring of rings)
+          for (const p of ring) {
+            let own = Infinity;
+            for (const m of s.members) own = Math.min(own, memberDist(p, m));
+            let v = Infinity,
+              vm: any = null;
+            for (const m of s.avoiding) {
+              const x = memberDist(p, m);
+              if (x < v) [v, vm] = [x, m];
+            }
+            // the nearest kept-out member's keep-out overlaps no padded member: no
+            // junction there, so nothing inherent lets the outline in
+            if (vm && v < worstFree) {
+              const kc = centre(vm),
+                R = keepR(vm, d.clearance);
+              const free = s.members.every(
+                (m: any) => memberDist(kc, m) - d.padding >= R
               );
-            for (const ring of rings)
-              for (const p of ring) {
-                let own = Infinity;
-                for (const m of s.members)
-                  own = Math.min(own, memberDist(p, m));
-                let v = Infinity,
-                  vm: any = null;
-                for (const m of s.avoiding) {
-                  const x = memberDist(p, m);
-                  if (x < v) [v, vm] = [x, m];
-                }
-                // the nearest kept-out member's keep-out overlaps no padded member: no
-                // junction there, so nothing inherent lets the outline in
-                if (vm && v < worstFree) {
-                  const kc = centre(vm),
-                    R = keepR(vm, d.clearance);
-                  const free = s.members.every(
-                    (m: any) => memberDist(kc, m) - d.padding >= R
-                  );
-                  if (free)
-                    [worstFree, atFree] = [
-                      v,
-                      `set${si} c${c} k${connection} n${neck} (${(own - d.padding).toFixed(2)} px off padded members)`,
-                    ];
-                }
-                const tag = `set${si} c${c} k${connection} n${neck} (${(own - d.padding).toFixed(2)} px off padded members)`;
-                if (v < worstAll) [worstAll, atAll] = [v, tag];
-                if (own > d.padding + ZONE && v < worstOff)
-                  [worstOff, at] = [v, tag];
-              }
-          });
+              if (free)
+                [worstFree, atFree] = [
+                  v,
+                  `set${si} ${name} (${(own - d.padding).toFixed(2)} px off padded members)`,
+                ];
+            }
+            const tag = `set${si} ${name} (${(own - d.padding).toFixed(2)} px off padded members)`;
+            if (v < worstAll) [worstAll, atAll] = [v, tag];
+            if (own > d.padding + ZONE && v < worstOff)
+              [worstOff, at] = [v, tag];
+          }
+      });
     console.log(
       `${d.id} (clearance ${d.clearance}): min more than ${ZONE} px off the padded members ${worstOff.toFixed(2)} at ${at}; min over all points ${worstAll.toFixed(2)} at ${atAll}`
     );

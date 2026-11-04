@@ -16,7 +16,10 @@
  *     rows of discs, so a clipped side is a clean curve at every convexity
  *     (convexity 2 has no outline blur of its own to hide them);
  *   - at least s from every other piece (d_¬i ≥ s);
- *   - outside every keep-out disc.
+ *   - outside the keep-out region: the keep-out discs' union closed by a
+ *     disc of SEPARATE.open px (keepRegion), so the ground between the
+ *     keep-outs is opened by it: no sliver of it narrower than about
+ *     2 · open px, and its corners between keep-outs are round.
  *
  * Two pieces' regions stay s apart (or as near as their spines already
  * are): d_i − d_j is 2-Lipschitz, so is its blur, and g_i ≥ d_i − d_j, so
@@ -26,13 +29,16 @@
  *
  * As one field, negative where allowed:
  *
- *   Ψ = smin(sd_i, max(G + s, s − d_¬i, k)),
+ *   Ψ = max(smin(sd_i, max(G + s, s − d_¬i)), min(sd_i, k)),
  *
  * smin a smooth min of width SEPARATE.fillet (a fillet where the spine
  * sticks out past the rest, at most fillet/4 px past either; there the gap
  * kept may close by as much),
- * sd_i the signed distance to piece i's spine, k = max over the keep-out
- * discs of (R − distance to the centre). Ψ is 2-Lipschitz.
+ * sd_i the signed distance to piece i's spine, k the signed distance to the
+ * keep-out region (positive inside). The keep-outs take a plain min with the
+ * spine, no smooth one: the cut never enters a keep-out but where the padded
+ * members do, and there it leaves a sharp concave corner (rounding it would
+ * enter one or the other). Ψ is 2-Lipschitz.
  *
  * The cut outline is the zero level of max(sd_R, Ψ), sd_R the signed
  * distance to the outline, traced by marching squares on a grid of step h
@@ -46,6 +52,7 @@
  */
 import type { Pt } from "./blob";
 import { SegGrid, Inside, segsOf } from "./meshBlend";
+import { closingRings, withArcsTolerance } from "./arcs";
 import { signedArea2, pointInRing } from "../../geometry/plane";
 
 type Box = [number, number, number, number];
@@ -65,10 +72,12 @@ const boxOf = (rings: Pt[][]): Box => {
 /** PROTOTYPE: the field's knobs. sigma: the blur of g, px (the bisector's
  *  smoothing); h: the grid step, px; round: the width, px, of the rounding
  *  of the convex corners the cut leaves (arcsSmooth.ts, roundCut); fillet:
- *  the width k, px, of the smooth union of the spine with the rest, which
- *  fills the concave corners where a spine sticks out past a clipped side
- *  (they cannot be rounded inward), reaching at most k/4 past either. */
-export const SEPARATE = { sigma: 4, h: 1, round: 3, fillet: 6 };
+ *  the width k, px, of the smooth union of the spine with the rest between
+ *  pieces, which fills the concave corners where a spine sticks out past a
+ *  clipped side (they cannot be rounded inward), reaching at most k/4 past
+ *  either; open: the radius, px, of the disc the keep-out region is closed
+ *  by (keepRegion). */
+export const SEPARATE = { sigma: 4, h: 1, round: 3, fillet: 6, open: 3 };
 
 export const SEPARATE_STATS: { ms?: number; evals?: number; nodes?: number } =
   {};
@@ -76,6 +85,28 @@ export const SEPARATE_STATS: { ms?: number; evals?: number; nodes?: number } =
 /** A keep-out: a disc the outline stays out of (an avoided member grown by
  *  the clearance). */
 export type KeepDisc = { c: Pt; R: number };
+
+/**
+ * The ground the keep-outs forbid: their union closed (arcs.ts, the exact closing) by a disc
+ * of radius `rho`, holes kept. The allowed ground less the keep-outs is opened by the same
+ * disc (the opening of a set is the complement of the closing of its complement): a sliver of
+ * ground narrower than about 2 rho between two keep-outs is forbidden too, and the corners
+ * between two keep-outs are rounded. The closing holds the union, so the cut never enters a
+ * keep-out; the padded members alone are allowed inside it (cutField).
+ */
+export function keepRegion(K: KeepDisc[], rho: number): Pt[][] {
+  if (!K.length) return [];
+  // sampled to 0.02 px, not the arcs' 0.2: a chord cuts inside its arc, and the cut keeps
+  // off the rings, so their chord error is clearance lost
+  return withArcsTolerance(0.02, () =>
+    closingRings(
+      K.map((k) => ({ kind: "disc" as const, cx: k.c[0], cy: k.c[1], r: k.R })),
+      0,
+      Math.max(0, rho),
+      true
+    )
+  );
+}
 
 /** A spine's box (for nearPieces). */
 export const spineBox = (rings: Pt[][]): Box => boxOf(rings);
@@ -104,70 +135,6 @@ export function nearPieces(
       near.push(j);
   }
   return near;
-}
-
-/** Keep-out discs bucketed on a grid: k(x) = max over discs of
- *  (R − |x − c|), or −cap when no disc comes within cap. */
-class DiscGrid {
-  x0: number;
-  y0: number;
-  cell: number;
-  nx: number;
-  ny: number;
-  start: Int32Array;
-  items: Int32Array;
-  D: Float64Array;
-  rmax: number;
-  constructor(K: KeepDisc[], cell = 8) {
-    const n = K.length;
-    this.D = new Float64Array(3 * n);
-    let [xa, ya, xb, yb] = [Infinity, Infinity, -Infinity, -Infinity];
-    this.rmax = 0;
-    K.forEach((k, i) => {
-      this.D[3 * i] = k.c[0];
-      this.D[3 * i + 1] = k.c[1];
-      this.D[3 * i + 2] = k.R;
-      xa = Math.min(xa, k.c[0]);
-      xb = Math.max(xb, k.c[0]);
-      ya = Math.min(ya, k.c[1]);
-      yb = Math.max(yb, k.c[1]);
-      this.rmax = Math.max(this.rmax, k.R);
-    });
-    this.cell = cell;
-    this.x0 = xa;
-    this.y0 = ya;
-    this.nx = Math.floor((xb - xa) / cell) + 1;
-    this.ny = Math.floor((yb - ya) / cell) + 1;
-    const cellOf = (i: number) =>
-      Math.floor((this.D[3 * i + 1] - ya) / cell) * this.nx +
-      Math.floor((this.D[3 * i] - xa) / cell);
-    const count = new Int32Array(this.nx * this.ny + 1);
-    for (let i = 0; i < n; i++) count[cellOf(i) + 1]++;
-    for (let c = 0; c < this.nx * this.ny; c++) count[c + 1] += count[c];
-    this.start = count;
-    this.items = new Int32Array(n);
-    const fill = count.slice();
-    for (let i = 0; i < n; i++) this.items[fill[cellOf(i)]++] = i;
-  }
-  k(x: number, y: number, cap: number): number {
-    const { x0, y0, cell, nx, ny, start, items, D } = this;
-    const reach = this.rmax + cap;
-    const i0 = Math.max(0, Math.floor((x - reach - x0) / cell)),
-      i1 = Math.min(nx - 1, Math.floor((x + reach - x0) / cell)),
-      j0 = Math.max(0, Math.floor((y - reach - y0) / cell)),
-      j1 = Math.min(ny - 1, Math.floor((y + reach - y0) / cell));
-    let best = -cap;
-    for (let j = j0; j <= j1; j++)
-      for (let i = i0; i <= i1; i++) {
-        const c = j * nx + i;
-        for (let q = start[c]; q < start[c + 1]; q++) {
-          const s = items[q];
-          const v = D[3 * s + 2] - Math.hypot(x - D[3 * s], y - D[3 * s + 1]);
-          if (v > best) best = v;
-        }
-      }
-    return best;
-  }
 }
 
 /** One piece's allowed ground (see the top of the file) on its grid, with
@@ -249,7 +216,7 @@ function quad(
  * box its fill stays in. `spine`: its filled spine rings (outer rings
  * winding positive); `near`: the spines of the pieces nearPieces finds, in
  * piece order; `s`: the gap kept between pieces; `keep`: the keep-out
- * discs. A function of these alone, so it is cached per piece, its
+ * region's rings (keepRegion). A function of these alone, so it is cached per piece, its
  * neighbours and the keep-outs. null when nothing is near and no keep-out
  * reaches the box: nothing to cut.
  */
@@ -258,18 +225,22 @@ export function cutField(
   box: Box,
   near: Pt[][][],
   s: number,
-  keep: KeepDisc[]
+  keep: Pt[][]
 ): CutField | null {
   const t0 = performance.now();
   const h = SEPARATE.h;
   const [bx0, by0, bx1, by1] = box;
-  const K = keep.filter(
-    (k) =>
-      k.c[0] + k.R >= bx0 &&
-      k.c[0] - k.R <= bx1 &&
-      k.c[1] + k.R >= by0 &&
-      k.c[1] - k.R <= by1
-  );
+  // the keep-out region's rings that reach the grid (the box and its margin, below)
+  const reach = (8 + 2 * Math.ceil(3 * (SEPARATE.sigma / h)) + 1) * h;
+  const K = keep.filter((r) => {
+    const [xa, ya, xb, yb] = boxOf([r]);
+    return (
+      xb >= bx0 - reach &&
+      xa <= bx1 + reach &&
+      yb >= by0 - reach &&
+      ya <= by1 + reach
+    );
+  });
   if (!near.length && !K.length) return null;
   const stats = { ms: 0, evals: 0 };
   const S0 = segsOf(spine);
@@ -278,7 +249,9 @@ export function cutField(
   const S1 = near.length ? segsOf(near.flat()) : new Float64Array(0);
   const og = near.length ? new SegGrid(S1, 4) : null,
     oin = near.length ? new Inside(S1) : null;
-  const dg = K.length ? new DiscGrid(K) : null;
+  const SK = K.length ? segsOf(K) : null;
+  const kg = SK ? new SegGrid(SK, 4) : null,
+    kin = SK ? new Inside(SK) : null;
   // the grid: step h over the box grown by the blur's reach twice and 8
   // steps (the smoothed outline's offset stays well inside that)
   const sig = near.length ? SEPARATE.sigma / h : 0;
@@ -369,18 +342,24 @@ export function cutField(
       );
     let v = sd;
     if (sd > -SURE) {
-      let rest = -SURE;
-      if (Gb) rest = Math.max(rest, Gb[q]);
+      v = -SURE;
       if (og && oin) {
+        let rest = -SURE;
+        if (Gb) rest = Math.max(rest, Gb[q]);
         const dj = oin.has(x, y) ? 0 : capped(og, x, y, s + SURE);
         rest = Math.max(rest, s - dj);
+        // the quadratic smooth min (Quílez): min(a, b) − k/4 · u², u =
+        // max(0, 1 − |a − b|/k); 2-Lipschitz as both are
+        const k = SEPARATE.fillet;
+        const u = k > 0 ? Math.max(0, 1 - Math.abs(sd - rest) / k) : 0;
+        v = Math.min(sd, rest) - (k / 4) * u * u;
       }
-      if (dg) rest = Math.max(rest, dg.k(x, y, SURE));
-      // the quadratic smooth min (Quílez): min(a, b) − k/4 · u², u =
-      // max(0, 1 − |a − b|/k); 2-Lipschitz as both are
-      const k = SEPARATE.fillet;
-      const u = k > 0 ? Math.max(0, 1 - Math.abs(sd - rest) / k) : 0;
-      v = Math.min(sd, rest) - (k / 4) * u * u;
+      // the keep-outs: a plain min with the padded members, no smooth union, so inside
+      // the keep-out region only the padded members are allowed
+      if (kg && kin) {
+        const d = capped(kg, x, y, SURE);
+        v = Math.max(v, Math.min(sd, kin.has(x, y) ? d : -d));
+      }
     }
     return (PSI[q] = Math.max(-SURE, Math.min(SURE, v)));
   };

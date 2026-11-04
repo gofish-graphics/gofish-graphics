@@ -25,6 +25,8 @@ const cases = JSON.parse(process.env.CASES!) as {
   avoid?: boolean;
   crop?: number[];
   scale?: number;
+  /** with avoid: draw the keep-out discs (dashed red) */
+  keepouts?: boolean;
   /** draw the fillet's links (their axes, red) */
   links?: boolean;
 }[];
@@ -42,6 +44,10 @@ for (const c of cases) {
     } as never) as Pt[][];
     const P = s.paint;
     g += `<path transform="matrix(1 0 0 ${s.T[2]} ${s.T[0]} ${s.T[1]})" d="${pathOf(rings)}" fill="${P.fill}" fill-opacity="${P.fillOpacity}" stroke="${P.stroke}" stroke-width="${Math.max(1, P.strokeWidth)}" stroke-linejoin="round"/>`;
+    if (c.avoid && c.keepouts)
+      for (const m of s.avoiding as any[])
+        if (m.kind === "disc")
+          g += `<circle transform="matrix(1 0 0 ${s.T[2]} ${s.T[0]} ${s.T[1]})" cx="${f2(m.cx)}" cy="${f2(m.cy)}" r="${f2(m.r + d.clearance)}" fill="none" stroke="#d62728" stroke-width="0.4" stroke-dasharray="1.5 1"/>`;
     if (c.links) {
       const o = c.opts as any;
       for (const L of filletLinks(

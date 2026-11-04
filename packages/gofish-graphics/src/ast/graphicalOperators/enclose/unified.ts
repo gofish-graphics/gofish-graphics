@@ -59,6 +59,7 @@ import { beyondHull, beyondEnds, minkowski, type Beyond } from "./beyond";
 import {
   cutField,
   cutRings,
+  keepRegion,
   nearPieces,
   spineBox,
   SEPARATE,
@@ -829,7 +830,9 @@ function avoidCut(
     boxOfRings(rings),
     [],
     0,
-    K
+    memo(key("keepRegion", intern(key(K)), SEPARATE.open), () =>
+      keepRegion(K, SEPARATE.open)
+    )
   );
   const cut = finish(
     { rings, all: pm, links: [], r: NaN, iterations: 0 },
