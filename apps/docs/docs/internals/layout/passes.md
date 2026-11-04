@@ -6,7 +6,7 @@ group: Layout
 status: draft
 covers:
   - packages/gofish-graphics/src/ast/gofish.tsx
-  - packages/gofish-graphics/src/ast/chromeGutters.ts
+  - packages/gofish-graphics/src/ast/solver/plotForms.ts
   - packages/gofish-graphics/src/ast/constraints/claimPlacement.ts
   - packages/gofish-graphics/src/ast/solver/plan.ts
   - packages/gofish-graphics/src/ast/solver/formula.ts

@@ -93,7 +93,7 @@ import {
 } from "./length";
 import type { Placement } from "./constraints/claimPlacement";
 import type { LayerPlan } from "./solver/plan";
-import { aroundShare, setChromeForms, type ChromeForms } from "./chromeGutters";
+import { aroundShare, plotForms } from "./solver/plotForms";
 import { toJSON } from "../util/interval";
 import type { AxisMap, AxisScale } from "./domain";
 import { envFlag } from "../util";
@@ -227,9 +227,6 @@ type ClaimMemo = {
   /** A layer's plan per axis ({@link ClaimWalk.plan}); set with its
    *  claim. */
   plans: [LayerPlan | undefined, LayerPlan | undefined];
-  /** Per axis, its chrome forms (`chromeForms` in chromeGutters.ts; `null`:
-   *  none, it has no claim there). */
-  chrome: [ChromeForms | null | undefined, ChromeForms | null | undefined];
   /** Per axis, its own size as a length laid out in its room
    *  ({@link GoFishNode.ownLength}), once read. */
   lengths: [Pwl.Value | undefined, Pwl.Value | undefined];
@@ -242,7 +239,6 @@ const freshClaimMemo = (): ClaimMemo => ({
   carriesData: [undefined, undefined],
   sharesRoom: [undefined, undefined],
   plans: [undefined, undefined],
-  chrome: [undefined, undefined],
   lengths: [undefined, undefined],
   gaps: new Map(),
 });
@@ -1382,13 +1378,18 @@ export class GoFishNode {
           : extent[dim] === undefined && this.inkOn?.[dim] !== true;
       const forms =
         scope && extent[dim] !== undefined
-          ? setChromeForms(
-              this,
-              dim,
+          ? plotForms(
               extent[dim],
               (this.chrome !== undefined
                 ? this.chrome.content.resolvePlotExtent()
-                : (this._plotExtent ?? extent))[dim]
+                : (this._plotExtent ?? extent))[dim],
+              (claim) =>
+                this.tryGetRenderSession()?.keyedDomains?.scope(
+                  this,
+                  dim,
+                  this._underlyingSpace?.[dim],
+                  claim
+                )[1] ?? claim
             )
           : undefined;
       if (scope) extent[dim] = undefined;

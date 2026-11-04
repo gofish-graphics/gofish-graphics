@@ -571,11 +571,8 @@ export function placeByClaims(
     // lands); a child that places itself where it put itself; a child no
     // constraint places, or one its own data places (`dataPositioned`),
     // where its frame seats it (layout's seating rule);
-    // a literal seat at its pixel, which layout reads as it lays the layer
-    // out (a chart's content is seated past its chrome's start gutter,
-    // `contentSeat`; the claim walk keeps the pin, its data 0, and the two
-    // agree on every box, as layout hands the content its frame from the
-    // seat). Else the solve places it.
+    // a literal seat at its pixel, as layout seats it (a ring seats its
+    // content at its data 0). Else the solve places it.
     const origin =
       c.standIn || c.fromRefs
         ? tape.input(

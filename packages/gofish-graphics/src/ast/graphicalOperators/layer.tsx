@@ -79,7 +79,7 @@ import {
   type LayerPlan,
 } from "../solver/plan";
 import { evaluate } from "../solver/formula";
-import { aroundPlot, chromeForms, setChromeForms } from "../chromeGutters";
+import { plotForms, type PlotForms } from "../solver/plotForms";
 
 // ── Z-order resolution ────────────────────────────────────────────────────
 //
@@ -546,7 +546,7 @@ export const layer = createNodeOperatorSequential(
           // A node's own size is its plot (#1032): its content's chrome
           // and dressing add around it. So its chrome forms are its
           // content's claim and plot, widened to its keyed domain and
-          // niced (`setChromeForms`), and the literal size is solved once
+          // niced (`plotForms`), and the literal size is solved once
           // as the plot through the registry (`solveFixed`), whose
           // solution `layout` reuses; the node claims the whole at that σ.
           // The node claims its own size and the reach of what dresses it
@@ -557,7 +557,7 @@ export const layer = createNodeOperatorSequential(
           // scope, the scope seats the content in the box, so the claim
           // keeps the content's split about its data 0 at that σ; content
           // that maps no domain is laid out in the box from its start edge
-          // (`aroundPlot`).
+          // (`ScopeRegistry.fixedBox`).
           // A literal size on both axes over one declared unit keeps one
           // data unit the same length on x and y (#582): both scopes take
           // the binding σ (`equalizeFixed`), so both are solved before
@@ -566,22 +566,20 @@ export const layer = createNodeOperatorSequential(
           // empty.
           const keyed: KeyedDomains | undefined = session?.keyedDomains;
           const scopes = getScopeRegistry(session);
-          for (const axis of [0, 1] as const)
-            if (node.fixedSize(axis) !== undefined)
-              setChromeForms(
-                node,
-                axis,
-                resolved[axis],
-                plot[axis],
-                (claim) =>
-                  keyed?.scope(
-                    node,
-                    axis,
-                    t.resolved[axis],
-                    claim,
-                    !isValue(dataSize(axis))
-                  )[1] ?? claim
-              );
+          const forms = ([0, 1] as const).map((axis) =>
+            plotForms(
+              resolved[axis],
+              plot[axis],
+              (claim) =>
+                keyed?.scope(
+                  node,
+                  axis,
+                  t.resolved[axis],
+                  claim,
+                  !isValue(dataSize(axis))
+                )[1] ?? claim
+            )
+          ) as [PlotForms | undefined, PlotForms | undefined];
           const fixedPx = ([0, 1] as const).map((axis) => {
             const size = node.fixedSize(axis);
             return typeof size === "number" ? size : undefined;
@@ -597,7 +595,7 @@ export const layer = createNodeOperatorSequential(
               keyed?.axisKey(node, axis, t.resolved[axis]),
               { kind: "sized", rootKey: node.key ?? node.type, axis },
               space,
-              chromeForms(node, axis),
+              forms[axis],
               px
             );
           }
@@ -610,7 +608,7 @@ export const layer = createNodeOperatorSequential(
           const fixedClaim = (axis: 0 | 1, px: number): Extent => {
             const solved = scopes.fixedSolve(node, axis);
             if (solved === undefined)
-              return Extent(Pwl.constant(aroundPlot(node, axis, px)));
+              return Extent(Pwl.constant(scopes.fixedBox(node, axis) ?? px));
             const { claim, solution, space, box } = solved;
             const descent = Pwl.at(claim.descent, solution.sigma);
             // Where the scope seats its content (`seatInScope`, as `layout`
@@ -667,16 +665,17 @@ export const layer = createNodeOperatorSequential(
           ];
           // Compute size using dims (w and h) before passing to children. A
           // node's own size is its plot's: what dresses its content adds
-          // around it (`aroundPlot`).
+          // around it, and a literal size is laid out at the box its claim
+          // solved (`ScopeRegistry.fixedBox`).
+          const sized = getScopeRegistry(node.tryGetRenderSession());
           size = ([0, 1] as const).map((axis) => {
             const fixed = node.fixedSize(axis);
             return fixed === undefined
               ? size[axis]
-              : aroundPlot(
-                  node,
-                  axis,
-                  computeSize(fixed, inheritedScaleFactors[axis]!, size[axis])
-                );
+              : ((typeof fixed === "number"
+                  ? sized.fixedBox(node, axis)
+                  : undefined) ??
+                  computeSize(fixed, inheritedScaleFactors[axis]!, size[axis]));
           }) as Size;
 
           // The scales this layer hands its children (`solveLayerScales`): on

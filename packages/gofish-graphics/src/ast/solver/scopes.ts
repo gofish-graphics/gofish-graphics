@@ -34,7 +34,7 @@ import { envFlag } from "../../util";
 import type { GoFishNode, RenderSession } from "../_node";
 import { fixedOverflow, warnLayout } from "../layoutWarnings";
 import { resolveUnit, sameUnitVar } from "../measure";
-import { reachAt, type ChromeForms } from "../chromeGutters";
+import { reachPast, type PlotForms } from "./plotForms";
 import { fromFrameStart, type AxisDirection } from "../axisDirection";
 
 export type ScopeKind = "root" | "sized" | "coord" | "recenter";
@@ -243,15 +243,19 @@ export class ScopeRegistry {
   /** The scope each node with a literal size solves on each axis, from the
    *  claim walk ({@link solveFixed}), with the keyed domain it maps. */
   private fixed = new Map<object, [FixedSolve?, FixedSolve?]>();
+  /** The box of each node with a literal size whose content maps no
+   *  domain there, so it solved no scope ({@link fixedBox}). */
+  private unsolved = new Map<object, [number?, number?]>();
 
   /**
    * Solve the scope of a node with a literal size on one axis (#1114): its
-   * content's type and chrome forms (`chromeForms`: what it draws and its
-   * plot, widened to the keyed domain it maps and niced), with its size as
-   * its plot (#1032). σ fits the plot to the size ({@link fit}), and the
-   * scope's box is the whole at that σ: the size and what the content's
-   * chrome and dressing reach past it (`reachAt`), with data 0 that far
-   * further from the box's start. A literal size does not depend on σ, so
+   * content's type and its claim's forms (`PlotForms`: what it draws and
+   * its plot, widened to the keyed domain it maps and niced), with its size
+   * as its plot (#1032). σ fits the plot to the size ({@link fit}), and the
+   * node's box is the whole at that σ: the size and what the content's
+   * dressing reaches past it (`reachPast`), with data 0 that far further
+   * from the box's start. Where no σ solves (content that maps no domain),
+   * the box is the whole where the plot fills the size ({@link fixedBox}). A literal size does not depend on σ, so
    * the claim walk solves it once, here, to compute the pixels the node
    * claims upward, and its layout reuses the solution ({@link fixedSolve}).
    * `key` names the keyed domain the node maps (`KeyedDomains.axisKey`), so
@@ -263,14 +267,31 @@ export class ScopeRegistry {
     key: string | undefined,
     meta: ScopeMeta,
     space: UnderlyingSpace | undefined,
-    forms: ChromeForms | undefined,
+    forms: PlotForms | undefined,
     plot: number
   ): ScopeSolution | undefined {
     const fitted =
       forms &&
       this.fit(meta, node, space, forms.plot, { px: plot, limit: true });
     const scope = fitted?.scope;
-    const reach = scope && reachAt(forms!, scope.sigma);
+    const reach = scope && reachPast(forms!, scope.sigma);
+    if (scope === undefined) {
+      let boxes = this.unsolved.get(node);
+      if (boxes === undefined) this.unsolved.set(node, (boxes = []));
+      // The σ at which the plot fills the size (`Pwl.fill`); 0 where none
+      // does, and where a slot of no finite size gives none.
+      const sigma = forms && Pwl.fill(forms.plot.width, plot);
+      const [start, end] =
+        forms === undefined
+          ? [0, 0]
+          : reachPast(
+              forms,
+              sigma !== undefined && Number.isFinite(sigma)
+                ? Math.max(0, sigma)
+                : 0
+            );
+      boxes[meta.axis] = plot + start + end;
+    }
     const solution: ScopeSolution | undefined =
       scope === undefined
         ? undefined
@@ -325,6 +346,13 @@ export class ScopeRegistry {
    *  ({@link solveFixed}), or undefined when it solved none. */
   fixedSolve(node: object, axis: 0 | 1): FixedSolve | undefined {
     return this.fixed.get(node)?.[axis];
+  }
+
+  /** The box a node with a literal size lays out at on `axis`: its size and
+   *  what its content's dressing reaches past it ({@link solveFixed}), the
+   *  pixels it claims. Undefined where it solved nothing there. */
+  fixedBox(node: object, axis: 0 | 1): number | undefined {
+    return this.fixed.get(node)?.[axis]?.box ?? this.unsolved.get(node)?.[axis];
   }
 
   /** The σ the nodes with a literal size solve the keyed domain `key` at on
