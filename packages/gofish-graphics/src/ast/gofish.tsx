@@ -678,7 +678,7 @@ export async function layout(
   // reflected (and `layout()` reads them back in its own order). The root's
   // order is its frame's: the chrome rings seat what they wrap at their own
   // origin and only add chrome around it.
-  const rootYDirection = yDirection(root.chrome?.withAxes ?? root);
+  const rootYDirection = yDirection(root.dressedBox());
 
   // Shared-measure scale equality (#582): when x and y carry the SAME unit
   // of measure, "1 unit on x" and "1 unit on y" are the same quantity, so

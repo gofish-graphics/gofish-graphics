@@ -149,14 +149,11 @@ const domainPlan = (
   };
 };
 
-/** Whether `node` is a ring of chrome (`GoFishNode.chrome`): a layer whose
- *  first child is the ring inside it and whose other children are chrome.
- *  (Not every `_transparent` wrapper: a label ring's labels are no chrome.) */
-const isRing = (node: GoFishNode): boolean => {
-  for (let o: GoFishNode | undefined = node; o !== undefined; o = o.parent)
-    if (o.chrome?.rings.includes(node)) return true;
-  return false;
-};
+/** Whether `node` is a ring of chrome (`GoFishNode._chromeRing`): a layer
+ *  whose first child is what it dresses and whose other children are
+ *  chrome. (Not every `_transparent` wrapper: a label ring's labels are no
+ *  chrome.) */
+const isRing = (node: GoFishNode): boolean => node._chromeRing === true;
 
 export const layer = createNodeOperatorSequential(
   async (
@@ -684,14 +681,17 @@ export const layer = createNodeOperatorSequential(
             if (px !== undefined) return at(axis, fixedClaim(axis, px));
             return at(axis, resolved[axis]);
           }) as [Extent | undefined, Extent | undefined];
-          // A ring has its content's plot. (Where its plot is its whole box,
+          // A ring's plot is the plot of what it dresses, its first child,
+          // which it seats at its origin. (Where its plot is its whole box,
           // `GoFishNode.resolvePlotExtent` reads its claim instead.)
-          const chromeContent = node.chrome?.content.resolvePlotExtent();
+          const dressedPlot = ring
+            ? node.dressedBox().resolvePlotExtent()
+            : undefined;
           node._plotExtent =
-            plotIsClaim && chromeContent === undefined
+            plotIsClaim && dressedPlot === undefined
               ? undefined
               : (([0, 1] as const).map((axis) =>
-                  at(axis, (chromeContent ?? plot)[axis])
+                  at(axis, (dressedPlot ?? plot)[axis])
                 ) as [Extent | undefined, Extent | undefined]);
           return claims;
         },
@@ -1021,7 +1021,7 @@ export const layer = createNodeOperatorSequential(
             // A ring's content is part of its plot, so it is proposed what
             // the chrome leaves of the ring's room (`plotRooms`).
             const layoutSize: Size = proposed;
-            const dressed = i === 0 && node.chrome !== undefined;
+            const dressed = i === 0 && isRing(node);
             // The shape travels with the room it was proposed with: a room
             // a nest derives from its source, or that a ring's chrome cuts
             // down, is not that room, so it has no shape.

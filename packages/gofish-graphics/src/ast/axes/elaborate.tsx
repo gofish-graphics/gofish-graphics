@@ -1608,8 +1608,10 @@ function elaborationsFor(
 //   ↳ axis titles            centered on the axis they name
 //   ↳ legend                 beside all of the above
 //
-// The node's identity (name, key, visibility) moves onto the outermost ring,
-// which records the boxes inside it as `chrome` (see `GoFishNode.chrome`).
+// The node's identity (name, key, visibility) moves onto the outermost ring.
+// Each ring is marked `_chromeRing`; nothing records the boxes inside it:
+// code that needs what a ring dresses walks its first child
+// (`GoFishNode.dressedBox`).
 
 /** How the chrome a chart asks for is drawn, beyond the axes `resolveAxes`
  *  assigned and the requests stamped on nodes (`GoFishNode._chromeRequest`). */
@@ -1705,8 +1707,6 @@ export async function elaborateChrome(
     return { node, changed, fold };
   }
 
-  let withAxes: GoFishNode = node;
-  const rings: GoFishNode[] = [];
   const root = await wrapPreservingIdentity(node, async (content) => {
     let ring: GoFishNode = content;
     // The box its axes (continuous ones and category label rows) are
@@ -1732,7 +1732,7 @@ export async function elaborateChrome(
           // Ticks read their datums in the content's frame.
           constrained.flatMap((e) => e.constraints(at, inner, inner)),
       });
-      rings.push(ring);
+      ring._chromeRing = true;
     }
 
     // Category label rows: ordinal labels track their keys via `ref(...)`, so
@@ -1747,9 +1747,8 @@ export async function elaborateChrome(
         constraints: (at, inner) =>
           refBased.flatMap((e) => e.constraints(at, inner, inner)),
       });
-      rings.push(ring);
+      ring._chromeRing = true;
     }
-    withAxes = ring;
 
     // Axis titles, seated past the axes so they clear the tick and label rows.
     if (titles[0] !== undefined || titles[1] !== undefined) {
@@ -1761,17 +1760,16 @@ export async function elaborateChrome(
           sides
         )
       );
-      rings.push(ring);
+      ring._chromeRing = true;
     }
 
     // The legend, beside everything inside it, titles included.
     if (legend !== undefined) {
       ring = await wrapRing(ring, legend);
-      rings.push(ring);
+      ring._chromeRing = true;
     }
     return ring;
   });
-  root.chrome = { content: node, withAxes, rings };
 
   return { node: root, changed: true, fold };
 }

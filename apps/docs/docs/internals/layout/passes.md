@@ -381,10 +381,10 @@ The chart's options describe the chrome of the chart root. `layout()` passes
 
 Each title is a ring seated past the root's axes and centered on the axis line
 it describes. The legend is the ring outside that, so it is seated past the
-titles. The outermost ring records the boxes inside it as `GoFishNode.chrome`:
-`content` (the root without chrome), `withAxes` (the root with its axes
-and category label rows) and its `rings`. `layout()` reads the root's
-axis direction off `withAxes`. The chrome takes room: every chrome shape claims
+titles. Each ring is marked `GoFishNode._chromeRing`, and nothing records the
+boxes inside it: `layout()` reads the root's axis direction off the content,
+which `GoFishNode.dressedBox` finds by walking the rings' first children.
+The chrome takes room: every chrome shape claims
 its size, and each ring claims it where it places it (see
 [Chrome around a chart](#chrome-around-a-chart) under Pass 9). See
 [Axes](/internals/frontend/axes) and [Legends](/internals/frontend/legends).
@@ -916,10 +916,14 @@ fixed-size nodes report their size).
   so widening it to a keyed or niced domain (`widenTo`) takes the farther of
   the claim and the domain's end on each side. A tick label past the last
   tick, or a mark past its datum, takes room only where the domain does not
-  already reach past it.
+  already reach past it. The plot an axis is seated beside covers its whole
+  niced domain (`_axesBeside`): its plan (`domainPlan` in `layer`) and its
+  layout box (`GoFishNode.domainSpan`) both reach the domain's ends, so its
+  axes frame the domain's corner, and the room handed to it counts the
+  domain as plot, not as dressing.
 - **The layout.** A ring lays its content out in the room its chrome leaves
-  (`plotRooms` in `layer`), and seats it at its data 0, as any layer seats
-  a child it pins at a literal pixel. A chart is placed whole, its chrome
+  (`plotRooms` in `layer`), and seats it at its origin on both axes, as any
+  layer seats a child it pins at a literal pixel. A chart is placed whole, its chrome
   with it: on an axis with no data 0 (a spread of bands) it has no baseline
   to share, so a baseline alignment seats it by its start in reading order
   (`anchorOffset`, #1241), and a caption above a bar chart starts where the

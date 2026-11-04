@@ -80,8 +80,8 @@ export function dumpSharing(root: GoFishAST): void {
   if (!DUMP_SHARING) return;
   const walk = (node: GoFishAST, depth: number) => {
     if (!(node instanceof GoFishNode)) return;
-    if (node.chrome !== undefined && node.chrome.content !== node) {
-      walk(node.chrome.content, depth);
+    if (node._chromeRing === true) {
+      walk(node.children[0], depth);
       return;
     }
     const { children, constraints, type } = node;

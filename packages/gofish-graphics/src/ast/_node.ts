@@ -863,28 +863,18 @@ export class GoFishNode {
    *  gives its own. Undefined on every other node. */
   public _chartAxes?: AxesOptions;
   /**
-   * Set on the outermost ring of chrome that chrome elaboration
-   * (`elaborateChrome` in axes/elaborate.tsx) wraps around a node: the boxes
-   * inside it. This node's own box is the box WITH chrome (axes, titles,
-   * legend); `content` is the node it dresses, the box WITHOUT chrome;
-   * `withAxes` is the content with its axes and category label rows,
-   * the box its titles and legend are seated around. Tick and category labels
-   * are chrome, not ink of the content: they sit outside `content`.
-   *
-   * Each ring is an ordinary layer of what it dresses and its chrome
-   * (#1257): its claim is the hull of its children where its constraints
-   * place them (`placeByClaims`), and it seats its content at its data 0.
-   * Its content's room is what the chrome leaves of the ring's room
-   * (`plotRooms` in `layer`).
+   * Set by chrome elaboration (`elaborateChrome` in axes/elaborate.tsx) on
+   * each ring of chrome it wraps around a node: a layer whose first child
+   * is what it dresses (the ring inside it, or the content) and whose other
+   * children are its chrome (axes, titles, a legend). Each ring is an
+   * ordinary layer of what it dresses and its chrome (#1257): its claim is
+   * the hull of its children where its constraints place them
+   * (`placeByClaims`), its plot is its first child's, and it seats that
+   * child at its origin. Its first child's room is what the chrome leaves
+   * of the ring's room (`plotRooms` in `layer`). Tick and category labels
+   * are chrome, not ink of the content: they sit outside it.
    */
-  public chrome?: {
-    content: GoFishNode;
-    withAxes: GoFishNode;
-    /** The rings, innermost first; the last is this node. Each ring's first
-     *  child is the ring inside it (or the content), and its other children
-     *  are its chrome. */
-    rings: GoFishNode[];
-  };
+  public _chromeRing?: true;
   /**
    * The chrome this node is asked to carry beyond the axes `resolveAxes`
    * assigned it: a title on each axis it draws (from the `axes` options) and
@@ -1384,9 +1374,7 @@ export class GoFishNode {
         scope && extent[dim] !== undefined
           ? plotForms(
               extent[dim],
-              (this.chrome !== undefined
-                ? this.chrome.content.resolvePlotExtent()
-                : (this._plotExtent ?? extent))[dim],
+              (this._plotExtent ?? extent)[dim],
               (claim) =>
                 this.tryGetRenderSession()?.keyedDomains?.scope(
                   this,
@@ -1850,7 +1838,24 @@ export class GoFishNode {
    * own wears its chrome inside its frame, which claims the total.)
    */
   public isChartBox(): boolean {
-    return this.chrome?.content._chartBox !== undefined;
+    if (this._chromeRing !== true) return false;
+    const p = this.parent;
+    if (p?._chromeRing === true && p.children[0] === this) return false;
+    return this.dressedBox()._chartBox !== undefined;
+  }
+
+  /**
+   * The box this node's rings of chrome dress: down its first child through
+   * each ring to the node they wrap. This node itself when it is no ring.
+   */
+  public dressedBox(): GoFishNode {
+    let n: GoFishNode = this;
+    while (n._chromeRing === true) {
+      const c = n.children[0];
+      if (!(c instanceof GoFishNode)) break;
+      n = c;
+    }
+    return n;
   }
 
   /**
