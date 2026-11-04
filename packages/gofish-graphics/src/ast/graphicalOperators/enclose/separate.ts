@@ -77,7 +77,17 @@ const boxOf = (rings: Pt[][]): Box => {
  *  clipped side (they cannot be rounded inward), reaching at most k/4 past
  *  either; open: the radius, px, of the disc the keep-out region is closed
  *  by (keepRegion). */
-export const SEPARATE = { sigma: 4, h: 1, round: 3, fillet: 6, open: 3 };
+export const SEPARATE: {
+  sigma: number;
+  h: number;
+  round: number;
+  fillet: number;
+  open: number;
+  /** PROTOTYPE: how a set's pieces are kept apart (unified.ts, blobOutline). bisector: this
+   *  file's field; avoid: each piece cut by the other pieces' padded members grown by s, as
+   *  keep-outs (the same avoidCut as `avoiding`); overlap: no cut between pieces. */
+  rule: "bisector" | "avoid" | "overlap";
+} = { sigma: 4, h: 1, round: 3, fillet: 6, open: 3, rule: "bisector" };
 
 export const SEPARATE_STATS: { ms?: number; evals?: number; nodes?: number } =
   {};

@@ -176,6 +176,8 @@ export const UNIFIED_STATS: {
   /** how many pieces, each piece's radius, the join tree's edges (kept or
    *  cut), and the time spent keeping the pieces apart (0 when cached) */
   pieces?: number;
+  /** PROTOTYPE: the blob's rings, per piece */
+  pieceRings?: Pt[][][];
   radii?: number[];
   joinTree?: JoinEdge[];
   msSeparate?: number;
@@ -806,6 +808,7 @@ export function unifiedOutline(
     links: links.length,
     linkMembers: links,
     pieces: parts.length,
+    pieceRings: undefined,
     joinTree: [],
     msLinks: 0,
     msClose: tCut - tClose,
@@ -1058,7 +1061,9 @@ function blobOutline(
   const sep = pad; // PROTOTYPE: the least gap kept between two pieces
   let forbidden: (() => CutField | null)[] = parts.map(() => () => null);
   let fKeys = parts.map(() => "");
-  if (parts.length > 1) {
+  // PROTOTYPE: the rule between pieces (SEPARATE.rule); one piece has none
+  const rule = parts.length > 1 ? SEPARATE.rule : "overlap";
+  if (rule === "bisector") {
     const spines = parts.map(({ pm, spine, pk }) =>
       memo(key("filledSpine", pk, pad), () =>
         closingRings([...pm, ...spine], pad, pad, false)
@@ -1127,7 +1132,7 @@ function blobOutline(
       () => {
         const t1 = performance.now();
         const f = fillOne(pm, spine, o, pad, holes, pk);
-        const F = parts.length > 1 ? memo(fKeys[p], forbidden[p]) : null;
+        const F = rule === "bisector" ? memo(fKeys[p], forbidden[p]) : null;
         const t2 = performance.now();
         const rings = finish(f, o, pad, F);
         msFill += t2 - t1;
@@ -1138,15 +1143,46 @@ function blobOutline(
     )
   );
   const tCut = performance.now();
-  const rings = outs.flatMap((f, p) =>
-    K.length
-      ? memo(
-          key("avoidCut", parts[p].pk, fKeys[p], optKey, kid),
-          () => avoidCut(f.rings, parts[p].pm, pad, K),
-          false
+  // PROTOTYPE (rule avoid): each piece's keep-outs are the avoided members and the other
+  // pieces' padded members and links grown by sep (keep-outs at clearance pad + sep), those
+  // that can reach its outline's box (the closing by SEPARATE.open reaches 2 · open past a
+  // disc)
+  const others =
+    rule === "avoid"
+      ? parts.map(({ pm, spine, pk }) =>
+          memo(key("pieceKeepOuts", pk, pad + sep), () =>
+            keepOuts([...pm, ...spine], pad + sep)
+          )
         )
-      : f.rings
-  );
+      : null;
+  const keepsOf = (p: number, rings: Pt[][]): Disc[] => {
+    if (!others) return K;
+    const [x0, y0, x1, y1] = boxOfRings(rings);
+    const m = 2 * SEPARATE.open + 1;
+    const near = others.flatMap((D, q) =>
+      q === p
+        ? []
+        : D.filter(
+            ({ c, R }) =>
+              c[0] + R >= x0 - m &&
+              c[0] - R <= x1 + m &&
+              c[1] + R >= y0 - m &&
+              c[1] - R <= y1 + m
+          )
+    );
+    return near.length ? [...K, ...near] : K;
+  };
+  const byPiece = outs.map((f, p) => {
+    const Kp = keepsOf(p, f.rings);
+    if (!Kp.length) return f.rings;
+    const kp = Kp === K ? kid : intern(key(Kp));
+    return memo(
+      key("avoidCut", parts[p].pk, fKeys[p], optKey, kp),
+      () => avoidCut(f.rings, parts[p].pm, pad, Kp),
+      false
+    );
+  });
+  const rings = byPiece.flat();
   const radii = outs.map((f) => f.r);
   Object.assign(UNIFIED_STATS, {
     radius: radii[0],
@@ -1155,6 +1191,7 @@ function blobOutline(
     links: J.links.length,
     linkMembers: parts.flatMap((p) => p.spine),
     pieces: outs.length,
+    pieceRings: byPiece,
     joinTree: J.tree,
     msLinks: tLinks - t0,
     msClose: msFill,
