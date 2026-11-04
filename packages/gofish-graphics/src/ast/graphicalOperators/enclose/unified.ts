@@ -4,7 +4,7 @@
  *
  *   enclose({ shape, padding, avoiding, clearance }, members)
  *   Shape.blob({ convexity, connection, neck, holes })
- *   Shape.fillet({ radius, holes })          (radius defaults to padding)
+ *   Shape.fillet({ radius, neck, holes })    (radius defaults to padding, neck to 0.5)
  *   Shape.box()                               (the padded bounding box)
  *
  * Blob:
@@ -27,7 +27,10 @@
  *  4. The approved smoothing: Gaussian along arclength, then the least
  *     uniform outward offset that holds every padded member and link again.
  *
- * Fillet: the exact closing, by a disc of `radius`, of the padded members.
+ * Fillet: the exact closing, by a disc of `radius`, of the padded members and
+ * their links: two pieces of the padded union nearer than 2 · radius are
+ * joined by a link along the padded-gap spanning tree, `neck` times the
+ * padded members' width, as the blob's (filletLinks; neck 0 draws none).
  * Its components are the pieces, and each piece is closed again on its own
  * members (filletPieces): the closing makes a horn with a cusp at its tip
  * where two padded members are near enough for their discs to overlap
@@ -118,8 +121,9 @@ export type UnifiedOptions = {
    *  are kept, the strongest first: 1 (default) is one piece, 0 joins only
    *  members whose padding touches. */
   connection?: number;
-  /** Blob: the links' width as a share of the padded members they join;
-   *  1 (default) is no neck. */
+  /** Blob and fillet: the links' width as a share of the padded members
+   *  they join. Blob: 1 (default) is no neck. Fillet: default 0.5; 0 draws
+   *  no links (the pieces split). */
   neck?: number;
   /** Fillet: the closing disc's radius, px. Default: the padding, so an
    *  inside corner is as round as the padding makes an outside one. */
@@ -137,6 +141,9 @@ export type UnifiedOptions = {
    *  sigma 6. */
   smooth?: SmoothSpec | null;
 };
+
+/** Fillet's default neck: a link half as wide as the padded members it joins. */
+export const FILLET_NECK = 0.5;
 
 /** The default clearance around an avoided node, px. */
 export const CLEARANCE = 4;
@@ -780,20 +787,23 @@ export function unifiedOutline(
   const shape = o.shape ?? "blob";
   if (shape === "blob") return blobOutline(members, o, pad, K, t0);
   const tClose = performance.now();
+  const r = Math.max(0, o.radius ?? pad);
+  const neck = Math.max(0, Math.min(1, o.neck ?? FILLET_NECK));
   const parts =
     shape === "box"
       ? [{ pm: members, rings: [boxRing(members, pad)] }]
-      : filletPieces(members, pad, Math.max(0, o.radius ?? pad), !!o.holes);
+      : filletPieces(members, pad, r, !!o.holes, neck);
+  const links = shape === "box" ? [] : filletLinks(members, pad, r, neck);
   const tCut = performance.now();
   const rings = parts.flatMap(({ pm, rings }) =>
     K.length ? avoidCut(rings, pm, pad, K) : rings
   );
   Object.assign(UNIFIED_STATS, {
-    radius: shape === "box" ? Infinity : Math.max(0, o.radius ?? pad),
+    radius: shape === "box" ? Infinity : r,
     radii: undefined,
     ms: performance.now() - t0,
-    links: 0,
-    linkMembers: [],
+    links: links.length,
+    linkMembers: links,
     pieces: parts.length,
     joinTree: [],
     msLinks: 0,
@@ -887,8 +897,62 @@ const insideOf = (m: BlobMember): Pt =>
       : [m.x + m.w / 2, m.y + m.h / 2];
 
 /**
- * The fillet: the exact closing (arcs.ts) of the members grown by pad, by a disc of radius r,
- * one piece per component, each piece closed again on its own members alone.
+ * The fillet's links (PROTOTYPE): the pieces are the padded members' union's components (members
+ * whose padding touches are one piece), and two pieces whose padded gap is under 2r are joined
+ * by a link along the padded-gap spanning tree (Kruskal over the member pairs by padded gap,
+ * stopping at 2r), each a tapered tube between the two members' cores whose padded half-width
+ * at each end is neck · (ρ + pad), as the blob's links are (pieceLinks). neck 0: no links.
+ *
+ * Why 2r. Grown by r, two padded members overlap exactly when their padded gap is under 2r:
+ * the disc cannot pass between them. Between flat sides the closing then fills the gap; between
+ * curved members it joins them only below a smaller gap (2·a·r = a·g + g²/4 for padded discs of
+ * radius a), and in between it has a horn on each member (filletPieces). A link across every
+ * such gap leaves the closing none to make a horn in, and over 2r it makes none.
+ */
+export function filletLinks(
+  members: BlobMember[],
+  pad: number,
+  r: number,
+  neck: number
+): BlobMember[] {
+  if (!(neck > 0) || !(r > 0)) return [];
+  return memo(key("filletLinks", intern(key(members)), pad, r, neck), () =>
+    gapLinks(members, pad, r, neck)
+  );
+}
+function gapLinks(
+  members: BlobMember[],
+  pad: number,
+  r: number,
+  neck: number
+): BlobMember[] {
+  const T = memo(key("joinTree", members, pad), () => joinTree(members, pad));
+  const c = members.map((_, i) => i);
+  const f = (i: number): number => (c[i] === i ? i : (c[i] = f(c[i])));
+  const links: BlobMember[] = [];
+  for (const p of T.byGap) {
+    if (p.g >= 2 * r) break;
+    const [a, b] = [f(p.i), f(p.j)];
+    if (a === b) continue;
+    c[a] = b;
+    // padded members that touch are one piece already
+    if (p.g <= 0) continue;
+    links.push({
+      kind: "segment",
+      a: p.a,
+      b: p.b,
+      w: 2 * (neck * (T.rho[p.i] + pad) - pad),
+      w2: 2 * (neck * (T.rho[p.j] + pad) - pad),
+    });
+  }
+  return links;
+}
+
+/**
+ * The fillet: the exact closing (arcs.ts), by a disc of radius r, of the members and their
+ * links (filletLinks) grown by pad, one piece per component, each piece closed again on its
+ * own members and links alone. `pm`: a piece's members (its links are cut by the keep-outs
+ * like any other ground).
  *
  * Why the second closing. The exact closing is right (scratch-bumps/fillet/pair.ts: within
  * 0.04 px of a raster closing of the padded union), and it has cusps of its own: two padded
@@ -914,28 +978,33 @@ function filletPieces(
   members: BlobMember[],
   pad: number,
   r: number,
-  holes: boolean
+  holes: boolean,
+  neck: number
 ): { pm: BlobMember[]; rings: Pt[][] }[] {
-  return memo(key("fillet", intern(key(members)), pad, r, holes), () => {
+  return memo(key("fillet", intern(key(members)), pad, r, holes, neck), () => {
+    const isLink = new Set<BlobMember>(filletLinks(members, pad, r, neck));
     const out: { pm: BlobMember[]; rings: Pt[][] }[] = [];
-    const todo: BlobMember[][] = [members];
+    const todo: BlobMember[][] = [[...members, ...isLink]];
     while (todo.length) {
-      const pm = todo.pop()!;
-      const filled = closingRings(pm, pad, r, false);
+      const all = todo.pop()!;
+      const filled = closingRings(all, pad, r, false);
       const outer = filled.filter((g) => signedArea2(g) > 0);
       const groups = outer.map(() => [] as BlobMember[]);
       if (outer.length > 1)
-        for (const m of pm) {
+        for (const m of all) {
           const p = insideOf(m);
           const k = outer.findIndex((g) => pointInRing(p, g));
           groups[Math.max(0, k)].push(m);
         }
-      const split = groups.filter((g) => g.length);
+      const split = groups.filter((g) => g.some((m) => !isLink.has(m)));
       if (split.length > 1) {
         todo.push(...split);
         continue;
       }
-      out.push({ pm, rings: holes ? closingRings(pm, pad, r, true) : filled });
+      out.push({
+        pm: all.filter((m) => !isLink.has(m)),
+        rings: holes ? closingRings(all, pad, r, true) : filled,
+      });
     }
     return out;
   });

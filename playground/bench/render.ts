@@ -6,7 +6,10 @@
 //   BENCH=render CASES='[…]' OUTDIR=… node playground/bench.mjs
 import { writeFileSync, mkdirSync } from "node:fs";
 import DATA from "../src/datasets.json";
-import { unifiedOutline } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/unified";
+import {
+  unifiedOutline,
+  filletLinks,
+} from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/unified";
 
 type Pt = [number, number];
 const f2 = (v: number) => v.toFixed(2);
@@ -22,6 +25,8 @@ const cases = JSON.parse(process.env.CASES!) as {
   avoid?: boolean;
   crop?: number[];
   scale?: number;
+  /** draw the fillet's links (their axes, red) */
+  links?: boolean;
 }[];
 const dir = process.env.OUTDIR!;
 mkdirSync(dir, { recursive: true });
@@ -37,6 +42,16 @@ for (const c of cases) {
     } as never) as Pt[][];
     const P = s.paint;
     g += `<path transform="matrix(1 0 0 ${s.T[2]} ${s.T[0]} ${s.T[1]})" d="${pathOf(rings)}" fill="${P.fill}" fill-opacity="${P.fillOpacity}" stroke="${P.stroke}" stroke-width="${Math.max(1, P.strokeWidth)}" stroke-linejoin="round"/>`;
+    if (c.links) {
+      const o = c.opts as any;
+      for (const L of filletLinks(
+        s.members,
+        (o.padding as number) ?? d.padding,
+        o.radius ?? d.padding,
+        o.neck ?? 0.5
+      ) as any[])
+        g += `<line transform="matrix(1 0 0 ${s.T[2]} ${s.T[0]} ${s.T[1]})" x1="${f2(L.a[0])}" y1="${f2(L.a[1])}" x2="${f2(L.b[0])}" y2="${f2(L.b[1])}" stroke="red" stroke-width="0.5"/>`;
+    }
   });
   const ms = performance.now() - t0;
   const vb = c.crop ?? [-10, -10, d.width + 20, d.height + 20];

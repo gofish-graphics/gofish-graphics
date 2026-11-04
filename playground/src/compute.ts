@@ -65,7 +65,7 @@ export function computeSet(s: SetInput, p: Params): SetResult {
     shape: p.shape,
     ...(p.shape === "blob"
       ? { convexity: p.convexity, connection: p.connection, neck: p.neck }
-      : { radius: p.radius ?? undefined }),
+      : { radius: p.radius ?? undefined, neck: p.neck }),
     holes: p.holes,
     ...(p.avoid ? { avoiding: s.avoiding, clearance: p.clearance } : {}),
   });

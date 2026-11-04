@@ -464,7 +464,8 @@
         keeps <i>connection</i> of its links, which splits the members into
         pieces; each piece's padded members and links are filled to
         <i>convexity</i> (0 the spine, 1 the padded hull, 2 the oval) and
-        smoothed. <b>Fillet</b>: the padded members closed by a disc of
+        smoothed. <b>Fillet</b>: the padded members, and links <i>neck</i>
+        wide between pieces nearer than twice the radius, closed by a disc of
         <i>radius</i> (the padding unless set), so every inside corner is an
         arc. <i>avoiding</i> and <i>clearance</i> are options of
         <code>enclose</code> next to <i>padding</i>, and cut any shape.
@@ -564,7 +565,7 @@
                 >neck <output id="neck-out" for="neck"></output
               ></label>
               <input type="range" id="neck" min="0.05" max="1" step="0.01" />
-              <div class="hint">
+              <div class="hint" id="neck-hint">
                 The width of each link as a share of the padded members it
                 joins: 1 is no neck.
               </div>

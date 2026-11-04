@@ -60,7 +60,12 @@ const BLOB = {
   neck: 1,
   holes: false,
 };
-const FILLET = { shape: "fillet" as ShapeKind, radius: null, holes: false };
+const FILLET = {
+  shape: "fillet" as ShapeKind,
+  radius: null,
+  neck: 0.5,
+  holes: false,
+};
 const CLEARANCE = 4; // enclose's default clearance
 const ds0 = DATASETS.find((d) => d.id === "chartaccent")!;
 let state: State = {
@@ -113,6 +118,7 @@ const spelling = () => {
     }
   } else {
     if (state.radius !== null) o.push(`radius: ${num(state.radius)}`);
+    if (!eq(state.neck, FILLET.neck)) o.push(`neck: ${num(state.neck)}`);
     if (state.holes) o.push("holes: true");
     shape = `Shape.fillet(${o.length ? `{ ${o.join(", ")} }` : ""})`;
   }
@@ -194,8 +200,14 @@ const syncControls = () => {
   }
   for (const b of document.querySelectorAll<HTMLButtonElement>("[data-shape]"))
     b.setAttribute("aria-checked", String(b.dataset.shape === state.shape));
-  for (const id of ["convexity-field", "connection-field", "neck-field"])
+  for (const id of ["convexity-field", "connection-field"])
     $(id).hidden = !blob;
+  // neck: blob's links never vanish (0.05 up); fillet's 0 draws none
+  $<HTMLInputElement>("neck").min = blob ? "0.05" : "0";
+  $<HTMLInputElement>("neck").value = String(state.neck);
+  $("neck-hint").textContent = blob
+    ? "The width of each link as a share of the padded members it joins: 1 is no neck."
+    : "The width of each link between pieces closer than twice the radius, as a share of the padded members it joins. 0 draws no links: the pieces stay apart.";
   $("radius-field").hidden = blob;
   // the padding's place on the radius slider, and the reset
   $("radius-pad").style.left = `${(100 * Math.min(60, state.padding)) / 60}%`;
@@ -406,7 +418,7 @@ const drawResults = (results: SetResult[]) => {
             'fill="#d62728" fill-opacity="0.08" stroke="#d62728" stroke-width="0.8" stroke-dasharray="3 2"'
           );
     }
-    if (state.showLinks && state.shape === "blob") {
+    if (state.showLinks) {
       // the join tree's edges that are cut (gray dashed); edges between members that overlap
       // need no link and are not drawn
       for (const e of r.tree)
@@ -620,7 +632,9 @@ const check = (id: string, f: (on: boolean) => Partial<State>) =>
 for (const b of document.querySelectorAll<HTMLButtonElement>("[data-shape]"))
   b.addEventListener("click", () => {
     const shape = b.dataset.shape as ShapeKind;
-    if (shape !== state.shape) update({ shape });
+    // neck's default is the shape's own (blob 1, fillet 0.5)
+    if (shape !== state.shape)
+      update({ shape, neck: (shape === "blob" ? BLOB : FILLET).neck });
   });
 check("holes", (on) => ({ holes: on }));
 check("show-links", (on) => ({ showLinks: on }));
