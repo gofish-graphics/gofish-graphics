@@ -48,6 +48,16 @@ a nearby broken case too (see `pluck` and `project` in
 that breaks one or two old examples is better than a dispatch tree that keeps
 them all; check what moved by rendering it, since an old render can be wrong.
 
+**A default is sugar, not a branch.** When an option is left out, the engine
+should act as if the user had written some ordinary value, and that value
+should be one the user can write. An internal conditional ("if a rect has no
+height, fill") is behavior users still have to reason about, but they cannot
+read it, write it, or change it, because it has no spelling in their code. A
+rect with no height is meant to be `percent(100)`, the same as writing it
+(#1292). The same rule is why chrome elaborates into nodes and constraints a
+user could write (#1257). If no writable value matches a default, treat that
+as a design smell to fix, not a feature.
+
 **Data always flows as lists.** Every step takes a list and gives back a list.
 A split turns a list into a list of groups and never looks inside an item, so
 an item may itself be an array. With no `by`, a split puts each item in its own
