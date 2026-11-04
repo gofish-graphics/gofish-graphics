@@ -1,0 +1,73 @@
+diff --git a/packages/gofish-graphics/src/ast/_node.ts b/packages/gofish-graphics/src/ast/_node.ts
+index 6eeecb8fe..2c8a738c4 100644
+--- a/packages/gofish-graphics/src/ast/_node.ts
++++ b/packages/gofish-graphics/src/ast/_node.ts
+@@ -2518,16 +2518,6 @@ export class GoFishNode {
+       const shift = min - (c.localAnchor?.(axis, "min") ?? 0);
+       return [plot[0] + shift, plot[1] + shift];
+     };
+-    if (this.chrome !== undefined) {
+-      // Its box less its chrome's gutters, which its layout read off its
+-      // claims (`chromeGutters`), in its axis order.
+-      const min = this.localAnchor(axis, "min");
+-      const max = this.localAnchor(axis, "max");
+-      if (min === undefined || max === undefined) return undefined;
+-      const [start, end] = this.chromeGutters(axis);
+-      const up = axis === 1 && this.yFrame.direction !== 1;
+-      return up ? [min + end, max - start] : [min + start, max - end];
+-    }
+     const walk = this.claimWalk;
+     const out = (i: number) =>
+       walk?.dressing[axis].has(i) === true || walk?.ink[axis].has(i) === true;
+diff --git a/packages/gofish-graphics/src/ast/graphicalOperators/layer.tsx b/packages/gofish-graphics/src/ast/graphicalOperators/layer.tsx
+index ba3cc25a5..4d79fe5cb 100644
+--- a/packages/gofish-graphics/src/ast/graphicalOperators/layer.tsx
++++ b/packages/gofish-graphics/src/ast/graphicalOperators/layer.tsx
+@@ -82,8 +82,6 @@ import { evaluate } from "../solver/formula";
+ import {
+   aroundPlot,
+   chromeForms,
+-  contentSeat,
+-  guttersAt,
+   setChromeForms,
+ } from "../chromeGutters";
+ 
+@@ -734,16 +732,6 @@ export const layer = createNodeOperatorSequential(
+                 childScaleFactors
+               )
+             : undefined;
+-          // A node dressed in chrome reads its gutters off its chrome forms
+-          // at the σ it is laid out at (#1032). It seats its content past
+-          // them (`seatsOf`).
+-          if (node.chrome !== undefined) {
+-            node.chrome.gutters = [
+-              guttersAt(node, 0, childScaleFactors[0]),
+-              guttersAt(node, 1, childScaleFactors[1]),
+-            ];
+-          }
+-
+           // `position` constraints with a datum coordinate resolve against
+           // the layer's frame. A child such a constraint places at a datum
+           // point gets no map on that axis (`childPosScalesFor`).
+@@ -854,8 +842,8 @@ export const layer = createNodeOperatorSequential(
+             if (op?.direct) constrainedChildren.add(op.child);
+           }
+           // Where a literal position pins each child's origin, read once. A
+-          // node dressed in chrome seats its content past its start gutters
+-          // instead (`contentSeat`).
++          // ring seats its content as any layer seats a child: at its data 0
++          // (#1257, #1239).
+           const literalSeatsByKey = seating().seats;
+           const seatsOf = (
+             i: number
+@@ -864,9 +852,7 @@ export const layer = createNodeOperatorSequential(
+               undefined,
+               undefined,
+             ];
+-            return i === 0 && node.chrome !== undefined
+-              ? [contentSeat(node, 0, lit[0]), contentSeat(node, 1, lit[1])]
+-              : lit;
++            return lit;
+           };
+ 
+           // The room of each member of a chain along `axis` that has no size
