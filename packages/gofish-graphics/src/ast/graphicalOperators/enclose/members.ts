@@ -37,16 +37,21 @@ import {
   ringExtent,
   type Outline,
 } from "../../geometry";
-import type { BlobMember } from "./blob";
+import type { Member } from "./prims";
 
-/** How far the samples of a curved outline may stray from it, in pixels. */
-const TOLERANCE = 0.5;
+/** How far the samples of a curved outline may stray from it, in pixels.
+ *  An enclosure's own outline is read through this too (an outer `enclose`
+ *  of inner ones), and the outer outline keeps every chord it is given: at
+ *  0.5 px a ring of radius 64 read as 16 px chords, drawn again as straight
+ *  runs one padding out. 0.1 px keeps the outer outline within 0.2 px of the
+ *  closing of the unthinned rings. */
+const TOLERANCE = 0.1;
 
-/** An outline as blob members. */
-function membersOfOutline(o: Outline): BlobMember[] {
+/** An outline as members. */
+function membersOfOutline(o: Outline): Member[] {
   if (o.ellipse !== undefined) {
     const { cx, cy, rx, ry } = o.ellipse;
-    const disc: BlobMember = { kind: "disc", cx, cy, r: Math.max(rx, ry) };
+    const disc: Member = { kind: "disc", cx, cy, r: Math.max(rx, ry) };
     return [rx === ry ? disc : { ...disc, axes: [rx, ry] }];
   }
   if (o.box !== undefined || (o.closed && o.filled)) {
@@ -57,7 +62,7 @@ function membersOfOutline(o: Outline): BlobMember[] {
   // An open path, or the loop of an unfilled closed one: its pieces.
   const w = o.width ?? 0;
   return outlineSegments(o).map(
-    ([a, b]): BlobMember => ({
+    ([a, b]): Member => ({
       kind: "segment",
       a,
       b,
@@ -71,5 +76,5 @@ function membersOfOutline(o: Outline): BlobMember[] {
  * enclosure's layout got it back (its view of the child), so its geometry
  * and `dims` are both in the enclosure's frame.
  */
-export const membersOf = (placed: Placeable): BlobMember[] =>
+export const membersOf = (placed: Placeable): Member[] =>
   placedOutlines(placed, TOLERANCE).flatMap(membersOfOutline);

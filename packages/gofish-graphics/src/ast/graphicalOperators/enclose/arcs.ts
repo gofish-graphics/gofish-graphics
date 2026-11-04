@@ -3,11 +3,12 @@
 // </gofish-wiki>
 
 /**
- * The outline of `Shape.arcs({ radius })`: pure geometry, no GoFish nodes.
+ * The exact closing (`closingRings`), the engine every curved `enclose`
+ * outline is built on (`outline.ts`): pure geometry, no GoFish nodes.
  *
  * The region is the morphological closing, by a disc of `radius`, of the
- * union of the members each grown by `padding`, with its holes filled (the
- * bubble treemap contour of Görtler et al., TVCG 2018). Every gap the disc
+ * union of the members each grown by `padding`, its holes filled unless
+ * asked to keep them (the bubble treemap contour of Görtler et al., TVCG 2018). Every gap the disc
  * cannot pass through fills, each concave corner becomes a circular arc of
  * `radius`, and the convex parts are the padded members' own boundaries.
  * Between flat members that is a gap narrower than 2 × radius; two padded
@@ -33,21 +34,23 @@
  *     curves, and the kept runs are relinked into loops.
  *
  * Every output point lies on the exact curve; arcs are sampled so a chord
- * strays at most TOL px from its arc. An ellipse member is read, as the blob
+ * strays at most `tol` px from its arc. An ellipse member is read, as the blob
  * reads it, as the disc of its larger radius (`members.ts`).
  */
 import { signedArea2, pointInRing, segDist } from "../../geometry/plane";
 import { ringExtent } from "../../geometry/box";
+import type { KeepIn } from "./smooth";
 import {
   boxGrid,
   grownPrim,
   primD,
-  type BlobMember,
+  type Member,
   type Prim,
   type Pt,
-} from "./blob";
+} from "./prims";
 
-/** How far a chord may stray from the arc it samples, in pixels. */
+/** How far a chord may stray from the arc it samples, in pixels, unless a
+ *  caller asks for finer (`closingRings`' `tol`). */
 const TOL = 0.2;
 /** The longest straight run between two samples, in pixels (the cut search
  *  of step 4 works between samples). */
@@ -69,7 +72,7 @@ type Arc = {
 };
 type Edge = Line | Arc;
 
-/** A grown member: its exact primitive (the blob's, whose signed distance
+/** A grown member: its exact primitive (prims.ts, whose signed distance
  *  `primD` reads) and its boundary as edges. */
 type Grown = { prim: Prim; edges: Edge[] };
 
@@ -122,6 +125,47 @@ function capsuleEdges(
   ];
 }
 
+/** The edges of a tapered tube, the hull of the disc of radius ra
+ *  at a and the disc of radius rb at b: its two outer tangent lines and the
+ *  two end arcs. A disc when one disc holds the other. */
+function taperEdges(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  ra: number,
+  rb: number
+): Edge[] {
+  const L = Math.hypot(bx - ax, by - ay);
+  if (L <= Math.abs(ra - rb) + 1e-9)
+    return ra >= rb
+      ? [{ t: "arc", cx: ax, cy: ay, R: ra, a0: 0, a1: TAU }]
+      : [{ t: "arc", cx: bx, cy: by, R: rb, a0: 0, a1: TAU }];
+  const phi = Math.atan2(by - ay, bx - ax);
+  // a tangent's normal n has n·u = (ra - rb) / L: at phi ± al
+  const al = Math.acos((ra - rb) / L);
+  const nr: Pt = [Math.cos(phi - al), Math.sin(phi - al)],
+    nl: Pt = [Math.cos(phi + al), Math.sin(phi + al)];
+  return [
+    {
+      t: "line",
+      ax: ax + ra * nr[0],
+      ay: ay + ra * nr[1],
+      bx: bx + rb * nr[0],
+      by: by + rb * nr[1],
+    },
+    { t: "arc", cx: bx, cy: by, R: rb, a0: phi - al, a1: phi + al },
+    {
+      t: "line",
+      ax: bx + rb * nl[0],
+      ay: by + rb * nl[1],
+      bx: ax + ra * nl[0],
+      by: ay + ra * nl[1],
+    },
+    { t: "arc", cx: ax, cy: ay, R: ra, a0: phi + al, a1: phi + TAU - al },
+  ];
+}
+
 /** The edges of box [x0, x1] × [y0, y1] grown by g: a rounded box (sharp
  *  when g = 0). */
 function roundedBoxEdges(
@@ -150,16 +194,18 @@ function roundedBoxEdges(
   return edges;
 }
 
-/** Member `m` grown by g: the blob's primitive for it (a disc, a capsule or
+/** Member `m` grown by g: its primitive (prims.ts) (a disc, a capsule or
  *  a rounded box), and the exact edges of that primitive's boundary. */
-function grown(m: BlobMember, g: number): Grown {
+function grown(m: Member, g: number): Grown {
   const p = grownPrim(m, g);
   const edges =
     p.k === 0
       ? [{ t: "arc", cx: p.x1, cy: p.y1, R: p.r, a0: 0, a1: TAU } as Edge]
       : p.k === 1
         ? capsuleEdges(p.x1, p.y1, p.x2, p.y2, p.r)
-        : roundedBoxEdges(p.x1, p.y1, p.x2, p.y2, p.r);
+        : p.k === 5
+          ? taperEdges(p.x1, p.y1, p.x2, p.y2, p.r, p.x3)
+          : roundedBoxEdges(p.x1, p.y1, p.x2, p.y2, p.r);
   return { prim: p, edges };
 }
 
@@ -398,44 +444,87 @@ function link<T>(runs: T[], start: (r: T) => Pt, end: (r: T) => Pt): T[][] {
 }
 
 /** Sample a piece: its points from s0 to s1, both ends included. */
-function sampleParams(e: Edge, s0: number, s1: number): number[] {
+function sampleParams(e: Edge, s0: number, s1: number, tol: number): number[] {
   let n: number;
   if (e.t === "line") {
     const L = Math.hypot(e.bx - e.ax, e.by - e.ay) * Math.abs(s1 - s0);
     n = Math.max(1, Math.ceil(L / MAX_STEP));
   } else {
     const step =
-      e.R <= TOL
+      e.R <= tol
         ? Math.PI
-        : Math.min(2 * Math.acos(1 - TOL / e.R), MAX_STEP / e.R);
+        : Math.min(2 * Math.acos(1 - tol / e.R), MAX_STEP / e.R);
     n = Math.max(1, Math.ceil(Math.abs(s1 - s0) / step));
   }
   return Array.from({ length: n + 1 }, (_, i) => s0 + ((s1 - s0) * i) / n);
 }
 
-/** The options of {@link arcsOutline}. */
-export type ArcsOutlineOptions = {
-  /** Pixels between each member and the outline. */
-  padding: number;
-  /** The radius of the closing disc, in pixels. */
-  radius: number;
-};
+/** Each member grown by pad, as keep-in capsules: what the smoothing
+ *  (smooth.ts) keeps inside the outline. A disc is one, a segment one (a
+ *  tapered link several), and a box its four sides, each grown by pad (the
+ *  outline holds the padded box when it holds its padded sides). */
+export function keepIns(members: Member[], pad: number): KeepIn[] {
+  return members.flatMap((m): KeepIn | KeepIn[] =>
+    m.kind === "disc"
+      ? { a: [m.cx, m.cy], b: [m.cx, m.cy], R: m.r + pad }
+      : m.kind === "segment"
+        ? m.w2 !== undefined && m.w2 !== m.w
+          ? taperKeepIns(m.a, m.b, m.w / 2 + pad, m.w2 / 2 + pad)
+          : { a: m.a, b: m.b, R: Math.max(0, m.w / 2 + pad) }
+        : boxKeepIns(m, pad)
+  );
+}
+
+/** A box's four sides, each grown by pad. */
+function boxKeepIns(
+  m: Extract<Member, { kind: "box" }>,
+  pad: number
+): KeepIn[] {
+  const c: Pt[] = [
+    [m.x, m.y],
+    [m.x + m.w, m.y],
+    [m.x + m.w, m.y + m.h],
+    [m.x, m.y + m.h],
+  ];
+  return c.map((a, k) => ({ a, b: c[(k + 1) % 4], R: pad }));
+}
+
+/** A tapered tube as short capsules along it (each inside it),
+ *  about 2 px long, of the tube's radius at their thinner end. */
+function taperKeepIns(a: Pt, b: Pt, ra: number, rb: number): KeepIn[] {
+  const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const n = Math.max(1, Math.ceil(L / 2));
+  const at = (t: number): Pt => [
+    a[0] + t * (b[0] - a[0]),
+    a[1] + t * (b[1] - a[1]),
+  ];
+  const R = (t: number) => ra + (rb - ra) * t;
+  return Array.from({ length: n }, (_, i) => ({
+    a: at(i / n),
+    b: at((i + 1) / n),
+    R: Math.max(0, Math.min(R(i / n), R((i + 1) / n))),
+  }));
+}
 
 /**
- * The outline of `Shape.arcs()` around `members`: its closed loops, in the
- * members' frame, all winding one way (it has no holes). A gap the closing
- * disc passes through leaves the pieces apart, one loop each. No members, no
- * outline.
+ * The exact closing (steps 1-4 above) of `members` grown by `padding`, by a
+ * disc of `radius`. Its outer loops wind as the members do. With `holes`,
+ * a hole of the closing stays open, as a loop that winds the other way;
+ * otherwise every hole is filled. Arcs are sampled so a chord strays at most
+ * `tol` px from its arc (the per-bay blend's mesh and the keep-out cut ask
+ * for finer than the default).
  */
-export function arcsOutline(
-  members: BlobMember[],
-  o: ArcsOutlineOptions
+export function closingRings(
+  members: Member[],
+  padding: number,
+  radius: number,
+  holes = false,
+  tol = TOL
 ): Pt[][] {
   if (members.length === 0) return [];
-  const r = Math.max(0, o.radius);
-  const prims = members.map((m) => grown(m, Math.max(0, o.padding) + r));
-  const sdf = (j: number, x: number, y: number) =>
-    primD(prims[j].prim, x, y, false);
+  const r = Math.max(0, radius);
+  const prims = members.map((m) => grown(m, Math.max(0, padding) + r));
+  const sdf = (j: number, x: number, y: number) => primD(prims[j].prim, x, y);
 
   // 2. The union's boundary.
   const near = boxGrid(prims.map((p) => p.prim.bb));
@@ -495,16 +584,27 @@ export function arcsOutline(
   ).map((loop) => ({
     loop,
     ring: loop.flatMap((q) =>
-      sampleParams(q.e, q.s0, q.s1).map((s) => at(q.e, s))
+      sampleParams(q.e, q.s0, q.s1, tol).map((s) => at(q.e, s))
     ),
   }));
   // Outer loops wind as the members do; the holes the other way.
   const outer = loops
     .filter(({ ring }) => signedArea2(ring) > 0)
     .sort((a, b) => signedArea2(b.ring) - signedArea2(a.ring));
-  const kept = outer.filter(
+  const keptOuter = outer.filter(
     (L, k) => !outer.slice(0, k).some((B) => pointInRing(L.ring[0], B.ring))
   );
+  // With holes, a hole loop of the grown union inside a kept outer one.
+  const kept = holes
+    ? [
+        ...keptOuter,
+        ...loops.filter(
+          ({ ring }) =>
+            signedArea2(ring) < 0 &&
+            keptOuter.some((B) => pointInRing(ring[0], B.ring))
+        ),
+      ]
+    : keptOuter;
   const boundary = kept.flatMap((L) => L.loop);
 
   // 3. Shrink by r: offset each piece inward, with an arc of r at each corner.
@@ -546,7 +646,9 @@ export function arcsOutline(
 
   // 4. Keep the points a full radius from the boundary.
   const pieceBB = boundary.map((q) => {
-    const e = ringExtent(sampleParams(q.e, q.s0, q.s1).map((s) => at(q.e, s)));
+    const e = ringExtent(
+      sampleParams(q.e, q.s0, q.s1, tol).map((s) => at(q.e, s))
+    );
     return [e.minX - 1, e.minY - 1, e.maxX + 1, e.maxY + 1];
   });
   const nearPiece = boxGrid(pieceBB);
@@ -564,7 +666,7 @@ export function arcsOutline(
     const samples: Sample[] = [];
     for (const c of curves) {
       const [lo, hi] = range(c);
-      const ps = sampleParams(c, lo, hi);
+      const ps = sampleParams(c, lo, hi, tol);
       // drop the first sample: it is the previous curve's last
       for (const s of ps.slice(samples.length > 0 ? 1 : 0)) {
         const p = at(c, s);
@@ -620,6 +722,17 @@ export function arcsOutline(
     (r) => r.at(-1)!
   ).map((loop) => loop.flat());
   // A loop of the closing winds as the members do (it has no holes); a tiny
-  // or backward one is a sliver from a cut, not part of the region.
-  return out.filter((ring) => ring.length > 2 && signedArea2(ring) > 1e-3);
+  // or backward one is a sliver from a cut, not part of the region. With
+  // holes, a backward loop of some size inside an outer one is a hole.
+  const closed = out.filter(
+    (ring) => ring.length > 2 && signedArea2(ring) > 1e-3
+  );
+  if (!holes) return closed;
+  const holeRings = out.filter(
+    (ring) =>
+      ring.length > 2 &&
+      signedArea2(ring) < -2 &&
+      closed.some((B) => pointInRing(ring[0], B))
+  );
+  return [...closed, ...holeRings];
 }

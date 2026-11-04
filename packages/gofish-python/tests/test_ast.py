@@ -1594,7 +1594,7 @@ class TestEncloseFlowStep:
         from gofish import Shape, enclose, pack
 
         step = (
-            enclose(shape=Shape.arcs(), padding=4)
+            enclose(shape=Shape.fillet(), padding=4)
             .name("region")
             .label("g")
             .z_order(-1)

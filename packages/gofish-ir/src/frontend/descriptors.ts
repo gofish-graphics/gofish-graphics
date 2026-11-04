@@ -954,46 +954,52 @@ export const STRATEGIES = {
         doc: "The smallest-area ellipse that holds every member grown by `padding`. It may be rotated: it follows the members, not the axes.",
         params: {},
       },
-      arcs: {
-        doc: "The members grown by `padding`, closed by a disc of `radius`: every gap the disc cannot pass through is filled, every concave corner is a circular arc of `radius`, and holes are always filled. Around circles it is made of circular arcs only, the contour of a bubble treemap (Görtler et al. 2018). Two discs of radius a with a gap g between their padded edges join only when 2·a·radius ≥ a·g + g²/4; otherwise they stay separate pieces.",
+      fillet: {
+        doc: "The members grown by `padding`, closed by a disc of `radius`: every gap the disc cannot pass through is filled, and every concave corner is a circular arc of `radius`. Around circles it is made of circular arcs only, the contour of a bubble treemap (Görtler et al. 2018). Two pieces of the padded members nearer than 2 · `radius` are joined by a link `neck` times as wide as the members it joins; farther pieces stay apart, and each piece is closed on its own. It is not smoothed.",
         params: {
           radius: {
             type: t.num({ min: 0, finite: true }),
-            default: 12,
-            doc: "The radius of the closing disc, in pixels: the radius of every concave arc. 0 is the padded union; a large radius nears the padded convex hull.",
+            doc: "The radius of the closing disc, in pixels: the radius of every concave arc. 0 is the padded union; a large radius nears the padded convex hull. Default: `padding`, so an inside corner is as round as an outside one.",
           },
-        },
-      },
-      blob: {
-        doc: "A smooth region around the members: each member grown by `padding`, the links of a spanning tree between them (routed around avoided nodes, so the set stays in one piece), and the Delaunay triangles of their points, filled smallest gaps first up to `convexity` of their convex hull. The outline is rounded so its curvature never jumps.",
-        params: {
-          convexity: {
+          neck: {
             type: t.num({ min: 0, max: 1 }),
             default: 0.5,
-            doc: "The share of the members' convex hull that is filled, smallest gaps first, from 0 (the spanning tree alone) to 1 (the whole hull). It is the only option that fills gaps between members, so it decides the pieces and the filled area.",
+            doc: "The width of each link between two pieces, as a share of the padded members it joins, from 0 (no links: pieces nearer than 2 · `radius` stay apart) to 1 (a link as wide as the members).",
           },
           holes: {
             type: t.boolean,
             default: false,
-            doc: "Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled and each avoided node it held is cut back out as its clearance circle, as `allow_holes` in PostGIS and Shapely.",
+            doc: "Whether a gap the outline closes around stays a hole. Off, every hole is filled.",
           },
-          roundness: {
-            type: t.num({ min: 0, finite: true }),
-            doc: "How far the outline's corners are rounded, in pixels. It changes how sharply the outline bends and nothing else: no gap fills, no hole opens, no two pieces join. Default: `padding`.",
+        },
+      },
+      blob: {
+        doc: "A smooth region around the members: the members are split into pieces by `connection`, each piece's members grown by `padding` and joined by the links of a spanning tree between them (routed around avoided nodes), and the gaps between them filled up to `convexity`. The outline is smoothed, then moved out just enough to hold every padded member again.",
+        params: {
+          convexity: {
+            type: t.num({ min: 0, max: 2 }),
+            default: 0.5,
+            doc: "How much of each gap between members is filled, from 0 (the spanning tree of tubes alone) to 1 (the padded convex hull) to 2 (the oval, as `Shape.oval()`). Between 0 and 1, every pocket between the tree and the hull fills that share of its own area; between 1 and 2, the hull rounds toward the oval.",
+          },
+          connection: {
+            type: t.num({ min: 0, max: 1 }),
+            default: 1,
+            doc: "The share of the links between members that are kept, the strongest first, from 0 (only members whose padding touches are one piece) to 1 (one piece). The links come from a minimum spanning tree in HDBSCAN's mutual reachability, so a dense group stays one piece longest. Each piece is filled on its own; the outline changes only where `connection` keeps or cuts a link.",
           },
           neck: {
             type: t.num({ exclusiveMin: 0, max: 1 }),
             default: 1,
-            doc: "How far the outline is NOT pulled in between members, above 0 and at most 1: a lone link becomes a tube `neck` times the bulge, and the edge of a filled region sinks in between its members. 1 does not pull in. 0 is not allowed: a link `neck` times the bulge would have no width, and its two sides would meet. It never changes the pieces or holes.",
+            doc: "The width of each link between members, as a share of the padded members it joins, above 0 and at most 1. 1 is a link as wide as the members (no neck). 0 is not allowed: a link would have no width.",
           },
-          avoiding: {
-            type: t.ref("NodeSelectionIR"),
-            doc: "Nodes to keep out: a list of nodes or refs, or a `selectAll(name)` selection. A listed node that is also a member is ignored. Each avoided node inside the region becomes a round hole, and links route around the others.",
+          holes: {
+            type: t.boolean,
+            default: false,
+            doc: "Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled, as `allow_holes` in PostGIS and Shapely.",
           },
-          clearance: {
-            type: t.num({ min: 0, finite: true }),
-            default: 4,
-            doc: "Pixels kept between the outline and each avoided node.",
+          separate: {
+            type: t.boolean,
+            default: false,
+            doc: "With `connection` below 1, whether the pieces keep apart. Off, each piece is filled on its own and two may overlap (a piece wholly inside another is dropped). On, each piece avoids the set's other pieces as it avoids `avoiding`, `clearance` away from their outlines.",
           },
         },
       },
@@ -1487,13 +1493,21 @@ const ENCLOSE_FIELDS: FieldGroup = group({
   padding: {
     ...ch.raw(
       "number",
-      "Pixels between the members and the outline: a number, or a field name or accessor read once per enclosed group (constant within the group). For a blob or arcs, the distance from each member's own outline (around a line's whole length). Around a member with no size of its own, how far inside the outline the member's shape is."
+      "Pixels between the members and the outline: a number, or a field name or accessor read once per enclosed group (constant within the group). For a blob or fillet, the distance from each member's own outline (around a line's whole length). Around a member with no size of its own, how far inside the outline the member's shape is."
     ),
     default: 2,
   },
   shape: {
     type: t.ref("Shape"),
-    doc: "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.arcs({radius}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset. Around a fresh member with no size of its own (a treemap, a region), the outline is the space it is given: Shape.box() is that space (a treemap's Voronoi cell, when it is in one) and Shape.oval() the oval inscribed in it, and the member fills the outline; Shape.arcs() and Shape.blob() are an error there.",
+    doc: "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.fillet({radius, neck, holes}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, connection, neck, holes, separate}) draws a smooth region: the members split into pieces by `connection`, each joined by a spanning tree of tubes and filled up to `convexity` (0 the tree, 1 the padded hull, 2 the oval). Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset. Around a fresh member with no size of its own (a treemap, a region), the outline is the space it is given: Shape.box() is that space (a treemap's Voronoi cell, when it is in one) and Shape.oval() the oval inscribed in it, and the member fills the outline; Shape.fillet() and Shape.blob() are an error there.",
+  },
+  avoiding: {
+    type: t.ref("NodeSelectionIR"),
+    doc: "Nodes the outline stays out of, whatever its shape: a list of nodes or refs, or a `selectAll(name)` selection. A listed node that is also a member is ignored. The outline is cut around each avoided node grown by `clearance`, never into the padded members, and a blob's or fillet's links route around them.",
+  },
+  clearance: {
+    type: t.num({ min: 0, finite: true }),
+    doc: "Pixels kept between the outline and each avoided node, and between two pieces of a blob with `separate`. Default: `padding`.",
   },
   fill: ch.color(
     "Fill color of the outline, or a field name or accessor for a color scale (constant within the enclosed group)."
@@ -2269,7 +2283,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   enclose: leafMark("enclose", {
-    doc: "Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.oval()`), the padded members with arc corners (`Shape.arcs()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs. Flow-step form `.flow(..., enclose(opts), ...)`: an outline around each group's subtree, laid out with it, so the operator above packs or places the outlined group and an outer `enclose` hugs this outline; in a chart's `operators`, its IR is this mark's.",
+    doc: "Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.oval()`), the padded members with arc corners (`Shape.fillet()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`), kept out of the nodes in `avoiding`. Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs. Flow-step form `.flow(..., enclose(opts), ...)`: an outline around each group's subtree, laid out with it, so the operator above packs or places the outlined group and an outer `enclose` hugs this outline; in a chart's `operators`, its IR is this mark's.",
     include: [filtered],
     fields: ENCLOSE_FIELDS,
     flowStep: true,
@@ -2731,7 +2745,7 @@ export function taggedBranches(
 
 /**
  * `value`, read as a value of `type`, with each part whose type holds nodes
- * (a `holdsNodes` ref, such as a blob's `avoiding`) replaced by `fn(part)`.
+ * (a `holdsNodes` ref, such as `enclose`'s `avoiding`) replaced by `fn(part)`.
  * The walk follows the declared type, not the value: object fields, array
  * and tuple items, record values, named option types, and the branch of a
  * union that the value's tag names (`taggedBranches`, the rule validation

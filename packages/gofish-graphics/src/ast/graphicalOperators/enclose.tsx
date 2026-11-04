@@ -7,8 +7,10 @@
  * is a value of the `Shape` family (`families/shape.ts`): the padded bounding
  * box (`Shape.box()`, the default), the minimum-area enclosing ellipse
  * (`Shape.oval()`; `enclose/oval.ts`), the padded members closed by a disc
- * (`Shape.arcs()`; `enclose/arcs.ts`), or a smooth region (`Shape.blob()`
- * and its presets `Shape.hull()`, `Shape.spine()`; `enclose/blob.ts`).
+ * (`Shape.fillet()`), or a smooth region (`Shape.blob()` and its presets
+ * `Shape.hull()`, `Shape.spine()`); the last two in `enclose/outline.ts`.
+ * Every shape stays out of the nodes in `avoiding`, each grown by
+ * `clearance`: one final cut of the outline (`enclose/separate.ts`).
  *
  * It is a relational mark (`createRelationalMark`), so it has the forms
  * `line` and `ribbon` have, and one more:
@@ -41,12 +43,12 @@ import { foldFinite } from "../../util";
 import { UNDEFINED, type UnderlyingSpace } from "../underlyingSpace";
 import type { LiveValue } from "../../interaction/live";
 import type { LayerContext } from "../marks/chart";
-import { box, type Shape } from "../../families/shape";
+import { box, type Nodes, type Shape } from "../../families/shape";
 import { avoidedRefs } from "../nodeRefs";
-import { blobOutline, type BlobMember, type Pt } from "./enclose/blob";
+import type { Member, Pt } from "./enclose/prims";
 import { membersOf } from "./enclose/members";
 import { ovalOutline } from "./enclose/oval";
-import { arcsOutline } from "./enclose/arcs";
+import { cutOutline, encloseOutline } from "./enclose/outline";
 import { targetOf } from "../constraints/relationalPaint";
 import { boxOfDims, ringExtent } from "../geometry/box";
 import { RelateOperand } from "../constraints/relate";
@@ -69,17 +71,18 @@ import {
 import type { Size } from "../dims";
 import type { AxisScale } from "../domain";
 
-/** `Shape.arcs()`'s radius when it is given none, as the `Shape` family
- *  declares it. */
-const ARCS_RADIUS = Frontend.STRATEGIES.Shape.kinds.arcs.params.radius
-  .default as number;
-
 export type EncloseOptions = FilterOptions & {
   /** Pixels between the members and the outline, or a field name or
    *  accessor read once per enclosed group (constant within it). Default 2. */
   padding?: number | string | ((d: any) => number);
   /** The outline: a call in the Shape family. Default `Shape.box()`. */
   shape?: Shape;
+  /** Nodes the outline stays out of: a list of nodes or refs, or a
+   *  `selectAll(name)` selection. A listed member is ignored. */
+  avoiding?: Nodes;
+  /** Pixels kept between the outline and each avoided node (and, for a
+   *  blob's separate pieces, between two pieces). Default: `padding`. */
+  clearance?: number;
   fill?: MaybeValue<string> | LiveValue;
   stroke?: MaybeValue<string> | LiveValue;
   strokeWidth?: number | LiveValue;
@@ -93,6 +96,8 @@ export type EncloseOptions = FilterOptions & {
 export type Resolved = {
   padding?: number;
   shape?: Shape;
+  avoiding?: Nodes;
+  clearance?: number;
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
@@ -101,8 +106,7 @@ export type Resolved = {
   fillOpacity?: number;
 };
 
-/** The shape, checked against the `Shape` family's table (a blob's
- *  `avoiding` holds nodes, which `avoidedRefs` checks as it reads them). */
+/** The shape, checked against the `Shape` family's table. */
 function checkedShape(shape: Shape | undefined): Shape {
   if (shape === undefined) return box();
   Frontend.checkStrategy("Shape", shape, "enclose({ shape })");
@@ -158,7 +162,15 @@ function Enclose(
         }) as [Extent | undefined, Extent | undefined],
       layout: (size, scales, children, _node, space) => {
         if (fillsItsSpace(members))
-          return fillingLayout(shape, padding, size, scales, children, space);
+          return fillingLayout(
+            shape,
+            avoided.length > 0,
+            padding,
+            size,
+            scales,
+            children,
+            space
+          );
         // Child placement (`placeUnplacedChild`): a FRESH child reports an
         // undefined translate until placed, so its baseline is placed at the
         // origin. An already-placed operand
@@ -187,7 +199,7 @@ function Enclose(
         const memberNodes = new Set(
           children.slice(0, memberCount).map(targetOf)
         );
-        const geometry = (from: number, to: number): BlobMember[] =>
+        const geometry = (from: number, to: number): Member[] =>
           children
             .slice(from, to)
             .flatMap((child, i) =>
@@ -195,24 +207,38 @@ function Enclose(
                 ? []
                 : membersOf(placed[from + i])
             );
+        const own = geometry(0, memberCount);
+        const avoid = {
+          padding,
+          avoiding: geometry(memberCount, children.length),
+          clearance: o.clearance,
+        };
         let loops: Pt[][] | undefined;
-        if (shape.kind === "blob")
-          loops = blobOutline(geometry(0, memberCount), {
-            convexity: shape.convexity,
-            holes: shape.holes,
-            roundness: shape.roundness,
+        if (shape.kind === "blob" || shape.kind === "fillet")
+          loops = encloseOutline(own, {
+            ...avoid,
+            shape: shape.kind,
+            ...(shape.kind === "blob"
+              ? {
+                  convexity: shape.convexity,
+                  connection: shape.connection,
+                  separate: shape.separate,
+                }
+              : { radius: shape.radius }),
             neck: shape.neck,
-            clearance: shape.clearance,
-            padding,
-            avoiding: geometry(memberCount, children.length),
+            holes: shape.holes,
           });
         else if (shape.kind === "oval")
-          loops = ovalOutline(geometry(0, memberCount), padding);
-        else if (shape.kind === "arcs")
-          loops = arcsOutline(geometry(0, memberCount), {
-            padding,
-            radius: shape.radius ?? ARCS_RADIUS,
-          });
+          loops = cutOutline(ovalOutline(own, padding), own, avoid);
+        else if (avoid.avoiding.length > 0) {
+          // a box that avoids nodes is drawn as its cut ring
+          const { rx, ry } = cornerRadii(shape.rx, shape.ry, 2);
+          loops = cutOutline(
+            [roundedBoxRing(minX, minY, maxX, maxY, rx, ry)],
+            own,
+            avoid
+          );
+        }
         // A computed outline's box is the outline's own.
         const pts = loops?.flat() ?? [];
         if (pts.length > 0) ({ minX, maxX, minY, maxY } = ringExtent(pts));
@@ -344,18 +370,27 @@ const fillsItsSpace = (members: readonly GoFishAST[]): boolean =>
  * the box it is laid out in for `Shape.box()`, or the shape it is handed
  * there (a treemap's cell), and the oval in that box for `Shape.oval()`,
  * cut to the shape it is handed. Only a convex outline can be a member's
- * shape, and `Shape.arcs()` and `Shape.blob()` hug members that have a size
- * of their own, so around members that fill their space they are an error.
+ * shape, and `Shape.fillet()` and `Shape.blob()` hug members that have a
+ * size of their own, so around members that fill their space they are an
+ * error, as is `avoiding` (a cut outline is not convex).
  */
 function fillingLayout(
   shape: Shape,
+  avoids: boolean,
   padding: number,
   size: Size,
   scales: Size<AxisScale | undefined>,
   children: readonly GoFishAST[],
   space: Ring | undefined
 ) {
-  if (shape.kind === "arcs" || shape.kind === "blob")
+  if (avoids)
+    throw new Error(
+      `enclose({ avoiding }): this enclosure's member fills the space it is ` +
+        `given (such as a treemap), so it fills the outline, and an outline ` +
+        `cut around avoided nodes cannot be filled. Give the member a size ` +
+        `of its own, or avoid nothing.`
+    );
+  if (shape.kind === "fillet" || shape.kind === "blob")
     throw new Error(
       `enclose({ shape }): Shape.${shape.kind} hugs members that have a ` +
         `size of their own, but this enclosure's member fills the space it ` +
@@ -434,8 +469,8 @@ function paddedPlacement(
 
 /**
  * The enclosure around `members`: what the relational mark `enclose`
- * (`marks/chart.ts`, beside `line` and `ribbon`) builds for each group. A
- * blob's `avoiding` is read here; a `selectAll(name)` in it resolves against
+ * (`marks/chart.ts`, beside `line` and `ribbon`) builds for each group.
+ * `avoiding` is read here; a `selectAll(name)` in it resolves against
  * `layerContext`, the chart's named layers.
  */
 export function encloseNode(
@@ -445,14 +480,37 @@ export function encloseNode(
 ): GoFishNode {
   const shape = checkedShape(o.shape);
   // The avoided nodes, as fresh refs the enclosure holds.
-  const avoided =
-    shape.kind === "blob"
-      ? avoidedRefs(
-          shape.avoiding,
-          layerContext,
-          "enclose({ shape }): avoiding",
-          "enclose"
-        )
-      : [];
+  const avoided = avoidedRefs(
+    o.avoiding,
+    layerContext,
+    "enclose({ avoiding })",
+    "enclose"
+  );
   return Enclose(o, shape, members, avoided);
+}
+
+/** The box [x0, x1] × [y0, y1] with elliptical corners of radii rx, ry (each
+ *  at most half the side), as a ring, each corner a quarter in 8 chords. */
+function roundedBoxRing(
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  rx: number,
+  ry: number
+): Pt[] {
+  const a = Math.max(0, Math.min(rx, (x1 - x0) / 2)),
+    b = Math.max(0, Math.min(ry, (y1 - y0) / 2));
+  const corners: [number, number, number][] = [
+    [x1 - a, y1 - b, 0],
+    [x0 + a, y1 - b, Math.PI / 2],
+    [x0 + a, y0 + b, Math.PI],
+    [x1 - a, y0 + b, (3 * Math.PI) / 2],
+  ];
+  return corners.flatMap(([cx, cy, t0]) =>
+    Array.from({ length: 9 }, (_, i): Pt => {
+      const t = t0 + (i / 8) * (Math.PI / 2);
+      return [cx + a * Math.cos(t), cy + b * Math.sin(t)];
+    })
+  );
 }

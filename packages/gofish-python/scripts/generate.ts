@@ -842,7 +842,7 @@ function pyValueChecks(
  *  `checkStrategy`, which reads the same STRATEGIES table. The branches of a
  *  union are told apart by Python type. */
 function pyParamChecks(type: FieldType, v: string, label: string): string[] {
-  // A param that holds marks (a blob's `avoiding`) is checked where JS
+  // A param that holds marks (enclose's `avoiding`) is checked where JS
   // reads it: its marks have no Python type test.
   if (type.kind === "ref" && AUTHORED_REFS[type.name]?.holdsNodes) return [];
   const branches = type.kind === "union" ? [...type.options] : [type];

@@ -1,5 +1,5 @@
 /**
- * The one rule for a value that names nodes inside an option (a blob's
+ * The one rule for a value that names nodes inside an option (`enclose`'s
  * `avoiding`, typed `Shape.Nodes`): a list of nodes or refs, or one
  * `selectAll(name)` as the whole value. A single ref and a `selectAll`
  * inside a list are errors. The wire's `NodeSelectionIR` has the same two

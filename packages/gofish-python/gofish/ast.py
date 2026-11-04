@@ -388,7 +388,7 @@ def _select_ref(proxy: "_RefProxy") -> Dict[str, Any]:
 
 
 def _mark_in_option(m: "Mark", payload: "_Payload") -> Any:
-    """A mark named inside an option (a blob's `avoiding`), as the wire names
+    """A mark named inside an option (`enclose`'s `avoiding`), as the wire names
     it (`NodeSelectionIR`): `select_all(name)` is every node of the layer, the
     `SelectRefIR` chart data takes; any other mark (a `ref(...)`, a
     `.relate()` operand) is its IR, and ``payload`` collects what ships
@@ -735,7 +735,7 @@ class Mark(_Root):
         the IR (see ``_Payload``)."""
         # Each `_PendingAccessor` (at any depth) becomes its lambda-id
         # sentinel, and the payload records its callback.
-        # A mark named inside an option (a blob's `avoiding`) is its IR.
+        # A mark named inside an option (`enclose`'s `avoiding`) is its IR.
         serialized_kwargs = _marks_in_options(
             _wire_options(self.kwargs, self._accessors, payload), payload
         )
@@ -3684,8 +3684,9 @@ def enclose(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
     a ``shape`` from the ``Shape`` family: the padded bounding box
     (``Shape.box(rx=..., ry=...)``, the default), the smallest ellipse around
     the members (``Shape.oval()``), the padded members with arc corners
-    (``Shape.arcs(radius=...)``), or a smooth region (``Shape.blob(...)``,
-    ``Shape.hull(...)``, ``Shape.spine(...)``).
+    (``Shape.fillet(radius=...)``), or a smooth region (``Shape.blob(...)``,
+    ``Shape.hull(...)``, ``Shape.spine(...)``). ``avoiding`` keeps every
+    shape out of the nodes it names, ``clearance`` away.
 
     Three forms: combinator form ``enclose([a, c], ...)`` (fresh children are
     laid out as ``layer`` lays them out; ``ref(...)`` children and

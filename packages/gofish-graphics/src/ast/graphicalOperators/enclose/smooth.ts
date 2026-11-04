@@ -1,0 +1,248 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Enclose and the Shape Family — /internals/frontend/enclose
+// </gofish-wiki>
+
+/**
+ * The smoothing of a curved outline, and the rounding of the corners the
+ * keep-out cut leaves (`outline.ts`). Each keeps every padded member (and
+ * each link, at its padded half-width) inside the outline: the keep-ins.
+ */
+import type { Pt } from "./prims";
+import { signedArea2 } from "../../geometry/plane";
+import { SegGrid, Inside, segsOf } from "./meshBlend";
+
+/** A keep-in constraint: a segment ab (a disc when a = b) grown to `R`. The
+ *  outline must keep every point of it inside. */
+export type KeepIn = { a: Pt; b: Pt; R: number };
+
+/** The smoothing's Gaussian, px of arclength. */
+const SIGMA = 6;
+/** The smoothing offset's margin past the least that holds every keep-in, px. */
+const MARGIN = 0.05;
+
+/** Resample a closed ring at a uniform step of about ds. */
+export function resample(ring: Pt[], ds: number): Pt[] {
+  const n = ring.length;
+  const cum = [0];
+  for (let i = 0; i < n; i++) {
+    const [a, b] = [ring[i], ring[(i + 1) % n]];
+    cum.push(cum[i] + Math.hypot(b[0] - a[0], b[1] - a[1]));
+  }
+  const L = cum[n];
+  const m = Math.max(8, Math.round(L / ds));
+  const out: Pt[] = [];
+  let k = 0;
+  for (let j = 0; j < m; j++) {
+    const s = (L * j) / m;
+    while (cum[k + 1] < s) k++;
+    const t = (s - cum[k]) / (cum[k + 1] - cum[k] || 1);
+    const [a, b] = [ring[k], ring[(k + 1) % n]];
+    out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+  }
+  return out;
+}
+
+function gauss(ring: Pt[], sigmaSamples: number): Pt[] {
+  const n = ring.length;
+  const J = Math.min(Math.floor(n / 2) - 1, Math.ceil(3 * sigmaSamples));
+  const w: number[] = [];
+  let z = 0;
+  for (let j = -J; j <= J; j++) {
+    const v = Math.exp(-(j * j) / (2 * sigmaSamples * sigmaSamples));
+    w.push(v);
+    z += v;
+  }
+  return ring.map((_, i) => {
+    let x = 0,
+      y = 0;
+    for (let j = -J; j <= J; j++) {
+      const q = ring[(((i + j) % n) + n) % n];
+      x += w[j + J] * q[0];
+      y += w[j + J] * q[1];
+    }
+    return [x / z, y / z] as Pt;
+  });
+}
+
+/** Push p out of every keep-in capsule that holds it. */
+function pushOut(p: Pt, keep: KeepIn[]): Pt {
+  let [x, y] = p;
+  for (let pass = 0; pass < 3; pass++) {
+    let moved = false;
+    for (const k of keep) {
+      const [a, b] = [k.a, k.b];
+      const ex = b[0] - a[0],
+        ey = b[1] - a[1];
+      const L2 = ex * ex + ey * ey;
+      const t =
+        L2 < 1e-12
+          ? 0
+          : Math.max(0, Math.min(1, ((x - a[0]) * ex + (y - a[1]) * ey) / L2));
+      const cx = a[0] + ex * t,
+        cy = a[1] + ey * t;
+      const d = Math.hypot(x - cx, y - cy);
+      if (d < k.R && d > 1e-9) {
+        x = cx + ((x - cx) * k.R) / d;
+        y = cy + ((y - cy) * k.R) / d;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  return [x, y];
+}
+
+/** The outward normals of a ring (winding positive in screen coordinates,
+ *  as the arcs outline does). */
+function normals(ring: Pt[], material = false): Pt[] {
+  const n = ring.length;
+  // material: the region is on the left of travel on every ring (an outer
+  // ring winds positive, a hole the other way), so outward is always right.
+  const sgn = material || signedArea2(ring) > 0 ? 1 : -1;
+  return ring.map((_, i) => {
+    const [p, q] = [ring[(i - 1 + n) % n], ring[(i + 1) % n]];
+    const tx = q[0] - p[0],
+      ty = q[1] - p[1];
+    const L = Math.hypot(tx, ty) || 1;
+    // right of travel is outside for positive signed area
+    return [(sgn * ty) / L, (-sgn * tx) / L] as Pt;
+  });
+}
+
+/** The least outward offset that holds every keep-in capsule: the most
+ *  any capsule's axis sample (every 2 px) needs, signed distance to the
+ *  rings (negative inside, nonzero winding) plus its radius. The distances
+ *  from a segment grid (exact, as the brute-force sdf it replaces). */
+function needed(rings: Pt[][], keep: KeepIn[]): number {
+  if (!keep.length) return 0;
+  const S = segsOf(rings);
+  const G = new SegGrid(S, 4),
+    In = new Inside(S);
+  let c = -Infinity;
+  for (const k of keep) {
+    const L = Math.hypot(k.b[0] - k.a[0], k.b[1] - k.a[1]);
+    const n = Math.max(1, Math.ceil(L / 2));
+    for (let t = 0; t <= n; t++) {
+      const x = k.a[0] + ((k.b[0] - k.a[0]) * t) / n,
+        y = k.a[1] + ((k.b[1] - k.a[1]) * t) / n;
+      const d = G.nearest(x, y)[0];
+      c = Math.max(c, (In.has(x, y) ? -d : d) + k.R);
+    }
+  }
+  return Math.max(0, c);
+}
+
+/**
+ * The outline smoothed: a Gaussian along arclength (SIGMA px, on rings
+ * resampled every px), then the whole outline moved out along its normals
+ * by the least amount that holds every keep-in capsule again (smoothing
+ * pulls a convex part of radius rho in by about SIGMA^2 / (2 rho)).
+ */
+export function smoothOutline(rings: Pt[][], keep: KeepIn[]): Pt[][] {
+  const sm = rings.map((ring) => gauss(resample(ring, 1), SIGMA));
+  const c = needed(sm, keep) + MARGIN;
+  return sm.map((r) => {
+    const N = normals(r, true);
+    return r.map((p, i) => [p[0] + c * N[i][0], p[1] + c * N[i][1]] as Pt);
+  });
+}
+
+/** Resample a closed ring at about ds, each sample marked when the edge it
+ *  lies on has a marked end. */
+function resampleMarked(
+  ring: Pt[],
+  mk: boolean[],
+  ds: number
+): [Pt[], boolean[]] {
+  const n = ring.length;
+  const cum = [0];
+  for (let i = 0; i < n; i++) {
+    const [a, b] = [ring[i], ring[(i + 1) % n]];
+    cum.push(cum[i] + Math.hypot(b[0] - a[0], b[1] - a[1]));
+  }
+  const L = cum[n];
+  const m = Math.max(8, Math.round(L / ds));
+  const out: Pt[] = [],
+    om: boolean[] = [];
+  let k = 0;
+  for (let j = 0; j < m; j++) {
+    const s = (L * j) / m;
+    while (cum[k + 1] < s) k++;
+    const t = (s - cum[k]) / (cum[k + 1] - cum[k] || 1);
+    const [a, b] = [ring[k], ring[(k + 1) % n]];
+    out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+    om.push(mk[k] || mk[(k + 1) % n]);
+  }
+  return [out, om];
+}
+
+/**
+ * The rounding of the corners a cut leaves (outline.ts, finish).
+ * Near the cut (`marks`: the points that came from the forbidden region's
+ * boundary), each point moves by the inward part of a Gaussian along
+ * arclength (sigma px) and no further: convex corners and spikes (where the
+ * outline meets a clipped side or a keep-out, or two keep-outs meet) round
+ * off; nothing moves outward, and no point moves out of the cut rings (a
+ * move that would cross a band thinner than itself is halved until it
+ * does not, or dropped), so the rounded outline stays inside the cut one
+ * and out of what was cut. Then every point is pushed out of the
+ * padded members again (pushOut), so they stay inside. The weight is 1
+ * within 3σ of a cut point and tapers to 0 over the next 3σ, so the rest of
+ * the outline does not move. A ring the rounding turns inside out was
+ * narrower than the rounding (an opening would remove it too): dropped.
+ */
+export function roundCut(
+  rings: Pt[][],
+  marks: boolean[][],
+  keep: KeepIn[],
+  sigma: number
+): Pt[][] {
+  const out: Pt[][] = [];
+  let region: Inside | null = null;
+  rings.forEach((ring, ri) => {
+    const mk0 = marks[ri];
+    if (sigma <= 0 || ring.length < 3 || !mk0.some((x) => x)) {
+      out.push(ring);
+      return;
+    }
+    const [r, mk] = resampleMarked(ring, mk0, 1);
+    const n = r.length;
+    // samples to the nearest mark, around the ring
+    const dist = new Float64Array(n).fill(Infinity);
+    for (let pass = 0; pass < 2; pass++) {
+      let d = Infinity;
+      for (let q = 0; q < 2 * n; q++) {
+        const i = q % n;
+        d = mk[i] ? 0 : d + 1;
+        if (d < dist[i]) dist[i] = d;
+      }
+      d = Infinity;
+      for (let q = 2 * n - 1; q >= 0; q--) {
+        const i = q % n;
+        d = mk[i] ? 0 : d + 1;
+        if (d < dist[i]) dist[i] = d;
+      }
+    }
+    const W = 3 * sigma;
+    const g = gauss(r, sigma);
+    const N = normals(r, true);
+    const res = r.map((p, i) => {
+      const w = dist[i] <= W ? 1 : dist[i] >= 2 * W ? 0 : 2 - dist[i] / W;
+      if (w <= 0) return p;
+      const t = (g[i][0] - p[0]) * N[i][0] + (g[i][1] - p[1]) * N[i][1];
+      if (t >= 0) return p;
+      region ??= new Inside(segsOf(rings));
+      let s = w * t;
+      for (let k = 0; k < 4; k++, s /= 2) {
+        const q: Pt = [p[0] + s * N[i][0], p[1] + s * N[i][1]];
+        if (region.has(q[0], q[1])) return pushOut(q, keep);
+      }
+      return pushOut(p, keep);
+    });
+    const a0 = signedArea2(ring),
+      a1 = signedArea2(res);
+    if (Math.sign(a1) !== Math.sign(a0) || Math.abs(a1) < 1e-6) return;
+    out.push(res);
+  });
+  return out;
+}

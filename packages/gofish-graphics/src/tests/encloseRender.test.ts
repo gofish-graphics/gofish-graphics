@@ -83,7 +83,7 @@ console.log("# an option a Shape kind does not have is an error naming it");
 for (const [name, make] of [
   ["Shape.box", () => Shape.box({ padding: 10 })],
   ["Shape.oval", () => Shape.oval({ padding: 10 })],
-  ["Shape.arcs", () => Shape.arcs({ padding: 10 })],
+  ["Shape.fillet", () => Shape.fillet({ padding: 10 })],
   ["Shape.blob", () => Shape.blob({ padding: 10 })],
   ["Shape.hull", () => Shape.hull({ padding: 10 })],
   ["Shape.spine", () => Shape.spine({ padding: 10 })],
@@ -139,7 +139,7 @@ console.log(
     const dl = await chart(rows)
       .flow(
         pack({ by: "g", spacing }),
-        enclose({ shape: Shape.arcs(), padding, fill: "none" }),
+        enclose({ shape: Shape.fillet({ radius: 12 }), padding, fill: "none" }),
         pack()
       )
       .mark(circleOf)
@@ -292,7 +292,7 @@ console.log("# a flow-step enclose keeps its step through its modifiers");
       .toDisplayList({ w: 300, h: 300 });
     return items(dl);
   };
-  const step = () => enclose({ shape: Shape.arcs(), padding: 4 });
+  const step = () => enclose({ shape: Shape.fillet(), padding: 4 });
   for (const [what, make] of [
     [".name(n)", () => step().name("region")],
     [".zOrder(n)", () => step().zOrder(-1)],

@@ -1,7 +1,7 @@
 /**
  * The nodes an `avoiding` option names, as fresh refs its holder keeps (each
- * read where it is placed, like a ref member). Shared by `enclose`'s blob
- * (`Shape.blob({ avoiding })`) and `.label({ avoiding })`, which take the
+ * read where it is placed, like a ref member). Shared by `enclose`
+ * (`enclose({ avoiding })`) and `.label({ avoiding })`, which take the
  * same value (`Shape.Nodes`, checked by `nodeSelectionOf`). A
  * `selectAll(name)` resolves against `layerContext`, the chart's named
  * layers.
