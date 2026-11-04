@@ -33,7 +33,6 @@ import {
   type UnderlyingSpace,
   axisOver,
   niceContinuous,
-  originIs,
   spaceTitle,
   spaceZone,
   axisTickPartition,
@@ -1711,33 +1710,24 @@ export async function elaborateChrome(
   const root = await wrapPreservingIdentity(node, async (content) => {
     let ring: GoFishNode = content;
 
-    // Axis gutters: continuous/difference axes seat a gutter via constraints
-    // that would SHIFT the content, so the content is seated first and each
-    // axis grows into negative gutter space; this keeps the content on the
-    // posScale grid both axes' ticks use. Where the content sits on each
-    // axis: a delta axis says where in its own frame. Otherwise this is the
-    // one seating rule (`seatInScope`): a free content (a bar chart's bars)
-    // is a magnitude whose baseline the axis's frame places, so it is left
-    // unpinned and the layer seats it at data 0 of the frame's map, so value
-    // 0 sits at the 0 tick; a pinned content shares the frame, so its
-    // baseline is the frame's 0 (a literal pixel pin). The anchor is
-    // `baseline`, not `start`: nested content (facets carrying their own
-    // ordinal labels) has a bbox extending past its origin, and pinning
-    // bbox-min would slide the marks off the tick grid by that overhang.
+    // Axis gutters: each axis line sits on a chain with the content, past
+    // its box, and grows into negative gutter space rather than shifting it.
+    // So the content is seated first, at the ring's origin by its baseline
+    // (`wrapRing`), on both axes: a chain can then only move the axis, and
+    // the ticks, which read their datums in the content's frame, find it
+    // placed. A free content (a bar chart's bars) is seated there too: its
+    // ticks read its own frame, so value 0 sits at the 0 tick wherever the
+    // ring puts it. The anchor is `baseline`, not `start`: nested content
+    // (facets carrying their own ordinal labels) has a bbox extending past
+    // its origin, and pinning bbox-min would slide the marks off the tick
+    // grid by that overhang.
     if (constrained.length > 0) {
-      const contentSpace = content._underlyingSpace;
-      const contentAt = (dim: 0 | 1) =>
-        originIs(contentSpace?.[dim], "free") ? undefined : 0;
-      ring = await wrapRing(
-        ring,
-        {
-          nodes: constrained.flatMap((e) => e.nodes),
-          constraints: (at, inner) =>
-            // Ticks read their datums in the content's frame.
-            constrained.flatMap((e) => e.constraints(at, inner, inner)),
-        },
-        { x: contentAt(0), y: contentAt(1) }
-      );
+      ring = await wrapRing(ring, {
+        nodes: constrained.flatMap((e) => e.nodes),
+        constraints: (at, inner) =>
+          // Ticks read their datums in the content's frame.
+          constrained.flatMap((e) => e.constraints(at, inner, inner)),
+      });
       rings.push(ring);
     }
 
