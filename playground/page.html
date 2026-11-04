@@ -560,24 +560,13 @@
                 outline changes only at the ticks above, one per link and set.
               </div>
             </div>
-            <div class="field" id="pieces-field">
-              <label for="pieces"
-                >pieces meet by (prototype)
-                <select id="pieces">
-                  <option value="avoid">avoid</option>
-                  <option value="merge-union">merge-union</option>
-                  <option value="merge-refill">merge-refill</option>
-                  <option value="none">no cut</option>
-                </select></label
+            <div class="field" id="overlap-field">
+              <label class="check" for="overlap"
+                ><input type="checkbox" id="overlap" /> overlap</label
               >
               <div class="hint">
-                avoid: each piece is cut by the others as keep-outs.
-                merge-union: the pieces' outlines are unioned and closed by a
-                disc of the padding, so pieces that overlap or nearly touch
-                become one region with round corners where they meet.
-                merge-refill: pieces that closing would join are merged and
-                filled again as one, until it joins none. no cut: each piece is
-                filled on its own, and pieces may overlap.
+                Let a set's pieces overlap instead of cutting each out of the
+                others.
               </div>
             </div>
             <div class="field" id="neck-field">

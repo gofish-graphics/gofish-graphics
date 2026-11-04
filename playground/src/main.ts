@@ -58,6 +58,7 @@ const BLOB = {
   convexity: 0.5,
   connection: 1,
   neck: 1,
+  overlap: true,
   holes: false,
 };
 const FILLET = {
@@ -77,7 +78,6 @@ let state: State = {
   avoidOn: Object.fromEntries(DATASETS.map((d) => [d.id, d.avoidDefault])),
   showLinks: false,
   showMembers: false,
-  pieces: "avoid",
 };
 const dataset = (): Dataset => DATASETS.find((x) => x.id === state.dataset)!;
 const avoiding = () => dataset().avoidable && !!state.avoidOn[state.dataset];
@@ -113,11 +113,9 @@ const spelling = () => {
         o.push(`convexity: ${num(state.convexity)}`);
       if (!eq(state.connection, 1))
         o.push(`connection: ${num(state.connection)}`);
-      // PROTOTYPE: not an option of enclose yet, only the playground's switch
-      if (state.connection < 1 && state.pieces !== "avoid")
-        o.push(`pieces: "${state.pieces}" /* PROTOTYPE */`);
       if (!eq(state.neck, 1)) o.push(`neck: ${num(state.neck)}`);
       if (state.holes) o.push("holes: true");
+      if (state.connection < 1 && !state.overlap) o.push("overlap: false");
       shape = `Shape.blob(${o.length ? `{ ${o.join(", ")} }` : ""})`;
     }
   } else {
@@ -219,8 +217,8 @@ const syncControls = () => {
   $<HTMLInputElement>("holes").checked = state.holes;
   $<HTMLInputElement>("show-links").checked = state.showLinks;
   $<HTMLInputElement>("show-members").checked = state.showMembers;
-  $<HTMLSelectElement>("pieces").value = state.pieces;
-  $("pieces-field").hidden = !blob || state.connection >= 1;
+  $<HTMLInputElement>("overlap").checked = state.overlap;
+  $("overlap-field").hidden = !blob || state.connection >= 1;
   $("avoid-field").hidden = !d.avoidable;
   $("avoid-label").textContent = d.avoidLabel;
   $<HTMLInputElement>("avoid").checked = avoiding();
@@ -328,7 +326,6 @@ const viewOf = (d: Dataset) => {
       padding: d.padding,
       avoid: false,
       clearance: d.clearance,
-      pieces: "avoid",
     });
     for (const ring of r.rings)
       for (const [x, y] of ring) {
@@ -528,7 +525,7 @@ const paramsOf = (): Params => ({
   holes: state.holes,
   avoid: avoiding(),
   clearance: state.clearance,
-  pieces: state.pieces,
+  overlap: state.overlap,
   draft: dragging,
 });
 const recompute = () => {
@@ -645,9 +642,7 @@ for (const b of document.querySelectorAll<HTMLButtonElement>("[data-shape]"))
       update({ shape, neck: (shape === "blob" ? BLOB : FILLET).neck });
   });
 check("holes", (on) => ({ holes: on }));
-$("pieces").addEventListener("change", (e) =>
-  update({ pieces: (e.target as HTMLSelectElement).value as State["pieces"] })
-);
+check("overlap", (on) => ({ overlap: on }));
 check("show-links", (on) => ({ showLinks: on }));
 check("show-members", (on) => ({ showMembers: on }));
 check("avoid", (on) => ({

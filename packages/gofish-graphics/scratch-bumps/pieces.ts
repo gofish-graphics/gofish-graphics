@@ -1,4 +1,4 @@
-// SCRATCH: a blob's pieces, each cut by the others as keep-outs: SVGs, the least gap between
+// SCRATCH: a blob's pieces, overlapping (overlap, the default) or each cut by the others (avoid): SVGs, the least gap between
 // two pieces' outlines (negative: the deepest overlap), the overlap area, timings.
 //   OUT=… npx tsx scratch-bumps/pieces.ts
 import { readFileSync, writeFileSync as writeRaw, mkdirSync } from "node:fs";
@@ -12,7 +12,6 @@ import {
   unifiedOutline,
   UNIFIED_STATS,
   clearUnifiedCache,
-  PIECES,
   ringsArea,
 } from "../src/ast/graphicalOperators/enclose/unified";
 import type { Pt } from "../src/ast/graphicalOperators/enclose/blob";
@@ -25,10 +24,10 @@ const DATA = JSON.parse(
 );
 const OUT = process.env.OUT!;
 mkdirSync(OUT, { recursive: true });
-const RULES = (process.env.RULES ?? "avoid").split(",");
-if (process.env.RHO) PIECES.rho = +process.env.RHO;
-const setRule = (r: string) =>
-  (PIECES.rule = (r === "no-cut" ? "none" : r) as typeof PIECES.rule);
+// "overlap": Shape.blob's overlap true (the default); "avoid": overlap false
+const RULES = (process.env.RULES ?? "overlap,avoid").split(",");
+let overlap = true;
+const setRule = (r: string) => (overlap = r !== "avoid");
 type C = {
   name: string;
   ds: string;
@@ -92,6 +91,7 @@ const run = (d: any, c: Partial<C>, set: any) =>
     connection: c.connection,
     neck: 1,
     holes: !!c.holes,
+    overlap,
     ...(c.avoid ? { avoiding: set.avoiding, clearance: d.clearance } : {}),
   });
 
@@ -270,8 +270,8 @@ if (process.env.STRIP) {
   process.exit(0);
 }
 
-// ── piece count and area against convexity and connection (STATS=1) ──────
-// area: the region's own area (each piece's rings, summed; for these rules no two pieces
+// area: the region's own area (each piece's rings, summed; with overlap, pieces that overlap count twice
+// there), per set, summed over the sets
 // overlap), per set, summed over the sets
 if (process.env.STATS) {
   const cases = [
