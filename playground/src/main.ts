@@ -58,7 +58,7 @@ const BLOB = {
   convexity: 0.5,
   connection: 1,
   neck: 1,
-  overlap: true,
+  separate: false,
   holes: false,
 };
 const FILLET = {
@@ -115,7 +115,7 @@ const spelling = () => {
         o.push(`connection: ${num(state.connection)}`);
       if (!eq(state.neck, 1)) o.push(`neck: ${num(state.neck)}`);
       if (state.holes) o.push("holes: true");
-      if (state.connection < 1 && !state.overlap) o.push("overlap: false");
+      if (state.connection < 1 && state.separate) o.push("separate: true");
       shape = `Shape.blob(${o.length ? `{ ${o.join(", ")} }` : ""})`;
     }
   } else {
@@ -217,8 +217,8 @@ const syncControls = () => {
   $<HTMLInputElement>("holes").checked = state.holes;
   $<HTMLInputElement>("show-links").checked = state.showLinks;
   $<HTMLInputElement>("show-members").checked = state.showMembers;
-  $<HTMLInputElement>("overlap").checked = state.overlap;
-  $("overlap-field").hidden = !blob || state.connection >= 1;
+  $<HTMLInputElement>("separate").checked = state.separate;
+  $("separate-field").hidden = !blob || state.connection >= 1;
   $("avoid-field").hidden = !d.avoidable;
   $("avoid-label").textContent = d.avoidLabel;
   $<HTMLInputElement>("avoid").checked = avoiding();
@@ -525,7 +525,7 @@ const paramsOf = (): Params => ({
   holes: state.holes,
   avoid: avoiding(),
   clearance: state.clearance,
-  overlap: state.overlap,
+  separate: state.separate,
   draft: dragging,
 });
 const recompute = () => {
@@ -642,7 +642,7 @@ for (const b of document.querySelectorAll<HTMLButtonElement>("[data-shape]"))
       update({ shape, neck: (shape === "blob" ? BLOB : FILLET).neck });
   });
 check("holes", (on) => ({ holes: on }));
-check("overlap", (on) => ({ overlap: on }));
+check("separate", (on) => ({ separate: on }));
 check("show-links", (on) => ({ showLinks: on }));
 check("show-members", (on) => ({ showMembers: on }));
 check("avoid", (on) => ({

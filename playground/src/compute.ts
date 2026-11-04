@@ -23,8 +23,8 @@ export type Params = {
   convexity: number;
   connection: number;
   neck: number;
-  /** blob, connection below 1: the pieces may overlap (true) or each is cut out of the others */
-  overlap: boolean;
+  /** blob, connection below 1: each piece is cut out of the others (true) or pieces may overlap */
+  separate: boolean;
   /** fillet: the closing radius, px; null follows the padding (the default) */
   radius: number | null;
   /** shared */
@@ -70,7 +70,7 @@ export function computeSet(s: SetInput, p: Params): SetResult {
           convexity: p.convexity,
           connection: p.connection,
           neck: p.neck,
-          overlap: p.overlap,
+          separate: p.separate,
         }
       : { radius: p.radius ?? undefined, neck: p.neck }),
     holes: p.holes,

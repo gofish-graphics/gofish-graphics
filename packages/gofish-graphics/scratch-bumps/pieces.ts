@@ -24,10 +24,10 @@ const DATA = JSON.parse(
 );
 const OUT = process.env.OUT!;
 mkdirSync(OUT, { recursive: true });
-// "overlap": Shape.blob's overlap true (the default); "avoid": overlap false
+// "overlap": Shape.blob's separate false (the default); "avoid": separate true
 const RULES = (process.env.RULES ?? "overlap,avoid").split(",");
-let overlap = true;
-const setRule = (r: string) => (overlap = r !== "avoid");
+let separate = false;
+const setRule = (r: string) => (separate = r === "avoid");
 type C = {
   name: string;
   ds: string;
@@ -91,7 +91,7 @@ const run = (d: any, c: Partial<C>, set: any) =>
     connection: c.connection,
     neck: 1,
     holes: !!c.holes,
-    overlap,
+    separate,
     ...(c.avoid ? { avoiding: set.avoiding, clearance: d.clearance } : {}),
   });
 

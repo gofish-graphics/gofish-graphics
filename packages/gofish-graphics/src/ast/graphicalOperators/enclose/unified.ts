@@ -3,7 +3,7 @@
  * the exact closing of `arcs.ts`:
  *
  *   enclose({ shape, padding, avoiding, clearance }, members)
- *   Shape.blob({ convexity, connection, neck, holes, overlap })
+ *   Shape.blob({ convexity, connection, neck, holes, separate })
  *   Shape.fillet({ radius, neck, holes })    (radius defaults to padding, neck to 0.5)
  *   Shape.box()                               (the padded bounding box)
  *
@@ -22,8 +22,8 @@
  *     (pieceLinks). At connection 1 this is the earlier blob exactly.
  *  3. Each piece is filled on its own (its spine, padded hull and the
  *     per-bay blend of `convexity`, meshBlend.ts; above 1 the hull blends
- *     toward the oval, beyond.ts). `overlap` (default true): the pieces may
- *     overlap, and a piece wholly inside another is dropped; false: the
+ *     toward the oval, beyond.ts). `separate` (default false): the pieces may
+ *     overlap, and a piece wholly inside another is dropped; true: the
  *     set's other pieces are its keep-outs, as avoided marks are (below).
  *  4. The approved smoothing: Gaussian along arclength, then the least
  *     uniform outward offset that holds every padded member and link again.
@@ -132,10 +132,11 @@ export type UnifiedOptions = {
   radius?: number;
   /** Blob and fillet: keep a gap the outline closes around as a hole. */
   holes?: boolean;
-  /** Blob, connection below 1: true (default), each piece is filled on its
-   *  own and pieces may overlap (a piece wholly inside another is dropped);
-   *  false, each piece is cut by the set's other pieces as by `avoiding`. */
-  overlap?: boolean;
+  /** Blob, connection below 1: true, each piece is cut by the set's other
+   *  pieces as by `avoiding`, so pieces stay apart; false (default), each
+   *  piece is filled on its own and pieces may overlap (a piece wholly inside
+   *  another is dropped). */
+  separate?: boolean;
   /** enclose's own: nodes the outline stays out of, each grown by
    *  `clearance` (default 4 px). */
   avoiding?: BlobMember[];
@@ -773,7 +774,7 @@ const boxOfRings = (rings: Pt[][]): [number, number, number, number] => {
  * The outline. Blob (`connected`, the default): the members split into
  * pieces by `join` (joinLinks); each piece is filled on its own (its own
  * spine, padded hull and convexity, `fillOne`) and smoothed, then cut by its
- * keep-outs: the avoided members and, with `overlap: false`, the set's other
+ * keep-outs: the avoided members and, with `separate: true`, the set's other
  * pieces (blobOutline), so pieces never merge by filling. One piece (connection 1) is the earlier
  * blob exactly. `connected: false` is the
  * arcs shape: the exact closing at `radius`, its links from the closing's
@@ -1017,8 +1018,8 @@ function filletPieces(
 }
 
 /** The blob: pieces by connection, each filled and smoothed (finish), then cut by its
- *  keep-outs as every shape is (avoidCut): the avoided members and, with `overlap: false`,
- *  the set's other pieces. With `overlap` (the default) a piece that lies wholly inside
+ *  keep-outs as every shape is (avoidCut): the avoided members and, with `separate: true`,
+ *  the set's other pieces. Without `separate` (the default) a piece that lies wholly inside
  *  another is dropped (contained). */
 function blobOutline(
   members: BlobMember[],
@@ -1084,13 +1085,13 @@ function blobOutline(
     )
   );
   const tCut = performance.now();
-  // each piece's keep-outs: the avoided members, and with `overlap: false` the set's other
+  // each piece's keep-outs: the avoided members, and with `separate: true` the set's other
   // pieces as keep-outs too (their padded members and links at clearance 2 · padding: kept a padding clear of the
   // other piece's padded members), those that can reach its outline's box (the closing by
   // SEPARATE.open reaches 2 · open past a disc)
-  const overlap = o.overlap ?? true;
+  const separate = o.separate ?? false;
   const others =
-    parts.length > 1 && !overlap
+    parts.length > 1 && separate
       ? parts.map(({ pm, spine, pk }) =>
           memo(key("pieceKeepOuts", pk, 2 * pad), () =>
             keepOuts([...pm, ...spine], 2 * pad)
@@ -1124,7 +1125,7 @@ function blobOutline(
       false
     );
   });
-  const byPiece = overlap && cut.length > 1 ? contained(cut) : cut;
+  const byPiece = !separate && cut.length > 1 ? contained(cut) : cut;
   const rings = byPiece.flat();
   const radii = outs.map((f) => f.r);
   Object.assign(UNIFIED_STATS, {
