@@ -69,7 +69,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
   <div class="cta-row">
     <a class="btn btn-primary" :href="getStartedHref">Get Started</a>
     <a class="btn btn-secondary" :href="examplesHref">Examples</a>
-    <a class="btn btn-secondary" :href="apiHref">API Reference</a>
+    <a class="btn btn-secondary btn-api" :href="apiHref">API Reference</a>
   </div>
   <button
     type="button"

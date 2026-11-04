@@ -67,21 +67,15 @@ import {
   getStoryTitle,
   type StoryExample,
 } from "./data/storyExamples";
+import { STORY_IMAGES_DIR, storyImagePath } from "./storyImages";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const EXAMPLES_DIR = join(__dirname, "examples");
 /** The docs source root (`apps/docs/docs`). */
 const DOCS_DIR = join(__dirname, "..");
 
-/**
- * Site path of the directory of captured story pictures (under `public/`), and
- * of one story's picture in it. The capture script writes these paths and
- * <GoFishImage> loads them, so they are spelled once, here.
- */
-export const STORY_IMAGES_DIR = "/previews";
-export function storyImagePath(storyId: string): string {
-  return `${STORY_IMAGES_DIR}/${storyId}.png`;
-}
+// Where the captured story pictures live; re-exported for the capture script.
+export { STORY_IMAGES_DIR, storyImagePath };
 
 /** One `::: gofish` container's info string, parsed. */
 interface Directive {

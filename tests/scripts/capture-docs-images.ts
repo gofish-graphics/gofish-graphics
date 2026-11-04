@@ -10,8 +10,10 @@
  *      see GalleryPage.vue), and shared example links unfurl as a branded chart
  *      card.
  *   2. Story images: every story a `::: gofish … image` container pictures (the
- *      tutorials index cards, for one), cropped to its drawing. See
- *      markdown-it-gofish.ts.
+ *      tutorials index cards, for one), and every chart the landing page shows
+ *      as a picture (its hero collage and spectrum row), cropped to its
+ *      drawing. See markdown-it-gofish.ts and the landing page's
+ *      landingCards.ts.
  *
  * These are docs BUILD ARTIFACTS (gitignored, not committed): `docs:build` runs
  * this (`docs:images`) before `vitepress build`, which copies public/ into the
@@ -39,7 +41,8 @@
  * with what the pages load by construction (no re-derived id to drift out of
  * sync): the gallery examples (`id` / `storyId`) from `loadStoryExamples()`, the
  * gallery and docs config's loader; the story images from `findImageStoryIds()`,
- * which reads the docs markdown through the `::: gofish` plugin itself, and
+ * which reads the docs markdown through the `::: gofish` plugin itself, plus
+ * the landing page's `LANDING_CARDS`, the list LandingPage.vue renders; and
  * their paths from the plugin's `storyImagePath()`.
  *
  * Output:
@@ -94,6 +97,18 @@ async function loadImagePlugin(): Promise<{
       "findImageStoryIds export not found in markdown-it-gofish.ts"
     );
   return plugin;
+}
+
+// The landing page's picture cards (LandingPage.vue renders the same list).
+// Same interop dance as above.
+async function loadLandingCards(): Promise<{ id: string; storyId: string }[]> {
+  const mod: any = await import(
+    "../../apps/docs/docs/.vitepress/theme/components/landing/landingCards.ts"
+  );
+  const cards = mod.LANDING_CARDS ?? mod.default?.LANDING_CARDS;
+  if (!Array.isArray(cards))
+    throw new Error("LANDING_CARDS export not found in landingCards.ts");
+  return cards;
 }
 
 const TESTS_DIR = join(import.meta.dirname, "..");
@@ -188,8 +203,28 @@ async function main() {
   console.log(`Found ${examples.length} gallery examples.`);
   const { findImageStoryIds, STORY_IMAGES_DIR, storyImagePath } =
     await loadImagePlugin();
-  const imageStoryIds = findImageStoryIds();
-  console.log(`Found ${imageStoryIds.length} story image(s) in the docs.\n`);
+  // Each landing card links to its gallery example and shows its story's
+  // picture: check the two name the same story, so a card never links to a
+  // different chart from the one it shows.
+  const storyOfExample = new Map(examples.map((ex) => [ex.id, ex.storyId]));
+  const landingCards = await loadLandingCards();
+  for (const card of landingCards) {
+    if (storyOfExample.get(card.id) !== card.storyId)
+      throw new Error(
+        `landingCards.ts: card "${card.id}" pictures story "${card.storyId}", ` +
+          `but gallery example "${card.id}" is story ` +
+          `"${storyOfExample.get(card.id) ?? "(none)"}".`
+      );
+  }
+  const imageStoryIds = [
+    ...new Set([
+      ...findImageStoryIds(),
+      ...landingCards.map((card) => card.storyId),
+    ]),
+  ].sort();
+  console.log(
+    `Found ${imageStoryIds.length} story image(s) in the docs and landing page.\n`
+  );
 
   const manifest: Record<string, { w: number; h: number }> = {};
   // Keep each thumbnail's bytes in memory so the OG-card pass can reuse them

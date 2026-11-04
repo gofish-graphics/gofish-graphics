@@ -404,6 +404,9 @@ export default defineConfig({
   },
   themeConfig: {
     logo: "/gofish-logo.png",
+    // The navbar title (VitePress renders it as HTML). "Graphics" is its own
+    // span so the home page can drop it on phones, where the navbar is full.
+    siteTitle: 'GoFish<span class="title-rest"> Graphics</span>',
     // Consumed by the LanguageToggle theme component.
     docRoutes: collectDocRoutes(),
     search: {

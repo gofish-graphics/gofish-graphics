@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { withBase } from "vitepress";
 import { docsLang } from "../../docsLang";
 import CtaBlock from "./CtaBlock.vue";
+import { COLLAGE, SPECTRUM, cardImage, type LandingCard } from "./landingCards";
 
 // Large static SVG / HTML chunks live in sibling fragment files imported as raw
-// strings and rendered with v-html, so the 400KB of inline chart art never goes
-// through the Vue template compiler.
-import heroCards from "./fragments/hero-cards.html?raw";
-import spectrumCards from "./fragments/spectrum-cards.html?raw";
+// strings and rendered with v-html, so the inline chart art never goes through
+// the Vue template compiler. The 500KB of hero-card art is loaded on demand
+// (see wireHeroCards).
 import demoSvg from "./fragments/demo-svg.html?raw";
 import codeStrip from "./fragments/code-strip.html?raw";
 
@@ -16,7 +17,19 @@ import "./landing.css";
 const rootEl = ref<HTMLElement | null>(null);
 const demoEl = ref<HTMLButtonElement | null>(null);
 const pulltabEl = ref<HTMLElement | null>(null);
+const railEl = ref<HTMLElement | null>(null);
+const knobEl = ref<HTMLElement | null>(null);
 const jsReady = ref(false);
+const heroCards = ref("");
+
+// Card links follow the reader's language, like the CTA buttons. The picture
+// URL is bound at runtime through withBase, as in GoFishImage.vue: a static
+// `<img src="/…">` would compile to a build-time import of a PNG that the docs
+// build only captures later (and that `docs:dev` may not have at all).
+const exampleHref = (card: LandingCard) =>
+  withBase(`/${docsLang.value}/examples/${card.id}`);
+const examplesHref = () => withBase(`/${docsLang.value}/examples/`);
+const imageSrc = (card: LandingCard) => withBase(cardImage(card));
 
 // Collected teardown callbacks (listeners, observers, injected nodes).
 const cleanups: Array<() => void> = [];
@@ -65,6 +78,13 @@ function wireDemo(): void {
   };
   demo.addEventListener("click", onClick);
   cleanups.push(() => demo.removeEventListener("click", onClick));
+  // A mouse drag is followed by a click, a touch drag is not: forget the drag
+  // when the next press starts, so it never swallows that press's own click.
+  const onPress = () => {
+    justDragged = false;
+  };
+  demo.addEventListener("pointerdown", onPress);
+  cleanups.push(() => demo.removeEventListener("pointerdown", onPress));
 
   if (tab) {
     let dragging = false;
@@ -236,6 +256,38 @@ function wireBrackets(): void {
   cleanups.push(stopLang);
 }
 
+// ---- the floating hero cards: ~500KB of inline SVG that only wide screens
+// show (landing.css hides .float-card at max-width 1100px). Fetch it only when
+// the viewport is wide enough to show it, so phones never download it.
+function wireHeroCards(): void {
+  const wide = window.matchMedia("(min-width: 1101px)");
+  const load = () => {
+    if (!wide.matches || heroCards.value) return;
+    import("./fragments/hero-cards.html?raw").then((m) => {
+      heroCards.value = m.default;
+    });
+  };
+  load();
+  wide.addEventListener("change", load);
+  cleanups.push(() => wide.removeEventListener("change", load));
+}
+
+// ---- spectrum swipe row (narrow screens): a dot on the pencil line under the
+// row tracks how far it has been swiped.
+function wireRail(): void {
+  const rail = railEl.value;
+  const knob = knobEl.value;
+  if (!rail || !knob) return;
+  const update = () => {
+    const max = rail.scrollWidth - rail.clientWidth;
+    const f = max > 0 ? rail.scrollLeft / max : 0;
+    knob.style.left = 4 + f * 88 + "%";
+  };
+  rail.addEventListener("scroll", update, { passive: true });
+  cleanups.push(() => rail.removeEventListener("scroll", update));
+  update();
+}
+
 // ---- scroll reveal.
 function wireReveals(): void {
   const root = rootEl.value;
@@ -266,6 +318,8 @@ onMounted(() => {
   document.documentElement.classList.add("landing-page");
   injectFonts();
   jsReady.value = true;
+  wireHeroCards();
+  wireRail();
   wireDemo();
   wireBrackets();
   wireReveals();
@@ -304,6 +358,40 @@ onBeforeUnmount(() => {
             <CtaBlock version />
           </div>
         </div>
+
+        <!-- phones and tablets, where the floating cards are hidden: a pile
+             of taped specimen cards, each linking to its example page -->
+        <div class="collage-wrap">
+          <div class="collage">
+            <a
+              v-for="card in COLLAGE"
+              :key="card.id"
+              class="pin"
+              :class="[card.place, { tall: card.tall }]"
+              :style="{
+                '--tilt': `${card.tilt}deg`,
+                '--tape-angle': `${card.tape}deg`,
+                marginTop: card.drop ? `${card.drop}px` : undefined,
+              }"
+              :href="exampleHref(card)"
+            >
+              <span class="tape" aria-hidden="true"></span>
+              <span class="card">
+                <img
+                  :src="imageSrc(card)"
+                  :alt="card.alt"
+                  :style="{ aspectRatio: card.aspect }"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </span>
+              <span class="cap">{{ card.caption }}</span>
+            </a>
+          </div>
+          <p class="collage-more">
+            <a :href="examplesHref()">see all examples →</a>
+          </p>
+        </div>
       </section>
 
       <!-- ===================== SPECTRUM ===================== -->
@@ -316,7 +404,66 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="track reveal">
-          <div v-html="spectrumCards"></div>
+          <!-- a row on wide screens; a swipe row on narrow ones -->
+          <div
+            ref="railEl"
+            class="specimens"
+            tabindex="0"
+            aria-label="Four charts, from simple to complex"
+          >
+            <div
+              v-for="(card, i) in SPECTRUM"
+              :key="card.id"
+              class="specimen"
+              role="group"
+              :aria-label="`${i + 1} of ${SPECTRUM.length}`"
+              :style="{ transform: `rotate(${card.tilt}deg)` }"
+            >
+              <a :href="exampleHref(card)">
+                <div class="card lift">
+                  <span
+                    class="tape"
+                    :style="{ '--tape-angle': `${card.tape}deg` }"
+                    aria-hidden="true"
+                  ></span>
+                  <img
+                    :src="imageSrc(card)"
+                    :alt="card.alt"
+                    :style="{ aspectRatio: card.aspect }"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </div>
+                <div class="cap">{{ card.caption }}</div>
+              </a>
+            </div>
+          </div>
+
+          <!-- narrow screens: the pencil line under the swipe row, with a dot
+               that moves along it as the row scrolls (wireRail) -->
+          <div class="spec-axis" aria-hidden="true">
+            <svg viewBox="0 0 340 22" preserveAspectRatio="none">
+              <path
+                d="M2 10 Q90 6 170 9 T334 8"
+                fill="none"
+                stroke="var(--graphite)"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                vector-effect="non-scaling-stroke"
+              />
+              <path
+                d="M326 3 L335 8 L326 14"
+                fill="none"
+                stroke="var(--graphite)"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                vector-effect="non-scaling-stroke"
+              />
+            </svg>
+            <span ref="knobEl" class="knob"></span>
+            <span class="lbl l">simple</span>
+            <span class="lbl r">complex</span>
+          </div>
 
           <!-- pencil axis line -->
           <svg
