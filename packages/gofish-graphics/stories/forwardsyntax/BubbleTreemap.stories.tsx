@@ -39,7 +39,7 @@ export const Default: StoryObj = {
       .flow(
         pack({ by: "continent", spacing: 4 }),
         enclose({
-          shape: Shape.arcs({ radius: 12 }),
+          shape: Shape.fillet({ radius: 12 }),
           padding: 4,
           fill: "none",
           stroke: "#333",
@@ -47,7 +47,7 @@ export const Default: StoryObj = {
         }),
         pack({ by: "region", spacing: 4 }),
         enclose({
-          shape: Shape.arcs({ radius: 8 }),
+          shape: Shape.fillet({ radius: 8 }),
           padding: 4,
           fill: "none",
           stroke: "#999",
@@ -72,7 +72,7 @@ export const Uncertainty: StoryObj = {
       .flow(
         pack({ by: "continent", spacing: 4 }),
         enclose({
-          shape: Shape.arcs({ radius: 12 }),
+          shape: Shape.fillet({ radius: 12 }),
           padding: 4,
           fill: "none",
           stroke: "#333",
@@ -80,7 +80,7 @@ export const Uncertainty: StoryObj = {
         }),
         pack({ by: "region", spacing: 4 }),
         enclose({
-          shape: Shape.arcs({ radius: 8 }),
+          shape: Shape.fillet({ radius: 8 }),
           padding: "uncertainty",
           fill: "none",
           stroke: "#999",
@@ -99,7 +99,7 @@ export const Uncertainty: StoryObj = {
 // tree as writing the steps out, with one shape and padding at every level.
 const bubbleTreemap = ({
   by,
-  shape = Shape.arcs(),
+  shape = Shape.fillet({ radius: 12 }),
   spacing = 4,
   padding = 4,
 }: {

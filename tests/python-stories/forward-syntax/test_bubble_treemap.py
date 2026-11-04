@@ -1,6 +1,6 @@
 """Equivalent of BubbleTreemap.stories.tsx — Forward Syntax/Bubble Treemap.
 
-Seventy countries packed by region and continent, with a ``Shape.arcs``
+Seventy countries packed by region and continent, with a ``Shape.fillet``
 contour around each region and each continent: ``enclose`` as a flow step,
 between the packs. Each country's circle takes its pixel radius from the
 population (area proportional to it), since ``pack`` does not size children
@@ -23,14 +23,14 @@ def story_default():
         .flow(
             pack(by="continent", spacing=4),
             enclose(
-                shape=Shape.arcs(radius=12),
+                shape=Shape.fillet(radius=12),
                 padding=4,
                 fill="none",
                 stroke="#333",
                 stroke_width=1.5,
             ),
             pack(by="region", spacing=4),
-            enclose(shape=Shape.arcs(radius=8), padding=4, fill="none", stroke="#999"),
+            enclose(shape=Shape.fillet(radius=8), padding=4, fill="none", stroke="#999"),
             pack(),
         )
         .mark(country),
@@ -46,7 +46,7 @@ def story_uncertainty():
         .flow(
             pack(by="continent", spacing=4),
             enclose(
-                shape=Shape.arcs(radius=12),
+                shape=Shape.fillet(radius=12),
                 padding=4,
                 fill="none",
                 stroke="#333",
@@ -54,7 +54,7 @@ def story_uncertainty():
             ),
             pack(by="region", spacing=4),
             enclose(
-                shape=Shape.arcs(radius=8),
+                shape=Shape.fillet(radius=8),
                 padding="uncertainty",
                 fill="none",
                 stroke="#999",
@@ -68,7 +68,7 @@ def story_uncertainty():
 
 def bubble_treemap(by, shape=None, spacing=4, padding=4):
     """A bubble treemap as one flow step: a pack and an enclose per level."""
-    shape = shape if shape is not None else Shape.arcs()
+    shape = shape if shape is not None else Shape.fillet(radius=12)
     steps = []
     for key in by:
         steps += [

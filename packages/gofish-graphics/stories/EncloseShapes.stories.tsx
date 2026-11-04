@@ -90,7 +90,9 @@ export const MunkresFigure: StoryObj = {
         enclose({ shape: Shape.oval(), padding: 16, ...outline }, [b, c]),
         enclose(
           {
-            shape: Shape.spine({ avoiding: [b], clearance: 6 }),
+            shape: Shape.spine(),
+            avoiding: [b],
+            clearance: 6,
             padding: 12,
             ...outline,
           },
@@ -312,8 +314,8 @@ const uBlob = (holes: boolean) =>
         shape: Shape.blob({
           convexity: 0.75,
           holes,
-          avoiding: GRAY.map((_, i) => names[`g${i}`]),
         }),
+        avoiding: GRAY.map((_, i) => names[`g${i}`]),
         padding: 8,
         fill: "#3366aa",
         stroke: "#3366aa",
@@ -323,8 +325,10 @@ const uBlob = (holes: boolean) =>
     ),
   ]);
 
-// holes off (the default): the gap the blob closes is filled, and each gray
-// point inside it is cut back out as its clearance circle.
+// holes off (the default): every hole the outline closes is filled, and each
+// gray point is cut back out, `clearance` (the padding) clear of it. At
+// convexity 0.75 the blob fills three quarters of the U's opening from its
+// walls, so the opening stays open at the top.
 export const HolesFilled: StoryObj = {
   render: () => {
     const container = initializeContainer();
@@ -333,7 +337,9 @@ export const HolesFilled: StoryObj = {
   },
 };
 
-// holes on: the gap stays open as it is.
+// holes on: a gap the outline closes around stays a hole. The U's opening
+// is never closed (see HolesFilled), so this draws the same outline; a blob
+// keeps a hole only where its members close a loop.
 export const HolesKept: StoryObj = {
   render: () => {
     const container = initializeContainer();
@@ -412,10 +418,9 @@ export const Hyperedges: StoryObj = {
         SETS.map((set) =>
           enclose(
             {
-              shape: Shape.spine({
-                avoiding: Object.keys(NODES).map((id) => n[id]),
-                clearance: 3,
-              }),
+              shape: Shape.spine(),
+              avoiding: Object.keys(NODES).map((id) => n[id]),
+              clearance: 3,
               padding: 6,
               fill: set.color,
               stroke: set.color,
@@ -435,22 +440,22 @@ export const Hyperedges: StoryObj = {
   },
 };
 
-// ── 8. Shape.arcs: the radius of the closing disc ───────────────────────────
+// ── 8. Shape.fillet: the radius of the closing disc ───────────────────────────
 
 // Africa's countries packed 6 px apart (pixel radius, area proportional to
-// population), outlined with `Shape.arcs` at growing radii. At radius 0 the
+// population), outlined with `Shape.fillet` at growing radii. At radius 0 the
 // outline is the padded circles' union; each concave corner becomes an arc
 // of `radius`, and a large radius nears the convex hull.
 const africa = countryPopulations
   .filter((d) => d.continent === "Africa")
   .map((d) => 1.6 * Math.sqrt(d.pop));
 
-const arcsPanel = (radius: number) =>
+const filletPanel = (radius: number) =>
   spread({ dir: "y", spacing: 8, alignment: "middle" }, [
-    text({ text: `Shape.arcs({ radius: ${radius} })`, fontSize: 12 }),
+    text({ text: `Shape.fillet({ radius: ${radius} })`, fontSize: 12 }),
     enclose(
       {
-        shape: Shape.arcs({ radius }),
+        shape: Shape.fillet({ radius }),
         padding: 6,
         fill: "#f2c14e",
         fillOpacity: 0.25,
@@ -466,13 +471,148 @@ const arcsPanel = (radius: number) =>
     ),
   ]);
 
-export const ArcsRadiusSweep: StoryObj = {
+export const FilletRadiusSweep: StoryObj = {
   render: () => {
     const container = initializeContainer();
     spread({ dir: "y", spacing: 24 }, [
-      spread({ dir: "x", spacing: 24 }, [0, 6, 12].map(arcsPanel)),
-      spread({ dir: "x", spacing: 24 }, [24, 48, 200].map(arcsPanel)),
+      spread({ dir: "x", spacing: 24 }, [0, 6, 12].map(filletPanel)),
+      spread({ dir: "x", spacing: 24 }, [24, 48, 200].map(filletPanel)),
     ]).render(container);
+    return container;
+  },
+};
+
+// ── 9. Shape.blob: convexity, connection and separate ────────────────────────
+
+/** A titled panel: `pts` as blue dots, outlined with `shape`. The dots'
+ *  names start with `key`, so each panel's are its own. */
+const blobPanel = (title: string, shape: Shape.Shape, pts: Pt[], key: string) =>
+  spread({ dir: "y", spacing: 36, alignment: "middle" }, [
+    text({ text: title, fontSize: 12 }),
+    layer(pts.map((p, i) => dot(p, "#3366aa", `${key}${i}`))).relate(
+      (names: any) => [
+        enclose(
+          {
+            shape,
+            padding: 8,
+            fill: "#3366aa",
+            stroke: "#3366aa",
+            fillOpacity: 0.25,
+          },
+          pts.map((_, i) => names[`${key}${i}`])
+        ),
+      ]
+    ),
+  ]);
+
+// convexity from 0 (the spine: each member joined by a tube) through 1 (the
+// padded convex hull) to 2 (the oval).
+export const BlobConvexitySweep: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    const panel = (convexity: number, i: number) =>
+      blobPanel(
+        `Shape.blob({ convexity: ${convexity} })`,
+        Shape.blob({ convexity }),
+        U,
+        `c${i}-`
+      );
+    spread({ dir: "y", spacing: 48 }, [
+      spread({ dir: "x", spacing: 72 }, [0, 0.5, 1].map(panel)),
+      spread({ dir: "x", spacing: 72 }, [1.5, 2].map((c, i) => panel(c, i + 3))),
+    ]).render(container);
+    return container;
+  },
+};
+
+// Three dots in the U's opening, a gap from its band. connection 1 joins
+// every member into one piece. 0.5 keeps the stronger half of the links
+// between members whose padding does not touch: the U breaks where its band
+// is thinnest, and each piece is filled on its own, so neighbors' fills can
+// overlap. separate cuts each piece clear of the others, `clearance` (the
+// padding) between their outlines.
+const INNER: Pt[] = [
+  [100, 70],
+  [124, 70],
+  [112, 91],
+];
+
+export const BlobConnection: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    spread({ dir: "x", spacing: 24 }, [
+      blobPanel(
+        "Shape.blob({ convexity: 1 })",
+        Shape.blob({ convexity: 1 }),
+        [...U, ...INNER],
+        "k0-"
+      ),
+      blobPanel(
+        "Shape.blob({ convexity: 1, connection: 0.5 })",
+        Shape.blob({ convexity: 1, connection: 0.5 }),
+        [...U, ...INNER],
+        "k1-"
+      ),
+      blobPanel(
+        "Shape.blob({ convexity: 1, connection: 0.5, separate: true })",
+        Shape.blob({ convexity: 1, connection: 0.5, separate: true }),
+        [...U, ...INNER],
+        "k2-"
+      ),
+    ]).render(container);
+    return container;
+  },
+};
+
+// ── 10. Shape.fillet: the neck of the links between pieces ───────────────────
+
+// Three packed groups 40 px apart: too far for the closing at radius 16 to
+// join them, but nearer than 2 · radius, so each pair is joined by a link
+// as wide as neck × the padded members it joins. neck 0 draws no links.
+const GROUPS = [
+  [14, 10, 8, 6, 6],
+  [12, 9, 7, 5],
+  [16, 8, 8, 6],
+];
+
+const neckPanel = (neck: number, key: string) =>
+  spread({ dir: "y", spacing: 8, alignment: "middle" }, [
+    text({ text: `Shape.fillet({ radius: 16, neck: ${neck} })`, fontSize: 12 }),
+    layer([
+      spread(
+        { dir: "x", spacing: 40, alignment: "middle" },
+        GROUPS.map((radii, g) =>
+          pack(
+            { spacing: 4 },
+            radii.map((r, j) =>
+              circle({ r, fill: "#f2c14e" }).name(`${key}${g}-${j}`)
+            )
+          )
+        )
+      ),
+    ]).relate((names: any) => [
+      enclose(
+        {
+          shape: Shape.fillet({ radius: 16, neck }),
+          padding: 6,
+          fill: "#f2c14e",
+          fillOpacity: 0.25,
+          stroke: "#333",
+          strokeWidth: 1.5,
+        },
+        GROUPS.flatMap((radii, g) =>
+          radii.map((_, j) => names[`${key}${g}-${j}`])
+        )
+      ),
+    ]),
+  ]);
+
+export const FilletNeckSweep: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    spread({ dir: "x", spacing: 24 }, [0, 0.25, 0.5, 1].map((neck, i) => neckPanel(neck, `n${i}-`))).render(
+      container
+    );
     return container;
   },
 };
