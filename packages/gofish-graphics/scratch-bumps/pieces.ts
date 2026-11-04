@@ -1,11 +1,19 @@
 // SCRATCH: a blob's pieces, each cut by the others as keep-outs: SVGs, the least gap between
 // two pieces' outlines (negative: the deepest overlap), the overlap area, timings.
 //   OUT=… npx tsx scratch-bumps/pieces.ts
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync as writeRaw, mkdirSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+// every SVG also as a PNG (rsvg-convert)
+const writeFileSync = (f: string, s: string) => {
+  writeRaw(f, s);
+  execFileSync("rsvg-convert", [f, "-o", f.replace(/\.svg$/, ".png")]);
+};
 import {
   unifiedOutline,
   UNIFIED_STATS,
   clearUnifiedCache,
+  PIECES,
+  ringsArea,
 } from "../src/ast/graphicalOperators/enclose/unified";
 import type { Pt } from "../src/ast/graphicalOperators/enclose/blob";
 
@@ -17,7 +25,10 @@ const DATA = JSON.parse(
 );
 const OUT = process.env.OUT!;
 mkdirSync(OUT, { recursive: true });
-const RULES = ["avoid"] as const;
+const RULES = (process.env.RULES ?? "avoid").split(",");
+if (process.env.RHO) PIECES.rho = +process.env.RHO;
+const setRule = (r: string) =>
+  (PIECES.rule = (r === "no-cut" ? "none" : r) as typeof PIECES.rule);
 type C = {
   name: string;
   ds: string;
@@ -182,6 +193,7 @@ for (const c of CASES) {
   const d = DATA.find((x: any) => x.id === c.ds);
   const line: string[] = [c.name];
   for (const rule of RULES) {
+    setRule(rule);
     clearUnifiedCache();
     let body = d.scenery;
     let minGap = Infinity,
@@ -222,9 +234,106 @@ for (const c of CASES) {
   console.log(line.join("\n  "));
 }
 
+// ── convexity strips: 0, 0.5, 1, 1.5, 2 side by side (STRIP=1) ───────────
+if (process.env.STRIP) {
+  const strips = [
+    { name: "penguins", ds: "penguins", connection: 0.9 },
+    { name: "chartaccent", ds: "chartaccent", pad: 4.5, connection: 0.85 },
+  ];
+  for (const st of strips)
+    for (const rule of RULES) {
+      setRule(rule);
+      clearUnifiedCache();
+      const d = DATA.find((x: any) => x.id === st.ds);
+      const [W, H] = [d.width + 40, d.height + 60];
+      let body = "";
+      [0, 0.5, 1, 1.5, 2].forEach((cv, k) => {
+        let g = d.scenery;
+        let n = 0;
+        for (const s of d.sets) {
+          const rings = run(d, { ...st, convexity: cv }, s);
+          const per = UNIFIED_STATS.pieceRings ?? [rings];
+          n += per.length;
+          const T = `matrix(1 0 0 ${s.T[2]} ${s.T[0]} ${s.T[1]})`;
+          g += `<path transform="${T}" d="${pathOf(rings)}" fill="${s.paint.fill}" fill-opacity="0.25" stroke="none"/>`;
+          per.forEach((R, q) => {
+            g += `<path transform="${T}" d="${pathOf(R)}" fill="none" stroke="${PIECE[q % PIECE.length]}" stroke-width="1"/>`;
+          });
+        }
+        body += `<g transform="translate(${k * W + 20} 40)">${g}<text x="0" y="-16" font-family="sans-serif" font-size="16">convexity ${cv} · ${n} pieces</text></g>`;
+      });
+      writeFileSync(
+        `${OUT}/sweep-${st.name}-${rule}.svg`,
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${5 * W} ${H}" width="${2 * 5 * W}" height="${2 * H}"><rect width="${5 * W}" height="${H}" fill="#fff"/>${body}</svg>`
+      );
+    }
+  process.exit(0);
+}
+
+// ── piece count and area against convexity and connection (STATS=1) ──────
+// area: the region's own area (each piece's rings, summed; for these rules no two pieces
+// overlap), per set, summed over the sets
+if (process.env.STATS) {
+  const cases = [
+    { name: "ca", ds: "chartaccent", pad: 4.5, connection: 0.85 },
+    { name: "pen-0.9", ds: "penguins", connection: 0.9 },
+    { name: "pen-0.5", ds: "penguins", connection: 0.5 },
+    { name: "u", ds: "u", connection: 0.9 },
+    { name: "holes", ds: "holes", connection: 0.9, holes: true, avoid: true },
+  ];
+  const measure = (d: any, c: Partial<C>) => {
+    let n = 0,
+      a = 0;
+    for (const s of d.sets) {
+      const rings = run(d, c, s);
+      n += (UNIFIED_STATS.pieceRings ?? [rings]).length;
+      a += ringsArea(rings);
+    }
+    return { n, a };
+  };
+  const report = (
+    label: string,
+    xs: number[],
+    m: { n: number; a: number }[]
+  ) => {
+    const counts = m.map((x) => x.n).join(" ");
+    const steps = m.slice(1).map((x, i) => x.a - m[i].a);
+    const drops = steps.filter((s) => s < -0.5);
+    const merge = steps.filter((_, i) => m[i + 1].n !== m[i].n);
+    const plain = steps.filter((_, i) => m[i + 1].n === m[i].n).map(Math.abs);
+    const med = plain.sort((p, q) => p - q)[plain.length >> 1] ?? 0;
+    console.log(
+      `${label}: pieces ${counts}\n    area ${f2(m[0].a)}→${f2(m[m.length - 1].a)}; drops ${drops.length}${drops.length ? ` (worst ${f2(Math.min(...drops))} px², ${f2((100 * Math.min(...drops)) / m[0].a)}%)` : ""}; steps where the piece count changes: ${merge.map((s) => f2(s)).join(", ") || "none"}; median other step ${f2(med)} px²`
+    );
+  };
+  for (const rule of RULES) {
+    setRule(rule);
+    for (const c of cases) {
+      clearUnifiedCache();
+      const d = DATA.find((x: any) => x.id === c.ds);
+      const cvs = Array.from({ length: 41 }, (_, i) => i / 20);
+      report(
+        `${rule} ${c.name} convexity 0→2 (step 0.05)`,
+        cvs,
+        cvs.map((cv) => measure(d, { ...c, convexity: cv }))
+      );
+      for (const cv of [0.5, 2]) {
+        const cns = Array.from({ length: 21 }, (_, i) => 0.5 + i / 40);
+        report(
+          `${rule} ${c.name} c${cv} connection 0.5→1 (step 0.025)`,
+          cns,
+          cns.map((cn) => measure(d, { ...c, convexity: cv, connection: cn }))
+        );
+      }
+    }
+  }
+  process.exit(0);
+}
+
 // ── how often fills overlap: every set at a grid of options (SWEEP=1) ─────
 if (process.env.SWEEP)
   for (const rule of RULES) {
+    setRule(rule);
     clearUnifiedCache();
     let runs = 0,
       split = 0,
@@ -286,6 +395,7 @@ const conv = [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((x) => ({
   connection: 0.9,
 }));
 for (const rule of RULES) {
+  setRule(rule);
   sweep(conn); // warm the JIT
   for (const [nm, st] of [
     ["connection sweep (c 0.5)", conn],

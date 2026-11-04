@@ -5,6 +5,7 @@ import {
   unifiedOutline,
   UNIFIED_STATS,
   UNIFIED_PROTOTYPE,
+  PIECES,
   type JoinEdge,
 } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/unified";
 import type {
@@ -16,6 +17,8 @@ import { signedArea2 } from "../../packages/gofish-graphics/src/ast/geometry/pla
 export type { BlobMember, Pt, JoinEdge };
 
 export type ShapeKind = "blob" | "fillet";
+/** PROTOTYPE: how a blob's pieces meet (unified.ts, PIECES.rule) */
+export type PieceRule = (typeof PIECES)["rule"];
 
 export type Params = {
   shape: ShapeKind;
@@ -30,6 +33,8 @@ export type Params = {
   holes: boolean;
   avoid: boolean;
   clearance: number;
+  /** PROTOTYPE (blob, connection below 1): how the pieces meet (PIECES.rule) */
+  pieces: PieceRule;
   /** PROTOTYPE: a slider is being dragged: the coarser mesh (UNIFIED_PROTOTYPE.draft) */
   draft?: boolean;
 };
@@ -59,6 +64,7 @@ const count = (rings: Pt[][]) => {
 
 export function computeSet(s: SetInput, p: Params): SetResult {
   UNIFIED_PROTOTYPE.draft = !!p.draft;
+  PIECES.rule = p.pieces ?? "avoid";
   const t0 = performance.now();
   const rings = unifiedOutline(s.members, {
     padding: p.padding,

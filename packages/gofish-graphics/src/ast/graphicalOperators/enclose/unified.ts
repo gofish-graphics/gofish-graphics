@@ -63,6 +63,8 @@ import {
   cutRings,
   keepRegion,
   SEPARATE,
+  nearGroups,
+  closeUnion,
   type CutField,
 } from "./separate";
 
@@ -519,15 +521,35 @@ export function pieceLinks(
     }
     pieces[ids.get(r)!].push(i);
   }
-  // each piece's own gap tree
+  const { links, linkPiece } = groupLinks(T, pieces, pad, neck);
+  return {
+    links,
+    linkPiece,
+    pieces,
+    pieceKeys: pieces.map((p) => p.join(",")),
+    tree,
+  };
+}
+
+/** Each group's own links: the padded-gap spanning tree of its members (Kruskal over the
+ *  pairs by padded gap), each link a tapered tube (see pieceLinks), with its group. */
+function groupLinks(
+  T: JoinTree,
+  groups: number[][],
+  pad: number,
+  neck: number
+): { links: BlobMember[]; linkPiece: number[] } {
+  const n = T.rho.length;
+  const gid = new Int32Array(n);
+  groups.forEach((g, p) => g.forEach((i) => (gid[i] = p)));
   const c = Array.from({ length: n }, (_, i) => i);
   const f = (i: number): number => (c[i] === i ? i : (c[i] = f(c[i])));
-  let left = n - pieces.length;
+  let left = n - groups.length;
   const links: BlobMember[] = [];
   const linkPiece: number[] = [];
   for (const p of T.byGap) {
     if (left === 0) break;
-    if (kfind(p.i) !== kfind(p.j)) continue;
+    if (gid[p.i] !== gid[p.j]) continue;
     const [a, b] = [f(p.i), f(p.j)];
     if (a === b) continue;
     c[a] = b;
@@ -540,15 +562,9 @@ export function pieceLinks(
       w: 2 * (neck * (T.rho[p.i] + pad) - pad),
       w2: 2 * (neck * (T.rho[p.j] + pad) - pad),
     });
-    linkPiece.push(ids.get(kfind(p.i))!);
+    linkPiece.push(gid[p.i]);
   }
-  return {
-    links,
-    linkPiece,
-    pieces,
-    pieceKeys: pieces.map((p) => p.join(",")),
-    tree,
-  };
+  return { links, linkPiece };
 }
 
 /** A member's core axis (two points, equal for a disc) and radius. */
@@ -1011,8 +1027,22 @@ function filletPieces(
   });
 }
 
+/** PROTOTYPE: how a blob's pieces (`connection` below 1) meet. "avoid" (default): each is cut
+ *  by the others as keep-outs (avoidCut). "none": each filled on its own, no cut (they may
+ *  overlap). "merge-union": the regions are the components of the fills' union closed by a
+ *  disc of rho (separate.ts, closeUnion), so fills that overlap or nearly touch are one region
+ *  with arcs of at least rho where they meet; a piece no other joins keeps its own fill.
+ *  "merge-refill": the pieces that closing joins are merged into one piece and refilled as
+ *  one, until it joins none. rho: px, or the padding when undefined. One piece (connection 1):
+ *  every rule is the earlier blob exactly. */
+export const PIECES: {
+  rule: "avoid" | "none" | "merge-union" | "merge-refill";
+  rho?: number;
+} = { rule: "avoid" };
+
 /** The blob: pieces by connection, each filled and smoothed (finish), then cut by its
- *  keep-outs as every shape is (avoidCut): the avoided members and the set's other pieces. */
+ *  keep-outs as every shape is (avoidCut): the avoided members and the set's other pieces
+ *  (PIECES.rule "avoid"; see PIECES for the others). */
 function blobOutline(
   members: BlobMember[],
   o: UnifiedOptions,
@@ -1035,19 +1065,25 @@ function blobOutline(
   // the final cut does not sever the piece there), so the fill's caches are keyed by the
   // spine itself
   const kid = K.length ? intern(key(K)) : -1;
-  const parts = J.pieces.map((idx, p) => {
-    const pm = idx.map((i) => members[i]);
-    const pk0 = key("piece", ctx, J.pieceKeys[p]);
-    const spine = memo(key("spine", pk0, kid), () =>
-      routeAround(
-        J.links.filter((_, l) => J.linkPiece[l] === p),
-        K,
-        pad
-      )
-    );
-    const pk = K.length ? key(pk0, intern(JSON.stringify(spine))) : pk0;
-    return { pm, spine, pk };
-  });
+  const partsOf = (
+    groups: number[][],
+    links: BlobMember[],
+    linkPiece: number[]
+  ) =>
+    groups.map((idx, p) => {
+      const pm = idx.map((i) => members[i]);
+      const pk0 = key("piece", ctx, idx.join(","));
+      const spine = memo(key("spine", pk0, kid), () =>
+        routeAround(
+          links.filter((_, l) => linkPiece[l] === p),
+          K,
+          pad
+        )
+      );
+      const pk = K.length ? key(pk0, intern(JSON.stringify(spine))) : pk0;
+      return { pm, spine, pk };
+    });
+  let parts = partsOf(J.pieces, J.links, J.linkPiece);
   const tLinks = performance.now();
   // each piece's outline: filled and smoothed on its own, then cut by its keep-outs
   // (smooth: undefined is the default blur and null none; JSON would spell
@@ -1061,70 +1097,178 @@ function blobOutline(
   );
   let msFill = 0,
     msFinish = 0;
-  const outs = parts.map(({ pm, spine, pk }) =>
-    memo(
-      key("outline", pk, optKey),
-      () => {
-        const t1 = performance.now();
-        const f = fillOne(pm, spine, o, pad, holes, pk);
-        const t2 = performance.now();
-        const rings = finish(f, o, pad, null);
-        msFill += t2 - t1;
-        msFinish += performance.now() - t2;
-        return { rings, r: f.r };
-      },
-      false
-    )
-  );
+  const outsOf = (ps: typeof parts) =>
+    ps.map(({ pm, spine, pk }) =>
+      memo(
+        key("outline", pk, optKey),
+        () => {
+          const t1 = performance.now();
+          const f = fillOne(pm, spine, o, pad, holes, pk);
+          const t2 = performance.now();
+          const rings = finish(f, o, pad, null);
+          msFill += t2 - t1;
+          msFinish += performance.now() - t2;
+          return { rings, r: f.r };
+        },
+        false
+      )
+    );
+  let outs = outsOf(parts);
+  let nLinks = J.links.length;
+  // one piece: nothing to keep apart (connection 1 is the earlier blob exactly)
+  const rule = parts.length > 1 ? PIECES.rule : "avoid";
+  const rho = PIECES.rho ?? pad;
+  // PROTOTYPE (merge rules): which pieces are one region: the components of the fills' union
+  // closed by a disc of rho. Only fills within 2 rho of each other can be joined by it
+  // (nearGroups), so only those groups are closed; a closed group can still fall apart into
+  // several components (a ρ-disc fits between two convex ends whose gap is under 2 rho), and
+  // each component is the pieces whose members it holds. rings: the component's closed rings,
+  // or null for a component of one piece (its own fill, untouched).
+  type Merged = { g: number[]; rings: Pt[][] | null };
+  const merged = (): Merged[] =>
+    nearGroups(
+      outs.map((f) => f.rings),
+      2 * rho
+    ).flatMap((g): Merged[] => {
+      if (g.length === 1) return [{ g, rings: null }];
+      const U = memo(
+        key(
+          "union",
+          g.map((p) => parts[p].pk),
+          optKey,
+          rho
+        ),
+        () =>
+          closeUnion(
+            g.map((p) => outs[p].rings),
+            rho
+          ),
+        false
+      );
+      const outer = U.filter((r) => signedArea2(r) > 0);
+      const comps = outer.map(() => [] as number[]);
+      for (const p of g) {
+        const at = insideOf(parts[p].pm[0]);
+        const c = outer.findIndex((r) => pointInRing(at, r));
+        comps[c < 0 ? 0 : c].push(p);
+      }
+      return outer.flatMap((o, c): Merged[] =>
+        !comps[c].length
+          ? []
+          : comps[c].length === 1
+            ? [{ g: comps[c], rings: null }]
+            : [
+                {
+                  g: comps[c],
+                  rings: [
+                    o,
+                    ...U.filter(
+                      (r) => signedArea2(r) < 0 && pointInRing(r[0], o)
+                    ),
+                  ],
+                },
+              ]
+      );
+    });
+  // PROTOTYPE (merge-refill): merge the pieces the closing joins (merged) and refill them as
+  // one, with the links connection would draw for the merged members (their padded-gap
+  // tree), until it joins none (it ends: pieces only merge)
+  if (rule === "merge-refill") {
+    let groups = J.pieces;
+    for (;;) {
+      const near = merged().map((m) => m.g);
+      if (near.length === groups.length) break;
+      const prev = groups;
+      groups = near.map((g) => g.flatMap((p) => prev[p]).sort((a, b) => a - b));
+      const T = memo(key("joinTree", members, pad), () =>
+        joinTree(members, pad)
+      );
+      const L = groupLinks(T, groups, pad, neck);
+      parts = partsOf(groups, L.links, L.linkPiece);
+      nLinks = L.links.length;
+      outs = outsOf(parts);
+    }
+  }
   const tCut = performance.now();
-  // each piece's keep-outs: the avoided members, and the set's other pieces as keep-outs too
-  // (their padded members and links at clearance 2 · padding: kept a padding clear of the
-  // other piece's padded members), those that can reach its outline's box (the closing by
-  // SEPARATE.open reaches 2 · open past a disc)
-  const others =
-    parts.length > 1
-      ? parts.map(({ pm, spine, pk }) =>
-          memo(key("pieceKeepOuts", pk, 2 * pad), () =>
-            keepOuts([...pm, ...spine], 2 * pad)
-          )
+  // the avoided members' cut alone, for a region of members pm
+  const cutK = (rings: Pt[][], pm: BlobMember[], pk: string) =>
+    K.length
+      ? memo(
+          key("avoidCut", pk, optKey, kid),
+          () => avoidCut(rings, pm, pad, K),
+          false
         )
-      : null;
-  const keepsOf = (p: number, rings: Pt[][]): Disc[] => {
-    if (!others) return K;
-    const [x0, y0, x1, y1] = boxOfRings(rings);
-    const m = 2 * SEPARATE.open + 1;
-    const near = others.flatMap((D, q) =>
-      q === p
-        ? []
-        : D.filter(
-            ({ c, R }) =>
-              c[0] + R >= x0 - m &&
-              c[0] - R <= x1 + m &&
-              c[1] + R >= y0 - m &&
-              c[1] - R <= y1 + m
+      : rings;
+  let byPiece: Pt[][][];
+  if (rule === "merge-union") {
+    // PROTOTYPE (merge-union): the joined pieces' fills, unioned and closed by rho
+    byPiece = merged().map(({ g, rings }) =>
+      rings === null
+        ? cutK(outs[g[0]].rings, parts[g[0]].pm, parts[g[0]].pk)
+        : cutK(
+            rings,
+            g.flatMap((p) => parts[p].pm),
+            key(
+              "unionPart",
+              g.map((p) => parts[p].pk),
+              optKey,
+              rho
+            )
           )
     );
-    return near.length ? [...K, ...near] : K;
-  };
-  const byPiece = outs.map((f, p) => {
-    const Kp = keepsOf(p, f.rings);
-    if (!Kp.length) return f.rings;
-    const kp = Kp === K ? kid : intern(key(Kp));
-    return memo(
-      key("avoidCut", parts[p].pk, optKey, kp),
-      () => avoidCut(f.rings, parts[p].pm, pad, Kp),
-      false
-    );
-  });
+  } else if (rule !== "avoid")
+    byPiece = outs.map((f, p) => cutK(f.rings, parts[p].pm, parts[p].pk));
+  else byPiece = avoidPieces();
+  function avoidPieces(): Pt[][][] {
+    // each piece's keep-outs: the avoided members, and the set's other pieces as keep-outs too
+    // (their padded members and links at clearance 2 · padding: kept a padding clear of the
+    // other piece's padded members), those that can reach its outline's box (the closing by
+    // SEPARATE.open reaches 2 · open past a disc)
+    const others =
+      parts.length > 1
+        ? parts.map(({ pm, spine, pk }) =>
+            memo(key("pieceKeepOuts", pk, 2 * pad), () =>
+              keepOuts([...pm, ...spine], 2 * pad)
+            )
+          )
+        : null;
+    const keepsOf = (p: number, rings: Pt[][]): Disc[] => {
+      if (!others) return K;
+      const [x0, y0, x1, y1] = boxOfRings(rings);
+      const m = 2 * SEPARATE.open + 1;
+      const near = others.flatMap((D, q) =>
+        q === p
+          ? []
+          : D.filter(
+              ({ c, R }) =>
+                c[0] + R >= x0 - m &&
+                c[0] - R <= x1 + m &&
+                c[1] + R >= y0 - m &&
+                c[1] - R <= y1 + m
+            )
+      );
+      return near.length ? [...K, ...near] : K;
+    };
+    return outs.map((f, p) => {
+      const Kp = keepsOf(p, f.rings);
+      if (!Kp.length) return f.rings;
+      const kp = Kp === K ? kid : intern(key(Kp));
+      return memo(
+        key("avoidCut", parts[p].pk, optKey, kp),
+        () => avoidCut(f.rings, parts[p].pm, pad, Kp),
+        false
+      );
+    });
+  }
   const rings = byPiece.flat();
   const radii = outs.map((f) => f.r);
   Object.assign(UNIFIED_STATS, {
     radius: radii[0],
     radii,
     ms: performance.now() - t0,
-    links: J.links.length,
+    links: nLinks,
     linkMembers: parts.flatMap((p) => p.spine),
-    pieces: outs.length,
+    pieces: byPiece.length,
     pieceRings: byPiece,
     joinTree: J.tree,
     msLinks: tLinks - t0,
