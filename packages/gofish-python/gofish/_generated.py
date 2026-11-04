@@ -511,7 +511,7 @@ def region(*, debug: Optional[bool] = None, fill: Optional[str] = None, stroke: 
 # --- Combinator-only marks ---------------------------------------------------
 
 def union(children: List["Mark"], *, blend_mode: Optional[str] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
-    """Draw the union of the regions: A ∪ B ∪ .... With no `fill` or `stroke`, each operand draws its own paint, and where two overlap the later one is drawn over the earlier with `blendMode`. With either, the union is one new shape in that paint. A stroke is not drawn yet (#1201).
+    """Draw the union of the regions: A ∪ B ∪ .... With no `fill` or `stroke`, each operand draws its own paint, and where two overlap the later one is drawn over the earlier with `blendMode`. With either, the union is one new shape in that paint. A stroke is an error for now: the result has no exact outline yet (#1201).
 
     Args:
         blend_mode: How a later operand's paint mixes with an earlier one's where they overlap (CSS `mix-blend-mode`). Unused when the result has a `fill` or `stroke`. Default "normal".
@@ -555,7 +555,7 @@ def intersect(children: List["Mark"], *, blend_mode: Optional[str] = None, fill:
     return Mark("inside", _children=list(children), **kwargs)
 
 def exclude(children: List["Mark"], *, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
-    """Draw where exactly one of two regions is: A − B and B − A. Two operands. With no `fill` or `stroke`, each operand draws its own paint where the other is not. With either, the result is one new shape in that paint. A stroke is not drawn yet (#1201).
+    """Draw where exactly one of two regions is: A − B and B − A. Two operands. With no `fill` or `stroke`, each operand draws its own paint where the other is not. With either, the result is one new shape in that paint. A stroke is an error for now: the result has no exact outline yet (#1201).
 
     Args:
         fill: Fill color of the result, or a field name or accessor for a color scale. Given, the result is one new shape in this paint, and the operands give shape only. Default none when `stroke` is given.
@@ -575,7 +575,7 @@ def exclude(children: List["Mark"], *, fill: Optional[str] = None, stroke: Optio
     return Mark("xor", _children=list(children), **kwargs)
 
 def subtract(children: List["Mark"], *, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
-    """Draw the first region with the others removed: A − B − .... With no `fill` or `stroke`, A draws its own paint where no other operand is. With either, the result is one new shape in that paint. A stroke is not drawn yet (#1201). The result is sized to A.
+    """Draw the first region with the others removed: A − B − .... With no `fill` or `stroke`, A draws its own paint where no other operand is. With either, the result is one new shape in that paint. A stroke is an error for now: the result has no exact outline yet (#1201). The result is sized to A.
 
     Args:
         fill: Fill color of the result, or a field name or accessor for a color scale. Given, the result is one new shape in this paint, and the operands give shape only. Default none when `stroke` is given.
