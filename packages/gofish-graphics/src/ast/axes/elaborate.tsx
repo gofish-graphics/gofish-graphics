@@ -1709,6 +1709,10 @@ export async function elaborateChrome(
   const rings: GoFishNode[] = [];
   const root = await wrapPreservingIdentity(node, async (content) => {
     let ring: GoFishNode = content;
+    // The box its axes (continuous ones and category label rows) are
+    // seated beside is a plot: it covers the whole niced domain they draw.
+    if (constrained.length > 0 || refBased.length > 0)
+      content._axesBeside = true;
 
     // Axis gutters: each axis line sits on a chain with the content, past
     // its box, and grows into negative gutter space rather than shifting it.

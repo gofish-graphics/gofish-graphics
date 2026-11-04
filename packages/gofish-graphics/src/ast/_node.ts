@@ -841,6 +841,13 @@ export class GoFishNode {
    *  label is a layer of text on the nearest one around its mark
    *  (`elaborateLabels`). */
   public _chartContent?: true;
+  /** Set by chrome elaboration on the box a node's axes are seated beside,
+   *  continuous axes and category label rows alike, the content of its
+   *  innermost ring (`elaborateChrome`): a plot, which
+   *  covers the whole niced domain its axes draw ({@link domainSpan}). With
+   *  no size of its own the chart's frame is that box; a chart with a size
+   *  wears its chrome inside its frame, around the frame's content. */
+  public _axesBeside?: true;
   /** The frame a layer lays its children out in on each axis, once laid
    *  out: data `v` is at `σ·v + originPx` in its own axis order, from its
    *  local origin. On an axis with no data 0 it measures lengths of its σ
@@ -2497,17 +2504,17 @@ export class GoFishNode {
   }
 
   /**
-   * On a node that draws an axis (`axisDemand`), the pixels its whole
-   * domain spans on `axis` in its local frame, once laid out: the keyed
-   * domain it maps, widened and niced as every axis over it is
-   * (`KeyedDomains.scope`). Such a node is a plot, and a plot covers its
+   * On the box a chart's axes are seated beside ({@link _axesBeside}), the
+   * pixels its whole domain spans on `axis` in its local frame, once laid
+   * out: the keyed domain it maps, widened and niced as every axis over it
+   * is (`KeyedDomains.scope`). That box is a plot, and a plot covers its
    * niced domain, not only the hull of its marks, so an axis seated beside
    * it sits at the domain's floor, on both axes (a facet panel that draws
    * only its y axis still covers the shared x domain). Undefined on any
    * other node, and on an axis with no data 0.
    */
   public domainSpan(axis: 0 | 1): [number, number] | undefined {
-    if (!this.drawsAxis()) return undefined;
+    if (this._axesBeside !== true) return undefined;
     const frame = this.layoutFrames?.[axis];
     const space = this._underlyingSpace?.[axis];
     const keyed = this.tryGetRenderSession()?.keyedDomains;
@@ -2525,11 +2532,6 @@ export class GoFishNode {
     const a = frame.sigma * min + frame.originPx;
     const b = frame.sigma * max + frame.originPx;
     return [Math.min(a, b), Math.max(a, b)];
-  }
-
-  /** Whether this node draws an axis on either dim (`axisDemand`). */
-  public drawsAxis(): boolean {
-    return this.axisDemand[0] !== undefined || this.axisDemand[1] !== undefined;
   }
 
   private computePlotSpan(axis: 0 | 1): [number, number] | undefined {

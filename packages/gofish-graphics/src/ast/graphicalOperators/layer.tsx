@@ -112,7 +112,7 @@ const outlined = (
 
 /**
  * A plan whose summary covers the node's whole niced domain on `axis` when
- * the node draws an axis there (`GoFishNode.drawsAxis`): a plot covers its
+ * a chart's axes are seated beside it (`GoFishNode._axesBeside`): a plot covers its
  * domain, rounded as the axis over it is (`KeyedDomains.scope`), not only
  * the hull of its marks, as it does in layout (`GoFishNode.domainSpan`).
  * Every reader of the claim (the node's claim, its plot, a parent's forms
@@ -130,7 +130,7 @@ const domainPlan = (
     plan === undefined ||
     summary === undefined ||
     keyed === undefined ||
-    !node.drawsAxis() ||
+    node._axesBeside !== true ||
     !hasOrigin(space)
   )
     return plan;
@@ -145,6 +145,7 @@ const domainPlan = (
       whole: widen(summary.whole),
       plot: summary.plot && widen(summary.plot),
     },
+    plotWhole: plan.plotWhole && widen(plan.plotWhole),
   };
 };
 
