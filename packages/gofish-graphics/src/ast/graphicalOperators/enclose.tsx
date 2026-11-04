@@ -212,14 +212,13 @@ function Enclose(
             holes: shape.holes,
             clearance: shape.clearance,
             avoiding: geometry(memberCount, children.length),
-            connected: true,
             ...P.overrides,
           });
         else if (P.unified && P.arcs && shape.kind === "arcs")
           loops = unifiedOutline(geometry(0, memberCount), {
             padding,
             radius: shape.radius ?? ARCS_RADIUS,
-            connected: false,
+            shape: "fillet",
             ...P.overrides,
           });
         else if (shape.kind === "blob")

@@ -2,56 +2,35 @@
 // there are), so a slider never blocks the page and the sets of a dataset are computed side by
 // side. A worker keeps its own per-piece cache, and set i always goes to worker i mod n, so the
 // cache a set built is the one it finds. The worker runs this same script (the page's own
-// bundle, started as a worker from its text): `handle` below is the worker's side, Pool the
+// bundle, started as a worker from its text): `handler` below is the worker's side, Pool the
 // page's.
 //
-// While the page is idle, each worker fills its cache for every reach position the slider can
+// While the page is idle, each worker fills its cache for every connection the slider can
 // reach (warm), a position at a time, so a compute request is never stuck behind more than one.
 // Where no Worker can be started (a page whose policy forbids blob workers), the same handler
 // runs on the page's thread, a request per task.
 import DATA from "./datasets.json";
-import {
-  computeSet,
-  configure,
-  type Means,
-  type Params,
-  type SetResult,
-} from "./compute";
+import { computeSet, type Params, type SetResult } from "./compute";
 
 type SetData = { members: unknown[]; avoiding: unknown[] };
 type Dataset = { id: string; sets: SetData[] };
 const DATASETS = DATA as unknown as Dataset[];
 
 export type Msg =
-  | { kind: "config"; search: string }
-  | {
-      kind: "compute";
-      id: number;
-      ds: string;
-      sets: number[];
-      p: Params;
-      means: Means[];
-    }
+  | { kind: "compute"; id: number; ds: string; sets: number[]; p: Params }
   | {
       kind: "warm";
       gen: number;
       ds: string;
       sets: number[];
       p: Params;
-      reaches: number[];
-    }
-  | { kind: "stop" };
+      connections: number[];
+    };
+
+export type Computed = { si: number; r: SetResult }[];
 
 export type Reply =
-  | {
-      kind: "computed";
-      id: number;
-      /** per set asked, per mean asked: the result */
-      out: {
-        si: number;
-        byMean: { means: Means; r: SetResult; ms: number }[];
-      }[];
-    }
+  | { kind: "computed"; id: number; out: Computed }
   | { kind: "failed"; id: number; message: string }
   | { kind: "warmed"; gen: number };
 
@@ -60,53 +39,41 @@ export type Reply =
 export function handler(post: (r: Reply) => void): (m: Msg) => void {
   let warmGen = -1;
   return (m) => {
-    if (m.kind === "config") configure(m.search);
-    else if (m.kind === "stop") warmGen = -1;
-    else if (m.kind === "compute") {
+    const d = DATASETS.find((x) => x.id === m.ds)!;
+    if (m.kind === "compute") {
       warmGen = -1; // a newer state: the warm-up of the old one stops
-      const d = DATASETS.find((x) => x.id === m.ds)!;
       try {
         const out = m.sets.map((si) => ({
           si,
-          byMean: m.means.map((means) => {
-            const t0 = performance.now();
-            const r = computeSet(d.sets[si] as never, {
-              ...m.p,
-              means,
-              compare: m.p.compare && means === m.p.means,
-            });
-            return { means, r, ms: performance.now() - t0 };
-          }),
+          r: computeSet(d.sets[si] as never, m.p),
         }));
         post({ kind: "computed", id: m.id, out });
       } catch (err) {
         post({ kind: "failed", id: m.id, message: (err as Error).message });
       }
-    } else {
-      const gen = (warmGen = m.gen);
-      const d = DATASETS.find((x) => x.id === m.ds)!;
-      let q = 0,
-        k = 0;
-      const step = () => {
-        if (warmGen !== gen) return;
-        if (q >= m.reaches.length) {
-          post({ kind: "warmed", gen });
-          return;
-        }
-        try {
-          computeSet(d.sets[m.sets[k]] as never, {
-            ...m.p,
-            reach: m.reaches[q],
-            compare: false,
-          });
-        } catch {
-          // a failing state is reported when it is asked for
-        }
-        if (++k === m.sets.length) [k, q] = [0, q + 1];
-        setTimeout(step, 0);
-      };
-      setTimeout(step, 0);
+      return;
     }
+    const gen = (warmGen = m.gen);
+    let q = 0,
+      k = 0;
+    const step = () => {
+      if (warmGen !== gen) return;
+      if (q >= m.connections.length) {
+        post({ kind: "warmed", gen });
+        return;
+      }
+      try {
+        computeSet(d.sets[m.sets[k]] as never, {
+          ...m.p,
+          connection: m.connections[q],
+        });
+      } catch {
+        // a failing state is reported when it is asked for
+      }
+      if (++k === m.sets.length) [k, q] = [0, q + 1];
+      setTimeout(step, 0);
+    };
+    setTimeout(step, 0);
   };
 }
 
@@ -141,8 +108,8 @@ export class Pool {
     number,
     {
       left: number;
-      out: Extract<Reply, { kind: "computed" }>["out"];
-      done: (r: unknown) => void;
+      out: Computed;
+      done: (r: Computed) => void;
       fail: (e: Error) => void;
     }
   >();
@@ -150,7 +117,7 @@ export class Pool {
   private warmLeft = 0;
   onWarm: () => void = () => {};
 
-  constructor(src: string | null, search: string) {
+  constructor(src: string | null) {
     const n = Math.max(
       1,
       Math.min(4, (navigator.hardwareConcurrency ?? 2) - 1)
@@ -174,10 +141,7 @@ export class Pool {
       this.workers = false;
     }
     this.ports = ports;
-    ports.forEach((p) => {
-      p.onReply((r) => this.reply(r));
-      p.post({ kind: "config", search });
-    });
+    ports.forEach((p) => p.onReply((r) => this.reply(r)));
   }
 
   private reply(r: Reply) {
@@ -199,50 +163,39 @@ export class Pool {
     }
   }
 
-  /** Every set of dataset `ds` at params p, for each of `means`; per set, per mean. */
-  compute(
-    ds: string,
-    nSets: number,
-    p: Params,
-    means: Means[]
-  ): Promise<
-    { si: number; byMean: { means: Means; r: SetResult; ms: number }[] }[]
-  > {
-    this.warmGen++; // any warm-up in flight is stale
-    const id = ++this.seq;
+  private groups(nSets: number) {
     const groups = this.ports.map(() => [] as number[]);
     for (let si = 0; si < nSets; si++) groups[si % this.ports.length].push(si);
-    const used = groups.filter((g) => g.length);
-    return new Promise((done, fail) => {
+    return groups;
+  }
+
+  /** Every set of dataset `ds` at params p, in set order. */
+  compute(ds: string, nSets: number, p: Params): Promise<SetResult[]> {
+    this.warmGen++; // any warm-up in flight is stale
+    const id = ++this.seq;
+    const groups = this.groups(nSets);
+    return new Promise<Computed>((done, fail) => {
       this.waiting.set(id, {
-        left: used.length,
+        left: groups.filter((g) => g.length).length,
         out: [],
-        done: done as (r: unknown) => void,
+        done,
         fail,
       });
       groups.forEach((sets, w) => {
         if (sets.length)
-          this.ports[w].post({ kind: "compute", id, ds, sets, p, means });
+          this.ports[w].post({ kind: "compute", id, ds, sets, p });
       });
-    }).then((out) =>
-      (
-        out as {
-          si: number;
-          byMean: { means: Means; r: SetResult; ms: number }[];
-        }[]
-      ).sort((a, b) => a.si - b.si)
-    );
+    }).then((out) => out.sort((a, b) => a.si - b.si).map((x) => x.r));
   }
 
-  /** Warm every worker's sets at every reach of `reaches` (the slider's reachable values). */
-  warm(ds: string, nSets: number, p: Params, reaches: number[]) {
+  /** Warm every worker's sets at each of `connections` (the slider's reachable values). */
+  warm(ds: string, nSets: number, p: Params, connections: number[]) {
     const gen = ++this.warmGen;
-    const groups = this.ports.map(() => [] as number[]);
-    for (let si = 0; si < nSets; si++) groups[si % this.ports.length].push(si);
+    const groups = this.groups(nSets);
     this.warmLeft = groups.filter((g) => g.length).length;
     groups.forEach((sets, w) => {
       if (sets.length)
-        this.ports[w].post({ kind: "warm", gen, ds, sets, p, reaches });
+        this.ports[w].post({ kind: "warm", gen, ds, sets, p, connections });
     });
   }
 }

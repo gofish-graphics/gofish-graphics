@@ -1,6 +1,8 @@
 /**
- * PROTOTYPE (scratch, not for merge): the per-bay blend of localFill.ts
- * solved on a triangle mesh instead of a pixel grid. Same field, same rule:
+ * PROTOTYPE (scratch, not for merge): the per-bay blend, what a blob's
+ * convexity between 0 and 1 means, solved on a triangle mesh (an earlier
+ * version on a 1 px grid is deleted). Every pocket of hull − spine fills
+ * share c of its own area, by the level sets of a harmonic field:
  *
  *  - the pockets are the pieces of the padded hull less the spine (the exact
  *    closing at r = padding). The hull is the convex hull of the spine's own
@@ -22,7 +24,7 @@
  *    the cusp is the share of the way across it (the limit of the harmonic u
  *    in a thin channel). The cut edge carries that linear u.
  *  - in a pocket with no mouth, u is the distance from its wall over the
- *    greatest such distance (as on the grid), exact at every mesh vertex.
+ *    greatest such distance, exact at every mesh vertex.
  *  - each pocket fills share c of its own area: the area of {u <= l} is
  *    closed form per triangle (piecewise quadratic in l), summed into one
  *    piecewise quadratic per pocket, so the level for c is a lookup and a

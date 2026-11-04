@@ -1,5 +1,5 @@
 // SCRATCH: rasterize SVG files to PNG with playwright's chromium.  node playground/svg2png.mjs a.svg [b.svg …]
-import { readdirSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
@@ -13,7 +13,15 @@ const { chromium } = await import(
 );
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
-for (const f of process.argv.slice(2)) {
+// a folder: every .svg in it
+const files = process.argv.slice(2).flatMap((f) =>
+  statSync(f).isDirectory()
+    ? readdirSync(f)
+        .filter((x) => x.endsWith(".svg"))
+        .map((x) => join(f, x))
+    : [f]
+);
+for (const f of files) {
   await page.goto(pathToFileURL(f).href);
   const el = await page.$("svg");
   await el.screenshot({ path: f.replace(/\.svg$/, ".png") });

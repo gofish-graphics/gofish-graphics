@@ -53,14 +53,6 @@ for (const ds of IDS) {
   );
   const warmS = (Date.now() - t0) / 1000;
   const pad0 = await page.evaluate(() => window.__playground.state().padding);
-  const joins = [
-    Infinity,
-    ...Array.from(
-      { length: 99 },
-      (_, k) => +(0.05 * 2 ** ((98 - k) / 12)).toFixed(3)
-    ),
-    0,
-  ];
   const seqs = [
     [
       "convexity",
@@ -68,9 +60,9 @@ for (const ds of IDS) {
       { convexity: 0.5 },
     ],
     [
-      "join",
-      joins.map((join) => ({ join, reach: join })),
-      { join: Infinity, reach: Infinity },
+      "connection",
+      Array.from({ length: 101 }, (_, k) => ({ connection: (100 - k) / 100 })),
+      { connection: 1 },
     ],
     [
       "neck",
@@ -83,6 +75,17 @@ for (const ds of IDS) {
       "padding",
       Array.from({ length: 13 }, (_, k) => ({ padding: pad0 + 0.5 * k })),
       { padding: pad0 },
+    ],
+    [
+      "fillet radius",
+      [
+        { shape: "fillet", radius: null },
+        ...Array.from({ length: 13 }, (_, k) => ({
+          shape: "fillet",
+          radius: pad0 + k,
+        })),
+      ],
+      { shape: "blob", radius: null },
     ],
     [
       "holes",

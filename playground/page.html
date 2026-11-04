@@ -168,43 +168,6 @@
         font-size: 13.5px;
         color: var(--muted);
       }
-      .stats {
-        margin-top: 10px;
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 8px;
-      }
-      .stat {
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        padding: 8px 10px;
-      }
-      .stat .k {
-        font-size: 11.5px;
-        color: var(--muted);
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-      }
-      .stat .v {
-        font:
-          500 15px/1.4 ui-monospace,
-          "SF Mono",
-          Menlo,
-          monospace;
-        overflow-wrap: anywhere;
-      }
-      .stat .s {
-        font:
-          11.5px/1.4 ui-monospace,
-          "SF Mono",
-          Menlo,
-          monospace;
-        color: var(--muted);
-      }
-      #slow {
-        color: var(--warn);
-      }
       .panel {
         background: var(--surface);
         border: 1px solid var(--line);
@@ -324,9 +287,6 @@
         margin: 0;
         color: var(--fg);
       }
-      #code .c {
-        color: var(--muted);
-      }
       .check {
         display: flex;
         gap: 8px;
@@ -374,44 +334,6 @@
         font-size: 13px;
         font-weight: 500;
       }
-      .multiples {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 8px;
-        margin-top: 10px;
-      }
-      @media (max-width: 600px) {
-        .multiples {
-          grid-template-columns: minmax(0, 1fr);
-        }
-      }
-      .multiples figure {
-        margin: 0;
-        background: var(--img-bg);
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        padding: 6px;
-      }
-      .multiples figure[data-current="true"] {
-        border-color: var(--accent);
-      }
-      .multiples svg {
-        display: block;
-        width: 100%;
-        height: auto;
-      }
-      .multiples figcaption {
-        font:
-          12px/1.35 ui-monospace,
-          "SF Mono",
-          Menlo,
-          monospace;
-        color: #4a5361;
-        margin-top: 4px;
-      }
-      .multiples figcaption b {
-        font-family: system-ui, sans-serif;
-        color: #1d232b;
       }
       .barcode {
         margin-top: 10px;
@@ -425,15 +347,12 @@
         color: var(--muted);
         margin-top: 6px;
       }
-      .bc-cap2 {
-        padding-left: 16px;
-      }
-      .reach-groups {
+      .groups {
         font-size: 12.5px;
         margin: 4px 0 2px;
         font-variant-numeric: tabular-nums;
       }
-      .reach-groups .sw {
+      .groups .sw {
         display: inline-block;
         width: 9px;
         height: 9px;
@@ -441,10 +360,10 @@
         margin-right: 4px;
         vertical-align: baseline;
       }
-      .join-rug {
+      .rug {
         margin: 1px 8px 0;
       }
-      .join-rug svg {
+      .rug svg {
         display: block;
         width: 100%;
         overflow: visible;
@@ -461,15 +380,6 @@
         margin-right: 6px;
         vertical-align: -1px;
       }
-      .bc-nat {
-        stroke: var(--accent);
-      }
-      .bc-nat-fill {
-        fill: var(--accent);
-      }
-      .bc-nat-txt {
-        color: var(--accent);
-      }
       svg.bc {
         display: block;
         width: 100%;
@@ -477,25 +387,53 @@
         color: var(--fg);
         font-family: ui-monospace, "SF Mono", Menlo, monospace;
       }
-      svg.bc .bar:hover rect + rect {
-        stroke: var(--fg);
-        stroke-width: 0.6;
+      .marker {
+        position: relative;
+        height: 0;
+        margin: 0 8px;
       }
-      .core-row {
+      .marker span {
+        position: absolute;
+        top: -2px;
+        transform: translateX(-50%);
+        font:
+          10.5px/1 ui-monospace,
+          "SF Mono",
+          Menlo,
+          monospace;
+        color: var(--accent);
+        white-space: nowrap;
+      }
+      .row {
         display: flex;
+        justify-content: space-between;
         align-items: center;
         gap: 8px;
-        font-size: 13px;
-        margin-top: 6px;
       }
-      .core-row input {
-        width: 56px;
-        font: inherit;
-        padding: 3px 6px;
-        border: 1px solid var(--line);
-        border-radius: 5px;
-        background: var(--surface);
-        color: var(--fg);
+      .row > label {
+        flex: 1;
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        font-weight: 500;
+        font-size: 14px;
+      }
+      button.small {
+        font:
+          500 12px/1 system-ui,
+          sans-serif;
+        padding: 4px 8px;
+      }
+      button.btn:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      details summary {
+        cursor: pointer;
+        font-size: 14px;
+      }
+      details[open] summary {
+        margin-bottom: 6px;
       }
       :focus-visible {
         outline: 2px solid var(--accent);
@@ -521,13 +459,15 @@
         </button>
       </div>
       <p class="lede">
-        Move the sliders to redraw the unified <code>enclose</code> outline
-        live. It is the prototype's own code: links join the members, an exact
-        closing by a disc of radius <i>r</i> fills the gaps (convexity picks
-        <i>r</i>), keep-outs are cut out, and a Gaussian smoothing rounds the
-        result. Above convexity 1 the hull blends toward the oval. The two
-        switches under convexity try other meanings for it; turn on
-        <i>compare modes</i> to see three side by side.
+        Move the sliders to redraw the prototype <code>enclose</code> outline
+        live, with the prototype's own code. <b>Blob</b>: the members' join tree
+        keeps <i>connection</i> of its links, which splits the members into
+        pieces; each piece's padded members and links are filled to
+        <i>convexity</i> (0 the spine, 1 the padded hull, 2 the oval) and
+        smoothed. <b>Fillet</b>: the padded members closed by a disc of
+        <i>radius</i> (the padding unless set), so every inside corner is an
+        arc. <i>avoiding</i> and <i>clearance</i> are options of
+        <code>enclose</code> next to <i>padding</i>, and cut any shape.
       </p>
       <div class="layout">
         <div>
@@ -546,18 +486,13 @@
             >
               <g id="outlines"></g>
               <g id="scenery"></g>
-              <g id="today"></g>
               <g id="debug"></g>
-              <g id="hover"></g>
             </svg>
           </div>
-          <div class="multiples" id="multiples" hidden></div>
           <div class="below">
             <span id="status" role="status" aria-live="polite"></span>
-            <span id="slow" hidden></span>
           </div>
           <p id="ds-note"></p>
-          <div class="stats" id="stats"></div>
         </div>
         <div class="panel">
           <section>
@@ -568,11 +503,10 @@
                 <button type="button" role="radio" data-shape="blob">
                   blob
                 </button>
-                <button type="button" role="radio" data-shape="arcs">
-                  arcs
+                <button type="button" role="radio" data-shape="fillet">
+                  fillet
                 </button>
               </div>
-              <div class="hint" id="shape-hint"></div>
             </div>
             <div class="field" id="convexity-field">
               <label for="convexity"
@@ -597,48 +531,32 @@
                 ><span style="left: 100%">2 oval</span>
               </div>
               <div class="hint">
-                Up to 1: from the spine (0) to the padded hull (1); the choice
-                below says what the values in between mean. 1 to 2: the hull
-                blended toward the smallest enclosing ellipse.
+                Up to 1, every pocket between the spine and the padded hull
+                fills that share of its own area. From 1 to 2, the hull blends
+                toward the smallest enclosing ellipse.
               </div>
             </div>
-            <div class="field" id="means-field">
-              <span class="seg-name" id="means-name">convexity means</span>
-              <div class="seg" role="radiogroup" aria-labelledby="means-name">
-                <button type="button" role="radio" data-means="area">
-                  area share
-                </button>
-                <button type="button" role="radio" data-means="radius">
-                  radius
-                </button>
-                <button type="button" role="radio" data-means="blend">
-                  per-bay blend
-                </button>
+            <div class="field" id="connection-field">
+              <label for="connection"
+                >connection
+                <output id="connection-out" for="connection"></output
+              ></label>
+              <input type="range" id="connection" min="0" max="1" step="0.01" />
+              <div class="rug" id="connection-rug" aria-hidden="true"></div>
+              <div class="ticks" aria-hidden="true">
+                <span style="left: 0%">0 touching only</span
+                ><span style="left: 100%">1 one piece</span>
               </div>
-              <div class="hint" id="means-hint"></div>
-            </div>
-            <div class="field" id="seal-field">
-              <span class="seg-name" id="seal-name">when a bay seals</span>
-              <div class="seg" role="radiogroup" aria-labelledby="seal-name">
-                <button type="button" role="radio" data-seal="jump">
-                  jump
-                </button>
-                <button type="button" role="radio" data-seal="lake">
-                  lake
-                </button>
-                <button type="button" role="radio" data-seal="lid">lid</button>
-              </div>
-              <div class="hint" id="seal-hint"></div>
-            </div>
-            <div class="field" id="compare-modes-field">
-              <label class="check" for="compare-modes"
-                ><input type="checkbox" id="compare-modes" /> compare
-                modes</label
-              >
+              <div
+                class="groups"
+                id="groups"
+                aria-live="polite"
+                title="A group is a piece of 3 or more members; an outlier is a piece of 1 or 2 members."
+              ></div>
               <div class="hint">
-                Small multiples below the picture: area share, radius and
-                per-bay blend at this convexity, each with the seal choice where
-                it applies.
+                The share of the members' links that are kept, the weakest cut
+                first. Members whose padding touches are always joined. The
+                outline changes only at the ticks above, one per link and set.
               </div>
             </div>
             <div class="field" id="neck-field">
@@ -651,108 +569,23 @@
                 joins: 1 is no neck.
               </div>
             </div>
-            <div class="field" id="join-field">
-              <label for="join"
-                >reach <output id="join-out" for="join"></output
-              ></label>
-              <input
-                type="range"
-                id="join"
-                min="0"
-                max="100"
-                step="1"
-                list="join-ticks"
-              />
-              <div class="join-rug" id="join-rug" aria-hidden="true"></div>
-              <datalist id="join-ticks">
-                <option value="0"></option>
-                <option value="100"></option>
-              </datalist>
-              <div
-                class="ticks"
-                aria-hidden="true"
-                id="join-ticks-labels"
-              ></div>
-              <div
-                class="reach-groups"
-                id="reach-groups"
-                aria-live="polite"
-                title="A group is a piece of 3 or more members; an outlier is a piece of 1 or 2 members."
-              ></div>
-              <div class="hint" id="join-hint"></div>
-              <div id="barcode" class="barcode"></div>
-              <div class="hint" id="bc-hover" aria-live="polite"></div>
-            </div>
-            <div class="field" id="join-measure-field">
-              <span class="seg-name" id="join-measure-name"
-                >reach measured as</span
-              >
-              <div
-                class="seg"
-                role="radiogroup"
-                aria-labelledby="join-measure-name"
-              >
-                <button type="button" role="radio" data-reach-measure="px">
-                  pixels
-                </button>
-                <button type="button" role="radio" data-reach-measure="share">
-                  share of links
-                </button>
-                <button type="button" role="radio" data-reach-measure="typical">
-                  typical gap
-                </button>
-                <button type="button" role="radio" data-reach-measure="local">
-                  nearby gaps
-                </button>
-                <button type="button" role="radio" data-reach-measure="pieces">
-                  pieces
-                </button>
-              </div>
-              <div class="hint" id="join-measure-hint"></div>
-            </div>
-            <div class="field" id="join-distance-field">
-              <span class="seg-name" id="join-distance-name">distance</span>
-              <div
-                class="seg"
-                role="radiogroup"
-                aria-labelledby="join-distance-name"
-              >
-                <button type="button" role="radio" data-reach-distance="plain">
-                  plain
-                </button>
-                <button type="button" role="radio" data-reach-distance="mutual">
-                  mutual reachability
-                </button>
-              </div>
-              <label class="core-row" id="join-core-row" for="join-core"
-                >core: the k-th nearest member, k
-                <input type="number" id="join-core" min="1" max="30" step="1"
-              /></label>
-              <div class="hint" id="join-distance-hint"></div>
-            </div>
-            <div class="field" id="join-range-field">
-              <span class="seg-name" id="join-range-name">reach range</span>
-              <div
-                class="seg"
-                role="radiogroup"
-                aria-labelledby="join-range-name"
-              >
-                <button type="button" role="radio" data-reach-range="inf">
-                  0..∞ (the multiple)
-                </button>
-                <button type="button" role="radio" data-reach-range="unit">
-                  0..1 (j / (1 − j))
-                </button>
-              </div>
-            </div>
             <div class="field" id="radius-field">
-              <label for="radius"
-                >radius <output id="radius-out" for="radius"></output
-              ></label>
+              <div class="row">
+                <label for="radius"
+                  >radius <output id="radius-out" for="radius"></output
+                ></label>
+                <button type="button" class="btn small" id="radius-reset">
+                  = padding
+                </button>
+              </div>
               <input type="range" id="radius" min="0" max="60" step="0.5" />
-              <div class="hint">
-                The closing disc's radius. Two pieces join where the disc cannot
-                pass between them.
+              <div class="marker" aria-hidden="true">
+                <span id="radius-pad">▲ padding</span>
+              </div>
+              <div class="hint" style="margin-top: 14px">
+                The radius of every inside corner. By default it is the padding,
+                so inside corners are as round as the outside ones. Members join
+                where the closing disc cannot pass between them.
               </div>
             </div>
             <div class="field">
@@ -762,6 +595,16 @@
               <div class="hint">
                 Keep a gap the outline closes around as a hole.
               </div>
+            </div>
+          </section>
+          <section>
+            <h2>Enclose</h2>
+            <div class="field">
+              <label for="padding"
+                >padding <output id="padding-out" for="padding"></output
+              ></label>
+              <input type="range" id="padding" min="0" max="30" step="0.5" />
+              <div class="hint">Each dataset loads its story's padding.</div>
             </div>
             <div class="field" id="avoid-field">
               <label class="check" for="avoid"
@@ -775,15 +618,6 @@
               ></label>
               <input type="range" id="clearance" min="0" max="20" step="0.5" />
             </div>
-            <div class="field">
-              <label for="padding"
-                >padding <output id="padding-out" for="padding"></output
-              ></label>
-              <input type="range" id="padding" min="0" max="30" step="0.5" />
-              <div class="hint">
-                enclose's own option. Each dataset loads its story's padding.
-              </div>
-            </div>
           </section>
           <section>
             <h2>Presets and spelling</h2>
@@ -796,7 +630,9 @@
               <button type="button" class="btn" data-preset="blob">
                 blob defaults
               </button>
-              <button type="button" class="btn" data-preset="arcs">arcs</button>
+              <button type="button" class="btn" data-preset="fillet">
+                fillet
+              </button>
               <button type="button" class="btn" data-preset="story">
                 story's settings
               </button>
@@ -809,28 +645,23 @@
           <section>
             <h2>Debug</h2>
             <div class="checks">
-              <label class="check" for="smooth"
-                ><input type="checkbox" id="smooth" /> smoothing step</label
-              >
               <label class="check" for="show-links"
-                ><input type="checkbox" id="show-links" /> links (spine)</label
+                ><input type="checkbox" id="show-links" /> links</label
               >
               <label class="check" for="show-members"
                 ><input type="checkbox" id="show-members" /> member circles and
                 keep-outs</label
               >
-              <label class="check" for="compare"
-                ><input type="checkbox" id="compare" /> today's outline
-                (dashed)</label
-              >
             </div>
-            <p class="hint">
-              The purple dashed line is today's
-              <code>Shape.blob</code> (convexity capped at 1, one piece) or, for
-              the arcs shape, today's <code>Shape.arcs</code>, with the same
-              options. The links view draws the join tree: orange links are kept
-              (at their full neck width), gray dashed edges are cut.
-            </p>
+            <details id="barcode-wrap" style="margin-top: 8px">
+              <summary>barcode</summary>
+              <div id="barcode" class="barcode"></div>
+              <div class="hint">
+                One bar per link whose members do not touch, as long as its
+                mutual reachability, the weakest at the top. Faded bars are
+                kept; the bars above the dashed line are cut.
+              </div>
+            </details>
           </section>
         </div>
       </div>
