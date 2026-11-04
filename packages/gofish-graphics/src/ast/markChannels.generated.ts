@@ -128,7 +128,19 @@ export const MARK_CHANNELS = {
     x: "pos",
     y: "pos",
   },
+  over: {
+    fill: "color",
+    stroke: "color",
+  },
   inside: {
+    fill: "color",
+    stroke: "color",
+  },
+  xor: {
+    fill: "color",
+    stroke: "color",
+  },
+  out: {
     fill: "color",
     stroke: "color",
   },
