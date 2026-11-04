@@ -79,13 +79,7 @@ import {
   type LayerPlan,
 } from "../solver/plan";
 import { evaluate } from "../solver/formula";
-import {
-  aroundPlot,
-  chromeForms,
-  contentSeat,
-  guttersAt,
-  setChromeForms,
-} from "../chromeGutters";
+import { aroundPlot, chromeForms, setChromeForms } from "../chromeGutters";
 
 // ── Z-order resolution ────────────────────────────────────────────────────
 //
@@ -222,6 +216,7 @@ export const layer = createNodeOperatorSequential(
             placed[i] === undefined) ||
           (alongOwnAxis(c, axis) && (held ??= heldInChain(axis))),
         dataPositioned: placedByOwnData(node, i, axis),
+        chartBox: c instanceof GoFishNode && c.isChartBox(),
       }));
     };
     // A category label along its own axis takes room only past the ends
@@ -734,16 +729,6 @@ export const layer = createNodeOperatorSequential(
                 childScaleFactors
               )
             : undefined;
-          // A node dressed in chrome reads its gutters off its chrome forms
-          // at the σ it is laid out at (#1032). It seats its content past
-          // them (`seatsOf`).
-          if (node.chrome !== undefined) {
-            node.chrome.gutters = [
-              guttersAt(node, 0, childScaleFactors[0]),
-              guttersAt(node, 1, childScaleFactors[1]),
-            ];
-          }
-
           // `position` constraints with a datum coordinate resolve against
           // the layer's frame. A child such a constraint places at a datum
           // point gets no map on that axis (`childPosScalesFor`).
@@ -854,8 +839,8 @@ export const layer = createNodeOperatorSequential(
             if (op?.direct) constrainedChildren.add(op.child);
           }
           // Where a literal position pins each child's origin, read once. A
-          // node dressed in chrome seats its content past its start gutters
-          // instead (`contentSeat`).
+          // ring seats its content as any layer seats a child: at its data 0
+          // (#1257, #1239).
           const literalSeatsByKey = seating().seats;
           const seatsOf = (
             i: number
@@ -864,9 +849,7 @@ export const layer = createNodeOperatorSequential(
               undefined,
               undefined,
             ];
-            return i === 0 && node.chrome !== undefined
-              ? [contentSeat(node, 0, lit[0]), contentSeat(node, 1, lit[1])]
-              : lit;
+            return lit;
           };
 
           // The room of each member of a chain along `axis` that has no size

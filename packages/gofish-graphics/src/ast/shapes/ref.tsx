@@ -46,6 +46,7 @@ const PLACEABLE_OPTIONAL_KEYS: readonly (keyof Placeable)[] = [
   "pinAnchor",
   "setSizeOnly",
   "spaceOn",
+  "isChartBox",
 ];
 let reservedKeys: ReadonlySet<string> | undefined;
 const RESERVED_KEYS = (): ReadonlySet<string> =>

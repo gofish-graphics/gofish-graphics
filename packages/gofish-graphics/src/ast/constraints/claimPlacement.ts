@@ -116,6 +116,8 @@ export type ClaimChild = {
   /** It is chrome (a ring's shapes): no part of the plot, so a chain
    *  places it past the whole box of what it dresses. */
   chrome?: boolean;
+  /** It is a chart's box (`GoFishNode.isChartBox`), placed whole. */
+  chartBox?: boolean;
 };
 
 /**
@@ -240,7 +242,8 @@ const formulaPlaceable = (
   hi: F,
   space: UnderlyingSpace | undefined,
   min: F | undefined,
-  plot?: readonly [F, F]
+  plot?: readonly [F, F],
+  chartBox = false
 ): SolvePlaceable<F> => {
   const box = { min, size: T.sub(hi, lo) };
   const none = { min: undefined, size: undefined };
@@ -260,6 +263,7 @@ const formulaPlaceable = (
     localPlotSpan: (a) =>
       a === axis && plot !== undefined ? [plot[0], plot[1]] : undefined,
     spaceOn: (dir) => (dir === axis ? space : undefined),
+    isChartBox: () => chartBox,
   };
 };
 
@@ -600,7 +604,10 @@ export function placeByClaims(
     const min = origin === undefined ? undefined : T.add(origin, lo);
     if (min !== undefined) presetMin.set(i, min);
     if (origin !== undefined) presetOrigin.set(i, origin);
-    targets.set(key, formulaPlaceable(T, axis, lo, hi, c.space, min, plot));
+    targets.set(
+      key,
+      formulaPlaceable(T, axis, lo, hi, c.space, min, plot, c.chartBox)
+    );
     indexOf.set(key, i);
     if (c.dataPositioned) dataPositioned.add(key);
     if (ink.has(i) || dressing.has(i) || c.chrome === true) apart.add(key);

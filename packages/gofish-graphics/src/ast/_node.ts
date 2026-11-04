@@ -324,6 +324,9 @@ export type Placeable = {
    *  `rect({})`), so the size cell is free for the constraint to own. Optional
    *  for the same reason as the other constraint write hooks. */
   spaceOn?: (dir: Direction) => UnderlyingSpace | undefined;
+  /** It is a chart's box ({@link GoFishNode.isChartBox}), placed whole:
+   *  where it has no data 0, its baseline is its start (#1241). */
+  isChartBox?: () => boolean;
 };
 
 /** Place a child's baseline at `(0, 0)` on whichever axes it hasn't already
@@ -2518,16 +2521,6 @@ export class GoFishNode {
       const shift = min - (c.localAnchor?.(axis, "min") ?? 0);
       return [plot[0] + shift, plot[1] + shift];
     };
-    if (this.chrome !== undefined) {
-      // Its box less its chrome's gutters, which its layout read off its
-      // claims (`chromeGutters`), in its axis order.
-      const min = this.localAnchor(axis, "min");
-      const max = this.localAnchor(axis, "max");
-      if (min === undefined || max === undefined) return undefined;
-      const [start, end] = this.chromeGutters(axis);
-      const up = axis === 1 && this.yFrame.direction !== 1;
-      return up ? [min + end, max - start] : [min + start, max - end];
-    }
     const walk = this.claimWalk;
     const out = (i: number) =>
       walk?.dressing[axis].has(i) === true || walk?.ink[axis].has(i) === true;

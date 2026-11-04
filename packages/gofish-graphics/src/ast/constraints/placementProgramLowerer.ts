@@ -17,7 +17,7 @@ import type {
   RelationAnchor,
 } from "./placementFacts";
 import { emptyAnchorProgram } from "./placementFacts";
-import { originIs } from "../underlyingSpace";
+import { hasOrigin, originIs } from "../underlyingSpace";
 
 export const BOX_ANCHOR: Record<AlignAnchor, Anchor> = {
   start: "min",
@@ -38,6 +38,8 @@ export type SolvePlaceable<T> = {
   localAnchor?: (axis: FancyDirection, anchor: Anchor) => T | undefined;
   localPlotSpan?: (axis: 0 | 1) => [T, T] | undefined;
   spaceOn?: (dir: Direction) => UnderlyingSpace | undefined;
+  /** It is a chart's box (`GoFishNode.isChartBox`), placed whole. */
+  isChartBox?: () => boolean;
 };
 
 /** The offset of a target's data baseline from its `min` on `axis`, or
@@ -87,6 +89,15 @@ export function anchorOffset<T>(
           : A.scale(0.5, A.add(span[0], span[1]));
     return A.sub(at, min);
   }
+  // A chart is placed whole, its chrome with it (#1257). On an axis with no
+  // data 0 it has no baseline to share, so it sits by its start, in reading
+  // order (#1241); on an axis with a data 0 it keeps that baseline.
+  if (
+    anchor === "baseline" &&
+    target.isChartBox?.() === true &&
+    !hasOrigin(target.spaceOn?.(axisIndex(axis)))
+  )
+    return A.zero;
   const local = target.localAnchor?.(axis, BOX_ANCHOR[anchor]);
   const localMin = target.localAnchor?.(axis, "min");
   if (local !== undefined && localMin !== undefined)
