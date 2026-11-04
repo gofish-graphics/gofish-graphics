@@ -7,7 +7,12 @@ import type { DisplayList } from "gofish-ir";
 import { getScopeRegistry, seatInBand, seatInScope } from "../solver/scopes";
 import { isToken } from "../createName";
 import { Size, elaborateOwnDims, FancyDims, displayTranslate } from "../dims";
-import { UnderlyingSpace, isUNDEFINED, magnitude } from "../underlyingSpace";
+import {
+  UnderlyingSpace,
+  hasOrigin,
+  isUNDEFINED,
+  magnitude,
+} from "../underlyingSpace";
 import { Extent, impliedExtent, padExtent, shiftExtent } from "../extent";
 import * as Pwl from "../solver/pwl";
 import type { KeyedDomains } from "../keyedDomains";
@@ -104,6 +109,44 @@ const outlined = (
         hi: Pwl.addConstant(p.hi, o),
         extent: padExtent(p.extent, o),
       };
+
+/**
+ * A plan whose summary covers the node's whole niced domain on `axis` when
+ * the node draws an axis there (`GoFishNode.drawsAxis`): a plot covers its
+ * domain, rounded as the axis over it is (`KeyedDomains.scope`), not only
+ * the hull of its marks, as it does in layout (`GoFishNode.domainSpan`).
+ * Every reader of the claim (the node's claim, its plot, a parent's forms
+ * of it) reads the summary, so all of them see the domain.
+ */
+const domainPlan = (
+  node: GoFishNode,
+  axis: 0 | 1,
+  space: UnderlyingSpace | undefined,
+  plan: LayerPlan | undefined
+): LayerPlan | undefined => {
+  const summary = plan?.summary;
+  const keyed = node.tryGetRenderSession()?.keyedDomains;
+  if (
+    plan === undefined ||
+    summary === undefined ||
+    keyed === undefined ||
+    !node.drawsAxis() ||
+    !hasOrigin(space)
+  )
+    return plan;
+  const placed = node.placedSpace(space, axis);
+  const widen = (e: Extent): Extent =>
+    keyed.scope(node, axis, placed, e)[1] ?? e;
+  return {
+    ...plan,
+    summary: {
+      ...summary,
+      box: widen(summary.box),
+      whole: widen(summary.whole),
+      plot: summary.plot && widen(summary.plot),
+    },
+  };
+};
 
 /** Whether `node` is a ring of chrome (`GoFishNode.chrome`): a layer whose
  *  first child is the ring inside it and whose other children are chrome.
@@ -483,18 +526,22 @@ export const layer = createNodeOperatorSequential(
           // plot the envelope of their plots, leaving out the dressing and
           // the ink. On a grid's track axis it places its cells in their
           // tracks, and its claim is the tracks and gaps (`gridTracks`).
-          const plans = ([0, 1] as const).map((axis) =>
-            buildPlan(
-              node,
-              axis,
-              claimChildren(axis, effectiveExtents, standInPlacements(axis)),
-              node.constraints,
-              refs,
-              nestedPlacement(axis, refs.operands),
-              ring,
-              scale[axis]
+          const plans = ([0, 1] as const)
+            .map((axis) =>
+              buildPlan(
+                node,
+                axis,
+                claimChildren(axis, effectiveExtents, standInPlacements(axis)),
+                node.constraints,
+                refs,
+                nestedPlacement(axis, refs.operands),
+                ring,
+                scale[axis]
+              )
             )
-          ) as [LayerPlan | undefined, LayerPlan | undefined];
+            .map((plan, axis) =>
+              domainPlan(node, axis as 0 | 1, t.resolved[axis], plan)
+            ) as [LayerPlan | undefined, LayerPlan | undefined];
           node._claimMemo.plans = plans;
           const session = node.tryGetRenderSession();
           for (const axis of [0, 1] as const) {
@@ -1270,6 +1317,13 @@ export const layer = createNodeOperatorSequential(
               maxs[axis].push(d[axis].max);
             }
           });
+          // A chart's frame covers its niced domain (`domainSpan`).
+          for (const axis of [0, 1] as const) {
+            const domain = node.domainSpan(axis);
+            if (domain === undefined) continue;
+            mins[axis].push(domain[0]);
+            maxs[axis].push(domain[1]);
+          }
           const minX = foldFinite(mins[0], Math.min);
           const maxX = foldFinite(maxs[0], Math.max);
           const minY = foldFinite(mins[1], Math.min);

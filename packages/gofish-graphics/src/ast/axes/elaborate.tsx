@@ -302,30 +302,20 @@ function axisLine(dim: 0 | 1): GoFishNode {
 }
 
 /**
- * Seat the axis in the gutter beside the content, growing into NEGATIVE cross
- * space (into the SVG padding) rather than shifting the content. Keeping the
- * content pinned at the origin (see the orchestrator) is what lets the *other*
- * axis's posScale-positioned ticks stay aligned with it — otherwise a y-axis
- * gutter would push the content off the x-axis's tick grid (and vice versa).
+ * Seat the axis beside the plot, on the chart's chain like every other piece
+ * of chrome: the line is distributed `AXIS_CONTENT_GAP` past the plot's box
+ * on the cross axis, growing into negative cross space rather than shifting
+ * the content.
  *   [tick labels] ← tick marks ← axis line ← | content (at origin)
- *
- * The LINE seats one of two ways:
- *  - `crossFloor` given (the other dim is position-like, whichever node draws
- *    its axis): the line
- *    sits flush at the PLOT edge — `position({[cross]: datum(crossFloor)})`,
- *    the other axis's scale minimum. The two lines then meet at the domain
- *    corner even when no datum reaches it (a scatter whose y domain starts
- *    below the lowest point must not draw its x axis at the lowest point).
- *  - otherwise: distribute just past the content's bbox edge (a bar chart's
- *    y axis sits beside the bars).
+ * A chart's plot covers its whole niced domain (`GoFishNode.domainSpan`),
+ * so the lines of a scatter meet at the domain corner even when no datum
+ * reaches it.
  */
 function gutterConstraints(
   dim: 0 | 1,
   inner: ConstraintRef,
-  plot: ConstraintRef | undefined,
   line: ConstraintRef,
   ticks: ConstraintRef[],
-  crossFloor?: number,
   side: "start" | "end" = "start"
 ): any[] {
   // A degenerate domain can yield zero ticks; emit no gutter rather than
@@ -340,27 +330,10 @@ function gutterConstraints(
   // outward into the gutter.
   const innerEdge = atEnd ? "start" : "end";
   const innerAlign = cross(dim) === 0 ? { x: innerEdge } : { y: innerEdge };
-  const seat =
-    crossFloor !== undefined
-      ? // Standoff: the line sits AXIS_CONTENT_GAP outside the plot edge, so
-        // marks at the domain floor (a y=0 histogram bin) don't straddle it.
-        // Both lines get the same outward offset, so they still frame the
-        // corner. `datum(v).offset(px)` = "this data position, plus pixels".
-        // `side` flips which way "outward" is.
-        Constraint.position(
-          {
-            [d]: datum(crossFloor).offset(
-              atEnd ? AXIS_CONTENT_GAP : -AXIS_CONTENT_GAP
-            ),
-            anchor: innerEdge,
-            ...(plot ? { in: plot } : {}),
-          } as any,
-          [line]
-        )
-      : Constraint.distribute(
-          { dir: d, spacing: AXIS_CONTENT_GAP },
-          atEnd ? [inner, line] : [line, inner]
-        );
+  const seat = Constraint.distribute(
+    { dir: d, spacing: AXIS_CONTENT_GAP },
+    atEnd ? [inner, line] : [line, inner]
+  );
   return [
     seat,
     // Tick marks' inner edge flush with the line; labels extend into the gutter.
@@ -410,9 +383,6 @@ function positionAxis(opts: {
    *  them, so they carry no `axisLabel` tag and `label.angle: "auto"` does
    *  not score them. */
   extraLabels?: ExtraLabel[];
-  /** The other dim's scale floor, when it also carries a position-like axis —
-   *  seats this line at the plot corner instead of the content edge. */
-  crossFloor?: number;
   /** Which frame edge to seat the axis on (default near/origin = "start"). */
   side?: "start" | "end";
 }): AxisElaboration {
@@ -455,17 +425,7 @@ function positionAxis(opts: {
     // distributes off it — an unplaced-anchor distribute would walk from 0
     // and drag the line into the plot. Tick marks align flush with the line
     // (their inner edge IS the tick).
-    cs.push(
-      ...gutterConstraints(
-        dim,
-        inner,
-        plot,
-        lineRef,
-        ticks,
-        opts.crossFloor,
-        side
-      )
-    );
+    cs.push(...gutterConstraints(dim, inner, lineRef, ticks, side));
     if (opts.tickLabel) {
       const trackAxis = axisName(dim);
       const gutterDir = crossName(dim);
@@ -524,8 +484,7 @@ function positionAxis(opts: {
 
 /** One continuous (POSITION) axis. Mirrors the hand-drawn ContinuousYAxis.
  *  `nice` is the d3-niced [min, max] of the domain, computed once by
- *  `elaborationsFor` (the same pair feeds the other axis's `crossFloor`, so
- *  computing it in one place keeps the corner consistent).
+ *  `elaborationsFor`.
  *
  *  `labelRotation`'s `trackAlign` picks how each tick's label is built (see
  *  `tickMark`'s and `positionAxis`'s `tickLabel` doc comments for why): the
@@ -542,7 +501,6 @@ function elaborateContinuousAxis(
   dim: 0 | 1,
   nice: [number, number],
   ticks: AxisTicks,
-  crossFloor: number | undefined,
   side: "start" | "end",
   crossDirection: AxisDirection,
   labelRotation: LabelRotation | undefined,
@@ -583,7 +541,6 @@ function elaborateContinuousAxis(
         }
       : undefined,
     labelRotation,
-    crossFloor,
     side,
   });
 }
@@ -620,7 +577,6 @@ function elaborateTimeAxis(
   space: CONTINUOUS_TYPE,
   nice: [number, number],
   levels: readonly { level: CalendarPartition; hidden: boolean }[],
-  crossFloor: number | undefined,
   side: "start" | "end"
 ): AxisElaboration {
   const [lo, hi] = nice;
@@ -681,7 +637,6 @@ function elaborateTimeAxis(
     extraLabels: labels.flatMap((row, k) =>
       row.map((l) => ({ value: l.at, text: l.text, offset: rowOffset[k] }))
     ),
-    crossFloor,
     side,
   });
 }
@@ -696,7 +651,6 @@ function elaborateDifferenceAxis(
   dim: 0 | 1,
   content: CONTINUOUS_TYPE,
   ticks: AxisTicks,
-  crossFloor?: number,
   side: "start" | "end" = "start"
 ): AxisElaboration {
   const space = niceContinuous(content, ticks);
@@ -718,7 +672,6 @@ function elaborateDifferenceAxis(
     tickValues: tickValues.map((v) => v - slack),
     tickNode: () => tickRect(dim),
     extraLabels,
-    crossFloor,
     side,
   });
 }
@@ -1430,15 +1383,10 @@ function elaborationsFor(
         keyed.domainOf(node, dim, placed[dim], true)
       )[0]
   );
-  // Niced [min, max] per POSITION dim, computed ONCE: it feeds both that
-  // dim's own axis line/ticks (when the node owns it) and the other axis's
-  // `crossFloor` (the plot corner), so a nicing change can't skew the corner.
-  // A DIFFERENCE dim's floor is 0. An owned dim reads its own nice and the
-  // other dim's floor, so a node that owns any axis computes both dims,
-  // owned or not: a facet panel that owns only its y axis still seats that
-  // axis at the floor of the shared x domain an ancestor draws (#753), since
-  // the keyed scope is the same widen-then-nice whichever node draws the
-  // axis.
+  // Niced [min, max] per POSITION dim, computed ONCE for its axis line and
+  // ticks. The plot's box covers the same niced domain
+  // (`GoFishNode.domainSpan`), so the line seated beside it meets the other
+  // axis at the domain corner (#753).
   // The `levels` entries an axis on `dim` reads, from its first level on.
   const entriesFor = (dim: 0 | 1) =>
     (perLevel[dim].levels ?? []).slice(fold.dims[dim].names.length);
@@ -1458,7 +1406,6 @@ function elaborationsFor(
     undefined,
   ];
   const nices: ([number, number] | undefined)[] = [undefined, undefined];
-  const floors: (number | undefined)[] = [undefined, undefined];
   // What each owned axis ticks at, as `resolveAxes` stamped it: the same
   // ticks its scope's solve nices the domain to. A numeric axis is drawn
   // from its tick count; a time axis stamps its rows here first.
@@ -1482,9 +1429,6 @@ function elaborationsFor(
         undefined
       )[0] as CONTINUOUS_TYPE;
       nices[dim] = [niced.dataInterval.min, niced.dataInterval.max];
-      floors[dim] = nices[dim]![0];
-    } else if (axisOver(s) === "delta") {
-      floors[dim] = 0;
     }
   }
   let keyMap: Record<string, GoFishNode> | undefined;
@@ -1553,7 +1497,6 @@ function elaborationsFor(
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
     const s = wide[dim];
-    const crossFloor = floors[cross(dim)];
     const kind = axisOver(s);
     const ticks = ticksFor(dim);
     const d = fold.dims[dim];
@@ -1571,7 +1514,7 @@ function elaborationsFor(
       );
       continuousAxis(
         dim,
-        elaborateTimeAxis(dim, s, nices[dim]!, rows, crossFloor, axisSide(dim)),
+        elaborateTimeAxis(dim, s, nices[dim]!, rows, axisSide(dim)),
         rows.map((r) => String(r.level))
       );
     } else if (kind === "absolute" && isCONTINUOUS(s)) {
@@ -1581,7 +1524,6 @@ function elaborationsFor(
           dim,
           nices[dim]!,
           ticks,
-          crossFloor,
           axisSide(dim),
           crossDirection(dim),
           resolvedLabelRotation({ dim, kind: "continuous", depth: depth0 }),
@@ -1593,7 +1535,7 @@ function elaborationsFor(
     } else if (kind === "delta" && isCONTINUOUS(s)) {
       continuousAxis(
         dim,
-        elaborateDifferenceAxis(dim, s, ticks, crossFloor, axisSide(dim)),
+        elaborateDifferenceAxis(dim, s, ticks, axisSide(dim)),
         numericNames(dim)
       );
     } else if (isORDINAL(s)) {

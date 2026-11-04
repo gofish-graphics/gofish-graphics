@@ -69,6 +69,7 @@ import { color6 } from "../color";
 import { hasUnits, Units, withUnits } from "./measure";
 import { orderByLevels, type HasLevels } from "./schema";
 import {
+  hasOrigin,
   isCONTINUOUS,
   isORDINAL,
   isUNDEFINED,
@@ -2495,8 +2496,45 @@ export class GoFishNode {
     return value;
   }
 
+  /**
+   * On a node that draws an axis (`axisDemand`), the pixels its whole
+   * domain spans on `axis` in its local frame, once laid out: the keyed
+   * domain it maps, widened and niced as every axis over it is
+   * (`KeyedDomains.scope`). Such a node is a plot, and a plot covers its
+   * niced domain, not only the hull of its marks, so an axis seated beside
+   * it sits at the domain's floor, on both axes (a facet panel that draws
+   * only its y axis still covers the shared x domain). Undefined on any
+   * other node, and on an axis with no data 0.
+   */
+  public domainSpan(axis: 0 | 1): [number, number] | undefined {
+    if (!this.drawsAxis()) return undefined;
+    const frame = this.layoutFrames?.[axis];
+    const space = this._underlyingSpace?.[axis];
+    const keyed = this.tryGetRenderSession()?.keyedDomains;
+    if (frame === undefined || keyed === undefined || !hasOrigin(space))
+      return undefined;
+    const niced = keyed.scope(
+      this,
+      axis,
+      this.placedSpace(space, axis),
+      undefined
+    )[0];
+    if (!isCONTINUOUS(niced)) return undefined;
+    const { min, max } = niced.dataInterval;
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return undefined;
+    const a = frame.sigma * min + frame.originPx;
+    const b = frame.sigma * max + frame.originPx;
+    return [Math.min(a, b), Math.max(a, b)];
+  }
+
+  /** Whether this node draws an axis on either dim (`axisDemand`). */
+  public drawsAxis(): boolean {
+    return this.axisDemand[0] !== undefined || this.axisDemand[1] !== undefined;
+  }
+
   private computePlotSpan(axis: 0 | 1): [number, number] | undefined {
     if (this.plotIsBox(axis)) return undefined;
+    const domain = this.domainSpan(axis);
     // A child's plot in its parent's frame, or its box when that is its
     // plot. Both are in pixels, as the child stores its box, whichever way
     // the parent reads y: a parent that reads y the other way sees the span
@@ -2519,8 +2557,8 @@ export class GoFishNode {
     );
     if (!this.children.some((_, i) => out(i)) && own.every((p) => !p))
       return undefined;
-    let lo = Infinity;
-    let hi = -Infinity;
+    let lo = domain?.[0] ?? Infinity;
+    let hi = domain?.[1] ?? -Infinity;
     this.children.forEach((c, i) => {
       if (out(i) || !(c instanceof GoFishNode)) return;
       const span = inFrame(c, own[i]);
