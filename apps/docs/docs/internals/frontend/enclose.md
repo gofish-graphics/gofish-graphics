@@ -5,9 +5,14 @@ order: 26
 status: stable
 covers:
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose.tsx
-  - packages/gofish-graphics/src/ast/graphicalOperators/enclose/blob.ts
-  - packages/gofish-graphics/src/ast/graphicalOperators/enclose/oval.ts
+  - packages/gofish-graphics/src/ast/graphicalOperators/enclose/outline.ts
+  - packages/gofish-graphics/src/ast/graphicalOperators/enclose/prims.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/arcs.ts
+  - packages/gofish-graphics/src/ast/graphicalOperators/enclose/meshBlend.ts
+  - packages/gofish-graphics/src/ast/graphicalOperators/enclose/beyond.ts
+  - packages/gofish-graphics/src/ast/graphicalOperators/enclose/separate.ts
+  - packages/gofish-graphics/src/ast/graphicalOperators/enclose/smooth.ts
+  - packages/gofish-graphics/src/ast/graphicalOperators/enclose/oval.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/members.ts
   - packages/gofish-graphics/src/ast/geometry/ring.ts
   - packages/gofish-graphics/src/families/shape.ts
@@ -18,10 +23,11 @@ covers:
 `enclose` draws an outline around a set of nodes, under them. The outline is a
 value of the `Shape` strategy family: the padded bounding box (`Shape.box()`),
 the minimum-area enclosing ellipse (`Shape.oval()`), the padded members with
-arc corners (`Shape.arcs()`), or a smooth region (`Shape.blob()` and its two
-presets, `Shape.hull()` and `Shape.spine()`). This essay explains how the
-node is built, how an oval's, a blob's and an arcs outline are computed, and
-which decisions and shortcuts the design rests on.
+arc corners (`Shape.fillet()`), or a smooth region (`Shape.blob()` and its
+two presets, `Shape.hull()` and `Shape.spine()`). Every shape keeps out of the
+nodes in `enclose`'s `avoiding`. This essay explains how the node is built,
+how an oval's, a blob's and a fillet's outline are computed, and which
+decisions and shortcuts the design rests on.
 The user-facing reference is [`enclose`](/js/api/operators/enclose) and
 [`Shape`](/js/api/shape).
 
@@ -76,8 +82,8 @@ the enclosure's own box.
 
 Layout places a fresh member the way `layer` places a child
 (`placeUnplacedChild`), and leaves a ref where its target is. The box shape
-uses the union of the members' boxes grown by `padding`. An oval or a
-blob computes its outline in the same pass, in the frame the children's boxes
+uses the union of the members' boxes grown by `padding`. An oval, a fillet
+or a blob computes its outline in the same pass, in the frame the children's boxes
 were read in, and the node's box is the outline's box. The outline is also
 the node's geometry, stroke included: an enclose over fresh children answers
 `outline` with its loops, thinned to the tolerance asked for
@@ -85,9 +91,12 @@ the node's geometry, stroke included: an enclose over fresh children answers
 loops (`ringsEnclosingCircle`, which `polygon` uses too) grown by half the
 stroke. So a `pack` that holds it packs the outline, and an
 outer `enclose` hugs it. A box shape's outline is its padded box, so its
-geometry is that box alone, and a `pack` packs the circle around the box. Both are kept in `renderData`, and
+geometry is that box alone, and a `pack` packs the circle around the box. A
+box with nodes in `avoiding` is cut like the other shapes: its outline is the
+rounded box as a ring (`roundedBoxRing`), cut by the keep-outs, and it is
+drawn as that path, not as a rectangle. Both are kept in `renderData`, and
 `lower` maps them through `local` (the node's translate and y direction) and
-`toPixel`. A blob is one SVG `path` over all its loops. Its outer loops and
+`toPixel`. A curved outline is one SVG `path` over all its loops. Its outer loops and
 its holes wind opposite ways, so the default nonzero fill rule leaves the
 holes open, with no change to the display list.
 
@@ -127,14 +136,16 @@ is the shape's box and its shape the ring (see
 so a `treemap` tiles it and a `region` draws it. The enclosure's box is the
 whole space it was given, as a member's would have been.
 
-`Shape.arcs()` and `Shape.blob()` are built from the members' outlines, so
+`Shape.fillet()` and `Shape.blob()` are built from the members' outlines, so
 around a member with no size they are an error that names `Shape.box()`,
-`Shape.oval()`, and giving the member a size. Both outlines here are convex,
+`Shape.oval()`, and giving the member a size. `avoiding` is an error there
+too: the outline is the given space, which a cut would leave unfilled. Both outlines here are convex,
 which is what `insetConvex` and the Voronoi tiling need.
 
 ## Reading members
 
-`members.ts` reads a placed node as blob geometry through its outlines
+`members.ts` reads a placed node as outline geometry (`Member`, `prims.ts`)
+through its outlines
 (the `outline` geometry query; see
 [Layout Calculation](/internals/layout/passes)). It reads them with
 `placedOutlines` from the view of the child that the enclosure's layout got
@@ -143,11 +154,12 @@ frame, and it reads each outline by its exact form where it has one:
 
 - An outline that gives an `ellipse` (an `ellipse` node) is a disc. An
   ellipse that is not a circle is the disc of its larger radius, carrying its
-  two semi-axes as well. The blob reads only the disc, so it pads the ellipse
+  two semi-axes as well. The fillet and the blob read only the disc, so they
+  pad the ellipse
   a little more along its short axis (a declared shortcut, below). The oval
   reads the semi-axes and samples the ellipse itself.
 - An outline that gives a `box` (a `rect`'s with square corners, or the fallback of a node with
-  no outline of its own) is its box. The blob measures the distance to it
+  no outline of its own) is its box. The closing measures the distance to it
   exactly, as a rectangle.
 - An open outline (a `line`, an `arrow` to the tip of its head) is its
   pieces, each a tube as wide as the stroke `width` the outline carries. A curve is cut into
@@ -159,10 +171,11 @@ frame, and it reads each outline by its exact form where it has one:
   a `rect` with rounded corners, a rotated `text`'s glyph box), is its bounding box, a declared shortcut
   (below).
 
-The blob needs these exact forms. A disc is one Delaunay site and links to
-its neighbors by its radius, and a stroke is a tube of its width. A disc read
-as its sampled edges would be many sites with no width, which changes every
-blob around circles. The `Enclose/Members` stories show one blob per kind.
+The curved outlines need these exact forms. The closing grows a disc, a tube
+and a box exactly, and the join tree measures the gap between two members
+from their edges. A disc read as its sampled edges would be many members with
+no width, which changes every outline around circles. The `Enclose/Members`
+stories show one blob per kind.
 
 This reader is internal. There is no `members` option and no public geometry
 protocol for it yet.
@@ -214,109 +227,105 @@ axis, so it balloons well past the members and over a chart's axes. Only the
 minimum-area ellipse both holds the members and stays close to them. Using
 any mark as the outline is left to #1167.
 
+## The exact closing
+
+`arcs.ts` holds the engine the fillet and the blob share: `closingRings(members,
+padding, radius, holes)`, the morphological closing, by a disc of `radius`, of
+the members grown by `padding`. This is the bubble treemap contour of Görtler
+et al. (2018). Each member is grown by padding + radius into a convex shape
+bounded by arcs and lines (a disc, a tapered capsule for a segment, a rounded
+box for a box): `grownPrim` in `prims.ts`, whose signed distance (`primD`) is
+the cover test, with its boundary as exact edges. The union's boundary is
+traced exactly, by cutting every edge where another shape's edge crosses it
+(each crossing solved once for the pair) and keeping the parts no other shape
+covers. That boundary is then shrunk by radius: arcs keep their centers, lines
+move inward, and each corner becomes an arc of `radius`. Where the shrunk
+boundary crosses itself, only the points a full radius from the union's
+boundary are kept, and the cut points are found by bisection on the exact
+curves. Every output point lies on the exact curve, sampled at most 0.2 px off
+it and at most 4 px apart. With `holes` off, only the outer loops are kept.
+
+At radius 0 the outline is the padded union, and as radius grows it nears the
+padded convex hull. Two members join when the disc cannot pass between them:
+two discs of radius a whose padded edges are g apart join only when
+2·a·radius ≥ a·g + g²/4, and two flat members join when g < 2·radius.
+`src/tests/enclose.test.ts` checks these, and checks the outline against an
+independent version of the paper's construction on packed discs.
+
+## How a fillet is built
+
+`Shape.fillet({ radius, neck, holes })` is the closing of the padded members
+and their links. The links come first (`filletLinks`, `outline.ts`): two
+pieces of the padded union nearer than 2 · radius are joined by a link along
+the spanning tree of the padded gaps, a tapered tube `neck` times as wide as
+the padded members it joins. `neck: 0` draws none. The closing of members and
+links together gives the pieces, and each piece is closed again on its own
+members (`filletPieces`): where two padded members are near enough for their
+discs to overlap but too far apart to join, closing them together leaves a
+horn with a cusp at its tip, and closing each piece without the other leaves
+none. The fillet is not smoothed. `radius` defaults to `padding`, so an inside
+corner is as round as the padding makes an outside one; `neck` to 0.5.
+
 ## How a blob is built
 
-`blob.ts` is pure geometry: `blobOutline(members, opts)` returns the outline's
-loops. It runs in screen pixels, after layout, so it works the same way
-under any coordinate transform.
+`Shape.blob({ convexity, connection, neck, holes, separate })` is built in
+`outline.ts` (`blobOutline`), in screen pixels after layout, so it works the
+same way under any coordinate transform.
 
-1. **Sites and triangles.** Each member contributes its sites: a disc its
-   center, a segment its two ends. The sites are triangulated (Delaunay, by
-   `d3-delaunay`).
-2. **Convexity as a share of the hull.** The triangles are taken in order of
-   circumradius, the radius of their empty circle, which is how wide a gap
-   the triangle spans. A triangle is filled when the midpoint of its area,
-   along the running total, is within `convexity` of the hull's area.
-   Triangles with the same circumradius count together. So 0 fills nothing
-   (the spine), 1 fills every triangle (the hull), and the filled share
-   follows `convexity` to within one triangle, at any chart size.
-3. **Links.** The links are the edges of the filled triangles, plus the
-   minimum spanning tree over the members, so the set is always one piece. A
-   tree link runs between the closest points of two members, so members that
-   touch join at no cost. It is routed around the avoided nodes: a visibility
-   graph over their keep-out polygons, searched with A\*, then snapped onto
-   the keep-out circles, so a route is straight lines tangent to the circles
-   and arcs of them. Every link is chosen at full width, so `neck` never
-   changes which links there are. The tree's candidates are the Delaunay
-   edges, plus, for a segment member, every other member, since its closest
-   point may lie anywhere along it. Those pairs join the queue a distance
-   band at a time (touching pairs, then 16 px, doubling), found through a
-   grid over the members, and only while the set is in more than one piece,
-   so a 1,000-point line does not pair every segment with every member. Each
-   keeps the place in the order it would have had in the full list, so the
-   tree is the same.
-4. **Region.** The pieces are each member grown by `padding`, each link as a
-   tube that tapers from the bulge at one end to the bulge at the other (the
-   convex hull of the two end discs, a tapered capsule with a closed-form
-   distance; with equal ends it is the plain capsule), and the filled
-   triangles. A routed link tapers along its length, and an arc of it around
-   an avoided node keeps the larger of its two ends' half-widths. A link is
-   routed at its larger half-width, so the narrower part keeps more than the
-   clearance.
-   Each avoided node grown by `clearance` is a keep-out zone. The region is
-   the union of the pieces minus the union of the zones.
-5. **Exact trace.** Every piece and zone has a closed-form signed distance (a
-   disc, a capsule, a box, a triangle, or a tube bent around an arc). A
-   quadtree over a 1 px grid keeps, per cell, only the primitives that can be
-   nearest there, marching squares joins the cells the outline crosses into
-   loops, and each crossing is found to a ten-thousandth of a pixel. Each
-   traced point records the circle it lies on, if any, and whether it is on a
-   member's bulge.
-6. **Holes.** With `holes: false` (the default, as in PostGIS and Shapely),
-   every hole of the traced region is filled, and the keep-out zones it held
-   are traced again on their own and put back as holes. So an avoided node
-   inside the set is always exactly its clearance circle. A hole made only of
-   keep-out circles stays as it is.
-7. **Neck.** Every outline point not on a member's bulge moves inward by
-   `1 - neck` times the region's half-width there (the largest disc inside the
-   region that touches the outline at that point, capped at the link's own
-   half-width), along its own piece's normal. Where two pieces meet in a
-   corner the moved sides are carried on until they meet, so the pull never
-   rounds anything. A point that would move into a bulge stops on its edge.
-   Small knots where the pull changes quickly are cut out, and where two
-   parts of the outline would still cross, the pull is halved near that
-   crossing only.
-8. **Roundness.** The outline is smoothed along its own length by a Gaussian
-   of width `roundness / 2`. Smoothing pulls a circle of radius _r_ inward by
-   a known factor, so each point on a circle is first moved out by that
-   factor: circles and straight sides come back where they were, and only
-   corners round. Inlets narrower than 1.5 σ are closed first, and points near
-   a keep-out zone are pushed out by a smooth maximum, so the outline never
-   enters a zone. Rounding is capped at the smallest circle in the region. If
-   two loops would cross, σ is narrowed by bisection until they do not.
+1. **Pieces.** The members' join tree is HDBSCAN's: the minimum spanning tree
+   of every pair in mutual reachability, the larger of the pair's distance and
+   each member's core distance (to its 4th nearest other member), with the
+   pairs whose padding touches taken first. `connection` keeps that share of
+   the tree's other links, the strongest first; touching links are always
+   kept. The kept links split the members into pieces: 1 (the default) is one
+   piece, and 0 joins only members whose padding touches. The pieces change
+   only where `connection` crosses a link's entry, so it is discrete.
+2. **Spine.** Inside each piece, the links run along the spanning tree of the
+   padded gaps between that piece's members (the closing's own merge order).
+   Each is a tube that tapers from one member's width to the other's, `neck`
+   times as wide as the padded members it joins, and bent around the
+   keep-outs (`routeAround`). The padded members and the links, closed at
+   radius `padding`, are the piece's spine.
+3. **Convexity.** Each piece is filled on its own. Between 0 and 1 the fill
+   is the per-bay blend (`meshBlend.ts`): every pocket of the padded hull less
+   the spine fills `convexity` of its own area. In a pocket with a mouth on
+   the hull, a harmonic field u is 0 on the spine and 1 on the mouth, solved
+   with finite elements on a constrained Delaunay mesh of the pocket; the
+   outline is u's level set at the level that holds that share of the area,
+   which is closed form per triangle. On a Delaunay mesh the field has no lake
+   and no island at any level. A pocket filled to the top is its mouth. At 1
+   the fill is the padded hull. Between 1 and 2 the hull is the Minkowski
+   combination (2 − c)·H ⊕ (c − 1)·E of the hull, its ends rounded, and the
+   `Shape.oval()` outline (`beyond.ts`), so it grows with c and is near the
+   oval at 2.
+4. **Separate.** With `separate: false` (the default), the pieces may
+   overlap, and a piece wholly inside another is dropped. With `separate:
+true`, each piece keeps out of the set's other pieces, as of an avoided
+   node: their padded members and links grown by padding + clearance, so two
+   outlines stay `clearance` apart.
+5. **Smoothing.** The outline is smoothed by a Gaussian along its length
+   (σ = 6 px), then moved out by the least uniform offset that holds every
+   padded member and link again (`smooth.ts`).
 
-`convexity` alone decides which gaps fill, so it decides the pieces and the
-holes. `roundness` changes only curvature and `neck` only how far the outline
-pulls in; neither changes the pieces or the holes. `src/tests/enclose.test.ts`
-checks this over sweeps of both on two point sets, and checks that the hull
-preset is within half a pixel of the true padded convex hull.
+A blob keeps a hole only where its members close a loop (a ring of touching
+members): the per-bay blend fills each pocket from its walls, so a bay that is
+open to the hull stays open at every `convexity` below 1, and is filled at 1.
 
-## How arcs are built
+## Avoiding
 
-`arcs.ts` builds `Shape.arcs({ radius })`, the bubble treemap contour of
-Görtler et al. (2018). The region is the morphological closing, by a disc of
-`radius`, of the members grown by `padding`, with holes filled. Each member
-is grown by padding + radius into a convex shape bounded by arcs and lines (a
-disc, a capsule for a segment, a rounded box for a box): the blob's own
-primitive for it (`grownPrim`), whose signed distance (`primD`) is the cover
-test, with its boundary as exact edges. The union's boundary
-is traced exactly, by cutting every edge where another shape's edge crosses
-it (each crossing solved once for the pair) and keeping the parts no other
-shape covers. Only the outer loops are kept.
-That boundary is then shrunk by radius: arcs keep their centers, lines move
-inward, and each corner becomes an arc of `radius`. Where the shrunk boundary
-crosses itself, only the points a full radius from the union's boundary are
-kept, and the cut points are found by bisection on the exact curves. Every
-output point lies on the exact curve.
-
-At radius 0 the outline is the padded union, and as radius grows it nears
-the padded convex hull. Two members join when the disc cannot pass between
-them: two discs of radius a whose padded edges are g apart join only when
-2·a·radius ≥ a·g + g²/4, and two flat members join when g < 2·radius. The
-default radius is 12. Holes are always filled, as the paper's contours have
-none, so `Shape.arcs` has no `holes` option. `src/tests/enclose.test.ts`
-checks these, and checks the outline against an independent version of the
-paper's construction on packed discs.
+Every outline, the box and the oval included (`cutOutline`), is cut last by
+its keep-outs: each node in `avoiding` grown by `clearance`, and for a
+separate blob piece the set's other pieces. `clearance` defaults to `padding`.
+The cut (`separate.ts`, `cutRings`) is one field on a grid over the outline's
+box: the outline may be drawn where its own padded members are, or outside
+the keep-out region, the union of the keep-out discs closed by a 3 px disc so
+that no sliver between two keep-outs survives. The members win over every
+keep-out, so the cut never enters a padded member, and the corners it leaves
+are rounded inward (`roundCut`). An avoided node is kept out as the disc that
+holds it. The cut comes after the smoothing, so neither the smoothing nor its
+offset moves the outline back across it. `src/tests/enclose.test.ts` checks
+that no outline point is within an avoided node's clearance, and that
+separate pieces stay `clearance` apart.
 
 ## The `Shape` family
 
@@ -326,9 +335,9 @@ no params: the minimum-area ellipse is one fixed construction, and `padding`
 and the paint are already on `enclose`. `Shape.hull()` and
 `Shape.spine()` are presets of `Shape.blob()`, declared in the `STRATEGIES`
 table the way `sina()` and `jitter()` are presets of `noise()`, so they make
-kind `"blob"`. The wire form is the same object, except a blob's `avoiding`,
-which holds nodes in JavaScript and their references on the wire
-(`NodeSelectionIR`; see [Frontend IR](/internals/frontend/serialization)).
+kind `"blob"`. The wire form is the same object. `avoiding` is `enclose`'s, so
+a shape holds no nodes: it holds nodes in JavaScript and their references on
+the wire (`NodeSelectionIR`; see [Frontend IR](/internals/frontend/serialization)).
 
 ## Decisions and declared shortcuts
 
@@ -336,8 +345,14 @@ Settled:
 
 - One construct, `enclose`. The old `background` alias is deleted, and the
   corner radii moved from `enclose` to `Shape.box({ rx, ry })`.
-- `padding` and the paint stay on `enclose`; the shape's own options stay on
-  the shape.
+- `padding`, the paint, `avoiding` and `clearance` stay on `enclose`, so every
+  shape avoids; the shape's own options stay on the shape.
+- One engine for the curved outlines: the fillet and the blob are built on
+  the exact closing. The old blob (Delaunay triangles, a traced field,
+  `roundness`) and `Shape.arcs` are deleted; `Shape.fillet` is the arcs
+  outline, renamed, with links and `holes`.
+- `clearance` defaults to `padding`, and is measured outline to outline
+  between separate pieces.
 - `Shape.oval()` is the minimum-area enclosing ellipse, not a mark drawn
   in the bounding box (see above). No `curve` option, no plot-area rule.
 - The flow step and the bag mark are one call, `enclose(opts)`, told apart
@@ -346,35 +361,35 @@ Settled:
   node whose geometry is its outline (#1221).
 - `padding` may be a field, read once per group in pixels, as `fill` and
   `stroke` are, in the flow step and the bag form alike.
-- `Shape.arcs({ radius })` always fills holes.
 - `avoiding` takes a list of nodes or refs, or one `selectAll(name)` as the
   whole value, in JS as on the wire (`NodeSelectionIR`): a single ref and a
   `selectAll` inside a list are errors. A listed node that is also a member
   is ignored, so the user never computes a set difference. The value is read
   into fresh refs by `avoidedRefs` (`ast/nodeRefs.ts`), which `.label()`'s
   `avoiding` shares (see [Labels](/internals/frontend/labels)).
-- `neck` is above 0 and at most 1. At 0 a link would have no width: its two
-  pulled-in sides meet, the crossing check gives the pull back, and the
-  outline comes out fuller than at a small `neck`. Any value above 0 is
-  honored as asked (there is no hidden floor).
+- A blob's `neck` is above 0 and at most 1: a link of no width would split
+  the piece it joins, which is `connection`'s job. A fillet's `neck` is 0 to
+  1, and 0 draws no links.
 
 Shortcuts, each a known approximation:
 
-- In a blob, an ellipse that is not a circle is read as its enclosing
-  circle (its larger radius), so it gets a little more padding along its
-  short axis. The oval samples the ellipse itself.
+- In a fillet and a blob, an ellipse that is not a circle is read as its
+  enclosing circle (its larger radius), so it gets a little more padding along
+  its short axis. The oval samples the ellipse itself.
 - A curved `line` piece (a Bezier segment) is cut into straight segments
   that stray at most 0.5 px from it.
 - A filled closed outline with no exact form (a polygon, a ribbon's band) is
-  read as its bounding box, so the blob hugs the box, not the shape. Reading it
-  as its edges at no width hugs the shape, but only through hole filling:
-  with `holes: true` a large polygon's inside stays a hole, and an avoided
-  polygon keeps out only a band along its edges. The fix is a filled-ring
-  member kind in `blob.ts` (#1207).
-- A segment member keeps its own padding band at every `convexity`: a filled
-  triangle's side along a member edge is that edge's band, and only the
-  enclosure's own links thin under `neck`.
-- An avoided segment's keep-out is routed as a capsule polygon whose ends are
-  plain corners, not snapped to arcs.
+  read as its bounding box, so the outline hugs the box, not the shape (#1207).
+- An avoided node is kept out as the disc that holds it, so an avoided box
+  keeps out its circumscribed disc.
+- The smoothing's keep-ins hold a box member by its four sides, grown by the
+  padding.
+- A fillet's links appear at full `neck` width once `neck` leaves 0, so the
+  outline jumps between 0 and a small `neck`.
+- With `holes` on, a fillet at `neck: 0` can leave a horn at a hole's mouth.
+- The closing samples its arcs at most 0.2 px off the exact curve; at a
+  radius near 12 on loose dots the outline was measured up to 0.46 px off.
+- A blob over a 1,000-point line and 300 dots takes about 4 to 5 s, against
+  well under 1 s for the old blob. The work is cached only within one call.
 - There is no `members` option and no list-taking `resolve` yet; members are
   the children or the refs of the chart's data.
