@@ -22,8 +22,8 @@
  *     (pieceLinks). At connection 1 this is the earlier blob exactly.
  *  3. Each piece is filled on its own (its spine, padded hull and the
  *     per-bay blend of `convexity`, meshBlend.ts; above 1 the hull blends
- *     toward the oval, beyond.ts) and kept a padding apart from the other
- *     pieces (separate.ts).
+ *     toward the oval, beyond.ts); the set's other pieces are its keep-outs,
+ *     as avoided marks are (below).
  *  4. The approved smoothing: Gaussian along arclength, then the least
  *     uniform outward offset that holds every padded member and link again.
  *
@@ -41,9 +41,11 @@
  * Box: the padded members' bounding box.
  *
  * Every shape is then cut by the keep-outs (`avoiding`, each grown by
- * `clearance`), an option of `enclose` next to `padding`: one final cut
- * that never enters the padded members (separate.ts, cutRings), its corners
- * rounded inward (arcsSmooth.ts, roundCut).
+ * `clearance`), an option of `enclose` next to `padding`, and a blob piece
+ * also by the set's other pieces (their padded members and links grown by
+ * the padding): one final cut that never enters the padded members
+ * (separate.ts, cutRings), its corners rounded inward (arcsSmooth.ts,
+ * roundCut).
  */
 import { signedArea2, pointInRing, segDist } from "../../geometry/plane";
 import { convexHull, type BlobMember, type Pt } from "./blob";
@@ -60,8 +62,6 @@ import {
   cutField,
   cutRings,
   keepRegion,
-  nearPieces,
-  spineBox,
   SEPARATE,
   type CutField,
 } from "./separate";
@@ -180,7 +180,6 @@ export const UNIFIED_STATS: {
   pieceRings?: Pt[][][];
   radii?: number[];
   joinTree?: JoinEdge[];
-  msSeparate?: number;
 } = {};
 
 // ── members as a core (point, segment or box) plus a radius ─────────────────
@@ -768,11 +767,10 @@ const boxOfRings = (rings: Pt[][]): [number, number, number, number] => {
 /**
  * The outline. Blob (`connected`, the default): the members split into
  * pieces by `join` (joinLinks); each piece is filled on its own (its own
- * spine, padded hull and convexity, `fillOne`); with more than one piece,
- * each fill is kept out of the ground nearer the other pieces
- * (separate.ts), so pieces never merge by filling; then each piece is cut
- * from the keep-outs and smoothed on its own. One piece (join = ∞, or every
- * gap under join) is the earlier blob exactly. `connected: false` is the
+ * spine, padded hull and convexity, `fillOne`) and smoothed, then cut by its
+ * keep-outs: the avoided members and the set's other pieces (blobOutline),
+ * so pieces never merge by filling. One piece (connection 1) is the earlier
+ * blob exactly. `connected: false` is the
  * arcs shape: the exact closing at `radius`, its links from the closing's
  * own reach (nearLinks), one region.
 
@@ -786,7 +784,6 @@ export function unifiedOutline(
   const pad = Math.max(0, o.padding);
   const K = keepOuts(o.avoiding ?? [], o.clearance ?? CLEARANCE);
   UNIFIED_STATS.msCached = 0;
-  UNIFIED_STATS.msSeparate = 0;
   const shape = o.shape ?? "blob";
   if (shape === "blob") return blobOutline(members, o, pad, K, t0);
   const tClose = performance.now();
@@ -831,8 +828,6 @@ function avoidCut(
       closingRings(pm, pad, 0, false)
     ),
     boxOfRings(rings),
-    [],
-    0,
     memo(key("keepRegion", intern(key(K)), SEPARATE.open), () =>
       keepRegion(K, SEPARATE.open)
     )
@@ -1016,8 +1011,8 @@ function filletPieces(
   });
 }
 
-/** The blob: pieces by connection, each filled, smoothed and kept apart from the others
- *  (finish), then cut by the keep-outs as every shape is (avoidCut). */
+/** The blob: pieces by connection, each filled and smoothed (finish), then cut by its
+ *  keep-outs as every shape is (avoidCut): the avoided members and the set's other pieces. */
 function blobOutline(
   members: BlobMember[],
   o: UnifiedOptions,
@@ -1029,12 +1024,12 @@ function blobOutline(
   const neck = o.neck ?? 1;
   const J = pieceLinks(members, pad, o.connection ?? 1, neck);
   // PROTOTYPE: the per-piece cache. A piece's links, fill and outline depend on its members,
-  // the padding, neck and the links' routing around the keep-outs; its separation on the
-  // pieces near it; its outline on the convexity options; its keep-out cut on the outline and
-  // the keep-outs. A connection change recomputes only the pieces whose member set changed
-  // (and the separation of the pieces near them); a convexity change reuses every spine,
-  // blend table and separation; a clearance change that bends no link differently reuses
-  // every outline and redoes only the cut.
+  // the padding, neck and the links' routing around the keep-outs; its outline on the
+  // convexity options; its keep-out cut on the outline and the keep-outs (the avoided members
+  // and the other pieces near it). A connection change refills only the pieces whose member
+  // set changed (and recuts the pieces near them); a convexity change reuses every spine and
+  // blend table; a clearance change that bends no link differently reuses every outline and
+  // redoes only the cut.
   const ctx = intern(key(members, pad, neck));
   // the keep-outs: a piece's spine depends on them only where a link bends around one (so
   // the final cut does not sever the piece there), so the fill's caches are keyed by the
@@ -1054,67 +1049,7 @@ function blobOutline(
     return { pm, spine, pk };
   });
   const tLinks = performance.now();
-  // more than one piece: each fill kept out of the ground nearer the others; the key of
-  // each piece's forbidden region (its own and its neighbours' pieces)
-  const c = o.convexity ?? 0.5;
-  const beyondOne = c > 1;
-  const sep = pad; // PROTOTYPE: the least gap kept between two pieces
-  let forbidden: (() => CutField | null)[] = parts.map(() => () => null);
-  let fKeys = parts.map(() => "");
-  // PROTOTYPE: the rule between pieces (SEPARATE.rule); one piece has none
-  const rule = parts.length > 1 ? SEPARATE.rule : "overlap";
-  if (rule === "bisector") {
-    const spines = parts.map(({ pm, spine, pk }) =>
-      memo(key("filledSpine", pk, pad), () =>
-        closingRings([...pm, ...spine], pad, pad, false)
-      )
-    );
-    // the box each piece's fill stays in: its padded hull, or its oval
-    // above convexity 1
-    const boxes = parts.map(({ pm, spine, pk }) =>
-      memo(key("fillBox", pk, beyondOne), () =>
-        boxOfRings([
-          beyondOne
-            ? beyondHull(
-                paddedHull([...pm, ...spine], pad),
-                [...pm, ...spine],
-                pad,
-                2,
-                o.beyond
-              )
-            : paddedHull([...pm, ...spine], pad),
-        ])
-      )
-    );
-    const sb = parts.map(({ pk }, p) =>
-      memo(key("spineBox", pk), () => spineBox(spines[p]))
-    );
-    const near = parts.map((_, p) => nearPieces(p, sb, boxes[p], sep));
-    fKeys = parts.map(({ pk }, p) =>
-      key(
-        "forbidden",
-        pk,
-        beyondOne,
-        sep,
-        near[p].map((q) => parts[q].pk),
-        SEPARATE
-      )
-    );
-    forbidden = parts.map((_, p) => () => {
-      const ts = performance.now();
-      const F = cutField(
-        spines[p],
-        boxes[p],
-        near[p].map((q) => spines[q]),
-        sep,
-        []
-      );
-      UNIFIED_STATS.msSeparate! += performance.now() - ts;
-      return F;
-    });
-  }
-  // each piece's outline: filled, smoothed and kept out of the others' ground, then cut by
-  // the keep-outs
+  // each piece's outline: filled and smoothed on its own, then cut by its keep-outs
   // (smooth: undefined is the default blur and null none; JSON would spell
   // both null)
   const optKey = key(
@@ -1126,15 +1061,14 @@ function blobOutline(
   );
   let msFill = 0,
     msFinish = 0;
-  const outs = parts.map(({ pm, spine, pk }, p) =>
+  const outs = parts.map(({ pm, spine, pk }) =>
     memo(
-      key("outline", pk, fKeys[p], optKey),
+      key("outline", pk, optKey),
       () => {
         const t1 = performance.now();
         const f = fillOne(pm, spine, o, pad, holes, pk);
-        const F = rule === "bisector" ? memo(fKeys[p], forbidden[p]) : null;
         const t2 = performance.now();
-        const rings = finish(f, o, pad, F);
+        const rings = finish(f, o, pad, null);
         msFill += t2 - t1;
         msFinish += performance.now() - t2;
         return { rings, r: f.r };
@@ -1143,15 +1077,15 @@ function blobOutline(
     )
   );
   const tCut = performance.now();
-  // PROTOTYPE (rule avoid): each piece's keep-outs are the avoided members and the other
-  // pieces' padded members and links grown by sep (keep-outs at clearance pad + sep), those
-  // that can reach its outline's box (the closing by SEPARATE.open reaches 2 · open past a
-  // disc)
+  // each piece's keep-outs: the avoided members, and the set's other pieces as keep-outs too
+  // (their padded members and links at clearance 2 · padding: kept a padding clear of the
+  // other piece's padded members), those that can reach its outline's box (the closing by
+  // SEPARATE.open reaches 2 · open past a disc)
   const others =
-    rule === "avoid"
+    parts.length > 1
       ? parts.map(({ pm, spine, pk }) =>
-          memo(key("pieceKeepOuts", pk, pad + sep), () =>
-            keepOuts([...pm, ...spine], pad + sep)
+          memo(key("pieceKeepOuts", pk, 2 * pad), () =>
+            keepOuts([...pm, ...spine], 2 * pad)
           )
         )
       : null;
@@ -1177,7 +1111,7 @@ function blobOutline(
     if (!Kp.length) return f.rings;
     const kp = Kp === K ? kid : intern(key(Kp));
     return memo(
-      key("avoidCut", parts[p].pk, fKeys[p], optKey, kp),
+      key("avoidCut", parts[p].pk, optKey, kp),
       () => avoidCut(f.rings, parts[p].pm, pad, Kp),
       false
     );
@@ -1264,12 +1198,11 @@ function fillOne(
 }
 
 /**
- * A piece's fill smoothed, then cut once by its field `F` (separate.ts: the
- * other pieces' ground and the keep-outs, never the piece's own spine). The
+ * A fill smoothed, then cut once by its field `F` when it has one (separate.ts: the
+ * keep-outs, never the shape's own padded members; avoidCut passes it). The
  * cut comes after the smoothing, so the smoothing's outward offset (which
  * holds every padded member again) never pushes the outline back across
- * it, and a clipped side is the same curve at every convexity. The corners
- * the cut leaves (where the outline meets a clipped side or a keep-out, and
+ * it. The corners the cut leaves (where the outline meets a keep-out, and
  * between two keep-outs) are rounded inward only (roundCut), so the
  * rounding never crosses F either.
  *

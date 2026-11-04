@@ -77,7 +77,6 @@ let state: State = {
   avoidOn: Object.fromEntries(DATASETS.map((d) => [d.id, d.avoidDefault])),
   showLinks: false,
   showMembers: false,
-  rule: "bisector",
 };
 const dataset = (): Dataset => DATASETS.find((x) => x.id === state.dataset)!;
 const avoiding = () => dataset().avoidable && !!state.avoidOn[state.dataset];
@@ -216,7 +215,6 @@ const syncControls = () => {
   $<HTMLInputElement>("holes").checked = state.holes;
   $<HTMLInputElement>("show-links").checked = state.showLinks;
   $<HTMLInputElement>("show-members").checked = state.showMembers;
-  $<HTMLSelectElement>("rule").value = state.rule;
   $("avoid-field").hidden = !d.avoidable;
   $("avoid-label").textContent = d.avoidLabel;
   $<HTMLInputElement>("avoid").checked = avoiding();
@@ -324,7 +322,6 @@ const viewOf = (d: Dataset) => {
       padding: d.padding,
       avoid: false,
       clearance: d.clearance,
-      rule: "bisector",
     });
     for (const ring of r.rings)
       for (const [x, y] of ring) {
@@ -524,7 +521,6 @@ const paramsOf = (): Params => ({
   holes: state.holes,
   avoid: avoiding(),
   clearance: state.clearance,
-  rule: state.rule,
   draft: dragging,
 });
 const recompute = () => {
@@ -643,9 +639,6 @@ for (const b of document.querySelectorAll<HTMLButtonElement>("[data-shape]"))
 check("holes", (on) => ({ holes: on }));
 check("show-links", (on) => ({ showLinks: on }));
 check("show-members", (on) => ({ showMembers: on }));
-$("rule").addEventListener("change", (e) =>
-  update({ rule: (e.target as HTMLSelectElement).value as State["rule"] })
-);
 check("avoid", (on) => ({
   avoidOn: { ...state.avoidOn, [state.dataset]: on },
 }));

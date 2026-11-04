@@ -35,7 +35,7 @@ const step = (o: any, avoid: boolean) => {
     } as any);
     const mb = (S.meshBlend ?? {}) as any;
     parts.push(
-      `${(performance.now() - t1).toFixed(0)} [L${S.msLinks!.toFixed(0)} F${S.msClose!.toFixed(0)} A${S.msSeparate!.toFixed(0)} S${S.msSmooth!.toFixed(0)} C${S.msCached!.toFixed(0)} mesh${(mb.ms ?? 0).toFixed(0)}${process.env.PH ? " " + ["pockets", "boundary", "quadtree", "delaunay", "assemble", "solve", "refine", "area"].map((k) => `${k[0]}${k[1]}${(mb["ms_" + k] ?? 0).toFixed(0)}`).join(" ") + ` v${mb.vertices}` : ""}]`
+      `${(performance.now() - t1).toFixed(0)} [L${S.msLinks!.toFixed(0)} F${S.msClose!.toFixed(0)} S${S.msSmooth!.toFixed(0)} C${S.msCached!.toFixed(0)} mesh${(mb.ms ?? 0).toFixed(0)}${process.env.PH ? " " + ["pockets", "boundary", "quadtree", "delaunay", "assemble", "solve", "refine", "area"].map((k) => `${k[0]}${k[1]}${(mb["ms_" + k] ?? 0).toFixed(0)}`).join(" ") + ` v${mb.vertices}` : ""}]`
     );
   }
   return [performance.now() - t0, parts.join(" ")] as const;

@@ -1,6 +1,7 @@
 // SCRATCH: the blob's keep-out cut.   BENCH=avoid MODE=base|check OUT=… node playground/bench.mjs
 // base: every dataset's blob outlines with avoiding off, at convexity 0..2 × neck 1, 0.6 ×
 //   connection 1, 0.8, 0.5, 0.2, 0, and holes, written to OUT (JSON) for a byte comparison.
+//   AVOID=1: avoiding on (where the dataset has it).
 // check: avoiding on, the least distance from an outline point to a kept-out member, over the
 //   points off the padded members (the cut never enters them) and over all points, and the
 //   pieces against avoiding off (a cut that severs a piece adds one).
@@ -9,7 +10,6 @@ import DATA from "../src/datasets.json";
 import { unifiedOutline } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/unified";
 import { SEPARATE } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/separate";
 if (process.env.ROUND) SEPARATE.round = +process.env.ROUND;
-if (process.env.FILLET) SEPARATE.fillet = +process.env.FILLET;
 // the cut never enters the padded members: a point on them (within ZONE px) inside a keep-out
 // is the member's own overlap with it (inherent), so "off the padded members" leaves them out
 const ZONE = process.env.ZONE ? +process.env.ZONE : 0.05;
@@ -78,6 +78,9 @@ if (process.env.MODE === "base") {
         out[`${d.id}/${si}/${k}`] = unifiedOutline(s.members, {
           padding: d.padding,
           ...o,
+          ...(process.env.AVOID && d.avoidable
+            ? { avoiding: s.avoiding, clearance: d.clearance }
+            : {}),
         });
     });
   writeFileSync(process.env.OUT!, JSON.stringify(out));

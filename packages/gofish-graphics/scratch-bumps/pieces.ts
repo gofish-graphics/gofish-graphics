@@ -1,5 +1,5 @@
-// SCRATCH: the rules between a blob's pieces (SEPARATE.rule) side by side: SVGs, the least gap
-// between two pieces' outlines (negative: the deepest overlap), the overlap area, timings.
+// SCRATCH: a blob's pieces, each cut by the others as keep-outs: SVGs, the least gap between
+// two pieces' outlines (negative: the deepest overlap), the overlap area, timings.
 //   OUT=… npx tsx scratch-bumps/pieces.ts
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import {
@@ -7,7 +7,6 @@ import {
   UNIFIED_STATS,
   clearUnifiedCache,
 } from "../src/ast/graphicalOperators/enclose/unified";
-import { SEPARATE } from "../src/ast/graphicalOperators/enclose/separate";
 import type { Pt } from "../src/ast/graphicalOperators/enclose/blob";
 
 const DATA = JSON.parse(
@@ -18,7 +17,7 @@ const DATA = JSON.parse(
 );
 const OUT = process.env.OUT!;
 mkdirSync(OUT, { recursive: true });
-const RULES = ["bisector", "avoid", "overlap"] as const;
+const RULES = ["avoid"] as const;
 type C = {
   name: string;
   ds: string;
@@ -183,7 +182,6 @@ for (const c of CASES) {
   const d = DATA.find((x: any) => x.id === c.ds);
   const line: string[] = [c.name];
   for (const rule of RULES) {
-    SEPARATE.rule = rule;
     clearUnifiedCache();
     let body = d.scenery;
     let minGap = Infinity,
@@ -224,37 +222,9 @@ for (const c of CASES) {
   console.log(line.join("\n  "));
 }
 
-// ── byte identity at connection 1 ────────────────────────────────────────
-let same = 0,
-  diff = 0;
-for (const d of DATA)
-  for (const cv of [0, 0.5, 1, 2])
-    for (const holes of [false, true]) {
-      const outs = RULES.map((rule) => {
-        SEPARATE.rule = rule;
-        clearUnifiedCache();
-        return JSON.stringify(
-          d.sets.map((s: any) =>
-            run(
-              d,
-              { convexity: cv, connection: 1, holes, avoid: d.avoidable },
-              s
-            )
-          )
-        );
-      });
-      if (outs.every((o) => o === outs[0])) same++;
-      else {
-        diff++;
-        console.log("DIFF at connection 1:", d.id, cv, holes);
-      }
-    }
-console.log(`connection 1: ${same} same, ${diff} differ`);
-
 // ── how often fills overlap: every set at a grid of options (SWEEP=1) ─────
 if (process.env.SWEEP)
   for (const rule of RULES) {
-    SEPARATE.rule = rule;
     clearUnifiedCache();
     let runs = 0,
       split = 0,
@@ -316,7 +286,6 @@ const conv = [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((x) => ({
   connection: 0.9,
 }));
 for (const rule of RULES) {
-  SEPARATE.rule = rule;
   sweep(conn); // warm the JIT
   for (const [nm, st] of [
     ["connection sweep (c 0.5)", conn],

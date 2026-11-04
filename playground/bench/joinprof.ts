@@ -6,7 +6,6 @@ import {
   UNIFIED_STATS,
   clearUnifiedCache,
 } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/unified";
-import { SEPARATE_STATS } from "../../packages/gofish-graphics/src/ast/graphicalOperators/enclose/separate";
 
 const d = (DATA as any[]).find((x) => x.id === (process.env.DS ?? "penguins"));
 const c = +(process.env.C ?? 0.25);
@@ -28,7 +27,7 @@ for (const join of [4, 4.3, 4.6, 5, 5.3, 16, 17, 18]) {
     tot += ms;
     const S = UNIFIED_STATS;
     parts.push(
-      `${S.pieces}p ${ms.toFixed(0)}ms (links ${S.msLinks!.toFixed(0)} fill ${S.msClose!.toFixed(0)} [apart ${S.msSeparate!.toFixed(0)}${S.msSeparate ? `, evals ${SEPARATE_STATS.evals}/${SEPARATE_STATS.nodes}` : ""}] smooth ${S.msSmooth!.toFixed(0)} cached ${S.msCached!.toFixed(0)})`
+      `${S.pieces}p ${ms.toFixed(0)}ms (links ${S.msLinks!.toFixed(0)} fill ${S.msClose!.toFixed(0)} smooth ${S.msSmooth!.toFixed(0)} cached ${S.msCached!.toFixed(0)})`
     );
   }
   console.log(`join ${join}: ${tot.toFixed(0)} ms · ${parts.join(" | ")}`);

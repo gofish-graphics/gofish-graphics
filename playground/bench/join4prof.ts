@@ -35,7 +35,7 @@ for (const join of JOINS) {
       clearance: d.clearance,
     });
     parts.push(
-      `${S.pieces}p ${(performance.now() - t1).toFixed(0)}ms [links ${S.msLinks!.toFixed(0)} fill ${S.msClose!.toFixed(0)} (apart ${S.msSeparate!.toFixed(0)}) smooth ${S.msSmooth!.toFixed(0)} cached ${S.msCached!.toFixed(0)}]`
+      `${S.pieces}p ${(performance.now() - t1).toFixed(0)}ms [links ${S.msLinks!.toFixed(0)} fill ${S.msClose!.toFixed(0)} smooth ${S.msSmooth!.toFixed(0)} cached ${S.msCached!.toFixed(0)}]`
     );
   }
   const ms = performance.now() - t0;
