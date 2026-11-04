@@ -33,7 +33,7 @@ def wire_slot(content):
     """A single gate/dot centered in a fixed 50x50 slot."""
     return layer(
         [
-            rect(w=GATE, h=GATE, fill="transparent").name("slot"),
+            rect(w=GATE, h=GATE).hidden().name("slot"),
             content.name("content"),
         ]
     ).relate(
@@ -45,7 +45,7 @@ def wire_slot(content):
 
 def empty_slot():
     """An empty 50x50 slot — a placeholder gap on a wire."""
-    return rect(w=GATE, h=GATE, fill="transparent")
+    return rect(w=GATE, h=GATE).hidden()
 
 
 @mark
@@ -113,7 +113,7 @@ def wire(slots, span=None):
                 fill="black",
             ).name("line"),
             spread(
-                [rect(w=10, h=GATE, fill="transparent"), *slots],
+                [rect(w=10, h=GATE).hidden(), *slots],
                 dir="x",
                 spacing=SLOT - GATE,
                 alignment="middle",

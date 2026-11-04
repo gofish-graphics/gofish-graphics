@@ -142,7 +142,6 @@ export const Text = ({
   fill = "black",
   stroke,
   strokeWidth = 0,
-  filter,
   fontSize = 12,
   fontFamily = FALLBACK_FONT_FAMILY,
   fontStyle,
@@ -157,7 +156,6 @@ export const Text = ({
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
-  filter?: string;
   fontSize?: number;
   fontFamily?: string;
   fontStyle?: string;
@@ -225,7 +223,6 @@ export const Text = ({
         fill,
         stroke,
         strokeWidth,
-        filter,
         fontSize,
         fontFamily,
         fontStyle,
@@ -410,7 +407,6 @@ export const Text = ({
             fill: resolvedFill,
             stroke: resolvedStroke,
             strokeWidth: strokeWidth ?? 0,
-            filter,
           }),
         };
         if (rotate) textItem.rotate = rotate;

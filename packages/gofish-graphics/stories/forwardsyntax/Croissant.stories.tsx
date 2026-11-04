@@ -27,7 +27,8 @@ import { seattleWeather } from "../../src/data/seatle-weather";
  * own with a small gap, with one dot per slice at the slice's median.
  *
  * Each chart is two layers over one table, the curve's grid rows `{ x, pdf }`.
- * The first draws the curve (`fill: "none"`, so it is not seen). The second
+ * The first lays the curve out hidden (`.hidden()`): it sets the scale and is
+ * read, and paints nothing. The second
  * turns the grid into quantile rows of the drawn curve (`quantileRows`),
  * partitions them into `Bin.quantiles(n)` cells (ten, or five a month in the
  * ridgeline), and in each cell draws the curve's area intersected with the
@@ -79,7 +80,7 @@ const croissant = (grid: { x: number; pdf: number }[]) =>
   layer([
     chart(grid)
       .flow(scatter({ x: "x" }))
-      .mark(ribbon({ h: "pdf", fill: "none" }).name("density")),
+      .mark(ribbon({ h: "pdf" }).name("density").hidden()),
   ]).relate(({ density }) => [
     chart(grid)
       .flow(
@@ -214,7 +215,7 @@ export const Ridgeline: StoryObj<Args> = {
         layer({ h: 34 }, [
           chart()
             .flow(scatter({ x: "temp_max" }))
-            .mark(ribbon({ h: "pdf", fill: "none" }).name("density")),
+            .mark(ribbon({ h: "pdf" }).name("density").hidden()),
         ]).relate(({ density }) => [
           chart()
             .flow(
@@ -275,7 +276,7 @@ export const SeattleHighsByMonth: StoryObj<Args> = {
     layer([
       chart(highs2012, { schema: schema2012 })
         .flow(scatter({ x: "date" }))
-        .mark(ribbon({ h: "temp_smooth", fill: "none" }).name("temps")),
+        .mark(ribbon({ h: "temp_smooth" }).name("temps").hidden()),
     ])
       .relate(({ temps }) => [
         chart(highs2012, { schema: schema2012 })

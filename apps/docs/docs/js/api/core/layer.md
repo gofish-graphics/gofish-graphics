@@ -61,7 +61,7 @@ invisible anchor tier plus a connector tier:
 
 `anchor(opts)` is exactly the `{w, h, emX, emY}` subset of `opts` — the purely
 spatial keys `blank()` itself accepts. Everything else (`fill`, `stroke`,
-`strokeWidth`, `strokeDasharray`, `opacity`, `curve`, `dir`, `mixBlendMode`,
+`strokeWidth`, `strokeDasharray`, `opacity`, `curve`, `dir`, `blendMode`,
 `along`, `source`, `target`) stays on the connector, matching what you'd write
 by hand:
 

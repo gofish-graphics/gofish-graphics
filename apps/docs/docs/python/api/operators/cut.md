@@ -198,9 +198,10 @@ image(...).cut(dir=..., size=None, inset=None)
 
 ## How it works
 
-Each slice is a [`mask`](/python/api/operators/region-compositing) of a window
-rect over an [`offset`](/python/api/operators/offset) copy of the source:
-`mask([window, offset(source)])`. The window rect defines the visible portion,
+Each slice is an [`intersect`](/python/api/operators/region-compositing#masks)
+of a hidden window rect and an [`offset`](/python/api/operators/offset) copy of
+the source: `intersect([window.hidden(), offset(source)])`. The window rect
+defines the visible portion,
 and `offset` shifts the source so the requested pixels line up beneath it — so
 `cut` is built entirely from the public region-compositing and `offset`
 primitives. Extent resolution (the flexbox-style number/datum split) runs on

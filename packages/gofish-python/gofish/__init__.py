@@ -16,12 +16,11 @@ from .ast import (
     Unit,
     ref,
     arrow,
-    over,
+    union,
     intersect,
-    exclude,
     subtract,
-    paint,
-    mask,
+    exclude,
+    atop,
     cut,
     offset,
     spread,
@@ -74,6 +73,7 @@ from . import color as Color
 from . import coord as Coord
 from . import curve as Curve
 from . import domain as Domain
+from . import filter_ as Filter
 from . import overlap as Overlap
 from . import place as Place
 from . import shape as Shape
@@ -97,12 +97,11 @@ __all__ = [
     "Calendar",
     "ref",
     "arrow",
-    "over",
+    "union",
     "intersect",
-    "exclude",
     "subtract",
-    "paint",
-    "mask",
+    "exclude",
+    "atop",
     "cut",
     "offset",
     "spread",
@@ -149,6 +148,7 @@ __all__ = [
     "Color",
     "Coord",
     "Curve",
+    "Filter",
     "Overlap",
     "Place",
     "Shape",

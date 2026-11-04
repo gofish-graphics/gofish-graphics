@@ -146,7 +146,7 @@ console.log("# intersect with paint");
     paths.length === 1 &&
       paths[0].style?.stroke === "#467DA8" &&
       paths[0].style?.fill === "#D1E4F6" &&
-      !drawn.some((it) => it.kind === "mask"),
+      !drawn.some((it) => it.kind === "composite"),
     drawn.map((it) => it.kind)
   );
 }
@@ -155,11 +155,13 @@ console.log("# intersect with paint");
     image({ href: "x.png", x: 0, y: 0, w: 100, h: 100 }),
     rect({ x: 50, y: 0, w: 100, h: 100 }),
   ]).toDisplayList({ w: 200, h: 200 });
-  const masks = items(dl).filter((it) => it.kind === "mask");
+  const composites = items(dl).filter((it) => it.kind === "composite");
   check(
-    "an image operand fills through an alpha mask",
-    masks.length > 0 && masks.every((m) => m.mode === "alpha"),
-    masks
+    "an image operand fills through its alpha: a filled composite",
+    composites.length === 1 &&
+      composites[0].operator === "intersect" &&
+      composites[0].fill?.[0]?.style?.fill === "#467DA8",
+    composites
   );
 }
 {
@@ -277,6 +279,31 @@ console.log("# intersect with paint");
   check("a croissant 150 pixels wide renders", message === "", message);
 }
 
+console.log("# intersect: a ribbon operand gives its exact outline");
+{
+  // A ribbon lowers through `connect`; its default blend, "normal", is no
+  // blend, so its outline is still its region.
+  const dl = await layer([
+    rect({ x: 0, y: 0, w: 1, h: 10 }).name("a"),
+    rect({ x: 100, y: 0, w: 1, h: 50 }).name("b"),
+  ])
+    .relate(({ a, b }: any) => [
+      intersect({ fill: "#D1E4F6", stroke: "#467DA8" }, [
+        ribbon({ fill: "#000" }, [a, b]),
+        rect({ x: 0, y: 0, w: 60, h: 100 }),
+      ]),
+    ])
+    .toDisplayList({ w: 200, h: 100 });
+  const drawn = items(dl);
+  check(
+    "a stroked intersect of a ribbon and a rect is one exact path",
+    drawn.filter(
+      (it) => it.kind === "path" && it.style?.stroke === "#467DA8"
+    ).length === 1 && !drawn.some((it) => it.kind === "composite"),
+    drawn.map((it) => it.kind)
+  );
+}
+
 console.log("# intersect paint from data");
 {
   const rows = [
@@ -325,10 +352,10 @@ console.log("# intersect paint from data");
   );
 }
 
-console.log("# intersect: operands give shape only");
+console.log("# intersect: alpha is shape");
 {
-  // Through the mask (an image has no exact outline), an operand's own
-  // paint does not change the shape it gives.
+  // An operand's region is its alpha as drawn: its opacity, its stroke and
+  // a fill of "none" all change the shape it gives.
   const dl = await intersect({ fill: "#467DA8" }, [
     image({ href: "x.png", x: 0, y: 0, w: 100, h: 100, opacity: 0.3 }),
     rect({
@@ -342,24 +369,16 @@ console.log("# intersect: operands give shape only");
       opacity: 0.2,
     }),
   ]).toDisplayList({ w: 200, h: 200 });
-  const maskShapes: any[] = [];
-  const walk = (it: any) => {
-    if (it.kind === "mask") {
-      it.mask.forEach((m: any) => maskShapes.push(m));
-      it.content.forEach(walk);
-    }
-  };
-  dl.items.forEach(function visit(it: any) {
-    walk(it);
-    (it.children ?? []).forEach(visit);
-  });
-  const maskRect = maskShapes.find((m) => m.kind === "rect");
-  const maskImage = maskShapes.find((m) => m.kind === "image");
+  const shapes = items(dl)
+    .filter((it) => it.kind === "composite")
+    .flatMap((it) => it.operands.flatMap((o: any) => o.shape ?? o.paint));
+  const maskRect = shapes.find((m) => m.kind === "rect");
+  const maskImage = shapes.find((m) => m.kind === "image");
   check(
-    "a shape operand masks as an opaque, unstroked fill",
-    maskRect?.style?.fill === "black" &&
-      maskRect.style.stroke === undefined &&
-      maskRect.style.opacity === undefined,
+    "a shape operand masks as drawn: its stroke, its fill none, its opacity",
+    maskRect?.style?.fill === "none" &&
+      maskRect.style.stroke === "red" &&
+      maskRect.style.opacity === 0.2,
     maskRect
   );
   check(
@@ -429,6 +448,46 @@ console.log("# intersect under a partition");
     "each cell's composite sits in its own cell",
     xs.length === 3 && new Set(xs).size === 3,
     xs
+  );
+}
+
+console.log("# intersect: a ref operand claims no room");
+{
+  // The density is laid out by its own chart and read through a ref, so it
+  // claims nothing in each cell, and the overlap is the cell region's: on a
+  // domain far from 0, as well as on one around it (#1267).
+  const gauss = (x: number) => Math.exp(-0.5 * ((x - 4500) / 500) ** 2);
+  const grid = Array.from({ length: 121 }, (_, i) => {
+    const x = 2200 + (4600 * i) / 120;
+    return { x, pdf: gauss(x) };
+  });
+  let message = "";
+  let paths = 0;
+  try {
+    const dl = await layer([
+      chart(grid)
+        .flow(scatter({ x: "x" }))
+        .mark(ribbon({ h: "pdf" }).name("density").hidden()),
+    ])
+      .relate(({ density }: any) => [
+        chart(grid)
+          .flow(
+            derive((rows: any) =>
+              quantileRows(rows, { x: "x", density: "pdf", n: 200 })
+            ),
+            partition({ by: field("x").bin(Bin.quantiles(4)), dir: "x" })
+          )
+          .mark(intersect({ fill: "#ddd" }, [density, region({ inset: 2 })])),
+      ])
+      .toDisplayList({ w: 400, h: 200 });
+    paths = items(dl).filter((it) => it.kind === "path").length;
+  } catch (e) {
+    message = e instanceof Error ? e.message : String(e);
+  }
+  check(
+    "a croissant on a domain away from 0 draws its four cells",
+    message === "" && paths === 4,
+    message || paths
   );
 }
 

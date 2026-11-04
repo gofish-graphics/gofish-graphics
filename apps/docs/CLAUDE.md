@@ -132,10 +132,9 @@ single source the generated Python factory layer
   docstrings of the generated Python factories change too). Never re-add a
   hand-written options table to a page; prose _around_ the block (semantics,
   examples, notes) stays hand-written as usual.
-- The name is the factory name: the wire `type`, or the descriptor's `pyName`
-  for the renamed compositing operators (`intersect`, `exclude`, `subtract`,
-  `paint`). Several names in one block render one titled subsection each
-  (`::: gofish-ref intersect exclude subtract paint mask`). An unknown name
+- The name is the factory name, which is the wire `type`. Several names in
+  one block render one titled subsection each
+  (`::: gofish-ref intersect exclude subtract atop`). An unknown name
   throws and fails the build. A name may also be an object option type in
   `OPTION_TYPES` (`descriptors.ts`): `::: gofish-ref ChartOptions` renders the
   chart-level options. `check-api-coverage` requires an option type used on

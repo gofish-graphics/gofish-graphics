@@ -93,7 +93,7 @@ export const testPolarCenterRibbon = (size: { width: number; height: number }) =
                 fill: colorScale[group as keyof typeof colorScale],
                 curve: Curve.bezier(),
                 opacity: 0.5,
-                mixBlendMode: "multiply",
+                blendMode: "multiply",
               },
               items.map((d) => ref(`${d.category}-${d.group}`))
             )

@@ -1,9 +1,38 @@
+/**
+ * Region compositing (#1267): `union`, `intersect`, `subtract`, `exclude`
+ * and `atop`, the set operations over their operands' regions, named after
+ * Figma's boolean operations, plus Porter-Duff's `atop`. The IR and
+ * display-list names are the same.
+ *
+ * An operator reads its operands and draws its result; it never draws an
+ * operand as itself. An operand's region is its alpha: where it puts ink, at
+ * that ink's alpha. A hidden operand (`.hidden()`) gives its shape and no
+ * paint, so it only clips, and an operand with `fill: "none"` and no stroke
+ * has no interior.
+ *
+ * - With a `fill` or a `stroke`, the result is one new shape in that paint
+ *   (`atop` takes none). It is an exact path when the operator has an exact
+ *   outline (`intersect`, of two operands that trace their shape in opaque
+ *   paint, one of them convex: `geometry/clip.ts`), and otherwise the fill
+ *   drawn over the result's region, which strokes nothing.
+ * - With neither, each operand's paint is drawn where the operator keeps it,
+ *   and a later operand's kept paint mixes with an earlier one's by
+ *   `blendMode` (PiCCL's coverage-blend rule; the layers are
+ *   `compositeLayers` in gofish-ir's `display-list/composite.ts`).
+ *
+ * A result that lies inside its first operand (`intersect`'s, `subtract`'s,
+ * `atop`'s) is laid out in the first operand's box and claim and clipped to
+ * it; `intersect` takes the overlap of its operands' boxes and claims.
+ * `union` and `exclude` take their union.
+ */
 import type { DisplayList } from "gofish-ir";
 import { GoFishAST } from "../_ast";
+import { paintOf } from "../displayList/shapeOnly";
 import { GoFishNode, placeUnplacedChild } from "../_node";
 import type { Placeable, ToPixel } from "../_node";
 import { Size, displayTranslate } from "../dims";
-import type { Extent } from "../extent";
+import { Extent } from "../extent";
+import * as Pwl from "../solver/pwl";
 import {
   lowerStyle,
   lowerSubtree,
@@ -28,69 +57,118 @@ import {
   type Outline,
   type OutlinePoint,
 } from "../geometry";
-import { inks } from "../geometry/outline";
+import { foldFinite } from "../../util";
 import type { AxisScale } from "../domain";
 import type { CoordinateTransform } from "../coordinateTransforms/coord";
+import type { BlendMode } from "../blendMode";
 
-type BlendMode = "color" | "multiply" | "screen" | "overlay" | "luminosity";
-type CompositeOperator = "over" | "in" | "xor" | "out" | "atop";
+type CompositeOperator = DisplayList.CompositeItem["operator"];
 
-/** The paint a composite puts on its result (`intersect`'s `fill`,
- *  `stroke`, `strokeWidth`, `opacity`). Its operands then give shape only. */
+/** The paint of a composite's result. Given a `fill` or a `stroke`, the
+ *  result is one new shape in it, and the operands give shape only. */
 export type CompositePaint = {
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
+  /** The opacity of the whole result. */
   opacity?: number;
 };
 
-const requireTwoChildren = <T,>(children: readonly T[]) => {
-  if (children.length !== 2) {
-    throw new Error(
-      "Porter-Duff relation operators currently expect exactly two children"
-    );
-  }
+/** How a later operand's kept paint mixes with an earlier one's. */
+export type CompositeBlend = { blendMode?: BlendMode };
+
+export type UnionOptions = CompositeBlend & CompositePaint;
+export type IntersectOptions = CompositeBlend & CompositePaint;
+export type SubtractOptions = CompositePaint;
+export type ExcludeOptions = CompositePaint;
+/** `atop` draws its operands' own paint, so it takes no `fill`. */
+export type AtopOptions = CompositeBlend & { opacity?: number };
+
+/** How a composite is laid out: in the union of its operands, in their
+ *  overlap, or in its first operand. */
+type Sizing = "union" | "overlap" | "first";
+const SIZING: Record<CompositeOperator, Sizing> = {
+  union: "union",
+  exclude: "union",
+  intersect: "overlap",
+  subtract: "first",
+  atop: "first",
 };
 
-const maxChildBounds = (children: Placeable[]) => {
-  const minX = Math.min(...children.map((child) => child.dims[0].min ?? 0));
-  const maxX = Math.max(...children.map((child) => child.dims[0].max ?? 0));
-  const minY = Math.min(...children.map((child) => child.dims[1].min ?? 0));
-  const maxY = Math.max(...children.map((child) => child.dims[1].max ?? 0));
-  return { minX, maxX, minY, maxY };
-};
+function checkArity(operator: CompositeOperator, n: number): void {
+  if (operator === "exclude" ? n !== 2 : n < 2)
+    throw new Error(
+      `${operator}: expected ${operator === "exclude" ? "exactly two" : "two or more"} operands, got ${n}.`
+    );
+}
+
+/** Whether a claim reaches nowhere: both sides are -∞, the claim of an
+ *  overlay of nothing. */
+const claimsNothing = (e: Extent): boolean =>
+  Pwl.at(e.ascent, 1) === -Infinity && Pwl.at(e.descent, 1) === -Infinity;
+
+/** The least of σ-affine values: the upper envelope of their negations,
+ *  negated. */
+const lowest = (vs: Pwl.Value[]): Pwl.Value =>
+  Pwl.negate(Pwl.envelope(vs.map(Pwl.negate)));
 
 /**
- * The claim of a composite clipped to its first child (`paint`, `mask`): the
- * first child's claim, as the box it lays out to is the first child's box.
- * The second child is drawn only inside the first, so it takes no room of
- * its own (a cut slice is its window, not the whole source it shows a part
- * of).
+ * A composite's claim on each axis. `union` takes its operands' union, as
+ * `layer` does; `first` its first operand's. `overlap` takes their overlap:
+ * a claim is the interval from its descent below data 0 to its ascent above
+ * it, so the overlap of claims takes the least of each side. An operand
+ * that makes no claim does not narrow it: one that takes the room it is
+ * given (no extent), or one that claims nothing here, as a ref placed by its
+ * own target does (the claim of an overlay of nothing, `Pwl.envelope([])`,
+ * whose sides are both -∞).
  */
-const firstChildClaim = (
+function compositeClaim(
+  sizing: Sizing,
   childExtents: Size<Extent | undefined>[],
   childSpaces: Size<UnderlyingSpace>[],
   spaces: Size<UnderlyingSpace>
-): Size<Extent | undefined> => [
-  unionChildExtents([childExtents[0]], [childSpaces[0]], 0, spaces[0]),
-  unionChildExtents([childExtents[0]], [childSpaces[0]], 1, spaces[1]),
-];
+): Size<Extent | undefined> {
+  const axis = (a: 0 | 1): Extent | undefined => {
+    if (sizing === "union")
+      return unionChildExtents(childExtents, childSpaces, a, spaces[a]);
+    if (sizing === "first")
+      return unionChildExtents(
+        [childExtents[0]],
+        [childSpaces[0]],
+        a,
+        spaces[a]
+      );
+    const claims = childExtents
+      .map((e, i) => unionChildExtents([e], [childSpaces[i]], a, spaces[a]))
+      .filter((e): e is Extent => e !== undefined && !claimsNothing(e));
+    // With no operand that narrows it, the overlap claims what they all do.
+    if (claims.length === 0)
+      return unionChildExtents(childExtents, childSpaces, a, spaces[a]);
+    if (claims.length === 1) return claims[0];
+    return Extent(
+      lowest(claims.map((c) => c.ascent)),
+      lowest(claims.map((c) => c.descent))
+    );
+  };
+  return [axis(0), axis(1)];
+}
 
-/**
- * Lay out a composite's children in its own frame, as a layer does: it hands
- * them the scales it was given, so their data positions (a `region()`
- * operand's cell, a `ref` operand's target) are in its parent's frame, and
- * places each child that did not place itself at its origin.
- */
-function layoutComposite(
-  size: Size,
-  scales: Size<AxisScale | undefined>,
-  children: readonly GoFishAST[]
-): Placeable[] {
-  requireTwoChildren(children);
-  const placed = children.map((child) => child.layout(size, scales));
-  placed.forEach(placeUnplacedChild);
-  return placed;
+/** A composite's box on one axis, from its placed operands. */
+function compositeBounds(
+  sizing: Sizing,
+  placed: Placeable[],
+  axis: 0 | 1
+): { min: number; max: number } {
+  // An operand with no finite box on this axis takes no part (`foldFinite`,
+  // as `layer` folds its children).
+  const ps = sizing === "first" ? [placed[0]] : placed;
+  const mins = ps.map((p) => p.dims[axis].min);
+  const maxs = ps.map((p) => p.dims[axis].max);
+  if (sizing === "overlap") {
+    const min = foldFinite(mins, Math.max);
+    return { min, max: Math.max(min, foldFinite(maxs, Math.min)) };
+  }
+  return { min: foldFinite(mins, Math.min), max: foldFinite(maxs, Math.max) };
 }
 
 /** How far the samples of a curved operand may stray from it, in pixels. */
@@ -101,8 +179,7 @@ const TOLERANCE = 0.25;
  * undefined when it has none: its outline must be one closed loop that
  * traces its shape (not a box standing in for an image, a text or a group,
  * `Outline.bounds`). An outline of no pieces is exact and empty (a cell its
- * inset leaves nothing of): the empty ring. Its paint does not matter: an
- * operand gives shape only.
+ * inset leaves nothing of): the empty ring.
  */
 function operandRing(p: Placeable): OutlinePoint[] | undefined {
   const outlines: Outline[] = placedOutlines(
@@ -117,14 +194,41 @@ function operandRing(p: Placeable): OutlinePoint[] | undefined {
 }
 
 /**
- * The exact outline of `A ∩ B` in the composite's frame: a ring, an empty
- * list when they do not overlap or an operand is exactly empty, or undefined
- * when there is no exact answer (an operand without an exact outline, or two
- * non-convex operands; see `geometry/clip.ts`).
+ * Whether lowered items cover exactly their traced shape: each is a rect,
+ * an ellipse or a path filled in opaque paint, with no stroke, no opacity
+ * and no blend, so its alpha is 1 inside its outline and 0 outside. Only then is
+ * an operand's outline its region, and an exact path the result's.
  */
-function exactIntersection(
+function coversItsOutline(items: DisplayList.DisplayItem[]): boolean {
+  return items.every((item) => {
+    if (item.kind !== "rect" && item.kind !== "ellipse" && item.kind !== "path")
+      return false;
+    const s = item.style ?? {};
+    const { filled, width } = outlinePaint(s);
+    return (
+      s.fill !== undefined &&
+      filled &&
+      width === undefined &&
+      (s.opacity ?? 1) === 1 &&
+      (s.fillOpacity ?? 1) === 1 &&
+      s.mixBlendMode === undefined
+    );
+  });
+}
+
+/**
+ * The exact outline of a composite's result in its frame: a ring, an empty
+ * list when it is empty, or undefined when there is none. Only `intersect`
+ * has one, of two operands (`geometry/clip.ts`): its result is one ring
+ * when one operand is convex. A `subtract` or an `exclude` can have holes or
+ * several pieces, which one ring cannot hold, and a `union` several pieces
+ * (TODO(#1201): exact geometry for them).
+ */
+function exactResult(
+  operator: CompositeOperator,
   placed: readonly Placeable[]
 ): OutlinePoint[] | undefined {
+  if (operator !== "intersect" || placed.length !== 2) return undefined;
   const a = operandRing(placed[0]);
   if (a?.length === 0) return [];
   const b = a && operandRing(placed[1]);
@@ -134,182 +238,109 @@ function exactIntersection(
 
 /** The loud error for a stroke, or an outline read, that needs exact
  *  geometry the operands do not give. */
-const noExactGeometry = (what: string) =>
+const noExactGeometry = (operator: CompositeOperator, what: string) =>
   new Error(
-    `intersect: ${what} needs the exact outline of the result, and these ` +
-      `operands give none. Exact geometry needs both operands to trace their ` +
-      `shape (a rect, ellipse, polygon, ribbon, area or region, or a ref to ` +
-      `one; not an image, a text or a group), and at least one of them to be ` +
-      `convex (#1201). Without it, intersect can fill the overlap but not ` +
-      `stroke it: drop \`stroke\`, or make an operand one of those shapes.`
+    `${operator}: ${what} needs the exact outline of the result, and ` +
+      (operator === "intersect"
+        ? `these operands give none. Exact geometry needs both operands to ` +
+          `trace their shape in opaque paint (a rect, ellipse, polygon, ` +
+          `ribbon, area or region, or a ref to one; not an image, a text or ` +
+          `a group, and no opacity, stroke or fill "none"), and at least ` +
+          `one of them to be convex (#1201). Without it, intersect can fill ` +
+          `the overlap but not stroke it: drop \`stroke\`, or make an ` +
+          `operand one of those shapes.`
+        : `only intersect has one yet (#1201): drop \`stroke\`.`)
   );
 
-/** The ink an operand's shape leaves: opaque, unstroked, at full opacity. */
-const SHAPE_STYLE: DisplayList.Style = { fill: "black" };
-
 /**
- * Lowered operands as their shapes alone, for the alpha masks a painted
- * `intersect` fills through: an operand gives shape only, so its own paint
- * (an opacity, `fill: "none"`, a stroke) must not change the mask. Each
- * shape item (a rect, ellipse, path or text) is drawn in {@link SHAPE_STYLE},
- * a group's and a composite's items are read the same way, and a mask's
- * content is (its mask still clips it).
- *
- * An image is the domain's one exception: it has no shape apart from its
- * pixels, so its region is where its alpha is, and it is kept as drawn.
- */
-function shapeOnly(
-  items: DisplayList.DisplayItem[]
-): DisplayList.DisplayItem[] {
-  return items.map((item): DisplayList.DisplayItem => {
-    switch (item.kind) {
-      case "rect":
-      case "ellipse":
-      case "path":
-      case "text":
-        return { ...item, style: SHAPE_STYLE };
-      case "image":
-        return item;
-      case "group":
-        return {
-          ...item,
-          style: undefined,
-          children: shapeOnly(item.children),
-        };
-      case "composite":
-        return {
-          ...item,
-          style: undefined,
-          source: shapeOnly(item.source),
-          dest: shapeOnly(item.dest),
-        };
-      case "mask":
-        return { ...item, style: undefined, content: shapeOnly(item.content) };
-    }
-  });
-}
-
-/**
- * Lower a composite's two children, a bake boundary, through `toPixel`
- * (the composite's own pixel map), in source order: the first child, then
- * the second. Each operand's subtree is baked under the node's `translate`
- * (`lowerSubtree`), so an operand that only places its children (a `pack`)
- * lowers its leaves.
+ * Lower each operand of a composite, a bake boundary, through `toPixel`
+ * (the composite's own pixel map), in order, once: each operand's shape,
+ * and its paint. A hidden node under the composite lowers as its shape
+ * (`GoFishNode.visibility`), so an operand's paint is its shape less what
+ * hidden nodes drew (`paintOf`), the same array when they drew none. Each
+ * operand's subtree is baked under the node's `translate` (`lowerSubtree`),
+ * so an operand that only places its children (a `pack`) lowers its leaves.
  */
 function lowerOperands(
   node: GoFishNode,
   translate: [number, number],
   coordinateTransform: CoordinateTransform | undefined,
   toPixel: ToPixel
-): [DisplayList.DisplayItem[], DisplayList.DisplayItem[]] {
+): { shape: DisplayList.DisplayItem[]; paint: DisplayList.DisplayItem[] }[] {
   const session = node.getRenderSession();
-  const outer = session.toPixel!;
   assertNoPaintOrder(node);
+  const saved = session.toPixel;
   session.toPixel = toPixel;
   try {
-    return [
-      lowerSubtree(node.children[0], translate, coordinateTransform),
-      lowerSubtree(node.children[1], translate, coordinateTransform),
-    ];
+    return node.children.map((child) => {
+      const shape = lowerSubtree(child, translate, coordinateTransform);
+      return { shape, paint: paintOf(shape) };
+    });
   } finally {
-    session.toPixel = outer;
+    session.toPixel = saved;
   }
 }
 
-/**
- * A composite node: `operator` over two children, as the SVG backends draw
- * it. With `paint` (only `intersect` takes it), the result is the region
- * `A ∩ B` drawn in that paint, and the operands give shape only: one exact
- * path when the operands have exact outlines, else the operands' ink as an
- * alpha mask over a fill. Without it, the operands are composited with their
- * own paint, as before.
- */
+/** A composite node: `operator` over its children, as the SVG backends draw
+ *  it (see the file header). */
 function compositeNode(
-  type: string,
   operator: CompositeOperator,
-  blendMode: BlendMode,
   children: GoFishAST[],
-  paint?: CompositePaint
+  opts: CompositePaint & CompositeBlend
 ): GoFishNode {
-  requireTwoChildren(children);
-  // For Porter-Duff "atop" the result is visually clipped to the first
-  // child (the source), so its reported size is the first child's size.
-  // Other operators keep the union-based sizing so unions/xors don't
-  // clip content outside the first child's bounds.
-  const isAtop = operator === "atop";
+  checkArity(operator, children.length);
+  const sizing = SIZING[operator];
+  const { blendMode = "normal", ...paint } = opts;
   // The children as laid out, in this node's frame; read again in `lower`
   // and `geometry`, after every node is placed.
   let placed: Placeable[] = [];
-  // The exact outline of `A ∩ B` (`exactIntersection`), worked out on its
+  // The exact outline of the result (`exactResult`), worked out on its
   // first read after layout.
   let exact: { ring: OutlinePoint[] | undefined } | undefined;
-  const exactRing = () => (exact ??= { ring: exactIntersection(placed) }).ring;
-  const painted =
-    paint !== undefined &&
-    (paint.fill !== undefined || paint.stroke !== undefined);
-  const strokeWidth = paint?.strokeWidth ?? 1;
-  const strokes =
-    paint?.stroke !== undefined && inks(paint.stroke) && strokeWidth > 0;
+  const exactRing = () =>
+    (exact ??= { ring: exactResult(operator, placed) }).ring;
+  const painted = paint.fill !== undefined || paint.stroke !== undefined;
   // The paint the result is drawn in, read by `lower` and `geometry`: no
-  // fill unless one is given, and a stroke width only where the stroke inks.
+  // fill unless one is given, and a stroke width (1 by default) only where
+  // the stroke inks.
+  const { width: strokeWidth } = outlinePaint({
+    stroke: paint.stroke ?? "none",
+    strokeWidth: paint.strokeWidth ?? 1,
+  });
+  const strokes = strokeWidth !== undefined;
   const drawn = {
-    fill: paint?.fill ?? "none",
-    stroke: paint?.stroke,
-    strokeWidth: strokes ? strokeWidth : undefined,
+    fill: paint.fill ?? "none",
+    stroke: paint.stroke,
+    strokeWidth,
   };
   const node = new GoFishNode(
     {
-      type,
+      type: operator,
       ...(painted && {
-        color: isValue(paint!.fill) ? paint!.fill : paint!.stroke,
+        color: isValue(paint.fill) ? paint.fill : paint.stroke,
       }),
       resolveUnderlyingSpace: (
         children: Size<UnderlyingSpace>[],
         _childNodes: readonly GoFishAST[]
       ) => [unionChildSpaces(children, 0), unionChildSpaces(children, 1)],
       resolveExtent: (childExtents, childSpaces, spaces) =>
-        isAtop
-          ? firstChildClaim(childExtents, childSpaces, spaces)
-          : [
-              unionChildExtents(childExtents, childSpaces, 0, spaces[0]),
-              unionChildExtents(childExtents, childSpaces, 1, spaces[1]),
-            ],
+        compositeClaim(sizing, childExtents, childSpaces, spaces),
       layout: (size, scales, layoutChildren) => {
         placed = layoutComposite(size, scales, layoutChildren);
         exact = undefined;
-
-        const { minX, maxX, minY, maxY } = isAtop
-          ? {
-              minX: placed[0].dims[0].min ?? 0,
-              maxX: placed[0].dims[0].max ?? 0,
-              minY: placed[0].dims[1].min ?? 0,
-              maxY: placed[0].dims[1].max ?? 0,
-            }
-          : maxChildBounds(placed);
+        const box = (axis: 0 | 1) => {
+          const { min, max } = compositeBounds(sizing, placed, axis);
+          return { min, size: max - min, center: (min + max) / 2, max };
+        };
         return {
-          intrinsicDims: [
-            {
-              min: minX,
-              size: maxX - minX,
-              center: minX + (maxX - minX) / 2,
-              max: maxX,
-            },
-            {
-              min: minY,
-              size: maxY - minY,
-              center: minY + (maxY - minY) / 2,
-              max: maxY,
-            },
-          ],
+          intrinsicDims: [box(0), box(1)],
           transform: { translate: [undefined, undefined] },
         };
       },
-      // IR lowering — mirror of `render`. A composite is a bake boundary,
-      // so its children are NOT pre-lowered: we re-walk the two subtrees
-      // ourselves, offset by the node's baked translate (the legacy
-      // `<g transform>`), and emit one CompositeItem. source = first child
-      // (`#…-source`), dest = second (`#…-destination`), matching the SVG
-      // backends' `composite` source/destination group ids.
+      // A composite is a bake boundary, so its children are not lowered
+      // before it: it lowers them itself, under its baked translate, and
+      // emits one composite item (or, for an exact painted result, one
+      // path). Its items are in absolute pixels, like every other item.
       lower: (
         { intrinsicDims, transform, coordinateTransform, toPixel, local },
         _children,
@@ -318,117 +349,100 @@ function compositeNode(
         const [tx, ty] = displayTranslate(transform);
         const session = node.getRenderSession();
         const outer = session.toPixel!;
-
         const minX = intrinsicDims?.[0]?.min ?? 0;
         const minY = intrinsicDims?.[1]?.min ?? 0;
         const width = intrinsicDims?.[0]?.size ?? 0;
         const height = intrinsicDims?.[1]?.size ?? 0;
-        // Pixel bbox top-left and size (see `pixelBox`).
-        const {
-          x: bx,
-          y: by,
-          w: bw,
-          h: bh,
-        } = pixelBox(
+        // TODO(#1298): under a curved coord this is the box of the warped
+        // corners, not of the warped region.
+        const bbox = pixelBox(
           [tx + minX, ty + minY],
           [tx + minX + width, ty + minY + height],
           outer
         );
+        const operands = lowerOperands(
+          node,
+          [tx, ty],
+          coordinateTransform,
+          outer
+        );
+        const opacity =
+          paint.opacity !== undefined ? { opacity: paint.opacity } : {};
 
-        if (painted) {
-          const unit = session.scaleContext?.unit;
-          const style = lowerStyle({
-            fill: resolveColorChannel(drawn.fill, unit) ?? "none",
-            stroke: resolveColorChannel(drawn.stroke, unit),
-            strokeWidth: drawn.strokeWidth,
-            opacity: paint!.opacity,
-          });
-          // One exact path, painted as the composite says.
-          const ring = exactRing();
-          if (ring !== undefined) {
-            if (ring.length === 0) return [];
-            return [
-              ringItem(
-                ring.map((p) => local(p)),
-                coordinateTransform,
-                toPixel,
-                node.datum,
-                style
+        // Unpainted, each operand draws its paint: its shape without what
+        // hidden nodes drew (`paintOf`), kept apart only where it differs.
+        if (!painted)
+          return [
+            {
+              kind: "composite",
+              operator,
+              ...(blendMode !== "normal" && { blendMode }),
+              bbox,
+              operands: operands.map(({ shape, paint }) =>
+                paint === shape ? { paint } : { paint, shape }
               ),
-            ];
-          }
-          if (strokes) throw noExactGeometry("a stroke");
-          // No exact outline: fill the overlap of the two operands' shapes,
-          // an alpha mask of each over a fill of the box.
-          const [a, b] = lowerOperands(
-            node,
-            [tx, ty],
-            coordinateTransform,
-            outer
-          ).map(shapeOnly);
-          const bbox = { x: bx, y: by, w: bw, h: bh };
-          const fillRect = rectItemFromBox(bx, bx + bw, by, by + bh, (p) => p, {
+              ...(paint.opacity !== undefined && { style: opacity }),
+            },
+          ];
+
+        // A new shape in the result's paint; the operands give shape only.
+        const shapes = operands.map((o) => o.shape);
+        const unit = session.scaleContext?.unit;
+        const style = lowerStyle({
+          fill: resolveColorChannel(drawn.fill, unit) ?? "none",
+          stroke: resolveColorChannel(drawn.stroke, unit),
+          strokeWidth: drawn.strokeWidth,
+          ...opacity,
+        });
+        // One exact path, painted as the composite says, when the outline
+        // is exact and every operand's region is its outline.
+        const ring = exactRing();
+        if (ring !== undefined && shapes.every(coversItsOutline)) {
+          if (ring.length === 0) return [];
+          return [
+            ringItem(
+              ring.map((p) => local(p)),
+              coordinateTransform,
+              toPixel,
+              node.datum,
+              style
+            ),
+          ];
+        }
+        if (strokes) throw noExactGeometry(operator, "a stroke");
+        // Otherwise the fill, drawn over the result's region.
+        const fill = rectItemFromBox(
+          bbox.x,
+          bbox.x + bbox.w,
+          bbox.y,
+          bbox.y + bbox.h,
+          (p) => p,
+          {
             rx: 0,
             ry: 0,
             style: { ...style, stroke: undefined, strokeWidth: undefined },
             datum: node.datum,
             role: roleFor(node.datum),
-          });
-          return [
-            {
-              kind: "mask",
-              mode: "alpha",
-              bbox,
-              mask: a,
-              content: [
-                {
-                  kind: "mask",
-                  mode: "alpha",
-                  bbox,
-                  mask: b,
-                  content: [fillRect],
-                },
-              ],
-            },
-          ];
-        }
-
-        // The two layers are lowered RELATIVE to the bbox pixel origin, not
-        // at absolute pixels: both SVG backends wrap the composited layers
-        // in a `<g transform="translate(bbox.x bbox.y)">` (see
-        // `paintSVG`'s / `render.ts`'s `composite` case), so child
-        // coordinates must start near the bbox's own origin rather than
-        // the document's. We reproduce that by subtracting the bbox origin.
-        // Each operand's subtree is baked under the node's translate, so
-        // this shift is the bbox origin alone.
-        const [source, dest] = lowerOperands(
-          node,
-          [tx, ty],
-          coordinateTransform,
-          (p) => {
-            const [ax, ay] = outer(p);
-            return [ax - bx, ay - by];
           }
         );
-
         return [
           {
             kind: "composite",
             operator,
-            blendMode,
-            bbox: { x: bx, y: by, w: bw, h: bh },
-            source,
-            dest,
-            // `opacity` fades the composited result as a whole.
-            ...(paint?.opacity !== undefined && {
-              style: { opacity: paint.opacity },
-            }),
+            bbox,
+            operands: shapes.map((shape) => ({ paint: [], shape })),
+            fill: [fill],
+            // The result is one mark: it is what a pointer hits.
+            datum: node.datum,
           },
         ];
       },
-      // A painted result's outline is the exact intersection; reading it
-      // when there is none is the loud error. An unpainted composite is read
-      // as its box, as before.
+      // A painted result's outline is the exact one; reading it when there
+      // is none is the loud error. An unpainted composite is read as its
+      // box. TODO(#1297): `lower` draws the exact ring only when its
+      // operands also pass `coversItsOutline` (opaque, unblended, unfiltered
+      // items), which layout cannot see, so a translucent operand's result
+      // is masked while this still reports the ring.
       ...(painted && {
         geometry: ({ intrinsicDims }, _children, node) => {
           const box = boxOfDims(intrinsicDims, node.type);
@@ -438,7 +452,7 @@ function compositeNode(
             outline: () => {
               const ring = exactRing();
               if (ring === undefined)
-                throw noExactGeometry("reading its outline");
+                throw noExactGeometry(operator, "reading its outline");
               return ring.length === 0
                 ? []
                 : [ringOutline(ring, node.yFrame.direction, outlinePaintOf)];
@@ -449,181 +463,52 @@ function compositeNode(
     },
     children
   );
-  node.clipsToBox = isAtop;
+  node.clipsToBox = sizing !== "union";
   return node;
 }
 
-const createCompositeRelation = (type: string, operator: CompositeOperator) =>
-  createNodeOperator(
-    (
-      {
-        blendMode = "color",
-      }: {
-        blendMode?: BlendMode;
-      },
-      children: GoFishAST[]
-    ) => compositeNode(type, operator, blendMode, children)
-  );
-
 /**
- * Region-compositing operators, named after Figma's boolean operations
- * (issues #196 / #202). Each takes **exactly two children** `[A, B]` — the
- * binary SVG-filter implementations below do not generalize to 3+ children,
- * so all of them throw via `requireTwoChildren` when given any other arity.
- * The maintainer's notation in #196 describes the eventual n-ary semantics;
- * the current arity behavior is binary-only and documented honestly per op.
- *
- * `over` is intentionally NOT exported from the public surface: it is
- * conceptually `layer` (`A ∪ B`, see #196) and is kept internal only so the
- * IR deserializer (serialize/registry) can still dispatch the `"over"` wire
- * type. Prefer `layer` in user code.
+ * Lay out a composite's children in its own frame, as a layer does: it hands
+ * them the scales it was given, so their data positions (a `region()`
+ * operand's cell, a `ref` operand's target) are in its parent's frame, and
+ * places each child that did not place itself at its origin.
  */
+function layoutComposite(
+  size: Size,
+  scales: Size<AxisScale | undefined>,
+  children: readonly GoFishAST[]
+): Placeable[] {
+  const placed = children.map((child) => child.layout(size, scales));
+  placed.forEach(placeUnplacedChild);
+  return placed;
+}
 
-/**
- * Internal-only `A ∪ B` union compositing. Exported for the IR deserializer
- * (serialize/registry) to dispatch the `"over"` wire type, but intentionally
- * NOT re-exported from `lib.ts` — use `layer` in user code.
- */
-export const over = createCompositeRelation("over", "over");
-
-/**
- * intersect — draw only where both regions overlap: `A ∩ B`.
- * Binary only (exactly two children); the n-ary form `A ∩ B ∩ ...` is not
- * yet implemented.
- *
- * With `fill` or `stroke`, the result is the region `A ∩ B` in that paint,
- * and the operands give shape only (`compositeNode`). Without them, the
- * operands keep their own paint (issue #1230 tracks that default).
- *
- * TODO: `subtract` and `exclude` take no paint yet. Their exact result can
- * have holes or several pieces, which one outline cannot hold (#1201), and
- * their mask fill needs an inverse-alpha mask.
- */
-export const intersect = createNodeOperator(
-  (
-    {
-      blendMode = "color",
-      ...paint
-    }: { blendMode?: BlendMode } & CompositePaint,
-    children: GoFishAST[]
-  ) => compositeNode("in", "in", blendMode, children, paint)
+/** union: A ∪ B ∪ .... */
+export const union = createNodeOperator(
+  (opts: UnionOptions, children: GoFishAST[]) =>
+    compositeNode("union", children, opts)
 );
 
-/**
- * exclude — draw the symmetric difference (odd-overlap parity): `A ^ B`.
- * Binary only (exactly two children). The n-ary parity form `A ^ B ^ ...`
- * (drawn where an odd number of regions overlap) is not yet implemented.
- */
-export const exclude = createCompositeRelation("xor", "xor");
+/** intersect: A ∩ B ∩ .... */
+export const intersect = createNodeOperator(
+  (opts: IntersectOptions, children: GoFishAST[]) =>
+    compositeNode("intersect", children, opts)
+);
 
-/**
- * subtract — draw A with B removed: `A − B`.
- * Binary only (exactly two children); the n-ary fold `A − B − C − ...` is
- * not yet implemented.
- */
-export const subtract = createCompositeRelation("out", "out");
+/** subtract: A − B − .... */
+export const subtract = createNodeOperator(
+  (opts: SubtractOptions, children: GoFishAST[]) =>
+    compositeNode("subtract", children, opts)
+);
 
-/**
- * paint — A is a base surface that B is painted onto, clipped to A:
- * `A ∪ (B ∩ A)`. The result is sized to A (the first child). Binary only
- * (exactly two children); the n-ary form `A ∪ (B ∩ A) ∪ (C ∩ A) ∪ ...` is
- * not yet implemented.
- */
-export const paint = createCompositeRelation("atop", "atop");
+/** exclude: where exactly one of A and B is. */
+export const exclude = createNodeOperator(
+  (opts: ExcludeOptions, children: GoFishAST[]) =>
+    compositeNode("exclude", children, opts)
+);
 
-/**
- * mask — use A's region as a clip and paint B inside it **without drawing A
- * itself**: `B ∩ A`, reporting A's bounds. Binary only (exactly two
- * children). Differs from `paint` in that A is a clip region, not a surface.
- */
-export const mask = createNodeOperator(
-  (_: Record<string, never>, children: GoFishAST[]) => {
-    requireTwoChildren(children);
-
-    const node = new GoFishNode(
-      {
-        type: "mask",
-        resolveUnderlyingSpace: (
-          children: Size<UnderlyingSpace>[],
-          _childNodes: readonly GoFishAST[]
-        ) => [unionChildSpaces(children, 0), unionChildSpaces(children, 1)],
-        resolveExtent: firstChildClaim,
-        layout: (size, scales, layoutChildren) => {
-          const childPlaceables = layoutComposite(size, scales, layoutChildren);
-
-          // Mask reports the first child's bounds — visually only the mask
-          // shape (first child) defines the opaque region, so reporting the
-          // union with the destination would over-state the visible bbox.
-          const minX = childPlaceables[0].dims[0].min ?? 0;
-          const maxX = childPlaceables[0].dims[0].max ?? 0;
-          const minY = childPlaceables[0].dims[1].min ?? 0;
-          const maxY = childPlaceables[0].dims[1].max ?? 0;
-          return {
-            intrinsicDims: [
-              {
-                min: minX,
-                size: maxX - minX,
-                center: minX + (maxX - minX) / 2,
-                max: maxX,
-              },
-              {
-                min: minY,
-                size: maxY - minY,
-                center: minY + (maxY - minY) / 2,
-                max: maxY,
-              },
-            ],
-            transform: { translate: [undefined, undefined] },
-          };
-        },
-        // IR lowering — mirror of `render`. A mask is a bake boundary, so we
-        // re-walk both subtrees offset by the node's baked translate (the
-        // legacy `<g transform>`) and emit one MaskItem. mask = first child
-        // (the clip region, `#…-source`), content = second child
-        // (`#…-destination`), matching the render's mask/use wiring.
-        lower: (
-          { intrinsicDims, transform, coordinateTransform },
-          _children,
-          node
-        ): DisplayList.DisplayItem[] => {
-          const [tx, ty] = displayTranslate(transform);
-          const outer = node.getRenderSession().toPixel!;
-          const [maskItems, content] = lowerOperands(
-            node,
-            [tx, ty],
-            coordinateTransform,
-            outer
-          );
-
-          const minX = intrinsicDims?.[0]?.min ?? 0;
-          const minY = intrinsicDims?.[1]?.min ?? 0;
-          const width = intrinsicDims?.[0]?.size ?? 0;
-          const height = intrinsicDims?.[1]?.size ?? 0;
-          // Flip-agnostic bbox top-left — see `pixelBox` / the compositor (#143/#16).
-          const {
-            x: bx,
-            y: by,
-            w: bw,
-            h: bh,
-          } = pixelBox(
-            [tx + minX, ty + minY],
-            [tx + minX + width, ty + minY + height],
-            outer
-          );
-
-          return [
-            {
-              kind: "mask",
-              bbox: { x: bx, y: by, w: bw, h: bh },
-              mask: maskItems,
-              content,
-            },
-          ];
-        },
-      },
-      children
-    );
-    node.clipsToBox = true;
-    return node;
-  }
+/** atop: A, then each later operand clipped to A. */
+export const atop = createNodeOperator(
+  (opts: AtopOptions, children: GoFishAST[]) =>
+    compositeNode("atop", children, opts)
 );

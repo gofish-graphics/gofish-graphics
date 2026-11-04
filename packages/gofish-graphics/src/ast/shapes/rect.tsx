@@ -77,7 +77,6 @@ export const Rect = ({
   strokeWidth = 0,
   rx: rxGiven,
   ry: ryGiven,
-  filter,
   opacity = 1,
   aspectRatio,
   inset = 0,
@@ -89,7 +88,6 @@ export const Rect = ({
   strokeWidth?: number;
   rx?: number;
   ry?: number;
-  filter?: string;
   opacity?: number;
   /** w/h ratio to enforce. w = h * aspectRatio. When both dims are data-driven,
    *  the constraining axis (smaller of the two scaled sizes) is used. */
@@ -167,7 +165,6 @@ export const Rect = ({
         strokeWidth,
         rx,
         ry,
-        filter,
         opacity,
         dims,
       },
@@ -330,7 +327,6 @@ export const Rect = ({
           stroke: resolvedStroke,
           strokeWidth: strokeWidth ?? 0,
           opacity,
-          filter,
         });
         const rectExtra = {
           rx,
@@ -413,7 +409,6 @@ export const Rect = ({
                 stroke: resolvedStroke,
                 strokeWidth: thickness + 0.5,
                 opacity,
-                filter,
               }),
             },
           ];
@@ -449,7 +444,6 @@ export const Rect = ({
               stroke: resolvedStroke,
               strokeWidth: strokeWidth ?? 0,
               opacity,
-              filter,
             }),
           },
         ];
@@ -488,25 +482,31 @@ export const rect: typeof baseRect = ((opts: any) =>
   attachCut(baseRect(opts))) as typeof baseRect;
 
 /**
- * `blank()`'s node: a rect in every respect that matters to the pipeline —
- * same dims, same underlying-space resolution, same layout, same datum, so it
- * anchors refs and fuses exactly as a rect does — except that it DRAWS
- * NOTHING. Invisibility is structural, not a paint style: the node emits no
- * display items at all (`INTERNAL_emitNothing`), the same rule `GoFishRef`
- * already follows as a placement stand-in. One rule, no flag — there is no
- * configuration under which a blank paints, so `blank()` accepts no paint-only
- * options (stroke, corner radius); its `fill` only seeds the color scale.
+ * `blank()`'s node: a hidden rect (`GoFishNode.isHidden`). It is a rect in
+ * every respect that matters to the pipeline — same dims, same
+ * underlying-space resolution, same layout, same datum — so it anchors refs
+ * and fuses exactly as a rect does, and, being hidden, paints nothing: it is
+ * `rect().hidden()` with blank's own defaults, and `.hidden()` on it has no
+ * effect on its own paint: it never paints (`_neverPaints`). That is its own,
+ * not its subtree's or its labels': a label on a blank shows unless the
+ * blank is `.hidden()` (`GoFishNode.visibility`). Like any hidden mark it keeps
+ * its shape, so under a compositor (`intersect`, `cut`, …) a blank operand
+ * gives its box. `blank()` accepts no paint-only options (stroke, corner
+ * radius); its `fill` only seeds the color scale.
  *
  * This is what keeps an anchor tier free: the blank-fusion rewrite
  * (`.mark(line(opts))` ⇒ `.mark(blank(anchor)).layer(line(opts))`, see
- * `marks/chart.ts`) synthesizes one anchor per row, and a 26k-row chart used
- * to pay for 26k invisible zero-size `<rect>`s in the DOM — and 26k entries in
- * the interaction hit-test map.
+ * `marks/chart.ts`) synthesizes one anchor per row, and the bake stops at a
+ * hidden node no compositor reads, so a 26k-row chart pays for no invisible
+ * `<rect>`s in the DOM and no entries in the interaction hit-test map.
  */
 export const Blank = (opts: Parameters<typeof Rect>[0]): GoFishNode => {
   const node = Rect(opts);
   node.type = "blank";
-  node.INTERNAL_emitNothing();
+  // Never painting is what a blank is, not a setting on it, so it is built
+  // in (`_neverPaints`) rather than set through `.hidden()`: a later
+  // `.hidden(false)`, `.hidden(true)` or `.hidden(fn)` changes nothing.
+  node._neverPaints = true;
   return node;
 };
 

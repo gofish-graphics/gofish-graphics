@@ -34,9 +34,11 @@
  *    to the pure `cut`. Datum stamping for `selectAll` is handled by the mark
  *    factory's expand path (see createMark).
  *
- * Internally each slice is `mask([regionRect, offset(source)])` — the region
- * rect defines the visible portion, and the source shape is shifted (via the
- * public `offset` operator) so the requested portion lines up under the rect.
+ * Internally each slice is `intersect([regionRect.hidden(), offset(source)])`:
+ * the hidden region rect gives the slice its shape and no paint, so it only
+ * clips, and the source is shifted (via the public `offset` operator) so the
+ * requested portion lines up under the rect. The slice is laid out in the
+ * overlap of the two, the rect's box.
  */
 import { GoFishNode } from "../_node";
 import { Mark } from "../types";
@@ -44,7 +46,7 @@ import {
   resolveMarkResult,
   attachTransformModifiers,
 } from "../marks/createOperator";
-import { mask as Mask } from "./porterDuff";
+import { intersect } from "./porterDuff";
 import { offset as offsetOp } from "./offset";
 import { Rect } from "../shapes/rect";
 import { createMark } from "../withGoFish";
@@ -107,19 +109,15 @@ async function buildSliceNode(
   const sliceW = dirIdx === 0 ? insetExtent : crossExtent;
   const sliceH = dirIdx === 1 ? insetExtent : crossExtent;
 
-  const regionRect = await Rect({
-    x: 0,
-    y: 0,
-    w: sliceW,
-    h: sliceH,
-    fill: "white",
-  });
+  const regionRect = (
+    await Rect({ x: 0, y: 0, w: sliceW, h: sliceH })
+  ).hidden();
   const sourceNode = await resolveMarkResult(source);
   const translated = await offsetOp(
     dirIdx === 0 ? { x: translateOffset } : { y: translateOffset },
     [sourceNode]
   );
-  return (await Mask({}, [regionRect, translated])) as GoFishNode;
+  return (await intersect({}, [regionRect, translated])) as GoFishNode;
 }
 
 /**

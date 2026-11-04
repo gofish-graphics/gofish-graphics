@@ -215,6 +215,8 @@ export type {
   PartitionPlaneOptions,
 } from "./ast/graphicalOperators/partition";
 export * as Overlap from "./families/overlap";
+export * as Filter from "./families/filter";
+export type { BlendMode } from "./ast/blendMode";
 export type { EncloseOptions } from "./ast/graphicalOperators/enclose";
 export * as Shape from "./families/shape";
 export * as Place from "./families/place";
@@ -253,12 +255,20 @@ export {
   repeat,
   log,
   layer,
-  paint,
+  union,
   intersect,
-  exclude,
   subtract,
-  mask,
+  exclude,
+  atop,
 } from "./ast/marks/chart";
+export type {
+  CompositePaint,
+  UnionOptions,
+  IntersectOptions,
+  SubtractOptions,
+  ExcludeOptions,
+  AtopOptions,
+} from "./ast/graphicalOperators/porterDuff";
 export type { RelatableMark, DeriveOptions } from "./ast/marks/chart";
 // A data helper for derive: the grid rows of a density curve to rows at its
 // quantiles. A shortcut until first-class distributions (#980).

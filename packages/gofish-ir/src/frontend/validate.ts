@@ -166,6 +166,9 @@ function walkChart(
     walkFieldType(t.ref("ChartOptions"), v, p, ctx)
   );
   optionalField(node, "zOrder", path, ctx, expectNumber);
+  optionalField(node, "hidden", path, ctx, (v, p) =>
+    walkFieldType(t.boolean, v, p, ctx)
+  );
   optionalField(node, "name", path, ctx, expectNameOrToken);
   rejectUnknown(
     node,
@@ -176,6 +179,7 @@ function walkChart(
       "mark",
       "options",
       "zOrder",
+      "hidden",
       "name",
       "origin",
       "meta",
@@ -1097,8 +1101,8 @@ const {
   ...COMBINATOR_NODE_FIELDS
 } = MARK_BASE_FIELDS;
 const REF_MARK_FIELDS = markBaseFields("label", "translate");
-const CUT_MARK_FIELDS = markBaseFields("zOrder", "translate");
-const OFFSET_MARK_FIELDS = markBaseFields("translate");
+const CUT_MARK_FIELDS = markBaseFields("zOrder", "hidden", "translate");
+const OFFSET_MARK_FIELDS = markBaseFields("hidden", "translate");
 
 /** The keys every mark walker checks itself, outside the descriptor walk. */
 const MARK_NODE_KEYS = ["type", "name", "origin", "meta"] as const;
