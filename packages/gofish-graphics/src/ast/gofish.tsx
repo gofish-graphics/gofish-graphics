@@ -18,7 +18,7 @@ import type { GoFishAST } from "./_ast";
 import { resolveReferences } from "./_ref";
 import { axisScale, pxOf, type AxisMap, type AxisScale } from "./domain";
 import { lowerToDisplayList } from "./displayList/lower";
-import { luminanceToAlphaDef, paintSVG } from "./displayList/paintSVG";
+import { paintDocument } from "./displayList/paintSVG";
 import type { InteractionRuntime } from "../interaction/runtime";
 import { renderWithInteraction } from "../interaction/renderTerminal";
 import { resolveMarkResult } from "./marks/markResult";
@@ -69,7 +69,7 @@ import {
   type LevelOptions,
   type PerLevel,
 } from "./axes/levels";
-import { DisplayList, Frontend } from "gofish-ir";
+import { Frontend } from "gofish-ir";
 import {
   getScopeRegistry,
   seatInBand,
@@ -1572,11 +1572,9 @@ export const render = (
       size: { width, height },
     });
     const __tPaint = perfNow();
-    const painted = items.map((item) => paintSVG(item, interactive));
+    const painted = paintDocument(items, interactive);
     perfAdd("paint", perfNow() - __tPaint);
-    return DisplayList.usesLuminanceToAlpha(items)
-      ? [<defs>{luminanceToAlphaDef()}</defs>, ...painted]
-      : painted;
+    return painted;
   };
   return (
     <svg

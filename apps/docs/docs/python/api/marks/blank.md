@@ -7,7 +7,8 @@ order: 60
 An invisible mark. `blank` takes up space and can be positioned and named like
 any other mark, but draws nothing. It is the positioning **guide** that
 [`line`](/python/api/marks/line) and [`ribbon`](/python/api/marks/ribbon) trace.
-`.hidden()` has no effect on a blank: it is always hidden.
+`.hidden()` has no effect on a blank itself: it is always hidden. Its labels
+show, and `.hidden()` hides them as it hides any mark's labels.
 
 ::: gofish example:area-chart hidden
 :::

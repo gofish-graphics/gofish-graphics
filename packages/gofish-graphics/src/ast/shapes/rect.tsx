@@ -487,7 +487,9 @@ export const rect: typeof baseRect = ((opts: any) =>
  * underlying-space resolution, same layout, same datum — so it anchors refs
  * and fuses exactly as a rect does, and, being hidden, paints nothing: it is
  * `rect().hidden()` with blank's own defaults, and `.hidden()` on it has no
- * effect: it is always hidden. Like any hidden mark it keeps
+ * effect on its own paint: it never paints (`_neverPaints`). That is its own,
+ * not its subtree's or its labels': a label on a blank shows unless the
+ * blank is `.hidden()` (`GoFishNode.visibility`). Like any hidden mark it keeps
  * its shape, so under a compositor (`intersect`, `cut`, …) a blank operand
  * gives its box. `blank()` accepts no paint-only options (stroke, corner
  * radius); its `fill` only seeds the color scale.

@@ -54,7 +54,9 @@ const styleAttrs = (style: Style | undefined): string => {
   return parts.length ? " " + parts.join(" ") : "";
 };
 
-const itemToSVG = (item: DisplayItem): string => {
+/** `item` as SVG. `filterId` is the id of the document's `luminanceToAlpha`
+ *  filter def. */
+const itemToSVG = (item: DisplayItem, filterId: string): string => {
   const s = styleAttrs(item.style);
   switch (item.kind) {
     case "rect": {
@@ -115,37 +117,40 @@ const itemToSVG = (item: DisplayItem): string => {
         f?.kind === "css"
           ? ` filter="${esc(f.value)}"`
           : f?.kind === "luminanceToAlpha"
-            ? ` filter="url(#${LUMINANCE_TO_ALPHA_FILTER.id})"`
+            ? ` filter="url(#${filterId})"`
             : "";
-      return `<g${tr}${fa}${s}>${item.children.map(itemToSVG).join("")}</g>`;
+      return `<g${tr}${fa}${s}>${item.children.map((c) => itemToSVG(c, filterId)).join("")}</g>`;
     }
     case "composite":
-      return compositeToSVG(item);
+      return compositeToSVG(item, filterId);
   }
 };
 
-/** Deterministic id counter for composite defs (Math.random is both
+/** Deterministic id counter for composite defs and the filter def (Math.random is both
  *  unavailable headlessly and non-reproducible). Reset per document by
  *  `displayListToSVG`; the JSX backend uses the same scheme so the two backends
  *  agree on id shape. */
 let compositeIdCounter = 0;
 
 /** The `<filter>` def of `LUMINANCE_TO_ALPHA_FILTER`, written once per
- *  document that uses it. */
-const luminanceToAlphaFilterSVG = (): string => {
+ *  document that uses it, under `id`. */
+const luminanceToAlphaFilterSVG = (id: string): string => {
   const f = LUMINANCE_TO_ALPHA_FILTER;
-  return `<filter id="${f.id}" color-interpolation-filters="${f.colorInterpolationFilters}"><feColorMatrix type="${f.matrixType}"/></filter>`;
+  return `<filter id="${id}" color-interpolation-filters="${f.colorInterpolationFilters}"><feColorMatrix type="${f.matrixType}"/></filter>`;
 };
 
 /** Draw a composite item as SVG masks and `mix-blend-mode` (no
  *  `<feImage>`: see `paintSVG.tsx` in gofish-graphics for why, issue #795):
  *  its `compositePlan` (composite.ts), which that backend writes too. */
-const compositeToSVG = (item: CompositeItem): string => {
+const compositeToSVG = (item: CompositeItem, filterId: string): string => {
   const { x, y, w, h } = item.bbox;
   const plan = compositePlan(item, `gf-comp-${compositeIdCounter++}`);
   const defs =
     plan.defs
-      .map((d) => `<g id="${d.id}">${d.items.map(itemToSVG).join("")}</g>`)
+      .map(
+        (d) =>
+          `<g id="${d.id}">${d.items.map((c) => itemToSVG(c, filterId)).join("")}</g>`
+      )
       .join("") +
     plan.masks
       .map((m) => {
@@ -179,9 +184,10 @@ const compositeToSVG = (item: CompositeItem): string => {
 export function displayListToSVG(doc: DisplayListDocument): string {
   compositeIdCounter = 0;
   const { w, h } = doc.viewport;
+  const filterId = `gf-luminance-to-alpha-${compositeIdCounter++}`;
   const defs = usesLuminanceToAlpha(doc.items)
-    ? `<defs>${luminanceToAlphaFilterSVG()}</defs>`
+    ? `<defs>${luminanceToAlphaFilterSVG(filterId)}</defs>`
     : "";
-  const body = defs + doc.items.map(itemToSVG).join("");
+  const body = defs + doc.items.map((i) => itemToSVG(i, filterId)).join("");
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${body}</svg>`;
 }

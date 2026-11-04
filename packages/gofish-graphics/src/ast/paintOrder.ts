@@ -12,8 +12,9 @@ import type { ZOrderConstraint } from "./constraints/zorder";
 /**
  * Paint-order resolution: the order a node paints its DIRECT children in. The
  * one rule behind every place that paints a node's children: the bake walks
- * (the root `bake`, `bakeChildren`, and the coord-local `flattenLayout`) and
- * the bake boundaries that lower their own children (`coord`, and `enclose`,
+ * (the root `bake` and `bakeChildren`) and
+ * the bake boundaries that lower their own children (`coord`, which bakes
+ * them with `bakeChildren`, and `enclose`,
  * `offset` and `arrow` through `lowerChildrenOffset`, which bakes them with
  * `bakeChildren`), so z-order is honored
  * identically inside and outside a boundary. Each of them recurses one node at

@@ -7,6 +7,7 @@
  */
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
+import { Frontend } from "gofish-ir";
 import { check, items, report } from "./testHelpers";
 
 const { blank, chart, circle, intersect, layer, rect, spread, Serialize } =
@@ -96,6 +97,28 @@ console.log("# a hidden mark's label hides with it");
   );
 }
 
+console.log("# a blank's label");
+{
+  // A blank never paints, but its label is a mark of its own: it shows,
+  // unless the blank is hidden, which hides it as it hides any mark's label.
+  const rows = [{ name: "a" }, { name: "b" }];
+  const labels = async (mark: any) =>
+    items(
+      await chart(rows)
+        .flow(spread({ by: "name", dir: "x" }))
+        .mark(mark)
+        .toDisplayList({ w: 300, h: 100, axes: false })
+    ).filter((i: any) => i.kind === "text").length;
+  check(
+    "blank().label() shows its labels",
+    (await labels(blank({ w: 10, h: 10 }).label("name"))) === 2
+  );
+  check(
+    "blank().hidden(true).label() hides them",
+    (await labels(blank({ w: 10, h: 10 }).hidden(true).label("name"))) === 0
+  );
+}
+
 console.log("# a hidden chart still sets its scale");
 {
   const rows = [{ k: "a", v: 10 }];
@@ -153,7 +176,7 @@ console.log("# a hidden operand gives its shape and no paint");
   );
 }
 {
-  // `.hidden()` has no effect on a blank: it is always hidden.
+  // `.hidden()` has no effect on a blank's own paint: it never paints.
   const red = (dl: any) =>
     items(dl).filter((i: any) => i.style?.fill === "red").length;
   const unhidden = await layer([
@@ -236,6 +259,34 @@ console.log("# the wire");
   const ir = await Serialize.toJSON(built);
   check("chart hidden on the wire", ir.root?.hidden === true, ir.root);
   check("mark hidden on the wire", ir.root?.mark?.hidden === true, ir.root);
+}
+{
+  // A cut mark (`.cut()` in Python; JS emits no IR for one) takes `hidden`
+  // on the wire: it validates, and the rebuilt cut paints nothing.
+  const base = await Serialize.toJSON(
+    chart([{ v: 1 }, { v: 2 }]).mark(rect({ w: 20, h: 40, fill: "red" }))
+  );
+  const ir = {
+    ...base,
+    root: {
+      ...(base.root as any),
+      mark: {
+        type: "cut",
+        source: (base.root as any).mark,
+        dir: "y",
+        size: "v",
+        hidden: true,
+      },
+    },
+  };
+  const result = Frontend.validate(ir);
+  check("a hidden cut validates", result.valid, result);
+  const dl = await Serialize.buildIR(ir).toDisplayList({ w: 100, h: 100 });
+  check(
+    "the rebuilt hidden cut paints nothing",
+    !items(dl).some((i: any) => i.style?.fill === "red"),
+    kinds(dl)
+  );
 }
 
 report();

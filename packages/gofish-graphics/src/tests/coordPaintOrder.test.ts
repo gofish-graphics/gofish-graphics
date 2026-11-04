@@ -4,8 +4,8 @@
  * down when they share a child.
  *
  * `coord` is a bake boundary: it flattens its subtree into screen-space draw
- * entries via `flattenLayout` (the coord-local bake) and warps them. These
- * tests assert the DISPLAY-LIST ORDER out of `flattenLayout` honors z-order
+ * entries via `bakeChildren` (the bake a boundary runs on its children) and
+ * warps them. These tests assert the DISPLAY-LIST ORDER out of that bake honors z-order
  * exactly as the root bake does: a later-in-array `.zOrder(-1)` / `zAbove`
  * child is emitted BEFORE its siblings (painted behind), while a plain layer
  * preserves array order.
@@ -14,7 +14,7 @@
  */
 import { coord } from "../ast/coordinateTransforms/coord";
 import { polar } from "../ast/coordinateTransforms/polar";
-import { flattenLayout } from "../ast/coordinateTransforms/bake";
+import { bakeChildren } from "../ast/coordinateTransforms/bake";
 import { Rect } from "../ast/shapes/rect";
 import { layer as Layer } from "../ast/graphicalOperators/layer";
 import { Constraint } from "../ast/constraints";
@@ -38,7 +38,7 @@ function ok(name: string, cond: boolean, detail?: string): void {
 }
 
 // Lay a coord(polar) subtree out (same passes as coordConfluence) and return
-// the ordered `.node`s that `flattenLayout` emits for the given layer.
+// the ordered `.node`s that coord's bake emits for the given layer.
 async function paintOrder(layerNode: any): Promise<any[]> {
   const root: any = await coord({ transform: polar() }, [layerNode]);
   await root.resolveAliases();
@@ -46,10 +46,10 @@ async function paintOrder(layerNode: any): Promise<any[]> {
   root.resolveUnderlyingSpace();
   root.resolveEmbedding();
   root.layout([400, 400], [undefined, undefined]);
-  // `layer([...])` is a spec that coord materializes into a real node; flatten
-  // the materialized child (leaf marks keep their identity), mirroring how
-  // coord itself calls `flattenLayout` on each of its children.
-  return flattenLayout(root.children[0]).map((d: any) => d.node);
+  // `layer([...])` is a spec that coord materializes into a real node; bake
+  // the coord's children (leaf marks keep their identity), as coord itself
+  // does.
+  return bakeChildren(root).map((d: any) => d.node);
 }
 
 // Assert `node` paints the marks of `m` in the order `expected`: their keys
@@ -87,7 +87,7 @@ async function expectThrows(
 
 // Render `node` to a display list and return the marks of `m`, by key, in the
 // order their items appear. This runs the full lowering, so it reaches the
-// bake boundaries (coord, enclose, the compositors) that `flattenLayout` alone
+// bake boundaries (coord, enclose, the compositors) that the bake alone
 // treats as a single entry.
 async function lowerOrder(node: any, m: Record<string, any>): Promise<string> {
   const { items } = await toDisplayList(node, { w: 400, h: 400 });

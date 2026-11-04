@@ -51,23 +51,36 @@ const mergedStyle = (item: DisplayList.DisplayItem, live: LiveSlots): Style => {
   return (merged as Style) ?? item.style;
 };
 
-/** The `luminanceToAlpha` filter's `<filter>` def, which a document that
- *  uses it (`DisplayList.usesLuminanceToAlpha`) writes once; gofish-ir's
- *  string backend writes the same one. */
-export const luminanceToAlphaDef = (): JSX.Element => {
-  const f = DisplayList.LUMINANCE_TO_ALPHA_FILTER;
-  return (
-    <filter id={f.id} color-interpolation-filters={f.colorInterpolationFilters}>
-      <feColorMatrix type={f.matrixType} />
-    </filter>
-  );
-};
-
-/** Deterministic id counter for composite defs — same scheme as gofish-ir's
- *  string backend so the two backends agree on id shape. A module-level counter
- *  (Math.random is non-reproducible); ids only need to be unique within a single
- *  painted document. */
+/** Deterministic id counter for composite defs and the filter def — same
+ *  scheme as gofish-ir's string backend so the two backends agree on id
+ *  shape. A module-level counter (Math.random is non-reproducible), never
+ *  reset, so ids are unique across every visualization on a page. */
 let compositeIdCounter = 0;
+
+/** A render's display list painted, with the `luminanceToAlpha` filter's
+ *  `<filter>` def written once ahead of it when an item uses it
+ *  (`DisplayList.usesLuminanceToAlpha`), under an id of this render's own;
+ *  gofish-ir's string backend writes the same def. */
+export function paintDocument(
+  items: readonly DisplayList.DisplayItem[],
+  interactive?: boolean
+): JSX.Element[] {
+  const filterId = `gf-luminance-to-alpha-${compositeIdCounter++}`;
+  const painted = items.map((item) => paintSVG(item, filterId, interactive));
+  if (!DisplayList.usesLuminanceToAlpha(items)) return painted;
+  const f = DisplayList.LUMINANCE_TO_ALPHA_FILTER;
+  return [
+    <defs>
+      <filter
+        id={filterId}
+        color-interpolation-filters={f.colorInterpolationFilters}
+      >
+        <feColorMatrix type={f.matrixType} />
+      </filter>
+    </defs>,
+    ...painted,
+  ];
+}
 
 /** SolidJS `style` prop for the CSS-only bits (mix-blend-mode). */
 const cssStyle = (style: Style): Record<string, string> | undefined =>
@@ -89,8 +102,11 @@ const styleProps = (style: Style) =>
     style: cssStyle(style),
   }) as const;
 
-export function paintSVG(
+/** `item` painted. `filterId` is the id of its render's `luminanceToAlpha`
+ *  filter def ({@link paintDocument}). */
+function paintSVG(
   item: DisplayList.DisplayItem,
+  filterId: string,
   interactive?: boolean
 ): JSX.Element {
   // Live channels (a `live()` value baked at lower time): per-attribute
@@ -191,14 +207,14 @@ export function paintSVG(
         parts.push(`translate(${t.translate[0]} ${t.translate[1]})`);
       if (t.scale) parts.push(`scale(${t.scale[0]} ${t.scale[1]})`);
       const transform = parts.length ? parts.join(" ") : undefined;
-      const children = item.children.map((c) => paintSVG(c, interactive));
+      const children = item.children.map((c) =>
+        paintSVG(c, filterId, interactive)
+      );
       const f = item.filter;
       // `luminanceToAlpha` has no CSS function: it is an SVG `<filter>` def
-      // the document writes once ({@link luminanceToAlphaDef}).
+      // the render writes once ({@link paintDocument}).
       const filter =
-        f?.kind === "luminanceToAlpha"
-          ? `url(#${DisplayList.LUMINANCE_TO_ALPHA_FILTER.id})`
-          : f?.value;
+        f?.kind === "luminanceToAlpha" ? `url(#${filterId})` : f?.value;
       return (
         <g transform={transform} filter={filter}>
           {children}
@@ -249,7 +265,9 @@ export function paintSVG(
         >
           <defs>
             {plan.defs.map((d) => (
-              <g id={d.id}>{d.items.map((c) => paintSVG(c, false))}</g>
+              <g id={d.id}>
+                {d.items.map((c) => paintSVG(c, filterId, false))}
+              </g>
             ))}
             {plan.masks.map((m) => {
               const uses = m.uses.map((u) => (

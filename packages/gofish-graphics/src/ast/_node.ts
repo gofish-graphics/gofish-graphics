@@ -2896,7 +2896,7 @@ export class GoFishNode {
     // INTERNAL_lower is either a leaf (no children) or a bake boundary (coord,
     // box, connect, arrow, enclose, …) that carries its own absolute transform —
     // a boundary must re-walk its subtree with that transform composed in (via
-    // `flattenLayout`) so descendants land in absolute coordinates before
+    // `bakeChildren`) so descendants land in absolute coordinates before
     // `toPixel`. Pre-recursed, parent-relative child items would be mispositioned.
     // A node with no lowering of its own draws only its children, so with
     // no children it draws nothing: an operator over a group with no rows,
@@ -3278,21 +3278,24 @@ export class GoFishNode {
   /**
    * How this node draws ({@link hidden}): `"shown"`; `"shape"`, hidden below
    * the nearest compositor, which reads its shape; or `"none"`, hidden with
-   * no compositor reading it. A node is hidden when it, an ancestor up to
-   * the nearest compositor, or the mark one of them is attached to (a
-   * label's) is hidden. A hidden flag at or above the compositor is the
-   * compositor's own to answer for: the compositor draws nothing, or is
-   * itself a shape.
+   * no compositor reading it. A node is hidden when it never paints
+   * (`_neverPaints`, a `blank()`), or when `.hidden()` is set on it, an
+   * ancestor up to the nearest compositor, or the mark one of them is
+   * attached to (a label's). Never painting is the node's own: a blank's
+   * label shows unless the blank is `.hidden()`. A hidden flag at or above
+   * the compositor is the compositor's own to answer for: the compositor
+   * draws nothing, or is itself a shape.
    */
   public visibility(): "shown" | "shape" | "none" {
+    if (this._neverPaints) return this.underComposite() ? "shape" : "none";
     for (const n of this.paintAncestors())
-      if (n.isHidden()) return this.underComposite() ? "shape" : "none";
+      if (n._hidden) return this.underComposite() ? "shape" : "none";
     return "shown";
   }
 
-  /** Whether this node itself is hidden: `.hidden()` set it, or it is built
-   *  as one that never paints (`_neverPaints`, a `blank()`), which no
-   *  `.hidden()` call turns back on. */
+  /** Whether this node itself draws nothing of its own: `.hidden()` set it,
+   *  or it is built as one that never paints (`_neverPaints`, a `blank()`),
+   *  which no `.hidden()` call turns back on. */
   public isHidden(): boolean {
     return this._hidden || this._neverPaints;
   }

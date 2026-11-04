@@ -1146,13 +1146,13 @@ export function enclose(
 }
 
 /**
- * `blank()` — an invisible positioning guide. It takes part in layout, carries
- * a datum, anchors refs (`selectAll`) and seeds the color scale exactly as a
- * `rect` does, and it emits NOTHING to the display list: no SVG element, no
- * hit-test entry. That is unconditional — `fill` reaches the color scale only,
- * there is no option that makes a blank paint, and so it takes no paint-only
- * options (stroke, corner radius). See `Blank` in `shapes/rect.tsx` for how
- * the rule is enforced.
+ * `blank()` — an invisible positioning guide: a hidden `rect`. It takes part
+ * in layout, carries a datum, anchors refs (`selectAll`) and seeds the color
+ * scale exactly as a `rect` does, and it never paints: `.hidden()` has no
+ * effect on it, `fill` reaches the color scale only, and it takes no
+ * paint-only options (stroke, corner radius). Like any hidden mark it keeps
+ * its shape, so under a compositor a blank operand gives its box. See `Blank`
+ * in `shapes/rect.tsx`.
  */
 export function blank<T extends Record<string, any>>({
   emX,

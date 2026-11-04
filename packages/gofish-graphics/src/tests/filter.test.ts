@@ -9,11 +9,30 @@ import * as GoFish from "../../dist/index.js";
 import { DisplayList } from "gofish-ir";
 import { check, report } from "./testHelpers";
 
-const { layer, rect, circle, spread, createMark, Filter, Serialize } =
-  GoFish as any;
+const {
+  chart,
+  layer,
+  rect,
+  circle,
+  spread,
+  createMark,
+  intersect,
+  Coord,
+  Filter,
+  Serialize,
+} = GoFish as any;
 
 const groups = (dl: any) =>
   dl.items.filter((i: any) => i.kind === "group" && i.filter !== undefined);
+
+/** Every item of a display list, groups' children and composites' operands
+ *  included. */
+const all = (items: any[]): any[] =>
+  items.flatMap((i: any) => [
+    i,
+    ...all(i.children ?? []),
+    ...all((i.operands ?? []).flatMap((o: any) => [...(o.paint ?? []), ...(o.shape ?? [])])),
+  ]);
 
 console.log("# a mark's filter wraps its drawing");
 {
@@ -69,6 +88,12 @@ console.log("# a layer's filter wraps its whole subtree");
       svg.includes('color-interpolation-filters="sRGB"'),
     svg
   );
+  const id = /<filter id="([^"]+)"/.exec(svg)?.[1];
+  check(
+    "the group's filter names the def",
+    id !== undefined && svg.includes(`filter="url(#${id})"`),
+    svg
+  );
 }
 
 console.log("# a mark built from an operator takes a filter");
@@ -94,6 +119,46 @@ console.log("# a mark built from an operator takes a filter");
       g[0].children.length === 2 &&
       xs[1] - xs[0] === 10,
     dl.items
+  );
+}
+
+console.log("# a filter inside a coordinate space");
+{
+  // A coord bakes its children the way the root does, so it stops at a
+  // filtered node, which filters its subtree as one picture.
+  const dl = await chart([{ v: 1 }], { coord: Coord.polar() })
+    .mark(() =>
+      layer({ filter: "blur(2px)" }, [
+        rect({ w: 10, h: 10, fill: "red" }),
+        rect({ x: 20, w: 10, h: 10, fill: "blue" }),
+      ])
+    )
+    .toDisplayList({ w: 100, h: 100 });
+  const g = all(dl.items).filter((i: any) => i.filter !== undefined);
+  check(
+    "one blur group holding both shapes, under polar",
+    g.length === 1 && g[0].filter.value === "blur(2px)" && g[0].children.length === 2,
+    dl.items
+  );
+}
+
+console.log("# a compositor inside a coordinate space");
+{
+  // The coord bake stops at a compositor too: it composites its operands
+  // rather than drawing each one on its own.
+  const dl = await chart([{ v: 1 }], { coord: Coord.polar() })
+    .mark(() =>
+      intersect([
+        rect({ w: 10, h: 10, fill: "red" }),
+        rect({ x: 5, w: 10, h: 10, fill: "blue" }),
+      ])
+    )
+    .toDisplayList({ w: 100, h: 100 });
+  const kinds = all(dl.items).map((i: any) => i.kind);
+  check(
+    "the operands draw as one composite, not two shapes",
+    kinds.includes("composite") || kinds.filter((k: string) => k === "path" || k === "rect").length === 1,
+    kinds
   );
 }
 

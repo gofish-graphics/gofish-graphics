@@ -188,8 +188,9 @@ How the re-walk lands descendants in absolute coordinates splits by boundary kin
   is the one part a flat list can't fold, so it stays a `group` wrapper around the
   flattened items.
 - A **space remapper** (`coord`) genuinely warps its content, so it keeps a
-  `contentToPixel` map: it flattens its subtree (`flattenLayout`) and maps each
-  descendant through its coordinate transform then its own translate. A `coord` is the
+  `contentToPixel` map: it bakes its children the way the root does
+  (`bakeChildren`), stopping at each bake boundary under it, and maps each
+  entry through its coordinate transform then its own translate. A `coord` is the
   archetype: it lowers its whole subtree into resolved `path`/`rect`/`ellipse` items
   whose coordinates are already warped (a petal becomes a `path`, a polar bar a warped
   `path`), so the backend never sees the polar mapping — just absolute pixel paths.
@@ -234,8 +235,11 @@ flat-absolute fold cannot express on its own:
   (`{ kind: "css", value: "grayscale(1)" }`, which `Filter.grayscale` lowers to) or
   `{ kind: "luminanceToAlpha" }`, which has no CSS function, so a backend writes an
   SVG `<filter>` def with an `feColorMatrix type="luminanceToAlpha"` in sRGB, once per
-  document that uses it (`usesLuminanceToAlpha`), under the fixed id of
-  `LUMINANCE_TO_ALPHA_FILTER` (`composite.ts`), which both backends write from. A
+  render that uses it (`usesLuminanceToAlpha`), from `LUMINANCE_TO_ALPHA_FILTER`
+  (`composite.ts`), which both backends write from. Its id is the render's own,
+  drawn from the counter the composite ids come from (`paintDocument` in
+  `paintSVG.tsx`, `displayListToSVG`), so two visualizations on one page do not
+  share it. A
   filtered node is a bake boundary (`GoFishNode.isBakeBoundary()`): a filtered `layer`
   lowers its own subtree, so the filter sees it as one picture, and a filtered
   node with no lowering of its own (a `spread` a `createMark` returns) lowers its
@@ -251,9 +255,10 @@ flat-absolute fold cannot express on its own:
   `.hidden()` drops the paint but keeps the shape. Under a compositor (a node
   of a type in `COMPOSITE_TYPES`, `bake.ts`), a hidden node lowers as it would
   draw (`GoFishNode.visibility()` is `"shape"`), and its items are recorded in
-  a side table (`displayList/shapeOnly.ts`) that `paintOf` reads; when an
-  operand's lowering recorded none (`shapeOnlyCount`), its paint is its shape
-  and `paintOf` is skipped. The walk up stops at the nearest compositor, so a
+  a side table (`displayList/shapeOnly.ts`) that `paintOf` reads. `paintOf`
+  returns the operand's items themselves when none was recorded, and copies
+  them only from the first that was. A blank never paints (`_neverPaints`),
+  which is its own: its label shows unless the blank is `.hidden()`. The walk up stops at the nearest compositor, so a
   hidden composite still gives its region to a composite that reads it.
   Elsewhere a hidden node draws nothing, and the bake stops at it, so its
   subtree makes no draw entries at all. A `fill` sub-list is the result's own
@@ -347,7 +352,7 @@ canvas, so `render()` reserves no margins: it lowers the tree through the identi
 `toPixel` and paints the list into an `<svg>` of the layout's size:
 
 ```ts
-const paintBaked = () => lowerToDisplayList(child).map(paintSVG); // identity toPixel
+const paintBaked = () => paintDocument(lowerToDisplayList(child)); // identity toPixel
 return (
   <svg width={…} height={…} xmlns="http://www.w3.org/2000/svg">
     <Show when={defs}><defs>{defs}</defs></Show>
@@ -362,7 +367,7 @@ pipeline against a throwaway container and serialize the result.
 The real `paintBaked` brackets each half with the perf instrumentation
 (`src/ast/perf.ts`): it times `lowerToDisplayList(child)`
 under the `lower` label, records the emitted `items.length` as the `displayItems`
-count, then times `items.map((item) => paintSVG(item, interactive))` under `paint`.
+count, then times `paintDocument(items, interactive)` under `paint`.
 Like the layout-pass hooks, this is zero-cost when instrumentation is off and
 dead-code-eliminated from the published build — see
 [Measuring the passes](/internals/layout/passes#measuring-the-passes).

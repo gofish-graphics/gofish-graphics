@@ -799,7 +799,7 @@ Six consumers read the table:
   `COMBINATOR_OPTIONS_BASE_FIELDS` (`debug`) ride; its other base fields sit on
   the node. The emitter keeps these keys, and the validator checks an operator
   or leaf-mark node against them. On a leaf mark, the base fields that Mark
-  methods set (`name`, `label`, `relate`, `zOrder`, `translate`) are checked by
+  methods set (`name`, `label`, `relate`, `zOrder`, `hidden`, `translate`) are checked by
   their own walkers, so the check of the mark's channels skips them. The
   emitter writes each `field(...)` or `datum(...)` instance, and each
   strategy kind used bare (`Curve.monotone`), in its plain `toJSON()` form, so the document it returns validates as the wire carries

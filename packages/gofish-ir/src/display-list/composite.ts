@@ -183,10 +183,10 @@ export function compositePlan(item: CompositeItem, uid: string): CompositePlan {
 /** The `luminanceToAlpha` filter (`DisplayFilter`) as an SVG `<filter>` of
  *  one `feColorMatrix`: each pixel becomes black with an alpha of its
  *  luminance, computed in sRGB as a CSS mask would. A backend writes it
- *  once per document, under `id`, when an item uses it
- *  ({@link usesLuminanceToAlpha}). */
+ *  once per render, when an item uses it ({@link usesLuminanceToAlpha}),
+ *  under an id it draws from the counter its composite ids come from, so
+ *  two visualizations on one page do not share it. */
 export const LUMINANCE_TO_ALPHA_FILTER = {
-  id: "gf-luminance-to-alpha",
   colorInterpolationFilters: "sRGB",
   matrixType: "luminanceToAlpha",
 } as const;

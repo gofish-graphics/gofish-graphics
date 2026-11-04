@@ -98,7 +98,7 @@ the data instead of carrying it.
 
 ## Filling the bottle
 
-Put the bar back, inside the picture. `atop()` takes exactly two children. The
+Put the bar back, inside the picture. Here `atop()` takes two children. The
 first is a surface, the second is painted onto it and clipped to its shape.
 
 ::: gofish
@@ -137,7 +137,8 @@ simplest way to guarantee full coverage. Its height is still `"amount"`, so the
 paint reaches exactly as high as the bar did in the first step.
 
 `atop` is one of five **region compositing** operators, named after Figma's
-boolean operations. They combine the silhouettes of two children:
+boolean operations. They combine the silhouettes of two or more children
+(`exclude` takes exactly two):
 
 | Operator            | What you get                                  |
 | ------------------- | --------------------------------------------- |

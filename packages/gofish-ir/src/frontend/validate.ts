@@ -1101,8 +1101,8 @@ const {
   ...COMBINATOR_NODE_FIELDS
 } = MARK_BASE_FIELDS;
 const REF_MARK_FIELDS = markBaseFields("label", "translate");
-const CUT_MARK_FIELDS = markBaseFields("zOrder", "translate");
-const OFFSET_MARK_FIELDS = markBaseFields("translate");
+const CUT_MARK_FIELDS = markBaseFields("zOrder", "hidden", "translate");
+const OFFSET_MARK_FIELDS = markBaseFields("hidden", "translate");
 
 /** The keys every mark walker checks itself, outside the descriptor walk. */
 const MARK_NODE_KEYS = ["type", "name", "origin", "meta"] as const;

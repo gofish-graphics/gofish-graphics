@@ -15,7 +15,7 @@ covers:
 The `coord` operator wraps a subtree in a non-Cartesian coordinate system — polar,
 clock, wavy, and friends. To make that work, `coord` does something the rest of the
 layout pipeline never does: it **collapses its entire child hierarchy into a flat
-list**. This page explains why, and how `flattenLayout` does it.
+list**. This page explains why, and how the bake (`bake.ts`) does it.
 
 ## Why flatten at all?
 
@@ -40,9 +40,9 @@ Each leaf in the flattened list carries the **sum** of every `translate` and the
 **product** of every `scale` on the path from `coord` down to it. The intermediate
 `stackX` / `stackY` nodes are gone.
 
-## How `flattenLayout` works
+## How the flatten works
 
-`flattenLayout` is an ordinary depth-first recursion that threads two accumulators —
+The flatten is an ordinary depth-first recursion that threads two accumulators —
 a cumulative translation and a cumulative scale — down the tree:
 
 ```ts twoslash
@@ -67,11 +67,12 @@ function descend(
 }
 ```
 
-When the recursion reaches a **leaf**, it writes the accumulated transform back onto
-the node and returns it as a one-element list. A node counts as a leaf when it has no
-children — or when it is a relational node (`connect`, `tween`) or a `box` node, which
-are deliberately treated as opaque (see the caveats below). Internal nodes `flatMap` the recursion over their
-children, so the whole tree bottoms out into a single flat array.
+When the recursion reaches a **leaf** or a **bake boundary**, it emits one draw
+entry for the node at the accumulated transform. A boundary is a node that lowers its
+own subtree (`GoFishNode.isBakeBoundary()`, described under the root bake below): a
+relational node (`connect`, `tween`), a `box`, a compositor, an `enclose`, an `arrow`,
+an `offset`, a nested `coord`, or a node with a `filter`. Other internal nodes recurse
+over their children, so the whole tree bottoms out into a single flat array.
 
 The recursion does **not** visit children in raw array order — it orders them first
 with the very same paint-order rule the root bake uses (`orderChildrenForPaint` in
@@ -80,8 +81,11 @@ with the very same paint-order rule the root bake uses (`orderChildrenForPaint` 
 flatten walked children in array order, so a gotree link's `.zOrder(-1)`
 (links-under-nodes) was silently a no-op under `coord: Coord.polar()`
 ([#676](https://github.com/gofish-graphics/gofish-graphics/issues/676)). Ordering is
-LOCAL to each layer, exactly as in the root bake (below); only the leaf/boundary rules
-differ between the two flatteners.
+LOCAL to each layer, exactly as in the root bake (below): `coord` bakes its children
+with the same `bakeChildren` a translate-only boundary uses, so the two cannot differ.
+They once did: `coord` had its own flatten (`flattenLayout`), which stopped only at
+relational nodes and `box`, so a filtered `layer` or a compositor under a coord was
+flattened through and drew its children unfiltered and uncomposited.
 
 ### How a layer orders its children
 
@@ -161,19 +165,19 @@ Two design notes from the source worth knowing:
   translate is a meaningful signal ("my parent may still place me"). Don't conflate the
   two.
 - **`coord` runs the recursion at render time.** `coord` keeps its children for the
-  layout pass, then calls `flattenLayout` inside `render` to produce the flat list it
-  actually draws, applying the coordinate transform to each flattened leaf.
+  layout pass, then calls `bakeChildren` inside `lower` to produce the flat list it
+  actually draws, applying the coordinate transform to each entry.
 
 ## The root bake — flattening the _whole_ tree
 
-`flattenLayout` is the **coord-local** flattener: `coord` calls it on its own
-subtree. There is also a **root** flattener, `bake`, in the same file, which is what
+`coord` flattens only its own subtree. There is also a **root** flattener, `bake`,
+in the same file, which is what
 render now consumes for the _entire_ chart (replacing the old nested `<g transform>`
 recursion). `bake` flattens the whole scenegraph into one ordered list of
 `DisplayObject`s — each a `{ node, transform }` draw entry at an absolute transform —
 which the render entry maps over directly.
 
-`bake` differs from `flattenLayout` in two ways:
+`bake`, `bakeSubtree` and `bakeChildren` share two rules:
 
 - **Boundaries.** A node whose render is _not_ reducible to "translate its independent
   children" is a **bake boundary**: it emits a single `DisplayObject` and renders its
@@ -182,8 +186,8 @@ which the render entry maps over directly.
   (`connect` / `tween` / `arrow` / `enclose` / `box`, and an axis's `axisSpan`, which
   draws a divider between two `ref` stand-ins), plus any label-bearing node. So `coord`
   stays a boundary — `bake` never recurses _through_ a coordinate transform (which
-  would compose a single global translate across a space remap); `coord` keeps doing
-  its own coord-local `flattenLayout` inside. The bake is **boundary-recursive**. (The
+  would compose a single global translate across a space remap); `coord` bakes its
+  own children inside. The bake is **boundary-recursive**. (The
   boundary set is a string set today; replacing it with a node-declared flag is tracked
   in [#75](https://github.com/gofish-graphics/gofish-graphics/issues/75).)
 - **Draw order.** Paint order is resolved **hierarchically** — per transparent layer,
@@ -197,15 +201,15 @@ which the render entry maps over directly.
   `orderChildrenForPaint` (described above) and only then descends into each child,
   which orders its own children in turn. Transforms still compose all the way to the
   leaves; only the _ordering_ is per-layer. This ordering
-  is the shared `orderChildrenForPaint` helper — the coord-local `flattenLayout` calls
+  is the shared `orderChildrenForPaint` helper — `coord`'s `bakeChildren` calls
   the exact same function, so draw order is resolved identically inside and outside a
   coordinate transform (one rule, not two copies).
 
 **`bakeChildren` — the same flatten, reused by boundaries.** `bake`'s per-transparent-layer
 children-flatten (the z-order resolution + transform composition) is factored into an
 exported `bakeChildren(node, translate, scale)`, which runs `bakeSubtree(child,
-translate, scale)` on each child in paint order. A compositor bakes each of its two
-operands with `bakeSubtree` alone. Both flatten through every node that only places
+translate, scale)` on each child in paint order. `coord` bakes its children with it,
+and a compositor bakes each of its operands with `bakeSubtree` alone. Both flatten through every node that only places
 its children, so a node whose lowering does more is a boundary
 (`GoFishNode.isBakeBoundary()`: a type in `BAKE_BOUNDARY_TYPES`, or a node with a
 `filter`): an `offset`, whose pixel shift is no translate, lowers its
@@ -408,7 +412,7 @@ instead — a geo graticule is its own piece of work.
 
 ## Current limitations
 
-`flattenLayout` is still evolving. The source carries TODOs, and the surrounding
+The bake is still evolving. The source carries TODOs, and the surrounding
 `coord` layout still carries some polar-specific assumptions. The angular extent is no
 longer the bare `2π` literal it once was: `coord.layout` reads the **angular budget**
 from the transform's `domain[0].size` (so `Coord.polar({ centralAngle })` gives a partial fan)
@@ -417,10 +421,12 @@ fraction of the outer radius), building an `effectiveTransform` that shifts `r` 
 inner radius; the axis/grid renderers read the same budget instead of `2π`. What remains
 polar-shaped is the assumption, in the no-`fit` branch and in the axis and grid
 renderers, that axis 0 is angular and axis 1 radial. The
-`connect`-as-leaf
+`connect`-as-boundary
 rule is explicitly called a hack: `connect` is excluded from flattening so it can keep
 rendering in coordinate space, where a cleaner design would have `connect` emit a child
-path mark instead. Treat this page as describing the _intended_ model — expect the
+path mark instead. A compositor under a curved coord composites its warped operands,
+but its `bbox` is the box of its two warped corners, not of the warped region, so an
+inverted mask or a painted fill there can be cut short. Treat this page as describing the _intended_ model — expect the
 exact leaf rules to shift as the non-Cartesian coordinate work matures.
 
 A `coord` node declares the space it opens (`GoFishNode._space`: its axis

@@ -27,7 +27,7 @@
  */
 import type { DisplayList } from "gofish-ir";
 import { GoFishAST } from "../_ast";
-import { paintOf, shapeOnlyCount } from "../displayList/shapeOnly";
+import { paintOf } from "../displayList/shapeOnly";
 import { GoFishNode, placeUnplacedChild } from "../_node";
 import type { Placeable, ToPixel } from "../_node";
 import { Size, displayTranslate } from "../dims";
@@ -263,9 +263,10 @@ const noExactGeometry = (operator: CompositeOperator, what: string) =>
 
 /**
  * Lower each operand of a composite, a bake boundary, through `toPixel`
- * (the composite's own pixel map), in order, once: each operand's shape. A
- * hidden node under the composite lowers as its shape
- * (`GoFishNode.visibility`), and `hidden` says whether one did. Each
+ * (the composite's own pixel map), in order, once: each operand's shape,
+ * and its paint. A hidden node under the composite lowers as its shape
+ * (`GoFishNode.visibility`), so an operand's paint is its shape less what
+ * hidden nodes drew (`paintOf`), the same array when they drew none. Each
  * operand's subtree is baked under the node's `translate` (`lowerSubtree`),
  * so an operand that only places its children (a `pack`) lowers its leaves.
  */
@@ -274,16 +275,15 @@ function lowerOperands(
   translate: [number, number],
   coordinateTransform: CoordinateTransform | undefined,
   toPixel: ToPixel
-): { shape: DisplayList.DisplayItem[]; hidden: boolean }[] {
+): { shape: DisplayList.DisplayItem[]; paint: DisplayList.DisplayItem[] }[] {
   const session = node.getRenderSession();
   assertNoPaintOrder(node);
   const saved = session.toPixel;
   session.toPixel = toPixel;
   try {
     return node.children.map((child) => {
-      const before = shapeOnlyCount();
       const shape = lowerSubtree(child, translate, coordinateTransform);
-      return { shape, hidden: shapeOnlyCount() !== before };
+      return { shape, paint: paintOf(shape) };
     });
   } finally {
     session.toPixel = saved;
@@ -362,6 +362,8 @@ function compositeNode(
         const minY = intrinsicDims?.[1]?.min ?? 0;
         const width = intrinsicDims?.[0]?.size ?? 0;
         const height = intrinsicDims?.[1]?.size ?? 0;
+        // TODO(#1298): under a curved coord this is the box of the warped
+        // corners, not of the warped region.
         const bbox = pixelBox(
           [tx + minX, ty + minY],
           [tx + minX + width, ty + minY + height],
@@ -385,10 +387,9 @@ function compositeNode(
               operator,
               ...(blendMode !== "normal" && { blendMode }),
               bbox,
-              operands: operands.map(({ shape, hidden }) => {
-                const paint = hidden ? paintOf(shape) : shape;
-                return paint === shape ? { paint } : { paint, shape };
-              }),
+              operands: operands.map(({ shape, paint }) =>
+                paint === shape ? { paint } : { paint, shape }
+              ),
               ...(paint.opacity !== undefined && { style: opacity }),
             },
           ];
@@ -447,7 +448,10 @@ function compositeNode(
       },
       // A painted result's outline is the exact one; reading it when there
       // is none is the loud error. An unpainted composite is read as its
-      // box.
+      // box. TODO(#1297): `lower` draws the exact ring only when its
+      // operands also pass `coversItsOutline` (opaque, unblended, unfiltered
+      // items), which layout cannot see, so a translucent operand's result
+      // is masked while this still reports the ring.
       ...(painted && {
         geometry: ({ intrinsicDims }, _children, node) => {
           const box = boxOfDims(intrinsicDims, node.type);

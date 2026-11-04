@@ -13,19 +13,11 @@
 import type { DisplayList } from "gofish-ir";
 
 const shapeOnly = new WeakSet<DisplayList.DisplayItem>();
-/** How many times items have been recorded: a lowering during which it does
- *  not change recorded none, so its items are all paint. */
-let recorded = 0;
 
 /** Record `items`, lowered by a hidden node, as shape and no paint. */
 export function markShapeOnly(items: DisplayList.DisplayItem[]): void {
-  recorded++;
   for (const item of items) shapeOnly.add(item);
 }
-
-/** A count that changes whenever items are recorded ({@link markShapeOnly}):
- *  read it before and after a lowering to know if it recorded any. */
-export const shapeOnlyCount = (): number => recorded;
 
 /**
  * The paint of lowered `items`: the items without the ones a hidden node
@@ -35,22 +27,26 @@ export const shapeOnlyCount = (): number => recorded;
 export function paintOf(
   items: DisplayList.DisplayItem[]
 ): DisplayList.DisplayItem[] {
-  let changed = false;
-  const out: DisplayList.DisplayItem[] = [];
-  for (const item of items) {
-    if (shapeOnly.has(item)) {
-      changed = true;
-      continue;
-    }
-    if (item.kind === "group") {
-      const children = paintOf(item.children);
-      if (children !== item.children) {
-        changed = true;
-        if (children.length > 0) out.push({ ...item, children });
-        continue;
-      }
-    }
-    out.push(item);
-  }
-  return changed ? out : items;
+  // The copy, made at the first item that differs from its paint.
+  let out: DisplayList.DisplayItem[] | undefined;
+  items.forEach((item, i) => {
+    const paint = shapeOnly.has(item)
+      ? undefined
+      : item.kind === "group"
+        ? paintOfGroup(item)
+        : item;
+    if (paint !== item) out ??= items.slice(0, i);
+    if (out && paint) out.push(paint);
+  });
+  return out ?? items;
+}
+
+/** A group's paint: the group itself when none of its children was hidden,
+ *  else the group of its children's paint, or nothing when that is none. */
+function paintOfGroup(
+  group: DisplayList.DisplayItem & { kind: "group" }
+): DisplayList.DisplayItem | undefined {
+  const children = paintOf(group.children);
+  if (children === group.children) return group;
+  return children.length > 0 ? { ...group, children } : undefined;
 }
