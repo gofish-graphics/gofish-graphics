@@ -869,9 +869,7 @@ report their size).
   `n·σ + (n − 1)·g`, so the claim walk knows where each band lands, and a
   value label beside a band, or the half of a category label past the last
   band, takes room. Solving the scope against its slot narrows the bands to
-  make it. In a share scope a layer lays each child out at its claim at σ,
-  so the bands are the σ the scope solved, and so is a share in a scope that
-  carries data (`GoFishNode.flexes`). On an axis the render gives no
+  make it. On an axis the render gives no
   size there is no slot to share, and the bands keep their default size. A
   node that fills (`GoFishNode.fillsRoom`: a leaf with no size of its own, or
   a node with no size of its own whose children all fill) and that a `nest`
@@ -879,6 +877,25 @@ report their size).
   that fills in a slot of a scope that carries data is a share too: it is
   one σ, one data unit, and the layout warns that its chain mixes
   data-driven and flexible sizes (`mixed-sizes`, below).
+- **Room versus box (#1257, #1292).** A layer lays each child out in a
+  room, and the child's box is the hull of what it draws, which may be
+  smaller. In an overlay a child's room is the layer's room. Along a chain
+  (a `distribute` on the axis), a member with no size of its own
+  (`GoFishNode.sizedOn`: no literal, data or percent size, and no claim of
+  its own as a leaf) gets its need, its claim at the σ the layer hands its
+  children, plus its share of the slack: what the layer's room leaves past
+  the hull of the plot's needs, split by `GoFishNode.flexWeight` (`k` for
+  `fr(k)`, else 1). This is CSS's `flex: 1 1 auto`. σ is solved from the
+  needs alone, so where a scope fits its needs to its room the slack is 0
+  and the members get their needs, the σ the scope solved. A filler (a rect
+  with no height) is its room, so a backdrop behind a bar fills the band,
+  and a stack's filler takes what the stack's other parts leave. The
+  children that are part of the layer's plot are proposed the layer's room
+  less how far the rest (dressing, a ring's chrome) reaches past what they
+  draw (`LayerPlan.plotWhole`), so a ring's content gets what its chrome
+  leaves. A percent is laid out in the room its parent gives it at layout
+  (`ρ·room`, read by `fixedSize`), so `[percent(100), 40]` in a stack
+  overflows by 40 px.
 - **Category labels overdraw their neighbors (#1115).** A category label is
   centered on its slot's ref, and only its overhang past the ends of its
   axis takes room: the claim of a ring is the hull of its labels, so labels

@@ -1802,16 +1802,6 @@ export class GoFishNode {
     return this._claimMemo.fills?.[axis] === true;
   }
 
-  /** Whether this node's size on `axis` is flexible: it fills the room it
-   *  is given ({@link fillsRoom}) and brings no data into the scope around
-   *  it (its own data, if any, is in a scope of its own). Its claim, where
-   *  it has one, is shares of that scope's σ alone. */
-  public flexes(axis: 0 | 1): boolean {
-    return (
-      this.fillsRoom(axis) && (this.isScope(axis) || !this.carriesData(axis))
-    );
-  }
-
   /**
    * The claim of this node's plot: its claim without its dressing, what is
    * placed beside a node the claim walk places elsewhere (a value label
