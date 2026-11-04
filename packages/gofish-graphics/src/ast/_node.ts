@@ -84,6 +84,7 @@ import { impliedExtents, Extent, padExtent } from "./extent";
 import * as Pwl from "./solver/pwl";
 import {
   DEFAULT_CANVAS_SIZE,
+  isFr,
   isLength,
   lengthIn,
   printLength,
@@ -1634,8 +1635,33 @@ export class GoFishNode {
   public fixedSize(axis: 0 | 1): MaybeValue<number> | undefined {
     const size = this.ownDims?.[axis]?.size;
     return isLength(size)
-      ? this.lengthPx(axis)
+      ? (this._laidLengths?.[axis] ?? this.lengthPx(axis))
       : (size as MaybeValue<number> | undefined);
+  }
+
+  /**
+   * Whether this node has a size of its own on `axis` (#1257): a literal or
+   * data size, a percent, or a leaf that claims a size (a measured text, a
+   * rect with a height). Anything else (a rect with no height, a layer with
+   * no size of its own, an `fr` weight) is laid out in the room its parent
+   * gives it: its whole room in an overlay, and its need plus its share of
+   * the slack along a chain (`chainRooms` in `layer`).
+   */
+  public sizedOn(axis: 0 | 1): boolean {
+    const len = this.lengthOn(axis);
+    if (len !== undefined) return !isFr(len);
+    if (this.children.length === 0)
+      return this.resolveExtent()[axis] !== undefined && !this.isShare(axis);
+    return this.claimWalk?.ownSize(axis) !== undefined || this.ownsScope(axis);
+  }
+
+  /** The weight of this node's share of a chain's slack on `axis`: `k` for
+   *  `fr(k)`, and 1 for a node with no size of its own. */
+  public flexWeight(axis: 0 | 1): number {
+    const len = this.lengthOn(axis);
+    return len !== undefined && isFr(len)
+      ? ((len as { fr?: number }).fr ?? 1)
+      : 1;
   }
 
   /** Its own box on `axis` ({@link ownDims}) with the size it fixes for
@@ -1920,6 +1946,7 @@ export class GoFishNode {
     this._extent = undefined;
     this._plotExtent = undefined;
     this._claimMemo = freshClaimMemo();
+    this._laidLengths = undefined;
     this._sharing = undefined;
     this.children.forEach((c) => {
       if (c instanceof GoFishNode) c.clearUnderlyingSpace();
@@ -2277,6 +2304,16 @@ export class GoFishNode {
         this.layout(size, scales, shape)
       );
     }
+    // A percent is laid out in the room its parent gives this node (#1257):
+    // `ρ·room + px`, read by `fixedSize` for the rest of this layout.
+    this._laidLengths = ([0, 1] as const).map((axis) => {
+      const len = this.lengthOn(axis);
+      if (len === undefined || isFr(len) || !Number.isFinite(size[axis]))
+        return undefined;
+      const { percent: p, px } = len as { percent?: number; px?: number };
+      return ((p ?? 0) / 100) * size[axis] + (px ?? 0);
+    }) as Size<number | undefined>;
+    size = [this._laidLengths[0] ?? size[0], this._laidLengths[1] ?? size[1]];
     const direction = this.yFrame.direction;
     const parentDirection = yDirection(this.parent);
     this._plotSpan = [undefined, undefined];
@@ -2447,6 +2484,10 @@ export class GoFishNode {
   public projectedTranslate(dir: Direction): number | undefined {
     return this._projectTranslate(dir);
   }
+
+  /** Its percent lengths' pixels in the room it was last laid out in
+   *  (`layout`), per axis; cleared with its claims. */
+  private _laidLengths?: Size<number | undefined>;
 
   /** {@link localPlotSpan}'s memo, per axis, cleared when it is laid out
    *  (`null`: its plot is its box). */

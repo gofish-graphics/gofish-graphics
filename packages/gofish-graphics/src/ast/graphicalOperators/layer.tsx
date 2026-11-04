@@ -41,6 +41,7 @@ import { applyRelationalZBelowDefaults } from "../constraints/relationalPaint";
 import {
   axisIndex,
   axisName,
+  directSlot,
   type ConstraintPosScales,
 } from "../constraints/shared";
 import {
@@ -868,6 +869,88 @@ export const layer = createNodeOperatorSequential(
               : lit;
           };
 
+          // The room of each member of a chain along `axis` that has no size
+          // of its own (#1257): its need (its claim at the σ this layer hands
+          // its children) plus its share of the slack, what this layer's
+          // room leaves past the hull of the needs. An `fr(k)` member takes
+          // k shares. This is CSS's `flex: 1 1 auto`. σ is solved from the
+          // needs alone, so where the needs fill the room (a scope fitted to
+          // it) the slack is 0, and on an axis with no room (an unsized
+          // render) the members keep their needs.
+          // The room this layer gives the children that are part of its plot
+          // (#1257): its own room less how far what dresses its plot (labels
+          // beside their marks, an outline drawn from refs, a ring's chrome)
+          // reaches past it, its whole claim past its plot claim at the σ it
+          // hands its children. Dressing adds around the plot and never
+          // moves it, so the plot is laid out in what dressing leaves. Its
+          // dressing and ink are proposed its whole room.
+          const sigmaOf = (axis: 0 | 1) => {
+            const s = childScaleFactors[axis];
+            return s !== undefined && Number.isFinite(s) ? s : 0;
+          };
+          const plotRooms = ([0, 1] as const).map((axis) => {
+            const room = size[axis];
+            const whole = contentExtents[axis];
+            const plot = node._claimMemo.plans[axis]?.plotWhole;
+            if (
+              !Number.isFinite(room) ||
+              whole === undefined ||
+              plot === undefined
+            )
+              return room;
+            const s = sigmaOf(axis);
+            const reach = Pwl.at(whole.width, s) - Pwl.at(plot.width, s);
+            return Math.max(0, room - Math.max(0, reach));
+          }) as Size;
+          const plotWidth = (axis: 0 | 1): number => {
+            const p =
+              node._claimMemo.plans[axis]?.plotWhole ?? contentExtents[axis];
+            return p === undefined ? 0 : Pwl.at(p.width, sigmaOf(axis));
+          };
+          const inPlot = (i: number, axis: 0 | 1) =>
+            !dressingChildren[axis].has(i) &&
+            !inkChildren[axis].has(i) &&
+            !(isRing(node) && i > 0);
+          const chainRoomsOn = (
+            axis: 0 | 1
+          ): Map<number, number> | undefined => {
+            const room = plotRooms[axis];
+            // With no σ (a scope no data sizes) the needs are constants.
+            const sigma = sigmaOf(axis);
+            if (!Number.isFinite(room)) return undefined;
+            const members = new Set<number>();
+            for (const c of node.constraints) {
+              if (c.type !== "distribute" || axisIndex(c.dir) !== axis)
+                continue;
+              for (const ref of c.children) {
+                const k = directSlot({ operands, keyOf }, ref);
+                if (k !== undefined) members.add(k);
+              }
+            }
+            const flex = [...members].filter((k) => {
+              const c = node.children[k];
+              return c instanceof GoFishNode && !c.sizedOn(axis);
+            });
+            if (flex.length === 0) return undefined;
+            const slack = Math.max(0, room - plotWidth(axis));
+            const weight = (k: number) =>
+              (node.children[k] as GoFishNode).flexWeight(axis);
+            const total = flex.reduce((s, k) => s + weight(k), 0);
+            const rooms = new Map<number, number>();
+            for (const k of flex) {
+              const claim = (node.children[k] as GoFishNode).resolveExtent()[
+                axis
+              ];
+              const need = claim === undefined ? 0 : Pwl.at(claim.width, sigma);
+              rooms.set(
+                k,
+                need + (total > 0 ? (slack * weight(k)) / total : 0)
+              );
+            }
+            return rooms;
+          };
+          const chainRooms = [chainRoomsOn(0), chainRoomsOn(1)];
+
           const layoutChild = (i: number) => {
             const child = children[i];
             const childKey = node.children[i].uid;
@@ -879,26 +962,21 @@ export const layer = createNodeOperatorSequential(
             // derived). Clamp ≥ 0; non-derived axes keep the normal child
             // proposal, so nest composes with — and wins on its derived axes
             // over — any other proposal.
-            // In a share scope (`sharesRoom`) a child is laid out at its
-            // claim at σ: a band is one σ, and a node that holds bands is
-            // what its claim says at the σ the scope solved. So is a share
-            // in a scope that data sizes (a part whose size flexes).
-            const own = ([0, 1] as const).map((axis) => {
-              const sigma = childScaleFactors[axis];
-              const claim =
-                child instanceof GoFishNode
-                  ? child.resolveExtent()[axis]
-                  : undefined;
-              return claim !== undefined &&
-                sigma !== undefined &&
-                Number.isFinite(sigma) &&
-                (node.sharesRoom(axis) || (child as GoFishNode).flexes(axis))
-                ? Pwl.at(claim.width, sigma)
-                : undefined;
-            }) as Size<number | undefined>;
+            // A member of a chain with no size of its own is laid out at
+            // its need plus its share of the chain's slack (`chainRooms`).
+            // Any other child is proposed this layer's room (its cell, its
+            // span, its grid track): a child with a size of its own keeps
+            // it, and one without fills it.
+            const own: Size<number | undefined> = [
+              chainRooms[0]?.get(i),
+              chainRooms[1]?.get(i),
+            ];
             const proposal = childLayoutSizeProposal(
               childKey,
-              size,
+              [
+                inPlot(i, 0) ? plotRooms[0] : size[0],
+                inPlot(i, 1) ? plotRooms[1] : size[1],
+              ],
               gridCellByKey,
               spanByKey,
               own,
@@ -910,18 +988,10 @@ export const layer = createNodeOperatorSequential(
               nestEdges,
               childPlaceables
             );
-            // A node dressed in chrome hands its content (its first child)
-            // what the chrome's gutters leave of its slot (#1032), or its
-            // own room in a share scope. Gutters larger than the slot leave
-            // the content no room (the fixed parts overflow, and the scope
-            // that solved the slot warns); an unsized axis (NaN) stays
-            // unsized.
-            const inside = (axis: 0 | 1) =>
-              Math.max(0, proposed[axis] - sum(node.chromeGutters(axis)));
+            // A ring's content is part of its plot, so it is proposed what
+            // the chrome leaves of the ring's room (`plotRooms`).
+            const layoutSize: Size = proposed;
             const dressed = i === 0 && node.chrome !== undefined;
-            const layoutSize: Size = dressed
-              ? [own[0] ?? inside(0), own[1] ?? inside(1)]
-              : proposed;
             // The shape travels with the room it was proposed with: a room
             // a nest derives from its source, or that chrome's gutters cut
             // down, is not that room, so it has no shape.

@@ -50,6 +50,10 @@ export type LayerPlan = {
    *  its data 0. `whole` is its claim. Undefined when no child takes room
    *  (they all fill the room the layer is given). */
   summary: ChildForms | undefined;
+  /** All its plot's children draw (each one's `whole`, not its plot): the
+   *  room this layer gives them is its own room less how far what is not
+   *  its plot reaches past this (#1257). Undefined with no plot child. */
+  plotWhole: Extent | undefined;
 };
 
 /** `c`'s plan on `axis`, when it is a layer that is no scope of its own
@@ -302,6 +306,7 @@ export function buildPlan(
   const box: [Pwl.Value[], Pwl.Value[]] = [[], []];
   const whole: [Pwl.Value[], Pwl.Value[]] = [[], []];
   const plot: [Pwl.Value[], Pwl.Value[]] = [[], []];
+  const plotWhole: [Pwl.Value[], Pwl.Value[]] = [[], []];
   for (const [i, b] of placement.boxes()) {
     const f = forms[i];
     box[0].push(b.hi);
@@ -333,6 +338,9 @@ export function buildPlan(
     // A child that is all dressing (a layer of outlines around refs) has no
     // plot: it adds nothing to the layer's.
     if (f !== undefined && f.plot === undefined) continue;
+    plotWhole[0].push(wHi);
+    plotWhole[1].push(wLo);
+    roomOn(plotWhole);
     const [pHi, pLo] = reach(f?.plot);
     plot[0].push(pHi);
     plot[1].push(pLo);
@@ -353,7 +361,15 @@ export function buildPlan(
             plot[0].length === 0 ? undefined : scaleExtent(scale, env(plot)!),
           zero: Pwl.ZERO,
         };
-  return { placement, forms, summary };
+  return {
+    placement,
+    forms,
+    summary,
+    plotWhole:
+      plotWhole[0].length === 0
+        ? undefined
+        : scaleExtent(scale, env(plotWhole)!),
+  };
 }
 
 /** Where `parent` seats `child`'s data 0 on `axis` without solving its own
