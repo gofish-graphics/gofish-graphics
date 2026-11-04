@@ -53,7 +53,9 @@ THIS SOFTWARE.
  *                `example:<id> image` still shows its code unless `hidden`.
  *                The capture finds the pictures to take with findImageStoryIds()
  *                below, which reads the docs through this same plugin: the
- *                markdown is the only list of them.
+ *                markdown is the only list of them. (The home page's
+ *                picture cards are the other source of pictures; their list
+ *                is landing/landingCards.ts.)
  *   https://…  → a CodePen link under the code.
  */
 
