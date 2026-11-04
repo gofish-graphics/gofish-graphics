@@ -321,9 +321,6 @@ export type Placeable = {
    *  `rect({})`), so the size cell is free for the constraint to own. Optional
    *  for the same reason as the other constraint write hooks. */
   spaceOn?: (dir: Direction) => UnderlyingSpace | undefined;
-  /** It is a chart's box ({@link GoFishNode.isChartBox}), placed whole:
-   *  where it has no data 0, its baseline is its start (#1241). */
-  isChartBox?: () => boolean;
 };
 
 /** Place a child's baseline at `(0, 0)` on whichever axes it hasn't already
@@ -1828,10 +1825,19 @@ export class GoFishNode {
     return mixed;
   }
 
-  /** Whether this node is a chart's box, the outermost ring of chrome
-   *  around a `chart()` ({@link _chartRing}). */
-  public isChartBox(): boolean {
-    return this._chartRing === true;
+  /**
+   * Whether this node's baseline on `axis` is its start, not its data 0:
+   * it is a chart's box ({@link _chartRing}), placed whole, its chrome with
+   * it (#1257), and it has no data 0 there to share, so it sits by its
+   * start in reading order (#1241). On an axis with a data 0 it keeps that
+   * baseline. Every other box keeps its own origin (a layer of literal
+   * positions, a rotated label's pivot). Read by {@link localAnchor} and by
+   * the claim walk's stand-in for the node (`ClaimChild.startBaseline`).
+   */
+  public baselineIsStart(axis: 0 | 1): boolean {
+    return (
+      this._chartRing === true && !hasOrigin(this._underlyingSpace?.[axis])
+    );
   }
 
   /**
@@ -2568,10 +2574,13 @@ export class GoFishNode {
     return lo <= hi ? [lo, hi] : undefined;
   }
 
+  /** Where its `anchor` sits in its local frame on `axis`. Its baseline is
+   *  its start where it has no data 0 to share ({@link baselineIsStart}). */
   public localAnchor(axis: FancyDirection, anchor: Anchor): number | undefined {
+    const dir = elaborateDirection(axis);
     return localAnchorOf(
-      this.intrinsicDims?.[elaborateDirection(axis)],
-      anchor
+      this.intrinsicDims?.[dir],
+      anchor === "baseline" && this.baselineIsStart(dir) ? "min" : anchor
     );
   }
 

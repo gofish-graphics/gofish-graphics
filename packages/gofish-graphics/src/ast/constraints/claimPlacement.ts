@@ -116,8 +116,10 @@ export type ClaimChild = {
   /** It is chrome (a ring's shapes): no part of the plot, so a chain
    *  places it past the whole box of what it dresses. */
   chrome?: boolean;
-  /** It is a chart's box (`GoFishNode.isChartBox`), placed whole. */
-  chartBox?: boolean;
+  /** Its baseline anchor is its start, not its data 0
+   *  (`GoFishNode.baselineIsStart`: a chart's box, placed whole), as its
+   *  `localAnchor` says once it is laid out. */
+  startBaseline?: boolean;
 };
 
 /**
@@ -232,7 +234,8 @@ const boxOfClaim = (extent: Extent | undefined): Box =>
 /**
  * What the solve reads of a child whose box on `axis` is `[lo, hi]` about
  * its origin, with its box start at `min` when it is placed before the
- * solve, and its plot `[plot[0], plot[1]]` where that is not its box. Only
+ * solve, and its plot `[plot[0], plot[1]]` where that is not its box. Its
+ * baseline is its origin, or its start where `startBaseline` says so. Only
  * `axis` is solved; the other axis has no size, so no fact on it resolves.
  */
 const formulaPlaceable = (
@@ -243,7 +246,7 @@ const formulaPlaceable = (
   space: UnderlyingSpace | undefined,
   min: F | undefined,
   plot?: readonly [F, F],
-  chartBox = false
+  startBaseline = false
 ): SolvePlaceable<F> => {
   const box = { min, size: T.sub(hi, lo) };
   const none = { min: undefined, size: undefined };
@@ -258,12 +261,13 @@ const formulaPlaceable = (
           ? hi
           : anchor === "center"
             ? T.scale(0.5, T.add(lo, hi))
-            : T.zero;
+            : startBaseline
+              ? lo
+              : T.zero;
     },
     localPlotSpan: (a) =>
       a === axis && plot !== undefined ? [plot[0], plot[1]] : undefined,
     spaceOn: (dir) => (dir === axis ? space : undefined),
-    isChartBox: () => chartBox,
   };
 };
 
@@ -603,7 +607,7 @@ export function placeByClaims(
     if (origin !== undefined) presetOrigin.set(i, origin);
     targets.set(
       key,
-      formulaPlaceable(T, axis, lo, hi, c.space, min, plot, c.chartBox)
+      formulaPlaceable(T, axis, lo, hi, c.space, min, plot, c.startBaseline)
     );
     indexOf.set(key, i);
     if (c.dataPositioned) dataPositioned.add(key);

@@ -257,7 +257,7 @@ export const layer = createNodeOperatorSequential(
             placed[i] === undefined) ||
           (alongOwnAxis(c, axis) && (held ??= heldInChain(axis))),
         dataPositioned: placedByOwnData(node, i, axis),
-        chartBox: c instanceof GoFishNode && c.isChartBox(),
+        startBaseline: c instanceof GoFishNode && c.baselineIsStart(axis),
       }));
     };
     // A category label along its own axis takes room only past the ends
