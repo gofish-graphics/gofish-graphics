@@ -554,10 +554,10 @@ for the API.
             "line",
             "ribbon",
             "treemap",
-            "over",
-            "inside",
-            "xor",
-            "out",
+            "union",
+            "intersect",
+            "subtract",
+            "exclude",
             "atop"
           ]
         },

@@ -165,10 +165,10 @@ baseline is `ascent` and `descent`, the font-metrics names, not height and
 depth, which read as the y and z axes (#773).
 
 **Designers' names over specialist names.** The region-compositing operators use
-Figma's boolean-operation names, not the Porter-Duff names: `intersect`,
-`union`, `intersect`, `subtract` and `exclude`, never `over`, `in`, `out` or
-`xor` (#196, #404). `atop` keeps its Porter-Duff name, which Figma has no word
-for (#1267). See [Region compositing](/js/api/operators/region-compositing).
+Figma's boolean-operation names, not the Porter-Duff names: `union`,
+`intersect`, `subtract` and `exclude`, never `over`, `in`, `out` or `xor`
+(#196, #404). `atop` keeps its Porter-Duff name, which Figma has no word for
+(#1267). The frontend IR and the display list use the same names. See [Region compositing](/js/api/operators/region-compositing).
 
 **A name says the shape of its value.** A singular noun gives one thing and a
 plural verb gives a collection: `ref` and `selectAll`, never `refAll` (#510).

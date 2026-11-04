@@ -159,7 +159,7 @@ console.log("# intersect with paint");
   check(
     "an image operand fills through its alpha: a filled composite",
     composites.length === 1 &&
-      composites[0].operator === "in" &&
+      composites[0].operator === "intersect" &&
       composites[0].fill?.[0]?.style?.fill === "#467DA8",
     composites
   );

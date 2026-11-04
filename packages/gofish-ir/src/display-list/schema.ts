@@ -146,9 +146,8 @@ export type DisplayFilter =
 
 /**
  * A region composite: a set operation over its operands' regions (#1267).
- * The user-facing names are Figma's, the wire names Porter-Duff's: `over`
- * is `union`, `in` is `intersect`, `out` is `subtract`, `xor` is `exclude`,
- * and `atop` is `atop`. An operand's region is its alpha coverage: where its
+ * `operator` is the public operator's name: Figma's `union`, `intersect`,
+ * `subtract` and `exclude`, and Porter-Duff's `atop`. An operand's region is its alpha coverage: where its
  * `shape` puts ink, at that ink's alpha.
  *
  * With `fill`, the result is a new shape in that paint: the fill items are
@@ -164,7 +163,7 @@ export type DisplayFilter =
  */
 export interface CompositeItem extends BaseDisplayItem {
   kind: "composite";
-  operator: "over" | "atop" | "in" | "out" | "xor";
+  operator: "union" | "intersect" | "subtract" | "exclude" | "atop";
   /** CSS `mix-blend-mode` between kept paint that overlaps. Default
    *  `"normal"`. */
   blendMode?: string;

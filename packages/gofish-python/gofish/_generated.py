@@ -530,7 +530,7 @@ def union(children: List["Mark"], *, blend_mode: Optional[str] = None, fill: Opt
     ]:
         if _v is not None:
             kwargs[_k] = _v
-    return Mark("over", _children=list(children), **kwargs)
+    return Mark("union", _children=list(children), **kwargs)
 
 def intersect(children: List["Mark"], *, blend_mode: Optional[str] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
     """Draw only where every region overlaps: A ∩ B ∩ .... With no `fill` or `stroke`, each operand draws its own paint inside the overlap, the later over the earlier with `blendMode`; a hidden operand gives its shape and no paint, so it clips the others. With either, the overlap is one new shape in that paint: an exact path when both operands trace their outlines in opaque paint and one of them is convex, else a fill of the overlapping ink, while a stroke is then an error.
@@ -552,27 +552,7 @@ def intersect(children: List["Mark"], *, blend_mode: Optional[str] = None, fill:
     ]:
         if _v is not None:
             kwargs[_k] = _v
-    return Mark("inside", _children=list(children), **kwargs)
-
-def exclude(children: List["Mark"], *, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
-    """Draw where exactly one of two regions is: A − B and B − A. Two operands. With no `fill` or `stroke`, each operand draws its own paint where the other is not. With either, the result is one new shape in that paint. A stroke is an error for now: the result has no exact outline yet (#1201).
-
-    Args:
-        fill: Fill color of the result, or a field name or accessor for a color scale. Given, the result is one new shape in this paint, and the operands give shape only. Default none when `stroke` is given.
-        stroke: Stroke color of the result's outline, or a field name or accessor for a color scale. Default none. It needs an exact outline, which only `intersect` has: both operands must trace their shape in opaque paint (a rect, ellipse, polygon, ribbon, area or region, or a ref to one; not an image, a text or a group), and at least one of them must be convex. Otherwise it is an error.
-        stroke_width: Stroke width in pixels. Without `stroke` it draws nothing. Default 1.
-        opacity: Opacity of the whole result, 0 to 1. Default 1.
-    """
-    kwargs: Dict[str, Any] = {}
-    for _k, _v in [
-        ("fill", _channel(fill)),
-        ("stroke", _channel(stroke)),
-        ("strokeWidth", stroke_width),
-        ("opacity", opacity),
-    ]:
-        if _v is not None:
-            kwargs[_k] = _v
-    return Mark("xor", _children=list(children), **kwargs)
+    return Mark("intersect", _children=list(children), **kwargs)
 
 def subtract(children: List["Mark"], *, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
     """Draw the first region with the others removed: A − B − .... With no `fill` or `stroke`, A draws its own paint where no other operand is. With either, the result is one new shape in that paint. A stroke is an error for now: the result has no exact outline yet (#1201). The result is sized to A.
@@ -592,7 +572,27 @@ def subtract(children: List["Mark"], *, fill: Optional[str] = None, stroke: Opti
     ]:
         if _v is not None:
             kwargs[_k] = _v
-    return Mark("out", _children=list(children), **kwargs)
+    return Mark("subtract", _children=list(children), **kwargs)
+
+def exclude(children: List["Mark"], *, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
+    """Draw where exactly one of two regions is: A − B and B − A. Two operands. With no `fill` or `stroke`, each operand draws its own paint where the other is not. With either, the result is one new shape in that paint. A stroke is an error for now: the result has no exact outline yet (#1201).
+
+    Args:
+        fill: Fill color of the result, or a field name or accessor for a color scale. Given, the result is one new shape in this paint, and the operands give shape only. Default none when `stroke` is given.
+        stroke: Stroke color of the result's outline, or a field name or accessor for a color scale. Default none. It needs an exact outline, which only `intersect` has: both operands must trace their shape in opaque paint (a rect, ellipse, polygon, ribbon, area or region, or a ref to one; not an image, a text or a group), and at least one of them must be convex. Otherwise it is an error.
+        stroke_width: Stroke width in pixels. Without `stroke` it draws nothing. Default 1.
+        opacity: Opacity of the whole result, 0 to 1. Default 1.
+    """
+    kwargs: Dict[str, Any] = {}
+    for _k, _v in [
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
+        ("strokeWidth", stroke_width),
+        ("opacity", opacity),
+    ]:
+        if _v is not None:
+            kwargs[_k] = _v
+    return Mark("exclude", _children=list(children), **kwargs)
 
 def atop(children: List["Mark"], *, blend_mode: Optional[str] = None, opacity: Optional[float] = None) -> Mark:
     """Draw A, and each later operand over it, clipped to A: A, then B ∩ A, .... The later operands mix with A by `blendMode`. The result is sized to A. It takes no `fill`: it draws its operands' own paint.

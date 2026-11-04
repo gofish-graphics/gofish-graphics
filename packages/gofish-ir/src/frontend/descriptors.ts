@@ -283,10 +283,6 @@ export interface ConstructDescriptor {
   /** The wire discriminator (the node's `type` tag). */
   type: string;
   kind: ConstructKind;
-  /** Python-facing factory name, when it differs from the wire `type` — the
-   *  Porter-Duff-style compositing renames (inside→intersect, xor→exclude,
-   *  out→subtract, atop→paint). The wire `type` is unchanged either way. */
-  pyName?: string;
   doc?: string;
   /** The field the factory takes as its first argument, before an options
    *  object of the rest: `Coord.geo("mercator", { lon })`. In Python it is
@@ -2452,31 +2448,27 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   // Region compositing (#1267): the five set operations. The wire `type` is
-  // the Porter-Duff name; `pyName` is the JS/Python-facing Figma name. Each
-  // reads its operands and draws its result: never an operand as itself.
-  over: combinatorMark("over", {
-    pyName: "union",
+  // the public name. Each reads its operands and draws its result: never an
+  // operand as itself.
+  union: combinatorMark("union", {
     doc: "Draw the union of the regions: A ∪ B ∪ .... With no `fill` or `stroke`, each operand draws its own paint, and where two overlap the later one is drawn over the earlier with `blendMode`. With either, the union is one new shape in that paint. A stroke is an error for now: the result has no exact outline yet (#1201).",
     fields: {
       blendMode: COMPOSITE_BLEND,
       ...COMPOSITE_PAINT,
     },
   }),
-  inside: combinatorMark("inside", {
-    pyName: "intersect",
+  intersect: combinatorMark("intersect", {
     doc: "Draw only where every region overlaps: A ∩ B ∩ .... With no `fill` or `stroke`, each operand draws its own paint inside the overlap, the later over the earlier with `blendMode`; a hidden operand gives its shape and no paint, so it clips the others. With either, the overlap is one new shape in that paint: an exact path when both operands trace their outlines in opaque paint and one of them is convex, else a fill of the overlapping ink, while a stroke is then an error.",
     fields: {
       blendMode: COMPOSITE_BLEND,
       ...COMPOSITE_PAINT,
     },
   }),
-  xor: combinatorMark("xor", {
-    pyName: "exclude",
+  exclude: combinatorMark("exclude", {
     doc: "Draw where exactly one of two regions is: A − B and B − A. Two operands. With no `fill` or `stroke`, each operand draws its own paint where the other is not. With either, the result is one new shape in that paint. A stroke is an error for now: the result has no exact outline yet (#1201).",
     fields: COMPOSITE_PAINT,
   }),
-  out: combinatorMark("out", {
-    pyName: "subtract",
+  subtract: combinatorMark("subtract", {
     doc: "Draw the first region with the others removed: A − B − .... With no `fill` or `stroke`, A draws its own paint where no other operand is. With either, the result is one new shape in that paint. A stroke is an error for now: the result has no exact outline yet (#1201). The result is sized to A.",
     fields: COMPOSITE_PAINT,
   }),

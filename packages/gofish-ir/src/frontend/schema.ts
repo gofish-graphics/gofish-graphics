@@ -796,10 +796,10 @@ export type CombinatorMarkType =
   | "ribbon"
   | "treemap"
   | "pack"
-  | "over"
-  | "inside"
-  | "xor"
-  | "out"
+  | "union"
+  | "intersect"
+  | "subtract"
+  | "exclude"
   | "atop";
 
 /**
@@ -1245,9 +1245,9 @@ export const COMBINATOR_MARK_TYPES: readonly CombinatorMarkType[] = [
   "ribbon",
   "treemap",
   "pack",
-  "over",
-  "inside",
-  "xor",
-  "out",
+  "union",
+  "intersect",
+  "subtract",
+  "exclude",
   "atop",
 ];

@@ -128,19 +128,19 @@ export const MARK_CHANNELS = {
     x: "pos",
     y: "pos",
   },
-  over: {
+  union: {
     fill: "color",
     stroke: "color",
   },
-  inside: {
+  intersect: {
     fill: "color",
     stroke: "color",
   },
-  xor: {
+  exclude: {
     fill: "color",
     stroke: "color",
   },
-  out: {
+  subtract: {
     fill: "color",
     stroke: "color",
   },

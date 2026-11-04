@@ -194,7 +194,9 @@ export const DISPLAY_LIST_JSON_SCHEMA = {
       additionalProperties: false,
       properties: {
         kind: { const: "composite" },
-        operator: { enum: ["over", "atop", "in", "out", "xor"] },
+        operator: {
+          enum: ["union", "intersect", "subtract", "exclude", "atop"],
+        },
         blendMode: { type: "string" },
         bbox: BBOX,
         operands: {

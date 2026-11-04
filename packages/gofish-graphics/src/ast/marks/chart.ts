@@ -601,7 +601,7 @@ function tagRelationalFusable(
 }
 
 /**
- * The channels a relational mark or `intersect` reads once per group: the
+ * The channels a relational mark or a compositor reads once per group: the
  * color channels of its channel map (`fill`, `stroke`) and its raw ones
  * (`enclose`'s `padding`), generated from its descriptor. They are the keys
  * the connector reads per group, so the only ones resolved.
@@ -1293,7 +1293,7 @@ export function layer<T>(
 
 /** The mark-combinator form of a compositing operator (porterDuff.tsx):
  *  `union([a, b])` or `union(opts, [a, b, ...])`. `irType` is its wire
- *  type, the Porter-Duff name. */
+ *  type, the same name. */
 function makeCompositeCombinator<O extends object>(
   lowLevel: (opts: any, children: any) => any,
   irType: string
@@ -1328,17 +1328,18 @@ function makeCompositeCombinator<O extends object>(
   return fn;
 }
 
-// The second arg is the IR/serialize *wire* type: the Porter-Duff strings
-// ("over"/"inside"/"out"/"xor"/"atop"), which the serialize bridge and IR
-// schema use. Only the JS-facing names are Figma-style.
-export const union = makeCompositeCombinator<UnionOptions>(Union, "over");
+// The second arg is the IR/serialize wire type, which is the public name.
+export const union = makeCompositeCombinator<UnionOptions>(Union, "union");
 export const intersect = makeCompositeCombinator<IntersectOptions>(
   Intersect,
-  "inside"
+  "intersect"
 );
 export const subtract = makeCompositeCombinator<SubtractOptions>(
   Subtract,
-  "out"
+  "subtract"
 );
-export const exclude = makeCompositeCombinator<ExcludeOptions>(Exclude, "xor");
+export const exclude = makeCompositeCombinator<ExcludeOptions>(
+  Exclude,
+  "exclude"
+);
 export const atop = makeCompositeCombinator<AtopOptions>(Atop, "atop");

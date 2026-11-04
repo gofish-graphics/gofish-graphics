@@ -43,11 +43,11 @@ const outside = (...operands: number[]): CompositeMask => ({
  * each operand's paint is drawn where the operator keeps it (PiCCL's
  * coverage-blend rule, for operands a and b):
  *
- *   over (union):      a only → a, b only → b, both → b blended over a
- *   in (intersect):    both → b blended over a
- *   out (subtract):    a only → a
- *   xor (exclude):     a only → a, b only → b
- *   atop:              a only → a, both → b blended over a
+ *   union:      a only → a, b only → b, both → b blended over a
+ *   intersect:  both → b blended over a
+ *   subtract:   a only → a
+ *   exclude:    a only → a, b only → b
+ *   atop:       a only → a, both → b blended over a
  *
  * A hidden operand has shape and no paint, so it only clips.
  */
@@ -62,11 +62,11 @@ export function compositeLayers(
     blend = false
   ): CompositeLayer => ({ draw, masks, blend });
   switch (operator) {
-    case "over":
+    case "union":
       return filled
         ? [layer("fill", [alpha(...all(n))])]
         : all(n).map((i) => layer(i, [], i > 0));
-    case "in":
+    case "intersect":
       return filled
         ? [
             layer(
@@ -83,12 +83,12 @@ export function compositeLayers(
               i > 0
             )
           );
-    case "out": {
+    case "subtract": {
       const rest = all(n, 1);
       const masks = rest.length ? [outside(...rest)] : [];
       return [filled ? layer("fill", [alpha(0), ...masks]) : layer(0, masks)];
     }
-    case "xor":
+    case "exclude":
       return filled
         ? [
             layer("fill", [alpha(0), outside(1)]),
@@ -105,7 +105,7 @@ export function compositeLayers(
 
 /** A key that names a mask, so a plan writes each distinct mask once. */
 const maskKey = (m: CompositeMask): string =>
-  `${m.invert ? "out" : "in"}-${m.operands.join("-")}`;
+  `${m.invert ? "outside" : "alpha"}-${m.operands.join("-")}`;
 
 /**
  * A composite as SVG draws it, ids and all: the one plan both SVG backends

@@ -230,11 +230,14 @@ function checkItem(
     checkBBox(item.bbox, `${path}.bbox`, errors);
     if (
       item.operator === undefined ||
-      !["over", "atop", "in", "out", "xor"].includes(item.operator as string)
+      !["union", "intersect", "subtract", "exclude", "atop"].includes(
+        item.operator as string
+      )
     )
       errors.push({
         path: `${path}.operator`,
-        message: "operator must be one of over, atop, in, out, xor",
+        message:
+          "operator must be one of union, intersect, subtract, exclude, atop",
       });
     const list = (v: unknown, at: string): void => {
       if (!Array.isArray(v))

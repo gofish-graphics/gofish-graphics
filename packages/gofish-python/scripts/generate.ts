@@ -16,8 +16,7 @@
  *  - Closed-signature **leaf mark** factories (rect, circle, ellipse, petal,
  *    text, image, polygon, blank) — pure kwargs-collection + wire rename.
  *  - The five compositing operators + enclose/arrow **combinator-only**
- *    marks — pure kwargs-collection, `pyName` supplies the Python-facing
- *    rename (wire `type` stays the descriptor's `type`).
+ *    marks — pure kwargs-collection, named by their wire `type`.
  *  - `_opts(...) -> dict` **cores** for the dual-form constructs (spread,
  *    stack, scatter, group, table, treemap, line, ribbon, layer) — the
  *    mechanical kwargs→dict half. The polymorphic
@@ -539,20 +538,19 @@ parts.push(
   "\n# --- Combinator-only marks ---------------------------------------------------\n"
 );
 const COMBINATOR_ONLY = [
-  "over",
-  "inside",
-  "xor",
-  "out",
+  "union",
+  "intersect",
+  "subtract",
+  "exclude",
   "atop",
   "position",
   "arrow",
 ];
 for (const wireType of COMBINATOR_ONLY) {
   const d = COMBINATOR_MARKS[wireType];
-  const pyName = d.pyName ?? wireType;
   parts.push(
     renderCombinatorFactory({
-      pyName,
+      pyName: wireType,
       wireType: d.type,
       doc: d.doc,
       fields: resolveFields(d),
@@ -1122,7 +1120,7 @@ writeFamilyModule({
   wire: { tag: "type", keys: "wire", bare: false },
   factories: Object.entries(COORDS).map(([type, d]) => ({
     family: "Coord",
-    name: pyKwarg(d.pyName ?? type),
+    name: pyKwarg(type),
     tag: type,
     params: resolveFields(d),
     preset: {},

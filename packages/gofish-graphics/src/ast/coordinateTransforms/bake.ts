@@ -49,7 +49,7 @@ const RELATIONAL_TYPES = ["connect", "tween"];
 //  1. **Boundaries.** A node whose render is NOT reducible to "translate its
 //     independent children" is a *bake boundary*: it emits a single DisplayObject
 //     and lowers its own subtree. These are the space-remappers (`coord`), the
-//     compositors (`over`/`atop`/`in`/`out`/`xor`), the cross-child
+//     compositors (`union`/`intersect`/`subtract`/`exclude`/`atop`), the cross-child
 //     self-drawers (`connect`/`tween`/`arrow`/`enclose`/`box`/`axisSpan`),
 //     `offset`, and any filtered node (it filters its subtree as one picture).
 //     The root bake never recurses *through* a coordinate transform (which
@@ -70,11 +70,11 @@ const RELATIONAL_TYPES = ["connect", "tween"];
  *  operands' shapes, so a hidden node under one lowers as its shape
  *  (`GoFishNode.visibility`). */
 export const COMPOSITE_TYPES: ReadonlySet<string> = new Set([
-  "over",
+  "union",
+  "intersect",
+  "subtract",
+  "exclude",
   "atop",
-  "in",
-  "out",
-  "xor",
 ]);
 
 /** The node types that are bake boundaries whatever their options

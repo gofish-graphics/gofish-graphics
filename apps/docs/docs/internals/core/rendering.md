@@ -246,8 +246,8 @@ flat-absolute fold cannot express on its own:
   children where it put them. A lent drawing (`INTERNAL_lendDrawing`, the copy a
   `time.transition()` moves) is filtered the same way.
 - **`composite`** — a region composite (#1267): one of the five set operations
-  over its `operands`, named by its Porter-Duff `operator` (`over` for `union`,
-  `in` for `intersect`, `out` for `subtract`, `xor` for `exclude`, and `atop`).
+  over its `operands`, named by its `operator`, the public operator's name
+  (`union`, `intersect`, `subtract`, `exclude` or `atop`).
   Each operand is `{ paint, shape? }`, from one lowering of the child: `shape`
   is what it covers, and `paint` is what it draws, the same items without the
   ones hidden nodes drew (empty for a hidden child). `shape` is omitted when it
@@ -270,12 +270,13 @@ flat-absolute fold cannot express on its own:
   `compositeLayers(operator, n, filled)` (`composite.ts`) is the one layer plan
   both SVG backends draw: each layer draws an operand's paint (or the fill),
   under a list of masks, each the alpha of some operands' shapes or its inverse,
-  and says whether it blends. `union` draws each operand over the last; `in`
-  draws each operand masked by every other's alpha; `out` draws the first
-  masked by every other's inverse; `xor` draws each of its two masked by the
-  other's inverse; `atop` draws the first, then each later one masked by the
-  first's alpha. With a fill, `union` and `in` draw the fill through the
-  operands' alpha instead. Only `union`, `in` and `atop` blend, by the item's
+  and says whether it blends. `union` draws each operand over the last;
+  `intersect` draws each operand masked by every other's alpha; `subtract`
+  draws the first masked by every other's inverse; `exclude` draws each of its
+  two masked by the other's inverse; `atop` draws the first, then each later
+  one masked by the first's alpha. With a fill, `union` and `intersect` draw
+  the fill through the operands' alpha instead. Only `union`, `intersect` and
+  `atop` blend, by the item's
   `blendMode` as CSS `mix-blend-mode`, in an `isolate`d group so a blend mixes
   the layers only.
 

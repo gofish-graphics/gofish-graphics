@@ -20,7 +20,7 @@ import type { ZOrderConstraint } from "./constraints/zorder";
  * identically inside and outside a boundary. Each of them recurses one node at
  * a time, so a node's order never reaches past its own children (#982).
  *
- * The compositors (`over`, `atop`, `in`, `out`, `xor`, `mask`) are the
+ * The compositors (`union`, `intersect`, `subtract`, `exclude`, `atop`) are the
  * exception the operator itself defines: they paint ONE result combined from a
  * source child and a destination child, so their children have no paint order
  * to change. They call {@link assertNoPaintOrder} instead, which throws if a z
@@ -247,7 +247,7 @@ export function orderChildrenForPaint(node: GoFishAST): readonly GoFishAST[] {
 
 /**
  * For a node that paints one result combined from its children (a compositor:
- * `over`, `atop`, `in`, `out`, `xor`, `mask`), where each child's index names
+ * `union`, `intersect`, `subtract`, `exclude`, `atop`), where each child's index names
  * its role rather than its paint order. Resolves the node's own z constraints
  * like {@link orderChildrenForPaint}, then throws if any z constraint orders
  * the node's children: there is no paint order between them to change.

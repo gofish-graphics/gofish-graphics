@@ -1,8 +1,8 @@
 /**
  * Region compositing (#1267): `union`, `intersect`, `subtract`, `exclude`
  * and `atop`, the set operations over their operands' regions, named after
- * Figma's boolean operations. The IR names are Porter-Duff's (`over`, `in`,
- * `out`, `xor`, `atop`).
+ * Figma's boolean operations, plus Porter-Duff's `atop`. The IR and
+ * display-list names are the same.
  *
  * An operator reads its operands and draws its result; it never draws an
  * operand as itself. An operand's region is its alpha: where it puts ink, at
@@ -84,30 +84,21 @@ export type ExcludeOptions = CompositePaint;
 /** `atop` draws its operands' own paint, so it takes no `fill`. */
 export type AtopOptions = CompositeBlend & { opacity?: number };
 
-/** The user-facing name of each operator, for errors. */
-const NAMES: Record<CompositeOperator, string> = {
-  over: "union",
-  in: "intersect",
-  out: "subtract",
-  xor: "exclude",
-  atop: "atop",
-};
-
 /** How a composite is laid out: in the union of its operands, in their
  *  overlap, or in its first operand. */
 type Sizing = "union" | "overlap" | "first";
 const SIZING: Record<CompositeOperator, Sizing> = {
-  over: "union",
-  xor: "union",
-  in: "overlap",
-  out: "first",
+  union: "union",
+  exclude: "union",
+  intersect: "overlap",
+  subtract: "first",
   atop: "first",
 };
 
 function checkArity(operator: CompositeOperator, n: number): void {
-  if (operator === "xor" ? n !== 2 : n < 2)
+  if (operator === "exclude" ? n !== 2 : n < 2)
     throw new Error(
-      `${NAMES[operator]}: expected ${operator === "xor" ? "exactly two" : "two or more"} operands, got ${n}.`
+      `${operator}: expected ${operator === "exclude" ? "exactly two" : "two or more"} operands, got ${n}.`
     );
 }
 
@@ -237,7 +228,7 @@ function exactResult(
   operator: CompositeOperator,
   placed: readonly Placeable[]
 ): OutlinePoint[] | undefined {
-  if (operator !== "in" || placed.length !== 2) return undefined;
+  if (operator !== "intersect" || placed.length !== 2) return undefined;
   const a = operandRing(placed[0]);
   if (a?.length === 0) return [];
   const b = a && operandRing(placed[1]);
@@ -249,8 +240,8 @@ function exactResult(
  *  geometry the operands do not give. */
 const noExactGeometry = (operator: CompositeOperator, what: string) =>
   new Error(
-    `${NAMES[operator]}: ${what} needs the exact outline of the result, and ` +
-      (operator === "in"
+    `${operator}: ${what} needs the exact outline of the result, and ` +
+      (operator === "intersect"
         ? `these operands give none. Exact geometry needs both operands to ` +
           `trace their shape in opaque paint (a rect, ellipse, polygon, ` +
           `ribbon, area or region, or a ref to one; not an image, a text or ` +
@@ -495,25 +486,25 @@ function layoutComposite(
 /** union: A ∪ B ∪ .... */
 export const union = createNodeOperator(
   (opts: UnionOptions, children: GoFishAST[]) =>
-    compositeNode("over", children, opts)
+    compositeNode("union", children, opts)
 );
 
 /** intersect: A ∩ B ∩ .... */
 export const intersect = createNodeOperator(
   (opts: IntersectOptions, children: GoFishAST[]) =>
-    compositeNode("in", children, opts)
+    compositeNode("intersect", children, opts)
 );
 
 /** subtract: A − B − .... */
 export const subtract = createNodeOperator(
   (opts: SubtractOptions, children: GoFishAST[]) =>
-    compositeNode("out", children, opts)
+    compositeNode("subtract", children, opts)
 );
 
 /** exclude: where exactly one of A and B is. */
 export const exclude = createNodeOperator(
   (opts: ExcludeOptions, children: GoFishAST[]) =>
-    compositeNode("xor", children, opts)
+    compositeNode("exclude", children, opts)
 );
 
 /** atop: A, then each later operand clipped to A. */

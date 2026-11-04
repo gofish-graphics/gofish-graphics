@@ -173,7 +173,7 @@ export const fadeItem = (
  *  only positions its children (a `treemap`, a `pack`, a `spread`) needs no
  *  lowering of its own, and each leaf lowers at its baked absolute
  *  transform. The leaves lower under the session's `toPixel`, so this also
- *  works inside a compositor (`mask`/`over`/`box`) that remapped it to a
+ *  works inside a compositor (`union`/`intersect`/…) or a `box` that remapped it to a
  *  bbox-local frame. */
 export const lowerChildrenOffset = (
   node: GoFishNode,

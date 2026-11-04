@@ -285,12 +285,11 @@ export const FACTORIES: Record<string, (...args: any[]) => any> = {
   layer,
   position,
   arrow,
-  // The compositing wire types are the Porter-Duff names; the factories
-  // are Figma's (#196/#202, #1267).
-  over: union,
-  inside: intersect,
-  xor: exclude,
-  out: subtract,
+  // The compositing operators (#1267).
+  union,
+  intersect,
+  subtract,
+  exclude,
   atop,
   // Coordinate transforms. A transform is a JS object of functions, so the
   // wire carries only its `type` tag and options, and the factory makes it

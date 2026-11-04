@@ -1954,14 +1954,10 @@ def ref(target: Union[str, Token]) -> _RefProxy:
     return _RefProxy([target])
 
 
-# `arrow` and the region-compositing quartet (Porter-Duff-style
-# inside/xor/out/atop, renamed intersect/exclude/subtract/paint per #196/#202,
-# plus `over`/`mask`) are generated (packages/gofish-python/gofish/_generated.py)
-# — pure kwargs-collection + the `pyName` rename table, imported above. Wire
-# `type` strings stay the OLD Porter-Duff spellings ("inside"/"xor"/"out"/
-# "atop") per the descriptor's `pyName` — the IR serializer never renamed them
-# (FACTORIES in packages/gofish-graphics/src/serialize/registry.ts is still
-# keyed by the old wire types).
+# `arrow` and the region-compositing operators (union/intersect/subtract/
+# exclude/atop) are generated (packages/gofish-python/gofish/_generated.py)
+# — pure kwargs-collection, imported above. Each one's wire `type` is its
+# name (FACTORIES in packages/gofish-graphics/src/serialize/registry.ts).
 
 
 def stack(

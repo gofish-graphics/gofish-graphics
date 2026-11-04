@@ -115,7 +115,7 @@ any of them takes effect there, and a boundary that declares its own constraints
 `coord` or `enclose` lowered its children in array order, and a constraint that parted
 inside one did nothing.
 
-The compositors (`over` / `atop` / `in` / `out` / `xor`) are the one
+The compositors (`union` / `intersect` / `subtract` / `exclude` / `atop`) are the one
 exception, and the operator defines it. A compositor paints one result combined from
 its operands, in the order the operation reads them (`subtract` removes the later
 operands from the first; `atop` draws the later ones over the first), so the index of
@@ -182,7 +182,7 @@ which the render entry maps over directly.
 - **Boundaries.** A node whose render is _not_ reducible to "translate its independent
   children" is a **bake boundary**: it emits a single `DisplayObject` and renders its
   own subtree internally. These are the space-remappers (`coord`), the compositors
-  (`over` / `atop` / `in` / `out` / `xor`), and the cross-child self-drawers
+  (`union` / `intersect` / `subtract` / `exclude` / `atop`), and the cross-child self-drawers
   (`connect` / `tween` / `arrow` / `enclose` / `box`, and an axis's `axisSpan`, which
   draws a divider between two `ref` stand-ins), plus any label-bearing node. So `coord`
   stays a boundary — `bake` never recurses _through_ a coordinate transform (which

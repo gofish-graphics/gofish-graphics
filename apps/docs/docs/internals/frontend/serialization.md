@@ -973,10 +973,9 @@ It emits:
   `petal`, `text`, `image`, `polygon`, `blank`) — pure kwargs-collection
   plus wire-key rename, with docstrings from each field's `doc`. An
   undeclared kwarg is a `TypeError` on all of them; none takes `**kwargs`.
-- The five compositing operators and other **combinator-only** marks — the
-  Porter-Duff-to-Figma renames (`over`→`union`, `inside`→`intersect`,
-  `xor`→`exclude`, `out`→`subtract`) come from the descriptor's `pyName`,
-  killing four previously hand-copied wire-name tables.
+- The five compositing operators and other **combinator-only** marks —
+  each named by its wire `type`, which is its public name (`union`,
+  `intersect`, `subtract`, `exclude`, `atop`).
 - `_opts(...) -> dict` **cores** for the dual-form constructs (`spread`,
   `stack`, `scatter`, `group`, `table`, `treemap`, `line`, `ribbon`,
   `layer`, `pack`), with separate combinator-form
@@ -1086,8 +1085,8 @@ descriptor's `positional` field is taken out of the options and passed first
 (`geo(projection, { lon, lat })`); when that field is required and missing,
 `rebuild` throws and names it (`coord geo: missing required field
 "projection"`). A dual-form construct such as
-`spread` or `line` therefore has one entry for both forms, and the compositing
-wire types map to their renamed factories (`inside` to `intersect`, and so on).
+`spread` or `line` therefore has one entry for both forms, and each compositing
+wire type is its factory's name (`intersect` to `intersect`, and so on).
 The coord transforms (`polar`, `clock`, `wavy`, `geo`) are entries of the same
 table. Only an `OPERATOR_BUILDERS` entry sees the bridge.
 
