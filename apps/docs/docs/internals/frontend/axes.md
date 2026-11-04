@@ -67,14 +67,15 @@ The node's identity (name, key, visibility) moves onto the outermost ring. That
 ring also records the boxes inside it as `GoFishNode.chrome`:
 
 - `chrome.content` is the node without chrome.
-- `chrome.withAxes` is the content with its axis gutters and category label
+- `chrome.withAxes` is the content with its axes and category label
   rows. Titles and the legend are seated around this box, and the render root
   reads its axis direction off it.
 - `chrome.rings` lists the rings, innermost first. A ring's first child is the
   ring inside it (or the content); its other children are its chrome.
-- `chrome.gutters` is how far the chrome reaches past the plot on each side
-  (#1032), which the node's layout reads off the claims. See
-  [Chrome gutters](/internals/layout/passes#chrome-gutters).
+- Each ring is an ordinary layer (#1257): it seats its content at its data
+  0, claims the hull of its children, and hands its content what its chrome
+  leaves of its room. There is no separate record of how far the chrome
+  reaches. See [Chrome around a chart](/internals/layout/passes#chrome-around-a-chart).
 - The outermost ring itself is the box with all chrome.
 
 Tick and category labels are chrome, so they lie outside `chrome.content`.

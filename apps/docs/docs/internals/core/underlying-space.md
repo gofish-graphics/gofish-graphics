@@ -591,7 +591,7 @@ each inherent to what the origin states are:
   placed beside a stand-in, so a chain with a stand-in reaches, in its
   plot, only as far as its stand-ins. A chart with a size of its own maps its plot
   into that size (see
-  [Chrome gutters](/internals/layout/passes#chrome-gutters)).
+  [Chrome around a chart](/internals/layout/passes#chrome-around-a-chart)).
 - **Alignment establishes a baseline; it does not pin**: aligning or
   overlaying free children gives a free result with one shared baseline
   (`overlayOrigin`: pinned only when a child is pinned, none when a child has
@@ -1676,9 +1676,9 @@ reads one: a ring or a label wrapper added later reads the seat of the content
 it wraps. Chrome does take room, as pixels: every chrome shape claims its size,
 and a ring's claim is the hull of what it wraps and of its shapes where its
 constraints place them (`placeByClaims`). A layer that wears chrome hands its
-content its slot less its gutters (never less than 0), forms of those claims in σ evaluated where it is laid out, and a node with a
+content what its chrome leaves of its room (never less than 0), and a node with a
 size of its own, a chart or a plain layer, takes that size as its plot and
-adds the gutters its content's claims give around it (#1032; see [Chrome gutters](/internals/layout/passes#chrome-gutters)). A child
+adds what its content's dressing reaches past it (#1032; see [Chrome around a chart](/internals/layout/passes#chrome-around-a-chart)). A child
 placed beside a node inside another child (a label on its mark's ref) takes
 room where the claim walk knows that node lands (`planPlacement`), a band of
 a category axis included (a share is a claim), and is ink where it does not
