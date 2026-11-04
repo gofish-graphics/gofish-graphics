@@ -1,4 +1,4 @@
-// SCRATCH: rasterize SVG files to PNG with playwright's chromium.  node playground/svg2png.mjs a.svg [b.svg …]
+// SCRATCH: rasterize SVG files to PNG with playwright's chromium.  node playground/svg2png.mjs a.svg [b.svg …] (SCALE=3: at 3x)
 import { readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -12,7 +12,10 @@ const { chromium } = await import(
   pathToFileURL(join(store, pw, "node_modules/playwright/index.mjs")).href
 );
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+const page = await browser.newPage({
+  viewport: { width: 1400, height: 1000 },
+  deviceScaleFactor: +(process.env.SCALE ?? 1),
+});
 // a folder: every .svg in it
 const files = process.argv.slice(2).flatMap((f) =>
   statSync(f).isDirectory()

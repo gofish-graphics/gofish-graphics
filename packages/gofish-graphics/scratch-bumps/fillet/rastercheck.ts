@@ -19,9 +19,34 @@ export function rasterClosing(
   h = 0.1
 ) {
   const prims = members.map((m) => grownPrim(m, pad));
+  // buckets of C px: the prims whose box comes within r + C of the bucket (a prim farther
+  // than r only says dX ≥ r, which is all the raster asks)
+  const C = 8;
+  const buckets = new Map<string, typeof prims>();
+  const reachB = r + C;
+  for (const p of prims) {
+    const [a, b, c, d] = p.bb;
+    for (
+      let j = Math.floor((b - reachB) / C);
+      j <= Math.floor((d + reachB) / C);
+      j++
+    )
+      for (
+        let i = Math.floor((a - reachB) / C);
+        i <= Math.floor((c + reachB) / C);
+        i++
+      ) {
+        const k = `${i},${j}`;
+        let L = buckets.get(k);
+        if (!L) buckets.set(k, (L = []));
+        L.push(p);
+      }
+  }
   const dX = (x: number, y: number) => {
     let d = Infinity;
-    for (const p of prims) d = Math.min(d, primD(p, x, y, false));
+    for (const p of buckets.get(`${Math.floor(x / C)},${Math.floor(y / C)}`) ??
+      [])
+      d = Math.min(d, primD(p, x, y, false));
     return d;
   };
   let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];

@@ -39,8 +39,13 @@ import {
 } from "../../geometry";
 import type { BlobMember } from "./blob";
 
-/** How far the samples of a curved outline may stray from it, in pixels. */
-const TOLERANCE = 0.5;
+/** How far the samples of a curved outline may stray from it, in pixels.
+ *  An enclosure's own outline is read through this too (an outer `enclose`
+ *  of inner ones), and the outer outline keeps every chord it is given: at
+ *  0.5 px a ring of radius 64 read as 16 px chords, drawn again as straight
+ *  runs one padding out. 0.1 px keeps the outer outline within 0.2 px of the
+ *  closing of the unthinned rings (playground/bench/nested.ts). */
+const TOLERANCE = 0.1;
 
 /** An outline as blob members. */
 function membersOfOutline(o: Outline): BlobMember[] {
