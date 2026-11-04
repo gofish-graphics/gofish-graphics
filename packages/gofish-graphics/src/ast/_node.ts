@@ -859,18 +859,15 @@ export class GoFishNode {
    * (`elaborateChrome` in axes/elaborate.tsx) wraps around a node: the boxes
    * inside it. This node's own box is the box WITH chrome (axes, titles,
    * legend); `content` is the node it dresses, the box WITHOUT chrome;
-   * `withAxes` is the content with its axis gutters and category label rows,
+   * `withAxes` is the content with its axes and category label rows,
    * the box its titles and legend are seated around. Tick and category labels
    * are chrome, not ink of the content: they sit outside `content`.
    *
-   * `gutters` is how far the chrome reaches past `content` on each side, in
-   * pixels, per axis `[start, end]` in this node's axis order (#1032). Chrome
-   * sits outside its chart, so this node's box is its content's box plus
-   * these: its claim is the hull of its rings (each places its shapes in the
-   * claim walk, `placeByClaims`), and it hands its content what is left of
-   * its slot. Its layout evaluates them at the σ it is laid out at, from its
-   * chrome forms (`chromeForms` and `guttersAt` in chromeGutters.ts,
-   * memoized with its claim); until then they are 0.
+   * Each ring is an ordinary layer of what it dresses and its chrome
+   * (#1257): its claim is the hull of its children where its constraints
+   * place them (`placeByClaims`), and it seats its content at its data 0.
+   * Its content's room is what the chrome leaves of the ring's room
+   * (`plotRooms` in `layer`).
    */
   public chrome?: {
     content: GoFishNode;
@@ -879,7 +876,6 @@ export class GoFishNode {
      *  child is the ring inside it (or the content), and its other children
      *  are its chrome. */
     rings: GoFishNode[];
-    gutters?: [[number, number], [number, number]];
   };
   /**
    * The chrome this node is asked to carry beyond the axes `resolveAxes`
@@ -1918,13 +1914,6 @@ export class GoFishNode {
       this.tryGetRenderSession()?.canvas?.[axis] === undefined &&
       this.sharesRoom(axis)
     );
-  }
-
-  /** The pixels this node's chrome reaches past its content on `axis`,
-   *  `[start, end]` in its axis order (see {@link chrome}); `[0, 0]` for a
-   *  node with no chrome, or before its layout reads them. */
-  public chromeGutters(axis: 0 | 1): [number, number] {
-    return this.chrome?.gutters?.[axis] ?? [0, 0];
   }
 
   /**

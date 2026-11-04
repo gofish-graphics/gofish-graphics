@@ -975,7 +975,7 @@ export const layer = createNodeOperatorSequential(
             const layoutSize: Size = proposed;
             const dressed = i === 0 && node.chrome !== undefined;
             // The shape travels with the room it was proposed with: a room
-            // a nest derives from its source, or that chrome's gutters cut
+            // a nest derives from its source, or that a ring's chrome cuts
             // down, is not that room, so it has no shape.
             const childShape =
               nestEdges === undefined && !dressed ? proposal.shape : undefined;

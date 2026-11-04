@@ -552,7 +552,7 @@ export async function layout(
 
   // `render({ w, h })` is the whole graphic (#493, #1032): the canvas is the
   // slot the root is given, its chrome included. Chrome sits outside its
-  // chart, so the root's content gets the slot less its chrome's gutters,
+  // chart, so the root's content gets what its chrome leaves of the slot,
   // as every node does with the slot its parent gives it. Every chrome
   // shape claims its size, so the root's claim already holds its chrome
   // (`placeByClaims`), and the layout fits it to the slot.
@@ -768,7 +768,7 @@ export async function layout(
   // given dimension that maps a domain), the root sits at its seat by the
   // one seating rule (`seatInScope`): a free (baseline-magnitude) root's
   // baseline at the scope's `originPx` (#773: `descent·σ` from the frame's
-  // start edge, plus any overhead, the chrome's start gutter included), a
+  // start edge, plus any overhead, the chrome before the plot included), a
   // pinned root's at 0, and, where the scope has no data 0 (a spread of
   // magnitudes, whose rows may reach past its origin on either side), its
   // box at the frame's start. The frame is the root's own size
