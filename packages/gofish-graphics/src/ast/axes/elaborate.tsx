@@ -119,21 +119,13 @@ const ROW_GAP = 2; // gap between two label rows of an axis on one dim
  *  given (an option) or no axis on that dim (an owner's result). */
 type AxisSides = ["start" | "end" | undefined, "start" | "end" | undefined];
 
-/** Builds an axis's constraints: `at` is the handle on one of its shapes,
- *  `inner` the handle on the box inside the ring, and `plot` the handle on
- *  the node the axis describes, whose frame its datums are read in
- *  (`position`'s `in`). */
-type AxisConstraints = (
-  at: Parameters<RingConstraints>[0],
-  inner: ConstraintRef,
-  plot: ConstraintRef | undefined
-) => any[];
-
 export type AxisElaboration = {
   /** Shapes to add as siblings of the content inside the wrapping layer. */
   nodes: GoFishNode[];
-  /** Builds this axis's constraints ({@link AxisConstraints}). */
-  constraints: AxisConstraints;
+  /** Builds this axis's constraints: `at` is the handle on one of its
+   *  `nodes`, and `inner` the handle on the box inside the ring, whose frame
+   *  its datums are read in (`position`'s `in`). */
+  constraints: RingConstraints;
   /** The node the axis's title centers on: the axis's own span. A
    *  position-like axis (continuous/difference) sets its line; an ordinal
    *  axis sets the span from its first slot to its last (`axisSpan`), so
@@ -387,11 +379,6 @@ function positionAxis(opts: {
 }): AxisElaboration {
   const { dim, lineMin, lineMax, tickValues } = opts;
   const side = opts.side ?? "start";
-  // A point or span of the plot's frame: ticks sit on the plot's scale
-  // wherever the plot is (a sized plot is a scope of its own, outside of
-  // which the ring sits).
-  const at = (v: unknown, plot: ConstraintRef | undefined) =>
-    ({ [axisName(dim)]: v, ...(plot ? { in: plot } : {}) }) as any;
 
   const line = axisLine(dim);
   const tickNodes = tickValues.map((v, i) => opts.tickNode(v, i));
@@ -405,18 +392,20 @@ function positionAxis(opts: {
     Text({ text: e.text, fontSize: LABEL_FONT_SIZE, fill: AXIS_COLOR })
   );
 
-  const constraints: AxisConstraints = (slot, inner, plot) => {
+  const constraints: RingConstraints = (slot, inner) => {
     const lineRef = slot(line);
     const ticks = tickNodes.map(slot);
-    const pos = (v: number) => at(datum(v), plot);
+    // A point or span of the frame of the box inside the ring: ticks sit on
+    // its scale wherever it is (a sized plot is a scope of its own, outside
+    // of which the ring sits).
+    const at = (v: unknown) => ({ [axisName(dim)]: v, in: inner }) as any;
+    const pos = (v: number) => at(datum(v));
     // Data pin: always the bare tick's own bbox (its "middle" anchor is its
     // TRUE center regardless of what a sibling `tickLabel` does — see
     // `tickMark`'s doc comment for why an oblique label can't be nested
     // inside the pinned node).
     const cs: any[] = [
-      Constraint.position(at([datum(lineMin), datum(lineMax)], plot), [
-        lineRef,
-      ]),
+      Constraint.position(at([datum(lineMin), datum(lineMax)]), [lineRef]),
       ...tickValues.map((v, i) => Constraint.position(pos(v), [ticks[i]])),
     ];
     // Seat the gutter FIRST: constraints apply in order and placement is
@@ -1608,10 +1597,29 @@ function elaborationsFor(
 //   ↳ axis titles            centered on the axis they name
 //   ↳ legend                 beside all of the above
 //
-// The node's identity (name, key, visibility) moves onto the outermost ring.
-// Each ring is marked `_chromeRing`; nothing records the boxes inside it:
-// code that needs what a ring dresses walks its first child
-// (`GoFishNode.dressedBox`).
+// The node's identity (name, key, visibility) moves onto the outermost ring,
+// which a chart's elaboration marks `_chartRing`. Each ring is marked
+// `_chromeRing`; nothing records the boxes inside it: code that needs what a
+// ring dresses walks its first child (`GoFishNode.dressedBox`).
+
+/** Wrap `inner` in one ring of chrome (`wrapRing`), marked as one
+ *  (`GoFishNode._chromeRing`). */
+async function wrapChromeRing(
+  inner: GoFishNode,
+  ring: ChromeRing
+): Promise<GoFishNode> {
+  const root = await wrapRing(inner, ring);
+  root._chromeRing = true;
+  return root;
+}
+
+/** One ring of the axes `elaborations` draw: their shapes, and their
+ *  constraints against the box inside the ring. */
+const axesRing = (elaborations: AxisElaboration[]): ChromeRing => ({
+  nodes: elaborations.flatMap((e) => e.nodes),
+  constraints: (at, inner) =>
+    elaborations.flatMap((e) => e.constraints(at, inner)),
+});
 
 /** How the chrome a chart asks for is drawn, beyond the axes `resolveAxes`
  *  assigned and the requests stamped on nodes (`GoFishNode._chromeRequest`). */
@@ -1725,15 +1733,9 @@ export async function elaborateChrome(
     // (facets carrying their own ordinal labels) has a bbox extending past
     // its origin, and pinning bbox-min would slide the marks off the tick
     // grid by that overhang.
-    if (constrained.length > 0) {
-      ring = await wrapRing(ring, {
-        nodes: constrained.flatMap((e) => e.nodes),
-        constraints: (at, inner) =>
-          // Ticks read their datums in the content's frame.
-          constrained.flatMap((e) => e.constraints(at, inner, inner)),
-      });
-      ring._chromeRing = true;
-    }
+    if (constrained.length > 0)
+      // Ticks read their datums in the content's frame.
+      ring = await wrapChromeRing(ring, axesRing(constrained));
 
     // Category label rows: ordinal labels track their keys via `ref(...)`, so
     // they must be laid out AFTER the gutters have shifted the content (the
@@ -1741,18 +1743,12 @@ export async function elaborateChrome(
     // their own. They `distribute` against the ring inside, whose bbox
     // includes any nested inner-facet labels, so an outer label row stacks
     // below the inner row.
-    if (refBased.length > 0) {
-      ring = await wrapRing(ring, {
-        nodes: refBased.flatMap((e) => e.nodes),
-        constraints: (at, inner) =>
-          refBased.flatMap((e) => e.constraints(at, inner, inner)),
-      });
-      ring._chromeRing = true;
-    }
+    if (refBased.length > 0)
+      ring = await wrapChromeRing(ring, axesRing(refBased));
 
     // Axis titles, seated past the axes so they clear the tick and label rows.
-    if (titles[0] !== undefined || titles[1] !== undefined) {
-      ring = await wrapRing(
+    if (titles[0] !== undefined || titles[1] !== undefined)
+      ring = await wrapChromeRing(
         ring,
         axisTitles(
           titles,
@@ -1760,16 +1756,14 @@ export async function elaborateChrome(
           sides
         )
       );
-      ring._chromeRing = true;
-    }
 
     // The legend, beside everything inside it, titles included.
-    if (legend !== undefined) {
-      ring = await wrapRing(ring, legend);
-      ring._chromeRing = true;
-    }
+    if (legend !== undefined) ring = await wrapChromeRing(ring, legend);
     return ring;
   });
+  // A chart is placed whole, its chrome with it (#1241): its outermost ring
+  // is its box (`GoFishNode._chartRing`).
+  if (node._chartBox !== undefined) root._chartRing = true;
 
   return { node: root, changed: true, fold };
 }

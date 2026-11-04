@@ -78,12 +78,9 @@ const printConstraintTypes = (
  *  chrome decides no domain. */
 export function dumpSharing(root: GoFishAST): void {
   if (!DUMP_SHARING) return;
-  const walk = (node: GoFishAST, depth: number) => {
-    if (!(node instanceof GoFishNode)) return;
-    if (node._chromeRing === true) {
-      walk(node.children[0], depth);
-      return;
-    }
+  const walk = (ast: GoFishAST, depth: number) => {
+    if (!(ast instanceof GoFishNode)) return;
+    const node = ast.dressedBox();
     const { children, constraints, type } = node;
     const plan = node.sharing();
     const moved = ([0, 1] as const).some(

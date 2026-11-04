@@ -831,10 +831,10 @@ export class GoFishNode {
     undefined,
   ];
   public _axisOverride?: { x?: boolean; y?: boolean };
-  /** Set on the node a `chart()` resolves to: per axis, whether the chart
-   *  has a size of its own (`w`/`h`). A chart is where its axes are drawn
-   *  (`isAxisBoundary`). Undefined on every other node. */
-  public _chartBox?: [boolean, boolean];
+  /** Set on the node a `chart()` resolves to. A chart is where its axes are
+   *  drawn (`isAxisBoundary`), around it, sized or not (#1257). Undefined on
+   *  every other node. */
+  public _chartBox?: true;
   /** Set on what holds a `chart()`'s marks: the node its mark resolves to,
    *  apart from the transitions it draws over them, and the layer its frame
    *  holds, every tier of a `.layer()` chain included (`frameChart`). A
@@ -843,10 +843,9 @@ export class GoFishNode {
   public _chartContent?: true;
   /** Set by chrome elaboration on the box a node's axes are seated beside,
    *  continuous axes and category label rows alike, the content of its
-   *  innermost ring (`elaborateChrome`): a plot, which
-   *  covers the whole niced domain its axes draw ({@link domainSpan}). With
-   *  no size of its own the chart's frame is that box; a chart with a size
-   *  wears its chrome inside its frame, around the frame's content. */
+   *  innermost ring (`elaborateChrome`): a plot, which covers the whole
+   *  niced domain its axes draw ({@link domainSpan}). For a chart, sized or
+   *  not, that box is the chart's own node ({@link _chartBox}). */
   public _axesBeside?: true;
   /** The frame a layer lays its children out in on each axis, once laid
    *  out: data `v` is at `σ·v + originPx` in its own axis order, from its
@@ -875,6 +874,15 @@ export class GoFishNode {
    * are chrome, not ink of the content: they sit outside it.
    */
   public _chromeRing?: true;
+  /**
+   * Set by chrome elaboration on the outermost ring of chrome around a
+   * chart's node ({@link _chartBox}): the chart's box. The chart's chrome
+   * adds around its plot, but its parent lays the chart out whole, plot and
+   * chrome, so to its parent all of it is plot ({@link plotIsBox}). On an
+   * axis with no data 0 it has no baseline to share, so its baseline is its
+   * start (#1241, {@link localAnchor}).
+   */
+  public _chartRing?: true;
   /**
    * The chrome this node is asked to carry beyond the axes `resolveAxes`
    * assigned it: a title on each axis it draws (from the `axes` options) and
@@ -1552,16 +1560,6 @@ export class GoFishNode {
         ? this.canvasRoom(axis)
         : this.parent.roomFor(axis, `${this.type}'s ${printLength(len)}`)
     );
-    // A chart with a percent size draws its axes inside its box, which it
-    // decides when it is built (`frameChart`): a percent that turns out to be
-    // a share of a band has no box to draw them in.
-    // TODO(#1176): read a chart's box from its resolved length instead.
-    if (this._chartBox?.[axis] === true && !Pwl.isConstant(v))
-      throw new Error(
-        `chart's ${printLength(len)}: its room is a band, a share of the ` +
-          `scope around it, so the chart has no box of its own to draw its ` +
-          `axes in. Use fr for a chart sized by a share.`
-      );
     this._claimMemo.lengths[axis] = v;
     return v;
   }
@@ -1830,18 +1828,10 @@ export class GoFishNode {
     return mixed;
   }
 
-  /**
-   * Whether this node is a chart's outer box (#1032): the outermost ring of
-   * chrome around a `chart()` with no size of its own. The chart's chrome
-   * adds around its plot, but its parent lays the chart out whole, plot and
-   * chrome, so to its parent all of it is plot. (A chart with a size of its
-   * own wears its chrome inside its frame, which claims the total.)
-   */
+  /** Whether this node is a chart's box, the outermost ring of chrome
+   *  around a `chart()` ({@link _chartRing}). */
   public isChartBox(): boolean {
-    if (this._chromeRing !== true) return false;
-    const p = this.parent;
-    if (p?._chromeRing === true && p.children[0] === this) return false;
-    return this.dressedBox()._chartBox !== undefined;
+    return this._chartRing === true;
   }
 
   /**
@@ -1861,11 +1851,13 @@ export class GoFishNode {
   /**
    * Whether this node's plot on `axis` is its whole box: it is a part of
    * its parent's plot with its chrome and dressing included. That is a
-   * chart's outer box ({@link isChartBox}), and a node with a size of its
-   * own there, which maps its plot into that size and claims the total.
+   * chart's box ({@link _chartRing}), and a node with a size of its own
+   * there, which maps its plot into that size and claims the total.
    */
   public plotIsBox(axis: 0 | 1): boolean {
-    return this.isChartBox() || this.claimWalk?.ownSize(axis) !== undefined;
+    return (
+      this._chartRing === true || this.claimWalk?.ownSize(axis) !== undefined
+    );
   }
 
   /**
