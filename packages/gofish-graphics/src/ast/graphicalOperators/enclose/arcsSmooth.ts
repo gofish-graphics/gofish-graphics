@@ -603,8 +603,10 @@ function resampleMarked(
  * boundary), each point moves by the inward part of a Gaussian along
  * arclength (sigma px) and no further: convex corners and spikes (where the
  * outline meets a clipped side or a keep-out, or two keep-outs meet) round
- * off; nothing moves outward, so the rounded outline stays inside the cut
- * one and out of what was cut. Then every point is pushed out of the
+ * off; nothing moves outward, and no point moves out of the cut rings (a
+ * move that would cross a band thinner than itself is halved until it
+ * does not, or dropped), so the rounded outline stays inside the cut one
+ * and out of what was cut. Then every point is pushed out of the
  * padded members again (pushOut), so they stay inside. The weight is 1
  * within 3σ of a cut point and tapers to 0 over the next 3σ, so the rest of
  * the outline does not move. A ring the rounding turns inside out was
@@ -617,6 +619,7 @@ export function roundCut(
   sigma: number
 ): Pt[][] {
   const out: Pt[][] = [];
+  let region: Inside | null = null;
   rings.forEach((ring, ri) => {
     const mk0 = marks[ri];
     if (sigma <= 0 || ring.length < 3 || !mk0.some((x) => x)) {
@@ -649,7 +652,13 @@ export function roundCut(
       if (w <= 0) return p;
       const t = (g[i][0] - p[0]) * N[i][0] + (g[i][1] - p[1]) * N[i][1];
       if (t >= 0) return p;
-      return pushOut([p[0] + w * t * N[i][0], p[1] + w * t * N[i][1]], keep);
+      region ??= new Inside(segsOf(rings));
+      let s = w * t;
+      for (let k = 0; k < 4; k++, s /= 2) {
+        const q: Pt = [p[0] + s * N[i][0], p[1] + s * N[i][1]];
+        if (region.has(q[0], q[1])) return pushOut(q, keep);
+      }
+      return pushOut(p, keep);
     });
     const a0 = signedArea2(ring),
       a1 = signedArea2(res);

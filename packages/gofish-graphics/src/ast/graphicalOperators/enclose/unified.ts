@@ -803,8 +803,9 @@ export function unifiedOutline(
   return rings;
 }
 
-/** A shape's rings cut by the keep-outs, as finish cuts a blob piece: never into the padded
- *  members, the cut's corners rounded inward. */
+/** A shape's rings (a blob piece, a fillet piece, the box) cut by the keep-outs: never into
+ *  the padded members (a link is cut like any other ground), the cut's corners rounded
+ *  inward (finish), and what the cut fences off from every member dropped. */
 function avoidCut(
   rings: Pt[][],
   pm: BlobMember[],
@@ -812,17 +813,30 @@ function avoidCut(
   K: Disc[]
 ): Pt[][] {
   const F = cutField(
-    closingRings(pm, pad, 0, false),
+    memo(key("padded", intern(key(pm)), pad), () =>
+      closingRings(pm, pad, 0, false)
+    ),
     boxOfRings(rings),
     [],
     0,
     K
   );
-  return finish(
+  const cut = finish(
     { rings, all: pm, links: [], r: NaN, iterations: 0 },
     { padding: pad, smooth: null },
     pad,
     F
+  );
+  // the ground the keep-outs fence off from every member (a link's or a fill's sliver
+  // between keep-outs) is not the enclosure: an outer ring that holds no member is dropped,
+  // and the holes inside it
+  const outer = cut.filter((r) => signedArea2(r) > 0);
+  const kept = outer.filter((r) => pm.some((m) => pointInRing(insideOf(m), r)));
+  if (kept.length === outer.length) return cut;
+  return cut.filter((r) =>
+    signedArea2(r) > 0
+      ? kept.includes(r)
+      : kept.some((o) => pointInRing(r[0], o))
   );
 }
 
@@ -927,8 +941,8 @@ function filletPieces(
   });
 }
 
-/** The blob: pieces by connection, each filled, kept apart from the others, cut by the
- *  keep-outs and smoothed (finish). */
+/** The blob: pieces by connection, each filled, smoothed and kept apart from the others
+ *  (finish), then cut by the keep-outs as every shape is (avoidCut). */
 function blobOutline(
   members: BlobMember[],
   o: UnifiedOptions,
@@ -940,13 +954,16 @@ function blobOutline(
   const neck = o.neck ?? 1;
   const J = pieceLinks(members, pad, o.connection ?? 1, neck);
   // PROTOTYPE: the per-piece cache. A piece's links, fill and outline depend on its members,
-  // the padding, neck and keep-outs; its separation on the pieces near it; its outline on the
-  // convexity options. A connection change recomputes only the pieces whose member set
-  // changed (and the separation of the pieces near them); a convexity change reuses every
-  // spine, blend table and separation.
+  // the padding, neck and the links' routing around the keep-outs; its separation on the
+  // pieces near it; its outline on the convexity options; its keep-out cut on the outline and
+  // the keep-outs. A connection change recomputes only the pieces whose member set changed
+  // (and the separation of the pieces near them); a convexity change reuses every spine,
+  // blend table and separation; a clearance change that bends no link differently reuses
+  // every outline and redoes only the cut.
   const ctx = intern(key(members, pad, neck));
-  // the keep-outs: a piece's spine depends on them only where a link bends
-  // around one, so the fill's caches are keyed by the spine itself
+  // the keep-outs: a piece's spine depends on them only where a link bends around one (so
+  // the final cut does not sever the piece there), so the fill's caches are keyed by the
+  // spine itself
   const kid = K.length ? intern(key(K)) : -1;
   const parts = J.pieces.map((idx, p) => {
     const pm = idx.map((i) => members[i]);
@@ -969,7 +986,7 @@ function blobOutline(
   const sep = pad; // PROTOTYPE: the least gap kept between two pieces
   let forbidden: (() => CutField | null)[] = parts.map(() => () => null);
   let fKeys = parts.map(() => "");
-  if (parts.length > 1 || K.length) {
+  if (parts.length > 1) {
     const spines = parts.map(({ pm, spine, pk }) =>
       memo(key("filledSpine", pk, pad), () =>
         closingRings([...pm, ...spine], pad, pad, false)
@@ -1003,7 +1020,6 @@ function blobOutline(
         beyondOne,
         sep,
         near[p].map((q) => parts[q].pk),
-        kid,
         SEPARATE
       )
     );
@@ -1014,14 +1030,14 @@ function blobOutline(
         boxes[p],
         near[p].map((q) => spines[q]),
         sep,
-        K
+        []
       );
       UNIFIED_STATS.msSeparate! += performance.now() - ts;
       return F;
     });
   }
-  // each piece's outline: filled, kept out of the others' ground, cut from the keep-outs
-  // and smoothed
+  // each piece's outline: filled, smoothed and kept out of the others' ground, then cut by
+  // the keep-outs
   // (smooth: undefined is the default blur and null none; JSON would spell
   // both null)
   const optKey = key(
@@ -1039,8 +1055,7 @@ function blobOutline(
       () => {
         const t1 = performance.now();
         const f = fillOne(pm, spine, o, pad, holes, pk);
-        const F =
-          parts.length > 1 || K.length ? memo(fKeys[p], forbidden[p]) : null;
+        const F = parts.length > 1 ? memo(fKeys[p], forbidden[p]) : null;
         const t2 = performance.now();
         const rings = finish(f, o, pad, F);
         msFill += t2 - t1;
@@ -1050,7 +1065,16 @@ function blobOutline(
       false
     )
   );
-  const rings = outs.flatMap((f) => f.rings);
+  const tCut = performance.now();
+  const rings = outs.flatMap((f, p) =>
+    K.length
+      ? memo(
+          key("avoidCut", parts[p].pk, fKeys[p], optKey, kid),
+          () => avoidCut(f.rings, parts[p].pm, pad, K),
+          false
+        )
+      : f.rings
+  );
   const radii = outs.map((f) => f.r);
   Object.assign(UNIFIED_STATS, {
     radius: radii[0],
@@ -1062,7 +1086,7 @@ function blobOutline(
     joinTree: J.tree,
     msLinks: tLinks - t0,
     msClose: msFill,
-    msSmooth: msFinish,
+    msSmooth: msFinish + performance.now() - tCut,
   });
   return rings;
 }

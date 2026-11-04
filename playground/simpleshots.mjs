@@ -15,7 +15,9 @@ const pw = readdirSync(store)
 const { chromium } = await import(
   pathToFileURL(join(store, pw, "node_modules/playwright/index.mjs")).href
 );
-const url = pathToFileURL(join(here, "dist/index.html")).href;
+const url = pathToFileURL(
+  process.env.DIST ?? join(here, "dist/index.html")
+).href;
 const out = process.env.OUT;
 mkdirSync(out, { recursive: true });
 const shots = process.env.SHOTS
@@ -33,7 +35,7 @@ for (const [name, patch, o = {}] of shots) {
     viewport: o.phone
       ? { width: 390, height: 844 }
       : { width: 1280, height: 900 },
-    deviceScaleFactor: o.phone ? 2 : 1,
+    deviceScaleFactor: o.scale ?? (o.phone ? 2 : 1),
     colorScheme: o.dark ? "dark" : "light",
   });
   page.on("pageerror", (e) => errs.push(`${name}: ${e.message}`));
