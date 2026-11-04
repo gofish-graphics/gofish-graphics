@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Blob and Arcs Outlines</title>
+    <title>One Enclose Outline</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link
       href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
@@ -12,7 +12,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <style>
       :root {
-        /* Layout: rules on top, then a gallery of example cards (image, proposed code, current code), decisions last. */
+        /* Layout: the API and its rules on top, then a gallery of example cards (render, proposed code, today's code), limitations and collapsed rationale last. */
         --bg: #f6f8f7;
         --surface: #ffffff;
         --ink: #1d2624;
@@ -20,13 +20,16 @@
         --line: #d7dfdc;
         --accent: #1f8a72;
         --accent-soft: #e2f2ed;
-        --warn: #a5631a;
-        --bad: #b23b3b;
         --code-bg: #f0f3f2;
+        --add-bg: #d9f0df;
+        --add-bar: #2b8a4a;
+        --del-bg: #f8dede;
+        --del-bar: #b23b3b;
+        --img-bg: #ffffff;
         --tk-kw: #8a3fa0;
         --tk-str: #2b7a3d;
         --tk-num: #a5631a;
-        --tk-com: #7b8a86;
+        --tk-com: #6b7a76;
         --tk-fn: #1d5fa8;
         --font-display: "Fraunces", Georgia, serif;
         --font-body: "IBM Plex Sans", system-ui, sans-serif;
@@ -42,13 +45,16 @@
           --line: #2d3a37;
           --accent: #5cc7aa;
           --accent-soft: #1d3530;
-          --warn: #e0a35c;
-          --bad: #ec8a8a;
           --code-bg: #161d1b;
+          --add-bg: #1c3a26;
+          --add-bar: #5cc77f;
+          --del-bg: #3f2222;
+          --del-bar: #ec8a8a;
+          --img-bg: #ffffff;
           --tk-kw: #d39be6;
           --tk-str: #8fd19e;
           --tk-num: #e0a35c;
-          --tk-com: #7d8f8a;
+          --tk-com: #8d9f9a;
           --tk-fn: #8fbcf0;
           color-scheme: dark;
         }
@@ -61,13 +67,16 @@
         --line: #2d3a37;
         --accent: #5cc7aa;
         --accent-soft: #1d3530;
-        --warn: #e0a35c;
-        --bad: #ec8a8a;
         --code-bg: #161d1b;
+        --add-bg: #1c3a26;
+        --add-bar: #5cc77f;
+        --del-bg: #3f2222;
+        --del-bar: #ec8a8a;
+        --img-bg: #ffffff;
         --tk-kw: #d39be6;
         --tk-str: #8fd19e;
         --tk-num: #e0a35c;
-        --tk-com: #7d8f8a;
+        --tk-com: #8d9f9a;
         --tk-fn: #8fbcf0;
         color-scheme: dark;
       }
@@ -83,10 +92,7 @@
       main {
         max-width: 1100px;
         margin: 0 auto;
-        padding: 40px 20px 80px;
-      }
-      .prose {
-        max-width: 70ch;
+        padding: 40px 16px 80px;
       }
       h1,
       h2,
@@ -115,6 +121,7 @@
       .sub {
         color: var(--muted);
         margin: 0 0 24px;
+        max-width: 75ch;
       }
       a {
         color: var(--accent);
@@ -125,20 +132,40 @@
         background: var(--code-bg);
         padding: 1px 5px;
         border-radius: 4px;
+        overflow-wrap: anywhere;
       }
       pre {
         margin: 0;
         background: var(--code-bg);
         border: 1px solid var(--line);
         border-radius: 6px;
-        padding: 10px 12px;
+        padding: 10px 0;
         overflow-x: auto;
       }
       pre code {
+        display: block;
         background: none;
-        padding: 0;
+        padding: 0 12px;
         font-size: 0.8rem;
         line-height: 1.5;
+        overflow-wrap: normal;
+        width: max-content;
+        min-width: 100%;
+      }
+      pre .ln {
+        display: block;
+        margin: 0 -12px;
+        padding: 0 12px 0 9px;
+        border-left: 3px solid transparent;
+        min-height: 1.5em;
+      }
+      pre .ln.add {
+        background: var(--add-bg);
+        border-left-color: var(--add-bar);
+      }
+      pre .ln.del {
+        background: var(--del-bg);
+        border-left-color: var(--del-bar);
       }
       .hljs-keyword,
       .hljs-built_in {
@@ -160,6 +187,10 @@
       .hljs-property,
       .hljs-attr {
         color: var(--tk-fn);
+      }
+      .api {
+        max-width: 80ch;
+        margin: 0 0 16px;
       }
       .rules {
         background: var(--accent-soft);
@@ -193,25 +224,19 @@
         gap: 10px;
         min-width: 0;
       }
-      .card header {
-        display: flex;
-        align-items: baseline;
-        gap: 10px;
-        flex-wrap: wrap;
-      }
       .pair {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 10px;
       }
-      .pair figure {
+      figure {
         margin: 0;
         display: flex;
         flex-direction: column;
         gap: 4px;
         min-width: 0;
       }
-      .pair figcaption,
+      figcaption,
       .lab {
         font-size: 0.75rem;
         font-weight: 600;
@@ -220,12 +245,17 @@
         color: var(--muted);
         margin: 0;
       }
+      figcaption {
+        text-transform: none;
+        letter-spacing: 0;
+        font-family: var(--font-mono);
+      }
       img {
         max-width: 100%;
         height: auto;
         display: block;
         border-radius: 4px;
-        background: #fff;
+        background: var(--img-bg);
         border: 1px solid var(--line);
       }
       .note {
@@ -233,77 +263,67 @@
         font-size: 0.9rem;
         margin: 0;
       }
-      .chip {
-        font-size: 0.72rem;
-        font-weight: 600;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        padding: 1px 8px;
-        border-radius: 99px;
-        border: 1px solid currentColor;
-      }
-      .chip.better {
-        color: var(--accent);
-      }
-      .chip.same {
-        color: var(--muted);
-      }
-      .chip.worse {
-        color: var(--bad);
-      }
-      .chip.diff {
-        color: var(--warn);
-      }
-      .code-pair {
-        display: grid;
-        gap: 6px;
-      }
-      .sweep {
-        display: grid;
-        grid-template-columns: max-content repeat(5, minmax(0, 1fr));
-        gap: 8px;
-        align-items: center;
-        margin-top: 12px;
-        overflow-x: auto;
-      }
-      .sweep .lab {
-        text-align: center;
-      }
-      .sweep .rowlab {
-        font-size: 0.8rem;
-        font-weight: 600;
-        color: var(--muted);
-        padding-right: 6px;
-      }
-      .sweep img {
-        min-width: 90px;
-      }
-      .zoom img {
-        image-rendering: pixelated;
-      }
-      .strip {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 8px;
-      }
-      ol.decisions li {
-        margin-bottom: 10px;
-      }
       details {
-        margin-top: 16px;
         background: var(--surface);
         border: 1px solid var(--line);
         border-radius: 8px;
         padding: 12px 16px;
+        margin-top: 12px;
+      }
+      details.today {
+        margin: 0;
+        padding: 8px 12px;
+        background: var(--surface);
+      }
+      details.today summary {
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      details.today[open] summary {
+        margin-bottom: 8px;
       }
       summary {
         cursor: pointer;
         font-weight: 600;
       }
+      details > :not(summary) {
+        max-width: 75ch;
+      }
+      details.today > pre {
+        max-width: none;
+      }
       summary:focus-visible,
       a:focus-visible {
         outline: 2px solid var(--accent);
         outline-offset: 2px;
+      }
+      .limits {
+        max-width: 80ch;
+        padding-left: 22px;
+      }
+      .limits li {
+        margin: 8px 0;
+      }
+      .tablewrap {
+        overflow-x: auto;
+      }
+      table {
+        border-collapse: collapse;
+        font-size: 0.9rem;
+        min-width: 520px;
+      }
+      th,
+      td {
+        text-align: left;
+        vertical-align: top;
+        padding: 6px 10px;
+        border-bottom: 1px solid var(--line);
+      }
+      th {
+        color: var(--muted);
+        font-weight: 600;
       }
     </style>
   </head>
@@ -311,1067 +331,675 @@
     <main>
       <h1>One enclose outline</h1>
       <p class="sub">
-        Merging <code>Shape.blob</code> and <code>Shape.arcs</code> into one
-        outline. Issue
+        The approved API for unifying <code>Shape.blob</code> and
+        <code>Shape.arcs</code> in <code>enclose</code>, issue
         <a href="https://github.com/gofish-graphics/gofish-graphics/issues/1247"
           >#1247</a
-        >. Every render is the scratch prototype on branch
-        <code>worktree-enclose-shape-unify</code>. Try it with sliders in the
+        >. Every render below is the prototype on branch
+        <code>worktree-enclose-shape-unify</code>. Try the options with sliders
+        in the
         <a href="https://claude.ai/artifact/7712e2pRroMGH45QPmgwMp"
           >playground</a
         >.
       </p>
 
+      <pre class="api"><code class="language-ts">// clearance defaults to the padding
+enclose({ shape, padding, avoiding, clearance }, members);
+// convexity 0.5, connection 1, neck 1, holes false, separate false
+Shape.blob({ convexity, connection, neck, holes, separate });
+// radius defaults to the padding; neck 0.5, holes false
+Shape.fillet({ radius, neck, holes });
+// presets: the blob at convexity 0, 1 and 2
+Shape.spine();
+Shape.hull();
+Shape.oval();</code></pre>
+
       <ul class="rules">
         <li>
-          <b>One engine.</b>
-          <code
-            >Shape.blob({ convexity, connected, holes, avoiding, clearance
-            })</code
-          >
-          closes the padded members with a disc and draws concave corners as
-          arcs, not straight chords.
+          <b>Convexity runs from 0 to 2.</b> At 0 the blob is the spine: the
+          padded members and their links, closed exactly by a disc as wide as
+          the padding. From 0 to 1, each bay between the spine and the padded
+          hull fills that share of its own area. At 1 it is the padded hull.
+          From 1 to 2 the hull blends toward the smallest enclosing ellipse, and
+          2 is exactly <code>Shape.oval()</code>.
         </li>
         <li>
-          <b>Convexity stays, and goes past the hull.</b> 0 is the spine, 1 is
-          the padded convex hull, 2 is the oval. The closing radius is found
-          from it: the closed area fills <code>convexity</code> of the gap
-          between the spine and the hull. So the radius scales with the data,
-          and users never set pixels.
+          <b>Connection splits a set into pieces.</b> It is the share of the
+          join tree's links that are kept, from 0 to 1, weakest cut first. The
+          tree is HDBSCAN's: a minimum spanning tree on mutual reachability with
+          k = 4, and members whose padding touches are always joined. The
+          outline changes only when a link enters. At 1 the set is one piece,
+          and its drawn links follow the plain padded gap tree, so the default
+          looks as before.
         </li>
         <li>
-          <b>No bumps.</b> After the closing, a Gaussian along the outline (σ =
-          padding) and the smallest outward push that keeps every member
-          covered.
+          <b>Neck is link width</b>, as a share of the padded members a link
+          joins. <code>separate</code> (default false) lets a set's pieces
+          overlap and drops a piece wholly inside another one of its set; true
+          cuts each piece out of the set's other pieces.
         </li>
         <li>
-          <b>No cusps.</b> Two pieces closer than 2r always join with a smooth
-          neck. Separate pieces are at least 2r apart, every outward curve is at
-          least as round as the padding, and the outline never has a corner.
+          <b><code>Shape.fillet</code> replaces <code>Shape.arcs</code></b>: the
+          exact closing of the padded members by a disc of
+          <code>radius</code>. Groups closer than 2 &middot; radius get links of
+          at least <code>neck</code> width, so channels meet groups in smooth
+          arcs. At neck 0 the groups split.
         </li>
         <li>
-          <b>Presets.</b> <code>Shape.spine()</code> is convexity 0,
-          <code>Shape.hull()</code> is convexity 1, <code>Shape.oval()</code> is
-          convexity 2. <code>Shape.arcs({ radius })</code> keeps a pixel radius,
-          allows separate pieces, and skips smoothing, for the bubble treemap.
+          <b><code>avoiding</code> and <code>clearance</code> move onto
+          <code>enclose</code></b> and work for every shape, as a final cut.
+          <code>clearance</code> is the distance an outline keeps from anything
+          it avoids: from each avoided node, and between two outlines for a
+          set's pieces under <code>separate: true</code>. It defaults to the
+          padding; today it is 4. The outline never cuts into a padded member,
+          even where that member overlaps a keep-out.
         </li>
         <li>
-          <b>Links are as wide as the members they join.</b>
-          <code>neck</code> stays: 1 (the default) means no waist, lower values
-          thin the links. <b>Removed:</b> <code>roundness</code>. Most existing
-          specs are unchanged.
+          <b>Removed:</b> <code>Shape.arcs</code> (renamed, no alias), the
+          blob's <code>roundness</code>, and the blob's own
+          <code>avoiding</code> and <code>clearance</code>.
         </li>
       </ul>
 
-      <h2>Convexity</h2>
-      <div class="prose">
-        <p>
-          The U-shaped cloud, top row today, bottom row proposed. At convexity 1
-          the new outline is within 1.3 px of the exact padded hull, the
-          distance the smoothing push adds. Area grows steadily with convexity
-          on both charts.
-        </p>
-      </div>
-      <div class="sweep">
-        <span></span><span class="lab">0</span><span class="lab">0.25</span
-        ><span class="lab">0.5</span><span class="lab">0.75</span
-        ><span class="lab">1</span>
-        <span class="rowlab">Today</span>
-        <img
-          src="img/round3/convexity-U-000-current.png"
-          alt="U today, convexity 0"
-        /><img
-          src="img/round3/convexity-U-025-current.png"
-          alt="U today, convexity 0.25"
-        /><img
-          src="img/round3/convexity-U-050-current.png"
-          alt="U today, convexity 0.5"
-        /><img
-          src="img/round3/convexity-U-075-current.png"
-          alt="U today, convexity 0.75"
-        /><img
-          src="img/round3/convexity-U-100-current.png"
-          alt="U today, convexity 1"
-        />
-        <span class="rowlab">New</span>
-        <img
-          src="img/round4/convexity-U-000-new.png"
-          alt="U new, convexity 0"
-        /><img
-          src="img/round4/convexity-U-025-new.png"
-          alt="U new, convexity 0.25"
-        /><img
-          src="img/round4/convexity-U-050-new.png"
-          alt="U new, convexity 0.5"
-        /><img
-          src="img/round4/convexity-U-075-new.png"
-          alt="U new, convexity 0.75"
-        /><img
-          src="img/round3/convexity-U-100-new.png"
-          alt="U new, convexity 1"
-        />
-      </div>
-      <div class="cards" style="margin-top: 20px">
-        <div class="card">
-          <pre><code class="language-js">// proposed and today: same call
-Shape.blob({ convexity: 0.5 });</code></pre>
-          <p class="note">
-            Today fills Delaunay triangles, so the inside of the U fills as a
-            V-shaped wedge. The new outline fills it as one round arc. One
-            weakness: when a pocket seals, the closing fills it all at once, so
-            on this U the area share jumps from 0.24 to 0.65 between radius 52
-            and 56. Today's triangle filling has no jump. See decision 2.
-          </p>
-        </div>
-        <div class="card">
-          <p class="lab">ChartAccent, today then new</p>
-          <div
-            class="sweep"
-            style="
-              grid-template-columns: max-content repeat(2, minmax(0, 1fr));
-              margin-top: 0;
-            "
-          >
-            <span class="rowlab">0</span
-            ><img
-              src="img/round3/convexity-ChartAccent-000-current.png"
-              alt="ChartAccent today, convexity 0"
-            /><img
-              src="img/round4/convexity-ChartAccent-000-new.png"
-              alt="ChartAccent new, convexity 0"
-            />
-            <span class="rowlab">0.5</span
-            ><img
-              src="img/round3/convexity-ChartAccent-050-current.png"
-              alt="ChartAccent today, convexity 0.5"
-            /><img
-              src="img/round4/convexity-ChartAccent-050-new.png"
-              alt="ChartAccent new, convexity 0.5"
-            />
-            <span class="rowlab">1</span
-            ><img
-              src="img/round3/convexity-ChartAccent-100-current.png"
-              alt="ChartAccent today, convexity 1"
-            /><img
-              src="img/round3/convexity-ChartAccent-100-new.png"
-              alt="ChartAccent new, convexity 1"
-            />
-          </div>
-        </div>
-      </div>
-
-      <h3 style="margin-top: 28px">Past the hull: convexity 1 to 2</h3>
-      <div class="prose">
-        <p>
-          Between 1 and 2 the outline blends the padded hull into the smallest
-          enclosing ellipse: in every direction its edge sits at a weighted mix
-          of where the hull and the ellipse reach. The result is always convex,
-          always contains the hull, and only grows as convexity rises. At 2 it
-          equals today's <code>Shape.oval()</code> exactly (0.000 px), so
-          <code>Shape.oval()</code> becomes a preset. It adds about 2 ms.
-        </p>
-      </div>
-      <div
-        class="sweep"
-        style="grid-template-columns: max-content repeat(4, minmax(0, 1fr))"
-      >
-        <span></span><span class="lab">1</span><span class="lab">1.25</span
-        ><span class="lab">1.5</span><span class="lab">1.75</span>
-        <span class="rowlab">U</span
-        ><img src="img/round4/conv-u-100.png" alt="U convexity 1" /><img
-          src="img/round4/conv-u-125.png"
-          alt="U convexity 1.25"
-        /><img src="img/round4/conv-u-150.png" alt="U convexity 1.5" /><img
-          src="img/round4/conv-u-175.png"
-          alt="U convexity 1.75"
-        />
-      </div>
+      <h2>Examples</h2>
+      <p class="note">
+        Green lines are the proposed spelling's changes. Red lines are what they
+        replace on main.
+      </p>
       <div class="cards">
-        <div class="card">
-          <header><h3>U, convexity 2</h3></header>
-          <div class="pair">
-            <figure>
-              <figcaption>Convexity 2</figcaption>
-              <img src="img/round4/conv-u-200.png" alt="U convexity 2" />
-            </figure>
-            <figure>
-              <figcaption>Today's Shape.oval()</figcaption>
-              <img src="img/round4/oval-u.png" alt="U oval" />
-            </figure>
-          </div>
-          <div class="code-pair">
-            <span class="lab">Proposed</span>
-            <pre><code class="language-js">Shape.blob({ convexity: 2 }); // = Shape.oval()</code></pre>
-          </div>
-        </div>
-        <div class="card">
-          <header><h3>Penguins</h3></header>
-          <div class="pair">
-            <figure>
-              <figcaption>Convexity 1.5</figcaption>
-              <img
-                src="img/round4/conv-penguins-150.png"
-                alt="Penguins convexity 1.5"
-              />
-            </figure>
-            <figure>
-              <figcaption>Convexity 2</figcaption>
-              <img
-                src="img/round4/conv-penguins-200.png"
-                alt="Penguins convexity 2"
-              />
-            </figure>
-          </div>
-          <div class="code-pair">
-            <span class="lab">Proposed</span>
-            <pre><code class="language-js">Shape.blob({ convexity: 1.5 });</code></pre>
-          </div>
-        </div>
-        <div class="card">
-          <header><h3>ChartAccent</h3></header>
-          <div class="pair">
-            <figure>
-              <figcaption>Convexity 1.5</figcaption>
-              <img
-                src="img/round4/conv-chartaccent-150.png"
-                alt="ChartAccent convexity 1.5"
-              />
-            </figure>
-            <figure>
-              <figcaption>Convexity 2</figcaption>
-              <img
-                src="img/round4/conv-chartaccent-200.png"
-                alt="ChartAccent convexity 2"
-              />
-            </figure>
-          </div>
-        </div>
-        <div class="card">
-          <header>
-            <h3>Rejected: toward a circle</h3>
-            <span class="chip worse">rejected</span>
-          </header>
-          <div class="pair">
-            <figure>
-              <figcaption>Circle at 2</figcaption>
-              <img
-                src="img/round4/alt-circle-penguins-200.png"
-                alt="Penguins blended toward circles"
-              />
-            </figure>
-            <figure>
-              <figcaption>Corner radius grows</figcaption>
-              <img
-                src="img/round4/alt-corner-penguins-200.png"
-                alt="Penguins with growing corner radius"
-              />
-            </figure>
-          </div>
-          <p class="note">
-            Circles lose the cluster's direction and reach 2 to 2.6 times the
-            hull's area. Growing the corner radius doesn't nest and looks lumpy.
-            A superellipse blend looked almost like the ellipse blend but has
-            messier math.
-          </p>
-        </div>
+<article class="card">
+<h3>ChartAccent, default blob</h3>
+<figure><img src="img/ca-blob.png" alt="One smooth blob around the Sub-Saharan African countries" loading="lazy" /></figure>
+<p class="lab">Proposed</p>
+<pre data-mark="18" data-kind="add"><code class="language-ts">chart(gapminderCountries, {
+  axes: true,
+  w: 520,
+  h: 320,
+  color: Color.palette(REGION_COLORS),
+})
+  .flow(scatter({ x: "FertilityRate", y: "LifeExpectancy" }))
+  .mark(circle({ r: 3.5, fill: "Region", opacity: 0.8 }).name("countries"))
+  .layer(
+    chart(selectAll("countries"))
+      .flow(
+        filter(
+          (country: any) =&gt; project(country, "Region") === "Sub-Saharan Africa"
+        )
+      )
+      .mark(
+        enclose({
+          shape: Shape.blob(),
+          padding: 6,
+          fill: "#47b8a0",
+          stroke: "#47b8a0",
+          fillOpacity: 0.3,
+        })
+      )
+  );</code></pre>
+<details class="today"><summary>Today on main</summary><pre data-mark="18" data-kind="del"><code class="language-ts">chart(gapminderCountries, {
+  axes: true,
+  w: 520,
+  h: 320,
+  color: Color.palette(REGION_COLORS),
+})
+  .flow(scatter({ x: "FertilityRate", y: "LifeExpectancy" }))
+  .mark(circle({ r: 3.5, fill: "Region", opacity: 0.8 }).name("countries"))
+  .layer(
+    chart(selectAll("countries"))
+      .flow(
+        filter(
+          (country: any) =&gt; project(country, "Region") === "Sub-Saharan Africa"
+        )
+      )
+      .mark(
+        enclose({
+          shape: Shape.blob({ convexity: 0.1, neck: 0.6 }),
+          padding: 6,
+          fill: "#47b8a0",
+          stroke: "#47b8a0",
+          fillOpacity: 0.3,
+        })
+      )
+  );</code></pre></details>
+<p class="note">The gallery story drops its tuning. The default blob is one piece, and each bay between the spine and the padded hull fills half of its own area.</p>
+</article>
+<article class="card">
+<h3>ChartAccent, ovals in pieces</h3>
+<figure><img src="img/ca-oval-085.png" alt="A large oval around most countries and four small ovals around the far ones" loading="lazy" /></figure>
+<p class="lab">Proposed</p>
+<pre data-mark="18" data-kind="add"><code class="language-ts">chart(gapminderCountries, {
+  axes: true,
+  w: 520,
+  h: 320,
+  color: Color.palette(REGION_COLORS),
+})
+  .flow(scatter({ x: "FertilityRate", y: "LifeExpectancy" }))
+  .mark(circle({ r: 3.5, fill: "Region", opacity: 0.8 }).name("countries"))
+  .layer(
+    chart(selectAll("countries"))
+      .flow(
+        filter(
+          (country: any) =&gt; project(country, "Region") === "Sub-Saharan Africa"
+        )
+      )
+      .mark(
+        enclose({
+          shape: Shape.blob({ convexity: 2, connection: 0.85 }),
+          padding: 4.5,
+          fill: "#47b8a0",
+          stroke: "#47b8a0",
+          fillOpacity: 0.3,
+        })
+      )
+  );</code></pre>
+<details class="today"><summary>Today on main</summary><pre data-mark="18" data-kind="del"><code class="language-ts">chart(gapminderCountries, {
+  axes: true,
+  w: 520,
+  h: 320,
+  color: Color.palette(REGION_COLORS),
+})
+  .flow(scatter({ x: "FertilityRate", y: "LifeExpectancy" }))
+  .mark(circle({ r: 3.5, fill: "Region", opacity: 0.8 }).name("countries"))
+  .layer(
+    chart(selectAll("countries"))
+      .flow(
+        filter(
+          (country: any) =&gt; project(country, "Region") === "Sub-Saharan Africa"
+        )
+      )
+      .mark(
+        enclose({
+          shape: Shape.oval(),
+          padding: 4.5,
+          fill: "#47b8a0",
+          stroke: "#47b8a0",
+          fillOpacity: 0.3,
+        })
+      )
+  );</code></pre></details>
+<p class="note">At convexity 2 each piece is the smallest ellipse around it. Connection 0.85 cuts the weakest 15 percent of the join tree's links, so the four far countries get their own small ovals. Today has no pieces, so the nearest spelling is one oval around every member.</p>
+</article>
+<article class="card">
+<h3>ChartAccent, avoiding the other countries</h3>
+<figure><img src="img/ca-avoid.png" alt="The blob with every other country cut out of it" loading="lazy" /></figure>
+<p class="lab">Proposed</p>
+<pre data-mark="18,20" data-kind="add"><code class="language-ts">chart(gapminderCountries, {
+  axes: true,
+  w: 520,
+  h: 320,
+  color: Color.palette(REGION_COLORS),
+})
+  .flow(scatter({ x: "FertilityRate", y: "LifeExpectancy" }))
+  .mark(circle({ r: 3.5, fill: "Region", opacity: 0.8 }).name("countries"))
+  .layer(
+    chart(selectAll("countries"))
+      .flow(
+        filter(
+          (country: any) =&gt; project(country, "Region") === "Sub-Saharan Africa"
+        )
+      )
+      .mark(
+        enclose({
+          shape: Shape.blob(),
+          padding: 6,
+          avoiding: selectAll("countries"),
+          fill: "#47b8a0",
+          stroke: "#47b8a0",
+          fillOpacity: 0.3,
+        })
+      )
+  );</code></pre>
+<details class="today"><summary>Today on main</summary><pre data-mark="18" data-kind="del"><code class="language-ts">chart(gapminderCountries, {
+  axes: true,
+  w: 520,
+  h: 320,
+  color: Color.palette(REGION_COLORS),
+})
+  .flow(scatter({ x: "FertilityRate", y: "LifeExpectancy" }))
+  .mark(circle({ r: 3.5, fill: "Region", opacity: 0.8 }).name("countries"))
+  .layer(
+    chart(selectAll("countries"))
+      .flow(
+        filter(
+          (country: any) =&gt; project(country, "Region") === "Sub-Saharan Africa"
+        )
+      )
+      .mark(
+        enclose({
+          shape: Shape.blob({ avoiding: selectAll("countries") }),
+          padding: 6,
+          fill: "#47b8a0",
+          stroke: "#47b8a0",
+          fillOpacity: 0.3,
+        })
+      )
+  );</code></pre></details>
+<p class="note"><code>avoiding</code> moves from the shape onto <code>enclose</code>. The outline keeps <code>clearance</code> from each avoided country, and clearance defaults to the padding, 6 px here. A member that is also avoided is ignored, as today.</p>
+</article>
+<article class="card">
+<h3>Penguins, connection 0.9</h3>
+<figure><img src="img/pen-09.png" alt="Three species blobs, with four far points as their own small pieces" loading="lazy" /></figure>
+<p class="lab">Proposed</p>
+<pre data-mark="1" data-kind="add"><code class="language-ts">export const PenguinBlobs = penguinStory(Shape.blob({ connection: 0.9 }));</code></pre>
+<p class="lab">Today on main</p>
+<pre data-mark="1" data-kind="del"><code class="language-ts">export const PenguinBlobs = penguinStory(Shape.blob());</code></pre>
+<p class="note"><code>penguinStory</code> is the story's helper: the beak scatter with one <code>enclose</code> per species, padding 6. At 0.9 each species keeps one main body, and its four far points become their own pieces.</p>
+</article>
+<article class="card">
+<h3>Penguins, overlap or separate</h3>
+<div class="pair"><figure><figcaption>Default</figcaption><img src="img/pen-c2-05.png" alt="Ovals per species, overlapping freely" loading="lazy" /></figure><figure><figcaption>separate: true</figcaption><img src="img/pen-c2-05-sep.png" alt="Ovals per species, each cut away from its set&#x27;s other pieces" loading="lazy" /></figure></div>
+<p class="lab">Proposed</p>
+<pre data-mark="1,2,3,4" data-kind="add"><code class="language-ts">// left: pieces may overlap (the default)
+penguinStory(Shape.blob({ convexity: 2, connection: 0.5 }));
+// right: each piece is cut out of its set's other pieces
+penguinStory(Shape.blob({ convexity: 2, connection: 0.5, separate: true }));</code></pre>
+<p class="lab">Today on main</p>
+<pre data-mark="1,2" data-kind="del"><code class="language-ts">// no pieces today; the nearest is one oval per species
+penguinStory(Shape.oval());</code></pre>
+<p class="note">Convexity 2 and connection 0.5 split each species into ovals. By default the pieces of a set may overlap, and a piece wholly inside another piece of its set is dropped. With <code>separate: true</code> each piece is cut out of the set's other pieces, as <code>avoiding</code> cuts, and keeps <code>clearance</code> from them.</p>
+</article>
+<article class="card">
+<h3>U cloud</h3>
+<figure><img src="img/u.png" alt="A U-shaped band of points with a blob whose bay is one round arc" loading="lazy" /></figure>
+<p class="lab">Proposed</p>
+<pre><code class="language-ts">layer(U.map((p, i) =&gt; dot(p, "#3366aa", `u${i}`))).relate((names: any) =&gt; [
+  enclose(
+    {
+      shape: Shape.blob(),
+      padding: 8,
+      fill: "#3366aa",
+      stroke: "#3366aa",
+      fillOpacity: 0.25,
+    },
+    U.map((_, i) =&gt; names[`u${i}`])
+  ),
+]);</code></pre>
+<p class="note">Today on main: the same spelling.</p>
+<p class="note">The spelling does not change, but the render does. The bay inside the U fills as one round arc to half its area. Today it fills with Delaunay triangles, as a V-shaped wedge.</p>
+</article>
+<article class="card">
+<h3>Holes</h3>
+<figure><img src="img/holes-on.png" alt="The U blob with the two gray points cut out" loading="lazy" /></figure>
+<p class="lab">Proposed</p>
+<pre data-mark="8,10" data-kind="add"><code class="language-ts">const uBlob = (holes: boolean) =&gt;
+  layer([
+    ...U.map((p, i) =&gt; dot(p, "#3366aa", `u${i}`)),
+    ...GRAY.map((p, i) =&gt; dot(p, "#9aa0a6", `g${i}`)),
+  ]).relate((names: any) =&gt; [
+    enclose(
+      {
+        shape: Shape.blob({ convexity: 0.75, holes }),
+        padding: 8,
+        avoiding: GRAY.map((_, i) =&gt; names[`g${i}`]),
+        fill: "#3366aa",
+        stroke: "#3366aa",
+        fillOpacity: 0.25,
+      },
+      U.map((_, i) =&gt; names[`u${i}`])
+    ),
+  ]);</code></pre>
+<details class="today"><summary>Today on main</summary><pre data-mark="8,9,10,11,12" data-kind="del"><code class="language-ts">const uBlob = (holes: boolean) =&gt;
+  layer([
+    ...U.map((p, i) =&gt; dot(p, "#3366aa", `u${i}`)),
+    ...GRAY.map((p, i) =&gt; dot(p, "#9aa0a6", `g${i}`)),
+  ]).relate((names: any) =&gt; [
+    enclose(
+      {
+        shape: Shape.blob({
+          convexity: 0.75,
+          holes,
+          avoiding: GRAY.map((_, i) =&gt; names[`g${i}`]),
+        }),
+        padding: 8,
+        fill: "#3366aa",
+        stroke: "#3366aa",
+        fillOpacity: 0.25,
+      },
+      U.map((_, i) =&gt; names[`u${i}`])
+    ),
+  ]);</code></pre></details>
+<p class="note"><code>avoiding</code> moves onto <code>enclose</code>. The two gray points are cut out, each with clearance 8 px, the padding. <code>holes</code> keeps only a gap that the closing seals all the way around. The U's bay is open, so here <code>holes: true</code> and <code>false</code> draw this same outline, and the two Holes stories on main no longer differ.</p>
+</article>
+<article class="card">
+<h3>Munkres</h3>
+<figure><img src="img/munkres.png" alt="Three points with three ovals and a spine around the outer two that routes under the middle one" loading="lazy" /></figure>
+<p class="lab">Proposed</p>
+<pre data-mark="13,15,16" data-kind="add"><code class="language-ts">layer([
+  spread({ dir: "x", spacing: 95, alignment: "middle" }, [
+    circle({ r: 5, fill: "#111" }).name("a"),
+    circle({ r: 5, fill: "#111" }).name("b"),
+    circle({ r: 5, fill: "#111" }).name("c"),
+  ]),
+]).relate(({ a, b, c }: any) =&gt; [
+  enclose({ shape: Shape.oval(), padding: 30, ...outline }, [a, b, c]),
+  enclose({ shape: Shape.oval(), padding: 16, ...outline }, [a, b]),
+  enclose({ shape: Shape.oval(), padding: 16, ...outline }, [b, c]),
+  enclose(
+    {
+      shape: Shape.spine(),
+      padding: 12,
+      avoiding: [b],
+      clearance: 6,
+      ...outline,
+    },
+    [a, c]
+  ),
+]);</code></pre>
+<details class="today"><summary>Today on main</summary><pre data-mark="13" data-kind="del"><code class="language-ts">layer([
+  spread({ dir: "x", spacing: 95, alignment: "middle" }, [
+    circle({ r: 5, fill: "#111" }).name("a"),
+    circle({ r: 5, fill: "#111" }).name("b"),
+    circle({ r: 5, fill: "#111" }).name("c"),
+  ]),
+]).relate(({ a, b, c }: any) =&gt; [
+  enclose({ shape: Shape.oval(), padding: 30, ...outline }, [a, b, c]),
+  enclose({ shape: Shape.oval(), padding: 16, ...outline }, [a, b]),
+  enclose({ shape: Shape.oval(), padding: 16, ...outline }, [b, c]),
+  enclose(
+    {
+      shape: Shape.spine({ avoiding: [b], clearance: 6 }),
+      padding: 12,
+      ...outline,
+    },
+    [a, c]
+  ),
+]);</code></pre></details>
+<p class="note">Only <code>avoiding</code> and <code>clearance</code> move. The story spells clearance 6, so it stays.</p>
+</article>
+<article class="card">
+<h3>Hyperedges</h3>
+<figure><img src="img/hyper.png" alt="A graph with three colored bands along their nodes and edges" loading="lazy" /></figure>
+<p class="lab">Proposed</p>
+<pre data-mark="4,6,7" data-kind="add"><code class="language-ts">SETS.map((set) =&gt;
+  enclose(
+    {
+      shape: Shape.spine(),
+      padding: 6,
+      avoiding: Object.keys(NODES).map((id) =&gt; n[id]),
+      clearance: 3,
+      fill: set.color,
+      stroke: set.color,
+      fillOpacity: 0.3,
+    },
+    [
+      ...set.nodes.map((id) =&gt; n[id]),
+      ...EDGES.filter(
+        ([p, q]) =&gt; set.nodes.includes(p) &amp;&amp; set.nodes.includes(q)
+      ).map((e) =&gt; n[edgeName(e)]),
+    ]
+  )
+);</code></pre>
+<details class="today"><summary>Today on main</summary><pre data-mark="4,5,6,7" data-kind="del"><code class="language-ts">SETS.map((set) =&gt;
+  enclose(
+    {
+      shape: Shape.spine({
+        avoiding: Object.keys(NODES).map((id) =&gt; n[id]),
+        clearance: 3,
+      }),
+      padding: 6,
+      fill: set.color,
+      stroke: set.color,
+      fillOpacity: 0.3,
+    },
+    [
+      ...set.nodes.map((id) =&gt; n[id]),
+      ...EDGES.filter(
+        ([p, q]) =&gt; set.nodes.includes(p) &amp;&amp; set.nodes.includes(q)
+      ).map((e) =&gt; n[edgeName(e)]),
+    ]
+  )
+);</code></pre></details>
+<p class="note">Each set's members are its nodes and the edges between them. <code>avoiding</code> and <code>clearance</code> move onto <code>enclose</code>; the story's clearance of 3 stays.</p>
+</article>
+<article class="card">
+<h3>Bubble treemap</h3>
+<figure><img src="img/bubble.png" alt="Countries packed by region and continent, with tight contours around each region and rounder ones around each continent" loading="lazy" /></figure>
+<p class="lab">Proposed</p>
+<pre data-mark="5,13" data-kind="add"><code class="language-ts">chart(countryPopulations)
+  .flow(
+    pack({ by: "continent", spacing: 4 }),
+    enclose({
+      shape: Shape.fillet({ radius: 12 }),
+      padding: 4,
+      fill: "none",
+      stroke: "#333",
+      strokeWidth: 1.5,
+    }),
+    pack({ by: "region", spacing: 4 }),
+    enclose({
+      shape: Shape.fillet({ radius: 0 }),
+      padding: 4,
+      fill: "none",
+      stroke: "#999",
+    }),
+    pack()
+  )
+  .mark(country)
+  .render(container, { w: 720, h: 600 });</code></pre>
+<details class="today"><summary>Today on main</summary><pre data-mark="5,13" data-kind="del"><code class="language-ts">chart(countryPopulations)
+  .flow(
+    pack({ by: "continent", spacing: 4 }),
+    enclose({
+      shape: Shape.arcs({ radius: 12 }),
+      padding: 4,
+      fill: "none",
+      stroke: "#333",
+      strokeWidth: 1.5,
+    }),
+    pack({ by: "region", spacing: 4 }),
+    enclose({
+      shape: Shape.arcs({ radius: 8 }),
+      padding: 4,
+      fill: "none",
+      stroke: "#999",
+    }),
+    pack()
+  )
+  .mark(country)
+  .render(container, { w: 720, h: 600 });</code></pre></details>
+<p class="note"><code>Shape.arcs</code> is renamed <code>Shape.fillet</code>. The regions use radius 0: the padded circles and nothing filled between them. The continents keep radius 12, so their regions stay one piece.</p>
+</article>
+<article class="card">
+<h3>ChartAccent, fillet radius 12</h3>
+<div class="pair"><figure><figcaption>neck: 0</figcaption><img src="img/ca-fillet-n0.png" alt="Fillet at radius 12 with no links: many separate pieces" loading="lazy" /></figure><figure><figcaption>neck: 0.5 (default)</figcaption><img src="img/ca-fillet-n05.png" alt="Fillet at radius 12 with links: fewer pieces joined by smooth channels" loading="lazy" /></figure></div>
+<p class="lab">Proposed</p>
+<pre data-mark="1,3,9,10,11,12,13,14,15" data-kind="add"><code class="language-ts">// in the ChartAccent visualization above: left, then right
+enclose({
+  shape: Shape.fillet({ radius: 12, neck: 0 }),
+  padding: 6,
+  fill: "#47b8a0",
+  stroke: "#47b8a0",
+  fillOpacity: 0.3,
+});
+enclose({
+  shape: Shape.fillet({ radius: 12 }),
+  padding: 6,
+  fill: "#47b8a0",
+  stroke: "#47b8a0",
+  fillOpacity: 0.3,
+});</code></pre>
+<p class="lab">Today on main</p>
+<pre data-mark="1,3" data-kind="del"><code class="language-ts">// in the ChartAccent visualization above; no links between pieces today
+enclose({
+  shape: Shape.arcs({ radius: 12 }),
+  padding: 6,
+  fill: "#47b8a0",
+  stroke: "#47b8a0",
+  fillOpacity: 0.3,
+});</code></pre>
+<p class="note">At neck 0 there are no links, so the groups split as they do today. The default neck 0.5 links groups closer than 2 &middot; radius, so each channel meets its groups in smooth arcs and no horn is left.</p>
+</article>
       </div>
 
-      <h2>The enclose examples</h2>
-      <div class="prose">
-        <p>
-          Every enclose story from the original enclose PR (#1152) and from the
-          bubble treemap PR. Left is today, right is proposed.
-          <code>Shape.box</code> and <code>Shape.oval</code> stories do not
-          change and are left out.
-        </p>
-      </div>
-      <div class="cards">
-        <div class="card">
-          <header>
-            <h3>ChartAccent, Sub-Saharan Africa</h3>
-            <span class="chip better">better</span>
-          </header>
-          <div class="pair">
-            <figure>
-              <figcaption>Today</figcaption>
-              <img
-                src="img/round3/chart-accent-current.png"
-                alt="ChartAccent today"
-              />
-            </figure>
-            <figure>
-              <figcaption>New</figcaption>
-              <img
-                src="img/round4/chart-accent-new.png"
-                alt="ChartAccent new"
-              />
-            </figure>
-          </div>
-          <div class="code-pair">
-            <span class="lab">Proposed and today</span>
-            <pre><code class="language-js">Shape.blob({ convexity: 0.1, neck: 0.6 });</code></pre>
-          </div>
-          <p class="note">
-            Wavy cluster edge, no bumps, one piece. The links to far outliers
-            are still straight.
-          </p>
-        </div>
-
-        <div class="card">
-          <header>
-            <h3>Penguin blobs</h3>
-            <span class="chip better">better</span>
-          </header>
-          <div class="pair">
-            <figure>
-              <figcaption>Today</figcaption>
-              <img
-                src="img/round3/penguin-blobs-current.png"
-                alt="Penguin blobs today"
-              />
-            </figure>
-            <figure>
-              <figcaption>New</figcaption>
-              <img
-                src="img/round4/penguin-blobs-new.png"
-                alt="Penguin blobs new"
-              />
-            </figure>
-          </div>
-          <div class="code-pair">
-            <span class="lab">Proposed and today</span>
-            <pre><code class="language-js">Shape.blob();</code></pre>
-          </div>
-          <p class="note">
-            Rounder. The found radius is 27, 40 and 60 px for the three species,
-            so one convexity adapts to each cloud's spread. Slowest chart: up to
-            435 ms per species.
-          </p>
-        </div>
-
-        <div class="card">
-          <header>
-            <h3>Penguin hulls</h3>
-            <span class="chip same">same</span>
-          </header>
-          <div class="pair">
-            <figure>
-              <figcaption>Today</figcaption>
-              <img
-                src="img/round3/penguin-hulls-current.png"
-                alt="Penguin hulls today"
-              />
-            </figure>
-            <figure>
-              <figcaption>New</figcaption>
-              <img
-                src="img/round3/penguin-hulls-new.png"
-                alt="Penguin hulls new"
-              />
-            </figure>
-          </div>
-          <div class="code-pair">
-            <span class="lab">Proposed and today</span>
-            <pre><code class="language-js">Shape.hull(); // = Shape.blob({ convexity: 1 })</code></pre>
-          </div>
-        </div>
-
-        <div class="card">
-          <header>
-            <h3>Penguin spines</h3>
-            <span class="chip same">same</span>
-          </header>
-          <div class="pair">
-            <figure>
-              <figcaption>Today</figcaption>
-              <img
-                src="img/round3/penguin-spines-current.png"
-                alt="Penguin spines today"
-              />
-            </figure>
-            <figure>
-              <figcaption>New</figcaption>
-              <img
-                src="img/round4/penguin-spines-new.png"
-                alt="Penguin spines new"
-              />
-            </figure>
-          </div>
-          <div class="code-pair">
-            <span class="lab">Proposed and today</span>
-            <pre><code class="language-js">Shape.spine(); // = Shape.blob({ convexity: 0 })</code></pre>
-          </div>
-          <p class="note">
-            Lumpier than today: inner corners come out at 2.5 to 4 px, tighter
-            than the 6 px padding (decision 6). This predates the neck fix.
-          </p>
-        </div>
-
-        <div class="card">
-          <header>
-            <h3>Penguins, four shapes</h3>
-            <span class="chip better">better</span>
-          </header>
-          <div class="pair">
-            <figure>
-              <figcaption>Today</figcaption>
-              <img
-                src="img/round3/penguins-four-shapes-current.png"
-                alt="Four shapes today"
-              />
-            </figure>
-            <figure>
-              <figcaption>New</figcaption>
-              <img
-                src="img/round4/penguins-four-shapes-new.png"
-                alt="Four shapes new"
-              />
-            </figure>
-          </div>
-          <div class="code-pair">
-            <span class="lab">Proposed and today</span>
-            <pre><code class="language-js">Shape.box();
-Shape.hull();
-Shape.blob();
-Shape.spine();</code></pre>
-          </div>
-          <p class="note">Only the blob panel changes visibly.</p>
-        </div>
-
-        <div class="card">
-          <header>
-            <h3>Munkres topology figure</h3>
-            <span class="chip same">same</span>
-          </header>
-          <div class="pair">
-            <figure>
-              <figcaption>Today</figcaption>
-              <img
-                src="img/round3/munkres-figure-current.png"
-                alt="Munkres today"
-              />
-            </figure>
-            <figure>
-              <figcaption>New</figcaption>
-              <img src="img/round4/munkres-figure-new.png" alt="Munkres new" />
-            </figure>
-          </div>
-          <div class="code-pair">
-            <span class="lab">Proposed and today</span>
-            <pre><code class="language-js">Shape.spine({ avoiding: [b], clearance: 6 });</code></pre>
-          </div>
-          <p class="note">
-            Links are now as wide as the dots, so no waist. Routes around b, but
-            hugs it closely instead of today's wide V.
-          </p>
-        </div>
-
-        <div class="card">
-          <header>
-            <h3>Holes filled</h3>
-            <span class="chip diff">different</span>
-          </header>
-          <div class="pair">
-            <figure>
-              <figcaption>Today</figcaption>
-              <img
-                src="img/round3/holes-filled-current.png"
-                alt="Holes filled today"
-              />
-            </figure>
-            <figure>
-              <figcaption>New</figcaption>
-              <img
-                src="img/round4/holes-filled-new.png"
-                alt="Holes filled new"
-              />
-            </figure>
-          </div>
-          <div class="code-pair">
-            <span class="lab">Proposed and today</span>
-            <pre><code class="language-js">Shape.blob({ convexity: 0.75, avoiding: gray });</code></pre>
-          </div>
-          <p class="note">
-            The pocket closes with an arc, so the top gray dot now sits on the
-            edge and becomes a notch instead of a hole. The lower one is still a
-            clearance hole.
-          </p>
-        </div>
-
-        <div class="card">
-          <header>
-            <h3>Holes kept</h3>
-            <span class="chip worse">worse</span>
-          </header>
-          <div class="pair">
-            <figure>
-              <figcaption>Today</figcaption>
-              <img
-                src="img/round3/holes-kept-current.png"
-                alt="Holes kept today"
-              />
-            </figure>
-            <figure>
-              <figcaption>New</figcaption>
-              <img src="img/round4/holes-kept-new.png" alt="Holes kept new" />
-            </figure>
-          </div>
-          <div class="code-pair">
-            <span class="lab">Proposed and today</span>
-            <pre><code class="language-js">Shape.blob({ convexity: 0.75, holes: true, avoiding: gray });</code></pre>
-          </div>
-          <p class="note">
-            Same as holes filled. Today's holes are triangles Delaunay leaves
-            empty. The closing only has a hole when a whole disc fits inside a
-            sealed pocket, so <code>holes: true</code> does nothing here at any
-            convexity (decision 3).
-          </p>
-        </div>
-
-        <div class="card">
-          <header>
-            <h3>Hyperedges</h3>
-            <span class="chip same">same</span>
-          </header>
-          <div class="pair">
-            <figure>
-              <figcaption>Today</figcaption>
-              <img
-                src="img/round3/hyperedges-current.png"
-                alt="Hyperedges today"
-              />
-            </figure>
-            <figure>
-              <figcaption>New</figcaption>
-              <img src="img/round3/hyperedges-new.png" alt="Hyperedges new" />
-            </figure>
-          </div>
-          <div class="code-pair">
-            <span class="lab">Proposed and today</span>
-            <pre><code class="language-js">Shape.spine({ avoiding: allNodes, clearance: 3 });</code></pre>
-          </div>
-          <p class="note">
-            Slightly smoother. Keep-outs hold with 0.00 px intrusion on every
-            story that uses <code>avoiding</code>.
-          </p>
-        </div>
-
-        <div class="card">
-          <header>
-            <h3>Ref hull</h3>
-            <span class="chip same">same</span>
-          </header>
-          <div class="pair">
-            <figure>
-              <figcaption>Today</figcaption>
-              <img src="img/round3/ref-hull-current.png" alt="Ref hull today" />
-            </figure>
-            <figure>
-              <figcaption>New</figcaption>
-              <img src="img/round3/ref-hull-new.png" alt="Ref hull new" />
-            </figure>
-          </div>
-          <div class="code-pair">
-            <span class="lab">Proposed and today</span>
-            <pre><code class="language-js">Shape.hull();</code></pre>
-          </div>
-        </div>
-
-        <div class="card">
-          <header>
-            <h3>Members: circles</h3>
-            <span class="chip better">better</span>
-          </header>
-          <div class="pair">
-            <figure>
-              <figcaption>Today</figcaption>
-              <img
-                src="img/round3/members-circles-current.png"
-                alt="Circles today"
-              />
-            </figure>
-            <figure>
-              <figcaption>New</figcaption>
-              <img src="img/round4/members-circles-new.png" alt="Circles new" />
-            </figure>
-          </div>
-          <div class="code-pair">
-            <span class="lab">Proposed and today</span>
-            <pre><code class="language-js">Shape.blob();</code></pre>
-          </div>
-        </div>
-
-        <div class="card">
-          <header>
-            <h3>Members: thick curves</h3>
-            <span class="chip better">better</span>
-          </header>
-          <div class="pair">
-            <figure>
-              <figcaption>Today</figcaption>
-              <img
-                src="img/round3/members-thick-curves-current.png"
-                alt="Thick curves today"
-              />
-            </figure>
-            <figure>
-              <figcaption>New</figcaption>
-              <img
-                src="img/round4/members-thick-curves-new.png"
-                alt="Thick curves new"
-              />
-            </figure>
-          </div>
-          <div class="code-pair">
-            <span class="lab">Proposed and today</span>
-            <pre><code class="language-js">Shape.blob();</code></pre>
-          </div>
-        </div>
-
-        <div class="card">
-          <header>
-            <h3>Members: polygons</h3>
-            <span class="chip better">better</span>
-          </header>
-          <div class="pair">
-            <figure>
-              <figcaption>Today</figcaption>
-              <img
-                src="img/round3/members-polygons-current.png"
-                alt="Polygons today"
-              />
-            </figure>
-            <figure>
-              <figcaption>New</figcaption>
-              <img
-                src="img/round4/members-polygons-new.png"
-                alt="Polygons new"
-              />
-            </figure>
-          </div>
-          <div class="code-pair">
-            <span class="lab">Proposed and today</span>
-            <pre><code class="language-js">Shape.blob();</code></pre>
-          </div>
-        </div>
-
-        <div class="card">
-          <header>
-            <h3>Members: ribbon band</h3>
-            <span class="chip better">better</span>
-          </header>
-          <div class="pair">
-            <figure>
-              <figcaption>Today</figcaption>
-              <img
-                src="img/round3/members-ribbon-band-current.png"
-                alt="Ribbon band today"
-              />
-            </figure>
-            <figure>
-              <figcaption>New</figcaption>
-              <img
-                src="img/round4/members-ribbon-band-new.png"
-                alt="Ribbon band new"
-              />
-            </figure>
-          </div>
-          <div class="code-pair">
-            <span class="lab">Proposed and today</span>
-            <pre><code class="language-js">Shape.blob();</code></pre>
-          </div>
-        </div>
-
-        <div class="card">
-          <header>
-            <h3>Pack, enclosed</h3>
-            <span class="chip same">same</span>
-          </header>
-          <div class="pair">
-            <figure>
-              <figcaption>Today</figcaption>
-              <img
-                src="img/round3/pack-enclosed-current.png"
-                alt="Pack today"
-              />
-            </figure>
-            <figure>
-              <figcaption>New</figcaption>
-              <img src="img/round4/pack-enclosed-new.png" alt="Pack new" />
-            </figure>
-          </div>
-          <div class="code-pair">
-            <span class="lab">Proposed and today</span>
-            <pre><code class="language-js">Shape.blob();</code></pre>
-          </div>
-        </div>
-
-        <div class="card">
-          <header>
-            <h3>Arcs radius sweep</h3>
-            <span class="chip same">same</span>
-          </header>
-          <div class="pair">
-            <figure>
-              <figcaption>Today</figcaption>
-              <img
-                src="img/round3/arcs-radius-sweep-current.png"
-                alt="Arcs sweep today"
-              />
-            </figure>
-            <figure>
-              <figcaption>New</figcaption>
-              <img
-                src="img/round3/arcs-radius-sweep-new.png"
-                alt="Arcs sweep new"
-              />
-            </figure>
-          </div>
-          <div class="code-pair">
-            <span class="lab">Proposed and today</span>
-            <pre><code class="language-js">Shape.arcs({ radius });</code></pre>
-          </div>
-          <p class="note">
-            Rendered here with smoothing on, which rounds the creases at radius
-            0.
-          </p>
-        </div>
-
-        <div class="card">
-          <header>
-            <h3>Bubble treemap</h3>
-            <span class="chip same">same exact</span
-            ><span class="chip worse">worse smoothed</span>
-          </header>
-          <div class="pair">
-            <figure>
-              <figcaption>Today and exact</figcaption>
-              <img
-                src="img/round3/bubble-treemap-current.png"
-                alt="Bubble treemap today"
-              />
-            </figure>
-            <figure>
-              <figcaption>With smoothing</figcaption>
-              <img
-                src="img/round3/bubble-treemap-new.png"
-                alt="Bubble treemap smoothed"
-              />
-            </figure>
-          </div>
-          <div class="code-pair">
-            <span class="lab">Proposed and today</span>
-            <pre><code class="language-js">Shape.arcs({ radius: 12 }); // outer
-Shape.arcs({ radius: 8 }); // inner</code></pre>
-          </div>
-          <p class="note">
-            No cusps here, so the exact closing is unchanged. Smoothing loosens
-            the nested contours, because the outward push is set by the thin
-            stroked rings. So the arcs preset skips smoothing (decision 4).
-          </p>
-        </div>
-      </div>
-
-      <h2>Neck</h2>
-      <div class="prose">
-        <p>
-          The earlier prototype joined members with zero-width links, so every
-          link pinched into a waist where it left a dot (0.72 of the dot's width
-          on Munkres). Links are now tapered tubes as wide as the member at each
-          end, which is today's <code>neck: 1</code>. Lower
-          <code>neck</code> thins them. Links that only prevent cusps in
-          <code>Shape.arcs</code> stay zero-width, so its concave arcs are kept.
-        </p>
-      </div>
-      <div class="cards">
-        <div class="card">
-          <header><h3>Munkres</h3></header>
-          <div class="pair">
-            <figure>
-              <figcaption>Neck 1 (default)</figcaption>
-              <img src="img/round4/munkres-neck-100.png" alt="Munkres neck 1" />
-            </figure>
-            <figure>
-              <figcaption>Neck 0.6</figcaption>
-              <img
-                src="img/round4/munkres-neck-060.png"
-                alt="Munkres neck 0.6"
-              />
-            </figure>
-          </div>
-          <div class="code-pair">
-            <span class="lab">Proposed and today</span>
-            <pre><code class="language-js">Shape.spine({ avoiding: [b], clearance: 6, neck: 0.6 });</code></pre>
-          </div>
-        </div>
-        <div class="card">
-          <header><h3>ChartAccent</h3></header>
-          <div class="pair">
-            <figure>
-              <figcaption>Neck 1</figcaption>
-              <img
-                src="img/round4/chart-accent-neck-100.png"
-                alt="ChartAccent neck 1"
-              />
-            </figure>
-            <figure>
-              <figcaption>Neck 0.6</figcaption>
-              <img
-                src="img/round4/chart-accent-neck-060.png"
-                alt="ChartAccent neck 0.6"
-              />
-            </figure>
-          </div>
-        </div>
-      </div>
-
-      <h2>Cusps</h2>
-      <div class="prose">
-        <p>
-          A cusp forms when two padded members are closer than 2r, so the
-          closing disc cannot pass between them, yet their outlines still don't
-          meet. The closing then has a corner where the two outside arcs cross:
-          the teardrop tail. Only the plain closing has them. With links between
-          pieces, and in the bubble treemap, there are none. Smoothing alone
-          does not remove them.
-        </p>
-        <p>
-          <b>Fix:</b> any two pieces whose gap is under 2r get a zero-width link
-          at their nearest points, shortest gaps first, repeated until no two
-          pieces are that close. That is the closing's own rule, "every gap the
-          disc cannot pass through fills", applied literally.
-          <code>connected: true</code> is the same step with no distance limit.
-          On ChartAccent at radius 12, 24, 40 and 80 there are 0 corners left.
-          The tightest outward curve is 9.5 px, the padded dot. Runtime is
-          unchanged, 11 to 25 ms.
-        </p>
-      </div>
-      <div class="cards">
-        <div class="card zoom">
-          <p class="lab">Radius 40: before, after, after with smoothing</p>
-          <div class="strip">
-            <img
-              src="img/round3/cusp-r40-upperleft-before.png"
-              alt="Cusp before"
-            /><img
-              src="img/round3/cusp-r40-upperleft-after.png"
-              alt="Cusp after"
-            /><img
-              src="img/round3/cusp-r40-upperleft-after-smooth.png"
-              alt="Cusp after smoothing"
-            />
-          </div>
-          <div class="strip">
-            <img
-              src="img/round3/cusp-r40-tail-before.png"
-              alt="Tail before"
-            /><img
-              src="img/round3/cusp-r40-tail-after.png"
-              alt="Tail after"
-            /><img
-              src="img/round3/cusp-r40-tail-after-smooth.png"
-              alt="Tail after smoothing"
-            />
-          </div>
-        </div>
-        <div class="card zoom">
-          <p class="lab">
-            Radius 24, padding 10: before, after, after with smoothing
-          </p>
-          <div class="strip">
-            <img
-              src="img/round3/cusp-r24-pad10-upperleft-before.png"
-              alt="Cusp before"
-            /><img
-              src="img/round3/cusp-r24-pad10-upperleft-after.png"
-              alt="Cusp after"
-            /><img
-              src="img/round3/cusp-r24-pad10-upperleft-after-smooth.png"
-              alt="Cusp after smoothing"
-            />
-          </div>
-          <div class="strip">
-            <img
-              src="img/round3/cusp-r24-pad10-tail-before.png"
-              alt="Tail before"
-            /><img
-              src="img/round3/cusp-r24-pad10-tail-after.png"
-              alt="Tail after"
-            /><img
-              src="img/round3/cusp-r24-pad10-tail-after-smooth.png"
-              alt="Tail after smoothing"
-            />
-          </div>
-        </div>
-        <div class="card">
-          <p class="lab">Radius 40, whole chart: before</p>
-          <img
-            src="img/round3/cusp-r40-full-before.png"
-            alt="Radius 40 before"
-          />
-        </div>
-        <div class="card">
-          <p class="lab">Radius 40, whole chart: after with smoothing</p>
-          <img
-            src="img/round3/cusp-r40-full-after-smooth.png"
-            alt="Radius 40 after"
-          />
-        </div>
-      </div>
-
-      <h2>Bumps</h2>
-      <div class="prose">
-        <p>
-          The closing alone makes small bumps where a dot sits slightly outside
-          its neighbors: the edge follows that dot's own circle between two
-          concave arcs. The smoothing step removes them. Top row before, bottom
-          row after.
-        </p>
-      </div>
-      <div class="sweep zoom">
-        <span class="rowlab">Before</span>
-        <img
-          src="img/bumps/00-current-arcs24-spine0-z1.png"
-          alt="Bump 1 before"
-        /><img
-          src="img/bumps/00-current-arcs24-spine0-z2.png"
-          alt="Bump 2 before"
-        /><img
-          src="img/bumps/00-current-arcs24-spine0-z3.png"
-          alt="Bump 3 before"
-        /><img
-          src="img/bumps/00-current-arcs24-spine0-z4.png"
-          alt="Bump 4 before"
-        /><img
-          src="img/bumps/00-current-arcs24-spine0-z5.png"
-          alt="Bump 5 before"
-        />
-        <span class="rowlab">After</span>
-        <img
-          src="img/bumps/10-cand-blur-s6-RECOMMENDED-z1.png"
-          alt="Bump 1 after"
-        /><img
-          src="img/bumps/10-cand-blur-s6-RECOMMENDED-z2.png"
-          alt="Bump 2 after"
-        /><img
-          src="img/bumps/10-cand-blur-s6-RECOMMENDED-z3.png"
-          alt="Bump 3 after"
-        /><img
-          src="img/bumps/10-cand-blur-s6-RECOMMENDED-z4.png"
-          alt="Bump 4 after"
-        /><img
-          src="img/bumps/10-cand-blur-s6-RECOMMENDED-z5.png"
-          alt="Bump 5 after"
-        />
-      </div>
-
-      <h2>Decisions for you</h2>
-      <ol class="decisions">
+      <h2>Known limitations</h2>
+      <p class="note">Each of these will be tracked as its own issue.</p>
+      <ul class="limits">
         <li>
-          <b>Convexity is the only concavity knob on <code>blob</code>,</b> with
-          the radius found from it. <code>radius</code> stays only on the
-          <code>arcs</code> preset. Recommended.
+          <b>Fillet neck jumps when it leaves 0.</b> At neck 0 there are no
+          links. Any neck above 0 adds every link at once, at least that wide,
+          so the outline jumps between 0 and the smallest neck above it.
         </li>
         <li>
-          <b>The sealed-pocket jump.</b> On the U, convexity 0.25 and 0.5 land
-          closer together than they should, because a pocket fills all at once
-          when it seals. Accept it, or keep that range continuous by letting a
-          sealed pocket fill gradually (more design work).
+          <b>Horns at hole mouths.</b> With <code>holes: true</code> and a
+          fillet at neck 0, the mouth of a hole can keep a horn, a sharp tip,
+          because no link fills the gap there.
         </li>
         <li>
-          <b>What <code>holes</code> means now.</b> The closing rarely leaves a
-          hole, so <code>holes: true</code> is close to a no-op. Options: drop
-          <code>holes</code>, or redefine it as "don't fill a pocket once it
-          seals".
+          <b>Closing accuracy.</b> With holes on, the exact closing is within
+          0.25 px of a raster reference everywhere except ChartAccent at radius
+          12, where it is 0.46 px. Today's <code>Shape.arcs</code> has the same
+          error there.
         </li>
         <li>
-          <b>Smoothing on the <code>arcs</code> preset:</b> off (recommended;
-          keeps the exact bubble treemap contour), or on with σ scaled to member
-          size.
+          <b>The playground's group count.</b> Its "N groups" readout counts
+          the connection's groups, not the pieces drawn after a piece wholly
+          inside another one is dropped. With connection 0.5 on the penguins,
+          Adelie reads 1 group and 8 outliers, but fewer pieces are drawn.
         </li>
+        <li>
+          <b><code>holes</code> only keeps sealed gaps.</b> A bay that is open
+          to the outside is never a hole, so the HolesFilled and HolesKept
+          stories now draw the same outline.
+        </li>
+      </ul>
 
-        <li>
-          <b>Convexity from 0 to 2.</b> One knob with three anchors (spine 0,
-          hull 1, oval 2), so <code>Shape.oval()</code> becomes a preset. Below
-          1 it means "share of the hull filled", above 1 "toward the ellipse".
-          Recommended over a separate knob, since the two ranges never overlap.
-          Above 1, <code>avoiding</code>, <code>holes</code> and
-          <code>connected</code> do nothing useful, so the oval preset would not
-          accept them.
-        </li>
-        <li>
-          <b>Spine inner corners.</b> Penguin spines have inner corners of 2.5
-          to 4 px, tighter than the padding, which looks lumpy. Needs its own
-          fix: cap the smoothing push there, or round inner corners to at least
-          the padding.
-        </li>
-      </ol>
-
+      <h2>Rationale</h2>
       <details>
-        <summary>Why one outline is principled, and earlier renders</summary>
-        <div class="prose">
-          <p>
-            Today's blob fills Delaunay triangles smallest first, which is an
-            alpha complex. The arcs closing is the matching alpha hull: the same
-            concavity axis, with concave arcs where the blob draws straight
-            chords. That is why blob drew long straight edges, and why the
-            bubble treemap looks like rounded polygons under blob.
-          </p>
-          <p>
-            The closing alone is only tangent-continuous, splits sparse sets
-            into pieces, and leaves cusps at near-joins. The links, the cusp
-            rule, and the smoothing step fix those three problems one by one.
-          </p>
+        <summary>Why each bay fills its own share</summary>
+        <p>
+          Between the spine and the padded hull, the empty space falls into
+          bays. Each bay fills <code>convexity</code> of its own area, from its
+          wall toward its mouth along the level sets of a harmonic field. So
+          every bay fills at the same rate, and no bay fills first because it
+          is large or narrow.
+        </p>
+        <p>
+          The two other rules we tried were worse. A single closing radius fills
+          every gap narrower than the radius at once, so the outline jumps as a
+          slider moves. A share of the total area fills the large bays first and
+          leaves the small ones empty. Today's Delaunay fill has the same
+          problem and fills a round bay as a wedge of triangles.
+        </p>
+      </details>
+      <details>
+        <summary>Why connection is a share of links</summary>
+        <p>
+          A share of the join tree's links does not depend on the number of
+          members or on the visualization's scale. The same value cuts about the
+          same part of a set of 30 points or of 300, in a small plot or a large
+          one. A pixel distance would need retuning for each.
+        </p>
+        <p>
+          The tree is cut weakest link first, so the far points split off
+          before the body does. We suggest 0.9 as the first value to try: it
+          cuts the farthest tenth of the links, which on the penguins splits
+          off the outliers and keeps each body whole.
+        </p>
+      </details>
+      <details>
+        <summary>Precedent in topological data analysis</summary>
+        <p>
+          Cutting a minimum spanning tree's longest links is single linkage
+          clustering, and the order in which its pieces merge is the zero
+          dimensional persistence of the members. The join tree follows
+          HDBSCAN, which builds that tree on mutual reachability so a lone point
+          in a sparse area does not bridge two dense ones.
+        </p>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Idea</th>
+                <th>Source</th>
+                <th>Use here</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Single linkage is H0 persistence</td>
+                <td>
+                  Edelsbrunner, Letscher and Zomorodian 2002; Ghrist 2008;
+                  Carlsson and M&eacute;moli 2010
+                </td>
+                <td>Pieces as the components at a cut of the tree</td>
+              </tr>
+              <tr>
+                <td>Minimum spanning tree on mutual reachability</td>
+                <td>
+                  HDBSCAN: Campello, Moulavi and Sander 2013; McInnes, Healy and
+                  Astels 2017
+                </td>
+                <td>The join tree, with core distance at k = 4</td>
+              </tr>
+              <tr>
+                <td>Robust single linkage</td>
+                <td>Chaudhuri and Dasgupta 2010</td>
+                <td>Why density weighting keeps outliers from bridging</td>
+              </tr>
+              <tr>
+                <td>Clusters by cutting inconsistent tree edges</td>
+                <td>Zahn 1971</td>
+                <td>Weakest link first</td>
+              </tr>
+              <tr>
+                <td>Distance to a measure</td>
+                <td>Chazal, Cohen-Steiner and M&eacute;rigot 2011</td>
+                <td>The same idea as the core distance, for robustness</td>
+              </tr>
+              <tr>
+                <td>The cut as a share of links</td>
+                <td>Our own</td>
+                <td>The <code>connection</code> value</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <div class="cards">
-          <div class="card">
-            <p class="lab">Today's blob</p>
-            <img
-              src="img/chartaccent-a-blob-current.png"
-              alt="Today's blob on ChartAccent"
-            />
-          </div>
-          <div class="card">
-            <p class="lab">Plain arcs, radius 12</p>
-            <img
-              src="img/chartaccent-b-arcs-r12-default.png"
-              alt="Plain arcs radius 12"
-            />
-          </div>
-          <div class="card">
-            <p class="lab">Plain arcs, radius 24</p>
-            <img
-              src="img/chartaccent-c1-arcs-r24.png"
-              alt="Plain arcs radius 24"
-            />
-          </div>
-          <div class="card">
-            <p class="lab">Arcs 24 with links, before smoothing</p>
-            <img
-              src="img/chartaccent-d2-PROTOTYPE-arcs-r24-plus-spine.png"
-              alt="Arcs with links"
-            />
-          </div>
-          <div class="card">
-            <p class="lab">Bubble treemap under today's blob</p>
-            <img
-              src="img/bubbletreemap-blob-default.png"
-              alt="Bubble treemap with blob"
-            />
-          </div>
-          <div class="card">
-            <p class="lab">Plain arcs, radius 80: pixel radius over-fills</p>
-            <img
-              src="img/chartaccent-c3-arcs-r80.png"
-              alt="Plain arcs radius 80"
-            />
-          </div>
-        </div>
+      </details>
+      <details>
+        <summary>Why the fillet closes each piece again, and has a neck</summary>
+        <p>
+          The exact closing of two padded members leaves a horn, a sharp tip,
+          where their gap is narrower than two radii but too wide for them to
+          join. So the fillet first finds its pieces, then closes each piece on
+          its own members. A piece closed without its neighbor has no horn.
+        </p>
+        <p>
+          Closing pieces apart would split groups that are close together. The
+          neck links every two groups closer than 2 &middot; radius with a tube
+          at least <code>neck</code> as wide as the members it joins, so the
+          channel between them meets each group in a smooth arc. Neck 0 keeps
+          the split, which the bubble treemap's regions use at radius 0.
+        </p>
+      </details>
+      <details>
+        <summary>Why separate is off by default</summary>
+        <p>
+          The pieces of one set belong together, and an overlap between them
+          does not mislead the reader. Cutting each piece out of the others
+          dents the large piece around every small one near it, as the right
+          penguin render shows. So by default pieces may overlap, and only a
+          piece wholly inside another one is dropped, because it adds nothing.
+          <code>separate: true</code> is there for a visualization where pieces
+          must not touch.
+        </p>
       </details>
     </main>
     <script>
       try {
-        hljs.highlightAll();
+        document.querySelectorAll("pre code").forEach((el) => {
+          hljs.highlightElement(el);
+          const pre = el.parentElement;
+          if (!pre.dataset.mark) return;
+          const marks = new Set(pre.dataset.mark.split(",").map(Number));
+          const kind = pre.dataset.kind;
+          el.innerHTML = el.innerHTML
+            .split("\n")
+            .map(
+              (line, i) =>
+                `<span class="ln${marks.has(i + 1) ? " " + kind : ""}">${line}</span>`
+            )
+            .join("");
+        });
       } catch (e) {}
     </script>
   </body>

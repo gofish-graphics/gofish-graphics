@@ -233,3 +233,32 @@ export const Neck_ChartAccent_100 = wrap(S.ChartAccentSubSaharanAfrica, {
 export const Neck_ChartAccent_060 = wrap(S.ChartAccentSubSaharanAfrica, {
   neck: 0.6,
 });
+
+// The bubble treemap as the proposal page spells it: Shape.fillet({ radius:
+// 12 }) around each continent, Shape.fillet({ radius: 0 }) around each region
+// (Shape.arcs routed through the unified fillet).
+import { pack } from "../../src/lib";
+import { countryPopulations } from "../../src/data/countryPopulations";
+export const BubbleFillet0: StoryObj = {
+  render: () => {
+    ARCS_PROTOTYPE.spine = undefined;
+    ARCS_PROTOTYPE.smooth = undefined;
+    ENCLOSE_PROTOTYPE.unified = true;
+    ENCLOSE_PROTOTYPE.arcs = true;
+    ENCLOSE_PROTOTYPE.overrides = undefined;
+    ENCLOSE_PROTOTYPE.dump = undefined;
+    ENCLOSE_PROTOTYPE.dumpEl = undefined;
+    const container = initializeContainer();
+    chart(countryPopulations)
+      .flow(
+        pack({ by: "continent", spacing: 4 }),
+        enclose({ shape: Shape.arcs({ radius: 12 }), padding: 4, fill: "none", stroke: "#333", strokeWidth: 1.5 }),
+        pack({ by: "region", spacing: 4 }),
+        enclose({ shape: Shape.arcs({ radius: 0 }), padding: 4, fill: "none", stroke: "#999" }),
+        pack()
+      )
+      .mark((d: any) => circle({ r: 1.6 * Math.sqrt(d[0].pop), fill: "continent" })(d))
+      .render(container, { w: 720, h: 600 });
+    return container;
+  },
+};
