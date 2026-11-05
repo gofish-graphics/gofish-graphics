@@ -45,9 +45,10 @@
  * Every outline, these and the box and the oval (`cutOutline`), is then cut
  * by the keep-outs (`avoiding`, each grown by `clearance`), and a separate
  * blob piece also by the set's other pieces (their padded members and links
- * grown by the padding and the clearance, so two outlines stay `clearance`
- * apart): one final cut that never enters the padded members (separate.ts,
- * cutRings), its corners rounded inward (smooth.ts, roundCut).
+ * grown by the padding and the clearance, so the outline stays `clearance`
+ * from them, though not from their fill): one final cut that never enters
+ * the padded members, though it does enter a hole they close around
+ * (separate.ts, cutRings), its corners rounded inward (smooth.ts, roundCut).
  */
 import { signedArea2, pointInRing, segDist, cross } from "../../geometry/plane";
 import {

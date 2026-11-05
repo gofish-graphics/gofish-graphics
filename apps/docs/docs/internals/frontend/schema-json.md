@@ -3247,7 +3247,7 @@ for the API.
         "clearance": {
           "type": "number",
           "minimum": 0,
-          "description": "Pixels kept between the outline and each avoided node, and between two pieces of a blob with `separate`. Default: `padding`."
+          "description": "Pixels kept between the outline and each avoided node, and between a piece of a blob with `separate` and the other pieces' padded members and links. Default: `padding`."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -4581,7 +4581,7 @@ for the API.
             },
             "separate": {
               "type": "boolean",
-              "description": "With `connection` below 1, whether the pieces keep apart. Off, each piece is filled on its own and two may overlap (a piece wholly inside another is dropped). On, each piece avoids the set's other pieces as it avoids `avoiding`, `clearance` away from their outlines.",
+              "description": "With `connection` below 1, whether the pieces keep apart. Off, each piece is filled on its own and two may overlap (a piece wholly inside another is dropped). On, each piece avoids the set's other pieces as it avoids `avoiding`: its outline stays `clearance` away from their padded members and links (not from their fill, so at `convexity` above 0 two outlines may still meet in a bay between them).",
               "default": false
             }
           },

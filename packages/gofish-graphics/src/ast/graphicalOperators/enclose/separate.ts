@@ -7,13 +7,14 @@
  * a fillet piece, the box) may be drawn: out of its keep-outs, which are the avoided members
  * (`avoiding`) grown by `clearance` and, for a blob split into pieces (`connection` below 1),
  * the set's other pieces: their padded members and links grown by the padding and the
- * clearance, so two outlines stay `clearance` apart (outline.ts, blobOutline). One kind of keep-out, one cut (outline.ts, avoidCut), so a piece
+ * clearance, so an outline stays `clearance` from them (outline.ts, blobOutline). One kind of keep-out, one cut (outline.ts, avoidCut), so a piece
  * keeps away from its neighbors exactly as it keeps away from an avoided mark. One field per
  * outline, on a grid over its box; the smoothed outline is cut by it once, after the smoothing
  * (outline.ts, finish), so neither the smoothing nor its outward offset ever moves an outline
  * back across it.
  *
- * Allowed: the shape's own padded members (always: the members win over every keep-out), or a
+ * Allowed: the shape's own padded members, their holes left open (always: the members win
+ * over every keep-out, but a keep-out in a ring of members is cut out of it), or a
  * point outside the keep-out region: the keep-out discs' union closed by a disc of
  * SEPARATE.open px (keepRegion), so the ground between the keep-outs is opened by it: no
  * sliver of it narrower than about 2 · open px, and its corners between keep-outs are round.

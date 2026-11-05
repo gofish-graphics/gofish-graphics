@@ -108,7 +108,7 @@ def blob(*, convexity: Optional[float] = None, connection: Optional[float] = Non
         connection: The share of the links between members that are kept, the strongest first, from 0 (only members whose padding touches are one piece) to 1 (one piece). The links come from a minimum spanning tree in HDBSCAN's mutual reachability, so a dense group stays one piece longest. Each piece is filled on its own; the outline changes only where `connection` keeps or cuts a link. Default 1.
         neck: The width of each link between members, as a share of the padded members it joins, above 0 and at most 1. 1 is a link as wide as the members (no neck). 0 is not allowed: a link would have no width. Default 1.
         holes: Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled, as `allow_holes` in PostGIS and Shapely. Default false.
-        separate: With `connection` below 1, whether the pieces keep apart. Off, each piece is filled on its own and two may overlap (a piece wholly inside another is dropped). On, each piece avoids the set's other pieces as it avoids `avoiding`, `clearance` away from their outlines. Default false.
+        separate: With `connection` below 1, whether the pieces keep apart. Off, each piece is filled on its own and two may overlap (a piece wholly inside another is dropped). On, each piece avoids the set's other pieces as it avoids `avoiding`: its outline stays `clearance` away from their padded members and links (not from their fill, so at `convexity` above 0 two outlines may still meet in a bay between them). Default false.
     """
     if convexity is not None:
         if not (isinstance(convexity, (int, float)) and not isinstance(convexity, bool)):
@@ -165,7 +165,7 @@ def hull(*, convexity: Optional[float] = None, connection: Optional[float] = Non
         connection: The share of the links between members that are kept, the strongest first, from 0 (only members whose padding touches are one piece) to 1 (one piece). The links come from a minimum spanning tree in HDBSCAN's mutual reachability, so a dense group stays one piece longest. Each piece is filled on its own; the outline changes only where `connection` keeps or cuts a link. Default 1.
         neck: The width of each link between members, as a share of the padded members it joins, above 0 and at most 1. 1 is a link as wide as the members (no neck). 0 is not allowed: a link would have no width. Default 1.
         holes: Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled, as `allow_holes` in PostGIS and Shapely. Default false.
-        separate: With `connection` below 1, whether the pieces keep apart. Off, each piece is filled on its own and two may overlap (a piece wholly inside another is dropped). On, each piece avoids the set's other pieces as it avoids `avoiding`, `clearance` away from their outlines. Default false.
+        separate: With `connection` below 1, whether the pieces keep apart. Off, each piece is filled on its own and two may overlap (a piece wholly inside another is dropped). On, each piece avoids the set's other pieces as it avoids `avoiding`: its outline stays `clearance` away from their padded members and links (not from their fill, so at `convexity` above 0 two outlines may still meet in a bay between them). Default false.
     """
     if convexity is not None:
         if not (isinstance(convexity, (int, float)) and not isinstance(convexity, bool)):
@@ -222,7 +222,7 @@ def spine(*, convexity: Optional[float] = None, connection: Optional[float] = No
         connection: The share of the links between members that are kept, the strongest first, from 0 (only members whose padding touches are one piece) to 1 (one piece). The links come from a minimum spanning tree in HDBSCAN's mutual reachability, so a dense group stays one piece longest. Each piece is filled on its own; the outline changes only where `connection` keeps or cuts a link. Default 1.
         neck: The width of each link between members, as a share of the padded members it joins, above 0 and at most 1. 1 is a link as wide as the members (no neck). 0 is not allowed: a link would have no width. Default 1.
         holes: Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled, as `allow_holes` in PostGIS and Shapely. Default false.
-        separate: With `connection` below 1, whether the pieces keep apart. Off, each piece is filled on its own and two may overlap (a piece wholly inside another is dropped). On, each piece avoids the set's other pieces as it avoids `avoiding`, `clearance` away from their outlines. Default false.
+        separate: With `connection` below 1, whether the pieces keep apart. Off, each piece is filled on its own and two may overlap (a piece wholly inside another is dropped). On, each piece avoids the set's other pieces as it avoids `avoiding`: its outline stays `clearance` away from their padded members and links (not from their fill, so at `convexity` above 0 two outlines may still meet in a bay between them). Default false.
     """
     if convexity is not None:
         if not (isinstance(convexity, (int, float)) and not isinstance(convexity, bool)):

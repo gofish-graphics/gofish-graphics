@@ -121,8 +121,9 @@ export const fillet = bareKind(
  * @param holes Whether a gap left open inside the silhouette stays a hole.
  *   Default false: every hole is filled.
  * @param separate With `connection` below 1, whether the pieces keep apart
- *   (`enclose`'s `clearance` between their outlines). Default false: each
- *   piece is filled on its own, and two may overlap.
+ *   (each outline `enclose`'s `clearance` from the other pieces' padded
+ *   members and links). Default false: each piece is filled on its own, and
+ *   two may overlap.
  */
 export const blob = bareKind(
   "Shape.blob",

@@ -167,9 +167,11 @@ A blob is built in the enclosure's pixels, in these steps:
   member again.
 
 Each avoided node, grown by `clearance`, is cut out of the outline. With
-`separate=True`, each piece is also cut by the set's other pieces, so two
-pieces stay `clearance` apart; with `separate=False`, pieces may overlap, and
-a piece wholly inside another is dropped. Holes are filled unless `holes` is
+`separate=True`, each piece is also cut by the set's other pieces' padded
+members and links, each grown by `clearance`; a neighbor's fill is not cut
+out, so at `convexity` above 0 two outlines may meet in a bay between them.
+With `separate=False`, pieces may overlap, and a piece wholly inside another is
+dropped. Holes are filled unless `holes` is
 true; a blob keeps a hole only where its members close a loop. The
 [Enclose](/internals/frontend/enclose) essay describes the construction.
 

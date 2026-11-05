@@ -90,7 +90,8 @@ export type EncloseOptions = FilterOptions & {
    *  `selectAll(name)` selection. A listed member is ignored. */
   avoiding?: Nodes;
   /** Pixels kept between the outline and each avoided node (and, for a
-   *  blob's separate pieces, between two pieces). Default: `padding`. */
+   *  blob's separate pieces, between a piece's outline and the other
+   *  pieces' padded members and links). Default: `padding`. */
   clearance?: number;
   fill?: MaybeValue<string> | LiveValue;
   stroke?: MaybeValue<string> | LiveValue;

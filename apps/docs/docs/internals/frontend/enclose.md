@@ -245,7 +245,10 @@ move inward, and each corner becomes an arc of `radius`. Where the shrunk
 boundary crosses itself, only the points a full radius from the union's
 boundary are kept, and the cut points are found by bisection on the exact
 curves. Every output point lies on the exact curve, sampled at most 0.2 px off
-it and at most 4 px apart. With `holes` off, only the outer loops are kept.
+it and at most 4 px apart. With `holes` off, only the outer loops are kept, and a loop inside another is
+dropped. With `holes` on, a loop is kept by the winding of the other loops
+around it: an outer loop they wind around 0 times bounds filled ground (an
+island inside a hole too), and a hole they wind around once is its hole.
 
 At radius 0 the outline is the padded union, and as radius grows it nears the
 padded convex hull. Two members join when the disc cannot pass between them:
@@ -317,8 +320,13 @@ same way under any coordinate transform.
 4. **Separate.** With `separate: false` (the default), the pieces may
    overlap, and a piece wholly inside another is dropped. With `separate:
 true`, each piece keeps out of the set's other pieces, as of an avoided
-   node: their padded members and links grown by padding + clearance, so two
-   outlines stay `clearance` apart.
+   node: their padded members and links (each link bent around the avoided
+   nodes) grown by padding + clearance, and a piece's own links are bent
+   around the same keep-outs, so the cut never severs them. That keeps each
+   outline `clearance` from the other pieces' padded members and links, not
+   from their fill: cutting by a neighbor's final fill would make each
+   piece's outline depend on the other's, so at a convexity above 0 two
+   outlines may still meet in a bay between their pieces.
 5. **Smoothing.** The outline is smoothed by a Gaussian along its length
    (σ = 6 px), then moved out by the least uniform offset that holds every
    padded member and link again (`smooth.ts`).
@@ -337,8 +345,10 @@ box: the outline may be drawn where its own padded members are, or outside
 the keep-out region, the union of the keep-out discs closed by a 3 px disc so
 that no sliver between two keep-outs survives. The members win over every
 keep-out, so the cut never enters a padded member, and the corners it leaves
-are rounded inward (`roundCut`). An avoided node is kept out as the disc that
-holds it. The cut comes after the smoothing, so neither the smoothing nor its
+are rounded inward (`roundCut`). The members' union keeps its holes, so a
+keep-out inside a ring of members is cut out of a fill that covers the ring.
+An avoided node is kept out as the disc that holds it, and a line as discs
+along it, every 2 px, as wide as it is there (a tapered link tapers). The cut comes after the smoothing, so neither the smoothing nor its
 offset moves the outline back across it. It is one step after the shape's
 own: an outline that no ring of the keep-out region comes within the cut's
 reach of is returned as it is, and the region is closed once, only when some
@@ -347,7 +357,8 @@ disc, so this test is exact). The field's distances and windings come from
 grids over the rings' segments (`grid.ts`), which the blend and the
 smoothing share. `src/tests/enclose.test.ts` checks
 that no outline point is within an avoided node's clearance, and that
-separate pieces stay `clearance` apart.
+separate pieces stay `clearance` apart where a piece's outline is its padded
+members.
 
 ## The `Shape` family
 

@@ -24,8 +24,10 @@
  *     grown member's edge crosses it and keep the parts no other grown member
  *     covers, then link them into loops (an edge buried inside another grown
  *     member is skipped: it has no such part, and where it meets an edge
- *     that edge is covered). Keep the outer loops (holes are
- *     filled), and drop a loop that lies inside another.
+ *     that edge is covered). Keep the outer loops that bound filled
+ *     ground: with holes, those the other loops wind around 0 times (an
+ *     island in a hole too) and the holes they wind around once; without,
+ *     every hole is filled, and a loop inside an outer one is dropped.
  *  3. Shrink the outer boundary by radius: each arc keeps its center and loses
  *     radius (a disc's arc becomes the padded disc's), each line moves inward,
  *     and each corner of the union becomes an arc of `radius` around it.
