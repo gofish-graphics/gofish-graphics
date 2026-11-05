@@ -178,8 +178,11 @@ const chainsOf = (
     for (const ref of c.children) {
       const k = directSlot(refs, ref);
       const child = k === undefined ? undefined : node.children[k];
+      // A ring's chrome (every child past the one it dresses) takes only
+      // its need: the slack is the plot's (`plotRooms`).
       if (
         child instanceof GoFishNode &&
+        !(node._chromeRing === true && k! > 0) &&
         !child.sizedOn(axis) &&
         !flex.some((m) => m.child === k)
       )

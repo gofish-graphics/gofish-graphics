@@ -279,6 +279,29 @@ async function main() {
   }
 
   console.log(
+    "\n# a plot that fills its room takes the slack its legend leaves"
+  );
+  {
+    // The stack's bars have no width, so the plot fills the room on x. The
+    // legend ring's chain has the plot and the legend, and a ring's chrome
+    // takes only its need: the plot gets all the slack, not half of it.
+    const data = ["a", "b", "c"].map((k, i) => ({ k, v: i + 1 }));
+    const rects = await rectsOf(
+      chart(data)
+        .flow(stack({ by: "k", dir: "y" }))
+        .mark(rect({ h: "v", fill: "k" })),
+      { w: 600, h: 300 }
+    );
+    const bars = rects.filter((r) => (r.h ?? 0) > 20 && (r.w ?? 0) > 2);
+    const wide = Math.min(...bars.map((r) => r.w!));
+    check(
+      "the bars are most of the 600 px canvas",
+      bars.length === 3 && wide > 450,
+      wide
+    );
+  }
+
+  console.log(
     "\n# a percent inside an unsized chain member: claim and layout agree (#1300)"
   );
   {

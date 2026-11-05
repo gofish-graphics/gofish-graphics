@@ -834,7 +834,10 @@ fixed-size nodes report their size).
   cell is the room it takes (`ClaimPlacement.rooms`). A child with no
   claim (a filler) takes no room: the solve places it as a point, so what
   a relation ties to it stays placed, and the hull holds that point only
-  where a datum position puts it. A child its own data places
+  where a position puts it, at a datum or a pixel (a ring seats what it
+  dresses at its origin, so its chrome's reach past a plot that fills is
+  measured from there). A ring's chrome takes only its need along a
+  chain: the slack is its plot's. A child its own data places
   (`placedByOwnData`, `ClaimChild.dataPositioned`) is placed before the
   solve, where its frame seats it, so no constraint but a `position`
   (which gives it a frame of its own) moves it, as layout does not move it. An `enclose` around placed

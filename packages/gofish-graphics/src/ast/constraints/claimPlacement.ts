@@ -541,15 +541,16 @@ export function placeByClaims(
   }
   // A filler (a child with no claim, which takes whatever room it is
   // given) takes no room here: the solve places it as a point, so what a
-  // relation ties to it stays placed. Where a datum position puts it, the
-  // point is data, and the hull holds it; anywhere else it lands only
-  // where layout gives it room, and the hull leaves it out.
-  const atDatum = constrainedOn(
+  // relation ties to it stays placed. Where a position puts it, at a datum
+  // or a pixel (a ring seats what it dresses at its origin), the point is
+  // known, and the hull holds it; anywhere else it lands only where layout
+  // gives it room, and the hull leaves it out.
+  const atPoint = constrainedOn(
     axis,
     onAxis,
     operands,
     keyOf,
-    (c) => c.type === "position" && typeof c[own] !== "number"
+    (c) => c.type === "position"
   );
   const unplaced = new Set<number>();
   children.forEach((c, i) => {
@@ -560,7 +561,7 @@ export function placeByClaims(
       !c.standIn &&
       presetOf(i) === undefined &&
       !spanned.has(i) &&
-      !atDatum.has(i)
+      !atPoint.has(i)
     )
       unplaced.add(i);
   });
