@@ -564,10 +564,19 @@ function coreDistances(T: PairTable, coreK: number): number[] {
 const keptLinks = (connection: number, n: number) =>
   Math.round(Math.max(0, Math.min(1, connection)) * n);
 
+/** Whether connection keeps every free link of a join tree on n members, whatever their
+ *  count (at most n − 1, the tree's links): then the members are one piece, and the join
+ *  tree need not be found. Always at connection 1, the default. */
+const keepsAll = (connection: number, n: number) => {
+  for (let k = 1; k < n; k++) if (keptLinks(connection, k) < k) return false;
+  return true;
+};
+
 /**
  * The pieces and links for `connection`. The join tree (joinTree, cached per
  * member set and padding) keeps its touching links and the keptLinks strongest free ones; the
- * kept links' components are the pieces. Each piece is drawn with the padded-gap spanning tree
+ * kept links' components are the pieces (one, with no join tree found, when connection keeps
+ * every link: keepsAll). Each piece is drawn with the padded-gap spanning tree
  * of its own members (Kruskal over the pairs by padded gap, the order in which the exact
  * closing merges them as its radius grows), each link a tapered tube between the two members'
  * cores whose padded half-width at each end is neck · (ρ + pad), ρ that member's core radius;
@@ -590,17 +599,21 @@ export function pieceLinks(
   pieceKeys: string[];
 } {
   const n = members.length;
-  const T = memo(key("joinTree", members, pad), () => joinTree(members, pad));
-  const nFree = T.free.length;
-  const keep = keptLinks(connection, nFree);
-  const rank = new Map(T.free.map((k, r) => [k, r]));
   const kc = Array.from({ length: n }, (_, i) => i);
   const kfind = (i: number): number =>
     kc[i] === i ? i : (kc[i] = kfind(kc[i]));
-  T.E.forEach((e, k) => {
-    const r = rank.get(k);
-    if (r === undefined || r < keep) kc[kfind(e.i)] = kfind(e.j);
-  });
+  if (keepsAll(connection, n)) {
+    // every link is kept, however many are free: one piece, and no join tree
+    for (let i = 1; i < n; i++) kc[i] = 0;
+  } else {
+    const T = memo(key("joinTree", members, pad), () => joinTree(members, pad));
+    const keep = keptLinks(connection, T.free.length);
+    const rank = new Map(T.free.map((k, r) => [k, r]));
+    T.E.forEach((e, k) => {
+      const r = rank.get(k);
+      if (r === undefined || r < keep) kc[kfind(e.i)] = kfind(e.j);
+    });
+  }
   const ids = new Map<number, number>();
   const pieces: number[][] = [];
   for (let i = 0; i < n; i++) {

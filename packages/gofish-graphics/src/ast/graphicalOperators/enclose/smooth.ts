@@ -111,25 +111,33 @@ function normals(ring: Pt[], material = false): Pt[] {
 
 /** The least outward offset that holds every keep-in capsule: the most
  *  any capsule's axis sample (every 2 px) needs, signed distance to the
- *  rings (negative inside, nonzero winding) plus its radius. The distances
- *  from a segment grid (exact, as the brute-force sdf it replaces). */
+ *  rings (negative inside, nonzero winding) plus its radius, and at least
+ *  0. The distances from a segment grid (exact, as the brute-force sdf it
+ *  replaces). An inside sample can raise the most only when the outline is
+ *  nearer than its radius less the most so far, so its search stops there
+ *  (deep inside a wide outline, the hull's, it would cross many empty
+ *  cells). */
 function needed(rings: Pt[][], keep: KeepIn[]): number {
   if (!keep.length) return 0;
   const S = segsOf(rings);
   const G = new SegGrid(S, 4),
     In = new Inside(S);
-  let c = -Infinity;
+  let c = 0;
   for (const k of keep) {
     const L = Math.hypot(k.b[0] - k.a[0], k.b[1] - k.a[1]);
     const n = Math.max(1, Math.ceil(L / 2));
     for (let t = 0; t <= n; t++) {
       const x = k.a[0] + ((k.b[0] - k.a[0]) * t) / n,
         y = k.a[1] + ((k.b[1] - k.a[1]) * t) / n;
-      const d = G.nearest(x, y)[0];
-      c = Math.max(c, (In.has(x, y) ? -d : d) + k.R);
+      if (!In.has(x, y)) c = Math.max(c, G.nearest(x, y)[0] + k.R);
+      else if (k.R > c) {
+        const lim = k.R - c;
+        const d = G.capped(x, y, lim);
+        if (d < lim) c = Math.max(c, k.R - d);
+      }
     }
   }
-  return Math.max(0, c);
+  return c;
 }
 
 /**

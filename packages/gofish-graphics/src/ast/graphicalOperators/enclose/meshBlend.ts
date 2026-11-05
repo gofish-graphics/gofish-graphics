@@ -158,6 +158,51 @@ export class SegGrid {
     }
     return [Math.sqrt(best), bs];
   }
+
+  /** The distance from (x, y) to the grid's nearest segment, or `cap` when
+   *  that is at least cap (the search stops there). */
+  capped(x: number, y: number, cap: number): number {
+    const { x0, y0, cell, nx, ny, start, items, S } = this;
+    const ci = Math.min(nx - 1, Math.max(0, Math.floor((x - x0) / cell))),
+      cj = Math.min(ny - 1, Math.max(0, Math.floor((y - y0) / cell)));
+    const off = Math.max(
+      0,
+      x0 - x,
+      x - (x0 + nx * cell),
+      y0 - y,
+      y - (y0 + ny * cell)
+    );
+    if (off >= cap) return cap;
+    let best = cap * cap;
+    const R = Math.max(nx, ny);
+    for (let k = 0; k <= R; k++) {
+      for (let j = cj - k; j <= cj + k; j++) {
+        if (j < 0 || j >= ny) continue;
+        const edge = j === cj - k || j === cj + k;
+        for (let i = ci - k; i <= ci + k; i += edge ? 1 : 2 * k || 1) {
+          if (i < 0 || i >= nx) continue;
+          const c = j * nx + i;
+          for (let q = start[c]; q < start[c + 1]; q++) {
+            const s = items[q];
+            const ax = S[4 * s],
+              ay = S[4 * s + 1],
+              ex = S[4 * s + 2] - ax,
+              ey = S[4 * s + 3] - ay;
+            const L = ex * ex + ey * ey;
+            let t = L > 0 ? ((x - ax) * ex + (y - ay) * ey) / L : 0;
+            t = t < 0 ? 0 : t > 1 ? 1 : t;
+            const dx = x - ax - t * ex,
+              dy = y - ay - t * ey;
+            const d = dx * dx + dy * dy;
+            if (d < best) best = d;
+          }
+        }
+      }
+      // every segment not yet seen is at least k·cell − off away
+      if (Math.sqrt(best) <= k * cell - off) break;
+    }
+    return Math.min(cap, Math.sqrt(best));
+  }
 }
 
 /** Segments of rings as the flat array SegGrid takes. */
