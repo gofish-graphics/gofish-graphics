@@ -16,19 +16,11 @@
  * their params and the presets are declared once, in gofish-ir's
  * `STRATEGIES` table. The outline itself is built in
  * `ast/graphicalOperators/enclose/`. The nodes an outline keeps out of
- * (`avoiding`) are `enclose`'s option, typed {@link Nodes} here.
+ * (`avoiding`) are `enclose`'s option, not a shape's (`Nodes`,
+ * `ast/nodeSelection.ts`).
  */
 import type { Frontend } from "gofish-ir";
 import { bareKind, given } from "../ast/strategyKind";
-import type { GoFishAST } from "../ast/_ast";
-import type { GoFishRef } from "../ast/_ref";
-
-/** Nodes an outline keeps out (`enclose`'s `avoiding`): a list of nodes or refs (a `.relate()` operand,
- *  `ref(...)`), or one `selectAll(name)` selection, the value as a whole. */
-export type Nodes =
-  | GoFishAST[]
-  | (GoFishRef & { readonly multiplicity: "all" });
-
 /** `box()`: the padded bounding box. See {@link box}. */
 export type BoxShape = Extract<Frontend.ShapeIR, { kind: "box" }>;
 

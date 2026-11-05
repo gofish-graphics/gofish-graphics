@@ -43,7 +43,7 @@ import { foldFinite } from "../../util";
 import { UNDEFINED, type UnderlyingSpace } from "../underlyingSpace";
 import type { LiveValue } from "../../interaction/live";
 import type { LayerContext } from "../marks/chart";
-import { box, type Nodes, type Shape } from "../../families/shape";
+import { box, type Shape } from "../../families/shape";
 import { avoidedRefs } from "../nodeRefs";
 import type { Member, Pt } from "./enclose/prims";
 import { membersOf } from "./enclose/members";
@@ -55,8 +55,7 @@ import {
 } from "./enclose/outline";
 import { targetOf } from "../constraints/relationalPaint";
 import { boxOfDims, ringExtent } from "../geometry/box";
-import { RelateOperand } from "../constraints/relate";
-import { nodeSelectionOf } from "../nodeSelection";
+import type { Nodes } from "../nodeSelection";
 import { planPlacement } from "../solver/plan";
 import type { Placement } from "../constraints/claimPlacement";
 import { Extent, hullExtent, padExtent } from "../extent";
