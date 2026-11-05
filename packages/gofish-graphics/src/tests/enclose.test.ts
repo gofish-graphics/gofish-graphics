@@ -29,11 +29,12 @@
  * Run: `tsx src/tests/enclose.test.ts` (wired as `pnpm test:enclose`).
  */
 import type { Member, Pt } from "../ast/graphicalOperators/enclose/prims";
+import type { BlobShape, FilletShape } from "../families/shape";
 import {
   cutOutline,
   encloseOutline,
   pieceLinks,
-  type OutlineOptions,
+  type AvoidOptions,
 } from "../ast/graphicalOperators/enclose/outline";
 import {
   ellipseLoop,
@@ -235,8 +236,10 @@ const AFRICA_PACKED: Disc[] = packSiblings(
 
 // ── Shape.blob(): convexity, connection, neck, holes, separate ─────────────
 console.log("# Shape.blob() (enclose/outline.ts)");
-const blob = (members: Member[], o: Omit<OutlineOptions, "shape">) =>
-  encloseOutline(members, { ...o, shape: "blob" });
+type BlobOpts = Omit<BlobShape, "kind"> & AvoidOptions;
+type FilletOpts = Omit<FilletShape, "kind"> & AvoidOptions;
+const blob =(members: Member[], o: BlobOpts) =>
+  encloseOutline(members, { ...o, kind: "blob" });
 const area = (loops: Pt[][]) => loops.reduce((s, l) => s + signedArea(l), 0);
 /** Whether p is inside the region (nonzero winding: a hole winds the other
  *  way). */
@@ -272,7 +275,7 @@ for (const [name, members, base] of [
   ["U, avoiding", U, { padding: 8, avoiding: NON }],
   ["Gentoo, avoiding the others", GENTOO, { padding: 4, avoiding: OTHERS }],
   ["mixed radii", MIXED, { padding: 6 }],
-] as [string, Disc[], Omit<OutlineOptions, "shape">][]) {
+] as [string, Disc[], BlobOpts][]) {
   // every padded member is inside, a little inside its padded circle
   for (const convexity of [0, 0.5, 1]) {
     const loops = blob(members, { ...base, convexity });
@@ -490,8 +493,8 @@ console.log("# a 1,000-point line and 300 dots");
 // ── Shape.fillet(): the closing per piece, with links ──────────────────────
 console.log("# Shape.fillet() (enclose/outline.ts)");
 {
-  const fillet = (members: Member[], o: Omit<OutlineOptions, "shape">) =>
-    encloseOutline(members, { ...o, shape: "fillet" });
+  const fillet = (members: Member[], o: FilletOpts) =>
+    encloseOutline(members, { ...o, kind: "fillet" });
   // two discs of radius 10 with a 30 px gap: the closing joins them only at
   // radius 26.25; a link joins them below 2 · radius = 30 too
   const pair = [C(0, 0, 10), C(50, 0, 10)];

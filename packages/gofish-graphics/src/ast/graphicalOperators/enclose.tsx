@@ -48,7 +48,11 @@ import { avoidedRefs } from "../nodeRefs";
 import type { Member, Pt } from "./enclose/prims";
 import { membersOf } from "./enclose/members";
 import { ovalOutline } from "./enclose/oval";
-import { cutOutline, encloseOutline } from "./enclose/outline";
+import {
+  cutOutline,
+  encloseOutline,
+  type AvoidOptions,
+} from "./enclose/outline";
 import { targetOf } from "../constraints/relationalPaint";
 import { boxOfDims, ringExtent } from "../geometry/box";
 import { RelateOperand } from "../constraints/relate";
@@ -58,7 +62,12 @@ import type { Placement } from "../constraints/claimPlacement";
 import { Extent, hullExtent, padExtent } from "../extent";
 import * as Pwl from "../solver/pwl";
 import { ringPathData } from "../geometry/plane";
-import { outlinePaint, ringOutline, simplifyRing } from "../geometry/outline";
+import {
+  outlinePaint,
+  ringOutline,
+  roundedBoxOutline,
+  simplifyRing,
+} from "../geometry/outline";
 import { ringsEnclosingCircle } from "../geometry/enclosingCircle";
 import { insetConvex, intersectRings } from "../geometry/clip";
 import {
@@ -161,16 +170,16 @@ function Enclose(
           return padExtent(hullExtent(...(own as Extent[])), padding);
         }) as [Extent | undefined, Extent | undefined],
       layout: (size, scales, children, _node, space) => {
-        if (fillsItsSpace(members))
-          return fillingLayout(
-            shape,
-            avoided.length > 0,
-            padding,
-            size,
-            scales,
-            children,
-            space
-          );
+        if (fillsItsSpace(members)) {
+          if (avoided.length > 0)
+            throw new Error(
+              `enclose({ avoiding }): this enclosure's member fills the space it is ` +
+                `given (such as a treemap), so it fills the outline, and an outline ` +
+                `cut around avoided nodes cannot be filled. Give the member a size ` +
+                `of its own, or avoid nothing.`
+            );
+          return fillingLayout(shape, padding, size, scales, children, space);
+        }
         // Child placement (`placeUnplacedChild`): a FRESH child reports an
         // undefined translate until placed, so its baseline is placed at the
         // origin. An already-placed operand
@@ -188,6 +197,7 @@ function Enclose(
             memberDims.map((d) => d[dir][end]),
             end === "min" ? Math.min : Math.max
           );
+        // the members' padded box
         let [minX, maxX, minY, maxY] = [
           fold(0, "min") - padding,
           fold(0, "max") + padding,
@@ -207,38 +217,16 @@ function Enclose(
                 ? []
                 : membersOf(placed[from + i])
             );
-        const own = geometry(0, memberCount);
-        const avoid = {
-          padding,
-          avoiding: geometry(memberCount, children.length),
-          clearance: o.clearance,
-        };
-        let loops: Pt[][] | undefined;
-        if (shape.kind === "blob" || shape.kind === "fillet")
-          loops = encloseOutline(own, {
-            ...avoid,
-            shape: shape.kind,
-            ...(shape.kind === "blob"
-              ? {
-                  convexity: shape.convexity,
-                  connection: shape.connection,
-                  separate: shape.separate,
-                }
-              : { radius: shape.radius }),
-            neck: shape.neck,
-            holes: shape.holes,
-          });
-        else if (shape.kind === "oval")
-          loops = cutOutline(ovalOutline(own, padding), own, avoid);
-        else if (avoid.avoiding.length > 0) {
-          // a box that avoids nodes is drawn as its cut ring
-          const { rx, ry } = cornerRadii(shape.rx, shape.ry, 2);
-          loops = cutOutline(
-            [roundedBoxRing(minX, minY, maxX, maxY, rx, ry)],
-            own,
-            avoid
-          );
-        }
+        const loops = outlineOf(
+          shape,
+          geometry(0, memberCount),
+          {
+            padding,
+            avoiding: geometry(memberCount, children.length),
+            clearance: o.clearance,
+          },
+          { min: [minX, minY], max: [maxX, maxY] }
+        );
         // A computed outline's box is the outline's own.
         const pts = loops?.flat() ?? [];
         if (pts.length > 0) ({ minX, maxX, minY, maxY } = ringExtent(pts));
@@ -372,24 +360,17 @@ const fillsItsSpace = (members: readonly GoFishAST[]): boolean =>
  * cut to the shape it is handed. Only a convex outline can be a member's
  * shape, and `Shape.fillet()` and `Shape.blob()` hug members that have a
  * size of their own, so around members that fill their space they are an
- * error, as is `avoiding` (a cut outline is not convex).
+ * error, as is `avoiding` (a cut outline is not convex; the layout throws
+ * that one).
  */
 function fillingLayout(
   shape: Shape,
-  avoids: boolean,
   padding: number,
   size: Size,
   scales: Size<AxisScale | undefined>,
   children: readonly GoFishAST[],
   space: Ring | undefined
 ) {
-  if (avoids)
-    throw new Error(
-      `enclose({ avoiding }): this enclosure's member fills the space it is ` +
-        `given (such as a treemap), so it fills the outline, and an outline ` +
-        `cut around avoided nodes cannot be filled. Give the member a size ` +
-        `of its own, or avoid nothing.`
-    );
   if (shape.kind === "fillet" || shape.kind === "blob")
     throw new Error(
       `enclose({ shape }): Shape.${shape.kind} hugs members that have a ` +
@@ -489,28 +470,36 @@ export function encloseNode(
   return Enclose(o, shape, members, avoided);
 }
 
-/** The box [x0, x1] × [y0, y1] with elliptical corners of radii rx, ry (each
- *  at most half the side), as a ring, each corner a quarter in 8 chords. */
-function roundedBoxRing(
-  x0: number,
-  y0: number,
-  x1: number,
-  y1: number,
-  rx: number,
-  ry: number
-): Pt[] {
-  const a = Math.max(0, Math.min(rx, (x1 - x0) / 2)),
-    b = Math.max(0, Math.min(ry, (y1 - y0) / 2));
-  const corners: [number, number, number][] = [
-    [x1 - a, y1 - b, 0],
-    [x0 + a, y1 - b, Math.PI / 2],
-    [x0 + a, y0 + b, Math.PI],
-    [x1 - a, y0 + b, (3 * Math.PI) / 2],
-  ];
-  return corners.flatMap(([cx, cy, t0]) =>
-    Array.from({ length: 9 }, (_, i): Pt => {
-      const t = t0 + (i / 8) * (Math.PI / 2);
-      return [cx + a * Math.cos(t), cy + b * Math.sin(t)];
-    })
-  );
+/** How far, px, the chords of a box's rounded corners may stray from them
+ *  when the box is cut by its keep-outs. */
+const BOX_TOLERANCE = 0.01;
+
+/**
+ * The outline of `shape` around placed members `own` (in the node's frame),
+ * cut by the keep-outs in `avoid` (`enclose/outline.ts`; a blob or a fillet
+ * is cut piece by piece, each never into its own padded members). Undefined
+ * for a box no keep-out reaches: it draws as itself, the members' padded box
+ * `box` with its corners.
+ */
+function outlineOf(
+  shape: Shape,
+  own: Member[],
+  avoid: AvoidOptions,
+  box: { min: Pt; max: Pt }
+): Pt[][] | undefined {
+  switch (shape.kind) {
+    case "blob":
+    case "fillet":
+      return encloseOutline(own, { ...shape, ...avoid });
+    case "oval":
+      return cutOutline(ovalOutline(own, avoid.padding), own, avoid);
+    case "box": {
+      const { rx, ry } = cornerRadii(shape.rx, shape.ry, 2);
+      const ring = [
+        roundedBoxOutline(box, rx, ry, 1, BOX_TOLERANCE).points as Pt[],
+      ];
+      const cut = cutOutline(ring, own, avoid);
+      return cut === ring ? undefined : cut;
+    }
+  }
 }

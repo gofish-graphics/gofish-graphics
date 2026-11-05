@@ -37,7 +37,7 @@ import { SegGrid, Inside, segsOf } from "./blend";
 import { closingRings } from "./arcs";
 import { signedArea2, pointInRing } from "../../geometry/plane";
 
-type Box = [number, number, number, number];
+export type Box = [number, number, number, number];
 
 const boxOf = (rings: Pt[][]): Box => {
   let [xa, ya, xb, yb] = [Infinity, Infinity, -Infinity, -Infinity];
@@ -152,36 +152,36 @@ function quad(
   }
 }
 
+/** The cut's grid runs M steps of h before an outline's box (the smoothed outline's offset
+ *  stays well inside that). */
+const M = 8;
+
+/** How far past an outline's box a keep-out can matter to its cut: the grid runs M steps
+ *  before the box and up to M + B past it (its sides rounded up to whole blocks), and a ring
+ *  farther than SURE from every node gives each the cap. */
+const REACH = (M + B) * SEPARATE.h + SURE;
+
+/** Whether box `b` comes within the cut's reach of an outline's box. */
+export const reaches = (b: Box, box: Box): boolean =>
+  b[2] >= box[0] - REACH &&
+  b[0] <= box[2] + REACH &&
+  b[3] >= box[1] - REACH &&
+  b[1] <= box[3] + REACH;
+
+/** The keep-out region's rings (keepRegion) that can cut an outline with box `box`: none
+ *  means the cut leaves the outline as it is. */
+export const reaching = (keep: Pt[][], box: Box): Pt[][] =>
+  keep.filter((r) => reaches(boxOf([r]), box));
+
 /**
  * An outline's allowed ground (see the top of the file), on a grid over its box. `members`:
  * the shape's padded members' rings (outer rings winding positive), which the cut never
- * enters; `keep`: the keep-out region's rings (keepRegion). A function of these alone, so it
- * is cached with them. null when no keep-out reaches the box: nothing to cut.
+ * enters; `keep`: the keep-out region's rings that reach the box (reaching), at least one.
  */
-export function cutField(
-  members: Pt[][],
-  box: Box,
-  keep: Pt[][]
-): CutField | null {
+export function cutField(members: Pt[][], box: Box, keep: Pt[][]): CutField {
   const h = SEPARATE.h;
   const [bx0, by0, bx1, by1] = box;
-  // the grid: step h over the box grown by M steps (the smoothed outline's offset stays well
-  // inside that)
-  const M = 8;
-  // the keep-out region's rings that reach the grid: a ring farther than SURE from every node
-  // gives each the cap (the grid runs M steps before the box and up to M + B past it, its
-  // sides rounded up to whole blocks)
-  const reach = (M + B) * h + SURE;
-  const K = keep.filter((r) => {
-    const [xa, ya, xb, yb] = boxOf([r]);
-    return (
-      xb >= bx0 - reach &&
-      xa <= bx1 + reach &&
-      yb >= by0 - reach &&
-      ya <= by1 + reach
-    );
-  });
-  if (!K.length) return null;
+  const K = keep;
   const S0 = segsOf(members);
   const meG = new SegGrid(S0, 4),
     meIn = new Inside(S0);

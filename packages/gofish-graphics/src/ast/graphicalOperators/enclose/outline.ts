@@ -59,48 +59,46 @@ import {
   cutField,
   cutRings,
   keepRegion,
+  reaches,
+  reaching,
   SEPARATE,
+  type Box,
   type CutField,
 } from "./separate";
+import { Frontend } from "gofish-ir";
+import type { BlobShape, FilletShape } from "../../../families/shape";
 
-/** The options of {@link encloseOutline}: `Shape.blob` (and its presets
- *  spine and hull: convexity 0 and 1) or `Shape.fillet`, with enclose's
- *  padding, avoiding and clearance. */
-export type OutlineOptions = {
-  /** enclose's own: px between the members and the outline. */
+/** enclose's own options, which every outline reads: px between the members
+ *  and the outline, and the nodes it stays out of, each grown by `clearance`
+ *  (default: the padding). */
+export type AvoidOptions = {
   padding: number;
-  /** Default "blob". */
-  shape?: "blob" | "fillet";
-  /** Blob: 0 is the spine, 1 the padded hull, 2 the oval; between 0 and 1
-   *  every pocket of hull − spine fills that share of its area (the per-bay
-   *  blend), between 1 and 2 the hull blends toward the oval. Default 0.5. */
-  convexity?: number;
-  /** Blob: the share of the join tree's links (those that do not touch) that
-   *  are kept, the strongest first: 1 (default) is one piece, 0 joins only
-   *  members whose padding touches. */
-  connection?: number;
-  /** Blob and fillet: the links' width as a share of the padded members
-   *  they join. Blob: 1 (default) is no neck. Fillet: default 0.5; 0 draws
-   *  no links (the pieces split). */
-  neck?: number;
-  /** Fillet: the closing disc's radius, px. Default: the padding, so an
-   *  inside corner is as round as the padding makes an outside one. */
-  radius?: number;
-  /** Blob and fillet: keep a gap the outline closes around as a hole. */
-  holes?: boolean;
-  /** Blob, connection below 1: true, each piece is cut by the set's other
-   *  pieces as by `avoiding`, so pieces stay apart; false (default), each
-   *  piece is filled on its own and pieces may overlap (a piece wholly inside
-   *  another is dropped). */
-  separate?: boolean;
-  /** enclose's own: nodes the outline stays out of, each grown by
-   *  `clearance` (default: the padding). */
   avoiding?: Member[];
   clearance?: number;
 };
 
-/** Fillet's default neck: a link half as wide as the padded members it joins. */
-export const FILLET_NECK = 0.5;
+/** The options of {@link encloseOutline}: a `Shape.blob` (or its presets
+ *  spine and hull) or a `Shape.fillet`, with enclose's own. */
+export type OutlineOptions = (BlobShape | FilletShape) & AvoidOptions;
+
+/** The `Shape` family's defaults, as gofish-ir's STRATEGIES declares them. */
+const { blob: BLOB, fillet: FILLET } = Frontend.STRATEGIES.Shape.kinds;
+const BLOB_DEFAULT = {
+  convexity: BLOB.params.convexity.default as number,
+  connection: BLOB.params.connection.default as number,
+  neck: BLOB.params.neck.default as number,
+  holes: BLOB.params.holes.default as boolean,
+  separate: BLOB.params.separate.default as boolean,
+};
+const FILLET_DEFAULT = {
+  neck: FILLET.params.neck.default as number,
+  holes: FILLET.params.holes.default as boolean,
+};
+
+/** A fillet's closing radius: its own, or the padding (its declared default),
+ *  so an inside corner is as round as the padding makes an outside one. */
+const filletRadius = (shape: FilletShape, pad: number) =>
+  Math.max(0, shape.radius ?? pad);
 
 /** The core distance's k in the join tree's mutual reachability: the center
  *  distance to the k-th nearest other member (HDBSCAN's min_samples = 5,
@@ -828,49 +826,72 @@ export function encloseOutline(members: Member[], o: OutlineOptions): Pt[][] {
   const pad = Math.max(0, o.padding);
   const clearance = Math.max(0, o.clearance ?? pad);
   const K = keepOuts(o.avoiding ?? [], clearance);
-  // the keep-outs' region, shared by every piece that keeps out of K alone
-  const region = keepRegion(K, SEPARATE.open);
-  if ((o.shape ?? "blob") === "blob")
-    return blobOutline(members, o, pad, clearance, K, region);
-  const r = Math.max(0, o.radius ?? pad);
-  const neck = Math.max(0, Math.min(1, o.neck ?? FILLET_NECK));
-  return filletPieces(members, pad, r, !!o.holes, neck).flatMap(
-    ({ pm, rings }) => (K.length ? avoidCut(rings, pm, pad, region) : rings)
-  );
+  if (o.kind === "blob") return blobOutline(members, o, pad, clearance, K);
+  const neck = Math.max(0, Math.min(1, o.neck ?? FILLET_DEFAULT.neck));
+  const keep = keepOutRegion(K);
+  return filletPieces(
+    members,
+    pad,
+    filletRadius(o, pad),
+    o.holes ?? FILLET_DEFAULT.holes,
+    neck
+  ).flatMap(({ pm, rings }) => avoidCut(rings, pm, pad, keep));
 }
 
 /**
  * Any outline (the box's, the oval's) cut by the keep-outs: `avoiding`, each
  * grown by `clearance` (default: the padding), as a blob's or a fillet's is.
- * Unchanged when nothing is avoided.
+ * `rings` itself (the same array) when no keep-out reaches it.
  */
 export function cutOutline(
   rings: Pt[][],
   members: Member[],
-  o: { padding: number; avoiding?: Member[]; clearance?: number }
+  o: AvoidOptions
 ): Pt[][] {
   const pad = Math.max(0, o.padding);
   const K = keepOuts(o.avoiding ?? [], Math.max(0, o.clearance ?? pad));
-  if (!K.length || !members.length) return rings;
-  return avoidCut(rings, members, pad, keepRegion(K, SEPARATE.open));
+  if (!members.length) return rings;
+  return avoidCut(rings, members, pad, keepOutRegion(K));
 }
 
-/** A shape's rings (a blob piece, a fillet piece, the box) cut by the keep-outs' region
- *  (keepRegion): never into the padded members (a link is cut like any other ground), the
- *  cut's corners rounded inward (cutAndRound), and what the cut fences off from every member
- *  dropped. */
+/** For an outline's box, the rings of keep-out discs K's region (keepRegion) that reach it
+ *  (separate.ts, reaching). The region is closed once, and only when an outline comes within
+ *  the cut's reach of the discs: it lies within them grown by SEPARATE.open (a closing lies
+ *  within the dilation by its disc), so an outline farther than that from their box is not
+ *  cut. */
+type KeepOutRegion = (box: Box) => Pt[][];
+function keepOutRegion(K: Disc[]): KeepOutRegion {
+  if (!K.length) return () => [];
+  const g = SEPARATE.open + 1;
+  const bound: Box = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const { c, R } of K) {
+    bound[0] = Math.min(bound[0], c[0] - R - g);
+    bound[1] = Math.min(bound[1], c[1] - R - g);
+    bound[2] = Math.max(bound[2], c[0] + R + g);
+    bound[3] = Math.max(bound[3], c[1] + R + g);
+  }
+  let region: Pt[][] | undefined;
+  return (box) =>
+    reaches(bound, box)
+      ? reaching((region ??= keepRegion(K, SEPARATE.open)), box)
+      : [];
+}
+
+/** A shape's rings (a blob piece, a fillet piece, the box) cut by the keep-outs' region:
+ *  never into the padded members (a link is cut like any other ground), the cut's corners
+ *  rounded inward (cutAndRound), and what the cut fences off from every member dropped.
+ *  `rings` itself when no keep-out reaches them. */
 function avoidCut(
   rings: Pt[][],
   pm: Member[],
   pad: number,
-  region: Pt[][]
+  keepOut: KeepOutRegion
 ): Pt[][] {
-  const F = cutField(
-    closingRings(pm, pad, 0, false),
-    boxOfRings(rings),
-    region
-  );
-  const cut = F ? cutAndRound(rings, pm, pad, F) : rings;
+  const box = boxOfRings(rings);
+  const keep = keepOut(box);
+  if (!keep.length) return rings;
+  const F = cutField(closingRings(pm, pad, 0, false), box, keep);
+  const cut = cutAndRound(rings, pm, pad, F);
   // the ground the keep-outs fence off from every member (a link's or a fill's sliver
   // between keep-outs) is not the enclosure: an outer ring that holds no member is dropped,
   // and the holes inside it
@@ -996,17 +1017,21 @@ function filletPieces(
 /** The blob: pieces by connection, each filled and smoothed (smoothFill), then cut by its
  *  keep-outs as every shape is (avoidCut): the avoided members and, with `separate: true`,
  *  the set's other pieces. Without `separate` (the default) a piece that lies wholly inside
- *  another is dropped (contained). `region`: K's keep-out region (keepRegion). */
+ *  another is dropped (contained). */
 function blobOutline(
   members: Member[],
-  o: OutlineOptions,
+  o: BlobShape,
   pad: number,
   clearance: number,
-  K: Disc[],
-  region: Pt[][]
+  K: Disc[]
 ): Pt[][] {
-  const holes = o.holes ?? false;
-  const J = pieceLinks(members, pad, o.connection ?? 1, o.neck ?? 1);
+  const holes = o.holes ?? BLOB_DEFAULT.holes;
+  const J = pieceLinks(
+    members,
+    pad,
+    o.connection ?? BLOB_DEFAULT.connection,
+    o.neck ?? BLOB_DEFAULT.neck
+  );
   // each piece's members and spine: its links, bent around the keep-outs (so the final cut
   // does not sever the piece there)
   const parts = J.pieces.map((idx, p) => ({
@@ -1018,7 +1043,7 @@ function blobOutline(
     ),
   }));
   // each piece's outline: filled and smoothed on its own, then cut by its keep-outs
-  const convexity = o.convexity ?? 0.5;
+  const convexity = o.convexity ?? BLOB_DEFAULT.convexity;
   const outs = parts.map(({ pm, spine }) =>
     smoothFill(fillOne(pm, spine, pad, convexity, holes), pad)
   );
@@ -1026,15 +1051,16 @@ function blobOutline(
   // pieces as keep-outs too (their padded members and links grown by padding + clearance, so
   // the two outlines stay `clearance` apart), those that can reach its outline's box (the
   // closing by SEPARATE.open reaches 2 · open past a disc)
-  const separate = o.separate ?? false;
+  const separate = o.separate ?? BLOB_DEFAULT.separate;
   const others =
     parts.length > 1 && separate
       ? parts.map(({ pm, spine }) =>
           keepOuts([...pm, ...spine], pad + clearance)
         )
       : null;
-  const keepsOf = (p: number, rings: Pt[][]): Disc[] => {
-    if (!others) return K;
+  const keepK = keepOutRegion(K);
+  const keepOf = (p: number, rings: Pt[][]): KeepOutRegion => {
+    if (!others) return keepK;
     const [x0, y0, x1, y1] = boxOfRings(rings);
     const m = 2 * SEPARATE.open + 1;
     const near = others.flatMap((D, q) =>
@@ -1048,18 +1074,11 @@ function blobOutline(
               c[1] - R <= y1 + m
           )
     );
-    return near.length ? [...K, ...near] : K;
+    return near.length ? keepOutRegion([...K, ...near]) : keepK;
   };
-  const cut = outs.map((rings, p) => {
-    const Kp = keepsOf(p, rings);
-    if (!Kp.length) return rings;
-    return avoidCut(
-      rings,
-      parts[p].pm,
-      pad,
-      Kp === K ? region : keepRegion(Kp, SEPARATE.open)
-    );
-  });
+  const cut = outs.map((rings, p) =>
+    avoidCut(rings, parts[p].pm, pad, keepOf(p, rings))
+  );
   const byPiece = !separate && cut.length > 1 ? contained(cut) : cut;
   return byPiece.flat();
 }
