@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter, withBase } from "vitepress";
-import { effectiveLang } from "../../docsLang";
+import { effectiveLang, exampleHref as exampleHrefOf } from "../../docsLang";
 import { data as examplesData } from "../../../data/storyExamples.data.js";
 import "./gallery.css";
 
@@ -99,7 +99,7 @@ onMounted(() => {
   // from the same gallery-tagged stories, so the gallery always links into
   // the section the visitor is currently browsing.
   function exampleHref(id: string): string {
-    return `/${effectiveLang(route.path)}/examples/${id}`;
+    return exampleHrefOf(effectiveLang(route.path), id);
   }
 
   // =====================================================================

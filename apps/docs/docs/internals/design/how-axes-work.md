@@ -69,7 +69,7 @@ the stack puts its 0 there. Nothing on the axis is set by hand:
 chart(survey, {
   schema: {
     response: Unit({
-      domain: Domain.ordered(LEVELS),
+      domain: Domain.discrete(LEVELS),
       traits: [Trait.diverging()],
     }),
   },
@@ -377,7 +377,7 @@ different things.
 **Ordered or not.** A centered label collects unordered items under it, such as a lake
 over its species. A start-aligned label marks where an ordered run of equal values
 begins, such as a year over its months. So by default an outer level over an ordered
-type (calendar cells, numeric bins, `Domain.ordered`) starts each label at its run, an
+type (calendar cells, numeric bins, `Trait.ordered()`) starts each label at its run, an
 unordered outer level centers its labels, and the innermost level stays centered. A
 color, a bracket or another grouping cue could do the job of start alignment, so it
 can be overridden per depth:
@@ -445,7 +445,7 @@ From #1115:
 - [#494](https://github.com/gofish-graphics/gofish-graphics/issues/494): inferring the
   graphic's size when no size is given.
 - [#984](https://github.com/gofish-graphics/gofish-graphics/issues/984): rebuild the
-  space kinds from capabilities, so a type states which structures it has.
+  space kinds from traits, so a type states which structures it has.
 - [#256](https://github.com/gofish-graphics/gofish-graphics/issues/256): the time
   datatype.
 - [#985](https://github.com/gofish-graphics/gofish-graphics/pull/985): signed `h`/`w`

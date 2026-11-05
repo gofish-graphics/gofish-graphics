@@ -237,6 +237,38 @@ html.landing-page .DocSearch-Button {
     4px 14px 30px var(--shadow-warm);
 }
 
+/* A picture card (PictureCard.vue): tilted by --tilt, its tape centered on
+   its top edge. The collage resizes the card, tape and caption. */
+.landing .pic {
+  position: relative;
+  transform: rotate(var(--tilt, 0deg));
+}
+.landing .pic a {
+  display: block;
+  text-decoration: none;
+}
+.landing .pic .card {
+  display: block;
+}
+.landing .pic .tape {
+  top: -11px;
+  left: calc(50% - 32px);
+}
+.landing .pic img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+.landing .pic .cap {
+  display: block;
+  font-family: "Architects Daughter", cursive;
+  color: var(--ink-soft);
+  text-align: center;
+  font-size: 1rem;
+  margin-top: 8px;
+}
+
 /* ---------- BUTTONS ---------- */
 .landing .btn {
   display: inline-block;
@@ -412,11 +444,11 @@ html.landing-page .DocSearch-Button {
   line-height: 1;
 }
 
-/* floating specimen cards */
+/* Floating specimen cards (wide screens): picture cards from landingCards.ts
+   (FLOATING), each placed in one corner of the hero. */
 .landing .float-card {
   position: absolute;
   z-index: 4;
-  width: max-content;
 }
 .landing .float-card .card {
   padding: 10px;
@@ -424,18 +456,22 @@ html.landing-page .DocSearch-Button {
 .landing .fc-tl {
   left: 6%;
   top: 14%;
+  animation-delay: 400ms;
 }
 .landing .fc-tr {
   right: 6%;
   top: 12%;
+  animation-delay: 520ms;
 }
 .landing .fc-bl {
   left: 4%;
   bottom: 6%;
+  animation-delay: 640ms;
 }
 .landing .fc-br {
   right: 5%;
   bottom: 7%;
+  animation-delay: 720ms;
 }
 /* Breakpoint must equal --sheet-w (a media query can't read a custom prop). */
 @media (max-width: 1240px) {
@@ -452,13 +488,78 @@ html.landing-page .DocSearch-Button {
   }
 }
 @media (max-width: 1200px) {
-  .landing .float-card.fc-bottom {
+  .landing .fc-bl,
+  .landing .fc-br {
     display: none;
   }
 }
+/* display:none, not just hidden: Chrome does not fetch a lazy image inside a
+   display:none ancestor, so phones never download these pictures. */
 @media (max-width: 1100px) {
-  .landing .float-card {
+  .landing .hero-cards {
     display: none;
+  }
+}
+
+/* Hero collage: where the floating cards are hidden (phones and tablets), a
+   loose pile of taped specimen cards under the buttons, two columns, slightly
+   tilted, bleeding a little past the hero's side padding. Cards come from
+   landingCards.ts. */
+.landing .collage-wrap {
+  display: none;
+}
+@media (max-width: 1100px) {
+  .landing .collage-wrap {
+    display: block;
+  }
+}
+.landing .collage {
+  max-width: 620px;
+  margin: 40px auto 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px 16px;
+  align-items: start;
+}
+.landing .collage .pic.wide {
+  grid-column: 1 / -1;
+}
+.landing .collage .pic.tall {
+  grid-row: span 2;
+  align-self: center;
+}
+.landing .collage .card {
+  padding: 8px;
+  border-radius: 5px;
+}
+.landing .collage .tape {
+  top: -9px;
+  left: calc(50% - 29px);
+  width: 58px;
+  height: 18px;
+}
+.landing .collage .cap {
+  font-size: 14px;
+  line-height: 1.2;
+  margin-top: 4px;
+}
+.landing .collage-more {
+  margin: 16px 0 0;
+  text-align: center;
+  font-family: "Architects Daughter", cursive;
+  font-size: 17px;
+}
+.landing .collage-more a {
+  color: var(--accent-deep);
+}
+@media (max-width: 700px) {
+  .landing .collage {
+    margin: 22px -14px 0;
+    gap: 10px 8px;
+  }
+  .landing .collage .pic.wide {
+    width: 104%;
+    margin-left: -2%;
   }
 }
 
@@ -474,9 +575,13 @@ html.landing-page .DocSearch-Button {
     transform: translateY(0);
   }
 }
+/* longhands, so the shorthand does not reset each corner's animation-delay */
 .landing .float-card {
   opacity: 0;
-  animation: gf-settle 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  animation-name: gf-settle;
+  animation-duration: 0.8s;
+  animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation-fill-mode: forwards;
 }
 @keyframes gf-settle {
   from {
@@ -496,7 +601,9 @@ html.landing-page .DocSearch-Button {
   text-align: center;
 }
 .landing .spectrum {
-  padding: 76px 44px 96px;
+  /* side gutter, also the swipe row's bleed and snap padding */
+  --gutter: 44px;
+  padding: 76px var(--gutter) 96px;
 }
 
 /* TRACK */
@@ -513,22 +620,6 @@ html.landing-page .DocSearch-Button {
   max-width: 1080px;
   margin: 36px auto 0;
 }
-.landing .track-line {
-  position: absolute;
-  left: 62px;
-  width: calc(100% - 172px);
-  bottom: -6px;
-  height: 60px;
-  pointer-events: none;
-}
-.landing .track-labels {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 18px;
-  font-family: "Architects Daughter", cursive;
-  color: var(--ink-soft);
-  font-size: 1.15rem;
-}
 .landing .specimens {
   display: flex;
   gap: 20px;
@@ -539,40 +630,118 @@ html.landing-page .DocSearch-Button {
   flex: 1;
   position: relative;
 }
-.landing .specimen .cap {
-  text-align: center;
+/* The pencil axis under the row: the stroke stretches across the row, the
+   arrowhead keeps its shape at its right end. On wide screens the line runs
+   behind the two labels (positioned against .track); on narrow ones it is a
+   thin line above them, with a dot that tracks the swipe (wireRail). */
+.landing .spec-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 18px;
   font-family: "Architects Daughter", cursive;
   color: var(--ink-soft);
-  font-size: 1rem;
-  margin-top: 8px;
+  font-size: 1.15rem;
 }
-.landing .specimen svg {
+.landing .axis-line {
+  position: absolute;
+  left: 62px;
+  width: calc(100% - 172px);
+  bottom: -6px;
+  height: 60px;
+  pointer-events: none;
+  --axis-stroke: 2.2;
+}
+.landing .axis-line svg {
+  position: absolute;
+  overflow: visible;
+}
+.landing .axis-line path {
+  fill: none;
+  stroke: var(--graphite);
+  stroke-width: var(--axis-stroke);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.landing .axis-stroke {
+  inset: 0;
   width: 100%;
-  height: auto;
-  display: block;
+  height: 100%;
 }
+.landing .axis-head {
+  right: 1.1%;
+  top: 50%;
+  width: 10px;
+  height: 16px;
+  margin-top: -8px;
+}
+.landing .spec-axis .knob {
+  display: none;
+  position: absolute;
+  top: 7px;
+  left: 0;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  border-radius: 50%;
+  background: var(--leaf);
+}
+/* Narrow screens: the four cards become one row you swipe sideways, each card
+   78% wide so the next one peeks in, bleeding to the sheet's edges. */
 @media (max-width: 900px) {
-  .landing .track-line,
-  .landing .track-labels {
+  .landing .spec-axis {
+    display: block;
+    position: relative;
+    height: 34px;
+    margin-top: 6px;
+    font-size: 15px;
+  }
+  .landing .axis-line {
+    left: 0;
+    width: 100%;
+    top: -4px;
+    bottom: auto;
+    height: 22px;
+    --axis-stroke: 1.8;
+  }
+  .landing .axis-head {
+    width: 7px;
+    height: 11px;
+    margin-top: -5.5px;
+  }
+  .landing .spec-axis .knob {
+    display: block;
+  }
+  .landing .spec-axis .lbl {
+    position: absolute;
+    bottom: -2px;
+  }
+  .landing .spec-axis .lbl.l {
+    left: 0;
+  }
+  .landing .spec-axis .lbl.r {
+    right: 0;
+  }
+  .landing .specimens {
+    gap: 14px;
+    align-items: flex-start;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-padding: 0 var(--gutter);
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    margin: 0 calc(-1 * var(--gutter));
+    padding: 26px var(--gutter) 10px;
+  }
+  .landing .specimens::-webkit-scrollbar {
     display: none;
   }
-  .landing .specimens {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 18px;
+  .landing .specimen {
+    flex: 0 0 78%;
+    scroll-snap-align: start;
   }
-  .landing .specimen:nth-child(5) {
-    grid-column: 1 / -1;
-    max-width: 60%;
-    margin: 0 auto;
-  }
-}
-@media (max-width: 560px) {
-  .landing .specimens {
-    grid-template-columns: 1fr;
-  }
-  .landing .specimen:nth-child(5) {
-    max-width: 100%;
+  .landing .specimen .card {
+    padding: 8px;
   }
 }
 
@@ -858,6 +1027,12 @@ html.landing-page .VPNavBarSocialLinks {
     padding: 0 8px;
   }
 }
+/* phones: the title shrinks to "GoFish" so the icons after it fit */
+@media (max-width: 480px) {
+  html.landing-page .VPNavBarTitle .title-rest {
+    display: none;
+  }
+}
 
 /* ---------- BAND FOOT (made with … at MIT VIS) ---------- */
 .landing .band-foot {
@@ -930,10 +1105,46 @@ html.landing-page .VPNavBarSocialLinks {
     padding: 60px 22px 70px;
   }
   .landing .section,
-  .landing .spectrum,
   .landing .band {
     padding-left: 22px;
     padding-right: 22px;
+  }
+  .landing .spectrum {
+    --gutter: 22px;
+  }
+}
+
+/* Phones: a tighter hero, so the first cards of the collage make the first
+   screen; the API Reference button gives way so Get Started and Examples fit
+   on one row (it stays in the closing call to action and the docs), and the
+   install command fits on one line. */
+@media (max-width: 560px) {
+  .landing .hero {
+    padding: 44px 16px 44px;
+  }
+  .landing .hero .btn-api {
+    display: none;
+  }
+  .landing .hero .btn {
+    padding: 12px 22px;
+  }
+  .landing .hero .cta-row {
+    margin-top: 28px;
+  }
+  .landing .hero .install-chip {
+    font-size: 0.72rem;
+    padding: 7px 12px;
+    gap: 6px;
+  }
+  .landing .collage {
+    margin: 18px -10px 0;
+  }
+  .landing .spectrum {
+    padding-top: 48px;
+    padding-bottom: 48px;
+  }
+  .landing .track {
+    margin-top: 8px;
   }
 }
 

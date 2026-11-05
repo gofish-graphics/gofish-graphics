@@ -1,4 +1,5 @@
 import { ref } from "vue";
+import { withBase } from "vitepress";
 
 // Shared documentation-language state. The source of truth is the
 // `<html data-docs-lang>` attribute, set before first paint by the inline
@@ -60,4 +61,14 @@ export function setDocsLang(lang: DocsLang): void {
   if (typeof localStorage !== "undefined") {
     localStorage.setItem(STORAGE_KEY, lang);
   }
+}
+
+// Links into a language's examples. Through `withBase`: VitePress adds the
+// site base only to markdown links and its own components (VPLink, VPButton),
+// not to a plain `<a href>` or `router.go()`.
+export function examplesHref(lang: DocsLang): string {
+  return withBase(`/${lang}/examples/`);
+}
+export function exampleHref(lang: DocsLang, id: string): string {
+  return withBase(`/${lang}/examples/${id}`);
 }

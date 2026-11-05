@@ -114,7 +114,7 @@ export type Seat = { px: number; anchor: "baseline" | "min" };
  *
  *  TODO(#1051): data 0 is the additive identity of the measure's algebraic
  *  structure (an ordered additive group's 0). Sums are checked now: a unit
- *  without `CanAdd` (dates, temperatures) cannot be summed or stacked
+ *  without `CanSum` (dates, temperatures) cannot be summed or stacked
  *  (#1197, `checkSummable` in measure.ts). What is left is the zero itself
  *  (`HasZero`): every measure is still seated as if it had one, so a bar of
  *  a single date or temperature (`.mean()`, which sums nothing) still hangs
@@ -185,7 +185,7 @@ export interface ScopeMeta {
    * claim puts it, `claim.descent(σ)` above the box's low edge, as the root
    * does; "start" at the box's low edge, whatever the claim, so data 0 is
    * the start of the budget (the angular axis of the polar family, whose
-   * data 0 is its baseline angle; see `AxisClasses.HasCycle`).
+   * data 0 is its baseline angle; see `AxisTraits.HasCycle`).
    */
   dataZero?: "claim" | "start";
 }

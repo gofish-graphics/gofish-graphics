@@ -416,7 +416,7 @@ const DOMAIN_OPS = new Set(["sort", "reverse", "bin", "dropNulls"]);
 export const isDomainOp = (op: FieldOp): boolean => DOMAIN_OPS.has(op.op);
 
 /** Whether `v` is a missing value: null or undefined, as everywhere in
- *  GoFish (`dropNulls`, the schema's classes). A fold skips it. NaN is a
+ *  GoFish (`dropNulls`, the schema's traits). A fold skips it. NaN is a
  *  number, not a missing value. */
 export const isMissing = (v: unknown): v is null | undefined => v == null;
 
@@ -619,14 +619,14 @@ const datumQuantity = (v: MaybeValue<number>): Quantity | undefined =>
  * (two nesting levels of the same mosaic) stay distinct units even though
  * both are "count share". The name doubles as the axis title. The unit has
  * no symbol: a share is a plain number, so the title adds no "(unit)". Shares
- * add up (to 1), so the unit has `CanAdd`.
+ * add up (to 1), so the unit has `CanSum`.
  */
 export const shareQuantity = (
   base: Quantity | undefined,
   byName?: string
 ): Quantity => {
   const name = `${base?.name ?? "value"} share${byName ? ` by ${byName}` : ""}`;
-  return { name, unit: { unit: name, classes: { CanAdd: {} } } };
+  return { name, unit: { unit: name, traits: { CanSum: {} } } };
 };
 
 /**
