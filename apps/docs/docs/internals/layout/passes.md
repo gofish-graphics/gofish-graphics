@@ -1342,8 +1342,8 @@ y). _Which_ anchor depends on whether data places the root:
 - **A scope solved against the render's slot that has a data 0** (a given
   dimension that maps a domain with an origin) → pin the **baseline** (local `0`)
   at the scope's seat from the start edge of the root's own frame. The root fills
-  the slot, so its frame is the slot, and the scope's `originPx` already counts the
-  chrome's start gutter, so the root's box, chrome included, starts at the frame's
+  the slot, so its frame is the slot, and the scope's `originPx` already counts how
+  far the root's claim reaches before its data 0 (the chrome before its plot), so the root's box, chrome included, starts at the frame's
   start.
 - **Anywhere else** (a shrink-to-fit dimension, a given dimension whose scope has
   no data 0, such as a spread of magnitudes whose rows reach past its origin on

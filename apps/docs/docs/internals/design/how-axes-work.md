@@ -111,11 +111,10 @@ with no size anywhere still falls back to the default canvas (#494). Since
 #1257 a chart's chrome goes around its frame whether it is sized or not:
 a tick reads its datum in the plot's frame (`position`'s `in`), so it maps
 with the σ the plot's own size solved, from outside it. The chrome is then
-ordinary children of the layers around the plot, as the rule below wants,
-though its gutters are still read off the claims in layout (see "Chrome
-gutters"): laying each layer's content out at its claim instead (rule B)
-hides labels and collapses filling regions, so it needs its own design
-(#1292).
+ordinary children of the layers around the plot, as the rule below wants:
+each ring of chrome is a layer that seats the plot at its origin and its
+chrome past it on a chain, and the plot is laid out in the room its
+chrome leaves (`LayerPlan.plotWhole`, #1292).
 
 The question is what `w` and `h` mean when a node has chrome. There are two boxes. The
 **plot** is the area the data is drawn in. The **whole graphic** is the plot plus its
