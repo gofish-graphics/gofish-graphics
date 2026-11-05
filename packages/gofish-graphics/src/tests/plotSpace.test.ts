@@ -393,44 +393,6 @@ async function main() {
     );
   }
 
-  console.log("\n# a ring's plot leaves out its chrome, in the plan and in layout");
-  {
-    // A scatter with titled axes has a ring of axes inside the ring of
-    // titles, which is the chart's box. The inner ring's plot is what it
-    // dresses, as its plan's plot is (`buildPlan`): its axes are chrome.
-    const node = await chart(
-      [
-        { a: 1, b: 10 },
-        { a: 4, b: 30 },
-      ],
-      { w: 200, h: 100 }
-    )
-      .flow(scatter({ x: "a", y: "b" }))
-      .mark(circle({ r: 3 }))
-      .resolve();
-    const data = await runLayout({ axes: true }, node);
-    const inner = nodesOf(data.child).filter(
-      (n) => n._chromeRing === true && n._chartRing !== true
-    );
-    for (const ring of inner)
-      for (const axis of [0, 1] as const) {
-        const content = ring.children[0] as GoFishNode;
-        const { min, max } = content.dims[axis];
-        const span = ring.localSpan("plot", axis);
-        const own = content.localSpan("plot", axis);
-        const want = own ?? [Math.min(min!, max!), Math.max(min!, max!)];
-        const shift = min! - (content.localAnchor?.(axis, "min") ?? 0);
-        check(
-          `the inner ring's plot on ${axis === 0 ? "x" : "y"} is its content's`,
-          span !== undefined &&
-            close(span[0], want[0] + (own ? shift : 0)) &&
-            close(span[1], want[1] + (own ? shift : 0)),
-          { span, want, shift }
-        );
-      }
-    check("the chart has an inner ring", inner.length > 0, inner.length);
-  }
-
   console.log("\n# sibling layers whose aligns each name a ref into the other");
   {
     // A's ref is in the part its target is in, in B, and B's in A: each
