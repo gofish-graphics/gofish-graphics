@@ -8,12 +8,14 @@ divides.
 from gofish import (
     Color,
     chart,
+    circle,
     datum,
     fr,
     layer,
     percent,
     rect,
     ribbon,
+    scatter,
     spread,
     stack,
     text,
@@ -236,5 +238,31 @@ def story_percent_of_band():
                 ]
             )(d)
         ),
+        {},
+    )
+
+
+def story_room_bar_backdrop():
+    return (
+        chart([{"c": "a", "v": 3}, {"c": "b", "v": 5}])
+        .flow(spread(by="c", dir="x"))
+        .mark(layer([rect(fill="#ddd"), rect(h="v")])),
+        {"w": 200, "h": 150},
+    )
+
+
+def story_room_one_row_scatter_labels():
+    return (
+        chart(
+            [
+                {"n": "alpha", "x": 1, "y": 1},
+                {"n": "beta", "x": 2, "y": 1},
+                {"n": "gamma", "x": 3, "y": 1},
+            ],
+            w=300,
+            h=120,
+        )
+        .flow(scatter(by="n", x="x", y="y"))
+        .mark(circle(r=5).label("n")),
         {},
     )
