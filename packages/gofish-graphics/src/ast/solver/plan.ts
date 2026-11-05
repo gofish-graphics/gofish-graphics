@@ -291,6 +291,9 @@ export function buildPlan(
         plot: f === undefined || f.plot === f.box ? undefined : f.plot,
         bare: f === undefined || f.bare === f.box ? undefined : f.bare,
         placesItself: placesItself(node.children[i], axis),
+        literal:
+          placesItself(node.children[i], axis) &&
+          (node.children[i] as GoFishNode).placedByLayout?.[axis] !== true,
         chrome: ring && i > 0,
       };
     }),

@@ -965,8 +965,10 @@ fixed-size nodes report their size).
   part of it that carries its space there (see
   [Underlying Space](/internals/core/underlying-space)): a child whose own
   type there is continuous or ordinal, one a `position` places at a datum,
-  one its own data places, or a `ref` stand-in for a node placed elsewhere.
-  Dressing is any other child of a layer where one child carries the space:
+  one its own data places, one its own options place at a literal pixel,
+  a `ref` stand-in for a node placed elsewhere, or one a relation ties to
+  a child that carries it other than a stand-in (the outer box of a
+  `nest`). Dressing is any other child of a layer where one child carries the space:
   its geometry is read off other nodes' pixels, not placed by data on that
   axis. That is a value label beside its bar's `ref`, a tier of texts
   seated beside the bars of another tier, an `enclose` drawn around placed

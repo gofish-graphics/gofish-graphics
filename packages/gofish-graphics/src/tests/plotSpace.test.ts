@@ -1,8 +1,9 @@
 /**
  * The plot is the part of a layer that carries its space (#1257): a child
  * whose own type on an axis is continuous or ordinal, that a `position`
- * places at a datum, or that stands for a node placed elsewhere (a `ref`)
- * carries the layer's space there. Any other child, in a layer where one
+ * places at a datum, that its options place at a literal pixel, that a
+ * relation ties to a child that carries it, or that stands for a node
+ * placed elsewhere (a `ref`) carries the layer's space there. Any other child, in a layer where one
  * does, is dressing: an `enclose` around refs, a chart of outlines or a
  * line layered over a scatter, a value label beside its bar. Dressing
  * takes room but is no part of the plot, and the axes sit beside the plot.
@@ -19,6 +20,12 @@ import {
   line,
   selectAll,
   Shape,
+  layer,
+  rect,
+  text,
+  spread,
+  value,
+  Constraint,
 } from "../lib";
 import { runLayout } from "../ast/gofish";
 import { GoFishNode } from "../ast/_node";
@@ -223,6 +230,50 @@ async function main() {
       "an oval reaches past the y axis line, which draws over it",
       outlines.some(([lo]) => lo < yLine.x!),
       { outlines, yLine: yLine.x }
+    );
+  }
+
+  console.log("\n# a nest's outer box and a literal caption are no dressing");
+  {
+    // The outer box a nest sizes from its data-sized inner is tied to it,
+    // so the spread lays the padded boxes `spacing` apart.
+    const padded = (v: number) =>
+      layer([
+        rect({ fill: "#eee" }).name("outer"),
+        rect({ w: value(v), h: 18 }).name("inner"),
+      ]).relate(({ outer, inner }: any) => [
+        Constraint.nest({ x: 8, y: 8 }, [outer, inner]),
+      ]);
+    const node = spread({ dir: "x", spacing: 10 }, [padded(40), padded(90)]);
+    const data = await runLayout({ w: 300, h: 80 }, await (node as any)(undefined));
+    const cells = (data.child as GoFishNode).children as GoFishNode[];
+    check(
+      "the outer box is no dressing of its layer",
+      cells.every((c) => c.claimWalk?.dressing[0].size === 0),
+      cells.map((c) => [...(c.claimWalk?.dressing[0] ?? [])])
+    );
+    const rects = items({ items: lowerToDisplayList(data.child) }).filter(
+      (i) => i.kind === "rect" && i.style?.fill === "#eee"
+    );
+    check(
+      "the padded boxes sit 10 px apart",
+      rects.length === 2 &&
+        close(rects[1].x! - (rects[0].x! + rects[0].w!), 10, 1e-3),
+      rects.map((r) => [r.x, r.w])
+    );
+
+    // A text its own options place at a literal pixel beside a chart.
+    const captioned = layer([
+      chart(points, { axes: false, w: 100, h: 50 })
+        .flow(scatter({ x: "x", y: "y" }))
+        .mark(circle({ r: 2 })),
+      text({ x: 0, y: 80, text: "caption" }),
+    ]);
+    const c = await runLayout({}, await (captioned as any)(undefined));
+    check(
+      "a caption at a literal pixel is no dressing",
+      (c.child as GoFishNode).claimWalk?.dressing[1].size === 0,
+      [...((c.child as GoFishNode).claimWalk?.dressing[1] ?? [])]
     );
   }
 

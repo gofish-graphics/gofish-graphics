@@ -581,8 +581,12 @@ each inherent to what the origin states are:
   claim of the plot, the part of the layer that carries its type. On each
   axis, a child carries the layer's type when its own type there is
   continuous or ordinal, when a `position` places it at a datum, when its
-  own data places it, or when it is a `ref` stand-in for a node placed
-  elsewhere. In a layer where some child carries the type, every other
+  own data places it, when its own options place it at a literal pixel
+  (`ClaimChild.literal`), or when it is a `ref` stand-in for a node placed
+  elsewhere. A relation (an align, a distribute, a nest) ties the children
+  it names into one figure, which carries the type when one of them does:
+  the outer box of a `nest` is part of the plot. A stand-in carries for
+  itself alone, so a label aligned to it does not. In a layer where some child carries the type, every other
   child is **dressing** (`placeByClaims`): its type is `undefined` there,
   because its geometry is read off other nodes' pixels rather than placed
   by data on that axis. An `enclose` drawn around refs, a `line` or
