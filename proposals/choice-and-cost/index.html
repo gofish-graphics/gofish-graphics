@@ -1,0 +1,2132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Choice, cost and wrap</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:ital,wght@0,400;0,600;0,700;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #f6f7f9;
+        --surface: #ffffff;
+        --fg: #1b2430;
+        --muted: #5d6878;
+        --line: #d9dee5;
+        --accent: #2357c6;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #11151b;
+          --surface: #1a2029;
+          --fg: #e4e8ee;
+          --muted: #9aa5b4;
+          --line: #2d3542;
+          --accent: #7ea6ff;
+          color-scheme: dark;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #11151b;
+        --surface: #1a2029;
+        --fg: #e4e8ee;
+        --muted: #9aa5b4;
+        --line: #2d3542;
+        --accent: #7ea6ff;
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          16px/1.55 "IBM Plex Sans",
+          system-ui,
+          sans-serif;
+        padding: 0 16px 64px;
+      }
+      main {
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+      .prose,
+      .prose-w > p,
+      .prose-w > ul,
+      .prose-w > ol,
+      .prose-w > h2,
+      .prose-w > h3 {
+        max-width: 65ch;
+      }
+      h1 {
+        font-size: 2rem;
+        line-height: 1.15;
+        margin: 40px 0 4px;
+        letter-spacing: -0.01em;
+      }
+      h2 {
+        font-size: 1.35rem;
+        margin: 56px 0 12px;
+        padding-top: 12px;
+        border-top: 1px solid var(--line);
+      }
+      h3 {
+        font-size: 1.08rem;
+        margin: 28px 0 10px;
+      }
+      h4 {
+        font-size: 0.95rem;
+        margin: 0 0 8px;
+      }
+      a {
+        color: var(--accent);
+      }
+      code,
+      pre {
+        font-family: "IBM Plex Mono", ui-monospace, monospace;
+        font-size: 0.86em;
+      }
+      :not(pre) > code {
+        background: color-mix(in srgb, var(--fg) 7%, transparent);
+        padding: 0.05em 0.3em;
+        border-radius: 4px;
+      }
+      .status {
+        color: var(--muted);
+        margin: 0 0 18px;
+      }
+      .reco {
+        border-left: 3px solid var(--accent);
+        padding: 6px 0 6px 14px;
+        margin: 16px 0;
+        max-width: 65ch;
+      }
+      pre.code {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px 0;
+        margin: 8px 0;
+        overflow-x: auto;
+        line-height: 1.5;
+      }
+      pre.code code {
+        display: block;
+        min-width: max-content;
+        font-size: 0.82rem;
+      }
+      .ln {
+        display: block;
+        padding: 0 14px;
+        min-height: 1.5em;
+        white-space: pre;
+      }
+      .ln.add {
+        background: color-mix(in srgb, #22a35a 16%, var(--surface));
+      }
+      .ln.del {
+        background: color-mix(in srgb, #e0464b 15%, var(--surface));
+      }
+      .hljs-keyword,
+      .hljs-built_in,
+      .hljs-literal,
+      .hljs-selector-tag {
+        color: var(--accent);
+      }
+      .hljs-string,
+      .hljs-attr .hljs-string {
+        color: color-mix(in oklab, #1e8a4a 70%, var(--fg));
+      }
+      .hljs-number {
+        color: color-mix(in oklab, #c25b00 70%, var(--fg));
+      }
+      .hljs-comment {
+        color: var(--muted);
+        font-style: italic;
+      }
+      .hljs-title,
+      .hljs-title.function_,
+      .hljs-params {
+        color: color-mix(in oklab, #8a3fbf 65%, var(--fg));
+      }
+      .hljs-attr,
+      .hljs-property {
+        color: color-mix(in oklab, var(--accent) 55%, var(--fg));
+      }
+      .hljs-type,
+      .hljs-meta {
+        color: color-mix(in oklab, #b0367a 60%, var(--fg));
+      }
+      .ex {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 20px;
+        margin: 22px 0;
+      }
+      .ex > header {
+        display: flex;
+        gap: 12px;
+        align-items: baseline;
+        flex-wrap: wrap;
+      }
+      .ex > header h3 {
+        margin: 0;
+      }
+      .issues {
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      .ex pre.code {
+        background: var(--bg);
+      }
+      figure {
+        margin: 12px 0;
+      }
+      .plate {
+        background: #fff;
+        border-radius: 8px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        overflow: hidden;
+      }
+      .plate img {
+        display: block;
+        max-width: 100%;
+        height: auto;
+        margin: 0 auto;
+      }
+      figcaption {
+        font-size: 0.82rem;
+        color: var(--muted);
+        margin-top: 4px;
+      }
+      .cite {
+        font-style: italic;
+      }
+      .caption {
+        max-width: 80ch;
+        margin: 6px 0 14px;
+      }
+      .note {
+        font-size: 0.9rem;
+        color: var(--muted);
+        max-width: 80ch;
+        margin: 12px 0 0;
+      }
+      .cols {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 18px;
+      }
+      .tag {
+        display: inline-block;
+        font-size: 0.72rem;
+        font-weight: 600;
+        padding: 1px 7px;
+        border-radius: 999px;
+        vertical-align: 1px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .tag.add {
+        background: color-mix(in srgb, #22a35a 20%, var(--surface));
+        color: color-mix(in oklab, #1e7a43 70%, var(--fg));
+      }
+      .tag.del {
+        background: color-mix(in srgb, #e0464b 18%, var(--surface));
+        color: color-mix(in oklab, #b3262b 70%, var(--fg));
+      }
+      .tag.rec {
+        background: var(--accent);
+        color: var(--surface);
+        margin-left: 6px;
+      }
+      .ne {
+        font-size: 0.92rem;
+        margin: 8px 0;
+      }
+      details {
+        margin: 8px 0;
+      }
+      details > summary {
+        cursor: pointer;
+        color: var(--accent);
+        font-size: 0.9rem;
+      }
+      details.py > summary {
+        font-size: 0.82rem;
+      }
+      details.rat {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px 14px;
+        max-width: 80ch;
+      }
+      details.rat > summary {
+        font-weight: 600;
+        color: var(--fg);
+        font-size: 1rem;
+      }
+      .apgrid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr));
+        gap: 14px;
+      }
+      .apgrid.two {
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+      }
+      .ap,
+      .pc {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 14px;
+        min-width: 0;
+      }
+      .ap.rec {
+        border: 2px solid var(--accent);
+      }
+      .ap ul {
+        padding-left: 18px;
+        margin: 8px 0 0;
+        font-size: 0.9rem;
+      }
+      .ap li.pro::marker {
+        content: "+  ";
+        color: #22a35a;
+        font-weight: 700;
+      }
+      .ap li.con::marker {
+        content: "−  ";
+        color: #e0464b;
+        font-weight: 700;
+      }
+      .small {
+        font-size: 0.9rem;
+        color: var(--muted);
+        max-width: 80ch;
+      }
+      .pgrid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
+        gap: 14px;
+      }
+      .pc dl {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 2px 10px;
+        font-size: 0.88rem;
+        margin: 8px 0;
+      }
+      .pc dt {
+        color: var(--muted);
+      }
+      .pc dd {
+        margin: 0;
+      }
+      .pc .links {
+        font-size: 0.82rem;
+        margin: 6px 0 0;
+      }
+      .trio {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+      .trio figure {
+        margin: 6px 0;
+      }
+      .tw {
+        overflow-x: auto;
+        margin: 10px 0;
+      }
+      table {
+        border-collapse: collapse;
+        font-size: 0.9rem;
+        background: var(--surface);
+        min-width: 520px;
+      }
+      th,
+      td {
+        border: 1px solid var(--line);
+        padding: 6px 9px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: color-mix(in srgb, var(--fg) 5%, var(--surface));
+      }
+      ol.dec li {
+        margin: 6px 0;
+      }
+      .syntax {
+        max-width: 780px;
+      }
+      @media (max-width: 760px) {
+        .cols {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .trio {
+          grid-template-columns: 1fr 1fr 1fr;
+        }
+        h1 {
+          font-size: 1.6rem;
+        }
+        .ex {
+          padding: 14px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header class="prose">
+        <h1>Choice, cost and wrap</h1>
+        <p class="status">
+          One mechanism for pretty printing, waffles, line breaking and axis
+          labels. Proposal, not implemented. Advances #486 (choice operator),
+          #122 (wrap operator) and #1194 (tick density, label angle and
+          placement as one mechanism).
+        </p>
+        <ul>
+          <li>
+            Add one operator, <code>choose</code>, which lists alternatives in
+            order of preference. You can use it as a node over child subtrees,
+            and you can also use it as the value of an option, e.g.
+            <code>angle: choose([0, 45, 90])</code> or
+            <code>cols: choose({ from: 4, to: 24 })</code>.
+          </li>
+          <li>
+            Add a <code>Cost</code> strategy family that says how
+            <code>choose</code> ranks the alternatives. By default
+            <code>choose</code> takes the first alternative that fits. With
+            <code>cost: [Cost.overflow(), Cost.waste()]</code> it takes the
+            alternative with the lowest cost, compared term by term.
+          </li>
+          <li>
+            Add a <code>wrap</code> operator, which flows children along a
+            direction and starts a new row when the row is full. A
+            <code>Break</code> family picks the break rule:
+            <code>Break.greedy</code>, <code>Break.optimal</code> (Knuth-Plass),
+            <code>Break.balance</code>, <code>Break.group</code> (all breaks or
+            none) and <code>Break.never</code>. Every
+            <code>Break</code> strategy is a <code>choose</code> at each seam
+            plus a cost, so <code>wrap</code> adds no new search machinery.
+          </li>
+        </ul>
+        <p class="reco">
+          <b>Recommendation.</b> Approach B: <code>choose</code> as one operator
+          that works as a node and as an option value, ranked by preference
+          order first and by an optional <code>Cost</code> list second, with
+          <code>wrap</code> and its <code>Break</code> family as the first
+          operator built on it. Today's <code>angle: "auto"</code> becomes sugar
+          for a written-out <code>choose</code>.
+        </p>
+        <p class="small">
+          The "union of boxes" geometry that the pretty printer needs stays
+          inside <code>wrap</code> and <code>choose</code> as an internal
+          summary. Users see it only as the <code>parts</code> of a wrapped
+          node's outline.
+        </p>
+      </header>
+      <h3>Syntax to review</h3>
+      <div class="syntax">
+        <pre
+          class="code"
+        ><code data-lang="javascript"><span class="ln">choose([a, b, c])</span><span class="ln">choose([a, b], { cost: [Cost.overflow(), Cost.lines()] })</span><span class="ln">label: { angle: choose([0, 45, 90]) }</span><span class="ln">label: choose([{ angle: 0 }, { angle: 45 }, { angle: 90 }, { hidden: true }])</span><span class="ln">label: { angle: choose({ from: 0, to: 90 }) }</span><span class="ln">ticks: { count: choose([10, 8, 6, 5, 4, 3, 2]) }</span><span class="ln">wrap({ cols: 10 })</span><span class="ln">wrap({ cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }) })</span><span class="ln">wrap({ w: 260, break: Break.optimal() })</span><span class="ln">wrap({ break: Break.never })</span><span class="ln">text({ text: para, w: 260, break: Break.optimal() })</span></code></pre>
+      </div>
+
+      <h2 id="gallery">Example gallery</h2>
+      <p class="small">
+        Each card: the prototype render, the proposed code (green lines are new
+        or changed), and today's spelling (red lines are what goes away). The
+        renders are throwaway prototypes in
+        <code>stories/proposals/ChoiceCost.stories.tsx</code> that compute the
+        choice in plain JS and draw it with today's API.
+      </p>
+
+      <article class="ex" id="ex-waffle">
+        <header>
+          <h3>Waffle chart</h3>
+          <span class="issues">#122 #739 #1128 #663</span>
+        </header>
+        <figure>
+          <div class="plate">
+            <a href="img/waffle-candidates.png"
+              ><img
+                src="img/waffle-candidates.png"
+                alt="Waffle candidates at 4, 8, 12, 16 and 24 columns with their costs"
+            /></a>
+          </div>
+        </figure>
+        <figure>
+          <div class="plate">
+            <a href="img/waffle-today-vs-chosen.png"
+              ><img
+                src="img/waffle-today-vs-chosen.png"
+                alt="Gallery waffle today with five columns overflowing, and the chosen eight columns"
+            /></a>
+          </div>
+        </figure>
+        <p class="caption">
+          The prototype fits 73 cells into a 300 by 200 box. Twelve columns win,
+          with 25 px cells and a cost of 0.24; four columns cost 0.87 and 24
+          columns cost 0.81. Below that, the gallery waffle today (five columns
+          of 8 px cells) needs 28 rows in a 600 by 200 box and spills out of the
+          top; with the same cost all six lakes share eight columns of 11 px
+          cells.
+        </p>
+        <div class="cols">
+          <div>
+            <h4><span class="tag add">Proposed</span> Approach B</h4>
+            <pre
+              class="code"
+            ><code data-lang="javascript"><span class="ln">chart(seafood, { axes: { x: { side: "end" } } })</span><span class="ln">  .flow(</span><span class="ln">    spread({ by: "lake", spacing: 8, dir: "x", axes: false, alignment: "end" }),</span><span class="ln">    derive((d) =&gt; d.flatMap((d) =&gt; repeat(d, "count"))),</span><span class="ln add">    wrap({</span><span class="ln add">      cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }),</span><span class="ln add">      spacing: 2,</span><span class="ln add">      start: "bottom",</span><span class="ln add">    })</span><span class="ln">  )</span><span class="ln add">  .mark(rect({ fill: "species" }))</span><span class="ln add">  .render(container, { w: 600, h: 200 });</span></code></pre>
+            <details class="py">
+              <summary>Python</summary>
+              <pre
+                class="code"
+              ><code data-lang="python"><span class="ln add">chart(SEAFOOD, axes={"x": {"side": "end"}}).flow(</span><span class="ln add">    spread(by="lake", spacing=8, dir="x", axes=False, alignment="end"),</span><span class="ln add">    derive(lambda d: [item for row in d for item in repeat(row, "count")]),</span><span class="ln add">    wrap(cols=choose(start=4, stop=24, cost=Cost.waste()), spacing=2, start="bottom"),</span><span class="ln add">).mark(rect(fill="species"))</span></code></pre>
+            </details>
+          </div>
+          <div>
+            <h4><span class="tag del">Today</span></h4>
+            <pre
+              class="code"
+            ><code data-lang="javascript"><span class="ln">chart(seafood, { axes: { x: { side: "end" } } })</span><span class="ln">  .flow(</span><span class="ln">    spread({ by: "lake", spacing: 8, dir: "x", axes: false, alignment: "end" }),</span><span class="ln">    derive((d) =&gt; d.flatMap((d) =&gt; repeat(d, "count"))),</span><span class="ln del">    spread({ by: chunk(5), spacing: 2, dir: "y", reverse: true }),</span><span class="ln del">    spread({ spacing: 2, dir: "x" })</span><span class="ln">  )</span><span class="ln del">  .mark(rect({ w: 8, h: 8, fill: "species" }))</span><span class="ln del">  .render(container, {});</span></code></pre>
+          </div>
+        </div>
+        <p class="note">
+          The cost is the fraction of the box left empty,
+          <code>1 − n·s²/(W·H)</code>, where <code>s</code> is the largest
+          square cell that fits. <code>wrap</code> with an unsized cell divides
+          the room into square cells. Plot's
+          <code>floor(sqrt(bandwidth / scale))</code> is the closed form of the
+          same rule, and the engine can use it when the cost is exactly
+          <code>Cost.waste()</code> with uniform cells. The grouped waffle is
+          <code>stack("species"), wrap()</code> and the "stacked" waffle is
+          <code>wrap("species"), wrap()</code>.
+        </p>
+      </article>
+      <article class="ex" id="ex-kp">
+        <header>
+          <h3>Knuth-Plass line breaking</h3>
+          <span class="issues">new</span>
+        </header>
+        <figure>
+          <div class="plate">
+            <a href="img/knuth-plass.png"
+              ><img
+                src="img/knuth-plass.png"
+                alt="Greedy first fit beside Knuth-Plass for the same paragraph"
+            /></a>
+          </div>
+        </figure>
+        <p class="caption">
+          The prototype sets a 61 word paragraph at 256 px. Greedy first fit has
+          a total badness of 0.99 and a worst line of 0.78; Knuth-Plass has a
+          total of 0.41 and a worst line of 0.19, with the same number of lines.
+        </p>
+        <div class="cols">
+          <div>
+            <h4><span class="tag add">Proposed</span> Approach B</h4>
+            <pre
+              class="code"
+            ><code data-lang="javascript"><span class="ln add">const words = paragraph.split(" ");</span><span class="ln add">wrap(</span><span class="ln add">  { w: 260, spacing: "0.5ch", break: Break.optimal() },</span><span class="ln add">  words.map((w) =&gt; text({ text: w }))</span><span class="ln add">);</span><span class="ln"></span><span class="ln">// or the same paragraph as one text mark, which desugars to the wrap above</span><span class="ln add">text({ text: paragraph, w: 260, break: Break.optimal() });</span></code></pre>
+            <details class="py">
+              <summary>Python</summary>
+              <pre
+                class="code"
+              ><code data-lang="python"><span class="ln add">wrap([text(text=w) for w in words], w=260, spacing="0.5ch", break_=Break.optimal())</span><span class="ln"></span><span class="ln add">text(text=paragraph, w=260, break_=Break.optimal())</span></code></pre>
+            </details>
+          </div>
+          <div>
+            <h4><span class="tag del">Today</span></h4>
+            <p class="ne">
+              Not expressible today. There is no <code>wrap</code>. The story
+              runs the line breaker in plain JS and places every word with its
+              own <code>text({ x, y })</code>.
+            </p>
+            <details>
+              <summary>What the story does instead</summary>
+              <pre
+                class="code"
+              ><code data-lang="typescript"><span class="ln">// Knuth-Plass: f[i] = min total badness of setting words i..n-1.</span><span class="ln del">const f = new Array(n + 1).fill(Infinity);</span><span class="ln del">const next = new Array(n + 1).fill(n);</span><span class="ln del">f[n] = 0;</span><span class="ln del">for (let i = n - 1; i &gt;= 0; i--) {</span><span class="ln del">  for (let j = i + 1; j &lt;= n &amp;&amp; lineW(i, j) &lt;= W; j++) {</span><span class="ln del">    const c = bad(i, j) + f[j];</span><span class="ln del">    if (c &lt; f[i]) ((f[i] = c), (next[i] = j));</span><span class="ln del">  }</span><span class="ln del">}</span><span class="ln del">const kp = [];</span><span class="ln del">for (let i = 0; i &lt; n; i = next[i]) kp.push([i, next[i]]);</span><span class="ln"></span><span class="ln">// then every word is placed by hand, one text mark at a time</span><span class="ln del">kp.forEach(([i, j], li) =&gt; {</span><span class="ln del">  let x = 0;</span><span class="ln del">  for (let k = i; k &lt; j; k++) {</span><span class="ln del">    marks.push(text({ x, y: li * LH, text: words[k], fontSize: SIZE }));</span><span class="ln del">    x += widths[k] + space;</span><span class="ln del">  }</span><span class="ln del">});</span><span class="ln del">layer(marks).render(container);</span></code></pre>
+            </details>
+          </div>
+        </div>
+        <p class="note">
+          Word widths come from the text mark's own measurement.
+        </p>
+      </article>
+      <article class="ex" id="ex-pp">
+        <header>
+          <h3>Pretty printer</h3>
+          <span class="issues">#40 #486</span>
+        </header>
+        <figure>
+          <div class="plate">
+            <a href="img/pretty-printer.png"
+              ><img
+                src="img/pretty-printer.png"
+                alt="The fold program printed at widths 80, 40 and 24"
+            /></a>
+          </div>
+        </figure>
+        <p class="caption">
+          Three alternatives per list (flat, hang and indent) with the cost (sum
+          of squared overflow, newlines). At 80 columns it fits on one line; at
+          40 it takes 6 lines (first row 23 columns, widest 34, last 29); at 24
+          it takes 8 lines. The prototype searches all 1555 layouts.
+        </p>
+        <div class="cols">
+          <div>
+            <h4><span class="tag add">Proposed</span> Approach B</h4>
+            <pre
+              class="code"
+            ><code data-lang="javascript"><span class="ln add">const row = (items) =&gt; wrap({ break: Break.never, spacing: "1ch" }, items);</span><span class="ln add">const column = (items) =&gt; stack({ dir: "y", align: "start" }, items);</span><span class="ln add">const open = text({ text: "(" }),</span><span class="ln add">  close = text({ text: ")" });</span><span class="ln"></span><span class="ln add">const sexp = (e) =&gt;</span><span class="ln add">  typeof e === "string"</span><span class="ln add">    ? text({ text: e, font: "mono" })</span><span class="ln add">    : choose(</span><span class="ln add">        [</span><span class="ln">          // flat: everything on the current row</span><span class="ln add">          row([open, ...e.map(sexp), close]),</span><span class="ln">          // hang: the head, then the arguments in a column that starts after it</span><span class="ln add">          row([open, sexp(e[0]), column(e.slice(1).map(sexp)), close]),</span><span class="ln">          // indent: the head alone, then the arguments indented by two columns</span><span class="ln add">          row([</span><span class="ln add">            column([</span><span class="ln add">              row([open, sexp(e[0])]),</span><span class="ln add">              offset({ x: "2ch" }, column(e.slice(1).map(sexp))),</span><span class="ln add">            ]),</span><span class="ln add">            close,</span><span class="ln add">          ]),</span><span class="ln add">        ],</span><span class="ln add">        { cost: [Cost.overflow(), Cost.lines()] }</span><span class="ln add">      );</span><span class="ln"></span><span class="ln add">sexp(program).render(container, { w: 40 * CH });</span></code></pre>
+            <details class="py">
+              <summary>Python</summary>
+              <pre
+                class="code"
+              ><code data-lang="python"><span class="ln add">def row(items):</span><span class="ln add">    return wrap(items, break_=Break.never, spacing="1ch")</span><span class="ln"></span><span class="ln"></span><span class="ln add">def column(items):</span><span class="ln add">    return stack(items, dir="y", align="start")</span><span class="ln"></span><span class="ln"></span><span class="ln add">def sexp(e):</span><span class="ln add">    if isinstance(e, str):</span><span class="ln add">        return text(text=e, font="mono")</span><span class="ln add">    head, args = sexp(e[0]), [sexp(a) for a in e[1:]]</span><span class="ln add">    return choose(</span><span class="ln add">        [</span><span class="ln add">            row([text(text="("), head, *args, text(text=")")]),</span><span class="ln add">            row([text(text="("), head, column(args), text(text=")")]),</span><span class="ln add">            row(</span><span class="ln add">                [</span><span class="ln add">                    column(</span><span class="ln add">                        [row([text(text="("), head]), offset(column(args), x="2ch")]</span><span class="ln add">                    ),</span><span class="ln add">                    text(text=")"),</span><span class="ln add">                ]</span><span class="ln add">            ),</span><span class="ln add">        ],</span><span class="ln add">        cost=[Cost.overflow(), Cost.lines()],</span><span class="ln add">    )</span></code></pre>
+            </details>
+          </div>
+          <div>
+            <h4><span class="tag del">Today</span></h4>
+            <p class="ne">
+              Not expressible today. The story defines its own document type and
+              searcher outside GoFish, then draws each printed line with
+              <code>text</code>.
+            </p>
+            <details>
+              <summary>What the story does instead</summary>
+              <pre
+                class="code"
+              ><code data-lang="typescript"><span class="ln">// A document type, its constructors and its own search, outside GoFish.</span><span class="ln del">type Doc =</span><span class="ln del">  | { t: "text"; s: string }</span><span class="ln del">  | { t: "nl" }</span><span class="ln del">  | { t: "cat"; a: Doc; b: Doc }</span><span class="ln del">  | { t: "nest"; n: number; d: Doc }</span><span class="ln del">  | { t: "align"; d: Doc }</span><span class="ln del">  | { t: "choice"; a: Doc; b: Doc };</span><span class="ln"></span><span class="ln">// One list, three candidate layouts: flat, hang, indent.</span><span class="ln del">const sexpDoc = (e: SExp): Doc =&gt; {</span><span class="ln del">  if (typeof e === "string") return txt(e);</span><span class="ln del">  const [head, ...args] = e.map(sexpDoc);</span><span class="ln del">  if (args.length === 0) return cat(txt("("), head, txt(")"));</span><span class="ln del">  const flat = flatten(cat(txt("("), hsep([head, ...args]), txt(")")));</span><span class="ln del">  const hang = cat(txt("("), head, txt(" "), align(vsep(args)), txt(")"));</span><span class="ln del">  const indent = align(</span><span class="ln del">    cat(txt("("), head, nest(2, cat(nl, vsep(args))), txt(")"))</span><span class="ln del">  );</span><span class="ln del">  return choice(flat, choice(hang, indent));</span><span class="ln del">};</span><span class="ln"></span><span class="ln">// Exhaustive search over every resolution of the choices (1555 layouts),</span><span class="ln">// keeping the first layout with the least (overflow, newlines) cost.</span><span class="ln del">const { lines } = prettyPrint(sexpDoc(parseSExp(FOLD_SRC)), 40);</span><span class="ln"></span><span class="ln">// then every line is drawn by hand at its indent</span><span class="ln del">lines.forEach((l, li) =&gt; {</span><span class="ln del">  const lead = l.length - l.trimStart().length;</span><span class="ln del">  marks.push(</span><span class="ln del">    text({ x: lead * cw, y: li * LH, text: l.trimStart(), fontFamily: MONO })</span><span class="ln del">  );</span><span class="ln del">});</span><span class="ln del">layer(marks).render(container);</span></code></pre>
+            </details>
+          </div>
+        </div>
+        <p class="note">
+          The blue boxes are the row boxes, so you can see that each layout's
+          shape is a union of boxes. A real implementation would keep only the
+          Pareto frontier. When two layouts tie on cost, the prototype keeps the
+          earlier alternative, which is why the 40 column layout hangs the
+          <code>if</code> after <code>(define </code> instead of indenting it.
+          The mapping to the pretty expressive printer is in the tables below.
+        </p>
+      </article>
+      <article class="ex" id="ex-angle">
+        <header>
+          <h3>Axis label angle</h3>
+          <span class="issues">#961 #1017 #1151 #1194</span>
+        </header>
+        <figure>
+          <div class="plate">
+            <a href="img/label-angle.png"
+              ><img
+                src="img/label-angle.png"
+                alt="The same bar chart with labels at 0, 45 and 90 degrees, and today's auto"
+            /></a>
+          </div>
+        </figure>
+        <p class="caption">
+          At 400 px the product names collide at 0 degrees. At 45 degrees they
+          clear, so first fit stops there; 90 degrees also clears but takes more
+          height. Today's <code>"auto"</code> (bottom right) picks 45 degrees
+          too, by laying out the whole chart once per angle.
+        </p>
+        <div class="cols">
+          <div>
+            <h4><span class="tag add">Proposed</span> Approach B</h4>
+            <pre
+              class="code"
+            ><code data-lang="javascript"><span class="ln">chart(regionProduct, {</span><span class="ln add">  axes: {</span><span class="ln add">    x: {</span><span class="ln add">      label: choose([</span><span class="ln add">        { angle: 0 },</span><span class="ln add">        { angle: 45 },</span><span class="ln add">        { angle: 90 },</span><span class="ln add">        { hidden: true },</span><span class="ln add">      ]),</span><span class="ln add">    },</span><span class="ln add">  },</span><span class="ln">  w: 400,</span><span class="ln">  h: 140,</span><span class="ln">})</span><span class="ln">  .flow(</span><span class="ln">    spread({ by: "region", dir: "x", spacing: 24 }),</span><span class="ln">    spread({ by: "product", dir: "x", spacing: 0 })</span><span class="ln">  )</span><span class="ln">  .mark(rect({ h: "sales", fill: "product" }))</span><span class="ln">  .render(container);</span></code></pre>
+            <details class="py">
+              <summary>Python</summary>
+              <pre
+                class="code"
+              ><code data-lang="python"><span class="ln add">chart(</span><span class="ln add">    region_product,</span><span class="ln add">    axes={</span><span class="ln add">        "x": {</span><span class="ln add">            "label": choose(</span><span class="ln add">                [{"angle": 0}, {"angle": 45}, {"angle": 90}, {"hidden": True}]</span><span class="ln add">            )</span><span class="ln add">        }</span><span class="ln add">    },</span><span class="ln add">    w=400,</span><span class="ln add">    h=140,</span><span class="ln add">).flow(</span><span class="ln add">    spread(by="region", dir="x", spacing=24),</span><span class="ln add">    spread(by="product", dir="x", spacing=0),</span><span class="ln add">).mark(</span><span class="ln add">    rect(h="sales", fill="product")</span><span class="ln add">)</span></code></pre>
+            </details>
+            <pre
+              class="code"
+            ><code data-lang="javascript"><span class="ln">// or a continuous angle: the smallest angle between 0 and 90 that clears</span><span class="ln add">axes: { x: { label: { angle: choose({ from: 0, to: 90 }) } } }</span></code></pre>
+            <details class="py">
+              <summary>Python, continuous angle</summary>
+              <pre
+                class="code"
+              ><code data-lang="python"><span class="ln"># or a continuous angle</span><span class="ln add">axes={"x": {"label": {"angle": choose(start=0, stop=90)}}}</span></code></pre>
+            </details>
+          </div>
+          <div>
+            <h4><span class="tag del">Today</span></h4>
+            <pre
+              class="code"
+            ><code data-lang="javascript"><span class="ln">chart(regionProduct, {</span><span class="ln del">  axes: { x: { label: { angle: "auto" } } },</span><span class="ln">  w: 400,</span><span class="ln">  h: 140,</span><span class="ln">})</span><span class="ln">  .flow(</span><span class="ln">    spread({ by: "region", dir: "x", spacing: 24 }),</span><span class="ln">    spread({ by: "product", dir: "x", spacing: 0 })</span><span class="ln">  )</span><span class="ln">  .mark(rect({ h: "sales", fill: "product" }))</span><span class="ln">  .render(container);</span></code></pre>
+            <p class="ne">
+              <code>"auto"</code> stays as the short spelling: it is sugar for
+              the <code>choose</code> on the left, and the docs show the
+              expansion.
+            </p>
+          </div>
+        </div>
+        <p class="note">
+          The axis is one node, so only its label row is laid out again per
+          alternative. The engine no longer rebuilds the whole chart, which
+          removes the rebuild hook in <code>runLayout</code> and the cost that
+          keeps #1017 (<code>"auto"</code> as the default) from shipping.
+        </p>
+      </article>
+      <article class="ex" id="ex-ticks">
+        <header>
+          <h3>Tick count</h3>
+          <span class="issues">#1063 #1194</span>
+        </header>
+        <figure>
+          <div class="plate">
+            <a href="img/tick-count.png"
+              ><img
+                src="img/tick-count.png"
+                alt="A 200 px axis with tick counts of about 3, 5, 10 and 20"
+            /></a>
+          </div>
+        </figure>
+        <p class="caption">
+          A 200 px axis over 0 to 12,000. About 3 ticks gives 3 ticks with no
+          overlap; about 5 gives 7 ticks with one overlapping pair; about 10
+          gives 13 ticks with 12 overlapping pairs. The rule "the most ticks
+          with no overlap" picks the first row.
+        </p>
+        <div class="cols">
+          <div>
+            <h4><span class="tag add">Proposed</span> Approach B</h4>
+            <pre
+              class="code"
+            ><code data-lang="javascript"><span class="ln">// the most ticks whose labels do not overlap</span><span class="ln add">axes: { x: { ticks: { count: choose([10, 8, 6, 5, 4, 3, 2]) } } }</span><span class="ln"></span><span class="ln">// tick count and angle as one choice, which #1194 asks for</span><span class="ln add">axes: {</span><span class="ln add">  x: choose([</span><span class="ln add">    { ticks: { count: 10 } },</span><span class="ln add">    { ticks: { count: 5 } },</span><span class="ln add">    { ticks: { count: 10 }, label: { angle: 45 } },</span><span class="ln add">    { ticks: { count: 3 } },</span><span class="ln add">  ]),</span><span class="ln add">}</span><span class="ln"></span><span class="ln">// Talbot style, with weights</span><span class="ln add">axes: {</span><span class="ln add">  x: {</span><span class="ln add">    ticks: {</span><span class="ln add">      count: choose(</span><span class="ln add">        { from: 2, to: 12 },</span><span class="ln add">        {</span><span class="ln add">          cost: Cost.weighted({</span><span class="ln add">            overlap: Infinity,</span><span class="ln add">            density: 0.5,</span><span class="ln add">            simplicity: 0.2,</span><span class="ln add">          }),</span><span class="ln add">        }</span><span class="ln add">      ),</span><span class="ln add">    },</span><span class="ln add">  },</span><span class="ln add">}</span></code></pre>
+            <details class="py">
+              <summary>Python</summary>
+              <pre
+                class="code"
+              ><code data-lang="python"><span class="ln"># the most ticks whose labels do not overlap</span><span class="ln add">axes={"x": {"ticks": {"count": choose([10, 8, 6, 5, 4, 3, 2])}}}</span></code></pre>
+            </details>
+          </div>
+          <div>
+            <h4><span class="tag del">Today</span></h4>
+            <p class="ne">
+              Not expressible today. The axis always asks d3 for about 10 ticks,
+              so labels overlap on a narrow chart. The story calls d3's
+              <code>ticks(0, 12000, count)</code> per candidate and draws each
+              axis by hand.
+            </p>
+            <details>
+              <summary>What the story does instead</summary>
+              <pre
+                class="code"
+              ><code data-lang="typescript"><span class="ln">// Candidates: d3's tick sets for a few requested counts.</span><span class="ln del">const candidates = [3, 5, 10, 20].map((count) =&gt; {</span><span class="ln del">  const ts = ticks(0, MAX, count);</span><span class="ln del">  const labels = ts.map((v) =&gt; {</span><span class="ln del">    const s = fmt(v);</span><span class="ln del">    const w = measure(s, SIZE);</span><span class="ln del">    const cx = (v / MAX) * PW;</span><span class="ln del">    return { s, x0: cx - w / 2, x1: cx + w / 2, cx };</span><span class="ln del">  });</span><span class="ln">  // Two neighboring labels overlap when their measured boxes intersect.</span><span class="ln del">  let overlaps = 0;</span><span class="ln del">  for (let k = 1; k &lt; labels.length; k++) {</span><span class="ln del">    if (labels[k].x0 &lt; labels[k - 1].x1) overlaps++;</span><span class="ln del">  }</span><span class="ln del">  return { count, ts, labels, overlaps };</span><span class="ln del">});</span><span class="ln">// Among the overlap-free candidates, prefer more ticks.</span><span class="ln del">const best = argmin(candidates, (c) =&gt; c.overlaps * 1000 - c.ts.length);</span><span class="ln">// then the axis line, tick marks and labels are drawn by hand with rect and text</span></code></pre>
+            </details>
+          </div>
+        </div>
+        <p class="note">
+          The Talbot form needs <code>density</code> and
+          <code>simplicity</code> terms that only make sense for ticks. We would
+          add them only if a user asks (decision 10).
+        </p>
+      </article>
+
+      <h2 id="approaches">Approaches</h2>
+      <p class="small">
+        The design has three separate axes: where the choice appears in the
+        spec, how alternatives are ranked, and how <code>wrap</code> names its
+        break rule.
+      </p>
+
+      <h3>Axis 1. Where the choice appears</h3>
+      <div class="apgrid">
+        <div class="ap">
+          <h4>A. <code>choose</code> is a node over subtrees</h4>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">// waffle</span><span class="ln">choose(</span><span class="ln">  [4, 8, 12, 16, 24].map((cols) =&gt; wrap({ cols }, cells)),</span><span class="ln">  { cost: Cost.waste() }</span><span class="ln">)</span><span class="ln"></span><span class="ln">// axis label angle: the axis is chrome, so the choice has to wrap the whole chart</span><span class="ln">choose(</span><span class="ln">  [0, 45, 90].map((angle) =&gt;</span><span class="ln">    chart(data, { axes: { x: { label: { angle } } } }).flow(...).mark(...)</span><span class="ln">  )</span><span class="ln">)</span></code></pre>
+          <details class="py">
+            <summary>Python</summary>
+            <pre
+              class="code"
+            ><code data-lang="python"><span class="ln">choose([wrap(cells, cols=c) for c in [4, 8, 12, 16, 24]], cost=Cost.waste())</span></code></pre>
+          </details>
+          <ul>
+            <li class="pro">
+              It is the smallest addition. The pretty printer maps onto it one
+              to one.
+            </li>
+            <li class="con">
+              Axis options are hard to reach. The user has to repeat the whole
+              chart per alternative: today's whole-chart loop, moved into user
+              code.
+            </li>
+            <li class="con">
+              A continuous choice, e.g. an angle between 0 and 90, cannot be
+              written as a finite list of subtrees.
+            </li>
+          </ul>
+        </div>
+        <div class="ap rec">
+          <h4>
+            B. A node, and also an option value
+            <span class="tag rec">recommended</span>
+          </h4>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">// option value, discrete</span><span class="ln">axes: { x: { label: { angle: choose([0, 45, 90]) } } }</span><span class="ln"></span><span class="ln">// option value, a whole record per alternative (today's "auto" written out)</span><span class="ln">axes: {</span><span class="ln">  x: {</span><span class="ln">    label: choose([</span><span class="ln">      { angle: 0 },</span><span class="ln">      { angle: 45 },</span><span class="ln">      { angle: 90 },</span><span class="ln">      { hidden: true },</span><span class="ln">    ]),</span><span class="ln">  },</span><span class="ln">}</span><span class="ln"></span><span class="ln">// option value, an integer range with a cost</span><span class="ln">wrap({ cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }) })</span><span class="ln"></span><span class="ln">// option value, a continuous interval: the smallest angle that clears</span><span class="ln">axes: { x: { label: { angle: choose({ from: 0, to: 90 }) } } }</span><span class="ln"></span><span class="ln">// node form, for structurally different layouts</span><span class="ln">choose([flatIf, brokenIf])</span></code></pre>
+          <details class="py">
+            <summary>Python</summary>
+            <pre
+              class="code"
+            ><code data-lang="python"><span class="ln">axes={"x": {"label": {"angle": choose([0, 45, 90])}}}</span><span class="ln">wrap(cols=choose(start=4, stop=24, cost=Cost.waste()))</span><span class="ln">choose([flat_if, broken_if])</span></code></pre>
+          </details>
+          <ul>
+            <li class="pro">
+              One word covers every case in the examples list.
+            </li>
+            <li class="pro">
+              The axis case no longer repeats the chart. Only that axis is laid
+              out again per alternative.
+            </li>
+            <li class="pro">
+              A range or interval is a lazy list. For first fit over an interval
+              the engine can bisect, because overlap falls as the angle grows
+              (#486).
+            </li>
+            <li class="con">
+              An option that accepts <code>choose(...)</code> has to say so in
+              its type. We would start with <code>wrap.cols</code>,
+              <code>label.angle</code>, <code>label</code>,
+              <code>ticks.count</code> and <code>axes.x</code>.
+            </li>
+          </ul>
+        </div>
+        <div class="ap">
+          <h4>C. No user-facing choice, only strategies</h4>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">wrap({ cols: "auto" }) // square cells that fill the room</span><span class="ln">wrap({ break: Break.optimal() }) // Knuth-Plass</span><span class="ln">axes: { x: { label: { angle: "auto" }, ticks: { count: "auto" } } }</span></code></pre>
+          <ul>
+            <li class="pro">
+              It is the simplest surface, and it is close to what GoFish ships
+              today.
+            </li>
+            <li class="pro">
+              It is the runner-up and the first shipping step of B: every
+              <code>"auto"</code> is sugar for a <code>choose</code> that B
+              makes writable.
+            </li>
+            <li class="con">
+              The pretty printer cannot be written, because its alternatives are
+              arbitrary user subtrees.
+            </li>
+            <li class="con">
+              Each <code>"auto"</code> is a hidden conditional. The user cannot
+              change the candidate list or the order.
+            </li>
+          </ul>
+        </div>
+        <div class="ap">
+          <h4>D. Free variables and an objective (foil)</h4>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">const cols = variable({ from: 4, to: 24, integer: true });</span><span class="ln">chart(data, { minimize: [overflow(), waste()] }).flow(wrap({ cols }));</span></code></pre>
+          <ul>
+            <li class="pro">
+              It can express everything, including choices that interact across
+              the chart.
+            </li>
+            <li class="con">
+              The search is global, so the result is hard to predict and slow.
+              The user cannot tell which variable moved a mark.
+            </li>
+            <li class="con">
+              A variable used in two places couples two parts of the tree, which
+              breaks the rule that a choice stays inside one scale scope (#486).
+            </li>
+          </ul>
+        </div>
+      </div>
+      <p class="small">
+        The value form is sugar: "instantiate this node once per value, then
+        choose among those nodes", so B desugars to A.
+      </p>
+
+      <h3>Axis 2. How alternatives are ranked</h3>
+      <div class="apgrid">
+        <div class="ap rec">
+          <h4>
+            1. Preference order with a fit test
+            <span class="tag rec">recommended</span>
+          </h4>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">// first fit: the first alternative that fits, else the one that overflows least</span><span class="ln">axes: { x: { label: { angle: choose([0, 45, 90]) } } }</span></code></pre>
+          <ul>
+            <li class="pro">
+              This is <code>ViewThatFits</code>, Plotly and today's
+              <code>chooseFirstFit</code>. Cheap and predictable.
+            </li>
+            <li class="pro">
+              Fit: the layout stays inside the room the parent gives (#1292),
+              and the operator's own test passes, e.g. labels do not overlap or
+              cover an <code>avoiding</code> mark.
+            </li>
+            <li class="con">
+              If none fits, it takes the one that overflows least.
+            </li>
+          </ul>
+        </div>
+        <div class="ap rec">
+          <h4>
+            2. A <code>Cost</code> list <span class="tag rec">recommended</span>
+          </h4>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">choose(alternatives, { cost: [Cost.overflow(), Cost.lines()] }) // the pretty printer default</span><span class="ln">wrap({ cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }) })</span></code></pre>
+          <ul>
+            <li class="pro">
+              Named terms compared in order (lexicographic). Preference order is
+              the last tie breaker.
+            </li>
+            <li class="pro">
+              Terms follow the silhouette note's laws: every join is monotone
+              and the cost is an ordered monoid, so
+              <code>Cost.overflow</code> sums squared overflow instead of taking
+              a maximum.
+            </li>
+            <li class="con">
+              A function, <code>cost: layout =&gt; number</code>, waits for
+              #1101.
+            </li>
+            <li class="con">Users may expect a weighted sum.</li>
+          </ul>
+        </div>
+        <div class="ap">
+          <h4>3. Penalties on alternatives</h4>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">// a cost on one alternative (not proposed now)</span><span class="ln">choose([flatIf, brokenIf.cost(2)])</span></code></pre>
+          <ul>
+            <li class="pro">
+              Knuth-Plass penalties and the pretty printer's
+              <code>cost n d</code> attach a cost to one alternative.
+            </li>
+            <li class="con">
+              Not proposed now. Preference order covers the cases above. Listed
+              as decision 9.
+            </li>
+          </ul>
+        </div>
+      </div>
+      <p class="small">
+        Recommended: first fit by default, a <code>Cost</code> list when given.
+      </p>
+
+      <h3>Axis 3. How <code>wrap</code> names its break rule</h3>
+      <div class="apgrid two">
+        <div class="ap rec">
+          <h4>
+            A <code>Break</code> family <span class="tag rec">recommended</span>
+          </h4>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">wrap({ dir: "x", w: 260, spacing: "0.5ch", break: Break.optimal() }, words)</span><span class="ln">wrap({ cols: 10 }, cells) // fixed columns, no choice at all</span><span class="ln">wrap({ break: Break.group }, items) // all on one row, or one item per row</span><span class="ln">wrap({ break: Break.never }, items) // one row; the next item starts on the last row of a multi-row child</span></code></pre>
+          <ul>
+            <li class="pro">
+              Typst (<code>linebreaks: "optimized"</code>) and CSS (<code
+                >text-wrap-style: pretty</code
+              >) name the rule, not the cost.
+            </li>
+            <li class="pro">
+              <code>Break.group</code> and <code>Break.never</code> are not
+              costs.
+            </li>
+            <li class="pro">
+              Every <code>Break</code> strategy is still a
+              <code>choose</code> at each seam plus a cost, so it adds no new
+              search machinery.
+            </li>
+          </ul>
+        </div>
+        <div class="ap">
+          <h4>A <code>cost</code> on <code>wrap</code> directly</h4>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">wrap({ cost: Cost.badness() })</span></code></pre>
+          <ul>
+            <li class="pro">
+              It drops the family and puts the cost on
+              <code>wrap</code> directly.
+            </li>
+            <li class="con">
+              It cannot say <code>group</code> or <code>never</code>, which are
+              not costs.
+            </li>
+          </ul>
+        </div>
+      </div>
+      <p class="small">
+        <code>wrap</code> folds its children with a soft seam: at each seam the
+        layout either continues on the current row or breaks. This follows
+        silhouette note §7, which found that a wrap is the pretty printer's
+        <code>fill</code> (one choice per seam), not <code>group</code> (one
+        choice for all seams). <code>stack</code> and <code>spread</code> are
+        the same fold with fixed seams. <code>text</code> can then take a width,
+        e.g. <code>text({ text: para, w: 260, break: Break.optimal() })</code>,
+        which desugars to a <code>wrap</code> over one <code>text</code> per
+        word, so a multi-line label is not a new mark.
+      </p>
+
+      <details class="rat">
+        <summary>Terms</summary>
+        <ul>
+          <li>
+            <b>Alternative.</b> One of the layouts a <code>choose</code> node
+            can pick. An alternative is a subtree, or a value for an option.
+          </li>
+          <li>
+            <b>Fit.</b> An alternative fits when its layout stays inside the
+            room its parent gives it and passes the operator's own test, e.g.
+            axis labels that do not overlap.
+          </li>
+          <li>
+            <b>Cost.</b> A number, or a list of numbers compared in order, that
+            ranks alternatives. Lower is better. A list compared in order is
+            called lexicographic: the second number only matters when the first
+            numbers are equal.
+          </li>
+          <li>
+            <b>Seam.</b> The place between two neighboring children of a flow
+            operator. <code>stack</code> and <code>spread</code> have fixed
+            seams. A <code>wrap</code> seam is a choice between continuing on
+            the current row and breaking to a new row.
+          </li>
+          <li>
+            <b>Silhouette.</b> The summary of a child's shape that a parent uses
+            when it joins children, e.g. a box, or a box plus the width of its
+            last row. The term comes from
+            <code>notes/design/silhouette-interface.md</code>. We use
+            "silhouette" and not "measure" because <code>Measure</code>,
+            <code>measureText</code> and <code>ref.measure()</code> already mean
+            other things in GoFish.
+          </li>
+          <li>
+            <b>Pareto frontier.</b> The set of alternatives that no other
+            alternative beats on every count. A layout engine keeps this set and
+            drops the rest, so it does not have to try every combination.
+          </li>
+        </ul>
+      </details>
+      <details class="rat">
+        <summary>How it works today</summary>
+        <ul>
+          <li>
+            <code>src/ast/choice/choose.ts</code> has the whole-chart first-fit
+            loop:
+            <code>chooseFirstFit(candidates, run, score, fits)</code> returns
+            the first candidate that fits, otherwise the one with the lowest
+            <code>Score</code> (a <code>number[]</code> compared in order). Its
+            header says the loop should be replaced by a node-local choice with
+            a frontier (#486, #630).
+          </li>
+          <li>
+            <code>src/ast/axes/autoLabelAngle.ts</code> is the only client. It
+            tries <code>[0, 45, 90, "hidden"]</code> per label row and lays out
+            the whole chart again for each candidate.
+          </li>
+          <li>
+            <code>.label()</code> with <code>Place.around</code> has its own
+            first-fit chooser (<code>labels/placeStep.ts</code>) that gives each
+            label its first free position.
+          </li>
+          <li>
+            There is no <code>wrap</code> operator. The old
+            <code>wrap</code> (an enclosure) was deleted in #396.
+            <code>chunk(n)</code> and <code>table({ numCols })</code> give fixed
+            rows.
+          </li>
+          <li>
+            The layout protocol returns one box per axis. The silhouette note
+            already defines the richer summary and says it stays inside the
+            operator that declares it. Only the box leaves.
+          </li>
+        </ul>
+      </details>
+
+      <h2 id="precedent">Precedent</h2>
+      <div class="pgrid">
+        <div class="pc">
+          <h4>Pretty expressive printer</h4>
+          <pre
+            class="code"
+          ><code data-lang="plaintext"><span class="ln">text s   nl   a &lt;&gt; b   nest n d   align d</span><span class="ln">a &lt;|&gt; b      -- choice between two layouts</span><span class="ln">cost n d     -- a penalty on one layout</span></code></pre>
+          <dl>
+            <dt>Decides</dt>
+            <dd>which branch of each <code>&lt;|&gt;</code></dd>
+            <dt>Cost</dt>
+            <dd>
+              a user-supplied cost factory: a totally ordered monoid with
+              <code>text c len</code>, <code>newline i</code>,
+              <code>combine</code>, <code>le</code>, <code>limit</code>. Default
+              is (sum of squared overflow, newline count).
+            </dd>
+          </dl>
+          <figure>
+            <div class="plate">
+              <a href="img/prior/pretty-expressive-fig1.png"
+                ><img
+                  src="img/prior/pretty-expressive-fig1.png"
+                  alt="Figure 1 of the pretty expressive printer paper"
+              /></a>
+            </div>
+            <figcaption>
+              <span class="cite"
+                >Porncharoenwase, Pombrio, Torlak, OOPSLA 2023, Fig. 1.</span
+              >
+            </figcaption>
+          </figure>
+          <p class="links">
+            <a href="https://arxiv.org/abs/2310.01530">arXiv</a>
+            <a href="https://docs.racket-lang.org/pretty-expressive/"
+              >Racket docs</a
+            >
+          </p>
+        </div>
+        <div class="pc">
+          <h4>Bernardy, a pretty but not greedy printer</h4>
+          <pre
+            class="code"
+          ><code data-lang="plaintext"><span class="ln">text   flush   a &lt;&gt; b   a &lt;|&gt; b</span></code></pre>
+          <dl>
+            <dt>Decides</dt>
+            <dd>the layout with fewest lines that fits</dd>
+            <dt>Cost</dt>
+            <dd>
+              the measure <code>(height, maxWidth, lastWidth)</code>, pruned to
+              a Pareto frontier
+            </dd>
+          </dl>
+          <figure>
+            <div class="plate">
+              <a href="img/prior/bernardy2017-measure-concat.png"
+                ><img
+                  src="img/prior/bernardy2017-measure-concat.png"
+                  alt="The measure and its concatenation diagram"
+              /></a>
+            </div>
+            <figcaption>
+              <span class="cite">Bernardy, ICFP 2017.</span>
+            </figcaption>
+          </figure>
+          <p class="links">
+            <a href="https://jyp.github.io/pdf/Prettiest.pdf">paper</a>
+          </p>
+        </div>
+        <div class="pc">
+          <h4>Knuth-Plass, TeX, tex-linebreak</h4>
+          <pre
+            class="code"
+          ><code data-lang="plaintext"><span class="ln">box(width)</span><span class="ln">glue(width, stretch, shrink)</span><span class="ln">penalty(cost)</span></code></pre>
+          <dl>
+            <dt>Decides</dt>
+            <dd>breakpoints</dd>
+            <dt>Cost</dt>
+            <dd>
+              sum of demerits from badness <code>100·|r|³</code>, dynamic
+              programming over feasible breaks
+            </dd>
+          </dl>
+          <div class="trio">
+            <figure>
+              <div class="plate">
+                <a href="img/prior/texlinebreak-knuth-plass.png"
+                  ><img
+                    src="img/prior/texlinebreak-knuth-plass.png"
+                    alt="tex-linebreak Knuth-Plass justification"
+                /></a>
+              </div>
+              <figcaption>Knuth-Plass</figcaption>
+            </figure>
+            <figure>
+              <div class="plate">
+                <a href="img/prior/texlinebreak-safari-justify.png"
+                  ><img
+                    src="img/prior/texlinebreak-safari-justify.png"
+                    alt="Safari text-align justify"
+                /></a>
+              </div>
+              <figcaption>Safari justify</figcaption>
+            </figure>
+            <figure>
+              <div class="plate">
+                <a href="img/prior/texlinebreak-chrome-justify-hyphens.png"
+                  ><img
+                    src="img/prior/texlinebreak-chrome-justify-hyphens.png"
+                    alt="Chrome justify with hyphens"
+                /></a>
+              </div>
+              <figcaption>Chrome justify, hyphens</figcaption>
+            </figure>
+          </div>
+          <p class="links">
+            <a href="https://github.com/robertknight/tex-linebreak"
+              >tex-linebreak</a
+            >
+          </p>
+        </div>
+        <div class="pc">
+          <h4>CSS and Typst</h4>
+          <pre
+            class="code"
+          ><code data-lang="css"><span class="ln">p { text-wrap: pretty; }   /* or balance */</span><span class="ln"></span><span class="ln">#set par(linebreaks: "optimized")</span><span class="ln">#set text(costs: (runt: 100%, widow: 100%))</span></code></pre>
+          <dl>
+            <dt>Decides</dt>
+            <dd>breakpoints</dd>
+            <dt>Cost</dt>
+            <dd>built in. Typst exposes weights by name.</dd>
+          </dl>
+          <p class="links">
+            <a
+              href="https://webkit.org/blog/16547/better-typography-with-text-wrap-pretty/"
+              >WebKit text-wrap: pretty</a
+            >
+            <a href="https://typst.app/docs/reference/model/par/">Typst par</a>
+          </p>
+        </div>
+        <div class="pc">
+          <h4>Observable Plot <code>waffleY</code></h4>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">Plot.waffleY(data, { unit, multiple, gap, round })</span><span class="ln"></span><span class="ln">// multiple = floor(sqrt(bandwidth / scale))</span></code></pre>
+          <dl>
+            <dt>Decides</dt>
+            <dd><code>multiple</code> (cells per row)</dd>
+            <dt>Cost</dt>
+            <dd>none. A closed form that makes cells square.</dd>
+          </dl>
+          <figure>
+            <div class="plate">
+              <a href="img/prior/plot-waffle.png"
+                ><img
+                  src="img/prior/plot-waffle.png"
+                  alt="An Observable Plot waffle histogram"
+              /></a>
+            </div>
+            <figcaption>Observable Plot <code>waffleY</code>.</figcaption>
+          </figure>
+          <p class="links">
+            <a href="https://github.com/observablehq/plot"
+              >src/marks/waffle.js</a
+            >
+          </p>
+        </div>
+        <div class="pc">
+          <h4>Plotly</h4>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">xaxis: { tickangle: "auto", autotickangles: [0, 30, 90], nticks }</span></code></pre>
+          <dl>
+            <dt>Decides</dt>
+            <dd>the first angle that clears</dd>
+            <dt>Cost</dt>
+            <dd>first fit in list order</dd>
+          </dl>
+          <p class="links">
+            <a href="https://github.com/plotly/plotly.js"
+              >layout_attributes.js</a
+            >
+          </p>
+        </div>
+        <div class="pc">
+          <h4>Vega and Vega-Lite</h4>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">"axis": { "labelOverlap": "parity", "labelAngle": 45 }</span><span class="ln">// or "labelOverlap": "greedy"</span></code></pre>
+          <dl>
+            <dt>Decides</dt>
+            <dd>which labels to hide</dd>
+            <dt>Cost</dt>
+            <dd>a repair loop. The angle is never chosen.</dd>
+          </dl>
+          <p class="links">
+            <a href="https://github.com/vega/vega">Overlap.js</a>
+          </p>
+        </div>
+        <div class="pc">
+          <h4>Talbot, Lin, Hanrahan</h4>
+          <pre
+            class="code"
+          ><code data-lang="plaintext"><span class="ln">0.2·simplicity + 0.25·coverage + 0.5·density + 0.05·legibility</span><span class="ln">// overlap is minus infinity</span></code></pre>
+          <dl>
+            <dt>Decides</dt>
+            <dd>
+              step, count, start, format, font size, orientation, from a data
+              range, nice steps, target density and font size
+            </dd>
+            <dt>Cost</dt>
+            <dd>the weighted sum above</dd>
+          </dl>
+          <figure>
+            <div class="plate">
+              <a href="img/prior/talbot2010-fig1.png"
+                ><img
+                  src="img/prior/talbot2010-fig1.png"
+                  alt="Figure 1 of Talbot et al. comparing axis labeling algorithms"
+              /></a>
+            </div>
+            <figcaption>
+              <span class="cite"
+                >Talbot, Lin, Hanrahan, InfoVis 2010, Fig. 1.</span
+              >
+            </figcaption>
+          </figure>
+          <p class="links">
+            <a href="http://vis.stanford.edu/files/2010-TickLabels-InfoVis.pdf"
+              >paper</a
+            >
+          </p>
+        </div>
+        <div class="pc">
+          <h4>SwiftUI <code>ViewThatFits</code></h4>
+          <pre
+            class="code"
+          ><code data-lang="swift"><span class="ln">ViewThatFits {</span><span class="ln">  HStack { a; b; c }</span><span class="ln">  VStack { a; b; c }</span><span class="ln">}</span></code></pre>
+          <dl>
+            <dt>Decides</dt>
+            <dd>the first child whose ideal size fits the proposed size</dd>
+            <dt>Cost</dt>
+            <dd>first fit</dd>
+          </dl>
+          <p class="links">
+            <a
+              href="https://developer.apple.com/documentation/swiftui/viewthatfits"
+              >Apple docs</a
+            >
+          </p>
+        </div>
+        <div class="pc">
+          <h4>Draco</h4>
+          <pre
+            class="code"
+          ><code data-lang="plaintext"><span class="ln">% ASP facts and soft constraints with weights</span><span class="ln">attribute((mark,type),m0,bar).</span></code></pre>
+          <dl>
+            <dt>Decides</dt>
+            <dd>a whole chart spec</dd>
+            <dt>Cost</dt>
+            <dd>
+              weighted sum of soft constraint violations. The foil: GoFish keeps
+              the choice local to one node.
+            </dd>
+          </dl>
+          <p class="links">
+            <a href="https://github.com/cmudig/draco2">draco2</a>
+          </p>
+        </div>
+      </div>
+      <details class="rat">
+        <summary>Full prior work table, and lessons for GoFish</summary>
+        <div class="tw">
+          <table>
+            <thead>
+              <tr>
+                <th>System</th>
+                <th>What the user writes</th>
+                <th>What the system decides</th>
+                <th>Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  Pretty expressive printer (Porncharoenwase, Pombrio, Torlak,
+                  OOPSLA 2023)
+                </td>
+                <td>
+                  <code>text</code>, <code>nl</code>, <code>&lt;&gt;</code>,
+                  <code>nest</code>, <code>align</code>,
+                  <code>a &lt;|&gt; b</code>, <code>cost n d</code>
+                </td>
+                <td>which branch of each <code>&lt;|&gt;</code></td>
+                <td>
+                  a user-supplied "cost factory": a totally ordered monoid with
+                  <code>text c len</code>, <code>newline i</code>,
+                  <code>combine</code>, <code>le</code>, <code>limit</code>.
+                  Default is (sum of squared overflow, newline count)
+                </td>
+              </tr>
+              <tr>
+                <td>Bernardy, "A pretty but not greedy printer" (ICFP 2017)</td>
+                <td>
+                  <code>text</code>, <code>flush</code>, <code>&lt;&gt;</code>,
+                  <code>&lt;|&gt;</code>
+                </td>
+                <td>the layout with fewest lines that fits</td>
+                <td>
+                  the measure <code>(height, maxWidth, lastWidth)</code>, pruned
+                  to a Pareto frontier
+                </td>
+              </tr>
+              <tr>
+                <td>Wadler, "A prettier printer"; Prettier</td>
+                <td>
+                  <code>group</code>, <code>nest</code>, <code>line</code>,
+                  <code>conditionalGroup([...])</code>
+                </td>
+                <td>which groups are flattened</td>
+                <td>greedy: the first line must fit</td>
+              </tr>
+              <tr>
+                <td>Knuth and Plass (1981); TeX; <code>tex-linebreak</code></td>
+                <td>boxes, glue (width, stretch, shrink), penalties</td>
+                <td>breakpoints</td>
+                <td>
+                  sum of demerits from badness <code>100·|r|³</code>, dynamic
+                  programming over feasible breaks
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  CSS <code>text-wrap: pretty | balance</code>; Typst
+                  <code>par(linebreaks: "optimized")</code>
+                </td>
+                <td>one keyword</td>
+                <td>breakpoints</td>
+                <td>
+                  built in. Typst exposes weights:
+                  <code>text(costs: (runt: 100%, widow: 100%, ...))</code>
+                </td>
+              </tr>
+              <tr>
+                <td>Observable Plot <code>waffleY</code></td>
+                <td>
+                  <code>unit</code>, <code>multiple</code>, <code>gap</code>,
+                  <code>round</code>
+                </td>
+                <td><code>multiple</code> (cells per row)</td>
+                <td>
+                  none. A closed form:
+                  <code>multiple = floor(sqrt(bandwidth / scale))</code>, which
+                  makes cells square
+                </td>
+              </tr>
+              <tr>
+                <td>R <code>waffle</code>, pywaffle</td>
+                <td>
+                  <code>n_rows</code>, <code>rows</code> / <code>columns</code>
+                </td>
+                <td>the other dimension</td>
+                <td>none</td>
+              </tr>
+              <tr>
+                <td>Plotly</td>
+                <td>
+                  <code>tickangle: "auto"</code>,
+                  <code>autotickangles: [0, 30, 90]</code>, <code>nticks</code>
+                </td>
+                <td>the first angle that clears</td>
+                <td>first fit in list order</td>
+              </tr>
+              <tr>
+                <td>Vega and Vega-Lite</td>
+                <td>
+                  <code>labelOverlap: "parity" | "greedy"</code>,
+                  <code>labelAngle</code>
+                </td>
+                <td>which labels to hide</td>
+                <td>a repair loop, the angle is never chosen</td>
+              </tr>
+              <tr>
+                <td>Talbot, Lin, Hanrahan (InfoVis 2010)</td>
+                <td>data range, nice steps, target density, font size</td>
+                <td>step, count, start, format, font size, orientation</td>
+                <td>
+                  weighted sum
+                  <code
+                    >0.2·simplicity + 0.25·coverage + 0.5·density +
+                    0.05·legibility</code
+                  >. Overlap is minus infinity
+                </td>
+              </tr>
+              <tr>
+                <td>SwiftUI <code>ViewThatFits</code></td>
+                <td>children in order of preference</td>
+                <td>the first child whose ideal size fits the proposed size</td>
+                <td>first fit</td>
+              </tr>
+              <tr>
+                <td>Draco</td>
+                <td>ASP facts and soft constraints with weights</td>
+                <td>a whole chart spec</td>
+                <td>weighted sum of soft constraint violations</td>
+              </tr>
+              <tr>
+                <td>SUPPLE (Gajos and Weld 2004)</td>
+                <td>widget alternatives for each value</td>
+                <td>which widget</td>
+                <td>branch and bound over a cost, under a screen size</td>
+              </tr>
+              <tr>
+                <td>Jacobs et al., adaptive grid layout (SIGGRAPH 2003)</td>
+                <td>page templates</td>
+                <td>a template per page</td>
+                <td>dynamic programming over a cost</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h4>Lessons for GoFish</h4>
+        <ul>
+          <li>
+            Every system with real optimization has four parts. It has
+            alternatives as a node, a summary of each layout that composes
+            bottom up, a cost that is an ordered monoid, and a search that
+            prunes dominated layouts. The pretty expressive printer states the
+            laws the cost must follow, and the silhouette note already restates
+            them for GoFish.
+          </li>
+          <li>
+            First fit (<code>ViewThatFits</code>, Plotly, Prettier's
+            <code>conditionalGroup</code>) is the case where the list order is
+            the cost. It is cheap, and users can predict it. It covers label
+            angle, tick count and most label placement.
+          </li>
+          <li>
+            Plot's waffle rule is what a cost search returns when the answer has
+            a closed form. GoFish can ship the general form and still compute
+            the closed form as a fast path.
+          </li>
+          <li>
+            Typst's <code>costs</code> and Talbot's weights are the precedent
+            for exposing cost terms by name, with weights, instead of asking
+            users to write a cost function.
+          </li>
+          <li>
+            Draco and Penrose put the whole chart under one objective. That is
+            the foil. GoFish keeps the choice local to one node so the user can
+            see what is chosen and why.
+          </li>
+        </ul>
+      </details>
+
+      <h2 id="tables">Tables</h2>
+      <h3>The <code>Break</code> family</h3>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Strategy</th>
+              <th>Rule</th>
+              <th>Written as <code>choose</code> plus cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>Break.greedy</code></td>
+              <td>continue while the next item fits</td>
+              <td>first fit at each seam, from the start</td>
+            </tr>
+            <tr>
+              <td><code>Break.optimal({ tolerance? })</code></td>
+              <td>Knuth-Plass, lowest total badness</td>
+              <td>
+                <code>choose</code> at each seam,
+                <code>cost: Cost.badness()</code>
+              </td>
+            </tr>
+            <tr>
+              <td><code>Break.balance</code></td>
+              <td>rows of nearly equal length</td>
+              <td>
+                <code>choose</code> at each seam, minimize the largest slack
+              </td>
+            </tr>
+            <tr>
+              <td><code>Break.group</code></td>
+              <td>all seams continue, or all break</td>
+              <td>one <code>choose</code> over two layouts</td>
+            </tr>
+            <tr>
+              <td><code>Break.never</code></td>
+              <td>all seams continue</td>
+              <td>no choice</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>The <code>Cost</code> family, a first set of terms</h3>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Term</th>
+              <th>Meaning</th>
+              <th>Used by</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>Cost.overflow()</code></td>
+              <td>
+                ink outside the room, squared and summed per row, as in the
+                pretty expressive printer
+              </td>
+              <td>pretty printing, wrap</td>
+            </tr>
+            <tr>
+              <td><code>Cost.overlap()</code></td>
+              <td>
+                total overlap area between labels or marks that should not touch
+              </td>
+              <td>axis labels, tick count, label placement</td>
+            </tr>
+            <tr>
+              <td><code>Cost.waste()</code></td>
+              <td>the fraction of the room left empty</td>
+              <td>waffle, treemap rows</td>
+            </tr>
+            <tr>
+              <td><code>Cost.lines()</code></td>
+              <td>the number of rows</td>
+              <td>pretty printing</td>
+            </tr>
+            <tr>
+              <td><code>Cost.badness()</code></td>
+              <td>
+                Knuth-Plass badness, <code>100·(slack/stretch)³</code> per row,
+                last row free
+              </td>
+              <td><code>Break.optimal</code></td>
+            </tr>
+            <tr>
+              <td><code>Cost.weighted({ ... })</code></td>
+              <td>
+                a weighted sum of other terms, in the style of Talbot and Typst
+              </td>
+              <td>tick choice in the Talbot style</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="small">
+        A function is the escape hatch, e.g.
+        <code>cost: layout =&gt; number</code>. It waits for #1101. The pretty
+        expressive paper shows that (max overflow, height) breaks monotonicity,
+        so the engine could not prune with it; that is why
+        <code>Cost.overflow</code> sums squared overflow.
+      </p>
+      <h3>Pretty expressive printer to GoFish</h3>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Pretty expressive</th>
+              <th>GoFish</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>text s</code></td>
+              <td><code>text({ text: s })</code></td>
+            </tr>
+            <tr>
+              <td><code>a &lt;&gt; b</code> (continue on the last row)</td>
+              <td><code>wrap({ break: Break.never }, [a, b])</code></td>
+            </tr>
+            <tr>
+              <td><code>a &lt;$&gt; b</code> (newline)</td>
+              <td><code>stack({ dir: "y", align: "start" }, [a, b])</code></td>
+            </tr>
+            <tr>
+              <td><code>align d</code></td>
+              <td>
+                a <code>stack</code> starts its rows at the column where it
+                begins
+              </td>
+            </tr>
+            <tr>
+              <td><code>nest n d</code></td>
+              <td>
+                <code>offset({ x: n }, d)</code> inside a <code>stack</code>
+              </td>
+            </tr>
+            <tr>
+              <td><code>a &lt;|&gt; b</code></td>
+              <td><code>choose([a, b])</code></td>
+            </tr>
+            <tr>
+              <td>cost factory</td>
+              <td>
+                <code>cost: [Cost.overflow(), Cost.lines()]</code>, and later a
+                function (#1101)
+              </td>
+            </tr>
+            <tr>
+              <td>page width</td>
+              <td>the room from <code>render(container, { w })</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="small">
+        The layout of a wrapped S-expression is a union of row boxes: a first
+        row, a block, and a last row that can end early. The next item continues
+        on that last row. This is the silhouette <code>(h, w, ℓ)</code> from the
+        silhouette note. It stays inside <code>wrap</code> and
+        <code>choose</code>. Outside, the node has its box, and its outline has
+        one part per row, so <code>enclose</code>, <code>.label()</code> and
+        <code>ref</code> can follow the staircase shape.
+      </p>
+      <p class="small">
+        One difference remains. The pretty expressive printer's
+        <code>&lt;&gt;</code> is unaligned, so the next row of the right side
+        starts at the indentation level and not at the column where the right
+        side began. GoFish places children by box, so every multi-row child is
+        aligned. Aligned concatenation covers the Lisp and JSON styles. The
+        C-style <code>nest</code> with unaligned rows would need
+        <code>offset</code> with a negative x or a new join, and we leave it
+        out.
+      </p>
+      <h3>Overlap with existing operators</h3>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Existing</th>
+              <th>Relation</th>
+              <th>Regime</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>angle: "auto"</code>, <code>chooseFirstFit</code></td>
+              <td>
+                <code>"auto"</code> becomes named sugar for a written-out
+                <code>choose</code>
+              </td>
+              <td>exact rewrite, delete the special loop</td>
+            </tr>
+            <tr>
+              <td><code>.label({ position: Place.around })</code></td>
+              <td>
+                each label's first free position is a <code>choose</code> over
+                <code>Place.along</code> candidates, with an overlap fit test
+              </td>
+              <td>
+                exact rewrite. The placer becomes a client of
+                <code>choose</code>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>spread({ by: chunk(n) })</code>,
+                <code>table({ numCols })</code>
+              </td>
+              <td>
+                a fixed-columns <code>wrap</code> is the same as nested spreads
+                over chunks
+              </td>
+              <td>
+                exact rewrite. We define <code>wrap({ cols })</code> by it.
+                <code>chunk</code> stays for other uses
+              </td>
+            </tr>
+            <tr>
+              <td><code>stack</code>, <code>spread</code></td>
+              <td>the same fold, with fixed seams instead of soft ones</td>
+              <td>shared mechanism, degenerate overlap</td>
+            </tr>
+            <tr>
+              <td><code>Overlap</code> family (<code>scatter</code>)</td>
+              <td>deterministic, no alternatives</td>
+              <td>none</td>
+            </tr>
+            <tr>
+              <td>region <code>union</code> (shape compositing)</td>
+              <td>
+                the name is taken, so we do not call the row geometry a "union"
+                in the API
+              </td>
+              <td>none, naming only</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="decisions">Decisions for Josh</h2>
+      <div class="prose">
+        <ol class="dec">
+          <li>
+            Is the operator called <code>choose</code>? Other options are
+            <code>choice</code>, <code>alt</code>, <code>oneOf</code> and
+            <code>firstOf</code>.
+          </li>
+          <li>
+            Should <code>choose</code> also be an option value (B), or only a
+            node (A)?
+          </li>
+          <li>
+            Is first fit in list order the default, with <code>cost</code> as
+            the override? The other option is to always minimize a default cost.
+          </li>
+          <li>
+            Is <code>cost</code> a lexicographic list of
+            <code>Cost</code> terms, with <code>Cost.weighted</code> for sums?
+          </li>
+          <li>
+            Is the range spelled <code>choose({ from: 4, to: 24 })</code>, with
+            an integer step when both ends are integers? Python would use
+            <code>choose(start=4, stop=24)</code>.
+          </li>
+          <li>
+            Does <code>wrap</code> take a <code>Break</code> family, or a
+            <code>cost</code> directly?
+          </li>
+          <li>
+            Does <code>text</code> take <code>w</code> and
+            <code>break</code> and desugar to a <code>wrap</code> over words?
+          </li>
+          <li>
+            Does <code>"auto"</code> stay as named sugar, with the docs showing
+            its expansion?
+          </li>
+          <li>
+            Do we want penalties on alternatives now
+            (<code>node.cost(2)</code>), or later?
+          </li>
+          <li>
+            Do tick-specific cost terms (<code>density</code>,
+            <code>simplicity</code>) belong in <code>Cost</code>, or should tick
+            count stay first fit only?
+          </li>
+        </ol>
+      </div>
+
+      <h2 id="shipping">Shipping order</h2>
+      <div class="prose">
+        <ol>
+          <li>
+            <code>wrap</code> with fixed <code>cols</code> and
+            <code>Break.greedy</code>. No choice machinery, works on today's
+            engine (#122 comment, 07-12).
+          </li>
+          <li>
+            <code>choose</code> with first fit as a node and as an option value.
+            Port <code>angle: "auto"</code> and the label placer to it, and
+            delete <code>chooseFirstFit</code>'s whole-chart loop.
+          </li>
+          <li>
+            <code>Cost</code> with a frontier inside <code>wrap</code> and
+            <code>choose</code>. <code>Break.optimal</code>,
+            <code>cols: choose(...)</code> with <code>Cost.waste()</code>, and
+            pretty printing. This step needs the cross-axis claim
+            <code>h(w)</code> for a wrap whose width comes from the room
+            (silhouette note §6).
+          </li>
+        </ol>
+      </div>
+
+      <h2 id="issues">Related issues</h2>
+      <div class="prose">
+        <ul>
+          <li>
+            <b>#486</b> Choice operator and cost-based selection that
+            generalizes the pretty printer. The parent issue for this proposal.
+          </li>
+          <li>
+            <b>#122</b> Wrap operator for faceting, waffles and text. The 07-12
+            comment says wrap is <code>fill</code>, not <code>group</code>.
+          </li>
+          <li>
+            <b>#1194</b> Tick density, label angle and label placement as one
+            composable mechanism.
+          </li>
+          <li>
+            <b>#1063</b> Ticks that account for their labels, in the style of
+            Talbot et al.
+          </li>
+          <li>
+            <b>#630</b> Add <code>min</code> to the claim algebra, which is how
+            a choice reports its size.
+          </li>
+          <li>
+            <b>#961</b> <code>labelAngle: "auto"</code>, the first choice client
+            (merged).
+          </li>
+          <li>
+            <b>#1017</b> Make <code>"auto"</code> the default once it is cheap.
+          </li>
+          <li><b>#1151</b> Per-chart label angles.</li>
+          <li><b>#40</b> Document pretty printing.</li>
+          <li><b>#739</b> Grid and waffle reshape primitive.</li>
+          <li><b>#1128</b> <code>chunk</code> with a size per group.</li>
+          <li>
+            <b>#663</b> Atom unit grids with a unit size derived from the fit.
+          </li>
+          <li><b>#1153</b> Calendar heatmap with months in a wrapped grid.</li>
+          <li>
+            <b>#290</b> <code>.stack()</code> as a mark method. The silhouette
+            note says wrap dissolves it for waffles.
+          </li>
+          <li>
+            <b>#1292</b> A node with no own size uses its parent's proposal, in
+            the style of SwiftUI.
+          </li>
+          <li><b>#1101</b> How a strategy family accepts a user function.</li>
+          <li>
+            <b>#485</b> Relational core plus solver tactics for the cases a
+            frontier cannot handle.
+          </li>
+          <li><b>#806</b> Draft design note on choice-based layout.</li>
+          <li>
+            <b>#396</b> Removal of the old enclosure <code>wrap</code>, so the
+            name is free.
+          </li>
+        </ul>
+      </div>
+
+      <h2 id="rationale">Rationale</h2>
+      <details class="rat">
+        <summary>How it composes</summary>
+        <ul>
+          <li>
+            <b>Layout engine.</b> A <code>choose</code> node lays out each
+            alternative in the room its parent gives, and keeps the chosen one.
+            When the parent asks for its size before giving room,
+            <code>choose</code> reports the smallest size among its
+            alternatives. That is the <code>min</code> in the claim algebra
+            (#630), and monotone piecewise-linear claims stay invertible under
+            <code>min</code>.
+          </li>
+          <li>
+            <b>Scale scopes.</b> A choice must not change a scale domain (#486).
+            Alternatives that would give different domains are an error. The
+            search is bounded to the scope that holds the <code>choose</code>.
+          </li>
+          <li>
+            <b>Silhouettes.</b> <code>wrap</code> and <code>choose</code> keep a
+            Pareto frontier of <code>(silhouette, cost)</code> pairs inside
+            their scope and commit one at the boundary. Outside, only the box
+            leaves. This is the silhouette note's Law 2, so no existing operator
+            changes.
+          </li>
+          <li>
+            <b>Coordinate transforms.</b> The choice is made in the layout
+            space, before the coordinate transform. In polar coordinates
+            <code>Cost.overflow</code> measures the box, not the arc. That is
+            fine for labels and wraps, which do not bend.
+          </li>
+          <li>
+            <b>Animation.</b> A choice can change between frames. A tween
+            between two alternatives moves shared marks by key. A choice that
+            flips back and forth while a value changes is a known risk. We would
+            add hysteresis only if it shows up.
+          </li>
+          <li>
+            <b>Data types.</b> Nothing new. Ranges in
+            <code>choose({ from, to })</code> are plain numbers.
+          </li>
+          <li>
+            <b>Python.</b> <code>choose</code> is a builtin construct with a
+            list of children or values. Costs are
+            <code>Cost.overflow()</code> as strategies in the
+            <code>STRATEGIES</code> table. A cost function crosses through the
+            callback runner once #1101 decides its spelling.
+          </li>
+        </ul>
+      </details>
+      <details class="rat">
+        <summary>Trade-offs</summary>
+        <ul>
+          <li>
+            <b>Easy.</b> Every example above is a few lines. The default (first
+            fit) is predictable. Costs are named terms that a user can read.
+          </li>
+          <li>
+            <b>Awkward.</b> Options have to declare that they accept
+            <code>choose</code>. A cost over several terms is lexicographic, and
+            users may expect a weighted sum. Unaligned concatenation is left
+            out.
+          </li>
+          <li>
+            <b>New terms.</b> <code>choose</code>, <code>wrap</code>,
+            <code>Cost</code>, <code>Break</code>. "Silhouette" stays internal.
+          </li>
+          <li>
+            <b>Extension cost.</b> New cost terms are new entries in the
+            <code>Cost</code> family. User cost functions wait for #1101. A new
+            <code>Break</code> strategy is a cost plus a search, so it adds no
+            engine code beyond its cost.
+          </li>
+        </ul>
+      </details>
+      <details class="rat">
+        <summary>Recommendation</summary>
+        <p>
+          Approach B with first fit by default, a <code>Cost</code> list when
+          given, and <code>wrap</code> with <code>Break</code>.
+        </p>
+        <ul>
+          <li>
+            <b>It desugars into the core.</b> The value form desugars to the
+            node form. <code>Break</code> strategies desugar to
+            <code>choose</code> at each seam plus a cost.
+            <code>"auto"</code> desugars to a written-out <code>choose</code>.
+            The core grows by one operator and one internal summary
+            (<code>principles.md</code>, "Why keep the core small").
+          </li>
+          <li>
+            <b>One concept is one operator.</b> Label angle, tick count, label
+            placement, waffle columns, line breaks and pretty printing all use
+            <code>choose</code>. Two existing first-fit loops (<code
+              >chooseFirstFit</code
+            >
+            and the label placer) become clients of it
+            (<code>api-design.md</code>, "One concept is one operator").
+          </li>
+          <li>
+            <b>Names match precedent.</b> <code>wrap</code> is the CSS and
+            Flutter word. <code>choose</code> is a plain verb. It avoids the
+            pretty printer's <code>group</code>, which already means something
+            else in GoFish, and <code>alt</code>, which is jargon.
+            <code>Break</code> and <code>Cost</code> follow the strategy family
+            pattern (<code>Tile</code>, <code>Curve</code>).
+          </li>
+          <li>
+            <b>Closed kinds plus a function.</b> <code>Cost</code> and
+            <code>Break</code> are closed families like the others, and the
+            function escape hatch is #1101's question, not a new one.
+          </li>
+          <li>
+            <b>Same shape in JS and Python.</b>
+            <code>choose([...], cost=[Cost.overflow()])</code> in both.
+          </li>
+        </ul>
+        <p>
+          The runner-up is Approach C. It is a subset of B, with the same engine
+          and no user-facing <code>choose</code>. If you want to ship waffles
+          and Knuth-Plass before deciding on the value form, ship
+          <code>wrap({ cols: "auto" })</code> and <code>Break</code> first. Each
+          <code>"auto"</code> is then a named <code>choose</code> that B makes
+          writable later. We would switch to C for good only if the value form
+          turns out to be confusing in the type of every option.
+        </p>
+      </details>
+
+      <h2 id="sources">Sources</h2>
+      <div class="prose small">
+        <ul>
+          <li>
+            Porncharoenwase, Pombrio, Torlak. A Pretty Expressive Printer.
+            OOPSLA 2023. <a href="https://arxiv.org/abs/2310.01530">arXiv</a>,
+            <a href="https://docs.racket-lang.org/pretty-expressive/"
+              >Racket docs</a
+            >
+          </li>
+          <li>
+            Bernardy. A Pretty But Not Greedy Printer. ICFP 2017.
+            <a href="https://jyp.github.io/pdf/Prettiest.pdf">PDF</a>
+          </li>
+          <li>Wadler. A prettier printer. 2003.</li>
+          <li>
+            Knuth, Plass. Breaking Paragraphs into Lines. Software: Practice and
+            Experience, 1981.
+            <a href="https://github.com/robertknight/tex-linebreak"
+              >tex-linebreak</a
+            >
+          </li>
+          <li>
+            Observable Plot waffle mark, <code>src/marks/waffle.js</code>.
+            <a href="https://github.com/observablehq/plot"
+              >github.com/observablehq/plot</a
+            >
+          </li>
+          <li>
+            Plotly <code>autotickangles</code>,
+            <code>src/plots/cartesian/layout_attributes.js</code>.
+            <a href="https://github.com/plotly/plotly.js"
+              >github.com/plotly/plotly.js</a
+            >
+          </li>
+          <li>
+            Vega overlap transform,
+            <code>packages/vega-view-transforms/src/Overlap.js</code>.
+            <a href="https://github.com/vega/vega">github.com/vega/vega</a>
+          </li>
+          <li>
+            Talbot, Lin, Hanrahan. An Extension of Wilkinson's Algorithm for
+            Positioning Tick Labels on Axes. InfoVis 2010.
+            <a href="http://vis.stanford.edu/files/2010-TickLabels-InfoVis.pdf"
+              >PDF</a
+            >
+          </li>
+          <li>
+            SwiftUI <code>ViewThatFits</code>.
+            <a
+              href="https://developer.apple.com/documentation/swiftui/viewthatfits"
+              >Apple docs</a
+            >
+          </li>
+          <li>
+            WebKit, <code>text-wrap: pretty</code>.
+            <a
+              href="https://webkit.org/blog/16547/better-typography-with-text-wrap-pretty/"
+              >webkit.org</a
+            >
+          </li>
+          <li>
+            Typst <code>par</code> and <code>text(costs:)</code>.
+            <a href="https://typst.app/docs/reference/model/par/">typst.app</a>
+          </li>
+          <li>
+            Draco 2.
+            <a href="https://github.com/cmudig/draco2"
+              >github.com/cmudig/draco2</a
+            >
+          </li>
+          <li>
+            Jiang et al. ORC Layout. CHI 2019.
+            <a href="https://arxiv.org/abs/1912.07827">arXiv</a>
+          </li>
+          <li>Gajos, Weld. SUPPLE. IUI 2004.</li>
+          <li>
+            Jacobs et al. Adaptive Grid-Based Document Layout. SIGGRAPH 2003.
+          </li>
+          <li>
+            <code>notes/design/silhouette-interface.md</code> and
+            <code>notes/design/modular-layout-algorithms.md</code> in this repo.
+          </li>
+        </ul>
+      </div>
+    </main>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      document.querySelectorAll("pre.code code").forEach(function (code) {
+        var lang = code.dataset.lang;
+        if (!window.hljs || !hljs.getLanguage(lang)) return;
+        code.querySelectorAll(".ln").forEach(function (ln) {
+          if (!ln.textContent) return;
+          ln.innerHTML = hljs.highlight(ln.textContent, {
+            language: lang,
+            ignoreIllegals: true,
+          }).value;
+        });
+      });
+    </script>
+  </body>
+</html>
