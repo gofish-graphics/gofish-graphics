@@ -1254,7 +1254,7 @@ def _chart_opts(*, w: Optional[float | LengthValue] = None, h: Optional[float | 
         axes: Draw this chart's axes: a boolean for both axes, or per-axis options {x?, y?}. It applies at this chart: a nested chart reads its own, and draws only the axes of the domains it owns. A chart that turns an axis off hides it; no chart inside it draws that axis instead. Default true.
         legend: Draw the color legend. Turned off, the marks keep their colors and only the legend is dropped. Default true.
         padding: Room in pixels between a non-linear coordinate space's drawing (a polar disc, a map) and the edge of the chart's box. It has no effect on a chart in linear coordinates. Default 30.
-        schema: Column types, keyed by column name: a Unit (Unit("USD", { traits: [Trait.summable()] }), Unit({ domain: Domain.ordered(levels) }), Unit.time() for a time), a unit's name ("km²"), or a column record { name, unit }.
+        schema: Column types, keyed by column name: a Unit (Unit("USD", { traits: [Trait.summable()] }), Unit({ domain: Domain.discrete(levels), traits: [Trait.ordered()] }), Unit.time() for a time), a unit's name ("km²"), or a column record { name, unit }.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [

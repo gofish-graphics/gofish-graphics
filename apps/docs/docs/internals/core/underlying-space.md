@@ -2094,15 +2094,16 @@ entry is a unit definition, a unit's name, or a column record
 
 ```ts
 const Likert = Unit({
-  domain: Domain.ordered(LEVELS),
+  domain: Domain.discrete(LEVELS),
   traits: [Trait.diverging()],
 });
 chart(survey, { schema: { response: Likert } });
 ```
 
 A unit definition (`Unit(name?, { domain?, traits? })`, #1197) separates
-what its values are, its `domain`, from the traits they have, its
-`traits`, as Rust separates a type from the traits it implements. `Domain`
+which values exist, its `domain`, from everything else about them, its
+`traits` (an order, a midpoint, summing), as Rust separates a type from the
+traits it implements. `Domain`
 and `Trait` are strategy families (`families/domain.ts`,
 `families/trait.ts`), but they are not in `STRATEGIES`: a domain and the
 traits are read when the `Unit` is made (`unitTypeOf`) and never reach the
@@ -2113,17 +2114,22 @@ wire, which carries only the traits they expand into
 | ---------------------------- | ---------------------------------------- |
 | a name `u`                   | `HasUnit { unit: u, symbol: u, traits }` |
 | `Domain.discrete(levels)`    | `HasLevels { levels }`                   |
-| `Domain.ordered(levels)`     | `HasLevels { levels }`, `HasOrder {}`    |
-| `Trait.diverging(midpoint?)` | `HasMidpoint { at }`                     |
+| `Trait.ordered()`            | `HasOrder {}`                            |
+| `Trait.diverging(midpoint?)` | `HasOrder {}`, `HasMidpoint { at }`      |
 | `Trait.summable()`           | `CanSum` in `HasUnit.traits`             |
 
+`Trait.diverging` implies `Trait.ordered`, as a Swift protocol or a Lean
+class implies its parents: a midpoint is a point along an order, so it
+writes `HasOrder` too, and listing both is the same unit.
+
 `unitTypeOf` checks the definition: a unit needs a name or a domain; a
-domain is a `Domain` value (a bare list or an interval is an error: an
-interval domain, `Domain.continuous`, is a follow-up); a domain lists at
-least one level and no level twice (`levelsDomain`, which the `Domain`
-factories call and `unitTypeOf` calls again on a domain written as a
+domain is a `Domain` value (a bare list, an interval or any kind but
+`discrete` is an error: an interval domain, `Domain.continuous`, is a
+follow-up); a domain lists at least one level and no level twice
+(`Domain.discrete`, which `unitTypeOf` calls again on a domain written as a
 record); a trait appears once;
-`Trait.diverging` needs `Domain.ordered` (no domain, the reals, is "not
+`Trait.ordered` and `Trait.diverging` need a domain of levels (an order
+over the reals waits for `Domain.continuous`, so no domain is "not
 supported yet"); `Trait.summable` needs a name, since adding up is a trait
 of a unit and a unit is known by its name. A unit with no name writes no
 `HasUnit`, so its columns are typed one by one, as before the unit existed.
@@ -2143,11 +2149,12 @@ a unit has one trait of its own (`CanSum`):
   are used (`orderByLevels`, at a split or a color scale), not when the
   chart types its data, so a `filter` in the flow can drop the stray rows
   first.
-- `HasOrder` (`{}`, from `Domain.ordered`): the levels are ordered. It is a
+- `HasOrder` (`{}`, from `Trait.ordered`, or implied by `Trait.diverging`):
+  the levels are ordered. It is a
   marker over `HasLevels`, which `columnTypeOf` requires. A split over the
   column says its groups are ordered (`SplitGroups.hasOrder`), so an
   ordinal axis starts an outer level's labels at their runs; over
-  `Domain.discrete` levels, which have no order, it centers them.
+  levels without it, which have no order, it centers them.
 - `HasMidpoint` (`{ at }`, from `Trait.diverging(midpoint)`): the order has a midpoint, the
   point `{ at }` along it in edge coordinates. Level `i` spans `[i, i + 1]`,
   so 0 is the first level's leading edge, `n` the last level's trailing
@@ -2155,9 +2162,9 @@ a unit has one trait of its own (`CanSum`):
   ggstats' `gglikert`). `Unit` writes the default `n / 2` into the
   record, so the wire form always carries a number: the middle of the
   middle level when the count is odd, the boundary between the two middle
-  levels when it is even. It requires `HasOrder`: `unitTypeOf` rejects
-  `Trait.diverging` without `Domain.ordered`, and `columnTypeOf`
-  rejects a wire record that has one without the other. A midpoint that is
+  levels when it is even. It requires `HasOrder`: `Trait.diverging`
+  writes both, and `columnTypeOf` rejects a wire record that has a
+  midpoint without an order. A midpoint that is
   not a finite number in `[0, n]` is an error from `checkMidpointOnOrder`,
   which `Unit` calls at once and `columnTypeOf` calls on a wire
   record; Python's `Unit` raises the same messages, word for word. A stack over the column takes the
@@ -2388,8 +2395,7 @@ error rather than silently doing the wrong thing:
   `floor(i / size)` (an operator with no `by` splits by `chunk(1)`, row
   identity), and the groups come in
   order of first appearance, or in the order of the column's levels when the
-  data declares them (`HasLevels`, from `Domain.discrete` or
-  `Domain.ordered`, see [Column types](#column-types-the-chart-schema)). A binned key (`bin`, or a
+  data declares them (`HasLevels`, from `Domain.discrete`, see [Column types](#column-types-the-chart-schema)). A binned key (`bin`, or a
   binned struct) instead keys each row by its **cell**, and its groups are the
   cells of its partition, in order, one entry per cell, empty cells included
   (`binEntries`; see [Cells](#cells-a-binned-key)). The same key function

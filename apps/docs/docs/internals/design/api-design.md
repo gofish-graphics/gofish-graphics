@@ -112,18 +112,21 @@ declared once and shared by its columns, so one unit cannot both add up and
 not.
 
 **A unit is a domain plus traits.** A unit definition,
-`Unit(name?, { domain?, traits? })`, keeps what its values are apart from
-what they can do. The `domain` says what the values are:
-`Domain.discrete(levels)` for levels with no order (nominal),
-`Domain.ordered(levels)` for levels in order (ordinal). Order is part of
-the domain, not a trait, because it says which values exist and how they
-line up; it has one spelling. The `traits` say what the values can do, as a
-list: `Trait.summable()`, `Trait.diverging(midpoint?)`. The word follows
-Rust, where a type declares the traits it implements. A trait may need a
-domain (a midpoint is a point along an order, so `Trait.diverging` needs
-`Domain.ordered`) or a name (`Trait.summable` belongs to a unit, and a unit
-is known by its name); a definition that breaks that is an error when it is
-made, not when it is drawn. `Domain` and `Trait` are families, but never
+`Unit(name?, { domain?, traits? })`, keeps which values exist apart from
+everything else about them. The `domain` says only which values exist:
+`Domain.discrete(levels)` lists them. The `traits` say everything else, as a
+list: an order (`Trait.ordered()`), a neutral point
+(`Trait.diverging(midpoint?)`), summing (`Trait.summable()`). So levels in
+order (ordinal) are `Domain.discrete(levels)` with `Trait.ordered()`, and
+without it they are nominal. The word follows Rust, where a type declares
+the traits it implements. A trait may imply another, as a Swift protocol or
+a Lean class implies its parents: `Trait.diverging()` implies
+`Trait.ordered()`, since a neutral point is a point along an order, so it is
+written alone. A trait may need a domain (an order here is an order of
+listed levels, so `Trait.ordered` needs `Domain.discrete`) or a name
+(`Trait.summable` belongs to a unit, and a unit is known by its name); a
+definition that breaks that is an error when it is made, not when it is
+drawn. `Domain` and `Trait` are families, but never
 reach the wire: the wire carries the traits they expand into. Named types such as `Price` or `Revenue` are sugar over the
 traits, like chart templates over operators, so design the traits
 first.

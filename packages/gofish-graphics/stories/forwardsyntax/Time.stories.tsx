@@ -9,6 +9,7 @@ import {
   derive,
   spread,
   Domain,
+  Trait,
   Unit,
   Calendar,
 } from "../../src/lib";
@@ -295,7 +296,7 @@ export const MonthlyHighs: StoryObj<Args> = {
           },
           {
             schema: {
-              month: Unit({ domain: Domain.ordered(MONTHS) }),
+              month: Unit({ domain: Domain.discrete(MONTHS), traits: [Trait.ordered()] }),
             },
           }
         ),

@@ -1,7 +1,7 @@
 /**
  * Column types (#984): `chart(data, { schema })` with a unit's `domain`
- * (`Domain.discrete`: HasLevels; `Domain.ordered`: HasLevels and HasOrder) and
- * `Trait.diverging()` (HasMidpoint). Covers the unit definition's checks,
+ * (`Domain.discrete`: HasLevels), `Trait.ordered()` (HasOrder) and
+ * `Trait.diverging()` (HasMidpoint, implying HasOrder). Covers the unit definition's checks,
  * nominal levels beside ordered ones, the midpoint of an
  * order (the default for odd and even orders, a set midpoint on a boundary,
  * inside a level, and at either end, a missing level), the midpoint's range
@@ -281,7 +281,7 @@ async function main() {
         {
           schema: {
             r: Unit({
-              domain: Domain.ordered(LEVELS5),
+              domain: Domain.discrete(LEVELS5),
               traits: [Trait.diverging()],
             }),
           },
@@ -329,7 +329,7 @@ async function main() {
       chart(
         rows.map((row) => ({ ...row, n: 1 })),
         {
-          schema: { r: Unit({ domain: Domain.ordered(LEVELS5) }) },
+          schema: { r: Unit({ domain: Domain.discrete(LEVELS5), traits: [Trait.ordered()] }) },
         }
       )
         .flow(stack({ by: "r", dir: "x" }))
@@ -346,7 +346,7 @@ async function main() {
     const renamed = await errorOf(() =>
       chart(
         LEVELS5.map((r) => ({ r, n: 1 })),
-        { schema: { r: Unit({ domain: Domain.ordered(LEVELS5) }) } }
+        { schema: { r: Unit({ domain: Domain.discrete(LEVELS5), traits: [Trait.ordered()] }) } }
       )
         .flow(
           derive((d: any[]) => d.map((row) => ({ ...row, r: `${row.r}!` }))),
@@ -388,7 +388,7 @@ async function main() {
       "Trait.diverging() implies the order, its midpoint n / 2",
       JSON.stringify(
         Unit({
-          domain: Domain.ordered(["a", "b", "c"]),
+          domain: Domain.discrete(["a", "b", "c"]),
           traits: [Trait.diverging()],
         }).type
       ) ===
@@ -401,7 +401,7 @@ async function main() {
     check(
       "Trait.diverging(midpoint) writes the midpoint",
       JSON.stringify(
-        Unit({ domain: Domain.ordered(LEVELS5), traits: [Trait.diverging(2)] })
+        Unit({ domain: Domain.discrete(LEVELS5), traits: [Trait.diverging(2)] })
           .type
       ) ===
         JSON.stringify({
@@ -409,6 +409,27 @@ async function main() {
           HasOrder: {},
           HasMidpoint: { at: 2 },
         })
+    );
+    check(
+      "Trait.ordered() beside Trait.diverging() writes the same record",
+      JSON.stringify(
+        Unit({
+          domain: Domain.discrete(LEVELS5),
+          traits: [Trait.ordered(), Trait.diverging()],
+        }).type
+      ) ===
+        JSON.stringify(
+          Unit({ domain: Domain.discrete(LEVELS5), traits: [Trait.diverging()] })
+            .type
+        )
+    );
+    check(
+      "Trait.ordered() over levels writes HasLevels and HasOrder",
+      JSON.stringify(
+        Unit({ domain: Domain.discrete(["a", "b"]), traits: [Trait.ordered()] })
+          .type
+      ) ===
+        JSON.stringify({ HasLevels: { levels: ["a", "b"] }, HasOrder: {} })
     );
     // The same literals as `TestSchema` in gofish-python/tests/test_ast.py:
     // the two languages raise the same messages, word for word.
@@ -426,7 +447,7 @@ async function main() {
     }
     for (const [at, expected] of offMessages) {
       const eager = await errorOf(() =>
-        Unit({ domain: Domain.ordered(LEVELS5), traits: [Trait.diverging(at)] })
+        Unit({ domain: Domain.discrete(LEVELS5), traits: [Trait.diverging(at)] })
       );
       check(
         `Trait.diverging(${String(at)}) throws at once`,
@@ -478,7 +499,7 @@ async function main() {
       noLevels ===
         `schema: column "r" has HasOrder but no HasLevels. An order is an ` +
           `order of levels; declare them with a unit's domain: ` +
-          `Unit({ domain: Domain.ordered(levels) }).`,
+          `Unit({ domain: Domain.discrete(levels), traits: [Trait.ordered()] }).`,
       noLevels
     );
     // A time is a column in a unit read on a calendar: Unit.time() writes
@@ -536,7 +557,7 @@ async function main() {
 
   console.log("\n# a unit's domain and traits");
   {
-    const Stars = SrcUnit("stars", { domain: Domain.ordered([1, 2, 3, 4, 5]) });
+    const Stars = SrcUnit("stars", { domain: Domain.discrete([1, 2, 3, 4, 5]), traits: [Trait.ordered()] });
     check(
       "a named unit with a domain is a unit with levels",
       JSON.stringify(Stars.type) ===
@@ -586,21 +607,35 @@ async function main() {
       [
         "a midpoint on a unit's amounts",
         () => Unit("pp", { traits: [Trait.summable(), Trait.diverging(0)] }),
-        `Unit("pp"): Trait.diverging() needs an ordered domain: a midpoint ` +
-          `is a point along an order, so list the levels in ` +
-          `Domain.ordered(levels). A midpoint on a unit's amounts is not ` +
-          `supported yet.`,
+        `Unit("pp"): Trait.diverging() needs a domain of levels to order: ` +
+          `Unit({ domain: Domain.discrete(levels), traits: [Trait.diverging()] }). ` +
+          `A unit's amounts are numbers, which are already ordered; an order ` +
+          `over them comes with Domain.continuous, which is not supported yet.`,
       ],
       [
-        "a midpoint on unordered levels",
+        "an order on a unit's amounts",
+        () => Unit("pts", { traits: [Trait.ordered()] }),
+        `Unit("pts"): Trait.ordered() needs a domain of levels to order: ` +
+          `Unit({ domain: Domain.discrete(levels), traits: [Trait.ordered()] }). ` +
+          `A unit's amounts are numbers, which are already ordered; an order ` +
+          `over them comes with Domain.continuous, which is not supported yet.`,
+      ],
+      [
+        "Trait.ordered() listed twice",
         () =>
           Unit({
             domain: Domain.discrete(LEVELS5),
-            traits: [Trait.diverging()],
+            traits: [Trait.ordered(), Trait.ordered()],
           }),
-        `Unit: Trait.diverging() needs an ordered domain, but ` +
-          `Domain.discrete(levels) is unordered. A midpoint is a point ` +
-          `along an order: use Domain.ordered(levels).`,
+        `Unit lists Trait.ordered() twice.`,
+      ],
+      [
+        "a domain record of the removed kind ordered",
+        () =>
+          Unit({ domain: { kind: "ordered", levels: ["a", "b"] } } as any),
+        `Unit: domain must be a Domain: Domain.discrete(levels), got ` +
+          `{"kind":"ordered","levels":["a","b"]}. A domain that is an ` +
+          `interval is not supported yet.`,
       ],
       [
         "a summable unit without a name",
@@ -619,7 +654,7 @@ async function main() {
         "two midpoints",
         () =>
           Unit({
-            domain: Domain.ordered(LEVELS5),
+            domain: Domain.discrete(LEVELS5),
             traits: [Trait.diverging(1), Trait.diverging(2)],
           }),
         `Unit lists Trait.diverging() twice.`,
@@ -627,22 +662,21 @@ async function main() {
       [
         "a bare list as a domain",
         () => Unit("pp", { domain: [1, 2] } as any),
-        `Unit("pp"): domain must be a Domain: Domain.discrete(levels) or ` +
-          `Domain.ordered(levels), got [1,2]. A domain that is an interval ` +
-          `is not supported yet.`,
+        `Unit("pp"): domain must be a Domain: Domain.discrete(levels), got ` +
+          `[1,2]. A domain that is an interval is not supported yet.`,
       ],
       [
         "an interval domain",
         () => Unit("pp", { domain: { lo: 0, hi: 1 } } as any),
-        `Unit("pp"): domain must be a Domain: Domain.discrete(levels) or ` +
-          `Domain.ordered(levels), got {"lo":0,"hi":1}. A domain that is an ` +
-          `interval is not supported yet.`,
+        `Unit("pp"): domain must be a Domain: Domain.discrete(levels), got ` +
+          `{"lo":0,"hi":1}. A domain that is an interval is not supported ` +
+          `yet.`,
       ],
       [
         "a trait that is not one",
         () => Unit("USD", { traits: ["summable"] } as any),
         `Unit("USD") has the trait "summable". A unit's traits are ` +
-          `Trait.diverging() and Trait.summable().`,
+          `Trait.ordered(), Trait.diverging() and Trait.summable().`,
       ],
       [
         "an unknown option",
@@ -658,21 +692,21 @@ async function main() {
       ],
       [
         "a level listed twice",
-        () => Domain.ordered(["a", "b", "a"]),
-        `Domain.ordered: the level "a" is listed twice. Each level is listed ` +
-          `once, in its place.`,
+        () => Domain.discrete(["a", "b", "a"]),
+        `Domain.discrete: the level "a" is listed twice. Each level is ` +
+          `listed once, in its place.`,
       ],
       [
         "a level listed twice in a domain written as a record",
         () => Unit({ domain: { kind: "discrete", levels: [1, 2, 1] } } as any),
-        `Domain.discrete: the level 1 is listed twice. Each level is listed ` +
-          `once, in its place.`,
+        `Domain.discrete: the level 1 is listed twice. Each level is ` +
+          `listed once, in its place.`,
       ],
       [
         "a domain with no levels",
-        () => Domain.ordered([]),
-        `Domain.ordered: levels must list at least one level, e.g. ` +
-          `Domain.ordered(["low", "mid", "high"]).`,
+        () => Domain.discrete([]),
+        `Domain.discrete: levels must list at least one level, e.g. ` +
+          `Domain.discrete(["low", "mid", "high"]).`,
       ],
       [
         "a name that is not a string",
@@ -739,7 +773,7 @@ async function main() {
     const dl = await chart(rows, {
       schema: {
         r: Unit({
-          domain: Domain.ordered(LEVELS5),
+          domain: Domain.discrete(LEVELS5),
           traits: [Trait.diverging()],
         }),
       },
@@ -776,7 +810,7 @@ async function main() {
       { start: edge, end: edge, count: { HasUnit: { unit: "count" } } }
     );
     const typed = await applySchema(binned, {
-      count: SrcUnit({ domain: Domain.ordered([0, 1, 2]) }),
+      count: SrcUnit({ domain: Domain.discrete([0, 1, 2]), traits: [Trait.ordered()] }),
     });
     check(
       "a column's quantity survives a schema for another column",
@@ -808,7 +842,7 @@ async function main() {
     ];
     const filtered = await errorOf(() =>
       chart(rows, {
-        schema: { r: Unit({ domain: Domain.ordered(LEVELS5) }) },
+        schema: { r: Unit({ domain: Domain.discrete(LEVELS5), traits: [Trait.ordered()] }) },
       })
         .flow(
           filter((row: any) => row.r !== "Refused"),
@@ -824,7 +858,7 @@ async function main() {
     );
     const kept = await errorOf(() =>
       chart(rows, {
-        schema: { r: Unit({ domain: Domain.ordered(LEVELS5) }) },
+        schema: { r: Unit({ domain: Domain.discrete(LEVELS5), traits: [Trait.ordered()] }) },
       })
         .flow(
           filter((row: any) => row.n > 0),
@@ -840,7 +874,7 @@ async function main() {
     );
     const colored = await errorOf(() =>
       chart(rows, {
-        schema: { r: Unit({ domain: Domain.ordered(LEVELS5) }) },
+        schema: { r: Unit({ domain: Domain.discrete(LEVELS5), traits: [Trait.ordered()] }) },
         color: Color.palette(["red", "green", "blue", "cyan", "magenta"]),
       })
         .flow(spread({ by: "q", dir: "x" }))
@@ -863,7 +897,7 @@ async function main() {
       { g1: "high", g2: "mid", a: 1, b: 3 },
       { g1: "low", g2: "high", a: 2, b: 1 },
     ];
-    const grade = () => Unit({ domain: Domain.ordered(["low", "mid", "high"]) });
+    const grade = () => Unit({ domain: Domain.discrete(["low", "mid", "high"]), traits: [Trait.ordered()] });
     const dl = await chart(rows, {
       schema: { g1: grade(), g2: grade() },
       color: Color.palette(["red", "green", "blue"]),
@@ -892,7 +926,7 @@ async function main() {
       chart(grades, {
         schema: {
           grade: Unit({
-            domain: Domain.ordered(["low", "mid", "high"]),
+            domain: Domain.discrete(["low", "mid", "high"]), traits: [Trait.ordered()],
           }),
         },
         color: Color.palette(["red", "green", "blue"]),
@@ -1038,7 +1072,7 @@ async function main() {
     const USD = Unit("USD", { traits: [Trait.summable()] });
     const Celsius = Unit("°C");
     const Stars = Unit("stars", {
-      domain: Domain.ordered([1, 2, 3, 4, 5]),
+      domain: Domain.discrete([1, 2, 3, 4, 5]), traits: [Trait.ordered()],
     });
     const doc = await Serialize.toJSON(
       chart([{ balance: 1 }], {
@@ -1048,7 +1082,7 @@ async function main() {
           area: "km²",
           temp: { unit: Celsius },
           region: Unit({
-            domain: Domain.ordered(["n", "s"]),
+            domain: Domain.discrete(["n", "s"]),
             traits: [Trait.diverging()],
           }),
           party: Unit({ domain: Domain.discrete(["Dem", "Rep", "Ind"]) }),
@@ -1088,7 +1122,7 @@ async function main() {
               area: "km²",
               temp: { unit: Celsius },
               region: Unit({
-                domain: Domain.ordered(["n", "s"]),
+                domain: Domain.discrete(["n", "s"]),
                 traits: [Trait.diverging()],
               }),
               party: Unit({ domain: Domain.discrete(["Dem", "Rep", "Ind"]) }),

@@ -190,7 +190,7 @@ export type SplitKey = string | number | KeyCell;
 
 /** The groups of a split, in order, keyed by their key, and whether the
  *  keys have an order (`HasOrder`): the column the key names is declared
- *  ordered (`Domain.ordered`), or the key is binned (cells are ordered by
+ *  ordered (`Trait.ordered()`), or the key is binned (cells are ordered by
  *  nature). An operator
  *  that folds the groups into an ordinal space reads the order here. */
 export type SplitGroups<T> = Map<SplitKey, T[]> & { readonly hasOrder?: true };

@@ -58,6 +58,7 @@ const {
   line,
   circle,
   Domain,
+  Trait,
   Unit,
 } = GoFish as any;
 const DistCalendar = (GoFish as any).Calendar;
@@ -468,7 +469,7 @@ async function main() {
         { m: "Feb", n: 2 },
       ],
       {
-        m: SrcUnit({ domain: Domain.ordered(["Jan", "Feb", "Mar"]) }),
+        m: SrcUnit({ domain: Domain.discrete(["Jan", "Feb", "Mar"]), traits: [Trait.ordered()] }),
       }
     );
     const kept = await derived((rows) => rows.slice(1), undefined, months);
@@ -481,7 +482,7 @@ async function main() {
       (rows) => rows.map((r) => ({ ...r, m: "Q1" })),
       {
         schema: {
-          m: Unit({ domain: Domain.ordered(["Q1", "Q2"]) }),
+          m: Unit({ domain: Domain.discrete(["Q1", "Q2"]), traits: [Trait.ordered()] }),
         },
       },
       months

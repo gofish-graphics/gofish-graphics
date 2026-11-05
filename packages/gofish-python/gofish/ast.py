@@ -2030,7 +2030,7 @@ def derive(fn: Callable, *, schema: Optional[dict] = None) -> DeriveOperator:
             ``chart(data, schema={...})``: a ``Unit`` (``Unit.time(zone=...)``
             for a time), a unit's name, a column record
             ``{"name": ..., "unit": ...}``, e.g.
-            ``Unit(domain=Domain.ordered(levels))``.
+            ``Unit(domain=Domain.discrete(levels), traits=[Trait.ordered()])``.
             Without it, a result column keeps the
             type it had in the input while its values still fit it, a
             datetime column is a time, and any other column has no type. A
@@ -2529,7 +2529,7 @@ def _json(value: Any) -> str:
         return repr(value)
 
 
-_TRAIT_KINDS = ("diverging", "summable")
+_TRAIT_KINDS = ("ordered", "diverging", "summable")
 
 
 def _unit_type_of(name: Optional[str], domain: Any, traits: Any) -> Dict[str, Any]:
@@ -2538,19 +2538,19 @@ def _unit_type_of(name: Optional[str], domain: Any, traits: Any) -> Dict[str, An
     who = "Unit" if name is None else f"Unit({json.dumps(name, ensure_ascii=False)})"
     if domain is not None and not (
         isinstance(domain, dict)
-        and domain.get("kind") in ("discrete", "ordered")
+        and domain.get("kind") == "discrete"
         and isinstance(domain.get("levels"), list)
     ):
         raise TypeError(
-            f"{who}: domain must be a Domain: Domain.discrete(levels) or "
-            f"Domain.ordered(levels), got {_json(domain)}. A domain that is "
-            "an interval is not supported yet."
+            f"{who}: domain must be a Domain: Domain.discrete(levels), got "
+            f"{_json(domain)}. A domain that is an interval is not supported "
+            "yet."
         )
     # A domain written as a dict, not with ``Domain``, gets the same checks.
     if domain is not None:
-        from .domain import _levels_domain
+        from .domain import discrete
 
-        _levels_domain(domain["kind"], domain["levels"])
+        discrete(domain["levels"])
     if name is None and domain is None:
         raise TypeError(
             'Unit needs a name, a domain, or both: Unit("USD"), '
@@ -2567,25 +2567,25 @@ def _unit_type_of(name: Optional[str], domain: Any, traits: Any) -> Dict[str, An
         if kind not in _TRAIT_KINDS:
             raise TypeError(
                 f"{who} has the trait {_json(trait)}. A unit's traits are "
-                "Trait.diverging() and Trait.summable()."
+                "Trait.ordered(), Trait.diverging() and Trait.summable()."
             )
         if kind in kinds:
             raise TypeError(f"{who} lists Trait.{kind}() twice.")
         kinds.append(kind)
         if kind == "diverging":
             midpoint = trait.get("midpoint")
-    if "diverging" in kinds and (domain is None or domain["kind"] != "ordered"):
-        if domain is None:
-            raise TypeError(
-                f"{who}: Trait.diverging() needs an ordered domain: a midpoint "
-                "is a point along an order, so list the levels in "
-                "Domain.ordered(levels). A midpoint on a unit's amounts is not "
-                "supported yet."
-            )
+    # Trait.diverging() implies Trait.ordered(): a midpoint is a point along
+    # an order. Listing both is allowed.
+    ordered = "ordered" in kinds or "diverging" in kinds
+    # TODO(Domain.continuous): an order over numbers comes with
+    # Domain.continuous. Until then, an order is an order of listed levels.
+    if ordered and domain is None:
+        listed = "diverging" if "diverging" in kinds else "ordered"
         raise TypeError(
-            f"{who}: Trait.diverging() needs an ordered domain, but "
-            "Domain.discrete(levels) is unordered. A midpoint is a point "
-            "along an order: use Domain.ordered(levels)."
+            f"{who}: Trait.{listed}() needs a domain of levels to order: "
+            f"Unit({{ domain: Domain.discrete(levels), traits: [Trait.{listed}()] }}). "
+            "A unit's amounts are numbers, which are already ordered; an order "
+            "over them comes with Domain.continuous, which is not supported yet."
         )
     if "summable" in kinds and name is None:
         raise TypeError(
@@ -2602,8 +2602,8 @@ def _unit_type_of(name: Optional[str], domain: Any, traits: Any) -> Dict[str, An
         }
     if domain is not None:
         type_["HasLevels"] = {"levels": list(domain["levels"])}
-        if domain["kind"] == "ordered":
-            type_["HasOrder"] = {}
+    if ordered:
+        type_["HasOrder"] = {}
     if "diverging" in kinds:
         levels = domain["levels"]
         at = len(levels) / 2 if midpoint is None else midpoint
@@ -2618,13 +2618,13 @@ class Unit:
     ``Unit(domain=..., traits=[...])`` with no name. Mirrors JS ``Unit``::
 
         USD = Unit("USD", traits=[Trait.summable()])
-        Likert = Unit(domain=Domain.ordered(LEVELS), traits=[Trait.diverging()])
+        Likert = Unit(domain=Domain.discrete(LEVELS), traits=[Trait.diverging()])
         chart(ledger, schema={"balance": {"name": "Balance", "unit": USD}})
 
     Its name is its identity: two units are the same when their names are
-    equal. Its ``domain`` (``Domain.discrete(levels)``,
-    ``Domain.ordered(levels)``) is what its values are, and its ``traits``
-    (the ``Trait`` family) the traits they have. It is immutable.
+    equal. Its ``domain`` (``Domain.discrete(levels)``) is which values it
+    has, and its ``traits`` (the ``Trait`` family) the traits they have. It
+    is immutable.
     Declare a unit once and use it for every column in it. The built-in
     units are ``Unit.time(zone=...)``, for instants, and ``Unit.duration``,
     for spans of time.
@@ -2713,10 +2713,12 @@ class Unit:
         args = [] if unit is None else [repr(unit["unit"])]
         levels = self._type.get("HasLevels")
         if levels is not None:
-            kind = "ordered" if "HasOrder" in self._type else "discrete"
-            args.append(f"domain=Domain.{kind}({levels['levels']!r})")
+            args.append(f"domain=Domain.discrete({levels['levels']!r})")
         traits = []
         midpoint = self._type.get("HasMidpoint")
+        # Trait.diverging() implies Trait.ordered(), so it is written alone.
+        if "HasOrder" in self._type and midpoint is None:
+            traits.append("Trait.ordered()")
         if midpoint is not None:
             default = len(levels["levels"]) / 2 if levels is not None else None
             at = "" if midpoint["at"] == default else repr(midpoint["at"])
@@ -3878,7 +3880,7 @@ def chart(
     ``schema`` declares column types, keyed by column name (see ``Unit``,
     ``Domain`` and ``Trait``):
 
-        Likert = Unit(domain=Domain.ordered(LEVELS), traits=[Trait.diverging()])
+        Likert = Unit(domain=Domain.discrete(LEVELS), traits=[Trait.diverging()])
         chart(survey, schema={"response": Likert})
         chart(ledger, schema={"balance": {"name": "Balance", "unit": USD}})
 

@@ -6,7 +6,7 @@ import type { StackOrigin } from "./constraints/distribute";
 import { loadTemporal, temporal } from "./calendar";
 import { tagArray } from "./data";
 import { DURATION, INSTANT, meetInto, type UnitOccurrence } from "./measure";
-import { levelsDomain } from "../families/domain";
+import { discrete } from "../families/domain";
 import { Frontend } from "gofish-ir";
 
 /**
@@ -16,19 +16,20 @@ import { Frontend } from "gofish-ir";
  * them:
  *
  *  - {@link HasLevels}: the column's values are the levels of a finite
- *    domain, declared with a unit's `domain`:
- *    `Domain.discrete(levels)` or `Domain.ordered(levels)`. Every `by`
- *    split over the column lays its groups out in the order of the list, a
- *    categorical color scale over it lists its domain in that order, and a
- *    value outside the list is an error where the levels are used.
+ *    domain, declared with a unit's `domain`: `Domain.discrete(levels)`.
+ *    Every `by` split over the column lays its groups out in the order of
+ *    the list, a categorical color scale over it lists its domain in that
+ *    order, and a value outside the list is an error where the levels are
+ *    used.
  *  - {@link HasOrder}: the levels are ordered, first to last. Declared with
- *    `Domain.ordered(levels)`. The levels of `Domain.discrete(levels)` are
+ *    `Trait.ordered()` in the unit's `traits`, or implied by
+ *    `Trait.diverging()`. Levels without it are
  *    nominal: they keep the list's order for display, but an ordinal axis
  *    over them treats its groups as unordered (it centers its outer
  *    labels), and they cannot have a midpoint.
  *  - {@link HasMidpoint}: the order has a midpoint, a point along it.
  *    Declared with `Trait.diverging(midpoint?)` in the unit's `traits`,
- *    over a `Domain.ordered` domain. A stack over the column puts its
+ *    which implies `Trait.ordered()`. A stack over the column puts its
  *    origin (its 0) at the midpoint.
  *  - {@link HasUnit}: the column's values are amounts. Declared with a
  *    unit in the column's entry: a {@link Unit} definition (`Unit("USD")`),
@@ -63,8 +64,9 @@ import { Frontend } from "gofish-ir";
  *
  * A unit definition ({@link Unit}) stands for every trait but HasQuantity,
  * HasDomain and HasInteger: its name is the column's HasUnit (with CanSum
- * when its traits say `Trait.summable()`), its `domain` is HasLevels (and
- * HasOrder for `Domain.ordered`), and `Trait.diverging()` is HasMidpoint.
+ * when its traits say `Trait.summable()`), its `domain` is HasLevels,
+ * `Trait.ordered()` is HasOrder, and `Trait.diverging()` is HasMidpoint
+ * and HasOrder.
  *
  * A column made from another keeps that column's type: the cells of
  * `field(x).bin(p)` are amounts of `x`'s quantity, in `x`'s unit, and a
@@ -84,13 +86,12 @@ import { Frontend } from "gofish-ir";
 export type Level = string | number;
 
 /** The trait of a column whose values are the levels of a finite domain,
- *  declared with a unit's `domain` (`Domain.discrete(levels)`,
- *  `Domain.ordered(levels)`). The list's order is the order its
- *  groups are laid out and listed in. */
+ *  declared with a unit's `domain` (`Domain.discrete(levels)`). The list's
+ *  order is the order its groups are laid out and listed in. */
 export type HasLevels = { levels: readonly Level[] };
 
 /** The trait of a column whose levels ({@link HasLevels}) are ordered, first
- *  to last (`Domain.ordered(levels)`). It has no options: the order is the levels'
+ *  to last (`Trait.ordered()`). It has no options: the order is the levels'
  *  list. It requires {@link HasLevels}. */
 export type HasOrder = Record<string, never>;
 
@@ -260,10 +261,15 @@ export type ColumnTypes = Record<string, ColumnType>;
  *  trait of units (`HasZero`, ...) is one more optional key. */
 export type UnitTraits = { CanSum?: CanSum };
 
+/** A trait that a unit's levels are ordered, first to last
+ *  (`Trait.ordered()`): its columns have {@link HasOrder}. It needs a
+ *  domain of levels (`Domain.discrete(levels)`). */
+export type OrderedTrait = { readonly kind: "ordered" };
+
 /** A trait that the order of a unit's levels has a midpoint
  *  (`Trait.diverging(midpoint?)`): its columns have {@link HasMidpoint}. It
- *  needs an ordered domain (`Domain.ordered`). Without `midpoint`, the
- *  midpoint is the middle of the order. */
+ *  implies {@link OrderedTrait}, so they have {@link HasOrder} too. Without
+ *  `midpoint`, the midpoint is the middle of the order. */
 export type DivergingTrait = {
   readonly kind: "diverging";
   readonly midpoint?: number;
@@ -275,16 +281,20 @@ export type SummableTrait = { readonly kind: "summable" };
 
 /** A trait of a unit's values, one entry of a unit definition's
  *  `traits` (the `Trait` family, `families/trait.ts`). */
-export type Trait = DivergingTrait | SummableTrait;
+export type Trait = OrderedTrait | DivergingTrait | SummableTrait;
 
 /** The kinds of {@link Trait}. */
-const TRAIT_KINDS: readonly Trait["kind"][] = ["diverging", "summable"];
+const TRAIT_KINDS: readonly Trait["kind"][] = [
+  "ordered",
+  "diverging",
+  "summable",
+];
 
-/** A finite domain of levels, in the order to lay them out in: unordered
- *  (`Domain.discrete(levels)`, nominal) or ordered first to last
- *  (`Domain.ordered(levels)`, ordinal). */
+/** A finite domain of levels, in the order to lay them out in
+ *  (`Domain.discrete(levels)`). The levels are ordered only when the unit
+ *  lists `Trait.ordered()`. */
 export type LevelsDomain = {
-  readonly kind: "discrete" | "ordered";
+  readonly kind: "discrete";
   readonly levels: readonly Level[];
 };
 
@@ -296,12 +306,11 @@ export type Domain = LevelsDomain;
 /** What a unit definition takes besides its name: its `domain`, what its
  *  values are, and its `traits`, the traits they have. */
 export type UnitOptions = {
-  /** The unit's values: `Domain.discrete(levels)` or
-   *  `Domain.ordered(levels)`. Without it, a named unit's values are
-   *  amounts (numbers). */
+  /** The unit's values: `Domain.discrete(levels)`. Without it, a named
+   *  unit's values are amounts (numbers). */
   domain?: Domain;
-  /** The traits of the unit's values: `Trait.diverging(midpoint?)`,
-   *  `Trait.summable()`. */
+  /** The traits of the unit's values: `Trait.ordered()`,
+   *  `Trait.diverging(midpoint?)`, `Trait.summable()`. */
   traits?: readonly Trait[];
 };
 
@@ -402,17 +411,17 @@ function unitTypeOf(name: string | undefined, options: UnitOptions): UnitType {
     !(
       domain !== null &&
       typeof domain === "object" &&
-      (domain.kind === "discrete" || domain.kind === "ordered") &&
+      domain.kind === "discrete" &&
       Array.isArray(domain.levels)
     )
   )
     throw new Error(
-      `${who}: domain must be a Domain: Domain.discrete(levels) or ` +
-        `Domain.ordered(levels), got ${JSON.stringify(domain) ?? String(domain)}. ` +
-        `A domain that is an interval is not supported yet.`
+      `${who}: domain must be a Domain: Domain.discrete(levels), got ` +
+        `${JSON.stringify(domain) ?? String(domain)}. A domain that is an ` +
+        `interval is not supported yet.`
     );
   // A domain written as a record, not with `Domain`, gets the same checks.
-  if (domain !== undefined) levelsDomain(domain.kind, domain.levels);
+  if (domain !== undefined) discrete(domain.levels);
   if (name === undefined && domain === undefined)
     throw new Error(
       `Unit needs a name, a domain, or both: Unit("USD"), ` +
@@ -427,24 +436,28 @@ function unitTypeOf(name: string | undefined, options: UnitOptions): UnitType {
     if (!TRAIT_KINDS.includes(kind as Trait["kind"]))
       throw new Error(
         `${who} has the trait ${JSON.stringify(trait) ?? String(trait)}. A ` +
-          `unit's traits are Trait.diverging() and Trait.summable().`
+          `unit's traits are Trait.ordered(), Trait.diverging() and ` +
+          `Trait.summable().`
       );
     if (kinds.has(kind as Trait["kind"]))
       throw new Error(`${who} lists Trait.${String(kind)}() twice.`);
     kinds.add(kind as Trait["kind"]);
     if (kind === "diverging") midpoint = (trait as DivergingTrait).midpoint;
   }
-  if (kinds.has("diverging") && domain?.kind !== "ordered")
+  // Trait.diverging() implies Trait.ordered(): a midpoint is a point along
+  // an order. Listing both is allowed.
+  const ordered = kinds.has("ordered") || kinds.has("diverging");
+  // TODO(Domain.continuous): an order over numbers comes with
+  // Domain.continuous. Until then, an order is an order of listed levels.
+  if (ordered && domain === undefined) {
+    const listed = kinds.has("diverging") ? "diverging" : "ordered";
     throw new Error(
-      domain === undefined
-        ? `${who}: Trait.diverging() needs an ordered domain: a midpoint is ` +
-          `a point along an order, so list the levels in ` +
-          `Domain.ordered(levels). A midpoint on a unit's amounts is not ` +
-          `supported yet.`
-        : `${who}: Trait.diverging() needs an ordered domain, but ` +
-          `Domain.discrete(levels) is unordered. A midpoint is a point ` +
-          `along an order: use Domain.ordered(levels).`
+      `${who}: Trait.${listed}() needs a domain of levels to order: ` +
+        `Unit({ domain: Domain.discrete(levels), traits: [Trait.${listed}()] }). ` +
+        `A unit's amounts are numbers, which are already ordered; an order ` +
+        `over them comes with Domain.continuous, which is not supported yet.`
     );
+  }
   if (kinds.has("summable") && name === undefined)
     throw new Error(
       `Unit: Trait.summable() needs a name. Whether amounts add up belongs ` +
@@ -464,7 +477,7 @@ function unitTypeOf(name: string | undefined, options: UnitOptions): UnitType {
     ...(domain !== undefined
       ? { HasLevels: { levels: [...domain.levels] } }
       : {}),
-    ...(domain?.kind === "ordered" ? { HasOrder: {} } : {}),
+    ...(ordered ? { HasOrder: {} } : {}),
   };
   if (kinds.has("diverging")) {
     const levels = domain!.levels;
@@ -690,14 +703,14 @@ export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
     throw new Error(
       `${who} has HasOrder but no HasLevels. An order is an order of ` +
         `levels; declare them with a unit's domain: ` +
-        `Unit({ domain: Domain.ordered(levels) }).`
+        `Unit({ domain: Domain.discrete(levels), traits: [Trait.ordered()] }).`
     );
   if (type.HasMidpoint === undefined) return type;
   if (type.HasOrder === undefined)
     throw new Error(
       `${who} has HasMidpoint but no HasOrder. A midpoint is a point along ` +
-        `an order; declare it with ` +
-        `Unit({ domain: Domain.ordered(levels), traits: [Trait.diverging()] }).`
+        `an order; declare it with Unit({ domain: Domain.discrete(levels), ` +
+        `traits: [Trait.diverging()] }).`
     );
   checkMidpointOnOrder(type.HasLevels!.levels, type.HasMidpoint.at);
   return type;
