@@ -37,8 +37,15 @@ export type SolvePlaceable<T> = {
   dims: Dimensions<T>;
   localAnchor?: (axis: FancyDirection, anchor: Anchor) => T | undefined;
   localPlotSpan?: (axis: 0 | 1) => [T, T] | undefined;
+  /** Its box without its dressing (`GoFishNode.localBareSpan`), which
+   *  chrome is laid beside; undefined where that is its box. */
+  localBareSpan?: (axis: 0 | 1) => [T, T] | undefined;
   spaceOn?: (dir: Direction) => UnderlyingSpace | undefined;
 };
+
+/** Which of a target's spans an anchor is read off: its box, its plot, or
+ *  its box without its dressing ({@link anchorOffset}). */
+export type SpanOf = "box" | "plot" | "bare";
 
 /** The offset of a target's data baseline from its `min` on `axis`, or
  *  undefined when the target is not a baseline magnitude there (it has no
@@ -67,8 +74,9 @@ export function anchorOffset<T>(
   anchor: RelationAnchor,
   // Read the anchor off the target's plot (`localPlotSpan`): a chain lays
   // its parts by their plots, so the dressing beside a part (a value label,
-  // a nested chart's chrome) never moves it (#1032).
-  plot = false
+  // a nested chart's chrome) never moves it (#1032). Or off its box without
+  // its dressing (`localBareSpan`), which chrome is laid beside.
+  plot: SpanOf = "box"
 ): T | undefined {
   if (anchor === "tail" || anchor === "head") {
     const tail = freeBaselineOffset(A, target, axis) ?? A.zero;
@@ -76,7 +84,12 @@ export function anchorOffset<T>(
     const end = anchorOffset(A, target, axis, "end", plot);
     return end === undefined ? undefined : A.sub(end, tail);
   }
-  const span = plot ? target.localPlotSpan?.(axisIndex(axis)) : undefined;
+  const span =
+    plot === "plot"
+      ? target.localPlotSpan?.(axisIndex(axis))
+      : plot === "bare"
+        ? target.localBareSpan?.(axisIndex(axis))
+        : undefined;
   if (span !== undefined && anchor !== "baseline") {
     const min = target.localAnchor?.(axis, "min") ?? A.zero;
     const at =

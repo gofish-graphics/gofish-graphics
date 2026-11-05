@@ -294,6 +294,7 @@ function reflectedView(target: Placeable): Placeable {
     projectedTranslate,
     localAnchor,
     localPlotSpan,
+    localBareSpan,
     pinAnchor,
     setExtent,
   }: Partial<Placeable> = target;
@@ -326,6 +327,12 @@ function reflectedView(target: Placeable): Placeable {
       localPlotSpan &&
       ((axis: 0 | 1): [number, number] | undefined => {
         const span = localPlotSpan.call(target, axis);
+        return axis === 1 && span !== undefined ? [-span[1], -span[0]] : span;
+      }),
+    localBareSpan:
+      localBareSpan &&
+      ((axis: 0 | 1): [number, number] | undefined => {
+        const span = localBareSpan.call(target, axis);
         return axis === 1 && span !== undefined ? [-span[1], -span[0]] : span;
       }),
     place: (axis: any, value: number, anchor: Anchor = "min") =>

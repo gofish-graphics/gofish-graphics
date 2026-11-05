@@ -132,13 +132,15 @@ const domainPlan = (
   if (plan === undefined || summary === undefined || placed === undefined)
     return plan;
   const widen = (e: Extent): Extent => node.widenToDomain(axis, placed, e);
+  const box = widen(summary.box);
   return {
     ...plan,
     summary: {
       ...summary,
-      box: widen(summary.box),
+      box,
       whole: widen(summary.whole),
       plot: summary.plot && widen(summary.plot),
+      bare: summary.bare === summary.box ? box : widen(summary.bare),
     },
     plotWhole: plan.plotWhole && widen(plan.plotWhole),
   };
@@ -714,6 +716,53 @@ export const layer = createNodeOperatorSequential(
               : (([0, 1] as const).map((axis) =>
                   at(axis, (dressedPlot ?? plot)[axis])
                 ) as [Extent | undefined, Extent | undefined]);
+          // A node with a size of its own claims that size and what its
+          // dressing reaches past it, at the σ it solved. Its box without
+          // its dressing is its content's at that σ, widened as its plot is,
+          // where the scope seats it: what the chrome around it is laid
+          // beside (`GoFishNode.resolveBareExtent`).
+          const bareOn = (axis: 0 | 1): Extent | undefined => {
+            const claim = claims[axis];
+            const solved = scopes.fixedSolve(node, axis);
+            const content = plans[axis]?.summary;
+            if (
+              fixedPx[axis] === undefined ||
+              claim === undefined ||
+              solved === undefined ||
+              content === undefined ||
+              content.bare === content.box
+            )
+              return claim;
+            const { claim: whole, solution, space } = solved;
+            const sigma = solution.sigma;
+            const bare = node.widenToDomain(
+              axis,
+              t.resolved[axis],
+              content.bare,
+              !isValue(dataSize(axis))
+            );
+            const ascent = Pwl.at(bare.ascent, sigma);
+            const descent = Pwl.at(bare.descent, sigma);
+            const shift =
+              seatInScope(solution, space).seat.anchor === "baseline"
+                ? 0
+                : Pwl.at(whole.descent, sigma);
+            return at(
+              axis,
+              Extent(
+                Pwl.constant(shift + ascent),
+                Pwl.constant(descent - shift)
+              )
+            );
+          };
+          const bares = [bareOn(0), bareOn(1)] as [
+            Extent | undefined,
+            Extent | undefined,
+          ];
+          node._bareExtent =
+            bares[0] === claims[0] && bares[1] === claims[1]
+              ? undefined
+              : bares;
           return claims;
         },
         layout: (size, scales, children, node, shape) => {
@@ -1212,6 +1261,10 @@ export const layer = createNodeOperatorSequential(
                     return p.localPlotSpan?.(axis)?.[0] ?? lo;
                   case "phi":
                     return p.localPlotSpan?.(axis)?.[1] ?? hi;
+                  case "blo":
+                    return p.localBareSpan?.(axis)?.[0] ?? lo;
+                  case "bhi":
+                    return p.localBareSpan?.(axis)?.[1] ?? hi;
                   case "at": {
                     const min = p.dims[axis].min;
                     return min === undefined || lo === undefined

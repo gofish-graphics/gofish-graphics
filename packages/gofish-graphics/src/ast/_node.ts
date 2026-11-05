@@ -311,6 +311,10 @@ export type Placeable = {
   /** Where its plot lies in its local frame, when that is not its whole box
    *  (see `GoFishNode.localPlotSpan`). A chain lays its parts by it. */
   localPlotSpan?: (axis: 0 | 1) => [number, number] | undefined;
+  /** Where its box without its dressing lies in its local frame, when that
+   *  is not its whole box (see `GoFishNode.localBareSpan`). Chrome is laid
+   *  beside it. */
+  localBareSpan?: (axis: 0 | 1) => [number, number] | undefined;
   place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
   /** Write an axis extent from owned bbox keys (the size-setting primitive
    *  — `span` and an authoritative `position` pin go through it). Optional
@@ -709,6 +713,10 @@ export class GoFishNode {
   /** Set by a node's claim hook when its plot claim differs from its claim
    *  (see {@link resolvePlotExtent}); cleared with the claims. */
   public _plotExtent?: Size<Extent | undefined> = undefined;
+  /** Set by a layer with a size of its own whose dressing reaches past it:
+   *  its box without its dressing (see {@link resolveBareExtent}); cleared
+   *  with the claims. */
+  public _bareExtent?: Size<Extent | undefined> = undefined;
   /** {@link resolvePlotExtent}'s answer where the plot is the box on one
    *  axis only, a new array, with the claim and plot it was read from, so
    *  every read returns the same array while those stay the same. */
@@ -1842,6 +1850,22 @@ export class GoFishNode {
   }
 
   /**
+   * The claim of this node's box without its dressing: what the chrome
+   * around it is laid beside, so an axis sits beside the part of it that
+   * carries its type and the dressing (an outline, a value label) draws
+   * over the axis. Inner chrome is part of it. A layer's is its plan's
+   * (`ChildForms.bare`, read there); a node with a size of its own has its
+   * content's at the σ it solved (`layer`); any other node is all box, as
+   * is a chart's box ({@link plotIsBox}).
+   */
+  public resolveBareExtent(): Size<Extent | undefined> {
+    const extent = this.resolveExtent();
+    const bare = this._bareExtent;
+    if (bare === undefined || this._chartRing === true) return extent;
+    return bare;
+  }
+
+  /**
    * Whether this node's baseline on `axis` is its start, not its data 0:
    * it is a chart's box ({@link _chartRing}), placed whole, its chrome with
    * it (#1257), and it has no data 0 there to share, so it sits by its
@@ -1955,6 +1979,7 @@ export class GoFishNode {
     this._yFrame = undefined;
     this._extent = undefined;
     this._plotExtent = undefined;
+    this._bareExtent = undefined;
     this._claimMemo = freshClaimMemo();
     this._sharing = undefined;
     this.children.forEach((c) => {
@@ -2333,6 +2358,7 @@ export class GoFishNode {
     const direction = this.yFrame.direction;
     const parentDirection = yDirection(this.parent);
     this._plotSpan = [undefined, undefined];
+    this._bareSpan = [undefined, undefined];
     if (this.strokeOverhang > 0) {
       const session = this.tryGetRenderSession();
       if (session !== undefined) session.outlined = true;
@@ -2609,6 +2635,62 @@ export class GoFishNode {
     const a = frame.sigma * min + frame.originPx;
     const b = frame.sigma * max + frame.originPx;
     return [Math.min(a, b), Math.max(a, b)];
+  }
+
+  /** {@link localBareSpan}'s memo, per axis, cleared when it is laid out
+   *  (`null`: it is its box). */
+  private _bareSpan: [
+    [number, number] | null | undefined,
+    [number, number] | null | undefined,
+  ] = [undefined, undefined];
+
+  /**
+   * Where its box without its dressing lies on `axis` in its local frame,
+   * once laid out (see {@link resolveBareExtent}), or undefined when that
+   * is its whole box. A layer's is the hull of its children that are no
+   * dressing and no ink there, each at its own, a ring's chrome included,
+   * and its niced domain where its axes sit beside it ({@link domainSpan}).
+   * Any other node, and a chart's box, is its box, as the claim walk reads
+   * it.
+   */
+  public localBareSpan(axis: 0 | 1): [number, number] | undefined {
+    const memo = this._bareSpan[axis];
+    if (memo !== undefined) return memo ?? undefined;
+    const value = this.computeBareSpan(axis);
+    this._bareSpan[axis] = value ?? null;
+    return value;
+  }
+
+  private computeBareSpan(axis: 0 | 1): [number, number] | undefined {
+    const walk = this.claimWalk;
+    if (walk === undefined || this._chartRing === true) return undefined;
+    const out = (i: number) =>
+      walk.dressing[axis].has(i) || walk.ink[axis].has(i);
+    const own = this.children.map((c) =>
+      c instanceof GoFishNode ? c.localBareSpan(axis) : undefined
+    );
+    if (!this.children.some((_, i) => out(i)) && own.every((p) => !p))
+      return undefined;
+    const ordered = this.domainSpan(axis);
+    const dir = axis === 0 ? 1 : this.yFrame.direction;
+    const domain: [number, number] | undefined =
+      ordered === undefined || dir === 1 ? ordered : [-ordered[1], -ordered[0]];
+    let lo = domain?.[0] ?? Infinity;
+    let hi = domain?.[1] ?? -Infinity;
+    this.children.forEach((c, i) => {
+      if (out(i) || !(c instanceof GoFishNode)) return;
+      const { min, max } = c.dims[axis];
+      if (min === undefined || max === undefined) return;
+      const span = own[i];
+      const shift = min - (c.localAnchor?.(axis, "min") ?? 0);
+      const [a, b] =
+        span === undefined
+          ? [Math.min(min, max), Math.max(min, max)]
+          : [span[0] + shift, span[1] + shift];
+      lo = Math.min(lo, a);
+      hi = Math.max(hi, b);
+    });
+    return lo <= hi ? [lo, hi] : undefined;
   }
 
   private computePlotSpan(axis: 0 | 1): [number, number] | undefined {

@@ -31,6 +31,7 @@ import {
   freeBaselineOffset,
   strongAnchorOffset,
   type SolvePlaceable,
+  type SpanOf,
 } from "./placementProgramLowerer";
 import {
   solveAxisProblem,
@@ -159,7 +160,7 @@ function nodeAnchorOffset<T>(
   axis: Axis,
   strongSizes: Map<NodeId, T>,
   targets: Map<string, SolvePlaceable<T>>,
-  plot = false
+  plot: SpanOf = "box"
 ): T | undefined {
   const strong = strongSizes.get(node);
   if (strong !== undefined) return strongAnchorOffset(A, strong, anchor);
@@ -200,8 +201,11 @@ function reduceToAxisProblem<T>(
   const chainAnchors = new Map<NodeId, T>();
 
   // A chain lays its parts by their plots (`anchorOffset`'s `plot`).
-  const resolveOffset = (node: NodeId, anchor: RelationAnchor, plot = false) =>
-    nodeAnchorOffset(A, node, anchor, axis, strongSizes, targets, plot);
+  const resolveOffset = (
+    node: NodeId,
+    anchor: RelationAnchor,
+    plot: SpanOf = "box"
+  ) => nodeAnchorOffset(A, node, anchor, axis, strongSizes, targets, plot);
 
   for (const fact of facts) {
     // A size-pin only feeds `closeSizes`'s box closure (above) — it has no
@@ -223,13 +227,28 @@ function reduceToAxisProblem<T>(
     }
     if (fact.type === "anchor-relation") {
       // A chain edge between two parts of the plot lays them by their
-      // plots; one to dressing or chrome places it past the whole box.
-      const chain =
-        fact.chain !== undefined &&
-        apart?.has(fact.from.node) !== true &&
-        apart?.has(fact.to.node) !== true;
-      const fromOffset = resolveOffset(fact.from.node, fact.from.anchor, chain);
-      const toOffset = resolveOffset(fact.to.node, fact.to.anchor, chain);
+      // plots. One to a part that is no part of the plot (dressing,
+      // chrome) lays that part by its whole box and the other by its box
+      // without its dressing: an axis line sits past its own box, beside
+      // what it dresses less the outlines and labels that dress it, which
+      // draw over it. Inner chrome is no dressing, so a title sits past the
+      // tick labels.
+      const span = (n: NodeId, other: NodeId): SpanOf =>
+        fact.chain === undefined || apart?.has(n) === true
+          ? "box"
+          : apart?.has(other) === true
+            ? "bare"
+            : "plot";
+      const fromOffset = resolveOffset(
+        fact.from.node,
+        fact.from.anchor,
+        span(fact.from.node, fact.to.node)
+      );
+      const toOffset = resolveOffset(
+        fact.to.node,
+        fact.to.anchor,
+        span(fact.to.node, fact.from.node)
+      );
       if (fromOffset === undefined || toOffset === undefined) continue;
       participants.add(fact.from.node);
       participants.add(fact.to.node);

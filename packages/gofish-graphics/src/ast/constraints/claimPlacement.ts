@@ -113,8 +113,12 @@ export type ClaimChild = {
    *  its plot, as layout's `localPlotSpan` does, so what dresses a part
    *  never moves the parts (#1032). */
   plot?: Extent;
-  /** It is chrome (a ring's shapes): no part of the plot, so a chain
-   *  places it past the whole box of what it dresses. */
+  /** Its box without its dressing, about its origin, where that is not its
+   *  whole box: what chrome is laid beside (`GoFishNode.localBareSpan`).
+   *  Inner chrome is part of it, so a title sits past the tick labels. */
+  bare?: Extent;
+  /** It is chrome (a ring's shapes): no part of the plot and no dressing,
+   *  so a chain lays it by its whole box, beside the plot it dresses. */
   chrome?: boolean;
   /** Its baseline anchor is its start, not its data 0
    *  (`GoFishNode.baselineIsStart`: a chart's box, placed whole), as its
@@ -246,7 +250,8 @@ const formulaPlaceable = (
   space: UnderlyingSpace | undefined,
   min: F | undefined,
   plot?: readonly [F, F],
-  startBaseline = false
+  startBaseline = false,
+  bare?: readonly [F, F]
 ): SolvePlaceable<F> => {
   const box = { min, size: T.sub(hi, lo) };
   const none = { min: undefined, size: undefined };
@@ -267,6 +272,8 @@ const formulaPlaceable = (
     },
     localPlotSpan: (a) =>
       a === axis && plot !== undefined ? [plot[0], plot[1]] : undefined,
+    localBareSpan: (a) =>
+      a === axis && bare !== undefined ? [bare[0], bare[1]] : undefined,
     spaceOn: (dir) => (dir === axis ? space : undefined),
   };
 };
@@ -535,29 +542,35 @@ export function placeByClaims(
     )
       unplaced.add(i);
   });
-  // Dressing: what is placed beside a node the claim walk places elsewhere
-  // (a value label beside its bar's ref). It takes room, but it is not part
-  // of the plot: a node with a size of its own maps its plot into that
-  // size, and its dressing, like its chrome, adds around it (#1032). The
-  // stand-in itself is the node it stands for, a part of the plot.
-  const placedKey = (key: string): boolean => {
-    const op = operands.get(key);
-    if (op === undefined) return false;
-    if (!op.direct) return nestedPlaced.has(key);
-    return presetOf(op.child) !== undefined;
+  // Dressing: a child that carries none of the layer's space on the axis,
+  // in a layer where another child does. A child carries the space when
+  // its own type there is continuous or ordinal, when a `position` places
+  // it at a datum, when its own data places it, or when it stands for a
+  // node placed elsewhere (a `ref`). So a value label beside its bar, an
+  // outline drawn around refs (an `enclose`), and a chart of outlines
+  // layered over a scatter are dressing: their geometry is read off other
+  // nodes' pixels, not placed by data on this axis. Dressing takes room,
+  // but it is no part of the plot: the axes sit beside the plot, and a
+  // node with a size of its own maps its plot into that size (#1032). A
+  // ring's chrome is chrome, not dressing. A layer where no child carries
+  // the space has no dressing: all of it is plot.
+  const carries = (i: number): boolean => {
+    const c = children[i];
+    return (
+      c.standIn ||
+      c.dataPositioned ||
+      atDatum.has(i) ||
+      c.space?.kind === "continuous" ||
+      c.space?.kind === "ordinal"
+    );
   };
-  const dressingRoots = new Set([...parent.keys()].filter(placedKey).map(find));
+  const plotPart = (c: ClaimChild, i: number) =>
+    !ink.has(i) && c.chrome !== true;
   const dressing = new Set<number>();
-  for (const n of parent.keys()) {
-    const op = operands.get(n);
-    if (op === undefined || !op.direct || children[op.child].standIn) continue;
-    if (dressingRoots.has(find(n))) dressing.add(op.child);
-  }
-  // A node drawn around refs (an `enclose`) is placed beside the nodes it
-  // reads, as a label is: dressing too.
-  children.forEach((c, i) => {
-    if (presetOf(i) !== undefined && !c.standIn) dressing.add(i);
-  });
+  if (children.some((c, i) => plotPart(c, i) && carries(i)))
+    children.forEach((c, i) => {
+      if (plotPart(c, i) && !carries(i)) dressing.add(i);
+    });
   // What the solve leaves out: the ink, and the stand-ins it cannot place.
   const out = (i: number) =>
     ink.has(i) || (children[i].standIn && children[i].placed === undefined);
@@ -622,12 +635,32 @@ export function placeByClaims(
               tape.input(`phi:${i}`, ph),
             ] as const;
           })();
+    const bare =
+      c.bare === undefined
+        ? undefined
+        : (() => {
+            const [bl, bh] = boxOfClaim(c.bare);
+            return [
+              tape.input(`blo:${i}`, bl),
+              tape.input(`bhi:${i}`, bh),
+            ] as const;
+          })();
     const min = origin === undefined ? undefined : T.add(origin, lo);
     if (min !== undefined) presetMin.set(i, min);
     if (origin !== undefined) presetOrigin.set(i, origin);
     targets.set(
       key,
-      formulaPlaceable(T, axis, lo, hi, c.space, min, plot, c.startBaseline)
+      formulaPlaceable(
+        T,
+        axis,
+        lo,
+        hi,
+        c.space,
+        min,
+        plot,
+        c.startBaseline,
+        bare
+      )
     );
     indexOf.set(key, i);
     if (c.dataPositioned) dataPositioned.add(key);
