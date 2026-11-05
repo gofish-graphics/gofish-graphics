@@ -2718,12 +2718,12 @@ class Unit:
         traits = []
         midpoint = self._type.get("HasMidpoint")
         # Trait.diverging() implies Trait.ordered(), so it is written alone.
-        if "HasOrder" in self._type and midpoint is None:
-            traits.append("Trait.ordered()")
         if midpoint is not None:
             default = len(levels["levels"]) / 2 if levels is not None else None
             at = "" if midpoint["at"] == default else repr(midpoint["at"])
             traits.append(f"Trait.diverging({at})")
+        elif "HasOrder" in self._type:
+            traits.append("Trait.ordered()")
         if unit is not None and "CanSum" in (unit.get("traits") or {}):
             traits.append("Trait.summable()")
         if traits:

@@ -48,7 +48,7 @@ export const discrete = (levels: readonly Level[]): LevelsDomain => {
     seen.add(level);
   }
   return Object.freeze({
-    kind: "discrete" as const,
+    kind: "discrete",
     levels: Object.freeze([...levels]),
   });
 };
