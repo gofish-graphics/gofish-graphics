@@ -397,9 +397,9 @@ Shortcuts, each a known approximation:
 - With `holes` on, a fillet at `neck: 0` can leave a horn at a hole's mouth.
 - The closing samples its arcs at most 0.2 px off the exact curve; at a
   radius near 12 on loose dots the outline was measured up to 0.46 px off.
-- A blob over a 1,000-point line and 300 dots takes about 0.25 s at
-  convexity 0 and 0.45 to 0.6 s at 0.5 and 0.9, against about 0.15 s for the
-  old blob. Most of it is the exact closing of the members and links and the
+- A blob over a 1,000-point line and 300 dots takes about 0.11 s at
+  convexity 0 and 0.35 to 0.4 s at 0.5 and 0.9 (in Node),
+  against about 0.15 s for the old blob. Most of it is the exact closing of the members and links and the
   blend's mesh of the pockets (about 50,000 vertices there). The work is
   cached only within one call, so changing only the convexity recomputes the
   join tree and the mesh.
