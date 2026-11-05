@@ -2312,7 +2312,11 @@ entry that names the column replaces it with the rest of the type (#994).
 `Unit(u)` or the name `u`. `columnTypeOf` turns every entry (a builder, a
 column record `{ name, unit }`, a `Unit`, a unit's name) into its record of
 traits, the wire form, in one place (`traitsOf`), which Python's `chart`
-mirrors before it serializes.
+mirrors before it serializes. A wire record may have only the keys of the
+types: each trait's record has only its own keys, and a `HasUnit`'s
+`traits` is a record keyed by unit trait name. Both key lists are tables
+the compiler holds to the types (`TRAIT_KEYS`, `UNIT_TRAIT_KEYS`), so a
+misspelled key throws instead of being dropped.
 
 A column's **domain** (`HasDomain`) moves with the rest of its type, by the
 rules above, with one difference: it is of the rows it was computed over.

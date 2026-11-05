@@ -7,6 +7,7 @@ import { loadTemporal, temporal } from "./calendar";
 import { tagArray } from "./data";
 import { DURATION, INSTANT, meetInto, type UnitOccurrence } from "./measure";
 import { levelsDomain } from "../families/domain";
+import { Frontend } from "gofish-ir";
 
 /**
  * Column types (#984): `chart(data, { schema })` declares, per column, the
@@ -527,8 +528,10 @@ function traitsOf(who: string, entry: SchemaEntry): ColumnType {
         `unit's name, or a column record { name, unit }.`
     );
   const keys = Object.keys(entry);
-  if (keys.every((k) => (TRAITS as string[]).includes(k)))
+  if (keys.every((k) => (TRAITS as string[]).includes(k))) {
+    checkWireRecord(who, entry as Record<string, unknown>);
     return entry as ColumnType;
+  }
   const unknown = keys.filter((k) => !RECORD_KEYS.includes(k));
   if (unknown.length > 0)
     throw new Error(
@@ -552,6 +555,107 @@ function traitsOf(who: string, entry: SchemaEntry): ColumnType {
     ...(name !== undefined ? { HasQuantity: { name } } : {}),
     ...(unit !== undefined ? unitType(unit) : {}),
   };
+}
+
+/** The keys a trait's record takes, `true` each: a table the compiler keeps
+ *  in step with the trait's type, since a key the type has and the table
+ *  lacks, or one the table has and the type lacks, is a type error. A trait
+ *  with no options (`Record<string, never>`) takes none. */
+type KeysOf<T> = string extends keyof T
+  ? Record<string, never>
+  : Record<keyof T, true>;
+
+/** The keys of each column trait's record ({@link KeysOf}). */
+const TRAIT_KEYS: {
+  [K in keyof ColumnType]-?: KeysOf<NonNullable<ColumnType[K]>>;
+} = {
+  HasLevels: { levels: true },
+  HasOrder: {},
+  HasMidpoint: { at: true },
+  HasUnit: {
+    unit: true,
+    symbol: true,
+    traits: true,
+    zone: true,
+    difference: true,
+  },
+  HasQuantity: { name: true },
+  HasDomain: { lo: true, hi: true, sorted: true },
+  HasInteger: {},
+};
+
+/** The keys of each unit trait's record ({@link KeysOf}). */
+const UNIT_TRAIT_KEYS: {
+  [K in keyof UnitTraits]-?: KeysOf<NonNullable<UnitTraits[K]>>;
+} = { CanAdd: {} };
+
+/** What is wrong with one record of a wire column type: at `at`, a value
+ *  that is not a record, or keys the record does not take (`takes`). */
+type Stray = { at: string; takes: object } & (
+  | { value: unknown }
+  | { unknown: string[] }
+);
+
+/** What is wrong with the record `record` at `at`, which takes the keys of
+ *  `takes`: that it is not a record, or the keys it does not take, or else
+ *  what is wrong inside it (`inner`, per key). */
+function straysOf(
+  at: string,
+  record: unknown,
+  takes: object,
+  inner: (key: string, value: unknown) => Stray[] = () => []
+): Stray[] {
+  if (!Frontend.isPlainObject(record)) return [{ at, takes, value: record }];
+  const unknown = Object.keys(record).filter((k) => !Object.hasOwn(takes, k));
+  if (unknown.length > 0) return [{ at, takes, unknown }];
+  return Object.entries(record).flatMap(([k, v]) =>
+    v === undefined ? [] : inner(k, v)
+  );
+}
+
+/** What is wrong with a wire `HasUnit` at `at`: its own keys, its `traits`,
+ *  a record keyed by unit trait name, and its `difference`, a `HasUnit`. */
+const unitStrays = (at: string, unit: unknown): Stray[] =>
+  straysOf(at, unit, TRAIT_KEYS.HasUnit, (key, value) =>
+    key === "traits"
+      ? straysOf(`${at}.traits`, value, UNIT_TRAIT_KEYS, (trait, record) =>
+          straysOf(
+            `${at}.traits.${trait}`,
+            record,
+            UNIT_TRAIT_KEYS[trait as keyof UnitTraits]
+          )
+        )
+      : key === "difference"
+        ? unitStrays(`${at}.difference`, value)
+        : []
+  );
+
+/** The rule that a wire column type (keyed by trait name, as Python sends
+ *  it) has only the keys of the types: each trait's record has only its
+ *  own keys ({@link TRAIT_KEYS}), and a `HasUnit`'s `traits` is a record
+ *  keyed by unit trait name ({@link UNIT_TRAIT_KEYS}). Without it a
+ *  misspelled key would be dropped without a word, and what it said with
+ *  it: a unit whose traits are misspelled skips the sum check. */
+function checkWireRecord(who: string, type: Record<string, unknown>): void {
+  const [stray] = Object.entries(type).flatMap(([trait, record]) =>
+    record === undefined
+      ? []
+      : trait === "HasUnit"
+        ? unitStrays(trait, record)
+        : straysOf(trait, record, TRAIT_KEYS[trait as keyof ColumnType])
+  );
+  if (stray === undefined) return;
+  const names = Object.keys(stray.takes);
+  const takes = names.length === 0 ? "{}" : `{ ${names.join(", ")} }`;
+  const what =
+    "unknown" in stray
+      ? `the unknown ${stray.unknown.length === 1 ? "key" : "keys"} ` +
+        stray.unknown.map((k) => JSON.stringify(`${stray.at}.${k}`)).join(", ")
+      : `the ${stray.at} ${JSON.stringify(stray.value)}, which is not a record`;
+  throw new Error(
+    `${who} has ${what}. ${stray.at} is a record ${takes}. A Unit writes ` +
+      `these records: Unit("USD", { traits: [Trait.summable()] }).`
+  );
 }
 
 /** A schema as the wire carries it: each entry's record of traits
@@ -582,7 +686,6 @@ export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
         `schema.`
     );
   checkLevelsFit(who, type);
-  checkUnitRecord(who, type.HasUnit);
   if (type.HasOrder !== undefined && type.HasLevels === undefined)
     throw new Error(
       `${who} has HasOrder but no HasLevels. An order is an order of ` +
@@ -598,31 +701,6 @@ export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
     );
   checkMidpointOnOrder(type.HasLevels!.levels, type.HasMidpoint.at);
   return type;
-}
-
-const UNIT_KEYS = ["unit", "symbol", "traits", "zone", "difference"];
-const UNIT_TRAIT_KEYS = ["CanAdd"];
-
-/** The rule that a wire record's `HasUnit` has only the keys of
- *  {@link HasUnit}, and that its `traits` is a record keyed by trait name
- *  ({@link UnitTraits}), not a list of `Trait` values. Without it a
- *  misspelled key would drop the unit's traits and skip the sum check. */
-function checkUnitRecord(who: string, unit: HasUnit | undefined): void {
-  if (unit === undefined) return;
-  const unknown = Object.keys(unit).filter((k) => !UNIT_KEYS.includes(k));
-  const { traits } = unit as { traits?: unknown };
-  const badTraits =
-    traits !== undefined &&
-    (traits === null ||
-      typeof traits !== "object" ||
-      Array.isArray(traits) ||
-      Object.keys(traits).some((k) => !UNIT_TRAIT_KEYS.includes(k)));
-  if (unknown.length > 0 || badTraits)
-    throw new Error(
-      `${who} has the HasUnit ${JSON.stringify(unit)}. A HasUnit takes ` +
-        `${UNIT_KEYS.join(", ")}, and its traits is a record such as ` +
-        `{ CanAdd: {} }. Unit("USD", { traits: [Trait.summable()] }) writes it.`
-    );
 }
 
 /** The rule that a column's levels fit its other traits: each level is one

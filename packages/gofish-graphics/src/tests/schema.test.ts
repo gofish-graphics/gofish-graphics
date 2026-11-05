@@ -28,6 +28,7 @@ import {
   columnTypeOf,
   getColumnTypes,
   orderByLevels,
+  schemaToWire,
   setColumnTypes,
   stackOrigin,
   Unit as SrcUnit,
@@ -1132,12 +1133,46 @@ async function main() {
       const got = await errorOf(() =>
         columnTypeOf("usd", { HasUnit } as any)
       );
-      check(`${name} throws`, got?.includes("A HasUnit takes") === true, got);
+      check(
+        `${name} throws`,
+        got?.includes("HasUnit") === true &&
+          got.includes('Unit("USD", { traits: [Trait.summable()] })'),
+        got
+      );
     }
     check(
       "a well-formed record passes",
       columnTypeOf("usd", { HasUnit: { unit: "USD", traits: { CanAdd: {} } } })
         .HasUnit?.traits?.CanAdd !== undefined
+    );
+    const midpoint = await errorOf(() =>
+      columnTypeOf("rating", {
+        HasLevels: { levels: [1, 2] },
+        HasOrder: {},
+        HasMidpoint: { at_: 1 },
+      } as any)
+    );
+    check(
+      "a misspelled key in another trait throws, naming it",
+      midpoint?.includes('"HasMidpoint.at_"') === true &&
+        midpoint.includes("HasMidpoint is a record { at }"),
+      midpoint
+    );
+    const wire = await errorOf(() =>
+      schemaToWire({
+        usd: { HasUnit: { unit: "USD", classes: { CanAdd: {} } } } as any,
+      })
+    );
+    check(
+      "schemaToWire checks a wire record too",
+      wire?.includes('"HasUnit.classes"') === true,
+      wire
+    );
+    check(
+      "the engine's own units pass (instant with a zone, its difference)",
+      columnTypeOf("t", SrcUnit.time({ zone: "UTC" }).type as any).HasUnit
+        ?.difference?.unit === "duration",
+      undefined
     );
   }
 
