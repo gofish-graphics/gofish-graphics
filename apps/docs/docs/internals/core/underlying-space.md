@@ -1079,7 +1079,9 @@ the targets are boxes read off claims and a datum maps through a symbolic σ, an
 results are formulas that layout evaluates at the solved σ with what it measured: the
 laid boxes, the pixel of data 0, and the place of each child that places itself (a
 shape at a literal pixel or a data position, an axis span or a `connect`, which set
-`placedByLayout`). A datum that is not a number has no pixel, so it emits no fact.
+`placedByLayout`). On an axis with no position scale a datum that is not a number
+has no pixel, so it emits no fact; against a real position scale it is an error
+(`compilePlacementCoordinate`).
 Every solved cell writes back through **one path**: a size-strong
 cell sets its extent (`setExtent({min, max})`), a position-only cell pins its
 `min` anchor, a rank-1 size-with-no-position cell (align `"size"`, above)
@@ -1429,8 +1431,9 @@ axis's claim is measured from data 0 and is the hull of what the content
 draws, so each side reaches the farther of the claim and the domain's niced
 end: pixels drawn past the data (a mark's size at its datum, a tick label
 past the last tick) take room only where the domain does not already reach
-past them. A delta axis centers its content in the niced width, so it widens
-by `σ·(nicedWidth − dataWidth)`, half on each side.
+past them. A delta axis centers its content in the niced width, so each
+side reaches at least `σ·nicedWidth/2` from the middle of its claim. Widening
+twice to one width changes nothing.
 
 Leaf shapes never need to compute their own scale factors — they receive the
 per-axis `AxisScale` via the `scales` parameter and read its `sigma` in
