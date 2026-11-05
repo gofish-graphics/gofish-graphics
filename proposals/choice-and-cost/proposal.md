@@ -5,55 +5,46 @@ Status: proposal, not implemented. Advances #486 (choice operator), #122 (wrap o
 ## Summary
 
 - Add one operator, `choose`, which lists alternatives in order of preference. You can use it as a node over child subtrees, and you can also use it as the value of an option, e.g. `angle: choose([0, 45, 90])` or `cols: choose({ from: 4, to: 24 })`.
-- Add a `Cost` strategy family that says how `choose` ranks the alternatives. By default `choose` takes the first alternative that fits. With `cost: [Cost.overflow(), Cost.waste()]` it takes the alternative with the lowest cost, compared term by term.
-- Add a `wrap` operator, which flows children along a direction and starts a new row when the row is full. A `Break` family picks the break rule: `Break.greedy`, `Break.optimal` (Knuth-Plass), `Break.balance`, `Break.group` (all breaks or none) and `Break.never`. Every `Break` strategy is a `choose` at each seam plus a cost, so `wrap` adds no new search machinery.
+- Add a `Cost` strategy family that says how alternatives are ranked. By default `choose` takes the first alternative that fits. With `cost: [Cost.overflow(), Cost.lines()]` it takes the alternative with the lowest cost, compared term by term.
+- Add a `wrap` option to `stack` and `spread`. It folds the operator's row of children into several rows. Each seam between two children is a `choose` between continuing on the current row and starting a new row, so the same ranking rule applies. By default the first fit at each seam gives greedy line breaking. `wrap: { cost: Cost.badness() }` gives Knuth-Plass.
 
-The "union of boxes" geometry that the pretty printer needs stays inside `wrap` and `choose` as an internal summary. Users see it only as the `parts` of a wrapped node's outline.
-
-**Recommendation.** Approach B below: `choose` as one operator that works as a node and as an option value, ranked by preference order first and by an optional `Cost` list second, with `wrap` and its `Break` family as the first operator built on it. Today's `angle: "auto"` becomes sugar for a written-out `choose`.
+Wrapping is about rows, and `stack` versus `spread` is about spaces, so the two are separate options. A `stack` glues its children's spaces into one space, and a `spread` keeps each child's space separate. Either one can wrap. The stacked waffle is a `stack` by species that wraps, and a facet grid is a `spread` by panel that wraps.
 
 ```js
-// Waffle: pick the column count whose square cells fill the box best.
+// Stacked waffle: species glued into one count, folded into rows.
+// The column count is the one whose square cells fill the box best.
 chart(seafood)
   .flow(
-    derive((d) => d.flatMap((d) => repeat(d, "count"))),
-    wrap({ cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }) })
+    stack({
+      by: "species",
+      dir: "x",
+      wrap: { cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }) },
+    }),
+    derive((d) => repeat(d, "count")),
+    stack({ dir: "x" })
   )
   .mark(rect({ fill: "species" }));
 
 // Paragraph: Knuth-Plass line breaking.
-wrap(
-  { w: 260, break: Break.optimal() },
+spread(
+  { dir: "x", spacing: "0.5ch", w: 260, wrap: { cost: Cost.badness() } },
   words.map((w) => text({ text: w }))
 );
 
 // Axis labels: the first angle whose labels do not overlap.
-axes: {
-  x: {
-    label: {
-      angle: choose([0, 45, 90]);
-    }
-  }
-}
-
-// Pretty printer: two layouts for an `if`, the printer picks one.
-choose([
-  wrap({ break: Break.never, spacing: "1ch" }, [kw("(if"), c, t, e, kw(")")]),
-  stack({ dir: "y", align: "start" }, [
-    wrap({ break: Break.never, spacing: "1ch" }, [kw("(if"), c]),
-    offset({ x: "2ch" }, t),
-    offset({ x: "2ch" }, e),
-  ]),
-]);
+chart(data, { axes: { x: { label: { angle: choose([0, 45, 90]) } } } });
 ```
+
+One question stays open on purpose: whether wrapping names its rule with a `Break` family (`wrap: { break: Break.optimal() }`) or with a cost (`wrap: { cost: Cost.badness() }`). The section [Break or no Break](#break-or-no-break) shows every example both ways. We lean toward no `Break`.
 
 ## Terms
 
 - **Alternative.** One of the layouts a `choose` node can pick. An alternative is a subtree, or a value for an option.
 - **Fit.** An alternative fits when its layout stays inside the room its parent gives it and passes the operator's own test, e.g. axis labels that do not overlap.
-- **Cost.** A number, or a list of numbers compared in order, that ranks alternatives. Lower is better. A list compared in order is called lexicographic: the second number only matters when the first numbers are equal.
-- **Seam.** The place between two neighboring children of a flow operator. `stack` and `spread` have fixed seams. A `wrap` seam is a choice between continuing on the current row and breaking to a new row.
-- **Silhouette.** The summary of a child's shape that a parent uses when it joins children, e.g. a box, or a box plus the width of its last row. The term comes from `notes/design/silhouette-interface.md`, which defines it. We use "silhouette" and not "measure" because `Measure`, `measureText` and `ref.measure()` already mean other things in GoFish.
+- **Cost.** A number, or a list of numbers compared in order, that ranks alternatives. Lower is better. A list compared in order is called lexicographic. The second number only matters when the first numbers are equal.
+- **Seam.** The place between two neighboring children of a `stack` or `spread`. Without `wrap`, every seam continues the row. With `wrap`, every seam is a choice between continuing and starting a new row.
+- **Block.** A child that a wrapped row treats as one box. It moves to the next row as a whole.
+- **Silhouette.** The summary of a child's shape that a parent uses when it joins children, e.g. a box, or a box plus the width of its last row. The term comes from `notes/design/silhouette-interface.md`. We use "silhouette" and not "measure" because `Measure`, `measureText` and `ref.measure()` already mean other things in GoFish.
 - **Pareto frontier.** The set of alternatives that no other alternative beats on every count. A layout engine keeps this set and drops the rest, so it does not have to try every combination.
 
 ## The examples
@@ -106,7 +97,14 @@ Reference images are in `img/prior/`.
 
 ## Approaches
 
-The design has three separate axes. The first axis is where the choice appears in the spec. The second is how alternatives are ranked. The third is how `wrap` names its break rule. We present the axes one at a time.
+The design has four separate axes:
+
+1. Where the choice appears in the spec.
+2. How alternatives are ranked.
+3. Where wrapping lives.
+4. Whether wrapping names its rule with a `Break` family or with a cost.
+
+We present the axes one at a time.
 
 ### Axis 1. Where the choice appears
 
@@ -116,15 +114,26 @@ The design has three separate axes. The first axis is where the choice appears i
 
 ```js
 // waffle
-choose([4, 8, 12, 16, 24].map(cols => wrap({ cols }, cells)), { cost: Cost.waste() })
+choose(
+  [4, 8, 12, 16, 24].map((cols) => stack({ dir: "x", wrap: { cols } }, cells)),
+  { cost: Cost.waste() }
+);
 
-// axis label angle: the axis is chrome, so the choice has to wrap the whole chart
-choose([0, 45, 90].map(angle =>
-  chart(data, { axes: { x: { label: { angle } } } }).flow(...).mark(...)))
+// axis label angle: the axis is chrome, so the choice has to repeat the whole chart
+choose(
+  [0, 45, 90].map((angle) =>
+    chart(data, { axes: { x: { label: { angle } } } })
+      .flow(spread({ by: "product", dir: "x" }))
+      .mark(rect({ h: "sales" }))
+  )
+);
 ```
 
 ```python
-choose([wrap(cells, cols=c) for c in [4, 8, 12, 16, 24]], cost=Cost.waste())
+choose(
+    [stack(cells, dir="x", wrap={"cols": c}) for c in [4, 8, 12, 16, 24]],
+    cost=Cost.waste(),
+)
 ```
 
 - It is the smallest addition. The pretty printer maps onto it one to one.
@@ -133,66 +142,61 @@ choose([wrap(cells, cols=c) for c in [4, 8, 12, 16, 24]], cost=Cost.waste())
 
 #### Approach B. `choose` is a node, and also an option value (recommended)
 
-The same `choose` works in two places. As a node it takes subtrees. As an option value it takes values, and the option takes the chosen value. The value form is sugar. It means "instantiate this node once per value, then choose among those nodes", so it desugars to Approach A.
+The same `choose` works in two places. As a node it takes subtrees. As an option value it takes values, and the option takes the chosen value. The value form is sugar. It means "build this node once per value, then choose among those nodes", so it desugars to Approach A.
 
 ```js
 // option value, discrete
-axes: {
-  x: {
-    label: {
-      angle: choose([0, 45, 90]);
-    }
-  }
-}
+chart(data, { axes: { x: { label: { angle: choose([0, 45, 90]) } } } });
 
 // option value, a whole record per alternative (today's "auto" written out)
-axes: {
-  x: {
-    label: choose([
-      { angle: 0 },
-      { angle: 45 },
-      { angle: 90 },
-      { hidden: true },
-    ]);
-  }
-}
+chart(data, {
+  axes: {
+    x: {
+      label: choose([
+        { angle: 0 },
+        { angle: 45 },
+        { angle: 90 },
+        { hidden: true },
+      ]),
+    },
+  },
+});
 
 // option value, an integer range with a cost
-wrap({ cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }) });
+stack({
+  dir: "x",
+  wrap: { cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }) },
+});
 
 // option value, a continuous interval: the smallest angle that clears
-axes: {
-  x: {
-    label: {
-      angle: choose({ from: 0, to: 90 });
-    }
-  }
-}
+chart(data, { axes: { x: { label: { angle: choose({ from: 0, to: 90 }) } } } });
 
 // node form, for structurally different layouts
 choose([flatIf, brokenIf]);
 ```
 
 ```python
-axes={"x": {"label": {"angle": choose([0, 45, 90])}}}
-wrap(cols=choose(start=4, stop=24, cost=Cost.waste()))
+chart(data, axes={"x": {"label": {"angle": choose([0, 45, 90])}}})
+stack(dir="x", wrap={"cols": choose(start=4, stop=24, cost=Cost.waste())})
 choose([flat_if, broken_if])
 ```
 
 - One word covers every case in the examples list.
-- The axis case no longer repeats the chart. The axis is still built by the engine, but the engine builds one axis node with a choice inside, and only that axis is laid out again per alternative.
+- The axis case no longer repeats the chart. The engine builds one axis node with a choice inside, and only that axis is laid out again per alternative.
 - A range or interval is a lazy list. For a first-fit choice over an interval the engine can bisect, because overlap falls as the angle grows. This is the "pick a basin, then solve inside it" idea from #486.
-- `"auto"` stays as named sugar: `angle: "auto"` is the same as `label: choose([{ angle: 0 }, { angle: 45 }, { angle: 90 }, { hidden: true }])`. The docs show the expansion, so the user can copy it and change the list.
-- The cost of this approach is a rule the user must learn. An option that accepts `choose(...)` has to say so in its type. We would start with a small set: `wrap.cols`, `label.angle`, `label` as a whole, `ticks.count`, and `axes.x` as a whole.
+- `"auto"` stays as named sugar. `angle: "auto"` is the same as `label: choose([{ angle: 0 }, { angle: 45 }, { angle: 90 }, { hidden: true }])`. The docs show the expansion, so the user can copy it and change the list.
+- The user must learn which options accept `choose(...)`, and each such option says so in its type. We would start with a small set: `wrap.cols`, `label.angle`, `label` as a whole, `ticks.count`, and `axes.x` as a whole.
 
 #### Approach C. No user-facing choice, only strategies
 
 Each operator gets an `"auto"` value or a strategy, and the search stays inside the engine. This is CSS `text-wrap: pretty`, Plotly's `tickangle: "auto"` and Plot's waffle rule.
 
 ```js
-wrap({ cols: "auto" })               // square cells that fill the room
-wrap({ break: Break.optimal() })     // Knuth-Plass
-axes: { x: { label: { angle: "auto" }, ticks: { count: "auto" } } }
+stack({ dir: "x", wrap: { cols: "auto" } }); // square cells that fill the room
+spread({ dir: "x", wrap: { break: Break.optimal() } }); // Knuth-Plass
+chart(data, {
+  axes: { x: { label: { angle: "auto" }, ticks: { count: "auto" } } },
+});
 ```
 
 - It is the simplest surface, and it is close to what GoFish ships today.
@@ -206,7 +210,9 @@ The user names unknowns and one objective for the chart, in the style of Penrose
 
 ```js
 const cols = variable({ from: 4, to: 24, integer: true });
-chart(data, { minimize: [overflow(), waste()] }).flow(wrap({ cols }));
+chart(data, { minimize: [overflow(), waste()] }).flow(
+  stack({ dir: "x", wrap: { cols } })
+);
 ```
 
 - It can express everything, including choices that interact across the chart.
@@ -231,61 +237,140 @@ The fit test has two parts:
 
 ```js
 choose(alternatives, { cost: [Cost.overflow(), Cost.lines()] }); // the pretty printer default
-wrap({ cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }) });
+stack({
+  dir: "x",
+  wrap: { cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }) },
+});
+spread({ dir: "x", wrap: { cost: Cost.badness() } }); // Knuth-Plass
 ```
 
 A first set of terms:
 
 | Term                     | Meaning                                                                               | Used by                                  |
 | ------------------------ | ------------------------------------------------------------------------------------- | ---------------------------------------- |
-| `Cost.overflow()`        | ink outside the room, squared and summed per row, as in the pretty expressive printer | pretty printing, wrap                    |
+| `Cost.overflow()`        | ink outside the room, squared and summed per row, as in the pretty expressive printer | pretty printing, wrapping                |
 | `Cost.overlap()`         | total overlap area between labels or marks that should not touch                      | axis labels, tick count, label placement |
 | `Cost.waste()`           | the fraction of the room left empty                                                   | waffle, treemap rows                     |
 | `Cost.lines()`           | the number of rows                                                                    | pretty printing                          |
-| `Cost.badness()`         | Knuth-Plass badness, `100·(slack/stretch)³` per row, last row free                    | `Break.optimal`                          |
+| `Cost.badness()`         | Knuth-Plass badness, `100 (slack/stretch)³` per row, last row free                    | paragraphs                               |
+| `Cost.balance()`         | the largest difference between a row's length and the longest row                     | titles, short labels                     |
 | `Cost.weighted({ ... })` | a weighted sum of other terms, in the style of Talbot and Typst                       | tick choice in the Talbot style          |
 
 A function is the escape hatch, e.g. `cost: layout => number`. It waits for #1101, which decides how a family accepts user functions and how they cross to Python.
 
-The cost terms must follow the laws in the silhouette note: every join is monotone in the cost, and the cost is an ordered monoid. That is why `Cost.overflow` sums squared overflow and does not take a maximum. The pretty expressive paper shows that (max overflow, height) breaks monotonicity, so the engine could not prune with it.
+The cost terms must follow the laws in the silhouette note. Every join must be monotone in the cost, and the cost must be an ordered monoid. That is why `Cost.overflow` sums squared overflow and does not take a maximum. The pretty expressive paper shows that (max overflow, height) breaks monotonicity, so the engine could not prune with it.
 
 #### Ranking 3. Penalties on alternatives
 
-Knuth-Plass penalties and the pretty printer's `cost n d` attach a cost to one alternative. In GoFish this could be a method, e.g. `brokenIf.cost(2)`, or a per-alternative weight in `choose`. We do not propose it now. Preference order covers the cases above. It is listed as a decision.
+Knuth-Plass penalties and the pretty printer's `cost n d` attach a cost to one alternative. In GoFish this could be a method, e.g. `brokenIf.cost(2)`, or a weight per alternative in `choose`. We do not propose it now, because preference order covers the cases above. It is listed as a decision.
 
-### Axis 3. How `wrap` names its break rule
+### Axis 3. Where wrapping lives
 
-`wrap` folds its children with a soft seam. At each seam the layout either continues on the current row or breaks to a new one. This follows the silhouette note §7, which found that a wrap is the pretty printer's `fill` (one choice per seam), not `group` (one choice for all seams). `stack` and `spread` are the same fold with fixed seams.
+`stack` and `spread` differ in their spaces. A `stack` glues its children's spaces into one space, e.g. the species counts in a stacked bar add up along one value axis. A `spread` keeps each child's space separate, e.g. one band per lake. Wrapping is a different question. It asks whether the children stay on one row or fold into several rows. Any flow of children can fold, whether their spaces are glued or separate:
+
+|             | glued spaces (`stack`) | separate spaces (`spread`)     |
+| ----------- | ---------------------- | ------------------------------ |
+| one row     | stacked bar            | grouped bars                   |
+| folded rows | stacked waffle         | facet grid, paragraph of words |
+
+#### Wrap 1. An option on `stack` and `spread` (recommended)
 
 ```js
-wrap({ dir: "x", w: 260, spacing: "0.5ch", break: Break.optimal() }, words);
-wrap({ cols: 10 }, cells); // fixed columns, no choice at all
-wrap({ break: Break.group }, items); // all on one row, or one item per row
-wrap({ break: Break.never }, items); // one row; the next item starts on the last row of a multi-row child
+stack({ by: "species", dir: "x", wrap: { cols: 10 } }); // stacked waffle, ten columns
+spread({ by: "panel", dir: "x", wrap: { cols: 3 } }); // facet grid, three columns
+spread({ dir: "x", spacing: "0.5ch", wrap: true }, words); // paragraph, greedy breaks in the room
 ```
 
-| Strategy                        | Rule                              | Written as `choose` plus cost                     |
-| ------------------------------- | --------------------------------- | ------------------------------------------------- |
-| `Break.greedy`                  | continue while the next item fits | first fit at each seam, from the start            |
-| `Break.optimal({ tolerance? })` | Knuth-Plass, lowest total badness | `choose` at each seam, `cost: Cost.badness()`     |
-| `Break.balance`                 | rows of nearly equal length       | `choose` at each seam, minimize the largest slack |
-| `Break.group`                   | all seams continue, or all break  | one `choose` over two layouts                     |
-| `Break.never`                   | all seams continue                | no choice                                         |
+```python
+stack(by="species", dir="x", wrap={"cols": 10})
+spread(by="panel", dir="x", wrap={"cols": 3})
+spread(words, dir="x", spacing="0.5ch", wrap=True)
+```
 
-The alternative spelling drops the family and puts the cost on `wrap` directly, e.g. `wrap({ cost: Cost.badness() })`. We prefer `Break`, because:
+- `wrap: true` breaks rows to fit the room the parent gives. `wrap: { cols }` fixes the column count. `wrap: { cost }` ranks the breaks.
+- `dir` is the direction of each row. Rows advance along the other axis, and `reverse` and `alignment` keep their meaning inside a row.
+- The glued space of a wrapped `stack` stays one space. In a stacked waffle, trout starts at the cell where bass ended, so the species still add up to one count.
+- It matches the rule that an option is a local adjective of its operator (`api-design.md`, "Calls, methods and options"). Wrapping changes how one operator places its own children, and nothing outside it.
+- It adds one option to two operators and no new operator.
 
-- Typst (`linebreaks: "optimized"`) and CSS (`text-wrap-style: pretty`) name the rule, not the cost.
-- `Break.group` and `Break.never` are not costs.
+#### Wrap 2. A separate `wrap` operator
 
-`text` can then take a width, e.g. `text({ text: para, w: 260, break: Break.optimal() })`. It desugars to a `wrap` over one `text` per word, so a multi-line label is not a new mark.
+```js
+wrap({ by: "species", cols: 10 });
+wrap({ by: "panel", cols: 3 });
+```
 
-## The examples under Approach B
+- It reads well for the waffle.
+- It cannot say whether its children's spaces are glued or separate. A `wrap` by species has to glue, so trout continues bass's count, and a `wrap` by panel has to separate, so each panel keeps its own scales. The operator would need its own glue flag, which repeats the `stack` and `spread` distinction. Two operators would then overlap on most of their behavior, which is the kind of large partial overlap `api-design.md` warns about.
+
+#### Nested flows
+
+A stacked waffle has two levels. The outer `stack` splits by species, and the inner `stack` lays out one species' units. The inner units have to continue the outer rows, so trout's first cell goes right after bass's last cell, on the same row. One rule covers this case and the paragraph case:
+
+- **A same-direction `stack` or `spread` without its own `wrap` continues its parent's rows.** Its seams join the parent's flow, so its children fill the current row and then the next one.
+- **Any other child is a block.** That includes a child that sets its own `wrap`, a child that flows in the other direction, a mark, and a node from any other operator. A block moves to the next row as a whole.
+
+The rule is the same as today's behavior without wrapping. Two nested same-direction stacks already lay out exactly like one flat stack, because gluing is associative. Wrapping folds that one flat row, so the nesting does not change the result.
+
+```js
+// stacked waffle: species glued, units continue the species rows
+stack({ by: "species", dir: "x", wrap: { cols: 10 } }),
+derive((d) => repeat(d, "count")),
+stack({ dir: "x" }),
+
+// grouped waffle: each species is its own wrapped block, side by side
+spread({ by: "species", dir: "x" }),
+derive((d) => repeat(d, "count")),
+stack({ dir: "x", wrap: { cols: 5 } }),
+```
+
+The continuing case is the only place the engine needs more than a box. A child that continues the parent's rows reports its silhouette as row count, widest row and last-row width, so the next sibling knows where to start. A block reports only its box.
+
+### Axis 4. Break or no Break
+
+Wrapping can name its rule in two ways. With a `Break` family, each rule has a name. Without it, `wrap` takes the same `cost` option as `choose`, and the rule is the cost.
+
+| Rule                         | With `Break`                                                          | Without `Break`                                  |
+| ---------------------------- | --------------------------------------------------------------------- | ------------------------------------------------ |
+| greedy (the default)         | `wrap: true`                                                          | `wrap: true`                                     |
+| Knuth-Plass                  | `wrap: { break: Break.optimal() }`                                    | `wrap: { cost: Cost.badness() }`                 |
+| Knuth-Plass with a tolerance | `wrap: { break: Break.optimal({ tolerance: 2 }) }`                    | `wrap: { cost: Cost.badness({ tolerance: 2 }) }` |
+| balanced rows                | `wrap: { break: Break.balance() }`                                    | `wrap: { cost: Cost.balance() }`                 |
+| fixed columns                | `wrap: { cols: 10 }`                                                  | `wrap: { cols: 10 }`                             |
+| columns chosen by a cost     | `wrap: { cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }) }` | the same                                         |
+| one row, or one item per row | `choose([spread(items), spread({ dir: "y" }, items)])`                | the same                                         |
+| never break                  | no `wrap`                                                             | no `wrap`                                        |
+
+The two spellings differ in three rows only. Everything else is the same, because `choose` over columns, all-or-nothing, and never breaking are not break rules.
+
+Each `Break` rule desugars to a `choose` at every seam plus a ranking:
+
+- `Break.greedy` is first fit at each seam. Each seam prefers "continue" over "new row". The first assignment in that order that fits continues whenever the current row still fits, because a later break is always possible. That is exactly the greedy rule.
+- `Break.optimal()` is `cost: Cost.badness()`.
+- `Break.balance()` is `cost: Cost.balance()`.
+
+So `Break` is a set of names for costs.
+
+**For `Break`:**
+
+- Typst (`par(linebreaks: "optimized")`) and CSS (`text-wrap-style: pretty | balance`) name the rule, not the cost. A user setting a paragraph does not have to know what a cost is.
+- `Break.optimal()` names the algorithm, so the engine can run the Knuth-Plass dynamic program instead of a general search. The engine could also do this when it sees `Cost.badness()`.
+
+**Against `Break`:**
+
+- Two families would say the same thing. `wrap: { break: Break.optimal() }` and `wrap: { cost: Cost.badness() }` would both have to work, or `wrap` would rank alternatives differently from `choose`.
+- With only `cost`, there is one ranking rule for every choice in GoFish. A user who learns `cost` for the pretty printer can use the same word for paragraphs, and a cost list such as `[Cost.overflow(), Cost.badness()]` works without a new spelling.
+- Every `Break` strategy would be a one-line alias, and the rule from `three-surfaces.md` is that an option with nothing to choose between gets no family.
+
+We lean toward no `Break`, with the Typst and CSS words in the docs for `Cost.badness` and `Cost.balance`. The case for `Break` is that paragraph users never have to see the word "cost".
+
+## The examples under the recommendation
 
 ### Waffle chart
 
 ![waffle candidates](img/waffle-candidates.png)
 
-The prototype fits 73 cells into a 300 by 200 box. The cost is the fraction of the box left empty, `1 − n·s²/(W·H)`, where `s` is the largest square cell that fits. Twelve columns win, with 25 px cells and a cost of 0.24. Four columns cost 0.87 and 24 columns cost 0.81.
+The prototype fits 73 cells into a 300 by 200 box. The cost is the fraction of the box left empty, `1 − n s²/(W H)`, where `s` is the largest square cell that fits. Twelve columns win, with 25 px cells and a cost of 0.24. Four columns cost 0.87 and 24 columns cost 0.81.
 
 ![today and chosen](img/waffle-today-vs-chosen.png)
 
@@ -294,21 +379,60 @@ Above is the gallery waffle today, with five columns of 8 px cells. In a 600 by 
 Today:
 
 ```js
-(spread({ by: chunk(5), spacing: 2, dir: "y", reverse: true }),
-  spread({ spacing: 2, dir: "x" }));
+chart(seafood, { axes: { x: { side: "end" } } })
+  .flow(
+    spread({ by: "lake", spacing: 8, dir: "x", axes: false, alignment: "end" }),
+    derive((d) => d.flatMap((d) => repeat(d, "count"))),
+    spread({ by: chunk(5), spacing: 2, dir: "y", reverse: true }),
+    spread({ spacing: 2, dir: "x" })
+  )
+  .mark(rect({ w: 8, h: 8, fill: "species" }))
+  .render(container, {});
 ```
 
 Proposed:
 
 ```js
-wrap({
-  cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }),
-  spacing: 2,
-  start: "bottom",
-});
+chart(seafood, { axes: { x: { side: "end" } } })
+  .flow(
+    spread({ by: "lake", spacing: 8, dir: "x", axes: false, alignment: "end" }),
+    stack({
+      by: "species",
+      dir: "x",
+      spacing: 2,
+      reverse: "rows",
+      wrap: { cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }) },
+    }),
+    derive((d) => repeat(d, "count")),
+    stack({ dir: "x" })
+  )
+  .mark(rect({ fill: "species" }))
+  .render(container, { w: 600, h: 200 });
 ```
 
-`wrap` with an unsized cell divides the room into square cells. The cost picks the column count that wastes the least room. Plot's `floor(sqrt(bandwidth / scale))` is the closed form of the same rule, and the engine can use it when the cost is exactly `Cost.waste()` with uniform cells. The grouped waffle is `stack("species"), wrap()` and the "stacked" waffle is `wrap("species"), wrap()`, as in the spec square from the silhouette note.
+```python
+(
+    chart(seafood, axes={"x": {"side": "end"}})
+    .flow(
+        spread(by="lake", spacing=8, dir="x", axes=False, alignment="end"),
+        stack(
+            by="species",
+            dir="x",
+            spacing=2,
+            reverse="rows",
+            wrap={"cols": choose(start=4, stop=24, cost=Cost.waste())},
+        ),
+        derive(lambda d: repeat(d, "count")),
+        stack(dir="x"),
+    )
+    .mark(rect(fill="species"))
+)
+```
+
+- The rect has no size, so the wrapped `stack` divides its room into square cells. The cost picks the column count that wastes the least room.
+- Plot's `floor(sqrt(bandwidth / scale))` is the closed form of the same rule. The engine can use it when the cost is exactly `Cost.waste()` and the cells are uniform. With uniform cells the silhouette is just a cell count, so trying 21 column counts means 21 formulas, not 21 layouts.
+- `reverse: "rows"` puts the ragged last row at the top, which the gallery story does today with `reverse: true` on the row spread. How to spell "reverse the row order but not the order inside a row" is a decision.
+- `stack` with `spacing: 2` leaves a gap between glued units. Today `stack` forces its spacing to 0, so this proposal also lets `stack` take `spacing`.
 
 ### Knuth-Plass
 
@@ -316,65 +440,102 @@ wrap({
 
 The prototype sets a 61 word paragraph at 256 px. Greedy first fit has a total badness of 0.99 and a worst line of 0.78. Knuth-Plass has a total of 0.41 and a worst line of 0.19, with the same number of lines. Word widths come from the text mark's own measurement.
 
+Not possible today. The prototype computes the breaks in plain JavaScript and places each word by hand.
+
+Proposed:
+
 ```js
-wrap(
-  { w: 260, spacing: "0.5ch", break: Break.optimal() },
+spread(
+  { dir: "x", spacing: "0.5ch", w: 260, wrap: { cost: Cost.badness() } },
+  words.map((w) => text({ text: w }))
+);
+
+// the same, with Break
+spread(
+  { dir: "x", spacing: "0.5ch", w: 260, wrap: { break: Break.optimal() } },
   words.map((w) => text({ text: w }))
 );
 ```
+
+```python
+spread(
+    [text(text=w) for w in words],
+    dir="x",
+    spacing="0.5ch",
+    w=260,
+    wrap={"cost": Cost.badness()},
+)
+```
+
+`text` can then take a width, e.g. `text({ text: para, w: 260, wrap: { cost: Cost.badness() } })`. It desugars to a wrapped `spread` over one `text` per word, so a label with several lines is not a new mark. A sentence with a bold word is a `spread` of runs, and each run is a `spread` of words. The inner spreads have no `wrap` of their own, so their words continue the paragraph's rows.
 
 ### Pretty printer
 
 ![pretty printer at three widths](img/pretty-printer.png)
 
-The prototype prints `(define (fold f acc xs) (if (null? xs) acc (fold f (f acc (car xs)) (cdr xs))))` with three alternatives per list (flat, hang and indent) and the cost (sum of squared overflow, newlines). At 80 columns it fits on one line. At 40 it takes 6 lines, and the shape has a first row of 23 columns, a widest row of 34 and a last row of 29. At 24 it takes 8 lines. The blue boxes are the row boxes, so you can see that each layout's shape is a union of boxes. The prototype searches all 1555 layouts. A real implementation would keep only the Pareto frontier. When two layouts tie on cost, the prototype keeps the earlier alternative, which is why the 40 column layout hangs the `if` after `(define ` instead of indenting it.
+The prototype prints `(define (fold f acc xs) (if (null? xs) acc (fold f (f acc (car xs)) (cdr xs))))` with three alternatives per list (flat, hang and indent) and the cost (sum of squared overflow, newlines). At 80 columns it fits on one line. At 40 it takes 6 lines, and the rows are 23 columns at first, 34 at the widest and 29 at the end. At 24 it takes 8 lines. The blue boxes are the row boxes. The prototype searches all 1555 layouts. A real implementation would keep only the Pareto frontier. When two layouts tie on cost, the prototype keeps the earlier alternative, which is why the 40 column layout hangs the `if` after `(define ` instead of indenting it.
+
+Not possible today. The prototype searches in plain JavaScript and places each line by hand.
+
+Proposed:
 
 ```js
-const row = (items) => wrap({ break: Break.never, spacing: "1ch" }, items);
-const column = (items) => stack({ dir: "y", align: "start" }, items);
-const open = text({ text: "(" }),
-  close = text({ text: ")" });
+const row = (items) =>
+  spread({ dir: "x", spacing: "1ch", alignment: "start" }, items);
+const column = (items) => spread({ dir: "y", alignment: "start" }, items);
+const glued = (items) => stack({ dir: "x", alignment: "start" }, items);
+const word = (s) => text({ text: s, font: "mono" });
 
-const sexp = (e) =>
-  typeof e === "string"
-    ? text({ text: e, font: "mono" })
-    : choose(
-        [
-          // flat: everything on the current row
-          row([open, ...e.map(sexp), close]),
-          // hang: the head, then the arguments in a column that starts after it
-          row([open, sexp(e[0]), column(e.slice(1).map(sexp)), close]),
-          // indent: the head alone, then the arguments indented by two columns
-          row([
-            column([
-              row([open, sexp(e[0])]),
-              offset({ x: "2ch" }, column(e.slice(1).map(sexp))),
-            ]),
-            close,
-          ]),
-        ],
-        { cost: [Cost.overflow(), Cost.lines()] }
-      );
+const sexp = (e) => {
+  if (typeof e === "string") return word(e);
+  const [head, ...args] = e.map(sexp);
+  // "(" sticks to the head, and ")" sticks to the last argument
+  const open = glued([word("("), head]);
+  const rest = [...args.slice(0, -1), glued([args.at(-1), word(")")])];
+  return choose(
+    [
+      // flat: everything on one row
+      row([open, ...rest]),
+      // hang: the head, then the arguments in a column that starts after it
+      row([open, column(rest)]),
+      // indent: the head alone, then the arguments indented by two columns
+      column([open, offset({ x: "2ch" }, column(rest))]),
+    ],
+    { cost: [Cost.overflow(), Cost.lines()] }
+  );
+};
 
 sexp(program).render(container, { w: 40 * CH });
 ```
 
 ```python
 def row(items):
-    return wrap(items, break_=Break.never, spacing="1ch")
+    return spread(items, dir="x", spacing="1ch", alignment="start")
+
 
 def column(items):
-    return stack(items, dir="y", align="start")
+    return spread(items, dir="y", alignment="start")
+
+
+def glued(items):
+    return stack(items, dir="x", alignment="start")
+
+
+def word(s):
+    return text(text=s, font="mono")
+
 
 def sexp(e):
     if isinstance(e, str):
-        return text(text=e, font="mono")
-    head, args = sexp(e[0]), [sexp(a) for a in e[1:]]
+        return word(e)
+    head, *args = [sexp(x) for x in e]
+    open_ = glued([word("("), head])
+    rest = [*args[:-1], glued([args[-1], word(")")])]
     return choose(
         [
-            row([text(text="("), head, *args, text(text=")")]),
-            row([text(text="("), head, column(args), text(text=")")]),
-            row([column([row([text(text="("), head]), offset(column(args), x="2ch")]), text(text=")")]),
+            row([open_, *rest]),
+            row([open_, column(rest)]),
+            column([open_, offset(column(rest), x="2ch")]),
         ],
         cost=[Cost.overflow(), Cost.lines()],
     )
@@ -382,20 +543,19 @@ def sexp(e):
 
 The mapping to the pretty expressive printer:
 
-| Pretty expressive                   | GoFish                                                                |
-| ----------------------------------- | --------------------------------------------------------------------- |
-| `text s`                            | `text({ text: s })`                                                   |
-| `a <> b` (continue on the last row) | `wrap({ break: Break.never }, [a, b])`                                |
-| `a <$> b` (newline)                 | `stack({ dir: "y", align: "start" }, [a, b])`                         |
-| `align d`                           | a `stack` starts its rows at the column where it begins               |
-| `nest n d`                          | `offset({ x: n }, d)` inside a `stack`                                |
-| `a <\|> b`                          | `choose([a, b])`                                                      |
-| cost factory                        | `cost: [Cost.overflow(), Cost.lines()]`, and later a function (#1101) |
-| page width                          | the room from `render(container, { w })`                              |
+| Pretty expressive                  | GoFish                                                                   |
+| ---------------------------------- | ------------------------------------------------------------------------ |
+| `text s`                           | `text({ text: s })`                                                      |
+| `a <+> b` (aligned concatenation)  | `spread({ dir: "x", alignment: "start" }, [a, b])`, where `b` is a block |
+| `a <$> b` (newline)                | `spread({ dir: "y", alignment: "start" }, [a, b])`                       |
+| `nest n d`                         | `offset({ x: n }, d)` inside a column                                    |
+| `a <> b` (unaligned concatenation) | a same-direction `spread` without `wrap`, inside a wrapped `spread`      |
+| `a <\|> b`                         | `choose([a, b])`                                                         |
+| `group d`                          | `choose([row(items), column(items)])`                                    |
+| cost factory                       | `cost: [Cost.overflow(), Cost.lines()]`, and later a function (#1101)    |
+| page width                         | the room from `render(container, { w })`                                 |
 
-The layout of a wrapped S-expression is a union of row boxes: a first row, a block, and a last row that can end early. The next item continues on that last row. This is the silhouette `(h, w, ℓ)` from the silhouette note, and it is the "union of AABBs" geometry. It stays inside `wrap` and `choose`. Outside, the node has its box, and its outline has one part per row, so `enclose`, `.label()` and `ref` can follow the staircase shape.
-
-One difference from the pretty expressive printer remains. Its `<>` is unaligned, so the next row of the right side starts at the indentation level and not at the column where the right side began. GoFish places children by box, so every multi-row child is aligned. Aligned concatenation covers the Lisp and JSON styles. The C-style `nest` with unaligned rows would need `offset` with a negative x or a new join, and we leave it out.
+This example uses only boxes. Every alternative is a row or a column of boxes. The parentheses are glued to the head and to the last argument, so nothing has to continue after a block. The union of row boxes shows up only as the outline of the result. The case that needs a silhouette is unaligned concatenation, where the next item continues on the last row of a flow and its later rows return to the left edge. In GoFish that is the nested-flow rule above, used by the stacked waffle and by runs of text.
 
 ### Axis label angle
 
@@ -406,36 +566,42 @@ At 400 px the product names collide at 0 degrees. At 45 degrees they clear, so f
 Today:
 
 ```js
-axes: {
-  x: {
-    label: {
-      angle: "auto";
-    }
-  }
-}
+chart(regionProduct, { axes: { x: { label: { angle: "auto" } } } });
 ```
 
 Proposed, with `"auto"` kept as the short spelling:
 
 ```js
-axes: {
-  x: {
-    label: choose([
-      { angle: 0 },
-      { angle: 45 },
-      { angle: 90 },
-      { hidden: true },
-    ]);
-  }
-}
-// or a continuous angle
-axes: {
-  x: {
-    label: {
-      angle: choose({ from: 0, to: 90 });
-    }
-  }
-}
+chart(regionProduct, {
+  axes: {
+    x: {
+      label: choose([
+        { angle: 0 },
+        { angle: 45 },
+        { angle: 90 },
+        { hidden: true },
+      ]),
+    },
+  },
+});
+
+// or a continuous angle: the smallest angle from 0 to 90 that clears
+chart(regionProduct, {
+  axes: { x: { label: { angle: choose({ from: 0, to: 90 }) } } },
+});
+```
+
+```python
+chart(
+    region_product,
+    axes={
+        "x": {
+            "label": choose(
+                [{"angle": 0}, {"angle": 45}, {"angle": 90}, {"hidden": True}]
+            )
+        }
+    },
+)
 ```
 
 The axis is one node, so only its label row is laid out again per alternative. The engine no longer rebuilds the whole chart, which removes the rebuild hook in `runLayout` and the cost that keeps #1017 ("auto" as the default) from shipping.
@@ -446,126 +612,149 @@ The axis is one node, so only its label row is laid out again per alternative. T
 
 A 200 px axis over 0 to 12,000, with ticks from d3's `ticks(0, 12000, count)`. Overlapping labels are drawn in orange. Asking for about 3 ticks gives 3 ticks with no overlap. About 5 gives 7 ticks with one overlapping pair, and about 10 gives 13 ticks with 12 overlapping pairs. The first-fit rule "the most ticks with no overlap" picks the first row.
 
+Not possible today. The axis always asks d3 for about 10 ticks.
+
+Proposed:
+
 ```js
 // the most ticks whose labels do not overlap
-axes: {
-  x: {
-    ticks: {
-      count: choose([10, 8, 6, 5, 4, 3, 2]);
-    }
-  }
-}
+chart(data, {
+  axes: { x: { ticks: { count: choose([10, 8, 6, 5, 4, 3, 2]) } } },
+});
 
 // tick count and angle as one choice, which #1194 asks for
-axes: {
-  x: choose([
-    { ticks: { count: 10 } },
-    { ticks: { count: 5 } },
-    { ticks: { count: 10 }, label: { angle: 45 } },
-    { ticks: { count: 3 } },
-  ]);
-}
+chart(data, {
+  axes: {
+    x: choose([
+      { ticks: { count: 10 } },
+      { ticks: { count: 5 } },
+      { ticks: { count: 10 }, label: { angle: 45 } },
+      { ticks: { count: 3 } },
+    ]),
+  },
+});
 
 // Talbot style, with weights
-axes: {
-  x: {
-    ticks: {
-      count: choose(
-        { from: 2, to: 12 },
-        {
-          cost: Cost.weighted({
-            overlap: Infinity,
-            density: 0.5,
-            simplicity: 0.2,
-          }),
-        }
-      );
-    }
-  }
-}
+chart(data, {
+  axes: {
+    x: {
+      ticks: {
+        count: choose(
+          { from: 2, to: 12 },
+          {
+            cost: Cost.weighted({
+              overlap: Infinity,
+              density: 0.5,
+              simplicity: 0.2,
+            }),
+          }
+        ),
+      },
+    },
+  },
+});
 ```
 
 The third form needs `density` and `simplicity` terms that only make sense for ticks. We would add them only if a user asks, and we list it as a decision.
 
+## How the geometry works inside
+
+1. Each child of a wrapped `stack` or `spread` reports a silhouette. A block reports its box. A child that continues the parent's rows (the nested-flow rule) reports three numbers: row count, widest row and last-row width.
+2. At each seam the engine joins the two neighbors' silhouettes once for "continue" and once for "new row". The join formulas use only `+` and `max`, and the silhouette note lists them.
+3. The engine keeps a list of (silhouette, cost) pairs and drops any pair that another pair beats on every count. That list is the Pareto frontier.
+4. When the parent gives room, the engine scores what is left, e.g. overflow past the room width. It commits one pair and places the children row by row.
+5. Only the box leaves the wrapped operator. Its outline gets one part per row, so `enclose`, `.label()` and `ref` can follow the staircase shape.
+
+A `choose` node works the same way over whole alternatives. Before the parent gives room, `choose` reports the smallest size among its alternatives, which is the `min` in #630. A wrapped flow whose width comes from the room needs its height as a function of its width, `h(w)`. That is stage 3 of the shipping order.
+
 ## How it composes
 
-- **Layout engine.** A `choose` node lays out each alternative in the room its parent gives, and keeps the chosen one. When the parent asks for its size before giving room, `choose` reports the smallest size among its alternatives. That is the `min` in the claim algebra (#630), and monotone piecewise-linear claims stay invertible under `min`.
+- **Layout engine.** A `choose` node lays out each alternative in the room its parent gives, and keeps the chosen one. When the parent asks for its size before giving room, `choose` reports the smallest size among its alternatives (#630). Monotone piecewise-linear claims stay invertible under `min`.
 - **Scale scopes.** A choice must not change a scale domain (#486). Alternatives that would give different domains are an error. The search is bounded to the scope that holds the `choose`.
-- **Silhouettes.** `wrap` and `choose` keep a Pareto frontier of `(silhouette, cost)` pairs inside their scope and commit one at the boundary. Outside, only the box leaves. This is the silhouette note's Law 2, so no existing operator changes.
-- **Coordinate transforms.** The choice is made in the layout space, before the coordinate transform. In polar coordinates `Cost.overflow` measures the box, not the arc. That is fine for labels and wraps, which do not bend.
-- **Animation.** A choice can change between frames. A tween between two alternatives moves shared marks by key. A choice that flips back and forth while a value changes is a known risk. We would add hysteresis only if it shows up.
+- **Spaces.** A wrapped `stack` keeps one glued space, and a wrapped `spread` keeps separate spaces. Wrapping changes rows, not spaces, so axes and scales come out the same as without `wrap`.
+- **Coordinate transforms.** The choice is made in the layout space, before the coordinate transform. In polar coordinates `Cost.overflow` measures the box, not the arc. That is fine for labels and rows, which do not bend.
+- **Animation.** A choice can change between frames. A tween between two alternatives moves shared marks by key. A choice that flips back and forth while a value changes is a known risk, and we would add hysteresis only if it shows up.
 - **Data types.** Nothing new. Ranges in `choose({ from, to })` are plain numbers.
-- **Python.** `choose` is a builtin construct with a list of children or values. Costs are `Cost.overflow()` as strategies in the `STRATEGIES` table. A cost function crosses through the callback runner once #1101 decides its spelling.
+- **Python.** `choose` is a builtin construct with a list of children or values. Costs are strategies such as `Cost.overflow()` in the `STRATEGIES` table. A cost function crosses through the callback runner once #1101 decides its spelling.
 
 ## Overlap with existing operators
 
-| Existing                                         | Relation                                                                                               | Regime                                                                        |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| `angle: "auto"`, `chooseFirstFit`                | `"auto"` becomes named sugar for a written-out `choose`                                                | exact rewrite, delete the special loop                                        |
-| `.label({ position: Place.around })`             | each label's first free position is a `choose` over `Place.along` candidates, with an overlap fit test | exact rewrite. The placer becomes a client of `choose`                        |
-| `spread({ by: chunk(n) })`, `table({ numCols })` | a fixed-columns `wrap` is the same as nested spreads over chunks                                       | exact rewrite. We define `wrap({ cols })` by it. `chunk` stays for other uses |
-| `stack`, `spread`                                | the same fold, with fixed seams instead of soft ones                                                   | shared mechanism, degenerate overlap                                          |
-| `Overlap` family (`scatter`)                     | deterministic, no alternatives                                                                         | none                                                                          |
-| region `union` (shape compositing)               | the name is taken, so we do not call the row geometry a "union" in the API                             | none, naming only                                                             |
+| Existing                                         | Relation                                                                                               | Regime                                                                            |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `angle: "auto"`, `chooseFirstFit`                | `"auto"` becomes named sugar for a written-out `choose`                                                | exact rewrite, and the special loop is deleted                                    |
+| `.label({ position: Place.around })`             | each label's first free position is a `choose` over `Place.along` candidates, with an overlap fit test | exact rewrite, and the placer becomes a client of `choose`                        |
+| `spread({ by: chunk(n) })`, `table({ numCols })` | `wrap: { cols: n }` is the same as nested spreads over chunks                                          | exact rewrite. We define `wrap: { cols }` by it, and `chunk` stays for other uses |
+| `stack`, `spread`                                | `wrap` is an option on both                                                                            | no overlap. Wrapping is about rows, and glue is about spaces                      |
+| `Overlap` family (`scatter`)                     | deterministic, with no alternatives                                                                    | none                                                                              |
+| region `union` (shape compositing)               | the name is taken, so we do not call the row geometry a "union" in the API                             | none, naming only                                                                 |
 
 ## Trade-offs
 
-- **Easy.** Every example above is a few lines. The default (first fit) is predictable. Costs are named terms that a user can read.
-- **Awkward.** Options have to declare that they accept `choose`. A cost over several terms is lexicographic, and users may expect a weighted sum. Unaligned concatenation is left out.
-- **New terms.** `choose`, `wrap`, `Cost`, `Break`. "Silhouette" stays internal.
-- **Extension cost.** New cost terms are new entries in the `Cost` family. User cost functions wait for #1101. A new `Break` strategy is a cost plus a search, so it adds no engine code beyond its cost.
+- **Easy.** Every example above is a few lines. The default (first fit) is predictable. Costs are named terms that a user can read. Wrapping keeps the meaning of `stack` and `spread`.
+- **Awkward.** Options have to declare that they accept `choose`. A cost over several terms is lexicographic, and users may expect a weighted sum. The nested-flow rule is one more thing to learn, though it changes nothing for charts that do not wrap.
+- **New terms.** `choose`, `Cost` and the `wrap` option, and `Break` if you want it. "Silhouette" stays internal.
+- **Extension cost.** New cost terms are new entries in the `Cost` family. User cost functions wait for #1101.
 
 ## Recommendation
 
-Approach B with first fit by default, a `Cost` list when given, and `wrap` with `Break`.
+Approach B with first fit by default and a `Cost` list when given, `wrap` as an option on `stack` and `spread`, and no `Break` family.
 
-- **It desugars into the core.** The value form desugars to the node form. `Break` strategies desugar to `choose` at each seam plus a cost. `"auto"` desugars to a written-out `choose`. The core grows by one operator and one internal summary (`principles.md`, "Why keep the core small").
+- **It desugars into the core.** The value form of `choose` desugars to the node form. Wrapping desugars to a `choose` at each seam plus a ranking. `"auto"` desugars to a written-out `choose`. The core grows by one operator, one option and one internal summary (`principles.md`, "Why keep the core small").
 - **One concept is one operator.** Label angle, tick count, label placement, waffle columns, line breaks and pretty printing all use `choose`. Two existing first-fit loops (`chooseFirstFit` and the label placer) become clients of it (`api-design.md`, "One concept is one operator").
-- **Names match precedent.** `wrap` is the CSS and Flutter word. `choose` is a plain verb. It avoids the pretty printer's `group`, which already means something else in GoFish, and `alt`, which is jargon. `Break` and `Cost` follow the strategy family pattern (`Tile`, `Curve`).
-- **Closed kinds plus a function.** `Cost` and `Break` are closed families like the others, and the function escape hatch is #1101's question, not a new one.
+- **Overlaps stay at the edges.** Glue versus separate stays on `stack` versus `spread`, and wrapping is a separate option on both, so no two operators share half their behavior.
+- **Names match precedent.** `wrap` is the CSS and Flutter word. `choose` is a plain verb, like most GoFish operators (`spread`, `stack`, `derive`, `filter`, `resolve`). It avoids the pretty printer's `group`, which already means something else in GoFish, and `alt`, which is jargon.
+- **Closed kinds plus a function.** `Cost` is a closed family like the others, and the function escape hatch is #1101's question, not a new one.
 - **Same shape in JS and Python.** `choose([...], cost=[Cost.overflow()])` in both.
 
-The runner-up is Approach C. It is a subset of B, with the same engine and no user-facing `choose`. If you want to ship waffles and Knuth-Plass before deciding on the value form, ship `wrap({ cols: "auto" })` and `Break` first. Each `"auto"` is then a named `choose` that B makes writable later. We would switch to C for good only if the value form turns out to be confusing in the type of every option.
+The runner-up is Approach C. It is a subset of B, with the same engine and no user-facing `choose`. If you want to ship waffles and paragraphs before deciding on the value form, ship `wrap: { cols: "auto" }` and the cost first. Each `"auto"` is then a named `choose` that B makes writable later.
 
 ## Shipping order
 
-1. `wrap` with fixed `cols` and `Break.greedy`. No choice machinery, works on today's engine (#122 comment, 07-12).
+1. `wrap: { cols }` and `wrap: true` on `stack` and `spread`, with greedy breaks and the nested-flow rule. This needs no choice machinery and works on today's engine (#122 comment, 07-12). `stack` also takes `spacing`.
 2. `choose` with first fit as a node and as an option value. Port `angle: "auto"` and the label placer to it, and delete `chooseFirstFit`'s whole-chart loop.
-3. `Cost` with a frontier inside `wrap` and `choose`. `Break.optimal`, `cols: choose(...)` with `Cost.waste()`, and pretty printing. This step needs the cross-axis claim `h(w)` for a wrap whose width comes from the room (silhouette note §6).
+3. `Cost` with a frontier inside wrapped flows and `choose`. This brings `Cost.badness`, `cols: choose(...)` with `Cost.waste()`, and pretty printing. This step needs the cross-axis claim `h(w)` for a wrapped flow whose width comes from the room (silhouette note §6).
 
 ## Decisions for Josh
 
-1. Is the operator called `choose`? Other options are `choice`, `alt`, `oneOf` and `firstOf`.
+1. Is the operator called `choose`? Other options are `choice`, `alt`, `oneOf` and `firstOf`. Parsec's `choice` tries alternatives in order, which is the best argument for `choice`.
 2. Should `choose` also be an option value (B), or only a node (A)?
 3. Is first fit in list order the default, with `cost` as the override? The other option is to always minimize a default cost.
 4. Is `cost` a lexicographic list of `Cost` terms, with `Cost.weighted` for sums?
 5. Is the range spelled `choose({ from: 4, to: 24 })`, with an integer step when both ends are integers? Python would use `choose(start=4, stop=24)`.
-6. Does `wrap` take a `Break` family, or a `cost` directly?
-7. Does `text` take `w` and `break` and desugar to a `wrap` over words?
-8. Does `"auto"` stay as named sugar, with the docs showing its expansion?
-9. Do we want penalties on alternatives now (`node.cost(2)`), or later?
-10. Do tick-specific cost terms (`density`, `simplicity`) belong in `Cost`, or should tick count stay first fit only?
+6. Is wrapping an option on `stack` and `spread` (`wrap: { cols }`), or its own operator?
+7. Does wrapping name its rule with `Break` (`wrap: { break: Break.optimal() }`), or with a cost (`wrap: { cost: Cost.badness() }`)?
+8. Is the nested-flow rule right? A same-direction `stack` or `spread` without its own `wrap` continues the parent's rows, and every other child is a block.
+9. How is "reverse the row order but not the order inside a row" spelled for the waffle, e.g. `reverse: "rows"`?
+10. Does `stack` take `spacing`, so glued units can have gaps?
+11. Does `text` take `w` and `wrap` and desugar to a wrapped `spread` over words?
+12. Does `"auto"` stay as named sugar, with the docs showing its expansion?
+13. Do we want penalties on alternatives now (`node.cost(2)`), or later?
+14. Do tick-only cost terms (`density`, `simplicity`) belong in `Cost`, or should tick count stay first fit only?
 
 ## Syntax to review
 
 ```js
 choose([a, b, c]);
 choose([a, b], { cost: [Cost.overflow(), Cost.lines()] });
-label: {
-  angle: choose([0, 45, 90]);
-}
-label: choose([{ angle: 0 }, { angle: 45 }, { angle: 90 }, { hidden: true }]);
-label: {
-  angle: choose({ from: 0, to: 90 });
-}
-ticks: {
-  count: choose([10, 8, 6, 5, 4, 3, 2]);
-}
-wrap({ cols: 10 });
-wrap({ cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }) });
-wrap({ w: 260, break: Break.optimal() });
-wrap({ break: Break.never });
-text({ text: para, w: 260, break: Break.optimal() });
+chart(data, { axes: { x: { label: { angle: choose([0, 45, 90]) } } } });
+chart(data, {
+  axes: {
+    x: { label: choose([{ angle: 0 }, { angle: 45 }, { hidden: true }]) },
+  },
+});
+chart(data, { axes: { x: { label: { angle: choose({ from: 0, to: 90 }) } } } });
+chart(data, {
+  axes: { x: { ticks: { count: choose([10, 8, 6, 5, 4, 3, 2]) } } },
+});
+stack({ by: "species", dir: "x", wrap: { cols: 10 } });
+stack({
+  dir: "x",
+  wrap: { cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }) },
+});
+spread({ by: "panel", dir: "x", wrap: { cols: 3 } });
+spread({ dir: "x", w: 260, wrap: true });
+spread({ dir: "x", w: 260, wrap: { cost: Cost.badness() } }); // or { break: Break.optimal() }
+text({ text: para, w: 260, wrap: { cost: Cost.badness() } });
 ```
 
 ## Related issues

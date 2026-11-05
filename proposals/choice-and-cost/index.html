@@ -388,6 +388,175 @@
           padding: 14px;
         }
       }
+
+      .ln.chg {
+        background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+      }
+      .toc {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 16px;
+        font-size: 0.9rem;
+        margin: 10px 0 0;
+      }
+      .caption p {
+        margin: 6px 0;
+      }
+      .note ul {
+        padding-left: 18px;
+        margin: 6px 0;
+      }
+      .note li {
+        margin: 4px 0;
+      }
+      .note h4 {
+        margin: 14px 0 4px;
+        color: var(--fg);
+      }
+      .note .tw table {
+        color: var(--fg);
+      }
+      .ap p.d {
+        font-size: 0.92rem;
+        margin: 4px 0 8px;
+      }
+      .ap ul.plain {
+        font-size: 0.9rem;
+      }
+      .ap li.neu::marker {
+        content: "·  ";
+        color: var(--muted);
+      }
+      .cmp {
+        display: grid;
+        grid-template-columns: minmax(140px, 190px) minmax(0, 1fr) minmax(
+            0,
+            1fr
+          );
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        overflow: hidden;
+        margin: 14px 0;
+      }
+      .cmp > div {
+        padding: 8px 12px;
+        border-top: 1px solid var(--line);
+        min-width: 0;
+      }
+      .cmp > div:nth-child(-n + 3) {
+        border-top: 0;
+      }
+      .cmp .hd {
+        font-weight: 600;
+        background: color-mix(in srgb, var(--fg) 5%, var(--surface));
+        font-size: 0.95rem;
+      }
+      .cmp .cell + .cell,
+      .cmp .hd + .hd {
+        border-left: 1px solid var(--line);
+      }
+      .cmp .rule {
+        font-size: 0.9rem;
+        font-weight: 600;
+      }
+      .cmp .rule.diff {
+        box-shadow: inset 3px 0 0 var(--accent);
+      }
+      .cmp pre.code {
+        margin: 0;
+        background: var(--bg);
+      }
+      .cmp .same {
+        color: var(--muted);
+      }
+      .cmp .cell.same pre.code {
+        opacity: 0.5;
+      }
+      .cmp .lbl {
+        display: none;
+      }
+      .tag.same {
+        background: color-mix(in srgb, var(--fg) 10%, var(--surface));
+        color: var(--muted);
+        margin-left: 6px;
+      }
+      .cols.bw {
+        margin: 10px 0;
+      }
+      .cols.bw > div {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 14px;
+        min-width: 0;
+      }
+      .cols.bw pre.code {
+        background: var(--bg);
+      }
+      .fa ul {
+        padding-left: 18px;
+        margin: 4px 0 0;
+        font-size: 0.93rem;
+      }
+      .fa li {
+        margin: 6px 0;
+      }
+      table.quad {
+        min-width: 0;
+        font-size: 1rem;
+      }
+      table.quad td,
+      table.quad th {
+        padding: 10px 16px;
+      }
+      table.quad tbody th {
+        background: color-mix(in srgb, var(--fg) 5%, var(--surface));
+      }
+      .rule-box {
+        border: 2px solid var(--accent);
+        border-radius: 10px;
+        background: var(--surface);
+        padding: 6px 16px;
+        max-width: 80ch;
+        margin: 12px 0;
+      }
+      .rule-box ul {
+        padding-left: 18px;
+      }
+      .rule-box li {
+        margin: 6px 0;
+      }
+      ol.geo li {
+        margin: 6px 0;
+      }
+      @media (max-width: 760px) {
+        .cmp {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .cmp .hd {
+          display: none;
+        }
+        .cmp > div {
+          border-top: 0;
+        }
+        .cmp .rule {
+          border-top: 1px solid var(--line);
+          background: color-mix(in srgb, var(--fg) 5%, var(--surface));
+        }
+        .cmp > div.rule:first-of-type {
+          border-top: 0;
+        }
+        .cmp .cell + .cell {
+          border-left: 0;
+        }
+        .cmp .lbl {
+          display: block;
+          font-size: 0.75rem;
+          color: var(--muted);
+          margin: 0 0 4px;
+        }
+      }
     </style>
   </head>
   <body>
@@ -409,43 +578,65 @@
             <code>cols: choose({ from: 4, to: 24 })</code>.
           </li>
           <li>
-            Add a <code>Cost</code> strategy family that says how
-            <code>choose</code> ranks the alternatives. By default
-            <code>choose</code> takes the first alternative that fits. With
-            <code>cost: [Cost.overflow(), Cost.waste()]</code> it takes the
+            Add a <code>Cost</code> strategy family that says how alternatives
+            are ranked. By default <code>choose</code> takes the first
+            alternative that fits. With
+            <code>cost: [Cost.overflow(), Cost.lines()]</code> it takes the
             alternative with the lowest cost, compared term by term.
           </li>
           <li>
-            Add a <code>wrap</code> operator, which flows children along a
-            direction and starts a new row when the row is full. A
-            <code>Break</code> family picks the break rule:
-            <code>Break.greedy</code>, <code>Break.optimal</code> (Knuth-Plass),
-            <code>Break.balance</code>, <code>Break.group</code> (all breaks or
-            none) and <code>Break.never</code>. Every
-            <code>Break</code> strategy is a <code>choose</code> at each seam
-            plus a cost, so <code>wrap</code> adds no new search machinery.
+            Add a <code>wrap</code> option to <code>stack</code> and
+            <code>spread</code>. It folds the operator's row of children into
+            several rows. Each seam between two children is a
+            <code>choose</code> between continuing on the current row and
+            starting a new row, so the same ranking rule applies. By default the
+            first fit at each seam gives greedy line breaking.
+            <code>wrap: { cost: Cost.badness() }</code> gives Knuth-Plass.
           </li>
         </ul>
+        <p>
+          Wrapping is about rows, and <code>stack</code> versus
+          <code>spread</code> is about spaces, so the two are separate options.
+          A <code>stack</code> glues its children's spaces into one space, and a
+          <code>spread</code> keeps each child's space separate. Either one can
+          wrap. The stacked waffle is a <code>stack</code> by species that
+          wraps, and a facet grid is a <code>spread</code> by panel that wraps.
+        </p>
         <p class="reco">
-          <b>Recommendation.</b> Approach B: <code>choose</code> as one operator
-          that works as a node and as an option value, ranked by preference
-          order first and by an optional <code>Cost</code> list second, with
-          <code>wrap</code> and its <code>Break</code> family as the first
-          operator built on it. Today's <code>angle: "auto"</code> becomes sugar
-          for a written-out <code>choose</code>.
+          <b>Recommendation.</b> Approach B with first fit by default and a
+          <code>Cost</code> list when given, <code>wrap</code> as an option on
+          <code>stack</code> and <code>spread</code>, and no
+          <code>Break</code> family.
         </p>
-        <p class="small">
-          The "union of boxes" geometry that the pretty printer needs stays
-          inside <code>wrap</code> and <code>choose</code> as an internal
-          summary. Users see it only as the <code>parts</code> of a wrapped
-          node's outline.
+        <p class="reco">
+          <b>Open on purpose.</b> Whether wrapping names its rule with a
+          <code>Break</code> family (<code
+            >wrap: { break: Break.optimal() }</code
+          >) or with a cost (<code>wrap: { cost: Cost.badness() }</code>).
+          <a href="#break-or-no-break">Break or no Break</a> shows every example
+          both ways. We lean toward no <code>Break</code>.
         </p>
+        <nav class="toc">
+          <a href="#gallery">Gallery</a
+          ><a href="#break-or-no-break">Break or no Break</a
+          ><a href="#approaches">Approaches</a
+          ><a href="#wrapping">Where wrapping lives</a
+          ><a href="#nested-flows">Nested flows</a
+          ><a href="#geometry">Geometry inside</a
+          ><a href="#decisions">Decisions</a
+          ><a href="#shipping">Shipping order</a>
+        </nav>
       </header>
+      <div class="syntax">
+        <pre
+          class="code"
+        ><code data-lang="javascript"><span class="ln">// Stacked waffle: species glued into one count, folded into rows.</span><span class="ln">// The column count is the one whose square cells fill the box best.</span><span class="ln">chart(seafood)</span><span class="ln">  .flow(</span><span class="ln">    stack({</span><span class="ln">      by: "species",</span><span class="ln">      dir: "x",</span><span class="ln">      wrap: { cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }) },</span><span class="ln">    }),</span><span class="ln">    derive((d) =&gt; repeat(d, "count")),</span><span class="ln">    stack({ dir: "x" })</span><span class="ln">  )</span><span class="ln">  .mark(rect({ fill: "species" }));</span><span class="ln"></span><span class="ln">// Paragraph: Knuth-Plass line breaking.</span><span class="ln">spread(</span><span class="ln">  { dir: "x", spacing: "0.5ch", w: 260, wrap: { cost: Cost.badness() } },</span><span class="ln">  words.map((w) =&gt; text({ text: w }))</span><span class="ln">);</span><span class="ln"></span><span class="ln">// Axis labels: the first angle whose labels do not overlap.</span><span class="ln">chart(data, { axes: { x: { label: { angle: choose([0, 45, 90]) } } } });</span></code></pre>
+      </div>
       <h3>Syntax to review</h3>
       <div class="syntax">
         <pre
           class="code"
-        ><code data-lang="javascript"><span class="ln">choose([a, b, c])</span><span class="ln">choose([a, b], { cost: [Cost.overflow(), Cost.lines()] })</span><span class="ln">label: { angle: choose([0, 45, 90]) }</span><span class="ln">label: choose([{ angle: 0 }, { angle: 45 }, { angle: 90 }, { hidden: true }])</span><span class="ln">label: { angle: choose({ from: 0, to: 90 }) }</span><span class="ln">ticks: { count: choose([10, 8, 6, 5, 4, 3, 2]) }</span><span class="ln">wrap({ cols: 10 })</span><span class="ln">wrap({ cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }) })</span><span class="ln">wrap({ w: 260, break: Break.optimal() })</span><span class="ln">wrap({ break: Break.never })</span><span class="ln">text({ text: para, w: 260, break: Break.optimal() })</span></code></pre>
+        ><code data-lang="javascript"><span class="ln">choose([a, b, c]);</span><span class="ln">choose([a, b], { cost: [Cost.overflow(), Cost.lines()] });</span><span class="ln">chart(data, { axes: { x: { label: { angle: choose([0, 45, 90]) } } } });</span><span class="ln">chart(data, {</span><span class="ln">  axes: {</span><span class="ln">    x: { label: choose([{ angle: 0 }, { angle: 45 }, { hidden: true }]) },</span><span class="ln">  },</span><span class="ln">});</span><span class="ln">chart(data, { axes: { x: { label: { angle: choose({ from: 0, to: 90 }) } } } });</span><span class="ln">chart(data, {</span><span class="ln">  axes: { x: { ticks: { count: choose([10, 8, 6, 5, 4, 3, 2]) } } },</span><span class="ln">});</span><span class="ln">stack({ by: "species", dir: "x", wrap: { cols: 10 } });</span><span class="ln">stack({</span><span class="ln">  dir: "x",</span><span class="ln">  wrap: { cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }) },</span><span class="ln">});</span><span class="ln">spread({ by: "panel", dir: "x", wrap: { cols: 3 } });</span><span class="ln">spread({ dir: "x", w: 260, wrap: true });</span><span class="ln">spread({ dir: "x", w: 260, wrap: { cost: Cost.badness() } }); // or { break: Break.optimal() }</span><span class="ln">text({ text: para, w: 260, wrap: { cost: Cost.badness() } });</span></code></pre>
       </div>
 
       <h2 id="gallery">Example gallery</h2>
@@ -480,45 +671,71 @@
             /></a>
           </div>
         </figure>
-        <p class="caption">
-          The prototype fits 73 cells into a 300 by 200 box. Twelve columns win,
-          with 25 px cells and a cost of 0.24; four columns cost 0.87 and 24
-          columns cost 0.81. Below that, the gallery waffle today (five columns
-          of 8 px cells) needs 28 rows in a 600 by 200 box and spills out of the
-          top; with the same cost all six lakes share eight columns of 11 px
-          cells.
-        </p>
+        <div class="caption">
+          <p>
+            The prototype fits 73 cells into a 300 by 200 box. The cost is the
+            fraction of the box left empty, <code>1 − n s²/(W H)</code>, where
+            <code>s</code> is the largest square cell that fits. Twelve columns
+            win, with 25 px cells and a cost of 0.24. Four columns cost 0.87 and
+            24 columns cost 0.81.
+          </p>
+          <p>
+            In the second image, above is the gallery waffle today, with five
+            columns of 8 px cells. In a 600 by 200 box it needs 28 rows and
+            spills out of the top. Below, the same chart picks its column count
+            by the same cost. All six lakes share eight columns of 11 px cells,
+            and the tallest lake sets the row count.
+          </p>
+        </div>
         <div class="cols">
           <div>
-            <h4><span class="tag add">Proposed</span> Approach B</h4>
+            <h4><span class="tag add">Proposed</span></h4>
             <pre
               class="code"
-            ><code data-lang="javascript"><span class="ln">chart(seafood, { axes: { x: { side: "end" } } })</span><span class="ln">  .flow(</span><span class="ln">    spread({ by: "lake", spacing: 8, dir: "x", axes: false, alignment: "end" }),</span><span class="ln">    derive((d) =&gt; d.flatMap((d) =&gt; repeat(d, "count"))),</span><span class="ln add">    wrap({</span><span class="ln add">      cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }),</span><span class="ln add">      spacing: 2,</span><span class="ln add">      start: "bottom",</span><span class="ln add">    })</span><span class="ln">  )</span><span class="ln add">  .mark(rect({ fill: "species" }))</span><span class="ln add">  .render(container, { w: 600, h: 200 });</span></code></pre>
+            ><code data-lang="javascript"><span class="ln">chart(seafood, { axes: { x: { side: "end" } } })</span><span class="ln">  .flow(</span><span class="ln">    spread({ by: "lake", spacing: 8, dir: "x", axes: false, alignment: "end" }),</span><span class="ln add">    stack({</span><span class="ln add">      by: "species",</span><span class="ln add">      dir: "x",</span><span class="ln add">      spacing: 2,</span><span class="ln add">      reverse: "rows",</span><span class="ln add">      wrap: { cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }) },</span><span class="ln add">    }),</span><span class="ln add">    derive((d) =&gt; repeat(d, "count")),</span><span class="ln add">    stack({ dir: "x" })</span><span class="ln">  )</span><span class="ln add">  .mark(rect({ fill: "species" }))</span><span class="ln add">  .render(container, { w: 600, h: 200 });</span></code></pre>
             <details class="py">
               <summary>Python</summary>
               <pre
                 class="code"
-              ><code data-lang="python"><span class="ln add">chart(SEAFOOD, axes={"x": {"side": "end"}}).flow(</span><span class="ln add">    spread(by="lake", spacing=8, dir="x", axes=False, alignment="end"),</span><span class="ln add">    derive(lambda d: [item for row in d for item in repeat(row, "count")]),</span><span class="ln add">    wrap(cols=choose(start=4, stop=24, cost=Cost.waste()), spacing=2, start="bottom"),</span><span class="ln add">).mark(rect(fill="species"))</span></code></pre>
+              ><code data-lang="python"><span class="ln add">(</span><span class="ln add">    chart(seafood, axes={"x": {"side": "end"}})</span><span class="ln add">    .flow(</span><span class="ln add">        spread(by="lake", spacing=8, dir="x", axes=False, alignment="end"),</span><span class="ln add">        stack(</span><span class="ln add">            by="species",</span><span class="ln add">            dir="x",</span><span class="ln add">            spacing=2,</span><span class="ln add">            reverse="rows",</span><span class="ln add">            wrap={"cols": choose(start=4, stop=24, cost=Cost.waste())},</span><span class="ln add">        ),</span><span class="ln add">        derive(lambda d: repeat(d, "count")),</span><span class="ln add">        stack(dir="x"),</span><span class="ln add">    )</span><span class="ln add">    .mark(rect(fill="species"))</span><span class="ln add">)</span></code></pre>
             </details>
           </div>
           <div>
             <h4><span class="tag del">Today</span></h4>
             <pre
               class="code"
-            ><code data-lang="javascript"><span class="ln">chart(seafood, { axes: { x: { side: "end" } } })</span><span class="ln">  .flow(</span><span class="ln">    spread({ by: "lake", spacing: 8, dir: "x", axes: false, alignment: "end" }),</span><span class="ln">    derive((d) =&gt; d.flatMap((d) =&gt; repeat(d, "count"))),</span><span class="ln del">    spread({ by: chunk(5), spacing: 2, dir: "y", reverse: true }),</span><span class="ln del">    spread({ spacing: 2, dir: "x" })</span><span class="ln">  )</span><span class="ln del">  .mark(rect({ w: 8, h: 8, fill: "species" }))</span><span class="ln del">  .render(container, {});</span></code></pre>
+            ><code data-lang="javascript"><span class="ln">chart(seafood, { axes: { x: { side: "end" } } })</span><span class="ln">  .flow(</span><span class="ln">    spread({ by: "lake", spacing: 8, dir: "x", axes: false, alignment: "end" }),</span><span class="ln del">    derive((d) =&gt; d.flatMap((d) =&gt; repeat(d, "count"))),</span><span class="ln del">    spread({ by: chunk(5), spacing: 2, dir: "y", reverse: true }),</span><span class="ln del">    spread({ spacing: 2, dir: "x" })</span><span class="ln">  )</span><span class="ln del">  .mark(rect({ w: 8, h: 8, fill: "species" }))</span><span class="ln del">  .render(container, {});</span></code></pre>
           </div>
         </div>
-        <p class="note">
-          The cost is the fraction of the box left empty,
-          <code>1 − n·s²/(W·H)</code>, where <code>s</code> is the largest
-          square cell that fits. <code>wrap</code> with an unsized cell divides
-          the room into square cells. Plot's
-          <code>floor(sqrt(bandwidth / scale))</code> is the closed form of the
-          same rule, and the engine can use it when the cost is exactly
-          <code>Cost.waste()</code> with uniform cells. The grouped waffle is
-          <code>stack("species"), wrap()</code> and the "stacked" waffle is
-          <code>wrap("species"), wrap()</code>.
-        </p>
+        <div class="note">
+          <ul>
+            <li>
+              The rect has no size, so the wrapped <code>stack</code> divides
+              its room into square cells. The cost picks the column count that
+              wastes the least room.
+            </li>
+            <li>
+              Plot's <code>floor(sqrt(bandwidth / scale))</code> is the closed
+              form of the same rule. The engine can use it when the cost is
+              exactly <code>Cost.waste()</code> and the cells are uniform. With
+              uniform cells the silhouette is just a cell count, so trying 21
+              column counts means 21 formulas, not 21 layouts.
+            </li>
+            <li>
+              <code>reverse: "rows"</code> puts the ragged last row at the top,
+              which the gallery story does today with
+              <code>reverse: true</code> on the row spread. How to spell
+              "reverse the row order but not the order inside a row" is a
+              decision.
+            </li>
+            <li>
+              <code>stack</code> with <code>spacing: 2</code> leaves a gap
+              between glued units. Today <code>stack</code> forces its spacing
+              to 0, so this proposal also lets <code>stack</code> take
+              <code>spacing</code>.
+            </li>
+          </ul>
+        </div>
       </article>
       <article class="ex" id="ex-kp">
         <header>
@@ -534,42 +751,59 @@
             /></a>
           </div>
         </figure>
-        <p class="caption">
-          The prototype sets a 61 word paragraph at 256 px. Greedy first fit has
-          a total badness of 0.99 and a worst line of 0.78; Knuth-Plass has a
-          total of 0.41 and a worst line of 0.19, with the same number of lines.
-        </p>
+        <div class="caption">
+          <p>
+            The prototype sets a 61 word paragraph at 256 px. Greedy first fit
+            has a total badness of 0.99 and a worst line of 0.78. Knuth-Plass
+            has a total of 0.41 and a worst line of 0.19, with the same number
+            of lines. Word widths come from the text mark's own measurement.
+          </p>
+        </div>
         <div class="cols">
           <div>
-            <h4><span class="tag add">Proposed</span> Approach B</h4>
+            <h4><span class="tag add">Proposed</span></h4>
             <pre
               class="code"
-            ><code data-lang="javascript"><span class="ln add">const words = paragraph.split(" ");</span><span class="ln add">wrap(</span><span class="ln add">  { w: 260, spacing: "0.5ch", break: Break.optimal() },</span><span class="ln add">  words.map((w) =&gt; text({ text: w }))</span><span class="ln add">);</span><span class="ln"></span><span class="ln">// or the same paragraph as one text mark, which desugars to the wrap above</span><span class="ln add">text({ text: paragraph, w: 260, break: Break.optimal() });</span></code></pre>
+            ><code data-lang="javascript"><span class="ln add">spread(</span><span class="ln add">  { dir: "x", spacing: "0.5ch", w: 260, wrap: { cost: Cost.badness() } },</span><span class="ln add">  words.map((w) =&gt; text({ text: w }))</span><span class="ln add">);</span><span class="ln"></span><span class="ln">// the same, with Break</span><span class="ln add">spread(</span><span class="ln add">  { dir: "x", spacing: "0.5ch", w: 260, wrap: { break: Break.optimal() } },</span><span class="ln add">  words.map((w) =&gt; text({ text: w }))</span><span class="ln add">);</span></code></pre>
             <details class="py">
               <summary>Python</summary>
               <pre
                 class="code"
-              ><code data-lang="python"><span class="ln add">wrap([text(text=w) for w in words], w=260, spacing="0.5ch", break_=Break.optimal())</span><span class="ln"></span><span class="ln add">text(text=paragraph, w=260, break_=Break.optimal())</span></code></pre>
+              ><code data-lang="python"><span class="ln add">spread(</span><span class="ln add">    [text(text=w) for w in words],</span><span class="ln add">    dir="x",</span><span class="ln add">    spacing="0.5ch",</span><span class="ln add">    w=260,</span><span class="ln add">    wrap={"cost": Cost.badness()},</span><span class="ln add">)</span></code></pre>
             </details>
           </div>
           <div>
             <h4><span class="tag del">Today</span></h4>
             <p class="ne">
-              Not expressible today. There is no <code>wrap</code>. The story
-              runs the line breaker in plain JS and places every word with its
-              own <code>text({ x, y })</code>.
+              Not possible today. The prototype computes the breaks in plain
+              JavaScript and places each word by hand.
             </p>
             <details>
-              <summary>What the story does instead</summary>
+              <summary>What the prototype does instead</summary>
               <pre
                 class="code"
               ><code data-lang="typescript"><span class="ln">// Knuth-Plass: f[i] = min total badness of setting words i..n-1.</span><span class="ln del">const f = new Array(n + 1).fill(Infinity);</span><span class="ln del">const next = new Array(n + 1).fill(n);</span><span class="ln del">f[n] = 0;</span><span class="ln del">for (let i = n - 1; i &gt;= 0; i--) {</span><span class="ln del">  for (let j = i + 1; j &lt;= n &amp;&amp; lineW(i, j) &lt;= W; j++) {</span><span class="ln del">    const c = bad(i, j) + f[j];</span><span class="ln del">    if (c &lt; f[i]) ((f[i] = c), (next[i] = j));</span><span class="ln del">  }</span><span class="ln del">}</span><span class="ln del">const kp = [];</span><span class="ln del">for (let i = 0; i &lt; n; i = next[i]) kp.push([i, next[i]]);</span><span class="ln"></span><span class="ln">// then every word is placed by hand, one text mark at a time</span><span class="ln del">kp.forEach(([i, j], li) =&gt; {</span><span class="ln del">  let x = 0;</span><span class="ln del">  for (let k = i; k &lt; j; k++) {</span><span class="ln del">    marks.push(text({ x, y: li * LH, text: words[k], fontSize: SIZE }));</span><span class="ln del">    x += widths[k] + space;</span><span class="ln del">  }</span><span class="ln del">});</span><span class="ln del">layer(marks).render(container);</span></code></pre>
             </details>
           </div>
         </div>
-        <p class="note">
-          Word widths come from the text mark's own measurement.
-        </p>
+        <div class="note">
+          <p>
+            <code>text</code> can then take a width, e.g.
+            <code
+              >text({ text: para, w: 260, wrap: { cost: Cost.badness() }
+              })</code
+            >. It desugars to a wrapped <code>spread</code> over one
+            <code>text</code> per word, so a label with several lines is not a
+            new mark. A sentence with a bold word is a <code>spread</code> of
+            runs, and each run is a <code>spread</code> of words. The inner
+            spreads have no <code>wrap</code> of their own, so their words
+            continue the paragraph's rows.
+          </p>
+          <p>
+            Both spellings side by side are in
+            <a href="#break-or-no-break">Break or no Break</a>.
+          </p>
+        </div>
       </article>
       <article class="ex" id="ex-pp">
         <header>
@@ -585,48 +819,125 @@
             /></a>
           </div>
         </figure>
-        <p class="caption">
-          Three alternatives per list (flat, hang and indent) with the cost (sum
-          of squared overflow, newlines). At 80 columns it fits on one line; at
-          40 it takes 6 lines (first row 23 columns, widest 34, last 29); at 24
-          it takes 8 lines. The prototype searches all 1555 layouts.
-        </p>
+        <div class="caption">
+          <p>
+            The prototype prints
+            <code
+              >(define (fold f acc xs) (if (null? xs) acc (fold f (f acc (car
+              xs)) (cdr xs))))</code
+            >
+            with three alternatives per list (flat, hang and indent) and the
+            cost (sum of squared overflow, newlines). At 80 columns it fits on
+            one line. At 40 it takes 6 lines, and the rows are 23 columns at
+            first, 34 at the widest and 29 at the end. At 24 it takes 8 lines.
+            The blue boxes are the row boxes. The prototype searches all 1555
+            layouts. A real implementation would keep only the Pareto frontier.
+            When two layouts tie on cost, the prototype keeps the earlier
+            alternative, which is why the 40 column layout hangs the
+            <code>if</code> after <code>(define </code> instead of indenting it.
+          </p>
+        </div>
         <div class="cols">
           <div>
-            <h4><span class="tag add">Proposed</span> Approach B</h4>
+            <h4><span class="tag add">Proposed</span></h4>
             <pre
               class="code"
-            ><code data-lang="javascript"><span class="ln add">const row = (items) =&gt; wrap({ break: Break.never, spacing: "1ch" }, items);</span><span class="ln add">const column = (items) =&gt; stack({ dir: "y", align: "start" }, items);</span><span class="ln add">const open = text({ text: "(" }),</span><span class="ln add">  close = text({ text: ")" });</span><span class="ln"></span><span class="ln add">const sexp = (e) =&gt;</span><span class="ln add">  typeof e === "string"</span><span class="ln add">    ? text({ text: e, font: "mono" })</span><span class="ln add">    : choose(</span><span class="ln add">        [</span><span class="ln">          // flat: everything on the current row</span><span class="ln add">          row([open, ...e.map(sexp), close]),</span><span class="ln">          // hang: the head, then the arguments in a column that starts after it</span><span class="ln add">          row([open, sexp(e[0]), column(e.slice(1).map(sexp)), close]),</span><span class="ln">          // indent: the head alone, then the arguments indented by two columns</span><span class="ln add">          row([</span><span class="ln add">            column([</span><span class="ln add">              row([open, sexp(e[0])]),</span><span class="ln add">              offset({ x: "2ch" }, column(e.slice(1).map(sexp))),</span><span class="ln add">            ]),</span><span class="ln add">            close,</span><span class="ln add">          ]),</span><span class="ln add">        ],</span><span class="ln add">        { cost: [Cost.overflow(), Cost.lines()] }</span><span class="ln add">      );</span><span class="ln"></span><span class="ln add">sexp(program).render(container, { w: 40 * CH });</span></code></pre>
+            ><code data-lang="javascript"><span class="ln add">const row = (items) =&gt;</span><span class="ln add">  spread({ dir: "x", spacing: "1ch", alignment: "start" }, items);</span><span class="ln add">const column = (items) =&gt; spread({ dir: "y", alignment: "start" }, items);</span><span class="ln add">const glued = (items) =&gt; stack({ dir: "x", alignment: "start" }, items);</span><span class="ln add">const word = (s) =&gt; text({ text: s, font: "mono" });</span><span class="ln"></span><span class="ln add">const sexp = (e) =&gt; {</span><span class="ln add">  if (typeof e === "string") return word(e);</span><span class="ln add">  const [head, ...args] = e.map(sexp);</span><span class="ln">  // "(" sticks to the head, and ")" sticks to the last argument</span><span class="ln add">  const open = glued([word("("), head]);</span><span class="ln add">  const rest = [...args.slice(0, -1), glued([args.at(-1), word(")")])];</span><span class="ln add">  return choose(</span><span class="ln add">    [</span><span class="ln">      // flat: everything on one row</span><span class="ln add">      row([open, ...rest]),</span><span class="ln">      // hang: the head, then the arguments in a column that starts after it</span><span class="ln add">      row([open, column(rest)]),</span><span class="ln">      // indent: the head alone, then the arguments indented by two columns</span><span class="ln add">      column([open, offset({ x: "2ch" }, column(rest))]),</span><span class="ln add">    ],</span><span class="ln add">    { cost: [Cost.overflow(), Cost.lines()] }</span><span class="ln add">  );</span><span class="ln add">};</span><span class="ln"></span><span class="ln add">sexp(program).render(container, { w: 40 * CH });</span></code></pre>
             <details class="py">
               <summary>Python</summary>
               <pre
                 class="code"
-              ><code data-lang="python"><span class="ln add">def row(items):</span><span class="ln add">    return wrap(items, break_=Break.never, spacing="1ch")</span><span class="ln"></span><span class="ln"></span><span class="ln add">def column(items):</span><span class="ln add">    return stack(items, dir="y", align="start")</span><span class="ln"></span><span class="ln"></span><span class="ln add">def sexp(e):</span><span class="ln add">    if isinstance(e, str):</span><span class="ln add">        return text(text=e, font="mono")</span><span class="ln add">    head, args = sexp(e[0]), [sexp(a) for a in e[1:]]</span><span class="ln add">    return choose(</span><span class="ln add">        [</span><span class="ln add">            row([text(text="("), head, *args, text(text=")")]),</span><span class="ln add">            row([text(text="("), head, column(args), text(text=")")]),</span><span class="ln add">            row(</span><span class="ln add">                [</span><span class="ln add">                    column(</span><span class="ln add">                        [row([text(text="("), head]), offset(column(args), x="2ch")]</span><span class="ln add">                    ),</span><span class="ln add">                    text(text=")"),</span><span class="ln add">                ]</span><span class="ln add">            ),</span><span class="ln add">        ],</span><span class="ln add">        cost=[Cost.overflow(), Cost.lines()],</span><span class="ln add">    )</span></code></pre>
+              ><code data-lang="python"><span class="ln add">def row(items):</span><span class="ln add">    return spread(items, dir="x", spacing="1ch", alignment="start")</span><span class="ln"></span><span class="ln"></span><span class="ln add">def column(items):</span><span class="ln add">    return spread(items, dir="y", alignment="start")</span><span class="ln"></span><span class="ln"></span><span class="ln add">def glued(items):</span><span class="ln add">    return stack(items, dir="x", alignment="start")</span><span class="ln"></span><span class="ln"></span><span class="ln add">def word(s):</span><span class="ln add">    return text(text=s, font="mono")</span><span class="ln"></span><span class="ln"></span><span class="ln add">def sexp(e):</span><span class="ln add">    if isinstance(e, str):</span><span class="ln add">        return word(e)</span><span class="ln add">    head, *args = [sexp(x) for x in e]</span><span class="ln add">    open_ = glued([word("("), head])</span><span class="ln add">    rest = [*args[:-1], glued([args[-1], word(")")])]</span><span class="ln add">    return choose(</span><span class="ln add">        [</span><span class="ln add">            row([open_, *rest]),</span><span class="ln add">            row([open_, column(rest)]),</span><span class="ln add">            column([open_, offset(column(rest), x="2ch")]),</span><span class="ln add">        ],</span><span class="ln add">        cost=[Cost.overflow(), Cost.lines()],</span><span class="ln add">    )</span></code></pre>
             </details>
           </div>
           <div>
             <h4><span class="tag del">Today</span></h4>
             <p class="ne">
-              Not expressible today. The story defines its own document type and
-              searcher outside GoFish, then draws each printed line with
-              <code>text</code>.
+              Not possible today. The prototype searches in plain JavaScript and
+              places each line by hand.
             </p>
             <details>
-              <summary>What the story does instead</summary>
+              <summary>What the prototype does instead</summary>
               <pre
                 class="code"
               ><code data-lang="typescript"><span class="ln">// A document type, its constructors and its own search, outside GoFish.</span><span class="ln del">type Doc =</span><span class="ln del">  | { t: "text"; s: string }</span><span class="ln del">  | { t: "nl" }</span><span class="ln del">  | { t: "cat"; a: Doc; b: Doc }</span><span class="ln del">  | { t: "nest"; n: number; d: Doc }</span><span class="ln del">  | { t: "align"; d: Doc }</span><span class="ln del">  | { t: "choice"; a: Doc; b: Doc };</span><span class="ln"></span><span class="ln">// One list, three candidate layouts: flat, hang, indent.</span><span class="ln del">const sexpDoc = (e: SExp): Doc =&gt; {</span><span class="ln del">  if (typeof e === "string") return txt(e);</span><span class="ln del">  const [head, ...args] = e.map(sexpDoc);</span><span class="ln del">  if (args.length === 0) return cat(txt("("), head, txt(")"));</span><span class="ln del">  const flat = flatten(cat(txt("("), hsep([head, ...args]), txt(")")));</span><span class="ln del">  const hang = cat(txt("("), head, txt(" "), align(vsep(args)), txt(")"));</span><span class="ln del">  const indent = align(</span><span class="ln del">    cat(txt("("), head, nest(2, cat(nl, vsep(args))), txt(")"))</span><span class="ln del">  );</span><span class="ln del">  return choice(flat, choice(hang, indent));</span><span class="ln del">};</span><span class="ln"></span><span class="ln">// Exhaustive search over every resolution of the choices (1555 layouts),</span><span class="ln">// keeping the first layout with the least (overflow, newlines) cost.</span><span class="ln del">const { lines } = prettyPrint(sexpDoc(parseSExp(FOLD_SRC)), 40);</span><span class="ln"></span><span class="ln">// then every line is drawn by hand at its indent</span><span class="ln del">lines.forEach((l, li) =&gt; {</span><span class="ln del">  const lead = l.length - l.trimStart().length;</span><span class="ln del">  marks.push(</span><span class="ln del">    text({ x: lead * cw, y: li * LH, text: l.trimStart(), fontFamily: MONO })</span><span class="ln del">  );</span><span class="ln del">});</span><span class="ln del">layer(marks).render(container);</span></code></pre>
             </details>
           </div>
         </div>
-        <p class="note">
-          The blue boxes are the row boxes, so you can see that each layout's
-          shape is a union of boxes. A real implementation would keep only the
-          Pareto frontier. When two layouts tie on cost, the prototype keeps the
-          earlier alternative, which is why the 40 column layout hangs the
-          <code>if</code> after <code>(define </code> instead of indenting it.
-          The mapping to the pretty expressive printer is in the tables below.
-        </p>
+        <div class="note">
+          <h4>The mapping to the pretty expressive printer</h4>
+          <div class="tw">
+            <table>
+              <thead>
+                <tr>
+                  <th>Pretty expressive</th>
+                  <th>GoFish</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>text s</code></td>
+                  <td><code>text({ text: s })</code></td>
+                </tr>
+                <tr>
+                  <td><code>a &lt;+&gt; b</code> (aligned concatenation)</td>
+                  <td>
+                    <code>spread({ dir: "x", alignment: "start" }, [a, b])</code
+                    >, where <code>b</code> is a block
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>a &lt;$&gt; b</code> (newline)</td>
+                  <td>
+                    <code
+                      >spread({ dir: "y", alignment: "start" }, [a, b])</code
+                    >
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>nest n d</code></td>
+                  <td><code>offset({ x: n }, d)</code> inside a column</td>
+                </tr>
+                <tr>
+                  <td><code>a &lt;&gt; b</code> (unaligned concatenation)</td>
+                  <td>
+                    a same-direction <code>spread</code> without
+                    <code>wrap</code>, inside a wrapped <code>spread</code>
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>a &lt;|&gt; b</code></td>
+                  <td><code>choose([a, b])</code></td>
+                </tr>
+                <tr>
+                  <td><code>group d</code></td>
+                  <td><code>choose([row(items), column(items)])</code></td>
+                </tr>
+                <tr>
+                  <td>cost factory</td>
+                  <td>
+                    <code>cost: [Cost.overflow(), Cost.lines()]</code>, and
+                    later a function (#1101)
+                  </td>
+                </tr>
+                <tr>
+                  <td>page width</td>
+                  <td>the room from <code>render(container, { w })</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            This example uses only boxes. Every alternative is a row or a column
+            of boxes. The parentheses are glued to the head and to the last
+            argument, so nothing has to continue after a block. The union of row
+            boxes shows up only as the outline of the result. The case that
+            needs a silhouette is unaligned concatenation, where the next item
+            continues on the last row of a flow and its later rows return to the
+            left edge. In GoFish that is the nested-flow rule above, used by the
+            stacked waffle and by runs of text.
+          </p>
+        </div>
       </article>
       <article class="ex" id="ex-angle">
         <header>
@@ -642,52 +953,43 @@
             /></a>
           </div>
         </figure>
-        <p class="caption">
-          At 400 px the product names collide at 0 degrees. At 45 degrees they
-          clear, so first fit stops there; 90 degrees also clears but takes more
-          height. Today's <code>"auto"</code> (bottom right) picks 45 degrees
-          too, by laying out the whole chart once per angle.
-        </p>
+        <div class="caption">
+          <p>
+            At 400 px the product names collide at 0 degrees. At 45 degrees they
+            clear, so first fit stops there. 90 degrees also clears but takes
+            more height. Today's <code>"auto"</code> (bottom right) picks 45
+            degrees too, by laying out the whole chart once per angle.
+          </p>
+        </div>
         <div class="cols">
           <div>
-            <h4><span class="tag add">Proposed</span> Approach B</h4>
+            <h4><span class="tag add">Proposed</span></h4>
             <pre
               class="code"
-            ><code data-lang="javascript"><span class="ln">chart(regionProduct, {</span><span class="ln add">  axes: {</span><span class="ln add">    x: {</span><span class="ln add">      label: choose([</span><span class="ln add">        { angle: 0 },</span><span class="ln add">        { angle: 45 },</span><span class="ln add">        { angle: 90 },</span><span class="ln add">        { hidden: true },</span><span class="ln add">      ]),</span><span class="ln add">    },</span><span class="ln add">  },</span><span class="ln">  w: 400,</span><span class="ln">  h: 140,</span><span class="ln">})</span><span class="ln">  .flow(</span><span class="ln">    spread({ by: "region", dir: "x", spacing: 24 }),</span><span class="ln">    spread({ by: "product", dir: "x", spacing: 0 })</span><span class="ln">  )</span><span class="ln">  .mark(rect({ h: "sales", fill: "product" }))</span><span class="ln">  .render(container);</span></code></pre>
+            ><code data-lang="javascript"><span class="ln add">chart(regionProduct, {</span><span class="ln add">  axes: {</span><span class="ln add">    x: {</span><span class="ln add">      label: choose([</span><span class="ln add">        { angle: 0 },</span><span class="ln add">        { angle: 45 },</span><span class="ln add">        { angle: 90 },</span><span class="ln add">        { hidden: true },</span><span class="ln add">      ]),</span><span class="ln add">    },</span><span class="ln add">  },</span><span class="ln">});</span><span class="ln"></span><span class="ln add">// or a continuous angle: the smallest angle from 0 to 90 that clears</span><span class="ln add">chart(regionProduct, {</span><span class="ln add">  axes: { x: { label: { angle: choose({ from: 0, to: 90 }) } } },</span><span class="ln">});</span></code></pre>
             <details class="py">
               <summary>Python</summary>
               <pre
                 class="code"
-              ><code data-lang="python"><span class="ln add">chart(</span><span class="ln add">    region_product,</span><span class="ln add">    axes={</span><span class="ln add">        "x": {</span><span class="ln add">            "label": choose(</span><span class="ln add">                [{"angle": 0}, {"angle": 45}, {"angle": 90}, {"hidden": True}]</span><span class="ln add">            )</span><span class="ln add">        }</span><span class="ln add">    },</span><span class="ln add">    w=400,</span><span class="ln add">    h=140,</span><span class="ln add">).flow(</span><span class="ln add">    spread(by="region", dir="x", spacing=24),</span><span class="ln add">    spread(by="product", dir="x", spacing=0),</span><span class="ln add">).mark(</span><span class="ln add">    rect(h="sales", fill="product")</span><span class="ln add">)</span></code></pre>
-            </details>
-            <pre
-              class="code"
-            ><code data-lang="javascript"><span class="ln">// or a continuous angle: the smallest angle between 0 and 90 that clears</span><span class="ln add">axes: { x: { label: { angle: choose({ from: 0, to: 90 }) } } }</span></code></pre>
-            <details class="py">
-              <summary>Python, continuous angle</summary>
-              <pre
-                class="code"
-              ><code data-lang="python"><span class="ln"># or a continuous angle</span><span class="ln add">axes={"x": {"label": {"angle": choose(start=0, stop=90)}}}</span></code></pre>
+              ><code data-lang="python"><span class="ln add">chart(</span><span class="ln add">    region_product,</span><span class="ln add">    axes={</span><span class="ln add">        "x": {</span><span class="ln add">            "label": choose(</span><span class="ln add">                [{"angle": 0}, {"angle": 45}, {"angle": 90}, {"hidden": True}]</span><span class="ln add">            )</span><span class="ln add">        }</span><span class="ln add">    },</span><span class="ln add">)</span></code></pre>
             </details>
           </div>
           <div>
             <h4><span class="tag del">Today</span></h4>
             <pre
               class="code"
-            ><code data-lang="javascript"><span class="ln">chart(regionProduct, {</span><span class="ln del">  axes: { x: { label: { angle: "auto" } } },</span><span class="ln">  w: 400,</span><span class="ln">  h: 140,</span><span class="ln">})</span><span class="ln">  .flow(</span><span class="ln">    spread({ by: "region", dir: "x", spacing: 24 }),</span><span class="ln">    spread({ by: "product", dir: "x", spacing: 0 })</span><span class="ln">  )</span><span class="ln">  .mark(rect({ h: "sales", fill: "product" }))</span><span class="ln">  .render(container);</span></code></pre>
-            <p class="ne">
-              <code>"auto"</code> stays as the short spelling: it is sugar for
-              the <code>choose</code> on the left, and the docs show the
-              expansion.
-            </p>
+            ><code data-lang="javascript"><span class="ln del">chart(regionProduct, { axes: { x: { label: { angle: "auto" } } } });</span></code></pre>
+            <p class="ne"><code>"auto"</code> is kept as the short spelling.</p>
           </div>
         </div>
-        <p class="note">
-          The axis is one node, so only its label row is laid out again per
-          alternative. The engine no longer rebuilds the whole chart, which
-          removes the rebuild hook in <code>runLayout</code> and the cost that
-          keeps #1017 (<code>"auto"</code> as the default) from shipping.
-        </p>
+        <div class="note">
+          <p>
+            The axis is one node, so only its label row is laid out again per
+            alternative. The engine no longer rebuilds the whole chart, which
+            removes the rebuild hook in <code>runLayout</code> and the cost that
+            keeps #1017 (<code>"auto"</code> as the default) from shipping.
+          </p>
+        </div>
       </article>
       <article class="ex" id="ex-ticks">
         <header>
@@ -703,67 +1005,322 @@
             /></a>
           </div>
         </figure>
-        <p class="caption">
-          A 200 px axis over 0 to 12,000. About 3 ticks gives 3 ticks with no
-          overlap; about 5 gives 7 ticks with one overlapping pair; about 10
-          gives 13 ticks with 12 overlapping pairs. The rule "the most ticks
-          with no overlap" picks the first row.
-        </p>
+        <div class="caption">
+          <p>
+            A 200 px axis over 0 to 12,000, with ticks from d3's
+            <code>ticks(0, 12000, count)</code>. Overlapping labels are drawn in
+            orange. Asking for about 3 ticks gives 3 ticks with no overlap.
+            About 5 gives 7 ticks with one overlapping pair, and about 10 gives
+            13 ticks with 12 overlapping pairs. The first-fit rule "the most
+            ticks with no overlap" picks the first row.
+          </p>
+        </div>
         <div class="cols">
           <div>
-            <h4><span class="tag add">Proposed</span> Approach B</h4>
+            <h4><span class="tag add">Proposed</span></h4>
             <pre
               class="code"
-            ><code data-lang="javascript"><span class="ln">// the most ticks whose labels do not overlap</span><span class="ln add">axes: { x: { ticks: { count: choose([10, 8, 6, 5, 4, 3, 2]) } } }</span><span class="ln"></span><span class="ln">// tick count and angle as one choice, which #1194 asks for</span><span class="ln add">axes: {</span><span class="ln add">  x: choose([</span><span class="ln add">    { ticks: { count: 10 } },</span><span class="ln add">    { ticks: { count: 5 } },</span><span class="ln add">    { ticks: { count: 10 }, label: { angle: 45 } },</span><span class="ln add">    { ticks: { count: 3 } },</span><span class="ln add">  ]),</span><span class="ln add">}</span><span class="ln"></span><span class="ln">// Talbot style, with weights</span><span class="ln add">axes: {</span><span class="ln add">  x: {</span><span class="ln add">    ticks: {</span><span class="ln add">      count: choose(</span><span class="ln add">        { from: 2, to: 12 },</span><span class="ln add">        {</span><span class="ln add">          cost: Cost.weighted({</span><span class="ln add">            overlap: Infinity,</span><span class="ln add">            density: 0.5,</span><span class="ln add">            simplicity: 0.2,</span><span class="ln add">          }),</span><span class="ln add">        }</span><span class="ln add">      ),</span><span class="ln add">    },</span><span class="ln add">  },</span><span class="ln add">}</span></code></pre>
+            ><code data-lang="javascript"><span class="ln">// the most ticks whose labels do not overlap</span><span class="ln add">chart(data, {</span><span class="ln add">  axes: { x: { ticks: { count: choose([10, 8, 6, 5, 4, 3, 2]) } } },</span><span class="ln add">});</span><span class="ln"></span><span class="ln">// tick count and angle as one choice, which #1194 asks for</span><span class="ln add">chart(data, {</span><span class="ln add">  axes: {</span><span class="ln add">    x: choose([</span><span class="ln add">      { ticks: { count: 10 } },</span><span class="ln add">      { ticks: { count: 5 } },</span><span class="ln add">      { ticks: { count: 10 }, label: { angle: 45 } },</span><span class="ln add">      { ticks: { count: 3 } },</span><span class="ln add">    ]),</span><span class="ln add">  },</span><span class="ln add">});</span><span class="ln"></span><span class="ln">// Talbot style, with weights</span><span class="ln add">chart(data, {</span><span class="ln add">  axes: {</span><span class="ln add">    x: {</span><span class="ln add">      ticks: {</span><span class="ln add">        count: choose(</span><span class="ln add">          { from: 2, to: 12 },</span><span class="ln add">          {</span><span class="ln add">            cost: Cost.weighted({</span><span class="ln add">              overlap: Infinity,</span><span class="ln add">              density: 0.5,</span><span class="ln add">              simplicity: 0.2,</span><span class="ln add">            }),</span><span class="ln add">          }</span><span class="ln add">        ),</span><span class="ln add">      },</span><span class="ln add">    },</span><span class="ln add">  },</span><span class="ln add">});</span></code></pre>
             <details class="py">
-              <summary>Python</summary>
+              <summary>Python, first form</summary>
               <pre
                 class="code"
-              ><code data-lang="python"><span class="ln"># the most ticks whose labels do not overlap</span><span class="ln add">axes={"x": {"ticks": {"count": choose([10, 8, 6, 5, 4, 3, 2])}}}</span></code></pre>
+              ><code data-lang="python"><span class="ln"># the most ticks whose labels do not overlap</span><span class="ln add">chart(data, axes={"x": {"ticks": {"count": choose([10, 8, 6, 5, 4, 3, 2])}}})</span></code></pre>
             </details>
           </div>
           <div>
             <h4><span class="tag del">Today</span></h4>
             <p class="ne">
-              Not expressible today. The axis always asks d3 for about 10 ticks,
-              so labels overlap on a narrow chart. The story calls d3's
-              <code>ticks(0, 12000, count)</code> per candidate and draws each
-              axis by hand.
+              Not possible today. The axis always asks d3 for about 10 ticks.
             </p>
             <details>
-              <summary>What the story does instead</summary>
+              <summary>What the prototype does instead</summary>
               <pre
                 class="code"
               ><code data-lang="typescript"><span class="ln">// Candidates: d3's tick sets for a few requested counts.</span><span class="ln del">const candidates = [3, 5, 10, 20].map((count) =&gt; {</span><span class="ln del">  const ts = ticks(0, MAX, count);</span><span class="ln del">  const labels = ts.map((v) =&gt; {</span><span class="ln del">    const s = fmt(v);</span><span class="ln del">    const w = measure(s, SIZE);</span><span class="ln del">    const cx = (v / MAX) * PW;</span><span class="ln del">    return { s, x0: cx - w / 2, x1: cx + w / 2, cx };</span><span class="ln del">  });</span><span class="ln">  // Two neighboring labels overlap when their measured boxes intersect.</span><span class="ln del">  let overlaps = 0;</span><span class="ln del">  for (let k = 1; k &lt; labels.length; k++) {</span><span class="ln del">    if (labels[k].x0 &lt; labels[k - 1].x1) overlaps++;</span><span class="ln del">  }</span><span class="ln del">  return { count, ts, labels, overlaps };</span><span class="ln del">});</span><span class="ln">// Among the overlap-free candidates, prefer more ticks.</span><span class="ln del">const best = argmin(candidates, (c) =&gt; c.overlaps * 1000 - c.ts.length);</span><span class="ln">// then the axis line, tick marks and labels are drawn by hand with rect and text</span></code></pre>
             </details>
           </div>
         </div>
-        <p class="note">
-          The Talbot form needs <code>density</code> and
-          <code>simplicity</code> terms that only make sense for ticks. We would
-          add them only if a user asks (decision 10).
-        </p>
+        <div class="note">
+          <p>
+            The third form needs <code>density</code> and
+            <code>simplicity</code> terms that only make sense for ticks. We
+            would add them only if a user asks, and we list it as a decision.
+          </p>
+        </div>
       </article>
 
-      <h2 id="approaches">Approaches</h2>
+      <h2 id="break-or-no-break">Break or no Break</h2>
+      <p class="prose">
+        Wrapping can name its rule in two ways. With a
+        <code>Break</code> family, each rule has a name. Without it,
+        <code>wrap</code> takes the same <code>cost</code> option as
+        <code>choose</code>, and the rule is the cost.
+      </p>
+      <div class="cmp" role="table">
+        <div class="hd" role="columnheader">Rule</div>
+        <div class="hd" role="columnheader">With <code>Break</code></div>
+        <div class="hd" role="columnheader">
+          Without <code>Break</code> (cost)
+        </div>
+        <div class="rule same" role="rowheader">
+          greedy (the default) <span class="tag same">same</span>
+        </div>
+        <div class="cell same" role="cell">
+          <span class="lbl">With Break</span>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">wrap: true</span></code></pre>
+        </div>
+        <div class="cell same" role="cell">
+          <span class="lbl">Without Break (cost)</span>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">wrap: true</span></code></pre>
+        </div>
+        <div class="rule diff" role="rowheader">Knuth-Plass</div>
+        <div class="cell" role="cell">
+          <span class="lbl">With Break</span>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">wrap: { break: Break.optimal() }</span></code></pre>
+        </div>
+        <div class="cell" role="cell">
+          <span class="lbl">Without Break (cost)</span>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">wrap: { cost: Cost.badness() }</span></code></pre>
+        </div>
+        <div class="rule diff" role="rowheader">
+          Knuth-Plass with a tolerance
+        </div>
+        <div class="cell" role="cell">
+          <span class="lbl">With Break</span>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">wrap: {</span><span class="ln">  break: Break.optimal({ tolerance: 2 }),</span><span class="ln">}</span></code></pre>
+        </div>
+        <div class="cell" role="cell">
+          <span class="lbl">Without Break (cost)</span>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">wrap: {</span><span class="ln">  cost: Cost.badness({ tolerance: 2 }),</span><span class="ln">}</span></code></pre>
+        </div>
+        <div class="rule diff" role="rowheader">balanced rows</div>
+        <div class="cell" role="cell">
+          <span class="lbl">With Break</span>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">wrap: { break: Break.balance() }</span></code></pre>
+        </div>
+        <div class="cell" role="cell">
+          <span class="lbl">Without Break (cost)</span>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">wrap: { cost: Cost.balance() }</span></code></pre>
+        </div>
+        <div class="rule same" role="rowheader">
+          fixed columns <span class="tag same">same</span>
+        </div>
+        <div class="cell same" role="cell">
+          <span class="lbl">With Break</span>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">wrap: { cols: 10 }</span></code></pre>
+        </div>
+        <div class="cell same" role="cell">
+          <span class="lbl">Without Break (cost)</span>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">wrap: { cols: 10 }</span></code></pre>
+        </div>
+        <div class="rule same" role="rowheader">
+          columns chosen by a cost <span class="tag same">same</span>
+        </div>
+        <div class="cell same" role="cell">
+          <span class="lbl">With Break</span>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">wrap: {</span><span class="ln">  cols: choose(</span><span class="ln">    { from: 4, to: 24 },</span><span class="ln">    { cost: Cost.waste() }</span><span class="ln">  ),</span><span class="ln">}</span></code></pre>
+        </div>
+        <div class="cell same" role="cell">
+          <span class="lbl">Without Break (cost)</span>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">wrap: {</span><span class="ln">  cols: choose(</span><span class="ln">    { from: 4, to: 24 },</span><span class="ln">    { cost: Cost.waste() }</span><span class="ln">  ),</span><span class="ln">}</span></code></pre>
+        </div>
+        <div class="rule same" role="rowheader">
+          one row, or one item per row <span class="tag same">same</span>
+        </div>
+        <div class="cell same" role="cell">
+          <span class="lbl">With Break</span>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">choose([</span><span class="ln">  spread(items),</span><span class="ln">  spread({ dir: "y" }, items),</span><span class="ln">])</span></code></pre>
+        </div>
+        <div class="cell same" role="cell">
+          <span class="lbl">Without Break (cost)</span>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">choose([</span><span class="ln">  spread(items),</span><span class="ln">  spread({ dir: "y" }, items),</span><span class="ln">])</span></code></pre>
+        </div>
+        <div class="rule same" role="rowheader">
+          never break <span class="tag same">same</span>
+        </div>
+        <div class="cell same" role="cell">
+          <span class="lbl">With Break</span>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">// no wrap</span></code></pre>
+        </div>
+        <div class="cell same" role="cell">
+          <span class="lbl">Without Break (cost)</span>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">// no wrap</span></code></pre>
+        </div>
+      </div>
       <p class="small">
-        The design has three separate axes: where the choice appears in the
-        spec, how alternatives are ranked, and how <code>wrap</code> names its
-        break rule.
+        The two spellings differ in three rows only. Everything else is the
+        same, because <code>choose</code> over columns, all-or-nothing, and
+        never breaking are not break rules.
+      </p>
+
+      <h3>The Knuth-Plass paragraph, both ways</h3>
+      <figure>
+        <div class="plate">
+          <a href="img/knuth-plass.png"
+            ><img
+              src="img/knuth-plass.png"
+              alt="Greedy first fit beside Knuth-Plass for the same paragraph"
+          /></a>
+        </div>
+      </figure>
+      <div class="cols bw">
+        <div>
+          <h4>With <code>Break</code></h4>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">spread(</span><span class="ln">  {</span><span class="ln">    dir: "x",</span><span class="ln">    spacing: "0.5ch",</span><span class="ln">    w: 260,</span><span class="ln chg">    wrap: { break: Break.optimal() },</span><span class="ln">  },</span><span class="ln">  words.map((w) =&gt; text({ text: w }))</span><span class="ln">);</span></code></pre>
+          <details class="py">
+            <summary>Python</summary>
+            <pre
+              class="code"
+            ><code data-lang="python"><span class="ln">spread(</span><span class="ln">    [text(text=w) for w in words],</span><span class="ln">    dir="x",</span><span class="ln">    spacing="0.5ch",</span><span class="ln">    w=260,</span><span class="ln chg">    wrap={"break": Break.optimal()},</span><span class="ln">)</span></code></pre>
+          </details>
+        </div>
+        <div>
+          <h4>Without <code>Break</code> (cost)</h4>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">spread(</span><span class="ln">  {</span><span class="ln">    dir: "x",</span><span class="ln">    spacing: "0.5ch",</span><span class="ln">    w: 260,</span><span class="ln chg">    wrap: { cost: Cost.badness() },</span><span class="ln">  },</span><span class="ln">  words.map((w) =&gt; text({ text: w }))</span><span class="ln">);</span></code></pre>
+          <details class="py">
+            <summary>Python</summary>
+            <pre
+              class="code"
+            ><code data-lang="python"><span class="ln">spread(</span><span class="ln">    [text(text=w) for w in words],</span><span class="ln">    dir="x",</span><span class="ln">    spacing="0.5ch",</span><span class="ln">    w=260,</span><span class="ln chg">    wrap={"cost": Cost.badness()},</span><span class="ln">)</span></code></pre>
+          </details>
+        </div>
+      </div>
+
+      <div class="cols bw">
+        <div class="fa">
+          <h4>For <code>Break</code></h4>
+          <ul>
+            <li>
+              Typst (<code>par(linebreaks: "optimized")</code>) and CSS (<code
+                >text-wrap-style: pretty | balance</code
+              >) name the rule, not the cost. A user setting a paragraph does
+              not have to know what a cost is.
+            </li>
+            <li>
+              <code>Break.optimal()</code> names the algorithm, so the engine
+              can run the Knuth-Plass dynamic program instead of a general
+              search. The engine could also do this when it sees
+              <code>Cost.badness()</code>.
+            </li>
+          </ul>
+        </div>
+        <div class="fa">
+          <h4>Against <code>Break</code></h4>
+          <ul>
+            <li>
+              Two families would say the same thing.
+              <code>wrap: { break: Break.optimal() }</code> and
+              <code>wrap: { cost: Cost.badness() }</code> would both have to
+              work, or <code>wrap</code> would rank alternatives differently
+              from <code>choose</code>.
+            </li>
+            <li>
+              With only <code>cost</code>, there is one ranking rule for every
+              choice in GoFish. A user who learns <code>cost</code> for the
+              pretty printer can use the same word for paragraphs, and a cost
+              list such as <code>[Cost.overflow(), Cost.badness()]</code> works
+              without a new spelling.
+            </li>
+            <li>
+              Every <code>Break</code> strategy would be a one-line alias, and
+              the rule from <code>three-surfaces.md</code> is that an option
+              with nothing to choose between gets no family.
+            </li>
+          </ul>
+        </div>
+      </div>
+      <p class="reco">
+        <b>Lean.</b> We lean toward no <code>Break</code>, with the Typst and
+        CSS words in the docs for <code>Cost.badness</code> and
+        <code>Cost.balance</code>. The case for <code>Break</code> is that
+        paragraph users never have to see the word "cost".
+      </p>
+      <details class="rat">
+        <summary>
+          Each <code>Break</code> rule desugars to a <code>choose</code> at
+          every seam plus a ranking
+        </summary>
+        <ul>
+          <li>
+            <code>Break.greedy</code> is first fit at each seam. Each seam
+            prefers "continue" over "new row". The first assignment in that
+            order that fits continues whenever the current row still fits,
+            because a later break is always possible. That is exactly the greedy
+            rule.
+          </li>
+          <li>
+            <code>Break.optimal()</code> is <code>cost: Cost.badness()</code>.
+          </li>
+          <li>
+            <code>Break.balance()</code> is <code>cost: Cost.balance()</code>.
+          </li>
+        </ul>
+        <p>So <code>Break</code> is a set of names for costs.</p>
+      </details>
+
+      <h2 id="approaches">Approaches</h2>
+
+      <p class="small">
+        The design has four separate axes: where the choice appears in the spec,
+        how alternatives are ranked, where wrapping lives, and whether wrapping
+        names its rule with a <code>Break</code> family or with a cost.
       </p>
 
       <h3>Axis 1. Where the choice appears</h3>
       <div class="apgrid">
         <div class="ap">
           <h4>A. <code>choose</code> is a node over subtrees</h4>
+          <p class="d">
+            <code>choose</code> takes a list of child subtrees, like
+            <code>layer</code>. It is the pretty printer's
+            <code>&lt;|&gt;</code>. To choose an option value, you write the
+            subtree once per value.
+          </p>
           <pre
             class="code"
-          ><code data-lang="javascript"><span class="ln">// waffle</span><span class="ln">choose(</span><span class="ln">  [4, 8, 12, 16, 24].map((cols) =&gt; wrap({ cols }, cells)),</span><span class="ln">  { cost: Cost.waste() }</span><span class="ln">)</span><span class="ln"></span><span class="ln">// axis label angle: the axis is chrome, so the choice has to wrap the whole chart</span><span class="ln">choose(</span><span class="ln">  [0, 45, 90].map((angle) =&gt;</span><span class="ln">    chart(data, { axes: { x: { label: { angle } } } }).flow(...).mark(...)</span><span class="ln">  )</span><span class="ln">)</span></code></pre>
+          ><code data-lang="javascript"><span class="ln">// waffle</span><span class="ln">choose(</span><span class="ln">  [4, 8, 12, 16, 24].map((cols) =&gt; stack({ dir: "x", wrap: { cols } }, cells)),</span><span class="ln">  { cost: Cost.waste() }</span><span class="ln">);</span><span class="ln"></span><span class="ln">// axis label angle: the axis is chrome, so the choice has to repeat the whole chart</span><span class="ln">choose(</span><span class="ln">  [0, 45, 90].map((angle) =&gt;</span><span class="ln">    chart(data, { axes: { x: { label: { angle } } } })</span><span class="ln">      .flow(spread({ by: "product", dir: "x" }))</span><span class="ln">      .mark(rect({ h: "sales" }))</span><span class="ln">  )</span><span class="ln">);</span></code></pre>
           <details class="py">
             <summary>Python</summary>
             <pre
               class="code"
-            ><code data-lang="python"><span class="ln">choose([wrap(cells, cols=c) for c in [4, 8, 12, 16, 24]], cost=Cost.waste())</span></code></pre>
+            ><code data-lang="python"><span class="ln">choose(</span><span class="ln">    [stack(cells, dir="x", wrap={"cols": c}) for c in [4, 8, 12, 16, 24]],</span><span class="ln">    cost=Cost.waste(),</span><span class="ln">)</span></code></pre>
           </details>
           <ul>
             <li class="pro">
@@ -771,9 +1328,9 @@
               to one.
             </li>
             <li class="con">
-              Axis options are hard to reach. The user has to repeat the whole
-              chart per alternative: today's whole-chart loop, moved into user
-              code.
+              Axis options are hard to reach. The axis is built by the engine,
+              so the user has to repeat the whole chart per alternative. That is
+              today's whole-chart loop, moved into user code.
             </li>
             <li class="con">
               A continuous choice, e.g. an angle between 0 and 90, cannot be
@@ -783,53 +1340,78 @@
         </div>
         <div class="ap rec">
           <h4>
-            B. A node, and also an option value
+            B. <code>choose</code> is a node, and also an option value
             <span class="tag rec">recommended</span>
           </h4>
+          <p class="d">
+            The same <code>choose</code> works in two places. As a node it takes
+            subtrees. As an option value it takes values, and the option takes
+            the chosen value. The value form is sugar. It means "build this node
+            once per value, then choose among those nodes", so it desugars to
+            Approach A.
+          </p>
           <pre
             class="code"
-          ><code data-lang="javascript"><span class="ln">// option value, discrete</span><span class="ln">axes: { x: { label: { angle: choose([0, 45, 90]) } } }</span><span class="ln"></span><span class="ln">// option value, a whole record per alternative (today's "auto" written out)</span><span class="ln">axes: {</span><span class="ln">  x: {</span><span class="ln">    label: choose([</span><span class="ln">      { angle: 0 },</span><span class="ln">      { angle: 45 },</span><span class="ln">      { angle: 90 },</span><span class="ln">      { hidden: true },</span><span class="ln">    ]),</span><span class="ln">  },</span><span class="ln">}</span><span class="ln"></span><span class="ln">// option value, an integer range with a cost</span><span class="ln">wrap({ cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }) })</span><span class="ln"></span><span class="ln">// option value, a continuous interval: the smallest angle that clears</span><span class="ln">axes: { x: { label: { angle: choose({ from: 0, to: 90 }) } } }</span><span class="ln"></span><span class="ln">// node form, for structurally different layouts</span><span class="ln">choose([flatIf, brokenIf])</span></code></pre>
+          ><code data-lang="javascript"><span class="ln">// option value, discrete</span><span class="ln">chart(data, { axes: { x: { label: { angle: choose([0, 45, 90]) } } } });</span><span class="ln"></span><span class="ln">// option value, a whole record per alternative (today's "auto" written out)</span><span class="ln">chart(data, {</span><span class="ln">  axes: {</span><span class="ln">    x: {</span><span class="ln">      label: choose([</span><span class="ln">        { angle: 0 },</span><span class="ln">        { angle: 45 },</span><span class="ln">        { angle: 90 },</span><span class="ln">        { hidden: true },</span><span class="ln">      ]),</span><span class="ln">    },</span><span class="ln">  },</span><span class="ln">});</span><span class="ln"></span><span class="ln">// option value, an integer range with a cost</span><span class="ln">stack({</span><span class="ln">  dir: "x",</span><span class="ln">  wrap: { cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }) },</span><span class="ln">});</span><span class="ln"></span><span class="ln">// option value, a continuous interval: the smallest angle that clears</span><span class="ln">chart(data, { axes: { x: { label: { angle: choose({ from: 0, to: 90 }) } } } });</span><span class="ln"></span><span class="ln">// node form, for structurally different layouts</span><span class="ln">choose([flatIf, brokenIf]);</span></code></pre>
           <details class="py">
             <summary>Python</summary>
             <pre
               class="code"
-            ><code data-lang="python"><span class="ln">axes={"x": {"label": {"angle": choose([0, 45, 90])}}}</span><span class="ln">wrap(cols=choose(start=4, stop=24, cost=Cost.waste()))</span><span class="ln">choose([flat_if, broken_if])</span></code></pre>
+            ><code data-lang="python"><span class="ln">chart(data, axes={"x": {"label": {"angle": choose([0, 45, 90])}}})</span><span class="ln">stack(dir="x", wrap={"cols": choose(start=4, stop=24, cost=Cost.waste())})</span><span class="ln">choose([flat_if, broken_if])</span></code></pre>
           </details>
           <ul>
             <li class="pro">
               One word covers every case in the examples list.
             </li>
             <li class="pro">
-              The axis case no longer repeats the chart. Only that axis is laid
-              out again per alternative.
+              The axis case no longer repeats the chart. The engine builds one
+              axis node with a choice inside, and only that axis is laid out
+              again per alternative.
             </li>
             <li class="pro">
-              A range or interval is a lazy list. For first fit over an interval
-              the engine can bisect, because overlap falls as the angle grows
-              (#486).
+              A range or interval is a lazy list. For a first-fit choice over an
+              interval the engine can bisect, because overlap falls as the angle
+              grows. This is the "pick a basin, then solve inside it" idea from
+              #486.
+            </li>
+            <li class="pro">
+              <code>"auto"</code> stays as named sugar.
+              <code>angle: "auto"</code> is the same as
+              <code
+                >label: choose([{ angle: 0 }, { angle: 45 }, { angle: 90 }, {
+                hidden: true }])</code
+              >. The docs show the expansion, so the user can copy it and change
+              the list.
             </li>
             <li class="con">
-              An option that accepts <code>choose(...)</code> has to say so in
-              its type. We would start with <code>wrap.cols</code>,
-              <code>label.angle</code>, <code>label</code>,
-              <code>ticks.count</code> and <code>axes.x</code>.
+              The user must learn which options accept <code>choose(...)</code>,
+              and each such option says so in its type. We would start with a
+              small set: <code>wrap.cols</code>, <code>label.angle</code>,
+              <code>label</code> as a whole, <code>ticks.count</code>, and
+              <code>axes.x</code> as a whole.
             </li>
           </ul>
         </div>
         <div class="ap">
           <h4>C. No user-facing choice, only strategies</h4>
+          <p class="d">
+            Each operator gets an <code>"auto"</code> value or a strategy, and
+            the search stays inside the engine. This is CSS
+            <code>text-wrap: pretty</code>, Plotly's
+            <code>tickangle: "auto"</code> and Plot's waffle rule.
+          </p>
           <pre
             class="code"
-          ><code data-lang="javascript"><span class="ln">wrap({ cols: "auto" }) // square cells that fill the room</span><span class="ln">wrap({ break: Break.optimal() }) // Knuth-Plass</span><span class="ln">axes: { x: { label: { angle: "auto" }, ticks: { count: "auto" } } }</span></code></pre>
+          ><code data-lang="javascript"><span class="ln">stack({ dir: "x", wrap: { cols: "auto" } }); // square cells that fill the room</span><span class="ln">spread({ dir: "x", wrap: { break: Break.optimal() } }); // Knuth-Plass</span><span class="ln">chart(data, {</span><span class="ln">  axes: { x: { label: { angle: "auto" }, ticks: { count: "auto" } } },</span><span class="ln">});</span></code></pre>
           <ul>
             <li class="pro">
               It is the simplest surface, and it is close to what GoFish ships
               today.
             </li>
             <li class="pro">
-              It is the runner-up and the first shipping step of B: every
-              <code>"auto"</code> is sugar for a <code>choose</code> that B
-              makes writable.
+              It is the runner-up, and it is also the first shipping step of
+              Approach B. Every <code>"auto"</code> in this list is sugar for a
+              <code>choose</code> that B makes writable.
             </li>
             <li class="con">
               The pretty printer cannot be written, because its alternatives are
@@ -837,15 +1419,20 @@
             </li>
             <li class="con">
               Each <code>"auto"</code> is a hidden conditional. The user cannot
-              change the candidate list or the order.
+              change the candidate list or the order, which goes against the
+              rule that a default should desugar to code the user could write.
             </li>
           </ul>
         </div>
         <div class="ap">
           <h4>D. Free variables and an objective (foil)</h4>
+          <p class="d">
+            The user names unknowns and one objective for the chart, in the
+            style of Penrose and Draco.
+          </p>
           <pre
             class="code"
-          ><code data-lang="javascript"><span class="ln">const cols = variable({ from: 4, to: 24, integer: true });</span><span class="ln">chart(data, { minimize: [overflow(), waste()] }).flow(wrap({ cols }));</span></code></pre>
+          ><code data-lang="javascript"><span class="ln">const cols = variable({ from: 4, to: 24, integer: true });</span><span class="ln">chart(data, { minimize: [overflow(), waste()] }).flow(</span><span class="ln">  stack({ dir: "x", wrap: { cols } })</span><span class="ln">);</span></code></pre>
           <ul>
             <li class="pro">
               It can express everything, including choices that interact across
@@ -859,138 +1446,289 @@
               A variable used in two places couples two parts of the tree, which
               breaks the rule that a choice stays inside one scale scope (#486).
             </li>
+            <li class="neu">
+              We list it to make the boundary clear. B can express the same
+              examples without global variables.
+            </li>
           </ul>
         </div>
       </div>
-      <p class="small">
-        The value form is sugar: "instantiate this node once per value, then
-        choose among those nodes", so B desugars to A.
-      </p>
 
       <h3>Axis 2. How alternatives are ranked</h3>
       <div class="apgrid">
         <div class="ap rec">
           <h4>
             1. Preference order with a fit test
+            <span class="tag rec">default</span>
+          </h4>
+          <p class="d">
+            <code>choose</code> takes the first alternative that fits. If none
+            fits, it takes the one that overflows least. This is
+            <code>ViewThatFits</code>, Plotly and today's
+            <code>chooseFirstFit</code>.
+          </p>
+          <p class="d">The fit test has two parts:</p>
+          <ul class="plain">
+            <li>
+              The layout stays inside the room the parent gives. This connects
+              to the proposal model in #1292, where a node with no own size uses
+              the parent's proposal.
+            </li>
+            <li>
+              The operator's own test passes, e.g. axis labels do not overlap,
+              and a label does not cover an <code>avoiding</code> mark.
+            </li>
+          </ul>
+        </div>
+        <div class="ap rec">
+          <h4>
+            2. A <code>Cost</code> list <span class="tag rec">when given</span>
+          </h4>
+          <p class="d">
+            <code>cost</code> replaces preference order with a list of named
+            terms compared in order. Preference order is the last tie breaker.
+          </p>
+          <pre
+            class="code"
+          ><code data-lang="javascript"><span class="ln">choose(alternatives, { cost: [Cost.overflow(), Cost.lines()] }); // the pretty printer default</span><span class="ln">stack({</span><span class="ln">  dir: "x",</span><span class="ln">  wrap: { cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }) },</span><span class="ln">});</span><span class="ln">spread({ dir: "x", wrap: { cost: Cost.badness() } }); // Knuth-Plass</span></code></pre>
+        </div>
+        <div class="ap">
+          <h4>3. Penalties on alternatives</h4>
+          <p class="d">
+            Knuth-Plass penalties and the pretty printer's
+            <code>cost n d</code> attach a cost to one alternative. In GoFish
+            this could be a method, e.g. <code>brokenIf.cost(2)</code>, or a
+            weight per alternative in <code>choose</code>. We do not propose it
+            now, because preference order covers the cases above. It is listed
+            as a decision.
+          </p>
+        </div>
+      </div>
+      <h4>A first set of <code>Cost</code> terms</h4>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Term</th>
+              <th>Meaning</th>
+              <th>Used by</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>Cost.overflow()</code></td>
+              <td>
+                ink outside the room, squared and summed per row, as in the
+                pretty expressive printer
+              </td>
+              <td>pretty printing, wrapping</td>
+            </tr>
+            <tr>
+              <td><code>Cost.overlap()</code></td>
+              <td>
+                total overlap area between labels or marks that should not touch
+              </td>
+              <td>axis labels, tick count, label placement</td>
+            </tr>
+            <tr>
+              <td><code>Cost.waste()</code></td>
+              <td>the fraction of the room left empty</td>
+              <td>waffle, treemap rows</td>
+            </tr>
+            <tr>
+              <td><code>Cost.lines()</code></td>
+              <td>the number of rows</td>
+              <td>pretty printing</td>
+            </tr>
+            <tr>
+              <td><code>Cost.badness()</code></td>
+              <td>
+                Knuth-Plass badness, <code>100 (slack/stretch)³</code> per row,
+                last row free
+              </td>
+              <td>paragraphs</td>
+            </tr>
+            <tr>
+              <td><code>Cost.balance()</code></td>
+              <td>
+                the largest difference between a row's length and the longest
+                row
+              </td>
+              <td>titles, short labels</td>
+            </tr>
+            <tr>
+              <td><code>Cost.weighted({ ... })</code></td>
+              <td>
+                a weighted sum of other terms, in the style of Talbot and Typst
+              </td>
+              <td>tick choice in the Talbot style</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="small">
+        A function is the escape hatch, e.g.
+        <code>cost: layout =&gt; number</code>. It waits for #1101, which
+        decides how a family accepts user functions and how they cross to
+        Python.
+      </p>
+      <p class="small">
+        The cost terms must follow the laws in the silhouette note. Every join
+        must be monotone in the cost, and the cost must be an ordered monoid.
+        That is why <code>Cost.overflow</code> sums squared overflow and does
+        not take a maximum. The pretty expressive paper shows that (max
+        overflow, height) breaks monotonicity, so the engine could not prune
+        with it.
+      </p>
+
+      <h3 id="wrapping">Axis 3. Where wrapping lives</h3>
+      <p class="prose">
+        <code>stack</code> and <code>spread</code> differ in their spaces. A
+        <code>stack</code> glues its children's spaces into one space, e.g. the
+        species counts in a stacked bar add up along one value axis. A
+        <code>spread</code> keeps each child's space separate, e.g. one band per
+        lake. Wrapping is a different question. It asks whether the children
+        stay on one row or fold into several rows. Any flow of children can
+        fold, whether their spaces are glued or separate:
+      </p>
+      <div class="tw">
+        <table class="quad">
+          <thead>
+            <tr>
+              <th></th>
+              <th>glued spaces (<code>stack</code>)</th>
+              <th>separate spaces (<code>spread</code>)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th>one row</th>
+              <td>stacked bar</td>
+              <td>grouped bars</td>
+            </tr>
+            <tr>
+              <th>folded rows</th>
+              <td>stacked waffle</td>
+              <td>facet grid, paragraph of words</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="apgrid two">
+        <div class="ap rec">
+          <h4>
+            Wrap 1. An option on <code>stack</code> and <code>spread</code>
             <span class="tag rec">recommended</span>
           </h4>
           <pre
             class="code"
-          ><code data-lang="javascript"><span class="ln">// first fit: the first alternative that fits, else the one that overflows least</span><span class="ln">axes: { x: { label: { angle: choose([0, 45, 90]) } } }</span></code></pre>
+          ><code data-lang="javascript"><span class="ln">// stacked waffle, ten columns</span><span class="ln">stack({ by: "species", dir: "x", wrap: { cols: 10 } });</span><span class="ln">// facet grid, three columns</span><span class="ln">spread({ by: "panel", dir: "x", wrap: { cols: 3 } });</span><span class="ln">// paragraph, greedy breaks in the room</span><span class="ln">spread({ dir: "x", spacing: "0.5ch", wrap: true }, words);</span></code></pre>
+          <details class="py">
+            <summary>Python</summary>
+            <pre
+              class="code"
+            ><code data-lang="python"><span class="ln">stack(by="species", dir="x", wrap={"cols": 10})</span><span class="ln">spread(by="panel", dir="x", wrap={"cols": 3})</span><span class="ln">spread(words, dir="x", spacing="0.5ch", wrap=True)</span></code></pre>
+          </details>
           <ul>
             <li class="pro">
-              This is <code>ViewThatFits</code>, Plotly and today's
-              <code>chooseFirstFit</code>. Cheap and predictable.
+              <code>wrap: true</code> breaks rows to fit the room the parent
+              gives. <code>wrap: { cols }</code> fixes the column count.
+              <code>wrap: { cost }</code> ranks the breaks.
             </li>
             <li class="pro">
-              Fit: the layout stays inside the room the parent gives (#1292),
-              and the operator's own test passes, e.g. labels do not overlap or
-              cover an <code>avoiding</code> mark.
-            </li>
-            <li class="con">
-              If none fits, it takes the one that overflows least.
-            </li>
-          </ul>
-        </div>
-        <div class="ap rec">
-          <h4>
-            2. A <code>Cost</code> list <span class="tag rec">recommended</span>
-          </h4>
-          <pre
-            class="code"
-          ><code data-lang="javascript"><span class="ln">choose(alternatives, { cost: [Cost.overflow(), Cost.lines()] }) // the pretty printer default</span><span class="ln">wrap({ cols: choose({ from: 4, to: 24 }, { cost: Cost.waste() }) })</span></code></pre>
-          <ul>
-            <li class="pro">
-              Named terms compared in order (lexicographic). Preference order is
-              the last tie breaker.
+              <code>dir</code> is the direction of each row. Rows advance along
+              the other axis, and <code>reverse</code> and
+              <code>alignment</code> keep their meaning inside a row.
             </li>
             <li class="pro">
-              Terms follow the silhouette note's laws: every join is monotone
-              and the cost is an ordered monoid, so
-              <code>Cost.overflow</code> sums squared overflow instead of taking
-              a maximum.
+              The glued space of a wrapped <code>stack</code> stays one space.
+              In a stacked waffle, trout starts at the cell where bass ended, so
+              the species still add up to one count.
             </li>
-            <li class="con">
-              A function, <code>cost: layout =&gt; number</code>, waits for
-              #1101.
+            <li class="pro">
+              It matches the rule that an option is a local adjective of its
+              operator (<code>api-design.md</code>, "Calls, methods and
+              options"). Wrapping changes how one operator places its own
+              children, and nothing outside it.
             </li>
-            <li class="con">Users may expect a weighted sum.</li>
+            <li class="pro">
+              It adds one option to two operators and no new operator.
+            </li>
           </ul>
         </div>
         <div class="ap">
-          <h4>3. Penalties on alternatives</h4>
+          <h4>Wrap 2. A separate <code>wrap</code> operator</h4>
           <pre
             class="code"
-          ><code data-lang="javascript"><span class="ln">// a cost on one alternative (not proposed now)</span><span class="ln">choose([flatIf, brokenIf.cost(2)])</span></code></pre>
+          ><code data-lang="javascript"><span class="ln">wrap({ by: "species", cols: 10 });</span><span class="ln">wrap({ by: "panel", cols: 3 });</span></code></pre>
           <ul>
-            <li class="pro">
-              Knuth-Plass penalties and the pretty printer's
-              <code>cost n d</code> attach a cost to one alternative.
-            </li>
+            <li class="pro">It reads well for the waffle.</li>
             <li class="con">
-              Not proposed now. Preference order covers the cases above. Listed
-              as decision 9.
+              It cannot say whether its children's spaces are glued or separate.
+              A <code>wrap</code> by species has to glue, so trout continues
+              bass's count, and a <code>wrap</code> by panel has to separate, so
+              each panel keeps its own scales. The operator would need its own
+              glue flag, which repeats the <code>stack</code> and
+              <code>spread</code> distinction. Two operators would then overlap
+              on most of their behavior, which is the kind of large partial
+              overlap <code>api-design.md</code> warns about.
             </li>
           </ul>
         </div>
       </div>
-      <p class="small">
-        Recommended: first fit by default, a <code>Cost</code> list when given.
+
+      <h3 id="nested-flows">Nested flows</h3>
+      <p class="prose">
+        A stacked waffle has two levels. The outer <code>stack</code> splits by
+        species, and the inner <code>stack</code> lays out one species' units.
+        The inner units have to continue the outer rows, so trout's first cell
+        goes right after bass's last cell, on the same row. One rule covers this
+        case and the paragraph case:
+      </p>
+      <div class="rule-box">
+        <ul>
+          <li>
+            <b
+              >A same-direction <code>stack</code> or
+              <code>spread</code> without its own <code>wrap</code> continues
+              its parent's rows.</b
+            >
+            Its seams join the parent's flow, so its children fill the current
+            row and then the next one.
+          </li>
+          <li>
+            <b>Any other child is a block.</b> That includes a child that sets
+            its own <code>wrap</code>, a child that flows in the other
+            direction, a mark, and a node from any other operator. A block moves
+            to the next row as a whole.
+          </li>
+        </ul>
+      </div>
+      <p class="prose">
+        The rule is the same as today's behavior without wrapping. Two nested
+        same-direction stacks already lay out exactly like one flat stack,
+        because gluing is associative. Wrapping folds that one flat row, so the
+        nesting does not change the result.
+      </p>
+      <div class="syntax">
+        <pre
+          class="code"
+        ><code data-lang="javascript"><span class="ln">// stacked waffle: species glued, units continue the species rows</span><span class="ln">chart(seafood).flow(</span><span class="ln">  stack({ by: "species", dir: "x", wrap: { cols: 10 } }),</span><span class="ln">  derive((d) =&gt; repeat(d, "count")),</span><span class="ln">  stack({ dir: "x" })</span><span class="ln">);</span><span class="ln"></span><span class="ln">// grouped waffle: each species is its own wrapped block, side by side</span><span class="ln">chart(seafood).flow(</span><span class="ln">  spread({ by: "species", dir: "x" }),</span><span class="ln">  derive((d) =&gt; repeat(d, "count")),</span><span class="ln">  stack({ dir: "x", wrap: { cols: 5 } })</span><span class="ln">);</span></code></pre>
+      </div>
+      <p class="prose">
+        The continuing case is the only place the engine needs more than a box.
+        A child that continues the parent's rows reports its silhouette as row
+        count, widest row and last-row width, so the next sibling knows where to
+        start. A block reports only its box.
       </p>
 
-      <h3>Axis 3. How <code>wrap</code> names its break rule</h3>
-      <div class="apgrid two">
-        <div class="ap rec">
-          <h4>
-            A <code>Break</code> family <span class="tag rec">recommended</span>
-          </h4>
-          <pre
-            class="code"
-          ><code data-lang="javascript"><span class="ln">wrap({ dir: "x", w: 260, spacing: "0.5ch", break: Break.optimal() }, words)</span><span class="ln">wrap({ cols: 10 }, cells) // fixed columns, no choice at all</span><span class="ln">wrap({ break: Break.group }, items) // all on one row, or one item per row</span><span class="ln">wrap({ break: Break.never }, items) // one row; the next item starts on the last row of a multi-row child</span></code></pre>
-          <ul>
-            <li class="pro">
-              Typst (<code>linebreaks: "optimized"</code>) and CSS (<code
-                >text-wrap-style: pretty</code
-              >) name the rule, not the cost.
-            </li>
-            <li class="pro">
-              <code>Break.group</code> and <code>Break.never</code> are not
-              costs.
-            </li>
-            <li class="pro">
-              Every <code>Break</code> strategy is still a
-              <code>choose</code> at each seam plus a cost, so it adds no new
-              search machinery.
-            </li>
-          </ul>
-        </div>
-        <div class="ap">
-          <h4>A <code>cost</code> on <code>wrap</code> directly</h4>
-          <pre
-            class="code"
-          ><code data-lang="javascript"><span class="ln">wrap({ cost: Cost.badness() })</span></code></pre>
-          <ul>
-            <li class="pro">
-              It drops the family and puts the cost on
-              <code>wrap</code> directly.
-            </li>
-            <li class="con">
-              It cannot say <code>group</code> or <code>never</code>, which are
-              not costs.
-            </li>
-          </ul>
-        </div>
-      </div>
-      <p class="small">
-        <code>wrap</code> folds its children with a soft seam: at each seam the
-        layout either continues on the current row or breaks. This follows
-        silhouette note §7, which found that a wrap is the pretty printer's
-        <code>fill</code> (one choice per seam), not <code>group</code> (one
-        choice for all seams). <code>stack</code> and <code>spread</code> are
-        the same fold with fixed seams. <code>text</code> can then take a width,
-        e.g. <code>text({ text: para, w: 260, break: Break.optimal() })</code>,
-        which desugars to a <code>wrap</code> over one <code>text</code> per
-        word, so a multi-line label is not a new mark.
+      <h3>Axis 4. Break or no Break</h3>
+      <p class="prose">
+        Wrapping can name its rule with a <code>Break</code> family (<code
+          >wrap: { break: Break.optimal() }</code
+        >) or with a cost (<code>wrap: { cost: Cost.badness() }</code>). Every
+        rule in both spellings is compared side by side in
+        <a href="#break-or-no-break">Break or no Break</a>.
       </p>
 
       <details class="rat">
@@ -1008,14 +1746,19 @@
           <li>
             <b>Cost.</b> A number, or a list of numbers compared in order, that
             ranks alternatives. Lower is better. A list compared in order is
-            called lexicographic: the second number only matters when the first
+            called lexicographic. The second number only matters when the first
             numbers are equal.
           </li>
           <li>
-            <b>Seam.</b> The place between two neighboring children of a flow
-            operator. <code>stack</code> and <code>spread</code> have fixed
-            seams. A <code>wrap</code> seam is a choice between continuing on
-            the current row and breaking to a new row.
+            <b>Seam.</b> The place between two neighboring children of a
+            <code>stack</code> or <code>spread</code>. Without
+            <code>wrap</code>, every seam continues the row. With
+            <code>wrap</code>, every seam is a choice between continuing and
+            starting a new row.
+          </li>
+          <li>
+            <b>Block.</b> A child that a wrapped row treats as one box. It moves
+            to the next row as a whole.
           </li>
           <li>
             <b>Silhouette.</b> The summary of a child's shape that a parent uses
@@ -1063,11 +1806,53 @@
           </li>
           <li>
             The layout protocol returns one box per axis. The silhouette note
-            already defines the richer summary and says it stays inside the
-            operator that declares it. Only the box leaves.
+            (<code>notes/design/silhouette-interface.md</code>) already defines
+            the richer summary and says it stays inside the operator that
+            declares it. Only the box leaves.
           </li>
         </ul>
       </details>
+
+      <h2 id="geometry">How the geometry works inside</h2>
+      <div class="prose">
+        <ol class="geo">
+          <li>
+            Each child of a wrapped <code>stack</code> or
+            <code>spread</code> reports a silhouette. A block reports its box. A
+            child that continues the parent's rows (the nested-flow rule)
+            reports three numbers: row count, widest row and last-row width.
+          </li>
+          <li>
+            At each seam the engine joins the two neighbors' silhouettes once
+            for "continue" and once for "new row". The join formulas use only
+            <code>+</code> and <code>max</code>, and the silhouette note lists
+            them.
+          </li>
+          <li>
+            The engine keeps a list of (silhouette, cost) pairs and drops any
+            pair that another pair beats on every count. That list is the Pareto
+            frontier.
+          </li>
+          <li>
+            When the parent gives room, the engine scores what is left, e.g.
+            overflow past the room width. It commits one pair and places the
+            children row by row.
+          </li>
+          <li>
+            Only the box leaves the wrapped operator. Its outline gets one part
+            per row, so <code>enclose</code>, <code>.label()</code> and
+            <code>ref</code> can follow the staircase shape.
+          </li>
+        </ol>
+        <p>
+          A <code>choose</code> node works the same way over whole alternatives.
+          Before the parent gives room, <code>choose</code> reports the smallest
+          size among its alternatives, which is the <code>min</code> in #630. A
+          wrapped flow whose width comes from the room needs its height as a
+          function of its width, <code>h(w)</code>. That is stage 3 of the
+          shipping order.
+        </p>
+      </div>
 
       <h2 id="precedent">Precedent</h2>
       <div class="pgrid">
@@ -1524,185 +2309,7 @@
         </ul>
       </details>
 
-      <h2 id="tables">Tables</h2>
-      <h3>The <code>Break</code> family</h3>
-      <div class="tw">
-        <table>
-          <thead>
-            <tr>
-              <th>Strategy</th>
-              <th>Rule</th>
-              <th>Written as <code>choose</code> plus cost</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>Break.greedy</code></td>
-              <td>continue while the next item fits</td>
-              <td>first fit at each seam, from the start</td>
-            </tr>
-            <tr>
-              <td><code>Break.optimal({ tolerance? })</code></td>
-              <td>Knuth-Plass, lowest total badness</td>
-              <td>
-                <code>choose</code> at each seam,
-                <code>cost: Cost.badness()</code>
-              </td>
-            </tr>
-            <tr>
-              <td><code>Break.balance</code></td>
-              <td>rows of nearly equal length</td>
-              <td>
-                <code>choose</code> at each seam, minimize the largest slack
-              </td>
-            </tr>
-            <tr>
-              <td><code>Break.group</code></td>
-              <td>all seams continue, or all break</td>
-              <td>one <code>choose</code> over two layouts</td>
-            </tr>
-            <tr>
-              <td><code>Break.never</code></td>
-              <td>all seams continue</td>
-              <td>no choice</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <h3>The <code>Cost</code> family, a first set of terms</h3>
-      <div class="tw">
-        <table>
-          <thead>
-            <tr>
-              <th>Term</th>
-              <th>Meaning</th>
-              <th>Used by</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>Cost.overflow()</code></td>
-              <td>
-                ink outside the room, squared and summed per row, as in the
-                pretty expressive printer
-              </td>
-              <td>pretty printing, wrap</td>
-            </tr>
-            <tr>
-              <td><code>Cost.overlap()</code></td>
-              <td>
-                total overlap area between labels or marks that should not touch
-              </td>
-              <td>axis labels, tick count, label placement</td>
-            </tr>
-            <tr>
-              <td><code>Cost.waste()</code></td>
-              <td>the fraction of the room left empty</td>
-              <td>waffle, treemap rows</td>
-            </tr>
-            <tr>
-              <td><code>Cost.lines()</code></td>
-              <td>the number of rows</td>
-              <td>pretty printing</td>
-            </tr>
-            <tr>
-              <td><code>Cost.badness()</code></td>
-              <td>
-                Knuth-Plass badness, <code>100·(slack/stretch)³</code> per row,
-                last row free
-              </td>
-              <td><code>Break.optimal</code></td>
-            </tr>
-            <tr>
-              <td><code>Cost.weighted({ ... })</code></td>
-              <td>
-                a weighted sum of other terms, in the style of Talbot and Typst
-              </td>
-              <td>tick choice in the Talbot style</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p class="small">
-        A function is the escape hatch, e.g.
-        <code>cost: layout =&gt; number</code>. It waits for #1101. The pretty
-        expressive paper shows that (max overflow, height) breaks monotonicity,
-        so the engine could not prune with it; that is why
-        <code>Cost.overflow</code> sums squared overflow.
-      </p>
-      <h3>Pretty expressive printer to GoFish</h3>
-      <div class="tw">
-        <table>
-          <thead>
-            <tr>
-              <th>Pretty expressive</th>
-              <th>GoFish</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>text s</code></td>
-              <td><code>text({ text: s })</code></td>
-            </tr>
-            <tr>
-              <td><code>a &lt;&gt; b</code> (continue on the last row)</td>
-              <td><code>wrap({ break: Break.never }, [a, b])</code></td>
-            </tr>
-            <tr>
-              <td><code>a &lt;$&gt; b</code> (newline)</td>
-              <td><code>stack({ dir: "y", align: "start" }, [a, b])</code></td>
-            </tr>
-            <tr>
-              <td><code>align d</code></td>
-              <td>
-                a <code>stack</code> starts its rows at the column where it
-                begins
-              </td>
-            </tr>
-            <tr>
-              <td><code>nest n d</code></td>
-              <td>
-                <code>offset({ x: n }, d)</code> inside a <code>stack</code>
-              </td>
-            </tr>
-            <tr>
-              <td><code>a &lt;|&gt; b</code></td>
-              <td><code>choose([a, b])</code></td>
-            </tr>
-            <tr>
-              <td>cost factory</td>
-              <td>
-                <code>cost: [Cost.overflow(), Cost.lines()]</code>, and later a
-                function (#1101)
-              </td>
-            </tr>
-            <tr>
-              <td>page width</td>
-              <td>the room from <code>render(container, { w })</code></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p class="small">
-        The layout of a wrapped S-expression is a union of row boxes: a first
-        row, a block, and a last row that can end early. The next item continues
-        on that last row. This is the silhouette <code>(h, w, ℓ)</code> from the
-        silhouette note. It stays inside <code>wrap</code> and
-        <code>choose</code>. Outside, the node has its box, and its outline has
-        one part per row, so <code>enclose</code>, <code>.label()</code> and
-        <code>ref</code> can follow the staircase shape.
-      </p>
-      <p class="small">
-        One difference remains. The pretty expressive printer's
-        <code>&lt;&gt;</code> is unaligned, so the next row of the right side
-        starts at the indentation level and not at the column where the right
-        side began. GoFish places children by box, so every multi-row child is
-        aligned. Aligned concatenation covers the Lisp and JSON styles. The
-        C-style <code>nest</code> with unaligned rows would need
-        <code>offset</code> with a negative x or a new join, and we leave it
-        out.
-      </p>
-      <h3>Overlap with existing operators</h3>
+      <h2 id="overlap">Overlap with existing operators</h2>
       <div class="tw">
         <table>
           <thead>
@@ -1719,7 +2326,7 @@
                 <code>"auto"</code> becomes named sugar for a written-out
                 <code>choose</code>
               </td>
-              <td>exact rewrite, delete the special loop</td>
+              <td>exact rewrite, and the special loop is deleted</td>
             </tr>
             <tr>
               <td><code>.label({ position: Place.around })</code></td>
@@ -1728,7 +2335,7 @@
                 <code>Place.along</code> candidates, with an overlap fit test
               </td>
               <td>
-                exact rewrite. The placer becomes a client of
+                exact rewrite, and the placer becomes a client of
                 <code>choose</code>
               </td>
             </tr>
@@ -1738,22 +2345,24 @@
                 <code>table({ numCols })</code>
               </td>
               <td>
-                a fixed-columns <code>wrap</code> is the same as nested spreads
+                <code>wrap: { cols: n }</code> is the same as nested spreads
                 over chunks
               </td>
               <td>
-                exact rewrite. We define <code>wrap({ cols })</code> by it.
+                exact rewrite. We define <code>wrap: { cols }</code> by it, and
                 <code>chunk</code> stays for other uses
               </td>
             </tr>
             <tr>
               <td><code>stack</code>, <code>spread</code></td>
-              <td>the same fold, with fixed seams instead of soft ones</td>
-              <td>shared mechanism, degenerate overlap</td>
+              <td><code>wrap</code> is an option on both</td>
+              <td>
+                no overlap. Wrapping is about rows, and glue is about spaces
+              </td>
             </tr>
             <tr>
               <td><code>Overlap</code> family (<code>scatter</code>)</td>
-              <td>deterministic, no alternatives</td>
+              <td>deterministic, with no alternatives</td>
               <td>none</td>
             </tr>
             <tr>
@@ -1774,7 +2383,9 @@
           <li>
             Is the operator called <code>choose</code>? Other options are
             <code>choice</code>, <code>alt</code>, <code>oneOf</code> and
-            <code>firstOf</code>.
+            <code>firstOf</code>. Parsec's <code>choice</code> tries
+            alternatives in order, which is the best argument for
+            <code>choice</code>.
           </li>
           <li>
             Should <code>choose</code> also be an option value (B), or only a
@@ -1794,12 +2405,32 @@
             <code>choose(start=4, stop=24)</code>.
           </li>
           <li>
-            Does <code>wrap</code> take a <code>Break</code> family, or a
-            <code>cost</code> directly?
+            Is wrapping an option on <code>stack</code> and
+            <code>spread</code> (<code>wrap: { cols }</code>), or its own
+            operator?
           </li>
           <li>
-            Does <code>text</code> take <code>w</code> and
-            <code>break</code> and desugar to a <code>wrap</code> over words?
+            Does wrapping name its rule with <code>Break</code> (<code
+              >wrap: { break: Break.optimal() }</code
+            >), or with a cost (<code>wrap: { cost: Cost.badness() }</code>)?
+          </li>
+          <li>
+            Is the nested-flow rule right? A same-direction
+            <code>stack</code> or <code>spread</code> without its own
+            <code>wrap</code> continues the parent's rows, and every other child
+            is a block.
+          </li>
+          <li>
+            How is "reverse the row order but not the order inside a row"
+            spelled for the waffle, e.g. <code>reverse: "rows"</code>?
+          </li>
+          <li>
+            Does <code>stack</code> take <code>spacing</code>, so glued units
+            can have gaps?
+          </li>
+          <li>
+            Does <code>text</code> take <code>w</code> and <code>wrap</code> and
+            desugar to a wrapped <code>spread</code> over words?
           </li>
           <li>
             Does <code>"auto"</code> stay as named sugar, with the docs showing
@@ -1810,7 +2441,7 @@
             (<code>node.cost(2)</code>), or later?
           </li>
           <li>
-            Do tick-specific cost terms (<code>density</code>,
+            Do tick-only cost terms (<code>density</code>,
             <code>simplicity</code>) belong in <code>Cost</code>, or should tick
             count stay first fit only?
           </li>
@@ -1821,9 +2452,11 @@
       <div class="prose">
         <ol>
           <li>
-            <code>wrap</code> with fixed <code>cols</code> and
-            <code>Break.greedy</code>. No choice machinery, works on today's
-            engine (#122 comment, 07-12).
+            <code>wrap: { cols }</code> and <code>wrap: true</code> on
+            <code>stack</code> and <code>spread</code>, with greedy breaks and
+            the nested-flow rule. This needs no choice machinery and works on
+            today's engine (#122 comment, 07-12). <code>stack</code> also takes
+            <code>spacing</code>.
           </li>
           <li>
             <code>choose</code> with first fit as a node and as an option value.
@@ -1831,11 +2464,11 @@
             delete <code>chooseFirstFit</code>'s whole-chart loop.
           </li>
           <li>
-            <code>Cost</code> with a frontier inside <code>wrap</code> and
-            <code>choose</code>. <code>Break.optimal</code>,
+            <code>Cost</code> with a frontier inside wrapped flows and
+            <code>choose</code>. This brings <code>Cost.badness</code>,
             <code>cols: choose(...)</code> with <code>Cost.waste()</code>, and
             pretty printing. This step needs the cross-axis claim
-            <code>h(w)</code> for a wrap whose width comes from the room
+            <code>h(w)</code> for a wrapped flow whose width comes from the room
             (silhouette note §6).
           </li>
         </ol>
@@ -1908,9 +2541,8 @@
             <b>Layout engine.</b> A <code>choose</code> node lays out each
             alternative in the room its parent gives, and keeps the chosen one.
             When the parent asks for its size before giving room,
-            <code>choose</code> reports the smallest size among its
-            alternatives. That is the <code>min</code> in the claim algebra
-            (#630), and monotone piecewise-linear claims stay invertible under
+            <code>choose</code> reports the smallest size among its alternatives
+            (#630). Monotone piecewise-linear claims stay invertible under
             <code>min</code>.
           </li>
           <li>
@@ -1919,23 +2551,22 @@
             search is bounded to the scope that holds the <code>choose</code>.
           </li>
           <li>
-            <b>Silhouettes.</b> <code>wrap</code> and <code>choose</code> keep a
-            Pareto frontier of <code>(silhouette, cost)</code> pairs inside
-            their scope and commit one at the boundary. Outside, only the box
-            leaves. This is the silhouette note's Law 2, so no existing operator
-            changes.
+            <b>Spaces.</b> A wrapped <code>stack</code> keeps one glued space,
+            and a wrapped <code>spread</code> keeps separate spaces. Wrapping
+            changes rows, not spaces, so axes and scales come out the same as
+            without <code>wrap</code>.
           </li>
           <li>
             <b>Coordinate transforms.</b> The choice is made in the layout
             space, before the coordinate transform. In polar coordinates
             <code>Cost.overflow</code> measures the box, not the arc. That is
-            fine for labels and wraps, which do not bend.
+            fine for labels and rows, which do not bend.
           </li>
           <li>
             <b>Animation.</b> A choice can change between frames. A tween
             between two alternatives moves shared marks by key. A choice that
-            flips back and forth while a value changes is a known risk. We would
-            add hysteresis only if it shows up.
+            flips back and forth while a value changes is a known risk, and we
+            would add hysteresis only if it shows up.
           </li>
           <li>
             <b>Data types.</b> Nothing new. Ranges in
@@ -1943,10 +2574,10 @@
           </li>
           <li>
             <b>Python.</b> <code>choose</code> is a builtin construct with a
-            list of children or values. Costs are
-            <code>Cost.overflow()</code> as strategies in the
-            <code>STRATEGIES</code> table. A cost function crosses through the
-            callback runner once #1101 decides its spelling.
+            list of children or values. Costs are strategies such as
+            <code>Cost.overflow()</code> in the <code>STRATEGIES</code> table. A
+            cost function crosses through the callback runner once #1101 decides
+            its spelling.
           </li>
         </ul>
       </details>
@@ -1956,38 +2587,41 @@
           <li>
             <b>Easy.</b> Every example above is a few lines. The default (first
             fit) is predictable. Costs are named terms that a user can read.
+            Wrapping keeps the meaning of <code>stack</code> and
+            <code>spread</code>.
           </li>
           <li>
             <b>Awkward.</b> Options have to declare that they accept
             <code>choose</code>. A cost over several terms is lexicographic, and
-            users may expect a weighted sum. Unaligned concatenation is left
-            out.
+            users may expect a weighted sum. The nested-flow rule is one more
+            thing to learn, though it changes nothing for charts that do not
+            wrap.
           </li>
           <li>
-            <b>New terms.</b> <code>choose</code>, <code>wrap</code>,
-            <code>Cost</code>, <code>Break</code>. "Silhouette" stays internal.
+            <b>New terms.</b> <code>choose</code>, <code>Cost</code> and the
+            <code>wrap</code> option, and <code>Break</code> if you want it.
+            "Silhouette" stays internal.
           </li>
           <li>
             <b>Extension cost.</b> New cost terms are new entries in the
-            <code>Cost</code> family. User cost functions wait for #1101. A new
-            <code>Break</code> strategy is a cost plus a search, so it adds no
-            engine code beyond its cost.
+            <code>Cost</code> family. User cost functions wait for #1101.
           </li>
         </ul>
       </details>
       <details class="rat">
         <summary>Recommendation</summary>
         <p>
-          Approach B with first fit by default, a <code>Cost</code> list when
-          given, and <code>wrap</code> with <code>Break</code>.
+          Approach B with first fit by default and a <code>Cost</code> list when
+          given, <code>wrap</code> as an option on <code>stack</code> and
+          <code>spread</code>, and no <code>Break</code> family.
         </p>
         <ul>
           <li>
-            <b>It desugars into the core.</b> The value form desugars to the
-            node form. <code>Break</code> strategies desugar to
-            <code>choose</code> at each seam plus a cost.
+            <b>It desugars into the core.</b> The value form of
+            <code>choose</code> desugars to the node form. Wrapping desugars to
+            a <code>choose</code> at each seam plus a ranking.
             <code>"auto"</code> desugars to a written-out <code>choose</code>.
-            The core grows by one operator and one internal summary
+            The core grows by one operator, one option and one internal summary
             (<code>principles.md</code>, "Why keep the core small").
           </li>
           <li>
@@ -2000,17 +2634,23 @@
             (<code>api-design.md</code>, "One concept is one operator").
           </li>
           <li>
-            <b>Names match precedent.</b> <code>wrap</code> is the CSS and
-            Flutter word. <code>choose</code> is a plain verb. It avoids the
-            pretty printer's <code>group</code>, which already means something
-            else in GoFish, and <code>alt</code>, which is jargon.
-            <code>Break</code> and <code>Cost</code> follow the strategy family
-            pattern (<code>Tile</code>, <code>Curve</code>).
+            <b>Overlaps stay at the edges.</b> Glue versus separate stays on
+            <code>stack</code> versus <code>spread</code>, and wrapping is a
+            separate option on both, so no two operators share half their
+            behavior.
           </li>
           <li>
-            <b>Closed kinds plus a function.</b> <code>Cost</code> and
-            <code>Break</code> are closed families like the others, and the
-            function escape hatch is #1101's question, not a new one.
+            <b>Names match precedent.</b> <code>wrap</code> is the CSS and
+            Flutter word. <code>choose</code> is a plain verb, like most GoFish
+            operators (<code>spread</code>, <code>stack</code>,
+            <code>derive</code>, <code>filter</code>, <code>resolve</code>). It
+            avoids the pretty printer's <code>group</code>, which already means
+            something else in GoFish, and <code>alt</code>, which is jargon.
+          </li>
+          <li>
+            <b>Closed kinds plus a function.</b> <code>Cost</code> is a closed
+            family like the others, and the function escape hatch is #1101's
+            question, not a new one.
           </li>
           <li>
             <b>Same shape in JS and Python.</b>
@@ -2020,11 +2660,10 @@
         <p>
           The runner-up is Approach C. It is a subset of B, with the same engine
           and no user-facing <code>choose</code>. If you want to ship waffles
-          and Knuth-Plass before deciding on the value form, ship
-          <code>wrap({ cols: "auto" })</code> and <code>Break</code> first. Each
+          and paragraphs before deciding on the value form, ship
+          <code>wrap: { cols: "auto" }</code> and the cost first. Each
           <code>"auto"</code> is then a named <code>choose</code> that B makes
-          writable later. We would switch to C for good only if the value form
-          turns out to be confusing in the type of every option.
+          writable later.
         </p>
       </details>
 
