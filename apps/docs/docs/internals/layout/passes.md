@@ -913,7 +913,8 @@ fixed-size nodes report their size).
   a run of several slots is centered on, or an `enclose` with a member the
   claim walk cannot place).
 - **Nicing holds the domain.** A claim is the hull of what the content draws,
-  so widening it to a keyed or niced domain (`widenTo`) takes the farther of
+  so widening it to a keyed or niced domain (`widenTo`, which
+  `GoFishNode.widenToDomain` applies for every reader) takes the farther of
   the claim and the domain's end on each side. A tick label past the last
   tick, or a mark past its datum, takes room only where the domain does not
   already reach past it. The plot an axis is seated beside covers its whole
@@ -926,7 +927,9 @@ fixed-size nodes report their size).
   layer seats a child it pins at a literal pixel. A chart is placed whole, its chrome
   with it: on an axis with no data 0 (a spread of bands) it has no baseline
   to share, so a baseline alignment seats it by its start in reading order
-  (`anchorOffset`, #1241), and a caption above a bar chart starts where the
+  (`GoFishNode.baselineIsStart`: the chart's box reports its start as its
+  baseline through `localAnchor`, and the claim walk's stand-in through
+  `ClaimChild.startBaseline`, #1241), and a caption above a bar chart starts where the
   chart's tick labels do. On an axis with a data 0 it keeps that baseline.
   Every other box keeps its own origin (a layer of literal positions, a
   rotated label's pivot). Which origin a pinned content's own constants are
@@ -964,7 +967,8 @@ fixed-size nodes report their size).
   them (#1176 step 3). A node that wears chrome has its content's plot as its plot: its
   rings are never plot, so a grouped bar chart's inner row of category
   labels adds around the outer chart's plot, as its own axes do. A chart's
-  outer box is the exception (`GoFishNode.isChartBox`): the outermost ring
+  outer box is the exception (`_chartRing`, which chrome elaboration sets
+  on the ring it wraps a `chart()` in): the outermost ring
   around a `chart()` with no size of its own is its parent's plot whole,
   axes included, since a parent lays a chart out by its outer box. So a
   chart in a spread beside a caption or another chart keeps its axes
