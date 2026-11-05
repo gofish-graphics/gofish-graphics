@@ -50,18 +50,11 @@ const mosaicPassengers = orderBy(
 
 const meta: Meta = {
   title: "atom/UnitMosaic",
-  argTypes: {
-    w: { control: { type: "number", min: 200, max: 1000, step: 10 } },
-    h: { control: { type: "number", min: 200, max: 1000, step: 10 } },
-  },
 };
 
 export default meta;
 
-type Args = { w: number; h: number };
-
-export const Default: StoryObj<Args> = {
-  args: { w: 400, h: 300 },
+export const Default: StoryObj = {
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -70,14 +63,12 @@ export const Default: StoryObj<Args> = {
         "The headline Atom unit mosaic: Titanic passengers as dots, blocked into class × sex rows and survived columns, where each count-proportional cell is filled one dot per passenger and colored by survival.",
     },
   },
-  render: (args: Args) => {
+  render: () => {
     const container = initializeContainer();
 
     chart(mosaicPassengers, {
       color: Color.palette(["#2b8cbe", "#ff8408"]),
       axes: false,
-      w: args.w,
-      h: args.h,
     })
       .flow(
         // pclass rows: 1st at the bottom, 3rd at the top

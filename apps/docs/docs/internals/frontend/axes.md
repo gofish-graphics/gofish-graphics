@@ -63,28 +63,30 @@ A node gets only the rings it has shapes for. Its chrome is:
   [Legends](/internals/frontend/legends)). The chart options stamp the request
   on the chart root; `elaborateChrome` reads it, synchronously, and clears it.
 
-The node's identity (name, key, visibility) moves onto the outermost ring. That
-ring also records the boxes inside it as `GoFishNode.chrome`:
+The node's identity (name, key, visibility) moves onto the outermost ring.
+Nothing records the boxes inside it. Each ring is marked `GoFishNode._chromeRing`:
 
-- `chrome.content` is the node without chrome.
-- `chrome.withAxes` is the content with its axis gutters and category label
-  rows. Titles and the legend are seated around this box, and the render root
-  reads its axis direction off it.
-- `chrome.rings` lists the rings, innermost first. A ring's first child is the
-  ring inside it (or the content); its other children are its chrome.
-- `chrome.gutters` is how far the chrome reaches past the plot on each side
-  (#1032), which the node's layout reads off the claims. See
-  [Chrome gutters](/internals/layout/passes#chrome-gutters).
+- A ring's first child is the ring inside it (or the content); its other
+  children are its chrome. `GoFishNode.dressedBox` walks the first children
+  down to the content, the node without chrome. The render root reads its
+  axis direction off it.
+- Each ring is an ordinary layer (#1257): it seats its content at its
+  origin, claims the hull of its children, and hands its content what its
+  chrome leaves of its room. Its plot is its content's plot. There is no
+  separate record of how far the chrome reaches. See
+  [Chrome around a chart](/internals/layout/passes#chrome-around-a-chart).
 - The outermost ring itself is the box with all chrome.
+- The content of the innermost ring is marked `GoFishNode._axesBeside`: it
+  is the plot its axes are seated beside, and it covers its whole niced
+  domain (see [Axis lines frame the domain](#axis-lines-frame-the-domain)).
 
-Tick and category labels are chrome, so they lie outside `chrome.content`.
-Code that needs a node's box without its axes reads `chrome.content`.
+Tick and category labels are chrome, so they lie outside the content.
 
 Chrome sits outside its chart and takes room: every chrome shape claims its
 size (a text is measured when the claims are resolved), each ring claims the
 hull of what it wraps and of its shapes where its constraints place them
-(`placeByClaims`), and the outermost ring hands its content what its gutters
-leave of its slot. A category label is centered on its slot's ref. The claim
+(`placeByClaims`), and each ring hands its content what its chrome leaves
+of the ring's room (`plotRooms` in `layer`). A category label is centered on its slot's ref. The claim
 walk knows where the slot lands (`planPlacement`): on a data axis (time or
 number bins) through the data, and on a category axis because a band is a
 share, which claims one σ (#493 piece 3, `GoFishNode.sharesRoom`). So the
@@ -111,16 +113,14 @@ must be `baseline`, not `start`: `start` pins the _bounding-box_ corner, which
 slides the marks off the tick grid once the box overhangs the origin (nested
 facet labels, negative bars).
 
-One case leaves the content unpinned on a dim: a **free** content (a bar
-chart's bars, lined up on one baseline, are one free magnitude; alignment
-shares a baseline but does not pin it). The render root places a free
-space's baseline (`placeBaseline`, `GoFishNode.placedSpace`), so it owns an
-absolute axis over it, niced about its 0. In the inner tier the free content
-is left unpinned on that dim, and the tier, pinned by its axis's datum
-domain, seats it as a pinned layer seats every free child: its baseline at
-the map's data 0. So value 0 sits at the 0 tick, negative bars included. (A
-literal-pixel pin there would put the baseline at the frame's 0, the niced
-domain's low end.)
+The content is pinned on both dims, a **free** content included (a bar
+chart's bars, lined up on one baseline, are one free magnitude). The render
+root and a chart place a free space's baseline (`placeBaseline`,
+`GoFishNode.placedSpace`), so they own an absolute axis over it, niced about
+its 0. The ticks read their datums in the content's frame (`position`'s
+`in`), so value 0 sits at the 0 tick wherever the ring puts the content,
+negative bars included. A content the gutter chain could move instead would
+leave those ticks with no frame to read.
 
 Everything else then seats around the stationary content in **negative gutter
 space** (the ring's box reaches past its origin, and the ring claims that room,
@@ -131,22 +131,30 @@ the single-axis hand-drawn story does — is what keeps _two_ continuous axes on
 one grid: a shifted content would land at `gutter + scale(v)` while the other
 axis's datum-pinned ticks sit at `scale(v)`.
 
-When both dimensions have position-like axes, each axis line is seated from the
-other dimension's datum floor plus a fixed outward standoff. This is deliberately
-different from seating at the content bbox: a niced scatter domain may extend
-past the lowest/highest datum, and the axis should frame the plot-space corner
-rather than the visible data extent. The standoff also keeps marks exactly on
-the domain floor (for example, a histogram bin at `y = 0`) from straddling the
-axis line.
+### Axis lines frame the domain
 
-The other dimension's floor is read from its keyed domain (`KeyedDomains.scope`,
-the same widen-then-nice the marks are placed by), whether or not the node draws
-that dimension's axis itself. A facet panel that owns only its y axis, under a
-chart that draws one shared x axis below all the panels, still seats its y axis
-at the floor of the shared x domain, not just past its own lowest datum. Every
-panel's axis then sits on one line, and the axes meet at the shared corner
-(#753). Only a dimension with no keyed domain (an ordinal one) leaves the line to
-seat off the content's bbox.
+A plot covers its whole niced domain, not only the hull of its marks: on each
+axis with an origin, the content its axes are seated beside (`_axesBeside`)
+widens its claim and its plot to the domain, rounded as the axis over it is
+(`KeyedDomains.scope`, the same widen-then-nice the marks are placed by). On
+a difference axis the domain is a width, and the plot covers it centered on
+its content, where the difference axis draws its line: both read it from
+one formula (`differenceSpan`), in the content's frame, which measures
+widths from the content's start wherever its interval starts. The
+claim walk widens its plan (`domainPlan` in `layer`) and layout widens its box
+(`GoFishNode.domainSpan`), so the two agree. Every axis line then distributes
+just past the content's box without its dressing, like any other chrome
+(see [the layout passes](/internals/layout/passes)): an outline or a label
+whose type is `undefined` draws over the line. The two lines of a scatter
+frame the domain corner even when no datum reaches it (a scatter whose y
+domain is niced below the lowest point does not draw its x axis at the lowest
+point), and a mark that reaches past the floor (a dot's radius, a histogram
+bin's dressing) pushes the line out instead of straddling it.
+
+A facet panel that owns only its y axis covers the shared domains, so its y
+axis sits at the floor of the shared x domain, past its own marks, and every
+panel's axis sits on one line (#753). Turning the rounding off, or setting a
+custom domain, is #1301.
 
 ### Which side the axis seats on
 
@@ -168,8 +176,8 @@ when specified it is honored **literally** (frame-relative: `"start"`=near,
 elaboration can tell an explicit `"start"` apart from the default. The per-dim
 side is threaded `elaborateChrome → elaborationsFor → elaborate{Continuous,
 Difference,Ordinal}Axis`, and each seating decision reads the resolved edge:
-`gutterConstraints` flips the `innerAlign` edge and the `distribute`/standoff
-order, the ordinal label row flips its `distribute([label, content])` pair, and the
+`gutterConstraints` flips the `innerAlign` edge and the order of the
+`distribute` that seats the line past the content, the ordinal label row flips its `distribute([label, content])` pair, and the
 axis **titles** follow their axis to the same edge (see below). The tick-and-label
 pair (`tickMark`) is a plain spread, which reads in pixel order, so it orders its
 two parts by the axis's SCREEN side (the side in axis order, turned into the screen
@@ -439,16 +447,9 @@ difference axis), never off the size claim:
   `spread([text, tickMark])` per tick pinned with
   `Constraint.position({ [axis]: datum(v) })`. The gutter is negative space,
   which the ring claims;
-  the line seats one of two ways. When the **other** dim is position-like
-  (whether this node or an ancestor draws its axis), the line is pinned just
-  outside that dim's scale floor —
-  `position({ [cross]: datum(floor), anchor: "end", offset: -GAP })` — so the
-  two lines frame the domain corner even when no datum reaches it (a scatter
-  whose y domain is niced below the lowest point must not draw its x axis at
-  the lowest point), while the fixed standoff keeps marks _at_ the floor (a
-  y=0 histogram bin) from straddling the line. Otherwise
-  `distribute([line, content])` seats it just past the content's bbox edge (a
-  bar chart's y axis sits beside the bars). Either way,
+  `distribute([line, content])` seats the line just past the plot's box,
+  which covers the niced domain (see
+  [Axis lines frame the domain](#axis-lines-frame-the-domain)).
   `align(end)` sets the ticks flush against the line (their inner edge _is_
   the tick mark, so the label text ends up offset by the tick + gap inside
   each tick's spread). Over a **mirrored** space (`CONTINUOUS_TYPE.mirrored`,
@@ -522,8 +523,7 @@ difference axis), never off the size claim:
   tick values over `[0, w]`, where `w` is the space's width niced from 0
   (`niceContinuous`, the same nicing the scope that sizes the content
   applies), so the steps are even. A delta axis has no data 0, so its frame
-  is its own: it centers the content in that niced width (the axis's
-  `contentAt`, where the content's baseline is pinned), because a delta axis
+  is its own: it centers the content in that niced width, because a delta axis
   comes from centering (`middle` alignment) and its slack splits evenly. Plus
   plain-text labels
   showing the _delta_ between adjacent ticks, pinned at their midpoints
@@ -635,16 +635,21 @@ difference axis), never off the size claim:
 
 ## Axes are drawn at chart boundaries
 
-A continuous axis is drawn only at a `chart()` boundary (#1114 step 6), so its
-ticks map with the σ its marks map with. `GoFishNode.isAxisBoundary` is the
-rule: a chart with no size of its own on a dim draws the axis around itself
-(its σ is solved at the sized node that contains it); a chart with a size of
-its own (`_chartBox`, set by the chart builder) draws it around its content,
-inside the box it solves σ in, and its content's free baseline is placed there
-(`placedSpace`); the render root is the outermost boundary, which draws the
-axes of the domains it solves, a bare low-level render's included. A chart is
-placed whole, its baseline with it, so a chart's own free baseline is placed
-too (`placedSpace`): a bar chart beside a caption in a `spread` draws the
+A continuous axis is drawn only at a `chart()` boundary (#1114 step 6).
+`GoFishNode.isAxisBoundary` is the rule: a chart (`_chartBox`, set by the
+chart builder) draws its axes around itself, sized or not (#1257), and the
+render root is the outermost boundary, which draws the axes of the domains it
+solves, a bare low-level render's included. A tick does not need to share its
+plot's σ to sit on its scale: each tick, the axis line's span and the line's
+seat at the other axis's floor are `position` constraints that read their
+datums in the plot's frame (`in`, internal for now, #1289), so an axis
+outside a chart with a size of its own still maps with the σ that size
+solved. A difference axis has no data 0 to read: on such an axis a layer's
+frame measures lengths of its σ from its own 0 (`GoFishNode.layoutFrames`,
+as the claim walk reads its plan), where the plot's data starts, so the
+axis's 0 sits the axis's slack before it. A chart is placed whole, its
+baseline with it, so a chart's own free baseline is placed
+(`placedSpace`): a bar chart beside a caption in a `spread` draws the
 value axis it draws on its own (#1170). On an axis
 the render gives no size, the root maps its domain at the σ the sized nodes
 below it solve it at, when they agree, so a bare spread of 160 px mini charts
@@ -661,8 +666,8 @@ A chart's content is everything it draws. `frameChart` builds a chart's node
 as its frame over one content layer: a chart's marks and the transitions it
 draws over them, or every tier of a `.layer(...)` chart, the root tier's own
 nodes first (`LayerBuilder.resolve`). The frame (its `w`/`h` and its `coord`)
-has that one child, so a sized chart draws its axes around all of it, and
-every tier's marks and the axis map with the σ that frame solves. A tier
+has that one child, so a chart draws its axes around all of it, and every
+tier's marks and the axis map with the σ that frame solves. A tier
 that is a chart of its own is inside that content, below the node that
 claimed the axis, so it does not draw a second one. A chart nested in
 another chart's content is still a boundary, but it draws only an axis no
@@ -732,13 +737,11 @@ axes inserted below the root would change the root's space after elaboration.
 
 Each chart titles the axes it draws, wherever it sits (#1170). `layout()`
 stamps every chart's `axes` options on it as its request: the render's on the
-root, and each nested chart's own (`_chartAxes`) on it; a chart with a size of
-its own draws its axes around its content, so its content carries the request
-too. A node titles each axis it owns that its request turns on, with the
-option's `title` or else the space's title. So a chart beside a caption in a
-`spread`, or each panel of the Gapminder curves row, titles its own axes. A
-node that is no chart and no sized chart's content carries no request, so an
-axis an operator's override draws gets no title.
+root, and each nested chart's own (`_chartAxes`) on it. A node titles each
+axis it owns that its request turns on, with the option's `title` or else the
+space's title. So a chart beside a caption in a `spread`, or each panel of
+the Gapminder curves row, titles its own axes. A node that is no chart
+carries no request, so an axis an operator's override draws gets no title.
 
 A coordinate space owns no cartesian axes (`resolveAxes` clears them), so a
 pie gets no cartesian title. It titles its own axes (the radial title, see

@@ -122,7 +122,7 @@ async function main() {
     const layout = proto.layout;
     proto.layout = function (this: GoFishNode, size: number[], ...rest: any[]) {
       const p = this.parent;
-      if (p?.chrome !== undefined && p.children[0] === this)
+      if (p?._chromeRing === true && p.children[0] === this)
         handed.push([...size]);
       return layout.call(this, size, ...rest);
     };

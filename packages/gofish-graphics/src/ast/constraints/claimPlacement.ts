@@ -12,8 +12,8 @@ import {
 } from "./placementSolver";
 import { values, type Arith } from "../solver/arith";
 import { Tape, type F } from "../solver/formula";
-import type { SolvePlaceable } from "./placementProgramLowerer";
-import type { PlacementConstraint } from "./placementLowering";
+import type { LocalSpan, SolvePlaceable } from "./placementProgramLowerer";
+import type { PlacementConstraint, ScaleOf } from "./placementLowering";
 import {
   axisIndex,
   axisName,
@@ -21,7 +21,7 @@ import {
   type ConstraintRef,
   type KeyOf,
 } from "./shared";
-import { isPositionInterval } from "./position";
+import { isPositionInterval, type PositionConstraint } from "./position";
 import { gridTracks } from "./grid";
 import type { GapOf } from "./gap";
 import type { ConstraintSpec } from ".";
@@ -108,14 +108,44 @@ export type ClaimChild = {
    *  takes it where layout put it (`at:`) unless a `position` override
    *  owns the axis. */
   placesItself?: boolean;
+  /** It is in a part of the layer's space its axes visualize on the axis:
+   *  its space in the layer, as the type pass infers it
+   *  (`ClaimWalk.parts`), is continuous or ordinal (`isVisualized`). Any
+   *  other child is beside them or over them (dressing). */
+  visualized?: boolean;
   /** Its plot on the axis, about its origin, where it is not its whole
    *  claim (an outline, dressing or chrome around it): a chain lays it by
-   *  its plot, as layout's `localPlotSpan` does, so what dresses a part
+   *  its plot, as layout's `localSpan` does, so what dresses a part
    *  never moves the parts (#1032). */
   plot?: Extent;
-  /** It is chrome (a ring's shapes): no part of the plot, so a chain
-   *  places it past the whole box of what it dresses. */
+  /** Its box without its dressing, about its origin, where that is not its
+   *  whole box: what chrome is laid beside (`GoFishNode.localSpan`).
+   *  Inner chrome is part of it, so a title sits past the tick labels. */
+  bare?: Extent;
+  /** It is chrome (a ring's shapes): no part of the plot and no dressing,
+   *  so a chain lays it by its whole box, beside the plot it dresses. */
   chrome?: boolean;
+  /** Its baseline anchor is its start, not its data 0
+   *  (`GoFishNode.baselineIsStart`: a chart's box, placed whole), as its
+   *  `localAnchor` says once it is laid out. */
+  startBaseline?: boolean;
+};
+
+/**
+ * Where the frame a `position` reads its datums in (`PositionOptions.in`)
+ * sits in a layer's plan on one axis: `child`, the layer's child that holds
+ * the node it names (or is it), and that node's data 0 and the length of
+ * one data unit from that child's origin, in the layer's axis order and σ.
+ * Both are undefined where the claim walk does not know them (the node is
+ * in a scope it cannot read out of): the datums it places are then ink.
+ * `key` names the node, for the inputs layout measures them by (`in0:`,
+ * `in1:`).
+ */
+export type InFrame = {
+  key: string;
+  child: number;
+  zero: Pwl.Value | undefined;
+  unit: Pwl.Value | undefined;
 };
 
 export type ClaimPlacement = {
@@ -213,17 +243,27 @@ const boxOfClaim = (extent: Extent | undefined): Box =>
 /**
  * What the solve reads of a child whose box on `axis` is `[lo, hi]` about
  * its origin, with its box start at `min` when it is placed before the
- * solve, and its plot `[plot[0], plot[1]]` where that is not its box. Only
- * `axis` is solved; the other axis has no size, so no fact on it resolves.
+ * solve, and its local spans (`spans`: its plot, its box without its
+ * dressing) where they are not its box. Its baseline is its origin, or its
+ * start where `startBaseline` says so. Only `axis` is solved; the other
+ * axis has no size, so no fact on it resolves.
  */
 const formulaPlaceable = (
   T: Arith<F>,
   axis: 0 | 1,
   lo: F,
   hi: F,
-  space: UnderlyingSpace | undefined,
-  min: F | undefined,
-  plot?: readonly [F, F]
+  {
+    space,
+    min,
+    spans = {},
+    startBaseline = false,
+  }: {
+    space?: UnderlyingSpace;
+    min?: F;
+    spans?: Partial<Record<LocalSpan, readonly [F, F]>>;
+    startBaseline?: boolean;
+  }
 ): SolvePlaceable<F> => {
   const box = { min, size: T.sub(hi, lo) };
   const none = { min: undefined, size: undefined };
@@ -238,13 +278,27 @@ const formulaPlaceable = (
           ? hi
           : anchor === "center"
             ? T.scale(0.5, T.add(lo, hi))
-            : T.zero;
+            : startBaseline
+              ? lo
+              : T.zero;
     },
-    localPlotSpan: (a) =>
-      a === axis && plot !== undefined ? [plot[0], plot[1]] : undefined,
+    localSpan: (kind, a) => {
+      const span = a === axis ? spans[kind] : undefined;
+      return span && [span[0], span[1]];
+    },
     spaceOn: (dir) => (dir === axis ? space : undefined),
   };
 };
+
+/** A child's local spans, in the order the solve reads them
+ *  (`ClaimChild.plot`, `ClaimChild.bare`). */
+const LOCAL_SPANS: readonly LocalSpan[] = ["plot", "bare"];
+
+/** The name of the tape input for one end (`0` its start, `1` its end) of
+ *  child `i`'s local `span` (`${span}0:${i}`), which layout evaluates by
+ *  `localSpan`. */
+export const spanInput = (span: LocalSpan, end: 0 | 1, i: number): string =>
+  `${span}${end}:${i}`;
 
 /** The constraints that act on `axis`, each as it acts on that axis alone
  *  (a position's or an align's other coordinate places nothing there). A
@@ -322,7 +376,9 @@ export function placeByClaims(
   gapOf: GapOf,
   // Whether the layer's frame on the axis has a data 0 (`frameOf`): a
   // frame without one maps no datum and seats no baseline.
-  framed = true
+  framed = true,
+  // The frame a `position` with `in` reads its datums in ({@link InFrame}).
+  inFrame: (c: PositionConstraint) => InFrame | undefined = () => undefined
 ): ClaimPlacement {
   // A cell places a child, by its index, that neither its data places in
   // the layer's frame nor placed itself (`constraintsOn`).
@@ -377,7 +433,72 @@ export function placeByClaims(
     children[i].standIn || children[i].fromRefs
       ? children[i].placed
       : undefined;
+  // The children a constraint acts on along this axis; the others sit at
+  // their own origin, which is the layer's (a free child's baseline is
+  // seated at data 0, and a shared child's claim is measured from it).
+  const constrained = constrainedOn(axis, constraints, operands, keyOf);
+  const seats = literalSeats(constraints, keyOf);
+  // A `position` override owns its operands' place on the axis, so a child
+  // it names is not pinned where it placed itself.
+  const overridden = constrainedOn(
+    axis,
+    onAxis,
+    operands,
+    keyOf,
+    (c) => c.type === "position" && !!c.override
+  );
+  // Any `position` owns its operands' place on the axis over their own
+  // data: a node it places at a datum takes its own frame there
+  // (`childPosScalesFor`), so its data no longer places it in this
+  // layer's.
+  const positioned = constrainedOn(
+    axis,
+    onAxis,
+    operands,
+    keyOf,
+    (c) => c.type === "position"
+  );
+  // How a child's origin is known before the solve, if it is: a stand-in,
+  // or a node drawn from refs, where layout laid it (in the claim walk,
+  // where its target lands) (`ref`); a child that places itself where it
+  // put itself (`self`); a child no constraint places, or one its own data
+  // places (`dataPositioned`), where its frame seats it, layout's seating
+  // rule (`seat`); a literal seat at its pixel, as layout seats it (a ring
+  // seats its content at its data 0) (`lit`). Else the solve places it.
+  const presetKind = (
+    i: number
+  ): "ref" | "self" | "seat" | "lit" | undefined => {
+    const c = children[i];
+    if (c.standIn || c.fromRefs) return "ref";
+    if (c.placesItself === true && !overridden.has(i)) return "self";
+    if (!constrained.has(i) || (c.dataPositioned && !positioned.has(i)))
+      return "seat";
+    return seats.get(c.key)?.[axis] !== undefined ? "lit" : undefined;
+  };
+  // What a `position` places at datums of a frame the claim walk cannot
+  // read here (`InFrame`) lands only where layout puts it: ink, by its key
+  // and, for a child of the layer, by its index. So is what it places in a
+  // frame read through a child the solve places: the frame would move with
+  // that child, which needs a relation, not a pin (`scaleOf`).
+  const inUnknown = new Set<string>();
+  const inUnknownChildren: number[] = [];
+  for (const c of onAxis)
+    if (c.type === "position" && c.in !== undefined) {
+      const f = inFrame(c);
+      if (
+        f?.zero === undefined ||
+        f.unit === undefined ||
+        presetKind(f.child) === undefined
+      )
+        for (const r of c.children) {
+          const key = keyOf(r);
+          inUnknown.add(key);
+          const op = operands.get(key);
+          if (op?.direct) inUnknownChildren.push(op.child);
+        }
+    }
   const inkKey = (key: string): boolean => {
+    if (inUnknown.has(key)) return true;
     const op = operands.get(key);
     if (op === undefined) return true;
     if (!op.direct) return !nestedPlaced.has(key);
@@ -412,7 +533,7 @@ export function placeByClaims(
     }
   }
   const inkRoots = new Set([...parent.keys()].filter(inkKey).map(find));
-  const ink = new Set<number>();
+  const ink = new Set<number>(inUnknownChildren);
   for (const n of parent.keys()) {
     const op = operands.get(n);
     if (op === undefined || !op.direct || pinned.has(op.child)) continue;
@@ -420,15 +541,16 @@ export function placeByClaims(
   }
   // A filler (a child with no claim, which takes whatever room it is
   // given) takes no room here: the solve places it as a point, so what a
-  // relation ties to it stays placed. Where a datum position puts it, the
-  // point is data, and the hull holds it; anywhere else it lands only
-  // where layout gives it room, and the hull leaves it out.
-  const atDatum = constrainedOn(
+  // relation ties to it stays placed. Where a position puts it, at a datum
+  // or a pixel (a ring seats what it dresses at its origin), the point is
+  // known, and the hull holds it; anywhere else it lands only where layout
+  // gives it room, and the hull leaves it out.
+  const atPoint = constrainedOn(
     axis,
     onAxis,
     operands,
     keyOf,
-    (c) => c.type === "position" && typeof c[own] !== "number"
+    (c) => c.type === "position"
   );
   const unplaced = new Set<number>();
   children.forEach((c, i) => {
@@ -439,41 +561,29 @@ export function placeByClaims(
       !c.standIn &&
       presetOf(i) === undefined &&
       !spanned.has(i) &&
-      !atDatum.has(i)
+      !atPoint.has(i)
     )
       unplaced.add(i);
   });
-  // Dressing: what is placed beside a node the claim walk places elsewhere
-  // (a value label beside its bar's ref). It takes room, but it is not part
-  // of the plot: a node with a size of its own maps its plot into that
-  // size, and its dressing, like its chrome, adds around it (#1032). The
-  // stand-in itself is the node it stands for, a part of the plot.
-  const placedKey = (key: string): boolean => {
-    const op = operands.get(key);
-    if (op === undefined) return false;
-    if (!op.direct) return nestedPlaced.has(key);
-    return presetOf(op.child) !== undefined;
-  };
-  const dressingRoots = new Set([...parent.keys()].filter(placedKey).map(find));
-  const dressing = new Set<number>();
-  for (const n of parent.keys()) {
-    const op = operands.get(n);
-    if (op === undefined || !op.direct || children[op.child].standIn) continue;
-    if (dressingRoots.has(find(n))) dressing.add(op.child);
-  }
-  // A node drawn around refs (an `enclose`) is placed beside the nodes it
-  // reads, as a label is: dressing too.
+  // Dressing: a child outside the part of the layer's space its axes
+  // visualize (`ClaimChild.visualized`, from the type pass). A layer is a
+  // collection of its children's spaces; its axes attach to the children
+  // whose space there is continuous or ordinal, and the rest (an outline
+  // around refs, a value label, a chart of outlines over a scatter) is
+  // beside them or over them. It takes room, but is no part of the plot.
+  // A layer with no such part has no dressing: all of it is plot. Ink and
+  // a ring's chrome are neither.
+  const outside: number[] = [];
+  let anyVisualized = false;
   children.forEach((c, i) => {
-    if (presetOf(i) !== undefined && !c.standIn) dressing.add(i);
+    if (ink.has(i) || c.chrome === true) return;
+    if (c.visualized === true) anyVisualized = true;
+    else outside.push(i);
   });
+  const dressing = new Set<number>(anyVisualized ? outside : []);
   // What the solve leaves out: the ink, and the stand-ins it cannot place.
   const out = (i: number) =>
     ink.has(i) || (children[i].standIn && children[i].placed === undefined);
-
-  // The children a constraint acts on along this axis; the others sit at
-  // their own origin, which is the layer's (a free child's baseline is
-  // seated at data 0, and a shared child's claim is measured from it).
-  const constrained = constrainedOn(axis, constraints, operands, keyOf);
 
   // One solve, with σ unknown and over every child, the ink included (it
   // takes no room, but layout seats it where the plan places it): each
@@ -483,27 +593,6 @@ export function placeByClaims(
   // layer's data 0, at the pixel its frame puts data 0 at.
   const tape = new Tape();
   const T = tape.arith;
-  const seats = literalSeats(constraints, keyOf);
-  // A `position` override owns its operands' place on the axis, so a child
-  // it names is not pinned where it placed itself.
-  const overridden = constrainedOn(
-    axis,
-    onAxis,
-    operands,
-    keyOf,
-    (c) => c.type === "position" && !!c.override
-  );
-  // Any `position` owns its operands' place on the axis over their own
-  // data: a node it places at a datum takes its own frame there
-  // (`childPosScalesFor`), so its data no longer places it in this
-  // layer's.
-  const positioned = constrainedOn(
-    axis,
-    onAxis,
-    operands,
-    keyOf,
-    (c) => c.type === "position"
-  );
   // The parts a chain places past their whole box, not by their plots:
   // what is no part of the plot (ink, dressing, chrome).
   const apart = new Set<string>();
@@ -519,6 +608,9 @@ export function placeByClaims(
   // Where each child placed before the solve has its box start, for a
   // nested operand's container.
   const presetMin = new Map<number, F>();
+  // Where each child placed before the solve has its origin, for a frame
+  // read through it (`inFrame`).
+  const presetOrigin = new Map<number, F>();
   const childIndices = children.map((_, i) => i);
   for (const i of childIndices) {
     const c = children[i];
@@ -526,44 +618,47 @@ export function placeByClaims(
     const p = presetOf(i);
     const key = keyAt(i);
     const seat = seats.get(key)?.[axis];
-    // Where its origin is before the solve: a stand-in, or a node drawn
-    // from refs, where layout laid it (in the claim walk, where its target
-    // lands); a child that places itself where it put itself; a child no
-    // constraint places, or one its own data places (`dataPositioned`),
-    // where its frame seats it (layout's seating rule);
-    // a literal seat at its pixel, which layout reads as it lays the layer
-    // out (a chart's content is seated past its chrome's start gutter,
-    // `contentSeat`; the claim walk keeps the pin, its data 0, and the two
-    // agree on every box, as layout hands the content its frame from the
-    // seat). Else the solve places it.
+    // Where its origin is before the solve (`presetKind`).
+    const kind = presetKind(i);
     const origin =
-      c.standIn || c.fromRefs
+      kind === "ref"
         ? tape.input(
             `at:${i}`,
             p !== undefined ? values.sub(p.lo, box[0]) : Pwl.ZERO
           )
-        : c.placesItself === true && !overridden.has(i)
+        : kind === "self"
           ? tape.input(`at:${i}`, Pwl.ZERO)
-          : !constrained.has(i) || (c.dataPositioned && !positioned.has(i))
+          : kind === "seat"
             ? tape.input(`seat:${i}`, Pwl.ZERO)
-            : seat !== undefined
-              ? tape.input(`lit:${i}`, Pwl.constant(seat))
+            : kind === "lit"
+              ? tape.input(`lit:${i}`, Pwl.constant(seat!))
               : undefined;
     const lo = tape.input(`lo:${i}`, box[0]);
     const hi = tape.input(`hi:${i}`, box[1]);
-    const plot =
-      c.plot === undefined
-        ? undefined
-        : (() => {
-            const [pl, ph] = boxOfClaim(c.plot);
-            return [
-              tape.input(`plo:${i}`, pl),
-              tape.input(`phi:${i}`, ph),
-            ] as const;
-          })();
+    // Its local spans, where they are not its box, each end an input that
+    // layout measures (`spanInput`).
+    const spans: Partial<Record<LocalSpan, readonly [F, F]>> = {};
+    for (const span of LOCAL_SPANS) {
+      const e = c[span];
+      if (e === undefined) continue;
+      const [l, h] = boxOfClaim(e);
+      spans[span] = [
+        tape.input(spanInput(span, 0, i), l),
+        tape.input(spanInput(span, 1, i), h),
+      ];
+    }
     const min = origin === undefined ? undefined : T.add(origin, lo);
     if (min !== undefined) presetMin.set(i, min);
-    targets.set(key, formulaPlaceable(T, axis, lo, hi, c.space, min, plot));
+    if (origin !== undefined) presetOrigin.set(i, origin);
+    targets.set(
+      key,
+      formulaPlaceable(T, axis, lo, hi, {
+        space: c.space,
+        min,
+        spans,
+        startBaseline: c.startBaseline,
+      })
+    );
     indexOf.set(key, i);
     if (c.dataPositioned) dataPositioned.add(key);
     if (ink.has(i) || dressing.has(i) || c.chrome === true) apart.add(key);
@@ -591,14 +686,9 @@ export function placeByClaims(
     const hi = tape.input(`hi:@${key}`, box[1]);
     targets.set(
       key,
-      formulaPlaceable(
-        T,
-        axis,
-        lo,
-        hi,
-        undefined,
-        containerMin === undefined ? undefined : T.add(containerMin, gap)
-      )
+      formulaPlaceable(T, axis, lo, hi, {
+        min: containerMin === undefined ? undefined : T.add(containerMin, gap),
+      })
     );
     rigid.set(key, {
       container: keyAt(op.child),
@@ -633,6 +723,22 @@ export function placeByClaims(
     origin === undefined
       ? undefined
       : { sigma: T.fromValue(Pwl.SIGMA), originPx: origin };
+  // The frame a `position` maps its datums through: the layer's, and for
+  // one with `in`, the named node's data 0 from the origin of the child
+  // that holds it, and its data unit, which layout measures (`in0:`,
+  // `in1:`). The child must be placed before the solve (a frame read
+  // through a child the solve moves would need a relation, not a pin),
+  // else nothing places the datums.
+  const scaleOf: ScaleOf<F> = (c, a) => {
+    if (a !== axis) return undefined;
+    if (c.in === undefined) return map;
+    const f = inFrame(c);
+    const o = f && presetOrigin.get(f.child);
+    if (f === undefined || o === undefined) return undefined;
+    const zero = tape.input(`in0:${f.key}`, f.zero ?? Pwl.ZERO);
+    const unit = tape.input(`in1:${f.key}`, f.unit ?? Pwl.ZERO);
+    return { sigma: unit, originPx: T.add(o, zero) };
+  };
   // The layer's box on the axis, which layout lays it out in: a discrete
   // position divides it.
   const box = tape.input("size", Pwl.ZERO);
@@ -643,7 +749,7 @@ export function placeByClaims(
     targets,
     axis === 0 ? [box, T.zero] : [T.zero, box],
     gapOf,
-    axis === 0 ? [map, undefined] : [undefined, map],
+    scaleOf,
     axis === 0 ? [tracks, undefined] : [undefined, tracks],
     axis === 0 ? [dataPositioned, new Set()] : [new Set(), dataPositioned],
     rigid,

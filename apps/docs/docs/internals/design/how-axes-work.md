@@ -103,11 +103,18 @@ known gap tracked by #984.
 **Built** (#1032, #493): the split below. Each chart claims its chrome around
 its content in the claim walk (every chrome shape claims its size), so a parent
 lays out the whole graphic in one layout, and the SVG is exactly the render's
-`w`/`h` (see "Chrome gutters" in
-[Layout and Render Passes](/internals/layout/passes#chrome-gutters)). Ink placed from a band of a category axis (a label below the last bar of a
+`w`/`h` (see "Chrome around a chart" in
+[Layout and Render Passes](/internals/layout/passes#chrome-around-a-chart)). Ink placed from a band of a category axis (a label below the last bar of a
 vertical spread) is not fitted inside a given size yet, a declared shortcut. Case 2 below
 (only the plot's size given) works for a chart with a size of its own; a root
-with no size anywhere still falls back to the default canvas (#494).
+with no size anywhere still falls back to the default canvas (#494). Since
+#1257 a chart's chrome goes around its frame whether it is sized or not:
+a tick reads its datum in the plot's frame (`position`'s `in`), so it maps
+with the σ the plot's own size solved, from outside it. The chrome is then
+ordinary children of the layers around the plot, as the rule below wants:
+each ring of chrome is a layer that seats the plot at its origin and its
+chrome past it on a chain, and the plot is laid out in the room its
+chrome leaves (`LayerPlan.plotWhole`, #1292).
 
 The question is what `w` and `h` mean when a node has chrome. There are two boxes. The
 **plot** is the area the data is drawn in. The **whole graphic** is the plot plus its

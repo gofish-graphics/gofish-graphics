@@ -434,29 +434,28 @@ async function main() {
 
   console.log("# chrome rings");
   {
-    // A delta axis seats the content it dresses at a datum (`contentAt` in
-    // axes/elaborate.tsx). The ring still reports the content's type: the
-    // content is its own set, not nested at that datum.
+    // A ring seats the content it dresses at its origin, by a literal
+    // pixel pin (`wrapRing`). The ring still reports the content's type: the
+    // content is its own set, not detached by the pin.
     const content: any = await (layer as any)([
       (rect as any)({ w: v(30), h: 10 }),
     ]);
-    const ring: any = await wrapRing(
-      content,
-      { nodes: [], constraints: () => [] },
-      { x: datum(5), y: undefined }
-    );
+    const ring: any = await wrapRing(content, {
+      nodes: [],
+      constraints: () => [],
+    });
     resolveReferences(ring);
     ring.resolveUnderlyingSpace();
     const plan: any = ring.sharing();
     check(
-      "a ring seating its content at a datum: content shared, not nested",
+      "a ring seating its content at its origin: content shared, not nested",
       plan.sets[0][0] === 0 &&
         !plan.nested[0].has(0) &&
         !(plan.datumPlaced?.[0]?.has(0) ?? false)
     );
     const x = ring._underlyingSpace[0];
     check(
-      "a ring seating its content at a datum reports the content's type",
+      "a ring seating its content at its origin reports the content's type",
       isCONTINUOUS(x) && x.dataInterval.min === 0 && x.dataInterval.max === 30,
       JSON.stringify(x)
     );

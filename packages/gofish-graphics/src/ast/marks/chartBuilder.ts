@@ -1,6 +1,6 @@
 import { Frontend } from "gofish-ir";
 import { GoFishNode } from "../_node";
-import { checkLengths, isFr, isLength, type LengthValue } from "../length";
+import { checkLengths, type LengthValue } from "../length";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { type ColorConfig } from "../colorSchemes";
 import { applySchema, type SchemaEntry } from "../schema";
@@ -1180,11 +1180,11 @@ function isChartOptions(x: unknown): x is ChartOptions {
  * A chart's node: a `Frame` with the chart's options over one layer of
  * `children`, its content. `Frame` picks out what it needs (`coord`, `axes`,
  * `padding`, and the dims, which size it), so this is the whole bag rather
- * than a key list. A chart is where its axes are drawn (#1114 step 6): on an
- * axis it has a size of its own, it solves σ there and draws them around its
- * content. Every node the chart draws (its marks, their transitions, the
- * tiers of a `.layer()` chain) is in that one content layer, so they all
- * share the axes it draws. The chart's own `axes` option (default `true`) is
+ * than a key list. A chart is where its axes are drawn (#1114 step 6): they
+ * go around it, sized or not, and read their datums in its frame (#1257).
+ * Every node the chart draws (its marks, their transitions, the tiers of a
+ * `.layer()` chain) is in that one content layer, so they all share the axes
+ * it draws. The chart's own `axes` option (default `true`) is
  * stamped next to its box (`_chartAxes`), and applies at the chart.
  *
  * DECLARED SHORTCUT (#1110): a coord's own axes (the polar rings) read the
@@ -1199,10 +1199,6 @@ async function frameChart(
   const content = await Layer({}, children);
   content._chartContent = true;
   const node = await Frame(options, [content]);
-  // A chart with a size of its own draws its axes inside its box. An `fr`
-  // size is a share of the scope around it, which it is given from
-  // outside, so it draws them around itself, as a facet panel does.
-  const box = (v: unknown) => v !== undefined && !(isLength(v) && isFr(v));
   // A percent or fr length only where the chart's options take one.
   // TODO(#852, #1238): a percent padding around a polar or geo drawing
   // needs the room of the coordinate space's box, in its own units.
@@ -1213,7 +1209,7 @@ async function frameChart(
     "chart",
     options as Record<string, unknown>
   );
-  node._chartBox = [box(options.w), box(options.h)];
+  node._chartBox = true;
   node._chartAxes = options.axes ?? true;
   return node;
 }

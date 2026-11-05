@@ -13,12 +13,11 @@ const meta: Meta = {
   title: "Forward Syntax/Space Unification Probes",
   argTypes: {
     w: { control: { type: "number", min: 100, max: 1000, step: 10 } },
-    h: { control: { type: "number", min: 100, max: 1000, step: 10 } },
   },
 };
 export default meta;
 
-type Args = { w: number; h: number };
+type Args = { w: number };
 
 // Tasks laid left-to-right, width ∝ hours, with gaps — a proportional strip.
 const tasks = [
@@ -38,10 +37,10 @@ const tasks = [
  * `width` with `linear(niceMax, 0)` and destroyed the intercept → wrong σ.)
  */
 export const SpacedSizeAxis: StoryObj<Args> = {
-  args: { w: 520, h: 220 },
+  args: { w: 520 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(tasks, { w: args.w, h: args.h })
+    chart(tasks, { w: args.w })
       .flow(spread({ by: "task", dir: "x", spacing: 30 }))
       .mark(rect({ w: "hours", h: 80, fill: "task" }))
       .render(container);

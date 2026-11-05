@@ -9,20 +9,17 @@ const meta: Meta = {
   title: "Vega-Lite/Strip Plot",
   argTypes: {
     w: { control: { type: "number", min: 100, max: 1000, step: 10 } },
-    h: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
   },
 };
 
 export default meta;
 
-type Args = { w: number; h: number };
+type Args = { w: number };
 
 export const Default: StoryObj<Args> = {
-  // Vega-Lite's size: a continuous x is 300 px wide, and an ordinal y takes a
-  // 20 px step per value, here five cylinder counts.
-  args: { w: 300, h: 5 * 20 },
+  // Vega-Lite's size: a continuous x is 300 px wide. The ordinal y is as
+  // tall as its five rows of ticks and their spacing.
+  args: { w: 300 },
   loaders: [async () => ({ cars: await data["cars.json"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
@@ -35,7 +32,7 @@ export const Default: StoryObj<Args> = {
         cylinders: Math.round(d.Cylinders),
       }));
 
-    chart(cars, { axes: { x: { side: "end" }, y: true }, w: args.w, h: args.h })
+    chart(cars, { axes: { x: { side: "end" }, y: true }, w: args.w })
       .flow(
         // Ascending so cylinders read 3 at the top → 8 at the bottom in y-down.
         derive((d) => [...d].sort((a, b) => a.cylinders - b.cylinders)),

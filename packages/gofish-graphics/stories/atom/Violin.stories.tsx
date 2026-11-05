@@ -42,18 +42,11 @@ const agedPassengers = orderBy(
 
 const meta: Meta = {
   title: "atom/Violin",
-  argTypes: {
-    w: { control: { type: "number", min: 200, max: 1200, step: 10 } },
-    h: { control: { type: "number", min: 200, max: 900, step: 10 } },
-  },
 };
 
 export default meta;
 
-type Args = { w: number; h: number };
-
-export const Default: StoryObj<Args> = {
-  args: { w: 680, h: 260 },
+export const Default: StoryObj = {
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -62,7 +55,7 @@ export const Default: StoryObj<Args> = {
         "Per-class age violins built from unit dots: each age bin is a centered horizontal row of passengers, so stacking the bins up the age axis traces a symmetric density silhouette, colored by survival.",
     },
   },
-  render: (args: Args) => {
+  render: () => {
     const container = initializeContainer();
 
     chart(agedPassengers, {
@@ -70,8 +63,6 @@ export const Default: StoryObj<Args> = {
       // x = pclass (the violins) at the bottom (y-end); y is the dot-row index,
       // so suppress it.
       axes: { x: { side: "end" }, y: false },
-      w: args.w,
-      h: args.h,
     })
       .flow(
         spread({ by: "pclass", dir: "x", spacing: 48, alignment: "middle" }),

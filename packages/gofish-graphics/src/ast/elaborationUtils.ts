@@ -67,12 +67,11 @@ export type ChromeRing = {
  *  `inner` is seated first
  *  (constraints apply in order and
  *  placement is first-write-wins, so the box the ring reads is placed before
- *  anything seats off it): at `seat`, by its baseline. A seat with neither
- *  axis given leaves `inner` to the layer. */
+ *  anything seats off it): at the ring's origin, by its baseline, so a
+ *  chain of chrome against it moves only the chrome. */
 export async function wrapRing(
   inner: GoFishNode,
-  ring: ChromeRing,
-  seat: { x?: any; y?: any } = { x: 0, y: 0 }
+  ring: ChromeRing
 ): Promise<GoFishNode> {
   const root = (await (layer as any)([inner, ...ring.nodes])) as GoFishNode;
   root._transparent = true;
@@ -82,10 +81,10 @@ export async function wrapRing(
   // domains seat the ring where its content was (`KeyedDomains`, built
   // before chrome, #1114). The ring's shapes (an axis's ticks and line, a
   // legend, a title) are each a set of their own: none joins the content's
-  // type, whatever constraint seats it. Ticks still sit at data positions in
-  // the ring's frame, through their position constraints. Its sets read no
-  // constraint: whatever seats the content (a literal pin, or a delta axis's
-  // datum `contentAt`), the content is neither nested nor datum-placed. The
+  // type, whatever constraint seats it. Ticks sit at data positions in the
+  // content's frame (`position`'s `in`), which is no part of the ring's. Its sets read no
+  // constraint: the literal pin that seats the content leaves it neither
+  // nested nor datum-placed. The
   // content is the ring's first child, by construction, and the rule reads
   // it by that slot, not by identity: a later pass (label elaboration) may
   // wrap the content and put its wrapper in the content's place.
@@ -123,9 +122,7 @@ export async function wrapRing(
   };
   const content = new SlotOperand(root, 0);
   await root.INTERNAL_relate([
-    ...(seat.x === undefined && seat.y === undefined
-      ? []
-      : [Constraint.position({ ...seat, anchor: "baseline" }, [content])]),
+    Constraint.position({ x: 0, y: 0, anchor: "baseline" }, [content]),
     ...ring.constraints(at, content),
   ]);
   return root;

@@ -138,7 +138,9 @@ export function buildChildSpans(
     return cur;
   };
   for (const c of constraints) {
-    if (c.type !== "position") continue;
+    // A span read in another node's frame (`in`) is not this layer's to
+    // size: its pins set the child's extent once that frame is laid out.
+    if (c.type !== "position" || c.in !== undefined) continue;
     for (const axis of [0, 1] as const) {
       const coord = axis === 0 ? c.x : c.y;
       const edges = isPositionInterval(coord) ? coord : c.region?.spans[axis];
@@ -161,8 +163,9 @@ export function buildChildSpans(
     const ring: Point[] = outline.map(([vx, vy]) => {
       const x = compilePlacementCoordinate(numbers, vx, posScales[0]);
       const y = compilePlacementCoordinate(numbers, vy, posScales[1]);
-      // A corner that is not a number would put NaN in what the child
-      // draws, so it is an error, not a guess.
+      // A corner that is not a number throws as it maps; one that maps off
+      // the plane (an infinite value) would put it in what the child draws,
+      // so it is an error, not a guess.
       const bad = [x, y].findIndex(
         (p) => p === undefined || !Number.isFinite(p)
       );
@@ -187,11 +190,13 @@ export function buildChildSpans(
  *      boxes at the layer's σ, `gridCellSizesAt`), keyed by the child's key
  *      (its uid, `keyOf`), on each
  *      axis where its track has one, and the layer's box on any other;
- *   2. the child's own room in a share scope (`own`, where defined): its
- *      claim at the layer's σ, when σ is the size of a share
- *      (`GoFishNode.sharesRoom`), so a band is one σ and what hangs off it
- *      keeps the room the scope solved for it;
- *   3. default layer box: any other child is proposed the full layer size.
+ *   2. its room in a chain (`own`, where defined): a member of a chain with
+ *      no size of its own is proposed its need (its claim at the layer's σ)
+ *      plus its share of its chain's slack (`chainRooms` in `layer`, #1257);
+ *   3. default layer box: any other child is proposed the layer's room, or
+ *      what dressing leaves of it for a part of its plot (`plotRooms` in
+ *      `layer`). A child with a size of its own keeps it, and one without
+ *      fills the room.
  *
  * A span (`spanByKey`, {@link buildChildSpans}) then owns the axes it
  * spans: an interval's pins set the child's extent there, and a cell is the
