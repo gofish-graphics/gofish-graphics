@@ -58,7 +58,10 @@ export const MESH_BLEND = {
 
 // ── spatial helpers ─────────────────────────────────────────────────────────
 
-/** Segments bucketed on a grid, for nearest-distance queries. */
+/** Segments bucketed on a grid, for nearest-distance queries. `cell`: the
+ *  grid's step, px; by default 4 px, or coarser where the segments are sparse
+ *  (about one per cell), so a query far from a few long segments (a pocket's
+ *  mouths) crosses few empty cells. The distance is exact at any step. */
 export class SegGrid {
   x0: number;
   y0: number;
@@ -68,7 +71,7 @@ export class SegGrid {
   start: Int32Array;
   items: Int32Array;
   S: Float64Array;
-  constructor(S: Float64Array, cell = 4) {
+  constructor(S: Float64Array, cell?: number) {
     this.S = S;
     const n = S.length / 4;
     let [xa, ya, xb, yb] = [Infinity, Infinity, -Infinity, -Infinity];
@@ -80,6 +83,7 @@ export class SegGrid {
         yb = Math.max(yb, S[4 * s + k + 1]);
       }
     if (!n) [xa, ya, xb, yb] = [0, 0, 1, 1];
+    cell ??= Math.max(4, Math.sqrt(((xb - xa) * (yb - ya)) / Math.max(1, n)));
     this.cell = cell;
     this.x0 = xa - cell;
     this.y0 = ya - cell;

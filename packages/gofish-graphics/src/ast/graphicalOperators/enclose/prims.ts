@@ -102,20 +102,30 @@ export const boxGrid = (bbs: number[][]) => {
   });
   const stamp = new Int32Array(bbs.length);
   let gen = 0;
-  const query = (xa: number, ya: number, xb: number, yb: number): number[] => {
-    if (!bbs.length || xb < X0 || xa > X1 || yb < Y0 || ya > Y1) return [];
+  /** Calls f once on every box that may meet the rectangle, in no set order. */
+  const each = (
+    xa: number,
+    ya: number,
+    xb: number,
+    yb: number,
+    f: (k: number) => void
+  ) => {
+    if (!bbs.length || xb < X0 || xa > X1 || yb < Y0 || ya > Y1) return;
     gen++;
-    const out: number[] = [];
     for (let j = cy(ya); j <= cy(yb); j++)
       for (let i = cx(xa); i <= cx(xb); i++)
         for (const k of cells[j * nx + i])
           if (stamp[k] !== gen) {
             stamp[k] = gen;
-            out.push(k);
+            f(k);
           }
+  };
+  const query = (xa: number, ya: number, xb: number, yb: number): number[] => {
+    const out: number[] = [];
+    each(xa, ya, xb, yb, (k) => out.push(k));
     return out.sort((a, b) => a - b);
   };
-  return { query };
+  return { query, each };
 };
 
 // ── a member grown by r, as a primitive ─────────────────────────────────────

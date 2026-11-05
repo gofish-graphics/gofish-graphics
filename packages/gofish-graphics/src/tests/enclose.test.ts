@@ -10,7 +10,7 @@
  *    padded hull and 2 the oval; connection 0 splits far clusters and
  *    `separate` keeps near pieces apart; neck never splits a piece; holes
  *    keeps a ring's middle open; a 1,000-point line and 300 dots outline in
- *    reasonable time.
+ *    under a second.
  *  - `Shape.fillet()`: links join pieces nearer than 2 · radius (none at neck
  *    0); the default radius keeps the outline a padding out.
  *  - Every shape avoids: the oval is cut around an avoided node.
@@ -226,8 +226,6 @@ const AFRICA_PACKED: Disc[] = packSiblings(
     .filter((d) => d.continent === "Africa")
     .map((d) => ({ r: 1.6 * Math.sqrt(d.pop) + 3, x: 0, y: 0 }))
 ).map((p) => C(p.x + 170, p.y + 170, p.r - 3));
-/** The time bound on the 1,000-point line and 300 dots, ms. */
-const LARGE_MS = 10000;
 
 // ── Shape.blob(): convexity, connection, neck, holes, separate ─────────────
 console.log("# Shape.blob() (enclose/outline.ts)");
@@ -453,8 +451,8 @@ console.log("# a 1,000-point line and 300 dots");
     const t = topology(loops);
     areas.push(area(loops));
     check(
-      `convexity ${convexity}: one piece, in under ${LARGE_MS} ms`,
-      t.pieces === 1 && ms < LARGE_MS,
+      `convexity ${convexity}: one piece, in under a second`,
+      t.pieces === 1 && ms < 1000,
       `${show(t)}, ${ms.toFixed(0)} ms`
     );
   }

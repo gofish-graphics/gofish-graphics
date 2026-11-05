@@ -279,7 +279,11 @@ same way under any coordinate transform.
    the tree's other links, the strongest first; touching links are always
    kept. The kept links split the members into pieces: 1 (the default) is one
    piece, and 0 joins only members whose padding touches. The pieces change
-   only where `connection` crosses a link's entry, so it is discrete.
+   only where `connection` crosses a link's entry, so it is discrete. The
+   tree is exactly the one over every pair, but it is found without measuring
+   most of them (`spanningForest`, by Borůvka on a grid of the members'
+   boxes): two boxes' gap is at most the members' gap and their distance, so
+   a search around a member stops once nothing farther can come first.
 2. **Spine.** Inside each piece, the links run along the spanning tree of the
    padded gaps between that piece's members (the closing's own merge order).
    Each is a tube that tapers from one member's width to the other's, `neck`
@@ -389,7 +393,11 @@ Shortcuts, each a known approximation:
 - With `holes` on, a fillet at `neck: 0` can leave a horn at a hole's mouth.
 - The closing samples its arcs at most 0.2 px off the exact curve; at a
   radius near 12 on loose dots the outline was measured up to 0.46 px off.
-- A blob over a 1,000-point line and 300 dots takes about 4 to 5 s, against
-  well under 1 s for the old blob. The work is cached only within one call.
+- A blob over a 1,000-point line and 300 dots takes about 0.25 s at
+  convexity 0 and 0.45 to 0.6 s at 0.5 and 0.9, against about 0.15 s for the
+  old blob. Most of it is the exact closing of the members and links and the
+  blend's mesh of the pockets (about 50,000 vertices there). The work is
+  cached only within one call, so changing only the convexity recomputes the
+  join tree and the mesh.
 - There is no `members` option and no list-taking `resolve` yet; members are
   the children or the refs of the chart's data.

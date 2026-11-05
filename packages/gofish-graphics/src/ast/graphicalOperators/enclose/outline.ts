@@ -50,7 +50,7 @@
  * cutRings), its corners rounded inward (smooth.ts, roundCut).
  */
 import { signedArea2, pointInRing, segDist, cross } from "../../geometry/plane";
-import { convexHull, type Member, type Pt } from "./prims";
+import { boxGrid, convexHull, type Member, type Pt } from "./prims";
 import { closingRings, keepIns } from "./arcs";
 import { buildMeshBlend, meshBlendRings } from "./meshBlend";
 import { roundCut, smoothOutline } from "./smooth";
@@ -260,16 +260,198 @@ type Pair = {
   b: Pt;
 };
 
+/**
+ * A member set's pairs, each worked out only when asked for, and once: its gap (nearest),
+ * its core axes' nearest points and their distance. A grid over the members' boxes (each
+ * box holds the member's shape and its core axis, so two boxes' gap is at most both the
+ * members' gap and their center distance) visits the members within a box gap r of one.
+ * Every search below widens r until no pair past it can matter, so the trees are exactly
+ * those over all n² pairs, without working out most of them.
+ */
+type PairTable = {
+  n: number;
+  /** the pair (i, j) with its gap unpadded (the caller pads it), i < j */
+  pair(i: number, j: number): Pair;
+  /** calls f on every member whose box may be within r of member i's (a superset, in no
+   *  set order; not reentrant) */
+  near(i: number, r: number, f: (j: number) => void): void;
+  /** a box gap no two members exceed: past it, every member is near */
+  reach: number;
+  /** a first search radius: about the spacing of the members along their spread */
+  step: number;
+  /** each member's core radius */
+  rho: number[];
+};
+
+function pairTable(members: Member[]): PairTable {
+  const n = members.length;
+  const prims = members.map(coreOf);
+  const ax = members.map(coreAxis);
+  const bb = prims.map((c) =>
+    c.k === "box"
+      ? [c.x0, c.y0, c.x1, c.y1]
+      : [
+          Math.min(c.a[0], c.b[0]) - c.rho,
+          Math.min(c.a[1], c.b[1]) - c.rho,
+          Math.max(c.a[0], c.b[0]) + c.rho,
+          Math.max(c.a[1], c.b[1]) + c.rho,
+        ]
+  );
+  const grid = boxGrid(bb);
+  let [X0, Y0, X1, Y1] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const b of bb) {
+    X0 = Math.min(X0, b[0]);
+    Y0 = Math.min(Y0, b[1]);
+    X1 = Math.max(X1, b[2]);
+    Y1 = Math.max(Y1, b[3]);
+  }
+  const [W, H] = [X1 - X0, Y1 - Y0];
+  const cache = new Map<number, Pair>();
+  return {
+    n,
+    pair(i, j) {
+      if (i > j) [i, j] = [j, i];
+      const k = i * n + j;
+      let p = cache.get(k);
+      if (!p) {
+        const g = nearest(prims[i], prims[j])[2];
+        const [x, y] = segSeg(ax[i][0], ax[i][1], ax[j][0], ax[j][1]);
+        p = {
+          i,
+          j,
+          g,
+          d: Math.hypot(x[0] - y[0], x[1] - y[1]),
+          w: 0,
+          overlap: g <= 0,
+          a: x,
+          b: y,
+        };
+        cache.set(k, p);
+      }
+      return p;
+    },
+    near(i, r, f) {
+      const b = bb[i];
+      grid.each(b[0] - r, b[1] - r, b[2] + r, b[3] + r, f);
+    },
+    reach: Math.hypot(W, H) + 1,
+    step: Math.max(Math.max(W, H) / n, 1e-6),
+    rho: ax.map((x) => x[2]),
+  };
+}
+
+/**
+ * The minimum spanning forest of each group's members (the complete graph on the members
+ * with one `group` value; a negative group is left out), under the strict order `less`, by
+ * Borůvka: each round, every component takes its least pair to another component of its
+ * group, until none has one. `edge(i, j)`: the pair as an edge, or null where it is none.
+ * `reach(e)`: a box gap past which no pair comes before e; `cap`: a box gap past which no
+ * pair is an edge. Returned in `less` order, so the forest and its order are Kruskal's over
+ * all pairs.
+ *
+ * A member's search widens (doubling from T.step) until it passes its own least edge's
+ * reach, or its component's best edge's (then nothing it has not seen comes first). A
+ * member's candidates only shrink as components merge, so its least edge only grows: each
+ * member keeps a bound (an edge its least does not come before), and one whose bound does
+ * not come before its component's best is skipped. The members are visited by bound, the
+ * least first, so a component's best is found early and most members are skipped.
+ */
+function spanningForest(
+  T: PairTable,
+  group: ArrayLike<number>,
+  edge: (i: number, j: number) => Pair | null,
+  less: (p: Pair, q: Pair) => boolean,
+  reach: (e: Pair) => number,
+  cap = Infinity
+): Pair[] {
+  const { n } = T;
+  const c = Array.from({ length: n }, (_, i) => i);
+  const find = (i: number): number => (c[i] === i ? i : (c[i] = find(c[i])));
+  const order = (p: Pair, q: Pair) => (less(p, q) ? -1 : less(q, p) ? 1 : 0);
+  // each group's component count, so a group in one piece is not searched again
+  const left = new Map<number, number>();
+  for (let i = 0; i < n; i++)
+    if (group[i] >= 0) left.set(group[i], (left.get(group[i]) ?? 0) + 1);
+  // bound[i]: an edge member i's least edge does not come before; exact[i]: it is that
+  // least edge (it stays so while its ends are in two components); none[i]: i has no
+  // edge, and never will
+  const bound: (Pair | undefined)[] = new Array(n);
+  const exact = new Uint8Array(n);
+  const none = new Uint8Array(n);
+  const end = Math.min(cap, T.reach);
+  const out: Pair[] = [];
+  let todo = Array.from({ length: n }, (_, i) => i).filter(
+    (i) => group[i] >= 0
+  );
+  while (todo.length) {
+    todo = todo.filter((i) => !none[i] && left.get(group[i])! > 1);
+    todo.sort((i, j) => {
+      const [p, q] = [bound[i], bound[j]];
+      return p && q ? order(p, q) : p ? 1 : q ? -1 : 0;
+    });
+    const best = new Map<number, Pair>();
+    const offer = (ci: number, e: Pair) => {
+      const b = best.get(ci);
+      if (!b || less(e, b)) best.set(ci, e);
+    };
+    for (const i of todo) {
+      const gi = group[i];
+      const ci = find(i);
+      const o = bound[i];
+      if (o && exact[i] && find(o.i) !== find(o.j)) {
+        offer(ci, o);
+        continue;
+      }
+      const b0 = best.get(ci);
+      if (o && b0 && !less(o, b0)) continue;
+      let mine: Pair | null = null;
+      for (let r = T.step; ; r *= 2) {
+        T.near(i, r, (j) => {
+          if (j === i || group[j] !== gi || find(j) === ci) return;
+          const e = edge(i, j);
+          if (e && (!mine || less(e, mine))) mine = e;
+        });
+        const m = mine as Pair | null;
+        if (m) offer(ci, m);
+        if (r >= end || (m && r >= reach(m))) {
+          // the search saw every pair that could come first: m is i's least
+          if (m) [bound[i], exact[i]] = [m, 1];
+          else none[i] = 1;
+          break;
+        }
+        const b = best.get(ci);
+        if (b && r >= reach(b)) {
+          // nothing i has not seen comes before b, nor did anything it saw
+          if (!o || less(o, b)) [bound[i], exact[i]] = [b, 0];
+          break;
+        }
+      }
+    }
+    if (!best.size) break;
+    for (const e of best.values()) {
+      const [a, b] = [find(e.i), find(e.j)];
+      if (a === b) continue;
+      c[a] = b;
+      out.push(e);
+      left.set(group[e.i], left.get(group[e.i])! - 1);
+    }
+  }
+  return out.sort(order);
+}
 /** The join tree of a member set: its edges in Kruskal order (touching first, then the
- *  strongest), and every pair by padded gap (the order the links are drawn in). */
+ *  strongest). */
 type JoinTree = {
   E: Pair[];
   /** the edges that do not touch, the strongest first (E's order) */
   free: number[];
-  byGap: Pair[];
-  /** each member's core radius (its links' widths) */
-  rho: number[];
 };
+
+/** A member set's pair table, shared by its join tree and its gap forests: a pair's gap
+ *  and axis do not depend on the padding. */
+const pairsOf = (members: Member[]) =>
+  memo(key("pairs", intern(key(members))), () => pairTable(members));
+
+const byIndex = (p: Pair, q: Pair) => p.i - q.i || p.j - q.j;
 
 /**
  * The join tree. HDBSCAN's: the minimum spanning tree over ALL member pairs, by
@@ -289,71 +471,86 @@ type JoinTree = {
  * Ties in w (every pair nearer than both cores has w = the larger core) are broken by the
  * center distance, then by index: among the edges that merge at one distance the tree takes the
  * nearest pair.
+ *
+ * It does not look at all n² pairs (spanningForest): a pair's box gap is at most its gap and
+ * its center distance, so a pair past a box gap of max(2 · pad, w) comes after an edge of
+ * weight w, and one past g + 2 · pad after a touching edge of padded gap g.
  */
 function joinTree(members: Member[], pad: number): JoinTree {
-  const n = members.length;
-  const ax = members.map(coreAxis);
-  // every pair's gap and axis do not depend on the padding: cached per
-  // member set, so a padding drag only re-sorts them
-  const P0 = memo(key("pairs", members), () => {
-    const prims = members.map(coreOf);
-    const out: Pair[] = [];
-    for (let i = 0; i < n; i++)
-      for (let j = i + 1; j < n; j++) {
-        const gap = nearest(prims[i], prims[j])[2];
-        const [x, y] = segSeg(ax[i][0], ax[i][1], ax[j][0], ax[j][1]);
-        out.push({
-          i,
-          j,
-          g: gap,
-          d: Math.hypot(x[0] - y[0], x[1] - y[1]),
-          w: 0,
-          overlap: gap <= 0,
-          a: x,
-          b: y,
-        });
-      }
-    return out;
-  });
-  const core = coreFromPairs(P0, n, CORE_K);
-  const P: Pair[] = P0.map((p) => ({
-    ...p,
-    g: p.g - 2 * pad,
-    w: Math.max(core[p.i], core[p.j], p.d),
-  }));
-  const byGap = P.slice().sort((p, q) => p.g - q.g);
-  const order = P.slice().sort((p, q) => {
+  const T = pairsOf(members);
+  const core = coreDistances(T, CORE_K);
+  const joinLess = (p: Pair, q: Pair) => {
     const fp = p.g <= 0,
       fq = q.g <= 0;
-    if (fp !== fq) return fp ? -1 : 1;
-    if (fp) return p.g - q.g;
-    return p.w - q.w || p.d - q.d;
-  });
-  const comp = Array.from({ length: n }, (_, i) => i);
-  const find = (i: number): number =>
-    comp[i] === i ? i : (comp[i] = find(comp[i]));
-  const E: Pair[] = [];
-  for (const p of order) {
-    const [ci, cj] = [find(p.i), find(p.j)];
-    if (ci === cj) continue;
-    comp[ci] = cj;
-    E.push(p);
-    if (E.length === n - 1) break;
-  }
+    if (fp !== fq) return fp;
+    const o = fp ? p.g - q.g : p.w - q.w || p.d - q.d;
+    return (o || byIndex(p, q)) < 0;
+  };
+  const E = spanningForest(
+    T,
+    new Array(T.n).fill(0),
+    (i, j) => {
+      const p = T.pair(i, j);
+      return {
+        ...p,
+        g: p.g - 2 * pad,
+        w: Math.max(core[p.i], core[p.j], p.d),
+      };
+    },
+    joinLess,
+    (e) => (e.g <= 0 ? e.g + 2 * pad : Math.max(2 * pad, e.w))
+  );
   const free = E.map((_, k) => k).filter((k) => E[k].g > 0);
-  return { E, free, byGap, rho: ax.map((x) => x[2]) };
+  return { E, free };
 }
 
-/** Each member's core distance from the pairs: the center distance to its k-th nearest
- *  other member, k clamped to 1..n − 1. */
-function coreFromPairs(P: Pair[], n: number, coreK: number): number[] {
-  const ds: number[][] = Array.from({ length: n }, () => []);
-  for (const p of P) {
-    ds[p.i].push(p.d);
-    ds[p.j].push(p.d);
-  }
-  const k = Math.max(1, Math.min(n - 1, Math.round(coreK)));
-  return ds.map((x) => x.sort((a, b) => a - b)[k - 1] ?? 0);
+/**
+ * The padded-gap spanning forest of each group's members (`group[i]`: member i's), in
+ * Kruskal's order over the pairs by padded gap, ties by index (the order in which the exact
+ * closing merges them as its radius grows); `below`: only pairs whose padded gap is under it.
+ * A pair past a box gap of g + 2 · pad comes after an edge of padded gap g (spanningForest).
+ */
+function gapForest(
+  members: Member[],
+  pad: number,
+  group: ArrayLike<number>,
+  below = Infinity
+): Pair[] {
+  const T = pairsOf(members);
+  return spanningForest(
+    T,
+    group,
+    (i, j) => {
+      const p = T.pair(i, j);
+      const g = p.g - 2 * pad;
+      return g < below ? { ...p, g } : null;
+    },
+    (p, q) => (p.g - q.g || byIndex(p, q)) < 0,
+    (e) => e.g + 2 * pad,
+    below + 2 * pad
+  );
+}
+
+/** Each member's core distance: the center distance to its k-th nearest other member, k
+ *  clamped to 1..n − 1 (0 for a lone member). The search widens until k members are
+ *  within it by center distance; a center distance is at least the box gap, so none
+ *  nearer is missed. */
+function coreDistances(T: PairTable, coreK: number): number[] {
+  const k = Math.max(1, Math.min(T.n - 1, Math.round(coreK)));
+  return Array.from({ length: T.n }, (_, i) => {
+    for (let r = T.step; ; r *= 2) {
+      const ds: number[] = [];
+      let within = 0;
+      T.near(i, r, (j) => {
+        if (j === i) return;
+        const d = T.pair(i, j).d;
+        ds.push(d);
+        if (d <= r) within++;
+      });
+      if (within >= k || r >= T.reach)
+        return ds.sort((a, b) => a - b)[k - 1] ?? 0;
+    }
+  });
 }
 
 /**
@@ -415,27 +612,20 @@ export function pieceLinks(
     pieces[ids.get(r)!].push(i);
   }
   // each piece's own gap tree
-  const c = Array.from({ length: n }, (_, i) => i);
-  const f = (i: number): number => (c[i] === i ? i : (c[i] = f(c[i])));
-  let left = n - pieces.length;
+  const piece = Array.from({ length: n }, (_, i) => ids.get(kfind(i))!);
   const links: Member[] = [];
   const linkPiece: number[] = [];
-  for (const p of T.byGap) {
-    if (left === 0) break;
-    if (kfind(p.i) !== kfind(p.j)) continue;
-    const [a, b] = [f(p.i), f(p.j)];
-    if (a === b) continue;
-    c[a] = b;
-    left--;
+  const { rho } = pairsOf(members);
+  for (const p of gapForest(members, pad, piece)) {
     if (p.overlap) continue;
     links.push({
       kind: "segment",
       a: p.a,
       b: p.b,
-      w: 2 * (neck * (T.rho[p.i] + pad) - pad),
-      w2: 2 * (neck * (T.rho[p.j] + pad) - pad),
+      w: 2 * (neck * (rho[p.i] + pad) - pad),
+      w2: 2 * (neck * (rho[p.j] + pad) - pad),
     });
-    linkPiece.push(ids.get(kfind(p.i))!);
+    linkPiece.push(piece[p.i]);
   }
   return {
     links,
@@ -762,23 +952,22 @@ function gapLinks(
   r: number,
   neck: number
 ): Member[] {
-  const T = memo(key("joinTree", members, pad), () => joinTree(members, pad));
-  const c = members.map((_, i) => i);
-  const f = (i: number): number => (c[i] === i ? i : (c[i] = f(c[i])));
+  const { rho } = pairsOf(members);
   const links: Member[] = [];
-  for (const p of T.byGap) {
-    if (p.g >= 2 * r) break;
-    const [a, b] = [f(p.i), f(p.j)];
-    if (a === b) continue;
-    c[a] = b;
+  for (const p of gapForest(
+    members,
+    pad,
+    members.map(() => 0),
+    2 * r
+  )) {
     // padded members that touch are one piece already
     if (p.g <= 0) continue;
     links.push({
       kind: "segment",
       a: p.a,
       b: p.b,
-      w: 2 * (neck * (T.rho[p.i] + pad) - pad),
-      w2: 2 * (neck * (T.rho[p.j] + pad) - pad),
+      w: 2 * (neck * (rho[p.i] + pad) - pad),
+      w2: 2 * (neck * (rho[p.j] + pad) - pad),
     });
   }
   return links;
