@@ -13,7 +13,7 @@ import {
 import { values, type Arith } from "../solver/arith";
 import { Tape, type F } from "../solver/formula";
 import type { SolvePlaceable } from "./placementProgramLowerer";
-import type { PlacementConstraint } from "./placementLowering";
+import type { PlacementConstraint, ScaleOf } from "./placementLowering";
 import {
   axisIndex,
   axisName,
@@ -405,13 +405,20 @@ export function placeByClaims(
       ? children[i].placed
       : undefined;
   // What a `position` places at datums of a frame the claim walk cannot
-  // read here (`InFrame`) lands only where layout puts it: ink.
+  // read here (`InFrame`) lands only where layout puts it: ink, by its key
+  // and, for a child of the layer, by its index.
   const inUnknown = new Set<string>();
+  const inUnknownChildren: number[] = [];
   for (const c of onAxis)
     if (c.type === "position" && c.in !== undefined) {
       const f = inFrame(c);
       if (f?.zero === undefined || f.unit === undefined)
-        for (const r of c.children) inUnknown.add(keyOf(r));
+        for (const r of c.children) {
+          const key = keyOf(r);
+          inUnknown.add(key);
+          const op = operands.get(key);
+          if (op?.direct) inUnknownChildren.push(op.child);
+        }
     }
   const inkKey = (key: string): boolean => {
     if (inUnknown.has(key)) return true;
@@ -449,7 +456,7 @@ export function placeByClaims(
     }
   }
   const inkRoots = new Set([...parent.keys()].filter(inkKey).map(find));
-  const ink = new Set<number>();
+  const ink = new Set<number>(inUnknownChildren);
   for (const n of parent.keys()) {
     const op = operands.get(n);
     if (op === undefined || !op.direct || pinned.has(op.child)) continue;
@@ -468,10 +475,6 @@ export function placeByClaims(
     (c) => c.type === "position" && typeof c[own] !== "number"
   );
   const unplaced = new Set<number>();
-  for (const key of inUnknown) {
-    const op = operands.get(key);
-    if (op?.direct) ink.add(op.child);
-  }
   children.forEach((c, i) => {
     if (c.inkOn) ink.add(i);
     if (c.standIn) ink.delete(i);
@@ -678,13 +681,15 @@ export function placeByClaims(
     origin === undefined
       ? undefined
       : { sigma: T.fromValue(Pwl.SIGMA), originPx: origin };
-  // The frame a `position` with `in` maps its datums through: the named
-  // node's data 0 from the origin of the child that holds it, and its data
-  // unit, which layout measures (`in0:`, `in1:`). The child must be placed
-  // before the solve (a frame read through a child the solve moves would
-  // need a relation, not a pin), else nothing places the datums.
-  const inScale = (c: PositionConstraint, a: 0 | 1) => {
+  // The frame a `position` maps its datums through: the layer's, and for
+  // one with `in`, the named node's data 0 from the origin of the child
+  // that holds it, and its data unit, which layout measures (`in0:`,
+  // `in1:`). The child must be placed before the solve (a frame read
+  // through a child the solve moves would need a relation, not a pin),
+  // else nothing places the datums.
+  const scaleOf: ScaleOf<F> = (c, a) => {
     if (a !== axis) return undefined;
+    if (c.in === undefined) return map;
     const f = inFrame(c);
     const o = f && presetOrigin.get(f.child);
     if (f === undefined || o === undefined) return undefined;
@@ -702,13 +707,12 @@ export function placeByClaims(
     targets,
     axis === 0 ? [box, T.zero] : [T.zero, box],
     gapOf,
-    axis === 0 ? [map, undefined] : [undefined, map],
+    scaleOf,
     axis === 0 ? [tracks, undefined] : [undefined, tracks],
     axis === 0 ? [dataPositioned, new Set()] : [new Set(), dataPositioned],
     rigid,
     axis === 0 ? [origin, undefined] : [undefined, origin],
-    axis === 0 ? [apart, new Set()] : [new Set(), apart],
-    inScale
+    axis === 0 ? [apart, new Set()] : [new Set(), apart]
   )[axis];
   // Two constraints that place one child at two places on the axis are an
   // error, which layout finds where it evaluates the plan: the solve keeps

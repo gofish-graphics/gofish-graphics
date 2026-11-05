@@ -3,12 +3,11 @@
 // </gofish-wiki>
 
 import { BBox } from "./bbox";
-import type { PositionConstraint } from "./position";
-import type { AxisMap } from "../domain";
 import type { Arith } from "../solver/arith";
 import {
   lowerPlacementConstraints,
   type PlacementConstraint,
+  type ScaleOf,
 } from "./placementLowering";
 import type { GridTracks } from "./grid";
 import type { GapOf } from "./gap";
@@ -16,7 +15,6 @@ import {
   axisIndex,
   axisName,
   type Axis,
-  type ConstraintPosScales,
   type FreeOrigin,
   type KeyOf,
 } from "./shared";
@@ -378,17 +376,15 @@ export function solvePlacementCells<T>(
   sizes: readonly [T, T],
   // The gap a chain or table lays out between its parts (`GoFishNode.gapOf`).
   gapOf: GapOf,
-  posScales?: ConstraintPosScales<T>,
+  // The frame each `position` maps its datums through (`ScaleOf`).
+  scaleOf?: ScaleOf<T>,
   gridTracks?: GridTracks<T>,
   dataPositioned?: [Set<string>, Set<string>],
   rigid?: Map<string, RigidAttachment<T>>,
   freeOrigin?: FreeOrigin<T>,
   // Per axis, the targets that are no part of the plot (dressing, chrome):
   // a chain edge between two others lays them by their plots.
-  apart?: [Set<string>, Set<string>],
-  // The frame a `position` with `in` reads its datums in
-  // (`PositionOptions.in`).
-  inScale?: (c: PositionConstraint, axis: 0 | 1) => AxisMap<T> | undefined
+  apart?: [Set<string>, Set<string>]
 ): readonly [SolvedAxis<T>, SolvedAxis<T>] {
   const lowered = lowerPlacementConstraints(
     A,
@@ -397,10 +393,9 @@ export function solvePlacementCells<T>(
     targets,
     sizes,
     gapOf,
-    posScales,
+    scaleOf,
     gridTracks,
-    dataPositioned,
-    inScale
+    dataPositioned
   );
   // Tie each nested operand to its container on every axis it takes part in,
   // so the solve moves the container with it (one rigid body).

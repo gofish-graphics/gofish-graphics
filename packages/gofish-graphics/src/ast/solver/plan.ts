@@ -297,16 +297,17 @@ export function buildPlan(
     (c, a) => node.gapOf(c, a),
     hasOrigin(node._underlyingSpace?.[axis]),
     (c) => {
-      const target = c.in?.means(node)[0];
-      return target instanceof GoFishNode
-        ? frameIn(target, node, axis)
-        : undefined;
+      const target = inTarget(c, node);
+      return target && frameIn(target, node, axis);
     }
   );
   const box: [Pwl.Value[], Pwl.Value[]] = [[], []];
   const whole: [Pwl.Value[], Pwl.Value[]] = [[], []];
   const plot: [Pwl.Value[], Pwl.Value[]] = [[], []];
   const plotWhole: [Pwl.Value[], Pwl.Value[]] = [[], []];
+  // Whether a child is left out of the plot: else the plot's whole is the
+  // whole, which is not enveloped twice.
+  let skipped = false;
   for (const [i, b] of placement.boxes()) {
     const f = forms[i];
     box[0].push(b.hi);
@@ -333,11 +334,17 @@ export function buildPlan(
     whole[0].push(wHi);
     whole[1].push(wLo);
     roomOn(whole);
-    if (placement.dressing.has(i) || placement.ink.has(i) || (ring && i > 0))
-      continue;
     // A child that is all dressing (a layer of outlines around refs) has no
     // plot: it adds nothing to the layer's.
-    if (f !== undefined && f.plot === undefined) continue;
+    if (
+      placement.dressing.has(i) ||
+      placement.ink.has(i) ||
+      (ring && i > 0) ||
+      (f !== undefined && f.plot === undefined)
+    ) {
+      skipped = true;
+      continue;
+    }
     plotWhole[0].push(wHi);
     plotWhole[1].push(wLo);
     roomOn(plotWhole);
@@ -365,8 +372,9 @@ export function buildPlan(
     placement,
     forms,
     summary,
-    plotWhole:
-      plotWhole[0].length === 0
+    plotWhole: !skipped
+      ? summary?.whole
+      : plotWhole[0].length === 0
         ? undefined
         : scaleExtent(scale, env(plotWhole)!),
   };
@@ -560,6 +568,17 @@ export function planPlacementInChild(
   if (walked === undefined || walked.n !== container) return undefined;
   return placementOf(...walked.at);
 }
+
+/** The node whose frame a `position` constraint of `layer` reads its
+ *  datums in (`PositionOptions.in`), if it names one. */
+export const inTarget = (
+  c: ConstraintSpec,
+  layer: GoFishNode
+): GoFishNode | undefined => {
+  if (c.type !== "position" || c.in === undefined) return undefined;
+  const t = c.in.means(layer)[0];
+  return t instanceof GoFishNode ? t : undefined;
+};
 
 /**
  * Where `target`'s frame sits in `layer`'s plan on `axis` (`InFrame`, the

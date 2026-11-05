@@ -109,7 +109,7 @@ const solveIn = <T>(
     // Pixel spacings, as a layer reads them (`GoFishNode.gapOf`).
     (c, axis) =>
       Pwl.constant((c.type === "grid" ? c.spacing[axis] : c.spacing) as number),
-    axis === 0 ? [map, undefined] : [undefined, map],
+    (_, a) => (a === axis ? map : undefined),
     undefined,
     [new Set(), new Set()],
     undefined,

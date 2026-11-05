@@ -73,6 +73,7 @@ import {
 } from "../constraints/claimPlacement";
 import {
   buildPlan,
+  inTarget,
   planPlacement,
   planPlacementInChild,
   plotIn,
@@ -1138,9 +1139,8 @@ export const layer = createNodeOperatorSequential(
             // translate.
             const inTargets = new Map<string, GoFishNode>();
             for (const c of node.constraints) {
-              if (c.type !== "position" || c.in === undefined) continue;
-              const t = c.in.means(node)[0];
-              if (t instanceof GoFishNode) inTargets.set(t.uid, t);
+              const t = inTarget(c, node);
+              if (t !== undefined) inTargets.set(t.uid, t);
             }
             const frameAt = (
               uid: string,

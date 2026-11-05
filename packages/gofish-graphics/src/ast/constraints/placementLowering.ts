@@ -30,12 +30,20 @@ import {
   axisName,
   placementKey,
   type Axis,
-  type ConstraintPosScales,
   type KeyOf,
 } from "./shared";
 import type { AxisMap } from "../domain";
 import type { AnchorProgram } from "./placementFacts";
 import type { Arith } from "../solver/arith";
+
+/** The frame the datums of a `position` constraint map through on one
+ *  axis: the layer's own, or, for one with `in`, the map of the node it
+ *  names into the layer's frame (`PositionOptions.in`). Undefined where
+ *  there is none, so its datums place nothing there. */
+export type ScaleOf<T> = (
+  c: PositionConstraint,
+  axis: 0 | 1
+) => AxisMap<T> | undefined;
 
 export type PlacementConstraint =
   | AlignConstraint
@@ -95,7 +103,7 @@ class PlacementOwnershipPlan<T> {
     targets: Map<string, SolvePlaceable<T>>,
     constraints: PlacementConstraint[],
     private readonly keyOf: KeyOf,
-    scaleOf: (c: PositionConstraint, axis: 0 | 1) => AxisMap<T> | undefined,
+    scaleOf: ScaleOf<T>,
     sizes: readonly [T, T],
     dataPositioned?: [Set<string>, Set<string>]
   ) {
@@ -198,17 +206,11 @@ export function lowerPlacementConstraints<T>(
   sizes: readonly [T, T],
   // The gap a chain or table lays out between its parts (`GoFishNode.gapOf`).
   gapOf: GapOf,
-  posScales?: ConstraintPosScales<T>,
+  scaleOf: ScaleOf<T> = () => undefined,
   // Per axis, the grid's resolved tracks, where the grid places its cells.
   gridTracks: GridTracks<T> = [undefined, undefined],
-  dataPositioned?: [Set<string>, Set<string>],
-  // The frame a `position` with `in` reads its datums in, on one axis: the
-  // map of the node it names into this layer's frame (`PositionOptions.in`).
-  inScale?: (c: PositionConstraint, axis: 0 | 1) => AxisMap<T> | undefined
+  dataPositioned?: [Set<string>, Set<string>]
 ): LoweredPlacement<T> {
-  // The frame a position constraint's datums map through on an axis.
-  const scaleOf = (c: PositionConstraint, axis: 0 | 1) =>
-    c.in !== undefined ? inScale?.(c, axis) : posScales?.[axis];
   // A `position` pin on a grid cell overrides that cell's track centering on the
   // pinned axis (the authoritative-pin pattern) — collect which (cell, axis) a
   // position constraint owns so the grid skips its center pin there.

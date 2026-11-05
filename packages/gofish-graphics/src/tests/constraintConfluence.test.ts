@@ -88,7 +88,7 @@ function solveAndSeat(
   constraints: PlacementConstraint[],
   targets: Map<string, Placeable>,
   sizes: [number, number],
-  posScales?: Parameters<typeof solvePlacementCells<number>>[5],
+  posScales?: readonly [unknown, unknown],
   gridTracks?: [TrackLayout, TrackLayout],
   dataPositioned?: [Set<string>, Set<string>]
 ): void {
@@ -98,7 +98,7 @@ function solveAndSeat(
     targets,
     sizes,
     pixelGaps,
-    posScales,
+    posScales && ((_, axis) => posScales[axis] as AxisMap | undefined),
     gridTracks,
     dataPositioned
   );
