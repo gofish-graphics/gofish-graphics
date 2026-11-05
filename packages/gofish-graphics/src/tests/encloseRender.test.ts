@@ -18,13 +18,17 @@ declare const process: { exit(code: number): never };
 const {
   chart,
   circle,
+  createName,
   enclose,
   ellipse,
   filter,
+  layer,
   live,
   pack,
   project,
   rect,
+  ref,
+  region,
   scatter,
   selectAll,
   Shape,
@@ -359,6 +363,38 @@ for (const clearance of [NaN, -2, "4"]) {
     `enclose({ clearance: ${typeof clearance === "number" ? clearance : JSON.stringify(clearance)} }) is an error naming clearance`,
     /enclose\(\{ clearance \}\)/.test(message),
     message || "no error"
+  );
+}
+
+console.log("# a member that fills its space may be listed in avoiding");
+{
+  // A listed node that is also a member is ignored, so it avoids nothing:
+  // the outline is filled, and nothing is an error.
+  const cells = createName("cells");
+  const fresh = createName("fresh");
+  const message = await errorOf(() =>
+    enclose({ padding: 4, avoiding: [ref(cells)] }, [
+      region({ fill: "#888" }).name(cells),
+    ]).toDisplayList({ w: 100, h: 100 })
+  );
+  check(
+    "enclose({ avoiding: [ref(m)] }, [m]) around a region that fills its space is no error",
+    message === "",
+    message
+  );
+  // a node other than the member is still an error there
+  const other = await errorOf(() =>
+    layer([
+      rect({ x: 0, y: 0, w: 5, h: 5 }).name(fresh),
+      enclose({ padding: 4, avoiding: [ref(fresh)] }, [
+        region({ fill: "#888" }),
+      ]),
+    ]).toDisplayList({ w: 100, h: 100 })
+  );
+  check(
+    "an avoided node that is not a member, around a member that fills its space, is an error",
+    /fills the space it is given/.test(other),
+    other || "no error"
   );
 }
 

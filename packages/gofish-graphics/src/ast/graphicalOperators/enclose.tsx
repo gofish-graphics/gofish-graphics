@@ -187,8 +187,14 @@ function Enclose(
           return padExtent(hullExtent(...(own as Extent[])), padding);
         }) as [Extent | undefined, Extent | undefined],
       layout: (size, scales, children, _node, space) => {
+        // An avoided node that is also a member is left out of the avoided
+        // ones: the children after the members that are not members.
+        const memberNodes = new Set(
+          children.slice(0, memberCount).map(targetOf)
+        );
+        const avoids = (child: GoFishAST) => !memberNodes.has(targetOf(child));
         if (fillsItsSpace(members)) {
-          if (avoided.length > 0)
+          if (children.slice(memberCount).some(avoids))
             throw new Error(
               `enclose({ avoiding }): this enclosure's member fills the space it is ` +
                 `given (such as a treemap), so it fills the outline, and an outline ` +
@@ -221,18 +227,13 @@ function Enclose(
           fold(1, "min") - padding,
           fold(1, "max") + padding,
         ];
-        // The children from..to read as outline geometry; an avoided node
-        // that is also a member is left out of the avoided ones.
-        const memberNodes = new Set(
-          children.slice(0, memberCount).map(targetOf)
-        );
+        // The children from..to read as outline geometry, the avoided ones
+        // without the members among them.
         const geometry = (from: number, to: number): Member[] =>
           children
             .slice(from, to)
             .flatMap((child, i) =>
-              from > 0 && memberNodes.has(targetOf(child))
-                ? []
-                : membersOf(placed[from + i])
+              from > 0 && !avoids(child) ? [] : membersOf(placed[from + i])
             );
         const loops = outlineOf(
           shape,
