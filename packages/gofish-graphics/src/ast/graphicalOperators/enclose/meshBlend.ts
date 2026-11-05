@@ -30,9 +30,10 @@
  *  - in a pocket with no mouth, u is the distance from its wall over the
  *    greatest such distance, exact at every mesh vertex.
  *  - each pocket fills share c of its own area: the area of {u <= l} is
- *    closed form per triangle (piecewise quadratic in l), summed into one
- *    piecewise quadratic per pocket, so the level for c is a lookup and a
- *    one-interval root.
+ *    summed over the pocket's triangles, each in closed form as a product of
+ *    two ratios of at most 1 (so it is exact however near a triangle's
+ *    values are, and behind a narrow channel they are all within 1e-6), and
+ *    the level for c is the root of that sum by regula falsi.
  *  - the outline at c is exact for the P1 field: the level set is a
  *    straight segment per triangle, chained, run through the cusps to the
  *    mouth ends, and stitched to the spine runs on the hull between pockets.
@@ -52,8 +53,11 @@ export const MESH_BLEND = {
   beta: 1,
   alpha: 0.3,
   hMax: 6,
-  /** CG stops at this relative residual */
-  tol: 1e-7,
+  /** CG stops at this relative residual. Behind a narrow channel u is
+   *  exponentially small (1e-6 and less), and a pocket's level can sit
+   *  there: at 1e-7 the level set in such a chamber moved by up to 12 px
+   *  between two solves of one mesh. */
+  tol: 1e-10,
 };
 
 // ── spatial helpers ─────────────────────────────────────────────────────────
@@ -304,12 +308,8 @@ type Pocket = {
   hole: boolean;
   /** the area cut off as cusps (filled at the rate ℓ) */
   cuspArea: number;
-  // the area of {u ≤ ℓ}: breakpoints and the quadratic after each
-  xs?: Float64Array;
-  q2?: Float64Array;
-  q1?: Float64Array;
-  q0?: Float64Array;
-  At?: Float64Array;
+  /** its triangles: the values at their corners, least first, and area */
+  tv?: Float64Array;
   area: number;
 };
 
@@ -1011,34 +1011,8 @@ export function buildMeshBlend(spine: Pt[][]): MeshBlend {
     cutCorner.set(HE[e] >= 0 ? Math.min(e, HE[e]) : e, c);
   const nREdge = nEdgeIds;
 
-  // ── each pocket's area of {u ≤ ℓ}, piecewise quadratic ────────────────────
-  // per quarter, with values a ≤ b ≤ c and area A: k1 (ℓ − a)² on [a, b],
-  // A − k2 (c − ℓ)² on [b, c], A after; as events (position, Δq2, Δq1, Δq0)
-  const nEv = 3 * nR + 2 * pockets.length;
-  const evX = new Float64Array(nEv),
-    evP = new Int32Array(nEv),
-    evC = new Float64Array(3 * nEv);
-  let ne = 0;
-  const push = (p: number, x: number, c2: number, c1: number, c0: number) => {
-    evX[ne] = x;
-    evP[ne] = p;
-    evC[3 * ne] = c2;
-    evC[3 * ne + 1] = c1;
-    evC[3 * ne + 2] = c0;
-    ne++;
-  };
-  // a quarter's events sit at its corners' values, so they are summed per
-  // corner (vertex) first: one event per vertex, not three per quarter
-  const nRV = RU.length;
-  const vC = new Float64Array(3 * nRV),
-    vPk = new Int32Array(nRV).fill(-1);
-  const addAt = (p: number, v: number, c2: number, c1: number, c0: number) => {
-    if (vPk[v] < 0) vPk[v] = p;
-    if (vPk[v] !== p) return push(p, RU[v], c2, c1, c0); // a vertex of two pockets
-    vC[3 * v] += c2;
-    vC[3 * v + 1] += c1;
-    vC[3 * v + 2] += c0;
-  };
+  // ── each pocket's triangles, as (a ≤ b ≤ c, area) for the area of {u ≤ ℓ}
+  const per = pockets.map(() => [] as number[]);
   for (let t = 0; t < nR; t++) {
     let i = rtri[3 * t],
       j = rtri[3 * t + 1],
@@ -1051,69 +1025,13 @@ export function buildMeshBlend(spine: Pt[][]): MeshBlend {
     if (RU[i] > RU[j]) [i, j] = [j, i];
     if (RU[j] > RU[k]) [j, k] = [k, j];
     if (RU[i] > RU[j]) [i, j] = [j, i];
-    const a = RU[i],
-      b = RU[j],
-      c = RU[k];
     const p = rtriPocket[t];
     pockets[p].area += ar;
-    if (c - a < 1e-12) {
-      addAt(p, i, 0, 0, ar);
-      continue;
-    }
-    const k1 = b - a > 1e-12 ? ar / ((b - a) * (c - a)) : 0;
-    const k2 = c - b > 1e-12 ? ar / ((c - a) * (c - b)) : 0;
-    addAt(p, i, k1, -2 * a * k1, a * a * k1);
-    addAt(
-      p,
-      j,
-      -k1 - k2,
-      2 * a * k1 + 2 * c * k2,
-      -a * a * k1 + ar - c * c * k2
-    );
-    addAt(p, k, k2, -2 * c * k2, c * c * k2);
+    per[p].push(RU[i], RU[j], RU[k], ar);
   }
-  for (let v = 0; v < nRV; v++)
-    if (vPk[v] >= 0)
-      push(vPk[v], RU[v], vC[3 * v], vC[3 * v + 1], vC[3 * v + 2]);
-  // the cusps fill at the rate ℓ
   pockets.forEach((P, p) => {
-    if (P.cuspArea <= 0) return;
-    push(p, 0, 0, P.cuspArea, 0);
-    push(p, 1, 0, -P.cuspArea, P.cuspArea);
+    P.tv = Float64Array.from(per[p]);
     P.area += P.cuspArea;
-  });
-  const order = sortByKey(evX.subarray(0, ne));
-  // the sorted events split by pocket (stable: each pocket's stay sorted)
-  const start = new Int32Array(pockets.length + 1);
-  for (let q = 0; q < ne; q++) start[evP[q] + 1]++;
-  for (let p = 0; p < pockets.length; p++) start[p + 1] += start[p];
-  const byPocket = new Int32Array(ne);
-  const fillAt = start.slice(0, pockets.length);
-  for (let q = 0; q < ne; q++) byPocket[fillAt[evP[order[q]]]++] = order[q];
-  pockets.forEach((P, p) => {
-    const os = byPocket.subarray(start[p], start[p + 1]);
-    const n = os.length;
-    const xs = new Float64Array(n),
-      q2 = new Float64Array(n),
-      q1 = new Float64Array(n),
-      q0 = new Float64Array(n),
-      At = new Float64Array(n);
-    let s2 = 0,
-      s1 = 0,
-      s0_ = 0;
-    for (let q = 0; q < n; q++) {
-      const o = os[q];
-      s2 += evC[3 * o];
-      s1 += evC[3 * o + 1];
-      s0_ += evC[3 * o + 2];
-      const x = evX[o];
-      xs[q] = x;
-      q2[q] = s2;
-      q1[q] = s1;
-      q0[q] = s0_;
-      At[q] = s2 * x * x + s1 * x + s0_;
-    }
-    Object.assign(P, { xs, q2, q1, q0, At });
   });
   const cornerPocket = corners.map((C) =>
     pockets.findIndex((P) => P.mouths.includes(C.mouth))
@@ -1140,35 +1058,6 @@ export function buildMeshBlend(spine: Pt[][]): MeshBlend {
     nREdge,
     cutCorner,
   };
-}
-
-/** the order of nonnegative keys: an LSD radix sort on their bits (for
- * nonnegative doubles the bit patterns sort as the values), 16 bits a pass;
- * stable, O(n) however the keys cluster */
-function sortByKey(keys: Float64Array): Uint32Array {
-  const n = keys.length;
-  const K = new Float64Array(n);
-  for (let i = 0; i < n; i++) K[i] = keys[i] + 0; // -0 → +0
-  const W = new Uint32Array(K.buffer); // little-endian: [lo, hi] per key
-  let out = new Uint32Array(n),
-    tmp = new Uint32Array(n);
-  for (let i = 0; i < n; i++) out[i] = i;
-  const cnt = new Uint32Array(65537);
-  for (let pass = 0; pass < 4; pass++) {
-    const word = pass >> 1,
-      shift = (pass & 1) * 16;
-    cnt.fill(0);
-    for (let i = 0; i < n; i++)
-      cnt[((W[2 * i + word] >>> shift) & 0xffff) + 1]++;
-    if (cnt[((W[word] >>> shift) & 0xffff) + 1] === n) continue; // one digit: no-op
-    for (let d = 0; d < 65536; d++) cnt[d + 1] += cnt[d];
-    for (let q = 0; q < n; q++) {
-      const i = out[q];
-      tmp[cnt[(W[2 * i + word] >>> shift) & 0xffff]++] = i;
-    }
-    [out, tmp] = [tmp, out];
-  }
-  return out;
 }
 
 function windingOf(rings: Pt[][], p: Pt): number {
@@ -1281,41 +1170,48 @@ function pcgIC(
   return { x, it };
 }
 
-/** A pocket's level for convexity c: the ℓ at which {u ≤ ℓ} holds share c
- *  of its area. */
-export function meshLevel(P: Pocket, c: number): number {
-  const { xs, q2, q1, q0, At } = P as Required<Pocket>;
-  const target = c * P.area;
-  const n = xs.length;
-  if (!n) return c;
-  // the last breakpoint with A ≤ target
-  let lo = 0,
-    hi = n - 1;
-  if (At[0] > target) return xs[0];
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1;
-    if (At[mid] <= target) lo = mid;
-    else hi = mid - 1;
+/** The area of {u ≤ ℓ} in a pocket: each triangle's in closed form (its
+ *  share is a product of two ratios, each at most 1, so it is exact however
+ *  near its corners' values are), and the cusps' (filled at the rate ℓ). */
+export function meshArea(P: Pocket, l: number): number {
+  const tv = P.tv!;
+  let s = 0;
+  for (let q = 0; q < tv.length; q += 4) {
+    const a = tv[q],
+      b = tv[q + 1],
+      c = tv[q + 2],
+      ar = tv[q + 3];
+    if (l >= c) s += ar;
+    else if (l <= a) continue;
+    else if (l <= b) s += ar * ((l - a) / (b - a)) * ((l - a) / (c - a));
+    else s += ar * (1 - ((c - l) / (c - a)) * ((c - l) / (c - b)));
   }
-  const a = xs[lo],
-    b = lo + 1 < n ? xs[lo + 1] : Math.max(1, a);
-  const f = (x: number) => q2[lo] * x * x + q1[lo] * x + q0[lo];
-  let x0 = a,
-    x1 = b;
-  for (let k = 0; k < 60 && x1 - x0 > 1e-15; k++) {
-    const mm = (x0 + x1) / 2;
-    if (f(mm) < target) x0 = mm;
-    else x1 = mm;
-  }
-  return (x0 + x1) / 2;
+  return s + P.cuspArea * Math.max(0, Math.min(1, l));
 }
 
-/** The area of {u ≤ ℓ} in a pocket (for checks). */
-export function meshArea(P: Pocket, l: number): number {
-  const { xs, q2, q1, q0 } = P as Required<Pocket>;
-  let lo = -1;
-  for (let q = 0; q < xs.length && xs[q] <= l; q++) lo = q;
-  return lo < 0 ? 0 : q2[lo] * l * l + q1[lo] * l + q0[lo];
+/** A pocket's level for convexity c: the ℓ at which {u ≤ ℓ} holds share c
+ *  of its area (regula falsi, Illinois, on the exact area). */
+export function meshLevel(P: Pocket, c: number): number {
+  const target = c * P.area;
+  let [a, fa, b, fb] = [0, meshArea(P, 0) - target, 1, meshArea(P, 1) - target];
+  if (fa >= 0) return 0;
+  if (fb <= 0) return 1;
+  let side = 0;
+  for (let it = 0; it < 200 && b - a > 1e-15; it++) {
+    const m = (a * fb - b * fa) / (fb - fa);
+    const fm = meshArea(P, m) - target;
+    if (Math.abs(fm) <= 1e-10 * P.area) return m;
+    if (fm < 0) {
+      [a, fa] = [m, fm];
+      if (side === -1) fb /= 2;
+      side = -1;
+    } else {
+      [b, fb] = [m, fm];
+      if (side === 1) fa /= 2;
+      side = 1;
+    }
+  }
+  return (a + b) / 2;
 }
 
 /**
@@ -1412,19 +1308,6 @@ export function meshBlendRings(
       end: cb,
     });
   }
-  // A pocket filled to the top (its level is u's largest, 1, on the mouth)
-  // crosses no triangle: its level set is the mouth itself, so each of its
-  // mouths' curves runs straight from the a cut's foot to the b cut's.
-  corners.forEach((C, a) => {
-    const p = MB.cornerPocket[a];
-    if (C.end !== "a" || pieceFrom.has(a) || lv[p] < 1) return;
-    const b = corners.findIndex((D) => D.mouth === C.mouth && D.end === "b");
-    if (b < 0) return;
-    pieceFrom.set(a, {
-      pts: [...level(a, lv[p]), ...level(b, lv[p]).reverse()],
-      end: b,
-    });
-  });
   for (const s of used) {
     if (done[s]) continue;
     const pts: Pt[] = [];

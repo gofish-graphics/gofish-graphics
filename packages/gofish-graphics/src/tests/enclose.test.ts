@@ -32,6 +32,7 @@ import type { Member, Pt } from "../ast/graphicalOperators/enclose/prims";
 import {
   cutOutline,
   encloseOutline,
+  pieceLinks,
   type OutlineOptions,
 } from "../ast/graphicalOperators/enclose/outline";
 import {
@@ -43,6 +44,11 @@ import {
   type Ellipse,
 } from "../ast/graphicalOperators/enclose/oval";
 import { closingRings } from "../ast/graphicalOperators/enclose/arcs";
+import {
+  buildMeshBlend,
+  meshArea,
+  meshLevel,
+} from "../ast/graphicalOperators/enclose/meshBlend";
 import { penguins } from "../data/penguins";
 import { countryPopulations } from "../data/countryPopulations";
 import { packSiblings } from "d3-hierarchy";
@@ -461,6 +467,23 @@ console.log("# a 1,000-point line and 300 dots");
     "the area grows with convexity on the line and dots",
     areas[0] < areas[1] && areas[1] <= areas[2] + 1,
     areas.map((a) => a.toFixed(0)).join(", ")
+  );
+  // behind the line's narrow channels u is under 1e-5, where a summed
+  // piecewise quadratic lost its digits (a pocket read as filled to its
+  // mouth at 0.5): each pocket's level holds its share exactly
+  const J = pieceLinks(members, 4, 1, 1);
+  const MB = buildMeshBlend(
+    closingRings([...members, ...J.links], 4, 4, false, 0.05)
+  );
+  const worst = Math.max(
+    ...[0.25, 0.5, 0.9].flatMap((c) =>
+      MB.pockets.map((P) => Math.abs(meshArea(P, meshLevel(P, c)) / P.area - c))
+    )
+  );
+  check(
+    "every pocket of the line and dots fills its share",
+    worst < 1e-6,
+    `worst share error ${worst.toExponential(1)}`
   );
 }
 

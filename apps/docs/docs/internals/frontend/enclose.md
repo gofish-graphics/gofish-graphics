@@ -297,7 +297,11 @@ same way under any coordinate transform.
    with finite elements on a constrained Delaunay mesh of the pocket; the
    outline is u's level set at the level that holds that share of the area,
    which is closed form per triangle. On a Delaunay mesh the field has no lake
-   and no island at any level. A pocket filled to the top is its mouth. At 1
+   and no island at any level. Behind a narrow channel u is exponentially
+   small (under 1e-5 between the line and dots of the test below), and a
+   pocket's level can sit there, so the area is summed per triangle in a form
+   that keeps its digits at any level, and the solve runs to a relative
+   residual of 1e-10. At 1
    the fill is the padded hull. Between 1 and 2 the hull is the Minkowski
    combination (2 − c)·H ⊕ (c − 1)·E of the hull, its ends rounded, and the
    `Shape.oval()` outline (`beyond.ts`), so it grows with c and is near the
