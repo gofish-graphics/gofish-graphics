@@ -93,15 +93,3 @@ export function beyondEnds(
   const Hc = ccw(H);
   return { Hc, E: ovalRing(members, pad) ?? Hc };
 }
-
-/** The outline for convexity c in (1, 2] from the padded hull H. */
-export function beyondHull(
-  H: Pt[],
-  members: Member[],
-  pad: number,
-  c: number
-): Pt[] {
-  const { Hc, E } = beyondEnds(H, members, pad);
-  const s = Math.max(0, Math.min(1, c - 1));
-  return minkowski(Hc, 1 - s, E, s);
-}

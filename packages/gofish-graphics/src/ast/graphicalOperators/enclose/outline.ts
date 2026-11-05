@@ -54,7 +54,7 @@ import { boxGrid, convexHull, type Member, type Pt } from "./prims";
 import { closingRings, keepIns } from "./arcs";
 import { buildBlend, blendRings } from "./blend";
 import { roundCut, smoothOutline } from "./smooth";
-import { beyondHull, beyondEnds, minkowski } from "./beyond";
+import { beyondEnds, minkowski } from "./beyond";
 import {
   cutField,
   cutRings,
@@ -62,26 +62,6 @@ import {
   SEPARATE,
   type CutField,
 } from "./separate";
-
-/** The work one outline call shares between its steps (a member set's join
- *  tree, a piece's spine and closing), keyed by the inputs it depends on.
- *  Emptied when the call returns (encloseOutline), so it holds nothing
- *  between calls. */
-const CACHE = new Map<string, unknown>();
-function memo<T>(key: string, f: () => T): T {
-  if (CACHE.has(key)) return CACHE.get(key) as T;
-  const v = f();
-  CACHE.set(key, v);
-  return v;
-}
-/** A short stand-in for a long cache key (a member set's JSON), so per-piece
- *  keys stay small. */
-const INTERN = new Map<string, number>();
-const intern = (s: string) => {
-  let v = INTERN.get(s);
-  if (v === undefined) INTERN.set(s, (v = INTERN.size));
-  return v;
-};
 
 /** The options of {@link encloseOutline}: `Shape.blob` (and its presets
  *  spine and hull: convexity 0 and 1) or `Shape.fillet`, with enclose's
@@ -446,11 +426,6 @@ type JoinTree = {
   free: number[];
 };
 
-/** A member set's pair table, shared by its join tree and its gap forests: a pair's gap
- *  and axis do not depend on the padding. */
-const pairsOf = (members: Member[]) =>
-  memo(key("pairs", intern(key(members))), () => pairTable(members));
-
 const byIndex = (p: Pair, q: Pair) => p.i - q.i || p.j - q.j;
 
 /**
@@ -476,8 +451,7 @@ const byIndex = (p: Pair, q: Pair) => p.i - q.i || p.j - q.j;
  * its center distance, so a pair past a box gap of max(2 · pad, w) comes after an edge of
  * weight w, and one past g + 2 · pad after a touching edge of padded gap g.
  */
-function joinTree(members: Member[], pad: number): JoinTree {
-  const T = pairsOf(members);
+function joinTree(T: PairTable, pad: number): JoinTree {
   const core = coreDistances(T, CORE_K);
   const joinLess = (p: Pair, q: Pair) => {
     const fp = p.g <= 0,
@@ -511,12 +485,11 @@ function joinTree(members: Member[], pad: number): JoinTree {
  * A pair past a box gap of g + 2 · pad comes after an edge of padded gap g (spanningForest).
  */
 function gapForest(
-  members: Member[],
+  T: PairTable,
   pad: number,
   group: ArrayLike<number>,
   below = Infinity
 ): Pair[] {
-  const T = pairsOf(members);
   return spanningForest(
     T,
     group,
@@ -573,18 +546,15 @@ const keepsAll = (connection: number, n: number) => {
 };
 
 /**
- * The pieces and links for `connection`. The join tree (joinTree, cached per
- * member set and padding) keeps its touching links and the keptLinks strongest free ones; the
+ * The pieces and links for `connection`. The join tree (joinTree) keeps its touching links and the keptLinks strongest free ones; the
  * kept links' components are the pieces (one, with no join tree found, when connection keeps
  * every link: keepsAll). Each piece is drawn with the padded-gap spanning tree
  * of its own members (Kruskal over the pairs by padded gap, the order in which the exact
  * closing merges them as its radius grows), each link a tapered tube between the two members'
  * cores whose padded half-width at each end is neck · (ρ + pad), ρ that member's core radius;
  * members that overlap need no link. At connection 1 the one piece's links are the whole
- * set's gap tree.
- *
- * `pieceKeys[p]`: what piece p's links and fill depend on (its members), for the per-piece
- * cache.
+ * set's gap tree. One pair table (pairTable) serves the join tree, the gap trees and the
+ * links' widths.
  */
 export function pieceLinks(
   members: Member[],
@@ -596,9 +566,9 @@ export function pieceLinks(
   /** each link's piece, and each piece's member indices */
   linkPiece: number[];
   pieces: number[][];
-  pieceKeys: string[];
 } {
   const n = members.length;
+  const T = pairTable(members);
   const kc = Array.from({ length: n }, (_, i) => i);
   const kfind = (i: number): number =>
     kc[i] === i ? i : (kc[i] = kfind(kc[i]));
@@ -606,10 +576,10 @@ export function pieceLinks(
     // every link is kept, however many are free: one piece, and no join tree
     for (let i = 1; i < n; i++) kc[i] = 0;
   } else {
-    const T = memo(key("joinTree", members, pad), () => joinTree(members, pad));
-    const keep = keptLinks(connection, T.free.length);
-    const rank = new Map(T.free.map((k, r) => [k, r]));
-    T.E.forEach((e, k) => {
+    const J = joinTree(T, pad);
+    const keep = keptLinks(connection, J.free.length);
+    const rank = new Map(J.free.map((k, r) => [k, r]));
+    J.E.forEach((e, k) => {
       const r = rank.get(k);
       if (r === undefined || r < keep) kc[kfind(e.i)] = kfind(e.j);
     });
@@ -628,8 +598,8 @@ export function pieceLinks(
   const piece = Array.from({ length: n }, (_, i) => ids.get(kfind(i))!);
   const links: Member[] = [];
   const linkPiece: number[] = [];
-  const { rho } = pairsOf(members);
-  for (const p of gapForest(members, pad, piece)) {
+  const { rho } = T;
+  for (const p of gapForest(T, pad, piece)) {
     if (p.overlap) continue;
     links.push({
       kind: "segment",
@@ -640,12 +610,7 @@ export function pieceLinks(
     });
     linkPiece.push(piece[p.i]);
   }
-  return {
-    links,
-    linkPiece,
-    pieces,
-    pieceKeys: pieces.map((p) => p.join(",")),
-  };
+  return { links, linkPiece, pieces };
 }
 
 /** A member's core axis (two points, equal for a disc) and radius. */
@@ -697,7 +662,7 @@ function paddedSamples(members: Member[], pad: number): Pt[] {
 }
 
 /** The padded convex hull, winding as the closing does (positive). */
-export function paddedHull(members: Member[], pad: number): Pt[] {
+function paddedHull(members: Member[], pad: number): Pt[] {
   const h = convexHull(paddedSamples(members, pad));
   return signedArea2(h) > 0 ? h : h.slice().reverse();
 }
@@ -844,8 +809,6 @@ export function routeAround(
 
 // ── the outline ─────────────────────────────────────────────────────────────
 
-const key = (...xs: unknown[]) => JSON.stringify(xs);
-
 /** The box of rings. */
 const boxOfRings = (rings: Pt[][]): [number, number, number, number] => {
   let [xa, ya, xb, yb] = [Infinity, Infinity, -Infinity, -Infinity];
@@ -865,18 +828,15 @@ export function encloseOutline(members: Member[], o: OutlineOptions): Pt[][] {
   const pad = Math.max(0, o.padding);
   const clearance = Math.max(0, o.clearance ?? pad);
   const K = keepOuts(o.avoiding ?? [], clearance);
-  try {
-    if ((o.shape ?? "blob") === "blob")
-      return blobOutline(members, o, pad, clearance, K);
-    const r = Math.max(0, o.radius ?? pad);
-    const neck = Math.max(0, Math.min(1, o.neck ?? FILLET_NECK));
-    return filletPieces(members, pad, r, !!o.holes, neck).flatMap(
-      ({ pm, rings }) => (K.length ? avoidCut(rings, pm, pad, K) : rings)
-    );
-  } finally {
-    CACHE.clear();
-    INTERN.clear();
-  }
+  // the keep-outs' region, shared by every piece that keeps out of K alone
+  const region = keepRegion(K, SEPARATE.open);
+  if ((o.shape ?? "blob") === "blob")
+    return blobOutline(members, o, pad, clearance, K, region);
+  const r = Math.max(0, o.radius ?? pad);
+  const neck = Math.max(0, Math.min(1, o.neck ?? FILLET_NECK));
+  return filletPieces(members, pad, r, !!o.holes, neck).flatMap(
+    ({ pm, rings }) => (K.length ? avoidCut(rings, pm, pad, region) : rings)
+  );
 }
 
 /**
@@ -892,28 +852,25 @@ export function cutOutline(
   const pad = Math.max(0, o.padding);
   const K = keepOuts(o.avoiding ?? [], Math.max(0, o.clearance ?? pad));
   if (!K.length || !members.length) return rings;
-  try {
-    return avoidCut(rings, members, pad, K);
-  } finally {
-    CACHE.clear();
-    INTERN.clear();
-  }
+  return avoidCut(rings, members, pad, keepRegion(K, SEPARATE.open));
 }
 
-/** A shape's rings (a blob piece, a fillet piece, the box) cut by the keep-outs: never into
- *  the padded members (a link is cut like any other ground), the cut's corners rounded
- *  inward (finish), and what the cut fences off from every member dropped. */
-function avoidCut(rings: Pt[][], pm: Member[], pad: number, K: Disc[]): Pt[][] {
+/** A shape's rings (a blob piece, a fillet piece, the box) cut by the keep-outs' region
+ *  (keepRegion): never into the padded members (a link is cut like any other ground), the
+ *  cut's corners rounded inward (cutAndRound), and what the cut fences off from every member
+ *  dropped. */
+function avoidCut(
+  rings: Pt[][],
+  pm: Member[],
+  pad: number,
+  region: Pt[][]
+): Pt[][] {
   const F = cutField(
-    memo(key("padded", intern(key(pm)), pad), () =>
-      closingRings(pm, pad, 0, false)
-    ),
+    closingRings(pm, pad, 0, false),
     boxOfRings(rings),
-    memo(key("keepRegion", intern(key(K)), SEPARATE.open), () =>
-      keepRegion(K, SEPARATE.open)
-    )
+    region
   );
-  const cut = finish({ rings, all: pm }, false, pad, F);
+  const cut = F ? cutAndRound(rings, pm, pad, F) : rings;
   // the ground the keep-outs fence off from every member (a link's or a fill's sliver
   // between keep-outs) is not the enclosure: an outer ring that holds no member is dropped,
   // and the holes inside it
@@ -948,27 +905,18 @@ const insideOf = (m: Member): Pt =>
  * radius a), and in between it has a horn on each member (filletPieces). A link across every
  * such gap leaves the closing none to make a horn in, and over 2r it makes none.
  */
-export function filletLinks(
+function filletLinks(
   members: Member[],
   pad: number,
   r: number,
   neck: number
 ): Member[] {
   if (!(neck > 0) || !(r > 0)) return [];
-  return memo(key("filletLinks", intern(key(members)), pad, r, neck), () =>
-    gapLinks(members, pad, r, neck)
-  );
-}
-function gapLinks(
-  members: Member[],
-  pad: number,
-  r: number,
-  neck: number
-): Member[] {
-  const { rho } = pairsOf(members);
+  const T = pairTable(members);
+  const { rho } = T;
   const links: Member[] = [];
   for (const p of gapForest(
-    members,
+    T,
     pad,
     members.map(() => 0),
     2 * r
@@ -1018,73 +966,61 @@ function filletPieces(
   holes: boolean,
   neck: number
 ): { pm: Member[]; rings: Pt[][] }[] {
-  return memo(key("fillet", intern(key(members)), pad, r, holes, neck), () => {
-    const isLink = new Set<Member>(filletLinks(members, pad, r, neck));
-    const out: { pm: Member[]; rings: Pt[][] }[] = [];
-    const todo: Member[][] = [[...members, ...isLink]];
-    while (todo.length) {
-      const all = todo.pop()!;
-      const filled = closingRings(all, pad, r, false);
-      const outer = filled.filter((g) => signedArea2(g) > 0);
-      const groups = outer.map(() => [] as Member[]);
-      if (outer.length > 1)
-        for (const m of all) {
-          const p = insideOf(m);
-          const k = outer.findIndex((g) => pointInRing(p, g));
-          groups[Math.max(0, k)].push(m);
-        }
-      const split = groups.filter((g) => g.some((m) => !isLink.has(m)));
-      if (split.length > 1) {
-        todo.push(...split);
-        continue;
+  const isLink = new Set<Member>(filletLinks(members, pad, r, neck));
+  const out: { pm: Member[]; rings: Pt[][] }[] = [];
+  const todo: Member[][] = [[...members, ...isLink]];
+  while (todo.length) {
+    const all = todo.pop()!;
+    const filled = closingRings(all, pad, r, false);
+    const outer = filled.filter((g) => signedArea2(g) > 0);
+    const groups = outer.map(() => [] as Member[]);
+    if (outer.length > 1)
+      for (const m of all) {
+        const p = insideOf(m);
+        const k = outer.findIndex((g) => pointInRing(p, g));
+        groups[Math.max(0, k)].push(m);
       }
-      out.push({
-        pm: all.filter((m) => !isLink.has(m)),
-        rings: holes ? closingRings(all, pad, r, true) : filled,
-      });
+    const split = groups.filter((g) => g.some((m) => !isLink.has(m)));
+    if (split.length > 1) {
+      todo.push(...split);
+      continue;
     }
-    return out;
-  });
+    out.push({
+      pm: all.filter((m) => !isLink.has(m)),
+      rings: holes ? closingRings(all, pad, r, true) : filled,
+    });
+  }
+  return out;
 }
 
-/** The blob: pieces by connection, each filled and smoothed (finish), then cut by its
+/** The blob: pieces by connection, each filled and smoothed (smoothFill), then cut by its
  *  keep-outs as every shape is (avoidCut): the avoided members and, with `separate: true`,
  *  the set's other pieces. Without `separate` (the default) a piece that lies wholly inside
- *  another is dropped (contained). */
+ *  another is dropped (contained). `region`: K's keep-out region (keepRegion). */
 function blobOutline(
   members: Member[],
   o: OutlineOptions,
   pad: number,
   clearance: number,
-  K: Disc[]
+  K: Disc[],
+  region: Pt[][]
 ): Pt[][] {
   const holes = o.holes ?? false;
-  const neck = o.neck ?? 1;
-  const J = pieceLinks(members, pad, o.connection ?? 1, neck);
-  const ctx = intern(key(members, pad, neck));
-  // the keep-outs: a piece's spine depends on them only where a link bends around one (so
-  // the final cut does not sever the piece there), so the fill's caches are keyed by the
-  // spine itself
-  const kid = K.length ? intern(key(K)) : -1;
-  const parts = J.pieces.map((idx, p) => {
-    const pm = idx.map((i) => members[i]);
-    const pk0 = key("piece", ctx, J.pieceKeys[p]);
-    const spine = memo(key("spine", pk0, kid), () =>
-      routeAround(
-        J.links.filter((_, l) => J.linkPiece[l] === p),
-        K,
-        pad
-      )
-    );
-    const pk = K.length ? key(pk0, intern(JSON.stringify(spine))) : pk0;
-    return { pm, spine, pk };
-  });
+  const J = pieceLinks(members, pad, o.connection ?? 1, o.neck ?? 1);
+  // each piece's members and spine: its links, bent around the keep-outs (so the final cut
+  // does not sever the piece there)
+  const parts = J.pieces.map((idx, p) => ({
+    pm: idx.map((i) => members[i]),
+    spine: routeAround(
+      J.links.filter((_, l) => J.linkPiece[l] === p),
+      K,
+      pad
+    ),
+  }));
   // each piece's outline: filled and smoothed on its own, then cut by its keep-outs
-  const optKey = key(o.convexity, holes);
-  const outs = parts.map(({ pm, spine, pk }) =>
-    memo(key("outline", pk, optKey), () =>
-      finish(fillOne(pm, spine, o, pad, holes, pk), true, pad, null)
-    )
+  const convexity = o.convexity ?? 0.5;
+  const outs = parts.map(({ pm, spine }) =>
+    smoothFill(fillOne(pm, spine, pad, convexity, holes), pad)
   );
   // each piece's keep-outs: the avoided members, and with `separate: true` the set's other
   // pieces as keep-outs too (their padded members and links grown by padding + clearance, so
@@ -1093,10 +1029,8 @@ function blobOutline(
   const separate = o.separate ?? false;
   const others =
     parts.length > 1 && separate
-      ? parts.map(({ pm, spine, pk }) =>
-          memo(key("pieceKeepOuts", pk, pad + clearance), () =>
-            keepOuts([...pm, ...spine], pad + clearance)
-          )
+      ? parts.map(({ pm, spine }) =>
+          keepOuts([...pm, ...spine], pad + clearance)
         )
       : null;
   const keepsOf = (p: number, rings: Pt[][]): Disc[] => {
@@ -1119,9 +1053,11 @@ function blobOutline(
   const cut = outs.map((rings, p) => {
     const Kp = keepsOf(p, rings);
     if (!Kp.length) return rings;
-    const kp = Kp === K ? kid : intern(key(Kp));
-    return memo(key("avoidCut", parts[p].pk, optKey, kp), () =>
-      avoidCut(rings, parts[p].pm, pad, Kp)
+    return avoidCut(
+      rings,
+      parts[p].pm,
+      pad,
+      Kp === K ? region : keepRegion(Kp, SEPARATE.open)
     );
   });
   const byPiece = !separate && cut.length > 1 ? contained(cut) : cut;
@@ -1185,12 +1121,13 @@ function regionInRegion(A: Pt[][], B: Pt[][]): boolean {
   return true;
 }
 
+/** One blob piece's fill, before the smoothing and the keep-out cut. */
 type Fill = {
   rings: Pt[][];
   /** the piece's members and links, which the smoothing keeps inside */
   all: Member[];
   /** above convexity 1: the padded hull and the oval it blends toward
-   *  (finish draws the blend from the smoothed hull) */
+   *  (smoothFill draws the blend from the smoothed hull; `rings` is empty) */
   beyond?: { Hc: Pt[]; E: Pt[]; s: number };
 };
 
@@ -1198,51 +1135,31 @@ type Fill = {
  *  (`spine`) and the convexity. 0: the spine (the members and links closed at r = padding,
  *  so every concave corner is an arc of at least the padding, as every convex one is); 1 the
  *  padded hull; between, the per-bay blend (blend.ts); above 1, the hull toward the oval
- *  (beyond.ts). `pk`: the cache key of (members, spine). */
+ *  (beyond.ts). */
 function fillOne(
   members: Member[],
   spine: Member[],
-  o: OutlineOptions,
   pad: number,
-  holes: boolean,
-  pk: string
+  convexity: number,
+  holes: boolean
 ): Fill {
   const all = [...members, ...spine];
-  const c = Math.max(0, Math.min(2, o.convexity ?? 0.5));
-  const rMin = pad;
-  const hullOf = () => memo(key("hull", pk, pad), () => paddedHull(all, pad));
-  const base = { all };
+  const c = Math.max(0, Math.min(2, convexity));
   if (c > 1) {
-    const ends = beyondEnds(hullOf(), all, pad);
-    return {
-      ...base,
-      rings: [beyondHull(hullOf(), all, pad, c)],
-      beyond: { ...ends, s: Math.min(1, c - 1) },
-    };
+    const ends = beyondEnds(paddedHull(all, pad), all, pad);
+    return { all, rings: [], beyond: { ...ends, s: c - 1 } };
   }
-  if (c >= 1) return { ...base, rings: [hullOf()] };
-  if (c <= 0)
-    return {
-      ...base,
-      rings: memo(key("spineRes", pk, pad, holes), () =>
-        closingRings(all, pad, rMin, holes)
-      ),
-    };
+  if (c >= 1) return { all, rings: [paddedHull(all, pad)] };
+  if (c <= 0) return { all, rings: closingRings(all, pad, pad, holes) };
   // the blend wants the spine's arcs to 0.05 px (the closing's own sampling is 0.2 px)
-  const MB = memo(key("blend", pk, pad, holes), () =>
-    buildBlend(closingRings(all, pad, rMin, holes, 0.05))
-  );
-  return { ...base, rings: blendRings(MB, c, holes) };
+  const MB = buildBlend(closingRings(all, pad, pad, holes, 0.05));
+  return { all, rings: blendRings(MB, c, holes) };
 }
 
 /**
- * A fill smoothed, then cut once by its field `F` when it has one (separate.ts: the
- * keep-outs, never the shape's own padded members; avoidCut passes it). The
- * cut comes after the smoothing, so the smoothing's outward offset (which
- * holds every padded member again) never pushes the outline back across
- * it. The corners the cut leaves (where the outline meets a keep-out, and
- * between two keep-outs) are rounded inward only (roundCut), so the
- * rounding never crosses F either.
+ * A fill smoothed (smooth.ts), before any keep-out cut: the cut comes after the smoothing
+ * (avoidCut), so the smoothing's outward offset (which holds every padded member again)
+ * never pushes the outline back across it.
  *
  * Above convexity 1 the outline is (2 − c)·S ⊕ (c − 1)·oval, S the convex
  * hull of the smoothed padded hull (the outline at convexity 1): no blur of
@@ -1250,22 +1167,25 @@ function fillOne(
  * the hull's sides never come back, and the area grows with c (a Minkowski
  * blend of nested convex sets grows toward the larger).
  */
-function finish(
-  f: Fill,
-  smooth: boolean,
-  pad: number,
-  F: CutField | null
-): Pt[][] {
-  let rings = f.rings;
+function smoothFill(f: Fill, pad: number): Pt[][] {
   const keep = keepIns(f.all, pad);
-  if (smooth && f.beyond) {
-    const { Hc, E, s } = f.beyond;
-    const S = convexHull(smoothOutline([Hc], keep).flat());
-    rings = [minkowski(S, 1 - s, E, s)];
-  } else if (smooth) rings = smoothOutline(rings, keep);
-  if (F) {
-    const c = cutRings(F, rings);
-    rings = roundCut(c.rings, c.cut, keep, SEPARATE.round);
-  }
-  return rings;
+  if (!f.beyond) return smoothOutline(f.rings, keep);
+  const { Hc, E, s } = f.beyond;
+  const S = convexHull(smoothOutline([Hc], keep).flat());
+  return [minkowski(S, 1 - s, E, s)];
+}
+
+/**
+ * Rings cut once by their field `F` (separate.ts: the keep-outs, never the shape's own
+ * padded members `all`). The corners the cut leaves (where the outline meets a keep-out, and
+ * between two keep-outs) are rounded inward only (roundCut), so the rounding never crosses F.
+ */
+function cutAndRound(
+  rings: Pt[][],
+  all: Member[],
+  pad: number,
+  F: CutField
+): Pt[][] {
+  const c = cutRings(F, rings);
+  return roundCut(c.rings, c.cut, keepIns(all, pad), SEPARATE.round);
 }
