@@ -799,7 +799,7 @@ Six consumers read the table:
   `COMBINATOR_OPTIONS_BASE_FIELDS` (`debug`) ride; its other base fields sit on
   the node. The emitter keeps these keys, and the validator checks an operator
   or leaf-mark node against them. On a leaf mark, the base fields that Mark
-  methods set (`name`, `label`, `relate`, `zOrder`, `translate`) are checked by
+  methods set (`name`, `label`, `relate`, `zOrder`, `hidden`, `translate`) are checked by
   their own walkers, so the check of the mark's channels skips them. The
   emitter writes each `field(...)` or `datum(...)` instance, and each
   strategy kind used bare (`Curve.monotone`), in its plain `toJSON()` form, so the document it returns validates as the wire carries
@@ -973,10 +973,9 @@ It emits:
   `petal`, `text`, `image`, `polygon`, `blank`) — pure kwargs-collection
   plus wire-key rename, with docstrings from each field's `doc`. An
   undeclared kwarg is a `TypeError` on all of them; none takes `**kwargs`.
-- Compositing-quartet and other **combinator-only** marks — the
-  Porter-Duff-style renames (`inside`→`intersect`, `xor`→`exclude`,
-  `out`→`subtract`, `atop`→`paint`) come from the descriptor's `pyName`,
-  killing four previously hand-copied wire-name tables.
+- The five compositing operators and other **combinator-only** marks —
+  each named by its wire `type`, which is its public name (`union`,
+  `intersect`, `subtract`, `exclude`, `atop`).
 - `_opts(...) -> dict` **cores** for the dual-form constructs (`spread`,
   `stack`, `scatter`, `group`, `table`, `treemap`, `line`, `ribbon`,
   `layer`, `pack`), with separate combinator-form
@@ -988,9 +987,12 @@ It emits:
   `ast.py`, calling into these generated cores.
 - One module per **strategy family** in `STRATEGIES` (`gofish/tile.py`,
   `gofish/overlap.py`, `gofish/curve.py`, `gofish/bin.py`,
-  `gofish/calendar.py`, `gofish/shape.py`), bound in `__init__.py` under the family name
-  (`Tile`, `Overlap`, `Curve`, `Bin`, `Calendar`, `Shape`): one factory per kind and
-  per preset, named by `pyKwarg` (`Curve.catmull_rom`, `Overlap.separate`).
+  `gofish/calendar.py`, `gofish/shape.py`, `gofish/filter_.py`), bound in `__init__.py`
+  under the family name (`Tile`, `Overlap`, `Curve`, `Bin`, `Calendar`, `Shape`,
+  `Filter`): one factory per kind and per preset, named by `pyKwarg`
+  (`Curve.catmull_rom`, `Overlap.separate`). A module whose name is an
+  operator's gets a trailing underscore, as a keyword kwarg does: `gofish.filter`
+  is the `filter` operator, so the `Filter` family is `gofish/filter_.py`.
   A factory with no required param is decorated with `bare_kind`, so it is
   also the value its call with no arguments makes.
   Each returns `{"kind": ..., **params}` with snake_case param keys, and the
@@ -1083,8 +1085,8 @@ descriptor's `positional` field is taken out of the options and passed first
 (`geo(projection, { lon, lat })`); when that field is required and missing,
 `rebuild` throws and names it (`coord geo: missing required field
 "projection"`). A dual-form construct such as
-`spread` or `line` therefore has one entry for both forms, and the compositing
-wire types map to their renamed factories (`inside` to `intersect`, and so on).
+`spread` or `line` therefore has one entry for both forms, and each compositing
+wire type is its factory's name (`intersect` to `intersect`, and so on).
 The coord transforms (`polar`, `clock`, `wavy`, `geo`) are entries of the same
 table. Only an `OPERATOR_BUILDERS` entry sees the bridge.
 

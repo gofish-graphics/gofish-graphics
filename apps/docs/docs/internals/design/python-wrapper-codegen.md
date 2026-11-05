@@ -184,7 +184,7 @@ incrementally. Two things keep the maintenance cost low:
 
 - **Shared field groups.** Most channels aren't per-mark. `boxDims` (the
   `FancyDims` channels: `x, cx, x2, w, emX, y, cy, y2, h, emY, dims`) and
-  `paint` (`fill, stroke, strokeWidth, opacity, filter`) are declared once
+  `paint` (`fill, stroke, strokeWidth, opacity`) and `filtered` (`filter`) are declared once
   and included by reference; a mark entry then lists only its genuinely own
   fields (rect: `rx, ry, aspectRatio`).
 - **An explicit escape hatch instead of open kwargs.** If raw SVG

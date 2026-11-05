@@ -179,7 +179,7 @@ const animatedPanel = (curve: LadderCurve, clock: any) => {
   // drawn first so everything else sits over it.
   let panel: ChartBuilder<any, any> | LayerBuilder = chart(drivingShifts)
     .flow(scatter({ by: "year", x: "miles", y: "gas" }))
-    .mark(circle({ r: 3.5, opacity: 0 }));
+    .mark(circle({ r: 3.5 }).hidden());
   if (below !== undefined) {
     panel = panel.layer(
       line({

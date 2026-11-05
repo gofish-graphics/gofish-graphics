@@ -133,7 +133,7 @@ export const Default: StoryObj = {
               fill: classColor[cls],
               curve: Curve.bezier(),
               opacity: 0.7,
-              mixBlendMode: "multiply",
+              blendMode: "multiply",
             },
             [names[`${cls}-src`], names[`${cls}-tgt`]]
           ),
@@ -144,7 +144,7 @@ export const Default: StoryObj = {
                 fill: sex === "Female" ? color6[4] : color6[5],
                 curve: Curve.bezier(),
                 opacity: 0.7,
-                mixBlendMode: "multiply",
+                blendMode: "multiply",
               },
               [names[`${cls}-${sex}-src`], names[`${cls}-${sex}-tgt`]]
             ),
@@ -162,7 +162,7 @@ export const Default: StoryObj = {
                         : color6[5],
                   curve: Curve.bezier(),
                   opacity: 0.7,
-                  mixBlendMode: "multiply",
+                  blendMode: "multiply",
                 },
                 [
                   names[`${cls}-${sex}-${survived}-src`],

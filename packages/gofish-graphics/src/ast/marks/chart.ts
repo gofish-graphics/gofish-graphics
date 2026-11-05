@@ -54,24 +54,37 @@ import {
   nameModifier,
   labelModifier,
   zOrderModifier,
+  hiddenModifier,
 } from "./createOperator";
-import type { ModifierConfig, ZOrderValue } from "./createOperator";
+import type {
+  HiddenValue,
+  ModifierConfig,
+  ZOrderValue,
+} from "./createOperator";
 import { layer as Layer } from "../graphicalOperators/layer";
+import type { BlendMode } from "../blendMode";
+import {
+  applyFilter,
+  displayFilter,
+  type FilterOption,
+  type FilterOptions,
+} from "../drawFilter";
 import {
   encloseNode,
   type EncloseOptions,
   type Resolved as EncloseResolved,
 } from "../graphicalOperators/enclose";
 import {
-  // `over` stays internal (not re-exported from lib) — it backs the
-  // deserializer's `"over"` wire type only; user code should use `layer`.
-  over as Over,
+  union as Union,
   intersect as Intersect,
   exclude as Exclude,
   subtract as Subtract,
-  paint as Paint,
-  mask as Mask,
-  type CompositePaint,
+  atop as Atop,
+  type UnionOptions,
+  type IntersectOptions,
+  type SubtractOptions,
+  type ExcludeOptions,
+  type AtopOptions,
 } from "../graphicalOperators/porterDuff";
 import type { RelateFn } from "../constraints";
 import { splitByTiers, type InferredRelational } from "../datumProjection";
@@ -512,7 +525,7 @@ function tagRelationalOperands<T extends GoFishAST>(
 // Anchor-tier keys the blank-fusion rewrite rule (see the doc-comment above
 // and `ChartBuilder.mark`) carves off a relational mark's opts: purely
 // spatial, nothing paint- or path-related. Everything else (fill, stroke,
-// strokeWidth, strokeDasharray, opacity, curve, dir, mixBlendMode, along,
+// strokeWidth, strokeDasharray, opacity, curve, dir, blendMode, along,
 // source, target) stays with the connector.
 const ANCHOR_KEYS = ["w", "h", "emX", "emY"] as const;
 
@@ -588,7 +601,7 @@ function tagRelationalFusable(
 }
 
 /**
- * The channels a relational mark or `intersect` reads once per group: the
+ * The channels a relational mark or a compositor reads once per group: the
  * color channels of its channel map (`fill`, `stroke`) and its raw ones
  * (`enclose`'s `padding`), generated from its descriptor. They are the keys
  * the connector reads per group, so the only ones resolved.
@@ -675,16 +688,20 @@ declare const relationalMarkBrand: unique symbol;
  * it may fuse: `ChartBuilder.mark()` gives a relational mark a
  * `ChartBuilder | LayerBuilder` result (it rewrites to a two-tier layer when
  * the chart has its own flow), and every other mark a plain `ChartBuilder`.
- * `.name()`, `.label()`, `.zOrder()` and `.transition()` carry the fusion tag
+ * `.name()`, `.label()`, `.zOrder()`, `.hidden()` and `.transition()` carry the fusion tag
  * forward, so they keep the brand; `.translate()` wraps the mark in a fresh
  * one without the tag, so it returns a plain `NameableMark`.
  */
 export type RelationalMark = Mark<any> &
-  Omit<NameableMark<any>, "name" | "label" | "zOrder" | "transition"> & {
+  Omit<
+    NameableMark<any>,
+    "name" | "label" | "zOrder" | "hidden" | "transition"
+  > & {
     readonly [relationalMarkBrand]: true;
     name(...args: Parameters<NameableMark<any>["name"]>): RelationalMark;
     label(...args: Parameters<NameableMark<any>["label"]>): RelationalMark;
     zOrder(...args: Parameters<NameableMark<any>["zOrder"]>): RelationalMark;
+    hidden(...args: Parameters<NameableMark<any>["hidden"]>): RelationalMark;
     transition(
       ...args: Parameters<NameableMark<any>["transition"]>
     ): RelationalMark;
@@ -697,10 +714,14 @@ export type RelationalMark = Mark<any> &
  */
 export type FlowStepMark = Mark<any> &
   Operator<any, any> &
-  Omit<RelationalMark, "name" | "label" | "zOrder" | "transition"> & {
+  Omit<
+    RelationalMark,
+    "name" | "label" | "zOrder" | "hidden" | "transition"
+  > & {
     name(...args: Parameters<NameableMark<any>["name"]>): FlowStepMark;
     label(...args: Parameters<NameableMark<any>["label"]>): FlowStepMark;
     zOrder(...args: Parameters<NameableMark<any>["zOrder"]>): FlowStepMark;
+    hidden(...args: Parameters<NameableMark<any>["hidden"]>): FlowStepMark;
     transition(
       ...args: Parameters<NameableMark<any>["transition"]>
     ): FlowStepMark;
@@ -756,6 +777,11 @@ export function createRelationalMark<O extends Record<string, unknown>>(
     // A strategy kind used bare is read as its value from here on.
     const opts = withKindValues((options ?? {}) as O);
     const liveChannels = liveChannelsOf(opts);
+    // Its `filter` filters each connector's whole drawing; checked once.
+    const filter = displayFilter(
+      opts.filter as FilterOption | undefined,
+      `${type}({ filter })`
+    );
     /** The cell `ChartBuilder` writes the computed split / travel direction /
      *  time tier into — see `tagRelationalFusable`'s doc comment. Declared
      *  here, not inside the bag branch below, because `produce` reads it on
@@ -801,7 +827,7 @@ export function createRelationalMark<O extends Record<string, unknown>>(
         (node as any).datum = datum;
       if (liveChannels)
         (node as any).__gfLive = { ...(node as any).__gfLive, ...liveChannels };
-      return node;
+      return applyFilter(node, filter);
     };
     /** Build one connector over `operands` from `o`: its paint (and other
      *  per-group channels) read off the rows `group` reaches, its live
@@ -964,13 +990,13 @@ export function createRelationalMark<O extends Record<string, unknown>>(
   return relational;
 }
 
-export type LineOptions = {
+export type LineOptions = FilterOptions & {
   fill?: MaybeValue<string> | LiveValue;
   stroke?: MaybeValue<string> | LiveValue;
   strokeWidth?: number | LiveValue;
   strokeDasharray?: string;
   opacity?: number | LiveValue;
-  mixBlendMode?: "normal" | "multiply";
+  blendMode?: BlendMode;
   // Screen-space path shape, made by a call in the Curve family
   // (`Curve.bezier()`, `Curve.orthogonal()`, `Curve.arc({ direction })`,
   // `Curve.perfectArrows({ bow })`, …). The single path-shaping key.
@@ -1016,7 +1042,7 @@ export const line = createRelationalMark<LineOptions>(
         strokeWidth: o.strokeWidth ?? 1,
         strokeDasharray: o.strokeDasharray,
         opacity: o.opacity,
-        mixBlendMode: o.mixBlendMode,
+        blendMode: o.blendMode,
         // Omitted ⇒ "auto": connect smooths (monotone) when the connected
         // points share a continuous connection axis, else a straight line.
         curve: o.curve,
@@ -1029,12 +1055,12 @@ export const line = createRelationalMark<LineOptions>(
     )
 );
 
-export type RibbonOptions = {
+export type RibbonOptions = FilterOptions & {
   fill?: MaybeValue<string> | LiveValue;
   stroke?: MaybeValue<string> | LiveValue;
   strokeWidth?: number | LiveValue;
   opacity?: number | LiveValue;
-  mixBlendMode?: "normal" | "multiply";
+  blendMode?: BlendMode;
   dir?: "x" | "y";
   // Screen-space path shape for the band edges (`"linear"` | `bezier()`).
   // Edge mode honors linear (linear band) vs bezier (S-curve band).
@@ -1068,7 +1094,7 @@ export const ribbon = createRelationalMark<RibbonOptions>(
       {
         direction: o.dir ?? "x",
         mode: "edge",
-        mixBlendMode: o.mixBlendMode ?? "normal",
+        blendMode: o.blendMode ?? "normal",
         fill: o.fill,
         stroke: o.stroke,
         strokeWidth: o.strokeWidth ?? 0,
@@ -1120,13 +1146,13 @@ export function enclose(
 }
 
 /**
- * `blank()` — an invisible positioning guide. It takes part in layout, carries
- * a datum, anchors refs (`selectAll`) and seeds the color scale exactly as a
- * `rect` does, and it emits NOTHING to the display list: no SVG element, no
- * hit-test entry. That is unconditional — `fill` reaches the color scale only,
- * there is no option that makes a blank paint, and so it takes no paint-only
- * options (stroke, corner radius). See `Blank` in `shapes/rect.tsx` for how
- * the rule is enforced.
+ * `blank()` — an invisible positioning guide: a hidden `rect`. It takes part
+ * in layout, carries a datum, anchors refs (`selectAll`) and seeds the color
+ * scale exactly as a `rect` does, and it never paints: `.hidden()` has no
+ * effect on it, `fill` reaches the color scale only, and it takes no
+ * paint-only options (stroke, corner radius). Like any hidden mark it keeps
+ * its shape, so under a compositor a blank operand gives its box. See `Blank`
+ * in `shapes/rect.tsx`.
  */
 export function blank<T extends Record<string, any>>({
   emX,
@@ -1159,10 +1185,7 @@ export function blank<T extends Record<string, any>>({
   });
 }
 
-/* ---- mark-combinator forms for layer and Porter-Duff operators ---- */
-
-type BlendMode = "color" | "multiply" | "screen" | "overlay";
-type PdOptions = { blendMode?: BlendMode };
+/* ---- mark-combinator forms for layer and the compositing operators ---- */
 
 /**
  * A mark with chainable .name, .label, .relate, and a top-level .render()
@@ -1177,6 +1200,7 @@ export type RelatableMark<T> = Mark<T> & {
   name(layerName: string | Token): RelatableMark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): RelatableMark<T>;
   zOrder(value: ZOrderValue<T>): RelatableMark<T>;
+  hidden(value?: HiddenValue<T>): RelatableMark<T>;
   relate(fn: RelateFn): RelatableMark<T>;
   render(
     container: Parameters<GoFishNode["render"]>[0],
@@ -1211,6 +1235,7 @@ function makeRelatableMark<T>(base: Mark<T>): RelatableMark<T> {
     labelModifier,
     relateModifier,
     zOrderModifier,
+    hiddenModifier,
   ]) as unknown as RelatableMark<T>;
 }
 
@@ -1266,31 +1291,31 @@ export function layer<T>(
   return tagCombinator(makeRelatableMark(base), "layer", opts, marks);
 }
 
-function makePorterDuffCombinator<O extends PdOptions = PdOptions>(
+/** The mark-combinator form of a compositing operator (porterDuff.tsx):
+ *  `union([a, b])` or `union(opts, [a, b, ...])`. `irType` is its wire
+ *  type, the same name. */
+function makeCompositeCombinator<O extends object>(
   lowLevel: (opts: any, children: any) => any,
   irType: string
 ) {
-  function fn<T>(marks: [MarkChild, MarkChild]): NameableMark<T>;
-  function fn<T>(opts: O, marks: [MarkChild, MarkChild]): NameableMark<T>;
+  function fn<T>(marks: MarkChild[]): NameableMark<T>;
+  function fn<T>(opts: O, marks: MarkChild[]): NameableMark<T>;
   function fn<T>(
-    optsOrMarks: O | [MarkChild, MarkChild],
-    maybeMarks?: [MarkChild, MarkChild]
+    optsOrMarks: O | MarkChild[],
+    maybeMarks?: MarkChild[]
   ): NameableMark<T> {
     const opts = Array.isArray(optsOrMarks) ? {} : optsOrMarks;
-    const marks = (Array.isArray(optsOrMarks) ? optsOrMarks : maybeMarks) as [
-      MarkChild,
-      MarkChild,
-    ];
+    const marks = (Array.isArray(optsOrMarks) ? optsOrMarks : maybeMarks) ?? [];
     const withChildren =
       (children: readonly MarkChild[]): Mark<T> =>
       async (d, key, layerContext) => {
-        const [child0, child1] = await Promise.all(
+        const operands = await Promise.all(
           children.map((m) => resolveMarkResult(m, layerContext, d, key))
         );
-        // Its paint (`intersect`'s fill and stroke) is read off its input,
-        // as a connector's is off the group it threads.
+        // Its paint (`fill` and `stroke`) is read off its input, as a
+        // connector's is off the group it threads.
         const paintOpts = await resolveGroupPaint(irType, opts, d);
-        const node = await lowLevel(paintOpts, [child0, child1]);
+        const node = await lowLevel(paintOpts, operands);
         node.datum = datumOfInput(d as unknown[]);
         return node;
       };
@@ -1303,17 +1328,18 @@ function makePorterDuffCombinator<O extends PdOptions = PdOptions>(
   return fn;
 }
 
-// The second arg is the IR/serialize *wire* type: the Porter-Duff strings
-// ("atop"/"over"/"inside"/"xor"/"out"/"mask"), which the serialize bridge and
-// IR schema use. Only the JS-facing names are Figma-style.
-export const paint = makePorterDuffCombinator(Paint, "atop");
-// `over` combinator is internal (deserializer only) — not exported from lib.
-export const over = makePorterDuffCombinator(Over, "over");
-// Only `intersect` paints its result (fill, stroke): see `compositeNode`.
-export const intersect = makePorterDuffCombinator<PdOptions & CompositePaint>(
+// The second arg is the IR/serialize wire type, which is the public name.
+export const union = makeCompositeCombinator<UnionOptions>(Union, "union");
+export const intersect = makeCompositeCombinator<IntersectOptions>(
   Intersect,
-  "inside"
+  "intersect"
 );
-export const exclude = makePorterDuffCombinator(Exclude, "xor");
-export const subtract = makePorterDuffCombinator(Subtract, "out");
-export const mask = makePorterDuffCombinator(Mask, "mask");
+export const subtract = makeCompositeCombinator<SubtractOptions>(
+  Subtract,
+  "subtract"
+);
+export const exclude = makeCompositeCombinator<ExcludeOptions>(
+  Exclude,
+  "exclude"
+);
+export const atop = makeCompositeCombinator<AtopOptions>(Atop, "atop");

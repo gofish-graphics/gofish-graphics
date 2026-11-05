@@ -16,16 +16,13 @@ const bakeTranslate = (node: GoFishAST): [number, number] => [
   node.projectedTranslate(1) ?? 0,
 ];
 
-/* takes in a GoFishNode and bakes it into a flat list of DisplayObjects (the
-   rendering IR; see `../_displayObject.ts`)
-- layout: during layout, they flatten their child hierarchy completely, so it's easy to transform them (and
-  also because coord doesn't care about graphical operators, only positions)
-- rendering: then, during rendering, each mark applies its coordinate transform context. its behavior is
-  influenced by its mark embedding "mode"
-- DisplayObjects don't have children (inspired by tldraw a bit). also makes stuff like z-indexing
-  easier later...
+/* The bake flattens a laid-out GoFishNode tree into a flat list of
+   DisplayObjects (the rendering IR; see `../_displayObject.ts`), each carrying
+   its absolute transform, so render needs no nested `<g transform>`
+   recursion. DisplayObjects don't have children (inspired by tldraw a bit),
+   which also makes z-ordering easier.
 - TODO: a DisplayObject still references its source GoFishAST as the renderer; the end-state
-  is self-contained primitives with no `node` back-reference.
+  is self-contained primitives with no `node` back-reference (#75).
 */
 
 /**
@@ -34,91 +31,30 @@ const bakeTranslate = (node: GoFishAST): [number, number] => [
  * `ribbon`) draws the path through a run of marks; `tween` (behind
  * `time.transition()`) draws the mark the run passes through at the current
  * playhead. Their children are refs to marks that live elsewhere in the tree,
- * so the bake must treat them as leaves — flattening through one would drop
- * its own geometry and re-emit the marks it is derived from.
+ * so the bake must treat them as boundaries — flattening through one would
+ * drop its own geometry and re-emit the marks it is derived from.
  */
-const RELATIONAL_TYPES = new Set(["connect", "tween"]);
-const isRelational = (node: GoFishAST): boolean =>
-  RELATIONAL_TYPES.has((node as { type?: string }).type ?? "");
+const RELATIONAL_TYPES = ["connect", "tween"];
 
-export const flattenLayout = (
-  node: GoFishAST,
-  transform: [number, number] = [0, 0],
-  scale: [number, number] = [1, 1]
-): DisplayObject[] => {
-  // recursive function
-  // as we go down the tree we accumulate transforms
-  // we apply the cumulative transform to all nodes we hit and remove their children
-  //   this includes operators and marks
-  // we EMIT the baked absolute transform on each DisplayObject rather than
-  // MUTATING node.transform — render reads it via INTERNAL_render's transform
-  // override, so the scenegraph's parent-relative transforms stay intact.
-
-  /* TODO: the relational types are a hack to get the operator to render in
-       coordinate spaces. A more principled way to do this would be to have
-       them produce a child mark.
-  */
-  if (
-    !("children" in node) ||
-    !node.children ||
-    node.children.length === 0 ||
-    isRelational(node) ||
-    node.type === "box"
-  ) {
-    const [ownTx, ownTy] = bakeTranslate(node);
-    return [
-      {
-        node,
-        transform: {
-          translate: [ownTx + transform[0]!, ownTy + transform[1]!],
-          scale: [
-            (node.transform?.scale?.[0] ?? 1) * (scale[0] ?? 1),
-            (node.transform?.scale?.[1] ?? 1) * (scale[1] ?? 1),
-          ],
-        },
-      },
-    ];
-  }
-
-  const [ownTx, ownTy] = bakeTranslate(node);
-  const newTransform: [number, number] = [
-    transform[0]! + ownTx,
-    transform[1]! + ownTy,
-  ];
-
-  const newScale: [number, number] = [
-    (node.transform?.scale?.[0] ?? 1) * (scale[0] ?? 1),
-    (node.transform?.scale?.[1] ?? 1) * (scale[1] ?? 1),
-  ];
-
-  // Resolve draw order the same way the root bake does (z-order LOCAL to this
-  // layer), so `.zOrder(-1)` and `zAbove`/`zBelow` are honored inside a
-  // coordinate transform, not silently dropped (#676).
-  return orderChildrenForPaint(node).flatMap((child) =>
-    flattenLayout(child, newTransform, newScale)
-  );
-};
-
-// ── The universal bake ──────────────────────────────────────────────────────
+// ── The bake ────────────────────────────────────────────────────────────────
 //
-// `flattenLayout` (above) is the COORD-local bake: `coord` calls it on each child
-// to flatten its own subtree into screen-space draw entries, which it then warps.
 // `bake` (below) is the ROOT bake: it flattens the *whole* scenegraph into one
-// ordered `DisplayObject[]` that render consumes directly, replacing the nested
-// `<g transform>` recursion.
+// ordered `DisplayObject[]` that render consumes directly. `bakeSubtree` and
+// `bakeChildren` are the same walk over one subtree, which a boundary that
+// lowers its own children calls: `coord` bakes its children this way and
+// warps each entry, and a compositor bakes each operand.
 //
-// The difference from `flattenLayout` is twofold:
+// The walk has two rules:
 //
 //  1. **Boundaries.** A node whose render is NOT reducible to "translate its
 //     independent children" is a *bake boundary*: it emits a single DisplayObject
-//     and renders its own subtree internally (via `INTERNAL_render`). These are
-//     the space-remappers (`coord`), the compositors (`over`/`atop`/`in`/`out`/
-//     `xor`/`mask`), and the cross-child self-drawers (`connect`/`arrow`/
-//     `enclose`/`box`) — plus any label-bearing node (its label draws with it).
-//     `coord` therefore stays a boundary here and keeps using `flattenLayout`
-//     internally; the root bake never recurses *through* a coordinate transform
-//     (which would compose a single global translate through a space remap — see
-//     the boundary-recursive note in the coord-flattening essay).
+//     and lowers its own subtree. These are the space-remappers (`coord`), the
+//     compositors (`union`/`intersect`/`subtract`/`exclude`/`atop`), the cross-child
+//     self-drawers (`connect`/`tween`/`arrow`/`enclose`/`box`/`axisSpan`),
+//     `offset`, and any filtered node (it filters its subtree as one picture).
+//     The root bake never recurses *through* a coordinate transform (which
+//     would compose a single global translate through a space remap — see the
+//     boundary-recursive note in the coord-flattening essay).
 //
 //  2. **Draw order.** Each transparent node orders its own children with the
 //     shared rule (`orderChildrenForPaint`) before descending into them, so
@@ -129,24 +65,26 @@ export const flattenLayout = (
 //     boundary still takes effect. The compositors have no such order (they
 //     paint one combined result) and throw if a z constraint parts at them
 //     (`assertNoPaintOrder`).
-//
-// TODO: like `flattenLayout`, a baked entry still references its source node as the
-// renderer; the end-state (#75) is self-contained primitives (`DisplayItem`).
 
-// TODO(#75 follow-up): "is this a bake boundary?" is currently a centralized
-// string set — a new self-drawing operator not listed here silently mis-renders
-// (its draw is dropped, its children hoisted). The right altitude is a flag the
-// operator factory sets on the node (like `_isComponent` / `_zOrder`), read once
-// via a polymorphic `node.isBakeBoundary()`; that would also subsume
-// `flattenLayout`'s inline `connect`/`box` cases.
-const BAKE_BOUNDARY_TYPES = new Set([
-  "coord",
-  "over",
+/** The compositors (`graphicalOperators/porterDuff.tsx`): they read their
+ *  operands' shapes, so a hidden node under one lowers as its shape
+ *  (`GoFishNode.visibility`). */
+export const COMPOSITE_TYPES: ReadonlySet<string> = new Set([
+  "union",
+  "intersect",
+  "subtract",
+  "exclude",
   "atop",
-  "in",
-  "out",
-  "xor",
-  "mask",
+]);
+
+/** The node types that are bake boundaries whatever their options
+ *  (`GoFishNode.isBakeBoundary`, which adds a filtered node). TODO(#75
+ *  follow-up): a new self-drawing operator not listed here silently
+ *  mis-renders (its draw is dropped, its children hoisted); a flag the
+ *  operator factory sets would not. */
+export const BAKE_BOUNDARY_TYPES: ReadonlySet<string> = new Set([
+  "coord",
+  ...COMPOSITE_TYPES,
   ...RELATIONAL_TYPES,
   "arrow",
   "axisSpan",
@@ -167,7 +105,7 @@ const isTransparent = (node: GoFishAST): boolean =>
   "children" in node &&
   !!node.children &&
   node.children.length > 0 &&
-  !BAKE_BOUNDARY_TYPES.has((node as { type?: string }).type ?? "");
+  !node.isBakeBoundary();
 
 /**
  * Flatten a resolved scenegraph into an ordered list of `DisplayObject`s.
@@ -189,6 +127,9 @@ export const bake = (root: GoFishAST): DisplayObject[] => {
     transform: [number, number],
     scale: [number, number]
   ): void => {
+    // A hidden subtree draws nothing: the root bake never reaches into a
+    // compositor, the one place a hidden node still gives its shape.
+    if (node.isHidden()) return;
     const [ownTx, ownTy] = bakeTranslate(node);
     const composedTranslate: [number, number] = [
       ownTx + transform[0],
@@ -239,6 +180,8 @@ export const bakeSubtree = (
     transform: [number, number],
     sc: [number, number]
   ): void => {
+    // A hidden subtree draws nothing, unless a compositor reads its shape.
+    if (n.isHidden() && n.visibility() === "none") return;
     const [ownTx, ownTy] = bakeTranslate(n);
     const composedTranslate: [number, number] = [
       ownTx + transform[0],

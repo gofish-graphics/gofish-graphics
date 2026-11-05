@@ -516,14 +516,20 @@ export function mapMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
 
 /**
  * `mark` with the modifiers its IR carries, chained in the order a JS
- * author writes them: `.translate(...)`, `.name(...)`, `.zOrder(...)`. A
- * `zOrder` is a number, or a Python function (`{__gofish_lambda}`), which
- * the mark resolves over the inputs it is applied to (`inputsResolver`),
- * as it calls a JS `.zOrder((d) => ...)` per input.
+ * author writes them: `.translate(...)`, `.name(...)`, `.zOrder(...)`,
+ * `.hidden(...)`. A `zOrder` or `hidden` is a constant, or a Python function
+ * (`{__gofish_lambda}`), which the mark resolves over the inputs it is
+ * applied to (`inputsResolver`), as it calls a JS `.zOrder((d) => ...)` per
+ * input.
  */
 function withMarkMeta<M>(
   mark: M,
-  spec: { translate?: unknown; name?: unknown; zOrder?: unknown },
+  spec: {
+    translate?: unknown;
+    name?: unknown;
+    zOrder?: unknown;
+    hidden?: unknown;
+  },
   ctx: IRContext
 ): M {
   let out: any = mark;
@@ -534,6 +540,9 @@ function withMarkMeta<M>(
   if (name != null && typeof out.name === "function") out = out.name(name);
   if (spec.zOrder != null && typeof out.zOrder === "function") {
     out = out.zOrder(unwrapOpts(spec.zOrder, ctx.bridge));
+  }
+  if (spec.hidden != null && typeof out.hidden === "function") {
+    out = out.hidden(unwrapOpts(spec.hidden, ctx.bridge));
   }
   return out;
 }
@@ -696,9 +705,15 @@ function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
     return withMarkMeta(mark, spec, ctx);
   }
 
-  // `name` and `zOrder` are not factory options: `withMarkMeta` applies them
-  // below.
-  const { type, name: _name, zOrder: _zOrder, ...rest } = spec as any;
+  // `name`, `zOrder` and `hidden` are not factory options: `withMarkMeta`
+  // applies them below.
+  const {
+    type,
+    name: _name,
+    zOrder: _zOrder,
+    hidden: _hidden,
+    ...rest
+  } = spec as any;
   // Label is an array of `{accessor, ...opts}` specs — pull out and call the
   // chained `.label(accessor, opts)` method once per entry, in order, so
   // repeated `.label()` calls round-trip (adds one external label layer per
@@ -812,12 +827,14 @@ function chartFromIR(chartSpec: ChartSpec, ctx: IRContext): ChartBuilder<any> {
   let builder = (chart as any)(chartData, resolvedOptions)
     .flow(...operators)
     .mark(mark);
-  // The chart-level modifiers `.zOrder(n)` and `.name(n)` (the name lets a
-  // sibling `layer([...]).relate(...)` or a cross-chart `selectAll(n)` refer
-  // to this chart).
+  // The chart-level modifiers `.zOrder(n)`, `.hidden(b)` and `.name(n)` (the
+  // name lets a sibling `layer([...]).relate(...)` or a cross-chart
+  // `selectAll(n)` refer to this chart).
   const zOrder = (chartSpec as any).zOrder as number | undefined;
+  const hidden = (chartSpec as any).hidden as boolean | undefined;
   const name = resolveNameField((chartSpec as any).name, ctx.resolveToken);
-  if (zOrder === undefined && name == null) return builder;
+  if (zOrder === undefined && hidden === undefined && name == null)
+    return builder;
   // A relational mark (line/ribbon) over row data fuses into an anchor tier
   // plus a connector tier, so `.mark()` returns a LayerBuilder, which has
   // neither modifier. JS cannot spell `chart(rows).mark(line()).name(...)`
@@ -825,6 +842,7 @@ function chartFromIR(chartSpec: ChartSpec, ctx: IRContext): ChartBuilder<any> {
   if (builder instanceof LayerBuilder) {
     const used = [
       zOrder !== undefined && ".zOrder()",
+      hidden !== undefined && ".hidden()",
       name != null && ".name()",
     ]
       .filter(Boolean)
@@ -836,6 +854,7 @@ function chartFromIR(chartSpec: ChartSpec, ctx: IRContext): ChartBuilder<any> {
     );
   }
   if (zOrder !== undefined) builder = builder.zOrder(zOrder);
+  if (hidden !== undefined) builder = builder.hidden(hidden);
   if (name != null) builder = builder.name(name);
   return builder;
 }

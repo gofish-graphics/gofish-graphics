@@ -303,6 +303,27 @@ stack(by="class", dir="y").translate(y=8).label("class")
 stack(by="class", dir="y").label("class").translate(y=8)
 ```
 
+## Hidden marks {#hidden}
+
+`.hidden(value=True)` lays the mark out and draws nothing, mirroring JS's
+[`.hidden(value)`](/js/api/core/mark#hidden). A hidden mark still feeds
+scales, axes and legends, can be read by [`ref` / `select_all`](/python/api/selection/ref),
+and takes no pointer events. `value` is a bool, or a function called once per
+mark instance with the input the mark is bound to, which returns the bool:
+
+```python
+# A guide shape other marks are placed against.
+ribbon(h="pdf").name("density").hidden()
+
+# Data-driven: draw only the emphasized lake.
+rect(h="count").hidden(lambda d: pluck(d, "lake")[0] != "Lake Michigan")
+```
+
+An ancestor's `.hidden()` wins over a descendant's `.hidden(False)`. A
+[region compositing](/python/api/operators/region-compositing) operator reads
+a hidden child's region and draws none of its paint. `chart(...)` and
+`layer([...])` take `.hidden()` too.
+
 ## Paint order {#z-order}
 
 `.z_order(value)` sets the mark's paint-order hint, mirroring JS's

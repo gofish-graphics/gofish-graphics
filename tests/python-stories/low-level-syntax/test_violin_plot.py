@@ -54,7 +54,7 @@ def story_default():
                     [ref(name) for name in names],
                     dir="y",
                     opacity=1,
-                    mix_blend_mode="normal",
+                    blend_mode="normal",
                 ),
             ]
         )

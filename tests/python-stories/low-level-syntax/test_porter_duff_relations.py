@@ -1,9 +1,9 @@
 """Equivalent of lowlevel/PorterDuffRelations.stories.tsx —
 Low Level Syntax/Porter-Duff Relations.
 
-Six exports, one per Porter-Duff compositing operator (Over/In/Xor/Out/Atop/Mask).
-Each builds the same `image + colored rect` pair and feeds them to a
-different operator. JS imports the bottle PNG via Vite's `?url` resolution;
+One export per compositing operator (union, intersect, exclude, subtract,
+atop), plus a luminance mask. Each builds the same `gray image + colored
+rect` pair and feeds them to a different operator. JS imports the bottle PNG via Vite's `?url` resolution;
 Python re-builds the `/@fs/<absolute-path>` URL Vite would generate so the
 captured DOM is byte-identical.
 """
@@ -12,18 +12,18 @@ import os
 
 from gofish import (
     Bin,
+    Filter,
+    atop,
     chart,
     circle,
     exclude,
     field,
     image,
     intersect,
-    mask,
-    over,
-    paint,
     partition,
     rect,
     subtract,
+    union,
 )
 
 # The Vite-served URL of the bottle image. JS storybook imports it via
@@ -52,9 +52,10 @@ BLEND_MODE = "color"
 
 
 def _build_children():
-    """The shared `image + rect` pair — image full-size, rect over the bottom half."""
+    """The shared `image + rect` pair — the image full-size in grays, the rect
+    over the bottom half."""
     return [
-        image(href=BOTTLE_PNG, x=0, y=0, w=W, h=H),
+        image(href=BOTTLE_PNG, x=0, y=0, w=W, h=H, filter=Filter.grayscale),
         rect(x=0, y=SPLIT_Y_PX, w=W, h=SPLIT_H, fill=BG_COLOR),
     ]
 
@@ -63,7 +64,7 @@ def _build_children():
 
 
 def story_union():
-    return over(_build_children(), blend_mode=BLEND_MODE), {"w": W, "h": H}
+    return union(_build_children(), blend_mode=BLEND_MODE), {"w": W, "h": H}
 
 
 def story_intersect():
@@ -71,20 +72,37 @@ def story_intersect():
 
 
 def story_exclude():
-    return exclude(_build_children(), blend_mode=BLEND_MODE), {"w": W, "h": H}
+    return exclude(_build_children()), {"w": W, "h": H}
 
 
 def story_subtract():
-    return subtract(_build_children(), blend_mode=BLEND_MODE), {"w": W, "h": H}
+    return subtract(_build_children()), {"w": W, "h": H}
 
 
-def story_paint():
-    return paint(_build_children(), blend_mode=BLEND_MODE), {"w": W, "h": H}
+def story_atop():
+    return atop(_build_children(), blend_mode=BLEND_MODE), {"w": W, "h": H}
 
 
-def story_mask():
-    # Mirrors the JS `MaskOp(buildChildren(args))` (no blendMode passed).
-    return mask(_build_children()), {"w": W, "h": H}
+def story_luminance_mask():
+    # The bottle, turned to alpha by its luminance and hidden, gives the rect
+    # its shape and no paint of its own.
+    cover = _build_children()[1]
+    return (
+        intersect(
+            [
+                image(
+                    href=BOTTLE_PNG,
+                    x=0,
+                    y=0,
+                    w=W,
+                    h=H,
+                    filter=Filter.luminance_to_alpha,
+                ).hidden(),
+                cover,
+            ]
+        ),
+        {"w": W, "h": H},
+    )
 
 
 def story_intersect_painted():
@@ -101,7 +119,7 @@ def story_intersect_painted():
 
 
 def story_intersect_image_fill():
-    # An image has no outline, so the overlap is filled through a mask.
+    # An image has no outline, so the overlap is filled through its alpha.
     return (
         intersect(
             [
@@ -130,3 +148,61 @@ def story_intersect_in_cells():
         ),
         {},
     )
+
+
+# ─── each operation over a circle and a square ──────────────────────────────
+# No fill: each operand draws its own paint where the result keeps it. A fill:
+# the result is one new shape.
+
+_PAIR_SIZE = {"w": 220, "h": 180}
+_FILL = "#D1E4F6"
+
+
+def _disk():
+    return circle(cx=90, cy=90, r=70, fill="#467DA8")
+
+
+def _square():
+    return rect(x=80, y=30, w=120, h=120, fill="#E8A23B")
+
+
+def _pair():
+    return [_disk(), _square()]
+
+
+def story_union_shapes():
+    return union(_pair()), _PAIR_SIZE
+
+
+def story_union_filled():
+    return union(_pair(), fill=_FILL), _PAIR_SIZE
+
+
+def story_intersect_shapes():
+    return intersect(_pair()), _PAIR_SIZE
+
+
+def story_subtract_shapes():
+    return subtract(_pair()), _PAIR_SIZE
+
+
+def story_subtract_filled():
+    return subtract(_pair(), fill=_FILL), _PAIR_SIZE
+
+
+def story_exclude_shapes():
+    return exclude(_pair()), _PAIR_SIZE
+
+
+def story_exclude_filled():
+    return exclude(_pair(), fill=_FILL), _PAIR_SIZE
+
+
+def story_atop_shapes():
+    return atop(_pair()), _PAIR_SIZE
+
+
+def story_hidden_mask():
+    # A hidden operand gives its shape and no paint: the square, clipped to the
+    # circle, with the circle itself not drawn.
+    return intersect([_disk().hidden(), _square()]), _PAIR_SIZE

@@ -35,7 +35,7 @@ export const stackSlot = createMark(
               fontFamily,
               text: value,
             }).name(valueTag)
-          : text({ fontSize: 24, fontFamily, fill: "none", text: "" }).name(
+          : text({ fontSize: 24, fontFamily, text: "" }).hidden().name(
               valueTag
             ),
       ]).relate(({ box, boxBorderBottom, boxBorderLeft, value }) => [
