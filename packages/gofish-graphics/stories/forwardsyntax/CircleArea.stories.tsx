@@ -6,10 +6,8 @@ import { chart, circle, spread } from "../../src/lib";
 // Circles sized by area (#972). The `area` channel sums a group's rows, as a
 // size does, and hands the circle the square root of the sum, so each
 // circle's area, not its radius, is proportional to the lake's catch. The
-// one scale the row is fitted with sizes every circle.
-//
-// No axes: the value axis a spread of data-sized circles draws reads the
-// wrong scale (#1087), and these stories are about the circles.
+// one scale the row is fitted with sizes every circle, on both axes (#1087),
+// so the value axis reads the circles' own scale.
 const meta: Meta = {
   title: "Forward Syntax/Circle Area",
   argTypes: {
@@ -26,8 +24,8 @@ export const ByArea: StoryObj<Args> = {
   args: { w: 500, h: 200 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(seafood, { w: args.w, h: args.h, axes: false })
-      .flow(spread({ by: "lake", dir: "x", spacing: 8, alignment: "middle" }))
+    chart(seafood, { w: args.w, h: args.h })
+      .flow(spread({ by: "lake", dir: "x", spacing: 8 }))
       .mark(circle({ area: "count", fill: "lake" }))
       .render(container);
     return container;
@@ -40,8 +38,8 @@ export const ByRadius: StoryObj<Args> = {
   args: { w: 500, h: 200 },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(seafood, { w: args.w, h: args.h, axes: false })
-      .flow(spread({ by: "lake", dir: "x", spacing: 8, alignment: "middle" }))
+    chart(seafood, { w: args.w, h: args.h })
+      .flow(spread({ by: "lake", dir: "x", spacing: 8 }))
       .mark(circle({ r: "count", fill: "lake" }))
       .render(container);
     return container;

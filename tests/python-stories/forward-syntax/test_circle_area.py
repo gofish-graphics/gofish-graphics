@@ -11,8 +11,8 @@ from python_stories.data import SEAFOOD
 
 def story_by_area():
     return (
-        chart(SEAFOOD, w=500, h=200, axes=False)
-        .flow(spread(by="lake", dir="x", spacing=8, alignment="middle"))
+        chart(SEAFOOD, w=500, h=200)
+        .flow(spread(by="lake", dir="x", spacing=8))
         .mark(circle(area="count", fill="lake")),
         {},
     )
@@ -20,8 +20,8 @@ def story_by_area():
 
 def story_by_radius():
     return (
-        chart(SEAFOOD, w=500, h=200, axes=False)
-        .flow(spread(by="lake", dir="x", spacing=8, alignment="middle"))
+        chart(SEAFOOD, w=500, h=200)
+        .flow(spread(by="lake", dir="x", spacing=8))
         .mark(circle(r="count", fill="lake")),
         {},
     )

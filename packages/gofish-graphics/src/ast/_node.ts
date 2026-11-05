@@ -59,7 +59,9 @@ import { setLiveSlots } from "../interaction/liveSlots";
 import { readLive, sharedDecision } from "../interaction/live";
 import type { LiveValue } from "../interaction/live";
 import type { AnimationRule } from "../animation/paint";
-import { GoFishRef } from "./_ref";
+import { GoFishRef, resolution } from "./_ref";
+import { isPositionInterval } from "./constraints/position";
+import { getScopeRegistry, type GlyphRoom } from "./solver/scopes";
 import { GoFishAST } from "./_ast";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
 import {
@@ -72,7 +74,14 @@ import {
   sameValueUnit,
 } from "./data";
 import { color6 } from "../color";
-import { hasUnits, Units, withUnits } from "./measure";
+import {
+  hasUnits,
+  resolveUnit,
+  sameUnitVar,
+  unitKey,
+  Units,
+  withUnits,
+} from "./measure";
 import { orderByLevels, type HasLevels } from "./schema";
 import {
   isCONTINUOUS,
@@ -85,6 +94,7 @@ import {
   MeasureClash,
   DEFAULT_AXIS_TICKS,
   type AxisTicks,
+  type CONTINUOUS_TYPE,
 } from "./underlyingSpace";
 import { impliedExtents, Extent, padExtent } from "./extent";
 import * as Pwl from "./solver/pwl";
@@ -99,7 +109,7 @@ import {
 import type { Placement } from "./constraints/claimPlacement";
 import type { LayerPlan } from "./solver/plan";
 import { aroundShare, setChromeForms, type ChromeForms } from "./chromeGutters";
-import { toJSON } from "../util/interval";
+import { toJSON, width as intervalWidth } from "../util/interval";
 import type { AxisScale } from "./domain";
 import { envFlag } from "../util";
 import type { AxesOptions, AxisOptions, ScaleContext } from "./gofish";
@@ -119,7 +129,11 @@ import {
 } from "./axisDirection";
 import type { Token } from "./createName";
 import type { ConstraintSpec } from "./constraints";
-import { childRole, type SharingPlan } from "./constraints/compose";
+import {
+  childRole,
+  type LayerSharingPlan,
+  type SharingPlan,
+} from "./constraints/compose";
 import type { KeyedDomains } from "./keyedDomains";
 import {
   chainOn,
@@ -242,6 +256,10 @@ type ClaimMemo = {
    *  ({@link GoFishNode.gapOf}), once read. */
   gaps: Map<GapConstraint, [Pwl.Value | undefined, Pwl.Value | undefined]>;
 };
+
+/** The unit a space's values are in, when it is continuous and has one. */
+const unitOf = (space: UnderlyingSpace | undefined) =>
+  space !== undefined && isCONTINUOUS(space) ? space.measure?.unit : undefined;
 
 const freshClaimMemo = (): ClaimMemo => ({
   carriesData: [undefined, undefined],
@@ -1300,6 +1318,123 @@ export class GoFishNode {
     return childRole(p.sharing(), p.indexOfChild(this) ?? -1, dim) === "slot";
   }
 
+  /**
+   * Whether this node's own data size on `dim` is a glyph size (#972,
+   * #1087): its parent places it at a datum (at a point, or in a cell, on
+   * either axis), and no axis its parent places it on is in the unit of its
+   * size (an axis it is not placed on may be its sizes' own union). A
+   * glyph size is not a length of the space it sits in: it is a scale of its
+   * own, keyed by its unit (`ScopeRegistry.glyphSigma`), and a coordinate
+   * transform does not warp it (`resolveEmbedding`). Any other data size is
+   * a length of the space: a size with no datum position (a bar in a stack,
+   * a circle in a spread's slot), or one in the unit of an axis of the
+   * parent that places it.
+   */
+  public isGlyph(dim: 0 | 1): boolean {
+    const p = this.parent;
+    const i = p?.indexOfChild(this);
+    if (p === undefined || i === undefined) return false;
+    const placed = ([0, 1] as const).filter(
+      (axis) =>
+        (p.sharing() as Partial<LayerSharingPlan>).datumPlaced?.[axis].has(
+          i
+        ) === true
+    );
+    const own = unitOf(this._underlyingSpace?.[dim]);
+    if (placed.length === 0 || own === undefined) return false;
+    return !placed.some((axis) => {
+      const at = unitOf(p._underlyingSpace?.[axis]);
+      return at !== undefined && sameUnitVar(own, at);
+    });
+  }
+
+  /** The key of the unit of this node's glyph size on `dim` (`unitKey`). */
+  private glyphUnit(dim: 0 | 1): string {
+    return unitKey(resolveUnit(unitOf(this._underlyingSpace?.[dim])!));
+  }
+
+  /** The room this glyph is placed in on `dim` (#972): the cell its
+   *  parent's position places it across there, else the point it is placed
+   *  at. */
+  private glyphRoom(dim: 0 | 1): GlyphRoom {
+    const p = this.parent!;
+    const i = p.indexOfChild(this);
+    const refs = resolution(p);
+    for (const c of p.constraints) {
+      if (c.type !== "position") continue;
+      const coord = dim === 0 ? c.x : c.y;
+      const edges = isPositionInterval(coord) ? coord : c.region?.spans[dim];
+      if (edges === undefined) continue;
+      const placesThis = c.children.some((ref) => {
+        const op = ref && refs.operands.get(refs.keyOf(ref));
+        return op?.direct === true && op.child === i;
+      });
+      const [a, b] = edges.map((e) => getValue(e));
+      if (placesThis && typeof a === "number" && typeof b === "number")
+        return {
+          kind: "cell",
+          axis: dim,
+          span: Math.abs(b - a),
+          width: intervalWidth(
+            (this._underlyingSpace![dim] as CONTINUOUS_TYPE).dataInterval ?? {
+              min: 0,
+              max: 0,
+            }
+          ),
+        };
+    }
+    return { kind: "point" };
+  }
+
+  /**
+   * The σ this glyph is sized at on `dim` (#972): its unit's σ
+   * (`ScopeRegistry.glyphSigma`), at `frame`, the σ of the frame its parent
+   * places it in on each axis.
+   */
+  public glyphSigma(
+    dim: 0 | 1,
+    frame: readonly [number | undefined, number | undefined]
+  ): number | undefined {
+    const session = this.tryGetRenderSession();
+    const unit = this.glyphUnit(dim);
+    return getScopeRegistry(session).glyphSigma(
+      unit,
+      session?.keyedDomains?.unitWidth(unit) ?? 0,
+      frame
+    );
+  }
+
+  /**
+   * A claim with its glyph sizes in pixels (#972): a glyph's size is no
+   * length of the space it sits in, so on an axis where this node is a glyph
+   * (`isGlyph`) it records its room and claims the pixels it draws. A glyph
+   * in a cell fits inside the cell, which the cell's data already claims,
+   * so it claims nothing past it. A glyph at a point claims its size at its
+   * unit's σ.
+   */
+  private glyphClaim(
+    claim: Size<Extent | undefined>
+  ): Size<Extent | undefined> {
+    if (!this.isGlyph(0) && !this.isGlyph(1)) return claim;
+    const scopes = getScopeRegistry(this.tryGetRenderSession());
+    return ([0, 1] as const).map((dim) => {
+      const e = claim[dim];
+      if (!this.isGlyph(dim) || e === undefined) return e;
+      const room = this.glyphRoom(dim);
+      scopes.fitGlyph(this.glyphUnit(dim), `${this.uid}/${dim}`, room);
+      const sigma =
+        room.kind === "point"
+          ? this.glyphSigma(dim, [undefined, undefined])
+          : undefined;
+      return sigma === undefined
+        ? Extent(Pwl.ZERO)
+        : Extent(
+            Pwl.constant(Pwl.at(e.ascent, sigma)),
+            Pwl.constant(Pwl.at(e.descent, sigma))
+          );
+    }) as Size<Extent | undefined>;
+  }
+
   /** One of this node's axis spaces on `dim` as the axis machinery sees it:
    *  placed ({@link placeBaseline}) when this node is seated by a sized scope
    *  that places a free baseline at the scope's `originPx` — the render root,
@@ -1363,13 +1498,17 @@ export class GoFishNode {
     const spaces = this.resolveUnderlyingSpace();
     const childSpaces = this.children.map((c) => c.resolveUnderlyingSpace());
     const childExtents = this.children.map((c) => c.resolveExtent());
-    const extent = this._resolveExtent(
-      childExtents,
-      childSpaces,
-      spaces,
-      this.children,
-      this.constraints
+    const extent = this.glyphClaim(
+      this._resolveExtent(
+        childExtents,
+        childSpaces,
+        spaces,
+        this.children,
+        this.constraints
+      )
     );
+    if (this._plotExtent !== undefined)
+      this._plotExtent = this.glyphClaim(this._plotExtent);
     // A node fills the room it is given when it has no size of its own: a
     // leaf with no claim, a node whose room is given to it from outside
     // its content (`isScope`), or a node with no size of its own whose
@@ -2059,6 +2198,9 @@ export class GoFishNode {
         let embedded = baseEmbedded(box as Dimensions[number]);
         // Route B gate (coord-scoped): a value-sized dim positioned in a unit
         // FOREIGN to its size's unit is a foreign extent (a bubble) → ink.
+        // A glyph size (`isGlyph`: its parent places it at a datum in
+        // another unit) is the same case, placed by its parent.
+        if (embedded && within && this.isGlyph(dir)) embedded = false;
         if (embedded && within) {
           for (const pos of [dim.min, dim.center, dim.max]) {
             if (isValue(pos) && !sameValueUnit(pos, size)) {

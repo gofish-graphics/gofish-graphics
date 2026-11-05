@@ -1368,6 +1368,51 @@ have a minimum size, such as a spread operator where even if the shapes
 have 0 size, the spacing between the shapes yields some minimum overall
 size).
 
+### Glyph sizes and lengths of the space
+
+A data size is one of two things, by one rule (#972).
+
+- A **length of the space**. A size whose mark has no datum position, or
+  whose parent places it at a datum in the size's own unit, is a length
+  along the axis. The axis's σ scales it, its claim is part of the axis's
+  claim, and a coordinate transform warps it. A bar in a stack and a circle
+  in a spread's slot are lengths.
+- A **glyph size**. A mark that its parent places at a datum, at a point or
+  in a cell, on an axis in a unit other than its size's, is a glyph
+  (`GoFishNode.isGlyph`). Its size is a scale of its own, keyed by its unit.
+  No axis's σ scales it, and a coordinate transform does not warp it. A
+  bubble in a scatter and a circle in a 2D histogram's cell are glyphs.
+
+The litmus test is whether the coordinate system should warp the shape. In
+a bubble chart it should not: the bubble's area measures population, and
+the axes measure GDP and life expectancy. In a spread of circles it should:
+the circles are the axis's extent, as the bars of a bar chart are.
+
+Each glyph unit has one σ, found as the shared-measure σ is (#582): every
+glyph bounds it, and it is the smallest bound
+(`ScopeRegistry.glyphSigma`). A glyph's bound is the σ at which its own
+domain fills its room. A glyph in a cell has the cell for its room, which is
+data on the axis that places it, so its pixels are known at its frame's σ;
+the largest σ that fits every glyph in its cell is
+`k = min_i(cell_i / d_i)`. A glyph at a point has the glyph range for its
+room, the same for every glyph, so the points bound σ by the range over the
+widest glyph of the unit (`KeyedDomains.unitWidth`). The range is one
+internal constant (`GLYPH_ROOM_PX`), a placeholder until chart options can
+set the range of a non-spatial scale.
+
+A glyph claims pixels, not σ (`GoFishNode.glyphClaim`). A glyph in a cell
+claims nothing past the cell, since the cell's data already claims the
+cell. A glyph at a point claims its size at its unit's σ. So the axes the
+glyphs are placed on fit their positions alone, and the glyphs' sizes do
+not shrink the plot.
+
+Two shortcuts remain. A cell is turned into pixels at the σ of the frame
+asking for the glyph's σ, so every frame that places one unit's glyphs must
+map its axis at one σ, which holds within one chart. And a size in the unit
+of one axis its parent places it on is a length on both axes of the mark,
+so `circle({ r: "a" })` at `x: "a", y: "b"` is a length of x drawn at the
+x and y σs, which the aspect lock reconciles by the smaller.
+
 ## Layout dispatch
 
 After both walks, layout proceeds on a single principle:
@@ -1533,7 +1578,16 @@ The marginal histogram's layer prints as:
 The registry is the sole producer of every slope. A coord boundary hands down
 the one σ its scope solves, which its map shares, and the #582 equal measure
 (equating x and y when they share a declared unit) is a named `equalizeMeasure`
-operation _on_ the registry, so the dump records the FINAL σ. The render root
+operation _on_ the registry, so the dump records the FINAL σ. Two axes share
+a unit when both their spaces are in one declared unit, or when both map a
+keyed domain of one unit (`KeyedDomains.unitsOf`) that is declared or that a
+mark ties (`ScopeRegistry.tie`). An aspect-locked mark whose size is data,
+such as a circle, ties its unit (#1087): it draws one value as a length on
+both axes, so its unit is one length on x and y even when it is unknown. So
+a row of `circle({ h: "value" })` in a spread fits both axes at
+`σ = min(H / max v, W / Σv)`, and the value axis reads that σ. The aspect
+lock gives the other axis the same data length (`Ellipse`'s `dataSize`), so
+both axes claim it. The render root
 and a chart with a literal size on both axes both go through it. The chart
 solves its two scopes in the claim walk (`solveFixed`) and equalizes them
 there (`equalizeFixed`) before either claim is read. Both take the smaller σ,
@@ -2007,8 +2061,10 @@ extent only when it is in the same unit as the dim's own position — a size in
 a foreign unit (a bubble's area) stays a flat point. It reads the units
 through the render's union-find (`sameValueUnit`, which compares the
 variables with `sameUnitVar`), after the walk: two unknowns are the same unit only when
-they are one column or met on a shared axis. See
-the embedding-resolution pass under
+they are one column or met on a shared axis. A mark its parent places is
+compared the same way: a glyph (`isGlyph`, see
+[Glyph sizes](#glyph-sizes-and-lengths-of-the-space)) stays a flat point.
+See the embedding-resolution pass under
 [layout passes](/internals/layout/passes#pass-8-5-embedding-resolution).
 
 **Constraint-domain measures.** A `position` constraint's datum coordinate

@@ -164,6 +164,8 @@ const originPxAt = (claim: Extent, sigma: number, offset = 0): number =>
  *  screen's left or top, `-1` when it starts at the bottom). */
 export type EqualMeasureAxis = {
   space: UnderlyingSpace | undefined;
+  /** The units whose domains the axis maps (`KeyedDomains.unitsOf`). */
+  units?: ReadonlySet<string>;
   claim: Extent;
   box: number;
   sigma: number;
@@ -234,6 +236,24 @@ export function sharesDeclaredMeasure(
 const DUMP_SCOPES = envFlag("GOFISH_DUMP_SCOPES");
 
 /**
+ * The room a glyph placed at a point is fit to: its unit's largest glyph
+ * spans this many pixels.
+ *
+ * PLACEHOLDER (#972): how a chart sets the range of a non-spatial scale (a
+ * size scale's largest glyph, beside its color scales) is an open API
+ * proposal. Until it lands, every glyph unit takes this one internal range,
+ * read only here.
+ */
+export const GLYPH_ROOM_PX = 30;
+
+/** One glyph's room on one axis ({@link ScopeRegistry.fitGlyph}): the
+ *  point it is placed at, or the cell it is placed in, which is `span` data
+ *  wide on `axis`, with `width` the width of the glyph's own domain. */
+export type GlyphRoom =
+  | { kind: "point" }
+  | { kind: "cell"; axis: 0 | 1; span: number; width: number };
+
+/**
  * Per-render record of every σ-scope solved. Lives on the {@link RenderSession}
  * (one per render, so no cross-render leakage); a render lays its tree out
  * once.
@@ -243,6 +263,68 @@ export class ScopeRegistry {
   /** The scope each node with a literal size solves on each axis, from the
    *  claim walk ({@link solveFixed}), with the keyed domain it maps. */
   private fixed = new Map<object, [FixedSolve?, FixedSolve?]>();
+  /** The units some mark draws one length of on both axes (`tie`). */
+  private tied = new Set<string>();
+
+  /**
+   * Record that a mark draws one value of `unit` as a length on both axes
+   * (#1087): an aspect-locked mark whose size is data, such as a circle. A
+   * data unit is then one length on x and y wherever both axes map it, as
+   * for a declared unit (#582), so {@link equalizeMeasure} gives both axes
+   * the smaller σ. An unknown unit two axes merely share by name does not
+   * count: only a mark that ties the two does.
+   */
+  tie(unit: string): void {
+    this.tied.add(unit);
+  }
+
+  /** Each glyph unit's rooms (`fitGlyph`), by the unit's key, each once. */
+  private glyphs = new Map<string, Map<string, GlyphRoom>>();
+
+  /**
+   * Record a glyph's room on one axis (#972, `GoFishNode.isGlyph`): its
+   * size there is at most its room. `id` names the room, so the claim walk
+   * may record it again.
+   */
+  fitGlyph(unit: string, id: string, room: GlyphRoom): void {
+    let rooms = this.glyphs.get(unit);
+    if (rooms === undefined) this.glyphs.set(unit, (rooms = new Map()));
+    rooms.set(id, room);
+  }
+
+  /**
+   * The σ of a glyph unit (#972). Each glyph bounds it by the σ at which its
+   * own domain fills its room, and one unit has one σ, so it is the
+   * smallest bound, as the shared-measure σ of two axes is the smaller of
+   * theirs ({@link equalizeMeasure}). A glyph at a point has the glyph range
+   * for its room ({@link GLYPH_ROOM_PX}), the same for each, so the points
+   * bound σ by the range over the widest glyph, `domain` (the width of the
+   * unit's widest keyed domain). A glyph in a cell has the cell for its room,
+   * which is data in its axis's unit, so its pixels are known only at
+   * `frame`, the σ of the frame that places it. Undefined when no glyph of
+   * the unit has a size.
+   *
+   * TODO(#972): a cell is turned into pixels at the asking frame's σ, so
+   * every frame that places one unit's glyphs must map its axis at one σ
+   * (true within one chart; facets with scales of their own are not).
+   */
+  glyphSigma(
+    unit: string,
+    domain: number,
+    frame: readonly [number | undefined, number | undefined]
+  ): number | undefined {
+    let sigma: number | undefined;
+    const bound = (s: number) => {
+      if (Number.isFinite(s) && s >= 0)
+        sigma = sigma === undefined ? s : Math.min(sigma, s);
+    };
+    for (const room of this.glyphs.get(unit)?.values() ?? []) {
+      if (room.kind === "point") bound(GLYPH_ROOM_PX / domain);
+      else if (frame[room.axis] !== undefined)
+        bound((frame[room.axis]! * room.span) / room.width);
+    }
+    return sigma;
+  }
 
   /**
    * Solve the scope of a node with a literal size on one axis (#1114): its
@@ -299,15 +381,22 @@ export class ScopeRegistry {
    * claim walk are equalized, and their claims hold the leftover pixels, so
    * the node still claims its size. `yDirection` is the direction of its
    * axis order on y. Call it after both axes' {@link solveFixed}; a no-op
-   * unless both share a declared unit.
+   * unless both share a declared or tied unit. `units` are the units each
+   * axis maps (`KeyedDomains.unitsOf`).
    */
-  equalizeFixed(node: object, rootKey: string, yDirection: 1 | -1): void {
+  equalizeFixed(
+    node: object,
+    rootKey: string,
+    yDirection: 1 | -1,
+    units?: readonly [ReadonlySet<string>, ReadonlySet<string>]
+  ): void {
     const solves = this.fixed.get(node);
     const axisOf = (axis: 0 | 1): EqualMeasureAxis | undefined => {
       const s = solves?.[axis];
       return (
         s && {
           space: s.space,
+          units: units?.[axis],
           claim: s.claim,
           box: s.box,
           sigma: s.solution.sigma,
@@ -525,7 +614,14 @@ export class ScopeRegistry {
     if (
       ax === undefined ||
       ay === undefined ||
-      !sharesDeclaredMeasure(ax.space, ay.space)
+      !(
+        sharesDeclaredMeasure(ax.space, ay.space) ||
+        [...(ax.units ?? [])].some(
+          (u) =>
+            ay.units?.has(u) === true &&
+            (u.startsWith("declared:") || this.tied.has(u))
+        )
+      )
     )
       return undefined;
     // Only an axis with a data width binds: a one-value axis (`isOneValue`)

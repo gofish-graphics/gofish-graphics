@@ -420,10 +420,14 @@ const DISC_PER_SQUARE = 2 / Math.sqrt(Math.PI);
  *   the value. The channel, not the circle, takes the square root, so the
  *   length it hands the circle is linear in the scale that sizes it. Like
  *   `r`, it sizes both axes. A number is an exact area in square pixels.
- * - `w` or `h` is the diameter along that axis. A data `w` or `h` claims only
- *   its own axis; the other axis follows it through the aspect lock, in
- *   pixels. So `circle({ h: "value" })` in a bar chart reads against the value
- *   axis and takes no data space along the category axis.
+ * - `w` or `h` is the diameter along that axis. The aspect lock gives the
+ *   other axis the same data length (`Ellipse`, #1087), so a data `w` or `h`
+ *   claims both axes and one σ sizes both: `circle({ h: "value" })` in a
+ *   spread reads against the value axis, and the row of circles fits.
+ *
+ * A circle its parent places at a datum in another unit (a bubble in a
+ * scatter, a circle in a 2D histogram's cell) is a glyph
+ * (`GoFishNode.isGlyph`): its size is a scale of its own, fit to its room.
  *
  * With none of them, the circle fills the space it is given.
  */

@@ -615,7 +615,8 @@ export const layer = createNodeOperatorSequential(
             scopes.equalizeFixed(
               node,
               node.key ?? node.type,
-              node.yFrame.direction
+              node.yFrame.direction,
+              keyed && [keyed.unitsOf(node, 0), keyed.unitsOf(node, 1)]
             );
           const fixedClaim = (axis: 0 | 1, px: number): Extent => {
             const solved = scopes.fixedSolve(node, axis);
@@ -865,6 +866,12 @@ export const layer = createNodeOperatorSequential(
               : lit;
           };
 
+          // The σ of this layer's frame on each axis, which turns a glyph's
+          // cell into pixels (`GoFishNode.glyphSigma`).
+          const frameSigmas = [
+            effectivePosScales[0]?.sigma,
+            effectivePosScales[1]?.sigma,
+          ] as const;
           const layoutChild = (i: number) => {
             const child = children[i];
             const childKey = node.children[i].uid;
@@ -936,11 +943,16 @@ export const layer = createNodeOperatorSequential(
               seats
             );
             childFrames[i] = layoutSize[1];
+            // A glyph is sized at its unit's σ (#972, `GoFishNode.glyphSigma`).
+            const sigmaOf = (axis: 0 | 1) =>
+              child instanceof GoFishNode && child.isGlyph(axis)
+                ? (child.glyphSigma(axis, frameSigmas) ?? 0)
+                : childScaleFactors[axis];
             const childPlaceable = child.layout(
               layoutSize,
               [
-                axisScale(childScaleFactors[0], childMaps[0]),
-                axisScale(childScaleFactors[1], childMaps[1]),
+                axisScale(sigmaOf(0), childMaps[0]),
+                axisScale(sigmaOf(1), childMaps[1]),
               ],
               childShape
             );

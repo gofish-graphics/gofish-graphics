@@ -3,7 +3,8 @@
  * the diameter, set by at most one of `r`, `w`, or `h`. `r` is a radius for
  * every channel kind: a number, a field name, a `field(...)` expression, and
  * an accessor all give a diameter of `2r`, on both axes. A data `w` or `h`
- * sizes only its own axis; the aspect lock derives the other.
+ * is set on its own axis; the aspect lock gives the other axis the same data
+ * length when the claims are read (#1087).
  *
  * The unit checks read the built node's `dims` (the ellipse's box sizes before
  * layout). The rendered checks read the ellipses back from a display list.
@@ -133,10 +134,12 @@ const ellipsesAt = (dl: any): { cy: number; rx: number }[] => {
 };
 
 /** Every ellipse in a display list. */
-const ellipsesOf = (dl: any): { rx: number; ry: number }[] => {
-  const out: { rx: number; ry: number }[] = [];
+type Dot = { cx: number; cy: number; rx: number; ry: number };
+const ellipsesOf = (dl: any): Dot[] => {
+  const out: Dot[] = [];
   const walk = (it: any) => {
-    if (it.kind === "ellipse") out.push({ rx: it.rx, ry: it.ry });
+    if (it.kind === "ellipse")
+      out.push({ cx: it.cx, cy: it.cy, rx: it.rx, ry: it.ry });
     for (const c of it.children ?? []) walk(c);
   };
   dl.items.forEach(walk);
@@ -327,6 +330,121 @@ console.log("# area: the circle's area is proportional to the value (#972)");
     "the row of circles fills the width it is given",
     Math.abs(2 * dots.reduce((s, e) => s + e.rx, 0) - 300) < 1e-6,
     JSON.stringify(dots)
+  );
+}
+
+console.log("# #1087: an aspect lock ties its data unit's σ on both axes");
+{
+  const data = [
+    { k: "A", v: 30 },
+    { k: "B", v: 80 },
+    { k: "C", v: 45 },
+  ];
+  for (const mark of [
+    ["circle({ h })", circle({ h: "v" })],
+    ["circle({ w })", circle({ w: "v" })],
+    ["ellipse({ h, aspectRatio: 1 })", GoFish.ellipse({ h: "v", aspectRatio: 1 })],
+  ] as const) {
+    const dots = ellipsesOf(
+      await chart(data, { axes: false })
+        .flow(spread({ by: "k", dir: "x", spacing: 0 }))
+        .mark(mark[1])
+        .toDisplayList({ w: 400, h: 300 })
+    );
+    const right = Math.max(...dots.map((e) => e.cx + e.rx));
+    const bottom = Math.max(...dots.map((e) => e.cy + e.ry));
+    check(
+      `${mark[0]} in a spread fits the width (σ = min(H / max v, W / Σv))`,
+      right <= 400 + 1e-6 && bottom <= 300 + 1e-6,
+      JSON.stringify(dots)
+    );
+    check(
+      `${mark[0]}: the row fills the binding axis, x`,
+      Math.abs(2 * dots.reduce((s, e) => s + e.rx, 0) - 400) < 1e-6,
+      JSON.stringify(dots)
+    );
+  }
+}
+
+console.log("# #972: a glyph size is a scale of its own");
+{
+  const { scatter, partition, Bin, Coord } = GoFish as any;
+  const rows = [
+    { a: 1, b: 10, n: 4 },
+    { a: 3, b: 30, n: 9 },
+    { a: 9, b: 90, n: 1 },
+  ];
+  // At a point, the unit's widest glyph spans the glyph range (30 px, a
+  // placeholder until chart options set it), whatever the axes' scales.
+  const dots = ellipsesOf(
+    await chart(rows)
+      .flow(scatter({ by: "a", x: "a", y: "b" }))
+      .mark(circle({ area: "n" }))
+      .toDisplayList({ w: 300, h: 300 })
+  );
+  check(
+    "a scatter's largest bubble is the glyph range across",
+    Math.abs(Math.max(...dots.map((e) => 2 * e.rx)) - 30) < 1e-6,
+    JSON.stringify(dots)
+  );
+  check(
+    "a bubble's area is proportional to its value",
+    dots.every(
+      (e, i) =>
+        Math.abs((e.rx * e.rx) / rows[i].n / ((15 * 15) / 9) - 1) < 1e-9
+    ),
+    JSON.stringify(dots)
+  );
+
+  // In a cell, the unit's σ is the largest at which every glyph fits its
+  // cell: k = min_i(cell_i / d_i).
+  const cells = ellipsesOf(
+    await chart(rows)
+      .flow(
+        partition({
+          by: { x: field("a").bin(Bin.step(1)), y: field("b").bin(Bin.step(10)) },
+        })
+      )
+      .mark(circle({ area: field("a").count() }))
+      .toDisplayList({ w: 300, h: 300 })
+  ).filter((e) => e.rx > 0);
+  // The first two rows are two cells apart on both axes.
+  const cellPx = Math.min(
+    Math.abs(cells[1].cx - cells[0].cx) / 2,
+    Math.abs(cells[1].cy - cells[0].cy) / 2
+  );
+  check(
+    "a 2D histogram's largest circle fits its cell exactly",
+    Math.abs(Math.max(...cells.map((e) => 2 * e.rx)) - cellPx) < 1e-6,
+    JSON.stringify({ cells, cellPx })
+  );
+
+  // A coordinate transform warps a length of its space, not a glyph.
+  const kinds = async (flow: unknown) => {
+    const out: string[] = [];
+    const walk = (it: any) => {
+      if (it.kind === "ellipse" || it.kind === "path") out.push(it.kind);
+      (it.children ?? []).forEach(walk);
+    };
+    (
+      await chart(rows, { coord: Coord.polar() })
+        .flow(flow)
+        .mark(circle({ area: "n" }))
+        .toDisplayList({ w: 300, h: 300 })
+    ).items.forEach(walk);
+    return out;
+  };
+  const bubbles = await kinds(scatter({ by: "a", x: "a", y: "b" }));
+  check(
+    "in polar, a scatter's bubbles stay round",
+    bubbles.length === 3 && bubbles.every((k) => k === "ellipse"),
+    JSON.stringify(bubbles)
+  );
+  const warped = await kinds(spread({ by: "a", dir: "x" }));
+  check(
+    "in polar, a spread's circles are lengths of the space, so they warp",
+    warped.length === 3 && warped.every((k) => k === "path"),
+    JSON.stringify(warped)
   );
 }
 

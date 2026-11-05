@@ -3,7 +3,16 @@ import { path, transformPath } from "../../path";
 import { GoFishNode, outlineOverhang } from "../_node";
 import { GoFishAST } from "../_ast";
 import { linear } from "../coordinateTransforms/linear";
-import { getValue, isValue, MaybeValue, Value } from "../data";
+import {
+  DatumValueImpl,
+  getQuantity,
+  getValue,
+  isValue,
+  MaybeValue,
+  Value,
+} from "../data";
+import { resolveUnit, unitKey } from "../measure";
+import { getScopeRegistry } from "../solver/scopes";
 import {
   Dimensions,
   displayDims as displayDimsOf,
@@ -19,6 +28,7 @@ import { aesthetic, continuous, posFn } from "../domain";
 import {
   UnderlyingSpace,
   glyphAxis,
+  isCONTINUOUS,
   pointOrMagnitude,
 } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
@@ -56,7 +66,27 @@ export const Ellipse = ({
   // the room it is given, known only once it is in its tree (#1176 step 6).
   // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
   const own = elaborateOwnDims<MaybeValue<number>>(fancyDims);
-  const { dims, dataSize } = own;
+  const { dims } = own;
+  // An aspect lock with a data size on one axis gives the other axis the
+  // same value times the ratio (#1087): one unit drawn as a length on both
+  // axes. So both axes claim it, and the mark ties its unit, which gives
+  // both the one σ (`ScopeRegistry.tie`), as a data `r` does.
+  const locked = aspectRatio !== undefined && aspectRatio > 0;
+  const dataSize = (axis: 0 | 1): MaybeValue<number> | undefined => {
+    const size = own.dataSize(axis);
+    const other = own.dataSize((1 - axis) as 0 | 1);
+    if (size !== undefined || !locked || !isValue(other)) return size;
+    const k = axis === 0 ? aspectRatio : 1 / aspectRatio;
+    return new DatumValueImpl(k * getValue(other), getQuantity(other));
+  };
+  const tiedUnit = (): string | undefined => {
+    const space = node._underlyingSpace?.[0];
+    const unit =
+      locked && space !== undefined && isCONTINUOUS(space)
+        ? space.measure?.unit
+        : undefined;
+    return unit === undefined ? undefined : unitKey(resolveUnit(unit));
+  };
   // How it paints its outline, read once.
   const paint = outlinePaint({ fill, stroke, strokeWidth });
   const node: GoFishNode = new GoFishNode(
@@ -84,12 +114,16 @@ export const Ellipse = ({
         return [axisSpace(0), axisSpace(1)];
       },
       // A literal pixel size is the ellipse's own (#493), as a rect's is.
-      resolveExtent: (_ce, _cs, spaces) =>
-        literalBoxExtents(
+      resolveExtent: (_ce, _cs, spaces) => {
+        const tied = tiedUnit();
+        if (tied !== undefined)
+          getScopeRegistry(node.tryGetRenderSession()).tie(tied);
+        return literalBoxExtents(
           spaces,
           [node.fixedBox(0), node.fixedBox(1)],
           aspectRatio
-        ),
+        );
+      },
       layout: (size, scales, children) => {
         const [wSize, hSize] = [node.fixedSize(0), node.fixedSize(1)];
         let w = isValue(wSize)

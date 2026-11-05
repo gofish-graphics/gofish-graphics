@@ -1,11 +1,21 @@
-"""Equivalent of TimeBenchmarkPorts.stories.tsx — Forward Syntax/Time/Benchmark Ports.
-
-CircleTimeline is exempt: it sizes each circle in a JS function mark.
-"""
+"""Equivalent of TimeBenchmarkPorts.stories.tsx — Forward Syntax/Time/Benchmark Ports."""
 
 from datetime import datetime, timezone
 
-from gofish import chart, scatter, stack, group, ribbon, line, blank, Unit, Color, Curve
+from gofish import (
+    chart,
+    circle,
+    scatter,
+    spread,
+    stack,
+    group,
+    ribbon,
+    line,
+    blank,
+    Unit,
+    Color,
+    Curve,
+)
 
 # A synthetic store's sales per category and quarter (the benchmark's
 # `quarterly-sales.json`).
@@ -89,6 +99,20 @@ def story_stacked_area():
         chart(QUARTERLY_SALES, schema={"date": Unit.time()}, w=520, h=330)
         .flow(scatter(by="date", x="date"), stack(by="category", dir="y"))
         .mark(ribbon(h="sales", fill="category", curve=Curve.linear())),
+        {},
+    )
+
+
+def story_circle_timeline():
+    # Area proportional to sales. A circle placed at a date is a glyph, so
+    # its size is a scale of its own, not a length on the time axis.
+    return (
+        chart(QUARTERLY_SALES, schema={"date": Unit.time()}, w=440)
+        .flow(
+            spread(by="category", dir="y", spacing=60),
+            scatter(by="date", x="date", alignment="middle"),
+        )
+        .mark(circle(area="sales", fill="category", opacity=0.8)),
         {},
     )
 

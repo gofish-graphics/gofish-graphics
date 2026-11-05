@@ -227,6 +227,31 @@ export class KeyedDomains {
     return this.domains.get(key.spaceRoot)?.[axis].get(key.key);
   }
 
+  /** The units whose domains a node's space maps on `axis` (`unitKey`):
+   *  the keys of its space root's keyed domains there that name a unit,
+   *  whether they hold positions or only widths. */
+  unitsOf(node: KeyedNode, axis: 0 | 1): Set<string> {
+    const seat = this.seatOf(node, axis);
+    const keys = seat && this.domains.get(seat.spaceRoot)?.[axis].keys();
+    return new Set(
+      [...(keys ?? [])]
+        .filter((k) => !k.startsWith("set:"))
+        .map((k) => k.replace(/\/width$/, ""))
+    );
+  }
+
+  /** The width of the widest keyed domain of `unit` (`unitKey`), in any
+   *  space and on either axis: the widest glyph of a glyph unit (#972). */
+  unitWidth(unit: string): number {
+    let width = 0;
+    for (const axes of this.domains.values())
+      for (const domains of axes)
+        for (const [key, d] of domains)
+          if (key.replace(/\/width$/, "") === unit)
+            width = Math.max(width, d.max - d.min);
+    return width;
+  }
+
   /** The ticks of an axis some node draws over the same keyed domain, or
    *  undefined when no axis is drawn over it: a keyed domain is niced iff some
    *  chart draws an axis for its key. */
