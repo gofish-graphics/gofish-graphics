@@ -2583,8 +2583,9 @@ export class GoFishNode {
    * it dresses (#1032); or its box without its dressing (see
    * {@link resolveBareExtent}), which chrome is laid beside. A layer's is
    * the hull of its children that are no dressing and no ink there, each at
-   * its own, a ring's chrome included, and its niced domain where its axes
-   * sit beside it ({@link domainSpan}).
+   * its own, and its niced domain where its axes sit beside it
+   * ({@link domainSpan}). A ring's chrome is in its box without its
+   * dressing, and not in its plot, as in the claim walk's plan.
    *
    * Where a span is its whole box differs by span, as the claims of each
    * say. A plot is a box placed whole ({@link plotIsBox}: a chart's box, a
@@ -2611,8 +2612,12 @@ export class GoFishNode {
         : walk === undefined || this._chartRing === true
     )
       return undefined;
+    // A ring's chrome is no part of its plot, as in the claim walk's plan
+    // (`buildPlan`), though it is part of its box without its dressing.
     const out = (i: number) =>
-      walk?.dressing[axis].has(i) === true || walk?.ink[axis].has(i) === true;
+      walk?.dressing[axis].has(i) === true ||
+      walk?.ink[axis].has(i) === true ||
+      (span === "plot" && this._chromeRing === true && i > 0);
     const own = this.children.map((c, i) =>
       c instanceof GoFishNode && !out(i) ? c.localSpan(span, axis) : undefined
     );
