@@ -167,6 +167,7 @@
         background: var(--surface-2);
         padding: 1px 4px;
         border-radius: 4px;
+        overflow-wrap: anywhere;
       }
       pre {
         background: var(--code-bg);
@@ -400,9 +401,11 @@
           of nodes, and one shared scale that equals d3's to the digit.
         </p>
         <p>
-          What is left over is relaxation (sliding nodes toward their neighbors)
-          and virtual nodes (bend points for long edges). Both are global and
-          iterative, and neither is a strategy on a single column.
+          What is left over is the coordinate phase (exact y positions once the
+          order is fixed; d3 calls it relaxation) and virtual nodes (bend points
+          for long edges). Both are global and iterative. The coordinate phase
+          is not cosmetic: on the energy graph it cuts the area where ribbons
+          cover each other from 25% to 4%, while the crossing count goes up.
         </p>
         <p>
           All renders below come from prototype stories on today's main with no
@@ -411,14 +414,16 @@
       </div>
 
       <div class="rec">
-        <b>Recommendation: A now, C later.</b> Add the two graph decisions as
+        <b>Recommendation: A now, C next.</b> Add the two graph decisions as
         <code>derive</code> data helpers with strategy families (<code
           >layers(links, { layering: Layering.justify() })</code
         >, <code>order(links, { ordering: Ordering.barycenter() })</code>) that
-        feed the existing <code>spread</code>. Relaxation and virtual nodes are
-        a declared follow-up whose home is a <code>layered(...)</code> operator
-        over nodes and links (C), built on A's helpers and on
-        <code>spread</code>.
+        feed the existing <code>spread</code>. The coordinate phase and virtual
+        nodes come next, in one operator over nodes and links,
+        <code>ranked(...)</code> (working name, C), built on A's helpers and on
+        <code>spread</code>. It is the next step, not a someday follow-up,
+        because the coordinate phase decides most of the overlap on a large
+        graph.
       </div>
 
       <ul class="rules">
@@ -436,6 +441,12 @@
           <b>One phase, one strategy family.</b> <code>Layering.*</code> for
           columns, <code>Ordering.*</code> for crossing reduction, like
           <code>Tile.*</code> for treemaps.
+        </li>
+        <li>
+          <b>Coordinate assignment is one family.</b> Place each node at a
+          center of its neighbors in the next layer, then remove overlap inside
+          the layer. Trees, sankeys and DAGs differ only in which center and
+          which overlap removal.
         </li>
         <li>
           <b>Iteration never enters the layout engine.</b> Relaxation lives in a
@@ -494,6 +505,30 @@
           The standard four-phase layered graph layout (Sugiyama, Tagawa, Toda
           1981): 1 cycle removal, 2 layer assignment, 3 crossing reduction, 4
           coordinate assignment.
+        </dd>
+        <dt>Overplot</dt>
+        <dd>
+          The share of ribbon area that lies on top of other ribbons, sampled
+          every pixel along x. Unlike a crossing count, it weighs a crossing by
+          how much it covers: thick bands crossing at a shallow angle count
+          most.
+        </dd>
+        <dt>Contour (outline)</dt>
+        <dd>
+          A subtree's extent per layer: its top and bottom in each column.
+          Spacing siblings by contours lets a short subtree tuck beside a deep
+          one, like kerning spaces letters by their shapes.
+        </dd>
+        <dt>Tidy tree</dt>
+        <dd>
+          The Reingold–Tilford tree layout (d3.tree): nodes at their depth,
+          sibling subtrees as close as their contours allow, each parent
+          centered on its first and last child.
+        </dd>
+        <dt>Dendrogram (cluster)</dt>
+        <dd>
+          A tree with every leaf in the last layer (d3.cluster); each parent
+          sits at the mean of its children.
         </dd>
         <dt>ky, σ</dt>
         <dd>
@@ -637,7 +672,10 @@
       <p>
         The same data under each choice. Crossings count pairs of links between
         the same two columns whose ends swap order (node centers; long links not
-        counted). Scripts: <code>d3-reference/crossings.ts</code>.
+        counted). Overplot is the share of ribbon area covered by other ribbons
+        (see Terms), measured on the same order and y. Scripts:
+        <code>d3-reference/crossings.ts</code>,
+        <code>d3-reference/r2-metrics.ts</code>.
       </p>
 
       <h3>Small flow (10 nodes, columns of 3, 2 and 5)</h3>
@@ -651,6 +689,7 @@
             <b>Data order, tight</b>: A with no <code>order</code> step. Columns
             packed from the top in input order.
             <span class="count">5 crossings</span>
+            <span class="count">15.5% overplot</span>
           </figcaption>
         </figure>
         <figure>
@@ -660,7 +699,10 @@
           />
           <figcaption>
             <b><code>Ordering.barycenter()</code>, tight</b>: four up-and-down
-            sweeps, then the same spreads. <span class="count">1 crossing</span>
+            sweeps, then the same spreads.
+            <span class="count">1 crossing</span>
+            <span class="count">7.8% overplot</span> (2.2% with centered
+            columns, as in C's <code>c-small-stack.png</code>)
           </figcaption>
         </figure>
         <figure>
@@ -669,6 +711,7 @@
             <b>Relaxed</b>: C's <code>Positioning.relax()</code>, a port of d3's
             loop. Matches d3 to 0.00 px here.
             <span class="count">3 crossings</span>
+            <span class="count">8.5% overplot</span>
           </figcaption>
         </figure>
         <figure>
@@ -679,6 +722,7 @@
           <figcaption>
             <b>d3-sankey reference</b>: <code>nodeAlign(sankeyJustify)</code>, 6
             iterations. <span class="count">3 crossings</span>
+            <span class="count">8.5% overplot</span> (same y as the port)
           </figcaption>
         </figure>
         <figure>
@@ -690,6 +734,7 @@
             <b>d3-sankey, <code>iterations(0)</code></b
             >: data order, leftover height spread evenly. Same order as the
             first card. <span class="count">5 crossings</span>
+            <span class="count">14.1% overplot</span>
           </figcaption>
         </figure>
       </div>
@@ -703,6 +748,7 @@
           />
           <figcaption>
             <b>Data order, tight</b>. <span class="count">72 crossings</span>
+            <span class="count">25.0% overplot</span>
           </figcaption>
         </figure>
         <figure>
@@ -712,8 +758,9 @@
           />
           <figcaption>
             <b><code>Ordering.barycenter()</code>, tight</b>. Fewest crossings
-            of all, but columns are packed and bands slant.
+            of all, but bands slant and cover each other.
             <span class="count">17 crossings</span>
+            <span class="count">25.4% overplot</span> (21.3% centered)
           </figcaption>
         </figure>
         <figure>
@@ -722,12 +769,15 @@
             <b>Relaxed</b> (C). Straighter bands; up to 45 px from d3 (two tied
             nodes swap in the first sweep).
             <span class="count">26 crossings</span>
+            <span class="count">3.7% overplot</span>
           </figcaption>
         </figure>
         <figure>
           <img src="img/d3-energy.png" alt="d3-sankey energy reference" />
           <figcaption>
             <b>d3-sankey reference</b>. <span class="count">27 crossings</span>
+            <span class="count">≈ 3.7% overplot</span> (measured on the port,
+            within 45 px of d3)
           </figcaption>
         </figure>
         <figure>
@@ -737,16 +787,246 @@
           />
           <figcaption>
             <b>d3-sankey, <code>iterations(0)</code></b
-            >. <span class="count">72 crossings</span>
+            >: data order, leftover height spread evenly.
+            <span class="count">72 crossings</span>
+            <span class="count">16.8% overplot</span>
           </figcaption>
         </figure>
       </div>
       <p>
-        <b>Reading the grid:</b> d3's relaxation does not minimize crossings;
-        barycenter ordering beats it (17 vs 27 on energy, 1 vs 3 on the small
-        flow). Relaxation straightens bands and uses the leftover height. These
-        are different goals, which is one reason to keep ordering and coordinate
-        assignment as separate phases.
+        <b>Reading the grid: crossings undercount overlap.</b> Barycenter order
+        has the fewest crossings (17 on energy against d3's 27), yet a quarter
+        of its ribbon area lies under other ribbons, against 3.7% for the
+        relaxed layout. d3 never counts crossings: it moves nodes toward level
+        links, so thin links may cross to keep thick bands straight, and a
+        crossing count treats a hairline and the widest band the same. On the
+        small flow the two are close (7.8% against 8.5%), and barycenter with
+        centered columns wins (2.2%). Even the simplest coordinate rule matters:
+        d3 with no relaxation, which only spreads the leftover height evenly,
+        has 16.8% against 25.0% for the same order packed at the top.
+      </p>
+      <p>
+        So the phases do different jobs. Ordering removes crossings. Coordinate
+        assignment removes overlap area and straightens bands. A large sankey
+        needs both, which is why they are separate strategy slots.
+      </p>
+
+      <h2 id="spacing">Column spacing</h2>
+      <p>
+        Josh's question: much of the overlap looks like it could go away if the
+        columns were spaced differently. Do tools do that, and how would GoFish,
+        given that the answer depends on the curve?
+      </p>
+      <ul>
+        <li>
+          <b>Spacing cannot remove crossings.</b> In one gap every ribbon has
+          the same x(t) and the same shape s(t) in y, so two ribbons cross
+          exactly when the column orders say so, whatever the gap width.
+        </li>
+        <li>
+          <b>Spacing cannot remove overlap.</b> Stretching a gap is an affine
+          map: overlap area and ribbon area grow together. Moving width between
+          gaps changed overplot by at most 7% in every case below.
+        </li>
+        <li>
+          <b>Spacing does change slope.</b> Giving each gap width in proportion
+          to its steepest link halves the worst slope on energy (5.58 to 2.70),
+          so steep bands look thicker and less tangled. The width comes from
+          other gaps, which crowds them (one energy gap shrinks from 101 to 61
+          px and its labels collide with ribbons).
+        </li>
+        <li>
+          <b>It is a phase after y placement.</b> It reads node y and link ends.
+          y never reads x, so the dependency is one way and the per-axis model
+          holds; the x step needs the solved pixel y and the links.
+        </li>
+      </ul>
+
+      <h3>The rule depends on the curve</h3>
+      <div class="table-wrap">
+        <table>
+          <tr>
+            <th>Curve</th>
+            <th>Steepest slope in a gap g</th>
+            <th>Gap for a slope cap s</th>
+          </tr>
+          <tr>
+            <td><code>Curve.linear()</code></td>
+            <td>|Δy| / g</td>
+            <td>g ≥ max|Δy| / s</td>
+          </tr>
+          <tr>
+            <td>
+              <code>Curve.bezier()</code> (control points at the gap's middle,
+              level ends)
+            </td>
+            <td>2|Δy| / g, at the middle</td>
+            <td>g ≥ 2·max|Δy| / s</td>
+          </tr>
+          <tr>
+            <td><code>Curve.orthogonal()</code></td>
+            <td>vertical segment</td>
+            <td>no cap; parallel segments need lanes (ELK below)</td>
+          </tr>
+        </table>
+      </div>
+      <p>
+        A link that skips columns charges its Δy to each gap it crosses, split
+        evenly. Gaps in proportion to need make every gap's steepest slope
+        equal, which minimizes the worst slope for a fixed width.
+      </p>
+
+      <h3>Prior work</h3>
+      <ul>
+        <li>
+          <b>ELK Layered</b> is the only tool found that sizes each gap from its
+          edges. Polyline routing: gap = nodeNode + 0.4·min(1,
+          edgeEdge/nodeNode)·maxVertDiff. Spline routing: gap = max(nodeNode,
+          2·edgeNode + (slots − 1)·edgeEdge), one slot per bending edge. Both
+          are "a minimum plus a term linear in the largest vertical span", the
+          slope rule above.
+        </li>
+        <li>
+          <b>Lupton's d3-sankey-diagram</b> carries a commented-out
+          <code>minEdgeDx</code>: each gap's minimum is the room its links need,
+          and leftover width splits evenly. That is CSS Grid's
+          <code>minmax(min, 1fr)</code> per gap.
+        </li>
+        <li>
+          <b>Every other sankey tool</b> (d3-sankey, ECharts, SankeyMATIC,
+          Plotly, Highcharts, RAWGraphs) uses uniform columns. ggalluvial lets
+          the user place axes by hand. No paper was found that sizes sankey gaps
+          from link steepness.
+        </li>
+      </ul>
+
+      <h3>Before and after (same y, same canvas width)</h3>
+      <div class="grid wide">
+        <figure>
+          <img
+            src="img/r2-energy-relax-even.png"
+            alt="Relaxed energy sankey, even columns"
+          />
+          <figcaption>
+            <b>Relaxed, even columns.</b>
+            <span class="count">3.7% overplot</span>
+            <span class="count">max slope 5.58</span>
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/r2-energy-relax-link-gaps.png"
+            alt="Relaxed energy sankey, gaps from the links"
+          />
+          <figcaption>
+            <b>Relaxed, gaps from the steepest link.</b>
+            <span class="count">3.4% overplot</span>
+            <span class="count">max slope 2.70</span> The Solid to Thermal bands
+            flatten; column 1 is crowded.
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/r2-energy-barycenter-even.png"
+            alt="Barycenter energy sankey, centered columns, even gaps"
+          />
+          <figcaption>
+            <b>Barycenter, centered, even columns.</b>
+            <span class="count">21.3% overplot</span>
+            <span class="count">max slope 3.67</span>
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/r2-energy-barycenter-link-gaps.png"
+            alt="Barycenter energy sankey, gaps from the links"
+          />
+          <figcaption>
+            <b>Barycenter, gaps from the steepest link.</b>
+            <span class="count">20.9% overplot</span>
+            <span class="count">max slope 2.37</span> Same crossings; the
+            overlap only gets shallower.
+          </figcaption>
+        </figure>
+      </div>
+      <div class="grid">
+        <figure>
+          <img
+            src="img/r2-small-relax-even.png"
+            alt="Small flow relaxed, even columns"
+          />
+          <figcaption>
+            <b>Small flow, relaxed, even.</b> <span class="count">8.5%</span>
+            <span class="count">max slope 1.70</span>
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/r2-small-relax-link-gaps.png"
+            alt="Small flow relaxed, gaps from the links"
+          />
+          <figcaption>
+            <b>Small flow, relaxed, link gaps.</b>
+            <span class="count">8.6%</span>
+            <span class="count">max slope 1.46</span>
+          </figcaption>
+        </figure>
+      </div>
+
+      <h3>Spelling</h3>
+      <div class="two">
+        <div>
+          <div class="label new">Picked: an option of <code>ranked</code></div>
+          <pre><code class="language-js">ranked(
+  {
+    layering: Layering.justify(),
+    ordering: Ordering.barycenter(),
+    positioning: Positioning.relax(),
+    layerSpacing: Gaps.slope({ max: 1, min: 30 }), // @hl
+  },
+  {
+    nodes,
+    links,
+    node: rect({ w: 12 }),
+    link: ribbon({ curve: Curve.bezier() }),
+  }
+);</code></pre>
+          <pre><code class="language-python">ranked(
+    layering=Layering.justify(),
+    ordering=Ordering.barycenter(),
+    positioning=Positioning.relax(),
+    layer_spacing=Gaps.slope(max=1, min=30),  # @hl
+    nodes=nodes,
+    links=links,
+    node=rect(w=12),
+    link=ribbon(curve=Curve.bezier()),
+)</code></pre>
+        </div>
+        <div>
+          <div class="label now">
+            Considered: a spacing value on the column spread
+          </div>
+          <pre><code class="language-js">spread({
+  by: "layer",
+  dir: "x",
+  spacing: Gaps.slope(links, { max: 1, min: 30, curve: Curve.bezier() }), // @hl
+});</code></pre>
+          <div class="label now">
+            Considered: a minmax rule (Lupton, CSS Grid)
+          </div>
+          <pre><code class="language-js">spread({ by: "layer", dir: "x", spacing: Gaps.minmax(links, { maxSlope: 1 }) }); // @hl</code></pre>
+        </div>
+      </div>
+      <p>
+        <b>Why the <code>ranked</code> option:</b> the rule needs the links and
+        the link mark's curve, and <code>ranked</code> already owns both. On the
+        column spread, the same links and curve would be passed a second time,
+        next to the ribbon layer that draws them. <code>Gaps.slope</code> (gaps
+        in proportion to need) and <code>Gaps.minmax</code> (each gap's minimum
+        from its links, leftover split evenly) are both strategies of the one
+        option; <code>Gaps.uniform()</code> is today's <code>fr(1)</code>. All
+        names are placeholders. Because spacing only changes slope, it is lower
+        priority than the coordinate phase.
       </p>
 
       <h2 id="approaches">Approaches</h2>
@@ -1105,7 +1385,7 @@ chart(ends).flow(
 
       <div class="card" id="C">
         <h3>
-          C. One <code>layered</code> operator over nodes and links, phases as
+          C. One <code>ranked</code> operator over nodes and links, phases as
           strategies
         </h3>
         <p>
@@ -1114,7 +1394,8 @@ chart(ends).flow(
           <code>sugiyama().layering().decross().coord()</code> or ELK Layered.
           Because it sees edges, it can add virtual nodes and run relaxation.
           The prototype computes every position in JS and emits placed marks, so
-          it is a stand-in.
+          it is a stand-in. <code>ranked</code> is a working name (Graphviz's
+          word for a layer, and directionless); the name is a decision below.
         </p>
 
         <div class="example">
@@ -1127,7 +1408,7 @@ chart(ends).flow(
           <div class="two">
             <div>
               <div class="label new">Proposed, JS</div>
-              <pre><code class="language-js">layered(
+              <pre><code class="language-js">ranked(
   {
     spacing: 24,
     layering: Layering.longestPath(),
@@ -1143,7 +1424,7 @@ chart(ends).flow(
   }
 );</code></pre>
               <div class="label new">Proposed, Python</div>
-              <pre><code class="language-python">layered(
+              <pre><code class="language-python">ranked(
     spacing=24,
     layering=Layering.longest_path(),
     ordering=Ordering.barycenter(),
@@ -1173,12 +1454,12 @@ chart(ends).flow(
           <b>UK energy sankey, relaxed</b>
           <img
             src="img/c-energy-relax.png"
-            alt="Energy sankey from the layered stand-in"
+            alt="Energy sankey from the ranked stand-in"
           />
           <div class="two">
             <div>
               <div class="label new">Proposed, JS</div>
-              <pre><code class="language-js">layered(
+              <pre><code class="language-js">ranked(
   {
     size: "value",
     spacing: 10,
@@ -1196,7 +1477,7 @@ chart(ends).flow(
             </div>
             <div>
               <div class="label new">Proposed, Python</div>
-              <pre><code class="language-python">layered(
+              <pre><code class="language-python">ranked(
     size="value",
     spacing=10,
     layering=Layering.justify(),
@@ -1236,6 +1517,13 @@ chart(ends).flow(
           desugar into A's helpers for layering and ordering and into
           <code>spread</code> for stacked placement, adding only what A cannot
           do: virtual nodes and <code>Positioning.relax()</code>.
+        </p>
+        <p>
+          <b>The coordinate phase is the reason C matters.</b> On energy it is
+          the difference between 25% and 3.7% overplot. Its strategies are one
+          family (see Tidy trees): a center rule (mean, median, midpoint of the
+          extremes, weighted barycenter) plus an overlap rule inside the layer
+          (1-D push, blocks, contours).
         </p>
         <p>
           <b>Trade-offs:</b> serves DAG diagrams and flowcharts, not only
@@ -1295,6 +1583,359 @@ chart(ends).flow(
         </p>
       </div>
 
+      <h2 id="trees">Tidy trees</h2>
+      <p>
+        A tree is a layered graph with no crossings to remove, so it tests the
+        factoring on the coordinate phase alone. Data: a 44-node subset of the
+        flare class tree (32 leaves, depth 3), with depth-2 leaves next to
+        depth-3 subtrees. Every render uses 8 px nodes, a 6 px minimum gap and
+        128 px per layer, and is as tall as its layout, so heights compare
+        directly.
+      </p>
+
+      <div class="grid">
+        <figure>
+          <img src="img/r2-d3-tree.png" alt="d3.tree reference" />
+          <figcaption>
+            <b>d3.tree reference</b> (Reingold–Tilford, Buchheim's linear-time
+            version). <span class="count">386 px</span>
+            <pre><code class="language-js">tree()
+  .nodeSize([14, 128])
+  .separation(() =&gt; 1)(hierarchy(flare));</code></pre>
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="img/r2-d3-cluster.png" alt="d3.cluster reference" />
+          <figcaption>
+            <b>d3.cluster reference</b> (dendrogram).
+            <span class="count">442 px</span>
+            <pre><code class="language-js">cluster()
+  .nodeSize([14, 128])
+  .separation(() =&gt; 1)(hierarchy(flare));</code></pre>
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/r2-tree-flat-a.png"
+            alt="Tree laid out with one centered spread per column"
+          />
+          <figcaption>
+            <b>A as is</b>: one centered spread per column.
+            <span class="count">288 px</span> The tightest, but parents sit far
+            from their children: a tree's y is a nesting, not a stack per
+            column.
+          </figcaption>
+        </figure>
+      </div>
+
+      <div class="card">
+        <h3>Nested spreads by bounding box (442 px)</h3>
+        <img
+          src="img/r2-tree-nested.png"
+          alt="Tree as nested spreads, each subtree a box"
+          style="max-width: min(100%, 520px)"
+        />
+        <div class="two">
+          <div>
+            <div class="label new">Proposed (same as today), JS</div>
+            <pre><code class="language-js">tree(
+  {
+    parentChild: distribute({ dir: "x", spacing: 120, alignment: "middle" }),
+    sibling: distribute({ dir: "y", spacing: 6 }),
+  },
+  flare
+);</code></pre>
+            <div class="label new">Proposed, Python</div>
+            <pre><code class="language-python">tree(
+    parent_child=distribute(dir="x", spacing=120, alignment="middle"),
+    sibling=distribute(dir="y", spacing=6),
+    data=flare,
+)</code></pre>
+          </div>
+          <div>
+            <div class="label now">Today (prototype story, combinators)</div>
+            <pre><code class="language-js">const sub = (n) =&gt;
+  kids(n).length
+    ? spread({ dir: "x", spacing: 120, alignment: "middle" }, [
+        box(n),
+        spread({ dir: "y", spacing: 6 }, kids(n).map(sub)),
+      ])
+    : box(n);
+layer([sub("flare")]).relate((r) =&gt;
+  links.map((l) =&gt;
+    line({ curve: Curve.bezier(), dir: "x" }, [r[l.source], r[l.target]])
+  )
+);</code></pre>
+          </div>
+        </div>
+        <p>
+          Each subtree is a box and siblings keep their boxes apart, so a
+          depth-2 leaf takes a full row even where its neighbor has nothing at
+          that depth.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3>Contour packing (386 px, equals d3.tree to 0.00 px)</h3>
+        <img
+          src="img/r2-tree-contour.png"
+          alt="Tree with contour packing"
+          style="max-width: min(100%, 520px)"
+        />
+        <div class="two">
+          <div>
+            <div class="label new">Proposed, JS</div>
+            <pre><code class="language-js">tree(
+  {
+    parentChild: distribute({ dir: "x", spacing: 120, alignment: "anchor" }), // @hl
+    sibling: distribute({ dir: "y", spacing: 6, measure: Outline.contour() }), // @hl
+  },
+  flare
+);</code></pre>
+            <div class="label new">Proposed, Python</div>
+            <pre><code class="language-python">tree(
+    parent_child=distribute(dir="x", spacing=120, alignment="anchor"),  # @hl
+    sibling=distribute(dir="y", spacing=6, measure=Outline.contour()),  # @hl
+    data=flare,
+)</code></pre>
+          </div>
+          <div>
+            <div class="label now">
+              Today (y from a stand-in, placed by A's spread plus scatter)
+            </div>
+            <pre><code class="language-js">const y = contourTree(t, 8, 6); // @hl
+rows = names.map((name) =&gt; ({ name, layer: depth.get(name), y: y.get(name) })); // @hl
+chart(rows)
+  .flow(
+    spread({
+      by: field("layer").sort(),
+      dir: "x",
+      spacing: 120,
+      alignment: "start",
+    }),
+    scatter({ by: "name", y: "y" }) // @hl
+  )
+  .mark(rect({ w: 8, h: 8 }).label("name", { position: "right" }).name("n"))
+  .layer(
+    chart(links)
+      .flow(resolve(["source", "target"], { from: selectAll("n") }))
+      .mark((es) =&gt;
+        layer(
+          es.map((e) =&gt;
+            line({ curve: Curve.bezier(), dir: "x" }, [e.source, e.target])
+          )
+        )
+      )
+  );</code></pre>
+          </div>
+        </div>
+        <p>Two changes to the sibling spread, both placeholders:</p>
+        <ol>
+          <li>
+            <b>Spacing measured on outlines, not boxes</b> (<code
+              >measure: Outline.contour()</code
+            >). This alone takes 442 to 386 px. It is not tree-specific: it
+            spreads any children as close as their outlines allow. Outlines
+            already exist on every node (labels and <code>enclose</code> use
+            them); what is missing is a size claim that carries a per-layer
+            profile up instead of one number.
+          </li>
+          <li>
+            <b>Center the parent on its first and last child</b>, not on the
+            children's whole outline (<code>alignment: "anchor"</code>, each
+            subtree's anchor being its root). With contour spacing,
+            <code>alignment: "middle"</code> moves 3 nodes by up to 26 px
+            against d3.tree.
+          </li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3>Cluster rule (442 px, equals d3.cluster to 0.00 px)</h3>
+        <img
+          src="img/r2-tree-cluster.png"
+          alt="Dendrogram: all leaves in the last layer"
+          style="max-width: min(100%, 520px)"
+        />
+        <div class="two">
+          <div>
+            <div class="label new">Proposed, JS</div>
+            <pre><code class="language-js">ranked(
+  {
+    layering: Layering.longestPath({ from: "sinks" }), // @hl
+    ordering: Ordering.input(),
+    positioning: Positioning.center({ of: "out", rule: "mean" }), // @hl
+  },
+  {
+    nodes,
+    links,
+    node: rect({ w: 8, h: 8 }),
+    link: line({ curve: Curve.bezier() }),
+  }
+);</code></pre>
+            <div class="label new">Proposed, Python</div>
+            <pre><code class="language-python">ranked(
+    layering=Layering.longest_path(from_="sinks"),  # @hl
+    ordering=Ordering.input(),
+    positioning=Positioning.center(of="out", rule="mean"),  # @hl
+    nodes=nodes,
+    links=links,
+    node=rect(w=8, h=8),
+    link=line(curve=Curve.bezier()),
+)</code></pre>
+          </div>
+          <div>
+            <div class="label now">Today (y and layer from a stand-in)</div>
+            <pre><code class="language-js">const { y, layer: depth } = clusterTree(t, 8, 6); // @hl
+rows = names.map((name) =&gt; ({ name, layer: depth.get(name), y: y.get(name) })); // @hl
+chart(rows)
+  .flow(
+    spread({
+      by: field("layer").sort(),
+      dir: "x",
+      spacing: 120,
+      alignment: "start",
+    }),
+    scatter({ by: "name", y: "y" }) // @hl
+  )
+  .mark(rect({ w: 8, h: 8 }).label("name", { position: "right" }).name("n"))
+  .layer(
+    chart(links)
+      .flow(resolve(["source", "target"], { from: selectAll("n") }))
+      .mark((es) =&gt;
+        layer(
+          es.map((e) =&gt;
+            line({ curve: Curve.bezier(), dir: "x" }, [e.source, e.target])
+          )
+        )
+      )
+  );</code></pre>
+          </div>
+        </div>
+        <p>
+          <b
+            >Cluster's layering is
+            <code>Layering.longestPath({ from: "sinks" })</code></b
+          >, d3-sankey's <code>right</code> (layer = tree height − node height;
+          no node differs). It is not <code>Layering.justify</code>: justify
+          keeps display, flex and physics at depth 1 and stretches their links
+          over two layers (<code>img/r2-tree-cluster-justify.png</code>).
+        </p>
+      </div>
+
+      <h3>Findings</h3>
+      <ul>
+        <li>
+          <b>Layer and order carry over unchanged.</b> Layer is depth
+          (<code>Layering.longestPath()</code>), order is depth-first order (a
+          sort key).
+        </li>
+        <li>
+          <b>The y placement does not.</b> A tree's y is a nesting (the GoTree
+          factoring), not one spread per column. A tidy tree is nested spreads
+          plus outline spacing plus root alignment.
+        </li>
+        <li>
+          <b>Contour spacing does not help the SankeyTree story.</b> Its titanic
+          tree has every path the same depth, so contours equal boxes (218 = 218
+          px). It helps only when stacked groups span different layer ranges:
+          subtrees of uneven depth, or DAG components in different columns. A's
+          flat columns are the limit case, packing with no grouping at all.
+        </li>
+        <li>
+          <b>Parent centering is the tree case of coordinate assignment.</b>
+          Each node has one parent, so one bottom-up pass solves it with no
+          iteration. d3.cluster is one backward sweep of "move to the mean of
+          your children".
+        </li>
+      </ul>
+      <div class="table-wrap">
+        <table>
+          <tr>
+            <th>Layout</th>
+            <th>Center of the neighbors</th>
+            <th>Overlap removal in the layer</th>
+            <th>Passes</th>
+          </tr>
+          <tr>
+            <td>d3.cluster</td>
+            <td>mean of the children</td>
+            <td>none needed (leaves are fixed)</td>
+            <td>one, leaves to root</td>
+          </tr>
+          <tr>
+            <td>Tidy tree (Reingold–Tilford)</td>
+            <td>midpoint of the first and last child</td>
+            <td>contours of rigid subtrees</td>
+            <td>one, leaves to root</td>
+          </tr>
+          <tr>
+            <td>Brandes–Köpf (ELK, dagre)</td>
+            <td>median neighbor, forming vertical blocks</td>
+            <td>block compaction</td>
+            <td>four directions, averaged</td>
+          </tr>
+          <tr>
+            <td>d3-sankey relaxation</td>
+            <td>value-weighted barycenter of link ends, both sides</td>
+            <td>1-D push inside the column</td>
+            <td>6 alternating rounds</td>
+          </tr>
+        </table>
+      </div>
+      <p>
+        So <code>Positioning</code> is one family with two parts, a center and
+        an overlap rule, and trees are the case where ordering is free.
+      </p>
+
+      <h2 id="dsl">Phases as a DSL (deferred)</h2>
+      <p>
+        Josh asked for a more compositional way to write the phases. Deferred by
+        agreement; the precedent and one sketch, for later:
+      </p>
+      <ul>
+        <li>
+          <b>d3-dag</b>: one builder slot per phase, operators nested inside
+          (<code>decrossTwoLayer().order(twolayerAgg(aggMedian()))</code>).
+          Closest to GoFish strategy families with options.
+        </li>
+        <li>
+          <b>ELK</b>: one flat strategy option per phase, plus per-node
+          constraints; internally each phase declares the processors it needs.
+        </li>
+        <li>
+          <b>WebCoLa (Dwyer et al.)</b>: phases become constraint sets in one
+          solve (<code>flowLayout(axis, gap)</code>, separation and alignment
+          constraints).
+        </li>
+        <li>
+          <b>Lupton</b>: each discrete phase's output is data, so a user
+          replaces a phase by writing its output. A already works this way.
+        </li>
+        <li>
+          <b>Penrose, Bluefish</b>: no phases; constraints and relations
+          composed in one program.
+        </li>
+      </ul>
+      <p>
+        Each one-sided sweep of a coordinate phase is a fold over the columns:
+        column i reads column i − 1's final positions, moves toward them,
+        removes its own overlaps, and hands on. That is acyclic, like nesting;
+        only the repetition is a loop. So relaxation could be a pipeline of
+        named steps (placeholder):
+      </p>
+      <pre><code class="language-js">positioning: [
+  Positioning.stack(),
+  Positioning.sweep("in"),
+  Positioning.sweep("out"),
+].repeat(6);</code></pre>
+      <p>
+        Cluster is the single step
+        <code>Positioning.sweep("out", { rule: "mean" })</code>
+        from evenly placed leaves. A tidy tree does not fit this pattern: it
+        moves whole subtrees, not columns.
+      </p>
+
       <h2 id="precedent">Prior work</h2>
       <div class="grid">
         <figure>
@@ -1319,7 +1960,8 @@ chart(ends).flow(
           <figcaption>
             <b>ELK Layered</b>. Every phase is a strategy option.
             <code>INTERACTIVE</code> and <code>NONE</code> ("keep the user's
-            order") are strategies, not a separate API.
+            order") are strategies, not a separate API. The only tool found that
+            sizes each gap from its edges (see Column spacing).
             <pre><code class="language-js">({
   "elk.layered.layering.strategy": "LONGEST_PATH",
   "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
@@ -1502,43 +2144,73 @@ chart(ends).flow(
           <code>derive</code> helpers and the spread composition GoFish already
           has, with the shared scale coming free. One concept per helper. The
           strategy families follow the <code>Tile</code> and
-          <code>Curve</code> precedent and cross to Python as IR. The JS and
-          Python shapes are the same. A user can always replace a helper with
-          their own field, which is the Lupton model.
+          <code>Curve</code> precedent and cross to Python as IR. A user can
+          always replace a helper with their own field, which is the Lupton
+          model. It also carries over to trees unchanged (layer and order).
         </p>
         <p>
-          <b>Runner-up: C, as the follow-up.</b> Relaxation and virtual nodes
-          need an operator that sees nodes and links. It should desugar into A's
-          helpers and <code>spread</code> and add only
-          <code>Positioning.relax()</code> and virtual nodes, so it does not
-          overlap A.
+          <b>C next, not later.</b> The coordinate phase is not cosmetic: on
+          energy it takes overplot from 25% to 3.7%, which no ordering or column
+          spacing can do. It needs an operator that sees nodes and links. C
+          should desugar into A's helpers and <code>spread</code> and add only
+          what A cannot do: <code>Positioning</code> (center plus overlap rule),
+          virtual nodes, and later <code>layerSpacing</code>.
         </p>
         <p>
-          <b>What would flip the pick to C now:</b> if d3's relaxed look should
-          be the default sankey, or if layered DAG diagrams with bent edges are
-          wanted soon. Note that barycenter ordering already has fewer crossings
-          than d3, so the relaxed look is mainly straighter bands and fuller
-          columns.
+          <b>Why not C now:</b> A ships on its own and is needed by C either
+          way, while C still has open design questions that the tree study
+          raised: the operator name, the shape of the <code>Positioning</code>
+          family, whether outline spacing and root alignment become spread
+          options (which would let tidy trees and some coordinate rules be plain
+          composition), and the deferred phase DSL.
+        </p>
+        <p>
+          <b>What would flip the pick to C now:</b> if the first sankey release
+          must look like d3's on large graphs, or if layered DAG diagrams with
+          bent edges are wanted soon. Then C ships with
+          <code>Positioning.relax()</code> only, and the family grows later.
         </p>
       </div>
 
       <h2 id="decisions">Decisions for Josh</h2>
       <ol class="qs">
-        <li>A now and C later, or C now?</li>
+        <li>A now and C next, or C now?</li>
+        <li>
+          Operator name: <code>ranked</code> (working name; Graphviz's word,
+          directionless, covers trees), <code>sugiyama</code> (d3-dag, OGDF,
+          igraph; a person's name), <code>rank</code> (clashes with SQL and
+          polars <code>rank()</code>), or <code>hierarchy</code>,
+          <code>dag</code>, <code>flowchart</code>, <code>strata</code> (weaker:
+          tree confusion, names the data, a chart type, a node word elsewhere).
+          <code>layered</code>, "tier" and <code>levels</code> are taken.
+        </li>
         <li>
           Where do the graph phases live: <code>derive</code> helpers over nodes
           that take the links table as an argument, or a flow operator over the
           links?
         </li>
         <li>
-          Family names: <code>Layering</code> and <code>Ordering</code>, and for
-          C's coordinate phase <code>Positioning</code>? (<code>Place</code> is
-          the label family, <code>Coord</code> is coordinate transforms, and
-          <code>align</code> means the cross axis in GoFish.)
+          Family names: <code>Layering</code>, <code>Ordering</code> and
+          <code>Positioning</code>? (<code>Place</code> is the label family,
+          <code>Coord</code> is coordinate transforms, and <code>align</code>
+          means the cross axis in GoFish.)
         </li>
         <li>
           Default column rule: <code>justify</code> (sinks in the last column,
           like d3) or <code>longestPath</code> (left)?
+        </li>
+        <li>
+          Column spacing: pursue it at all, given it only changes slope? If so,
+          as a <code>ranked</code> option (picked) or a spacing value on the
+          column spread?
+        </li>
+        <li>
+          Outline (contour) spacing as a spread option: part of this effort, or
+          its own issue?
+        </li>
+        <li>
+          Root alignment (parent on its first and last child): spell it as
+          <code>alignment: "anchor"</code>, or as a relation in GoTree?
         </li>
         <li>
           Is fill-the-height spacing part of this effort, or does it stay with
@@ -1629,6 +2301,14 @@ chart(ends).flow(
             definition; relevant if D ships.
           </li>
           <li>
+            <b>#738</b> Hierarchy layouts in GoFish (tree layouts), where tidy
+            trees and dendrograms would land.
+          </li>
+          <li>
+            <b>#966</b> Shape geometry (pack, overlap strategies): the outlines
+            that outline spacing would measure.
+          </li>
+          <li>
             <b>#46</b> Composite visualization examples, including a
             FrankenSankey (a hard case).
           </li>
@@ -1642,11 +2322,15 @@ chart(ends).flow(
           <code
             >packages/gofish-graphics/stories/_proposals/sankey-layout/</code
           >
-          (ApproachA to D, ScaleProbe, Repro). Throwaway helpers:
+          (ApproachA to D, Round2Spacing, Round2Tree, ScaleProbe, Repro).
+          Throwaway helpers:
           <code>_proto.ts</code>. d3 references:
-          <code>d3-reference/render-d3.mjs</code> (d3-sankey 0.12.3). Notes with
-          every story's code: <code>NOTES-prototypes.md</code>. Research:
-          <code>research.md</code>.
+          <code>d3-reference/render-d3.mjs</code> (d3-sankey 0.12.3) and
+          <code>d3-reference/r2-render-d3-tree.mjs</code> (d3-hierarchy 3).
+          Metrics: <code>d3-reference/crossings.ts</code>,
+          <code>d3-reference/r2-metrics.ts</code>. Notes with every story's
+          code: <code>NOTES-prototypes.md</code>. Research:
+          <code>research.md</code>, <code>research-2.md</code>.
         </p>
       </details>
     </main>

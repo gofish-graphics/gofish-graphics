@@ -91,6 +91,20 @@ for (const [name, names, links, w, h] of [
         row("data order", { ...opts(w, h, "stack"), ordering: "input" }),
         row("barycenter", opts(w, h, "stack")),
         row("relaxed", opts(w, h, "relax")),
+        row("data order top (A image)", {
+          ...opts(w, h, "stack"),
+          ordering: "input",
+          columnAlign: "top",
+        }),
+        row("barycenter top (A image)", {
+          ...opts(w, h, "stack"),
+          columnAlign: "top",
+        }),
+        row("data order evenly (d3 iterations 0)", {
+          ...opts(w, h, "stack"),
+          ordering: "input",
+          columnAlign: "evenly",
+        }),
       ].join("; ")
   );
 }

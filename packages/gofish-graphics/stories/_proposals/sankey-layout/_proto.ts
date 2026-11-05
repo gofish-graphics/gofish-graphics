@@ -289,6 +289,8 @@ export type LayeredOptions = {
   /** left edge of each column in px (Round 2: link-driven column gaps).
    *  Omitted: columns evenly spaced, d3's kx. */
   colX?: number[];
+  /** "stack" only: where a short column sits. Default "center". */
+  columnAlign?: "center" | "top" | "evenly";
 };
 
 export type LayeredGeometry = {
@@ -341,10 +343,14 @@ export function layeredGeometry(names: string[], links: Link[], o: LayeredOption
     box = new Map();
     for (const c of cols) {
       const total = sum(c.map(size)) * ky + (c.length - 1) * o.spacing;
-      let y = (o.h - total) / 2; // centered column
+      // centered column (default), top-aligned (A's renders), or leftover
+      // height split evenly around the nodes (d3 with iterations(0))
+      const slack = o.h - total;
+      const even = o.columnAlign === "evenly" ? slack / (c.length + 1) : 0;
+      let y = o.columnAlign === "top" ? 0 : o.columnAlign === "evenly" ? even : slack / 2;
       for (const n of c) {
         box.set(n, { y0: y, y1: y + size(n) * ky });
-        y += size(n) * ky + o.spacing;
+        y += size(n) * ky + o.spacing + even;
       }
     }
   }
