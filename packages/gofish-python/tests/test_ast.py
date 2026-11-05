@@ -1095,14 +1095,14 @@ class TestSchema:
             (
                 lambda: Unit("pp", traits=[Trait.summable(), Trait.diverging(0)]),
                 'Unit("pp"): Trait.diverging() needs a domain of levels to order: '
-                "Unit({ domain: Domain.discrete(levels), traits: [Trait.diverging()] }). "
+                'Unit("pp", { domain: Domain.discrete(levels), traits: [Trait.diverging()] }). '
                 "A unit's amounts are numbers, which are already ordered; an order "
                 "over them comes with Domain.continuous, which is not supported yet.",
             ),
             (
                 lambda: Unit("pts", traits=[Trait.ordered()]),
                 'Unit("pts"): Trait.ordered() needs a domain of levels to order: '
-                "Unit({ domain: Domain.discrete(levels), traits: [Trait.ordered()] }). "
+                'Unit("pts", { domain: Domain.discrete(levels), traits: [Trait.ordered()] }). '
                 "A unit's amounts are numbers, which are already ordered; an order "
                 "over them comes with Domain.continuous, which is not supported yet.",
             ),

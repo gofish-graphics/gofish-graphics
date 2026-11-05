@@ -115,14 +115,14 @@ not.
 `Unit(name?, { domain?, traits? })`, keeps which values exist apart from
 everything else about them. The `domain` says only which values exist:
 `Domain.discrete(levels)` lists them. The `traits` say everything else, as a
-list: an order (`Trait.ordered()`), a neutral point
+list: an order (`Trait.ordered()`), a midpoint the values diverge from
 (`Trait.diverging(midpoint?)`), summing (`Trait.summable()`). So levels in
 order (ordinal) are `Domain.discrete(levels)` with `Trait.ordered()`, and
 without it they are nominal. The word follows Rust, where a type declares
 the traits it implements. A trait may imply another, as a Swift protocol or
 a Lean class implies its parents: `Trait.diverging()` implies
-`Trait.ordered()`, since a neutral point is a point along an order, so it is
-written alone. A trait may need a domain (an order here is an order of
+`Trait.ordered()`, since a midpoint is a point along an order, so it can be
+written alone. Listing both means the same unit. A trait may need a domain (an order here is an order of
 listed levels, so `Trait.ordered` needs `Domain.discrete`) or a name
 (`Trait.summable` belongs to a unit, and a unit is known by its name); a
 definition that breaks that is an error when it is made, not when it is

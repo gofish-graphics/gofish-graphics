@@ -453,7 +453,7 @@ function unitTypeOf(name: string | undefined, options: UnitOptions): UnitType {
     const listed = kinds.has("diverging") ? "diverging" : "ordered";
     throw new Error(
       `${who}: Trait.${listed}() needs a domain of levels to order: ` +
-        `Unit({ domain: Domain.discrete(levels), traits: [Trait.${listed}()] }). ` +
+        `Unit(${name === undefined ? "" : `"${name}", `}{ domain: Domain.discrete(levels), traits: [Trait.${listed}()] }). ` +
         `A unit's amounts are numbers, which are already ordered; an order ` +
         `over them comes with Domain.continuous, which is not supported yet.`
     );

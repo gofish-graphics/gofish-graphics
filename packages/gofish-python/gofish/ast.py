@@ -2581,9 +2581,10 @@ def _unit_type_of(name: Optional[str], domain: Any, traits: Any) -> Dict[str, An
     # Domain.continuous. Until then, an order is an order of listed levels.
     if ordered and domain is None:
         listed = "diverging" if "diverging" in kinds else "ordered"
+        named = "" if name is None else '"' + name + '", '
         raise TypeError(
             f"{who}: Trait.{listed}() needs a domain of levels to order: "
-            f"Unit({{ domain: Domain.discrete(levels), traits: [Trait.{listed}()] }}). "
+            f"Unit({named}{{ domain: Domain.discrete(levels), traits: [Trait.{listed}()] }}). "
             "A unit's amounts are numbers, which are already ordered; an order "
             "over them comes with Domain.continuous, which is not supported yet."
         )
