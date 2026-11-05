@@ -7,7 +7,7 @@
  * `test:position-in`).
  */
 // The library first, so its modules initialize in their usual order.
-import { datum } from "../lib";
+import { datum, chart, scatter, circle } from "../lib";
 import { runLayout } from "../ast/gofish";
 import { lowerToDisplayList } from "../ast/displayList/lower";
 import { GoFishNode } from "../ast/_node";
@@ -113,6 +113,54 @@ async function main() {
       [...(data.child.claimWalk?.ink[0] ?? [])]
     );
   }
+  console.log("\n# a time axis's ticks read epoch ms, so Date rows place");
+  {
+    // A column of Dates is a time column, whose values are epoch ms by the
+    // time anything places them (`applySchema`): a tick's datum is a
+    // number, never a Date.
+    const day = (d: number) => new Date(Date.UTC(2024, 0, d));
+    let threw: unknown;
+    let ticks = 0;
+    try {
+      const dl = await chart(
+        [
+          { t: day(1), v: 1 },
+          { t: day(20), v: 3 },
+        ],
+        { w: 200, h: 100 }
+      )
+        .flow(scatter({ x: "t", y: "v" }))
+        .mark(circle({ r: 3 }))
+        .toDisplayList();
+      ticks = items(dl as any).filter((i) => i.kind === "text").length;
+    } catch (e) {
+      threw = String(e);
+    }
+    check(
+      "the chart renders, its axes labeled",
+      threw === undefined && ticks > 2,
+      threw ?? ticks
+    );
+  }
+
+  console.log("\n# a datum the frame cannot place is an error");
+  {
+    // A string has no place on a continuous axis: the frame maps numbers.
+    const plot = await plotOf("x");
+    const node = await withTick(plot, "x", "late" as any);
+    let threw = "";
+    try {
+      await runLayout({}, node);
+    } catch (e) {
+      threw = String(e);
+    }
+    check(
+      "the tick's datum is reported",
+      threw.includes("the value late") && threw.includes("no position scale"),
+      threw
+    );
+  }
+
   report();
 }
 
