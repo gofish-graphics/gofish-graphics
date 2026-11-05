@@ -404,15 +404,63 @@ export function placeByClaims(
     children[i].standIn || children[i].fromRefs
       ? children[i].placed
       : undefined;
+  // The children a constraint acts on along this axis; the others sit at
+  // their own origin, which is the layer's (a free child's baseline is
+  // seated at data 0, and a shared child's claim is measured from it).
+  const constrained = constrainedOn(axis, constraints, operands, keyOf);
+  const seats = literalSeats(constraints, keyOf);
+  // A `position` override owns its operands' place on the axis, so a child
+  // it names is not pinned where it placed itself.
+  const overridden = constrainedOn(
+    axis,
+    onAxis,
+    operands,
+    keyOf,
+    (c) => c.type === "position" && !!c.override
+  );
+  // Any `position` owns its operands' place on the axis over their own
+  // data: a node it places at a datum takes its own frame there
+  // (`childPosScalesFor`), so its data no longer places it in this
+  // layer's.
+  const positioned = constrainedOn(
+    axis,
+    onAxis,
+    operands,
+    keyOf,
+    (c) => c.type === "position"
+  );
+  // How a child's origin is known before the solve, if it is: a stand-in,
+  // or a node drawn from refs, where layout laid it (in the claim walk,
+  // where its target lands) (`ref`); a child that places itself where it
+  // put itself (`self`); a child no constraint places, or one its own data
+  // places (`dataPositioned`), where its frame seats it, layout's seating
+  // rule (`seat`); a literal seat at its pixel, as layout seats it (a ring
+  // seats its content at its data 0) (`lit`). Else the solve places it.
+  const presetKind = (
+    i: number
+  ): "ref" | "self" | "seat" | "lit" | undefined => {
+    const c = children[i];
+    if (c.standIn || c.fromRefs) return "ref";
+    if (c.placesItself === true && !overridden.has(i)) return "self";
+    if (!constrained.has(i) || (c.dataPositioned && !positioned.has(i)))
+      return "seat";
+    return seats.get(c.key)?.[axis] !== undefined ? "lit" : undefined;
+  };
   // What a `position` places at datums of a frame the claim walk cannot
   // read here (`InFrame`) lands only where layout puts it: ink, by its key
-  // and, for a child of the layer, by its index.
+  // and, for a child of the layer, by its index. So is what it places in a
+  // frame read through a child the solve places: the frame would move with
+  // that child, which needs a relation, not a pin (`scaleOf`).
   const inUnknown = new Set<string>();
   const inUnknownChildren: number[] = [];
   for (const c of onAxis)
     if (c.type === "position" && c.in !== undefined) {
       const f = inFrame(c);
-      if (f?.zero === undefined || f.unit === undefined)
+      if (
+        f?.zero === undefined ||
+        f.unit === undefined ||
+        presetKind(f.child) === undefined
+      )
         for (const r of c.children) {
           const key = keyOf(r);
           inUnknown.add(key);
@@ -514,11 +562,6 @@ export function placeByClaims(
   const out = (i: number) =>
     ink.has(i) || (children[i].standIn && children[i].placed === undefined);
 
-  // The children a constraint acts on along this axis; the others sit at
-  // their own origin, which is the layer's (a free child's baseline is
-  // seated at data 0, and a shared child's claim is measured from it).
-  const constrained = constrainedOn(axis, constraints, operands, keyOf);
-
   // One solve, with σ unknown and over every child, the ink included (it
   // takes no room, but layout seats it where the plan places it): each
   // child's box, `[lo, hi]`, where the solve places it, as a formula in σ
@@ -527,27 +570,6 @@ export function placeByClaims(
   // layer's data 0, at the pixel its frame puts data 0 at.
   const tape = new Tape();
   const T = tape.arith;
-  const seats = literalSeats(constraints, keyOf);
-  // A `position` override owns its operands' place on the axis, so a child
-  // it names is not pinned where it placed itself.
-  const overridden = constrainedOn(
-    axis,
-    onAxis,
-    operands,
-    keyOf,
-    (c) => c.type === "position" && !!c.override
-  );
-  // Any `position` owns its operands' place on the axis over their own
-  // data: a node it places at a datum takes its own frame there
-  // (`childPosScalesFor`), so its data no longer places it in this
-  // layer's.
-  const positioned = constrainedOn(
-    axis,
-    onAxis,
-    operands,
-    keyOf,
-    (c) => c.type === "position"
-  );
   // The parts a chain places past their whole box, not by their plots:
   // what is no part of the plot (ink, dressing, chrome).
   const apart = new Set<string>();
@@ -573,25 +595,20 @@ export function placeByClaims(
     const p = presetOf(i);
     const key = keyAt(i);
     const seat = seats.get(key)?.[axis];
-    // Where its origin is before the solve: a stand-in, or a node drawn
-    // from refs, where layout laid it (in the claim walk, where its target
-    // lands); a child that places itself where it put itself; a child no
-    // constraint places, or one its own data places (`dataPositioned`),
-    // where its frame seats it (layout's seating rule);
-    // a literal seat at its pixel, as layout seats it (a ring seats its
-    // content at its data 0). Else the solve places it.
+    // Where its origin is before the solve (`presetKind`).
+    const kind = presetKind(i);
     const origin =
-      c.standIn || c.fromRefs
+      kind === "ref"
         ? tape.input(
             `at:${i}`,
             p !== undefined ? values.sub(p.lo, box[0]) : Pwl.ZERO
           )
-        : c.placesItself === true && !overridden.has(i)
+        : kind === "self"
           ? tape.input(`at:${i}`, Pwl.ZERO)
-          : !constrained.has(i) || (c.dataPositioned && !positioned.has(i))
+          : kind === "seat"
             ? tape.input(`seat:${i}`, Pwl.ZERO)
-            : seat !== undefined
-              ? tape.input(`lit:${i}`, Pwl.constant(seat))
+            : kind === "lit"
+              ? tape.input(`lit:${i}`, Pwl.constant(seat!))
               : undefined;
     const lo = tape.input(`lo:${i}`, box[0]);
     const hi = tape.input(`hi:${i}`, box[1]);

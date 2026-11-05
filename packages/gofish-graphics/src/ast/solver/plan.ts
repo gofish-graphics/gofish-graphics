@@ -262,6 +262,8 @@ export function buildPlan(
           }
         : undefined
   );
+  // Each `in` target's frame in this layer's plan on `axis`, by its uid.
+  const frames = new Map<string, InFrame | undefined>();
   const placement = placeByClaims(
     axis,
     children.map((c, i) => {
@@ -296,9 +298,13 @@ export function buildPlan(
     },
     (c, a) => node.gapOf(c, a),
     hasOrigin(node._underlyingSpace?.[axis]),
+    // Read once per target: every tick of a ring reads its plot's frame.
     (c) => {
       const target = inTarget(c, node);
-      return target && frameIn(target, node, axis);
+      if (target === undefined) return undefined;
+      if (!frames.has(target.uid))
+        frames.set(target.uid, frameIn(target, node, axis));
+      return frames.get(target.uid);
     }
   );
   const box: [Pwl.Value[], Pwl.Value[]] = [[], []];

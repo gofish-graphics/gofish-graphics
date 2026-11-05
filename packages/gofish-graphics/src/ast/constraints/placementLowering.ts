@@ -77,12 +77,13 @@ export function compilePlacementCoordinate<T>(
     return A.scale(coordinate.index / coordinate.count, axisSize);
   }
   if (!isValue(coordinate)) return A.constant(coordinate);
+  // On an axis with no scale the datum is not solved there.
+  if (scale === undefined) return undefined;
   // A map takes only a number to a pixel: a datum that is not one (a value
   // of a field whose values are not numbers) has no place on the axis.
   const value = getValue(coordinate);
   if (typeof value !== "number" || Number.isNaN(value))
     throw unplaceableValue(coordinate);
-  if (scale === undefined) return undefined;
   // `pxOf`, in `A`.
   return A.add(
     A.scale(value, scale.sigma),

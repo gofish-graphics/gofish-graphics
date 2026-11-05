@@ -87,6 +87,32 @@ async function main() {
       [data.width, tick.x, tick.w]
     );
   }
+  console.log("\n# a frame read through a child the solve places is ink");
+  {
+    // A chain places the plot, so its origin is known only after the
+    // solve, and a datum read through its frame cannot be pinned before
+    // it. The tick is ink on x then, as a tick in a frame the claim walk
+    // cannot read is: it takes no room, in the claim or in the box.
+    const plot = await plotOf("x", { w: 200, h: 50 });
+    const spacer = (Rect as any)({ w: 50, h: 4 });
+    const tick = (Rect as any)({ w: 2, h: 6 });
+    const node = (await (layer as any)([spacer, plot, tick])) as GoFishNode;
+    await node.INTERNAL_relate([
+      Constraint.distribute({ dir: "x", spacing: 30 } as any, [
+        new SlotOperand(node, 0),
+        new SlotOperand(node, 1),
+      ]),
+      Constraint.position({ x: datum(90), in: new NodeOperand(plot) } as any, [
+        new SlotOperand(node, 2),
+      ]),
+    ]);
+    const data = await runLayout({}, node);
+    check(
+      "the tick is ink on x",
+      data.child.claimWalk?.ink[0].has(2) === true,
+      [...(data.child.claimWalk?.ink[0] ?? [])]
+    );
+  }
   report();
 }
 
