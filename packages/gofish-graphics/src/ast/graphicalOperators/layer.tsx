@@ -160,8 +160,10 @@ const domainPlan = (
 /**
  * The chains of `node` along `axis` (each `distribute` there) that have a
  * member with no size of its own (`GoFishNode.sizedOn`): per chain, those
- * members, each with its weight (`GoFishNode.flexWeight`), in the order the
- * chain names them. They depend on the node's claim alone, so they are read
+ * members, each with its weight in the chain's slack, in the order the
+ * chain names them. The weight is `GoFishNode.flexWeight` for a member
+ * whose room reaches something that fills it (`GoFishNode.readsRoom`), and
+ * 0 for any other, which takes only its need. They depend on the node's claim alone, so they are read
  * once per claim (`ClaimMemo.chains`).
  */
 const chainsOf = (
@@ -178,15 +180,18 @@ const chainsOf = (
     for (const ref of c.children) {
       const k = directSlot(refs, ref);
       const child = k === undefined ? undefined : node.children[k];
-      // A ring's chrome (every child past the one it dresses) takes only
-      // its need: the slack is the plot's (`plotRooms`).
+      // A member whose room reaches nothing that fills it (a legend of
+      // fixed swatches and text) takes only its need: its weight in the
+      // slack is 0 (`GoFishNode.readsRoom`).
       if (
         child instanceof GoFishNode &&
-        !(node._chromeRing === true && k! > 0) &&
         !child.sizedOn(axis) &&
         !flex.some((m) => m.child === k)
       )
-        flex.push({ child: k!, weight: child.flexWeight(axis) });
+        flex.push({
+          child: k!,
+          weight: child.readsRoom(axis) ? child.flexWeight(axis) : 0,
+        });
     }
     if (flex.length > 0) chains.push(flex);
   }
@@ -1161,9 +1166,12 @@ export const layer = createNodeOperatorSequential(
           // its children) plus its share of the slack, what this layer's
           // room leaves past the hull of its content's needs (chrome or
           // labels seated beside a chain included). Each chain splits the
-          // slack among its own members, so two chains side by side (two
-          // rows of one width) each fill the room. An `fr(k)` member takes
-          // k shares.
+          // slack among its own members that read their room, so two chains
+          // side by side (two rows of one width) each fill the room. An
+          // `fr(k)` member takes k shares. A member whose room reaches
+          // nothing that fills it (`GoFishNode.readsRoom`: a legend, a ring's
+          // chrome) takes only its need, and where no member reads its room
+          // the slack is left over: each member's room is its need.
           // TODO(#1257): a chain narrower than the hull gets only the
           // hull's slack; its own would need the boxes beside it on its row. This is CSS's
           // `flex: 1 1 auto`. σ is solved from the needs alone, so where the

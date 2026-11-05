@@ -231,6 +231,9 @@ type ClaimMemo = {
   /** Per axis, whether the node fills the room it is given
    *  ({@link GoFishNode.fillsRoom}); set with its claim. */
   fills?: [boolean, boolean];
+  /** Per axis, whether a room it is given reaches something that fills
+   *  it ({@link GoFishNode.readsRoom}); set with its claim. */
+  reads?: [boolean, boolean];
   /** Per axis, whether its claim is one share of the scope around it, a σ
    *  weight ({@link GoFishNode.isShare}); set with its claim. */
   shares?: [boolean, boolean];
@@ -1475,6 +1478,20 @@ export class GoFishNode {
       return fills;
     }) as [boolean, boolean];
     this._claimMemo.shares = shares;
+    // A node reads the room it is given where something in it fills that
+    // room: it fills, or it has no scope of its own and some child reads
+    // the room it hands that child.
+    this._claimMemo.reads = ([0, 1] as const).map((dim) => {
+      if (this.children.length === 0) return this._claimMemo.fills![dim];
+      const own = this.ownsScope(dim);
+      return (
+        !own &&
+        (this.isScope(dim) ||
+          this.children.some(
+            (c) => c instanceof GoFishNode && c._claimMemo.reads?.[dim] === true
+          ))
+      );
+    }) as [boolean, boolean];
     // Its flexible parts and gaps, checked once per axis it lays out
     // (`warnFlexibleSizes`).
     warnFlexibleSizes(this, 0);
@@ -1698,12 +1715,12 @@ export class GoFishNode {
    * data size, a percent, or a leaf that claims a size (a measured text, a
    * rect with a height). Anything else (a rect with no height, a layer with
    * no size of its own, an `fr` weight) is laid out in the room its parent
-   * gives it: its whole room in an overlay, and its need plus its share of
-   * the slack along a chain (`chainRooms` in `layer`).
+   * gives it: its whole room in an overlay, and along a chain its need,
+   * plus its share of the slack where its room reaches something that
+   * fills it ({@link readsRoom}; `chainRooms` in `layer`).
    *
    * A ring of chrome ({@link _chromeRing}) is sized where the box it
-   * dresses is ({@link dressedBox}): a chart's `w`/`h` are on its plot,
-   * and its chrome around it takes only its need.
+   * dresses is ({@link dressedBox}): a chart's `w`/`h` are on its plot.
    */
   public sizedOn(axis: 0 | 1): boolean {
     const box = this.dressedBox();
@@ -1840,6 +1857,16 @@ export class GoFishNode {
       (scope ||
         this.children.every((c) => c instanceof GoFishNode && childFills(c)))
     );
+  }
+
+  /** Whether the room this node is given on `axis` reaches something that
+   *  fills it: it fills ({@link fillsRoom}), or it has no scope of its own
+   *  and some child reads its room. A part of a chain that reads no room
+   *  takes only its need of the chain's slack (`chainsOf` in `layer`): a
+   *  room larger than its box would change nothing it draws. */
+  public readsRoom(axis: 0 | 1): boolean {
+    this.resolveExtent();
+    return this._claimMemo.reads?.[axis] === true;
   }
 
   /** Whether this node solves σ for its content against a room it claims

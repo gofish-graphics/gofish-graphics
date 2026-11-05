@@ -307,12 +307,76 @@ async function main() {
   }
 
   console.log(
+    "\n# along a chain, only a member whose room reaches a filler takes slack"
+  );
+  {
+    // A chain with no chrome: a layer that holds a 30 px rect over a filler,
+    // beside a layer that holds only a 40 px rect. Neither has a size of its
+    // own. The first reads its room (its filler fills it), the second does
+    // not, so the second keeps its need and the filler gets the rest.
+    const R = Rect as any;
+    const parts = {
+      f: (Layer as any)([
+        R({ w: 30, h: 10, fill: "e" }),
+        R({ h: 10, fill: "f" }),
+      ]).name("f"),
+      g: (Layer as any)([R({ w: 40, h: 10, fill: "g" })]).name("g"),
+    };
+    const node = (Layer as any)({ w: 300, h: 50 }, Object.values(parts)).relate(
+      ({ f, g }: any) => [
+        Constraint.distribute({ dir: "x", spacing: 0 }, [f, g]),
+      ]
+    );
+    const data = await runLayout({}, node);
+    const rects = items({ items: lowerToDisplayList(data.child) }).filter(
+      (i) => i.kind === "rect"
+    );
+    const w = (fill: string) => rects.find((r) => r.style?.fill === fill)?.w;
+    check(
+      "the filler is the 260 px the fixed layer leaves",
+      close(w("f"), 260) && close(w("g"), 40),
+      ["f", "g"].map(w)
+    );
+  }
+
+  console.log(
+    "\n# a chain where no member reads its room leaves its slack over"
+  );
+  {
+    // Two layers of fixed rects: neither reads its room, so each is laid
+    // out at its need, and the second starts where the first ends.
+    const R = Rect as any;
+    const parts = {
+      a: (Layer as any)([R({ w: 40, h: 10, fill: "a" })]).name("a"),
+      b: (Layer as any)([R({ w: 60, h: 10, fill: "b" })]).name("b"),
+    };
+    const node = (Layer as any)({ w: 300, h: 50 }, Object.values(parts)).relate(
+      ({ a, b }: any) => [
+        Constraint.distribute({ dir: "x", spacing: 0 }, [a, b]),
+      ]
+    );
+    const data = await runLayout({}, node);
+    const rects = items({ items: lowerToDisplayList(data.child) }).filter(
+      (i) => i.kind === "rect"
+    );
+    const at = (fill: string) => rects.find((r) => r.style?.fill === fill);
+    check(
+      "b starts 40 px after a, and both keep their widths",
+      close(at("b")!.x! - at("a")!.x!, 40) &&
+        close(at("a")!.w, 40) &&
+        close(at("b")!.w, 60),
+      [at("a"), at("b")]
+    );
+  }
+
+  console.log(
     "\n# a plot that fills its room takes the slack its legend leaves"
   );
   {
     // The stack's bars have no width, so the plot fills the room on x. The
-    // legend ring's chain has the plot and the legend, and a ring's chrome
-    // takes only its need: the plot gets all the slack, not half of it.
+    // legend ring's chain has the plot and the legend. The legend's swatches
+    // and text read no room, so it takes only its need: the plot gets all
+    // the slack, not half of it.
     const data = ["a", "b", "c"].map((k, i) => ({ k, v: i + 1 }));
     const rects = await rectsOf(
       chart(data)

@@ -836,8 +836,9 @@ fixed-size nodes report their size).
   a relation ties to it stays placed, and the hull holds that point only
   where a position puts it, at a datum or a pixel (a ring seats what it
   dresses at its origin, so its chrome's reach past a plot that fills is
-  measured from there). A ring's chrome takes only its need along a
-  chain: the slack is its plot's. A child its own data places
+  measured from there). A ring's chrome along a chain is a legend that
+  reads no room, so it takes only its need and the slack goes to the plot
+  that fills it (the room rule below, which names no chrome). A child its own data places
   (`placedByOwnData`, `ClaimChild.dataPositioned`) is placed before the
   solve, where its frame seats it, so no constraint but a `position`
   (which gives it a frame of its own) moves it, as layout does not move it. An `enclose` around placed
@@ -893,8 +894,15 @@ fixed-size nodes report their size).
   is, so a chart's `w`/`h` hold for its outermost ring) gets its need,
   its claim at the σ the layer hands its
   children, plus its share of the slack: what the layer's room leaves past
-  the hull of the needs, split among the members of its own chain by
-  `GoFishNode.flexWeight` (`k` for `fr(k)`, else 1). Each chain splits the
+  the hull of the needs, split among the members of its own chain that
+  read their room by `GoFishNode.flexWeight` (`k` for `fr(k)`, else 1). A
+  member reads its room (`GoFishNode.readsRoom`) where the room reaches
+  something that fills it: a filler, a share of a scope, or a node with no
+  scope of its own that holds one. Any other member (a legend of fixed
+  swatches and text, which a ring's chrome usually is) takes only its
+  need, because a larger room would change nothing it draws; and where no
+  member of a chain reads its room, the slack is left over and each
+  member's room is its need. Nothing in this rule names chrome. Each chain splits the
   slack on its own (`chainsOf` in `layer`), so two chains of one width side
   by side each fill the room; a chain narrower than the hull gets only the
   hull's slack. This is CSS's `flex: 1 1 auto`. σ is solved from the
