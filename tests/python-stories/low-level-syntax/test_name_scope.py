@@ -77,7 +77,6 @@ def story_per_row_names():
                 {"k": "c", "v": 60},
             ],
             axes=False,
-            w=200,
             h=120,
         )
         .flow(spread(by="k", dir="x", spacing=20, axes=False))

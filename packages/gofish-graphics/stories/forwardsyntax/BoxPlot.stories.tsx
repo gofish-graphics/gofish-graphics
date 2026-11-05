@@ -14,16 +14,15 @@ import { genderPayGap, payGrade } from "../../src/data/genderPayGap";
 const meta: Meta = {
   title: "Forward Syntax/Box Plot",
   argTypes: {
-    w: { control: { type: "number", min: 200, max: 1000, step: 10 } },
     h: { control: { type: "number", min: 200, max: 1000, step: 10 } },
   },
 };
 export default meta;
 
-type Args = { w: number; h: number };
+type Args = { h: number };
 
 export const GenderPayGap: StoryObj<Args> = {
-  args: { w: 560, h: 320 },
+  args: { h: 320 },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -37,7 +36,6 @@ export const GenderPayGap: StoryObj<Args> = {
         "75-Percentile": pay,
         Max: pay,
       },
-      w: args.w,
       h: args.h,
     })
       .flow(

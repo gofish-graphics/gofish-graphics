@@ -136,7 +136,7 @@ def story_intersect_in_cells():
     # A composite under a partition, its operands at literal positions: each
     # cell draws its own copy, centered in that cell, as a layer would be.
     return (
-        chart([{"v": 5}, {"v": 15}, {"v": 25}], w=480, h=120)
+        chart([{"v": 5}, {"v": 15}, {"v": 25}], w=480)
         .flow(partition(by=field("v").bin(Bin.step(10)), dir="x"))
         .mark(
             intersect(

@@ -51,12 +51,12 @@ export const GroupedBarsInnerHeight: StoryObj = {
   },
 };
 
-// A chart with its own size keeps its axes: it maps its keyed domains into
-// its own w and h, and the render gives it no other size.
+// A chart with its own size keeps its axes: it maps its keyed domain into
+// its own h, and the render gives it no other size.
 export const ChartOwnSize: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    chart(values.filter((d) => d.group === "B"), { w: 240, h: 160 })
+    chart(values.filter((d) => d.group === "B"), { h: 160 })
       .flow(spread({ by: "item", dir: "x", spacing: 12 }))
       .mark(rect({ w: 40, h: "value", fill: "item" }))
       .render(container);
@@ -66,14 +66,14 @@ export const ChartOwnSize: StoryObj = {
 
 // A `.layer()` chart whose root tier has a size of its own, rendered on a
 // larger canvas. The chart's box is hoisted over both tiers, so the bars,
-// their value labels and the y axis all map with the σ the 240 x 160 box
+// their value labels and the y axis all map with the σ its 160 px height
 // solves: the 1.1 bar's top meets the axis at 1.1.
 export const LayeredChartOwnSize: StoryObj = {
   render: () => {
     const container = initializeContainer();
     chart(
       values.filter((d) => d.group === "B"),
-      { w: 240, h: 160 }
+      { h: 160 }
     )
       .flow(spread({ by: "item", dir: "x", spacing: 12 }))
       .mark(rect({ w: 40, h: "value", fill: "item" }).name("bars"))

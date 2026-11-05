@@ -131,7 +131,6 @@ def story_event_timeline():
             schema={"date": Unit.time()},
             axes={"x": True, "y": False},
             w=560,
-            h=80,
         )
         .flow(scatter(by="name", x="date"))
         .mark(circle(r=5, fill="steelblue")),

@@ -87,7 +87,7 @@ export const PerRowNames: StoryObj = {
         { k: "b", v: 90 },
         { k: "c", v: 60 },
       ],
-      { axes: false, w: 200, h: 120 }
+      { axes: false, h: 120 }
     )
       .flow(spread({ by: "k", dir: "x", spacing: 20, axes: false }))
       .mark(

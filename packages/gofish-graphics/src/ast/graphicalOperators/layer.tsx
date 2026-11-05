@@ -1552,10 +1552,28 @@ export const layer = createNodeOperatorSequential(
             mins[axis].push(domain[0]);
             maxs[axis].push(domain[1]);
           }
-          const minX = foldFinite(mins[0], Math.min);
-          const maxX = foldFinite(maxs[0], Math.max);
-          const minY = foldFinite(mins[1], Math.min);
-          const maxY = foldFinite(maxs[1], Math.max);
+          const hull = ([0, 1] as const).map((axis) => {
+            const lo = foldFinite(mins[axis], Math.min);
+            const hi = foldFinite(maxs[axis], Math.max);
+            // A node with a literal size whose content maps no domain there
+            // solves no scope, and its plot is still its size (#1032: `w`/`h`
+            // are the plot), as its claim is (`fixedClaim`). Its box covers
+            // that size from the start of what it holds, in its axis order,
+            // whether or not that fills it (#1320). The size is the literal
+            // one: what reaches past it (a stroke) adds around it, as it
+            // does for any box.
+            const px = node.fixedSize(axis);
+            if (
+              typeof px !== "number" ||
+              scopes.fixedSolve(node, axis) !== undefined
+            )
+              return [lo, hi];
+            return axis === 1 && direction === -1
+              ? [Math.min(lo, hi - px), hi]
+              : [lo, Math.max(hi, lo + px)];
+          });
+          const [minX, maxX] = hull[0];
+          const [minY, maxY] = hull[1];
           const scaleX = options.transform?.scale?.x ?? 1;
           const scaleY = options.transform?.scale?.y ?? 1;
 

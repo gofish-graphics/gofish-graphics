@@ -45,7 +45,7 @@ export const OneSided: StoryObj = {
   render: () => {
     const container = initializeContainer();
 
-    chart(weighed, { w: 560, h: 200 })
+    chart(weighed, { w: 560 })
       .flow(
         scatter({
           x: "Body Mass (g)",
@@ -66,7 +66,7 @@ export const MixedRadii: StoryObj = {
   render: () => {
     const container = initializeContainer();
 
-    chart(weighed.slice(0, 120), { w: 480, h: 200 })
+    chart(weighed.slice(0, 120), { w: 480 })
       .flow(
         scatter({
           x: "Flipper Length (mm)",

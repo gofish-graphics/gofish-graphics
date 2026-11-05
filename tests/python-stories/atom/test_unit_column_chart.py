@@ -19,8 +19,6 @@ def story_default():
             titanic_passengers,
             color=Color.palette(["#2b8cbe", "#ff8408"]),
             axes={"x": {"side": "end"}, "y": False},
-            w=520,
-            h=580,
         )
         # Bottom-align the columns (y-down free space: "end" = bottom) so the
         # unit stacks share a baseline and grow upward.

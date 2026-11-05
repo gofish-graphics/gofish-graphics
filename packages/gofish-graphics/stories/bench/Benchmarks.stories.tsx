@@ -275,7 +275,7 @@ export const PassBreakdown: StoryObj<Args & { family: string }> = {
 // ---------------------------------------------------------------------------
 
 export const Ecological: StoryObj<Args> = {
-  args: { w: 560, h: 400 },
+  args: { h: 400 },
   render: (args: Args) => {
     const container = initializeContainer();
     heading(container, "Median per-example cost by stage");
@@ -295,7 +295,6 @@ export const Ecological: StoryObj<Args> = {
         "PY load": "#f28e2b",
         "PY RPC": "#e15759",
       }),
-      w: args.w,
       h: args.h,
     })
       .flow(spread({ by: "stage", dir: "x", spacing: 36 }))
