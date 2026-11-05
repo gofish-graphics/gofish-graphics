@@ -1037,24 +1037,43 @@ export function buildBlend(spine: Pt[][]): Blend {
       h /= 2;
     }
   });
-  // each triangle edge's id, shared by the two triangles on it
+  // each triangle edge's id, shared by the two triangles on it, numbered in
+  // the order first met: a list per lower vertex of (upper vertex, id)
   const nV = T.X.length;
   const nT = T.triPocket.length;
-  const ids = new Map<number, number>();
-  const ekey = (a: number, b: number) => (a < b ? a * nV + b : b * nV + a);
+  const head = new Int32Array(nV).fill(-1),
+    next = new Int32Array(3 * nT),
+    upper = new Int32Array(3 * nT),
+    eid = new Int32Array(3 * nT);
+  let nE = 0;
+  const idOf = (a: number, b: number): number => {
+    const lo = a < b ? a : b,
+      hi = a < b ? b : a;
+    for (let s = head[lo]; s >= 0; s = next[s])
+      if (upper[s] === hi) return eid[s];
+    return -1;
+  };
   const edge = new Int32Array(3 * nT);
   for (let t = 0; t < nT; t++)
     for (let q = 0; q < 3; q++) {
-      const k = ekey(T.tri[3 * t + q], T.tri[3 * t + ((q + 1) % 3)]);
-      let e = ids.get(k);
-      if (e === undefined) ids.set(k, (e = ids.size));
+      const a = T.tri[3 * t + q],
+        b = T.tri[3 * t + ((q + 1) % 3)];
+      let e = idOf(a, b);
+      if (e < 0) {
+        const lo = a < b ? a : b;
+        upper[nE] = a < b ? b : a;
+        eid[nE] = e = nE;
+        next[nE] = head[lo];
+        head[lo] = nE++;
+      }
       edge[3 * t + q] = e;
     }
   const cutCorner = new Map<number, number>();
   for (let k = 0; k < T.cuts.length; k += 3) {
-    const e = ids.get(ekey(T.cuts[k], T.cuts[k + 1]));
-    if (e !== undefined) cutCorner.set(e, T.cuts[k + 2]);
+    const e = idOf(T.cuts[k], T.cuts[k + 1]);
+    if (e >= 0) cutCorner.set(e, T.cuts[k + 2]);
   }
+
   const X = Float64Array.from(T.X),
     Y = Float64Array.from(T.Y),
     U = Float64Array.from(T.U);
@@ -1097,7 +1116,7 @@ export function buildBlend(spine: Pt[][]): Blend {
     tri,
     triPocket,
     edge,
-    nEdge: ids.size,
+    nEdge: nE,
     cutCorner,
   };
 }
