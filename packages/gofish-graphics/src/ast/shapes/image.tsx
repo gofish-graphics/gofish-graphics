@@ -1,16 +1,17 @@
+import { NAMEABLE_METHODS } from "../marks/createOperator";
 import { posFn, pxOf } from "../domain";
 import { GoFishNode } from "../_node";
 import { getValue, isValue } from "../data";
 import {
   Dimensions,
   displayTranslate,
-  elaborateDims,
-  deferAxisDims,
+  elaborateOwnDims,
   FancyDims,
   positionOf,
   Transform,
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
+import { isLength, type LengthValue } from "../length";
 import { createMark } from "../withGoFish";
 import { MARK_CHANNELS } from "../markChannels.generated";
 import { attachCut } from "../graphicalOperators/cut";
@@ -218,19 +219,20 @@ const resolveRenderedDimensions = (
 export const Image = ({
   key,
   href,
-  filter,
   opacity,
   preserveAspectRatio = "xMidYMid meet",
   ...fancyDims
 }: {
   key?: string;
   href: string;
-  filter?: string;
   opacity?: number;
   preserveAspectRatio?: string;
-} & FancyDims<number>) => {
+} & FancyDims<number | LengthValue>) => {
+  // A length for its own size (`w: percent(30)`, `w: fr(2)`) is laid out in
+  // the room it is given, known only once it is in its tree (#1176 step 6).
   // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
-  const dims = elaborateDims(fancyDims);
+  const own = elaborateOwnDims<number>(fancyDims);
+  const { dims, dataSize } = own;
 
   const node = new GoFishNode(
     {
@@ -239,7 +241,6 @@ export const Image = ({
       args: {
         key,
         href,
-        filter,
         opacity,
         preserveAspectRatio,
         dims,
@@ -250,7 +251,7 @@ export const Image = ({
 
         // With no data position or size, the image's intrinsic dimensions are
         // resolved at layout time via resolveRenderedDimensions.
-        return [glyphAxis(xPos, dims[0].size), glyphAxis(yPos, dims[1].size)];
+        return [glyphAxis(xPos, dataSize(0)), glyphAxis(yPos, dataSize(1))];
       },
       layout: (size, scales, children) => {
         // For data-bound (Value-wrapped) dims, map from data units to pixels via
@@ -258,6 +259,11 @@ export const Image = ({
         // with rect's data-driven sizing. For literal-number dims, treat as pixels.
         const pixelSize = (dim: 0 | 1): number | undefined => {
           const raw = dims[dim].size;
+          // A length is the size it fixes for itself (`fixedSize`), and the
+          // room it is given where it is a share of its scope (`fr`, or a
+          // percent of a band), as a rect's is.
+          if (isLength(raw))
+            return (node.fixedSize(dim) as number | undefined) ?? size[dim];
           if (isValue(raw)) {
             const dataSize = getValue(raw)!;
             const map = scales?.[dim]?.map;
@@ -323,7 +329,7 @@ export const Image = ({
           [x + width, y + height],
           toPixel
         );
-        const style = lowerStyle({ opacity, filter });
+        const style = lowerStyle({ opacity });
         const item: DisplayList.ImageItem = {
           kind: "image",
           x: px,
@@ -341,32 +347,28 @@ export const Image = ({
     },
     []
   );
-  // Defer the axis-name-keyed `dims` option to the resolveAliases pass.
-  node._elaborateInAxisScope = deferAxisDims(fancyDims, dims);
+  own.bind(node);
   return node;
 };
 
 const rawImage = createMark(Image, MARK_CHANNELS.image, "image");
 
 /** Wrap an image mark so it awaits intrinsic dimension loading before producing
- *  a node. Recursively wraps .name/.label so chained calls stay awaiting. */
+ *  a node. Recursively wraps its modifiers so chained calls stay awaiting. */
 const withDimsAwait = (mark: any, href: unknown): any => {
   const wrapped: any = async (...args: any[]) => {
     if (typeof href === "string") await ensureImageDimensions(href);
     return mark(...args);
   };
-  // Use defineProperty because `.name` on a function is not writable by default.
-  Object.defineProperty(wrapped, "name", {
-    value: (layerName: string) => withDimsAwait(mark.name(layerName), href),
-    writable: true,
-    configurable: true,
-  });
-  Object.defineProperty(wrapped, "label", {
-    value: (accessor: any, options?: any) =>
-      withDimsAwait(mark.label(accessor, options), href),
-    writable: true,
-    configurable: true,
-  });
+  // Each modifier a mark carries (`.name`, `.hidden`, ...) returns a new
+  // mark, which awaits too. Use defineProperty because `.name` on a function
+  // is not writable by default.
+  for (const method of NAMEABLE_METHODS)
+    Object.defineProperty(wrapped, method, {
+      value: (...args: any[]) => withDimsAwait(mark[method](...args), href),
+      writable: true,
+      configurable: true,
+    });
   // Method-form cut: `image({...}).cut({...})` is sugar for `cut(image, opts)`.
   return attachCut(wrapped);
 };

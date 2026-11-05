@@ -26,7 +26,7 @@ layer([
 ## Signature
 
 ```python
-ribbon(stroke=None, stroke_width=None, opacity=None, mix_blend_mode=None,
+ribbon(stroke=None, stroke_width=None, opacity=None, blend_mode=None,
      dir=None, curve=None, along=None, w=None, h=None, em_x=None, em_y=None) -> Mark
 ```
 
@@ -47,7 +47,7 @@ multiple charts into one figure. To re-partition the selection first (e.g. one
 ribbon per series), run it through `group(by="field")` — see
 [`group`](/python/api/operators/group).
 
-Stack several ribbons in one `layer` — with `opacity` or `mix_blend_mode` — for
+Stack several ribbons in one `layer` — with `opacity` or `blend_mode` — for
 layered and stacked area charts.
 
 ## Default grouping

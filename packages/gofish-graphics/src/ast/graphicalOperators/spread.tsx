@@ -1,4 +1,6 @@
 import { axisOverrideOf, GoFishNode } from "../_node";
+import { checkLengths, type LengthValue } from "../length";
+import { Frontend } from "gofish-ir";
 import type { AxisOptions } from "../gofish";
 import { fieldNameOf, MaybeValue } from "../data";
 import { AxisName, Direction, FancyDims, resolveAxisName } from "../dims";
@@ -67,7 +69,7 @@ export const Spread = createNodeOperator(
       /** The axis to spread along: `x`/`y`, a name the enclosing coordinate
        *  space declares (`theta`, `lon`, ...), or an axis index. */
       dir: AxisName | Direction;
-      spacing?: number;
+      spacing?: number | LengthValue;
       alignment?: Alignment;
       /** How adjacent children relate on the stack axis: `"edge"` (default)
        *  chains facing edges (spacing = gap); `"start"|"middle"|"end"|
@@ -211,7 +213,9 @@ export type SpreadOptions<T = any> = {
    *  a name the enclosing coordinate space declares (`theta`/`r` in polar,
    *  `lon`/`lat` in geo). */
   dir: AxisName;
-  spacing?: number;
+  /** The gap between neighbors: pixels, a percent of the spread's room, or
+   *  an `fr` weight, so the gaps are the flexible parts (#1176 step 6). */
+  spacing?: number | LengthValue;
   alignment?: "start" | "middle" | "end" | "baseline";
   /** How adjacent children relate on the stack axis: `"edge"` (default)
    *  chains facing edges (spacing = gap); `"start"|"middle"|"end"|
@@ -220,8 +224,8 @@ export type SpreadOptions<T = any> = {
   anchor?: AlignAnchor | "edge";
   reverse?: boolean;
   glue?: boolean;
-  w?: number | (keyof T & string);
-  h?: number | (keyof T & string);
+  w?: number | (keyof T & string) | LengthValue;
+  h?: number | (keyof T & string) | LengthValue;
   /** The size of each CHILD along `dir` (a distributive singular, like a
    *  mark's `fill` or `cut`'s `size` — one extent per split entry, NOT this
    *  operator's own box, which is `w`/`h`): a field name, a field expression,
@@ -307,6 +311,13 @@ export function stack(
   opts: StackOptions,
   marks?: MarkChild[]
 ): ReturnType<typeof spread> | Operator<any[], any[]> {
+  // A stack glues its parts, so its spacing takes no length: checked
+  // against its own descriptor, not the spread's it forwards to.
+  checkLengths(
+    Frontend.acceptedFields("operator", "stack"),
+    "stack",
+    opts as Record<string, unknown>
+  );
   const stackOpts: SpreadOptions = { ...opts, glue: true };
   const result =
     marks !== undefined ? spread(stackOpts, marks) : spread(stackOpts);

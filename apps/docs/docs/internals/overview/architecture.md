@@ -45,12 +45,12 @@ _size_, or a _difference_, which since #586 are the three `origin` states of one
 continuous kind). It does this in two walks over the tree. The first infers
 each node's _type_ (its kind and data interval, with no σ in it); the second
 infers each node's _size claim_ from its children's claims and the finished
-types. The claim walk leans on the [monotonic algebra](/internals/core/monotonic) to
+types. The claim walk leans on the [piecewise-linear value algebra](/internals/core/pwl) to
 track, symbolically, how each subtree's size depends on the scale factor — and to
 prune subtrees that don't depend on it at all.
 
 **2 · Layout.** With domains known, each node computes its size. Every continuous
-scope solves its σ through the monotonic machinery from its size claim; a `POSITION`
+scope solves its σ through the piecewise-linear algebra from its size claim; a `POSITION`
 (pinned) dimension then also maps its data through `px(d) = σ·d + originPx`, while
 a `SIZE` (free) dimension is placed by its parent at its baseline. Bounding boxes
 ([the bbox model](/internals/core/bbox)) are the common currency. After layout, a node can
@@ -126,5 +126,5 @@ A few systems thread through every pass rather than belonging to one:
 ## Where to go next
 
 - New to the layout model? Read [Layout & Render Passes](/internals/layout/passes).
-- Curious about the type-level tricks? [The Monotonic Module](/internals/core/monotonic).
+- Curious about the type-level tricks? [Piecewise-Linear Values](/internals/core/pwl).
 - Want the design philosophy? [Design Philosophy](/internals/design/philosophy).

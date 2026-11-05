@@ -2,6 +2,10 @@
 // @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
+import { applyFilter, displayFilter, type FilterOptions } from "./drawFilter";
+import { Frontend } from "gofish-ir";
+import { checkLengths } from "./length";
+
 import { getColumnTypes, setColumnTypes } from "./schema";
 import type { JSX } from "solid-js";
 import { GoFishAST } from "./_ast";
@@ -32,6 +36,7 @@ import {
   type TranslateModifierOptions,
   type MarkKind,
   type ZOrderValue,
+  type HiddenValue,
 } from "./marks/createOperator";
 import { isValue } from "./data";
 import { splitLiveChannels } from "../interaction/live";
@@ -114,6 +119,7 @@ export interface PromiseWithRender<T> extends Promise<T> {
   setKey(key: string): PromiseWithRender<T>;
   relate(fn: RelateFn): PromiseWithRender<T>;
   zOrder(value: number): PromiseWithRender<T>;
+  hidden(value?: boolean): PromiseWithRender<T>;
   scope(): PromiseWithRender<T>;
 }
 
@@ -151,6 +157,7 @@ const CHAINABLE_NODE_METHODS = [
   "setKey",
   "relate",
   "zOrder",
+  "hidden",
 ] as const;
 
 /** Wrap a Promise so GoFishNode's chainable methods and the export terminals
@@ -364,6 +371,8 @@ export type NameableMark<T> = Mark<T> & {
   name(layerName: string | Token): NameableMark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): NameableMark<T>;
   zOrder(value: ZOrderValue<T>): NameableMark<T>;
+  /** Lay the mark out and paint nothing (`GoFishNode.hidden`). */
+  hidden(value?: HiddenValue<T>): NameableMark<T>;
   /** How the mark looks in each phase of an animation: `Animation.grow()`,
    *  `Animation.fadeIn()`, … (see `src/animation/`). */
   transition(spec: MarkTransition): NameableMark<T>;
@@ -417,12 +426,12 @@ export type NameableMark<T> = Mark<T> & {
  */
 export function createMark<P extends Record<string, any>>(
   shapeFn: (props: P) => MarkChild
-): (props: P) => NameableMark<P>;
+): (props: P & FilterOptions) => NameableMark<P>;
 export function createMark<P extends Record<string, any>>(
   shapeFn: (props: P) => MarkChild,
   channels: undefined,
   serialize: string
-): (props: P) => NameableMark<P>;
+): (props: P & FilterOptions) => NameableMark<P>;
 export function createMark<
   ShapeProps extends Record<string, any>,
   C extends ChannelAnnotations<ShapeProps>,
@@ -439,7 +448,7 @@ export function createMark<
   serialize?: string,
   cfg?: { kind?: MarkKind }
 ): <T extends Record<string, any>>(
-  opts: DeriveMarkProps<ShapeProps, C, T>
+  opts: DeriveMarkProps<ShapeProps, C, T> & FilterOptions
 ) => NameableMark<T[]>;
 export function createMark(
   shapeFn: any,
@@ -483,6 +492,17 @@ function buildCreatedMark(
   kind: MarkKind,
   markOpts: Record<string, any>
 ): any {
+  // A percent or fr length only where the mark's descriptor takes one.
+  if (serialize !== undefined)
+    checkLengths(
+      Frontend.acceptedFields("leaf-mark", serialize),
+      serialize,
+      markOpts
+    );
+  // `filter` is no channel: it filters the built node's whole drawing
+  // (`drawFilter.ts`), whatever the mark draws. It is checked once, here.
+  const { filter: filterOpt, ...channelOpts } = markOpts;
+  const filter = displayFilter(filterOpt, `${serialize ?? "mark"}({ filter })`);
   const baseMark: Mark<any> = async (
     d: unknown[],
     key?: string | number,
@@ -505,7 +525,7 @@ function buildCreatedMark(
     // via the datum-bound thunk baked at lower time. One split, shared with
     // every other mark factory — see `splitLiveChannels`.
     const { static: staticOpts, live: liveChannels } = splitLiveChannels(
-      markOpts,
+      channelOpts,
       d
     );
     const pending = resolveChannelAccessors(staticOpts, channels, () => d);
@@ -568,13 +588,17 @@ function buildCreatedMark(
               ? setColumnTypes([d[i]], types)
               : [d[i]];
         if (liveChannels) node.__gfLive = liveChannels;
+        applyFilter(node, filter);
       }
       return result as unknown as GoFishNode;
     }
     const node = await resolveMarkResult(raw, new LayerContext());
     if (liveChannels) node.__gfLive = liveChannels;
+    applyFilter(node, filter);
     // Its whole drawing, not only its own lowering: a component's children
-    // lower on their own.
+    // lower on their own. TODO(#1267): a mark with no value draws no shape
+    // either, even under a compositor; should it be `.hidden()`, giving its
+    // shape as a blank does?
     if (noValue) for (const n of breadthFirst(node)) n.INTERNAL_emitNothing();
     return sealComponent(node, d);
   };

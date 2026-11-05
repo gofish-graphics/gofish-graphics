@@ -4,8 +4,8 @@
  * down when they share a child.
  *
  * `coord` is a bake boundary: it flattens its subtree into screen-space draw
- * entries via `flattenLayout` (the coord-local bake) and warps them. These
- * tests assert the DISPLAY-LIST ORDER out of `flattenLayout` honors z-order
+ * entries via `bakeChildren` (the bake a boundary runs on its children) and
+ * warps them. These tests assert the DISPLAY-LIST ORDER out of that bake honors z-order
  * exactly as the root bake does: a later-in-array `.zOrder(-1)` / `zAbove`
  * child is emitted BEFORE its siblings (painted behind), while a plain layer
  * preserves array order.
@@ -14,13 +14,13 @@
  */
 import { coord } from "../ast/coordinateTransforms/coord";
 import { polar } from "../ast/coordinateTransforms/polar";
-import { flattenLayout } from "../ast/coordinateTransforms/bake";
+import { bakeChildren } from "../ast/coordinateTransforms/bake";
 import { Rect } from "../ast/shapes/rect";
 import { layer as Layer } from "../ast/graphicalOperators/layer";
 import { Constraint } from "../ast/constraints";
 import { chart, enclose, line, rect as rectMark, spread } from "../lib";
 import { ref } from "../ast/shapes/ref";
-import { intersect, mask } from "../ast/graphicalOperators/porterDuff";
+import { intersect, subtract } from "../ast/graphicalOperators/porterDuff";
 import { pack } from "../ast/graphicalOperators/pack";
 import { toDisplayList } from "../ast/displayList/toDisplayList";
 import { resolveReferences } from "../ast/_ref";
@@ -38,7 +38,7 @@ function ok(name: string, cond: boolean, detail?: string): void {
 }
 
 // Lay a coord(polar) subtree out (same passes as coordConfluence) and return
-// the ordered `.node`s that `flattenLayout` emits for the given layer.
+// the ordered `.node`s that coord's bake emits for the given layer.
 async function paintOrder(layerNode: any): Promise<any[]> {
   const root: any = await coord({ transform: polar() }, [layerNode]);
   await root.resolveAliases();
@@ -46,10 +46,10 @@ async function paintOrder(layerNode: any): Promise<any[]> {
   root.resolveUnderlyingSpace();
   root.resolveEmbedding();
   root.layout([400, 400], [undefined, undefined]);
-  // `layer([...])` is a spec that coord materializes into a real node; flatten
-  // the materialized child (leaf marks keep their identity), mirroring how
-  // coord itself calls `flattenLayout` on each of its children.
-  return flattenLayout(root.children[0]).map((d: any) => d.node);
+  // `layer([...])` is a spec that coord materializes into a real node; bake
+  // the coord's children (leaf marks keep their identity), as coord itself
+  // does.
+  return bakeChildren(root).map((d: any) => d.node);
 }
 
 // Assert `node` paints the marks of `m` in the order `expected`: their keys
@@ -87,7 +87,7 @@ async function expectThrows(
 
 // Render `node` to a display list and return the marks of `m`, by key, in the
 // order their items appear. This runs the full lowering, so it reaches the
-// bake boundaries (coord, enclose, the compositors) that `flattenLayout` alone
+// bake boundaries (coord, enclose, the compositors) that the bake alone
 // treats as a single entry.
 async function lowerOrder(node: any, m: Record<string, any>): Promise<string> {
   const { items } = await toDisplayList(node, { w: 400, h: 400 });
@@ -97,8 +97,9 @@ async function lowerOrder(node: any, m: Record<string, any>): Promise<string> {
     const k = byUid.get(item.id);
     if (k !== undefined && !order.includes(k)) order.push(k);
     // A group's children, and a compositor's operands.
-    for (const key of ["children", "source", "dest", "mask", "content"])
-      for (const c of item[key] ?? []) visit(c);
+    for (const c of item.children ?? []) visit(c);
+    for (const o of item.operands ?? [])
+      for (const c of o.shape ?? o.paint) visit(c);
   };
   items.forEach(visit);
   return order.join(",");
@@ -407,8 +408,8 @@ console.log("# a compositor's operand that only places its children lowers");
   const E = Rect({ w: 40, h: 40 });
   const F = Rect({ x: 0, y: 0, w: 100, h: 40 });
   await expectLowerOrder(
-    "mask over a pack operand lowers its leaves",
-    Layer([mask([pack({}, [D, E]), F])]),
+    "subtract over a pack operand lowers its leaves",
+    Layer([subtract([pack({}, [D, E]), F])]),
     { D, E, F },
     "D,E,F"
   );
@@ -416,7 +417,8 @@ console.log("# a compositor's operand that only places its children lowers");
 
 console.log("# a cut slice shows its own window of the source");
 {
-  // Each slice is mask([window, offset(source)]): the offset's shift is
+  // Each slice is intersect([window.hidden(), offset(source)]): the offset's
+  // shift is
   // render-only, so it lowers its child itself (a bake boundary). Slice i's
   // source sits i slice widths left of its window.
   const dl = await chart(
@@ -429,17 +431,22 @@ console.log("# a cut slice shows its own window of the source");
   const masks: any[] = [];
   const visit = (items: any[]) => {
     for (const it of items) {
-      if (it.kind === "mask") masks.push(it);
-      for (const key of ["children", "content"])
-        if (Array.isArray(it[key])) visit(it[key]);
+      if (it.kind === "composite") masks.push(it);
+      if (Array.isArray(it.children)) visit(it.children);
     }
   };
   visit(dl.items);
   const offsets = masks.map((m, i) => {
-    const win = m.mask.find((it: any) => it.kind === "rect");
-    const src = m.content.find((it: any) => it.kind === "rect");
+    // The window is hidden: it has a shape and no paint.
+    const win = m.operands[0].shape.find((it: any) => it.kind === "rect");
+    const src = m.operands[1].paint.find((it: any) => it.kind === "rect");
     return src.x - (win.x - i * win.w);
   });
+  ok(
+    "the window paints nothing",
+    masks.every((m) => m.operands[0].paint.length === 0),
+    JSON.stringify(masks.map((m) => m.operands[0].paint))
+  );
   ok(
     "slice i's source rect is at its window's x minus i window widths",
     masks.length === 4 && offsets.every((d) => Math.abs(d) < 1e-6),

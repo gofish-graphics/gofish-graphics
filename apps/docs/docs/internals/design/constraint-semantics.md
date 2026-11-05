@@ -69,7 +69,7 @@ $$\sigma_d \;=\; \big([\![ L ]\!]^{\mathsf{size}}_d\big)^{-1}(B_d)$$
 and **evaluates**: every node's extent is $e_d(n) = [\![ n ]\!]^{\mathsf{size}}_d(\sigma_d)$.
 With $\sigma$ fixed, the difference constraints $[\![ \cdot ]\!]^{\mathsf{pos}}$
 become concrete and positions are read off by propagation. (This inversion is
-exactly `Monotonic.inverse`; the [[monotonic]] module is the implementation of
+exactly `Monotonic.inverse`; the [[pwl]] module is the implementation of
 $\mathsf{Claim}$.)
 
 ## The denotations

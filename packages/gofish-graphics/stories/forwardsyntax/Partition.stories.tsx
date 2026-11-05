@@ -10,6 +10,7 @@ import {
   field,
   layer,
   partition,
+  Place,
   region,
   scatter,
   struct,
@@ -331,6 +332,35 @@ export const PenguinBeakVoronoi: StoryObj<Args> = {
 export const AirportHexCounts: StoryObj<Args> = {
   args: { w: 600, h: 360 },
   loaders: [async () => ({ airports: await data["airports.csv"]() })],
+  render: (args: Args, context: any) => {
+    const container = initializeContainer();
+    const airports = contiguous(context.loaded.airports);
+    chart(airports, { color: Color.gradient("blues"), w: args.w, h: args.h })
+      .flow(
+        partition({
+          by: struct({ x: "longitude", y: "latitude" }).bin(
+            Bin.hex({ radius: 3 })
+          ),
+        })
+      )
+      .mark(
+        layer([
+          region({ fill: field("iata").count(), stroke: "white" }).name("cell"),
+          text({ text: field("iata").count(), fontSize: 10 }).name("count"),
+        ]).relate(({ cell, count }) => [
+          Constraint.align({ x: "middle", y: "middle" }, [cell, count]),
+        ])
+      )
+      .render(container, { axes: true });
+    return container;
+  },
+};
+
+// The same counts written by the region's own label, inside it
+// (`Place.interior()`), so its color contrasts with the region's fill.
+export const AirportHexCountsLabeled: StoryObj<Args> = {
+  args: { w: 600, h: 360 },
+  loaders: [async () => ({ airports: await data["airports.csv"]() })],
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -351,12 +381,10 @@ export const AirportHexCounts: StoryObj<Args> = {
         })
       )
       .mark(
-        layer([
-          region({ fill: field("iata").count(), stroke: "white" }).name("cell"),
-          text({ text: field("iata").count(), fontSize: 10 }).name("count"),
-        ]).relate(({ cell, count }) => [
-          Constraint.align({ x: "middle", y: "middle" }, [cell, count]),
-        ])
+        region({ fill: field("iata").count(), stroke: "white" }).label(
+          field("iata").count(),
+          { position: Place.interior() }
+        )
       )
       .render(container, { axes: true });
     return container;

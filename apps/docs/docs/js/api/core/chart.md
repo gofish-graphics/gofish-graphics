@@ -268,6 +268,19 @@ layer([
 // circles are always drawn on top of the line, regardless of array position
 ```
 
+## .hidden()
+
+Lays the chart out and draws none of it, as a mark's
+[`.hidden()`](/js/api/core/mark#hidden) does. A hidden chart still feeds
+scales, axes and legends, and its marks can be read by `ref` / `selectAll`.
+
+```ts
+chartBuilder.hidden(value?: boolean): ChartBuilder
+```
+
+`value` defaults to `true`. A hidden chart hides every mark in it, whatever
+the marks' own `.hidden(false)`.
+
 ## .name()
 
 Names a whole chart's resolved node — the builder-level counterpart to a mark's

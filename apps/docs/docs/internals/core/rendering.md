@@ -188,8 +188,9 @@ How the re-walk lands descendants in absolute coordinates splits by boundary kin
   is the one part a flat list can't fold, so it stays a `group` wrapper around the
   flattened items.
 - A **space remapper** (`coord`) genuinely warps its content, so it keeps a
-  `contentToPixel` map: it flattens its subtree (`flattenLayout`) and maps each
-  descendant through its coordinate transform then its own translate. A `coord` is the
+  `contentToPixel` map: it bakes its children the way the root does
+  (`bakeChildren`), stopping at each bake boundary under it, and maps each
+  entry through its coordinate transform then its own translate. A `coord` is the
   archetype: it lowers its whole subtree into resolved `path`/`rect`/`ellipse` items
   whose coordinates are already warped (a petal becomes a `path`, a polar bar a warped
   `path`), so the backend never sees the polar mapping — just absolute pixel paths.
@@ -199,10 +200,10 @@ How the re-walk lands descendants in absolute coordinates splits by boundary kin
 Whatever its kind, a boundary that paints its children in turn (`coord`, `box`,
 `enclose`, `offset`, `arrow`) takes their order from `orderChildrenForPaint`, the same
 rule the bake uses, so a z constraint that parts inside a boundary takes effect there.
-A compositor lowers each of its two operands as a subtree (`lowerSubtree`, over
+A compositor lowers each of its operands as a subtree (`lowerSubtree`, over
 `bakeSubtree` in `bake.ts`, the one-child walk `bakeChildren` runs per child), so an
 operand that only places its children, a `pack` or a `treemap`, lowers its leaves.
-It paints one result from a source and a destination child, so it has no
+It paints one result from its operands, so it has no
 order to take: it calls `assertNoPaintOrder`, which throws if a z constraint parts at
 it (see [How a layer orders its children](/internals/layout/coord-flattening#how-a-layer-orders-its-children)).
 
@@ -221,37 +222,86 @@ A `DisplayListDocument` is:
 }
 ```
 
-The item kinds are `rect`, `ellipse`, `path`, `text`, `image`, `group`, `composite`,
-and `mask`. The first five are leaf primitives in absolute pixels with resolved
+The item kinds are `rect`, `ellipse`, `path`, `text`, `image`, `group` and
+`composite`. The first five are leaf primitives in absolute pixels with resolved
 `style` (fill/stroke/opacity/…, already mapped through the color scales; a
 label's halo sets `paintOrder: "stroke"` and `strokeLinejoin: "round"`, which
-both backends write as SVG attributes). The last three carry structure the
+both backends write as SVG attributes). The last two carry structure the
 flat-absolute fold cannot express on its own:
 
 - **`group`** — an affine transform group, for the rare `box`/`frame` `scale` a flat
-  list can't fold away.
-- **`composite`** — a Porter-Duff composite of two sub-lists, named with Figma-style
-  operators (`over`/`atop`/`in`/`out`/`xor` plus a CSS `mixBlendMode`). The SVG
-  backends reconstruct it as plain SVG masks and `mix-blend-mode`, not an
-  `<feImage>` filter graph: `<feImage>` referencing live SVG content has three
-  independent browser pathologies (Chrome's GPU raster path clips it at
-  fractional page zoom, issue #795; WebKit misaligns its content bbox; WebKit
-  can rasterize before a data-URI `<image>` inside it decodes and never
-  invalidate), so both painters emit the source and destination groups once
-  each and wire them together per-operator: the source is grayscaled with a
-  local `saturate(0)` filter, and each layer is alpha-masked by the other
-  layer's content (or its inverse) depending on the operator — `over` masks
-  neither, `atop`/`in` mask the destination by the source's alpha, `out`/`xor`
-  mask the destination by the source's _inverse_ alpha, and `in`/`xor`
-  additionally mask the source by the destination's alpha or inverse alpha.
-  Only `over`/`atop`/`in` add a `mix-blend-mode` to the destination layer. A
-  Canvas/WebGPU backend would map the operator to its own blend state instead.
-- **`mask`** — clip `content` by `mask`: by its luminance, as an SVG mask
-  does by default, or by its alpha when `mode` is `"alpha"`
-  (`mask-type: alpha`). A painted `intersect` with no exact outline fills the
-  overlap through two nested alpha masks, one per operand. An operand gives
-  shape only, so its shape items are lowered into the mask opaque and
-  unstroked (`shapeOnly`); an image keeps its own alpha, which is its shape.
+  list can't fold away, and the group a node with a `filter` option draws its whole
+  drawing in (`drawFilter.ts`). Its `filter` is a CSS filter value
+  (`{ kind: "css", value: "grayscale(1)" }`, which `Filter.grayscale` lowers to) or
+  `{ kind: "luminanceToAlpha" }`, which has no CSS function, so a backend writes an
+  SVG `<filter>` def with an `feColorMatrix type="luminanceToAlpha"` in sRGB, once per
+  render that uses it (`usesLuminanceToAlpha`), from `LUMINANCE_TO_ALPHA_FILTER`
+  (`composite.ts`), which both backends write from. Its id is the render's own,
+  drawn from the counter the composite ids come from (`paintDocument` in
+  `paintSVG.tsx`, `displayListToSVG`), so two visualizations on one page do not
+  share it. A
+  filtered node is a bake boundary (`GoFishNode.isBakeBoundary()`): a filtered `layer`
+  lowers its own subtree, so the filter sees it as one picture, and a filtered
+  node with no lowering of its own (a `spread` a `createMark` returns) lowers its
+  children where it put them. A lent drawing (`INTERNAL_lendDrawing`, the copy a
+  `time.transition()` moves) is filtered the same way.
+- **`composite`** — a region composite (#1267): one of the five set operations
+  over its `operands`, named by its `operator`, the public operator's name
+  (`union`, `intersect`, `subtract`, `exclude` or `atop`).
+  Each operand is `{ paint, shape? }`, from one lowering of the child: `shape`
+  is what it covers, and `paint` is what it draws, the same items without the
+  ones hidden nodes drew (empty for a hidden child). `shape` is omitted when it
+  equals `paint`. Its region is its alpha as drawn: alpha is shape, and
+  `.hidden()` drops the paint but keeps the shape. Under a compositor (a node
+  of a type in `COMPOSITE_TYPES`, `bake.ts`), a hidden node lowers as it would
+  draw (`GoFishNode.visibility()` is `"shape"`), and its items are recorded in
+  a side table (`displayList/shapeOnly.ts`) that `paintOf` reads. `paintOf`
+  returns the operand's items themselves when none was recorded, and copies
+  them only from the first that was. A blank never paints (`_neverPaints`),
+  which is its own: its label shows unless the blank is `.hidden()`. The walk up stops at the nearest compositor, so a
+  hidden composite still gives its region to a composite that reads it.
+  Elsewhere a hidden node draws nothing, and the bake stops at it, so its
+  subtree makes no draw entries at all. A `fill` sub-list is the result's own
+  paint, a box in the composite's `fill`, drawn through the result's region
+  instead of the operands' paint: then every operand gives shape only, so its
+  `paint` is empty and its items are its `shape`. Items are in absolute pixels,
+  like every other item.
+
+  `compositeLayers(operator, n, filled)` (`composite.ts`) is the one layer plan
+  both SVG backends draw: each layer draws an operand's paint (or the fill),
+  under a list of masks, each the alpha of some operands' shapes or its inverse,
+  and says whether it blends. `union` draws each operand over the last;
+  `intersect` draws each operand masked by every other's alpha; `subtract`
+  draws the first masked by every other's inverse; `exclude` draws each of its
+  two masked by the other's inverse; `atop` draws the first, then each later
+  one masked by the first's alpha. With a fill, `union` and `intersect` draw
+  the fill through the operands' alpha instead. Only `union`, `intersect` and
+  `atop` blend, by the item's
+  `blendMode` as CSS `mix-blend-mode`, in an `isolate`d group so a blend mixes
+  the layers only.
+
+  The SVG backends draw it with plain SVG masks, not an `<feImage>` filter
+  graph: `<feImage>` referencing live SVG content has three independent browser
+  pathologies (Chrome's GPU raster path clips it at fractional page zoom, issue
+  #795; WebKit misaligns its content bbox; WebKit can rasterize before a
+  data-URI `<image>` inside it decodes and never invalidate). Both write out
+  one `compositePlan(item, uid)` (`composite.ts`), ids and all: the defs, each
+  group of items written once; the masks, each distinct one once; and the
+  layers, each a `<use>` of a def in its masks and blend. The plan drops a
+  layer that would draw an operand with no paint, and writes a def only where
+  a layer or a mask uses it, so a hidden operand's shape is written only for
+  the masks that read it. A Canvas/WebGPU backend would map the plan to its
+  own blend state instead.
+
+  The composite is the hit target: its group carries its `data-gf-id`, as every
+  item does, and the defs are painted with no ids, since a pointer over a
+  `<use>` targets the `<use>`. A painted result carries its node's `datum`, so
+  the pointer reads it; the runtime takes boxes from the operands' paint, which
+  a painted result's operands have none of.
+
+  A painted `intersect` of two operands that both trace their outlines in opaque
+  paint, one of them convex, lowers to one exact `path` instead
+  (`coversItsOutline`, `exactResult` in `porterDuff.tsx`).
 
 A `composite` may carry `style.opacity` (`intersect`'s `opacity` with no
 paint), which both SVG backends put on the composite's outer group, so the
@@ -292,7 +342,7 @@ test keeps them in lockstep, since they must agree pixel-for-pixel:
 
 Because items are already in final absolute pixels, painting is verbatim: a `rect`
 item becomes `<rect x y width height …/>`, an `ellipse` becomes `<ellipse cx cy …/>`,
-and so on. The only painter-side cleverness is reconstructing the `composite`/`mask`
+and so on. The only painter-side cleverness is reconstructing the `composite`
 mask-and-blend-mode graphs and assigning their deterministic def ids.
 
 ## How the live `render()` wires it together
@@ -303,7 +353,7 @@ canvas, so `render()` reserves no margins: it lowers the tree through the identi
 `toPixel` and paints the list into an `<svg>` of the layout's size:
 
 ```ts
-const paintBaked = () => lowerToDisplayList(child).map(paintSVG); // identity toPixel
+const paintBaked = () => paintDocument(lowerToDisplayList(child)); // identity toPixel
 return (
   <svg width={…} height={…} xmlns="http://www.w3.org/2000/svg">
     <Show when={defs}><defs>{defs}</defs></Show>
@@ -318,7 +368,7 @@ pipeline against a throwaway container and serialize the result.
 The real `paintBaked` brackets each half with the perf instrumentation
 (`src/ast/perf.ts`): it times `lowerToDisplayList(child)`
 under the `lower` label, records the emitted `items.length` as the `displayItems`
-count, then times `items.map((item) => paintSVG(item, interactive))` under `paint`.
+count, then times `paintDocument(items, interactive)` under `paint`.
 Like the layout-pass hooks, this is zero-cost when instrumentation is off and
 dead-code-eliminated from the published build — see
 [Measuring the passes](/internals/layout/passes#measuring-the-passes).

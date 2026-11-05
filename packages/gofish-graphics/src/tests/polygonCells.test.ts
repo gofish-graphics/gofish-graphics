@@ -487,6 +487,95 @@ async function main() {
       JSON.stringify(hexCenters) === JSON.stringify(circleCenters),
       JSON.stringify({ hexCenters, circleCenters })
     );
+    // A layer of a region and a text, the text centered on the region by an
+    // align (the Airport Hex Counts story): the region places itself by its
+    // cell's data, so the align moves the text to it, and each hexagon is
+    // where a region alone draws it.
+    const { layer, text } = GoFish as any;
+    const Constraint = (GoFish as any).Constraint;
+    const ldl = await chart(rows, { axes: false, legend: false })
+      .flow(partition({ by: key }))
+      .mark(
+        layer([
+          region({ fill: distField("a").count() }).name("cell"),
+          text({ text: "x", fontSize: 10 }).name("count"),
+        ]).relate(({ cell, count }: any) => [
+          Constraint.align({ x: "middle", y: "middle" }, [cell, count]),
+        ])
+      )
+      .toDisplayList({ w: 300, h: 200 });
+    const lpaths = pathsOf(ldl).map((p) => p.d);
+    check(
+      "a region aligned with a text in a layer draws its hexagon where a region alone does",
+      JSON.stringify([...lpaths].sort()) ===
+        JSON.stringify(paths.map((p) => p.d).sort()),
+      JSON.stringify({ lpaths, alone: paths.map((p) => p.d) })
+    );
+    // Each text, paired with the hexagon drawn just before it, sits at the
+    // hexagon's center on both axes. A text's x is its start and its y its
+    // baseline, so its center is one fixed offset from (x, y) for the same
+    // string: every text is that same offset from its hexagon's center, a
+    // small one (under its font size).
+    const pairsOf = (dl: any): { hex: number[]; at: number[] }[] => {
+      const items: any[] = [];
+      const walk = (it: any) => {
+        if (it.kind === "path" || it.kind === "text") items.push(it);
+        for (const c of it.children ?? []) walk(c);
+      };
+      dl.items.forEach(walk);
+      const out: { hex: number[]; at: number[] }[] = [];
+      items.forEach((it, k) => {
+        if (it.kind === "text" && items[k - 1]?.kind === "path")
+          out.push({ hex: centerOf(items[k - 1].d), at: [it.x, it.y] });
+      });
+      return out;
+    };
+    const centeredOnHexagons = (dl: any): boolean => {
+      const pairs = pairsOf(dl);
+      if (pairs.length !== paths.length) return false;
+      const offsets = pairs.map(({ hex, at }) => [
+        at[0] - hex[0],
+        at[1] - hex[1],
+      ]);
+      return offsets.every(
+        ([dx, dy]) =>
+          Math.abs(dx - offsets[0][0]) < 0.01 &&
+          Math.abs(dy - offsets[0][1]) < 0.01 &&
+          Math.abs(dx) < 10 &&
+          Math.abs(dy) < 10
+      );
+    };
+    check(
+      "each text aligned with a region sits at its hexagon's center",
+      centeredOnHexagons(ldl),
+      JSON.stringify(pairsOf(ldl))
+    );
+    // The same with the region wrapped in a layer: the layer's own data
+    // (the region's) places it in the cell, so the align moves the text to
+    // it, as it does a bare region, and the hexagons do not collapse.
+    const wdl = await chart(rows, { axes: false, legend: false })
+      .flow(partition({ by: key }))
+      .mark(
+        layer([
+          layer([region({ fill: distField("a").count() })]).name("cell"),
+          text({ text: "x", fontSize: 10 }).name("count"),
+        ]).relate(({ cell, count }: any) => [
+          Constraint.align({ x: "middle", y: "middle" }, [cell, count]),
+        ])
+      )
+      .toDisplayList({ w: 300, h: 200 });
+    const wpaths = pathsOf(wdl).map((p) => p.d);
+    check(
+      "a region wrapped in a layer, aligned with a text, draws its hexagon where a region alone does",
+      JSON.stringify([...wpaths].sort()) ===
+        JSON.stringify(paths.map((p) => p.d).sort()),
+      JSON.stringify({ wpaths, alone: paths.map((p) => p.d) })
+    );
+    check(
+      "each text aligned with a wrapped region sits at its hexagon's center",
+      centeredOnHexagons(wdl),
+      JSON.stringify(pairsOf(wdl))
+    );
     const seeds = [
       { a: 0, b: 0 },
       { a: 2, b: 1 },
@@ -502,6 +591,92 @@ async function main() {
     check(
       "a Voronoi partition draws one region per seed",
       pathsOf(vdl).length === 2
+    );
+
+    // A polygon of data points (a country outline) is placed by its data, as
+    // a region in its cell is (`placedByOwnData`): aligned with a text, it
+    // stays where it is drawn alone, and the align moves the text to it.
+    const { polygon, group } = GoFish as any;
+    const rings = [
+      {
+        n: "a",
+        ring: [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+        ],
+      },
+      {
+        n: "b",
+        ring: [
+          [2, 0],
+          [3, 0],
+          [3, 1],
+        ],
+      },
+    ];
+    const polyAlone = await chart(rings, { axes: false, legend: false })
+      .flow(group({ by: "n" }))
+      .mark(polygon({ points: "ring" }))
+      .toDisplayList({ w: 300, h: 200 });
+    const pdl = await chart(rings, { axes: false, legend: false })
+      .flow(group({ by: "n" }))
+      .mark(
+        layer([
+          polygon({ points: "ring" }).name("shape"),
+          text({ text: "x", fontSize: 10 }).name("t"),
+        ]).relate(({ shape, t }: any) => [
+          Constraint.align({ x: "middle", y: "middle" }, [shape, t]),
+        ])
+      )
+      .toDisplayList({ w: 300, h: 200 });
+    const ppaths = pathsOf(pdl).map((p) => p.d);
+    check(
+      "a data-bound polygon aligned with a text is drawn where it is alone",
+      ppaths.length === 2 &&
+        JSON.stringify([...ppaths].sort()) ===
+          JSON.stringify(
+            pathsOf(polyAlone)
+              .map((p) => p.d)
+              .sort()
+          ),
+      JSON.stringify({ ppaths, alone: pathsOf(polyAlone).map((p) => p.d) })
+    );
+    // The text sits at the middle of its polygon's box: the same small
+    // offset from it for every polygon.
+    const ptexts: number[][] = [];
+    const walkP = (it: any) => {
+      if (it.kind === "text") ptexts.push([it.x, it.y]);
+      for (const c of it.children ?? []) walkP(c);
+    };
+    pdl.items.forEach(walkP);
+    const boxMid = (d: string) => {
+      const pts = [...d.matchAll(/[ML]([-\d.e]+),([-\d.e]+)/g)].map((m) => [
+        Number(m[1]),
+        Number(m[2]),
+      ]);
+      const xs = pts.map((p) => p[0]);
+      const ys = pts.map((p) => p[1]);
+      return [
+        (Math.min(...xs) + Math.max(...xs)) / 2,
+        (Math.min(...ys) + Math.max(...ys)) / 2,
+      ];
+    };
+    const poffsets = ppaths.map((d, k) => {
+      const m = boxMid(d);
+      return [ptexts[k][0] - m[0], ptexts[k][1] - m[1]];
+    });
+    check(
+      "each text aligned with a data-bound polygon sits at the middle of its box",
+      ptexts.length === 2 &&
+        poffsets.every(
+          ([dx, dy]) =>
+            Math.abs(dx - poffsets[0][0]) < 0.01 &&
+            Math.abs(dy - poffsets[0][1]) < 0.01 &&
+            Math.abs(dx) < 10 &&
+            Math.abs(dy) < 10
+        ),
+      JSON.stringify({ ptexts, ppaths })
     );
   }
 

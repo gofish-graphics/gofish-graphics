@@ -4,7 +4,7 @@
 
 import type { DisplayList } from "gofish-ir";
 import { color6, resolveColorChannel } from "../../color";
-import { isValue, type MaybeValue } from "../data";
+import { getValue, isValue, type MaybeValue } from "../data";
 import { displayTranslate, type Dimensions } from "../dims";
 import {
   boxOfDims,
@@ -13,9 +13,8 @@ import {
   insetConvex,
   outlinePaint,
   ringOutline,
-  type OutlinePoint,
-  type Point,
 } from "../geometry";
+import type { Ring } from "../geometry/ring";
 import {
   lowerStyle,
   rectItemFromBox,
@@ -34,6 +33,7 @@ import {
   type PositionRegion,
 } from "../constraints/position";
 import { compilePlacementCoordinate } from "../constraints/placementLowering";
+import { numbers } from "../solver/arith";
 import { axisName } from "../constraints/shared";
 import { createMark } from "../withGoFish";
 import { MARK_CHANNELS } from "../markChannels.generated";
@@ -44,38 +44,40 @@ const DEFAULT_SIZE = 16;
  *  sides. Its shape is the cell it is in. */
 export type RegionProps = {
   key?: string;
-  /** Pixels drawn in from each side of the cell: each side the cell has,
-   *  on an axis where it is in a cell (both axes of a hexagon, the
-   *  two ends of a 1D partition's cell). Paint only: its box, which layout
-   *  reads, stays the cell. A cell thinner than twice the inset draws
-   *  nothing. */
+  /** Pixels drawn in from each side of the cell: each side of the cell's
+   *  outline (a hexagon, a treemap's cell), or, for a cell with no outline,
+   *  each side on an axis where it is in a cell (the two ends of a 1D
+   *  partition's cell). Paint only: its box, which layout reads, stays the
+   *  cell. A cell thinner than twice the inset draws nothing. */
   inset?: number;
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
   opacity?: number;
-  filter?: string;
 };
 
 /**
- * `region()`'s node (#1059): it draws the cell it is in, such as a
- * `partition`'s cell, and has no size or position of its own.
+ * `region()`'s node (#1059, #1222): it draws the cell it is in, such as a
+ * `partition`'s cell or a `treemap`'s, and has no size or position of its
+ * own.
  *
- * The cell is in data (`enclosingCell`). On each axis where the region is in
- * a cell, it is placed by its data, as a rect with a data `x` and `x2` is:
- * its space is the cell's interval, pinned, and it maps the cell's edges
- * (and the outline of a cell of the plane) through the map its parent hands
- * it, the frame of the partition, which a child placed by its data shares.
- * A datum of the cell it cannot map there is an error, since its parent
- * leaves it where its data puts it. On an axis where it is in no cell, it is as long as the size it is
- * proposed, and its parent places it there, as it places a rect with no
- * size.
+ * A partition's cell is in data (`enclosingCell`). On each axis where the
+ * region is in such a cell, it is placed by its data, as a rect with a data
+ * `x` and `x2` is: its space is the cell's interval, pinned, and it maps the
+ * cell's edges through the map its parent hands it, the frame of the
+ * partition, which a child placed by its data shares. A datum of the cell it
+ * cannot map there is an error, since its parent leaves it where its data
+ * puts it. On an axis where it is in no such cell, it is as long as the size
+ * it is proposed, and its parent places it there, as it places a rect with
+ * no size.
  *
- * It draws the cell's outline when the cell has one (a hexagon, a Voronoi
- * cell, from a `partition` over `struct({ x, y }).bin(b)`), and its box
- * otherwise, drawn in by `inset` from each side the cell gives it. Under a
- * nonlinear coordinate space either one is resampled, so a cell of a polar
- * partition draws as the wedge it is. Its outline is what it draws.
+ * It draws the shape it is laid out in (see `Layout` in `_node.ts`) when its
+ * parent hands it one: the outline of a partition's cell of the plane (a
+ * hexagon, a Voronoi cell, from a `partition` over `struct({ x, y }).bin(b)`),
+ * a treemap's cell, or the shape of an `enclose` around it. Otherwise it
+ * draws its box. Either is drawn in by `inset`. Under a nonlinear coordinate
+ * space either one is resampled, so a cell of a polar partition draws as the
+ * wedge it is. Its outline is what it draws.
  */
 export const Region = ({
   key,
@@ -83,7 +85,6 @@ export const Region = ({
   stroke = fill,
   strokeWidth = 0,
   opacity = 1,
-  filter,
   inset = 0,
 }: RegionProps): GoFishNode => {
   if (!(Number.isFinite(inset) && inset >= 0))
@@ -93,10 +94,10 @@ export const Region = ({
   // The cell it is in, read when its space is resolved: the partitions
   // around it have given their children their cells by then.
   let cell: PositionRegion | undefined;
-  // The outline in the node's local frame and axis order, as `layout` placed
-  // it (the cell's outline less the node's translate, drawn in by `inset`),
-  // or none for a box. Empty when the inset leaves nothing.
-  let outline: Point[] | undefined;
+  // The outline in the node's local frame and axis order: the shape it is
+  // laid out in, drawn in by `inset`, or none for a box. Empty when the
+  // inset leaves nothing.
+  let outline: Ring | undefined;
   // Per axis, how far its box is drawn in at each end: `inset` where the
   // cell gives a span, else 0.
   let boxInset: [number, number] = [0, 0];
@@ -110,7 +111,7 @@ export const Region = ({
     {
       key,
       type: "region",
-      args: { key, fill, stroke, strokeWidth, opacity, filter, inset },
+      args: { key, fill, stroke, strokeWidth, opacity, inset },
       // Used to seed the unit color scale. Prefer whichever channel is
       // data-driven, as `rect` does.
       color: isValue(fill) ? fill : stroke,
@@ -129,20 +130,22 @@ export const Region = ({
         };
         return [axisSpace(0), axisSpace(1)];
       },
-      layout: (size, scales) => {
+      layout: (size, scales, _children, _node, shape) => {
         // A datum of the cell through the map its parent hands it. Its space
         // claimed the cell on this axis, pinned, so its parent treats it as
         // placed by its data there: a datum it cannot map would leave it
         // nowhere, so that is an error, not a guess.
         const px = (axis: 0 | 1, v: PositionInterval[number], what: string) => {
-          const p = compilePlacementCoordinate(v, scales[axis]?.map);
+          const p = compilePlacementCoordinate(numbers, v, scales[axis]?.map);
           if (p === undefined || !Number.isFinite(p))
             throw new Error(
               `region: its cell's ${what} on ${axisName(axis)} does not map ` +
                 `to pixels: ${
                   scales[axis]?.map === undefined
                     ? `the region's parent gives it no map for its cell's data on ${axisName(axis)}`
-                    : `it maps to ${p}`
+                    : p === undefined
+                      ? `its datum ${getValue(v as MaybeValue<number>)} is not a number`
+                      : `it maps to ${p}`
                 }. A region is placed by its cell's data, so it must share ` +
                 `the frame of the partition that gives it the cell (an ` +
                 `operator between them that places its children on ` +
@@ -170,18 +173,14 @@ export const Region = ({
           x.translate === undefined ? 0 : inset,
           y.translate === undefined ? 0 : inset,
         ];
-        // The cell's outline in the node's local frame. A cell has one only
-        // when it is placed along both axes (`PositionRegion`), so both
-        // edges mapped above, and each corner maps or throws.
-        const ring = cell?.outline?.map(
-          ([vx, vy]): OutlinePoint => [
-            px(0, vx, "outline") - x.translate!,
-            px(1, vy, "outline") - y.translate!,
-          ]
-        );
+        // The shape it is laid out in (#1222), in its local frame, whose box
+        // is its own: the outline of a partition's cell of the plane, or a
+        // treemap's or an enclosure's cell. None is its box.
         outline =
-          ring === undefined || inset === 0 ? ring : insetConvex(ring, inset);
-        if (outline === undefined && ring !== undefined)
+          shape === undefined || inset === 0
+            ? shape
+            : insetConvex(shape, inset);
+        if (outline === undefined && shape !== undefined)
           // TODO(#1201): drawing in a ring that is not convex needs a
           // general polygon offset. Every partition cell is convex.
           throw new Error(
@@ -210,7 +209,6 @@ export const Region = ({
           stroke: resolvedStroke,
           strokeWidth: strokeWidth ?? 0,
           opacity,
-          filter,
         });
         const linear =
           coordinateTransform === undefined ||

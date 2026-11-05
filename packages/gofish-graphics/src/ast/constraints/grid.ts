@@ -9,52 +9,59 @@
 // cell pinned to its (column, row) track intersection. It's the elaboration
 // target for `table` — `layer(cells).relate(grid(...))`.
 //
-// **The unified sizing rule.** Per axis, a track's extent is set by
-// ONE rule — the (max, +) fold every other operator already uses:
+// **The sizing rule.** Per axis, a track's extent is set by ONE rule, the
+// (max, +) fold every other operator already uses:
 //
-//   track claim   = Monotonic.max(claims of the cells in that track)
-//   grid claim    = Monotonic.add(track claims) + gaps          (the σ-frame LHS)
+//   track claim   = Pwl.max(boxes of the cells in that track), or σ
+//   grid claim    = Pwl.add(track claims) + gaps
 //
-// A claim-less ("fill") cell contributes nothing to its track. This subsumes
-// equal-flex box-division: an all-fill grid has no track claims, so the leftover
-// (allocated − gaps) splits equally among the tracks. Content-sized tracks
-// emerge automatically when cells carry size claims (a track sizes to its widest
-// cell). Fill tracks share whatever the claimed tracks leave over, equally.
+// A track whose cells claim nothing is a share of its scope, `fr(1)`: σ. A
+// cell that fills a share claims one σ (#493 piece 3), so an all-fill grid
+// claims `n·σ + gaps`; content-sized tracks size to their widest cell, and
+// are fixed parts beside the pixel gaps. A gap may be a percent of the
+// table's room or an `fr` weight, a term of the claim, which the layer
+// reads where it lays the tracks out (`GoFishNode.gapOf`).
+// The grid claim is the layer's claim on the axis, composed by its plan as
+// any chain's is (`placeByClaims`, `gridTracks`), so the scope it is in
+// solves σ for it by the one fit, with the one overflow warning and the one
+// fallback. A track is sized by its cells' boxes, both in the claim walk
+// and in layout: what a cell draws past its box (an outline, a label, an
+// offset part) overhangs its track. Layout proposes each cell its track's
+// extent at that σ, from the same boxes, the forms of the layer's plan
+// (`cellBoxesOf`, `gridCellSizesAt`), and the plan places each cell in
+// the middle of its track, from the cells' laid-out sizes. Where the layer
+// has no σ on an axis (an unsized root, where shares have no room), a
+// track its cells' boxes do not size has no extent to propose, and its
+// cells keep their default size there, as a spread's bands do.
 //
-// `resolveGridTracks` is the single site that runs this rule; both the layout
-// budget (each cell is proposed its track's extent) and the placement (each cell
-// pinned to its track-intersection center) read the SAME resolved tracks, so the
-// two cannot drift. When every track carries a σ-dependent claim (no fill to
-// absorb slack) the grid claim is inverted against the allocated size by the
-// scope registry, exactly like any other frame equation; the common all-constant
-// case (fixed-px cells) is σ-independent and reads back its intercept.
+// Every reader finds a cell through the grid's own refs (`CellOf`), in the
+// grid's row-major order, never by the layer's child order.
 //
 // The grid is interpreted by the Layer after `selectGridConstraint` has
 // established that there is at most one grid owner for the layer. `gridSpaces`
 // gives the categorical track axes (ORDINAL over columns/rows) for axis
-// rendering — a categorical axis cannot simultaneously be a SIZE magnitude, so
-// the grid's size claim is consumed at layout time (track resolution) rather than
-// reported as the axis space.
+// rendering: the layer reports those as its type, and its size claim as its
+// claim.
 
-import * as Monotonic from "../../util/monotonic";
+import * as Pwl from "../solver/pwl";
 import { GoFishNode } from "../_node";
 import type { GoFishAST } from "../_ast";
-import { type ConstraintRef, type KeyOf } from "./shared";
-import { sliceExtent } from "./folds";
+import { directSlot, type ConstraintRef, type KeyOf } from "./shared";
+import { resolution } from "../_ref";
 import {
   ordinalOver,
   type OrdinalKey,
   UNDEFINED,
   type UnderlyingSpace,
-  originIs,
 } from "../underlyingSpace";
-import type { ScopeRegistry } from "../solver/scopes";
 import type { PlacementFactEmitter } from "./placementFacts";
+import { numbers, type Arith } from "../solver/arith";
+import type { Gap } from "./gap";
 
 export interface GridOptions {
   numCols: number;
   /** [x, y] gaps between tracks; a scalar applies to both. Default 0. */
-  spacing?: number | [number, number];
+  spacing?: Gap | [Gap, Gap];
   /** The column and row keys, in order: text, or cells for a binned key
    *  (`ORDINAL_TYPE.cells`). */
   colKeys?: OrdinalKey[];
@@ -71,8 +78,9 @@ export interface GridOptions {
 export interface GridConstraint {
   type: "grid";
   numCols: number;
-  xSpacing: number;
-  ySpacing: number;
+  /** The gap between tracks on x and on y: pixels, or a length the table
+   *  lays out in its room (`GoFishNode.gapOf`). */
+  spacing: [Gap, Gap];
   colKeys?: OrdinalKey[];
   rowKeys?: OrdinalKey[];
   colMeasure?: string;
@@ -91,8 +99,7 @@ export const createGridConstraint = (
   return {
     type: "grid",
     numCols: options.numCols,
-    xSpacing: Array.isArray(sp) ? sp[0] : sp,
-    ySpacing: Array.isArray(sp) ? sp[1] : sp,
+    spacing: (Array.isArray(sp) ? sp : [sp, sp]) as [Gap, Gap],
     colKeys: options.colKeys,
     rowKeys: options.rowKeys,
     colMeasure: options.colMeasure,
@@ -109,283 +116,243 @@ export const isGridConstraint = (c: { type: string }): c is GridConstraint =>
 const numRowsOf = (c: GridConstraint): number =>
   Math.ceil(c.children.length / c.numCols);
 
+/** The layer's child a grid ref names, or undefined for none. Every reader
+ *  of a grid's cells finds them this way, by the grid's own refs. */
+export type CellOf = (ref: ConstraintRef) => GoFishAST | undefined;
+
+/** The index of the direct child of `layer` each ref of its grid resolved
+ *  to in the last `resolveReferences` round (`directSlot`), or undefined. */
+const slotOf = (layer: GoFishNode) => {
+  const resolved = resolution(layer);
+  return (ref: ConstraintRef): number | undefined => directSlot(resolved, ref);
+};
+
+/** {@link CellOf} over `layer`'s children, by {@link slotOf}. */
+export const cellsOf = (layer: GoFishNode): CellOf => {
+  const slot = slotOf(layer);
+  return (ref) => {
+    const i = slot(ref);
+    return i === undefined ? undefined : layer.children[i];
+  };
+};
+
+/** The number of tracks of `c` on `axis`: its columns on x, its rows on y. */
+const trackCount = (c: GridConstraint, axis: 0 | 1): number =>
+  axis === 0 ? c.numCols : numRowsOf(c);
+
+/** The indices into `c.children` of the cells in track `track` on `axis`. */
+const cellsOfTrack = (
+  c: GridConstraint,
+  axis: 0 | 1,
+  track: number
+): number[] => {
+  const across = trackCount(c, axis === 0 ? 1 : 0);
+  return Array.from({ length: across }, (_, k) =>
+    axis === 0 ? k * c.numCols + track : track * c.numCols + k
+  ).filter((i) => i < c.children.length);
+};
+
 /** The resolved geometry of one axis's tracks: each track's start (low edge, in
  *  the layer's local pixel frame) and extent. `starts[i] + extents[i]/2` is the
  *  center a cell in track `i` pins to. */
-export type TrackLayout = { starts: number[]; extents: number[] };
+export type TrackLayout<T = number> = { starts: T[]; extents: T[] };
 
-/** A cell's size claim on `axis`: the SIZE-magnitude width Monotonic it reports,
- *  or undefined when the cell fills (no size claim — a plain `rect({fill})`, a
- *  literal-pixel cell, or an ORDINAL/POSITION axis). */
-const cellClaim = (
-  cell: GoFishAST | undefined,
+/** A grid's resolved tracks on x (columns) and y (rows), where known. */
+export type GridTracks<T = number> = readonly [
+  TrackLayout<T> | undefined,
+  TrackLayout<T> | undefined,
+];
+
+/** A cell's box on `axis`, by the grid's ref, or undefined for a cell with
+ *  no size there. */
+export type CellBox = (
+  ref: ConstraintRef,
   axis: 0 | 1
-): Monotonic.Monotonic | undefined => {
-  if (!(cell instanceof GoFishNode)) return undefined;
-  const sp = cell._underlyingSpace?.[axis];
-  return originIs(sp, "free") ? cell.resolveExtent()[axis]!.width : undefined;
+) => Pwl.Value | undefined;
+
+/**
+ * Each cell's box in `layer`'s plan (`buildPlan`'s forms): the width of its
+ * box, in σ, which is what the claim walk sizes its track by
+ * (`placeByClaims`). A cell that draws past its box (an outline, a label,
+ * an offset part) sizes its track by its box, and what it draws past it
+ * overhangs the track. A cell with no claim has no box. It reads the plan
+ * the layer's claim made (`ClaimMemo.plans`), so it is read once that claim
+ * is made: in layout, and in the checks the claim runs at its end
+ * (`warnFlexibleSizes`).
+ */
+export const cellBoxesOf = (layer: GoFishNode): CellBox => {
+  const slot = slotOf(layer);
+  return (ref, axis) => {
+    const i = slot(ref);
+    return i === undefined
+      ? undefined
+      : layer._claimMemo.plans[axis]?.forms[i]?.box.width;
+  };
 };
 
-/** Per-axis track claims: for each track (a column on x, a row on y), the max
- *  over its cells' claims — the (max, +) rule. A track with no claiming cell is
- *  `undefined` (a fill track). */
-export function gridTrackClaims(
+/**
+ * Each track's extent on `axis` (columns on x, rows on y): the largest size
+ * of its cells (`sizeOf`, by the grid's ref, undefined for a cell with
+ * none), or `share` where no cell has one, a track its content does not
+ * size, which is one share of its scope (`fr(1)`).
+ */
+function trackExtents<T, S extends T | undefined>(
+  A: Arith<T>,
   c: GridConstraint,
-  cells: readonly GoFishAST[]
-): [(Monotonic.Monotonic | undefined)[], (Monotonic.Monotonic | undefined)[]] {
-  const numRows = numRowsOf(c);
-  const colClaims = Array.from({ length: c.numCols }, (_, col) => {
-    const claims: Monotonic.Monotonic[] = [];
-    for (let row = 0; row < numRows; row++) {
-      const claim = cellClaim(cells[row * c.numCols + col], 0);
-      if (claim !== undefined) claims.push(claim);
-    }
-    return claims.length > 0 ? Monotonic.max(...claims) : undefined;
+  axis: 0 | 1,
+  sizeOf: (ref: ConstraintRef) => T | undefined,
+  share: S
+): (T | S)[] {
+  return Array.from({ length: trackCount(c, axis) }, (_, track) => {
+    const own = cellsOfTrack(c, axis, track)
+      .map((i) => sizeOf(c.children[i]))
+      .filter((v): v is T => v !== undefined);
+    return own.length > 0 ? A.max([A.zero, ...own]) : share;
   });
-  const rowClaims = Array.from({ length: numRows }, (_, row) => {
-    const claims: Monotonic.Monotonic[] = [];
-    for (let col = 0; col < c.numCols; col++) {
-      const claim = cellClaim(cells[row * c.numCols + col], 1);
-      if (claim !== undefined) claims.push(claim);
-    }
-    return claims.length > 0 ? Monotonic.max(...claims) : undefined;
-  });
-  return [colClaims, rowClaims];
 }
 
-/** Solve one axis of tracks against `allocated` pixels under the unified rule.
- *
- *  - No claims (all fill): the leftover after gaps splits equally — today's
- *    `sliceExtent`, bit-identical.
- *  - Some claims: each claimed track takes its claim (evaluated at the solved σ,
- *    or its constant intercept when σ-independent); the remaining fill tracks
- *    share whatever is left, equally. When EVERY track is claimed and a claim is
- *    σ-dependent, σ is solved by inverting `Σ claims + gaps = allocated` through
- *    the scope registry (the same frame equation as any other size scope). */
-function resolveAxisTracks(
-  claims: (Monotonic.Monotonic | undefined)[],
-  allocated: number,
-  spacing: number,
-  scopes?: ScopeRegistry,
-  meta?: { rootKey: string; axis: 0 | 1 }
-): TrackLayout {
-  const n = claims.length;
-  const gaps = spacing * Math.max(0, n - 1);
-  const nFill = claims.filter((c) => c === undefined).length;
-
-  let extents: number[];
-  if (nFill === n) {
-    const e = sliceExtent(allocated, spacing, n);
-    extents = claims.map(() => e);
-  } else {
-    // Solve σ only when every track is claimed (no fill absorbs the slack) and a
-    // claim is genuinely σ-dependent; otherwise claims are constants and σ is
-    // irrelevant (read back the intercept at σ=0).
-    let sigma = 0;
-    if (nFill === 0 && scopes !== undefined && meta !== undefined) {
-      const claimed = claims.filter(
-        (c): c is Monotonic.Monotonic => c !== undefined
-      );
-      const gridClaim = Monotonic.adds(Monotonic.add(...claimed), gaps);
-      if (!Monotonic.isConstant(gridClaim)) {
-        sigma =
-          scopes.solveSize(
-            { kind: "grid", rootKey: meta.rootKey, axis: meta.axis },
-            gridClaim,
-            allocated,
-            { upperBoundGuess: allocated }
-          ) ?? 0;
-      }
-    }
-    const claimedExtents = claims.map((c) =>
-      c === undefined ? undefined : Math.max(0, c.run(sigma))
-    );
-    const claimedTotal =
-      claimedExtents.reduce((s: number, e) => s + (e ?? 0), 0) + gaps;
-    const fillShare =
-      nFill > 0 ? Math.max(0, (allocated - claimedTotal) / nFill) : 0;
-    extents = claims.map((c, i) =>
-      c === undefined ? fillShare : claimedExtents[i]!
-    );
-  }
-
-  return layoutTrack(extents, spacing);
-}
-
-/** Resolve both axes' tracks for a grid laid into `size`, under the unified
- *  (max, +) sizing rule. The one site the rule runs; the layout budget and the
- *  placement both read the result, so cell proposals and cell centers agree by
- *  construction. */
-export function resolveGridTracks(
+/**
+ * The tracks of `c` on `axis` ({@link trackExtents}), laid end to end with
+ * `gap` between them. The one track rule: the claim walk reads it in σ
+ * (`placeByClaims`), and layout proposes each cell its track's extent at
+ * the σ it lays out at ({@link gridCellSizesAt}).
+ */
+export function gridTracks<T>(
+  A: Arith<T>,
   c: GridConstraint,
-  cells: readonly GoFishAST[],
-  size: readonly [number, number],
-  scopes?: ScopeRegistry,
-  rootKey = "grid"
-): [TrackLayout, TrackLayout] {
-  const [colClaims, rowClaims] = gridTrackClaims(c, cells);
-  return [
-    resolveAxisTracks(colClaims, size[0], c.xSpacing, scopes, {
-      rootKey,
-      axis: 0,
-    }),
-    resolveAxisTracks(rowClaims, size[1], c.ySpacing, scopes, {
-      rootKey,
-      axis: 1,
-    }),
-  ];
+  axis: 0 | 1,
+  sizeOf: (ref: ConstraintRef) => T | undefined,
+  gap: T,
+  share: T
+): TrackLayout<T> {
+  return layoutTrack(A, trackExtents(A, c, axis, sizeOf, share), gap);
 }
 
 /** Lay out a run of track extents into `{ starts, extents }`: cumulative starts
- *  with `spacing` reserved between adjacent tracks. */
-function layoutTrack(extents: number[], spacing: number): TrackLayout {
-  const starts: number[] = [];
-  let cursor = 0;
+ *  with `gap` reserved between adjacent tracks. */
+function layoutTrack<T>(A: Arith<T>, extents: T[], gap: T): TrackLayout<T> {
+  const starts: T[] = [];
+  let cursor = A.zero;
   for (const e of extents) {
     starts.push(cursor);
-    cursor += e + spacing;
+    cursor = A.add(cursor, A.add(e, gap));
   }
   return { starts, extents };
 }
 
-/** The AUTHORITATIVE placement tracks: each track's extent is the max of its
- *  cells' ACTUAL laid-out sizes (a filled cell equals the budgeted extent; a
- *  claim cell equals its content). Computed post-layout so the cell centers pin
- *  to the real geometry — this is the single source both the placement and the
- *  solver shadow read, so they cannot drift from what rendered. */
-export function gridTracksFromSizes(
-  c: GridConstraint,
-  cellSizes: (readonly [number, number] | undefined)[]
-): [TrackLayout, TrackLayout] {
-  const numRows = numRowsOf(c);
-  const colExtents = Array.from({ length: c.numCols }, (_, col) => {
-    let m = 0;
-    for (let row = 0; row < numRows; row++)
-      m = Math.max(m, cellSizes[row * c.numCols + col]?.[0] ?? 0);
-    return m;
-  });
-  const rowExtents = Array.from({ length: numRows }, (_, row) => {
-    let m = 0;
-    for (let col = 0; col < c.numCols; col++)
-      m = Math.max(m, cellSizes[row * c.numCols + col]?.[1] ?? 0);
-    return m;
-  });
-  return [
-    layoutTrack(colExtents, c.xSpacing),
-    layoutTrack(rowExtents, c.ySpacing),
-  ];
-}
-
-/** Per-cell proposed size `[cellW, cellH]`, keyed by cell operand key: each cell is
- *  proposed its (column, row) track's extent. A fill cell fills that extent; a
- *  claim cell keeps its own (equal or smaller) size and is centered in it. */
-export function gridCellSizeByKey(
+/**
+ * Per-cell proposed size `[cellW, cellH]`, keyed by cell operand key
+ * (`keyOf`, the uid of the cell), at the σ its
+ * layer hands its cells (`sigmas`): each cell is proposed its (column, row)
+ * track's extent ({@link trackExtents}), its cells' boxes (`boxOf`, the
+ * boxes the claim walk sized the tracks by, {@link cellBoxesOf}) at σ. A
+ * fill cell fills that extent; a cell with a size of its own keeps its own
+ * (equal or smaller) size and is centered in it.
+ *
+ * Where the layer has no σ on an axis (an unsized root, where shares have
+ * no room: `GoFishNode.sharesHaveNoRoom`), a box that grows with σ has
+ * no size there, as the layer proposes a child of a spread no size from
+ * its claim. A box with no σ in it is the same at any σ, so it still
+ * sizes its track. A track no box sizes then has no extent, and its
+ * cells are proposed none on that axis: they keep their default size, as
+ * a spread's bands do.
+ */
+export function gridCellSizesAt(
   c: GridConstraint,
   keyOf: KeyOf,
-  tracks: [TrackLayout, TrackLayout]
-): Map<string, [number, number]> {
-  const [cols, rows] = tracks;
-  const out = new Map<string, [number, number]>();
+  boxOf: CellBox,
+  sigmas: readonly [number | undefined, number | undefined]
+): Map<string, [number | undefined, number | undefined]> {
+  const extentsOn = (axis: 0 | 1): (number | undefined)[] => {
+    const s = sigmas[axis];
+    const sigma = s !== undefined && Number.isFinite(s) ? s : undefined;
+    return trackExtents(
+      numbers,
+      c,
+      axis,
+      (ref) => {
+        const box = boxOf(ref, axis);
+        if (box === undefined) return undefined;
+        if (sigma !== undefined) return Pwl.at(box, sigma);
+        return Pwl.isConstant(box) ? Pwl.at(box, 0) : undefined;
+      },
+      sigma
+    );
+  };
+  const [cols, rows] = [extentsOn(0), extentsOn(1)];
+  const out = new Map<string, [number | undefined, number | undefined]>();
   c.children.forEach((child, index) => {
-    if (child === undefined) return;
-    const col = index % c.numCols;
-    const row = Math.floor(index / c.numCols);
-    out.set(keyOf(child), [cols.extents[col], rows.extents[row]]);
+    out.set(keyOf(child), [
+      cols[index % c.numCols],
+      rows[Math.floor(index / c.numCols)],
+    ]);
   });
   return out;
 }
 
-export type GridCellPlacement = {
-  child: ConstraintRef;
-  center: [number, number];
-};
-
-/** Equal box-division tracks: every column/row gets the same slice of `size`.
- *  The fallback for `gridCellPlacements` when no resolved tracks are handed in. */
-function equalTracks(
+/** The tracks of `c` on `axis` that no cell's box sizes (`boxOf`), by
+ *  index: each is one share of its scope (`fr(1)`), a flexible size
+ *  (`warnFlexibleSizes`). */
+export const shareTracks = (
   c: GridConstraint,
-  size: readonly [number, number]
-): [TrackLayout, TrackLayout] {
-  const numRows = numRowsOf(c);
-  const colExtent = sliceExtent(size[0], c.xSpacing, c.numCols);
-  const rowExtent = sliceExtent(size[1], c.ySpacing, numRows);
-  return [
-    layoutTrack(
-      Array.from({ length: c.numCols }, () => colExtent),
-      c.xSpacing
-    ),
-    layoutTrack(
-      Array.from({ length: numRows }, () => rowExtent),
-      c.ySpacing
-    ),
-  ];
-}
+  axis: 0 | 1,
+  boxOf: CellBox
+): number[] =>
+  Array.from({ length: trackCount(c, axis) }, (_, t) => t).filter((t) =>
+    cellsOfTrack(c, axis, t).every(
+      (i) => boxOf(c.children[i], axis) === undefined
+    )
+  );
 
-/** Cell centers from resolved tracks — or, when `tracks` is omitted, the equal
- *  box-division fallback used by the direct-solver tests. */
-export function gridCellPlacements(
-  c: GridConstraint,
-  size: readonly [number, number],
-  tracks?: [TrackLayout, TrackLayout]
-): GridCellPlacement[] {
-  const [cols, rows] = tracks ?? equalTracks(c, size);
-  return c.children.map((child, index) => {
-    const column = index % c.numCols;
-    const row = Math.floor(index / c.numCols);
-    return {
-      child,
-      center: [
-        cols.starts[column] + cols.extents[column] / 2,
-        rows.starts[row] + rows.extents[row] / 2,
-      ],
-    };
-  });
-}
-
-/** Emit the per-cell center pins for a grid. A cell whose center on an axis is
- *  claimed by a `position` pin is skipped on that axis — the explicit pin
- *  overrides the track centering (the authoritative-pin pattern). */
-export function lowerGridPlacement(
+/** Emit the per-cell center pins for a grid, on each axis it has the
+ *  resolved `tracks` of (the claim walk solves one axis at a time, so it
+ *  hands only that axis's): each cell is pinned to the middle of its
+ *  (column, row) track. A cell whose center on an axis is claimed by a
+ *  `position` pin is skipped on that axis — the explicit pin overrides the
+ *  track centering (the authoritative-pin pattern). */
+export function lowerGridPlacement<T>(
+  A: Arith<T>,
   c: GridConstraint,
   owner: string,
-  size: readonly [number, number],
-  emitter: PlacementFactEmitter,
+  emitter: PlacementFactEmitter<T>,
   keyOf: KeyOf,
-  tracks?: [TrackLayout, TrackLayout],
+  tracks: GridTracks<T>,
   pinnedByPosition?: Map<string, Set<0 | 1>>
 ): void {
-  for (const { child, center } of gridCellPlacements(c, size, tracks)) {
+  const center = (t: TrackLayout<T>, i: number) =>
+    A.add(t.starts[i], A.scale(0.5, t.extents[i]));
+  c.children.forEach((child, index) => {
+    const at = [index % c.numCols, Math.floor(index / c.numCols)] as const;
     const key = keyOf(child);
     const overridden = pinnedByPosition?.get(key);
-    if (!overridden?.has(0))
+    for (const axis of [0, 1] as const) {
+      const t = tracks[axis];
+      if (t === undefined || overridden?.has(axis)) continue;
       emitter.pin({
-        axis: "x",
+        axis: axis === 0 ? "x" : "y",
         target: { key, anchor: "middle" },
-        value: center[0],
+        value: center(t, at[axis]),
         owner,
       });
-    if (!overridden?.has(1))
-      emitter.pin({
-        axis: "y",
-        target: { key, anchor: "middle" },
-        value: center[1],
-        owner,
-      });
-  }
+    }
+  });
 }
 
 /**
  * A grid's axes are categorical: ORDINAL over the columns (x) and rows (y).
  * Keys come from `colKeys`/`rowKeys`, else the representative cells' keys —
- * first-row cells for columns, first-column cells for rows. `cells` are the
- * layer's children in row-major order.
+ * first-row cells for columns, first-column cells for rows, found by the
+ * grid's refs (`cellOf`).
  */
 export function gridSpaces(
   c: GridConstraint,
-  cells: readonly GoFishAST[]
+  cellOf: CellOf
 ): [UnderlyingSpace, UnderlyingSpace] {
-  const keyAt = (i: number): OrdinalKey | undefined =>
-    cells[i] instanceof GoFishNode ? (cells[i] as GoFishNode).key : undefined;
+  const keyAt = (i: number): OrdinalKey | undefined => {
+    const ref = c.children[i];
+    const cell = ref === undefined ? undefined : cellOf(ref);
+    return cell instanceof GoFishNode ? cell.key : undefined;
+  };
   const colKeys =
     c.colKeys && c.colKeys.length > 0
       ? c.colKeys

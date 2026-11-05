@@ -86,7 +86,7 @@ export const testVLStackedBar = () =>
       .groupBy("month")
       .map((items) =>
         ribbon(
-          { dir: "x", opacity: 0.8, mixBlendMode: "multiply" },
+          { dir: "x", opacity: 0.8, blendMode: "multiply" },
           items.map((d) => {
             const date = new Date(d.date);
             const monthNames = [

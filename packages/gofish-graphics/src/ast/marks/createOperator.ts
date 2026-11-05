@@ -2,6 +2,9 @@
 // @wiki The Operator Factory — /internals/frontend/operator-factory
 // </gofish-wiki>
 
+import { Frontend } from "gofish-ir";
+import { checkLengths } from "../length";
+
 /**
  * createOperator: a factory for the fluent API's layout operators.
  *
@@ -548,34 +551,74 @@ export const labelModifier = {
 >;
 
 /**
+ * A modifier whose one argument is a value for every node the mark makes: a
+ * constant, or a callback resolved per instance against the datum the mark
+ * is bound to (`.zOrder`, `.hidden`). `set` stores it on the node. A Python
+ * callback is called through the bridge once with every input
+ * (`resolveValue`) and read back by input. A constant round-trips through the
+ * IR as the tag field `name`; a callback can't be JSON-serialized, so it is
+ * dropped from the emitted IR (the rest of the tag still propagates),
+ * mirroring `.label(fn)`. A call with no argument takes `fallback`.
+ */
+function datumValueModifier<V extends number | boolean>(
+  name: "zOrder" | "hidden",
+  set: (node: GoFishNode, value: V) => void,
+  isConstant: (value: unknown) => value is V,
+  fallback?: V
+) {
+  type Arg = V | ((datum: any) => V);
+  const valueOf = (value: Arg | undefined) => (value ?? fallback) as Arg;
+  return {
+    name,
+    apply: (node, _layerContext, datum, value) => {
+      const v = valueOf(value);
+      set(node, typeof v === "function" ? v(datum) : v);
+    },
+    resolveArgs: (value) =>
+      isBatchAccessor(value)
+        ? async (inputs) => [
+            (await resolveValue(value, inputs)) as (datum: unknown) => V,
+          ]
+        : undefined,
+    tag: (wrapped, base, value) => {
+      const v = valueOf(value);
+      propagateSerialize(base, wrapped, (tag) => {
+        if (isConstant(v)) tag[name] = v;
+      });
+    },
+  } satisfies ModifierConfig<[value?: Arg]>;
+}
+
+/**
  * `.zOrder(value)` — sets the node's paint-order hint. `value` is either a
  * constant or a callback resolved per-instance against the datum the mark is
  * bound to, so paint order can be data-driven (e.g. raise one category over
  * the rest) without splitting the mark into separately-named layers. The hint
  * is consumed by the bake pass's per-layer `(zOrder, index)` sort.
  */
-export const zOrderModifier = {
-  name: "zOrder",
-  apply: (node, _layerContext, datum, value) => {
-    node.zOrder(typeof value === "function" ? value(datum) : value);
-  },
-  // A Python callback is called through the bridge once with every input
-  // (`resolveValue`), and read back by input.
-  resolveArgs: (value) =>
-    isBatchAccessor(value)
-      ? async (inputs) => [
-          (await resolveValue(value, inputs)) as (datum: unknown) => number,
-        ]
-      : undefined,
-  tag: (wrapped, base, value) => {
-    // A constant hint round-trips; a callback can't be JSON-serialized, so it
-    // is dropped from the emitted IR (the rest of the tag still propagates),
-    // mirroring `.label(fn)`.
-    propagateSerialize(base, wrapped, (tag) => {
-      if (typeof value === "number") tag.zOrder = value;
-    });
-  },
-} satisfies ModifierConfig<[value: ZOrderValue]>;
+export const zOrderModifier = datumValueModifier<number>(
+  "zOrder",
+  (node, value) => node.zOrder(value),
+  (value): value is number => typeof value === "number"
+);
+
+/** Whether a mark is hidden: a constant, or a callback resolved per instance
+ *  against the datum the mark is bound to. */
+export type HiddenValue<T = any> = boolean | ((datum: T) => boolean);
+
+/**
+ * `.hidden(value = true)` — sets the node's hidden flag (`GoFishNode.hidden`):
+ * the mark is laid out and feeds scales, axes, legends and refs, and paints
+ * nothing. `value` is a constant or a callback resolved per instance against
+ * the datum the mark is bound to, as `.zOrder` is. It only sets a field, so
+ * it has no function form.
+ */
+export const hiddenModifier = datumValueModifier<boolean>(
+  "hidden",
+  (node, value) => node.hidden(value),
+  (value): value is boolean => typeof value === "boolean",
+  true
+);
 
 /**
  * `.transition({ enter, update, exit })` — how the mark looks in each phase
@@ -596,17 +639,26 @@ export const transitionModifier = {
 } satisfies ModifierConfig<[spec: MarkTransition]>;
 
 /**
- * Attach chainable .name(), .label(), and .zOrder() to a mark, registering it
+ * Attach chainable .name(), .label(), .zOrder() and .hidden() to a mark, registering it
  * into the layer context when named so that ref(...)/selectAll(...) can find
  * it back.
  */
+/** The modifiers every mark carries (`nameableMark`). */
+const NAMEABLE_MODIFIERS = [
+  nameModifier,
+  labelModifier,
+  zOrderModifier,
+  hiddenModifier,
+  transitionModifier,
+];
+
+/** Their method names: a wrapper around a mark forwards these. */
+export const NAMEABLE_METHODS: readonly string[] = NAMEABLE_MODIFIERS.map(
+  (m) => m.name
+);
+
 export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
-  return attachModifiers(base, [
-    nameModifier,
-    labelModifier,
-    zOrderModifier,
-    transitionModifier,
-  ]) as NameableMark<T>;
+  return attachModifiers(base, NAMEABLE_MODIFIERS) as NameableMark<T>;
 }
 
 /**
@@ -1211,6 +1263,12 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         );
       }
       if (cfg.serialize) {
+        // A percent or fr length only where its descriptor takes one.
+        checkLengths(
+          Frontend.acceptedFields("combinator-mark", cfg.serialize),
+          cfg.serialize,
+          opts as Record<string, unknown>
+        );
         tagCombinator(combinator, cfg.serialize, opts, marks);
       }
       return combinator;
@@ -1400,6 +1458,12 @@ export function createOperator<Datum, Options extends Record<string, any>>(
     // Tag the operator with IR-serialization metadata so the frontend-IR
     // emitter can reconstruct it as `{ type, ...opts }` on the wire.
     if (cfg.serialize) {
+      // A percent or fr length only where its descriptor takes one.
+      checkLengths(
+        Frontend.acceptedFields("operator", cfg.serialize),
+        cfg.serialize,
+        opts as Record<string, unknown>
+      );
       withWire(operator, { type: cfg.serialize, opts });
     }
     const withTranslate = attachTranslateOption(operator, (translateOpts) =>

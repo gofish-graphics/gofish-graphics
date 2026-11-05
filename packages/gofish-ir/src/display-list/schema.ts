@@ -43,8 +43,7 @@ export type DisplayItem =
   | TextItem
   | ImageItem
   | GroupItem
-  | CompositeItem
-  | MaskItem;
+  | CompositeItem;
 
 /** Source-data provenance carried by a primitive: one row, or rows for an
  *  aggregate mark. */
@@ -120,40 +119,70 @@ export interface ImageItem extends BaseDisplayItem {
 
 /**
  * A transform group — children painted under an affine `transform` (the
- * display-list analogue of an SVG `<g transform>` / a Canvas save+transform).
- * Used for the rare cases the flat-absolute fold can't express on its own: a
- * `box`/`frame` `scale`. Children are in the group's local pixel space.
+ * display-list analogue of an SVG `<g transform>` / a Canvas save+transform),
+ * and under a `filter` when it has one. Used for the cases the flat-absolute
+ * fold can't express on its own: a `box`/`frame` `scale`, and a node with a
+ * `filter` option, whose drawing is filtered as one picture. Children are in
+ * the group's local pixel space.
  */
 export interface GroupItem extends BaseDisplayItem {
   kind: "group";
   transform: { translate?: [number, number]; scale?: [number, number] };
+  /** A filter over the group's whole drawing. */
+  filter?: DisplayFilter;
   children: DisplayItem[];
 }
 
 /**
- * A Porter-Duff composite of two sub-lists (Figma-style operator names). The
- * SVG backend reconstructs the `feImage`/`feComposite`/`feBlend` filter graph;
- * a Canvas/WebGPU backend maps `operator`/`blendMode` to its own blend state.
+ * A filter over a group's drawing. `css` is a CSS `filter` value
+ * (`grayscale(1)`, `url(#shadow)`), which SVG takes as the `filter`
+ * attribute. `luminanceToAlpha` has no CSS function, so a backend draws it
+ * as an SVG `<filter>` def: an `feColorMatrix type="luminanceToAlpha"` in
+ * sRGB, which makes each pixel black with an alpha of its luminance.
+ */
+export type DisplayFilter =
+  | { kind: "css"; value: string }
+  | { kind: "luminanceToAlpha" };
+
+/**
+ * A region composite: a set operation over its operands' regions (#1267).
+ * `operator` is the public operator's name: Figma's `union`, `intersect`,
+ * `subtract` and `exclude`, and Porter-Duff's `atop`. An operand's region is its alpha coverage: where its
+ * `shape` puts ink, at that ink's alpha.
+ *
+ * With `fill`, the result is a new shape in that paint: the fill items are
+ * drawn where the result's region is, and no operand's paint is drawn. With
+ * none, each operand's own `paint` is drawn where the operator keeps it, and
+ * where two operands' kept paint overlaps the later one is drawn over the
+ * earlier with `blendMode` (PiCCL's coverage-blend rule). Which operand is
+ * drawn where, and which masks clip it, is `compositeLayers` (composite.ts),
+ * the one table both SVG backends read.
+ *
+ * The items of `operands` and `fill` are in absolute pixels, like every
+ * other item.
  */
 export interface CompositeItem extends BaseDisplayItem {
   kind: "composite";
-  operator: "over" | "atop" | "in" | "out" | "xor";
-  /** CSS `mix-blend-mode` applied between the two layers. */
+  operator: "union" | "intersect" | "subtract" | "exclude" | "atop";
+  /** CSS `mix-blend-mode` between kept paint that overlaps. Default
+   *  `"normal"`. */
   blendMode?: string;
   bbox: { x: number; y: number; w: number; h: number };
-  source: DisplayItem[];
-  dest: DisplayItem[];
+  operands: CompositeOperand[];
+  /** The result's own paint, drawn over the bbox and clipped to the
+   *  result's region. */
+  fill?: DisplayItem[];
 }
 
-/** Clip `content` by `mask`: by its luminance (SVG's default mask), or by
- *  its alpha when `mode` is `"alpha"` (where `mask` draws any ink at all). */
-export interface MaskItem extends BaseDisplayItem {
-  kind: "mask";
-  /** What of `mask` clips: its luminance (the default) or its alpha. */
-  mode?: "luminance" | "alpha";
-  bbox: { x: number; y: number; w: number; h: number };
-  mask: DisplayItem[];
-  content: DisplayItem[];
+/** One operand of a {@link CompositeItem}. */
+export interface CompositeOperand {
+  /** The operand as it draws: empty for a hidden one (`.hidden()`), and for
+   *  every operand of a composite with a `fill`, whose operands give shape
+   *  only. */
+  paint: DisplayItem[];
+  /** The operand's shape, where it differs from `paint`: a hidden part is
+   *  drawn here, and gives shape but no paint. Omitted, it is `paint`. */
+  shape?: DisplayItem[];
 }
 
 export interface Style {
@@ -166,8 +195,6 @@ export interface Style {
   mixBlendMode?: string;
   /** SVG `stroke-dasharray`. */
   strokeDasharray?: string;
-  /** A `url(#id)` reference to a user-supplied filter def. */
-  filter?: string;
   /** SVG `paint-order`: `"stroke"` paints the stroke under the fill (a
    *  text halo). */
   paintOrder?: string;
@@ -183,7 +210,6 @@ export const DISPLAY_ITEM_KINDS = [
   "image",
   "group",
   "composite",
-  "mask",
 ] as const;
 
 export type DisplayItemKind = (typeof DISPLAY_ITEM_KINDS)[number];
@@ -212,7 +238,4 @@ export function isGroupItem(item: DisplayItem): item is GroupItem {
 }
 export function isCompositeItem(item: DisplayItem): item is CompositeItem {
   return item.kind === "composite";
-}
-export function isMaskItem(item: DisplayItem): item is MaskItem {
-  return item.kind === "mask";
 }

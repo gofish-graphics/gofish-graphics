@@ -28,11 +28,8 @@ const IR_DIST = resolve(REPO_ROOT, "packages/gofish-ir/dist/frontend/index.js");
  * Constructs deliberately without a reference page:
  *  - `mark-fn`: the Python bridge's "a lambda returning a chart" mark. It has no
  *    user-facing factory in either language.
- *  - `over`: internal-only union compositing, not exported from lib.ts (the
- *    public spelling is `layer`), kept only so the deserializer can dispatch
- *    the wire type.
  */
-const ALLOWLIST = new Set(["mark-fn", "over"]);
+const ALLOWLIST = new Set(["mark-fn"]);
 
 const LANGS = ["js", "python"];
 

@@ -21,7 +21,7 @@
 import {
   ribbon,
   enclose,
-  paint,
+  atop,
   blank,
   circle,
   derive,
@@ -33,9 +33,8 @@ import {
   layer,
   line,
   log,
-  mask,
   subtract,
-  over,
+  union,
   rect,
   exclude,
   type ChartBuilder,
@@ -286,14 +285,12 @@ export const FACTORIES: Record<string, (...args: any[]) => any> = {
   layer,
   position,
   arrow,
-  // The compositing wire types keep their original names; the factories were
-  // renamed (#196/#202).
-  over,
-  inside: intersect,
-  xor: exclude,
-  out: subtract,
-  atop: paint,
-  mask,
+  // The compositing operators (#1267).
+  union,
+  intersect,
+  subtract,
+  exclude,
+  atop,
   // Coordinate transforms. A transform is a JS object of functions, so the
   // wire carries only its `type` tag and options, and the factory makes it
   // again from them.

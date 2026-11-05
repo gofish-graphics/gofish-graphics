@@ -299,8 +299,6 @@ console.log("# measure: the join table, shared axis");
           ["p", "q"],
           {
             axis: 1,
-            spacing: 0,
-            anchor: "edge",
             glue: true,
             origin: { part: 0, fraction: 0, mirrored: false },
           }

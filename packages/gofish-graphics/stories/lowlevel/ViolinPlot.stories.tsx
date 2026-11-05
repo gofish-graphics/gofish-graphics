@@ -44,7 +44,7 @@ export const Default: StoryObj<Args> = {
           ),
         ]).relate((names) => [
           ribbon(
-            { dir: "y", opacity: 1, mixBlendMode: "normal" },
+            { dir: "y", opacity: 1, blendMode: "normal" },
             map(density, (d) => names[`${species}-${d.x}`])
           ),
         ]);

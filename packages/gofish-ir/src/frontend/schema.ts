@@ -108,6 +108,8 @@ export interface ChartIR extends BaseIRNode {
   mark: MarkIR;
   options?: Record<string, unknown>;
   zOrder?: number;
+  /** `chart(...).hidden(b)`: the chart is laid out and paints nothing. */
+  hidden?: boolean;
   /**
    * Chart-level name (from `chart(...).name("scatter")` in Python /
    * `node.name(...)` on a resolved chart in JS) so a sibling
@@ -293,7 +295,8 @@ export interface SpreadOperator
   by?: string | FieldAccessor | ChunkKeyIR;
   /** `x`/`y`, or an axis name the enclosing coordinate space declares. */
   dir?: string;
-  spacing?: number;
+  /** Pixels, or a length (`percent(n)`, `fr(k)`). */
+  spacing?: number | LengthIR;
   alignment?: string;
   anchor?: "edge" | "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
@@ -305,9 +308,10 @@ export interface SpreadOperator
   x?: ChannelValue;
   y?: ChannelValue;
   /** Data-driven operator extent (#4/#20): a field name or pixel number sizing
-   *  this operator's box, reported as a SIZE claim to the enclosing scale. */
-  w?: ChannelValue;
-  h?: ChannelValue;
+   *  this operator's box, reported as a SIZE claim to the enclosing scale,
+   *  or a length (`percent(n)`, `fr(k)`). */
+  w?: ChannelValue | LengthIR;
+  h?: ChannelValue | LengthIR;
   /** Per-entry stack-axis extent (#700 Phase 2): a field name/accessor or
    *  pixel number sizing each split entry. A `field(name).normalize()`
    *  accessor (a `FieldAccessor` with a `normalize` pipeline op) replaces
@@ -339,8 +343,8 @@ export interface StackOperator
   /** Box position, extent, and per-entry size — see `SpreadOperator`. */
   x?: ChannelValue;
   y?: ChannelValue;
-  w?: ChannelValue;
-  h?: ChannelValue;
+  w?: ChannelValue | LengthIR;
+  h?: ChannelValue | LengthIR;
   size?: ChannelValue;
   axes?: AxesOptions;
 }
@@ -444,7 +448,8 @@ export interface TableOperator
     x: string | FieldAccessor | ChunkKeyIR;
     y: string | FieldAccessor | ChunkKeyIR;
   };
-  spacing?: number | [number, number];
+  /** Pixels or `percent(n)`, one for both axes or `[x, y]`. */
+  spacing?: number | LengthIR | [number | LengthIR, number | LengthIR];
   numCols?: number;
 }
 
@@ -494,8 +499,9 @@ export interface TreemapOperator
    *  annotation, so they are pixel literals. */
   x?: ChannelValue;
   y?: ChannelValue;
-  w?: ChannelValue;
-  h?: ChannelValue;
+  /** Its box's size, or a length (`percent(n)`, `fr(k)`). */
+  w?: ChannelValue | LengthIR;
+  h?: ChannelValue | LengthIR;
   /** The same box by axis name (see `AxisDims`). */
   dims?: AxisDims;
 }
@@ -565,15 +571,36 @@ export interface PartitionOperator
 // type, e.g. `Curve.Curve`) and on the wire. descriptors.test.ts checks that
 // these kinds and params agree with the table.
 
-/** How `treemap` tiles its box, made by a call in the `Tile` family
+/** How `treemap` tiles its region, made by a call in the `Tile` family
  *  (`Tile.squarify()`, `Tile.slice()`, `Tile.dice()`, `Tile.binary()`,
- *  `Tile.sliceDice()`). */
+ *  `Tile.voronoi()`). */
 export type TileIR =
   | { kind: "squarify"; ratio?: number }
   | { kind: "slice" }
   | { kind: "dice" }
   | { kind: "binary" }
-  | { kind: "sliceDice" };
+  | { kind: "voronoi"; seed?: number };
+
+/** How a mark's or a layer's drawing is filtered, made by a call in the
+ *  `Filter` family (`Filter.grayscale()`, `Filter.luminanceToAlpha()`). The
+ *  `filter` option also takes a raw CSS filter string. */
+export type FilterIR =
+  | { kind: "grayscale"; amount?: number }
+  | { kind: "luminanceToAlpha" };
+
+/** How a paint mixes with what is under it where they overlap: the CSS
+ *  `mix-blend-mode` values a `blendMode` option takes. `"normal"` draws the
+ *  later paint over the earlier one. The one list: `BLEND_MODE` in
+ *  descriptors.ts and gofish-graphics' `BlendMode` are made from it. */
+export const BLEND_MODES = [
+  "normal",
+  "multiply",
+  "screen",
+  "overlay",
+  "color",
+  "luminosity",
+] as const;
+export type BlendModeIR = (typeof BLEND_MODES)[number];
 
 /** How `scatter` keeps its children clear of each other, made by a call in
  *  the `Overlap` family (`Overlap.separate()`, `Overlap.noise()`;
@@ -769,12 +796,11 @@ export type CombinatorMarkType =
   | "ribbon"
   | "treemap"
   | "pack"
-  | "over"
-  | "inside"
-  | "xor"
-  | "out"
-  | "atop"
-  | "mask";
+  | "union"
+  | "intersect"
+  | "subtract"
+  | "exclude"
+  | "atop";
 
 /**
  * A leaf shape mark. Channel-valued props (`h`, `w`, `fill`, `x`, `y`, …)
@@ -800,6 +826,7 @@ export interface LeafMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   label?: LabelIR;
   relate?: RelateIR;
   zOrder?: number | BridgeLambdaSentinel;
+  hidden?: boolean | BridgeLambdaSentinel;
   translate?: TranslateIR;
   [key: string]: unknown;
 }
@@ -818,6 +845,7 @@ export interface CombinatorMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   label?: LabelIR;
   relate?: RelateIR;
   zOrder?: number | BridgeLambdaSentinel;
+  hidden?: boolean | BridgeLambdaSentinel;
   translate?: TranslateIR;
 }
 
@@ -900,6 +928,17 @@ export type ChannelValue =
   | FieldAccessor
   | DatumValue
   | BridgeLambdaSentinel;
+
+/**
+ * A length (#1176 step 6), as `percent(n)` and `fr(k)` build it: `percent`
+ * percent of the room it is laid out in plus `px` pixels, or a weight of
+ * `fr` shares of the room its nearest scope divides. gofish-graphics'
+ * `Length` (`ast/length.ts`) is this type; the `Length` option type in
+ * descriptors.ts mirrors it.
+ */
+export type LengthIR =
+  | { type: "length"; percent: number; px?: number }
+  | { type: "length"; fr: number };
 
 /** One axis of a `dims` option, as an interval: its anchors, each a channel
  *  value (`size` a size channel, the rest positions). */
@@ -1206,10 +1245,9 @@ export const COMBINATOR_MARK_TYPES: readonly CombinatorMarkType[] = [
   "ribbon",
   "treemap",
   "pack",
-  "over",
-  "inside",
-  "xor",
-  "out",
+  "union",
+  "intersect",
+  "subtract",
+  "exclude",
   "atop",
-  "mask",
 ];

@@ -4,8 +4,13 @@
 
 import type { GoFishNode } from "./_node";
 import type { DistributeConstraint } from "./constraints/distribute";
+import { spacingOn } from "./constraints/gap";
 import { axisIndex, axisName } from "./constraints/shared";
+import { cellBoxesOf, isGridConstraint, shareTracks } from "./constraints/grid";
+import type { Extent } from "./extent";
 import { room } from "../util";
+import * as Pwl from "./solver/pwl";
+import { isFr, printLength, type Length, type LengthValue } from "./length";
 
 /**
  * A problem layout found and drew through anyway (#493): the render keeps
@@ -20,9 +25,14 @@ import { room } from "../util";
  * - `ink-overflow`: what the graphic draws reaches past the canvas for
  *   another reason: a node the claim walk cannot place (ink), so it took
  *   no room.
+ * - `mixed-sizes`: a flexible size (a part of a chain with no size of its
+ *   own, an `fr` size or gap: a share of the chain's room) sits in a scope
+ *   that data sizes. It is drawn that many data units wide.
+ * - `no-room`: an `fr` gap sits in a scope that nothing gives room (an
+ *   axis the render gives no size), so it is 0.
  */
 export type LayoutWarning = {
-  kind: "fixed-overflow" | "ink-overflow";
+  kind: "fixed-overflow" | "ink-overflow" | "mixed-sizes" | "no-room";
   /** The node, as its operator or mark and key: `spread(by: "site")`. */
   node: string;
   axis: "x" | "y";
@@ -39,6 +49,18 @@ export type LayoutWarning = {
   message: string;
 };
 
+/** Record `warning` (if any) on the render of `node`, once per message. */
+export const warnLayout = (
+  node: GoFishNode,
+  warning: LayoutWarning | undefined
+): void => {
+  if (warning === undefined) return;
+  const session = node.tryGetRenderSession();
+  if (session === undefined) return;
+  const list = (session.warnings ??= []);
+  if (!list.some((w) => w.message === warning.message)) list.push(warning);
+};
+
 /** The prefix every layout warning is printed with. */
 const LAYOUT_WARNING_PREFIX = "[gofish:layout]";
 
@@ -46,7 +68,7 @@ const px = (v: number) => `${Math.round(v * 10) / 10} px`;
 
 /** The distribute of the spread or stack `node` is along `axis`, if it is
  *  one (a ring that seats its chrome with a distribute is not). */
-const chainOn = (
+export const chainOn = (
   node: GoFishNode,
   axis: 0 | 1
 ): DistributeConstraint | undefined =>
@@ -76,7 +98,8 @@ function describeNode(node: GoFishNode): string {
 
 /** The fixed pixels of `node`'s claim on `axis`: its claim at σ = 0. */
 const fixedPx = (node: GoFishNode, axis: 0 | 1): number => {
-  return room(node.resolveExtent()[axis]?.width.run(0) ?? 0);
+  const claim = node.resolveExtent()[axis];
+  return room(claim === undefined ? 0 : Pwl.at(claim.width, 0));
 };
 
 /** The children whose claims compose into `node`'s on `axis`: not ink,
@@ -108,110 +131,146 @@ const largestChild = (
  * (a chart's rings, a label wrapper), taking off the pixels the node adds
  * around that child, to the first node that lays several parts out along
  * the axis (a spread), has a size of its own, or has no child that claims.
+ * `startPx` is the fixed pixels of the claim `start` fits to its slot.
  */
 function culprit(
   start: GoFishNode,
   axis: 0 | 1,
-  available: number
-): { node: GoFishNode; available: number } {
+  available: number,
+  startPx: number
+): { node: GoFishNode; available: number; px: number } {
   let node = start;
+  let nodePx = startPx;
   for (;;) {
     if (chainOn(node, axis) !== undefined) break;
-    if (node !== start && node.claimWalk?.ownScope[axis] === true) break;
+    if (node !== start && node.claimWalk?.ownSize(axis) !== undefined) break;
     const big = largestChild(node, axis);
     if (big === undefined) break;
     // Mostly one child's: more than half of the node's fixed pixels. A
     // node whose fixed pixels are spread over its children (a literal
     // position here, a fixed-size box there) holds them itself.
-    if (fixedPx(big, axis) * 2 <= fixedPx(node, axis)) break;
-    available -= fixedPx(node, axis) - fixedPx(big, axis);
+    const bigPx = fixedPx(big, axis);
+    if (bigPx * 2 <= nodePx) break;
+    available -= nodePx - bigPx;
     node = big;
+    nodePx = bigPx;
   }
-  return { node, available };
+  return { node, available, px: nodePx };
 }
 
 /**
- * The fixed parts under `node` on `axis`: the spacing of each spread along
- * it and the size of each node with a size of its own (parts of one
- * description summed, with how many there are), and the rest of its fixed
- * pixels (text, literal sizes and positions, chrome).
+ * The fixed parts under `node` on `axis`, which come to `total` pixels: the
+ * spacing of each spread along it and the size of each node with a size of
+ * its own (parts of one description summed, with how many there are), and
+ * the rest (text, literal sizes and positions, chrome). `ofContent` says
+ * the pixels are those of the content `node` fits into its own size, not
+ * its own claim, which for a node with a size of its own is that size.
  */
 function fixedParts(
   node: GoFishNode,
-  axis: 0 | 1
+  axis: 0 | 1,
+  total: number,
+  ofContent: boolean
 ): { part: string; px: number }[] {
-  const spacing = new Map<string, { each: number; count: number }>();
-  const add = (key: string, each: number) => {
-    const cur = spacing.get(key) ?? { each, count: 0 };
-    cur.count++;
-    spacing.set(key, cur);
+  // Each description's parts, by their pixels: parts of one description
+  // can differ (two panels of one kind, a percent spacing in two slots).
+  const groups = new Map<string, number[]>();
+  const add = (key: string, partPx: number) => {
+    const sizes = groups.get(key) ?? [];
+    sizes.push(partPx);
+    groups.set(key, sizes);
   };
   const visit = (n: GoFishNode) => {
-    if (n.claimWalk?.ownScope[axis] === true) {
+    if (
+      n.claimWalk?.ownSize(axis) !== undefined &&
+      !(ofContent && n === node)
+    ) {
       add(`${describeNode(n)}: its own size`, fixedPx(n, axis));
       return;
     }
     const chain = chainOn(n, axis);
     if (chain !== undefined && !chain.glue && chain.anchor === "edge") {
       const gaps = chain.children.length - 1;
-      if (chain.spacing > 0 && gaps > 0)
-        add(
-          `${describeNode(n)}: spacing ${chain.spacing} × ${gaps}`,
-          chain.spacing * gaps
-        );
+      // A length spacing's fixed pixels are its gap at σ = 0.
+      const each = Pwl.at(n.gapOf(chain, axis), 0);
+      const spelled =
+        typeof chain.spacing === "number"
+          ? `${chain.spacing}`
+          : printLength(chain.spacing);
+      if (each > 0 && gaps > 0)
+        add(`${describeNode(n)}: spacing ${spelled} × ${gaps}`, each * gaps);
     }
     for (const c of composing(n, axis)) visit(c);
   };
   // A node with a size of its own holds that size, whatever is in it.
-  if (node.claimWalk?.ownScope[axis] === true)
-    return [{ part: "its own size", px: fixedPx(node, axis) }];
+  if (!ofContent && node.claimWalk?.ownSize(axis) !== undefined)
+    return [{ part: "its own size", px: total }];
   visit(node);
-  const parts = [...spacing].map(([key, { each, count }]) => ({
-    part: count > 1 ? `${key}, ×${count}` : key,
-    px: each * count,
+  const parts = [...groups].map(([key, sizes]) => ({
+    part: groupedPart(key, sizes),
+    px: sizes.reduce((a, s) => a + s, 0),
   }));
-  const rest = fixedPx(node, axis) - parts.reduce((a, p) => a + p.px, 0);
-  if (rest > 0.5)
+  const named = parts.reduce((a, p) => a + p.px, 0);
+  if (Pwl.overflows(total, named))
     parts.push({
       part: "other fixed sizes (text, literal sizes and positions, chrome)",
-      px: rest,
+      px: total - named,
     });
   return parts.sort((a, b) => b.px - a.px);
 }
 
 /**
- * A `fixed-overflow` warning for `start`, whose fixed parts on `axis` need
- * more than the `available` pixels it is given, or undefined when they fit.
- * It names the node that holds the fixed parts (see {@link culprit}).
+ * How a description's parts add up, before ` = <their sum>`: one part is
+ * the description; parts of one size are `×count`; parts of differing sizes
+ * list them, `216 px + 504 px`, or past four give their range.
+ */
+function groupedPart(key: string, sizes: number[]): string {
+  if (sizes.length === 1) return key;
+  const same = sizes.every((s) => !Pwl.overflows(Math.abs(s - sizes[0]), 0));
+  if (same) return `${key}, ×${sizes.length}`;
+  if (sizes.length <= 4) return `${key}, ${sizes.map(px).join(" + ")}`;
+  return (
+    `${key}, ×${sizes.length} from ${px(Math.min(...sizes))} ` +
+    `to ${px(Math.max(...sizes))}`
+  );
+}
+
+/**
+ * A `fixed-overflow` warning for `start`, which fits `claim` into the
+ * `available` pixels of its slot on `axis` (`ScopeRegistry.fit`), or
+ * undefined when the claim's fixed parts (its pixels at σ = 0) fit. The
+ * claim is `start`'s own, or for a node with a size of its own, that of
+ * the content it maps into that size. It names the node that holds the
+ * fixed parts (see {@link culprit}).
  */
 export function fixedOverflow(
   start: GoFishNode,
   axis: 0 | 1,
+  claim: Extent,
   available: number
 ): LayoutWarning | undefined {
   if (!Number.isFinite(available)) return undefined;
-  if (fixedPx(start, axis) <= available + 0.5) return undefined;
-  const at = culprit(start, axis, available);
+  const needed = room(Pwl.at(claim.width, 0));
+  if (!Pwl.overflows(needed, available)) return undefined;
+  const at = culprit(start, axis, available, needed);
   return fixedWarning(
     at.node,
     axis,
-    fixedPx(at.node, axis),
+    at.px,
     at.available,
-    fixedParts(at.node, axis),
-    "The parts that scale are drawn as if the fixed parts took no room"
+    fixedParts(at.node, axis, at.px, at.node === start)
   );
 }
 
 /** A `fixed-overflow` warning: `node`'s fixed `parts` need `needed` pixels
- *  on `axis`, more than the `available` pixels of its slot, and its parts
- *  are drawn as `drawn` says. */
+ *  on `axis`, more than the `available` pixels of its slot, so the parts
+ *  that scale are drawn as if the fixed parts took no room. */
 function fixedWarning(
   node: GoFishNode,
   axis: 0 | 1,
   needed: number,
   available: number,
-  parts: { part: string; px: number }[],
-  drawn: string
+  parts: { part: string; px: number }[]
 ): LayoutWarning {
   const what = describeNode(node);
   const name = axisName(axis);
@@ -226,44 +285,158 @@ function fixedWarning(
       `${what} on ${name}: its fixed parts need ${px(needed)}, but its slot ` +
       `has ${px(Math.max(0, available))}. Fixed parts: ` +
       parts.map((p) => `${p.part} = ${px(p.px)}`).join("; ") +
-      `. ${drawn}, and the graphic overflows on ${name}.`,
+      `. The parts that scale are drawn as if the fixed parts took no ` +
+      `room, and the graphic overflows on ${name}.`,
   };
 }
 
-/** {@link fixedOverflow} for the content of `node`, a node with a size of
- *  its own (`available` pixels) on `axis`: its child whose claim holds the
- *  most fixed pixels. */
-export function fixedOverflowInside(
-  node: GoFishNode,
-  axis: 0 | 1,
-  available: number
-): LayoutWarning | undefined {
-  const big = largestChild(node, axis);
-  return big === undefined ? undefined : fixedOverflow(big, axis, available);
+/** The `fr` gaps `node` lays out between its parts along `axis`: its
+ *  chains' spacings and its table's gap between tracks there. */
+const frGaps = (node: GoFishNode, axis: 0 | 1): (Length | LengthValue)[] =>
+  node.constraints.flatMap((c) => {
+    const spacing = spacingOn(c, axis);
+    return spacing !== undefined && typeof spacing !== "number" && isFr(spacing)
+      ? [spacing]
+      : [];
+  });
+
+/**
+ * Check the flexible sizes `node` lays out along `axis` once (#1176 steps 5
+ * and 6): its parts whose claim is one share of their scope
+ * (`GoFishNode.isShare`: a part with no size of its own, or an `fr` size),
+ * its table's tracks that no cell sizes, each one share (`shareTracks`),
+ * and its `fr` gaps (a chain's spacing, a table's gap between tracks).
+ *
+ * In a scope that data sizes there, a flexible size has no data type, so it
+ * shares no scale with the data: it is a σ weight in the scope, that many
+ * data units wide. The node warns once (`mixed-sizes`), naming its flexible
+ * parts and gaps. Where shares have no room (`GoFishNode.sharesHaveNoRoom`),
+ * an `fr` gap, which has no default size as a part has, is 0, and warns
+ * (`no-room`).
+ */
+export function warnFlexibleSizes(node: GoFishNode, axis: 0 | 1): void {
+  const gaps = frGaps(node, axis);
+  const parts = node.children.filter(
+    (c): c is GoFishNode => "isShare" in c && (c as GoFishNode).isShare(axis)
+  );
+  const grid = node.constraints.find(isGridConstraint);
+  const tracks =
+    grid === undefined ? [] : shareTracks(grid, axis, cellBoxesOf(node));
+  if (gaps.length === 0 && parts.length === 0 && tracks.length === 0) return;
+  // The default canvas gives a data σ room but gives shares none
+  // (`sharesHaveNoRoom`), so the fit is not asked: an `fr` gap there is 0.
+  if (gaps.length > 0 && node.sharesHaveNoRoom(axis)) {
+    for (const g of gaps) warnLayout(node, noRoom(node, axis, g));
+    return;
+  }
+  if (node.scopeOf(axis).carriesData(axis))
+    warnLayout(node, mixedSizes(node, axis, parts, tracks, gaps));
 }
 
-/** A `fixed-overflow` warning for the spread `node`, whose spacing alone
- *  needs more than the `available` pixels it is given along `axis` (its
- *  parts have no size of their own, so they claim nothing; see
- *  `GoFishNode.sharesRoom`), or undefined when it fits. */
-export function spacingOverflow(
+/** A clause list: `a`, `a and b`, `a, b and c`. */
+const listed = (items: string[]): string =>
+  items.length <= 1
+    ? (items[0] ?? "")
+    : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+
+/**
+ * A `mixed-sizes` warning for the flexible sizes the chain `chain` lays out
+ * along `axis` in a scope that data sizes there ({@link warnFlexibleSizes}):
+ * `parts`, its parts with no size of its own or with an `fr` size,
+ * `tracks`, its table's tracks that no cell sizes (by index), and `gaps`,
+ * its `fr` spacings. It names the chain's parts that data sizes, or the
+ * scope when none of them is.
+ */
+function mixedSizes(
+  chain: GoFishNode,
+  axis: 0 | 1,
+  parts: GoFishNode[],
+  tracks: number[],
+  gaps: (Length | LengthValue)[]
+): LayoutWarning {
+  const name = axisName(axis);
+  // Per flexible size: why it is flexible, and how wide it is drawn.
+  const flexible: string[] = [];
+  const drawn: string[] = [];
+  for (const part of parts) {
+    const what = describeNode(part);
+    const own = part.lengthOn(axis);
+    flexible.push(
+      own !== undefined
+        ? `${what} has the size ${printLength(own)}, which is flexible`
+        : `${what} has no size of its own, so its size is flexible`
+    );
+    drawn.push(
+      `${what} is drawn ` +
+        `${own === undefined ? "one data unit" : "its weight in data units"} wide`
+    );
+  }
+  for (const t of tracks) {
+    const what = `its ${axis === 0 ? "column" : "row"} ${t + 1}`;
+    flexible.push(`${what} has no cell that sizes it, so its size is flexible`);
+    drawn.push(`${what} is drawn one data unit wide`);
+  }
+  for (const g of gaps) {
+    const what = `its spacing ${printLength(g)}`;
+    flexible.push(`${what} is flexible`);
+    drawn.push(`${what} is drawn its weight in data units wide`);
+  }
+  const data = chain.children.filter(
+    (c): c is GoFishNode =>
+      !parts.includes(c as GoFishNode) &&
+      "carriesData" in c &&
+      !(c as GoFishNode).isScope(axis) &&
+      (c as GoFishNode).carriesData(axis)
+  );
+  const scope = chain.scopeOf(axis);
+  const sized =
+    data.length === 0
+      ? `${describeNode(scope)} sizes its other parts by data`
+      : `${[...new Set(data.map(describeNode))].join(", ")} ` +
+        `${data.length === 1 ? "is" : "are"} sized by data`;
+  return {
+    kind: "mixed-sizes",
+    node: describeNode(chain),
+    axis: name,
+    needed: 0,
+    available: 0,
+    parts: [],
+    message:
+      `${describeNode(chain)} on ${name} mixes data-driven and flexible ` +
+      `sizes: ${listed(flexible)}, ` +
+      `but ${sized}. A flexible size is like a data type with no name, so ` +
+      `this is like sizing two parts along ${name} by two different data ` +
+      `types: no one scale fits both. ` +
+      `${listed(drawn)}. ` +
+      `Give ${flexible.length === 1 ? "it a size of its own" : "them sizes of their own"}, ` +
+      `or put the data-driven parts in a container with a size of its own.`,
+  };
+}
+
+/**
+ * A `no-room` warning: the `fr` spacing `gap` of `node` (a chain's spacing
+ * or a table's gap between tracks) sits in a scope of shares on an axis the
+ * render gives no size, so nothing gives it room, and it is 0 (as in CSS
+ * and Typst).
+ */
+function noRoom(
   node: GoFishNode,
   axis: 0 | 1,
-  available: number
-): LayoutWarning | undefined {
-  const chain = chainOn(node, axis);
-  if (chain === undefined || !Number.isFinite(available)) return undefined;
-  const gaps = chain.children.length - 1;
-  const needed = chain.spacing * gaps;
-  if (needed <= available + 0.5) return undefined;
-  return fixedWarning(
-    node,
-    axis,
-    needed,
-    available,
-    [{ part: `spacing ${chain.spacing} × ${gaps}`, px: needed }],
-    "Its parts are drawn as if the spacing took no room"
-  );
+  gap: Length | LengthValue
+): LayoutWarning {
+  const name = axisName(axis);
+  const what = describeNode(node);
+  return {
+    kind: "no-room",
+    node: what,
+    axis: name,
+    needed: 0,
+    available: 0,
+    parts: [],
+    message:
+      `${what}: \`spacing: ${printLength(gap)}\` has no room on ${name}, so its gaps ` +
+      `are 0; give the chart a ${axis === 0 ? "w" : "h"}.`,
+  };
 }
 
 /** An `ink-overflow` warning: what the graphic draws spans `[lo, hi]` on

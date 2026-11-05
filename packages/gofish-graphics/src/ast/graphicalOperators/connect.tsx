@@ -9,6 +9,7 @@ import {
   transformPath,
 } from "../../path";
 import { GoFishAST } from "../_ast";
+import type { BlendMode } from "../blendMode";
 import { projectBy, type SplitBy } from "../datumProjection";
 import { GoFishNode, defaultGeometry, outlineOverhang } from "../_node";
 import { outlinePaint, pathOutline } from "../geometry";
@@ -199,7 +200,7 @@ export const connect = createNodeOperator(
       strokeDasharray,
       opacity,
       mode = "edge",
-      mixBlendMode,
+      blendMode,
       source,
       target,
       along,
@@ -220,7 +221,7 @@ export const connect = createNodeOperator(
       strokeDasharray?: string;
       opacity?: number;
       mode?: "edge" | "center";
-      mixBlendMode?: "multiply" | "normal";
+      blendMode?: BlendMode;
       // Per-endpoint anchor on each child's bbox. Accepts a per-axis tuple
       // `[fx, fy]` of numbers (`min + f * size`) or alignment keywords
       // (`start | middle | end` → `0 | 0.5 | 1`), with a single keyword as
@@ -274,7 +275,7 @@ export const connect = createNodeOperator(
       strokeWidth: strokeWidth ?? 0,
     });
 
-    return new GoFishNode(
+    const node = new GoFishNode(
       {
         type: "connect",
         // Labeled by its outline: a line at its end, a band inside itself.
@@ -937,9 +938,9 @@ export const connect = createNodeOperator(
             ...paintOf(resolvedFill, resolvedStroke),
             strokeDasharray,
             opacity: opacity ?? 1,
-            // Normal by default for both modes; a ribbon that wants overlaps to
-            // darken opts into `mixBlendMode: "multiply"` explicitly.
-            mixBlendMode: mixBlendMode ?? "normal",
+            // Normal (none) by default for both modes; a ribbon that wants
+            // overlaps to darken opts into `blendMode: "multiply"` explicitly.
+            mixBlendMode: blendMode,
           });
 
           /** A path's pixel-space path data. The paths were built in the
@@ -1003,5 +1004,9 @@ export const connect = createNodeOperator(
       },
       children
     );
+    // It draws between the nodes it reads, where they landed: its layout
+    // places it, on both axes.
+    node.placedByLayout = [true, true];
+    return node;
   }
 );

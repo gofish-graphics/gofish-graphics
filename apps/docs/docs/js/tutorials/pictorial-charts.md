@@ -98,7 +98,7 @@ the data instead of carrying it.
 
 ## Filling the bottle
 
-Put the bar back, inside the picture. `paint()` takes exactly two children. The
+Put the bar back, inside the picture. Here `atop()` takes two children. The
 first is a surface, the second is painted onto it and clipped to its shape.
 
 ::: gofish
@@ -116,8 +116,12 @@ gf.chart(data, { axes: false })
     gf.spread({ by: "category", dir: "x", spacing: 20, axes: { x: false } })
   )
   .mark(
-    gf.paint({ blendMode: "color" }, [
-      gf.image({ href: "/wilsonblanco.png", h: gf.v(100) }),
+    gf.atop({ blendMode: "color" }, [
+      gf.image({
+        href: "/wilsonblanco.png",
+        h: gf.v(100),
+        filter: gf.Filter.grayscale,
+      }),
       gf.rect({ h: "amount", w: 175, fill: "#00ff00" }),
     ])
   )
@@ -132,13 +136,14 @@ is clipped to the bottle's outline anyway, so an over wide rectangle is the
 simplest way to guarantee full coverage. Its height is still `"amount"`, so the
 paint reaches exactly as high as the bar did in the first step.
 
-`paint` is one of five **region compositing** operators, named after Figma's
-boolean operations. They combine the silhouettes of two children:
+`atop` is one of five **region compositing** operators, named after Figma's
+boolean operations. They combine the silhouettes of two or more children
+(`exclude` takes exactly two):
 
 | Operator            | What you get                                  |
 | ------------------- | --------------------------------------------- |
-| `paint([A, B])`     | A, with B drawn on top of it and clipped to A |
-| `mask([A, B])`      | B clipped to A, with A itself never drawn     |
+| `union([A, B])`     | everywhere either of them covers              |
+| `atop([A, B])`      | A, with B drawn on top of it and clipped to A |
 | `intersect([A, B])` | only where the two overlap                    |
 | `subtract([A, B])`  | A with B's shape cut out of it                |
 | `exclude([A, B])`   | everywhere exactly one of them covers         |
@@ -180,8 +185,12 @@ gf.chart(data, { axes: false })
     gf
       .layer([
         gf
-          .paint({ blendMode: "color" }, [
-            gf.image({ href: "/wilsonblanco.png", h: gf.v(100) }),
+          .atop({ blendMode: "color" }, [
+            gf.image({
+              href: "/wilsonblanco.png",
+              h: gf.v(100),
+              filter: gf.Filter.grayscale,
+            }),
             gf.rect({ h: "amount", w: 175, fill: "#00ff00" }),
           ])
           .name("bottle"),

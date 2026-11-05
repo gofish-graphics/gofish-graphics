@@ -2,20 +2,28 @@
 // @wiki Overview — /internals/layout/passes
 // </gofish-wiki>
 
-import type { Placeable } from "../_node";
-import { Extent } from "../extent";
+import type { Extent } from "../extent";
 import type { UnderlyingSpace } from "../underlyingSpace";
-import * as Monotonic from "../../util/monotonic";
-import { solvePlacementCells } from "./placementSolver";
+import * as Pwl from "../solver/pwl";
+import {
+  solvePlacementCells,
+  type RigidAttachment,
+  type SolvedCell,
+} from "./placementSolver";
+import { values, type Arith } from "../solver/arith";
+import { Tape, type F } from "../solver/formula";
+import type { SolvePlaceable } from "./placementProgramLowerer";
 import type { PlacementConstraint } from "./placementLowering";
 import {
   axisIndex,
   axisName,
-  isPointAlign,
   type Axis,
+  type ConstraintRef,
   type KeyOf,
 } from "./shared";
 import { isPositionInterval } from "./position";
+import { gridTracks } from "./grid";
+import type { GapOf } from "./gap";
 import type { ConstraintSpec } from ".";
 
 /**
@@ -31,17 +39,18 @@ import type { ConstraintSpec } from ".";
  * The claim walk places them with the same solve the layout runs (the
  * placement solver), on boxes that are the children's claims instead of
  * their laid-out boxes: data maps through σ from data 0, and every claim is
- * measured from data 0. The solve is linear in σ and in the sides of the
- * boxes, so a few solves give each box's edges as an affine form in σ and
- * in the sides of the claims that are not lines in σ (a nested spread's
- * envelope). An edge whose form only adds those sides is exact
- * (`Monotonic.add` keeps envelopes), and the hull is the envelope of the
- * edges. An edge that subtracts one (a box centered on a ring inside it) is
- * evaluated at each σ it is read at.
+ * measured from data 0. It is the one solve, run once in formulas (`Tape`
+ * in formula.ts) instead of numbers: each box's edges come out as formulas
+ * in σ and in what only layout measures, whose claims are piecewise-linear
+ * functions of σ, exact at every σ, and the layer's claim is the envelope
+ * of the edges (`buildPlan` in plan.ts).
  *
- * A `ref` stand-in, or an operand nested in a child, stands where its node
- * lands in this layer's frame, which the claim walk knows through the
- * layers between them (a placement claim, `placementIn`): a value label
+ * A `ref` stand-in stands where its node lands in this layer's frame, which
+ * the claim walk knows through the layers between them (a placement claim,
+ * `planPlacement`). An operand nested in a child is held at its offset in
+ * that child, which the plans from it up to the child give
+ * (`planPlacementInChild`), so it moves with the child wherever the solve
+ * places the child. A value label
  * beside its bar takes room where it draws, while the bar stays where its
  * own layout puts it. A band of a category axis is a share, which is a
  * claim too (`GoFishNode.sharesRoom`), so a label beside a band is placed
@@ -60,8 +69,8 @@ import type { ConstraintSpec } from ".";
 /** A box's two edges along one axis, `[lo, hi]`, each a function of σ: where
  *  the claim walk knows a node lands in some layer's frame. */
 export type BoxForm = {
-  lo: Monotonic.Monotonic;
-  hi: Monotonic.Monotonic;
+  lo: Pwl.Value;
+  hi: Pwl.Value;
 };
 
 /** Where the claim walk knows a node lands: its box, and its own claim (so
@@ -83,23 +92,33 @@ export type ClaimChild = {
   fromRefs: boolean;
   /** For a stand-in, where its target lands in the layer's frame, and for a
    *  node drawn from refs, where it lands, when the claim walk knows
-   *  (`placementIn`). */
+   *  (`planPlacement`). */
   placed?: Placement;
   /** It reads its place from refs and the claim walk does not know where
    *  it lands (`GoFishNode.inkOn`, or a node drawn from refs with no
    *  `placed`): it is ink. */
   inkOn: boolean;
-  /** Its own data places it in the layer's frame (a continuous type with a
-   *  data position in the layer's own set), as layout's `dataPositioned`. */
+  /** Its own data places it in the layer's frame (`placedByOwnData`, the
+   *  one rule): it sits where the frame seats it (`seat:`), and no
+   *  constraint moves it unless a `position` places it on the axis. */
   dataPositioned: boolean;
+  /** It places itself at a position of its own as it is laid out, before
+   *  the solve (a literal start, a shape's own position, or a node placed
+   *  from the refs it reads: `placesItself` in solver/plan.ts). The solve
+   *  takes it where layout put it (`at:`) unless a `position` override
+   *  owns the axis. */
+  placesItself?: boolean;
+  /** Its plot on the axis, about its origin, where it is not its whole
+   *  claim (an outline, dressing or chrome around it): a chain lays it by
+   *  its plot, as layout's `localPlotSpan` does, so what dresses a part
+   *  never moves the parts (#1032). */
+  plot?: Extent;
+  /** It is chrome (a ring's shapes): no part of the plot, so a chain
+   *  places it past the whole box of what it dresses. */
+  chrome?: boolean;
 };
 
 export type ClaimPlacement = {
-  /** The hull of the placed children, or undefined when none takes room. */
-  hull?: Extent;
-  /** The hull of the placed children that are not dressing (see
-   *  {@link placeByClaims}), or undefined when every one is. */
-  plot?: Extent;
   /** The children that draw on the axis but are ink there: they take no
    *  room. (A stand-in draws nothing, so it is not among them.) */
   ink: Set<number>;
@@ -110,6 +129,24 @@ export type ClaimPlacement = {
    *  (a child whose size or place depends on a share of the layer's room,
    *  or on a node only layout places, has none). Built when first read. */
   boxes: () => Map<number, BoxForm>;
+  /** The cell of each child a region's cell places with a size of its
+   *  own: the room it takes, which it sits in the middle of. */
+  rooms: Map<number, BoxForm>;
+  /** Where the solve places each target, as formulas layout evaluates. */
+  seats: PlanSeats;
+};
+
+/**
+ * Where a layer's plan places its targets on one axis (a child, or an
+ * operand nested in a child, by its key, the `uid` of its node): each
+ * placed cell's box start and, where the solve sets it, its size, as nodes
+ * of `tape`. Layout evaluates them at the solved σ with the inputs it
+ * measured (`evaluate` in formula.ts) and writes them back.
+ */
+export type PlanSeats = {
+  tape: Tape;
+  cells: Map<string, SolvedCell<F>>;
+  sizeOnly: Map<string, { size: F; owner: string }>;
 };
 
 /** Whether `c` acts on `axis` (for a position, at a point or over a span). */
@@ -119,12 +156,13 @@ export const actsOn = (c: ConstraintSpec, axis: 0 | 1): boolean => {
     case "position":
       return c[name] !== undefined || c.region?.spans[axis] !== undefined;
     case "align":
-      // A "span" or "size" align sets a size layout measures, not a place.
-      return isPointAlign(c[name]);
+      return c[name] !== undefined;
     case "distribute":
       return axisIndex(c.dir) === axis;
     case "nest":
       return c[name] !== undefined;
+    case "grid":
+      return true;
     default:
       return false;
   }
@@ -163,31 +201,34 @@ export const literalSeats = (
   return seats;
 };
 
-/** One child's box on the axis at σ: `[lo, hi]` about its origin. */
-const boxAt = (extent: Extent | undefined, sigma: number): [number, number] =>
+/** One child's box on the axis: `[lo, hi]` about its origin, in σ. */
+type Box = readonly [Pwl.Value, Pwl.Value];
+
+/** The box `[−descent, ascent]` of a claim about its origin. */
+const boxOfClaim = (extent: Extent | undefined): Box =>
   extent === undefined
-    ? [0, 0]
-    : [-extent.descent.run(sigma), extent.ascent.run(sigma)];
+    ? [Pwl.ZERO, Pwl.ZERO]
+    : [Pwl.negate(extent.descent), extent.ascent];
 
 /**
- * A placeable whose box on `axis` is `[lo, hi]` about its origin, placed at
- * `at` (its origin's pixel) when given, else for the solve to place. Only
+ * What the solve reads of a child whose box on `axis` is `[lo, hi]` about
+ * its origin, with its box start at `min` when it is placed before the
+ * solve, and its plot `[plot[0], plot[1]]` where that is not its box. Only
  * `axis` is solved; the other axis has no size, so no fact on it resolves.
  */
-const claimPlaceable = (
+const formulaPlaceable = (
+  T: Arith<F>,
   axis: 0 | 1,
-  [lo, hi]: [number, number],
+  lo: F,
+  hi: F,
   space: UnderlyingSpace | undefined,
-  at: number | undefined
-): Placeable => {
-  const size = hi - lo;
-  const box = { min: at === undefined ? undefined : at + lo, size };
+  min: F | undefined,
+  plot?: readonly [F, F]
+): SolvePlaceable<F> => {
+  const box = { min, size: T.sub(hi, lo) };
   const none = { min: undefined, size: undefined };
   return {
     dims: axis === 0 ? [box, none] : [none, box],
-    geometry: () => {
-      throw new Error("[gofish] a claim placeable has no geometry");
-    },
     localAnchor: (a, anchor) => {
       if (axisIndex(typeof a === "number" ? axisName(a) : (a as Axis)) !== axis)
         return undefined;
@@ -196,51 +237,66 @@ const claimPlaceable = (
         : anchor === "max"
           ? hi
           : anchor === "center"
-            ? (lo + hi) / 2
-            : 0;
+            ? T.scale(0.5, T.add(lo, hi))
+            : T.zero;
     },
-    place: () => {},
+    localPlotSpan: (a) =>
+      a === axis && plot !== undefined ? [plot[0], plot[1]] : undefined,
     spaceOn: (dir) => (dir === axis ? space : undefined),
-  } as Placeable;
+  };
 };
 
 /** The constraints that act on `axis`, each as it acts on that axis alone
  *  (a position's or an align's other coordinate places nothing there). A
  *  region (a `partition` cell) places its child across its datum span on
- *  the axis, as an interval does. */
+ *  the axis, as an interval does, but only a child `inCell` names: one
+ *  placed by its data in the layer's frame is in its cell already, and one
+ *  that placed itself is where it put itself. */
 export const constraintsOn = (
   constraints: readonly ConstraintSpec[],
-  axis: 0 | 1
+  axis: 0 | 1,
+  inCell: (ref: ConstraintRef) => boolean = () => true
 ): ConstraintSpec[] => {
   const own = axisName(axis);
   const other = axisName((1 - axis) as 0 | 1);
-  return constraints
-    .filter((c) => actsOn(c, axis))
-    .map((c) =>
-      c.type === "position"
-        ? {
-            ...c,
-            [own]: c[own] ?? c.region?.spans[axis],
-            [other]: undefined,
-            region: undefined,
-          }
-        : c.type === "align" && c[other] !== undefined
+  const out: ConstraintSpec[] = [];
+  for (const c of constraints) {
+    if (!actsOn(c, axis)) continue;
+    if (c.type !== "position") {
+      out.push(
+        c.type === "align" && c[other] !== undefined
           ? { ...c, [other]: undefined }
           : c
-    );
+      );
+      continue;
+    }
+    const children =
+      c[own] === undefined ? c.children.filter(inCell) : c.children;
+    if (children.length === 0) continue;
+    out.push({
+      ...c,
+      children,
+      [own]: c[own] ?? c.region?.spans[axis],
+      [other]: undefined,
+      region: undefined,
+    });
+  }
+  return out;
 };
 
 /** The children a constraint places on `axis` (a position, an align, a
- *  distribute or a nest acting on it), by their direct operands. */
-export function constrainedOn(
+ *  distribute or a nest acting on it), by their direct operands: of the
+ *  constraints that pass `test`, if one is given. */
+function constrainedOn(
   axis: 0 | 1,
   constraints: readonly ConstraintSpec[],
-  operands: Map<string, { child: number; direct: boolean }>,
-  keyOf: KeyOf
+  operands: ReadonlyMap<string, { child: number; direct: boolean }>,
+  keyOf: KeyOf,
+  test: (c: ConstraintSpec) => boolean = () => true
 ): Set<number> {
   const out = new Set<number>();
   for (const c of constraints) {
-    if (!actsOn(c, axis)) continue;
+    if (!actsOn(c, axis) || !test(c)) continue;
     for (const r of c.children) {
       const op = operands.get(keyOf(r));
       if (op?.direct) out.add(op.child);
@@ -249,34 +305,64 @@ export function constrainedOn(
   return out;
 }
 
-const isLinearExtent = (e: Extent): boolean =>
-  Monotonic.isLinear(e.ascent) && Monotonic.isLinear(e.descent);
-
 /**
  * Where a layer's constraints place its children on `axis`, from their
- * claims, and the hull of the `candidates` (see the module comment).
- * `nested` is where an operand nested in a child lands in the layer's frame,
- * when the claim walk knows (`placementIn`).
+ * claims (see the module comment). `nested` is where an operand nested in a child lands in that child's
+ * frame, when the claim walk knows (`planPlacementInChild`).
  */
 export function placeByClaims(
   axis: 0 | 1,
   children: ClaimChild[],
   constraints: readonly ConstraintSpec[],
-  operands: Map<string, { child: number; direct: boolean }>,
+  operands: ReadonlyMap<string, { child: number; direct: boolean }>,
   keyOf: KeyOf,
-  candidates: Set<number>,
-  nested: (key: string) => Placement | undefined
+  nested: (key: string) => Placement | undefined,
+  // The gap a chain or table lays out between its parts, in σ
+  // (`GoFishNode.gapOf`).
+  gapOf: GapOf,
+  // Whether the layer's frame on the axis has a data 0 (`frameOf`): a
+  // frame without one maps no datum and seats no baseline.
+  framed = true
 ): ClaimPlacement {
-  const onAxis = constraintsOn(constraints, axis);
-  // A child an interval pins (across a span, or a region's cell) has a
-  // size from it, whatever its own claim.
-  const spanned = new Set<number>();
-  for (const c of onAxis)
-    if (c.type === "position" && isPositionInterval(c[axisName(axis)]!))
-      for (const r of c.children) {
-        const op = operands.get(keyOf(r));
-        if (op?.direct) spanned.add(op.child);
-      }
+  // A cell places a child, by its index, that neither its data places in
+  // the layer's frame nor placed itself (`constraintsOn`).
+  const inCell = (i: number): boolean =>
+    !children[i].dataPositioned && children[i].placesItself !== true;
+  const onAxis = constraintsOn(constraints, axis, (r) => {
+    const op = operands.get(keyOf(r));
+    return op === undefined || !op.direct || inCell(op.child);
+  });
+  const own = axisName(axis);
+  // The children a region's cell places on the axis: each is laid out in
+  // the cell's length (`buildChildSpans`). One with no size of its own
+  // fills it, and any other keeps its size in the middle of it.
+  const celled = new Set(
+    [
+      ...constrainedOn(
+        axis,
+        constraints,
+        operands,
+        keyOf,
+        (c) =>
+          c.type === "position" &&
+          c[own] === undefined &&
+          c.region?.spans[axis] !== undefined
+      ),
+    ].filter(inCell)
+  );
+  // A child an interval pins (across a span, or a region's cell it fills)
+  // has a size from it, whatever its own claim.
+  const spanned = new Set(
+    [
+      ...constrainedOn(
+        axis,
+        onAxis,
+        operands,
+        keyOf,
+        (c) => c.type === "position" && isPositionInterval(c[own]!)
+      ),
+    ].filter((i) => !(celled.has(i) && children[i].extent !== undefined))
+  );
 
   // An operand only layout places, unless the claim walk knows where it
   // lands: a node nested in a child, a stand-in for a node elsewhere, a
@@ -298,30 +384,16 @@ export function placeByClaims(
     const c = children[op.child];
     return c.inkOn || (c.standIn && c.placed === undefined);
   };
-  // A child that fills the room it is given has no size the claim walk
-  // knows, so neither does the place of whatever is seated beside it.
-  const sizeless = (key: string): boolean => {
-    const op = operands.get(key);
-    if (op === undefined || !op.direct) return false;
-    const c = children[op.child];
-    return (
-      !c.standIn &&
-      !c.inkOn &&
-      presetOf(op.child) === undefined &&
-      c.extent === undefined &&
-      !spanned.has(op.child)
-    );
-  };
-  // What is unknown spreads through the relations on this axis: whatever
-  // is aligned or seated against an operand lands where it does. A child a
-  // position pins on its own stays known.
+  // Ink spreads through the relations on this axis: whatever is aligned
+  // or seated against an operand only layout places lands where it does. A
+  // child a position pins on its own stays known.
   const pinned = new Set<number>();
   for (const c of onAxis)
     if (c.type === "position")
       for (const r of c.children) {
         const key = keyOf(r);
         const op = operands.get(key);
-        if (op?.direct && !inkKey(key) && !sizeless(key)) pinned.add(op.child);
+        if (op?.direct && !inkKey(key)) pinned.add(op.child);
       }
   const parent = new Map<string, string>();
   const find = (a: string): string => {
@@ -340,15 +412,25 @@ export function placeByClaims(
     }
   }
   const inkRoots = new Set([...parent.keys()].filter(inkKey).map(find));
-  const sizelessRoots = new Set([...parent.keys()].filter(sizeless).map(find));
   const ink = new Set<number>();
-  const unplaced = new Set<number>();
   for (const n of parent.keys()) {
     const op = operands.get(n);
     if (op === undefined || !op.direct || pinned.has(op.child)) continue;
     if (inkRoots.has(find(n))) ink.add(op.child);
-    if (sizelessRoots.has(find(n))) unplaced.add(op.child);
   }
+  // A filler (a child with no claim, which takes whatever room it is
+  // given) takes no room here: the solve places it as a point, so what a
+  // relation ties to it stays placed. Where a datum position puts it, the
+  // point is data, and the hull holds it; anywhere else it lands only
+  // where layout gives it room, and the hull leaves it out.
+  const atDatum = constrainedOn(
+    axis,
+    onAxis,
+    operands,
+    keyOf,
+    (c) => c.type === "position" && typeof c[own] !== "number"
+  );
+  const unplaced = new Set<number>();
   children.forEach((c, i) => {
     if (c.inkOn) ink.add(i);
     if (c.standIn) ink.delete(i);
@@ -356,7 +438,8 @@ export function placeByClaims(
       c.extent === undefined &&
       !c.standIn &&
       presetOf(i) === undefined &&
-      !spanned.has(i)
+      !spanned.has(i) &&
+      !atDatum.has(i)
     )
       unplaced.add(i);
   });
@@ -387,204 +470,232 @@ export function placeByClaims(
   const out = (i: number) =>
     ink.has(i) || (children[i].standIn && children[i].placed === undefined);
 
-  const hullOf = [...candidates].filter((i) => !out(i) && !unplaced.has(i));
-  const solved = children.map((c, i) => i).filter((i) => !out(i));
-
   // The children a constraint acts on along this axis; the others sit at
   // their own origin, which is the layer's (a free child's baseline is
   // seated at data 0, and a shared child's claim is measured from it).
   const constrained = constrainedOn(axis, constraints, operands, keyOf);
 
-  // The claims that are not lines in σ: the solve reads each of their two
-  // sides as a value of its own. Placed operands are read at σ.
-  const curved = solved.filter((i) => {
-    const e = children[i].extent;
-    return presetOf(i) === undefined && e !== undefined && !isLinearExtent(e);
-  });
-  const presets = [
-    ...solved.flatMap((i) => presetOf(i) ?? []),
-    ...nestedPlaced.values(),
-  ];
-  // The affine forms below hold when every placed operand's box is a line
-  // in σ; otherwise each σ is solved when read.
-  const exact = presets.every(
-    (p) =>
-      Monotonic.isLinear(p.lo) &&
-      Monotonic.isLinear(p.hi) &&
-      isLinearExtent(p.extent)
-  );
-  type Box = readonly [number, number];
-
-  // Each child's box, `[lo, hi]`, where the solve places it at σ, with the
-  // curved claims' sides `sides` (`[ascent, descent]`): a box sits about its
-  // origin, or across the span an interval pins.
+  // One solve, with σ unknown and over every child, the ink included (it
+  // takes no room, but layout seats it where the plan places it): each
+  // child's box, `[lo, hi]`, where the solve places it, as a formula in σ
+  // and in what only layout measures (`Tape`). A box sits about its origin,
+  // or across the span an interval pins. A datum maps through σ from the
+  // layer's data 0, at the pixel its frame puts data 0 at.
+  const tape = new Tape();
+  const T = tape.arith;
   const seats = literalSeats(constraints, keyOf);
-  const isCurved = new Set(curved);
-  const solve = (sigma: number, sides: Map<number, Box>): Map<number, Box> => {
-    const boxOf = (i: number): [number, number] => {
-      const side = sides.get(i);
-      if (side !== undefined) return [-side[1], side[0]];
-      const p = presetOf(i);
-      if (p !== undefined) return boxAt(p.extent, sigma);
-      return isCurved.has(i) ? [0, 0] : boxAt(children[i].extent, sigma);
-    };
-    const at = new Map<number, Box>();
-    const targets = new Map<string, Placeable>();
-    const indexOf = new Map<string, number>();
-    for (const i of solved) {
-      const c = children[i];
-      const box = boxOf(i);
-      const p = presetOf(i);
-      // A child no constraint reads sits at its origin.
-      const key = c.key;
-      const seat = seats.get(key)?.[axis];
-      const preset =
-        p !== undefined
-          ? p.lo.run(sigma) - box[0]
-          : !constrained.has(i) || c.dataPositioned
-            ? 0
+  // A `position` override owns its operands' place on the axis, so a child
+  // it names is not pinned where it placed itself.
+  const overridden = constrainedOn(
+    axis,
+    onAxis,
+    operands,
+    keyOf,
+    (c) => c.type === "position" && !!c.override
+  );
+  // Any `position` owns its operands' place on the axis over their own
+  // data: a node it places at a datum takes its own frame there
+  // (`childPosScalesFor`), so its data no longer places it in this
+  // layer's.
+  const positioned = constrainedOn(
+    axis,
+    onAxis,
+    operands,
+    keyOf,
+    (c) => c.type === "position"
+  );
+  // The parts a chain places past their whole box, not by their plots:
+  // what is no part of the plot (ink, dressing, chrome).
+  const apart = new Set<string>();
+  // The children their own data places (`ClaimChild.dataPositioned`): an
+  // align by an end or a baseline leaves them where their data puts them.
+  const dataPositioned = new Set<string>();
+  const boxOf = (i: number): Box =>
+    boxOfClaim(presetOf(i)?.extent ?? children[i].extent);
+  const keyAt = (i: number) => children[i].key;
+  const at = new Map<number, Box>();
+  const targets = new Map<string, SolvePlaceable<F>>();
+  const indexOf = new Map<string, number>();
+  // Where each child placed before the solve has its box start, for a
+  // nested operand's container.
+  const presetMin = new Map<number, F>();
+  const childIndices = children.map((_, i) => i);
+  for (const i of childIndices) {
+    const c = children[i];
+    const box = boxOf(i);
+    const p = presetOf(i);
+    const key = keyAt(i);
+    const seat = seats.get(key)?.[axis];
+    // Where its origin is before the solve: a stand-in, or a node drawn
+    // from refs, where layout laid it (in the claim walk, where its target
+    // lands); a child that places itself where it put itself; a child no
+    // constraint places, or one its own data places (`dataPositioned`),
+    // where its frame seats it (layout's seating rule);
+    // a literal seat at its pixel, which layout reads as it lays the layer
+    // out (a chart's content is seated past its chrome's start gutter,
+    // `contentSeat`; the claim walk keeps the pin, its data 0, and the two
+    // agree on every box, as layout hands the content its frame from the
+    // seat). Else the solve places it.
+    const origin =
+      c.standIn || c.fromRefs
+        ? tape.input(
+            `at:${i}`,
+            p !== undefined ? values.sub(p.lo, box[0]) : Pwl.ZERO
+          )
+        : c.placesItself === true && !overridden.has(i)
+          ? tape.input(`at:${i}`, Pwl.ZERO)
+          : !constrained.has(i) || (c.dataPositioned && !positioned.has(i))
+            ? tape.input(`seat:${i}`, Pwl.ZERO)
             : seat !== undefined
-              ? seat
+              ? tape.input(`lit:${i}`, Pwl.constant(seat))
               : undefined;
-      targets.set(key, claimPlaceable(axis, box, c.space, preset));
-      indexOf.set(key, i);
-      if (preset !== undefined) at.set(i, [preset + box[0], preset + box[1]]);
-    }
-    for (const [key, p] of nestedPlaced) {
-      const box = boxAt(p.extent, sigma);
-      targets.set(
-        key,
-        claimPlaceable(axis, box, undefined, p.lo.run(sigma) - box[0])
-      );
-    }
-    const map = { sigma, originPx: 0 };
-    // A relation with an operand the solve leaves out (ink) places nothing
-    // here.
-    const solvable = onAxis.filter((c) =>
-      c.children.every((r) => targets.has(keyOf(r)))
-    );
-    const cells = solvePlacementCells(
-      solvable as PlacementConstraint[],
-      keyOf,
-      targets,
-      [NaN, NaN],
-      axis === 0 ? [map, undefined] : [undefined, map],
-      undefined,
-      [new Set(), new Set()],
-      undefined,
-      axis === 0 ? [0, undefined] : [undefined, 0]
-    )[axis].cells;
-    for (const [key, cell] of cells) {
-      const i = indexOf.get(key);
-      if (i === undefined) continue;
-      const [lo, hi] = boxOf(i);
-      const size = cell.sizeStrong ? (cell.size ?? hi - lo) : hi - lo;
-      at.set(i, [cell.min, cell.min + size]);
-    }
-    // A child the solve leaves unplaced sits at the layer's origin.
-    for (const i of solved) if (!at.has(i)) at.set(i, boxOf(i));
-    return at;
-  };
-
-  // Each edge (0 = lo, 1 = hi) of child `i`, times `sign`, as a function of
-  // σ (`sign` −1 reads a low edge as a reach below 0, a descent).
-  let edge: (i: number, end: 0 | 1, sign: 1 | -1) => Monotonic.Monotonic;
-  if (exact) {
-    // At σ = 0 with every side 0, then one more solve per variable (σ, and
-    // each side of each curved claim), each the change it makes.
-    const none = new Map<number, Box>();
-    const base = solve(0, none);
-    const variables: { m: Monotonic.Monotonic; boxes: Map<number, Box> }[] = [
-      { m: Monotonic.linear(1, 0), boxes: solve(1, none) },
-      ...curved.flatMap((k) => {
-        const e = children[k].extent!;
-        return [
-          { m: e.ascent, boxes: solve(0, new Map([[k, [1, 0] as const]])) },
-          {
-            m: e.descent,
-            boxes: solve(0, new Map([[k, [0, 1] as const]])),
-          },
-        ];
-      }),
-    ];
-    edge = (i, end, sign) => {
-      const c0 = sign * base.get(i)![end];
-      const terms = variables
-        .map((v) => ({
-          m: v.m,
-          c: sign * (v.boxes.get(i)![end] - base.get(i)![end]),
-        }))
-        .filter((t) => Math.abs(t.c) >= 1e-9);
-      // An envelope weighed by a negative number is no envelope (`smul`
-      // keeps one only for a positive weight): read such a form at each σ.
-      if (terms.some((t) => t.c < 0 && !Monotonic.isLinear(t.m)))
-        return Monotonic.unknown(
-          (sigma) => c0 + terms.reduce((a, t) => a + t.c * t.m.run(sigma), 0)
-        );
-      return Monotonic.add(
-        Monotonic.linear(0, c0),
-        ...terms.map((t) => Monotonic.smul(t.c, t.m))
-      );
-    };
-  } else {
-    // Solve at each σ read, with every claim's sides at that σ.
-    let memo: { sigma: number; boxes: Map<number, Box> } | undefined;
-    const at = (sigma: number) => {
-      if (memo?.sigma !== sigma)
-        memo = {
-          sigma,
-          boxes: solve(
-            sigma,
-            new Map(
-              curved.map((k) => {
-                const e = children[k].extent!;
-                return [k, [e.ascent.run(sigma), e.descent.run(sigma)]];
-              })
-            )
-          ),
-        };
-      return memo.boxes;
-    };
-    edge = (i, end, sign) =>
-      Monotonic.unknown((sigma) => sign * at(sigma).get(i)![end]);
+    const lo = tape.input(`lo:${i}`, box[0]);
+    const hi = tape.input(`hi:${i}`, box[1]);
+    const plot =
+      c.plot === undefined
+        ? undefined
+        : (() => {
+            const [pl, ph] = boxOfClaim(c.plot);
+            return [
+              tape.input(`plo:${i}`, pl),
+              tape.input(`phi:${i}`, ph),
+            ] as const;
+          })();
+    const min = origin === undefined ? undefined : T.add(origin, lo);
+    if (min !== undefined) presetMin.set(i, min);
+    targets.set(key, formulaPlaceable(T, axis, lo, hi, c.space, min, plot));
+    indexOf.set(key, i);
+    if (c.dataPositioned) dataPositioned.add(key);
+    if (ink.has(i) || dressing.has(i) || c.chrome === true) apart.add(key);
+    if (origin !== undefined)
+      at.set(i, [
+        Pwl.add(tape.claim[origin], box[0]),
+        Pwl.add(tape.claim[origin], box[1]),
+      ]);
   }
+  // An operand nested in a child is held at a fixed offset inside it
+  // (`NestedOperand`), which layout measures (`gap:`): the solve moves the
+  // child with it. In the claim walk the offset is where the plans of the
+  // layers between put it in the child (`planPlacementInChild`), from the
+  // child's box start.
+  const rigid = new Map<string, RigidAttachment<F>>();
+  for (const [key, op] of operands) {
+    if (op.direct) continue;
+    const p = nestedPlaced.get(key);
+    const box = boxOfClaim(p?.extent);
+    const containerMin = presetMin.get(op.child);
+    const gapClaim =
+      p !== undefined ? values.sub(p.lo, boxOf(op.child)[0]) : Pwl.ZERO;
+    const gap = tape.input(`gap:@${key}`, gapClaim);
+    const lo = tape.input(`lo:@${key}`, box[0]);
+    const hi = tape.input(`hi:@${key}`, box[1]);
+    targets.set(
+      key,
+      formulaPlaceable(
+        T,
+        axis,
+        lo,
+        hi,
+        undefined,
+        containerMin === undefined ? undefined : T.add(containerMin, gap)
+      )
+    );
+    rigid.set(key, {
+      container: keyAt(op.child),
+      gap: axis === 0 ? [gap, T.zero] : [T.zero, gap],
+    });
+  }
+  // A grid's tracks size to the largest of their cells as layout lays them
+  // out, a track no cell claims room in being one share (`gridTracks`), and
+  // center each cell in its track. Its claim is the tracks and the gaps
+  // between them, a chain's along the axis.
+  const grid = onAxis.find((c) => c.type === "grid");
+  const tracks =
+    grid === undefined
+      ? undefined
+      : gridTracks(
+          T,
+          grid,
+          axis,
+          // A cell by the grid's ref, as every reader of a grid finds it.
+          (ref) => {
+            const key = keyOf(ref);
+            const i = indexOf.get(key);
+            return i === undefined || children[i].extent === undefined
+              ? undefined
+              : (targets.get(key)!.dims[axis].size ?? T.zero);
+          },
+          T.fromValue(gapOf(grid, axis)),
+          T.fromValue(Pwl.SIGMA)
+        );
+  const origin = framed ? tape.input("origin", Pwl.ZERO) : undefined;
+  const map =
+    origin === undefined
+      ? undefined
+      : { sigma: T.fromValue(Pwl.SIGMA), originPx: origin };
+  // The layer's box on the axis, which layout lays it out in: a discrete
+  // position divides it.
+  const box = tape.input("size", Pwl.ZERO);
+  const solvedAxis = solvePlacementCells(
+    T,
+    onAxis as PlacementConstraint[],
+    keyOf,
+    targets,
+    axis === 0 ? [box, T.zero] : [T.zero, box],
+    gapOf,
+    axis === 0 ? [map, undefined] : [undefined, map],
+    axis === 0 ? [tracks, undefined] : [undefined, tracks],
+    axis === 0 ? [dataPositioned, new Set()] : [new Set(), dataPositioned],
+    rigid,
+    axis === 0 ? [origin, undefined] : [undefined, origin],
+    axis === 0 ? [apart, new Set()] : [new Set(), apart]
+  )[axis];
+  // Two constraints that place one child at two places on the axis are an
+  // error, which layout finds where it evaluates the plan: the solve keeps
+  // each over-determination as a check (`Tape.checks`).
+  const cells = new Map(solvedAxis.cells);
+  // The room a child in a region's cell takes: its cell, which a child with
+  // a size of its own sits in the middle of, and may overhang.
+  const rooms = new Map<number, BoxForm>();
+  for (const [key, cell] of solvedAxis.cells) {
+    const i = indexOf.get(key);
+    if (i === undefined) continue;
+    const own = T.sub(
+      tape.input(`hi:${i}`, Pwl.ZERO),
+      tape.input(`lo:${i}`, Pwl.ZERO)
+    );
+    // A child with a size of its own in a region's cell sits in its middle.
+    const centered =
+      celled.has(i) && !spanned.has(i) && cell.size !== undefined;
+    const size = cell.sizeStrong && !centered ? (cell.size ?? own) : own;
+    const min = centered
+      ? T.add(cell.min, T.scale(0.5, T.sub(cell.size!, own)))
+      : cell.min;
+    if (centered) cells.set(key, { min, size: own, sizeStrong: false });
+    const m = tape.claim[min];
+    at.set(i, [m, Pwl.add(m, tape.claim[size])]);
+    if (centered)
+      rooms.set(i, {
+        lo: tape.claim[cell.min],
+        hi: Pwl.add(tape.claim[cell.min], tape.claim[cell.size!]),
+      });
+  }
+  // A child the solve leaves unplaced sits at the layer's origin.
+  for (const i of childIndices) if (!at.has(i)) at.set(i, boxOf(i));
+  const seated: PlanSeats = { tape, cells, sizeOnly: solvedAxis.sizeOnly };
 
-  // Each edge's form, built once: the boxes and both hulls read the same
-  // edges.
-  const forms = new Map<number, Monotonic.Monotonic>();
-  const form = (i: number, end: 0 | 1, sign: 1 | -1): Monotonic.Monotonic => {
-    const key = 4 * i + 2 * end + (sign === 1 ? 1 : 0);
-    let f = forms.get(key);
-    if (f === undefined) forms.set(key, (f = edge(i, end, sign)));
-    return f;
-  };
+  // Each placed child's box: every child but the ink, the stand-ins the
+  // solve cannot place, and the fillers it leaves unplaced.
   let boxes: Map<number, BoxForm> | undefined;
   const boxesOf = () => {
     if (boxes !== undefined) return boxes;
     boxes = new Map();
-    for (const i of solved)
-      if (!unplaced.has(i))
-        boxes.set(i, { lo: form(i, 0, 1), hi: form(i, 1, 1) });
+    for (const i of childIndices)
+      if (!out(i) && !unplaced.has(i)) {
+        const [lo, hi] = at.get(i)!;
+        boxes.set(i, { lo, hi });
+      }
     return boxes;
   };
-  if (hullOf.length === 0) return { ink, dressing, boxes: boxesOf };
-  const hullOver = (is: number[]): Extent =>
-    Extent(
-      Monotonic.envelope(is.map((i) => form(i, 1, 1))),
-      Monotonic.envelope(is.map((i) => form(i, 0, -1)))
-    );
-  const hull = hullOver(hullOf);
-  const plotOf = hullOf.filter((i) => !dressing.has(i));
-  return {
-    ink,
-    dressing,
-    boxes: boxesOf,
-    hull,
-    plot:
-      plotOf.length === hullOf.length
-        ? hull
-        : plotOf.length === 0
-          ? undefined
-          : hullOver(plotOf),
-  };
+  return { ink, dressing, boxes: boxesOf, rooms, seats: seated };
 }

@@ -18,7 +18,7 @@ export const testViolinPlot = () => {
           map(density, (d) => rect({ y: d.x / 40, w: d.y * 100000, h: 0, fill: v(species) }).name(`${species}-${d.x}`))
         ),
         ribbon(
-          { dir: "y", opacity: 1, mixBlendMode: "normal" },
+          { dir: "y", opacity: 1, blendMode: "normal" },
           map(density, (d) => ref(`${species}-${d.x}`))
         ),
       ]);

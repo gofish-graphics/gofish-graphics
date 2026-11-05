@@ -4,14 +4,13 @@
  * Every continuous axis is one affine map per σ-scope, `px(d) = σ·d +
  * originPx` (an {@link AxisMap}), and σ is solved once per scope from its size
  * claim at the frame equation `claim.width(σ) = allocated`
- * (`Monotonic.inverse`). The scope's type fixes whether it has an `originPx`.
+ * (`Pwl.solve`). The scope's type fixes whether it has an `originPx`.
  * One mechanism covers every site:
  *
  *   - **sized nodes solve** (#1114) — the render root, a coord boundary, and
  *     a node whose size is given to it (a literal or data-valued `w`/`h`, a
  *     facet panel's slot), each mapping its measure-keyed domain into that
- *     size — each calls {@link ScopeRegistry.solveScope} (or
- *     {@link ScopeRegistry.solveSize} for a grid's bare tracks). A literal
+ *     size — each calls {@link ScopeRegistry.fit}. A literal
  *     size solves once, in the claim walk ({@link ScopeRegistry.solveFixed}),
  *     and its layout reuses the solution;
  *   - **everyone else INHERITS** — "not a root → inherit": a non-root site
@@ -21,7 +20,7 @@
  * Behind `GOFISH_DUMP_SCOPES` the registry also prints every scope's frame
  * equation.
  */
-import * as Monotonic from "../../util/monotonic";
+import * as Pwl from "./pwl";
 import {
   hasOrigin,
   isCONTINUOUS,
@@ -29,13 +28,16 @@ import {
   originIs,
   type UnderlyingSpace,
 } from "../underlyingSpace";
-import { Extent } from "../extent";
+import { Extent, mapsDomain } from "../extent";
 import type { AxisMap } from "../domain";
 import { envFlag } from "../../util";
-import type { RenderSession } from "../_node";
+import type { GoFishNode, RenderSession } from "../_node";
+import { fixedOverflow, warnLayout } from "../layoutWarnings";
 import { resolveUnit, sameUnitVar } from "../measure";
+import { reachAt, type ChromeForms } from "../chromeGutters";
+import { fromFrameStart, type AxisDirection } from "../axisDirection";
 
-export type ScopeKind = "root" | "sized" | "coord" | "grid" | "recenter";
+export type ScopeKind = "root" | "sized" | "coord" | "recenter";
 
 /** A solved σ-scope on one axis: its slope `sigma` (px per data unit) and,
  *  when the scope's type has an origin, `originPx`, the pixel of data 0 (the
@@ -49,6 +51,16 @@ export type ScopeKind = "root" | "sized" | "coord" | "grid" | "recenter";
 export type ScopeSolution =
   | { sigma: number; originPx: number }
   | { sigma: number; originPx: undefined; startPx: number };
+
+/** What {@link ScopeRegistry.fit} lays a claim out in: the scope it
+ *  solved, if any, and the box it laid it in, in pixels. */
+export type Fitted = { scope: ScopeSolution | undefined; box: number };
+
+/** The slot a scope root's claim is fit to on one axis ({@link
+ *  ScopeRegistry.fit}): its pixels, and whether they are a limit (a render
+ *  size, a node's own size) or room that grows to hold the claim (the
+ *  default canvas, a coord's budget). */
+export type Slot = { px: number; limit: boolean };
 
 /** The frame a solved scope places its content in, `px(d) = sigma·d +
  *  originPx`, or undefined for an unsolved scope or one with no origin (only
@@ -123,11 +135,27 @@ export const seatInScope = (
   };
 };
 
+/** A seat in pixels from the start edge of the band that holds the child,
+ *  for a seat read in `direction` relative to that band: `1` where the seat
+ *  is in the band's own axis order, `-1` where it is in the other (a root
+ *  whose y grows upward on the canvas, or a child whose y grows upward that
+ *  no scope seats inside a layer that reads top-down, whose axis starts at
+ *  its band's bottom). One rule for the render root (`placeRoot` in
+ *  gofish.tsx) and a layer's children (`seatOf` in layer.tsx). */
+export const seatInBand = (
+  seat: Seat,
+  band: number,
+  direction: AxisDirection
+): Seat => ({
+  px: fromFrameStart(seat.px, band, direction),
+  anchor: seat.anchor,
+});
+
 /** The pixel of data 0 in a box whose claim starts `offset` px above its low
  *  edge: a claim is measured from data 0, so data 0 sits `claim.descent(σ)`
  *  above that. */
 const originPxAt = (claim: Extent, sigma: number, offset = 0): number =>
-  offset + claim.descent.run(sigma);
+  offset + Pwl.at(claim.descent, sigma);
 
 /** One axis of a scope root that {@link ScopeRegistry.equalizeMeasure}
  *  equalizes (#582): the scope's type and size claim, its box, the σ it
@@ -164,7 +192,7 @@ export interface ScopeMeta {
 
 interface ScopeEntry extends ScopeMeta {
   allocated: number;
-  /** The frame equation LHS, printed (`Monotonic.print`), or a POSITION map's
+  /** The frame equation LHS, printed (`Pwl.print`), or a POSITION map's
    *  `[min,max]→[0,alloc]` shape. */
   frame: string;
   sigma: number | undefined;
@@ -218,28 +246,50 @@ export class ScopeRegistry {
 
   /**
    * Solve the scope of a node with a literal size on one axis (#1114): its
-   * content's type and claim, widened to the keyed domain it maps and niced,
-   * against its size. A literal size does not depend on σ, so the claim walk
-   * solves it once, here, to compute the pixels the node claims upward, and
-   * its layout reuses the solution ({@link fixedSolve}). `key` names the keyed
-   * domain the node maps (`KeyedDomains.axisKey`), so a render root with no
-   * size of its own can map that domain at the same σ ({@link keyedSigma}).
+   * content's type and chrome forms (`chromeForms`: what it draws and its
+   * plot, widened to the keyed domain it maps and niced), with its size as
+   * its plot (#1032). σ fits the plot to the size ({@link fit}), and the
+   * scope's box is the whole at that σ: the size and what the content's
+   * chrome and dressing reach past it (`reachAt`), with data 0 that far
+   * further from the box's start. A literal size does not depend on σ, so
+   * the claim walk solves it once, here, to compute the pixels the node
+   * claims upward, and its layout reuses the solution ({@link fixedSolve}).
+   * `key` names the keyed domain the node maps (`KeyedDomains.axisKey`), so
+   * a render root with no size of its own can map that domain at the same σ
+   * ({@link keyedSigma}).
    */
   solveFixed(
-    node: object,
+    node: GoFishNode,
     key: string | undefined,
     meta: ScopeMeta,
     space: UnderlyingSpace | undefined,
-    claim: Extent | undefined,
-    allocated: number
+    forms: ChromeForms | undefined,
+    plot: number
   ): ScopeSolution | undefined {
-    const solution = this.solveScope(meta, space, claim, allocated);
+    const fitted =
+      forms &&
+      this.fit(meta, node, space, forms.plot, { px: plot, limit: true });
+    const scope = fitted?.scope;
+    const reach = scope && reachAt(forms!, scope.sigma);
+    const solution: ScopeSolution | undefined =
+      scope === undefined
+        ? undefined
+        : scope.originPx === undefined
+          ? scope
+          : { sigma: scope.sigma, originPx: scope.originPx + reach![0] };
     let solves = this.fixed.get(node);
     if (solves === undefined) this.fixed.set(node, (solves = []));
     solves[meta.axis] =
-      solution === undefined || claim === undefined
+      solution === undefined
         ? undefined
-        : { key, solution, claim, space, box: allocated };
+        : {
+            key,
+            solution,
+            claim: forms!.whole,
+            space,
+            // Its own size, whatever its content claims (`fit`).
+            box: plot + reach![0] + reach![1],
+          };
     return solution;
   }
 
@@ -294,27 +344,66 @@ export class ScopeRegistry {
   }
 
   /**
-   * Solve σ for a SIZE frame at a scope root: invert `content(σ) = allocated`.
-   * `frame` is the σ-affine width `Monotonic` (a space's `width`, or a composed
-   * distribute size domain). Returns the slope, or `undefined` when the frame
-   * cannot determine σ (slope 0) — the caller applies its own fallback.
+   * Fit a scope root's claim to its slot on one axis: the one solve of every
+   * sized site (the render root, a node with a size of its own, a coord
+   * boundary). A claim with no σ in it maps no domain (`mapsDomain`), so it
+   * is not solved. Any other claim solves `claim.width(σ) = allocated`
+   * ({@link solveScope}). When no σ ≥ 0 does, the rest of the one rule for
+   * a claim in its slot (`Pwl.fill`) picks σ: 0 where the claim's fixed
+   * parts fill the slot up to rounding, else, where they need more than
+   * the slot, the σ at which the part of the claim that grows with σ,
+   * alone, fills the slot (`Pwl.rising`), as if the fixed parts took no
+   * room, and the layout warns once, at `node` (`fixedOverflow`). A claim
+   * with no σ in it that is larger than its slot warns the same way, and
+   * gets no scope.
+   *
+   * `node` is the node whose slot `slot` is (for a node with a size of its
+   * own, `claim` is its content's). Only a slot that is a limit warns: the
+   * render's size, a node's own size. The default canvas of a render with
+   * no size on the axis grows to hold its claim (#1179), and a coord's
+   * budget does not warn. Either way the box the claim is laid out in holds
+   * it: the slot, or the claim at its σ where that is longer, and a claim
+   * with no scope (only pixels) is its own box. So a render root whose
+   * claim overflows the render's size is its claim, which sits at the
+   * canvas's top-left and draws past its far edges. A node with a size of
+   * its own is that size whatever its content claims, so it reads its slot,
+   * not this box. TODO(#1176): a coord's budget is in its coordinate
+   * units (radians on a polar θ axis), so comparing its claim's fixed
+   * pixels with it warns falsely (35 lines in 26 stories). Whether a
+   * coord's budget is a limit, and in which units, is open; until then a
+   * coord does not warn, as before.
    */
-  solveSize(
+  fit(
     meta: ScopeMeta,
-    frame: Monotonic.Monotonic,
-    allocated: number,
-    opts?: { tolerance?: number; lowerBound?: number; upperBoundGuess?: number }
-  ): number | undefined {
-    const sigma = frame.inverse(allocated, opts);
-    if (DUMP_SCOPES)
-      this.entries.push({
-        ...meta,
-        allocated,
-        frame: Monotonic.print(frame),
-        sigma,
-        hasMap: false,
-      });
-    return sigma;
+    node: GoFishNode,
+    space: UnderlyingSpace | undefined,
+    claim: Extent | undefined,
+    { px, limit }: Slot
+  ): Fitted | undefined {
+    if (claim === undefined) return undefined;
+    const maps = mapsDomain(space, claim);
+    let scope = maps ? this.solveScope(meta, space, claim, px) : undefined;
+    if (scope === undefined) {
+      if (limit) warnLayout(node, fixedOverflow(node, meta.axis, claim, px));
+      // No σ solves the claim in the slot: the rest of the one rule
+      // (`Pwl.fill`, whose first step `solveScope` just took). Its solve
+      // runs again only here, where it failed.
+      const sigma = maps ? Pwl.fill(claim.width, px) : undefined;
+      if (sigma !== undefined) scope = this.scopeAt(meta, space, claim, sigma);
+    }
+    // The box holds the claim: the slot, or the claim at its σ where that
+    // is longer; a claim with no scope is only pixels, its own box.
+    const grown =
+      scope === undefined ? undefined : Pwl.at(claim.width, scope.sigma);
+    const box =
+      grown !== undefined
+        ? Pwl.overflows(grown, px)
+          ? grown
+          : px
+        : Pwl.isConstant(claim.width)
+          ? Pwl.at(claim.width, 0)
+          : px;
+    return { scope, box };
   }
 
   /**
@@ -334,9 +423,12 @@ export class ScopeRegistry {
    * has no width for σ to scale, so no σ fits its claim to the box. Its value
    * maps to the middle of the box, as d3 and Vega-Lite map a zero-width
    * linear domain to the middle of the range: σ is 0 and the claim (only
-   * pixels) is centered in the box. Returns undefined when there is no claim
-   * or it cannot determine σ for any other reason (a claim that is only
-   * pixels over a wider type).
+   * pixels) is centered in the box. Whether the claim's width depends on σ
+   * is decided where it is summed: σ parts that cancel to within rounding are
+   * 0 (`Pwl.cancel`), so float noise in a one-value domain's claim does not
+   * solve a σ near 1e16. Returns undefined when there is no claim or no σ ≥ 0
+   * fits it for any other reason (a claim that is only pixels over a wider
+   * type, or pixels that alone are larger than the box).
    */
   solveScope(
     meta: ScopeMeta,
@@ -345,22 +437,20 @@ export class ScopeRegistry {
     allocated: number
   ): ScopeSolution | undefined {
     if (space === undefined || claim === undefined) return undefined;
-    const solved = claim.width.inverse(allocated, {
-      upperBoundGuess: allocated,
-    });
+    const solved = Pwl.solve(claim.width, allocated);
     const oneValue = solved === undefined && isOneValue(space);
     const sigma = oneValue ? 0 : solved;
     if (DUMP_SCOPES)
       this.entries.push({
         ...meta,
         allocated,
-        frame: `${isCONTINUOUS(space) ? `${space.origin}[${space.dataInterval.min},${space.dataInterval.max}]` : space.kind} ${Monotonic.print(claim.width)}${meta.dataZero === "start" ? " (0 at start)" : ""}`,
+        frame: `${isCONTINUOUS(space) ? `${space.origin}[${space.dataInterval.min},${space.dataInterval.max}]` : space.kind} ${Pwl.print(claim.width)}${meta.dataZero === "start" ? " (0 at start)" : ""}`,
         sigma,
         hasMap: hasOrigin(space),
       });
     if (sigma === undefined) return undefined;
     // Centering slack: 0 when σ fits the claim to the box.
-    const offset = oneValue ? (allocated - claim.width.run(0)) / 2 : 0;
+    const offset = oneValue ? (allocated - Pwl.at(claim.width, 0)) / 2 : 0;
     if (!hasOrigin(space)) return { sigma, originPx: undefined, startPx: 0 };
     return {
       sigma,
@@ -372,8 +462,10 @@ export class ScopeRegistry {
   /**
    * A scope root on one axis at a σ solved elsewhere: a render root with no
    * size of its own maps its keyed domain at the σ the nodes with a literal
-   * size solve it at ({@link keyedSigma}). Its `originPx` follows from its
-   * claim at that σ, as in {@link solveScope}, and its box is that claim.
+   * size solve it at ({@link keyedSigma}), and a scope whose claim overflows
+   * its slot takes the σ {@link fit} falls back to. Its `originPx` follows
+   * from its claim at that σ, as in {@link solveScope}, and its box is that
+   * claim.
    */
   scopeAt(
     meta: ScopeMeta,
@@ -385,8 +477,8 @@ export class ScopeRegistry {
     if (DUMP_SCOPES)
       this.entries.push({
         ...meta,
-        allocated: claim.width.run(sigma),
-        frame: `at(σ=${sigma}) ${Monotonic.print(claim.width)}`,
+        allocated: Pwl.at(claim.width, sigma),
+        frame: `at(σ=${sigma}) ${Pwl.print(claim.width)}`,
         sigma,
         hasMap: hasOrigin(space),
       });
@@ -443,7 +535,7 @@ export class ScopeRegistry {
     const shared = Math.min(...binding.map((a) => a.sigma)); // binding axis wins
     const equalize = (info: EqualMeasureAxis, axis: 0 | 1): EqualizedAxis => {
       const { claim, box, direction, space } = info;
-      const leftover = Math.max(0, box - claim.width.run(shared));
+      const leftover = Math.max(0, box - Pwl.at(claim.width, shared));
       // The leftover pixels before the content along the axis order: none
       // when the order starts at the left or top, all of them when a y-up
       // order starts at the bottom, and half of them on a one-value axis,
@@ -457,8 +549,8 @@ export class ScopeRegistry {
         leftover === 0
           ? claim
           : Extent(
-              Monotonic.adds(claim.ascent, leftover - before),
-              Monotonic.adds(claim.descent, before)
+              Pwl.addConstant(claim.ascent, leftover - before),
+              Pwl.addConstant(claim.descent, before)
             );
       if (DUMP_SCOPES)
         this.entries.push({

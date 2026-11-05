@@ -3,6 +3,7 @@
 // @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
+import { isLength } from "./length";
 import {
   MaybeValue,
   Value,
@@ -261,6 +262,9 @@ const inferNumeric =
   ): MaybeValue<number> | undefined => {
     if (accessor === undefined) return undefined;
     if (typeof accessor === "number") return accessor;
+    // A length (`percent(30)`, `fr(2)`) is a size the node lays out in its
+    // room, not data: it passes through (#1176 step 6).
+    if (isLength(accessor)) return accessor as unknown as number;
     if (isLiteral(accessor)) return accessor.value as number;
     if (isValue(accessor)) return accessor as MaybeValue<number>;
     // The pipeline maps the rows to values, and an aggregate op (`.mean()`,

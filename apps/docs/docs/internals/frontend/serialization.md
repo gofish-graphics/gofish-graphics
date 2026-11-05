@@ -171,7 +171,7 @@ column types (#1088). Operators are a flat list (`derive`, `resolve`,
 `join`, `filter`, `spread`, `stack`, `group`, `scatter`, `table`, `log`, `treemap`,
 `pack`). `treemap`'s `tile` is a strategy object made by a call in the `Tile`
 family (`Tile.squarify({ ratio })`, `Tile.slice()`, `Tile.dice()`,
-`Tile.binary()`, `Tile.sliceDice()` in both languages). Every strategy has
+`Tile.binary()`, `Tile.voronoi({ seed })` in both languages). Every strategy has
 one shape, `{ kind, ...params }`, which is both the JS value and the wire
 form, e.g. `{ "kind": "squarify", "ratio": 1 }`, and the JS layout
 dispatches on `kind`. `scatter`'s `overlap` (the `Overlap` family) and a
@@ -646,6 +646,16 @@ partition by its `kind`, and the JS layout checks one with
 `checkPartition(value, where)`. An axis's `levels` entries take
 `OPTION_TYPES.Calendar`.
 
+`OPTION_TYPES.Length` is a length (#1176 step 6): `{ type: "length",
+percent, px? }` or `{ type: "length", fr }`, what JS `percent(n)` /
+`fr(k)` and Python's `LengthValue` dicts serialize to (`LengthIR` in
+`schema.ts`). A field takes a length exactly when its type names
+`t.ref("Length")` (`lengthSize` for a box's `w`/`h`, `spacing` on `spread`,
+`stack` and `table`, `inset` on `rect`). The JS factories read that from the
+table (`checkLengths` in `gofish-graphics/src/ast/length.ts`), so a length
+in any other field throws rather than being dropped by the wire's key
+filter.
+
 A kind with no required param is a value as it is, and calling it sets
 options (#1133): `Curve.monotone` is `Curve.monotone()`, and
 `Calendar.month({ every: 3 })` sets the month's step. Neither the wire nor
@@ -789,7 +799,7 @@ Six consumers read the table:
   `COMBINATOR_OPTIONS_BASE_FIELDS` (`debug`) ride; its other base fields sit on
   the node. The emitter keeps these keys, and the validator checks an operator
   or leaf-mark node against them. On a leaf mark, the base fields that Mark
-  methods set (`name`, `label`, `relate`, `zOrder`, `translate`) are checked by
+  methods set (`name`, `label`, `relate`, `zOrder`, `hidden`, `translate`) are checked by
   their own walkers, so the check of the mark's channels skips them. The
   emitter writes each `field(...)` or `datum(...)` instance, and each
   strategy kind used bare (`Curve.monotone`), in its plain `toJSON()` form, so the document it returns validates as the wire carries
@@ -963,10 +973,9 @@ It emits:
   `petal`, `text`, `image`, `polygon`, `blank`) — pure kwargs-collection
   plus wire-key rename, with docstrings from each field's `doc`. An
   undeclared kwarg is a `TypeError` on all of them; none takes `**kwargs`.
-- Compositing-quartet and other **combinator-only** marks — the
-  Porter-Duff-style renames (`inside`→`intersect`, `xor`→`exclude`,
-  `out`→`subtract`, `atop`→`paint`) come from the descriptor's `pyName`,
-  killing four previously hand-copied wire-name tables.
+- The five compositing operators and other **combinator-only** marks —
+  each named by its wire `type`, which is its public name (`union`,
+  `intersect`, `subtract`, `exclude`, `atop`).
 - `_opts(...) -> dict` **cores** for the dual-form constructs (`spread`,
   `stack`, `scatter`, `group`, `table`, `treemap`, `line`, `ribbon`,
   `layer`, `pack`), with separate combinator-form
@@ -978,9 +987,12 @@ It emits:
   `ast.py`, calling into these generated cores.
 - One module per **strategy family** in `STRATEGIES` (`gofish/tile.py`,
   `gofish/overlap.py`, `gofish/curve.py`, `gofish/bin.py`,
-  `gofish/calendar.py`, `gofish/shape.py`), bound in `__init__.py` under the family name
-  (`Tile`, `Overlap`, `Curve`, `Bin`, `Calendar`, `Shape`): one factory per kind and
-  per preset, named by `pyKwarg` (`Tile.slice_dice`, `Curve.catmull_rom`).
+  `gofish/calendar.py`, `gofish/shape.py`, `gofish/filter_.py`), bound in `__init__.py`
+  under the family name (`Tile`, `Overlap`, `Curve`, `Bin`, `Calendar`, `Shape`,
+  `Filter`): one factory per kind and per preset, named by `pyKwarg`
+  (`Curve.catmull_rom`, `Overlap.separate`). A module whose name is an
+  operator's gets a trailing underscore, as a keyword kwarg does: `gofish.filter`
+  is the `filter` operator, so the `Filter` family is `gofish/filter_.py`.
   A factory with no required param is decorated with `bare_kind`, so it is
   also the value its call with no arguments makes.
   Each returns `{"kind": ..., **params}` with snake_case param keys, and the
@@ -1073,8 +1085,8 @@ descriptor's `positional` field is taken out of the options and passed first
 (`geo(projection, { lon, lat })`); when that field is required and missing,
 `rebuild` throws and names it (`coord geo: missing required field
 "projection"`). A dual-form construct such as
-`spread` or `line` therefore has one entry for both forms, and the compositing
-wire types map to their renamed factories (`inside` to `intersect`, and so on).
+`spread` or `line` therefore has one entry for both forms, and each compositing
+wire type is its factory's name (`intersect` to `intersect`, and so on).
 The coord transforms (`polar`, `clock`, `wavy`, `geo`) are entries of the same
 table. Only an `OPERATOR_BUILDERS` entry sees the bridge.
 

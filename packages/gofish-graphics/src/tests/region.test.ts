@@ -341,7 +341,8 @@ async function main() {
   console.log("# a region's outline corner that does not map is an error");
   {
     // A cell whose box maps but one of whose corners is not a number: the
-    // region throws rather than put NaN in the path it draws.
+    // layer that maps the outline into the shape it hands the region
+    // (`buildChildSpans`) throws rather than put NaN in the path it draws.
     class BadCell extends RegionCell {
       readonly id = "bad";
       readonly label = undefined;
@@ -371,7 +372,7 @@ async function main() {
     }
     check(
       "a corner that maps to NaN throws",
-      error.startsWith("region: its cell's outline on x does not map") &&
+      error.startsWith("a cell's outline on x does not map") &&
         error.includes("NaN"),
       error
     );

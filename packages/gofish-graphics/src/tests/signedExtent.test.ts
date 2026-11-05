@@ -23,12 +23,13 @@ import { nestedExtent, nestedSpace } from "../ast/constraints/nest";
 import { Extent } from "../ast/extent";
 import { resolveAlignmentSpace } from "../ast/graphicalOperators/alignment";
 import { solveAxisProblem } from "../ast/constraints/differenceGraph";
+import { numbers } from "../ast/solver/arith";
 import { distributeSpaceFold } from "../ast/constraints/distribute";
 import { anchorExpr, relationFact } from "../ast/constraints/placementFacts";
 import { ref } from "../ast/shapes/ref";
 import { createName } from "../ast/createName";
 import { GoFishRef } from "../ast/_ref";
-import * as M from "../util/monotonic";
+import * as Pwl from "../ast/solver/pwl";
 import { interval } from "../util/interval";
 
 const { chart, scatter, stack, spread, rect } = GoFish as any;
@@ -103,16 +104,19 @@ async function main() {
         JSON.stringify((inner as CONTINUOUS_TYPE).dataInterval)
     );
     const claim = nestedExtent(
-      Extent(M.ZERO),
+      Extent(Pwl.ZERO),
       inner,
-      Extent(M.linear(10, 0), M.linear(4, 0)),
+      Extent(Pwl.affine(10, 0), Pwl.affine(4, 0)),
       2
     )!;
     check(
       "claim: ascent + padding and descent + padding",
-      claim.ascent.run(1) === 12 && claim.descent.run(1) === 6
+      Pwl.at(claim.ascent, 1) === 12 && Pwl.at(claim.descent, 1) === 6
     );
-    check("claim width is inner width + 2·padding", claim.width.run(1) === 18);
+    check(
+      "claim width is inner width + 2·padding",
+      Pwl.at(claim.width, 1) === 18
+    );
   }
 
   console.log("\n# a chain seats only the baselines it leaves free");
@@ -136,7 +140,7 @@ async function main() {
       participants: new Set(["a", "b"]),
     });
     const problem = chain("spread");
-    const spreadChain = solveAxisProblem("y", problem, {
+    const spreadChain = solveAxisProblem(numbers, "y", problem, {
       value: 50,
       baselines: new Map(),
     });
@@ -148,7 +152,7 @@ async function main() {
     );
     // A stack lists its first part's baseline only (the others sit on the
     // previous head), and the free origin seats it.
-    const stackChain = solveAxisProblem("y", chain("stack"), {
+    const stackChain = solveAxisProblem(numbers, "y", chain("stack"), {
       value: 50,
       baselines: new Map([["a", 4]]),
     });
@@ -165,6 +169,7 @@ async function main() {
     // The same two nodes tied by an align relation share a determined
     // baseline, which the free origin seats.
     const aligned = solveAxisProblem(
+      numbers,
       "y",
       {
         ...problem,
@@ -219,8 +224,6 @@ async function main() {
         [],
         {
           axis: 1,
-          spacing: 0,
-          anchor: "edge",
           glue: true,
           origin: { part: 0, fraction: 0, mirrored: false },
         }
@@ -306,11 +309,14 @@ async function main() {
     // The spread's x type is ordinal (separate spaces), but its room depends
     // on σ, so its explicit w roots its own σ-scope: the bars fit the 300 px
     // box, not the 500 px canvas.
-    const dl = await chart([
-      { c: "a", v: 10 },
-      { c: "b", v: 20 },
-      { c: "c", v: 30 },
-    ], { axes: false })
+    const dl = await chart(
+      [
+        { c: "a", v: 10 },
+        { c: "b", v: 20 },
+        { c: "c", v: 30 },
+      ],
+      { axes: false }
+    )
       .flow(spread({ by: "c", dir: "x", w: 300 }))
       .mark(rect({ w: "v", h: 20 }))
       .toDisplayList({ w: 500, h: 100 });

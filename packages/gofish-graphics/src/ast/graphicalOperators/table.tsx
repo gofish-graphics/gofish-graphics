@@ -4,6 +4,7 @@ import { createNodeOperator } from "../withGoFish";
 import { createOperator } from "../marks/createOperator";
 import { layer } from "./layer";
 import { createGridConstraint } from "../constraints/grid";
+import type { Gap } from "../constraints/gap";
 import { childSlots } from "../constraints/shared";
 import { splitEntries, type SplitBy } from "../datumProjection";
 import { fieldNameOf } from "../data";
@@ -29,7 +30,7 @@ const Table = createNodeOperator(
     }: {
       key?: string;
       numCols?: number;
-      spacing?: number | [number, number];
+      spacing?: Gap | [Gap, Gap];
       /** The column and row keys the split found, in order (cells for a
        *  binned key), and whether each key's column has an order. */
       colKeys?: OrdinalKey[];
@@ -90,7 +91,10 @@ export type TableOptions = {
    *  takes, a field name or a `field(...)` key (binned, chained, a product,
    *  a part of a cycle). */
   by?: { x: SplitBy; y: SplitBy };
-  spacing?: number | [number, number];
+  /** The gap between columns and rows: pixels, a percent of the table's
+   *  room, or an `fr` weight of its scope's share, one for both axes or
+   *  `[x, y]` (#1176 step 6). */
+  spacing?: Gap | [Gap, Gap];
   numCols?: number;
 };
 

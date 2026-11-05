@@ -33,7 +33,7 @@ W2_JUT = 10
 ROPE_OPTS = {
     "stroke": "#774e32",
     "stroke_width": 3,
-    "mix_blend_mode": "normal",
+    "blend_mode": "normal",
 }
 
 

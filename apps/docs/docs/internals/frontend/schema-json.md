@@ -128,6 +128,9 @@ for the API.
         "zOrder": {
           "$ref": "#/$defs/Number"
         },
+        "hidden": {
+          "type": "boolean"
+        },
         "name": {
           "type": "string",
           "description": "Chart-level name so a sibling Layer relate callback can reference this chart."
@@ -551,12 +554,11 @@ for the API.
             "line",
             "ribbon",
             "treemap",
-            "over",
-            "inside",
-            "xor",
-            "out",
-            "atop",
-            "mask"
+            "union",
+            "intersect",
+            "subtract",
+            "exclude",
+            "atop"
           ]
         },
         "__combinator": {
@@ -584,6 +586,16 @@ for the API.
           "anyOf": [
             {
               "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
             },
             {
               "$ref": "#/$defs/BridgeLambdaSentinel"
@@ -1127,8 +1139,15 @@ for the API.
           "description": "Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat)."
         },
         "spacing": {
-          "$ref": "#/$defs/Number",
-          "description": "Gap between children, px.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Gap between children, px. Also `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible.",
           "default": 8
         },
         "alignment": {
@@ -1163,12 +1182,26 @@ for the API.
           "description": "Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
         },
         "w": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Data-driven cross-axis extent (field/datum-sized children)."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Width of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "h": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Data-driven cross-axis extent (field/datum-sized children)."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Height of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "size": {
           "$ref": "#/$defs/ChannelValue",
@@ -1253,12 +1286,26 @@ for the API.
           "description": "Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
         },
         "w": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Data-driven cross-axis extent (field/datum-sized children)."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Width of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "h": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Data-driven cross-axis extent (field/datum-sized children)."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Height of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "size": {
           "$ref": "#/$defs/ChannelValue",
@@ -1460,20 +1507,37 @@ for the API.
               "$ref": "#/$defs/Number"
             },
             {
+              "$ref": "#/$defs/Length"
+            },
+            {
               "type": "array",
               "minItems": 2,
               "maxItems": 2,
               "prefixItems": [
                 {
-                  "$ref": "#/$defs/Number"
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Number"
+                    },
+                    {
+                      "$ref": "#/$defs/Length"
+                    }
+                  ]
                 },
                 {
-                  "$ref": "#/$defs/Number"
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Number"
+                    },
+                    {
+                      "$ref": "#/$defs/Length"
+                    }
+                  ]
                 }
               ]
             }
           ],
-          "description": "Cell gap: a single number for both axes, or [x, y].",
+          "description": "Cell gap: a single number for both axes, or [x, y]. Each is pixels, `percent(n)`, n percent of the table's room on its axis, or `fr(k)`, k shares of its scope.",
           "default": 0
         },
         "numCols": {
@@ -1545,12 +1609,26 @@ for the API.
           "description": "Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
         },
         "w": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "h": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "dims": {
           "type": "object",
@@ -1585,12 +1663,12 @@ for the API.
         },
         "round": {
           "type": "boolean",
-          "description": "Round pixel positions and sizes.",
+          "description": "Round pixel positions and sizes. Applies to the rectangular tilings; Tile.voronoi cells are not rounded.",
           "default": true
         },
         "tile": {
           "$ref": "#/$defs/Tile",
-          "description": "The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.sliceDice(). Each is one of d3-hierarchy's tiling methods.",
+          "description": "The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.voronoi({ seed? }). The first four are d3-hierarchy's tiling methods and need a rectangular region: inside a Voronoi cell or an oval they are an error. Tile.voronoi tiles any convex region, so it can sit inside a Voronoi cell.",
           "default": {
             "kind": "squarify"
           }
@@ -1785,8 +1863,15 @@ for the API.
           "description": "Right edge position."
         },
         "w": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Width."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Width. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "emX": {
           "type": "boolean",
@@ -1805,8 +1890,15 @@ for the API.
           "description": "Other y edge position."
         },
         "h": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Height."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "emY": {
           "type": "boolean",
@@ -1838,8 +1930,15 @@ for the API.
           "default": 1
         },
         "filter": {
-          "type": "string",
-          "description": "Raw SVG filter attribute."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "key": {
           "type": "string",
@@ -1858,8 +1957,15 @@ for the API.
           "description": "w/h ratio to enforce; the constraining axis wins when both are data-driven."
         },
         "inset": {
-          "$ref": "#/$defs/Number",
-          "description": "Pixels drawn in from each side of the space the rect fills, on an axis where it has no size or span of its own (a bar's width in a spread or a partition cell), so neighbors are drawn apart. A side the rect sizes itself, such as a bar's data height, is never inset. It changes only what is drawn: the rect's box stays the space it was given.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Pixels drawn in from each side of the space the rect fills, on an axis where it has no size or span of its own (a bar's width in a spread or a partition cell), so neighbors are drawn apart. A side the rect sizes itself, such as a bar's data height, is never inset. It changes only what is drawn: the rect's box stays the space it was given. Also `percent(n)`, n percent of that space on each axis: `percent(10)` draws a bar at 80% of its band. The percent and any pixels added to it are each 0 or more.",
           "default": 0
         },
         "debug": {
@@ -1878,6 +1984,16 @@ for the API.
           "anyOf": [
             {
               "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
             },
             {
               "$ref": "#/$defs/BridgeLambdaSentinel"
@@ -1945,6 +2061,17 @@ for the API.
           },
           "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+        },
         "r": {
           "$ref": "#/$defs/ChannelValue",
           "description": "Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, w, and h."
@@ -1993,13 +2120,23 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
       }
     },
     "EllipseMark": {
-      "description": "An ellipse. Box geometry via the shared dims channels; paint is `paint` without filter, plus fillOpacity.",
+      "description": "An ellipse. Box geometry via the shared dims channels; paint is `paint` plus fillOpacity.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -2020,8 +2157,15 @@ for the API.
           "description": "Right edge position."
         },
         "w": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Width."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Width. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "emX": {
           "type": "boolean",
@@ -2040,8 +2184,15 @@ for the API.
           "description": "Other y edge position."
         },
         "h": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Height."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "emY": {
           "type": "boolean",
@@ -2053,6 +2204,17 @@ for the API.
             "$ref": "#/$defs/AxisDimsValue"
           },
           "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -2096,6 +2258,16 @@ for the API.
           "anyOf": [
             {
               "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
             },
             {
               "$ref": "#/$defs/BridgeLambdaSentinel"
@@ -2163,6 +2335,17 @@ for the API.
           },
           "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+        },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
           "description": "Fill color, or a field name for a color scale."
@@ -2192,6 +2375,16 @@ for the API.
           "anyOf": [
             {
               "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
             },
             {
               "$ref": "#/$defs/BridgeLambdaSentinel"
@@ -2259,6 +2452,17 @@ for the API.
           },
           "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+        },
         "key": {
           "type": "string",
           "description": "Internal per-node key override."
@@ -2280,10 +2484,6 @@ for the API.
           "$ref": "#/$defs/Number",
           "description": "Stroke width in pixels.",
           "default": 0
-        },
-        "filter": {
-          "type": "string",
-          "description": "Raw SVG filter attribute."
         },
         "fontSize": {
           "$ref": "#/$defs/Number",
@@ -2344,6 +2544,16 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "debug": {
           "type": "boolean"
         },
@@ -2374,8 +2584,15 @@ for the API.
           "description": "Right edge position."
         },
         "w": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Width."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Width. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "emX": {
           "type": "boolean",
@@ -2394,8 +2611,15 @@ for the API.
           "description": "Other y edge position."
         },
         "h": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Height."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "emY": {
           "type": "boolean",
@@ -2408,6 +2632,17 @@ for the API.
           },
           "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+        },
         "key": {
           "type": "string",
           "description": "Internal per-node key override."
@@ -2415,10 +2650,6 @@ for the API.
         "href": {
           "type": "string",
           "description": "Image URL or data URI."
-        },
-        "filter": {
-          "type": "string",
-          "description": "Raw SVG filter attribute."
         },
         "opacity": {
           "$ref": "#/$defs/Number",
@@ -2451,6 +2682,16 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
@@ -2464,6 +2705,17 @@ for the API.
       "properties": {
         "type": {
           "const": "polygon"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "points": {
           "anyOf": [
@@ -2530,6 +2782,16 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
@@ -2553,13 +2815,27 @@ for the API.
           "description": "Embed y in the parent's y space."
         },
         "w": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Width.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Width. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.",
           "default": 0
         },
         "h": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Height.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.",
           "default": 0
         },
         "fill": {
@@ -2582,6 +2858,16 @@ for the API.
           "anyOf": [
             {
               "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
             },
             {
               "$ref": "#/$defs/BridgeLambdaSentinel"
@@ -2621,8 +2907,15 @@ for the API.
           "default": 1
         },
         "filter": {
-          "type": "string",
-          "description": "Raw SVG filter attribute."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "inset": {
           "$ref": "#/$defs/Number",
@@ -2651,6 +2944,16 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
@@ -2664,6 +2967,17 @@ for the API.
       "properties": {
         "type": {
           "const": "line"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -2686,9 +3000,17 @@ for the API.
           "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1."
         },
-        "mixBlendMode": {
-          "enum": ["normal", "multiply"],
-          "description": "Blend mode where connectors overlap."
+        "blendMode": {
+          "enum": [
+            "normal",
+            "multiply",
+            "screen",
+            "overlay",
+            "color",
+            "luminosity"
+          ],
+          "description": "How connectors mix where they overlap (CSS `mix-blend-mode`).",
+          "default": "normal"
         },
         "curve": {
           "$ref": "#/$defs/Curve",
@@ -2751,6 +3073,16 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "debug": {
           "type": "boolean"
         },
@@ -2767,6 +3099,17 @@ for the API.
       "properties": {
         "type": {
           "const": "ribbon"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -2785,9 +3128,16 @@ for the API.
           "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1."
         },
-        "mixBlendMode": {
-          "enum": ["normal", "multiply"],
-          "description": "Blend mode where bands overlap.",
+        "blendMode": {
+          "enum": [
+            "normal",
+            "multiply",
+            "screen",
+            "overlay",
+            "color",
+            "luminosity"
+          ],
+          "description": "How bands mix where they overlap (CSS `mix-blend-mode`).",
           "default": "normal"
         },
         "dir": {
@@ -2843,6 +3193,16 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "debug": {
           "type": "boolean"
         },
@@ -2860,14 +3220,25 @@ for the API.
         "type": {
           "const": "enclose"
         },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+        },
         "padding": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Pixels between the members and the outline: a number, or a field name or accessor read once per enclosed group (constant within the group). For a blob or arcs, the distance from each member's own outline (around a line's whole length).",
+          "description": "Pixels between the members and the outline: a number, or a field name or accessor read once per enclosed group (constant within the group). For a blob or arcs, the distance from each member's own outline (around a line's whole length). Around a member with no size of its own, how far inside the outline the member's shape is.",
           "default": 2
         },
         "shape": {
           "$ref": "#/$defs/Shape",
-          "description": "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.arcs({radius}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset."
+          "description": "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.arcs({radius}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset. Around a fresh member with no size of its own (a treemap, a region), the outline is the space it is given: Shape.box() is that space (a treemap's Voronoi cell, when it is in one) and Shape.oval() the oval inscribed in it, and the member fills the outline; Shape.arcs() and Shape.blob() are an error there."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -2914,6 +3285,16 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "debug": {
           "type": "boolean"
         },
@@ -2947,6 +3328,16 @@ for the API.
           "anyOf": [
             {
               "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
             },
             {
               "$ref": "#/$defs/BridgeLambdaSentinel"
@@ -3185,16 +3576,54 @@ for the API.
       "required": ["field", "between"],
       "description": "A field predicate, as `field(name).between(lo, hi, { closed })` builds it: the field it reads and the interval it tests."
     },
+    "Length": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "length",
+          "description": "The tag that marks a length."
+        },
+        "percent": {
+          "type": "number",
+          "description": "Percent of the room the length is laid out in."
+        },
+        "px": {
+          "type": "number",
+          "description": "Pixels added to the percent."
+        },
+        "fr": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Shares of the room the nearest scope divides."
+        }
+      },
+      "required": ["type"],
+      "description": "A length, as `percent(n)` or `fr(k)` builds it: a percent of the room it is laid out in plus pixels (`percent(n).offset(px)`), or a weight of `fr` shares of its nearest scope."
+    },
     "ChartOptions": {
       "type": "object",
       "properties": {
         "w": {
-          "$ref": "#/$defs/Number",
-          "description": "Width of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Width of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "h": {
-          "$ref": "#/$defs/Number",
-          "description": "Height of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Height of the chart's plot in pixels. Its axes, titles and legend, and labels placed beside its marks, add around it. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "coord": {
           "description": "Coordinate transform for the whole chart, made by a call in the Coord family: Coord.polar(), Coord.clock(), Coord.wavy(), ..."
@@ -3503,6 +3932,36 @@ for the API.
       ],
       "description": "The cells `struct({ x, y }).bin(...)` divides the plane of its two fields into: Bin.hex({ radius }) or Bin.voronoi({ seeds })."
     },
+    "Filter": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "grayscale"
+            },
+            "amount": {
+              "$ref": "#/$defs/Number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "How far to gray, from 0 (unchanged) to 1 (all gray).",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "luminanceToAlpha"
+            }
+          },
+          "required": ["kind"]
+        }
+      ],
+      "description": "How a mark's or a layer's drawing is filtered as one picture: the value of its `filter` option, beside a raw CSS filter string. `luminanceToAlpha` turns a drawing into a mask shape."
+    },
     "Tile": {
       "anyOf": [
         {
@@ -3550,13 +4009,18 @@ for the API.
           "type": "object",
           "properties": {
             "kind": {
-              "const": "sliceDice"
+              "const": "voronoi"
+            },
+            "seed": {
+              "type": "number",
+              "description": "Seed for the random starting positions of the sites, so a render is the same every time. Another seed draws other cells with the same areas.",
+              "default": 0
             }
           },
           "required": ["kind"]
         }
       ],
-      "description": "How `treemap` tiles its box: the value of its `tile` option. Each kind is one of d3-hierarchy's tiling methods."
+      "description": "How `treemap` tiles its region: the value of its `tile` option. The rectangular kinds (squarify, slice, dice, binary) are d3-hierarchy's tiling methods and need a rectangular region; voronoi tiles any convex region."
     },
     "Overlap": {
       "anyOf": [

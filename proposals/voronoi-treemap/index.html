@@ -1,0 +1,1629 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Voronoi Treemaps</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/r.min.js"></script>
+    <style>
+      /* Layout idea: tabs over one reading column; the proposal tab is a gallery of cards (image, proposed code, current code). */
+      :root {
+        --bg: #f6f7f9;
+        --surface: #ffffff;
+        --ink: #1d2430;
+        --muted: #5b6575;
+        --line: #dde2ea;
+        --accent: #2f6fa8;
+        --accent-soft: #e6eef7;
+        --warn: #9a5b00;
+        --warn-soft: #fbf1e1;
+        --add: #e3f4e6;
+        --del: #fbe7e7;
+        --code-bg: #f1f3f7;
+        --tok-key: #8a3ab9;
+        --tok-str: #2c7a3f;
+        --tok-num: #b0521b;
+        --tok-com: #7d8695;
+        --tok-fn: #2f6fa8;
+        --display: "Source Serif 4", Georgia, serif;
+        --body: "IBM Plex Sans", system-ui, sans-serif;
+        --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #12161d;
+          --surface: #1a1f28;
+          --ink: #e5e9f0;
+          --muted: #9aa4b4;
+          --line: #2c3340;
+          --accent: #7fb2e5;
+          --accent-soft: #1f2d3d;
+          --warn: #f0b860;
+          --warn-soft: #2e2516;
+          --add: #1d3324;
+          --del: #3a1f22;
+          --code-bg: #151a22;
+          --tok-key: #c99be6;
+          --tok-str: #8fd19e;
+          --tok-num: #f0a46e;
+          --tok-com: #7d8695;
+          --tok-fn: #7fb2e5;
+          color-scheme: dark;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #12161d;
+        --surface: #1a1f28;
+        --ink: #e5e9f0;
+        --muted: #9aa4b4;
+        --line: #2c3340;
+        --accent: #7fb2e5;
+        --accent-soft: #1f2d3d;
+        --warn: #f0b860;
+        --warn-soft: #2e2516;
+        --add: #1d3324;
+        --del: #3a1f22;
+        --code-bg: #151a22;
+        --tok-key: #c99be6;
+        --tok-str: #8fd19e;
+        --tok-num: #f0a46e;
+        --tok-com: #7d8695;
+        --tok-fn: #7fb2e5;
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 16px/1.6 var(--body);
+      }
+      main {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 32px 16px 80px;
+      }
+      h1,
+      h2,
+      h3 {
+        font-family: var(--display);
+        line-height: 1.25;
+        text-wrap: balance;
+      }
+      h1 {
+        font-size: 2.1rem;
+        margin: 0 0 8px;
+      }
+      h2 {
+        font-size: 1.5rem;
+        margin: 48px 0 12px;
+      }
+      h3 {
+        font-size: 1.15rem;
+        margin: 28px 0 8px;
+      }
+      p,
+      li {
+        max-width: 72ch;
+      }
+      a {
+        color: var(--accent);
+      }
+      code {
+        font-family: var(--mono);
+        font-size: 0.88em;
+        background: var(--code-bg);
+        padding: 1px 4px;
+        border-radius: 3px;
+      }
+      pre {
+        margin: 0;
+        background: var(--code-bg);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 10px 0;
+        overflow-x: auto;
+        font-size: 12.5px;
+        line-height: 1.5;
+      }
+      pre code {
+        background: none;
+        padding: 0;
+        font-size: inherit;
+        display: block;
+      }
+      pre code .ln {
+        display: block;
+        padding: 0 12px;
+      }
+      pre code .ln.add {
+        background: var(--add);
+      }
+      pre code .ln.del {
+        background: var(--del);
+      }
+      .hljs-keyword,
+      .hljs-built_in {
+        color: var(--tok-key);
+      }
+      .hljs-string {
+        color: var(--tok-str);
+      }
+      .hljs-number,
+      .hljs-literal {
+        color: var(--tok-num);
+      }
+      .hljs-comment {
+        color: var(--tok-com);
+        font-style: italic;
+      }
+      .hljs-title,
+      .hljs-title.function_ {
+        color: var(--tok-fn);
+      }
+      .lede {
+        font-size: 1.05rem;
+        color: var(--muted);
+        max-width: 72ch;
+        margin: 0;
+      }
+      .tabs {
+        display: flex;
+        gap: 4px;
+        border-bottom: 1px solid var(--line);
+        margin: 24px 0 0;
+        flex-wrap: wrap;
+      }
+      .tabs button {
+        font: 500 0.95rem var(--body);
+        color: var(--muted);
+        background: none;
+        border: 1px solid transparent;
+        border-bottom: none;
+        padding: 9px 16px;
+        border-radius: 6px 6px 0 0;
+        cursor: pointer;
+        margin-bottom: -1px;
+      }
+      .tabs button[aria-selected="true"] {
+        color: var(--ink);
+        background: var(--surface);
+        border-color: var(--line);
+      }
+      .tabs button:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .panel[hidden] {
+        display: none;
+      }
+      .rules {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-top: none;
+        border-radius: 0 0 8px 8px;
+        padding: 16px 22px;
+        margin: 0 0 8px;
+      }
+      .rules ul {
+        margin: 0;
+        padding-left: 20px;
+      }
+      .rules li {
+        margin: 4px 0;
+      }
+      .gallery {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 16px;
+        margin-top: 20px;
+        max-width: 820px;
+      }
+      .card .imgwrap img {
+        max-width: min(100%, 520px);
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-width: 0;
+      }
+      .card h3 {
+        margin: 0;
+        font-size: 1.05rem;
+      }
+      .card .note {
+        font-size: 0.88rem;
+        color: var(--muted);
+        margin: 0;
+      }
+      .card img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: 0 auto;
+        border-radius: 4px;
+        background: #fff;
+      }
+      .card .imgwrap {
+        background: #fff;
+        border-radius: 6px;
+        border: 1px solid var(--line);
+        padding: 6px;
+      }
+      .label {
+        font: 600 0.72rem/1 var(--body);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        margin: 2px 0 -4px;
+      }
+      .label.prop {
+        color: var(--accent);
+      }
+      .tag {
+        display: inline-block;
+        font: 500 0.7rem/1 var(--body);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 4px 7px;
+        border-radius: 3px;
+        margin-left: 6px;
+        vertical-align: 2px;
+      }
+      .tag.today {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+      .tag.proto {
+        background: var(--warn-soft);
+        color: var(--warn);
+      }
+      .tag.sketch {
+        background: var(--code-bg);
+        color: var(--muted);
+      }
+      .none {
+        font-size: 0.88rem;
+        color: var(--muted);
+        background: var(--code-bg);
+        border: 1px dashed var(--line);
+        border-radius: 6px;
+        padding: 8px 12px;
+        margin: 0;
+      }
+      details {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        margin: 12px 0;
+      }
+      details > summary {
+        cursor: pointer;
+        padding: 12px 16px;
+        font-weight: 600;
+      }
+      details > .inner {
+        padding: 0 18px 16px;
+      }
+      details.code > summary {
+        font-weight: 500;
+        font-size: 0.88rem;
+        padding: 6px 10px;
+        color: var(--muted);
+      }
+      details.code {
+        border: none;
+        background: none;
+        margin: 0;
+      }
+      details.code > .inner {
+        padding: 0;
+      }
+      .strip {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));
+        gap: 10px;
+      }
+      .strip figure {
+        margin: 0;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 6px;
+      }
+      .strip figcaption {
+        font-size: 0.8rem;
+        color: #444;
+        padding: 4px 2px 0;
+      }
+      .strip figcaption b {
+        font-family: var(--mono);
+        font-weight: 500;
+        color: #1d2430;
+      }
+      .strip img {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+      .decisions {
+        counter-reset: d;
+        list-style: none;
+        padding: 0;
+      }
+      .decisions li {
+        counter-increment: d;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 10px 14px 10px 46px;
+        margin: 8px 0;
+        position: relative;
+        max-width: none;
+      }
+      .decisions li::before {
+        content: counter(d);
+        position: absolute;
+        left: 16px;
+        top: 10px;
+        font: 600 1rem var(--display);
+        color: var(--accent);
+      }
+      .callout {
+        background: var(--accent-soft);
+        border-radius: 6px;
+        padding: 12px 16px;
+        margin: 16px 0;
+        max-width: 72ch;
+      }
+      .prec {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+        gap: 12px;
+        margin: 12px 0;
+      }
+      .prec .pc {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .prec h4 {
+        margin: 0;
+        font: 600 0.98rem var(--body);
+      }
+      .prec p {
+        margin: 0;
+        font-size: 0.88rem;
+        color: var(--muted);
+      }
+      .prec img {
+        max-width: 200px;
+        height: auto;
+        display: block;
+        border-radius: 4px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 0.9rem;
+      }
+      th,
+      td {
+        text-align: left;
+        vertical-align: top;
+        border-bottom: 1px solid var(--line);
+        padding: 7px 10px;
+      }
+      th {
+        font-weight: 600;
+        color: var(--muted);
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .tablewrap {
+        overflow-x: auto;
+      }
+      .foot {
+        color: var(--muted);
+        font-size: 0.88rem;
+        margin-top: 32px;
+      }
+      @media (max-width: 600px) {
+        h1 {
+          font-size: 1.7rem;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          scroll-behavior: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Voronoi treemaps</h1>
+      <p class="lede">
+        An API proposal for #1222, with an explanation of how treemap tilings
+        work. <span class="tag today">today</span> marks a render of the current
+        API. <span class="tag proto">prototype</span> marks a real GoFish render
+        of polygons that a throwaway layout script computed.
+      </p>
+
+      <div class="tabs" role="tablist">
+        <button
+          role="tab"
+          id="tab-proposal"
+          aria-controls="proposal"
+          aria-selected="true"
+        >
+          Proposal
+        </button>
+        <button
+          role="tab"
+          id="tab-explainer"
+          aria-controls="explainer"
+          aria-selected="false"
+        >
+          How treemaps work
+        </button>
+        <button
+          role="tab"
+          id="tab-rationale"
+          aria-controls="rationale"
+          aria-selected="false"
+        >
+          Rationale and precedent
+        </button>
+      </div>
+
+      <!-- ============================ PROPOSAL ============================ -->
+      <section
+        class="panel"
+        id="proposal"
+        role="tabpanel"
+        aria-labelledby="tab-proposal"
+      >
+        <div class="rules">
+          <ul>
+            <li>
+              A Voronoi treemap is <code>treemap</code> with a new tiling,
+              <code>Tile.voronoi</code>. One flow step is one level, as it
+              already is for every tiling.
+            </li>
+            <li>
+              Leaves draw with <code>region()</code>, the mark that already
+              fills a partition cell. It now also fills a treemap cell.
+            </li>
+            <li>
+              Gaps use treemap's existing <code>spacing</code> (between
+              siblings) and <code>padding</code> (at its outer edge).
+            </li>
+            <li>
+              A round boundary comes from an
+              <code>enclose({ shape: Shape.oval })</code> step above the
+              treemap. Around a child that fills its space, enclose hands its
+              shape down.
+            </li>
+            <li>
+              Inside the library, a parent can hand its child a convex polygon
+              instead of a box. A rectangular tiling inside a polygon cell is a
+              loud error.
+            </li>
+            <li>
+              <code>Tile.sliceDice</code> is deleted. It draws exactly like
+              <code>Tile.dice</code> today, and two flow steps express
+              slice-and-dice.
+            </li>
+          </ul>
+        </div>
+
+        <div class="gallery">
+          <div class="card">
+            <h3>
+              Voronoi treemap in a circle
+              <span class="tag proto">prototype</span>
+            </h3>
+            <div class="imgwrap">
+              <img
+                src="img/voronoi-nested-circle.png"
+                alt="Three-level Voronoi treemap of country populations in a circle"
+              />
+            </div>
+            <p class="label prop">Proposed</p>
+            <pre><code class="language-javascript" data-add="3,4,5,6,8">chart(countryPopulations)
+  .flow(
+    enclose({ shape: Shape.oval, fill: "none" }),
+    treemap({ by: "continent", size: "pop", spacing: 5, tile: Tile.voronoi }),
+    treemap({ by: "region", size: "pop", spacing: 2.5, tile: Tile.voronoi }),
+    treemap({ size: "pop", spacing: 1, tile: Tile.voronoi })
+  )
+  .mark(region({ fill: "continent" }));</code></pre>
+            <pre><code class="language-python" data-add="2,3,4,5,6">chart(COUNTRY_POPULATIONS).flow(
+    enclose(shape=Shape.oval, fill="none"),
+    treemap(by="continent", size="pop", spacing=5, tile=Tile.voronoi(seed=7)),
+    treemap(by="region", size="pop", spacing=2.5, tile=Tile.voronoi),
+    treemap(size="pop", spacing=1, tile=Tile.voronoi),
+).mark(region(fill="continent"))</code></pre>
+            <p class="label">Current</p>
+            <p class="none">
+              No spelling. The closest is a nested squarify treemap in a
+              rectangle (next card).
+            </p>
+          </div>
+
+          <div class="card">
+            <h3>
+              Voronoi treemap in the chart's box
+              <span class="tag proto">prototype</span>
+            </h3>
+            <div class="imgwrap">
+              <img
+                src="img/voronoi-nested-square.png"
+                alt="Three-level Voronoi treemap in a square"
+              />
+            </div>
+            <p class="label prop">Proposed</p>
+            <pre><code class="language-javascript" data-add="3,4,5,7">chart(countryPopulations)
+  .flow(
+    treemap({ by: "continent", size: "pop", spacing: 5, tile: Tile.voronoi }),
+    treemap({ by: "region", size: "pop", spacing: 2.5, tile: Tile.voronoi }),
+    treemap({ size: "pop", spacing: 1, tile: Tile.voronoi })
+  )
+  .mark(region({ fill: "continent" }));</code></pre>
+            <p class="label">
+              Current, nested squarify <span class="tag today">today</span>
+            </p>
+            <pre><code class="language-javascript" data-del="3,4,5,7">chart(countryPopulations)
+  .flow(
+    treemap({ by: "continent", size: "pop", spacing: 6 }),
+    treemap({ by: "region", size: "pop", spacing: 3 }),
+    treemap({ size: "pop", spacing: 1 })
+  )
+  .mark(rect({ fill: "continent" }));</code></pre>
+            <details class="code">
+              <summary>Show today's render</summary>
+              <div class="inner">
+                <div class="imgwrap">
+                  <img
+                    src="img/current-nested-squarify.png"
+                    alt="Nested squarified treemap"
+                  />
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <div class="card">
+            <h3>
+              Squarify continents, Voronoi below
+              <span class="tag proto">prototype</span>
+            </h3>
+            <div class="imgwrap">
+              <img
+                src="img/mixed-squarify-then-voronoi.png"
+                alt="Squarified continents with Voronoi regions inside"
+              />
+            </div>
+            <p class="note">
+              A rectangle is convex, so a Voronoi level fits inside any
+              rectangular tiling.
+            </p>
+            <p class="label prop">Proposed</p>
+            <pre><code class="language-javascript" data-add="4,5,7">chart(countryPopulations)
+  .flow(
+    treemap({ by: "continent", size: "pop", spacing: 8 }),
+    treemap({ by: "region", size: "pop", spacing: 2.5, tile: Tile.voronoi }),
+    treemap({ size: "pop", spacing: 1, tile: Tile.voronoi })
+  )
+  .mark(region({ fill: "continent" }));</code></pre>
+            <p class="label">Current</p>
+            <p class="none">No spelling. Only rectangular tilings exist.</p>
+          </div>
+
+          <div class="card">
+            <h3>Slice, then dice <span class="tag today">today</span></h3>
+            <div class="imgwrap">
+              <img
+                src="img/current-slice-then-dice.png"
+                alt="Continents sliced into rows, regions diced into columns"
+              />
+            </div>
+            <p class="note">
+              Slice-and-dice alternates direction by level. Two flow steps
+              already say that, so <code>Tile.sliceDice</code> goes.
+            </p>
+            <p class="label prop">Proposed (works today)</p>
+            <pre><code class="language-javascript" data-add="3,4">chart(countryPopulations, { w: 320, h: 320 })
+  .flow(
+    treemap({ by: "continent", size: "pop", spacing: 4, tile: Tile.slice }),
+    treemap({ by: "region", size: "pop", spacing: 2, tile: Tile.dice })
+  )
+  .mark(rect({ fill: "continent" }));</code></pre>
+            <p class="label">Current, removed</p>
+            <pre><code class="language-javascript" data-del="1">treemap({ by: "region", size: "pop", tile: Tile.sliceDice });
+// draws exactly like Tile.dice, because every GoFish treemap is depth 0</code></pre>
+          </div>
+
+          <div class="card">
+            <h3>
+              Error: squarify inside a Voronoi cell
+              <span class="tag sketch">no render</span>
+            </h3>
+            <p class="note">
+              Squarify assumes a rectangle. Using the cell's bounding box would
+              break the areas, so this is an error that names the fix. A later
+              polygon tiling, e.g., angular treemaps, could fill the gap.
+            </p>
+            <p class="label prop">Proposed</p>
+            <pre><code class="language-javascript" data-add="8,9">chart(countryPopulations)
+  .flow(
+    treemap({ by: "continent", size: "pop", tile: Tile.voronoi }),
+    treemap({ by: "region", size: "pop", tile: Tile.squarify })
+  )
+  .mark(region({ fill: "continent" }));
+
+// Error: treemap (by "region"): Tile.squarify needs a rectangular region,
+// but this treemap sits in a Voronoi cell. Use Tile.voronoi here.</code></pre>
+          </div>
+
+          <div class="card">
+            <h3>
+              Hard example: a bubble treemap in each Voronoi cell
+              <span class="tag proto">prototype</span>
+            </h3>
+            <div class="imgwrap">
+              <img
+                src="img/mixed-voronoi-then-pack.png"
+                alt="Voronoi continents each holding a small bubble treemap"
+              />
+            </div>
+            <p class="note">
+              This mixes top-down and bottom-up layout. The prototype uses one
+              circle scale, set by the thinnest cell (Europe), so the packs look
+              small in big cells. The spelling works, and the picture needs pack
+              fitting (#967). Region contours here are plain circles.
+            </p>
+            <p class="label prop">Proposed</p>
+            <pre><code class="language-javascript" data-add="3">chart(countryPopulations)
+  .flow(
+    treemap({ by: "continent", size: "pop", tile: Tile.voronoi }),
+    pack({ by: "region", spacing: 4 }),
+    enclose({ shape: Shape.arcs({ radius: 8 }), padding: 4, fill: "none" }),
+    pack()
+  )
+  .mark(country);</code></pre>
+            <p class="label">
+              Current, bubble treemap <span class="tag today">today</span>
+            </p>
+            <details class="code">
+              <summary>Show code and render</summary>
+              <div class="inner">
+                <pre><code class="language-javascript" data-del="3,4,5,6,7,8,9">chart(countryPopulations)
+  .flow(
+    pack({ by: "continent", spacing: 4 }),
+    enclose({
+      shape: Shape.arcs({ radius: 12 }),
+      padding: 4,
+      fill: "none",
+      stroke: "#333",
+    }),
+    pack({ by: "region", spacing: 4 }),
+    enclose({ shape: Shape.arcs({ radius: 8 }), padding: 4, fill: "none" }),
+    pack()
+  )
+  .mark(country);</code></pre>
+                <div class="imgwrap" style="margin-top: 8px">
+                  <img
+                    src="img/current-bubble-treemap.png"
+                    alt="Bubble treemap"
+                  />
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <div class="card">
+            <h3>
+              Hard example: Voronoi treemaps in hex bins
+              <span class="tag sketch">no render</span>
+            </h3>
+            <p class="note">
+              A hex cell is convex. Once partition cells are handed down as
+              regions (the nested-partition gap in #1059), this needs nothing
+              new.
+            </p>
+            <p class="label prop">Proposed</p>
+            <pre><code class="language-javascript" data-add="6,8">chart(sightings)
+  .flow(
+    partition({
+      by: struct({ x: "lon", y: "lat" }).bin(Bin.hex({ radius: 1 })),
+    }),
+    treemap({ by: "species", size: "count", tile: Tile.voronoi })
+  )
+  .mark(region({ fill: "species" }));</code></pre>
+            <p class="label">Current</p>
+            <p class="none">
+              No spelling. A child of a hex cell gets only the cell's bounding
+              box.
+            </p>
+          </div>
+
+          <div class="card">
+            <h3>
+              A drawn outline per group
+              <span class="tag sketch">no render</span>
+            </h3>
+            <p class="note">
+              For a colored group outline, as in the bubble treemap, add an
+              <code>enclose</code> step. A group's cells together make its
+              parent cell, so the outline is that cell. This needs cells to
+              report outlines (#1233), which pack already does.
+            </p>
+            <p class="label prop">Proposed</p>
+            <pre><code class="language-javascript" data-add="4,5,6,7,8,9">chart(countryPopulations)
+  .flow(
+    treemap({ by: "continent", size: "pop", spacing: 6, tile: Tile.voronoi }),
+    enclose({
+      shape: Shape.box,
+      fill: "none",
+      stroke: "#333",
+      strokeWidth: 1.5,
+    }),
+    treemap({ by: "region", size: "pop", spacing: 3, tile: Tile.voronoi }),
+    treemap({ size: "pop", spacing: 1, tile: Tile.voronoi })
+  )
+  .mark(region({ fill: "continent" }));</code></pre>
+            <p class="label">Current</p>
+            <p class="none">
+              No spelling for Voronoi. For rect treemaps, outlines come from
+              <code>spacing</code> gaps only.
+            </p>
+          </div>
+        </div>
+
+        <h2>The same data under each tiling</h2>
+        <p>
+          Thirteen regions, area proportional to population. Only the last panel
+          is new.
+        </p>
+        <div class="strip">
+          <figure>
+            <img src="img/strategy-grid-squarify.png" alt="squarify" />
+            <figcaption><b>Tile.squarify</b></figcaption>
+          </figure>
+          <figure>
+            <img src="img/strategy-grid-binary.png" alt="binary" />
+            <figcaption><b>Tile.binary</b></figcaption>
+          </figure>
+          <figure>
+            <img src="img/strategy-grid-slice.png" alt="slice" />
+            <figcaption><b>Tile.slice</b></figcaption>
+          </figure>
+          <figure>
+            <img src="img/strategy-grid-dice.png" alt="dice" />
+            <figcaption><b>Tile.dice</b></figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/strategy-grid-slice-dice.png"
+              alt="sliceDice, the same as dice"
+            />
+            <figcaption>
+              <b>Tile.sliceDice</b> (same as dice, removed)
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="img/strategy-grid-voronoi.png" alt="voronoi" />
+            <figcaption><b>Tile.voronoi</b> (new, prototype)</figcaption>
+          </figure>
+        </div>
+        <pre
+          style="margin-top: 10px"
+        ><code class="language-javascript" data-add="2">chart(countryPopulations, { w: 320, h: 320 })
+  .flow(treemap({ by: "region", size: "pop", spacing: 2, tile: Tile.voronoi }))
+  .mark(region({ fill: "continent" }));</code></pre>
+
+        <h2>Decisions for you</h2>
+        <ol class="decisions">
+          <li>
+            Is <code>Tile.voronoi</code> on <code>treemap</code> the right home,
+            rather than a separate <code>voronoi</code> operator?
+          </li>
+          <li>
+            Should the leaf mark be <code>region()</code>, the partition cell
+            mark, rather than a new mark or a stretched <code>rect</code>?
+          </li>
+          <li>
+            Is a rectangular tiling inside a polygon cell a loud error, rather
+            than a fallback to the bounding box?
+          </li>
+          <li>
+            Should <code>enclose({ shape })</code> around a filling child hand
+            its shape down, for a round boundary? The alternative is d3's
+            <code>Tile.voronoi({ clip: Shape.oval })</code>.
+          </li>
+          <li>
+            Should <code>Tile.voronoi</code> take only <code>seed</code>, with
+            tolerance and iteration cap fixed inside? d3 exposes
+            <code>convergenceRatio</code>, <code>maxIterationCount</code> and
+            <code>minWeightRatio</code>.
+          </li>
+          <li>Can we delete <code>Tile.sliceDice</code>?</li>
+          <li>
+            In a polygon cell, should <code>Shape.box</code> mean the cell, or
+            do we add <code>Shape.cell</code>?
+          </li>
+        </ol>
+      </section>
+
+      <!-- ============================ EXPLAINER ============================ -->
+      <section
+        class="panel"
+        id="explainer"
+        role="tabpanel"
+        aria-labelledby="tab-explainer"
+        hidden
+      >
+        <h2>Every tiling works on one level</h2>
+        <p>
+          A tiling cuts one region into one piece per child, with each piece's
+          area proportional to the child's value. All the common tilings take
+          the same two inputs: one node's child values, and the region that node
+          got. None of them look at the levels above or below.
+        </p>
+        <p>
+          In d3, <code>treemap(root)</code> calls
+          <code>tile(node, x0, y0, x1, y1)</code> once per internal node, from
+          the top down. Bruls et al. chose this on purpose in the squarify
+          paper: "we do not consider the subdivision for all levels
+          simultaneously. This leads to an explosion in computation time."
+        </p>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Tiling</th>
+                <th>How it works</th>
+                <th>Order kept</th>
+                <th>Shapes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>Tile.slice</code></td>
+                <td>
+                  Cuts the rectangle into horizontal strips, one per child, top
+                  to bottom.
+                </td>
+                <td>yes</td>
+                <td>thin strips</td>
+              </tr>
+              <tr>
+                <td><code>Tile.dice</code></td>
+                <td>The same with vertical strips, left to right.</td>
+                <td>yes</td>
+                <td>thin strips</td>
+              </tr>
+              <tr>
+                <td><code>Tile.squarify</code></td>
+                <td>
+                  Sorts children largest first. Fills a row along the short side
+                  and keeps adding children while the worst aspect ratio in the
+                  row improves. When it gets worse, it closes the row and starts
+                  a new one in the leftover space. (Bruls, Huizing, van Wijk
+                  2000)
+                </td>
+                <td>no</td>
+                <td>close to square</td>
+              </tr>
+              <tr>
+                <td><code>Tile.binary</code></td>
+                <td>
+                  Splits the children into two halves of about equal value. It
+                  cuts a wide rectangle left and right and a tall one top and
+                  bottom, then recurses. (d3)
+                </td>
+                <td>partly</td>
+                <td>balanced</td>
+              </tr>
+              <tr>
+                <td>strip, pivot, split, spiral</td>
+                <td>
+                  Not in GoFish. Strip fills rows in input order. Pivot picks
+                  one child and arranges the rest around it, then recurses.
+                  (Bederson, Shneiderman, Wattenberg 2002; Engdahl 2005)
+                </td>
+                <td>yes</td>
+                <td>medium</td>
+              </tr>
+              <tr>
+                <td><code>Tile.voronoi</code> (new)</td>
+                <td>
+                  Places one site per child and grows a power diagram until each
+                  cell has its target area. (Balzer and Deussen 2005; Nocaj and
+                  Brandes 2012)
+                </td>
+                <td>no</td>
+                <td>rounded polygons</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2>Slice and dice within a level and across levels</h2>
+        <p>
+          Slice and dice are each a single-level tiling. The classic
+          slice-and-dice treemap (Shneiderman 1992) is the two of them
+          alternating by depth: level one slices, level two dices, and so on.
+          d3's <code>treemapSliceDice</code> is only a switch on
+          <code>node.depth</code>.
+        </p>
+        <p>
+          In GoFish each level is its own flow step, so you write the
+          alternation directly, one tiling per step. This also answers whether
+          each level of a bubble treemap could be its own treemap. Yes, every
+          level picks its own layout, and the only limits are about shape and
+          size direction, covered below.
+        </p>
+
+        <h2>Is a treemap a dynamic program, like the pretty printer?</h2>
+        <p>
+          No. Squarify, strip, pivot, split and binary are all greedy or
+          divide-and-conquer rules, and the squarify paper says it cannot
+          guarantee the best result. Finding the treemap with the best aspect
+          ratios is strongly NP-hard even for one level (de Berg, Speckmann, van
+          der Weele 2011, Theorem 11). We found no published treemap layout that
+          uses dynamic programming.
+        </p>
+        <ul>
+          <li>
+            A Wadler-style pretty printer picks line breaks greedily, as
+            squarify picks rows greedily.
+          </li>
+          <li>
+            An optimal printer (Bernardy 2017; Porncharoenwase et al. 2023) can
+            be exact because its state is small, a column position below the
+            page width, and its cost adds up line by line.
+          </li>
+          <li>
+            A treemap's leftover region is a 2D shape that depends on every
+            earlier choice, and the worst aspect ratio does not add up. So the
+            same method does not apply.
+          </li>
+          <li>
+            One case does fit. A strip layout with a fixed order and fixed strip
+            direction is the same problem as breaking a paragraph into lines
+            (Knuth and Plass), and a dynamic program over break points finds the
+            best strips. This is our own observation, and no system we surveyed
+            ships it.
+          </li>
+        </ul>
+        <p>
+          A Voronoi treemap is a third kind. It is an iterative search that
+          settles into a local optimum.
+        </p>
+
+        <h2>How a Voronoi treemap is built</h2>
+        <p>
+          A power diagram is a Voronoi diagram where each site has a weight, and
+          a bigger weight gives a bigger cell. Its cells have straight edges and
+          are always convex. One level, inside a convex region:
+        </p>
+        <ol>
+          <li>
+            Place one site per child, from a seeded random number generator so
+            the result is repeatable.
+          </li>
+          <li>
+            Give every site the same small weight and compute the power diagram,
+            clipped to the region.
+          </li>
+          <li>
+            Move each site to the center of its cell. This keeps cells round.
+          </li>
+          <li>
+            Compare each cell's area to its target, which is the region's area
+            times the child's share. Grow the weight of a cell that is too small
+            and shrink one that is too large. Keep each weight small enough that
+            the site stays inside its own cell.
+          </li>
+          <li>
+            Repeat steps 3 and 4 until the total area error is below a
+            tolerance, e.g., 1%, or an iteration cap is reached.
+          </li>
+        </ol>
+        <p>
+          Every cell of a clipped power diagram is convex, so each cell can be
+          the region for the next level, and that is why the method nests. The
+          prototype reaches a worst-cell error of 2% to 3% in 13 to 42 ms for 70
+          countries in three levels.
+        </p>
+        <div class="callout">
+          d3 splits this into three packages, and the split matches GoFish's
+          levels. <code>d3-weighted-voronoi</code> computes one power diagram.
+          <code>d3-voronoi-map</code> runs the loop for one level.
+          <code>d3-voronoi-treemap</code> repeats
+          <code>d3-voronoi-map</code> inside each cell.
+        </div>
+
+        <h2>What GoFish's treemap can and cannot compose today</h2>
+        <p>
+          Each <code>treemap</code> in <code>.flow()</code> already lays out one
+          level over its own box (<code>treemap.tsx:215</code>), and each step
+          can use a different tiling. The bubble treemap has the same shape,
+          with <code>pack</code> in place of <code>treemap</code>. Three things
+          still keep treemap from composing freely.
+        </p>
+        <ol>
+          <li>
+            <strong>The region is always a box.</strong> Layout hands a child
+            only a width and a height, and a Voronoi level needs its parent's
+            polygon. The same gap blocks nested partitions (#1059) and a circle
+            pack inside each hex bin (#1064). The proposal fixes this one.
+          </li>
+          <li>
+            <strong>Top-down and bottom-up do not meet.</strong> A treemap fills
+            the region it is given, and a pack keeps its children at their own
+            size. In a pack of treemaps there is no way to say that each
+            treemap's area follows its total, so every continent below is the
+            same size. That needs an area request with a free aspect ratio
+            (#967, #972), and it is out of scope.
+          </li>
+          <li>
+            <strong>Group padding lives on the treemap.</strong> Treemap has
+            <code>spacing</code> and <code>padding</code>, while bubble treemaps
+            put the gap on an <code>enclose</code> step. The proposal keeps
+            treemap's keys. Moving <code>padding</code> to
+            <code>enclose</code> would give one word two directions, outward in
+            a pack and inward in a treemap.
+          </li>
+        </ol>
+        <div class="gallery">
+          <div class="card">
+            <h3>A pack of treemaps <span class="tag today">today</span></h3>
+            <div class="imgwrap">
+              <img
+                src="img/current-pack-of-treemaps.png"
+                alt="Four treemaps of equal size, packed"
+              />
+            </div>
+            <p class="note">
+              Every continent is 100 × 100 because the size has to be a literal.
+            </p>
+            <pre><code class="language-javascript">chart(countryPopulations)
+  .flow(
+    pack({ by: "continent", spacing: 8 }),
+    treemap({ by: "region", size: "pop", spacing: 3, w: 100, h: 100 }),
+    treemap({ size: "pop", spacing: 1 })
+  )
+  .mark(rect({ fill: "continent" }));</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================ RATIONALE ============================ -->
+      <section
+        class="panel"
+        id="rationale"
+        role="tabpanel"
+        aria-labelledby="tab-rationale"
+        hidden
+      >
+        <h2>Why this design</h2>
+        <ul>
+          <li>
+            <strong>It desugars into the existing core.</strong> It adds one
+            strategy and lets a layout region be a convex polygon. The polygon
+            region also closes the nested-partition gap in #1059 and unblocks
+            #1064. The mechanism stays fixed and the long tail grows as
+            strategies ("Why keep the core small", principles.md).
+          </li>
+          <li>
+            <strong>One concept is one operator.</strong> Every surveyed library
+            treats Voronoi as a tiling choice or a package on top of the same
+            hierarchy code.
+          </li>
+          <li>
+            <strong>Few new terms.</strong> <code>Tile.voronoi</code> and
+            <code>seed</code>. <code>region()</code> and
+            <code>enclose</code> gain cases their names already suggest.
+          </li>
+          <li>
+            <strong>It matches recent decisions.</strong> Uppercase strategy
+            families with bare kinds as values (#1013, #1145).
+            <code>spacing</code> as the sibling gap and <code>padding</code> as
+            the outer inset (#1005). <code>seed</code> as in <code>noise</code>.
+          </li>
+          <li>
+            <strong>It errors loudly.</strong> A rectangular tiling in a polygon
+            cell names the fix instead of drawing wrong areas.
+          </li>
+          <li>
+            <strong>The same shape in Python.</strong>
+            <code>tile=Tile.voronoi(seed=7)</code> comes from the generated
+            <code>Tile</code> module.
+          </li>
+        </ul>
+
+        <details>
+          <summary>Alternatives considered</summary>
+          <div class="inner">
+            <h3>B: a separate <code>voronoi</code> operator</h3>
+            <p>
+              This mirrors d3's package split. It has the same inputs, outputs
+              and options as <code>treemap</code>, which is the large partial
+              overlap that api-design.md warns against ("Overlap is fine at the
+              edges, not in the middle"). Squarify and Voronoi levels would also
+              look like two operators when they are two tilings of one idea.
+            </p>
+            <pre><code class="language-javascript">chart(countryPopulations)
+  .flow(
+    voronoi({ by: "continent", size: "pop", spacing: 5 }),
+    voronoi({ by: "region", size: "pop", spacing: 2.5 }),
+    voronoi({ size: "pop", spacing: 1 })
+  )
+  .mark(region({ fill: "continent" }));</code></pre>
+            <h3>C: a weighted Voronoi partition</h3>
+            <p>
+              Adding weights to today's <code>Bin.voronoi({ seeds })</code> is a
+              useful feature, but it is not a treemap. A partition decides cells
+              from where the data sits, and a treemap decides cells from how
+              much each group holds. A treemap of continents has no seed
+              positions to give. The two features should share one clipping
+              routine (<code>geometry/clip.ts</code> already has
+              <code>clipToConvex</code> and <code>insetConvex</code>) and keep
+              separate names.
+            </p>
+            <h3>
+              A <code>clip</code> option instead of <code>enclose</code> for the
+              boundary
+            </h3>
+            <pre><code class="language-javascript">treemap({
+  by: "continent",
+  size: "pop",
+  tile: Tile.voronoi({ clip: Shape.oval }),
+});</code></pre>
+            <p>
+              This is d3's spelling and simpler to build, but only Voronoi gets
+              a circle. A pack in a circle or a Voronoi treemap in a hexagon
+              would each need their own clip option. This is the runner-up. We
+              would pick it if a filling mode for <code>enclose</code> turns out
+              to be too much for one change. Inner levels need polygon regions
+              either way.
+            </p>
+            <h3>
+              Moving treemap's <code>padding</code> onto <code>enclose</code>
+            </h3>
+            <p>
+              This would copy the bubble treemap exactly. In a pack, enclose
+              padding grows the group outward. In a treemap the same number
+              would have to shrink the region inward, and one word with two
+              directions is a trap.
+            </p>
+          </div>
+        </details>
+
+        <details>
+          <summary>How it composes and what it overlaps</summary>
+          <div class="inner">
+            <ul>
+              <li>
+                <strong>Who makes polygon regions.</strong> Treemap cells of any
+                tiling, partition cells (<code>Bin.hex</code>,
+                <code>Bin.voronoi</code>), and <code>enclose</code> with a
+                convex shape.
+              </li>
+              <li>
+                <strong>Who reads them.</strong> <code>treemap</code>,
+                <code>region()</code>, and later <code>pack</code>, which could
+                fit inside a polygon.
+              </li>
+              <li>
+                <strong>Enclose's two modes.</strong> Around content with its
+                own size, enclose hugs it. Around content that fills its space,
+                the content fills enclose's shape. Only convex shapes work in
+                the second mode, so <code>Shape.box</code> and
+                <code>Shape.oval</code> are allowed and
+                <code>Shape.arcs</code> or <code>Shape.blob</code> is an error.
+              </li>
+              <li>
+                <strong>Coordinate transforms.</strong> In
+                <code>Coord.polar</code> the straight edges bend, as a rect
+                treemap's do today. No special case.
+              </li>
+              <li>
+                <strong>Animation.</strong> A seeded start gives the same
+                picture on every render. Stable layouts across data changes
+                (Hahn et al. 2014) could be a later option on the strategy.
+              </li>
+              <li>
+                <strong>Overlap with <code>Bin.voronoi</code>.</strong> A small
+                shared case: both clip a power diagram to a convex region.
+                Membership comes from position in one and from groups in the
+                other.
+              </li>
+              <li>
+                <strong>Overlap with <code>pack</code>.</strong> None. Pack is
+                bottom-up, treemap is top-down.
+              </li>
+              <li>
+                <strong>Custom tilings (#1101).</strong> A custom tiling would
+                receive a region, box or polygon, and return one region per
+                child. That is d3's tile signature with a polygon in place of
+                four numbers.
+              </li>
+            </ul>
+          </div>
+        </details>
+
+        <details>
+          <summary>Precedent</summary>
+          <div class="inner">
+            <div class="prec">
+              <div class="pc">
+                <h4>d3-voronoi-treemap (Lebeau)</h4>
+                <img
+                  src="img/ref/d3-voronoi-treemap-circle.png"
+                  alt="d3-voronoi-treemap in a circle"
+                />
+                <pre><code class="language-javascript">d3.voronoiTreemap()
+  .clip(circlePolygon)
+  .convergenceRatio(0.01)
+  .maxIterationCount(50)
+  .minWeightRatio(0.01)
+  .prng(seededRandom)(root);</code></pre>
+                <p>
+                  Recursive over a d3 hierarchy. The outer boundary is a convex
+                  clip. Repeatable only with a seeded prng. Image from
+                  github.com/Kcnarf/d3-voronoi-treemap.
+                </p>
+              </div>
+              <div class="pc">
+                <h4>WeightedTreemaps (R)</h4>
+                <img
+                  src="img/ref/weightedtreemaps-example.png"
+                  alt="WeightedTreemaps example"
+                />
+                <pre><code class="language-r">voronoiTreemap(data,
+  levels = c("gear", "car_name"),
+  cell_size = "wt",
+  shape = "rounded_rect",
+  seed = 123)</code></pre>
+                <p>
+                  Recursive Voronoi. Custom shapes are not checked. Only the
+                  starting positions vary per level. Image from
+                  github.com/m-jahn/WeightedTreemaps.
+                </p>
+              </div>
+              <div class="pc">
+                <h4>d3-hierarchy</h4>
+                <pre><code class="language-javascript">d3.treemap()
+  .tile(d3.treemapSquarify.ratio(1))
+  .paddingInner(2)(root);</code></pre>
+                <p>
+                  One tile function, called once per node. A custom tile can
+                  switch on <code>node.depth</code>, which is all
+                  <code>treemapSliceDice</code> does.
+                </p>
+              </div>
+              <div class="pc">
+                <h4>Highcharts</h4>
+                <pre><code class="language-javascript">{
+  type: "treemap",
+  layoutAlgorithm: "squarified",
+  levels: [{ level: 1, layoutAlgorithm: "sliceAndDice" }],
+}</code></pre>
+                <p>
+                  The only surveyed system with a tiling per level as an option.
+                  GoFish gets this from flow steps.
+                </p>
+              </div>
+              <div class="pc">
+                <h4>Vega and Plotly</h4>
+                <pre><code class="language-javascript">{ type: "treemap", method: "squarify", ratio: 1.618 }
+{ tiling: { packing: "squarify", squarifyratio: 1 } }</code></pre>
+                <p>One method for the whole tree. No Voronoi.</p>
+              </div>
+              <div class="pc">
+                <h4>FoamTree, treemapify, Vega-Lite, Plot</h4>
+                <pre><code class="language-plaintext">FoamTree:   layout: "relaxed"   (Voronoi)
+treemapify: geom_treemap(layout = "squarified")
+Vega-Lite, Observable Plot: no treemap</code></pre>
+                <p>
+                  FoamTree has Voronoi as one global setting. Vega-Lite and Plot
+                  users compute layouts in d3 and draw rects.
+                </p>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details>
+          <summary>Cleanups found along the way</summary>
+          <div class="inner">
+            <ul>
+              <li>
+                <code>Tile.sliceDice</code> draws like <code>Tile.dice</code>,
+                because every GoFish treemap builds a one-level hierarchy at
+                depth 0.
+              </li>
+              <li>
+                Treemap writes the global <code>scaleContext.x</code> and
+                <code>.y</code> (<code>treemap.tsx:204</code>), so nested
+                treemaps overwrite each other. Polygon regions should replace
+                that write.
+              </li>
+              <li>
+                #1069: treemap has no <code>serialize</code>, so JS
+                <code>toJSON</code> drops it.
+              </li>
+              <li>
+                A field-name <code>fill</code> on a row that lacks the field
+                paints the literal string, black, with no error.
+              </li>
+            </ul>
+          </div>
+        </details>
+
+        <details>
+          <summary>Related issues</summary>
+          <div class="inner">
+            <div class="tablewrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Issue</th>
+                    <th>What it is</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>#1222</td>
+                    <td>
+                      This issue: voronoi treemap, "can this be done more
+                      compositionally?"
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>#1221, #1226</td>
+                    <td>
+                      Bubble treemaps: <code>enclose</code> as a flow step,
+                      <code>Shape.arcs</code>, pack <code>spacing</code>.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>#1005</td>
+                    <td>
+                      Treemap tile strategies as objects, and what
+                      <code>spacing</code> and <code>padding</code> mean.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>#1013, #1145</td>
+                    <td>
+                      Strategy families as uppercase namespaces, bare kinds as
+                      values.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>#1059</td>
+                    <td>
+                      2D partitions, <code>Bin.voronoi</code>, the
+                      <code>region()</code> mark, and the nested-partition gap.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>#1064</td>
+                    <td>
+                      A circle pack inside each hex bin. Needs the same polygon
+                      region.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>#967, #972</td>
+                    <td>Pack fitting to its space, and area requests.</td>
+                  </tr>
+                  <tr>
+                    <td>#973, #974, #1233</td>
+                    <td>
+                      Pack padding, the boundary query, containers reporting
+                      children's outlines.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>#1247</td>
+                    <td>
+                      Unifying <code>Shape.arcs</code> and
+                      <code>Shape.blob</code> (open). It may rename the bubble
+                      treemap's shape.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>#1201</td>
+                    <td>Non-convex intersect and offset.</td>
+                  </tr>
+                  <tr>
+                    <td>#1004</td>
+                    <td>
+                      A data-driven leaf size inside a treemap renders NaN.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>#1069</td>
+                    <td>Treemap is missing from JS <code>toJSON</code>.</td>
+                  </tr>
+                  <tr>
+                    <td>#1101</td>
+                    <td>Custom strategies.</td>
+                  </tr>
+                  <tr>
+                    <td>#541, #631</td>
+                    <td>Treemap and other layouts as constraint generators.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+
+        <details>
+          <summary>Sources</summary>
+          <div class="inner">
+            <ul>
+              <li>
+                Shneiderman 1992, "Tree visualization with tree-maps", ACM TOG
+                11(1).
+              </li>
+              <li>
+                Bruls, Huizing, van Wijk 2000, "Squarified treemaps", VisSym.
+              </li>
+              <li>
+                Bederson, Shneiderman, Wattenberg 2002, "Ordered and quantum
+                treemaps", ACM TOG 21(4).
+              </li>
+              <li>
+                de Berg, Speckmann, van der Weele 2011, "Treemaps with bounded
+                aspect ratio",
+                <a href="https://arxiv.org/abs/1012.1749">arXiv:1012.1749</a>.
+              </li>
+              <li>Balzer and Deussen 2005, "Voronoi treemaps", InfoVis.</li>
+              <li>
+                Nocaj and Brandes 2012, "Computing Voronoi treemaps: faster,
+                simpler, and resolution-independent", CGF 31(3).
+              </li>
+              <li>
+                Hahn, Trümper, Moritz, Döllner 2014, "Visualization of varying
+                hierarchies by stable layout of Voronoi treemaps", IVAPP.
+              </li>
+              <li>
+                Liang, Nguyen, Simoff, Huang 2012, "Angular treemaps", IV.
+              </li>
+              <li>
+                Bernardy 2017, "A pretty but not greedy printer", ICFP.
+                Porncharoenwase et al. 2023, "A pretty expressive printer",
+                OOPSLA.
+              </li>
+              <li>
+                Documentation for
+                <a href="https://d3js.org/d3-hierarchy/treemap">d3-hierarchy</a
+                >,
+                <a href="https://github.com/Kcnarf/d3-voronoi-treemap"
+                  >d3-voronoi-treemap</a
+                >,
+                <a href="https://github.com/Kcnarf/d3-voronoi-map"
+                  >d3-voronoi-map</a
+                >,
+                <a href="https://github.com/m-jahn/WeightedTreemaps"
+                  >WeightedTreemaps</a
+                >,
+                <a
+                  href="https://www.highcharts.com/docs/chart-and-series-types/treemap"
+                  >Highcharts</a
+                >,
+                <a href="https://vega.github.io/vega/docs/transforms/treemap/"
+                  >Vega</a
+                >,
+                <a href="https://plotly.com/python/reference/treemap/"
+                  >Plotly</a
+                >
+                and
+                <a href="https://get.carrotsearch.com/foamtree/latest/api/"
+                  >FoamTree</a
+                >.
+              </li>
+            </ul>
+          </div>
+        </details>
+      </section>
+
+      <p class="foot">
+        Repo copy: <code>proposals/voronoi-treemap/proposal.md</code> on branch
+        <code>worktree-voronoi-treemap-proposal-1222</code>. Prototype stories:
+        <code
+          >packages/gofish-graphics/stories/_proposals/VoronoiTreemap.stories.tsx</code
+        >.
+      </p>
+    </main>
+    <script>
+      (function () {
+        function lines(attr) {
+          return attr
+            ? attr.split(",").map(function (n) {
+                return parseInt(n, 10);
+              })
+            : [];
+        }
+        document.querySelectorAll("pre code").forEach(function (el) {
+          var add = lines(el.getAttribute("data-add"));
+          var del = lines(el.getAttribute("data-del"));
+          try {
+            if (window.hljs) hljs.highlightElement(el);
+          } catch (e) {}
+          var parts = el.innerHTML.split("\n");
+          el.innerHTML = parts
+            .map(function (line, i) {
+              var n = i + 1;
+              var cls =
+                add.indexOf(n) >= 0
+                  ? " add"
+                  : del.indexOf(n) >= 0
+                    ? " del"
+                    : "";
+              return '<span class="ln' + cls + '">' + (line || " ") + "</span>";
+            })
+            .join("");
+        });
+
+        var tabs = Array.prototype.slice.call(
+          document.querySelectorAll('[role="tab"]')
+        );
+        function show(id) {
+          tabs.forEach(function (t) {
+            var on = t.getAttribute("aria-controls") === id;
+            t.setAttribute("aria-selected", on ? "true" : "false");
+            document.getElementById(t.getAttribute("aria-controls")).hidden =
+              !on;
+          });
+        }
+        tabs.forEach(function (t) {
+          t.addEventListener("click", function () {
+            var id = t.getAttribute("aria-controls");
+            show(id);
+            try {
+              history.replaceState(null, "", "#" + id);
+            } catch (e) {
+              location.hash = id;
+            }
+          });
+        });
+        var start = location.hash.replace("#", "");
+        if (["proposal", "explainer", "rationale"].indexOf(start) >= 0)
+          show(start);
+        window.addEventListener("hashchange", function () {
+          var h = location.hash.replace("#", "");
+          if (["proposal", "explainer", "rationale"].indexOf(h) >= 0) show(h);
+        });
+      })();
+    </script>
+  </body>
+</html>

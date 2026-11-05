@@ -173,6 +173,14 @@ Walking `withGoFish.ts:431-477`:
    list (`rect({...})([box])`, so the rect's datum is `[box]`). Nothing
    inspects the input's shape; the `infer*` helpers all read it as the list
    it is.
+   Before that, the options are checked for lengths (`checkLengths` in
+   `ast/length.ts`): a `percent(n)` or `fr(k)` is allowed only in a field
+   whose descriptor type names `t.ref("Length")` (a box's `w`/`h`, a rect's
+   `inset`); a length anywhere else throws rather than being dropped. A
+   length passes the channels through unchanged (`inferNumeric`), and the
+   shape keeps it as the size in its own box, which it gives its node
+   (`elaborateOwnDims` in `ast/dims.ts`; `GoFishNode.ownDims`), where the
+   node reads it once it is in its tree (`GoFishNode.lengthOn`).
 2. **Apply each channel.** For each prop in the user's `markOpts`:
    - `Value`-wrapped (`v(...)`) → pass through unchanged. (Already final.)
    - **No value means not drawn**, for every data channel, in one place: a
@@ -414,9 +422,10 @@ was called with to `GoFishNode.relate`, so a drawing clause binds them; the
 the node's `_names`, so a drawing clause is resolved in a fresh registry
 nested in it, which the call that replaces the clause discards) and the
 combinator marks — one wiring, not three copies. The region-compositing
-combinators share one factory (`makePorterDuffCombinator`), typed by their
-options: only `intersect` takes paint (`fill`, `stroke`, `strokeWidth`,
-`opacity`). Its `fill` and `stroke` are color channels, read off the rows of
+combinators share one factory (`makeCompositeCombinator`), typed by their
+options: `union`, `intersect`, `subtract` and `exclude` take paint (`fill`,
+`stroke`, `strokeWidth`, `opacity`), and `union`, `intersect` and `atop` take
+`blendMode`. A `fill` and a `stroke` are color channels, read off the rows of
 its input by `resolveGroupPaint`, the same resolution a connector's paint
 goes through: `paintChannelsOf` finds them in `MARK_CHANNELS`, which holds
 the combinator-only marks' channels as well as the leaf marks'.
@@ -573,10 +582,12 @@ plus a connector tier —
 .mark(R(opts))  ⇒  .mark(blank(anchor(opts))).layer(R(opts))
 ```
 
-The anchor tier is invisible in the strong sense: a `blank` node lowers to no
-display items at all (see [Render Pass 4](/internals/layout/passes)), so the one
+The anchor tier is invisible in the strong sense: a `blank` node is a hidden
+rect, and the bake stops at a hidden node no compositor reads, so it lowers to
+no display items at all (see [Render Pass 4](/internals/layout/passes)). The one
 anchor per row costs layout and a `selectAll` target but no DOM element and no
-hit-test entry. Since nothing can make it paint, `blank()` takes no paint-only
+hit-test entry. Never painting is the blank's own: a label on it shows unless
+the blank is `.hidden()`. Since no option makes it paint, `blank()` takes no paint-only
 options (no stroke or corner radius); its `fill` stays only to seed the color
 scale.
 

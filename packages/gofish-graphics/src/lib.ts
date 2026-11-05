@@ -21,6 +21,11 @@ export { value as v } from "./ast/data";
 // accessor; `literal(x)` is an explicit constant.
 export { datum, field, literal } from "./ast/data";
 export type { FieldAccessor, LiteralValue } from "./ast/data";
+// `percent(n)` / `fr(n)` — lengths: a percent of the room a size or gap is
+// laid out in (`percent(30).offset(10)` adds pixels), or an `fr` weight, a
+// share of the nearest scope's room (#1176 step 6).
+export { percent, fr } from "./ast/length";
+export type { LengthValue, Length } from "./ast/length";
 // `chunk(size)` — a `by` key that groups consecutive rows `size` at a time
 // (a bin over row position).
 export { chunk } from "./ast/data";
@@ -210,6 +215,8 @@ export type {
   PartitionPlaneOptions,
 } from "./ast/graphicalOperators/partition";
 export * as Overlap from "./families/overlap";
+export * as Filter from "./families/filter";
+export type { BlendMode } from "./ast/blendMode";
 export type { EncloseOptions } from "./ast/graphicalOperators/enclose";
 export * as Shape from "./families/shape";
 export * as Place from "./families/place";
@@ -248,12 +255,20 @@ export {
   repeat,
   log,
   layer,
-  paint,
+  union,
   intersect,
-  exclude,
   subtract,
-  mask,
+  exclude,
+  atop,
 } from "./ast/marks/chart";
+export type {
+  CompositePaint,
+  UnionOptions,
+  IntersectOptions,
+  SubtractOptions,
+  ExcludeOptions,
+  AtopOptions,
+} from "./ast/graphicalOperators/porterDuff";
 export type { RelatableMark, DeriveOptions } from "./ast/marks/chart";
 // A data helper for derive: the grid rows of a density curve to rows at its
 // quantiles. A shortcut until first-class distributions (#980).

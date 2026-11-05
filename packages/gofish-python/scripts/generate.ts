@@ -15,9 +15,8 @@
  * What gets generated, and what stays hand-written in `gofish/ast.py`:
  *  - Closed-signature **leaf mark** factories (rect, circle, ellipse, petal,
  *    text, image, polygon, blank) — pure kwargs-collection + wire rename.
- *  - Compositing-quartet + over/mask + enclose/arrow **combinator-only**
- *    marks — pure kwargs-collection, `pyName` supplies the Python-facing
- *    rename (wire `type` stays the descriptor's `type`).
+ *  - The five compositing operators + enclose/arrow **combinator-only**
+ *    marks — pure kwargs-collection, named by their wire `type`.
  *  - `_opts(...) -> dict` **cores** for the dual-form constructs (spread,
  *    stack, scatter, group, table, treemap, line, ribbon, layer) — the
  *    mechanical kwargs→dict half. The polymorphic
@@ -310,7 +309,7 @@ function renderOptsCore(
 }
 
 /** Combinator-only mark that always takes children + a small options set
- *  (compositing quartet, over, mask, enclose, arrow). */
+ *  (the five compositing operators, enclose, arrow). */
 function renderCombinatorFactory(opts: {
   pyName: string;
   wireType: string;
@@ -539,21 +538,19 @@ parts.push(
   "\n# --- Combinator-only marks ---------------------------------------------------\n"
 );
 const COMBINATOR_ONLY = [
-  "over",
-  "inside",
-  "xor",
-  "out",
+  "union",
+  "intersect",
+  "subtract",
+  "exclude",
   "atop",
-  "mask",
   "position",
   "arrow",
 ];
 for (const wireType of COMBINATOR_ONLY) {
   const d = COMBINATOR_MARKS[wireType];
-  const pyName = d.pyName ?? wireType;
   parts.push(
     renderCombinatorFactory({
-      pyName,
+      pyName: wireType,
       wireType: d.type,
       doc: d.doc,
       fields: resolveFields(d),
@@ -1020,7 +1017,13 @@ function writeFamilyModule(opts: {
   factories: FamilyFactory[];
 }): void {
   const { family, doc, table, wire, factories } = opts;
-  const module = family.toLowerCase();
+  // The module is the family's name in lowercase. A Python package's
+  // submodule and its attribute share one name, so importing
+  // `gofish.filter` would replace the `filter` operator: a module whose
+  // name is also an operator's takes a trailing `_` (`gofish.filter_`), as
+  // a kwarg that is a Python keyword does (`from_=`).
+  const lower = family.toLowerCase();
+  const module = Object.hasOwn(OPERATORS, lower) ? `${lower}_` : lower;
   const example = factories[0].name;
   const bareExample = wire.bare
     ? factories.find((f) =>
@@ -1049,7 +1052,7 @@ function writeFamilyModule(opts: {
     `\`\`from gofish.${module} import ${example}\`\` reach the same member. Each member`,
     `returns a plain dict, \`\`{"${wire.tag}": ..., **params}\`\`, with`,
     ...keys,
-    `Mirrors JS \`\`gofish-graphics/${module}\`\`.`,
+    `Mirrors JS \`\`gofish-graphics/${lower}\`\`.`,
     ...(bareExample !== undefined
       ? [
           ``,
@@ -1117,7 +1120,7 @@ writeFamilyModule({
   wire: { tag: "type", keys: "wire", bare: false },
   factories: Object.entries(COORDS).map(([type, d]) => ({
     family: "Coord",
-    name: pyKwarg(d.pyName ?? type),
+    name: pyKwarg(type),
     tag: type,
     params: resolveFields(d),
     preset: {},

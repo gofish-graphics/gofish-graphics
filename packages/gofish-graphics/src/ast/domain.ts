@@ -33,10 +33,12 @@ export const aesthetic = (value: any): AestheticDomain => ({
 /** One continuous axis's data→pixel affine map: `px(d) = sigma·d + originPx`.
  *  `sigma` is the map's slope (px per data unit) and `originPx` is the pixel of
  *  data 0, the baseline, kept in pixels so pixel overhead never has to be
- *  expressed in data units. Every `AxisMap` is produced by the scope registry
- *  (`solveScope`) or its equal-measure recentering, so `sigma` is always a
- *  scope's solved slope. Evaluated by {@link pxOf}. */
-export type AxisMap = { sigma: number; originPx: number };
+ *  expressed in data units. Every number `AxisMap` is produced by the scope
+ *  registry (`solveScope`) or its equal-measure recentering, so `sigma` is
+ *  always a scope's solved slope. Evaluated by {@link pxOf}. With `T` a value
+ *  in σ it is the map of a scope whose σ is not solved yet, as the claim
+ *  walk's placement solve reads it (`Arith`, solver/arith.ts). */
+export type AxisMap<T = number> = { sigma: T; originPx: T };
 
 /** One axis's data→pixel affine scale — the single carrier that replaced the
  *  parallel `scaleFactors` (slope-only) and `posScales` (whole map) channels.

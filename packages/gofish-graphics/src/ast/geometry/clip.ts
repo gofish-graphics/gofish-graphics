@@ -4,8 +4,10 @@
 
 /**
  * Polygon clipping for the region-compositing operators (`intersect`'s
- * outline, `region({ inset })`). Rings are lists of points with no repeated
- * closing point, in any winding.
+ * outline, `region({ inset })`), for the shapes a parent hands its children
+ * at layout (`ring.ts`), and for the power diagram of a Voronoi treemap
+ * (`voronoiTiling.ts`). Rings are lists of points with no repeated closing
+ * point, in any winding.
  *
  * TODO(#1201): this is a declared shortcut. Exact geometry needs one convex
  * operand, because Sutherland–Hodgman clipping is exact only against a convex
@@ -13,13 +15,14 @@
  * out joined by zero-width seams), and a result with holes need a general
  * polygon boolean and outlines with several loops.
  */
-import type { OutlinePoint } from "./outline";
+import type { OutlinePoint, Point } from "./outline";
 import { cross, signedArea2 } from "./plane";
+import { hasArea } from "./ring";
 
 type Pt = OutlinePoint;
 
 /** A ring with repeated points and straight-through points dropped. */
-export function simplifyRing(ring: readonly Pt[], eps = 1e-9): Pt[] {
+export function simplifyRing(ring: readonly Point[], eps = 1e-9): Pt[] {
   let pts: Pt[] = [];
   for (const p of ring) {
     const last = pts[pts.length - 1];
@@ -58,7 +61,7 @@ export function simplifyRing(ring: readonly Pt[], eps = 1e-9): Pt[] {
 
 /** Whether a ring is convex: every turn goes the same way. A ring of fewer
  *  than three points is not. */
-export function isConvex(ring: readonly Pt[]): boolean {
+export function isConvex(ring: readonly Point[]): boolean {
   return isConvexSimplified(simplifyRing(ring));
 }
 
@@ -81,33 +84,72 @@ function isConvexSimplified(pts: readonly Pt[]): boolean {
 }
 
 /** A clipped ring simplified, or an empty list when it has no area left. */
-function nonDegenerate(ring: Pt[]): Pt[] {
+function nonDegenerate(ring: readonly Point[]): Pt[] {
   const out = simplifyRing(ring);
-  return out.length >= 3 && Math.abs(signedArea2(out)) > 1e-9 ? out : [];
+  return hasArea(out) ? out : [];
+}
+
+/** The part of `subject` where `g` is 0 or more, for a function `g` linear
+ *  in the point, given as its value at each of `subject`'s points (one
+ *  Sutherland–Hodgman step): the side of one line. `subject` itself when
+ *  all of it is on that side. */
+function clipByLinear(
+  subject: readonly Point[],
+  g: readonly number[]
+): readonly Point[] {
+  let allIn = true;
+  for (let i = 0; i < g.length && allIn; i++) allIn = g[i] >= 0;
+  if (allIn) return subject;
+  const out: Point[] = [];
+  for (let i = 0; i < subject.length; i++) {
+    const j = (i - 1 + subject.length) % subject.length;
+    const cur = subject[i];
+    const prev = subject[j];
+    const curIn = g[i] >= 0;
+    const prevIn = g[j] >= 0;
+    if (curIn !== prevIn) {
+      const t = g[j] / (g[j] - g[i]);
+      out.push([
+        prev[0] + t * (cur[0] - prev[0]),
+        prev[1] + t * (cur[1] - prev[1]),
+      ]);
+    }
+    if (curIn) out.push(cur);
+  }
+  return out;
 }
 
 /** The part of `subject` on the inside of the line through `a` and `b`,
  *  where inside is the side `side` (the sign of `cross(a, b, p)`). */
-function clipByEdge(subject: Pt[], a: Pt, b: Pt, side: number): Pt[] {
-  const out: Pt[] = [];
-  const inside = (p: Pt) => side * cross(a, b, p) >= 0;
-  const meet = (p: Pt, q: Pt): Pt => {
-    const dp = cross(a, b, p);
-    const dq = cross(a, b, q);
-    const t = dp / (dp - dq);
-    return [p[0] + t * (q[0] - p[0]), p[1] + t * (q[1] - p[1])];
-  };
-  for (let i = 0; i < subject.length; i++) {
-    const cur = subject[i];
-    const prev = subject[(i - 1 + subject.length) % subject.length];
-    const curIn = inside(cur);
-    const prevIn = inside(prev);
-    if (curIn) {
-      if (!prevIn) out.push(meet(prev, cur));
-      out.push(cur);
-    } else if (prevIn) out.push(meet(prev, cur));
-  }
-  return out;
+const clipByEdge = (
+  subject: readonly Point[],
+  a: Point,
+  b: Point,
+  side: number
+) =>
+  clipByLinear(
+    subject,
+    subject.map((p) => side * cross(a, b, p))
+  );
+
+/**
+ * The part of the convex ring `subject` in the half-plane
+ * `nx * x + ny * y <= c`: a convex ring, or an empty list when none of it
+ * is. The power diagram of a Voronoi treemap (`voronoiTiling.ts`) cuts each
+ * cell by one such half-plane per other site.
+ */
+export function clipToHalfPlane(
+  subject: readonly Point[],
+  nx: number,
+  ny: number,
+  c: number
+): readonly Point[] {
+  if (subject.length < 3) return [];
+  const g = new Array<number>(subject.length);
+  for (let i = 0; i < subject.length; i++)
+    g[i] = c - (nx * subject[i][0] + ny * subject[i][1]);
+  const out = clipByLinear(subject, g);
+  return out.length < 3 ? [] : out;
 }
 
 /**
@@ -116,8 +158,8 @@ function clipByEdge(subject: Pt[], a: Pt, b: Pt, side: number): Pt[] {
  * simple ring; `clip` must be convex ({@link isConvex}).
  */
 export function clipToConvex(
-  subject: readonly Pt[],
-  clip: readonly Pt[]
+  subject: readonly Point[],
+  clip: readonly Point[]
 ): Pt[] {
   return clipSimplified(simplifyRing(subject), simplifyRing(clip));
 }
@@ -126,7 +168,7 @@ export function clipToConvex(
 function clipSimplified(subject: Pt[], clip: readonly Pt[]): Pt[] {
   if (clip.length < 3 || subject.length < 3) return [];
   const side = Math.sign(signedArea2(clip));
-  let out = subject;
+  let out: readonly Point[] = subject;
   for (let i = 0; i < clip.length && out.length > 0; i++)
     out = clipByEdge(out, clip[i], clip[(i + 1) % clip.length], side);
   return nonDegenerate(out);
@@ -138,8 +180,8 @@ function clipSimplified(subject: Pt[], clip: readonly Pt[]): Pt[] {
  * yet (#1201). An empty list when they do not overlap.
  */
 export function intersectRings(
-  a: readonly Pt[],
-  b: readonly Pt[]
+  a: readonly Point[],
+  b: readonly Point[]
 ): Pt[] | undefined {
   const sa = simplifyRing(a);
   const sb = simplifyRing(b);
@@ -154,12 +196,15 @@ export function intersectRings(
  * undefined when the ring is not convex: drawing in any ring needs a general
  * polygon offset (#1201).
  */
-export function insetConvex(ring: readonly Pt[], d: number): Pt[] | undefined {
+export function insetConvex(
+  ring: readonly Point[],
+  d: number
+): Pt[] | undefined {
   const pts = simplifyRing(ring);
   if (!isConvexSimplified(pts)) return undefined;
   if (d <= 0) return pts;
   const side = Math.sign(signedArea2(pts));
-  let out = pts;
+  let out: readonly Point[] = pts;
   for (let i = 0; i < pts.length && out.length > 0; i++) {
     const a = pts[i];
     const b = pts[(i + 1) % pts.length];

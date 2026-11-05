@@ -15,18 +15,32 @@ import {
   text,
   field,
   layer as layerOf,
+  value,
+  percent,
 } from "../lib";
 import { runLayout } from "../ast/gofish";
+import * as Pwl from "../ast/solver/pwl";
 import { GoFishNode } from "../ast/_node";
 import { Rect } from "../ast/shapes/rect";
 import { layer } from "../ast/graphicalOperators/layer";
 import { Constraint } from "../ast/constraints";
-import { placementIn } from "../ast/placementClaims";
+import { planPlacement } from "../ast/solver/plan";
 import { check, items, report } from "./testHelpers";
 
 /** Every node of the tree under `node`, `node` included. */
 const close = (a: number | undefined, b: number, eps = 1e-6) =>
   a !== undefined && Math.abs(a - b) <= eps;
+
+/** The node under `n` that holds a chain (a `distribute`). */
+const chainOf = (n: GoFishNode): GoFishNode => {
+  const walk = (m: GoFishNode): GoFishNode[] => [
+    m,
+    ...m.children.flatMap((c) => (c instanceof GoFishNode ? walk(c) : [])),
+  ];
+  return walk(n).find((m) =>
+    m.constraints.some((c) => c.type === "distribute")
+  )!;
+};
 
 async function main() {
   console.log("\n# an over-full root draws what scales as if the fixed parts took no room");
@@ -48,6 +62,41 @@ async function main() {
       "bands sit 110 px apart",
       close(rects[1].x! - rects[0].x! - rects[0].w!, 110),
       rects.map((r) => r.x)
+    );
+  }
+
+  console.log(
+    "\n# an unsized root whose fixed parts exceed the default canvas (#1179)"
+  );
+  {
+    // Data-valued widths, spacing 200 × 5 = 1000 px: more than the default
+    // 400 px canvas, so no σ ≥ 0 fits. The bars alone fill the 400 px
+    // (σ = 400 / 6, never negative), and the canvas grows to hold the
+    // spacing. The render gave no size, so nothing overflows or warns.
+    const data = ["a", "b", "c", "d", "e", "f"].map((k) => ({ k, v: 1 }));
+    const bars = () =>
+      chart(data, { axes: false })
+        .flow(spread({ by: "k", dir: "x", spacing: 200 }))
+        .mark(rect({ w: "v", h: 10 }));
+    const rects = items(await bars().toDisplayList({})).filter(
+      (i) => i.kind === "rect"
+    );
+    check(
+      "every bar is 400 / 6 px wide",
+      rects.length === 6 && rects.every((r) => close(r.w, 400 / 6)),
+      rects.map((r) => r.w)
+    );
+    check(
+      "bars sit 200 px apart",
+      close(rects[1].x! - rects[0].x! - rects[0].w!, 200),
+      rects.map((r) => r.x)
+    );
+    const data1179 = await runLayout({}, bars().resolve());
+    check(
+      "the canvas holds the bars and the spacing, and nothing warns",
+      close(data1179.width, 400 + 1000, 1e-6) &&
+        data1179.warnings.length === 0,
+      [data1179.width, data1179.warnings.map((w) => w.message)]
     );
   }
 
@@ -111,11 +160,11 @@ async function main() {
       close(bNode.dims[0].center, 110),
       bNode.dims[0]
     );
-    const p = placementIn(mNode, data.child, 0);
+    const p = planPlacement(mNode, data.child, 0);
     check(
       "the claim walk places m where the layout does",
-      p !== undefined && close(p.lo.run(1), 100) && close(p.hi.run(1), 120),
-      p && [p.lo.run(1), p.hi.run(1)]
+      p !== undefined && close(Pwl.at(p.lo, 1), 100) && close(Pwl.at(p.hi, 1), 120),
+      p && [Pwl.at(p.lo, 1), Pwl.at(p.hi, 1)]
     );
   }
 
@@ -142,12 +191,69 @@ async function main() {
       const claim = chain.resolveExtent()[0]!;
       check(
         `anchor "${anchor}": the claim is the laid-out 0..60`,
-        close(-claim.descent.run(1), 0) &&
-          close(claim.ascent.run(1), 60) &&
+        close(-Pwl.at(claim.descent, 1), 0) &&
+          close(Pwl.at(claim.ascent, 1), 60) &&
           close(chain.dims[0].size, 60),
-        [-claim.descent.run(1), claim.ascent.run(1), chain.dims[0].size]
+        [-Pwl.at(claim.descent, 1), Pwl.at(claim.ascent, 1), chain.dims[0].size]
       );
     }
+  }
+
+  console.log("\n# a spread claims its parts chained with the spacing");
+  {
+    // A spread of magnitudes shares the enclosing scope's σ: two bars of 4
+    // and 3 data units, 10 px apart, claim 7σ + 10.
+    const node = await chart(
+      [
+        { k: "a", v: 4 },
+        { k: "b", v: 3 },
+      ],
+      { axes: false }
+    )
+      .flow(spread({ by: "k", dir: "x", spacing: 10 }))
+      .mark(rect({ w: "v", h: 10 }))
+      .resolve();
+    const data = await runLayout({}, node);
+    const claim = chainOf(data.child).resolveExtent()[0]!;
+    check(
+      "the claim is 7σ + 10",
+      close(Pwl.at(claim.width, 2), 24) && close(Pwl.at(claim.width, 5), 45),
+      [Pwl.at(claim.width, 2), Pwl.at(claim.width, 5)]
+    );
+  }
+
+  console.log("\n# a pitched chain's tallest part binds wherever it sits");
+  {
+    // Parts 30 px apart by their middles: at σ = 1, a 100 px part in the
+    // middle reaches past both of its neighbors, so the claim is its 100 px.
+    const node = await chart(
+      [2, 100, 2].map((h, i) => ({ k: `${i}`, h })),
+      { axes: false }
+    )
+      .flow(spread({ by: "k", dir: "y", spacing: 30, anchor: "middle" }))
+      .mark(rect({ w: 10, h: "h" }))
+      .resolve();
+    const data = await runLayout({}, node);
+    const claim = chainOf(data.child).resolveExtent()[1]!;
+    check(
+      "the claim is the middle part's 100 px",
+      close(Pwl.at(claim.width, 1), 100),
+      Pwl.at(claim.width, 1)
+    );
+  }
+
+  console.log("\n# transform.scale scales a layer's claim");
+  {
+    const node = (layer as any)({ transform: { scale: { x: 2 } } }, [
+      (Rect as any)({ w: 10, h: 10 }),
+    ]);
+    const data = await runLayout({}, node);
+    const claim = data.child.resolveExtent()[0]!;
+    check(
+      "a 10 px rect scaled by 2 claims 20 px",
+      close(Pwl.at(claim.width, 1), 20),
+      Pwl.at(claim.width, 1)
+    );
   }
 
   console.log("\n# a sized chart's plot leaves out the nested label rows");
@@ -293,6 +399,93 @@ async function main() {
       "labels below the bars: the caption's height counts from below the labels",
       close(bottom.height, 132 + 12, 0.5) && plotBottom < bottom.height - 1,
       [bottom.height, plotBottom]
+    );
+  }
+
+  console.log(
+    "\n# a flexible part beside data-sized parts is one data unit, and warns"
+  );
+  {
+    // Two bars sized by data and one with no size of its own, in one chain
+    // with no container between them: the flexible part is a σ weight in the
+    // chain's scope, one data unit wide, so 40σ + 20σ + σ + 2 · 10 = 300.
+    const rows = [
+      { k: "a", v: 40 },
+      { k: "b", v: 20 },
+      { k: "flex", v: 0 },
+    ];
+    const build = () =>
+      chart(rows, { axes: false })
+        .flow(spread({ by: "k", dir: "x", spacing: 10 }))
+        .mark((d: any) =>
+          d[0].k === "flex"
+            ? rect({ h: 10 })
+            : rect({ w: value(d[0].v), h: 10 })
+        );
+    const sigma = 280 / 61;
+    const rects = items(await build().toDisplayList({ w: 300, h: 50 })).filter(
+      (i) => i.kind === "rect"
+    );
+    check(
+      "the data-sized parts are 40σ and 20σ, and the flexible part is σ",
+      rects.length === 3 &&
+        close(rects[0].w, 40 * sigma) &&
+        close(rects[1].w, 20 * sigma) &&
+        close(rects[2].w, sigma),
+      rects.map((r) => r.w)
+    );
+    const data = await runLayout({ w: 300, h: 50 }, await build().resolve());
+    const mixed = data.warnings.filter((w) => w.kind === "mixed-sizes");
+    check(
+      "the layout warns that x mixes data-driven and flexible sizes, naming the parts",
+      mixed.length === 1 &&
+        mixed[0].axis === "x" &&
+        mixed[0].message.includes(
+          'spread(by: "k") on x mixes data-driven and flexible sizes'
+        ) &&
+        mixed[0].message.includes('rect(key: "flex") has no size of its own') &&
+        mixed[0].message.includes(
+          'rect(key: "a"), rect(key: "b") are sized by data'
+        ),
+      data.warnings.map((w) => w.message)
+    );
+  }
+
+  console.log("\n# an overflow's breakdown sums each kind's parts");
+  {
+    // Two panels and a 12 px gap in a 720 px layer: 30% and 70% are
+    // 216 + 504 px, so the row needs 732 px. Panels of one kind with
+    // different sizes are listed; panels of one size are counted.
+    const row = (a: number, b: number) =>
+      layerOf({ w: 720, h: 120 }, [
+        spread({ dir: "x", spacing: 12, alignment: "start" }, [
+          layerOf({ w: percent(a), h: 120 }, [rect({ fill: "#dbe9f6" })]),
+          layerOf({ w: percent(b), h: 120 }, [rect({ fill: "#fde7d4" })]),
+        ]),
+      ]);
+    const fixedOf = async (a: number, b: number) =>
+      (await runLayout({}, await (row(a, b) as any)(undefined))).warnings.filter(
+        (w) => w.kind === "fixed-overflow"
+      );
+    const differ = await fixedOf(30, 70);
+    check(
+      "30% and 70% panels are summed and listed: 216 px + 504 px = 720 px",
+      differ.length === 1 &&
+        differ[0].message.includes(
+          "Fixed parts: layer: its own size, 216 px + 504 px = 720 px; " +
+            'spread(dir: "x"): spacing 12 × 1 = 12 px.'
+        ),
+      differ.map((w) => w.message)
+    );
+    const same = await fixedOf(50, 50);
+    check(
+      "two 50% panels keep their count: ×2 = 720 px",
+      same.length === 1 &&
+        same[0].message.includes(
+          "Fixed parts: layer: its own size, ×2 = 720 px; " +
+            'spread(dir: "x"): spacing 12 × 1 = 12 px.'
+        ),
+      same.map((w) => w.message)
     );
   }
 

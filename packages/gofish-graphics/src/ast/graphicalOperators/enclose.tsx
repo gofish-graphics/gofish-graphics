@@ -23,6 +23,7 @@
  * The node's geometry is its outline, so a parent that reads geometry
  * (`pack`) lays out the outline, and an outer `enclose` hugs it.
  */
+import type { FilterOptions } from "../drawFilter";
 import { GoFishNode, outlineOverhang, placeUnplacedChild } from "../_node";
 
 import { Frontend, type DisplayList } from "gofish-ir";
@@ -50,20 +51,30 @@ import { targetOf } from "../constraints/relationalPaint";
 import { boxOfDims, ringExtent } from "../geometry/box";
 import { RelateOperand } from "../constraints/relate";
 import { nodeSelectionOf } from "../nodeSelection";
-import { placementIn } from "../placementClaims";
+import { planPlacement } from "../solver/plan";
 import type { Placement } from "../constraints/claimPlacement";
-import { Extent } from "../extent";
-import * as Monotonic from "../../util/monotonic";
+import { Extent, hullExtent, padExtent } from "../extent";
+import * as Pwl from "../solver/pwl";
 import { ringPathData } from "../geometry/plane";
 import { outlinePaint, ringOutline, simplifyRing } from "../geometry/outline";
 import { ringsEnclosingCircle } from "../geometry/enclosingCircle";
+import { insetConvex, intersectRings } from "../geometry/clip";
+import {
+  boxRing,
+  inItsBox,
+  isWholeBox,
+  ovalRing,
+  type Ring,
+} from "../geometry/ring";
+import type { Size } from "../dims";
+import type { AxisScale } from "../domain";
 
 /** `Shape.arcs()`'s radius when it is given none, as the `Shape` family
  *  declares it. */
 const ARCS_RADIUS = Frontend.STRATEGIES.Shape.kinds.arcs.params.radius
   .default as number;
 
-export type EncloseOptions = {
+export type EncloseOptions = FilterOptions & {
   /** Pixels between the members and the outline, or a field name or
    *  accessor read once per enclosed group (constant within it). Default 2. */
   padding?: number | string | ((d: any) => number);
@@ -131,7 +142,23 @@ function Enclose(
         UNDEFINED,
         UNDEFINED,
       ],
-      layout: (size, scales, children) => {
+      // Over fresh members, each laid at the outline's origin, the outline
+      // claims their union grown by the padding. Around refs it is placed
+      // from them (`placedFromRefs` below), and claims nothing of its own.
+      resolveExtent: (childExtents) =>
+        ([0, 1] as const).map((axis) => {
+          const own = childExtents.slice(0, memberCount).map((e) => e[axis]);
+          if (
+            own.length === 0 ||
+            members.some((m) => m instanceof GoFishRef) ||
+            own.some((e) => e === undefined)
+          )
+            return undefined;
+          return padExtent(hullExtent(...(own as Extent[])), padding);
+        }) as [Extent | undefined, Extent | undefined],
+      layout: (size, scales, children, _node, space) => {
+        if (fillsItsSpace(members))
+          return fillingLayout(shape, padding, size, scales, children, space);
         // Child placement (`placeUnplacedChild`): a FRESH child reports an
         // undefined translate until placed, so its baseline is placed at the
         // origin. An already-placed operand
@@ -289,9 +316,6 @@ function Enclose(
   // every member does (#493 placement claims). Its claim is the members'
   // padded box. That is exact for `Shape.box()`, and a blob lies inside it;
   // an oval may reach past it, and that reach is ink.
-  // TODO(#1032): an outline over fresh children has no claim yet (the claim
-  // walk reads no size for it); it should claim their union grown by the
-  // padding.
   if (memberCount > 0 && members.every((m) => m instanceof GoFishRef))
     node.placedFromRefs = (frame, axis) =>
       paddedPlacement(
@@ -301,6 +325,82 @@ function Enclose(
         padding
       );
   return node;
+}
+
+/** Whether every member fills the space it is given on both axes: it is
+ *  fresh (not a `ref`), and the claim walk says it fills its room
+ *  (`GoFishNode.fillsRoom`: a `treemap` or a `region` with no size of its
+ *  own does; a `pack` of sized circles does not). */
+const fillsItsSpace = (members: readonly GoFishAST[]): boolean =>
+  members.length > 0 &&
+  members.every(
+    (m) => m instanceof GoFishNode && m.fillsRoom(0) && m.fillsRoom(1)
+  );
+
+/**
+ * The layout of an enclosure around members that fill their space (#1222):
+ * the outline is its space, and the members fill the outline, drawn in by
+ * the padding, as their shape (see `Layout` in `_node.ts`). The outline is
+ * the box it is laid out in for `Shape.box()`, or the shape it is handed
+ * there (a treemap's cell), and the oval in that box for `Shape.oval()`,
+ * cut to the shape it is handed. Only a convex outline can be a member's
+ * shape, and `Shape.arcs()` and `Shape.blob()` hug members that have a size
+ * of their own, so around members that fill their space they are an error.
+ */
+function fillingLayout(
+  shape: Shape,
+  padding: number,
+  size: Size,
+  scales: Size<AxisScale | undefined>,
+  children: readonly GoFishAST[],
+  space: Ring | undefined
+) {
+  if (shape.kind === "arcs" || shape.kind === "blob")
+    throw new Error(
+      `enclose({ shape }): Shape.${shape.kind} hugs members that have a ` +
+        `size of their own, but this enclosure's member fills the space it ` +
+        `is given (such as a treemap), so it would fill the outline instead, ` +
+        `and only a convex outline can be filled. Use Shape.box or ` +
+        `Shape.oval, or give the member a size of its own.`
+    );
+  const [w, h] = size;
+  // The shape it is handed, unless that is its box.
+  const cell = isWholeBox(space, w, h) ? undefined : space;
+  const outline: Ring =
+    shape.kind === "box"
+      ? (cell ?? boxRing(w, h))
+      : cell === undefined
+        ? ovalRing(w, h)
+        : (intersectRings(ovalRing(w, h), cell) ?? []);
+  const inner =
+    padding > 0 && outline.length >= 3
+      ? (insetConvex(outline, padding) ?? [])
+      : outline;
+  // Each member is laid out in the inner shape's box, with that shape as
+  // its own, and its origin at the box's corner.
+  for (const child of children) {
+    if (inner.length < 3) {
+      placeUnplacedChild(child.layout([0, 0], scales));
+      continue;
+    }
+    const box = inItsBox(inner);
+    const placed = child.layout(box.size, scales, box.ring);
+    placed.place("x", box.at[0], "baseline");
+    placed.place("y", box.at[1], "baseline");
+  }
+  return {
+    intrinsicDims: { x: 0, y: 0, w, h },
+    transform: { translate: [undefined, undefined] as [undefined, undefined] },
+    // A box with no shape handed to it draws as a rect (with its corners);
+    // any other outline as its loop.
+    renderData: {
+      loops:
+        shape.kind === "box" && cell === undefined
+          ? undefined
+          : [outline.map(([x, y]): Pt => [x, y])],
+      box: [0, 0, w, h],
+    },
+  };
 }
 
 /** The box of `members` (refs) in `frame`'s frame on `axis`, grown by
@@ -316,20 +416,17 @@ function paddedPlacement(
   const boxes: Placement[] = [];
   for (const m of members) {
     const target = m instanceof GoFishRef ? m.targetNode : undefined;
-    const p = target && placementIn(target, frame, axis);
+    const p = target && planPlacement(target, frame, axis);
     if (p === undefined) return undefined;
     boxes.push(p);
   }
-  const ascent = Monotonic.adds(
-    Monotonic.envelope(boxes.map((b) => b.hi)),
-    padding
-  );
-  const descent = Monotonic.adds(
-    Monotonic.envelope(boxes.map((b) => Monotonic.negate(b.lo))),
+  const ascent = Pwl.addConstant(Pwl.envelope(boxes.map((b) => b.hi)), padding);
+  const descent = Pwl.addConstant(
+    Pwl.envelope(boxes.map((b) => Pwl.negate(b.lo))),
     padding
   );
   return {
-    lo: Monotonic.negate(descent),
+    lo: Pwl.negate(descent),
     hi: ascent,
     extent: Extent(ascent, descent),
   };

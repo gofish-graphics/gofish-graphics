@@ -6,7 +6,7 @@ order: 60
 
 Creates invisible positioning guides. Use blank when you need to define positions for other marks (like `line` or `ribbon`) without rendering visible shapes.
 
-A blank draws nothing at all: it takes part in layout, carries its datum, can be named and selected with `selectAll`, and feeds the color scale, but it produces no SVG element and no hover target. That is unconditional — there is no option that makes a blank paint.
+A blank is a hidden rect, `rect().hidden()` with blank's own options: it takes part in layout, carries its datum, can be named and selected with `selectAll`, and feeds the color scale, but it produces no SVG element and no hover target. Like any hidden mark it keeps its shape, so as an operand of `intersect`, `cut` or another compositor it gives its box. No option makes a blank paint, and `.hidden()` has no effect on a blank itself: it is always hidden. Its labels show, and `.hidden()` hides them as it hides any mark's labels.
 
 ::: gofish
 

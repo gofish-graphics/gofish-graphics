@@ -18,10 +18,13 @@ import type {
   CompositeItem,
   DisplayItem,
   DisplayListDocument,
-  MaskItem,
   Style,
 } from "./schema.js";
-import { compositeLayerConfig } from "./composite.js";
+import {
+  compositePlan,
+  LUMINANCE_TO_ALPHA_FILTER,
+  usesLuminanceToAlpha,
+} from "./composite.js";
 
 const esc = (s: string): string =>
   s
@@ -44,7 +47,6 @@ const styleAttrs = (style: Style | undefined): string => {
     parts.push(`fill-opacity="${style.fillOpacity}"`);
   if (style.mixBlendMode !== undefined)
     parts.push(`style="mix-blend-mode:${esc(style.mixBlendMode)}"`);
-  if (style.filter !== undefined) parts.push(`filter="${esc(style.filter)}"`);
   if (style.paintOrder !== undefined)
     parts.push(`paint-order="${esc(style.paintOrder)}"`);
   if (style.strokeLinejoin !== undefined)
@@ -52,7 +54,9 @@ const styleAttrs = (style: Style | undefined): string => {
   return parts.length ? " " + parts.join(" ") : "";
 };
 
-const itemToSVG = (item: DisplayItem): string => {
+/** `item` as SVG. `filterId` is the id of the document's `luminanceToAlpha`
+ *  filter def. */
+const itemToSVG = (item: DisplayItem, filterId: string): string => {
   const s = styleAttrs(item.style);
   switch (item.kind) {
     case "rect": {
@@ -108,127 +112,71 @@ const itemToSVG = (item: DisplayItem): string => {
         parts.push(`translate(${t.translate[0]} ${t.translate[1]})`);
       if (t.scale) parts.push(`scale(${t.scale[0]} ${t.scale[1]})`);
       const tr = parts.length ? ` transform="${parts.join(" ")}"` : "";
-      return `<g${tr}${s}>${item.children.map(itemToSVG).join("")}</g>`;
+      const f = item.filter;
+      const fa =
+        f?.kind === "css"
+          ? ` filter="${esc(f.value)}"`
+          : f?.kind === "luminanceToAlpha"
+            ? ` filter="url(#${filterId})"`
+            : "";
+      return `<g${tr}${fa}${s}>${item.children.map((c) => itemToSVG(c, filterId)).join("")}</g>`;
     }
     case "composite":
-    case "mask":
-      // Reconstruct the Porter-Duff filter / mask graph (see compositeToSVG).
-      return compositeToSVG(item);
+      return compositeToSVG(item, filterId);
   }
 };
 
-/** Deterministic id counter for composite/mask defs (Math.random is both
+/** Deterministic id counter for composite defs and the filter def (Math.random is both
  *  unavailable headlessly and non-reproducible). Reset per document by
  *  `displayListToSVG`; the JSX backend uses the same scheme so the two backends
  *  agree on id shape. */
 let compositeIdCounter = 0;
 
-/** Reconstruct the Porter-Duff mask/blend SVG from a structured composite/mask
- *  item — ported verbatim from `paintSVG.tsx`'s `composite`/`mask` cases,
- *  which carry the full rationale for the mask/blend lowering (no `<feImage>`
- *  — see that file for why: Chrome GPU-raster quantization at fractional zoom
- *  clips `<feImage>` content, issue #795; WebKit has two more `<feImage>`
- *  pathologies). The lower pass folded the legacy outer `<g transform>` into
- *  the items' absolute pixels and the `bbox`, so for `mask` no wrapper group
- *  is emitted; `composite` wraps its layers in a `<g transform="translate(…)">`
- *  at the bbox origin since its children are lowered bbox-relative. */
-const compositeToSVG = (item: CompositeItem | MaskItem): string => {
-  const uid = `gf-comp-${compositeIdCounter++}`;
-  const sourceId = `${uid}-source`;
-  const destinationId = `${uid}-destination`;
+/** The `<filter>` def of `LUMINANCE_TO_ALPHA_FILTER`, written once per
+ *  document that uses it, under `id`. */
+const luminanceToAlphaFilterSVG = (id: string): string => {
+  const f = LUMINANCE_TO_ALPHA_FILTER;
+  return `<filter id="${id}" color-interpolation-filters="${f.colorInterpolationFilters}"><feColorMatrix type="${f.matrixType}"/></filter>`;
+};
 
-  if (item.kind === "mask") {
-    const maskId = `${uid}-mask`;
-    return (
-      `<defs>` +
-      `<g id="${sourceId}">${item.mask.map(itemToSVG).join("")}</g>` +
-      `<g id="${destinationId}">${item.content.map(itemToSVG).join("")}</g>` +
-      `<mask id="${maskId}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse"${item.mode === "alpha" ? ` style="mask-type:alpha"` : ""}>` +
-      `<use href="#${sourceId}"/></mask>` +
-      `</defs>` +
-      `<use href="#${destinationId}" mask="url(#${maskId})"/>`
-    );
-  }
-
-  const grayId = `${uid}-gray`;
-  const maskAlphaSrcId = `${uid}-mask-alpha-src`;
-  const maskAlphaDestId = `${uid}-mask-alpha-dest`;
-  const maskInvAlphaSrcId = `${uid}-mask-invalpha-src`;
-  const maskInvAlphaDestId = `${uid}-mask-invalpha-dest`;
-  const { operator } = item;
-  const blendMode = item.blendMode ?? "color";
+/** Draw a composite item as SVG masks and `mix-blend-mode` (no
+ *  `<feImage>`: see `paintSVG.tsx` in gofish-graphics for why, issue #795):
+ *  its `compositePlan` (composite.ts), which that backend writes too. */
+const compositeToSVG = (item: CompositeItem, filterId: string): string => {
   const { x, y, w, h } = item.bbox;
-
-  const cfg = compositeLayerConfig[operator];
-  const { hasSourceLayer, hasBlend } = cfg;
-
-  const sourceMaskId =
-    cfg.sourceMask === "alphaDest"
-      ? maskAlphaDestId
-      : cfg.sourceMask === "invAlphaDest"
-        ? maskInvAlphaDestId
-        : undefined;
-  const destMaskId =
-    cfg.destMask === "alphaSrc"
-      ? maskAlphaSrcId
-      : cfg.destMask === "invAlphaSrc"
-        ? maskInvAlphaSrcId
-        : undefined;
-
-  /** `mask-type:alpha` mask that clips by the referenced layer's alpha. */
-  const alphaMask = (id: string, refId: string): string =>
-    `<mask id="${id}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" style="mask-type:alpha"><use href="#${refId}"/></mask>`;
-  /** Inverse-alpha mask: white rect (fully opaque) minus the referenced
-   *  layer's shape (blacked out via `brightness(0)`), so the mask clips to
-   *  everywhere the referenced layer is NOT. */
-  const invAlphaMask = (id: string, refId: string): string =>
-    `<mask id="${id}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">` +
-    `<rect x="0" y="0" width="${w}" height="${h}" fill="#fff"/>` +
-    `<use href="#${refId}" filter="brightness(0)"/></mask>`;
-
-  const grayFilterDef = hasSourceLayer
-    ? `<filter id="${grayId}" color-interpolation-filters="sRGB"><feColorMatrix type="saturate" values="0"/></filter>`
-    : "";
-  const alphaSrcMaskDef =
-    cfg.destMask === "alphaSrc" ? alphaMask(maskAlphaSrcId, sourceId) : "";
-  const alphaDestMaskDef =
-    cfg.sourceMask === "alphaDest"
-      ? alphaMask(maskAlphaDestId, destinationId)
-      : "";
-  const invAlphaSrcMaskDef =
-    cfg.destMask === "invAlphaSrc"
-      ? invAlphaMask(maskInvAlphaSrcId, sourceId)
-      : "";
-  const invAlphaDestMaskDef =
-    cfg.sourceMask === "invAlphaDest"
-      ? invAlphaMask(maskInvAlphaDestId, destinationId)
-      : "";
-
-  const sourceLayer = hasSourceLayer
-    ? `<use href="#${sourceId}" filter="url(#${grayId})"${
-        sourceMaskId ? ` mask="url(#${sourceMaskId})"` : ""
-      }/>`
-    : "";
-  const destLayer =
-    `<use href="#${destinationId}"` +
-    (hasBlend ? ` style="mix-blend-mode:${esc(blendMode)}"` : "") +
-    (destMaskId ? ` mask="url(#${destMaskId})"` : "") +
-    `/>`;
-
+  const plan = compositePlan(item, `gf-comp-${compositeIdCounter++}`);
+  const defs =
+    plan.defs
+      .map(
+        (d) =>
+          `<g id="${d.id}">${d.items.map((c) => itemToSVG(c, filterId)).join("")}</g>`
+      )
+      .join("") +
+    plan.masks
+      .map((m) => {
+        const uses = m.uses
+          .map(
+            (u) =>
+              `<use href="#${u}"${m.invert ? ` filter="brightness(0)"` : ""}/>`
+          )
+          .join("");
+        return m.invert
+          ? `<mask id="${m.id}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">` +
+              `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#fff"/>${uses}</mask>`
+          : `<mask id="${m.id}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" style="mask-type:alpha">${uses}</mask>`;
+      })
+      .join("");
+  const drawn = plan.layers.map((l) => {
+    let out = `<use href="#${l.use}"/>`;
+    for (const m of [...l.masks].reverse())
+      out = `<g mask="url(#${m})">${out}</g>`;
+    return l.blendMode !== undefined
+      ? `<g style="mix-blend-mode:${esc(l.blendMode)}">${out}</g>`
+      : out;
+  });
   return (
-    `<g transform="translate(${x} ${y})" style="isolation:isolate"${item.style?.opacity !== undefined ? ` opacity="${item.style.opacity}"` : ""}>` +
-    `<defs>` +
-    `<g id="${sourceId}">${item.source.map(itemToSVG).join("")}</g>` +
-    `<g id="${destinationId}">${item.dest.map(itemToSVG).join("")}</g>` +
-    grayFilterDef +
-    alphaSrcMaskDef +
-    alphaDestMaskDef +
-    invAlphaSrcMaskDef +
-    invAlphaDestMaskDef +
-    `</defs>` +
-    sourceLayer +
-    destLayer +
-    `</g>`
+    `<g style="isolation:isolate"${item.style?.opacity !== undefined ? ` opacity="${item.style.opacity}"` : ""}>` +
+    `<defs>${defs}</defs>${drawn.join("")}</g>`
   );
 };
 
@@ -236,6 +184,10 @@ const compositeToSVG = (item: CompositeItem | MaskItem): string => {
 export function displayListToSVG(doc: DisplayListDocument): string {
   compositeIdCounter = 0;
   const { w, h } = doc.viewport;
-  const body = doc.items.map(itemToSVG).join("");
+  const filterId = `gf-luminance-to-alpha-${compositeIdCounter++}`;
+  const defs = usesLuminanceToAlpha(doc.items)
+    ? `<defs>${luminanceToAlphaFilterSVG(filterId)}</defs>`
+    : "";
+  const body = defs + doc.items.map((i) => itemToSVG(i, filterId)).join("");
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${body}</svg>`;
 }

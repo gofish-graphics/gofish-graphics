@@ -18,8 +18,8 @@
  *   3. synthetic    — sweep a scale parameter across the micro-benchmark
  *                     families (tests/bench/specs.ts); the thesis asymptotics.
  *
- * The recognized per-pass labels are resolve / axes / embed / solve / lower /
- * paint / fonts (see packages/gofish-graphics/src/ast/perf.ts).
+ * The recognized per-pass labels are resolve / axes / embed / claims / solve /
+ * lower / paint / fonts (see packages/gofish-graphics/src/ast/perf.ts).
  *
  * Usage:
  *   tsx scripts/bench.ts [mode] [--filter <substr>] [--quick]
@@ -72,6 +72,7 @@ const PASS_LABELS = [
   "resolve",
   "axes",
   "embed",
+  "claims",
   "solve",
   "lower",
   "paint",
@@ -936,8 +937,11 @@ async function benchSynthetic(context: BrowserContext): Promise<SyntheticRun> {
       continue;
     }
     points.push({ family, n, ...r });
+    const perPass = PASS_LABELS.filter((l) => r.passes[l])
+      .map((l) => `${l} ${r.passes[l].median.toFixed(1)}`)
+      .join(" · ");
     console.log(
-      `engine ${r.totalMs.median.toFixed(2)}ms · wall ${r.wallMs.median.toFixed(2)}ms`
+      `engine ${r.totalMs.median.toFixed(2)}ms · wall ${r.wallMs.median.toFixed(2)}ms (${perPass})`
     );
     if (r.wallMs.median > PER_RENDER_CEILING_MS) {
       console.log(
@@ -1251,7 +1255,8 @@ const DIST_BENCH = join(ROOT, "packages/gofish-graphics/dist-bench");
  * the build failed. We do NOT edit packages/ ourselves.
  */
 function ensureProdBuild(): boolean {
-  if (existsSync(join(DIST_BENCH, "index.js"))) return true;
+  // Always rebuild: an existing dist-bench may predate the source being
+  // measured, and benching it would report the old code's numbers.
   try {
     console.log("[prod] building instrumented dist-bench (build:bench) ...");
     execSync("pnpm --filter gofish-graphics build:bench", {

@@ -9,6 +9,7 @@ covers:
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/oval.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/arcs.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/members.ts
+  - packages/gofish-graphics/src/ast/geometry/ring.ts
   - packages/gofish-graphics/src/families/shape.ts
 ---
 
@@ -93,7 +94,7 @@ holes open, with no change to the display list.
 In the claim walk, an outline whose members are all refs is placed from
 them, as a label beside a ref is (`GoFishNode.placedFromRefs`; see
 [Overview](/internals/layout/passes)). Its claim in the layer that holds it is
-its members' boxes, each where `placementIn` lands it there, grown by
+its members' boxes, each where `planPlacement` lands it there, grown by
 `padding` and by half its stroke, which is drawn centered on the outline
 (`GoFishNode.strokeOverhang`). It takes that room and is dressing: it is no part of the plot, so a
 chart with a size of its own keeps its plot that size and the outline adds
@@ -101,14 +102,35 @@ around it, and its members never move for it. The box is exact for
 `Shape.box()`, and a blob lies inside it. An oval can reach past it, and that
 reach is ink. Where the claim walk cannot place a member (it is in a
 coordinate space, or under a node with a size of its own), the whole outline
-is ink. An outline over fresh children has no claim yet: the claim walk
-reads no size for it. It should claim its children's union grown by
-`padding`, as a part of the plot.
+is ink. An outline over fresh children, each laid at the outline's origin,
+claims their union grown by `padding`, as a part of the plot.
 
 The outline paints under its members. Among a layer's children that is the
 default `zBelow` every relational mark gets; as a `.relate()` clause it is
 the same default, installed for the clause's operands (see
 [Names and Scoping](/internals/core/names-and-scoping)).
+
+## Around a member that fills its space
+
+A fresh member that fills the room it is given on both axes (`fillsItsSpace`,
+which reads the claim walk's `fillsRoom`: a `treemap` or a `region` with no size; not a `pack` of sized circles) has nothing to hug: laid
+out, it would be as large as whatever it is given. So `enclose` turns the
+layout around (`fillingLayout`). The outline comes first, from the space
+the enclosure is given: `Shape.box()` is that space, and `Shape.oval()` is
+the oval inscribed in its box (`ovalRing`, `geometry/ring.ts`). When the
+enclosure's parent handed it a shape, such as a Voronoi cell of a treemap,
+the space is that shape, so `Shape.box()` is the cell and `Shape.oval()` is
+the oval cut to the cell (`intersectRings`). The outline drawn in by
+`padding` (`insetConvex`) is the shape each member is laid out in: its size
+is the shape's box and its shape the ring (see
+[The shape a parent gives a child](/internals/layout/passes#the-shape-a-parent-gives-a-child)),
+so a `treemap` tiles it and a `region` draws it. The enclosure's box is the
+whole space it was given, as a member's would have been.
+
+`Shape.arcs()` and `Shape.blob()` are built from the members' outlines, so
+around a member with no size they are an error that names `Shape.box()`,
+`Shape.oval()`, and giving the member a size. Both outlines here are convex,
+which is what `insetConvex` and the Voronoi tiling need.
 
 ## Reading members
 
