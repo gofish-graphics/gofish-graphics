@@ -178,8 +178,8 @@ dispatches on `kind`. `scatter`'s `overlap` (the `Overlap` family) and a
 `line` or `ribbon` `curve` (the `Curve` family:
 `{ "kind": "arc", "direction": "down" }`) work the same way; a bare curve name
 is not a curve. So does `enclose`'s `shape` (the `Shape` family:
-`{ "kind": "blob", "convexity": 0, "avoiding": [...] }`). A blob's `avoiding`
-names nodes, so on the wire it is a `NodeSelectionIR`: a list of
+`{ "kind": "blob", "convexity": 0 }`). `enclose`'s `avoiding` names nodes, so
+on the wire it is a `NodeSelectionIR`: a list of
 `{ "type": "ref", "selection": "b" }` refs, or every node of a named layer as
 `{ "type": "select", "layer": "nodes", "mode": "all" }`, the `SelectRefIR`
 chart data takes for `selectAll` (one shape in `schema.ts` and the JSON
@@ -201,7 +201,7 @@ inside a chart serializes. JS does not serialize a `.relate()` callback (it
 is a closure), so a relate clause's IR comes from Python. A label's
 `position` takes a position string or a strategy of the `Place` family
 (`{ "kind": "along", "at": 0.6, "orient": "sloped" }`), and its `avoiding`
-is a `NodeSelectionIR` like a blob's. A `.label()` chain is not a construct
+is a `NodeSelectionIR` like `enclose`'s. A `.label()` chain is not a construct
 with a descriptor, so the emitter writes it with `wireLabels` in `toJSON.ts`:
 each call's `accessor`, and of its options only the keys `LABEL_OPTIONS`
 declares, kept by the same `wireFields` that `wireOpts` uses, with the nodes
@@ -705,7 +705,7 @@ errors). So an unknown kind, an undeclared param, and a value out of
 bounds each fail in one place, whether the strategy came from a factory, a
 hand-written object, or Python IR. A JS check of an authored value passes
 over a ref whose authored value holds nodes (`holdsNodes` in
-`AUTHORED_REFS`): a blob's `avoiding`, typed `t.ref("NodeSelectionIR")`,
+`AUTHORED_REFS`): `enclose`'s `avoiding`, typed `t.ref("NodeSelectionIR")`,
 holds the nodes themselves in JS, not their IR, so `enclose` checks it as it
 reads the nodes. `Coord` and `Color` are families on the
 two surfaces but not in this table: a coordinate transform is a JS object of
@@ -714,8 +714,7 @@ is tagged by `_tag` and takes its one argument by position.
 
 `schema.ts` keeps the TypeScript types of the strategies, `TileIR`,
 `OverlapIR`, `CurveIR`, `BinIR`, `CalendarPartitionIR`, `ShapeIR` and `PlaceIR`, by hand, and each family's JS type is one of them
-(`Curve.Curve` is `CurveIR`; `Shape.Shape` is `ShapeIR` with `avoiding`
-holding nodes). `descriptors.test.ts` checks that their kinds
+(`Curve.Curve` is `CurveIR`; `Shape.Shape` is `ShapeIR`). `descriptors.test.ts` checks that their kinds
 and params agree with `STRATEGIES`. Every family is closed: there is no
 public way to add a kind, so every strategy can cross the wire (user-defined
 strategies are designed in #1101).
@@ -984,7 +983,13 @@ It emits:
   JS `Spread` spreads its `FancyDims` into its box), and `_chart_opts` for
   `chart()` and the chart-tier `layer([...])` — just the kwargs→dict half. The
   polymorphic operator-vs-combinator dispatch stays hand-written in
-  `ast.py`, calling into these generated cores.
+  `ast.py`, calling into these generated cores. A field whose type is a
+  number with bounds (`enclose`'s `clearance`, `pack`'s `spacing`:
+  `t.num({ min: 0, finite: true })`) is checked at the call when it is given,
+  by the same checks a strategy factory runs on its params (below):
+  `enclose(clearance=-1)` raises `ValueError`, as JS's
+  `enclose({ clearance: -1 })` throws at render. Every generated function
+  does this, the cores and the leaf and combinator-only factories.
 - One module per **strategy family** in `STRATEGIES` (`gofish/tile.py`,
   `gofish/overlap.py`, `gofish/curve.py`, `gofish/bin.py`,
   `gofish/calendar.py`, `gofish/shape.py`, `gofish/filter_.py`), bound in `__init__.py`

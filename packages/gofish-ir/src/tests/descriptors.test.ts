@@ -326,14 +326,13 @@ const SCHEMA_STRATEGY_KEYS: Record<
   Shape: {
     box: { rx: true, ry: true },
     oval: {},
-    arcs: { radius: true },
+    fillet: { radius: true, neck: true, holes: true },
     blob: {
       convexity: true,
-      holes: true,
-      roundness: true,
+      connection: true,
       neck: true,
-      avoiding: true,
-      clearance: true,
+      holes: true,
+      separate: true,
     },
   } satisfies StrategyKeys<ShapeIR>,
   Place: {

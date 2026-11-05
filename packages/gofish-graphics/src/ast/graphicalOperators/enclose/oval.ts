@@ -29,7 +29,7 @@
  * free test); the outline is then the hull itself: a sliver or a segment, or
  * nothing for a single point.
  */
-import { convexHull, discPoly, type BlobMember, type Pt } from "./blob";
+import { convexHull, discPoly, type Member, type Pt } from "./prims";
 import { ringExtent } from "../../geometry/box";
 
 /** The ellipse `{ p : (p - c)ᵀ A (p - c) <= 1 }`, A = [[a, b], [b, d]]. */
@@ -42,7 +42,7 @@ const ELLIPSE_SIDES = 64;
 
 /** The discs, `[cx, cy, r]`, whose union's hull holds the member grown by
  *  `pad` (is it, but for an ellipse that is not a circle). */
-const discsOf = (m: BlobMember, pad: number): [number, number, number][] =>
+const discsOf = (m: Member, pad: number): [number, number, number][] =>
   m.kind === "disc"
     ? m.axes === undefined
       ? [[m.cx, m.cy, m.r + pad]]
@@ -72,7 +72,7 @@ const discsOf = (m: BlobMember, pad: number): [number, number, number][] =>
         ];
 
 /** Each disc's 24-gon drawn around it (a disc of radius 0 is its center). */
-const samplesOf = (members: BlobMember[], pad: number): Pt[] =>
+const samplesOf = (members: Member[], pad: number): Pt[] =>
   members.flatMap((m) =>
     discsOf(m, pad).flatMap(([cx, cy, r]) =>
       r > 0
@@ -206,13 +206,13 @@ export const ellipseLoop = (e: Ellipse, k = LOOP): Pt[] => {
 /** The convex hull of the samples around the members grown by `pad`: the
  *  points the ellipse must hold. Fewer than three points when no ellipse
  *  of positive area exists (every sample on one line). */
-export const paddedHull = (members: BlobMember[], pad: number): Pt[] =>
+export const paddedHull = (members: Member[], pad: number): Pt[] =>
   convexHull(samplesOf(members, pad));
 
 /** The outline `Shape.oval()` draws: one loop, the minimum-area ellipse's,
  *  or the hull of degenerate members (a segment); none for a single point
  *  or no members. */
-export const ovalOutline = (members: BlobMember[], pad: number): Pt[][] => {
+export const ovalOutline = (members: Member[], pad: number): Pt[][] => {
   const hull = paddedHull(members, pad);
   if (!flat(hull)) return [ellipseLoop(minEllipse(hull))];
   return hull.length > 0 ? [hull] : [];

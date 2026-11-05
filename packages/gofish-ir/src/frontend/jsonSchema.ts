@@ -674,7 +674,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
     },
     NodeSelectionIR: {
       description:
-        "Nodes named inside an option (a blob's `avoiding`): a list of refs, or every node of a named layer (selectAll).",
+        "Nodes named inside an option (`enclose`'s `avoiding`): a list of refs, or every node of a named layer (selectAll).",
       oneOf: [
         { type: "array", items: { $ref: "#/$defs/RefMarkIR" } },
         {

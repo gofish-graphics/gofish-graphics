@@ -1,5 +1,5 @@
 /**
- * A blob's `avoiding` on the wire (`NodeSelectionIR`): the JS emitter writes
+ * `enclose`'s `avoiding` on the wire (`NodeSelectionIR`): the JS emitter writes
  * each kind of value it can hold, the validator accepts it, and fromJSON
  * rebuilds an enclosure that renders exactly as the JS one does. Also the
  * values the wire has no form for: an unnamed node, a single ref, a
@@ -76,7 +76,12 @@ console.log("# avoiding: [b] inside .relate(), as Python writes it");
     layer([dots()])
       .relate(({ a, b, c }: any) => [
         enclose(
-          { shape: Shape.spine({ avoiding: [b], clearance: 6 }), padding: 22 },
+          {
+            shape: Shape.spine(),
+            avoiding: [b],
+            clearance: 6,
+            padding: 22,
+          },
           [a, c]
         ),
       ])
@@ -109,12 +114,9 @@ console.log("# avoiding: [b] inside .relate(), as Python writes it");
             type: "enclose",
             __combinator: true,
             options: {
-              shape: {
-                kind: "blob",
-                convexity: 0,
-                clearance: 6,
-                avoiding: [{ type: "ref", selection: "b", scope: "r1" }],
-              },
+              shape: { kind: "blob", convexity: 0 },
+              clearance: 6,
+              avoiding: [{ type: "ref", selection: "b", scope: "r1" }],
               padding: 22,
             },
             children: [
@@ -222,7 +224,8 @@ console.log("# avoiding: selectAll(name), through JS toJSON and back");
       .flow(group({ by: "g" }))
       .mark(
         enclose({
-          shape: Shape.blob({ avoiding: selectAll("pts") }),
+          shape: Shape.blob(),
+          avoiding: selectAll("pts"),
           padding: 6,
           fill: "g",
         })
@@ -260,13 +263,15 @@ console.log("# what each node value is written as");
     // The combinator builds its node at once; only its IR is read here, so
     // a build that fails (as an invalid avoiding does) is caught, not left
     // unhandled.
-    const built = enclose({ shape: Shape.spine({ avoiding }) }, [ref("a")]);
+    const built = enclose({ shape: Shape.spine(), avoiding } as any, [
+      ref("a"),
+    ]);
     built.catch(() => {});
     const doc = await chart([{}])
       .mark(layer([circle({ r: 5 }).name("a"), built]))
       .toJSON();
     return JSON.stringify(
-      (doc.root as any).mark.children[1].options.shape.avoiding
+      (doc.root as any).mark.children[1].options.avoiding
     );
   };
   check(
@@ -335,7 +340,7 @@ console.log("# a single ref is not a node list, in JS as on the wire");
   const message = await errorOf(() =>
     layer([circle({ r: 5 }).name("a"), circle({ r: 5 }).name("b")])
       .relate(({ a, b }: any) => [
-        enclose({ shape: Shape.spine({ avoiding: b }) }, [a]),
+        enclose({ shape: Shape.spine(), avoiding: b }, [a]),
       ])
       .render(document.createElement("div"), { w: 100, h: 100 })
   );
@@ -351,7 +356,8 @@ console.log("# a single ref is not a node list, in JS as on the wire");
       type: "enclose",
       __combinator: true,
       options: {
-        shape: { kind: "blob", avoiding: { type: "ref", selection: "b" } },
+        shape: { kind: "blob" },
+        avoiding: { type: "ref", selection: "b" },
       },
       children: [],
     },
@@ -370,7 +376,7 @@ console.log("# a flow-step enclose's modifiers, through JS toJSON and back");
     chart(rows)
       .flow(
         pack({ by: "g", spacing: 4 }),
-        enclose({ shape: Shape.arcs(), padding: 4 })
+        enclose({ shape: Shape.fillet(), padding: 4 })
           .name("region")
           .label("g")
           .zOrder(-1),

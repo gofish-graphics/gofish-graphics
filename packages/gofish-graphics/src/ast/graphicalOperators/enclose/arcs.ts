@@ -3,11 +3,12 @@
 // </gofish-wiki>
 
 /**
- * The outline of `Shape.arcs({ radius })`: pure geometry, no GoFish nodes.
+ * The exact closing (`closingRings`), the engine every curved `enclose`
+ * outline is built on (`outline.ts`): pure geometry, no GoFish nodes.
  *
  * The region is the morphological closing, by a disc of `radius`, of the
- * union of the members each grown by `padding`, with its holes filled (the
- * bubble treemap contour of Görtler et al., TVCG 2018). Every gap the disc
+ * union of the members each grown by `padding`, its holes filled unless
+ * asked to keep them (the bubble treemap contour of Görtler et al., TVCG 2018). Every gap the disc
  * cannot pass through fills, each concave corner becomes a circular arc of
  * `radius`, and the convex parts are the padded members' own boundaries.
  * Between flat members that is a gap narrower than 2 × radius; two padded
@@ -21,8 +22,12 @@
  *     box a rounded box.
  *  2. Trace the union's boundary exactly: split every edge where another
  *     grown member's edge crosses it and keep the parts no other grown member
- *     covers, then link them into loops. Keep the outer loops (holes are
- *     filled), and drop a loop that lies inside another.
+ *     covers, then link them into loops (an edge buried inside another grown
+ *     member is skipped: it has no such part, and where it meets an edge
+ *     that edge is covered). Keep the outer loops that bound filled
+ *     ground: with holes, those the other loops wind around 0 times (an
+ *     island in a hole too) and the holes they wind around once; without,
+ *     every hole is filled, and a loop inside an outer one is dropped.
  *  3. Shrink the outer boundary by radius: each arc keeps its center and loses
  *     radius (a disc's arc becomes the padded disc's), each line moves inward,
  *     and each corner of the union becomes an arc of `radius` around it.
@@ -33,26 +38,46 @@
  *     curves, and the kept runs are relinked into loops.
  *
  * Every output point lies on the exact curve; arcs are sampled so a chord
- * strays at most TOL px from its arc. An ellipse member is read, as the blob
+ * strays at most `tol` px from its arc. An ellipse member is read, as the blob
  * reads it, as the disc of its larger radius (`members.ts`).
  */
-import { signedArea2, pointInRing, segDist } from "../../geometry/plane";
+import {
+  signedArea2,
+  pointInRing,
+  segDist,
+  windingAt,
+} from "../../geometry/plane";
 import { ringExtent } from "../../geometry/box";
+import { arcStep } from "../../geometry/outline";
 import {
   boxGrid,
   grownPrim,
+  PRIM,
   primD,
-  type BlobMember,
+  type Member,
   type Prim,
   type Pt,
-} from "./blob";
+} from "./prims";
 
-/** How far a chord may stray from the arc it samples, in pixels. */
+/** How far a chord may stray from the arc it samples, in pixels, unless a
+ *  caller asks for finer (`closingRings`' `tol`). */
 const TOL = 0.2;
 /** The longest straight run between two samples, in pixels (the cut search
  *  of step 4 works between samples). */
 const MAX_STEP = 4;
-const EPS = 1e-7;
+/** The cover test's tie tolerance, px: two edges nearer than this are one
+ *  edge (two members that share a cap or a side), and the first member keeps
+ *  it. The test is made at a piece's middle, and the edges where it changes
+ *  (±EPS off another edge) are not cuts, so a piece that runs from inside
+ *  the band to outside it is judged by its middle alone. Two near edges
+ *  apart by a few EPS then keep both or neither of a stretch, which opens or
+ *  links the wrong loops: the band must be no wider than rounding, below
+ *  any distance a layout means. */
+const EPS = 1e-10;
+/** On a tie, the step along the edge's normal, each way, the other member's
+ *  signed distance is read at to tell which way it faces, px: far past
+ *  rounding (EPS), far below any curvature a layout means. */
+const TIE_STEP = 1e-6;
 const TAU = 2 * Math.PI;
 
 /** An edge of a grown member, run so the member is on its left (angle
@@ -69,7 +94,7 @@ type Arc = {
 };
 type Edge = Line | Arc;
 
-/** A grown member: its exact primitive (the blob's, whose signed distance
+/** A grown member: its exact primitive (prims.ts, whose signed distance
  *  `primD` reads) and its boundary as edges. */
 type Grown = { prim: Prim; edges: Edge[] };
 
@@ -122,6 +147,47 @@ function capsuleEdges(
   ];
 }
 
+/** The edges of a tapered tube, the hull of the disc of radius ra
+ *  at a and the disc of radius rb at b: its two outer tangent lines and the
+ *  two end arcs. A disc when one disc holds the other. */
+function taperEdges(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  ra: number,
+  rb: number
+): Edge[] {
+  const L = Math.hypot(bx - ax, by - ay);
+  if (L <= Math.abs(ra - rb) + 1e-9)
+    return ra >= rb
+      ? [{ t: "arc", cx: ax, cy: ay, R: ra, a0: 0, a1: TAU }]
+      : [{ t: "arc", cx: bx, cy: by, R: rb, a0: 0, a1: TAU }];
+  const phi = Math.atan2(by - ay, bx - ax);
+  // a tangent's normal n has n·u = (ra - rb) / L: at phi ± al
+  const al = Math.acos((ra - rb) / L);
+  const nr: Pt = [Math.cos(phi - al), Math.sin(phi - al)],
+    nl: Pt = [Math.cos(phi + al), Math.sin(phi + al)];
+  return [
+    {
+      t: "line",
+      ax: ax + ra * nr[0],
+      ay: ay + ra * nr[1],
+      bx: bx + rb * nr[0],
+      by: by + rb * nr[1],
+    },
+    { t: "arc", cx: bx, cy: by, R: rb, a0: phi - al, a1: phi + al },
+    {
+      t: "line",
+      ax: bx + rb * nl[0],
+      ay: by + rb * nl[1],
+      bx: ax + ra * nl[0],
+      by: ay + ra * nl[1],
+    },
+    { t: "arc", cx: ax, cy: ay, R: ra, a0: phi + al, a1: phi + TAU - al },
+  ];
+}
+
 /** The edges of box [x0, x1] × [y0, y1] grown by g: a rounded box (sharp
  *  when g = 0). */
 function roundedBoxEdges(
@@ -150,16 +216,18 @@ function roundedBoxEdges(
   return edges;
 }
 
-/** Member `m` grown by g: the blob's primitive for it (a disc, a capsule or
+/** Member `m` grown by g: its primitive (prims.ts) (a disc, a capsule or
  *  a rounded box), and the exact edges of that primitive's boundary. */
-function grown(m: BlobMember, g: number): Grown {
+function grown(m: Member, g: number): Grown {
   const p = grownPrim(m, g);
   const edges =
-    p.k === 0
+    p.k === PRIM.disc
       ? [{ t: "arc", cx: p.x1, cy: p.y1, R: p.r, a0: 0, a1: TAU } as Edge]
-      : p.k === 1
+      : p.k === PRIM.capsule
         ? capsuleEdges(p.x1, p.y1, p.x2, p.y2, p.r)
-        : roundedBoxEdges(p.x1, p.y1, p.x2, p.y2, p.r);
+        : p.k === PRIM.taper
+          ? taperEdges(p.x1, p.y1, p.x2, p.y2, p.r, p.x3)
+          : roundedBoxEdges(p.x1, p.y1, p.x2, p.y2, p.r);
   return { prim: p, edges };
 }
 
@@ -225,15 +293,25 @@ function lineCircle(l: Line, c: Arc): number[] {
   return [(-B - q) / (2 * A), (-B + q) / (2 * A)];
 }
 
-/** Cut e (onto `out`) where an end of f lies on it, so an arc that shares a
- *  circle with another, as two lines' joined ends do, or a line that runs
- *  along another, is cut where the other stops. */
-function endsOn(e: Edge, f: Edge, out: number[]): void {
-  const [s0, s1] = f.t === "line" ? [0, 1] : [f.a0, f.a1];
-  const t0 = paramOn(e, atX(f, s0), atY(f, s0));
-  if (!Number.isNaN(t0)) out.push(t0);
-  const t1 = paramOn(e, atX(f, s1), atY(f, s1));
-  if (!Number.isNaN(t1)) out.push(t1);
+/** An edge's two ends, [x0, y0, x1, y1]. */
+const endsOf = (e: Edge): number[] => {
+  const [s0, s1] = range(e);
+  return [atX(e, s0), atY(e, s0), atX(e, s1), atY(e, s1)];
+};
+
+/** Cut e (onto `out`) where an end of f (`fe`, endsOf) lies on it, so an
+ *  arc that shares a circle with another, as two lines' joined ends do, or
+ *  a line that runs along another, is cut where the other stops. An end
+ *  outside e's box (`eb`, boxOfEdge: grown past paramOn's tolerance) is
+ *  not on it. */
+function endsOn(e: Edge, eb: number[], fe: number[], out: number[]): void {
+  for (let k = 0; k < 4; k += 2) {
+    const x = fe[k],
+      y = fe[k + 1];
+    if (x < eb[0] || x > eb[2] || y < eb[1] || y > eb[3]) continue;
+    const t = paramOn(e, x, y);
+    if (!Number.isNaN(t)) out.push(t);
+  }
 }
 
 /** The parameters on arc e (onto `out`) where the circle of arc f crosses
@@ -253,14 +331,27 @@ function arcArc(e: Arc, f: Arc, out: number[]): void {
   }
 }
 
+/** A grown member's edge as the union's boundary reads it: its box
+ *  (boxOfEdge), its ends (endsOf), its cut parameters so far, and whether it
+ *  is buried in the other members (then it is neither cut nor traced). */
+type Side = {
+  e: Edge;
+  bb: number[];
+  ends: number[];
+  cuts: number[];
+  buried: boolean;
+};
+
 /**
- * Where edges e and f cross, as cut parameters on each: onto `ce` the
- * parameters on e where f crosses it or ends on it, onto `cf` the same on f.
- * Each crossing is solved once for the pair.
+ * Where two edges cross, as cut parameters on each: onto each side's `cuts`
+ * the parameters on its edge where the other crosses it or ends on it. Each
+ * crossing is solved once for the pair.
  */
-function crossPair(e: Edge, f: Edge, ce: number[], cf: number[]): void {
-  endsOn(e, f, ce);
-  endsOn(f, e, cf);
+function crossPair(se: Side, sf: Side): void {
+  const { e, cuts: ce } = se,
+    { e: f, cuts: cf } = sf;
+  endsOn(e, se.bb, sf.ends, ce);
+  endsOn(f, sf.bb, se.ends, cf);
   if (e.t === "arc" && f.t === "arc") {
     arcArc(e, f, ce);
     arcArc(f, e, cf);
@@ -321,6 +412,47 @@ function boxOfEdge(e: Edge): number[] {
     e.cx + e.R * x1 + 1e-6,
     e.cy + e.R * y1 + 1e-6,
   ];
+}
+
+/** How far inside the other grown members every part of an edge must be for
+ *  it to be buried (closingRings): past the cover test's tie tolerance, EPS. */
+const BURIED = 1e-5;
+
+/** The least depth a burial walk steps on, px: an edge that comes nearer the
+ *  union's boundary than this is solved exactly instead. */
+const WALK = 0.25;
+
+/**
+ * Whether every point of edge e is inside the union of the grown members
+ * `cands` by more than BURIED: a walk along e, each step as long as the
+ * depth at its start less BURIED, since a signed distance changes by at most
+ * the distance moved, and a step's chord is at most its arc. The depth is
+ * read from the member that held the last point while it holds this one by
+ * WALK, else from the deepest; the union's is at least that. A sufficient
+ * test, never a false yes.
+ */
+function edgeCovered(e: Edge, cands: number[], prims: Prim[]): boolean {
+  if (!cands.length) return false;
+  // the walk's parameter per px of arclength
+  const rate =
+    e.t === "arc" ? 1 / e.R : 1 / Math.hypot(e.bx - e.ax, e.by - e.ay);
+  const [s0, s1] = range(e);
+  const dir = s1 >= s0 ? 1 : -1;
+  let j = cands[0];
+  for (let s = s0; ; ) {
+    const x = atX(e, s),
+      y = atY(e, s);
+    let d = -primD(prims[j], x, y);
+    if (d < WALK)
+      for (const k of cands) {
+        const dk = -primD(prims[k], x, y);
+        if (dk > d) [d, j] = [dk, k];
+      }
+    if (d < WALK) return false;
+    const next = s + dir * (d - BURIED) * rate;
+    if ((next - s1) * dir >= 0) return true;
+    s = next;
+  }
 }
 
 /** A piece of an edge from parameter s0 to s1. */
@@ -398,88 +530,116 @@ function link<T>(runs: T[], start: (r: T) => Pt, end: (r: T) => Pt): T[][] {
 }
 
 /** Sample a piece: its points from s0 to s1, both ends included. */
-function sampleParams(e: Edge, s0: number, s1: number): number[] {
+function sampleParams(e: Edge, s0: number, s1: number, tol: number): number[] {
   let n: number;
   if (e.t === "line") {
     const L = Math.hypot(e.bx - e.ax, e.by - e.ay) * Math.abs(s1 - s0);
     n = Math.max(1, Math.ceil(L / MAX_STEP));
   } else {
+    // within tol of an arc no wider than tol is any chord; a third of a turn
+    // at most, so a whole disc is a triangle and bounds its area
     const step =
-      e.R <= TOL
-        ? Math.PI
-        : Math.min(2 * Math.acos(1 - TOL / e.R), MAX_STEP / e.R);
+      e.R <= tol
+        ? (2 * Math.PI) / 3
+        : Math.min(arcStep(e.R, tol), MAX_STEP / e.R);
     n = Math.max(1, Math.ceil(Math.abs(s1 - s0) / step));
   }
   return Array.from({ length: n + 1 }, (_, i) => s0 + ((s1 - s0) * i) / n);
 }
 
-/** The options of {@link arcsOutline}. */
-export type ArcsOutlineOptions = {
-  /** Pixels between each member and the outline. */
-  padding: number;
-  /** The radius of the closing disc, in pixels. */
-  radius: number;
-};
-
 /**
- * The outline of `Shape.arcs()` around `members`: its closed loops, in the
- * members' frame, all winding one way (it has no holes). A gap the closing
- * disc passes through leaves the pieces apart, one loop each. No members, no
- * outline.
+ * The exact closing (steps 1-4 above) of `members` grown by `padding`, by a
+ * disc of `radius`. Its outer loops wind as the members do. With `holes`,
+ * a hole of the closing stays open, as a loop that winds the other way;
+ * otherwise every hole is filled. Arcs are sampled so a chord strays at most
+ * `tol` px from its arc (the per-bay blend's grid and the keep-out cut ask
+ * for finer than the default).
  */
-export function arcsOutline(
-  members: BlobMember[],
-  o: ArcsOutlineOptions
+export function closingRings(
+  members: Member[],
+  padding: number,
+  radius: number,
+  holes = false,
+  tol = TOL
 ): Pt[][] {
   if (members.length === 0) return [];
-  const r = Math.max(0, o.radius);
-  const prims = members.map((m) => grown(m, Math.max(0, o.padding) + r));
-  const sdf = (j: number, x: number, y: number) =>
-    primD(prims[j].prim, x, y, false);
+  const r = Math.max(0, radius);
+  const prims = members.map((m) => grown(m, Math.max(0, padding) + r));
+  const sdf = (j: number, x: number, y: number) => primD(prims[j].prim, x, y);
 
   // 2. The union's boundary.
   const near = boxGrid(prims.map((p) => p.prim.bb));
   const others = prims.map((P, i) => {
-    const [xa, ya, xb, yb] = P.prim.bb;
-    return near
-      .query(xa, ya, xb, yb)
-      .filter((j) => j !== i && overlaps(P.prim.bb, prims[j].prim.bb));
+    const bb = P.prim.bb;
+    const out: number[] = [];
+    near.each(bb[0], bb[1], bb[2], bb[3], (j) => {
+      if (j !== i && overlaps(bb, prims[j].prim.bb)) out.push(j);
+    });
+    return out;
   });
-  const edgeBB = prims.map((P) => P.edges.map(boxOfEdge));
+  // An edge buried in the other grown members (each part of it inside one by
+  // more than BURIED) is not on the union's boundary, and where it crosses
+  // or ends on another member's edge it is inside a third member: there the
+  // other edge is covered on both sides, so the cut would only split a
+  // covered stretch. Its crossings are not solved, and it is not traced.
   // Every edge's cut parameters: its ends, and where another member's edge
   // crosses it or ends on it, each crossing solved once for its pair.
-  const cuts = prims.map((P) => P.edges.map(range));
-  prims.forEach((P, i) => {
+  const grownPrims = prims.map((P) => P.prim);
+  const sides: Side[][] = prims.map((P, i) =>
+    P.edges.map((e) => ({
+      e,
+      bb: boxOfEdge(e),
+      ends: endsOf(e),
+      cuts: range(e),
+      buried: edgeCovered(e, others[i], grownPrims),
+    }))
+  );
+  sides.forEach((S, i) => {
     for (const j of others[i]) {
       if (j < i) continue;
-      P.edges.forEach((e, ei) => {
-        const eb = edgeBB[i][ei];
-        prims[j].edges.forEach((f, fi) => {
-          if (overlaps(eb, edgeBB[j][fi]))
-            crossPair(e, f, cuts[i][ei], cuts[j][fi]);
-        });
-      });
+      for (const se of S) {
+        if (se.buried) continue;
+        for (const sf of sides[j])
+          if (!sf.buried && overlaps(se.bb, sf.bb)) crossPair(se, sf);
+      }
     }
   });
   const pieces: Piece[] = [];
-  prims.forEach((P, i) => {
-    P.edges.forEach((e, ei) => {
-      const eb = edgeBB[i][ei];
+  sides.forEach((S, i) => {
+    S.forEach(({ e, bb: eb, cuts, buried }) => {
+      if (buried) return;
       const touching = others[i].filter((j) => overlaps(eb, prims[j].prim.bb));
-      const cs = cuts[i][ei].sort((a, b) => a - b);
-      // covered by another member; on a tie (two equal members) the first
-      // keeps it. The member that covered the last part is tried first.
-      const covers = (j: number, x: number, y: number) => {
+      const cs = cuts.sort((a, b) => a - b);
+      // covered by another member. On a tie (the point on that member's
+      // boundary too) the two boundaries run together there: facing each
+      // other (two members that touch along it, the other's inside on this
+      // edge's outer side) the stretch is inside the union, and both drop it;
+      // facing the same way (two equal members) the first keeps it. The
+      // member that covered the last part is tried first. A point off a
+      // member's box (grown past EPS) is not covered by it.
+      const covers = (j: number, x: number, y: number, s: number) => {
+        const b = prims[j].prim.bb;
+        if (x < b[0] - EPS || x > b[2] + EPS) return false;
+        if (y < b[1] - EPS || y > b[3] + EPS) return false;
         const d = sdf(j, x, y);
-        return d < -EPS || (d <= EPS && j < i);
+        if (d < -EPS) return true;
+        if (d > EPS) return false;
+        // facing: the other's distance falls across this edge, outward
+        const [nx, ny] = normal(e, s);
+        const h = TIE_STEP;
+        return (
+          sdf(j, x + h * nx, y + h * ny) < sdf(j, x - h * nx, y - h * ny) ||
+          j < i
+        );
       };
       let lastCover = -1;
       for (let k = 0; k + 1 < cs.length; k++) {
         const [s0, s1] = [cs[k], cs[k + 1]];
         if (s1 - s0 < 1e-12) continue;
-        const [mx, my] = at(e, (s0 + s1) / 2);
-        if (lastCover >= 0 && covers(lastCover, mx, my)) continue;
-        lastCover = touching.find((j) => covers(j, mx, my)) ?? -1;
+        const sm = (s0 + s1) / 2;
+        const [mx, my] = at(e, sm);
+        if (lastCover >= 0 && covers(lastCover, mx, my, sm)) continue;
+        lastCover = touching.find((j) => covers(j, mx, my, sm)) ?? -1;
         if (lastCover >= 0) continue;
         const last = pieces.at(-1);
         if (last && last.e === e && Math.abs(last.s1 - s0) < 1e-12)
@@ -495,16 +655,56 @@ export function arcsOutline(
   ).map((loop) => ({
     loop,
     ring: loop.flatMap((q) =>
-      sampleParams(q.e, q.s0, q.s1).map((s) => at(q.e, s))
+      sampleParams(q.e, q.s0, q.s1, tol).map((s) => at(q.e, s))
     ),
   }));
-  // Outer loops wind as the members do; the holes the other way.
+  // Outer loops wind as the members do; the holes the other way. A loop's
+  // depth is the winding of the other loops at a point of it (probe): an outer
+  // loop at 0 bounds filled ground, and a hole at 1 is a hole of it. With
+  // holes, that keeps an island inside a hole (+1 − 1 = 0) and its own holes;
+  // without, every hole is filled, so a loop inside an outer one is dropped.
+  const area = loops.map(({ ring }) => signedArea2(ring));
+  const boxes = loops.map(({ ring }) => ringExtent(ring));
+  // the outer loops' indices, the largest first
   const outer = loops
-    .filter(({ ring }) => signedArea2(ring) > 0)
-    .sort((a, b) => signedArea2(b.ring) - signedArea2(a.ring));
-  const kept = outer.filter(
-    (L, k) => !outer.slice(0, k).some((B) => pointInRing(L.ring[0], B.ring))
-  );
+    .map((_, k) => k)
+    .filter((k) => area[k] > 0)
+    .sort((a, b) => area[b] - area[a]);
+  // a loop's point to test against the others: the middle of its first piece, not an end
+  // (loops meet only at pieces' ends, as two members that touch at a point do)
+  const probe = (k: number): Pt => {
+    const q = loops[k].loop[0];
+    return at(q.e, (q.s0 + q.s1) / 2);
+  };
+  const depth = (k: number) => {
+    const p = probe(k);
+    const [x, y] = p;
+    const around = loops.filter(
+      (_, j) =>
+        j !== k &&
+        x >= boxes[j].minX &&
+        x <= boxes[j].maxX &&
+        y >= boxes[j].minY &&
+        y <= boxes[j].maxY
+    );
+    return windingAt(
+      p,
+      around.map(({ ring }) => ring)
+    );
+  };
+  const kept = (
+    holes
+      ? [
+          ...outer.filter((k) => depth(k) === 0),
+          ...loops
+            .map((_, k) => k)
+            .filter((k) => area[k] < 0 && depth(k) === 1),
+        ]
+      : outer.filter(
+          (k, i) =>
+            !outer.slice(0, i).some((B) => pointInRing(probe(k), loops[B].ring))
+        )
+  ).map((k) => loops[k]);
   const boundary = kept.flatMap((L) => L.loop);
 
   // 3. Shrink by r: offset each piece inward, with an arc of r at each corner.
@@ -546,7 +746,9 @@ export function arcsOutline(
 
   // 4. Keep the points a full radius from the boundary.
   const pieceBB = boundary.map((q) => {
-    const e = ringExtent(sampleParams(q.e, q.s0, q.s1).map((s) => at(q.e, s)));
+    const e = ringExtent(
+      sampleParams(q.e, q.s0, q.s1, tol).map((s) => at(q.e, s))
+    );
     return [e.minX - 1, e.minY - 1, e.maxX + 1, e.maxY + 1];
   });
   const nearPiece = boxGrid(pieceBB);
@@ -564,13 +766,15 @@ export function arcsOutline(
     const samples: Sample[] = [];
     for (const c of curves) {
       const [lo, hi] = range(c);
-      const ps = sampleParams(c, lo, hi);
+      const ps = sampleParams(c, lo, hi, tol);
       // drop the first sample: it is the previous curve's last
       for (const s of ps.slice(samples.length > 0 ? 1 : 0)) {
         const p = at(c, s);
         samples.push({ p, c, s, ok: valid(p) });
       }
     }
+    // a loop of no length (a disc of radius 0) bounds nothing
+    if (samples.length === 0) continue;
     if (samples.length > 1) {
       const [f, l] = [samples[0].p, samples.at(-1)!.p];
       if (Math.hypot(f[0] - l[0], f[1] - l[1]) < 1e-6) samples.pop();
@@ -620,6 +824,17 @@ export function arcsOutline(
     (r) => r.at(-1)!
   ).map((loop) => loop.flat());
   // A loop of the closing winds as the members do (it has no holes); a tiny
-  // or backward one is a sliver from a cut, not part of the region.
-  return out.filter((ring) => ring.length > 2 && signedArea2(ring) > 1e-3);
+  // or backward one is a sliver from a cut, not part of the region. With
+  // holes, a backward loop of some size inside an outer one is a hole.
+  const closed = out.filter(
+    (ring) => ring.length > 2 && signedArea2(ring) > 1e-3
+  );
+  if (!holes) return closed;
+  const holeRings = out.filter(
+    (ring) =>
+      ring.length > 2 &&
+      signedArea2(ring) < -2 &&
+      closed.some((B) => pointInRing(ring[0], B))
+  );
+  return [...closed, ...holeRings];
 }

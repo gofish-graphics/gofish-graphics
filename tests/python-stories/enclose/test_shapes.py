@@ -2,8 +2,9 @@
 
 `enclose` in every form: the combinator over fresh children, over
 `.relate()` operands and over explicit `ref(...)` children; the chart mark
-form with one outline per group; avoiding with holes off and on; graph
-edges as members; and the radius of ``Shape.arcs``. PenguinsFourShapes (a DOM grid of four charts) and
+form with one outline per group; holes off and on; graph
+edges as members; the radius of ``Shape.fillet``; the blob's convexity,
+connection and separate; and the fillet's neck. PenguinsFourShapes (a DOM grid of four charts) and
 ChartAccentSubSaharanAfrica (a JS lambda filter over refs) are exempt, see
 tests/.python-sync-exempt.
 """
@@ -84,7 +85,9 @@ def story_munkres_figure():
             enclose([b, c], shape=Shape.oval(), padding=16, **outline),
             enclose(
                 [a, c],
-                shape=Shape.spine(avoiding=[b], clearance=6),
+                shape=Shape.spine(),
+                avoiding=[b],
+                clearance=6,
                 padding=12,
                 **outline,
             ),
@@ -126,9 +129,9 @@ BEAKS = [
 ]
 
 
-def _penguin_shapes(shape):
+def _penguin_shapes(shape, data=BEAKS):
     return (
-        chart(BEAKS, axes=True, w=420, h=320)
+        chart(data, axes=True, w=420, h=320)
         .flow(scatter(x="Beak Length (mm)", y="Beak Depth (mm)"))
         .mark(circle(r=2.5, fill="Species").name("points"))
         .layer(
@@ -167,62 +170,57 @@ def story_penguin_ovals():
     return (_penguin_shapes(Shape.oval()), {})
 
 
-# ── 6. avoiding and holes ───────────────────────────────────────────────────
+ADELIE = [d for d in BEAKS if d["Species"] == "Adelie"]
 
 
-def _u_points():
-    path = [(35, 22), (35, 150), (190, 150), (190, 22)]
-    out = []
-    for s in range(3):
-        a, b = path[s], path[s + 1]
-        length = math.hypot(b[0] - a[0], b[1] - a[1])
-        nx, ny = -(b[1] - a[1]) / length, (b[0] - a[0]) / length
-        k = round(length / 26)
-        for i in range(0 if s == 0 else 1, k + 1):
-            t = i / k
-            jit = ((i * 7 + s * 3) % 5) - 2
-            for side in (-1, 1):
-                out.append((
-                    a[0] + t * (b[0] - a[0]) + side * 11 * nx + jit,
-                    a[1] + t * (b[1] - a[1]) + side * 11 * ny - jit,
-                ))
-    return out
+def story_penguin_holes_filled():
+    return (_penguin_shapes(Shape.blob(convexity=0, holes=False), ADELIE), {})
 
 
-U = _u_points()
-GRAY = [(112, 50), (112, 100)]
+def story_penguin_holes_kept():
+    return (_penguin_shapes(Shape.blob(convexity=0, holes=True), ADELIE), {})
+
+
+# ── 6. holes ────────────────────────────────────────────────────────────────
+
+# A ring of points two dots thick (16 inside, 20 outside) around an empty
+# middle.
+RING = [
+    (195, 125), (192, 153), (177, 177), (152, 191), (125, 198), (98, 190),
+    (74, 176), (57, 153), (54, 125), (58, 97), (76, 76), (97, 58),
+    (125, 51), (152, 59), (177, 73), (190, 98),
+    (216, 139), (209, 168), (193, 193), (167, 208), (140, 219), (111, 216),
+    (82, 209), (57, 193), (42, 167), (31, 140), (34, 111), (41, 82),
+    (57, 57), (83, 42), (110, 31), (139, 34), (168, 41), (193, 57),
+    (208, 83), (219, 110),
+]
 
 
 def _dot(p, fill, name):
     return position([circle(r=5, fill=fill).name(name)], x=p[0] - 5, y=p[1] - 5)
 
 
-def _u_blob(holes):
-    return layer(
-        [_dot(p, "#3366aa", f"u{i}") for i, p in enumerate(U)]
-        + [_dot(p, "#9aa0a6", f"g{i}") for i, p in enumerate(GRAY)]
-    ).relate(lambda **names: [
-        enclose(
-            [names[f"u{i}"] for i in range(len(U))],
-            shape=Shape.blob(
-                convexity=0.75,
-                holes=holes,
-                avoiding=[names[f"g{i}"] for i in range(len(GRAY))],
-            ),
-            padding=8,
-            fill="#3366aa",
-            stroke="#3366aa",
-            fill_opacity=0.25,
-        )
-    ])
+def _ring_blob(holes):
+    return layer([_dot(p, "#3366aa", f"p{i}") for i, p in enumerate(RING)]).relate(
+        lambda **names: [
+            enclose(
+                [names[f"p{i}"] for i in range(len(RING))],
+                shape=Shape.blob(convexity=0.75, holes=holes),
+                padding=8,
+                fill="#3366aa",
+                stroke="#3366aa",
+                fill_opacity=0.25,
+            )
+        ]
+    )
 
 
 def story_holes_filled():
-    return (_u_blob(False), {})
+    return (_ring_blob(False), {})
 
 
 def story_holes_kept():
-    return (_u_blob(True), {})
+    return (_ring_blob(True), {})
 
 
 # ── 7. Hyperedges: graph edges as members ───────────────────────────────────
@@ -285,7 +283,9 @@ def story_hyperedges():
                     for e in EDGES
                     if e[0] in s["nodes"] and e[1] in s["nodes"]
                 ],
-                shape=Shape.spine(avoiding=[n[node] for node in NODES], clearance=3),
+                shape=Shape.spine(),
+                avoiding=[n[node] for node in NODES],
+                clearance=3,
                 padding=6,
                 fill=s["color"],
                 stroke=s["color"],
@@ -297,20 +297,20 @@ def story_hyperedges():
     )
 
 
-# ── 8. Shape.arcs: the radius of the closing disc ────────────────────────────
+# ── 8. Shape.fillet: the radius of the closing disc ────────────────────────────
 
 AFRICA = [
     1.6 * math.sqrt(d["pop"]) for d in COUNTRY_POPULATIONS if d["continent"] == "Africa"
 ]
 
 
-def _arcs_panel(radius):
+def _fillet_panel(radius):
     return spread(
         [
-            text(text=f"Shape.arcs({{ radius: {radius} }})", font_size=12),
+            text(text=f"Shape.fillet({{ radius: {radius} }})", font_size=12),
             enclose(
                 [pack([circle(r=r, fill="#f2c14e") for r in AFRICA], spacing=6)],
-                shape=Shape.arcs(radius=radius),
+                shape=Shape.fillet(radius=radius),
                 padding=6,
                 fill="#f2c14e",
                 fill_opacity=0.25,
@@ -324,14 +324,182 @@ def _arcs_panel(radius):
     )
 
 
-def story_arcs_radius_sweep():
+def story_fillet_radius_sweep():
     return (
         spread(
             [
-                spread([_arcs_panel(r) for r in (0, 6, 12)], dir="x", spacing=24),
-                spread([_arcs_panel(r) for r in (24, 48, 200)], dir="x", spacing=24),
+                spread([_fillet_panel(r) for r in (0, 6, 12)], dir="x", spacing=24),
+                spread([_fillet_panel(r) for r in (24, 48, 200)], dir="x", spacing=24),
             ],
             dir="y",
+            spacing=24,
+        ),
+        {},
+    )
+
+
+# ── 9. Shape.blob: convexity, connection and separate ────────────────────────
+
+
+def _u_points():
+    path = [(35, 22), (35, 150), (190, 150), (190, 22)]
+    out = []
+    for s in range(3):
+        a, b = path[s], path[s + 1]
+        length = math.hypot(b[0] - a[0], b[1] - a[1])
+        nx, ny = -(b[1] - a[1]) / length, (b[0] - a[0]) / length
+        k = round(length / 26)
+        for i in range(0 if s == 0 else 1, k + 1):
+            t = i / k
+            jit = ((i * 7 + s * 3) % 5) - 2
+            for side in (-1, 1):
+                out.append((
+                    a[0] + t * (b[0] - a[0]) + side * 11 * nx + jit,
+                    a[1] + t * (b[1] - a[1]) + side * 11 * ny - jit,
+                ))
+    return out
+
+
+# A band of points two dots thick around a U-shaped path.
+U = _u_points()
+
+
+def _blob_panel(title, shape, pts, key):
+    return spread(
+        [
+            text(text=title, font_size=12),
+            layer([_dot(p, "#3366aa", f"{key}{i}") for i, p in enumerate(pts)]).relate(
+                lambda **names: [
+                    enclose(
+                        [names[f"{key}{i}"] for i in range(len(pts))],
+                        shape=shape,
+                        padding=8,
+                        fill="#3366aa",
+                        stroke="#3366aa",
+                        fill_opacity=0.25,
+                    )
+                ]
+            ),
+        ],
+        dir="y",
+        spacing=36,
+        alignment="middle",
+    )
+
+
+def story_blob_convexity_sweep():
+    def panel(convexity, i):
+        return _blob_panel(
+            f"Shape.blob({{ convexity: {convexity} }})",
+            Shape.blob(convexity=convexity),
+            U,
+            f"c{i}-",
+        )
+
+    return (
+        spread(
+            [
+                spread([panel(c, i) for i, c in enumerate((0, 0.5, 1))], dir="x", spacing=72),
+                spread([panel(c, i + 3) for i, c in enumerate((1.5, 2))], dir="x", spacing=72),
+            ],
+            dir="y",
+            spacing=48,
+        ),
+        {},
+    )
+
+
+INNER = [(100, 70), (124, 70), (112, 91)]
+
+
+def story_blob_connection():
+    return (
+        spread(
+            [
+                _blob_panel(
+                    "Shape.blob({ convexity: 1 })",
+                    Shape.blob(convexity=1),
+                    U + INNER,
+                    "k0-",
+                ),
+                _blob_panel(
+                    "Shape.blob({ convexity: 1, connection: 0.5 })",
+                    Shape.blob(convexity=1, connection=0.5),
+                    U + INNER,
+                    "k1-",
+                ),
+                _blob_panel(
+                    "Shape.blob({ convexity: 1, connection: 0.5, separate: true })",
+                    Shape.blob(convexity=1, connection=0.5, separate=True),
+                    U + INNER,
+                    "k2-",
+                ),
+            ],
+            dir="x",
+            spacing=24,
+        ),
+        {},
+    )
+
+
+# ── 10. Shape.fillet: the neck of the links between pieces ───────────────────
+
+GROUPS = [
+    [14, 10, 8, 6, 6],
+    [12, 9, 7, 5],
+    [16, 8, 8, 6],
+]
+
+
+def _neck_panel(neck, key):
+    return spread(
+        [
+            text(text=f"Shape.fillet({{ radius: 16, neck: {neck} }})", font_size=12),
+            layer([
+                spread(
+                    [
+                        pack(
+                            [
+                                circle(r=r, fill="#f2c14e").name(f"{key}{g}-{j}")
+                                for j, r in enumerate(radii)
+                            ],
+                            spacing=4,
+                        )
+                        for g, radii in enumerate(GROUPS)
+                    ],
+                    dir="x",
+                    spacing=40,
+                    alignment="middle",
+                )
+            ]).relate(
+                lambda **names: [
+                    enclose(
+                        [
+                            names[f"{key}{g}-{j}"]
+                            for g, radii in enumerate(GROUPS)
+                            for j in range(len(radii))
+                        ],
+                        shape=Shape.fillet(radius=16, neck=neck),
+                        padding=6,
+                        fill="#f2c14e",
+                        fill_opacity=0.25,
+                        stroke="#333",
+                        stroke_width=1.5,
+                    )
+                ]
+            ),
+        ],
+        dir="y",
+        spacing=8,
+        alignment="middle",
+    )
+
+
+def story_fillet_neck_sweep():
+    return (
+        spread(
+            [_neck_panel(neck, f"n{i}-") for i, neck in enumerate((0, 0.25, 0.5, 1))],
+            dir="x",
             spacing=24,
         ),
         {},

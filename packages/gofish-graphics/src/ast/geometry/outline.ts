@@ -273,12 +273,17 @@ export const pathOutline = (
   filled: closed && paint.filled,
 });
 
+/** The widest angle a chord of a circle of radius `r` may span and stay
+ *  within `tolerance` of its arc: the sagitta `r (1 − cos(θ/2))` at most the
+ *  tolerance. A whole turn when the circle is no wider than the tolerance. */
+export const arcStep = (r: number, tolerance: number): number =>
+  r > tolerance / 2 ? 2 * Math.acos(1 - tolerance / r) : 2 * Math.PI;
+
 /** How many equal steps of angle keep a circle of radius `r` within
- *  `tolerance` of its chords: the sagitta `r (1 − cos(θ/2))` at most the
- *  tolerance. At least 8. */
+ *  `tolerance` of its chords (arcStep). At least 8. */
 const circleSteps = (r: number, tolerance: number): number => {
   if (!(r > tolerance)) return 8;
-  const theta = 2 * Math.acos(1 - tolerance / r);
+  const theta = arcStep(r, tolerance);
   return Math.max(8, Math.min(1024, Math.ceil((2 * Math.PI) / theta)));
 };
 

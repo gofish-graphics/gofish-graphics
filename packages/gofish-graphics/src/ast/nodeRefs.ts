@@ -1,8 +1,8 @@
 /**
  * The nodes an `avoiding` option names, as fresh refs its holder keeps (each
- * read where it is placed, like a ref member). Shared by `enclose`'s blob
- * (`Shape.blob({ avoiding })`) and `.label({ avoiding })`, which take the
- * same value (`Shape.Nodes`, checked by `nodeSelectionOf`). A
+ * read where it is placed, like a ref member). Shared by `enclose`
+ * (`enclose({ avoiding })`) and `.label({ avoiding })`, which take the
+ * same value (`Nodes`, checked by `nodeSelectionOf`). A
  * `selectAll(name)` resolves against `layerContext`, the chart's named
  * layers.
  */
@@ -11,11 +11,10 @@ import { GoFishRef } from "./_ref";
 import { RelateOperand } from "./constraints/relate";
 import type { LayerContext } from "./marks/chart";
 import { resolveRefData } from "./marks/resolveRefData";
-import { nodeSelectionOf } from "./nodeSelection";
-import type { Nodes } from "../families/shape";
+import { nodeSelectionOf, type Nodes } from "./nodeSelection";
 
 /**
- * @param where Names the option in errors (`"enclose({ shape }): avoiding"`).
+ * @param where Names the option in errors (`"enclose({ avoiding })"`).
  * @param construct Names the construct in errors (`"enclose"`).
  */
 export function avoidedRefs(

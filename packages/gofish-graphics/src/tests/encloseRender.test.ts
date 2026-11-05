@@ -7,17 +7,30 @@
  */
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
-import { items } from "./testHelpers";
+import { items, seeded } from "./testHelpers";
+import { encloseOutline } from "../ast/graphicalOperators/enclose/outline";
+import type { Member } from "../ast/graphicalOperators/enclose/prims";
+import { pointInRing, segDist } from "../ast/geometry/plane";
+import { countryPopulations } from "../data/countryPopulations";
+import { gapminderCountries } from "../data/gapminderCountries";
 
 declare const process: { exit(code: number): never };
 const {
   chart,
   circle,
+  createName,
   enclose,
   ellipse,
+  filter,
+  layer,
   live,
   pack,
+  project,
   rect,
+  ref,
+  region,
+  scatter,
+  selectAll,
   Shape,
   spread,
   treemap,
@@ -83,7 +96,7 @@ console.log("# an option a Shape kind does not have is an error naming it");
 for (const [name, make] of [
   ["Shape.box", () => Shape.box({ padding: 10 })],
   ["Shape.oval", () => Shape.oval({ padding: 10 })],
-  ["Shape.arcs", () => Shape.arcs({ padding: 10 })],
+  ["Shape.fillet", () => Shape.fillet({ padding: 10 })],
   ["Shape.blob", () => Shape.blob({ padding: 10 })],
   ["Shape.hull", () => Shape.hull({ padding: 10 })],
   ["Shape.spine", () => Shape.spine({ padding: 10 })],
@@ -139,7 +152,7 @@ console.log(
     const dl = await chart(rows)
       .flow(
         pack({ by: "g", spacing }),
-        enclose({ shape: Shape.arcs(), padding, fill: "none" }),
+        enclose({ shape: Shape.fillet({ radius: 12 }), padding, fill: "none" }),
         pack()
       )
       .mark(circleOf)
@@ -292,7 +305,7 @@ console.log("# a flow-step enclose keeps its step through its modifiers");
       .toDisplayList({ w: 300, h: 300 });
     return items(dl);
   };
-  const step = () => enclose({ shape: Shape.arcs(), padding: 4 });
+  const step = () => enclose({ shape: Shape.fillet(), padding: 4 });
   for (const [what, make] of [
     [".name(n)", () => step().name("region")],
     [".zOrder(n)", () => step().zOrder(-1)],
@@ -337,6 +350,191 @@ console.log("# a box-shape enclose is packed by the circle around its box");
     cs.length === 2 && Math.abs(gap - 40 * Math.SQRT2) < 1e-6,
     `centers ${gap} px apart`
   );
+}
+
+console.log("# clearance is a number of pixels at least 0");
+for (const clearance of [NaN, -2, "4"]) {
+  const message = await errorOf(() =>
+    enclose({ clearance, avoiding: [] }, [
+      ellipse({ w: 20, h: 10 }),
+    ]).toDisplayList({ w: 100, h: 100 })
+  );
+  check(
+    `enclose({ clearance: ${typeof clearance === "number" ? clearance : JSON.stringify(clearance)} }) is an error naming clearance`,
+    /enclose\(\{ clearance \}\)/.test(message),
+    message || "no error"
+  );
+}
+
+console.log("# a member that fills its space may be listed in avoiding");
+{
+  // A listed node that is also a member is ignored, so it avoids nothing:
+  // the outline is filled, and nothing is an error.
+  const cells = createName("cells");
+  const fresh = createName("fresh");
+  const message = await errorOf(() =>
+    enclose({ padding: 4, avoiding: [ref(cells)] }, [
+      region({ fill: "#888" }).name(cells),
+    ]).toDisplayList({ w: 100, h: 100 })
+  );
+  check(
+    "enclose({ avoiding: [ref(m)] }, [m]) around a region that fills its space is no error",
+    message === "",
+    message
+  );
+  // a node other than the member is still an error there
+  const other = await errorOf(() =>
+    layer([
+      rect({ x: 0, y: 0, w: 5, h: 5 }).name(fresh),
+      enclose({ padding: 4, avoiding: [ref(fresh)] }, [
+        region({ fill: "#888" }),
+      ]),
+    ]).toDisplayList({ w: 100, h: 100 })
+  );
+  check(
+    "an avoided node that is not a member, around a member that fills its space, is an error",
+    /fills the space it is given/.test(other),
+    other || "no error"
+  );
+}
+
+console.log("# a nudge of 1e-12 to 1e-4 px moves an outline by less than 0.5 px");
+type Pt = [number, number];
+/** A path item's rings, one per subpath. */
+const ringsOf = (d: string): Pt[][] =>
+  d
+    .split("M")
+    .filter(Boolean)
+    .map((s) => {
+      const n = s.match(/-?[\d.]+(e-?\d+)?/g)!.map(Number);
+      const r: Pt[] = [];
+      for (let i = 0; i + 1 < n.length; i += 2) r.push([n[i], n[i + 1]]);
+      return r;
+    });
+/** The farthest a point of either set of rings is from the other's edges. */
+const hausdorff = (A: Pt[][], B: Pt[][]): number => {
+  const dTo = (p: Pt, R: Pt[][]) => {
+    let d = Infinity;
+    for (const r of R)
+      r.forEach((a, i) => {
+        const b = r[(i + 1) % r.length];
+        d = Math.min(d, segDist(p[0], p[1], a[0], a[1], b[0], b[1]));
+      });
+    return d;
+  };
+  const far = (X: Pt[][], Y: Pt[][]) => {
+    let m = 0;
+    for (const r of X) for (const p of r) m = Math.max(m, dTo(p, Y));
+    return m;
+  };
+  if (!A.length || !B.length) return A.length === B.length ? 0 : Infinity;
+  return Math.max(far(A, B), far(B, A));
+};
+/** Each coordinate nudged on its own by up to `by` px, so the ends two
+ *  pieces of an outline share are no longer shared. */
+const nudge = (
+  members: Member[],
+  rand: () => number,
+  by: number
+): Member[] => {
+  const j = () => (rand() - 0.5) * 2 * by;
+  return members.map((m): Member =>
+    m.kind === "disc"
+      ? { ...m, cx: m.cx + j(), cy: m.cy + j() }
+      : m.kind === "segment"
+        ? {
+            ...m,
+            a: [m.a[0] + j(), m.a[1] + j()],
+            b: [m.b[0] + j(), m.b[1] + j()],
+          }
+        : m
+  );
+};
+const steady = (name: string, members: Member[], o: any) => {
+  const base = encloseOutline(members, o);
+  const rand = seeded(1);
+  let worst = 0;
+  // from below the closing's tie band (1e-10 px) to well above it
+  for (const by of [1e-12, 1e-9, 1e-6, 1e-4])
+    worst = Math.max(
+      worst,
+      hausdorff(base, encloseOutline(nudge(members, rand, by), o))
+    );
+  check(`${name}: moves ${worst.toFixed(3)} px`, worst < 0.5);
+};
+{
+  // the bubble treemap's continent contours, each over its region contours
+  const dl = await chart(countryPopulations)
+    .flow(
+      pack({ by: "continent", spacing: 4 }),
+      enclose({ shape: Shape.fillet({ radius: 12 }), padding: 4, stroke: "#333" }),
+      pack({ by: "region", spacing: 4 }),
+      enclose({ shape: Shape.fillet({ radius: 8 }), padding: 4, stroke: "#999" }),
+      pack()
+    )
+    .mark((d: any[]) => circle({ r: 1.6 * Math.sqrt(d[0].pop) })(d))
+    .toDisplayList({ w: 720, h: 600 });
+  const paths = items(dl).filter((it) => it.kind === "path");
+  const regions = paths
+    .filter((it) => it.style.stroke === "#999")
+    .map((it) => ringsOf(it.d));
+  paths
+    .filter((it) => it.style.stroke === "#333")
+    .forEach((it, k) => {
+      const contour = ringsOf(it.d)[0];
+      const members = regions
+        .filter((R) => pointInRing(R[0][0], contour))
+        .flatMap((R) =>
+          R.flatMap((r) =>
+            r.map(
+              (a, i): Member => ({
+                kind: "segment",
+                a,
+                b: r[(i + 1) % r.length],
+                w: 1,
+              })
+            )
+          )
+        );
+      steady(`bubble treemap continent ${k} (${members.length} pieces)`, members, {
+        kind: "fillet",
+        radius: 12,
+        padding: 4,
+        avoiding: [],
+      });
+    });
+}
+{
+  // ChartAccent's blob around the Sub-Saharan African countries
+  const dl = await chart(gapminderCountries, { w: 520, h: 320 })
+    .flow(scatter({ x: "FertilityRate", y: "LifeExpectancy" }))
+    .mark(circle({ r: 3.5 }).name("countries"))
+    .layer(
+      chart(selectAll("countries"))
+        .flow(
+          filter((c: any) => project(c, "Region") === "Sub-Saharan Africa")
+        )
+        .mark(
+          enclose({
+            shape: Shape.blob({ convexity: 0.1, neck: 0.6 }),
+            padding: 6,
+          })
+        )
+    )
+    .toDisplayList({ w: 520, h: 320 });
+  const members = items(dl)
+    .filter(
+      (it) =>
+        it.kind === "ellipse" && it.datum?.[0]?.Region === "Sub-Saharan Africa"
+    )
+    .map((it): Member => ({ kind: "disc", cx: it.cx, cy: it.cy, r: it.rx }));
+  steady(`ChartAccent Sub-Saharan Africa (${members.length} countries)`, members, {
+    kind: "blob",
+    convexity: 0.1,
+    neck: 0.6,
+    padding: 6,
+    avoiding: [],
+  });
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

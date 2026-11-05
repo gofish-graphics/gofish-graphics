@@ -799,7 +799,7 @@ for the API.
       ]
     },
     "NodeSelectionIR": {
-      "description": "Nodes named inside an option (a blob's `avoiding`): a list of refs, or every node of a named layer (selectAll).",
+      "description": "Nodes named inside an option (`enclose`'s `avoiding`): a list of refs, or every node of a named layer (selectAll).",
       "oneOf": [
         {
           "type": "array",
@@ -3212,7 +3212,7 @@ for the API.
       }
     },
     "EncloseMark": {
-      "description": "Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.oval()`), the padded members with arc corners (`Shape.arcs()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs. Flow-step form `.flow(..., enclose(opts), ...)`: an outline around each group's subtree, laid out with it, so the operator above packs or places the outlined group and an outer `enclose` hugs this outline; in a chart's `operators`, its IR is this mark's.",
+      "description": "Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.oval()`), the padded members with arc corners (`Shape.fillet()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`), kept out of the nodes in `avoiding`. Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs. Flow-step form `.flow(..., enclose(opts), ...)`: an outline around each group's subtree, laid out with it, so the operator above packs or places the outlined group and an outer `enclose` hugs this outline; in a chart's `operators`, its IR is this mark's.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -3233,12 +3233,21 @@ for the API.
         },
         "padding": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Pixels between the members and the outline: a number, or a field name or accessor read once per enclosed group (constant within the group). For a blob or arcs, the distance from each member's own outline (around a line's whole length). Around a member with no size of its own, how far inside the outline the member's shape is.",
+          "description": "Pixels between the members and the outline: a number, or a field name or accessor read once per enclosed group (constant within the group). For a blob or fillet, the distance from each member's own outline (around a line's whole length). Around a member with no size of its own, how far inside the outline the member's shape is.",
           "default": 2
         },
         "shape": {
           "$ref": "#/$defs/Shape",
-          "description": "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.arcs({radius}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset. Around a fresh member with no size of its own (a treemap, a region), the outline is the space it is given: Shape.box() is that space (a treemap's Voronoi cell, when it is in one) and Shape.oval() the oval inscribed in it, and the member fills the outline; Shape.arcs() and Shape.blob() are an error there."
+          "description": "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.fillet({radius, neck, holes}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, connection, neck, holes, separate}) draws a smooth region: the members split into pieces by `connection`, each joined by a spanning tree of tubes and filled up to `convexity` (0 the tree, 1 the padded hull, 2 the oval). Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset. Around a fresh member with no size of its own (a treemap, a region), the outline is the space it is given: Shape.box() is that space (a treemap's Voronoi cell, when it is in one) and Shape.oval() the oval inscribed in it, and the member fills the outline; Shape.fillet() and Shape.blob() are an error there."
+        },
+        "avoiding": {
+          "$ref": "#/$defs/NodeSelectionIR",
+          "description": "Nodes the outline stays out of, whatever its shape: a list of nodes or refs, or a `selectAll(name)` selection. A listed node that is also a member is ignored. The outline is cut around each avoided node grown by `clearance`, never into the padded members, and a blob's or fillet's links route around them."
+        },
+        "clearance": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Pixels kept between the outline and each avoided node, and between a piece of a blob with `separate` and the other pieces' padded members and links. Default: `padding`."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -4516,13 +4525,24 @@ for the API.
           "type": "object",
           "properties": {
             "kind": {
-              "const": "arcs"
+              "const": "fillet"
             },
             "radius": {
               "type": "number",
               "minimum": 0,
-              "description": "The radius of the closing disc, in pixels: the radius of every concave arc. 0 is the padded union; a large radius nears the padded convex hull.",
-              "default": 12
+              "description": "The radius of the closing disc, in pixels: the radius of every concave arc. 0 is the padded union; a large radius nears the padded convex hull. Default: `padding`, so an inside corner is as round as an outside one."
+            },
+            "neck": {
+              "$ref": "#/$defs/Number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "The width of each link between two pieces, as a share of the padded members it joins, from 0 (no links: pieces nearer than 2 · `radius` stay apart) to 1 (a link as wide as the members).",
+              "default": 0.5
+            },
+            "holes": {
+              "type": "boolean",
+              "description": "Whether a gap the outline closes around stays a hole. Off, every hole is filled.",
+              "default": false
             }
           },
           "required": ["kind"]
@@ -4536,36 +4556,33 @@ for the API.
             "convexity": {
               "$ref": "#/$defs/Number",
               "minimum": 0,
-              "maximum": 1,
-              "description": "The share of the members' convex hull that is filled, smallest gaps first, from 0 (the spanning tree alone) to 1 (the whole hull). It is the only option that fills gaps between members, so it decides the pieces and the filled area.",
+              "maximum": 2,
+              "description": "How much of each gap between members is filled, from 0 (the spanning tree of tubes alone) to 1 (the padded convex hull) to 2 (the oval, as `Shape.oval()`). Between 0 and 1, every pocket between the tree and the hull fills that share of its own area; between 1 and 2, the hull rounds toward the oval.",
               "default": 0.5
             },
-            "holes": {
-              "type": "boolean",
-              "description": "Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled and each avoided node it held is cut back out as its clearance circle, as `allow_holes` in PostGIS and Shapely.",
-              "default": false
-            },
-            "roundness": {
-              "type": "number",
+            "connection": {
+              "$ref": "#/$defs/Number",
               "minimum": 0,
-              "description": "How far the outline's corners are rounded, in pixels. It changes how sharply the outline bends and nothing else: no gap fills, no hole opens, no two pieces join. Default: `padding`."
+              "maximum": 1,
+              "description": "The share of the links between members that are kept, the strongest first, from 0 (only members whose padding touches are one piece) to 1 (one piece). The links come from a minimum spanning tree in HDBSCAN's mutual reachability, so a dense group stays one piece longest. Each piece is filled on its own; the outline changes only where `connection` keeps or cuts a link.",
+              "default": 1
             },
             "neck": {
               "$ref": "#/$defs/Number",
               "exclusiveMinimum": 0,
               "maximum": 1,
-              "description": "How far the outline is NOT pulled in between members, above 0 and at most 1: a lone link becomes a tube `neck` times the bulge, and the edge of a filled region sinks in between its members. 1 does not pull in. 0 is not allowed: a link `neck` times the bulge would have no width, and its two sides would meet. It never changes the pieces or holes.",
+              "description": "The width of each link between members, as a share of the padded members it joins, above 0 and at most 1. 1 is a link as wide as the members (no neck). 0 is not allowed: a link would have no width.",
               "default": 1
             },
-            "avoiding": {
-              "$ref": "#/$defs/NodeSelectionIR",
-              "description": "Nodes to keep out: a list of nodes or refs, or a `selectAll(name)` selection. A listed node that is also a member is ignored. Each avoided node inside the region becomes a round hole, and links route around the others."
+            "holes": {
+              "type": "boolean",
+              "description": "Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled, as `allow_holes` in PostGIS and Shapely.",
+              "default": false
             },
-            "clearance": {
-              "type": "number",
-              "minimum": 0,
-              "description": "Pixels kept between the outline and each avoided node.",
-              "default": 4
+            "separate": {
+              "type": "boolean",
+              "description": "With `connection` below 1, whether the pieces keep apart. Off, each piece is filled on its own and two may overlap (a piece wholly inside another is dropped). On, each piece avoids the set's other pieces as it avoids `avoiding`: its outline stays `clearance` away from their padded members and links (not from their fill, so at `convexity` above 0 two outlines may still meet in a bay between them).",
+              "default": false
             }
           },
           "required": ["kind"]
