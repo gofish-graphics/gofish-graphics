@@ -82,20 +82,21 @@ export type CutField = {
 const B = 8;
 const SURE = Math.SQRT2 * B + 4;
 
+/** A sure node's value: its sign times this, far past any level the cut reads. */
+const FAR = 1e9;
+
 /** Refine blocks of B steps by halves where `at` can change sign (it is
  *  2-Lipschitz; a block whose corners all have one sign and |value| >
- *  margin + √2 · its side keeps that sign, and |value| > margin), then fill
- *  the sure blocks (after: their nodes may be shared with blocks that need
- *  them exactly). */
+ *  √2 · its side keeps that sign), then fill the sure blocks' nodes with
+ *  ±FAR (after: their nodes may be shared with blocks that need them
+ *  exactly). */
 function quad(
   at: (q: number) => number,
   A: Float64Array,
   W: number,
   nx: number,
   ny: number,
-  h: number,
-  margin: number,
-  value: (sign: number) => number
+  h: number
 ) {
   const later: number[] = [];
   const refine = (i0: number, j0: number, n: number) => {
@@ -106,7 +107,7 @@ function quad(
       d = at(q + n * W + n);
     if (
       Math.min(Math.abs(a), Math.abs(b), Math.abs(c), Math.abs(d)) >
-        margin + Math.SQRT2 * n * h &&
+        Math.SQRT2 * n * h &&
       Math.sign(a) === Math.sign(b) &&
       Math.sign(b) === Math.sign(c) &&
       Math.sign(c) === Math.sign(d)
@@ -125,7 +126,7 @@ function quad(
     for (let i = 0; i < nx; i += B) refine(i, j, B);
   for (let k = 0; k < later.length; k += 3) {
     const [q0, n, sg] = [later[k], later[k + 1], later[k + 2]];
-    const v = value(sg);
+    const v = sg * FAR;
     for (let j = 0; j <= n; j++)
       for (let i = 0; i <= n; i++) {
         const q = q0 + j * W + i;
@@ -344,7 +345,7 @@ export function cutRings(
     SD[q] = sd;
     return (V[q] = sd >= SURE ? sd : Math.max(sd, psi(q)));
   };
-  quad(at, V, W, nx, ny, h, 0, (sg) => sg * 1e9);
+  quad(at, V, W, nx, ny, h);
   // marching squares traces {−V > 0}; the border is outside, so every
   // loop closes
   const U = new Float64Array(N);

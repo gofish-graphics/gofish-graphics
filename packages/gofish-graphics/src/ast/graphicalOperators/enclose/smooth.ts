@@ -97,28 +97,25 @@ function pushOut(p: Pt, { keep, grid }: KeepGrid): Pt {
   return [x, y];
 }
 
-/** The outward normals of a ring (winding positive in screen coordinates,
- *  as the arcs outline does). */
-function normals(ring: Pt[], material = false): Pt[] {
+/** The outward normals of a ring, the right of travel: the region is on the
+ *  left of travel on every ring (an outer ring winds positive, a hole the
+ *  other way, as the arcs outline does). */
+function normals(ring: Pt[]): Pt[] {
   const n = ring.length;
-  // material: the region is on the left of travel on every ring (an outer
-  // ring winds positive, a hole the other way), so outward is always right.
-  const sgn = material || signedArea2(ring) > 0 ? 1 : -1;
   return ring.map((_, i) => {
     const [p, q] = [ring[(i - 1 + n) % n], ring[(i + 1) % n]];
     const tx = q[0] - p[0],
       ty = q[1] - p[1];
     const L = Math.hypot(tx, ty) || 1;
-    // right of travel is outside for positive signed area
-    return [(sgn * ty) / L, (-sgn * tx) / L] as Pt;
+    return [ty / L, -tx / L] as Pt;
   });
 }
 
 /** The least outward offset that holds every keep-in capsule: the most
  *  any capsule's axis sample (every 2 px) needs, signed distance to the
  *  rings (negative inside, nonzero winding) plus its radius, and at least
- *  0. The distances from a segment grid (exact, as the brute-force sdf it
- *  replaces). An inside sample can raise the most only when the outline is
+ *  0. The distances from a segment grid (exact). An inside sample can raise
+ *  the most only when the outline is
  *  nearer than its radius less the most so far, so its search stops there
  *  (deep inside a wide outline, the hull's, it would cross many empty
  *  cells). */
@@ -155,7 +152,7 @@ export function smoothOutline(rings: Pt[][], keep: KeepIn[]): Pt[][] {
   const sm = rings.map((ring) => gauss(resample(ring, 1)[0], SIGMA));
   const c = needed(sm, keep) + MARGIN;
   return sm.map((r) => {
-    const N = normals(r, true);
+    const N = normals(r);
     return r.map((p, i) => [p[0] + c * N[i][0], p[1] + c * N[i][1]] as Pt);
   });
 }
@@ -239,7 +236,7 @@ export function roundCut(
     }
     const W = 3 * sigma;
     const g = gauss(r, sigma);
-    const N = normals(r, true);
+    const N = normals(r);
     const res = r.map((p, i) => {
       const w = dist[i] <= W ? 1 : dist[i] >= 2 * W ? 0 : 2 - dist[i] / W;
       if (w <= 0) return p;

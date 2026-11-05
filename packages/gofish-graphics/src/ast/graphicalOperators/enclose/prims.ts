@@ -153,11 +153,14 @@ export const boxGrid = (bbs: number[][]) => {
 };
 
 // ── a member grown by r, as a primitive ─────────────────────────────────────
-// Each is a disc (k 0), a capsule (a segment grown by r, k 1), a box (a
-// rectangle grown by r, k 2), or a tapered capsule (the convex hull of two
-// discs, k 5), with an exact signed distance.
+// Each is a disc, a capsule (a segment grown by r), a box (a rectangle
+// grown by r), or a tapered capsule (the convex hull of two discs), with an
+// exact signed distance; `k` names which (PRIM).
+
+/** The primitives' kinds, `Prim.k`. */
+export const PRIM = { disc: 0, capsule: 1, box: 2, taper: 3 } as const;
 export type Prim = {
-  k: 0 | 1 | 2 | 5;
+  k: (typeof PRIM)[keyof typeof PRIM];
   x1: number;
   y1: number;
   x2: number;
@@ -167,7 +170,7 @@ export type Prim = {
   bb: number[];
 };
 const discPrim = (x: number, y: number, r: number): Prim => ({
-  k: 0,
+  k: PRIM.disc,
   x1: x,
   y1: y,
   x2: 0,
@@ -177,7 +180,7 @@ const discPrim = (x: number, y: number, r: number): Prim => ({
   bb: [x - r, y - r, x + r, y + r],
 });
 const capsulePrim = (a: Pt, b: Pt, r: number): Prim => ({
-  k: 1,
+  k: PRIM.capsule,
   x1: a[0],
   y1: a[1],
   x2: b[0],
@@ -197,7 +200,7 @@ const taperPrim = (a: Pt, b: Pt, ra: number, rb: number): Prim =>
   ra === rb
     ? capsulePrim(a, b, ra)
     : {
-        k: 5,
+        k: PRIM.taper,
         x1: a[0],
         y1: a[1],
         x2: b[0],
@@ -251,7 +254,7 @@ const boxPrim = (
   h: number,
   r: number
 ): Prim => ({
-  k: 2,
+  k: PRIM.box,
   x1: x,
   y1: y,
   x2: x + w,
@@ -271,12 +274,12 @@ export const grownPrim = (m: Member, r: number): Prim =>
       : boxPrim(m.x, m.y, m.w, m.h, r);
 /** Signed distance from (x, y) to a primitive. */
 export const primD = (p: Prim, x: number, y: number): number => {
-  if (p.k === 0) {
+  if (p.k === PRIM.disc) {
     const dx = x - p.x1,
       dy = y - p.y1;
     return Math.sqrt(dx * dx + dy * dy) - p.r;
   }
-  if (p.k === 1) {
+  if (p.k === PRIM.capsule) {
     const ex = p.x2 - p.x1,
       ey = p.y2 - p.y1,
       L = ex * ex + ey * ey;
@@ -286,7 +289,7 @@ export const primD = (p: Prim, x: number, y: number): number => {
       dy = y - (p.y1 + u * ey);
     return Math.sqrt(dx * dx + dy * dy) - p.r;
   }
-  if (p.k === 2) {
+  if (p.k === PRIM.box) {
     const qx = x < p.x1 ? p.x1 : x > p.x2 ? p.x2 : x,
       qy = y < p.y1 ? p.y1 : y > p.y2 ? p.y2 : y;
     if (qx === x && qy === y)

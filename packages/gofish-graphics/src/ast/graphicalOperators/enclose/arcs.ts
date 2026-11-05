@@ -44,6 +44,7 @@ import { ringExtent } from "../../geometry/box";
 import {
   boxGrid,
   grownPrim,
+  PRIM,
   primD,
   type Member,
   type Prim,
@@ -200,11 +201,11 @@ function roundedBoxEdges(
 function grown(m: Member, g: number): Grown {
   const p = grownPrim(m, g);
   const edges =
-    p.k === 0
+    p.k === PRIM.disc
       ? [{ t: "arc", cx: p.x1, cy: p.y1, R: p.r, a0: 0, a1: TAU } as Edge]
-      : p.k === 1
+      : p.k === PRIM.capsule
         ? capsuleEdges(p.x1, p.y1, p.x2, p.y2, p.r)
-        : p.k === 5
+        : p.k === PRIM.taper
           ? taperEdges(p.x1, p.y1, p.x2, p.y2, p.r, p.x3)
           : roundedBoxEdges(p.x1, p.y1, p.x2, p.y2, p.r);
   return { prim: p, edges };
@@ -310,24 +311,27 @@ function arcArc(e: Arc, f: Arc, out: number[]): void {
   }
 }
 
+/** A grown member's edge as the union's boundary reads it: its box
+ *  (boxOfEdge), its ends (endsOf), its cut parameters so far, and whether it
+ *  is buried in the other members (then it is neither cut nor traced). */
+type Side = {
+  e: Edge;
+  bb: number[];
+  ends: number[];
+  cuts: number[];
+  buried: boolean;
+};
+
 /**
- * Where edges e and f cross, as cut parameters on each: onto `ce` the
- * parameters on e where f crosses it or ends on it, onto `cf` the same on f.
- * Each crossing is solved once for the pair. `eb`, `fb`: their boxes
- * (boxOfEdge); `ee`, `fe`: their ends (endsOf).
+ * Where two edges cross, as cut parameters on each: onto each side's `cuts`
+ * the parameters on its edge where the other crosses it or ends on it. Each
+ * crossing is solved once for the pair.
  */
-function crossPair(
-  e: Edge,
-  f: Edge,
-  ce: number[],
-  cf: number[],
-  eb: number[],
-  fb: number[],
-  ee: number[],
-  fe: number[]
-): void {
-  endsOn(e, eb, fe, ce);
-  endsOn(f, fb, ee, cf);
+function crossPair(se: Side, sf: Side): void {
+  const { e, cuts: ce } = se,
+    { e: f, cuts: cf } = sf;
+  endsOn(e, se.bb, sf.ends, ce);
+  endsOn(f, sf.bb, se.ends, cf);
   if (e.t === "arc" && f.t === "arc") {
     arcArc(e, f, ce);
     arcArc(f, e, cf);
@@ -551,51 +555,39 @@ export function closingRings(
     });
     return out;
   });
-  const edgeBB = prims.map((P) => P.edges.map(boxOfEdge));
-  const edgeEnds = prims.map((P) => P.edges.map(endsOf));
   // An edge buried in the other grown members (each part of it inside one by
   // more than BURIED) is not on the union's boundary, and where it crosses
   // or ends on another member's edge it is inside a third member: there the
   // other edge is covered on both sides, so the cut would only split a
   // covered stretch. Its crossings are not solved, and it is not traced.
-  const grownPrims = prims.map((P) => P.prim);
-  const buried = prims.map((P, i) =>
-    P.edges.map((e) => edgeCovered(e, others[i], grownPrims))
-  );
   // Every edge's cut parameters: its ends, and where another member's edge
   // crosses it or ends on it, each crossing solved once for its pair.
-  const cuts = prims.map((P) => P.edges.map(range));
-  prims.forEach((P, i) => {
+  const grownPrims = prims.map((P) => P.prim);
+  const sides: Side[][] = prims.map((P, i) =>
+    P.edges.map((e) => ({
+      e,
+      bb: boxOfEdge(e),
+      ends: endsOf(e),
+      cuts: range(e),
+      buried: edgeCovered(e, others[i], grownPrims),
+    }))
+  );
+  sides.forEach((S, i) => {
     for (const j of others[i]) {
       if (j < i) continue;
-      const fs = prims[j].edges;
-      P.edges.forEach((e, ei) => {
-        if (buried[i][ei]) return;
-        const eb = edgeBB[i][ei];
-        for (let fi = 0; fi < fs.length; fi++) {
-          const fb = edgeBB[j][fi];
-          if (!buried[j][fi] && overlaps(eb, fb))
-            crossPair(
-              e,
-              fs[fi],
-              cuts[i][ei],
-              cuts[j][fi],
-              eb,
-              fb,
-              edgeEnds[i][ei],
-              edgeEnds[j][fi]
-            );
-        }
-      });
+      for (const se of S) {
+        if (se.buried) continue;
+        for (const sf of sides[j])
+          if (!sf.buried && overlaps(se.bb, sf.bb)) crossPair(se, sf);
+      }
     }
   });
   const pieces: Piece[] = [];
-  prims.forEach((P, i) => {
-    P.edges.forEach((e, ei) => {
-      if (buried[i][ei]) return;
-      const eb = edgeBB[i][ei];
+  sides.forEach((S, i) => {
+    S.forEach(({ e, bb: eb, cuts, buried }) => {
+      if (buried) return;
       const touching = others[i].filter((j) => overlaps(eb, prims[j].prim.bb));
-      const cs = cuts[i][ei].sort((a, b) => a - b);
+      const cs = cuts.sort((a, b) => a - b);
       // covered by another member; on a tie (two equal members) the first
       // keeps it. The member that covered the last part is tried first. A
       // point off a member's box (grown past EPS) is not covered by it.

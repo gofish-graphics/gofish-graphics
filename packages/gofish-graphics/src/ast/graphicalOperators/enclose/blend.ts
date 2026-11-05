@@ -4,8 +4,7 @@
 
 /**
  * The per-bay blend, what a blob's convexity between 0 and 1 means, solved
- * on a regular grid per pocket (earlier versions on a 1 px raster and on a
- * Delaunay mesh are deleted). Every pocket of hull − spine fills share c of
+ * on a regular grid per pocket. Every pocket of hull − spine fills share c of
  * its own area, by the level sets of a harmonic field:
  *
  *  - the pockets are the pieces of the padded hull less the spine (the exact
@@ -43,7 +42,7 @@
  *    to the mouth ends, and stitched to the spine runs on the hull between
  *    pockets.
  */
-import type { Pt } from "./prims";
+import { boxOf, type Pt } from "./prims";
 import { SegGrid, segsOf } from "./grid";
 import { signedArea2, cross, pointInRing } from "../../geometry/plane";
 
@@ -86,8 +85,8 @@ type Loop = {
 };
 
 type Pocket = {
+  /** its mouths on the hull; none for a hole of the spine */
   mouths: number[];
-  hole: boolean;
   /** the area cut off as cusps (filled at the rate ℓ) */
   cuspArea: number;
   /** its triangles: the values at their corners, least first, and area */
@@ -95,9 +94,21 @@ type Pocket = {
   area: number;
 };
 
+/** Whether a pocket is a hole of the spine: it has no mouth. */
+const isHole = (P: Pocket) => P.mouths.length === 0;
+
+/** A wall loop of pocket `pocket`: a spine ring as it is (u = 0 all round,
+ *  no cut edges). */
+const wallLoop = (pocket: number, pts: Pt[]): Loop => ({
+  pocket,
+  pts,
+  val: pts.map(() => 0),
+  kind: pts.map(() => 0),
+  corner: pts.map(() => -1),
+});
+
 export type Blend = {
   spine: Pt[][];
-  hull: Pt[];
   mouths: Mouth[];
   corners: Corner[];
   /** each corner's pocket */
@@ -159,7 +170,6 @@ const footOn = (A: Pt, B: Pt, p: Pt): Pt => {
  */
 export function pocketsOf(spine: Pt[][]): {
   clean: Pt[][];
-  hull: Pt[];
   mouths: Mouth[];
   corners: Corner[];
   pockets: Pocket[];
@@ -182,7 +192,6 @@ export function pocketsOf(spine: Pt[][]): {
   const holeRings = clean.filter((r) => signedArea2(r) < 0);
   const at = (v: RV) => outer[v.r][v.i];
   const H = hullOf(outer);
-  const hull = H.map(at);
   // mouths: hull edges between ring vertices that are not neighbors
   const mouths: Mouth[] = [];
   const aOf = new Map<number, number>();
@@ -274,7 +283,6 @@ export function pocketsOf(spine: Pt[][]): {
     const pid = pockets.length;
     const pocket: Pocket = {
       mouths: P.mouths,
-      hole: false,
       cuspArea: 0,
       area: 0,
     };
@@ -336,31 +344,16 @@ export function pocketsOf(spine: Pt[][]): {
     if (touched.has(r)) continue;
     const p = outer[r][0];
     const owner = loops.findIndex(
-      (L) => !pockets[L.pocket].hole && pointInRing(p, L.pts)
+      (L) => !isHole(pockets[L.pocket]) && pointInRing(p, L.pts)
     );
     if (owner < 0) continue;
-    const pts = outer[r].slice().reverse();
-    loops.push({
-      pocket: loops[owner].pocket,
-      pts,
-      val: pts.map(() => 0),
-      kind: pts.map(() => 0),
-      corner: pts.map(() => -1),
-    });
+    loops.push(wallLoop(loops[owner].pocket, outer[r].slice().reverse()));
   }
   for (const h of holeRings) {
-    const pid = pockets.length;
-    pockets.push({ mouths: [], hole: true, cuspArea: 0, area: 0 });
-    const pts = h.slice().reverse();
-    loops.push({
-      pocket: pid,
-      pts,
-      val: pts.map(() => 0),
-      kind: pts.map(() => 0),
-      corner: pts.map(() => -1),
-    });
+    loops.push(wallLoop(pockets.length, h.slice().reverse()));
+    pockets.push({ mouths: [], cuspArea: 0, area: 0 });
   }
-  return { clean, hull, mouths, corners, pockets, loops };
+  return { clean, mouths, corners, pockets, loops };
 }
 
 // ── the field on a grid ─────────────────────────────────────────────────────
@@ -443,10 +436,10 @@ class Tris {
 }
 
 /**
- * One pocket's field on a grid of step h and its triangles, into T; false
- * when a boundary loop lies wholly inside one grid cell (a cell with a hole
- * in it, which the cell triangulation does not handle: the caller retries
- * at h / 2).
+ * One pocket's field on a grid of step h and its triangles, into T; false,
+ * with T untouched, when a boundary loop lies wholly inside one grid cell
+ * (a cell with a hole in it, which the cell triangulation does not handle:
+ * the caller retries at h / 2).
  */
 function gridPocket(
   pid: number,
@@ -455,16 +448,7 @@ function gridPocket(
   h: number,
   T: Tris
 ): boolean {
-  const T0 = { v: T.X.length, t: T.tri.length, p: T.triPocket.length };
-  const T0cuts = T.cuts.length;
-  let [xa, ya, xb, yb] = [Infinity, Infinity, -Infinity, -Infinity];
-  for (const L of Ls)
-    for (const [x, y] of L.pts) {
-      xa = Math.min(xa, x);
-      xb = Math.max(xb, x);
-      ya = Math.min(ya, y);
-      yb = Math.max(yb, y);
-    }
+  const [xa, ya, xb, yb] = boxOf(Ls.map((L) => L.pts));
   // the grid's origin off any round number, so a boundary vertex (often on
   // a member's axis) is not on a grid line
   const gx0 = xa - h * 1.3183,
@@ -474,65 +458,73 @@ function gridPocket(
   const W = nx + 1;
   const gx = (i: number) => gx0 + i * h,
     gy = (j: number) => gy0 + j * h;
-  // ── the boundary's crossings of the grid lines, in loop order ──
+  // ── the boundary's crossings of the grid lines: per loop, per edge, along
+  // it. A loop with none lies inside one cell: no field at this h ──
+  const crossingsOf = (a: Pt, b: Pt) => {
+    const cs: {
+      t: number;
+      x: number;
+      y: number;
+      line: number;
+      li: number;
+      dir: number;
+    }[] = [];
+    if (a[0] !== b[0]) {
+      const lo = Math.min(a[0], b[0]),
+        hi = Math.max(a[0], b[0]);
+      const dir = b[0] > a[0] ? 1 : -1;
+      for (let i = Math.ceil((lo - gx0) / h); gx(i) <= hi; i++) {
+        const x = gx(i);
+        if (a[0] <= x === b[0] <= x) continue;
+        const t = (x - a[0]) / (b[0] - a[0]);
+        cs.push({ t, x, y: a[1] + t * (b[1] - a[1]), line: 0, li: i, dir });
+      }
+    }
+    if (a[1] !== b[1]) {
+      const lo = Math.min(a[1], b[1]),
+        hi = Math.max(a[1], b[1]);
+      const dir = b[1] > a[1] ? 1 : -1;
+      for (let j = Math.ceil((lo - gy0) / h); gy(j) <= hi; j++) {
+        const y = gy(j);
+        if (a[1] <= y === b[1] <= y) continue;
+        const t = (y - a[1]) / (b[1] - a[1]);
+        cs.push({ t, x: a[0] + t * (b[0] - a[0]), y, line: 1, li: j, dir });
+      }
+    }
+    if (cs.length > 1) cs.sort((p, q) => p.t - q.t);
+    return cs;
+  };
+  const hits = Ls.map((L) =>
+    L.pts.map((a, k) => crossingsOf(a, L.pts[(k + 1) % L.pts.length]))
+  );
+  if (hits.some((H) => H.every((cs) => cs.length === 0))) return false;
+
+  // ── the loops' vertices and crossings, in loop order ──
+  const T0v = T.X.length;
   const rows: Cross[][] = Array.from({ length: ny + 1 }, () => []);
   const cols: Cross[][] = Array.from({ length: nx + 1 }, () => []);
-  /** per crossing vertex (less T0.v): its line (0 vertical, 1 horizontal)
+  /** per crossing vertex (less T0v): its line (0 vertical, 1 horizontal)
    *  and index; -1 for a loop vertex */
   const crossLine: number[] = [],
     crossIdx: number[] = [];
   /** each loop as vertex ids, and whether each is a crossing */
   const seqs: { id: number[]; cross: boolean[] }[] = [];
-  const cs: {
-    t: number;
-    x: number;
-    y: number;
-    line: number;
-    li: number;
-    dir: number;
-  }[] = [];
   const vert = (x: number, y: number, u: number, line: number, li: number) => {
     crossLine.push(line);
     crossIdx.push(li);
     return T.vert(x, y, u);
   };
-  for (const L of Ls) {
+  Ls.forEach((L, l) => {
     const n = L.pts.length;
     const ids = L.pts.map((p, k) => vert(p[0], p[1], L.val[k], -1, -1));
     const seq = { id: [] as number[], cross: [] as boolean[] };
     for (let k = 0; k < n; k++) {
-      const a = L.pts[k],
-        b = L.pts[(k + 1) % n];
       const ua = L.val[k],
         ub = L.val[(k + 1) % n];
       seq.id.push(ids[k]);
       seq.cross.push(false);
-      cs.length = 0;
-      if (a[0] !== b[0]) {
-        const lo = Math.min(a[0], b[0]),
-          hi = Math.max(a[0], b[0]);
-        const dir = b[0] > a[0] ? 1 : -1;
-        for (let i = Math.ceil((lo - gx0) / h); gx(i) <= hi; i++) {
-          const x = gx(i);
-          if (a[0] <= x === b[0] <= x) continue;
-          const t = (x - a[0]) / (b[0] - a[0]);
-          cs.push({ t, x, y: a[1] + t * (b[1] - a[1]), line: 0, li: i, dir });
-        }
-      }
-      if (a[1] !== b[1]) {
-        const lo = Math.min(a[1], b[1]),
-          hi = Math.max(a[1], b[1]);
-        const dir = b[1] > a[1] ? 1 : -1;
-        for (let j = Math.ceil((lo - gy0) / h); gy(j) <= hi; j++) {
-          const y = gy(j);
-          if (a[1] <= y === b[1] <= y) continue;
-          const t = (y - a[1]) / (b[1] - a[1]);
-          cs.push({ t, x: a[0] + t * (b[0] - a[0]), y, line: 1, li: j, dir });
-        }
-      }
-      if (cs.length > 1) cs.sort((p, q) => p.t - q.t);
       const start = seq.id.length - 1;
-      for (const c of cs) {
+      for (const c of hits[l][k]) {
         const u = ua + c.t * (ub - ua);
         const id = vert(c.x, c.y, u, c.line, c.li);
         if (c.line === 0) cols[c.li].push({ c: c.y, dir: c.dir, id, u });
@@ -550,7 +542,7 @@ function gridPocket(
           );
     }
     seqs.push(seq);
-  }
+  });
 
   // ── the nodes inside, and each one's distance to the boundary along the
   // four grid directions (E, W, S, N; th = 1 and reg = 1: a node) ──
@@ -628,14 +620,13 @@ function gridPocket(
 
   // ── the loops' runs through each cell ──
   const runsOf = new Map<number, Run[]>();
-  let island = false;
   const cellOf = (a: number, b: number) =>
     Math.floor(((T.Y[a] + T.Y[b]) / 2 - gy0) / h) * nx +
     Math.floor(((T.X[a] + T.X[b]) / 2 - gx0) / h);
   /** where crossing `id` is on cell `cell`'s perimeter */
   const perim = (id: number, cell: number) => {
-    const line = crossLine[id - T0.v],
-      li = crossIdx[id - T0.v];
+    const line = crossLine[id - T0v],
+      li = crossIdx[id - T0v];
     const ci = cell % nx,
       cj = Math.floor(cell / nx);
     if (line === 0)
@@ -646,11 +637,8 @@ function gridPocket(
   };
   for (const { id, cross } of seqs) {
     const n = id.length;
+    // every loop crosses a grid line (else it returned above)
     const first = cross.indexOf(true);
-    if (first < 0) {
-      island = true;
-      break;
-    }
     let k = first;
     do {
       const verts = [id[k]];
@@ -671,13 +659,6 @@ function gridPocket(
       else runsOf.set(cell, [run]);
       k = q;
     } while (k !== first);
-  }
-  if (island) {
-    T.X.length = T.Y.length = T.U.length = T0.v;
-    T.tri.length = T0.t;
-    T.triPocket.length = T0.p;
-    T.cuts.length = T0cuts;
-    return false;
   }
 
   // ── the cells: whole ones as two triangles, cut ones as the polygons the
@@ -792,7 +773,7 @@ function solveNodes(
     rp[r + 1] = nz;
   }
   const res = pcgIC(rp, ci.subarray(0, nz), cv.subarray(0, nz), rhs, m);
-  for (let k = 0; k < m; k++) sol[k] = Math.min(1, Math.max(0, res.x[k]));
+  for (let k = 0; k < m; k++) sol[k] = Math.min(1, Math.max(0, res[k]));
 }
 
 /**
@@ -801,7 +782,7 @@ function solveNodes(
  * BLEND.h or, in a small pocket, its size over BLEND.k (at least BLEND.hMin).
  */
 export function buildBlend(spine: Pt[][]): Blend {
-  const { clean, hull, mouths, corners, pockets, loops } = pocketsOf(spine);
+  const { clean, mouths, corners, pockets, loops } = pocketsOf(spine);
   const T = new Tris();
   const byPocket = pockets.map(() => [] as Loop[]);
   for (const L of loops) byPocket[L.pocket].push(L);
@@ -818,10 +799,10 @@ export function buildBlend(spine: Pt[][]): Blend {
     );
     // a wall ring inside one cell: a finer grid, or under hMin / 4 px across,
     // left out
-    while (!gridPocket(pid, P.hole, Ls, h, T)) {
+    while (!gridPocket(pid, isHole(P), Ls, h, T)) {
       if (h / 2 < BLEND.hMin / 4) {
         const big = Ls.filter((L, k) => k === 0 || boxSize(L.pts) >= 2 * h);
-        gridPocket(pid, P.hole, big, h, T);
+        gridPocket(pid, isHole(P), big, h, T);
         break;
       }
       h /= 2;
@@ -895,7 +876,6 @@ export function buildBlend(spine: Pt[][]): Blend {
   );
   return {
     spine: clean,
-    hull,
     mouths,
     corners,
     cornerPocket,
@@ -930,7 +910,7 @@ function pcgIC(
   cv: Float64Array,
   b: Float64Array,
   n: number
-): { x: Float64Array; it: number } {
+): Float64Array {
   // IC(0): L on the lower pattern of A, row by row
   const lp = new Int32Array(n + 1);
   for (let i = 0; i < n; i++) {
@@ -987,8 +967,7 @@ function pcgIC(
   let rz = 0;
   for (let i = 0; i < n; i++) rz += r[i] * z[i];
   const bn = Math.sqrt(b.reduce((s, v) => s + v * v, 0)) || 1;
-  let it = 0;
-  for (; it < 2000; it++) {
+  for (let it = 0; it < 2000; it++) {
     for (let i = 0; i < n; i++) {
       let s = 0;
       for (let q = rp[i]; q < rp[i + 1]; q++) s += cv[q] * p[ci[q]];
@@ -1004,10 +983,7 @@ function pcgIC(
       r[i] -= al * Ap[i];
       rn += r[i] * r[i];
     }
-    if (Math.sqrt(rn) < BLEND.tol * bn) {
-      it++;
-      break;
-    }
+    if (Math.sqrt(rn) < BLEND.tol * bn) break;
     apply(r, z);
     let rz2 = 0;
     for (let i = 0; i < n; i++) rz2 += r[i] * z[i];
@@ -1015,7 +991,7 @@ function pcgIC(
     rz = rz2;
     for (let i = 0; i < n; i++) p[i] = z[i] + be * p[i];
   }
-  return { x, it };
+  return x;
 }
 
 /** The area of {u ≤ ℓ} in a pocket: each triangle's in closed form (its
