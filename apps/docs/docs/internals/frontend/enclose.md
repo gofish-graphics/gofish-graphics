@@ -239,8 +239,10 @@ bounded by arcs and lines (a disc, a tapered capsule for a segment, a rounded
 box for a box): `grownPrim` in `prims.ts`, whose signed distance (`primD`) is
 the cover test, with its boundary as exact edges. The union's boundary is
 traced exactly, by cutting every edge where another shape's edge crosses it
-(each crossing solved once for the pair) and keeping the parts no other shape
-covers. A part is judged at its middle, and two edges nearer than 1e-10 px
+or ends on it (each crossing solved once for the pair) and keeping the parts
+no other shape covers. Two edges that run together (lines on one line, arcs
+on one circle) are both cut where either stops, so each part lies wholly on
+the shared run or wholly off it. A part is judged at its middle, and two edges nearer than 1e-10 px
 there are one edge (two members that share a cap or a side). Which one keeps
 it is read off the other member's signed distance a step of 1e-6 px to either
 side along the edge's normal: where the two face the

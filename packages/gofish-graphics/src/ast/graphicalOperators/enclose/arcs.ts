@@ -619,8 +619,8 @@ export function closingRings(
       // member's box (grown past EPS) is not covered by it.
       const covers = (j: number, x: number, y: number, s: number) => {
         const b = prims[j].prim.bb;
-        if (x < b[0] - 1e-6 || x > b[2] + 1e-6) return false;
-        if (y < b[1] - 1e-6 || y > b[3] + 1e-6) return false;
+        if (x < b[0] - EPS || x > b[2] + EPS) return false;
+        if (y < b[1] - EPS || y > b[3] + EPS) return false;
         const d = sdf(j, x, y);
         if (d < -EPS) return true;
         if (d > EPS) return false;

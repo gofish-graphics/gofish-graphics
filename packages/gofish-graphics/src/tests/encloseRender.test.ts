@@ -362,7 +362,7 @@ for (const clearance of [NaN, -2, "4"]) {
   );
 }
 
-console.log("# a nudge of 1e-6 px moves an outline by less than 0.5 px");
+console.log("# a nudge of 1e-12 to 1e-4 px moves an outline by less than 0.5 px");
 type Pt = [number, number];
 /** A path item's rings, one per subpath. */
 const ringsOf = (d: string): Pt[][] =>
@@ -394,10 +394,14 @@ const hausdorff = (A: Pt[][], B: Pt[][]): number => {
   if (!A.length || !B.length) return A.length === B.length ? 0 : Infinity;
   return Math.max(far(A, B), far(B, A));
 };
-/** Each coordinate nudged on its own by up to 1e-6 px, so the ends two
+/** Each coordinate nudged on its own by up to `by` px, so the ends two
  *  pieces of an outline share are no longer shared. */
-const nudge = (members: Member[], rand: () => number): Member[] => {
-  const j = () => (rand() - 0.5) * 2e-6;
+const nudge = (
+  members: Member[],
+  rand: () => number,
+  by: number
+): Member[] => {
+  const j = () => (rand() - 0.5) * 2 * by;
   return members.map((m): Member =>
     m.kind === "disc"
       ? { ...m, cx: m.cx + j(), cy: m.cy + j() }
@@ -414,10 +418,11 @@ const steady = (name: string, members: Member[], o: any) => {
   const base = encloseOutline(members, o);
   const rand = seeded(1);
   let worst = 0;
-  for (let k = 0; k < 3; k++)
+  // from below the closing's tie band (1e-10 px) to well above it
+  for (const by of [1e-12, 1e-9, 1e-6, 1e-4])
     worst = Math.max(
       worst,
-      hausdorff(base, encloseOutline(nudge(members, rand), o))
+      hausdorff(base, encloseOutline(nudge(members, rand, by), o))
     );
   check(`${name}: moves ${worst.toFixed(3)} px`, worst < 0.5);
 };
