@@ -43,7 +43,7 @@ const GATE = 50; // gate box / wire-symbol side length
 // independently-built wires (mirrors Bluefish's <WireSymbol>).
 const WireSlot = createMark(({ content }: { content: any }) =>
   layer([
-    rect({ w: GATE, h: GATE, fill: "transparent" }).name("slot"),
+    rect({ w: GATE, h: GATE }).hidden().name("slot"),
     content.name("content"),
   ]).relate(({ slot, content }) => [
     Constraint.align({ x: "middle", y: "middle" }, [slot, content]),
@@ -56,7 +56,7 @@ const WireSlot = createMark(({ content }: { content: any }) =>
 // still-deferred Mark (see ControlDot below and the friction log) — wrapping
 // one directly in createMark crashes at render time ("node.scope is not a
 // function"). A plain function that just returns the mark call sidesteps it.
-const EmptySlot = () => rect({ w: GATE, h: GATE, fill: "transparent" });
+const EmptySlot = () => rect({ w: GATE, h: GATE }).hidden();
 
 // A labeled square gate (Bluefish's <BoxedSymbol>).
 const BoxedSymbol = createMark(({ label }: { label: string }) =>
@@ -110,7 +110,7 @@ const ControlDot = () => circle({ r: 5, fill: "black" });
 // wire too). Rail width = span*SLOT + 30, matching Bluefish's
 // `depth * 60 + 30`.
 //
-// The leader is a 10px transparent rect PREPENDED to the gates spread,
+// The leader is a 10px hidden rect PREPENDED to the gates spread,
 // exactly as in Bluefish's StackH — and Bluefish's Stack ALSO defaults
 // spacing to 10, so the first gate starts 10 (rect) + 10 (gap) = 20px in.
 // With rail = 60n + 30 and gates ending at 60n + 10, that leaves 20px of
@@ -133,7 +133,7 @@ const Wire = createMark(({ slots, span }: { slots: any[]; span?: number }) =>
       fill: "black",
     }).name("line"),
     spread({ dir: "x", spacing: SLOT - GATE, alignment: "middle" }, [
-      rect({ w: 10, h: GATE, fill: "transparent" }),
+      rect({ w: 10, h: GATE }).hidden(),
       ...slots,
     ]).name("gates"),
   ]).relate(({ line, gates }) => [

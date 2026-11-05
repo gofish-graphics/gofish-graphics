@@ -579,6 +579,7 @@ type ChartBuilderState<TInput, TOutput> = {
   finalMark?: Mark<TOutput> | RenderableBuilder;
   layerContext: LayerContext;
   nodeZOrder?: number;
+  nodeHidden?: boolean;
   nodeName?: string;
 };
 
@@ -1053,6 +1054,9 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     if (this.state.nodeZOrder !== undefined) {
       result.zOrder(this.state.nodeZOrder);
     }
+    if (this.state.nodeHidden !== undefined) {
+      result.hidden(this.state.nodeHidden);
+    }
 
     // A user-chained `.name(...)` names the resolved node so it's a valid
     // `.relate(...)` target on an enclosing layer (looked up by `_name`)
@@ -1101,6 +1105,12 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
 
   zOrder(value: number): ChartBuilder<TInput, TOutput> {
     return this.with({ nodeZOrder: value });
+  }
+
+  /** Lay the whole chart out, axes and legend included, and paint none of
+   *  it (`GoFishNode.hidden`). Its marks can still be read by name. */
+  hidden(value = true): ChartBuilder<TInput, TOutput> {
+    return this.with({ nodeHidden: value });
   }
 }
 

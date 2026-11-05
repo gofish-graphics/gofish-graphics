@@ -422,9 +422,10 @@ was called with to `GoFishNode.relate`, so a drawing clause binds them; the
 the node's `_names`, so a drawing clause is resolved in a fresh registry
 nested in it, which the call that replaces the clause discards) and the
 combinator marks — one wiring, not three copies. The region-compositing
-combinators share one factory (`makePorterDuffCombinator`), typed by their
-options: only `intersect` takes paint (`fill`, `stroke`, `strokeWidth`,
-`opacity`). Its `fill` and `stroke` are color channels, read off the rows of
+combinators share one factory (`makeCompositeCombinator`), typed by their
+options: `union`, `intersect`, `subtract` and `exclude` take paint (`fill`,
+`stroke`, `strokeWidth`, `opacity`), and `union`, `intersect` and `atop` take
+`blendMode`. A `fill` and a `stroke` are color channels, read off the rows of
 its input by `resolveGroupPaint`, the same resolution a connector's paint
 goes through: `paintChannelsOf` finds them in `MARK_CHANNELS`, which holds
 the combinator-only marks' channels as well as the leaf marks'.
@@ -581,10 +582,12 @@ plus a connector tier —
 .mark(R(opts))  ⇒  .mark(blank(anchor(opts))).layer(R(opts))
 ```
 
-The anchor tier is invisible in the strong sense: a `blank` node lowers to no
-display items at all (see [Render Pass 4](/internals/layout/passes)), so the one
+The anchor tier is invisible in the strong sense: a `blank` node is a hidden
+rect, and the bake stops at a hidden node no compositor reads, so it lowers to
+no display items at all (see [Render Pass 4](/internals/layout/passes)). The one
 anchor per row costs layout and a `selectAll` target but no DOM element and no
-hit-test entry. Since nothing can make it paint, `blank()` takes no paint-only
+hit-test entry. Never painting is the blank's own: a label on it shows unless
+the blank is `.hidden()`. Since no option makes it paint, `blank()` takes no paint-only
 options (no stroke or corner radius); its `fill` stays only to seed the color
 scale.
 

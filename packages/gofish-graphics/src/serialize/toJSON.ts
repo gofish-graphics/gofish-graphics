@@ -60,6 +60,8 @@ interface SerializeTag {
    *  its wrapper and stamps this field so the structural pixel offset
    *  reaches the wire (mirrors `TranslatableIR.translate` in gofish-ir). */
   translate?: { x?: number; y?: number };
+  /** Set when a constant `.hidden(value)` is chained on a mark. */
+  hidden?: boolean;
 }
 
 /**
@@ -276,6 +278,7 @@ interface ChartBuilderInternals {
   operators: Operator<any, any>[];
   finalMark?: Mark<any> | RenderableBuilder;
   nodeZOrder?: number;
+  nodeHidden?: boolean;
   nodeName?: string;
 }
 
@@ -289,6 +292,7 @@ function chartBuilderInternals(
     operators: c.operators ?? [],
     finalMark: c.finalMark,
     nodeZOrder: c.nodeZOrder,
+    nodeHidden: c.nodeHidden,
     nodeName: c.nodeName,
   };
 }
@@ -297,8 +301,15 @@ async function chartBuilderToChartIR(
   chart: ChartBuilder<any>,
   tables: TableIds
 ): Promise<Frontend.ChartIR> {
-  const { data, options, operators, finalMark, nodeZOrder, nodeName } =
-    chartBuilderInternals(chart);
+  const {
+    data,
+    options,
+    operators,
+    finalMark,
+    nodeZOrder,
+    nodeHidden,
+    nodeName,
+  } = chartBuilderInternals(chart);
 
   const ir: Frontend.ChartIR = {
     type: "chart",
@@ -334,6 +345,9 @@ async function chartBuilderToChartIR(
   }
   if (nodeZOrder !== undefined) {
     ir.zOrder = nodeZOrder;
+  }
+  if (nodeHidden !== undefined) {
+    ir.hidden = nodeHidden;
   }
   // `chart(...).name(n)`, which a sibling `layer([...]).relate(...)` reads.
   if (nodeName !== undefined) {
@@ -438,6 +452,7 @@ async function markToIR(
   const chained: AnyObject = {};
   if (tag.name !== undefined) chained.name = tag.name;
   if (tag.label !== undefined) chained.label = wireLabels(tag.label);
+  if (tag.hidden !== undefined) chained.hidden = tag.hidden;
 
   if (tag.__combinator) {
     const childrenResolved = await flatChildren(tag.children);

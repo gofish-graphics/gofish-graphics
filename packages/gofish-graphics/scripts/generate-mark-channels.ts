@@ -60,8 +60,8 @@ const lines: string[] = [
   "export const MARK_CHANNELS = {",
 ];
 // Every mark that has a channel: the `createMark` marks, the relational
-// marks (`line`, `ribbon`), and the combinator-only marks (`intersect`, wire
-// type `inside`), which resolve their paint by the same map. A dual-form
+// marks (`line`, `ribbon`), and the combinator-only marks (the
+// compositors, `union` ... `atop`), which resolve their paint by the same map. A dual-form
 // operator's channels are its operator's (`OPERATORS`), not a mark's.
 const marks: [NodeKind, string][] = [
   ...Object.keys(LEAF_MARKS).map((t): [NodeKind, string] => ["leaf-mark", t]),

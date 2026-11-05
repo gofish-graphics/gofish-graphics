@@ -15,24 +15,35 @@ import type { GoFishAST } from "./_ast";
  * axis's ticks) shows and hides with it. Its `.zOrder()` moves with it too:
  * the hint orders the node among its siblings, which are now the wrapper's,
  * and left on the node it would instead reorder the node against the
- * chrome beside it (a label would paint under its mark, and before it). Shared
+ * chrome beside it (a label would paint under its mark, and before it). Its
+ * `.hidden()` moves with it the same way, so a hidden mark's label, and a
+ * hidden chart's axes and legend, are hidden with it. Shared
  * by the axis, legend and label elaboration passes. */
 export async function wrapPreservingIdentity(
   node: GoFishNode,
   build: (node: GoFishNode) => GoFishNode | Promise<GoFishNode>
 ): Promise<GoFishNode> {
   const origKey = node.key;
-  const origVisible = node.__gfVisible;
-  const origZOrder = node._zOrder;
   node.key = undefined;
-  node.__gfVisible = undefined;
-  node._zOrder = undefined;
+  const moved = MOVED_FIELDS.map(([field, unset]) => {
+    const value = node[field];
+    (node as any)[field] = unset;
+    return [field, unset, value] as const;
+  });
   const root = await build(node);
   if (origKey !== undefined) root.setKey(origKey);
-  if (origVisible !== undefined) root.__gfVisible = origVisible;
-  if (origZOrder !== undefined) root._zOrder = origZOrder;
+  for (const [field, unset, value] of moved)
+    if (value !== unset) (root as any)[field] = value;
   return root;
 }
+
+/** The fields `wrapPreservingIdentity` moves from the node onto its
+ *  wrapper, each with its unset value. */
+const MOVED_FIELDS = [
+  ["__gfVisible", undefined],
+  ["_zOrder", undefined],
+  ["_hidden", false],
+] as const satisfies readonly (readonly [keyof GoFishNode, unknown])[];
 
 /** Builds a ring's constraints from handles: `at(node)` is the handle on
  *  one of the ring's shapes, and `inner` the handle on the box inside the

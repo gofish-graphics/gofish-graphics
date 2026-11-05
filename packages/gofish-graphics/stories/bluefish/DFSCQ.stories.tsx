@@ -109,7 +109,7 @@ const BigComma = () => text({ text: ",", fontFamily: "monospace", fontSize: 30 }
 const CONTENT_WIDTH = 680;
 const withMinWidth = (width: number, content: ReturnType<typeof spread>) =>
   layer([
-    rect({ w: width, h: 0, fill: "transparent" }).name("filler"),
+    rect({ w: width, h: 0 }).hidden().name("filler"),
     content.name("content"),
   ]).relate(({ filler, content }) => [
     Constraint.align({ x: "start", y: "middle" }, [filler, content]),
@@ -156,7 +156,7 @@ const ActionLabel = (
 // content column starts at the same x regardless of label length.
 const BoxedAlign = (width: number, content: ReturnType<typeof text>) =>
   layer([
-    rect({ w: width, h: 0, fill: "transparent" }).name("slot"),
+    rect({ w: width, h: 0 }).hidden().name("slot"),
     content.name("content"),
   ]).relate(({ slot, content }) => [
     Constraint.align({ x: "end", y: "middle" }, [slot, content]),
@@ -269,7 +269,7 @@ export const DFSCQ: StoryObj<Args> = {
     const diskLogInner = layer([
       memRow,
       rect({ h: 3, fill: "black" }).name("line"),
-      rect({ w: 1, h: 1, fill: "transparent" }).name("labelSpace"),
+      rect({ w: 1, h: 1 }).hidden().name("labelSpace"),
     ]).relate((c) => [
       // ── SPAN SITE: the divider line adopts `mem`'s exact horizontal
       // extent — the one Bluefish `LayoutFunction` call this port replaces.
@@ -336,7 +336,7 @@ export const DFSCQ: StoryObj<Args> = {
       ]);
 
     const diskLogRow = spread({ dir: "x", spacing: 0, alignment: "start" }, [
-      rect({ w: LEFT_COLUMN_WIDTH, h: 0, fill: "transparent" }).name(disklogleft),
+      rect({ w: LEFT_COLUMN_WIDTH, h: 0 }).hidden().name(disklogleft),
       diskLogInner,
     ]);
 
@@ -376,7 +376,7 @@ export const DFSCQ: StoryObj<Args> = {
     ]);
 
     const applierRow = spread({ dir: "x", spacing: 0, alignment: "start" }, [
-      rect({ w: LEFT_COLUMN_WIDTH, h: 0, fill: "transparent" }).name(applierleft),
+      rect({ w: LEFT_COLUMN_WIDTH, h: 0 }).hidden().name(applierleft),
       applierInner,
     ]);
 
@@ -387,11 +387,11 @@ export const DFSCQ: StoryObj<Args> = {
     // track the box's right edge.
     const pipelineHead = spread({ dir: "y", spacing: 10, alignment: "start" }, [
       TitledBackground("LogAPI", logAPIRow).name(logAPIBox),
-      rect({ w: 1, h: 24, fill: "transparent" }).name(commitSlot),
+      rect({ w: 1, h: 24 }).hidden().name(commitSlot),
       TitledBackground("GroupLog", groupLogRow).name(groupLogBox),
-      rect({ w: 1, h: 24, fill: "transparent" }).name(flushSlot),
+      rect({ w: 1, h: 24 }).hidden().name(flushSlot),
       TitledBackground("DiskLog", diskLogRow).name(diskLogBox),
-      rect({ w: 1, h: 24, fill: "transparent" }).name(applySlot),
+      rect({ w: 1, h: 24 }).hidden().name(applySlot),
       TitledBackground("Applier", applierRow).name(applierBox),
     ]);
 
@@ -418,14 +418,14 @@ export const DFSCQ: StoryObj<Args> = {
     // only its own direct children (never a deep cross-tier destructure), so
     // it isn't subject to FRICTION LOG #4.
     const fanoutAnchorLayer = layer([
-      rect({ w: 80, h: 1, fill: "transparent" }).name(fanoutAnchorName),
+      rect({ w: 80, h: 1 }).hidden().name(fanoutAnchorName),
       ref(diskdataStack).name("target"),
     ]).relate((c) => [
       Constraint.distribute({ dir: "y", spacing: 50 }, [c.fanoutAnchor, c.target]),
       Constraint.align({ x: "middle" }, [c.target, c.fanoutAnchor]),
     ]);
     const blocks1ArrowLayer = layer([
-      rect({ w: 10, h: 10, fill: "transparent" }).name(blocks1ArrowAnchorName),
+      rect({ w: 10, h: 10 }).hidden().name(blocks1ArrowAnchorName),
       ref(blocks1).name("target"),
     ]).relate((c) => [
       Constraint.distribute({ dir: "y", spacing: 70 }, [c.blocks1ArrowAnchor, c.target]),
@@ -449,7 +449,7 @@ export const DFSCQ: StoryObj<Args> = {
     const LOG_DATA_WIDTH = 80 /* rect2 */ + 80 /* rect3 */ + 7 * 10 /* blocks1 */ + 3 * 10; /* blocks2 */
     const logDataAnchorLayer = layer([
       ref(rect2).name("a"),
-      rect({ w: LOG_DATA_WIDTH, h: BLOCK_H, fill: "transparent" }).name(logDataAnchor),
+      rect({ w: LOG_DATA_WIDTH, h: BLOCK_H }).hidden().name(logDataAnchor),
     ]).relate((c) => [
       Constraint.align({ x: "start", y: "start" }, [c.a, c.logDataAnchor]),
     ]);
@@ -481,14 +481,14 @@ export const DFSCQ: StoryObj<Args> = {
         // Short vertical drop below the top anchor's edge.
         layer([
           ref(topAnchor).name("a"),
-          rect({ w: 1, h: 1, fill: "transparent" }).name(topStub),
+          rect({ w: 1, h: 1 }).hidden().name(topStub),
         ]).relate((c) => [
           Constraint.distribute({ dir: "y", spacing: FUNNEL_STUB }, [c.a, c[topKey]]),
           Constraint.align({ x: topEdge }, [c.a, c[topKey]]),
         ]),
         // Short vertical entry above the bottom anchor's edge.
         layer([
-          rect({ w: 1, h: 1, fill: "transparent" }).name(bottomStub),
+          rect({ w: 1, h: 1 }).hidden().name(bottomStub),
           ref(bottomAnchor).name("b"),
         ]).relate((c) => [
           Constraint.distribute({ dir: "y", spacing: FUNNEL_STUB }, [c[bottomKey], c.b]),

@@ -16,8 +16,7 @@ import {
   Size,
 } from "../dims";
 import { rejectLength, type LengthValue } from "../length";
-import { flattenLayout } from "./bake";
-import { orderChildrenForPaint } from "../paintOrder";
+import { bakeChildren } from "./bake";
 import * as IntervalLib from "../../util/interval";
 import { computeSize } from "../../util";
 import { black } from "../../color";
@@ -760,15 +759,14 @@ export const coord = createNodeOperator(
 
           session.toPixel = contentToPixel;
           try {
-            // Children paint in the shared paint order (#982), so a z
-            // constraint that parts at this coord takes effect here.
-            for (const child of orderChildrenForPaint(node)) {
-              for (const d of flattenLayout(child)) {
-                if (outsideFrame(d)) continue;
-                items.push(
-                  ...d.node.INTERNAL_lower(pixelTransform, d.transform)
-                );
-              }
+            // The children bake the way the root does (`bakeChildren`): in
+            // the shared paint order (#982), so a z constraint that parts at
+            // this coord takes effect here, and stopping at each bake
+            // boundary (a filtered node, a compositor, ...), which lowers its
+            // own subtree.
+            for (const d of bakeChildren(node)) {
+              if (outsideFrame(d)) continue;
+              items.push(...d.node.INTERNAL_lower(pixelTransform, d.transform));
             }
           } finally {
             session.toPixel = outer;

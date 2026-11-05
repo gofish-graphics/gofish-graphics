@@ -1,3 +1,4 @@
+import { NAMEABLE_METHODS } from "../marks/createOperator";
 import { posFn, pxOf } from "../domain";
 import { GoFishNode } from "../_node";
 import { getValue, isValue } from "../data";
@@ -218,14 +219,12 @@ const resolveRenderedDimensions = (
 export const Image = ({
   key,
   href,
-  filter,
   opacity,
   preserveAspectRatio = "xMidYMid meet",
   ...fancyDims
 }: {
   key?: string;
   href: string;
-  filter?: string;
   opacity?: number;
   preserveAspectRatio?: string;
 } & FancyDims<number | LengthValue>) => {
@@ -242,7 +241,6 @@ export const Image = ({
       args: {
         key,
         href,
-        filter,
         opacity,
         preserveAspectRatio,
         dims,
@@ -331,7 +329,7 @@ export const Image = ({
           [x + width, y + height],
           toPixel
         );
-        const style = lowerStyle({ opacity, filter });
+        const style = lowerStyle({ opacity });
         const item: DisplayList.ImageItem = {
           kind: "image",
           x: px,
@@ -356,24 +354,21 @@ export const Image = ({
 const rawImage = createMark(Image, MARK_CHANNELS.image, "image");
 
 /** Wrap an image mark so it awaits intrinsic dimension loading before producing
- *  a node. Recursively wraps .name/.label so chained calls stay awaiting. */
+ *  a node. Recursively wraps its modifiers so chained calls stay awaiting. */
 const withDimsAwait = (mark: any, href: unknown): any => {
   const wrapped: any = async (...args: any[]) => {
     if (typeof href === "string") await ensureImageDimensions(href);
     return mark(...args);
   };
-  // Use defineProperty because `.name` on a function is not writable by default.
-  Object.defineProperty(wrapped, "name", {
-    value: (layerName: string) => withDimsAwait(mark.name(layerName), href),
-    writable: true,
-    configurable: true,
-  });
-  Object.defineProperty(wrapped, "label", {
-    value: (accessor: any, options?: any) =>
-      withDimsAwait(mark.label(accessor, options), href),
-    writable: true,
-    configurable: true,
-  });
+  // Each modifier a mark carries (`.name`, `.hidden`, ...) returns a new
+  // mark, which awaits too. Use defineProperty because `.name` on a function
+  // is not writable by default.
+  for (const method of NAMEABLE_METHODS)
+    Object.defineProperty(wrapped, method, {
+      value: (...args: any[]) => withDimsAwait(mark[method](...args), href),
+      writable: true,
+      configurable: true,
+    });
   // Method-form cut: `image({...}).cut({...})` is sugar for `cut(image, opts)`.
   return attachCut(wrapped);
 };

@@ -6,19 +6,17 @@ import {
   chart,
   circle,
   field,
-  paint,
+  Filter,
+  atop,
   image,
   intersect,
-  mask as maskOp,
   partition,
   subtract,
   rect,
   exclude,
+  union,
   type MarkChild,
 } from "../../src/lib";
-// `over` is internal (conceptually `layer`, #196) — imported from source for
-// the low-level Union demo only; it is not part of the public lib surface.
-import { over } from "../../src/ast/marks/chart";
 
 const meta: Meta = {
   title: "Low Level Syntax/Porter-Duff Relations",
@@ -50,72 +48,89 @@ const DEFAULT_ARGS: Args = {
   blendMode: "color",
 };
 
+// The bottle in grays, and a rect over its lower part: each operator below
+// draws the two operands' own paint where it keeps them.
 const buildChildren = (args: Args): [MarkChild, MarkChild] => {
   const splitY = args.h - args.h * (args.splitY / 100);
   const splitH = args.h * (args.splitY / 100);
   return [
-    image({ href: bottlePng, x: 0, y: 0, w: args.w, h: args.h }),
+    image({
+      href: bottlePng,
+      x: 0,
+      y: 0,
+      w: args.w,
+      h: args.h,
+      filter: Filter.grayscale,
+    }),
     rect({ x: 0, y: splitY, w: args.w, h: splitH, fill: args.bgColor }),
   ];
 };
 
-const renderComposite = (
+const show = (
   args: Args,
-  relation: typeof intersect
+  mark: { render(c: HTMLElement, o: { w: number; h: number }): unknown }
 ) => {
   const container = initializeContainer();
   container.innerHTML = "";
-  relation({ blendMode: args.blendMode }, buildChildren(args)).render(container, {
-    w: args.w,
-    h: args.h,
-  });
-  return container;
-};
-
-const renderMask = (args: Args) => {
-  const container = initializeContainer();
-  container.innerHTML = "";
-  maskOp(buildChildren(args)).render(container, {
-    w: args.w,
-    h: args.h,
-  });
+  mark.render(container, { w: args.w, h: args.h });
   return container;
 };
 
 export const Union: StoryObj<Args> = {
   name: "Union (Over)",
   args: DEFAULT_ARGS,
-  render: (args: Args) => renderComposite(args, over),
+  render: (args: Args) =>
+    show(args, union({ blendMode: args.blendMode }, buildChildren(args))),
 };
 
 export const Intersect: StoryObj<Args> = {
   name: "Intersect (in)",
   args: DEFAULT_ARGS,
-  render: (args: Args) => renderComposite(args, intersect),
+  render: (args: Args) =>
+    show(args, intersect({ blendMode: args.blendMode }, buildChildren(args))),
 };
 
 export const Exclude: StoryObj<Args> = {
   name: "Exclude (Xor)",
   args: DEFAULT_ARGS,
-  render: (args: Args) => renderComposite(args, exclude),
+  render: (args: Args) => show(args, exclude(buildChildren(args))),
 };
 
 export const Subtract: StoryObj<Args> = {
   name: "Subtract (out)",
   args: DEFAULT_ARGS,
-  render: (args: Args) => renderComposite(args, subtract),
+  render: (args: Args) => show(args, subtract(buildChildren(args))),
 };
 
-export const Paint: StoryObj<Args> = {
-  name: "Paint (Atop)",
+export const Atop: StoryObj<Args> = {
+  name: "Atop",
   args: DEFAULT_ARGS,
-  render: (args: Args) => renderComposite(args, paint),
+  render: (args: Args) =>
+    show(args, atop({ blendMode: args.blendMode }, buildChildren(args))),
 };
 
-export const mask: StoryObj<Args> = {
-  name: "Mask (none)",
+// A luminance mask: the bottle, turned to alpha by its luminance and
+// hidden, gives the rect its shape and no paint of its own.
+export const LuminanceMask: StoryObj<Args> = {
+  name: "Intersect, luminance mask",
   args: DEFAULT_ARGS,
-  render: (args: Args) => renderMask(args),
+  render: (args: Args) => {
+    const cover = buildChildren(args)[1];
+    return show(
+      args,
+      intersect([
+        image({
+          href: bottlePng,
+          x: 0,
+          y: 0,
+          w: args.w,
+          h: args.h,
+          filter: Filter.luminanceToAlpha,
+        }).hidden(),
+        cover,
+      ])
+    );
+  },
 };
 
 // `intersect` with paint draws the overlap itself, as one shape: a circle and
@@ -133,9 +148,9 @@ export const IntersectPainted: StoryObj = {
   },
 };
 
-// An image has no outline, so a painted `intersect` fills its overlap with a
-// mask: the bottle's ink, cut by the rect, in one color. A stroke here would
-// be an error.
+// An image has no outline, so a painted `intersect` fills its overlap
+// through the operands' alpha: the bottle's ink, cut by the rect, in one
+// color. A stroke here would be an error.
 export const IntersectImageFill: StoryObj = {
   name: "Intersect, image filled",
   render: () => {
@@ -167,4 +182,68 @@ export const IntersectInCells: StoryObj = {
       .render(container);
     return container;
   },
+};
+
+// Each operation over the same circle and square, with no fill (each operand
+// draws its own paint where the result keeps it) and with a fill (the result
+// is one new shape).
+const disk = () => circle({ cx: 90, cy: 90, r: 70, fill: "#467DA8" });
+const square = () => rect({ x: 80, y: 30, w: 120, h: 120, fill: "#E8A23B" });
+const pair = (): [MarkChild, MarkChild] => [disk(), square()];
+const FILL = { fill: "#D1E4F6" };
+
+const showPair = (mark: {
+  render(c: HTMLElement, o: { w: number; h: number }): unknown;
+}) => {
+  const container = initializeContainer();
+  container.innerHTML = "";
+  mark.render(container, { w: 220, h: 180 });
+  return container;
+};
+
+export const UnionShapes: StoryObj = {
+  name: "Union, shapes",
+  render: () => showPair(union(pair())),
+};
+
+export const UnionFilled: StoryObj = {
+  name: "Union, filled",
+  render: () => showPair(union(FILL, pair())),
+};
+
+export const IntersectShapes: StoryObj = {
+  name: "Intersect, shapes",
+  render: () => showPair(intersect(pair())),
+};
+
+export const SubtractShapes: StoryObj = {
+  name: "Subtract, shapes",
+  render: () => showPair(subtract(pair())),
+};
+
+export const SubtractFilled: StoryObj = {
+  name: "Subtract, filled",
+  render: () => showPair(subtract(FILL, pair())),
+};
+
+export const ExcludeShapes: StoryObj = {
+  name: "Exclude, shapes",
+  render: () => showPair(exclude(pair())),
+};
+
+export const ExcludeFilled: StoryObj = {
+  name: "Exclude, filled",
+  render: () => showPair(exclude(FILL, pair())),
+};
+
+export const AtopShapes: StoryObj = {
+  name: "Atop, shapes",
+  render: () => showPair(atop(pair())),
+};
+
+// A hidden operand gives its shape and no paint: the square, clipped to the
+// circle, with the circle itself not drawn.
+export const HiddenMask: StoryObj = {
+  name: "Intersect, hidden operand",
+  render: () => showPair(intersect([disk().hidden(), square()])),
 };

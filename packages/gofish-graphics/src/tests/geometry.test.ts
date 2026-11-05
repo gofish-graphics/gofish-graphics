@@ -10,7 +10,11 @@ import * as Pwl from "../ast/solver/pwl";
 import { Ellipse } from "../ast/shapes/ellipse";
 import { Polygon } from "../ast/shapes/polygon";
 import { Pack } from "../ast/graphicalOperators/pack";
-import { mask, paint } from "../ast/graphicalOperators/porterDuff";
+import {
+  atop,
+  intersect,
+  subtract,
+} from "../ast/graphicalOperators/porterDuff";
 import { defaultGeometry, GoFishNode } from "../ast/_node";
 import {
   enclosingCircle,
@@ -559,13 +563,16 @@ console.log("# pack: 0 and 1 children");
   ok("one child: R is its radius", near(one.intrinsicDims![0].size!, 12));
 }
 
-console.log("# composites clipped to their first child claim its room");
+console.log("# composites inside their first operand claim its room");
 {
-  // A cut slice is `mask([window, source])`: it shows a 100-px window of a
-  // 600-px source, so it claims 100 px, as it lays out to (#493).
+  // A cut slice is `intersect([window.hidden(), source])`: it shows a 100-px
+  // window of a 600-px source, so it claims 100 px, as it lays out to
+  // (#493). `intersect` claims the overlap of its operands, which here is
+  // the first; `subtract` and `atop` always claim the first.
   for (const [name, op] of [
-    ["mask", mask],
-    ["paint", paint],
+    ["intersect", intersect],
+    ["subtract", subtract],
+    ["atop", atop],
   ] as const) {
     const node = (await op({}, [
       Rect({ w: 100, h: 80 }),

@@ -75,14 +75,12 @@ function walkItems(
         });
         break;
       }
-      case "composite":
-        walkItems(item.source, visit, at);
-        walkItems(item.dest, visit, at);
+      case "composite": {
+        // The operands' paint is what shows, so it has boxes; a hidden part,
+        // and every operand of a painted result, has none.
+        for (const o of item.operands) walkItems(o.paint, visit, at);
         break;
-      case "mask":
-        walkItems(item.mask, visit, at);
-        walkItems(item.content, visit, at);
-        break;
+      }
     }
   }
 }
@@ -113,7 +111,6 @@ function itemBox(
         2 * item.ry
       );
     case "composite":
-    case "mask":
       return local(item.bbox.x, item.bbox.y, item.bbox.w, item.bbox.h);
     default:
       return undefined;

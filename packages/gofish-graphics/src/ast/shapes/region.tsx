@@ -54,7 +54,6 @@ export type RegionProps = {
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
   opacity?: number;
-  filter?: string;
 };
 
 /**
@@ -86,7 +85,6 @@ export const Region = ({
   stroke = fill,
   strokeWidth = 0,
   opacity = 1,
-  filter,
   inset = 0,
 }: RegionProps): GoFishNode => {
   if (!(Number.isFinite(inset) && inset >= 0))
@@ -113,7 +111,7 @@ export const Region = ({
     {
       key,
       type: "region",
-      args: { key, fill, stroke, strokeWidth, opacity, filter, inset },
+      args: { key, fill, stroke, strokeWidth, opacity, inset },
       // Used to seed the unit color scale. Prefer whichever channel is
       // data-driven, as `rect` does.
       color: isValue(fill) ? fill : stroke,
@@ -209,7 +207,6 @@ export const Region = ({
           stroke: resolvedStroke,
           strokeWidth: strokeWidth ?? 0,
           opacity,
-          filter,
         });
         const linear =
           coordinateTransform === undefined ||

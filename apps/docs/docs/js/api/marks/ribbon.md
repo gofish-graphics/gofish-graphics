@@ -30,7 +30,7 @@ gf.layer([
 ## Signature
 
 ```ts
-ribbon({ stroke?, strokeWidth = 0, opacity?, mixBlendMode = "normal", dir = "x", curve?, along?, from?, to?, w?, h?, emX?, emY? })
+ribbon({ stroke?, strokeWidth = 0, opacity?, blendMode = "normal", dir = "x", curve?, along?, from?, to?, w?, h?, emX?, emY? })
 ```
 
 ## Parameters

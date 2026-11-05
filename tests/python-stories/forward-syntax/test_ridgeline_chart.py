@@ -75,7 +75,7 @@ def story_default():
                 stroke="white",
                 stroke_width=1,
                 opacity=0.85,
-                mix_blend_mode="normal",
+                blend_mode="normal",
             )
         )
         # Per-row baseline labeling, in the style of a ggridges ridgeline: a

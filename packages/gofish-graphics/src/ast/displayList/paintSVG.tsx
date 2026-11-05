@@ -51,11 +51,36 @@ const mergedStyle = (item: DisplayList.DisplayItem, live: LiveSlots): Style => {
   return (merged as Style) ?? item.style;
 };
 
-/** Deterministic id counter for composite/mask defs — same scheme as gofish-ir's
- *  string backend so the two backends agree on id shape. A module-level counter
- *  (Math.random is non-reproducible); ids only need to be unique within a single
- *  painted document. */
+/** Deterministic id counter for composite defs and the filter def — same
+ *  scheme as gofish-ir's string backend so the two backends agree on id
+ *  shape. A module-level counter (Math.random is non-reproducible), never
+ *  reset, so ids are unique across every visualization on a page. */
 let compositeIdCounter = 0;
+
+/** A render's display list painted, with the `luminanceToAlpha` filter's
+ *  `<filter>` def written once ahead of it when an item uses it
+ *  (`DisplayList.usesLuminanceToAlpha`), under an id of this render's own;
+ *  gofish-ir's string backend writes the same def. */
+export function paintDocument(
+  items: readonly DisplayList.DisplayItem[],
+  interactive?: boolean
+): JSX.Element[] {
+  const filterId = `gf-luminance-to-alpha-${compositeIdCounter++}`;
+  const painted = items.map((item) => paintSVG(item, filterId, interactive));
+  if (!DisplayList.usesLuminanceToAlpha(items)) return painted;
+  const f = DisplayList.LUMINANCE_TO_ALPHA_FILTER;
+  return [
+    <defs>
+      <filter
+        id={filterId}
+        color-interpolation-filters={f.colorInterpolationFilters}
+      >
+        <feColorMatrix type={f.matrixType} />
+      </filter>
+    </defs>,
+    ...painted,
+  ];
+}
 
 /** SolidJS `style` prop for the CSS-only bits (mix-blend-mode). */
 const cssStyle = (style: Style): Record<string, string> | undefined =>
@@ -70,7 +95,6 @@ const styleProps = (style: Style) =>
     "stroke-dasharray": style?.strokeDasharray,
     opacity: style?.opacity,
     "fill-opacity": style?.fillOpacity,
-    filter: style?.filter,
     "paint-order": style?.paintOrder,
     "stroke-linejoin": style?.strokeLinejoin as
       | JSX.PathSVGAttributes<SVGPathElement>["stroke-linejoin"]
@@ -78,8 +102,11 @@ const styleProps = (style: Style) =>
     style: cssStyle(style),
   }) as const;
 
-export function paintSVG(
+/** `item` painted. `filterId` is the id of its render's `luminanceToAlpha`
+ *  filter def ({@link paintDocument}). */
+function paintSVG(
   item: DisplayList.DisplayItem,
+  filterId: string,
   interactive?: boolean
 ): JSX.Element {
   // Live channels (a `live()` value baked at lower time): per-attribute
@@ -179,169 +206,99 @@ export function paintSVG(
       if (t.translate)
         parts.push(`translate(${t.translate[0]} ${t.translate[1]})`);
       if (t.scale) parts.push(`scale(${t.scale[0]} ${t.scale[1]})`);
+      const transform = parts.length ? parts.join(" ") : undefined;
+      const children = item.children.map((c) =>
+        paintSVG(c, filterId, interactive)
+      );
+      const f = item.filter;
+      // `luminanceToAlpha` has no CSS function: it is an SVG `<filter>` def
+      // the render writes once ({@link paintDocument}).
+      const filter =
+        f?.kind === "luminanceToAlpha" ? `url(#${filterId})` : f?.value;
       return (
-        <g transform={parts.length ? parts.join(" ") : undefined}>
-          {item.children.map((c) => paintSVG(c, interactive))}
+        <g transform={transform} filter={filter}>
+          {children}
         </g>
       );
     }
     case "composite": {
-      // Porter-Duff composite, lowered to plain SVG masks + `mix-blend-mode`
-      // (no `<feImage>`). `<feImage>` referencing live SVG content has three
-      // independent browser pathologies: Chrome's GPU raster path quantizes
-      // the reference at fractional page zoom and clips the right/bottom of
-      // the composited image (issue #795); WebKit aligns the referenced
-      // element's content bbox to the filter region's origin rather than the
-      // element's own origin (diverging from Chromium's behavior); and WebKit
-      // can rasterize the filter before a data-URI `<image>` inside it has
-      // decoded, then never invalidate to repaint once it has. Masks and
-      // `mix-blend-mode` are the ordinary, well-tested rendering path — no
-      // `<feImage>` anywhere in the graph below.
+      // A region composite (#1267), drawn with plain SVG masks and
+      // `mix-blend-mode`, no `<feImage>`. `<feImage>` referencing live SVG
+      // content has three independent browser pathologies: Chrome's GPU
+      // raster path quantizes the reference at fractional page zoom and
+      // clips the right/bottom of the composited image (issue #795); WebKit
+      // aligns the referenced element's content bbox to the filter region's
+      // origin rather than the element's own origin; and WebKit can
+      // rasterize the filter before a data-URI `<image>` inside it has
+      // decoded, then never invalidate to repaint once it has.
       //
-      // Grayscale-then-composite becomes: paint the source once, grayscale it
-      // with a local `saturate(0)` filter, and paint the destination once;
-      // which of the two gets alpha-masked by the other (and whether the
-      // destination gets a `mix-blend-mode`) depends on the operator:
-      //
-      //   over:  gray(src) unmasked           + dest blended, unmasked
-      //   atop:  gray(src) unmasked           + dest blended, masked by alpha(src)
-      //   in:    gray(src) masked by alpha(dest) + dest blended, masked by alpha(src)
-      //   out:   (no source layer)            + dest NOT blended, masked by inverse-alpha(src)
-      //   xor:   gray(src) masked by inverse-alpha(dest) + dest NOT blended, masked by inverse-alpha(src)
-      //
-      // Both layers live in a group translated to the bbox origin (matching
-      // the lowered items' bbox-relative coordinates) and `isolate`d so
-      // `mix-blend-mode` only blends the two layers against each other, not
-      // against whatever is behind the composite on the page.
-      //
-      // Cost: for `atop`/`in`/`xor`, the masked layer's sublist is referenced
-      // twice (once as mask content via `<use>`, once as the visible layer),
-      // so those sublists rasterize twice per composite. That's inherent to
-      // SVG's mask model, not a bug — the accepted price of leaving
-      // `<feImage>` behind.
-      //
-      // Per-operator layer/mask wiring lives in gofish-ir's
-      // `compositeLayerConfig` (the single source of truth both SVG backends
-      // consume); see that table for the over/atop/in/out/xor breakdown.
-      const uid = `gf-comp-${compositeIdCounter++}`;
-      const sourceId = `${uid}-source`;
-      const destinationId = `${uid}-destination`;
-      const grayId = `${uid}-gray`;
-      const maskAlphaSrcId = `${uid}-mask-alpha-src`;
-      const maskAlphaDestId = `${uid}-mask-alpha-dest`;
-      const maskInvAlphaSrcId = `${uid}-mask-invalpha-src`;
-      const maskInvAlphaDestId = `${uid}-mask-invalpha-dest`;
-      const { operator } = item;
-      const blendMode = item.blendMode ?? "color";
+      // It writes out the item's `compositePlan` (gofish-ir composite.ts):
+      // defs, masks, and layers of `<use>`s. The composite is the hit
+      // target, so its group carries its id, as every item does: a pointer
+      // over a `<use>` targets the `<use>`, not the def it draws, so the defs
+      // are painted with no ids. The items are in absolute pixels, as
+      // everywhere else: drawing an image under a fractional translate that
+      // its own fractional x cancels makes the browser resample it. A shape
+      // is referenced by each mask that reads it, so it rasterizes once per
+      // mask: the price of SVG's mask model.
+      // gofish-ir's `render.ts` draws the same SVG.
       const { x, y, w, h } = item.bbox;
-
-      const cfg = DisplayList.compositeLayerConfig[operator];
-      const { hasSourceLayer, hasBlend } = cfg;
-
-      const sourceMaskId =
-        cfg.sourceMask === "alphaDest"
-          ? maskAlphaDestId
-          : cfg.sourceMask === "invAlphaDest"
-            ? maskInvAlphaDestId
-            : undefined;
-      const destMaskId =
-        cfg.destMask === "alphaSrc"
-          ? maskAlphaSrcId
-          : cfg.destMask === "invAlphaSrc"
-            ? maskInvAlphaSrcId
-            : undefined;
-
-      /** `mask-type:alpha` mask that clips by the referenced layer's alpha. */
-      const alphaMask = (id: string, refId: string): JSX.Element => (
-        <mask
-          id={id}
-          maskUnits="userSpaceOnUse"
-          maskContentUnits="userSpaceOnUse"
-          style="mask-type:alpha"
-        >
-          <use href={`#${refId}`} />
-        </mask>
+      const plan = DisplayList.compositePlan(
+        item,
+        `gf-comp-${compositeIdCounter++}`
       );
-      /** Inverse-alpha mask: white rect (fully opaque) minus the referenced
-       *  layer's shape (blacked out via `brightness(0)`), so the mask clips
-       *  to everywhere the referenced layer is NOT. */
-      const invAlphaMask = (id: string, refId: string): JSX.Element => (
-        <mask
-          id={id}
-          maskUnits="userSpaceOnUse"
-          maskContentUnits="userSpaceOnUse"
-        >
-          <rect x={0} y={0} width={w} height={h} fill="#fff" />
-          <use href={`#${refId}`} filter="brightness(0)" />
-        </mask>
-      );
-
+      const drawn = plan.layers.map((l) => {
+        let out: JSX.Element = <use href={`#${l.use}`} />;
+        for (const m of [...l.masks].reverse())
+          out = <g mask={`url(#${m})`}>{out}</g>;
+        return l.blendMode !== undefined ? (
+          <g style={`mix-blend-mode:${l.blendMode}`}>{out}</g>
+        ) : (
+          out
+        );
+      });
       return (
         <g
-          transform={`translate(${x} ${y})`}
           style="isolation:isolate"
           opacity={item.style?.opacity}
+          data-gf-id={gfId}
         >
           <defs>
-            <g id={sourceId}>
-              {item.source.map((c) => paintSVG(c, interactive))}
-            </g>
-            <g id={destinationId}>
-              {item.dest.map((c) => paintSVG(c, interactive))}
-            </g>
-            {hasSourceLayer && (
-              <filter id={grayId} color-interpolation-filters="sRGB">
-                <feColorMatrix type="saturate" values="0" />
-              </filter>
-            )}
-            {cfg.destMask === "alphaSrc" && alphaMask(maskAlphaSrcId, sourceId)}
-            {cfg.sourceMask === "alphaDest" &&
-              alphaMask(maskAlphaDestId, destinationId)}
-            {cfg.destMask === "invAlphaSrc" &&
-              invAlphaMask(maskInvAlphaSrcId, sourceId)}
-            {cfg.sourceMask === "invAlphaDest" &&
-              invAlphaMask(maskInvAlphaDestId, destinationId)}
+            {plan.defs.map((d) => (
+              <g id={d.id}>
+                {d.items.map((c) => paintSVG(c, filterId, false))}
+              </g>
+            ))}
+            {plan.masks.map((m) => {
+              const uses = m.uses.map((u) => (
+                <use
+                  href={`#${u}`}
+                  filter={m.invert ? "brightness(0)" : undefined}
+                />
+              ));
+              return m.invert ? (
+                <mask
+                  id={m.id}
+                  maskUnits="userSpaceOnUse"
+                  maskContentUnits="userSpaceOnUse"
+                >
+                  <rect x={x} y={y} width={w} height={h} fill="#fff" />
+                  {uses}
+                </mask>
+              ) : (
+                <mask
+                  id={m.id}
+                  maskUnits="userSpaceOnUse"
+                  maskContentUnits="userSpaceOnUse"
+                  style="mask-type:alpha"
+                >
+                  {uses}
+                </mask>
+              );
+            })}
           </defs>
-          {hasSourceLayer && (
-            <use
-              href={`#${sourceId}`}
-              filter={`url(#${grayId})`}
-              mask={sourceMaskId ? `url(#${sourceMaskId})` : undefined}
-            />
-          )}
-          <use
-            href={`#${destinationId}`}
-            style={hasBlend ? `mix-blend-mode:${blendMode}` : undefined}
-            mask={destMaskId ? `url(#${destMaskId})` : undefined}
-          />
+          {drawn}
         </g>
-      );
-    }
-    case "mask": {
-      const uid = `gf-comp-${compositeIdCounter++}`;
-      const sourceId = `${uid}-source`;
-      const destinationId = `${uid}-destination`;
-      const maskId = `${uid}-mask`;
-      return (
-        <>
-          <defs>
-            <g id={sourceId}>
-              {item.mask.map((c) => paintSVG(c, interactive))}
-            </g>
-            <g id={destinationId}>
-              {item.content.map((c) => paintSVG(c, interactive))}
-            </g>
-            <mask
-              id={maskId}
-              maskUnits="userSpaceOnUse"
-              maskContentUnits="userSpaceOnUse"
-              style={item.mode === "alpha" ? "mask-type:alpha" : undefined}
-            >
-              <use href={`#${sourceId}`} />
-            </mask>
-          </defs>
-          <use href={`#${destinationId}`} mask={`url(#${maskId})`} />
-        </>
       );
     }
   }

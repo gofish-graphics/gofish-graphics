@@ -59,6 +59,23 @@ user can write yet, which is this smell, still open (#1292). The same rule is wh
 user could write (#1257). If no writable value matches a default, treat that
 as a design smell to fix, not a feature.
 
+**An operator reads its operands and never draws them as themselves.** A
+region-compositing operator (`union`, `intersect`, `subtract`, `exclude`,
+`atop`) reads each child's paint and region and draws one result. It has no
+mode in which a child is drawn whole, untouched, beside the result, so
+`paint` and `mask`, which drew one child as a surface or used it as a
+stencil, are not operators: `atop` and an `intersect` with a hidden child say
+the same (#1267).
+
+**Alpha is shape.** A child's region is its alpha as drawn, with its fill, its
+stroke and its opacity. There is no separate shape channel. `.hidden()` drops
+a node's paint and keeps its shape, so a hidden child of a compositing
+operator is a mask, and a filter that writes alpha
+(`Filter.luminanceToAlpha`) makes a luminance mask (#1267).
+
+**A node's box is as tight as the visible result allows, while staying cheap
+to compute.** An intersect's box is the overlap (#1267).
+
 **Data always flows as lists.** Every step takes a list and gives back a list.
 A split turns a list into a list of groups and never looks inside an item, so
 an item may itself be an array. With no `by`, a split puts each item in its own
@@ -159,9 +176,10 @@ baseline is `ascent` and `descent`, the font-metrics names, not height and
 depth, which read as the y and z axes (#773).
 
 **Designers' names over specialist names.** The region-compositing operators use
-Figma's boolean-operation names, not the Porter-Duff names: `intersect`,
-`subtract`, `exclude`, `paint` and `mask`, never `in`, `out`, `xor` or `atop`
-(#196, #404). See [Region compositing](/js/api/operators/region-compositing).
+Figma's boolean-operation names, not the Porter-Duff names: `union`,
+`intersect`, `subtract` and `exclude`, never `over`, `in`, `out` or `xor`
+(#196, #404). `atop` keeps its Porter-Duff name, which Figma has no word for
+(#1267). The frontend IR and the display list use the same names. See [Region compositing](/js/api/operators/region-compositing).
 
 **A name says the shape of its value.** A singular noun gives one thing and a
 plural verb gives a collection: `ref` and `selectAll`, never `refAll` (#510).
@@ -202,6 +220,12 @@ local adjective of one thing, usually specific to its kind, such as
 everywhere. So `every` is an option, because it describes the month
 partition and reads nothing from a parent, while `.format(fn)` is a method
 (#1133).
+
+**A method has a function twin only for a one-child operator.** When an
+operator takes one child, a method on the child may spell the same call, and
+both build the same node: `image(...).cut(opts)` is `cut(image(...), opts)`.
+A method that sets a field of the node (`.name`, `.zOrder`, `.hidden`) or
+reaches outward from it (`.label`, `.relate`) has no function twin (#1267).
 
 **Strategy families are uppercase namespaces.** When an option's value is one of
 several named strategies, the family is a capitalized namespace such as

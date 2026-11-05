@@ -172,7 +172,7 @@ gf.spread(
 
 `inset` shrinks both the visible window **and** the slice's reported bounding
 box — a slice reports the bounds of its visible region, not its full logical
-extent. That is deliberate (`mask` reports the region's bounds). It does mean a
+extent. That is deliberate (`intersect` reports its overlap's bounds). It does mean a
 plain flush `stack` pulls the inset slices flush and drops the gaps (`stack`
 recomposes its children flush by design — it has no `spacing` option).
 
@@ -233,9 +233,10 @@ image({ ... }).cut({ dir, size?, inset? });
 
 ## How it works
 
-Each slice is a [`mask`](/js/api/operators/region-compositing) of a window rect
-over an [`offset`](/js/api/operators/offset) copy of the source:
-`mask([window, offset(source)])`. The window rect defines the visible portion,
+Each slice is an [`intersect`](/js/api/operators/region-compositing#masks) of a
+hidden window rect and an [`offset`](/js/api/operators/offset) copy of the
+source: `intersect([window.hidden(), offset(source)])`. The window rect defines
+the visible portion,
 and `offset` shifts the source so the requested pixels line up beneath it — so
 `cut` is built entirely from the public region-compositing and `offset`
 primitives.

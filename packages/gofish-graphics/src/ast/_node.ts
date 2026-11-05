@@ -48,6 +48,12 @@ import {
 } from "./gofish";
 import type { GoFishExportOptions, GoFishRenderOptions } from "./gofish";
 import { toDisplayList } from "./displayList/toDisplayList";
+import { markShapeOnly } from "./displayList/shapeOnly";
+import { lowerChildrenOffset } from "./displayList/lowerHelpers";
+import {
+  BAKE_BOUNDARY_TYPES,
+  COMPOSITE_TYPES,
+} from "./coordinateTransforms/bake";
 import type { DisplayList } from "gofish-ir";
 import { setLiveSlots } from "../interaction/liveSlots";
 import { readLive, sharedDecision } from "../interaction/live";
@@ -815,6 +821,15 @@ export class GoFishNode {
   // order key apply `?? 0` at the comparison site so unset behaves exactly
   // like an explicit 0 for sorting purposes.
   public _zOrder: number | undefined = undefined;
+  /** Set by `.hidden()`: the node is laid out, read and counted like any
+   *  other, and paints nothing (see {@link hidden}). */
+  public _hidden = false;
+  /** Set when a node is built as one that never paints (`blank()`): it is
+   *  hidden whatever `.hidden()` says ({@link isHidden}). */
+  public _neverPaints = false;
+  /** Set by a `filter` option (`drawFilter.ts`): the filter the node's
+   *  whole drawing is drawn under. A filtered node is a bake boundary. */
+  public _filter: DisplayList.DisplayFilter | undefined = undefined;
   private renderSession?: RenderSession;
   // Axis state per dimension. Set by `resolveAxes` and consumed by the axis
   // elaboration pass (`elaborateChrome`), which wraps owning nodes in a Layer of
@@ -2863,8 +2878,9 @@ export class GoFishNode {
    * its ref-anchoring role, but contributes no display items. Every lower path
    * goes through {@link INTERNAL_lower}, so replacing the lowering — rather than
    * consulting a "visible" flag at paint — makes the node invisible everywhere by
-   * construction. `blank()` is built this way (`shapes/rect.tsx`); `GoFishRef`
-   * draws nothing for the same reason.
+   * construction. A mark with no value is built this way (`withGoFish.ts`);
+   * `GoFishRef` draws nothing for the same reason. Unlike {@link hidden}, it
+   * gives no shape to a compositor either.
    */
   public INTERNAL_emitNothing(): void {
     this._lower = () => [];
@@ -2889,7 +2905,11 @@ export class GoFishNode {
     // but without the visibility rule: the node painting the copy owns when
     // it shows.
     return (transform, toPixel) =>
-      own ? this.lowerWith(own, transform, toPixel, undefined, false) : [];
+      own
+        ? this.filtered(
+            this.lowerWith(own, transform, toPixel, undefined, false)
+          )
+        : [];
   }
 
   /**
@@ -2899,7 +2919,7 @@ export class GoFishNode {
    *
    * This is the other half of the pair with {@link INTERNAL_emitNothing}, and
    * the difference is which tier decides. A node that must not draw AT ALL
-   * (`blank()`, a `ref`, a keyframe a transition moves when its sequence
+   * (a mark with no value, a `ref`, a keyframe a transition moves when its sequence
    * keeps no history) is hidden by construction, at resolve. A node whose
    * drawing comes and goes with a signal — a `time.sequence`'s keyframe
    * groups, where the clock picks which band is showing, or the keyframe marks
@@ -2960,7 +2980,9 @@ export class GoFishNode {
    *  set on a node covers its whole subtree, including nodes a later
    *  elaboration pass adds under it (a label's `Text`, an axis's ticks), so
    *  nothing has to be stamped node by node. Undefined when no rule is set
-   *  anywhere up the chain, which is the static path. */
+   *  anywhere up the chain, which is the static path. TODO(#1267): it reads
+   *  the parent chain only, so a label does not follow its mark's rule as it
+   *  follows its `.hidden()` (`paintAncestors`); should it? */
   private effectiveVisibility(): (() => boolean) | undefined {
     const owners = new Set<object>();
     const rules: (() => boolean)[] = [];
@@ -2995,30 +3017,56 @@ export class GoFishNode {
     // INTERNAL_lower is either a leaf (no children) or a bake boundary (coord,
     // box, connect, arrow, enclose, …) that carries its own absolute transform —
     // a boundary must re-walk its subtree with that transform composed in (via
-    // `flattenLayout`) so descendants land in absolute coordinates before
+    // `bakeChildren`) so descendants land in absolute coordinates before
     // `toPixel`. Pre-recursed, parent-relative child items would be mispositioned.
-    if (!this._lower) {
-      // A node with no lowering of its own draws only its children (the bake
-      // lowers them directly), so with no children it draws nothing: an
-      // operator over a group with no rows, such as an empty cell's.
-      if (this.children.length === 0) return [];
-      throw new Error(
-        `[gofish] node type "${this.type}" has no lower() yet — cannot ` +
-          `emit the display list.`
-      );
-    }
-    const toPixel = this.getRenderSession().toPixel;
+    // A node with no lowering of its own draws only its children, so with
+    // no children it draws nothing: an operator over a group with no rows,
+    // such as an empty cell's.
+    if (!this._lower && this.children.length === 0) return [];
+    const session = this.getRenderSession();
+    // A hidden node draws nothing, or, under a compositor, its shape only.
+    const visibility = this.visibility();
+    if (visibility === "none") return [];
+    const toPixel = session.toPixel;
     if (!toPixel) {
       throw new Error("[gofish] toPixel not set on the render session");
     }
 
-    return this.lowerWith(
-      this._lower,
-      transformOverride ?? this._displayTransform,
-      toPixel,
-      coordinateTransform,
-      true
-    );
+    const transform = transformOverride ?? this._displayTransform;
+    // The bake lowers the children of a node with no lowering of its own
+    // directly, unless the node is filtered: then it lowers them here, where
+    // it put them, to filter them as one picture.
+    let items: DisplayList.DisplayItem[];
+    if (this._lower)
+      items = this.lowerWith(
+        this._lower,
+        transform,
+        toPixel,
+        coordinateTransform,
+        true
+      );
+    else if (this._filter !== undefined)
+      items = lowerChildrenOffset(this, transform, coordinateTransform);
+    else
+      throw new Error(
+        `[gofish] node type "${this.type}" has no lower() yet — cannot ` +
+          `emit the display list.`
+      );
+    const drawn = this.filtered(items);
+    if (visibility === "shape") markShapeOnly(drawn);
+    return drawn;
+  }
+
+  /** The node's drawing under its `filter` option, which filters the whole
+   *  drawing as one picture. Both {@link INTERNAL_lower} and a lent drawing
+   *  ({@link INTERNAL_lendDrawing}) draw through it. */
+  private filtered(
+    items: DisplayList.DisplayItem[]
+  ): DisplayList.DisplayItem[] {
+    if (this._filter === undefined || items.length === 0) return items;
+    return [
+      { kind: "group", transform: {}, filter: this._filter, children: items },
+    ];
   }
 
   /**
@@ -3327,6 +3375,77 @@ export class GoFishNode {
   public zOrder(value: number): this {
     this._zOrder = value;
     return this;
+  }
+
+  /**
+   * `.hidden(value = true)`: the node keeps its layout, its datum, its name
+   * and everything it feeds (scales, axes, legends, refs), and paints
+   * nothing, so it takes no pointer either. An ancestor's hidden wins over a
+   * descendant's `.hidden(false)`: a node paints only when no node on its
+   * path to the root is hidden ({@link visibility}). On one node the last call
+   * wins.
+   *
+   * Hidden drops paint, not shape: under a compositor, which reads its
+   * operands' shapes, a hidden node lowers as it would draw, and its items
+   * are recorded as shape only (`displayList/shapeOnly.ts`), so a hidden
+   * operand still gives its alpha (porterDuff.tsx). A label hides with its
+   * mark, though it lives out of the mark's subtree ({@link INTERNAL_attach}).
+   */
+  public hidden(value = true): this {
+    this._hidden = value;
+    return this;
+  }
+
+  /**
+   * How this node draws ({@link hidden}): `"shown"`; `"shape"`, hidden below
+   * the nearest compositor, which reads its shape; or `"none"`, hidden with
+   * no compositor reading it. A node is hidden when it never paints
+   * (`_neverPaints`, a `blank()`), or when `.hidden()` is set on it, an
+   * ancestor up to the nearest compositor, or the mark one of them is
+   * attached to (a label's). Never painting is the node's own: a blank's
+   * label shows unless the blank is `.hidden()`. A hidden flag at or above
+   * the compositor is the compositor's own to answer for: the compositor
+   * draws nothing, or is itself a shape.
+   */
+  public visibility(): "shown" | "shape" | "none" {
+    if (this._neverPaints) return this.underComposite() ? "shape" : "none";
+    for (const n of this.paintAncestors())
+      if (n._hidden) return this.underComposite() ? "shape" : "none";
+    return "shown";
+  }
+
+  /** Whether this node itself draws nothing of its own: `.hidden()` set it,
+   *  or it is built as one that never paints (`_neverPaints`, a `blank()`),
+   *  which no `.hidden()` call turns back on. */
+  public isHidden(): boolean {
+    return this._hidden || this._neverPaints;
+  }
+
+  /**
+   * The nodes whose paint this node's paint follows: itself, its ancestors
+   * up to the nearest compositor, and, for each of them attached to a mark
+   * (a label), that mark's own paint ancestors.
+   */
+  private *paintAncestors(): Generator<GoFishNode> {
+    for (let n: GoFishNode | undefined = this; n; n = n.parent) {
+      yield n;
+      if (n._attachedTo) yield* n._attachedTo.paintAncestors();
+      if (n.parent && COMPOSITE_TYPES.has(n.parent.type)) return;
+    }
+  }
+
+  /** Whether a compositor is above this node, reading its shape. */
+  private underComposite(): boolean {
+    for (let n = this.parent; n; n = n.parent)
+      if (COMPOSITE_TYPES.has(n.type)) return true;
+    return false;
+  }
+
+  /** Whether the bake stops at this node, which lowers its own subtree
+   *  (`coordinateTransforms/bake.ts`): a boundary type, or a node with a
+   *  `filter`, which draws its subtree as one filtered picture. */
+  public isBakeBoundary(): boolean {
+    return BAKE_BOUNDARY_TYPES.has(this.type) || this._filter !== undefined;
   }
 
   /** The raw author-set z-order hint, or `undefined` if never set (distinct

@@ -71,13 +71,6 @@ const TABLES: Record<string, ConstructDescriptor>[] = [
   COORDS,
 ];
 
-/** The user-facing factory name. `pyName` is the JS-and-Python-facing rename of
- *  a wire type (the compositing quartet: inside→intersect, xor→exclude,
- *  out→subtract, atop→paint), so it is the display name in both languages. */
-export function displayName(d: ConstructDescriptor): string {
-  return d.pyName ?? d.type;
-}
-
 /** Every descriptor entry a `gofish-ref` name may refer to — a name can match
  *  more than one table (the dual-form constructs are both an operator and a
  *  combinator mark). */
@@ -85,7 +78,7 @@ export function lookupConstructs(name: string): ConstructDescriptor[] {
   const found: ConstructDescriptor[] = [];
   for (const table of TABLES) {
     for (const d of Object.values(table)) {
-      if (d.type === name || d.pyName === name) found.push(d);
+      if (d.type === name) found.push(d);
     }
   }
   return found;
@@ -334,7 +327,7 @@ function renderName(
     throw new Error(
       `Unknown gofish-ref construct "${name}". It must be a construct in ` +
         `packages/gofish-ir/src/frontend/descriptors.ts (OPERATORS, LEAF_MARKS, ` +
-        `COMBINATOR_MARKS or COORDS), named by its wire type or its pyName, ` +
+        `COMBINATOR_MARKS or COORDS), named by its wire type, ` +
         `or an object option type in OPTION_TYPES (e.g. ChartOptions).`
     );
   }
@@ -345,7 +338,7 @@ function renderName(
     byFields.get(key)!.push(d);
   }
   const variants = [...byFields.values()];
-  const title = displayName(found[0]);
+  const title = found[0].type;
 
   return variants
     .map((group) => {

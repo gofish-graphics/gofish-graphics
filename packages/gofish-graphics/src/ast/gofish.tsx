@@ -18,7 +18,7 @@ import type { GoFishAST } from "./_ast";
 import { resolveReferences } from "./_ref";
 import { axisScale, pxOf, type AxisMap, type AxisScale } from "./domain";
 import { lowerToDisplayList } from "./displayList/lower";
-import { paintSVG } from "./displayList/paintSVG";
+import { paintDocument } from "./displayList/paintSVG";
 import type { InteractionRuntime } from "../interaction/runtime";
 import { renderWithInteraction } from "../interaction/renderTerminal";
 import { resolveMarkResult } from "./marks/markResult";
@@ -1567,7 +1567,7 @@ export const render = (
       size: { width, height },
     });
     const __tPaint = perfNow();
-    const painted = items.map((item) => paintSVG(item, interactive));
+    const painted = paintDocument(items, interactive);
     perfAdd("paint", perfNow() - __tPaint);
     return painted;
   };

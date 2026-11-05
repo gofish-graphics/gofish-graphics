@@ -40,6 +40,7 @@ import type {
   LabelSpecIR,
   OverlapIR,
   TileIR,
+  FilterIR,
 } from "../frontend/schema.js";
 
 declare const process: { exit(code: number): never };
@@ -269,6 +270,10 @@ const SCHEMA_STRATEGY_KEYS: Record<
   keyof typeof STRATEGIES,
   Record<string, Record<string, true>>
 > = {
+  Filter: {
+    grayscale: { amount: true },
+    luminanceToAlpha: {},
+  } satisfies StrategyKeys<FilterIR>,
   Tile: {
     squarify: { ratio: true },
     slice: {},
@@ -341,7 +346,7 @@ const SCHEMA_STRATEGY_KEYS: Record<
 };
 
 console.log(
-  "\n# STRATEGIES agree with schema.ts TileIR / OverlapIR / CurveIR / BinIR / CalendarPartitionIR / ShapeIR / PlaceIR"
+  "\n# STRATEGIES agree with schema.ts FilterIR / TileIR / OverlapIR / CurveIR / BinIR / CalendarPartitionIR / ShapeIR / PlaceIR"
 );
 for (const [family, kinds] of Object.entries(SCHEMA_STRATEGY_KEYS)) {
   const table = STRATEGIES[family as keyof typeof STRATEGIES].kinds as Record<
