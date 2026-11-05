@@ -81,9 +81,14 @@ export const isLength = (v: unknown): v is Length | LengthValue =>
   v !== null &&
   (v as { type?: unknown }).type === "length";
 
+/** The weight `k` of the length `v` when it is `fr(k)`; undefined for a
+ *  percent. */
+export const frWeight = (v: Length | LengthValue): number | undefined =>
+  (v as LengthFields).fr;
+
 /** Whether the length `v` is an `fr` weight. */
 export const isFr = (v: Length | LengthValue): boolean =>
-  (v as LengthFields).fr !== undefined;
+  frWeight(v) !== undefined;
 
 /** `v` as it is written: `percent(30)`, `percent(30).offset(10)`,
  *  `fr(2)`. */

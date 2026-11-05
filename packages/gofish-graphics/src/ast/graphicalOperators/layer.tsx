@@ -7,17 +7,12 @@ import type { DisplayList } from "gofish-ir";
 import { getScopeRegistry, seatInBand, seatInScope } from "../solver/scopes";
 import { isToken } from "../createName";
 import { Size, elaborateOwnDims, FancyDims, displayTranslate } from "../dims";
-import {
-  UnderlyingSpace,
-  hasOrigin,
-  isUNDEFINED,
-  magnitude,
-} from "../underlyingSpace";
+import { UnderlyingSpace, isUNDEFINED, magnitude } from "../underlyingSpace";
 import { Extent, impliedExtent, padExtent, shiftExtent } from "../extent";
 import * as Pwl from "../solver/pwl";
 import type { KeyedDomains } from "../keyedDomains";
 import { isValue } from "../data";
-import { computeSize, foldFinite } from "../../util";
+import { computeSize, foldFinite, room } from "../../util";
 import { axisScale, type AxisMap } from "../domain";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { coord } from "../coordinateTransforms/coord";
@@ -84,7 +79,7 @@ import {
   type LayerPlan,
 } from "../solver/plan";
 import { evaluate } from "../solver/formula";
-import { plotForms, type PlotForms } from "../solver/plotForms";
+import { plotForms, reachPast } from "../solver/plotForms";
 
 // ── Z-order resolution ────────────────────────────────────────────────────
 //
@@ -112,9 +107,10 @@ const outlined = (
 
 /**
  * A plan whose summary covers the node's whole niced domain on `axis` when
- * a chart's axes are seated beside it (`GoFishNode._axesBeside`): a plot covers its
- * domain, rounded as the axis over it is (`KeyedDomains.scope`), not only
- * the hull of its marks, as it does in layout (`GoFishNode.domainSpan`).
+ * a chart's axes are seated beside it (`GoFishNode.coveredDomain`): a plot
+ * covers its domain, rounded as the axis over it is (`KeyedDomains.scope`),
+ * not only the hull of its marks, as it does in layout
+ * (`GoFishNode.domainSpan`).
  * Every reader of the claim (the node's claim, its plot, a parent's forms
  * of it) reads the summary, so all of them see the domain.
  */
@@ -125,18 +121,10 @@ const domainPlan = (
   plan: LayerPlan | undefined
 ): LayerPlan | undefined => {
   const summary = plan?.summary;
-  const keyed = node.tryGetRenderSession()?.keyedDomains;
-  if (
-    plan === undefined ||
-    summary === undefined ||
-    keyed === undefined ||
-    node._axesBeside !== true ||
-    !hasOrigin(space)
-  )
+  const placed = node.coveredDomain(axis, space);
+  if (plan === undefined || summary === undefined || placed === undefined)
     return plan;
-  const placed = node.placedSpace(space, axis);
-  const widen = (e: Extent): Extent =>
-    keyed.scope(node, axis, placed, e)[1] ?? e;
+  const widen = (e: Extent): Extent => node.widenToDomain(axis, placed, e);
   return {
     ...plan,
     summary: {
@@ -149,11 +137,37 @@ const domainPlan = (
   };
 };
 
-/** Whether `node` is a ring of chrome (`GoFishNode._chromeRing`): a layer
- *  whose first child is what it dresses and whose other children are
- *  chrome. (Not every `_transparent` wrapper: a label ring's labels are no
- *  chrome.) */
-const isRing = (node: GoFishNode): boolean => node._chromeRing === true;
+/**
+ * The members of a chain of `node` along `axis` (a `distribute` there)
+ * that have no size of their own (`GoFishNode.sizedOn`), each with its
+ * weight (`GoFishNode.flexWeight`), in the order the chains name them.
+ * They depend on the node's claim alone, so they are read once per claim
+ * (`ClaimMemo.flex`).
+ */
+const flexMembers = (
+  node: GoFishNode,
+  axis: 0 | 1,
+  refs: Pick<ResolvedConstraints, "operands" | "keyOf">
+): { child: number; weight: number }[] => {
+  const memo = node._claimMemo.flex[axis];
+  if (memo !== undefined) return memo;
+  const members = new Set<number>();
+  for (const c of node.constraints) {
+    if (c.type !== "distribute" || axisIndex(c.dir) !== axis) continue;
+    for (const ref of c.children) {
+      const k = directSlot(refs, ref);
+      if (k !== undefined) members.add(k);
+    }
+  }
+  const flex: { child: number; weight: number }[] = [];
+  for (const k of members) {
+    const c = node.children[k];
+    if (c instanceof GoFishNode && !c.sizedOn(axis))
+      flex.push({ child: k, weight: c.flexWeight(axis) });
+  }
+  node._claimMemo.flex[axis] = flex;
+  return flex;
+};
 
 export const layer = createNodeOperatorSequential(
   async (
@@ -517,7 +531,7 @@ export const layer = createNodeOperatorSequential(
             options.transform?.scale?.y ?? 1,
           ];
           const refs = resolution(node);
-          const ring = isRing(node);
+          const ring = node._chromeRing === true;
           // The layer's plan on each axis (`buildPlan`): one solve over
           // every child, by its box, where its constraints place it. Its
           // claim is the envelope of what its children draw there, and its
@@ -611,20 +625,6 @@ export const layer = createNodeOperatorSequential(
           // empty.
           const keyed: KeyedDomains | undefined = session?.keyedDomains;
           const scopes = getScopeRegistry(session);
-          const forms = ([0, 1] as const).map((axis) =>
-            plotForms(
-              resolved[axis],
-              plot[axis],
-              (claim) =>
-                keyed?.scope(
-                  node,
-                  axis,
-                  t.resolved[axis],
-                  claim,
-                  !isValue(dataSize(axis))
-                )[1] ?? claim
-            )
-          ) as [PlotForms | undefined, PlotForms | undefined];
           const fixedPx = ([0, 1] as const).map((axis) => {
             const size = node.fixedSize(axis);
             return typeof size === "number" ? size : undefined;
@@ -640,7 +640,14 @@ export const layer = createNodeOperatorSequential(
               keyed?.axisKey(node, axis, t.resolved[axis]),
               { kind: "sized", rootKey: node.key ?? node.type, axis },
               space,
-              forms[axis],
+              plotForms(resolved[axis], plot[axis], (claim) =>
+                node.widenToDomain(
+                  axis,
+                  t.resolved[axis],
+                  claim,
+                  !isValue(dataSize(axis))
+                )
+              ),
               px
             );
           }
@@ -889,15 +896,49 @@ export const layer = createNodeOperatorSequential(
           // ring seats its content as any layer seats a child: at its data 0
           // (#1257, #1239).
           const literalSeatsByKey = seating().seats;
-          const seatsOf = (
-            i: number
-          ): [number | undefined, number | undefined] => {
-            const lit = literalSeatsByKey.get(node.children[i].uid) ?? [
-              undefined,
-              undefined,
-            ];
-            return lit;
+
+          // The σ this layer hands its children on `axis`; 0 where it has
+          // none (a scope no data sizes), so its children's claims are
+          // constants.
+          const sigmaOf = (axis: 0 | 1) => room(childScaleFactors[axis] ?? 0);
+          // How wide this layer's content is on `axis` at that σ.
+          const wholeWidth = (axis: 0 | 1): number => {
+            const whole = contentExtents[axis];
+            return whole === undefined ? 0 : Pwl.at(whole.width, sigmaOf(axis));
           };
+
+          // The room this layer gives the children that are part of its plot
+          // (#1257): its own room less how far what dresses its plot (labels
+          // beside their marks, an outline drawn from refs, a ring's chrome)
+          // reaches past it, its whole claim past its plot claim at the σ it
+          // hands its children (`reachPast`). Dressing adds around the plot
+          // and never moves it, so the plot is laid out in what dressing
+          // leaves. Its dressing and ink are proposed its whole room.
+          const plotRooms = ([0, 1] as const).map((axis) => {
+            const whole = contentExtents[axis];
+            const plot = node._claimMemo.plans[axis]?.plotWhole;
+            if (
+              !Number.isFinite(size[axis]) ||
+              whole === undefined ||
+              plot === undefined
+            )
+              return size[axis];
+            const [start, end] = reachPast({ whole, plot }, sigmaOf(axis));
+            return room(size[axis] - (start + end));
+          }) as Size;
+          const ring = node._chromeRing === true;
+          const inPlot = (i: number, axis: 0 | 1) =>
+            !dressingChildren[axis].has(i) &&
+            !inkChildren[axis].has(i) &&
+            !(ring && i > 0);
+          // Every child is part of the plot: each is proposed `plotRooms`.
+          const allInPlot =
+            !ring &&
+            ([0, 1] as const).every(
+              (axis) =>
+                dressingChildren[axis].size === 0 &&
+                inkChildren[axis].size === 0
+            );
 
           // The room of each member of a chain along `axis` that has no size
           // of its own (#1257): its need (its claim at the σ this layer hands
@@ -906,75 +947,26 @@ export const layer = createNodeOperatorSequential(
           // k shares. This is CSS's `flex: 1 1 auto`. σ is solved from the
           // needs alone, so where the needs fill the room (a scope fitted to
           // it) the slack is 0, and on an axis with no room (an unsized
-          // render) the members keep their needs.
-          // The room this layer gives the children that are part of its plot
-          // (#1257): its own room less how far what dresses its plot (labels
-          // beside their marks, an outline drawn from refs, a ring's chrome)
-          // reaches past it, its whole claim past its plot claim at the σ it
-          // hands its children. Dressing adds around the plot and never
-          // moves it, so the plot is laid out in what dressing leaves. Its
-          // dressing and ink are proposed its whole room.
-          const sigmaOf = (axis: 0 | 1) => {
-            const s = childScaleFactors[axis];
-            return s !== undefined && Number.isFinite(s) ? s : 0;
-          };
-          const plotRooms = ([0, 1] as const).map((axis) => {
-            const room = size[axis];
-            const whole = contentExtents[axis];
-            const plot = node._claimMemo.plans[axis]?.plotWhole;
-            if (
-              !Number.isFinite(room) ||
-              whole === undefined ||
-              plot === undefined
-            )
-              return room;
-            const s = sigmaOf(axis);
-            const reach = Pwl.at(whole.width, s) - Pwl.at(plot.width, s);
-            return Math.max(0, room - Math.max(0, reach));
-          }) as Size;
-          const plotWidth = (axis: 0 | 1): number => {
-            const p =
-              node._claimMemo.plans[axis]?.plotWhole ?? contentExtents[axis];
-            return p === undefined ? 0 : Pwl.at(p.width, sigmaOf(axis));
-          };
-          const inPlot = (i: number, axis: 0 | 1) =>
-            !dressingChildren[axis].has(i) &&
-            !inkChildren[axis].has(i) &&
-            !(isRing(node) && i > 0);
+          // render) the members keep their needs. The members and their
+          // weights are read once per claim (`flexMembers`).
           const chainRoomsOn = (
             axis: 0 | 1
           ): Map<number, number> | undefined => {
-            const room = plotRooms[axis];
-            // With no σ (a scope no data sizes) the needs are constants.
-            const sigma = sigmaOf(axis);
-            if (!Number.isFinite(room)) return undefined;
-            const members = new Set<number>();
-            for (const c of node.constraints) {
-              if (c.type !== "distribute" || axisIndex(c.dir) !== axis)
-                continue;
-              for (const ref of c.children) {
-                const k = directSlot({ operands, keyOf }, ref);
-                if (k !== undefined) members.add(k);
-              }
-            }
-            const flex = [...members].filter((k) => {
-              const c = node.children[k];
-              return c instanceof GoFishNode && !c.sizedOn(axis);
-            });
+            if (!Number.isFinite(plotRooms[axis])) return undefined;
+            const flex = flexMembers(node, axis, { operands, keyOf });
             if (flex.length === 0) return undefined;
-            const slack = Math.max(0, room - plotWidth(axis));
-            const weight = (k: number) =>
-              (node.children[k] as GoFishNode).flexWeight(axis);
-            const total = flex.reduce((s, k) => s + weight(k), 0);
+            const sigma = sigmaOf(axis);
+            const slack = room(size[axis] - wholeWidth(axis));
+            const total = flex.reduce((s, m) => s + m.weight, 0);
             const rooms = new Map<number, number>();
-            for (const k of flex) {
-              const claim = (node.children[k] as GoFishNode).resolveExtent()[
-                axis
-              ];
+            for (const { child, weight } of flex) {
+              const claim = (
+                node.children[child] as GoFishNode
+              ).resolveExtent()[axis];
               const need = claim === undefined ? 0 : Pwl.at(claim.width, sigma);
               rooms.set(
-                k,
-                need + (total > 0 ? (slack * weight(k)) / total : 0)
+                child,
+                need + (total > 0 ? (slack * weight) / total : 0)
               );
             }
             return rooms;
@@ -1001,27 +993,28 @@ export const layer = createNodeOperatorSequential(
               chainRooms[0]?.get(i),
               chainRooms[1]?.get(i),
             ];
+            // A ring's content is part of its plot, so it is proposed what
+            // the chrome leaves of the ring's room (`plotRooms`).
             const proposal = childLayoutSizeProposal(
               childKey,
-              [
-                inPlot(i, 0) ? plotRooms[0] : size[0],
-                inPlot(i, 1) ? plotRooms[1] : size[1],
-              ],
+              allInPlot
+                ? plotRooms
+                : [
+                    inPlot(i, 0) ? plotRooms[0] : size[0],
+                    inPlot(i, 1) ? plotRooms[1] : size[1],
+                  ],
               gridCellByKey,
               spanByKey,
               own,
               shape
             );
             const nestEdges = layoutPlan.nestPlan?.byDerived.get(i);
-            const proposed = applyNestLayoutProposal(
+            const layoutSize = applyNestLayoutProposal(
               proposal.size,
               nestEdges,
               childPlaceables
             );
-            // A ring's content is part of its plot, so it is proposed what
-            // the chrome leaves of the ring's room (`plotRooms`).
-            const layoutSize: Size = proposed;
-            const dressed = i === 0 && isRing(node);
+            const dressed = i === 0 && ring;
             // The shape travels with the room it was proposed with: a room
             // a nest derives from its source, or that a ring's chrome cuts
             // down, is not that room, so it has no shape.
@@ -1031,7 +1024,10 @@ export const layer = createNodeOperatorSequential(
             // forwards uniformly (childScaleFactors), the anchored map forwards
             // per child (childPosScalesFor — stripped where a constraint consumed
             // the scale). A stripped map keeps the child's σ.
-            const seats = seatsOf(i);
+            const seats = literalSeatsByKey.get(childKey) ?? [
+              undefined,
+              undefined,
+            ];
             const childMaps = childPosScalesFor(
               (children[i] as GoFishNode)._underlyingSpace,
               targetDims,
@@ -1192,7 +1188,7 @@ export const layer = createNodeOperatorSequential(
                 const hi = p.localAnchor?.(axis, "max");
                 switch (kind) {
                   case "lit":
-                    return seatsOf(i!)[axis];
+                    return literalSeatsByKey.get(node.children[i!].uid)?.[axis];
                   case "lo":
                     return lo;
                   case "hi":

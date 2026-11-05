@@ -85,6 +85,7 @@ import { impliedExtents, Extent, padExtent } from "./extent";
 import * as Pwl from "./solver/pwl";
 import {
   DEFAULT_CANVAS_SIZE,
+  frWeight,
   isFr,
   isLength,
   lengthIn,
@@ -234,6 +235,12 @@ type ClaimMemo = {
   /** Per constraint and axis, the gap it lays out between its parts
    *  ({@link GoFishNode.gapOf}), once read. */
   gaps: Map<GapConstraint, [Pwl.Value | undefined, Pwl.Value | undefined]>;
+  /** Per axis, the members of its chains with no size of their own and
+   *  their weights (`flexMembers` in `layer`), once read. */
+  flex: [
+    { child: number; weight: number }[] | undefined,
+    { child: number; weight: number }[] | undefined,
+  ];
 };
 
 const freshClaimMemo = (): ClaimMemo => ({
@@ -242,6 +249,7 @@ const freshClaimMemo = (): ClaimMemo => ({
   plans: [undefined, undefined],
   lengths: [undefined, undefined],
   gaps: new Map(),
+  flex: [undefined, undefined],
 });
 
 /** What the claim walk reads of a layer (`GoFishNode.claimWalk`). */
@@ -1377,16 +1385,8 @@ export class GoFishNode {
           : extent[dim] === undefined && this.inkOn?.[dim] !== true;
       const forms =
         scope && extent[dim] !== undefined
-          ? plotForms(
-              extent[dim],
-              (this._plotExtent ?? extent)[dim],
-              (claim) =>
-                this.tryGetRenderSession()?.keyedDomains?.scope(
-                  this,
-                  dim,
-                  this._underlyingSpace?.[dim],
-                  claim
-                )[1] ?? claim
+          ? plotForms(extent[dim], (this._plotExtent ?? extent)[dim], (claim) =>
+              this.widenToDomain(dim, this._underlyingSpace?.[dim], claim)
             )
           : undefined;
       if (scope) extent[dim] = undefined;
@@ -1650,9 +1650,7 @@ export class GoFishNode {
    *  `fr(k)`, and 1 for a node with no size of its own. */
   public flexWeight(axis: 0 | 1): number {
     const len = this.lengthOn(axis);
-    return len !== undefined && isFr(len)
-      ? ((len as { fr?: number }).fr ?? 1)
-      : 1;
+    return (len === undefined ? undefined : frWeight(len)) ?? 1;
   }
 
   /** Its own box on `axis` ({@link ownDims}) with the size it fixes for
@@ -2299,15 +2297,20 @@ export class GoFishNode {
       );
     }
     // A percent is laid out in the room its parent gives this node (#1257):
-    // `ρ·room + px`, read by `fixedSize` for the rest of this layout.
-    this._laidLengths = ([0, 1] as const).map((axis) => {
+    // `ρ·room + px` (`lengthIn`), read by `fixedSize` for the rest of this
+    // layout.
+    let laid: Size<number | undefined> | undefined;
+    for (const axis of [0, 1] as const) {
       const len = this.lengthOn(axis);
-      if (len === undefined || isFr(len) || !Number.isFinite(size[axis]))
-        return undefined;
-      const { percent: p, px } = len as { percent?: number; px?: number };
-      return ((p ?? 0) / 100) * size[axis] + (px ?? 0);
-    }) as Size<number | undefined>;
-    size = [this._laidLengths[0] ?? size[0], this._laidLengths[1] ?? size[1]];
+      const room = size[axis];
+      if (len === undefined || isFr(len) || !Number.isFinite(room)) continue;
+      (laid ??= [undefined, undefined])[axis] = Pwl.at(
+        lengthIn(len, () => Pwl.constant(room)),
+        0
+      );
+    }
+    this._laidLengths = laid;
+    if (laid !== undefined) size = [laid[0] ?? size[0], laid[1] ?? size[1]];
     const direction = this.yFrame.direction;
     const parentDirection = yDirection(this.parent);
     this._plotSpan = [undefined, undefined];
@@ -2507,6 +2510,48 @@ export class GoFishNode {
   }
 
   /**
+   * `claim` widened to the keyed domain this node maps on `axis`, its type
+   * there being `space`, and niced as every axis over that domain is
+   * (`KeyedDomains.scope`, `viaSet` as it reads it). `claim` itself outside
+   * a render, or where it maps no domain.
+   */
+  public widenToDomain(
+    axis: 0 | 1,
+    space: UnderlyingSpace | undefined,
+    claim: Extent,
+    viaSet = true
+  ): Extent {
+    return (
+      this.tryGetRenderSession()?.keyedDomains?.scope(
+        this,
+        axis,
+        space,
+        claim,
+        viaSet
+      )[1] ?? claim
+    );
+  }
+
+  /**
+   * On the box a chart's axes are seated beside ({@link _axesBeside}), whose
+   * type on `axis` is `space`, the type its whole niced domain is read in
+   * there: `space` placed ({@link placedSpace}). A plot covers that domain,
+   * in its claim (`domainPlan` in `layer`) and in its layout
+   * ({@link domainSpan}). Undefined on any other node, on an axis with no
+   * data 0, and outside a render.
+   */
+  public coveredDomain(
+    axis: 0 | 1,
+    space: UnderlyingSpace | undefined
+  ): UnderlyingSpace | undefined {
+    return this._axesBeside === true &&
+      hasOrigin(space) &&
+      this.tryGetRenderSession()?.keyedDomains !== undefined
+      ? this.placedSpace(space!, axis)
+      : undefined;
+  }
+
+  /**
    * On the box a chart's axes are seated beside ({@link _axesBeside}), the
    * pixels its whole domain spans on `axis` in its local frame, once laid
    * out: the keyed domain it maps, widened and niced as every axis over it
@@ -2517,16 +2562,13 @@ export class GoFishNode {
    * other node, and on an axis with no data 0.
    */
   public domainSpan(axis: 0 | 1): [number, number] | undefined {
-    if (this._axesBeside !== true) return undefined;
     const frame = this.layoutFrames?.[axis];
-    const space = this._underlyingSpace?.[axis];
-    const keyed = this.tryGetRenderSession()?.keyedDomains;
-    if (frame === undefined || keyed === undefined || !hasOrigin(space))
-      return undefined;
-    const niced = keyed.scope(
+    const space = this.coveredDomain(axis, this._underlyingSpace?.[axis]);
+    if (frame === undefined || space === undefined) return undefined;
+    const niced = this.tryGetRenderSession()!.keyedDomains!.scope(
       this,
       axis,
-      this.placedSpace(space, axis),
+      space,
       undefined
     )[0];
     if (!isCONTINUOUS(niced)) return undefined;
