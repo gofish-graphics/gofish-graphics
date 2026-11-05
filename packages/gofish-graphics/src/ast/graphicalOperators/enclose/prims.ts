@@ -32,6 +32,10 @@ export type Member =
       w2?: number;
     };
 
+/** A disc around c of radius R: a keep-out (an avoided member grown by the
+ *  clearance), which the outline stays out of. */
+export type Disc = { c: Pt; R: number };
+
 /** Andrew's monotone chain. */
 export const convexHull = (pts: Pt[]): Pt[] => {
   const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);

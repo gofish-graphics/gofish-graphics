@@ -49,7 +49,7 @@ import { signedArea2, cross } from "../../geometry/plane";
 /** The blend's knobs, px. delta: the cusp cut width; h: the grid step; k: a
  *  small pocket's grid step is its size (the square root of its area) over
  *  k; hMin: the least step. */
-export const BLEND = {
+const BLEND = {
   delta: 0.02,
   h: 4,
   k: 12,
@@ -971,37 +971,40 @@ function solveNodes(
   reg: Uint8Array,
   sol: Float64Array
 ): void {
-  const nbr = [1, -1, W, -W];
+  // arm d of node v: 4 · v + d, toward v + 1, v − 1, v + W, v − W
   const rp = new Int32Array(m + 1);
-  const ci: number[] = [],
-    cv: number[] = [];
+  const ci = new Int32Array(5 * m),
+    cv = new Float64Array(5 * m);
   const rhs = new Float64Array(m);
-  const row: [number, number][] = [];
+  let nz = 0;
+  const off = (v: number, d: number, dv: number) => {
+    if (!reg[4 * v + d]) return;
+    ci[nz] = uid[v + dv];
+    cv[nz++] = -1;
+  };
   for (let v = 0; v < N; v++) {
     const r = uid[v];
     if (r < 0) continue;
     let diag = 0;
-    row.length = 0;
     for (let d = 0; d < 4; d++) {
       const k = 4 * v + d;
-      if (reg[k]) {
-        diag += 1;
-        row.push([uid[v + nbr[d]], -1]);
-      } else {
+      if (reg[k]) diag += 1;
+      else {
         const t = Math.max(1e-9, th[k]);
         diag += 1 / t;
         rhs[r] += gv[k] / t;
       }
     }
-    row.push([r, diag]);
-    row.sort((p, q) => p[0] - q[0]);
-    for (const [c, x] of row) {
-      ci.push(c);
-      cv.push(x);
-    }
-    rp[r + 1] = ci.length;
+    // the row's columns in order: the ids grow with v (the nodes are numbered in grid order)
+    off(v, 3, -W);
+    off(v, 1, -1);
+    ci[nz] = r;
+    cv[nz++] = diag;
+    off(v, 0, 1);
+    off(v, 2, W);
+    rp[r + 1] = nz;
   }
-  const res = pcgIC(rp, Int32Array.from(ci), Float64Array.from(cv), rhs, m);
+  const res = pcgIC(rp, ci.subarray(0, nz), cv.subarray(0, nz), rhs, m);
   for (let k = 0; k < m; k++) sol[k] = Math.min(1, Math.max(0, res.x[k]));
 }
 

@@ -50,7 +50,7 @@
  * cutRings), its corners rounded inward (smooth.ts, roundCut).
  */
 import { signedArea2, pointInRing, segDist, cross } from "../../geometry/plane";
-import { boxGrid, convexHull, type Member, type Pt } from "./prims";
+import { boxGrid, convexHull, type Disc, type Member, type Pt } from "./prims";
 import { closingRings, keepIns } from "./arcs";
 import { buildBlend, blendRings } from "./blend";
 import { roundCut, smoothOutline } from "./smooth";
@@ -118,7 +118,7 @@ const coreOf = (m: Member): Core =>
       ? { k: "seg", a: m.a, b: m.b, rho: Math.max(m.w, m.w2 ?? m.w) / 2 }
       : { k: "box", x0: m.x, y0: m.y, x1: m.x + m.w, y1: m.y + m.h };
 
-const segsOf = (c: Core): [Pt, Pt][] =>
+const edgesOf = (c: Core): [Pt, Pt][] =>
   c.k === "seg"
     ? [[c.a, c.b]]
     : [
@@ -158,12 +158,10 @@ function segSeg(p: Pt, q: Pt, r: Pt, s: Pt): [Pt, Pt, number] {
     return [a[0] + ex * t, a[1] + ey * t];
   };
   // proper crossing: distance 0
-  const d = (a: Pt, b: Pt, c: Pt) =>
-    (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
-  const d1 = d(p, q, r),
-    d2 = d(p, q, s),
-    d3 = d(r, s, p),
-    d4 = d(r, s, q);
+  const d1 = cross(p, q, r),
+    d2 = cross(p, q, s),
+    d3 = cross(r, s, p),
+    d4 = cross(r, s, q);
   if (d1 * d2 < 0 && d3 * d4 < 0) {
     const t = d1 / (d1 - d2);
     const x: Pt = [r[0] + (s[0] - r[0]) * t, r[1] + (s[1] - r[1]) * t];
@@ -197,8 +195,8 @@ function nearest(A: Core, B: Core): [Pt, Pt, number] {
   )
     return [[0, 0], [0, 0], -1];
   let best: [Pt, Pt, number] = [[0, 0], [0, 0], Infinity];
-  for (const [p, q] of segsOf(A))
-    for (const [r, s] of segsOf(B)) {
+  for (const [p, q] of edgesOf(A))
+    for (const [r, s] of edgesOf(B)) {
       const x = segSeg(p, q, r, s);
       if (x[2] < best[2]) best = x;
     }
@@ -227,19 +225,21 @@ function nearest(A: Core, B: Core): [Pt, Pt, number] {
 type Pair = {
   i: number;
   j: number;
-  /** padded gap, px */
+  /** padded gap, px: the members' gap less twice the padding */
   g: number;
   /** center distance: between the members' core axes, px */
   d: number;
-  /** the tree's distance, the mutual reachability */
+  /** the join tree's distance, the mutual reachability (set by joinTree, its
+   *  only reader) */
   w: number;
+  /** whether the members themselves overlap (their gap unpadded ≤ 0) */
   overlap: boolean;
   a: Pt;
   b: Pt;
 };
 
 /**
- * A member set's pairs, each worked out only when asked for, and once: its gap (nearest),
+ * A member set's pairs at a padding, each worked out only when asked for, and once: its gap (nearest),
  * its core axes' nearest points and their distance. A grid over the members' boxes (each
  * box holds the member's shape and its core axis, so two boxes' gap is at most both the
  * members' gap and their center distance) visits the members within a box gap r of one.
@@ -248,7 +248,7 @@ type Pair = {
  */
 type PairTable = {
   n: number;
-  /** the pair (i, j) with its gap unpadded (the caller pads it), i < j */
+  /** the pair (i, j), i < j: one object per pair */
   pair(i: number, j: number): Pair;
   /** calls f on every member whose box may be within r of member i's (a superset, in no
    *  set order; not reentrant) */
@@ -261,7 +261,7 @@ type PairTable = {
   rho: number[];
 };
 
-function pairTable(members: Member[]): PairTable {
+function pairTable(members: Member[], pad: number): PairTable {
   const n = members.length;
   const prims = members.map(coreOf);
   const ax = members.map(coreAxis);
@@ -297,7 +297,7 @@ function pairTable(members: Member[]): PairTable {
         p = {
           i,
           j,
-          g,
+          g: g - 2 * pad,
           d: Math.hypot(x[0] - y[0], x[1] - y[1]),
           w: 0,
           overlap: g <= 0,
@@ -463,11 +463,8 @@ function joinTree(T: PairTable, pad: number): JoinTree {
     new Array(T.n).fill(0),
     (i, j) => {
       const p = T.pair(i, j);
-      return {
-        ...p,
-        g: p.g - 2 * pad,
-        w: Math.max(core[p.i], core[p.j], p.d),
-      };
+      p.w = Math.max(core[p.i], core[p.j], p.d);
+      return p;
     },
     joinLess,
     (e) => (e.g <= 0 ? e.g + 2 * pad : Math.max(2 * pad, e.w))
@@ -493,8 +490,7 @@ function gapForest(
     group,
     (i, j) => {
       const p = T.pair(i, j);
-      const g = p.g - 2 * pad;
-      return g < below ? { ...p, g } : null;
+      return p.g < below ? p : null;
     },
     (p, q) => (p.g - q.g || byIndex(p, q)) < 0,
     (e) => e.g + 2 * pad,
@@ -508,18 +504,26 @@ function gapForest(
  *  nearer is missed. */
 function coreDistances(T: PairTable, coreK: number): number[] {
   const k = Math.max(1, Math.min(T.n - 1, Math.round(coreK)));
+  // the k least center distances seen, least first (m of them)
+  const least = new Float64Array(k);
+  let m = 0;
+  const add = (d: number) => {
+    if (m === k && d >= least[k - 1]) return;
+    let q = m < k ? m++ : k - 1;
+    for (; q > 0 && least[q - 1] > d; q--) least[q] = least[q - 1];
+    least[q] = d;
+  };
   return Array.from({ length: T.n }, (_, i) => {
     for (let r = T.step; ; r *= 2) {
-      const ds: number[] = [];
+      m = 0;
       let within = 0;
       T.near(i, r, (j) => {
         if (j === i) return;
         const d = T.pair(i, j).d;
-        ds.push(d);
+        add(d);
         if (d <= r) within++;
       });
-      if (within >= k || r >= T.reach)
-        return ds.sort((a, b) => a - b)[k - 1] ?? 0;
+      if (within >= k || r >= T.reach) return m === k ? least[k - 1] : 0;
     }
   });
 }
@@ -566,7 +570,7 @@ export function pieceLinks(
   pieces: number[][];
 } {
   const n = members.length;
-  const T = pairTable(members);
+  const T = pairTable(members, pad);
   const kc = Array.from({ length: n }, (_, i) => i);
   const kfind = (i: number): number =>
     kc[i] === i ? i : (kc[i] = kfind(kc[i]));
@@ -596,20 +600,23 @@ export function pieceLinks(
   const piece = Array.from({ length: n }, (_, i) => ids.get(kfind(i))!);
   const links: Member[] = [];
   const linkPiece: number[] = [];
-  const { rho } = T;
   for (const p of gapForest(T, pad, piece)) {
     if (p.overlap) continue;
-    links.push({
-      kind: "segment",
-      a: p.a,
-      b: p.b,
-      w: 2 * (neck * (rho[p.i] + pad) - pad),
-      w2: 2 * (neck * (rho[p.j] + pad) - pad),
-    });
+    links.push(linkOf(p, T.rho, pad, neck));
     linkPiece.push(piece[p.i]);
   }
   return { links, linkPiece, pieces };
 }
+
+/** The link along pair p: a tapered tube between the two members' cores whose padded
+ *  half-width at each end is neck · (ρ + pad), ρ that member's core radius. */
+const linkOf = (p: Pair, rho: number[], pad: number, neck: number): Member => ({
+  kind: "segment",
+  a: p.a,
+  b: p.b,
+  w: 2 * (neck * (rho[p.i] + pad) - pad),
+  w2: 2 * (neck * (rho[p.j] + pad) - pad),
+});
 
 /** A member's core axis (two points, equal for a disc) and radius. */
 function coreAxis(m: Member): [Pt, Pt, number] {
@@ -667,12 +674,10 @@ function paddedHull(members: Member[], pad: number): Pt[] {
 
 // ── keep-outs ───────────────────────────────────────────────────────────────
 
-type Disc = { c: Pt; R: number };
-
 /** Keep-out discs: each avoided member grown by clearance. A segment is
  *  discs along it, every 2 px; a box is its circumscribed disc (declared:
  *  a long box keeps out more than itself, #1247). */
-export function keepOuts(avoiding: Member[], clearance: number): Disc[] {
+function keepOuts(avoiding: Member[], clearance: number): Disc[] {
   const out: Disc[] = [];
   for (const m of avoiding) {
     if (m.kind === "disc") out.push({ c: [m.cx, m.cy], R: m.r + clearance });
@@ -702,13 +707,23 @@ export function keepOuts(avoiding: Member[], clearance: number): Disc[] {
  * an arc pad clear of the disc, on the side the link passes nearer (below,
  * +y, on a tie): one disc at a time, at most four levels deep.
  */
-export function routeAround(
+function routeAround(links: Member[], K: Disc[], pad: number): Member[] {
+  if (K.length === 0) return links;
+  // the discs that may reach a link: a disc whose center is within R + e of a link meets the
+  // link's box grown by e
+  const grid = boxGrid(
+    K.map(({ c, R }) => [c[0] - R, c[1] - R, c[0] + R, c[1] + R])
+  );
+  return routeLinks(links, K, grid, pad, 0);
+}
+function routeLinks(
   links: Member[],
   K: Disc[],
+  grid: ReturnType<typeof boxGrid>,
   pad: number,
-  depth = 0
+  depth: number
 ): Member[] {
-  if (K.length === 0 || depth > 3) return links;
+  if (depth > 3) return links;
   const out: Member[] = [];
   for (const l of links) {
     if (l.kind !== "segment") {
@@ -718,7 +733,15 @@ export function routeAround(
     const [a, b] = [l.a, l.b];
     let hit: Disc | undefined;
     let hd = Infinity;
-    for (const k of K) {
+    const e = Math.max(0, pad + Math.max(l.w, l.w2 ?? l.w) / 2);
+    // in index order, so a tie goes to the first
+    for (const q of grid.query(
+      Math.min(a[0], b[0]) - e,
+      Math.min(a[1], b[1]) - e,
+      Math.max(a[0], b[0]) + e,
+      Math.max(a[1], b[1]) + e
+    )) {
+      const k = K[q];
       const d = segDist(k.c[0], k.c[1], a[0], a[1], b[0], b[1]);
       const Rd = k.R + pad + Math.max(l.w, l.w2 ?? l.w) / 2;
       const da = Math.hypot(a[0] - k.c[0], a[1] - k.c[1]);
@@ -800,7 +823,7 @@ export function routeAround(
         w: wAt(i),
         w2: wAt(i + 1),
       });
-    out.push(...routeAround(segs, K, pad, depth + 1));
+    out.push(...routeLinks(segs, K, grid, pad, depth + 1));
   }
   return out;
 }
@@ -933,26 +956,13 @@ function filletLinks(
   neck: number
 ): Member[] {
   if (!(neck > 0) || !(r > 0)) return [];
-  const T = pairTable(members);
-  const { rho } = T;
-  const links: Member[] = [];
-  for (const p of gapForest(
-    T,
-    pad,
-    members.map(() => 0),
-    2 * r
-  )) {
-    // padded members that touch are one piece already
-    if (p.g <= 0) continue;
-    links.push({
-      kind: "segment",
-      a: p.a,
-      b: p.b,
-      w: 2 * (neck * (rho[p.i] + pad) - pad),
-      w2: 2 * (neck * (rho[p.j] + pad) - pad),
-    });
-  }
-  return links;
+  const T = pairTable(members, pad);
+  return (
+    gapForest(T, pad, new Array(members.length).fill(0), 2 * r)
+      // padded members that touch are one piece already (a blob links them: pieceLinks)
+      .filter((p) => p.g > 0)
+      .map((p) => linkOf(p, T.rho, pad, neck))
+  );
 }
 
 /**
@@ -1116,29 +1126,46 @@ function regionInRegion(A: Pt[][], B: Pt[][]): boolean {
     R.reduce((w, r) => w !== pointInRing(p, r), false);
   if (!A.every((r) => r.every((p) => inside(p, B)))) return false;
   if (B.some((r) => r.some((p) => inside(p, A)))) return false;
+  // B's edges that meet A's box, on a grid; each edge of A is tested against those its box
+  // meets (two edges whose boxes are apart cannot cross)
   const [ax0, ay0, ax1, ay1] = boxOfRings(A);
-  for (const r of A)
-    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
-      const [a, b] = [r[j], r[i]];
-      for (const s of B)
-        for (let k = 0, l = s.length - 1; k < s.length; l = k++) {
-          const [c, d] = [s[l], s[k]];
-          if (
-            Math.max(c[0], d[0]) < ax0 ||
-            Math.min(c[0], d[0]) > ax1 ||
-            Math.max(c[1], d[1]) < ay0 ||
-            Math.min(c[1], d[1]) > ay1
-          )
-            continue;
-          if (
-            cross(a, b, c) * cross(a, b, d) < 0 &&
-            cross(c, d, a) * cross(c, d, b) < 0
-          )
-            return false;
-        }
+  const E: [Pt, Pt][] = [];
+  for (const s of B)
+    for (let k = 0, l = s.length - 1; k < s.length; l = k++) {
+      const [c, d] = [s[l], s[k]];
+      if (
+        Math.max(c[0], d[0]) < ax0 ||
+        Math.min(c[0], d[0]) > ax1 ||
+        Math.max(c[1], d[1]) < ay0 ||
+        Math.min(c[1], d[1]) > ay1
+      )
+        continue;
+      E.push([c, d]);
     }
-  return true;
+  const grid = boxGrid(E.map(edgeBox));
+  let crosses = false;
+  for (const r of A)
+    for (let i = 0, j = r.length - 1; i < r.length && !crosses; j = i++) {
+      const [a, b] = [r[j], r[i]];
+      const [x0, y0, x1, y1] = edgeBox([a, b]);
+      grid.each(x0, y0, x1, y1, (k) => {
+        const [c, d] = E[k];
+        if (
+          cross(a, b, c) * cross(a, b, d) < 0 &&
+          cross(c, d, a) * cross(c, d, b) < 0
+        )
+          crosses = true;
+      });
+    }
+  return !crosses;
 }
+
+const edgeBox = ([a, b]: [Pt, Pt]) => [
+  Math.min(a[0], b[0]),
+  Math.min(a[1], b[1]),
+  Math.max(a[0], b[0]),
+  Math.max(a[1], b[1]),
+];
 
 /** One blob piece's fill, before the smoothing and the keep-out cut. */
 type Fill = {

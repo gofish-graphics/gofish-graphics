@@ -7,7 +7,7 @@
  * keep-out cut leaves (`outline.ts`). Each keeps every padded member (and
  * each link, at its padded half-width) inside the outline: the keep-ins.
  */
-import type { Pt } from "./prims";
+import { boxGrid, type Pt } from "./prims";
 import { signedArea2 } from "../../geometry/plane";
 import { SegGrid, Inside, segsOf } from "./blend";
 
@@ -64,12 +64,37 @@ function gauss(ring: Pt[], sigmaSamples: number): Pt[] {
   });
 }
 
-/** Push p out of every keep-in capsule that holds it. */
-function pushOut(p: Pt, keep: KeepIn[]): Pt {
+/** The keep-ins with a grid over their boxes (each capsule's axis box grown
+ *  by R holds every point the capsule holds). */
+type KeepGrid = { keep: KeepIn[]; grid: ReturnType<typeof boxGrid> };
+const keepGrid = (keep: KeepIn[]): KeepGrid => ({
+  keep,
+  grid: boxGrid(
+    keep.map(({ a, b, R }) => [
+      Math.min(a[0], b[0]) - R,
+      Math.min(a[1], b[1]) - R,
+      Math.max(a[0], b[0]) + R,
+      Math.max(a[1], b[1]) + R,
+    ])
+  ),
+});
+
+/** Push p out of every keep-in capsule that holds it: up to three passes,
+ *  each over the keep-ins in order, a capsule that holds the point moving it
+ *  to the capsule's edge. A pass visits only the capsules whose boxes hold
+ *  the point, asking the grid again after each move, so it moves the point
+ *  exactly as a pass over every capsule would. */
+function pushOut(p: Pt, { keep, grid }: KeepGrid): Pt {
   let [x, y] = p;
   for (let pass = 0; pass < 3; pass++) {
     let moved = false;
-    for (const k of keep) {
+    let last = -1;
+    let at = grid.query(x, y, x, y);
+    for (let q = 0; q < at.length; q++) {
+      const i = at[q];
+      if (i <= last) continue;
+      last = i;
+      const k = keep[i];
       const [a, b] = [k.a, k.b];
       const ex = b[0] - a[0],
         ey = b[1] - a[1];
@@ -85,6 +110,8 @@ function pushOut(p: Pt, keep: KeepIn[]): Pt {
         x = cx + ((x - cx) * k.R) / d;
         y = cy + ((y - cy) * k.R) / d;
         moved = true;
+        at = grid.query(x, y, x, y);
+        q = -1;
       }
     }
     if (!moved) break;
@@ -207,6 +234,7 @@ export function roundCut(
 ): Pt[][] {
   const out: Pt[][] = [];
   let region: Inside | null = null;
+  let held: KeepGrid | null = null;
   rings.forEach((ring, ri) => {
     const mk0 = marks[ri];
     if (sigma <= 0 || ring.length < 3 || !mk0.some((x) => x)) {
@@ -240,12 +268,13 @@ export function roundCut(
       const t = (g[i][0] - p[0]) * N[i][0] + (g[i][1] - p[1]) * N[i][1];
       if (t >= 0) return p;
       region ??= new Inside(segsOf(rings));
+      held ??= keepGrid(keep);
       let s = w * t;
       for (let k = 0; k < 4; k++, s /= 2) {
         const q: Pt = [p[0] + s * N[i][0], p[1] + s * N[i][1]];
-        if (region.has(q[0], q[1])) return pushOut(q, keep);
+        if (region.has(q[0], q[1])) return pushOut(q, held);
       }
-      return pushOut(p, keep);
+      return pushOut(p, held);
     });
     const a0 = signedArea2(ring),
       a1 = signedArea2(res);

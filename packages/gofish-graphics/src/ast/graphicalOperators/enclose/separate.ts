@@ -32,7 +32,7 @@
  * of the grid are refined by halves (a quadtree) where it can cross, and Ψ is kept with the
  * field once asked.
  */
-import type { Pt } from "./prims";
+import type { Disc, Pt } from "./prims";
 import { SegGrid, Inside, segsOf } from "./blend";
 import { closingRings } from "./arcs";
 import { signedArea2, pointInRing } from "../../geometry/plane";
@@ -56,10 +56,6 @@ const boxOf = (rings: Pt[][]): Box => {
  *  the disc the keep-out region is closed by (keepRegion). */
 export const SEPARATE = { h: 1, round: 3, open: 3 };
 
-/** A keep-out: a disc the outline stays out of (an avoided member grown by
- *  the clearance). */
-export type KeepDisc = { c: Pt; R: number };
-
 /**
  * The ground the keep-outs forbid: their union closed (arcs.ts, the exact closing) by a disc
  * of radius `rho`, holes kept. The allowed ground less the keep-outs is opened by the same
@@ -68,7 +64,7 @@ export type KeepDisc = { c: Pt; R: number };
  * between two keep-outs are rounded. The closing holds the union, so the cut never enters a
  * keep-out; the padded members alone are allowed inside it (cutField).
  */
-export function keepRegion(K: KeepDisc[], rho: number): Pt[][] {
+export function keepRegion(K: Disc[], rho: number): Pt[][] {
   if (!K.length) return [];
   // sampled to 0.02 px, not the arcs' 0.2: a chord cuts inside its arc, and the cut keeps
   // off the rings, so their chord error is clearance lost
