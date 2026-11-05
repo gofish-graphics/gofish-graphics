@@ -674,7 +674,6 @@ html.landing-page .DocSearch-Button {
   margin-left: -6px;
   border-radius: 50%;
   background: var(--leaf);
-  transition: transform 0.15s;
 }
 /* Narrow screens: the four cards become one row you swipe sideways, each card
    78% wide so the next one peeks in, bleeding to the sheet's edges. */

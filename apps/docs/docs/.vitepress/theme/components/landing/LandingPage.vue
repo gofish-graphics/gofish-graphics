@@ -11,7 +11,7 @@ import { COLLAGE, SPECTRUM } from "./landingCards";
 // (see wireHeroCards).
 import demoSvg from "./fragments/demo-svg.html?raw";
 import codeStrip from "./fragments/code-strip.html?raw";
-import heroCardsUrl from "./fragments/hero-cards.html?url";
+import heroCardsUrl from "./fragments/hero-cards.htm?url";
 
 import "./landing.css";
 
@@ -21,6 +21,9 @@ const pulltabEl = ref<HTMLElement | null>(null);
 const railEl = ref<HTMLElement | null>(null);
 const axisEl = ref<HTMLElement | null>(null);
 const knobEl = ref<HTMLElement | null>(null);
+// Whether the spectrum row overflows, so it scrolls (narrow screens only). Only
+// then is it a tab stop with a label, so keyboard users can scroll it.
+const railScrolls = ref(false);
 const jsReady = ref(false);
 const heroCards = ref("");
 const allExamplesHref = computed(() => examplesHref(docsLang.value));
@@ -255,7 +258,8 @@ function wireBrackets(): void {
 // the viewport is wide enough to show it, so phones never download it. It is
 // a hashed static asset (`?url`), fetched as text, rather than a dynamic
 // import(): VitePress modulepreloads every dynamic import of a page's chunk,
-// which would send it to phones anyway.
+// which would send it to phones anyway. The file ends in `.htm`, not `.html`,
+// because the VitePress dev server answers every `.html` URL with its app shell.
 function wireHeroCards(): void {
   const wide = window.matchMedia("(min-width: 1101px)");
   let requested = false;
@@ -263,9 +267,16 @@ function wireHeroCards(): void {
     if (!wide.matches || requested) return;
     requested = true;
     fetch(heroCardsUrl)
-      .then((r) => r.text())
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.text();
+      })
       .then((html) => {
         heroCards.value = html;
+      })
+      .catch((err) => {
+        // The cards are decoration: leave them out.
+        console.warn("GoFish landing: hero cards did not load", err);
       });
   };
   load();
@@ -276,6 +287,7 @@ function wireHeroCards(): void {
 // ---- spectrum swipe row (narrow screens): a dot on the pencil line under the
 // row tracks how far it has been swiped, from 4% to 92% of the line. The
 // sizes are measured on mount and resize, so a scroll only sets a transform.
+// The same measure says whether the row scrolls at all (railScrolls).
 function wireRail(): void {
   const rail = railEl.value;
   const axis = axisEl.value;
@@ -290,6 +302,10 @@ function wireRail(): void {
   const measure = () => {
     axisW = axis.clientWidth;
     max = rail.scrollWidth - rail.clientWidth;
+    // On wide screens the row does not clip (overflow visible), though its
+    // tilted cards still overflow it by a few pixels.
+    railScrolls.value =
+      max > 0 && getComputedStyle(rail).overflowX !== "visible";
     update();
   };
   rail.addEventListener("scroll", update, { passive: true });
@@ -404,8 +420,10 @@ onBeforeUnmount(() => {
           <div
             ref="railEl"
             class="specimens"
-            tabindex="0"
-            aria-label="Four charts, from simple to complex"
+            :tabindex="railScrolls ? 0 : undefined"
+            :aria-label="
+              railScrolls ? 'Four charts, from simple to complex' : undefined
+            "
           >
             <PictureCard
               v-for="(card, i) in SPECTRUM"

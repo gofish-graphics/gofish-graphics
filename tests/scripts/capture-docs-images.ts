@@ -68,14 +68,15 @@ import {
 
 // The docs package is `type: commonjs` while this one is `type: module`, so a
 // static named import of a docs .ts trips Node's CJS↔ESM named-export interop
-// under tsx. A dynamic import with a default-namespace fallback is robust
-// either way.
-async function importExport<T>(path: string, name: string): Promise<T> {
+// under tsx. A dynamic import that falls back to the default namespace (where
+// the CJS interop puts the exports) is robust either way.
+async function importModule<T>(path: string, names: (keyof T)[]): Promise<T> {
   const mod: any = await import(path);
-  const value = mod[name] ?? mod.default?.[name];
-  if (value === undefined)
-    throw new Error(`${name} export not found in ${path}`);
-  return value;
+  const ns = names.every((name) => name in mod) ? mod : mod.default;
+  for (const name of names)
+    if (ns?.[name] === undefined)
+      throw new Error(`${String(name)} export not found in ${path}`);
+  return ns;
 }
 
 const DOCS_VITEPRESS = "../../apps/docs/docs/.vitepress";
@@ -84,33 +85,30 @@ type GalleryExample = { id: string; title: string; storyId: string };
 
 // The SAME loader the gallery + docs config use, so the example `id`s line up
 // with the runtime `ex.id` and the `/js/examples/<id>` slugs by construction.
-const loadStoryExamples = await importExport<() => Promise<GalleryExample[]>>(
-  `${DOCS_VITEPRESS}/data/storyExamples.ts`,
-  "loadStoryExamples"
-);
+const { loadStoryExamples } = await importModule<{
+  loadStoryExamples: () => Promise<GalleryExample[]>;
+}>(`${DOCS_VITEPRESS}/data/storyExamples.ts`, ["loadStoryExamples"]);
 // The `::: gofish` markdown plugin: which stories the docs picture with `image`.
-const findImageStoryIds = await importExport<() => string[]>(
-  `${DOCS_VITEPRESS}/markdown-it-gofish.ts`,
-  "findImageStoryIds"
-);
+const { findImageStoryIds } = await importModule<{
+  findImageStoryIds: () => string[];
+}>(`${DOCS_VITEPRESS}/markdown-it-gofish.ts`, ["findImageStoryIds"]);
 // Where each picture lives (the pages read the same module).
-const STORY_IMAGES_DIR = await importExport<string>(
-  `${DOCS_VITEPRESS}/storyImages.ts`,
-  "STORY_IMAGES_DIR"
-);
-const storyImagePath = await importExport<(storyId: string) => string>(
-  `${DOCS_VITEPRESS}/storyImages.ts`,
-  "storyImagePath"
-);
-const exampleImagePath = await importExport<(id: string) => string>(
-  `${DOCS_VITEPRESS}/storyImages.ts`,
-  "exampleImagePath"
-);
+const { STORY_IMAGES_DIR, storyImagePath, exampleImagePath } =
+  await importModule<{
+    STORY_IMAGES_DIR: string;
+    storyImagePath: (storyId: string) => string;
+    exampleImagePath: (id: string) => string;
+  }>(`${DOCS_VITEPRESS}/storyImages.ts`, [
+    "STORY_IMAGES_DIR",
+    "storyImagePath",
+    "exampleImagePath",
+  ]);
 // The landing page's picture cards (LandingPage.vue renders the same list).
-const LANDING_CARDS = await importExport<{ id: string }[]>(
-  `${DOCS_VITEPRESS}/theme/components/landing/landingCards.ts`,
-  "LANDING_CARDS"
-);
+const { LANDING_CARDS } = await importModule<{
+  LANDING_CARDS: { id: string }[];
+}>(`${DOCS_VITEPRESS}/theme/components/landing/landingCards.ts`, [
+  "LANDING_CARDS",
+]);
 
 const TESTS_DIR = join(import.meta.dirname, "..");
 const HARNESS_DIR = join(TESTS_DIR, "harness");
@@ -311,10 +309,18 @@ async function main() {
               shot = { png, width: box.width, height: box.height };
             }
             // The landing card's picture, cropped to the drawing (this
-            // changes the svg, so it comes after the thumbnail).
-            const landing = landingIds.has(ex.id)
-              ? await shootDrawing(page)
-              : undefined;
+            // changes the svg, so it comes after the thumbnail). It fails on
+            // its own: an error here still keeps the thumbnail above.
+            let landing: Shot | undefined;
+            if (landingIds.has(ex.id)) {
+              try {
+                landing = await shootDrawing(page);
+              } catch (err) {
+                landing = {
+                  skip: `error: ${err instanceof Error ? err.message : err}`,
+                };
+              }
+            }
             return { shot, landing };
           }
         );
