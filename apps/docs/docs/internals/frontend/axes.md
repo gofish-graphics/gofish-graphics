@@ -141,7 +141,9 @@ a difference axis the domain is a width, and the plot covers it centered on
 its content, where the difference axis draws its line. The
 claim walk widens its plan (`domainPlan` in `layer`) and layout widens its box
 (`GoFishNode.domainSpan`), so the two agree. Every axis line then distributes
-just past the plot's box, like any other chrome. The two lines of a scatter
+just past the content's box without its dressing, like any other chrome
+(see [the layout passes](/internals/layout/passes)): an outline or a label
+whose type is `undefined` draws over the line. The two lines of a scatter
 frame the domain corner even when no datum reaches it (a scatter whose y
 domain is niced below the lowest point does not draw its x axis at the lowest
 point), and a mark that reaches past the floor (a dot's radius, a histogram

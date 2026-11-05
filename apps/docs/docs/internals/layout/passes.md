@@ -961,11 +961,19 @@ fixed-size nodes report their size).
   is the plot alone. What dresses the content inside the frame still is: a
   label hanging off the first bar is dressing, so it adds around the plot. Labels beside a plain layer's content (and
   the outlines of its shapes) add around it the same way.
-- **The plot leaves out dressing.** Dressing is what is placed beside a node
-  the claim walk places elsewhere: a value label beside its bar's `ref`, a
-  tier of texts seated beside the bars of another tier, an `enclose` drawn
-  around placed members, and a ring's axes, seated beside the stand-in for
-  its content. Each node has a plot claim
+- **The plot leaves out dressing.** The plot of a layer on an axis is the
+  part of it that carries its space there (see
+  [Underlying Space](/internals/core/underlying-space)): a child whose own
+  type there is continuous or ordinal, one a `position` places at a datum,
+  one its own data places, or a `ref` stand-in for a node placed elsewhere.
+  Dressing is any other child of a layer where one child carries the space:
+  its geometry is read off other nodes' pixels, not placed by data on that
+  axis. That is a value label beside its bar's `ref`, a tier of texts
+  seated beside the bars of another tier, an `enclose` drawn around placed
+  members, and a chart of outlines or a line layered over a scatter
+  (`.layer(chart(selectAll(…)))`), whose type is `undefined` on both axes. A
+  layer where no child carries the space has no dressing: all of it is
+  plot. A ring's chrome is chrome, not dressing (`ClaimChild.chrome`). Each node has a plot claim
   next to its claim (`GoFishNode.resolvePlotExtent`): a layer composes its
   children's plot claims the way it composes their claims, its hull of what
   its constraints place leaves out the dressing (`buildPlan`'s plot
@@ -982,7 +990,11 @@ fixed-size nodes report their size).
   around a `chart()` with no size of its own is its parent's plot whole,
   axes included, since a parent lays a chart out by its outer box. So a
   chart in a spread beside a caption or another chart keeps its axes
-  clear of them.
+  clear of them. Each child also has a third claim, its box without its
+  dressing (`ChildForms.bare` in the plan, `GoFishNode.resolveBareExtent`
+  in the claim, `localBareSpan` in layout, inputs `blo`/`bhi`): the hull
+  of its children that are no dressing and no ink, a ring's chrome
+  included. It is what chrome is laid beside.
 - **Dressing never moves the parts it dresses.** Labels are a layer applied
   after the spread: they take room in the chart, but do not change how the
   spread lays out its parts. A chain of parts of the plot lays them by their
@@ -996,10 +1008,15 @@ fixed-size nodes report their size).
   overlaps where it does not fit (#1171); a label past the first or last
   row reaches past the chain, into the chart's margin. A part that is a
   share and a scope of its own (a facet panel) has its share as its plot,
-  and its chrome adds around it (`aroundShare` in `solver/plotForms.ts`). A chain edge to a
-  part that is no part of the plot (dressing, ink, a ring's chrome, a
-  stand-in) clears that part's whole box, so a ring still seats its title
-  past its tick labels. The plot of a chain with a stand-in reaches only as
+  and its chrome adds around it (`aroundShare` in `solver/plotForms.ts`). A chain edge
+  between two parts of the plot lays them by their plots. An edge to a
+  part that is no part of the plot (dressing, ink, a ring's chrome) lays
+  that part by its whole box and the other end by its box without its
+  dressing. So an axis line sits past its own box, beside what it dresses
+  less the outlines and labels that dress it: the ovals around a
+  scatter's groups, which are dressing, draw over the axes rather than
+  push them out. Inner chrome is no dressing, so a ring still seats its
+  title past its tick labels. The plot of a chain with a stand-in reaches only as
   far as its stand-ins. A child that reads y the other
   way has its plot read reflected with its box, at the one place a
   child's claim meets its parent (`formsOf` in `solver/plan.ts`), which a
@@ -1009,7 +1026,11 @@ fixed-size nodes report their size).
   with a size of its own, and a chart's outer box, are a part of their
   parent's plot, chrome and labels included (`GoFishNode.plotIsBox`), in
   the claim and in the layout alike: a chain lays such a part by its whole
-  box, and an align that places it by its plot aligns that box. So a row of
+  box, and an align that places it by its plot aligns that box. The axes
+  around a node with a size of its own still sit beside its box without
+  its dressing, its content's at the σ it solved (the `layer` claim hook
+  sets `_bareExtent`), so outlines that reach past its size draw over
+  them. So a row of
   charts aligned at their tops lines up the tops of their outer boxes, and
   a chart whose labels reach above its plot sits lower than one whose
   labels do not. The `spacing` between charts is measured between their
