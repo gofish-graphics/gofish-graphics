@@ -374,7 +374,7 @@ async function main() {
     const data = await runLayout({ w: 300, h: 200, axes: true }, node);
     const plot = nodesOf(data.child).find((n) => n._axesBeside)!;
     for (const axis of [0, 1] as const) {
-      const span = plot.localPlotSpan(axis);
+      const span = plot.localSpan("plot", axis);
       const { min, max } = plot.dims[axis];
       check(
         `the plot's span on ${axis === 0 ? "x" : "y"} lies inside its box`,

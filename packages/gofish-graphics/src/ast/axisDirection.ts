@@ -6,6 +6,7 @@ import type { Anchor, Dimensions, Interval, Transform } from "./dims";
 import type { AxisMap, AxisScale } from "./domain";
 import type { Size } from "./dims";
 import type { Placeable } from "./_node";
+import type { LocalSpan } from "./constraints/placementProgramLowerer";
 import type { BBoxKey } from "./constraints/bbox";
 import type { Geometry } from "./geometry";
 import { reflectOutlineY } from "./geometry/outline";
@@ -293,8 +294,7 @@ function reflectedView(target: Placeable): Placeable {
   const {
     projectedTranslate,
     localAnchor,
-    localPlotSpan,
-    localBareSpan,
+    localSpan,
     pinAnchor,
     setExtent,
   }: Partial<Placeable> = target;
@@ -323,16 +323,10 @@ function reflectedView(target: Placeable): Placeable {
         const v = localAnchor.call(target, axis, orientSide(anchor, -1));
         return v === undefined ? undefined : -v;
       }),
-    localPlotSpan:
-      localPlotSpan &&
-      ((axis: 0 | 1): [number, number] | undefined => {
-        const span = localPlotSpan.call(target, axis);
-        return axis === 1 && span !== undefined ? [-span[1], -span[0]] : span;
-      }),
-    localBareSpan:
-      localBareSpan &&
-      ((axis: 0 | 1): [number, number] | undefined => {
-        const span = localBareSpan.call(target, axis);
+    localSpan:
+      localSpan &&
+      ((kind: LocalSpan, axis: 0 | 1): [number, number] | undefined => {
+        const span = localSpan.call(target, kind, axis);
         return axis === 1 && span !== undefined ? [-span[1], -span[0]] : span;
       }),
     place: (axis: any, value: number, anchor: Anchor = "min") =>

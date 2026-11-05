@@ -56,6 +56,7 @@ import {
   directSlot,
   type ConstraintPosScales,
 } from "../constraints/shared";
+import type { LocalSpan } from "../constraints/placementProgramLowerer";
 import {
   applyNestExtentPlan,
   applyNestLayoutProposal,
@@ -1383,14 +1384,16 @@ export const layer = createNodeOperatorSequential(
                     return lo;
                   case "hi":
                     return hi;
-                  case "plo":
-                    return p.localPlotSpan?.(axis)?.[0] ?? lo;
-                  case "phi":
-                    return p.localPlotSpan?.(axis)?.[1] ?? hi;
-                  case "blo":
-                    return p.localBareSpan?.(axis)?.[0] ?? lo;
-                  case "bhi":
-                    return p.localBareSpan?.(axis)?.[1] ?? hi;
+                  // An end of a local span (`spanInput`), or of its box
+                  // where that is the span.
+                  case "plot0":
+                  case "plot1":
+                  case "bare0":
+                  case "bare1": {
+                    const end = kind.endsWith("0") ? 0 : 1;
+                    const span = kind.slice(0, -1) as LocalSpan;
+                    return p.localSpan?.(span, axis)?.[end] ?? (end ? hi : lo);
+                  }
                   case "at": {
                     const min = p.dims[axis].min;
                     return min === undefined || lo === undefined

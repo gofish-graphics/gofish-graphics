@@ -136,7 +136,7 @@ async function main() {
       layered.claimWalk?.dressing
     );
     // Its plot is the scatter's box: the ovals are left out.
-    const span = layered.localPlotSpan(0);
+    const span = layered.localSpan("plot", 0);
     const { min, max } = scatterPart.dims[0];
     check(
       "the layer's plot is the scatter's box on x",

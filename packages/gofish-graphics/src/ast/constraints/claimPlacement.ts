@@ -12,7 +12,7 @@ import {
 } from "./placementSolver";
 import { values, type Arith } from "../solver/arith";
 import { Tape, type F } from "../solver/formula";
-import type { SolvePlaceable } from "./placementProgramLowerer";
+import type { LocalSpan, SolvePlaceable } from "./placementProgramLowerer";
 import type { PlacementConstraint, ScaleOf } from "./placementLowering";
 import {
   axisIndex,
@@ -115,11 +115,11 @@ export type ClaimChild = {
   part?: UnderlyingSpace;
   /** Its plot on the axis, about its origin, where it is not its whole
    *  claim (an outline, dressing or chrome around it): a chain lays it by
-   *  its plot, as layout's `localPlotSpan` does, so what dresses a part
+   *  its plot, as layout's `localSpan` does, so what dresses a part
    *  never moves the parts (#1032). */
   plot?: Extent;
   /** Its box without its dressing, about its origin, where that is not its
-   *  whole box: what chrome is laid beside (`GoFishNode.localBareSpan`).
+   *  whole box: what chrome is laid beside (`GoFishNode.localSpan`).
    *  Inner chrome is part of it, so a title sits past the tick labels. */
   bare?: Extent;
   /** It is chrome (a ring's shapes): no part of the plot and no dressing,
@@ -243,20 +243,27 @@ const boxOfClaim = (extent: Extent | undefined): Box =>
 /**
  * What the solve reads of a child whose box on `axis` is `[lo, hi]` about
  * its origin, with its box start at `min` when it is placed before the
- * solve, and its plot `[plot[0], plot[1]]` where that is not its box. Its
- * baseline is its origin, or its start where `startBaseline` says so. Only
- * `axis` is solved; the other axis has no size, so no fact on it resolves.
+ * solve, and its local spans (`spans`: its plot, its box without its
+ * dressing) where they are not its box. Its baseline is its origin, or its
+ * start where `startBaseline` says so. Only `axis` is solved; the other
+ * axis has no size, so no fact on it resolves.
  */
 const formulaPlaceable = (
   T: Arith<F>,
   axis: 0 | 1,
   lo: F,
   hi: F,
-  space: UnderlyingSpace | undefined,
-  min: F | undefined,
-  plot?: readonly [F, F],
-  startBaseline = false,
-  bare?: readonly [F, F]
+  {
+    space,
+    min,
+    spans = {},
+    startBaseline = false,
+  }: {
+    space?: UnderlyingSpace;
+    min?: F;
+    spans?: Partial<Record<LocalSpan, readonly [F, F]>>;
+    startBaseline?: boolean;
+  }
 ): SolvePlaceable<F> => {
   const box = { min, size: T.sub(hi, lo) };
   const none = { min: undefined, size: undefined };
@@ -275,13 +282,23 @@ const formulaPlaceable = (
               ? lo
               : T.zero;
     },
-    localPlotSpan: (a) =>
-      a === axis && plot !== undefined ? [plot[0], plot[1]] : undefined,
-    localBareSpan: (a) =>
-      a === axis && bare !== undefined ? [bare[0], bare[1]] : undefined,
+    localSpan: (kind, a) => {
+      const span = a === axis ? spans[kind] : undefined;
+      return span && [span[0], span[1]];
+    },
     spaceOn: (dir) => (dir === axis ? space : undefined),
   };
 };
+
+/** A child's local spans, in the order the solve reads them
+ *  (`ClaimChild.plot`, `ClaimChild.bare`). */
+const LOCAL_SPANS: readonly LocalSpan[] = ["plot", "bare"];
+
+/** The name of the tape input for one end (`0` its start, `1` its end) of
+ *  child `i`'s local `span` (`${span}0:${i}`), which layout evaluates by
+ *  `localSpan`. */
+export const spanInput = (span: LocalSpan, end: 0 | 1, i: number): string =>
+  `${span}${end}:${i}`;
 
 /** The constraints that act on `axis`, each as it acts on that axis alone
  *  (a position's or an align's other coordinate places nothing there). A
@@ -618,42 +635,29 @@ export function placeByClaims(
               : undefined;
     const lo = tape.input(`lo:${i}`, box[0]);
     const hi = tape.input(`hi:${i}`, box[1]);
-    const plot =
-      c.plot === undefined
-        ? undefined
-        : (() => {
-            const [pl, ph] = boxOfClaim(c.plot);
-            return [
-              tape.input(`plo:${i}`, pl),
-              tape.input(`phi:${i}`, ph),
-            ] as const;
-          })();
-    const bare =
-      c.bare === undefined
-        ? undefined
-        : (() => {
-            const [bl, bh] = boxOfClaim(c.bare);
-            return [
-              tape.input(`blo:${i}`, bl),
-              tape.input(`bhi:${i}`, bh),
-            ] as const;
-          })();
+    // Its local spans, where they are not its box, each end an input that
+    // layout measures (`spanInput`).
+    const spans: Partial<Record<LocalSpan, readonly [F, F]>> = {};
+    for (const span of LOCAL_SPANS) {
+      const e = c[span];
+      if (e === undefined) continue;
+      const [l, h] = boxOfClaim(e);
+      spans[span] = [
+        tape.input(spanInput(span, 0, i), l),
+        tape.input(spanInput(span, 1, i), h),
+      ];
+    }
     const min = origin === undefined ? undefined : T.add(origin, lo);
     if (min !== undefined) presetMin.set(i, min);
     if (origin !== undefined) presetOrigin.set(i, origin);
     targets.set(
       key,
-      formulaPlaceable(
-        T,
-        axis,
-        lo,
-        hi,
-        c.space,
+      formulaPlaceable(T, axis, lo, hi, {
+        space: c.space,
         min,
-        plot,
-        c.startBaseline,
-        bare
-      )
+        spans,
+        startBaseline: c.startBaseline,
+      })
     );
     indexOf.set(key, i);
     if (c.dataPositioned) dataPositioned.add(key);
@@ -682,14 +686,9 @@ export function placeByClaims(
     const hi = tape.input(`hi:@${key}`, box[1]);
     targets.set(
       key,
-      formulaPlaceable(
-        T,
-        axis,
-        lo,
-        hi,
-        undefined,
-        containerMin === undefined ? undefined : T.add(containerMin, gap)
-      )
+      formulaPlaceable(T, axis, lo, hi, {
+        min: containerMin === undefined ? undefined : T.add(containerMin, gap),
+      })
     );
     rigid.set(key, {
       container: keyAt(op.child),

@@ -36,16 +36,19 @@ export const BOX_ANCHOR: Record<AlignAnchor, Anchor> = {
 export type SolvePlaceable<T> = {
   dims: Dimensions<T>;
   localAnchor?: (axis: FancyDirection, anchor: Anchor) => T | undefined;
-  localPlotSpan?: (axis: 0 | 1) => [T, T] | undefined;
-  /** Its box without its dressing (`GoFishNode.localBareSpan`), which
-   *  chrome is laid beside; undefined where that is its box. */
-  localBareSpan?: (axis: 0 | 1) => [T, T] | undefined;
+  /** One of its spans (`GoFishNode.localSpan`); undefined where that is
+   *  its box. */
+  localSpan?: (span: LocalSpan, axis: 0 | 1) => [T, T] | undefined;
   spaceOn?: (dir: Direction) => UnderlyingSpace | undefined;
 };
 
-/** Which of a target's spans an anchor is read off: its box, its plot, or
- *  its box without its dressing ({@link anchorOffset}). */
-export type SpanOf = "box" | "plot" | "bare";
+/** A span of a target other than its box (`GoFishNode.localSpan`): its
+ *  plot, or its box without its dressing. */
+export type LocalSpan = "plot" | "bare";
+
+/** Which of a target's spans an anchor is read off: its box, or one of
+ *  its local spans ({@link anchorOffset}). */
+export type SpanOf = "box" | LocalSpan;
 
 /** The offset of a target's data baseline from its `min` on `axis`, or
  *  undefined when the target is not a baseline magnitude there (it has no
@@ -72,32 +75,28 @@ export function anchorOffset<T>(
   target: SolvePlaceable<T>,
   axis: Axis,
   anchor: RelationAnchor,
-  // Read the anchor off the target's plot (`localPlotSpan`): a chain lays
-  // its parts by their plots, so the dressing beside a part (a value label,
-  // a nested chart's chrome) never moves it (#1032). Or off its box without
-  // its dressing (`localBareSpan`), which chrome is laid beside.
-  plot: SpanOf = "box"
+  // Read the anchor off the target's plot (`localSpan`): a chain lays its
+  // parts by their plots, so the dressing beside a part (a value label, a
+  // nested chart's chrome) never moves it (#1032). Or off its box without
+  // its dressing, which chrome is laid beside.
+  span: SpanOf = "box"
 ): T | undefined {
   if (anchor === "tail" || anchor === "head") {
     const tail = freeBaselineOffset(A, target, axis) ?? A.zero;
     if (anchor === "tail") return tail;
-    const end = anchorOffset(A, target, axis, "end", plot);
+    const end = anchorOffset(A, target, axis, "end", span);
     return end === undefined ? undefined : A.sub(end, tail);
   }
-  const span =
-    plot === "plot"
-      ? target.localPlotSpan?.(axisIndex(axis))
-      : plot === "bare"
-        ? target.localBareSpan?.(axisIndex(axis))
-        : undefined;
-  if (span !== undefined && anchor !== "baseline") {
+  const lohi =
+    span === "box" ? undefined : target.localSpan?.(span, axisIndex(axis));
+  if (lohi !== undefined && anchor !== "baseline") {
     const min = target.localAnchor?.(axis, "min") ?? A.zero;
     const at =
       anchor === "start"
-        ? span[0]
+        ? lohi[0]
         : anchor === "end"
-          ? span[1]
-          : A.scale(0.5, A.add(span[0], span[1]));
+          ? lohi[1]
+          : A.scale(0.5, A.add(lohi[0], lohi[1]));
     return A.sub(at, min);
   }
   const local = target.localAnchor?.(axis, BOX_ANCHOR[anchor]);

@@ -9,6 +9,7 @@
 // Type-only (erased) so no runtime cycle with solver/scopes.ts, which imports
 // RenderSession from here.
 import type { ScopeRegistry } from "./solver/scopes";
+import type { LocalSpan } from "./constraints/placementProgramLowerer";
 import { LayerContext } from "./marks/markResult";
 import type { SplitBy } from "./datumProjection";
 import {
@@ -313,13 +314,11 @@ export type Placeable = {
    *  uses this to express every anchor as `absoluteMin + constant`, including
    *  `baseline` for asymmetric boxes such as text and negative bars. */
   localAnchor?: (axis: FancyDirection, anchor: Anchor) => number | undefined;
-  /** Where its plot lies in its local frame, when that is not its whole box
-   *  (see `GoFishNode.localPlotSpan`). A chain lays its parts by it. */
-  localPlotSpan?: (axis: 0 | 1) => [number, number] | undefined;
-  /** Where its box without its dressing lies in its local frame, when that
-   *  is not its whole box (see `GoFishNode.localBareSpan`). Chrome is laid
-   *  beside it. */
-  localBareSpan?: (axis: 0 | 1) => [number, number] | undefined;
+  /** Where one of its spans lies in its local frame, when that is not its
+   *  whole box (see `GoFishNode.localSpan`): its plot, which a chain lays
+   *  its parts by, or its box without its dressing, which chrome is laid
+   *  beside. */
+  localSpan?: (span: LocalSpan, axis: 0 | 1) => [number, number] | undefined;
   place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
   /** Write an axis extent from owned bbox keys (the size-setting primitive
    *  — `span` and an authoritative `position` pin go through it). Optional
@@ -2362,8 +2361,8 @@ export class GoFishNode {
     }
     const direction = this.yFrame.direction;
     const parentDirection = yDirection(this.parent);
-    this._plotSpan = [undefined, undefined];
-    this._bareSpan = [undefined, undefined];
+    this._spans.plot.fill(undefined);
+    this._spans.bare.fill(undefined);
     if (this.strokeOverhang > 0) {
       const session = this.tryGetRenderSession();
       if (session !== undefined) session.outlined = true;
@@ -2532,27 +2531,79 @@ export class GoFishNode {
     return this._projectTranslate(dir);
   }
 
-  /** {@link localPlotSpan}'s memo, per axis, cleared when it is laid out
-   *  (`null`: its plot is its box). */
-  private _plotSpan: [
-    [number, number] | null | undefined,
-    [number, number] | null | undefined,
-  ] = [undefined, undefined];
+  /** {@link localSpan}'s memo, per span and axis, cleared when it is laid
+   *  out (`null`: the span is its box). */
+  private readonly _spans: Record<
+    LocalSpan,
+    [[number, number] | null | undefined, [number, number] | null | undefined]
+  > = { plot: [undefined, undefined], bare: [undefined, undefined] };
 
   /**
-   * Where its plot lies on `axis` in its local frame, once laid out: its
-   * box without its dressing and chrome (see {@link resolvePlotExtent}), or
-   * undefined when that is its whole box ({@link plotIsBox}). Any other
-   * node that wears chrome has its content's; a layer has the hull of its
-   * children that are no dressing there, each at its own plot. A chain lays its parts by their plots
-   * (`anchorOffset`), so dressing never moves the parts it dresses (#1032).
+   * Where one of its spans lies on `axis` in its local frame, once laid
+   * out, or undefined when that is its whole box: its plot, its box without
+   * its dressing and chrome (see {@link resolvePlotExtent}), which a chain
+   * lays its parts by (`anchorOffset`), so dressing never moves the parts
+   * it dresses (#1032); or its box without its dressing (see
+   * {@link resolveBareExtent}), which chrome is laid beside. A layer's is
+   * the hull of its children that are no dressing and no ink there, each at
+   * its own, a ring's chrome included, and its niced domain where its axes
+   * sit beside it ({@link domainSpan}).
+   *
+   * Where a span is its whole box differs by span, as the claims of each
+   * say. A plot is a box placed whole ({@link plotIsBox}: a chart's box, a
+   * node with a size of its own, which maps its plot into that size), and
+   * any other node that wears chrome has its content's. A box without its
+   * dressing is a chart's box, whose dressing is its own, and any node that
+   * is no layer: only a layer sets dressing apart (`placeByClaims`), and a
+   * node with a size of its own still has its content's, since its
+   * dressing reaches past that size.
    */
-  public localPlotSpan(axis: 0 | 1): [number, number] | undefined {
-    const memo = this._plotSpan[axis];
-    if (memo !== undefined) return memo ?? undefined;
-    const value = this.computePlotSpan(axis);
-    this._plotSpan[axis] = value ?? null;
+  public localSpan(span: LocalSpan, axis: 0 | 1): [number, number] | undefined {
+    const memo = this._spans[span];
+    if (memo[axis] !== undefined) return memo[axis] ?? undefined;
+    const value = this.spanHull(span, axis);
+    memo[axis] = value ?? null;
     return value;
+  }
+
+  private spanHull(span: LocalSpan, axis: 0 | 1): [number, number] | undefined {
+    const walk = this.claimWalk;
+    if (
+      span === "plot"
+        ? this.plotIsBox(axis)
+        : walk === undefined || this._chartRing === true
+    )
+      return undefined;
+    const out = (i: number) =>
+      walk?.dressing[axis].has(i) === true || walk?.ink[axis].has(i) === true;
+    const own = this.children.map((c, i) =>
+      c instanceof GoFishNode && !out(i) ? c.localSpan(span, axis) : undefined
+    );
+    if (!this.children.some((_, i) => out(i)) && own.every((p) => !p))
+      return undefined;
+    // The domain's span is in this node's axis order, as its layout reads
+    // it; its box is stored in pixels, `direction × order` (`frameAt` in
+    // `layer`), so a y-up node reflects it.
+    const ordered = this.domainSpan(axis);
+    const dir = axis === 0 ? 1 : this.yFrame.direction;
+    const domain: [number, number] | undefined =
+      ordered === undefined || dir === 1 ? ordered : [-ordered[1], -ordered[0]];
+    let lo = domain?.[0] ?? Infinity;
+    let hi = domain?.[1] ?? -Infinity;
+    // A child's span in its parent's frame, or its box when that is its
+    // span. Both are in pixels, as the child stores its box, whichever way
+    // the parent reads y: a parent that reads y the other way sees the span
+    // through its view of the child (`orientView`), which reflects it.
+    this.children.forEach((c, i) => {
+      if (out(i) || !(c instanceof GoFishNode)) return;
+      const { min, max } = c.dims[axis];
+      if (min === undefined || max === undefined) return;
+      const s = own[i];
+      const shift = min - (c.localAnchor?.(axis, "min") ?? 0);
+      lo = Math.min(lo, s === undefined ? Math.min(min, max) : s[0] + shift);
+      hi = Math.max(hi, s === undefined ? Math.max(min, max) : s[1] + shift);
+    });
+    return lo <= hi ? [lo, hi] : undefined;
   }
 
   /**
@@ -2640,105 +2691,6 @@ export class GoFishNode {
     const a = frame.sigma * min + frame.originPx;
     const b = frame.sigma * max + frame.originPx;
     return [Math.min(a, b), Math.max(a, b)];
-  }
-
-  /** {@link localBareSpan}'s memo, per axis, cleared when it is laid out
-   *  (`null`: it is its box). */
-  private _bareSpan: [
-    [number, number] | null | undefined,
-    [number, number] | null | undefined,
-  ] = [undefined, undefined];
-
-  /**
-   * Where its box without its dressing lies on `axis` in its local frame,
-   * once laid out (see {@link resolveBareExtent}), or undefined when that
-   * is its whole box. A layer's is the hull of its children that are no
-   * dressing and no ink there, each at its own, a ring's chrome included,
-   * and its niced domain where its axes sit beside it ({@link domainSpan}).
-   * Any other node, and a chart's box, is its box, as the claim walk reads
-   * it.
-   */
-  public localBareSpan(axis: 0 | 1): [number, number] | undefined {
-    const memo = this._bareSpan[axis];
-    if (memo !== undefined) return memo ?? undefined;
-    const value = this.computeBareSpan(axis);
-    this._bareSpan[axis] = value ?? null;
-    return value;
-  }
-
-  private computeBareSpan(axis: 0 | 1): [number, number] | undefined {
-    const walk = this.claimWalk;
-    if (walk === undefined || this._chartRing === true) return undefined;
-    const out = (i: number) =>
-      walk.dressing[axis].has(i) || walk.ink[axis].has(i);
-    const own = this.children.map((c) =>
-      c instanceof GoFishNode ? c.localBareSpan(axis) : undefined
-    );
-    if (!this.children.some((_, i) => out(i)) && own.every((p) => !p))
-      return undefined;
-    const ordered = this.domainSpan(axis);
-    const dir = axis === 0 ? 1 : this.yFrame.direction;
-    const domain: [number, number] | undefined =
-      ordered === undefined || dir === 1 ? ordered : [-ordered[1], -ordered[0]];
-    let lo = domain?.[0] ?? Infinity;
-    let hi = domain?.[1] ?? -Infinity;
-    this.children.forEach((c, i) => {
-      if (out(i) || !(c instanceof GoFishNode)) return;
-      const { min, max } = c.dims[axis];
-      if (min === undefined || max === undefined) return;
-      const span = own[i];
-      const shift = min - (c.localAnchor?.(axis, "min") ?? 0);
-      const [a, b] =
-        span === undefined
-          ? [Math.min(min, max), Math.max(min, max)]
-          : [span[0] + shift, span[1] + shift];
-      lo = Math.min(lo, a);
-      hi = Math.max(hi, b);
-    });
-    return lo <= hi ? [lo, hi] : undefined;
-  }
-
-  private computePlotSpan(axis: 0 | 1): [number, number] | undefined {
-    if (this.plotIsBox(axis)) return undefined;
-    // The domain's span is in this node's axis order, as its layout reads
-    // it; its box is stored in pixels, `direction × order` (`frameAt` in
-    // `layer`), so a y-up node reflects it.
-    const ordered = this.domainSpan(axis);
-    const dir = axis === 0 ? 1 : this.yFrame.direction;
-    const domain: [number, number] | undefined =
-      ordered === undefined || dir === 1 ? ordered : [-ordered[1], -ordered[0]];
-    // A child's plot in its parent's frame, or its box when that is its
-    // plot. Both are in pixels, as the child stores its box, whichever way
-    // the parent reads y: a parent that reads y the other way sees the span
-    // through its view of the child (`orientView`), which reflects it.
-    const inFrame = (
-      c: Placeable,
-      plot: [number, number] | undefined
-    ): [number, number] | undefined => {
-      const { min, max } = c.dims[axis];
-      if (min === undefined || max === undefined) return undefined;
-      if (plot === undefined) return [Math.min(min, max), Math.max(min, max)];
-      const shift = min - (c.localAnchor?.(axis, "min") ?? 0);
-      return [plot[0] + shift, plot[1] + shift];
-    };
-    const walk = this.claimWalk;
-    const out = (i: number) =>
-      walk?.dressing[axis].has(i) === true || walk?.ink[axis].has(i) === true;
-    const own = this.children.map((c) =>
-      c instanceof GoFishNode ? c.localPlotSpan(axis) : undefined
-    );
-    if (!this.children.some((_, i) => out(i)) && own.every((p) => !p))
-      return undefined;
-    let lo = domain?.[0] ?? Infinity;
-    let hi = domain?.[1] ?? -Infinity;
-    this.children.forEach((c, i) => {
-      if (out(i) || !(c instanceof GoFishNode)) return;
-      const span = inFrame(c, own[i]);
-      if (span === undefined) return;
-      lo = Math.min(lo, span[0]);
-      hi = Math.max(hi, span[1]);
-    });
-    return lo <= hi ? [lo, hi] : undefined;
   }
 
   /** Where its `anchor` sits in its local frame on `axis`. Its baseline is
