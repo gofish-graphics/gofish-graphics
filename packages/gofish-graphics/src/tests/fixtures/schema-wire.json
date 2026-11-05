@@ -1,10 +1,10 @@
 {
   "balance": {
     "HasQuantity": { "name": "Balance" },
-    "HasUnit": { "unit": "USD", "symbol": "USD", "traits": { "CanAdd": {} } }
+    "HasUnit": { "unit": "USD", "symbol": "USD", "traits": { "CanSum": {} } }
   },
   "revenue": {
-    "HasUnit": { "unit": "USD", "symbol": "USD", "traits": { "CanAdd": {} } }
+    "HasUnit": { "unit": "USD", "symbol": "USD", "traits": { "CanSum": {} } }
   },
   "area": {
     "HasUnit": { "unit": "km²", "symbol": "km²" }
@@ -30,7 +30,7 @@
     "HasUnit": {
       "unit": "instant",
       "traits": {},
-      "difference": { "unit": "duration", "traits": { "CanAdd": {} } },
+      "difference": { "unit": "duration", "traits": { "CanSum": {} } },
       "zone": "UTC"
     }
   },
@@ -39,11 +39,11 @@
     "HasUnit": {
       "unit": "instant",
       "traits": {},
-      "difference": { "unit": "duration", "traits": { "CanAdd": {} } },
+      "difference": { "unit": "duration", "traits": { "CanSum": {} } },
       "zone": "America/New_York"
     }
   },
   "wait": {
-    "HasUnit": { "unit": "duration", "traits": { "CanAdd": {} } }
+    "HasUnit": { "unit": "duration", "traits": { "CanSum": {} } }
   }
 }

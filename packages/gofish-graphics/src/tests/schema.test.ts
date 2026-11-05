@@ -492,7 +492,7 @@ async function main() {
           HasUnit: {
             unit: "instant",
             traits: {},
-            difference: { unit: "duration", traits: { CanAdd: {} } },
+            difference: { unit: "duration", traits: { CanSum: {} } },
             zone: "Asia/Tokyo",
           },
         })
@@ -509,7 +509,7 @@ async function main() {
     );
     check(
       "Unit.duration adds up",
-      SrcUnit.duration.type.HasUnit?.traits?.CanAdd !== undefined &&
+      SrcUnit.duration.type.HasUnit?.traits?.CanSum !== undefined &&
         SrcUnit.duration.name === "duration"
     );
     // The levels-fit rule: text levels are not amounts, numbers are.
@@ -562,10 +562,10 @@ async function main() {
       JSON.stringify(Party.type)
     );
     check(
-      "Unit(name, { traits: [Trait.summable()] }) has CanAdd",
+      "Unit(name, { traits: [Trait.summable()] }) has CanSum",
       JSON.stringify(Unit("USD", { traits: [Trait.summable()] }).type) ===
         JSON.stringify({
-          HasUnit: { unit: "USD", symbol: "USD", traits: { CanAdd: {} } },
+          HasUnit: { unit: "USD", symbol: "USD", traits: { CanSum: {} } },
         })
     );
     check(
@@ -1118,16 +1118,16 @@ async function main() {
     check(
       "and the wire form reads back with the area's unit name alone",
       getColumnTypes(back)?.area?.HasUnit?.traits === undefined &&
-        getColumnTypes(back)?.revenue?.HasUnit?.traits?.CanAdd !== undefined
+        getColumnTypes(back)?.revenue?.HasUnit?.traits?.CanSum !== undefined
     );
   }
 
   console.log("\n# a wire HasUnit has only its own keys");
   {
     const bad = {
-      "the old key classes": { unit: "USD", classes: { CanAdd: {} } },
+      "the old key classes": { unit: "USD", classes: { CanSum: {} } },
       "a list of Trait values": { unit: "USD", traits: [Trait.summable()] },
-      "an unknown unit trait": { unit: "USD", traits: { CanSum: {} } },
+      "an unknown unit trait": { unit: "USD", traits: { CanMultiply: {} } },
     };
     for (const [name, HasUnit] of Object.entries(bad)) {
       const got = await errorOf(() =>
@@ -1142,8 +1142,8 @@ async function main() {
     }
     check(
       "a well-formed record passes",
-      columnTypeOf("usd", { HasUnit: { unit: "USD", traits: { CanAdd: {} } } })
-        .HasUnit?.traits?.CanAdd !== undefined
+      columnTypeOf("usd", { HasUnit: { unit: "USD", traits: { CanSum: {} } } })
+        .HasUnit?.traits?.CanSum !== undefined
     );
     const midpoint = await errorOf(() =>
       columnTypeOf("rating", {
@@ -1160,7 +1160,7 @@ async function main() {
     );
     const wire = await errorOf(() =>
       schemaToWire({
-        usd: { HasUnit: { unit: "USD", classes: { CanAdd: {} } } } as any,
+        usd: { HasUnit: { unit: "USD", classes: { CanSum: {} } } } as any,
       })
     );
     check(

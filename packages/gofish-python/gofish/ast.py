@@ -2435,7 +2435,7 @@ def _require_str(value: Any, what: str) -> str:
 
 # The unit of a difference of two instants, ``Unit.duration``: JS
 # ``DURATION`` in measure.ts. Durations add up.
-_DURATION = {"unit": "duration", "traits": {"CanAdd": {}}}
+_DURATION = {"unit": "duration", "traits": {"CanSum": {}}}
 
 # The unit of a time column without its zone, which ``Unit.time(zone=...)``
 # adds: JS ``INSTANT`` in measure.ts. Its traits are known: it has none,
@@ -2598,7 +2598,7 @@ def _unit_type_of(name: Optional[str], domain: Any, traits: Any) -> Dict[str, An
         type_["HasUnit"] = {
             "unit": name,
             "symbol": name,
-            "traits": {"CanAdd": {}} if "summable" in kinds else {},
+            "traits": {"CanSum": {}} if "summable" in kinds else {},
         }
     if domain is not None:
         type_["HasLevels"] = {"levels": list(domain["levels"])}
@@ -2721,7 +2721,7 @@ class Unit:
             default = len(levels["levels"]) / 2 if levels is not None else None
             at = "" if midpoint["at"] == default else repr(midpoint["at"])
             traits.append(f"Trait.diverging({at})")
-        if unit is not None and "CanAdd" in (unit.get("traits") or {}):
+        if unit is not None and "CanSum" in (unit.get("traits") or {}):
             traits.append("Trait.summable()")
         if traits:
             args.append(f"traits=[{', '.join(traits)}]")

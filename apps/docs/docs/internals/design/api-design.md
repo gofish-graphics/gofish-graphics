@@ -103,10 +103,10 @@ and yields to either real source. See
 
 **Traits get plain names.** A trait is named `Has<Thing>` for a
 property and `Can<Verb>` for an operation: `HasZero`, `HasOrder`, `HasCycle`,
-`CanAdd`, `CanNegate`. These read at a glance for someone who is not a
+`CanSum`, `CanNegate`. These read at a glance for someone who is not a
 mathematician. Math names like monoid or torsor appear only in the docs, as
 analogies. The builder word that declares a trait names what the user gets,
-not the trait itself: `Trait.summable()` declares `CanAdd`, as `Trait.diverging()`
+not the trait itself: `Trait.summable()` declares `CanSum`, as `Trait.diverging()`
 declares `HasMidpoint`. A trait of amounts sits on the unit, which is
 declared once and shared by its columns, so one unit cannot both add up and
 not.

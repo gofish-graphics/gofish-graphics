@@ -62,7 +62,7 @@ import { Frontend } from "gofish-ir";
  *    integers. Nothing in the engine reads it.
  *
  * A unit definition ({@link Unit}) stands for every trait but HasQuantity,
- * HasDomain and HasInteger: its name is the column's HasUnit (with CanAdd
+ * HasDomain and HasInteger: its name is the column's HasUnit (with CanSum
  * when its traits say `Trait.summable()`), its `domain` is HasLevels (and
  * HasOrder for `Domain.ordered`), and `Trait.diverging()` is HasMidpoint.
  *
@@ -150,7 +150,7 @@ export type HasUnit = {
  *  a sum of them is an amount in the same unit, and it starts from 0. It has
  *  no options. The instant, a time's unit, never has it, because two
  *  instants do not add. */
-export type CanAdd = Record<string, never>;
+export type CanSum = Record<string, never>;
 
 /** The trait of a column whose values are amounts of the quantity `name`
  *  (`{ name: "Pay", unit: USD }`), when that is not the column's own name.
@@ -258,7 +258,7 @@ export type ColumnTypes = Record<string, ColumnType>;
 /** The traits of a unit, what its amounts can do, keyed by trait name: a
  *  {@link Unit} definition's, which every column in the unit shares. A later
  *  trait of units (`HasZero`, ...) is one more optional key. */
-export type UnitTraits = { CanAdd?: CanAdd };
+export type UnitTraits = { CanSum?: CanSum };
 
 /** A trait that the order of a unit's levels has a midpoint
  *  (`Trait.diverging(midpoint?)`): its columns have {@link HasMidpoint}. It
@@ -270,7 +270,7 @@ export type DivergingTrait = {
 };
 
 /** A trait that a unit's amounts add up (`Trait.summable()`): the unit has
- *  {@link CanAdd}. */
+ *  {@link CanSum}. */
 export type SummableTrait = { readonly kind: "summable" };
 
 /** A trait of a unit's values, one entry of a unit definition's
@@ -457,7 +457,7 @@ function unitTypeOf(name: string | undefined, options: UnitOptions): UnitType {
           HasUnit: {
             unit: name,
             symbol: name,
-            traits: kinds.has("summable") ? { CanAdd: {} } : {},
+            traits: kinds.has("summable") ? { CanSum: {} } : {},
           },
         }
       : {}),
@@ -587,7 +587,7 @@ const TRAIT_KEYS: {
 /** The keys of each unit trait's record ({@link KeysOf}). */
 const UNIT_TRAIT_KEYS: {
   [K in keyof UnitTraits]-?: KeysOf<NonNullable<UnitTraits[K]>>;
-} = { CanAdd: {} };
+} = { CanSum: {} };
 
 /** What is wrong with one record of a wire column type: at `at`, a value
  *  that is not a record, or keys the record does not take (`takes`). */

@@ -3,7 +3,7 @@ import { initializeContainer } from "../../helper";
 import { chart, spread, stack, rect, Unit, Trait } from "../../../src/lib";
 
 const meta: Meta = {
-  title: "Forward Syntax/Bar/Stack Needs CanAdd",
+  title: "Forward Syntax/Bar/Stack Needs CanSum",
   argTypes: {
     w: {
       control: { type: "number", min: 100, max: 1000, step: 10 },
@@ -19,7 +19,7 @@ type Args = { w: number; h: number };
 
 // One dataset with a temperature column and a USD column, and three steps of
 // one spec (from the GUGOG 2026 talk). With no schema, GoFish checks nothing
-// and stacks the temperatures. With a schema, °C has no CanAdd, so GoFish
+// and stacks the temperatures. With a schema, °C has no CanSum, so GoFish
 // refuses to stack "temp". USD declares Trait.summable(), so stacking "usd"
 // passes. The numbers are illustrative.
 const cities = [

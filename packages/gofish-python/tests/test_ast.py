@@ -100,7 +100,7 @@ class TestOperators:
                 "HasUnit": {
                     "unit": "instant",
                     "traits": {},
-                    "difference": {"unit": "duration", "traits": {"CanAdd": {}}},
+                    "difference": {"unit": "duration", "traits": {"CanSum": {}}},
                     "zone": "America/New_York",
                 },
             },
@@ -1181,7 +1181,7 @@ class TestSchema:
         # A Unit is `{ unit }` with the unit's traits, a name alone is a
         # unit whose traits are unknown (no `traits`), and a record adds
         # the quantity.
-        summable_usd = {"unit": "USD", "symbol": "USD", "traits": {"CanAdd": {}}}
+        summable_usd = {"unit": "USD", "symbol": "USD", "traits": {"CanSum": {}}}
         assert schema_of(revenue=usd) == {"revenue": {"HasUnit": summable_usd}}
         assert schema_of(area="km²") == {
             "area": {"HasUnit": {"unit": "km²", "symbol": "km²"}}
@@ -1343,14 +1343,14 @@ class TestTime:
         assert schema_of(Unit.time()) == {"HasUnit": {
             "unit": "instant",
             "traits": {},
-            "difference": {"unit": "duration", "traits": {"CanAdd": {}}},
+            "difference": {"unit": "duration", "traits": {"CanSum": {}}},
             "zone": "UTC",
         }}
         assert schema_of(Unit.time(zone="America/New_York")) == {
             "HasUnit": {
                 "unit": "instant",
                 "traits": {},
-                "difference": {"unit": "duration", "traits": {"CanAdd": {}}},
+                "difference": {"unit": "duration", "traits": {"CanSum": {}}},
                 "zone": "America/New_York",
             }
         }
@@ -1358,7 +1358,7 @@ class TestTime:
             "name": "Sold"
         }
         assert schema_of(Unit.duration) == {
-            "HasUnit": {"unit": "duration", "traits": {"CanAdd": {}}}
+            "HasUnit": {"unit": "duration", "traits": {"CanSum": {}}}
         }
         assert Unit.duration.name == "duration"
         assert repr(Unit.time(zone="Asia/Tokyo")) == "Unit.time(zone='Asia/Tokyo')"
@@ -1496,7 +1496,7 @@ class TestTime:
             "t": {"HasUnit": {
                 "unit": "instant",
                 "traits": {},
-                "difference": {"unit": "duration", "traits": {"CanAdd": {}}},
+                "difference": {"unit": "duration", "traits": {"CanSum": {}}},
                 "zone": "Asia/Tokyo",
             }}
         }

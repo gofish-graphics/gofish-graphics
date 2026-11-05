@@ -33,7 +33,7 @@ Domain.ordered(levels)                  # levels in order (ordinal): HasLevels a
 
 Trait.diverging()                       # the order has a midpoint (HasMidpoint), at n / 2
 Trait.diverging(midpoint)               # the same, at `midpoint`
-Trait.summable()                        # the unit's amounts add up (CanAdd)
+Trait.summable()                        # the unit's amounts add up (CanSum)
 
 Unit.time()                             # the unit of instants (a time), read in UTC
 Unit.time(zone=zone)                    # the same, read in the time zone `zone`
@@ -83,8 +83,8 @@ A column record takes the keys `"name"` and `"unit"`. Any other key raises a
 | `Trait.diverging(midpoint)`   | `HasMidpoint`           | The order has a midpoint, a point along it. See below.  |
 | `Unit(name)`, `{"unit": ...}` | `HasUnit`               | The column's values are amounts in the unit.            |
 | `Unit.time()`                 | `HasUnit`               | The column's values are instants, read on a calendar.   |
-| `Unit.duration`               | `HasUnit`, `CanAdd`     | The column's values are spans of time.                  |
-| `Trait.summable()`            | `CanAdd`                | The unit's amounts add up. See below.                   |
+| `Unit.duration`               | `HasUnit`, `CanSum`     | The column's values are spans of time.                  |
+| `Trait.summable()`            | `CanSum`                | The unit's amounts add up. See below.                   |
 | `{"unit": ...}`, a name       | `HasUnit`               | The same, with no word on whether the amounts add up.   |
 | `{"name": ...}`               | `HasQuantity`           | The column's values are amounts of the quantity `name`. |
 
@@ -94,7 +94,7 @@ A column record takes the keys `"name"` and `"unit"`. Any other key raises a
 | ---------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `name`     | `str`              | `Unit`'s name, e.g. `"USD"` or `"mm"`. Two units are the same when their names are equal. A record's `"name"` is its quantity, e.g. `"Pay"`, which titles the axis in place of the column's name. |
 | `domain`   | `Domain`           | What the unit's values are: `Domain.discrete(levels)` or `Domain.ordered(levels)`. Without it, a named unit's values are amounts (numbers).                                                       |
-| `traits`   | `list[Trait]`      | The traits the unit's values have, as `Trait` values: `Trait.summable()` declares `CanAdd` and `Trait.diverging()` declares `HasMidpoint`. Each appears at most once.                             |
+| `traits`   | `list[Trait]`      | The traits the unit's values have, as `Trait` values: `Trait.summable()` declares `CanSum` and `Trait.diverging()` declares `HasMidpoint`. Each appears at most once.                             |
 | `levels`   | `list[str \| int]` | Every value the column takes, in the order to lay them out in.                                                                                                                                    |
 | `midpoint` | `float`            | Where the midpoint lies along the order, from 0 (before the first level) to `n` (after the last). Default `n / 2`.                                                                                |
 | `zone`     | `str`              | The IANA time zone the column's instants are read in, e.g. `"America/New_York"`. Default `"UTC"`.                                                                                                 |
@@ -215,16 +215,16 @@ A column record takes the keys `"name"` and `"unit"`. Any other key raises a
   axis as `x` does and shares its unit. Counts, `.normalize()` shares, and
   times add no unit to an axis title.
 
-**`CanAdd`.**
+**`CanSum`.**
 
 - A `size` channel (`w`, `h`, ...), a [`stack`](/python/api/operators/stack), a
   [`treemap`](/python/api/operators/treemap) `size`, `field(x).sum()` and
   `field(x).normalize()` add up their values. Adding up values in a declared
-  unit needs `CanAdd`: without it, it is an error that names the column and
+  unit needs `CanSum`: without it, it is an error that names the column and
   the unit, and says to declare the unit with `Unit(name, traits=[Trait.summable()])`, or,
   for a unit whose differences add up (a time), to subtract a reference
   first.
-- A time column never has `CanAdd`: two instants do not add up. Its
+- A time column never has `CanSum`: two instants do not add up. Its
   difference does (`end - start` is a duration), and a mark with two
   positions (`x="start", x2="end"`) adds nothing.
 - A column with no declared unit adds up without `Trait.summable()`, and so does
@@ -238,12 +238,12 @@ A column record takes the keys `"name"` and `"unit"`. Any other key raises a
   is °C), except the difference of two times, which is a duration
   (`Unit.duration`). A size
   read from a time column is a duration too, never a time.
-- `CanAdd` is the unit's, not the column's. A unit is its name, so two
+- `CanSum` is the unit's, not the column's. A unit is its name, so two
   `Unit`s of one name in one chart's schema, or in the columns two charts
   of one figure draw, must agree on `Trait.summable()`: a disagreement is an
-  error that names both columns. A column whose unit is a name alone takes the `CanAdd` of a
+  error that names both columns. A column whose unit is a name alone takes the `CanSum` of a
   `Unit` of that name in the same chart; a stack of it also takes the
-  `CanAdd` of a `Unit` of that name in another chart of the figure.
+  `CanSum` of a `Unit` of that name in another chart of the figure.
 - A stack checks only the columns it adds, so a `start` column in days may
   share an axis with a stacked width in days.
 

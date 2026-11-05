@@ -5,13 +5,13 @@ unit definition's ``traits``: ``Unit("USD", traits=[Trait.summable()])``.
 The package binds this module as ``Trait``, so ``Trait.summable()`` and
 ``from gofish.trait import summable`` reach the same function. A unit takes a
 set of traits, not one choice from them, and a ``Trait`` value never reaches
-the wire: ``Unit`` turns each into the trait it declares (``CanAdd``,
+the wire: ``Unit`` turns each into the trait it declares (``CanSum``,
 ``HasMidpoint``). Mirrors JS ``gofish-graphics/trait``.
 
 - ``diverging(midpoint=None)``: the order has a midpoint (``HasMidpoint``),
   in edge coordinates over the levels, ``n / 2`` for ``n`` levels by
   default. It needs an ordered domain, ``Domain.ordered(levels)``.
-- ``summable()``: the unit's amounts add up (``CanAdd``). It needs a name.
+- ``summable()``: the unit's amounts add up (``CanSum``). It needs a name.
 """
 
 from typing import Any, Dict, Optional
@@ -33,7 +33,7 @@ def diverging(midpoint: Optional[float] = None) -> Dict[str, Any]:
 
 
 def summable() -> Dict[str, Any]:
-    """The unit's amounts add up (``CanAdd``): a sum of them means something
+    """The unit's amounts add up (``CanSum``): a sum of them means something
     (money, counts, lengths), so a ``size`` channel, ``stack``, treemap
     ``size`` and ``.sum()`` may sum a column in the unit. Amounts that do not
     add up (temperatures, prices, rates) are in a unit without it."""

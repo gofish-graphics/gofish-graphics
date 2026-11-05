@@ -1803,7 +1803,7 @@ or a share is a plain number and a time axis's ticks already read as
 dates, and their traits are known: a duration, a count and a share add
 up, and an instant does not.
 
-**Which amounts add up.** `CanAdd` (#1197) is a trait of the unit, not of a
+**Which amounts add up.** `CanSum` (#1197) is a trait of the unit, not of a
 column: `Unit(name, { traits: [Trait.summable()] })` defines it, and it rides on the unit
 (`HasUnit.traits`) into the `Quantity` read from a column. A unit is its
 name, so every occurrence of one name is one unit, and where two
@@ -1816,7 +1816,7 @@ unit name meet (`meetChartUnits`, `schema.ts`), so a column declared
 declared unit read (`unitOf`) meets the figure's other occurrences of its
 name in the walk's `Units`, wherever they are, so two charts that define
 one unit differently throw. `addsUp` (`measure.ts`) is the rule for one
-quantity: it adds up when its unit has `CanAdd`, when it has no declared
+quantity: it adds up when its unit has `CanSum`, when it has no declared
 unit, or when its unit's traits are unknown. Every place that adds values
 while a chart is built sums them with `sumIn` (`fieldExpr.ts`), which
 checks it with `checkSummable`: a size channel's sum over its rows
@@ -1839,7 +1839,7 @@ them is met, so a stack of `"USD"` in one chart throws beside a
 the parts, not the unit class they joined, so a `start` point beside a
 stacked width is checked only for the width; a pinned part is not summed,
 since the stack adds only its width. Summing a declared unit without
-`CanAdd` throws an error that names the column and says to declare
+`CanSum` throws an error that names the column and says to declare
 `Unit(name, { traits: [Trait.summable()] })`; for a unit whose difference unit adds up (a
 time), it says to subtract a reference first (`date - start` gives a
 duration, which adds up). That message reads the unit's `difference`, not
@@ -2115,7 +2115,7 @@ wire, which carries only the traits they expand into
 | `Domain.discrete(levels)`    | `HasLevels { levels }`                   |
 | `Domain.ordered(levels)`     | `HasLevels { levels }`, `HasOrder {}`    |
 | `Trait.diverging(midpoint?)` | `HasMidpoint { at }`                     |
-| `Trait.summable()`           | `CanAdd` in `HasUnit.traits`             |
+| `Trait.summable()`           | `CanSum` in `HasUnit.traits`             |
 
 `unitTypeOf` checks the definition: a unit needs a name or a domain; a
 domain is a `Domain` value (a bare list or an interval is an error: an
@@ -2131,7 +2131,7 @@ Two units of one name with different domains are not compared yet.
 
 A column type is a record keyed by trait name (`ColumnType`), and the engine
 reads only the traits, never the definition. Seven column traits exist, and
-a unit has one trait of its own (`CanAdd`):
+a unit has one trait of its own (`CanSum`):
 
 - `HasLevels` (`{ levels }`, from a domain): the values are the levels of a
   fixed list. `splitEntries` groups a `by` over the column in that order
@@ -2227,7 +2227,7 @@ a unit has one trait of its own (`CanAdd`):
 - `HasUnit` (`{ unit, symbol?, traits?, zone?, difference? }`, #994, #955,
   #1197): the values
   are amounts in the declared unit `unit`. A column's entry declares it with
-  a `Unit(u)` definition, which writes the unit's `traits` (`{ CanAdd: {} }`
+  a `Unit(u)` definition, which writes the unit's `traits` (`{ CanSum: {} }`
   with `Trait.summable()`, else `{}`), or with the name `u` alone, which writes
   no `traits`: what the unit can do is unknown. Either writes the symbol
   `u`. The engine's units are definitions too, with no symbol:
@@ -2237,7 +2237,7 @@ a unit has one trait of its own (`CanAdd`):
   [measures](#measures-units-are-types)). A column's levels must fit its
   other traits, so a text-level column takes no unit (`checkLevelsFit` in
   `schema.ts`, which only a wire record can break).
-- `CanAdd` (`{}`, #1197) is not a column trait: it is a trait of the unit,
+- `CanSum` (`{}`, #1197) is not a column trait: it is a trait of the unit,
   in `HasUnit.traits`. See [which units add up](#measures-units-are-types).
 - `HasQuantity` (`{ name }`, #955): the values are amounts of the quantity
   `name` (a column record's `name`, `{ name, unit }`), when it is not the
@@ -2787,7 +2787,7 @@ called a sum or a mean over the raw per-row values; it now instead calls
 the pipeline already folded them to a singleton (`evalFieldValues` reports
 `folded`, the one place that decides it), the channel takes that value
 as it is and applies no aggregation of its own (so a size channel sums
-nothing and checks no `CanAdd`); otherwise it applies its own sum or mean
+nothing and checks no `CanSum`); otherwise it applies its own sum or mean
 to the per-row values. So `rect({ h: field("weight").mean() })` reports the
 mean, not
 `mean-of-a-1-element-array`-nonsense. A bare string or plain function accessor

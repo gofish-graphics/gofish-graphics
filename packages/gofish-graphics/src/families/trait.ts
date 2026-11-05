@@ -11,14 +11,14 @@
  * `gofish-graphics/trait` exports the same module. Unlike the strategy
  * families, a unit takes a set of traits, not one choice from them, and a
  * `Trait` value never reaches the wire: `Unit` turns each into the trait it
- * declares (`CanAdd`, `HasMidpoint`; `unitTypeOf` in `ast/schema.ts`), and
+ * declares (`CanSum`, `HasMidpoint`; `unitTypeOf` in `ast/schema.ts`), and
  * that trait is what the wire carries. So the traits are not in gofish-ir's
  * `STRATEGIES` table.
  *
  *  - `diverging(midpoint?)`: the order has a midpoint (`HasMidpoint`), in
  *    edge coordinates over the levels, `n / 2` for `n` levels by default.
  *    It needs an ordered domain, `Domain.ordered(levels)`.
- *  - `summable()`: the unit's amounts add up (`CanAdd`). It needs a name.
+ *  - `summable()`: the unit's amounts add up (`CanSum`). It needs a name.
  */
 import type { DivergingTrait, SummableTrait } from "../ast/schema";
 
@@ -38,7 +38,7 @@ export const diverging = (midpoint?: number): DivergingTrait =>
       : { kind: "diverging" as const, midpoint }
   );
 
-/** The unit's amounts add up (`CanAdd`): a sum of them means something
+/** The unit's amounts add up (`CanSum`): a sum of them means something
  *  (money, counts, lengths), so a `size` channel, `stack`, treemap `size`
  *  and `.sum()` may sum a column in the unit. Amounts that do not add up
  *  (temperatures, prices, rates) are in a unit without it. */

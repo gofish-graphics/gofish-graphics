@@ -129,7 +129,7 @@ export type {
   HasOrder,
   HasMidpoint,
   HasUnit,
-  CanAdd,
+  CanSum,
   HasQuantity,
   Level,
   SchemaEntry,
