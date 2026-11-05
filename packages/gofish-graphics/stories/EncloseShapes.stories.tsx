@@ -140,8 +140,13 @@ const beaks = penguins.filter(
 );
 
 /** The penguins' beaks with one outline per species, in a `w` × `h` plot. */
-const penguinShapes = (shape: Shape.Shape, w: number, h: number) =>
-  chart(beaks, {
+const penguinShapes = (
+  shape: Shape.Shape,
+  w: number,
+  h: number,
+  data: typeof beaks = beaks
+) =>
+  chart(data, {
     axes: true,
     w,
     h,
@@ -163,10 +168,13 @@ const penguinShapes = (shape: Shape.Shape, w: number, h: number) =>
     );
 
 /** A story of the penguins with one `shape` per species. */
-const penguinStory = (shape: Shape.Shape): StoryObj => ({
+const penguinStory = (
+  shape: Shape.Shape,
+  data: typeof beaks = beaks
+): StoryObj => ({
   render: () => {
     const container = initializeContainer();
-    penguinShapes(shape, 420, 320).render(container);
+    penguinShapes(shape, 420, 320, data).render(container);
     return container;
   },
 });
@@ -176,6 +184,19 @@ export const PenguinHulls = penguinStory(Shape.hull());
 export const PenguinBlobs = penguinStory(Shape.blob());
 export const PenguinSpines = penguinStory(Shape.spine());
 export const PenguinOvals = penguinStory(Shape.oval());
+
+// The Adelie penguins alone: at convexity 0 their blob closes empty gaps
+// between the points. holes off (the default) fills them; holes on keeps
+// them as holes.
+const adelie = beaks.filter((d) => d.Species === "Adelie");
+export const PenguinHolesFilled = penguinStory(
+  Shape.blob({ convexity: 0, holes: false }),
+  adelie
+);
+export const PenguinHolesKept = penguinStory(
+  Shape.blob({ convexity: 0, holes: true }),
+  adelie
+);
 
 // The four shapes on the same points: pick one from the menu, then tune it.
 export const PenguinsFourShapes: StoryObj = {
@@ -265,85 +286,56 @@ export const ChartAccentSubSaharanAfrica: StoryObj = {
   },
 };
 
-// ── 6. avoiding and holes ───────────────────────────────────────────────────
+// ── 6. holes ────────────────────────────────────────────────────────────────
 
 type Pt = [number, number];
-// A band of points two dots thick around a U-shaped path, with two gray
-// non-members inside its opening.
-const U: Pt[] = (() => {
-  const path: Pt[] = [
-    [35, 22],
-    [35, 150],
-    [190, 150],
-    [190, 22],
-  ];
-  const out: Pt[] = [];
-  for (let s = 0; s < 3; s++) {
-    const [a, b] = [path[s], path[s + 1]];
-    const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    const nx = -(b[1] - a[1]) / L,
-      ny = (b[0] - a[0]) / L;
-    const k = Math.round(L / 26);
-    for (let i = s === 0 ? 0 : 1; i <= k; i++) {
-      const t = i / k,
-        jit = ((i * 7 + s * 3) % 5) - 2;
-      for (const side of [-1, 1])
-        out.push([
-          a[0] + t * (b[0] - a[0]) + side * 11 * nx + jit,
-          a[1] + t * (b[1] - a[1]) + side * 11 * ny - jit,
-        ]);
-    }
-  }
-  return out;
-})();
-const GRAY: Pt[] = [
-  [112, 50],
-  [112, 100],
+// A ring of points two dots thick (16 inside, 20 outside) around an empty
+// middle.
+const RING: Pt[] = [
+  [195, 125], [192, 153], [177, 177], [152, 191], [125, 198], [98, 190],
+  [74, 176], [57, 153], [54, 125], [58, 97], [76, 76], [97, 58],
+  [125, 51], [152, 59], [177, 73], [190, 98],
+  [216, 139], [209, 168], [193, 193], [167, 208], [140, 219], [111, 216],
+  [82, 209], [57, 193], [42, 167], [31, 140], [34, 111], [41, 82],
+  [57, 57], [83, 42], [110, 31], [139, 34], [168, 41], [193, 57],
+  [208, 83], [219, 110],
 ];
 const dot = ([x, y]: Pt, fill: string, name: string) =>
   position({ x: x - 5, y: y - 5 }, [circle({ r: 5, fill }).name(name)]);
 
-/** The U with a blob around its points that keeps out the gray ones. */
-const uBlob = (holes: boolean) =>
-  layer([
-    ...U.map((p, i) => dot(p, "#3366aa", `u${i}`)),
-    ...GRAY.map((p, i) => dot(p, "#9aa0a6", `g${i}`)),
-  ]).relate((names: any) => [
-    enclose(
-      {
-        shape: Shape.blob({
-          convexity: 0.75,
-          holes,
-        }),
-        avoiding: GRAY.map((_, i) => names[`g${i}`]),
-        padding: 8,
-        fill: "#3366aa",
-        stroke: "#3366aa",
-        fillOpacity: 0.25,
-      },
-      U.map((_, i) => names[`u${i}`])
-    ),
-  ]);
+/** The ring with a blob around its points. */
+const ringBlob = (holes: boolean) =>
+  layer(RING.map((p, i) => dot(p, "#3366aa", `p${i}`))).relate(
+    (names: any) => [
+      enclose(
+        {
+          shape: Shape.blob({ convexity: 0.75, holes }),
+          padding: 8,
+          fill: "#3366aa",
+          stroke: "#3366aa",
+          fillOpacity: 0.25,
+        },
+        RING.map((_, i) => names[`p${i}`])
+      ),
+    ]
+  );
 
-// holes off (the default): every hole the outline closes is filled, and each
-// gray point is cut back out, `clearance` (the padding) clear of it. At
-// convexity 0.75 the blob fills three quarters of the U's opening from its
-// walls, so the opening stays open at the top.
+// holes off (the default): the ring's middle, which its points close a loop
+// around, is filled.
 export const HolesFilled: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    uBlob(false).render(container);
+    ringBlob(false).render(container);
     return container;
   },
 };
 
-// holes on: a gap the outline closes around stays a hole. The U's opening
-// is never closed (see HolesFilled), so this draws the same outline; a blob
-// keeps a hole only where its members close a loop.
+// holes on: the ring's middle stays a hole. At convexity 0.75 the blob fills
+// three quarters of the hole's area from its wall, so a smaller hole is left.
 export const HolesKept: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    uBlob(true).render(container);
+    ringBlob(true).render(container);
     return container;
   },
 };
@@ -484,6 +476,33 @@ export const FilletRadiusSweep: StoryObj = {
 
 // ── 9. Shape.blob: convexity, connection and separate ────────────────────────
 
+// A band of points two dots thick around a U-shaped path.
+const U: Pt[] = (() => {
+  const path: Pt[] = [
+    [35, 22],
+    [35, 150],
+    [190, 150],
+    [190, 22],
+  ];
+  const out: Pt[] = [];
+  for (let s = 0; s < 3; s++) {
+    const [a, b] = [path[s], path[s + 1]];
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const nx = -(b[1] - a[1]) / L,
+      ny = (b[0] - a[0]) / L;
+    const k = Math.round(L / 26);
+    for (let i = s === 0 ? 0 : 1; i <= k; i++) {
+      const t = i / k,
+        jit = ((i * 7 + s * 3) % 5) - 2;
+      for (const side of [-1, 1])
+        out.push([
+          a[0] + t * (b[0] - a[0]) + side * 11 * nx + jit,
+          a[1] + t * (b[1] - a[1]) + side * 11 * ny - jit,
+        ]);
+    }
+  }
+  return out;
+})();
 /** A titled panel: `pts` as blue dots, outlined with `shape`. The dots'
  *  names start with `key`, so each panel's are its own. */
 const blobPanel = (title: string, shape: Shape.Shape, pts: Pt[], key: string) =>
