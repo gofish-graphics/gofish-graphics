@@ -52,6 +52,7 @@ import { applyRelationalZBelowDefaults } from "../constraints/relationalPaint";
 import {
   axisIndex,
   axisName,
+  isPointAlign,
   directSlot,
   type ConstraintPosScales,
 } from "../constraints/shared";
@@ -374,6 +375,72 @@ export const layer = createNodeOperatorSequential(
       seatingMemo = { of: resolved, seating: fresh };
       return fresh;
     };
+    // A point `align` puts each operand's anchor exactly at its partners'
+    // anchors: it has no offset or gap (a chain's `spacing` is a
+    // `distribute`, not an align). So where a partner is in a continuous or
+    // ordinal part on the axis, the anchor is at a datum there, and an
+    // operand in no such part is in its partner's: it is at that datum, as
+    // a circle is, with a size of its own in pixels (a flower aligned to the
+    // end of its stem). Aligns chain, so this runs until nothing changes. A
+    // `ref` operand is in the part its target is in, in its target's layer
+    // (as `partOf` reads it).
+    // TODO(#1053, #1054): a shortcut. A pixel offset on an aligned operand
+    // (a `.translate()` wrapper) would put its anchor at datum + pixels,
+    // which is in no data space; today the align's solve overrides that
+    // translate, so the anchor is at the datum and the operand joins.
+    // Once pixel offsets have their own semantics, an operand an align
+    // places with a pixel offset should stay out of its partner's part.
+    const alignedParts = (
+      axis: 0 | 1,
+      base: UnderlyingSpace[],
+      childNodes: readonly GoFishAST[],
+      constraints: readonly ConstraintSpec[]
+    ): UnderlyingSpace[] => {
+      const visualized = (s: UnderlyingSpace | undefined) =>
+        s?.kind === "continuous" || s?.kind === "ordinal";
+      const { operands, keyOf } = resolution(node);
+      const aligns = constraints
+        .filter((c) => c.type === "align" && isPointAlign(c[axisName(axis)]))
+        .map((c) =>
+          c.children
+            .map((r) => operands.get(keyOf(r)))
+            .filter((op) => op?.direct === true)
+            .map((op) => op!.child)
+        );
+      if (aligns.length === 0) return base;
+      const parts = [...base];
+      const refPart = (i: number): UnderlyingSpace => {
+        const c = childNodes[i];
+        if (!(c instanceof GoFishRef)) return parts[i];
+        const target = c.targetNode;
+        const holder = target instanceof GoFishNode ? target.parent : undefined;
+        if (!(holder instanceof GoFishNode)) return parts[i];
+        const k = holder.indexOfChild(target!);
+        if (k === undefined) return parts[i];
+        if (holder === node) return parts[k];
+        // A holder that is this layer or holds it is not typed yet.
+        for (let p: GoFishAST | undefined = node; p; p = p.parent)
+          if (p === holder) return parts[i];
+        return holder.claimWalk?.parts(axis)?.[k] ?? parts[i];
+      };
+      for (let changed = true; changed; ) {
+        changed = false;
+        for (const members of aligns) {
+          const at = members.map(refPart).find(visualized);
+          if (at === undefined) continue;
+          for (const i of members)
+            if (
+              !(childNodes[i] instanceof GoFishRef) &&
+              !visualized(parts[i])
+            ) {
+              parts[i] = at;
+              changed = true;
+            }
+        }
+      }
+      return parts;
+    };
+
     // The layer's composed per-axis types: the types of its content. A pure
     // function of the children's types: the type hook computes it, reports it
     // (a data-valued size reports its magnitude instead), and keeps it in
@@ -486,7 +553,9 @@ export const layer = createNodeOperatorSequential(
       // with a size of its own: it solves its own σ, so to this layer it is
       // a box of pixels, `GoFishNode.plotIsBox`), is in no space of the
       // layer's. Any other child is in its own space, which a `nest` has
-      // unified with what it pads (`effectiveChildren`). The layer's axes
+      // unified with what it pads (`effectiveChildren`), or, if that is no
+      // continuous or ordinal space, in the part of a partner an `align`
+      // puts it at (`alignedParts`: a flower at its stem's end). The layer's axes
       // attach to the parts that are continuous or ordinal, and the rest
       // is dressing (`placeByClaims`).
       // TODO(type system): a shortcut. A part is one space per child, read
@@ -497,12 +566,17 @@ export const layer = createNodeOperatorSequential(
       // space types are aligned, pixels should be a space of their own and
       // the collection keyed by space, not by child.
       const parts = ([0, 1] as const).map((axis) =>
-        effectiveChildren.map((c, i) => {
-          if (sharing.nested[axis].has(i)) return resolved[axis];
-          const child = childNodes[i];
-          const whole = child instanceof GoFishNode && child.plotIsBox(axis);
-          return whole || sharing.sets[axis][i] !== 0 ? UNDEFINED : c[axis];
-        })
+        alignedParts(
+          axis,
+          effectiveChildren.map((c, i) => {
+            if (sharing.nested[axis].has(i)) return resolved[axis];
+            const child = childNodes[i];
+            const whole = child instanceof GoFishNode && child.plotIsBox(axis);
+            return whole || sharing.sets[axis][i] !== 0 ? UNDEFINED : c[axis];
+          }),
+          childNodes,
+          constraints
+        )
       ) as [UnderlyingSpace[], UnderlyingSpace[]];
       return {
         nestPlan,

@@ -4,9 +4,10 @@
  * (`ClaimWalk.parts`). The layer's axes attach to the children whose space
  * there is continuous or ordinal; any other child is dressing, beside or
  * over them: an `enclose` around refs, a chart of outlines or a line
- * layered over a scatter, a value label beside its bar. A ref is in the
- * part its target is in, and a `nest` unifies its outer box with the inner
- * it pads. A box placed whole (a chart's box, a node with a size of its
+ * layered over a scatter, a value label a gap sets past its bar. A ref is
+ * in the part its target is in, a `nest` unifies its outer box with the
+ * inner it pads, and an `align` puts each operand in its partner's part,
+ * as it has no offset (a flower at the end of its stem). A box placed whole (a chart's box, a node with a size of its
  * own) is pixels to its layer, as a text at a literal pixel is: neither is
  * in the layer's space. Dressing takes room but is no part of the plot.
  * Run: `tsx src/tests/plotSpace.test.ts` (wired into `pnpm test` as
@@ -77,9 +78,7 @@ const pathX = (d: string): [number, number] => {
 /** The axis lines and the points of a laid-out tree, in render pixels. */
 const geometry = (root: GoFishNode) => {
   const all = items({ items: lowerToDisplayList(root) });
-  const gray = all.filter(
-    (i) => i.kind === "rect" && i.style?.fill === "gray"
-  );
+  const gray = all.filter((i) => i.kind === "rect" && i.style?.fill === "gray");
   const yLine = gray.find((r) => r.w === 1 && (r.h ?? 0) > 50)!;
   const xLine = gray.find((r) => r.h === 1 && (r.w ?? 0) > 50)!;
   const dots = all.filter((i) => i.kind === "ellipse");
@@ -92,7 +91,9 @@ const geometry = (root: GoFishNode) => {
 };
 
 async function main() {
-  console.log("\n# the inferred spaces of a scatter with ovals layered over it");
+  console.log(
+    "\n# the inferred spaces of a scatter with ovals layered over it"
+  );
   {
     const node = await ovals().resolve();
     const data = await runLayout({ w: 300, h: 200, axes: true }, node);
@@ -235,7 +236,9 @@ async function main() {
     );
   }
 
-  console.log("\n# a nest's outer box, and a caption beside a chart, are no dressing");
+  console.log(
+    "\n# a nest's outer box, and a caption beside a chart, are no dressing"
+  );
   {
     // The outer box a nest sizes from its data-sized inner is tied to it,
     // so the spread lays the padded boxes `spacing` apart.
@@ -247,7 +250,10 @@ async function main() {
         Constraint.nest({ x: 8, y: 8 }, [outer, inner]),
       ]);
     const node = spread({ dir: "x", spacing: 10 }, [padded(40), padded(90)]);
-    const data = await runLayout({ w: 300, h: 80 }, await (node as any)(undefined));
+    const data = await runLayout(
+      { w: 300, h: 80 },
+      await (node as any)(undefined)
+    );
     const cells = (data.child as GoFishNode).children as GoFishNode[];
     check(
       "the outer box is no dressing of its layer",
@@ -277,6 +283,77 @@ async function main() {
       "a caption beside a chart placed whole is no dressing",
       (c.child as GoFishNode).claimWalk?.dressing[1].size === 0,
       [...((c.child as GoFishNode).claimWalk?.dressing[1] ?? [])]
+    );
+  }
+
+  console.log("\n# an align joins its partner's part; a gap does not");
+  {
+    // A head with no space of its own, aligned to the end of a stem whose
+    // height is data: an align has no offset, so the head's anchor is the
+    // stem's end, a datum on y. The head is in the stem's part there.
+    const plant = layer([
+      rect({ w: 4, h: value(30) }).name("stem"),
+      circle({ r: 10 }).name("head"),
+    ]).relate(({ stem, head }: any) => [
+      Constraint.align({ x: "middle", y: ["end", "middle"] }, [stem, head]),
+    ]);
+    const data = await runLayout(
+      { w: 100, h: 100 },
+      await (plant as any)(undefined)
+    );
+    const walk = (data.child as GoFishNode).claimWalk!;
+    check(
+      "an align puts the head in the stem's continuous part on y",
+      walk.parts(1)?.[1]?.kind === "continuous",
+      walk.parts(1)?.map((s) => s.kind)
+    );
+    check("the aligned head is no dressing", walk.dressing[1].size === 0, [
+      ...walk.dressing[1],
+    ]);
+  }
+  {
+    // A value label on its bar: a chain sets it a gap of pixels past the
+    // bar's top on y, and an align centers it on the bar on x. On y its
+    // anchor is a datum plus pixels, in no space of the layer's, so it is
+    // dressing there; on x it is in the bar's part.
+    const labeled = async (position?: "center") => {
+      const node = await chart([
+        { c: "a", v: 10 },
+        { c: "b", v: 30 },
+      ])
+        .flow(spread({ by: "c", dir: "x" }))
+        .mark(rect({ h: "v" }).label("v", position ? { position } : {}))
+        .resolve();
+      const data = await runLayout({ w: 200, h: 100, axes: true }, node);
+      const layered = nodesOf(data.child).find((n) =>
+        n.children.some((c) => c instanceof GoFishNode && c.type === "label")
+      )!;
+      const labels = layered.children.flatMap((c, i) =>
+        c instanceof GoFishNode && c.type === "label" ? [i] : []
+      );
+      return { walk: layered.claimWalk!, labels };
+    };
+    const outset = await labeled();
+    check(
+      "a label a gap sets past its bar is dressing on y",
+      outset.labels.length === 2 &&
+        outset.labels.every((i) => outset.walk.dressing[1].has(i)),
+      [...outset.walk.dressing[1]]
+    );
+    check(
+      "a label an align centers on its bar is in its part on x",
+      outset.labels.every(
+        (i) =>
+          outset.walk.parts(0)?.[i]?.kind === "ordinal" &&
+          !outset.walk.dressing[0].has(i)
+      ),
+      outset.walk.parts(0)?.map((s) => s.kind)
+    );
+    const center = await labeled("center");
+    check(
+      "a label aligned to its bar's center is no dressing",
+      center.walk.dressing[0].size === 0 && center.walk.dressing[1].size === 0,
+      center.walk.dressing
     );
   }
 

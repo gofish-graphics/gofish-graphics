@@ -593,13 +593,33 @@ each inherent to what the origin states are:
     the inner it pads (`applyNestSpacePlan`), so the outer box of a nest
     is in the inner's space;
   - a `ref` stand-in is in the part its target is in, in its target's
-    layer.
+    layer;
+  - a child that is in no continuous or ordinal part by the rules above,
+    and that a point `align` places at a partner that is in one, is in its
+    partner's part on that axis (`alignedParts` in `layer`). An align has
+    no offset or gap, so the child's anchor is at the partner's anchor,
+    which is a datum there: the child is at a datum, as a circle is, with a
+    size of its own in pixels. A polar chart aligned to the end of its
+    stem (`Forward Syntax/Flower Chart`) is in the stem's y part, though
+    it is placed whole. Aligns chain, and a `ref` operand counts as its
+    target's part. A gap is a `distribute`'s `spacing`, not an align, and
+    a node an `enclose` draws around refs is aligned to nothing, so
+    neither joins a part this way.
+
+  This is a shortcut tied to the deferred pixel offset semantics (#1053,
+  #1054). A pixel `.translate()` on an aligned child would put its anchor
+  at a datum plus pixels, which is in no data space. Today the align's
+  solve overrides that translate, so the child sits at the datum and
+  joins. Once pixel offsets have semantics of their own, a child an align
+  places at a pixel offset should stay out of its partner's part.
 
   The layer's axes attach to the children whose part is continuous or
   ordinal. Every other child of a layer that has such a part is
   **dressing** (`placeByClaims`): it is beside the part or over it. An
   `enclose` drawn around refs, a `line` or `ribbon` connecting refs, a
-  `.label()` text beside its mark's ref, and a chart of those layered over
+  `.label()` text a gap sets past its mark's ref (on the axis of the gap;
+  on the axis an align centers it, it is in the mark's part, and a label
+  at `"center"` is in it on both), and a chart of those layered over
   a scatter (`.layer(chart(selectAll("points")).mark(enclose()))`) all
   have type `undefined` on both axes, so they are dressing of the layer
   that holds them, while the layer's own type stays the scatter's
