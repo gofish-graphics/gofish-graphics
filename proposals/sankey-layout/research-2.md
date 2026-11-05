@@ -44,24 +44,24 @@ same gap cross if and only if the column orders say so, whatever the gap width. 
 
 What the gap does change:
 
-| Effect                                          | Depends on gap? | Rule                                                                                                      |
-| ----------------------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------- | --- | --------------------------------- |
-| Ribbon-over-ribbon crossings (how many)         | no              | set by column order only (proof above)                                                                    |
-| Area of each crossing's overlap                 | yes, grows      | about `w1·w2 /                                                                                            | m1 − m2 | `; slopes scale as `1/g`, so the area grows in proportion to `g` (a wider gap means a longer, shallower overlap) |
-| Steepness and visible thinning (filled ribbon)  | yes, shrinks    | max slope `2                                                                                              | Δy      | /g`(bezier),`                                                                                                    | Δy  | /g`(linear); thickness`w/√(1+m²)` |
-| Stroke folding (stroked links, d3-sankey)       | yes, shrinks    | needs min radius of curvature `≥ w/2`; see below                                                          |
-| Ribbon passing behind a node in a middle column | no              | only links that skip a column do this; fixed by routing through placeholder (dummy) nodes, not by spacing |
-| Ribbons bunched up next to a node               | yes             | part of the steepness problem                                                                             |
+| Effect                                          | Depends on gap? | Rule                                                                                                                                        |
+| ----------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ribbon-over-ribbon crossings (how many)         | no              | set by column order only (proof above)                                                                                                      |
+| Area of each crossing's overlap                 | yes, grows      | about `w1·w2 / abs(m1 − m2)`; slopes scale as `1/g`, so the area grows in proportion to `g` (a wider gap means a longer, shallower overlap) |
+| Steepness and visible thinning (filled ribbon)  | yes, shrinks    | max slope `2·abs(Δy)/g` (bezier), `abs(Δy)/g` (linear); thickness `w/√(1+m²)`                                                               |
+| Stroke folding (stroked links, d3-sankey)       | yes, shrinks    | needs min radius of curvature `≥ w/2`; see below                                                                                            |
+| Ribbon passing behind a node in a middle column | no              | only links that skip a column do this; fixed by routing through placeholder (dummy) nodes, not by spacing                                   |
+| Ribbons bunched up next to a node               | yes             | part of the steepness problem                                                                                                               |
 
 For the stroked case, the maximum curvature of this cubic (computed numerically) is:
 
-| `    | Δy   | /g`  | max curvature `· g` | where (t) | max slope |
-| ---- | ---- | ---- | ------------------- | --------- | --------- |
-| 0.1  | 0.54 | 0.27 | 0.2                 |
-| 0.25 | 1.20 | 0.24 | 0.5                 |
-| 0.5  | 1.92 | 0.17 | 1                   |
-| 1    | 3.06 | 0.07 | 2                   |
-| 2    | 5.55 | 0.02 | 4                   |
+| `abs(Δy)/g` | max curvature `· g` | where (t) | max slope |
+| ----------- | ------------------- | --------- | --------- |
+| 0.1         | 0.54                | 0.27      | 0.2       |
+| 0.25        | 1.20                | 0.24      | 0.5       |
+| 0.5         | 1.92                | 0.17      | 1         |
+| 1           | 3.06                | 0.07      | 2         |
+| 2           | 5.55                | 0.02      | 4         |
 
 For gentle slopes the curvature is about `5.4·|Δy|/g²`, so a stroked link of width `w` does not
 fold when `g ≳ √(2.7·w·|Δy|)`.
