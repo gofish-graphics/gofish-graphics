@@ -128,6 +128,19 @@ function checkedShape(shape: Shape | undefined): Shape {
 const loopsPath = (loops: Pt[][], toPixel: (p: Pt) => Pt) =>
   loops.map((loop) => ringPathData(loop.map((p) => toPixel(p)))).join("");
 
+/** `value`, when it is a number of pixels at least 0; else an error naming
+ *  enclose's option `name`, with `more` after it. */
+function checkPixels(name: string, value: unknown, more = ""): number {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0)
+    return value;
+  const shown =
+    typeof value === "number" ? String(value) : JSON.stringify(value);
+  throw new Error(
+    `[gofish] enclose({ ${name} }): ${shown} is not a number of pixels at ` +
+      `least 0.${more}`
+  );
+}
+
 /** The enclosure node over `members`, keeping out `avoided`. Both are its
  *  children (an avoided ref draws nothing); only the members count toward
  *  its box. `shape` is already checked. */
@@ -137,25 +150,16 @@ function Enclose(
   members: GoFishAST[],
   avoided: GoFishRef[]
 ): GoFishNode {
-  const padding = o.padding ?? 2;
-  if (typeof padding !== "number" || !Number.isFinite(padding) || padding < 0)
-    throw new Error(
-      `[gofish] enclose({ padding }): ${JSON.stringify(padding)} is not a ` +
-        `number of pixels at least 0. A field name must name a column of ` +
-        `the enclosed rows, whose value is such a number.`
-    );
-  const { clearance } = o;
-  if (
-    clearance !== undefined &&
-    (typeof clearance !== "number" ||
-      !Number.isFinite(clearance) ||
-      clearance < 0)
-  )
-    throw new Error(
-      `[gofish] enclose({ clearance }): ${
-        typeof clearance === "number" ? clearance : JSON.stringify(clearance)
-      } is not a number of pixels at least 0.`
-    );
+  const padding = checkPixels(
+    "padding",
+    o.padding ?? 2,
+    " A field name must name a column of the enclosed rows, whose value is " +
+      "such a number."
+  );
+  const clearance =
+    o.clearance === undefined
+      ? undefined
+      : checkPixels("clearance", o.clearance);
   const { fill = "none", stroke = gray, strokeWidth = 1 } = o;
   const { strokeDasharray, opacity = 1, fillOpacity } = o;
   const memberCount = members.length;

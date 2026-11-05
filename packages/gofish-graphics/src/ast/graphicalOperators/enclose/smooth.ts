@@ -11,6 +11,7 @@ import { boxGrid, type Member, type Pt } from "./prims";
 import { signedArea2 } from "../../geometry/plane";
 import { SegGrid, Inside, segsOf } from "./grid";
 import { closingRings } from "./arcs";
+import { arcStep } from "../../geometry/outline";
 
 /** A keep-in constraint: a segment ab (a disc when a = b) grown to `R`. The
  *  outline must keep every point of it inside. */
@@ -115,16 +116,12 @@ function normals(ring: Pt[]): Pt[] {
 /** The least outward offset that holds every keep-in capsule: the most
  *  any capsule's axis sample (every 2 px) needs, signed distance to the
  *  rings (negative inside, nonzero winding) plus its radius, and at least
- *  0. The distances from a segment grid (exact). An inside sample can raise
+ *  0. The distances from the rings' segment grid (exact). An inside sample can raise
  *  the most only when the outline is
  *  nearer than its radius less the most so far, so its search stops there
  *  (deep inside a wide outline, the hull's, it would cross many empty
  *  cells). */
-function needed(rings: Pt[][], keep: KeepIn[]): number {
-  if (!keep.length) return 0;
-  const S = segsOf(rings);
-  const G = new SegGrid(S, 4),
-    In = new Inside(S);
+function needed({ G, In }: RingQuery, keep: KeepIn[]): number {
   let c = 0;
   for (const k of keep) {
     const L = Math.hypot(k.b[0] - k.a[0], k.b[1] - k.a[1]);
@@ -151,8 +148,14 @@ function needed(rings: Pt[][], keep: KeepIn[]): number {
  */
 export function smoothOutline(rings: Pt[][], keep: KeepIn[]): Pt[][] {
   const sm = rings.map((ring) => gauss(resample(ring, 1)[0], SIGMA));
-  return grow(sm, needed(sm, keep) + MARGIN);
+  const S = segsOf(sm);
+  const q: RingQuery = { G: new SegGrid(S, 4), In: new Inside(S) };
+  return grow(sm, q, needed(q, keep) + MARGIN);
 }
+
+/** The smoothed rings' distance (a segment grid) and nonzero winding
+ *  queries, built once for `needed` and `grow`. */
+type RingQuery = { G: SegGrid; In: Inside };
 
 /**
  * The rings' region grown by c: every point within c of it. Its boundary is
@@ -167,11 +170,9 @@ export function smoothOutline(rings: Pt[][], keep: KeepIn[]): Pt[][] {
  * every side grown by c, its rings outside the region (the outer ones moved
  * out, and each hole shrunk, or gone).
  */
-function grow(rings: Pt[][], c: number): Pt[][] {
-  if (c <= 0) return rings;
+function grow(rings: Pt[][], { G, In }: RingQuery, c: number): Pt[][] {
   const moved = rings.map((r) => offsetRing(r, c));
   const lim = c - 2 * JOIN_TOL;
-  const G = new SegGrid(segsOf(rings), 4);
   if (moved.every((r) => r.every(([x, y]) => G.capped(x, y, lim) >= lim)))
     return moved;
   const sides = rings.flatMap((r) =>
@@ -179,13 +180,14 @@ function grow(rings: Pt[][], c: number): Pt[][] {
       (a, i): Member => ({ kind: "segment", a, b: r[(i + 1) % r.length], w: 0 })
     )
   );
-  const In = new Inside(segsOf(rings));
   return closingRings(sides, c, 0, true).filter(
     (q) => !In.has(q[0][0], q[0][1])
   );
 }
 
-/** The chord error of the arcs offsetRing adds at a sharp convex vertex, px. */
+/** The chord error of the arcs offsetRing adds at a sharp convex vertex, px:
+ *  no more than MARGIN, so an offset (at least MARGIN) is never narrower
+ *  than its arcs' tolerance. */
 const JOIN_TOL = 0.05;
 
 /**
@@ -201,8 +203,7 @@ const JOIN_TOL = 0.05;
 function offsetRing(r: Pt[], c: number): Pt[] {
   const n = r.length;
   const N = normals(r);
-  const step =
-    2 * Math.acos(Math.max(-1, 1 - JOIN_TOL / Math.max(c, JOIN_TOL)));
+  const step = arcStep(c, JOIN_TOL);
   const side = (i: number): Pt => {
     const [p, q] = [r[i], r[(i + 1) % n]];
     const L = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
@@ -220,7 +221,7 @@ function offsetRing(r: Pt[], c: number): Pt[] {
       a[0] * b[1] - a[1] * b[0],
       a[0] * b[0] + a[1] * b[1]
     );
-    if (c <= 0 || turn <= step) {
+    if (turn <= step) {
       out.push([p[0] + c * N[i][0], p[1] + c * N[i][1]]);
       continue;
     }

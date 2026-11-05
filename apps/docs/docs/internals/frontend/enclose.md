@@ -242,7 +242,8 @@ traced exactly, by cutting every edge where another shape's edge crosses it
 (each crossing solved once for the pair) and keeping the parts no other shape
 covers. A part is judged at its middle, and two edges nearer than 1e-10 px
 there are one edge (two members that share a cap or a side). Which one keeps
-it is read off the other member's distance gradient: where the two face the
+it is read off the other member's signed distance a step of 1e-6 px to either
+side along the edge's normal: where the two face the
 same way (equal members) the first member keeps it, and where they face each
 other (two boxes that share a side) both drop it, so the two are one ring.
 That tie band is not a cut, so it must be no wider than

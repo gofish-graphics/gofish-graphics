@@ -41,14 +41,19 @@
  * strays at most `tol` px from its arc. An ellipse member is read, as the blob
  * reads it, as the disc of its larger radius (`members.ts`).
  */
-import { signedArea2, pointInRing, segDist } from "../../geometry/plane";
+import {
+  signedArea2,
+  pointInRing,
+  segDist,
+  windingAt,
+} from "../../geometry/plane";
 import { ringExtent } from "../../geometry/box";
+import { arcStep } from "../../geometry/outline";
 import {
   boxGrid,
   grownPrim,
   PRIM,
   primD,
-  primGrad,
   type Member,
   type Prim,
   type Pt,
@@ -69,6 +74,10 @@ const MAX_STEP = 4;
  *  links the wrong loops: the band must be no wider than rounding, below
  *  any distance a layout means. */
 const EPS = 1e-10;
+/** On a tie, the step along the edge's normal, each way, the other member's
+ *  signed distance is read at to tell which way it faces, px: far past
+ *  rounding (EPS), far below any curvature a layout means. */
+const TIE_STEP = 1e-6;
 const TAU = 2 * Math.PI;
 
 /** An edge of a grown member, run so the member is on its left (angle
@@ -532,7 +541,7 @@ function sampleParams(e: Edge, s0: number, s1: number, tol: number): number[] {
     const step =
       e.R <= tol
         ? (2 * Math.PI) / 3
-        : Math.min(2 * Math.acos(1 - tol / e.R), MAX_STEP / e.R);
+        : Math.min(arcStep(e.R, tol), MAX_STEP / e.R);
     n = Math.max(1, Math.ceil(Math.abs(s1 - s0) / step));
   }
   return Array.from({ length: n + 1 }, (_, i) => s0 + ((s1 - s0) * i) / n);
@@ -608,24 +617,29 @@ export function closingRings(
       // facing the same way (two equal members) the first keeps it. The
       // member that covered the last part is tried first. A point off a
       // member's box (grown past EPS) is not covered by it.
-      const covers = (j: number, x: number, y: number, n: Pt) => {
+      const covers = (j: number, x: number, y: number, s: number) => {
         const b = prims[j].prim.bb;
         if (x < b[0] - 1e-6 || x > b[2] + 1e-6) return false;
         if (y < b[1] - 1e-6 || y > b[3] + 1e-6) return false;
         const d = sdf(j, x, y);
         if (d < -EPS) return true;
         if (d > EPS) return false;
-        const g = primGrad(prims[j].prim, x, y);
-        return g[0] * n[0] + g[1] * n[1] < 0 || j < i;
+        // facing: the other's distance falls across this edge, outward
+        const [nx, ny] = normal(e, s);
+        const h = TIE_STEP;
+        return (
+          sdf(j, x + h * nx, y + h * ny) < sdf(j, x - h * nx, y - h * ny) ||
+          j < i
+        );
       };
       let lastCover = -1;
       for (let k = 0; k + 1 < cs.length; k++) {
         const [s0, s1] = [cs[k], cs[k + 1]];
         if (s1 - s0 < 1e-12) continue;
-        const [mx, my] = at(e, (s0 + s1) / 2);
-        const n = normal(e, (s0 + s1) / 2);
-        if (lastCover >= 0 && covers(lastCover, mx, my, n)) continue;
-        lastCover = touching.find((j) => covers(j, mx, my, n)) ?? -1;
+        const sm = (s0 + s1) / 2;
+        const [mx, my] = at(e, sm);
+        if (lastCover >= 0 && covers(lastCover, mx, my, sm)) continue;
+        lastCover = touching.find((j) => covers(j, mx, my, sm)) ?? -1;
         if (lastCover >= 0) continue;
         const last = pieces.at(-1);
         if (last && last.e === e && Math.abs(last.s1 - s0) < 1e-12)
@@ -649,37 +663,48 @@ export function closingRings(
   // loop at 0 bounds filled ground, and a hole at 1 is a hole of it. With
   // holes, that keeps an island inside a hole (+1 − 1 = 0) and its own holes;
   // without, every hole is filled, so a loop inside an outer one is dropped.
-  const outer = loops
-    .filter(({ ring }) => signedArea2(ring) > 0)
-    .sort((a, b) => signedArea2(b.ring) - signedArea2(a.ring));
+  const area = loops.map(({ ring }) => signedArea2(ring));
   const boxes = loops.map(({ ring }) => ringExtent(ring));
+  // the outer loops' indices, the largest first
+  const outer = loops
+    .map((_, k) => k)
+    .filter((k) => area[k] > 0)
+    .sort((a, b) => area[b] - area[a]);
   // a loop's point to test against the others: the middle of its first piece, not an end
   // (loops meet only at pieces' ends, as two members that touch at a point do)
-  const probe = ({ loop }: (typeof loops)[number]): Pt => {
-    const q = loop[0];
+  const probe = (k: number): Pt => {
+    const q = loops[k].loop[0];
     return at(q.e, (q.s0 + q.s1) / 2);
   };
   const depth = (k: number) => {
-    const [x, y] = probe(loops[k]);
-    let w = 0;
-    loops.forEach(({ ring }, j) => {
-      const b = boxes[j];
-      if (j === k || x < b.minX || x > b.maxX || y < b.minY || y > b.maxY)
-        return;
-      if (pointInRing([x, y], ring)) w += signedArea2(ring) > 0 ? 1 : -1;
-    });
-    return w;
+    const p = probe(k);
+    const [x, y] = p;
+    const around = loops.filter(
+      (_, j) =>
+        j !== k &&
+        x >= boxes[j].minX &&
+        x <= boxes[j].maxX &&
+        y >= boxes[j].minY &&
+        y <= boxes[j].maxY
+    );
+    return windingAt(
+      p,
+      around.map(({ ring }) => ring)
+    );
   };
-  const kept = holes
-    ? [
-        ...outer.filter((L) => depth(loops.indexOf(L)) === 0),
-        ...loops.filter(
-          ({ ring }, k) => signedArea2(ring) < 0 && depth(k) === 1
-        ),
-      ]
-    : outer.filter(
-        (L, k) => !outer.slice(0, k).some((B) => pointInRing(probe(L), B.ring))
-      );
+  const kept = (
+    holes
+      ? [
+          ...outer.filter((k) => depth(k) === 0),
+          ...loops
+            .map((_, k) => k)
+            .filter((k) => area[k] < 0 && depth(k) === 1),
+        ]
+      : outer.filter(
+          (k, i) =>
+            !outer.slice(0, i).some((B) => pointInRing(probe(k), loops[B].ring))
+        )
+  ).map((k) => loops[k]);
   const boundary = kept.flatMap((L) => L.loop);
 
   // 3. Shrink by r: offset each piece inward, with an arc of r at each corner.

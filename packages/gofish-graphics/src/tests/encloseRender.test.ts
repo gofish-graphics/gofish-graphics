@@ -7,10 +7,10 @@
  */
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
-import { items } from "./testHelpers";
+import { items, seeded } from "./testHelpers";
 import { encloseOutline } from "../ast/graphicalOperators/enclose/outline";
 import type { Member } from "../ast/graphicalOperators/enclose/prims";
-import { pointInRing } from "../ast/geometry/plane";
+import { pointInRing, segDist } from "../ast/geometry/plane";
 import { countryPopulations } from "../data/countryPopulations";
 import { gapminderCountries } from "../data/gapminderCountries";
 
@@ -356,7 +356,7 @@ for (const clearance of [NaN, -2, "4"]) {
     ]).toDisplayList({ w: 100, h: 100 })
   );
   check(
-    `enclose({ clearance: ${JSON.stringify(clearance) ?? String(clearance)} }) is an error naming clearance`,
+    `enclose({ clearance: ${typeof clearance === "number" ? clearance : JSON.stringify(clearance)} }) is an error naming clearance`,
     /enclose\(\{ clearance \}\)/.test(message),
     message || "no error"
   );
@@ -377,20 +377,13 @@ const ringsOf = (d: string): Pt[][] =>
     });
 /** The farthest a point of either set of rings is from the other's edges. */
 const hausdorff = (A: Pt[][], B: Pt[][]): number => {
-  const segD = (p: Pt, a: Pt, b: Pt) => {
-    const dx = b[0] - a[0],
-      dy = b[1] - a[1];
-    const L = dx * dx + dy * dy || 1;
-    const t = Math.max(
-      0,
-      Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L)
-    );
-    return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy);
-  };
   const dTo = (p: Pt, R: Pt[][]) => {
     let d = Infinity;
     for (const r of R)
-      r.forEach((a, i) => (d = Math.min(d, segD(p, a, r[(i + 1) % r.length]))));
+      r.forEach((a, i) => {
+        const b = r[(i + 1) % r.length];
+        d = Math.min(d, segDist(p[0], p[1], a[0], a[1], b[0], b[1]));
+      });
     return d;
   };
   const far = (X: Pt[][], Y: Pt[][]) => {
@@ -401,13 +394,10 @@ const hausdorff = (A: Pt[][], B: Pt[][]): number => {
   if (!A.length || !B.length) return A.length === B.length ? 0 : Infinity;
   return Math.max(far(A, B), far(B, A));
 };
-let seed = 1;
 /** Each coordinate nudged on its own by up to 1e-6 px, so the ends two
  *  pieces of an outline share are no longer shared. */
-const nudge = (members: Member[]): Member[] => {
-  const j = () =>
-    ((seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296 - 0.5) *
-    2e-6;
+const nudge = (members: Member[], rand: () => number): Member[] => {
+  const j = () => (rand() - 0.5) * 2e-6;
   return members.map((m): Member =>
     m.kind === "disc"
       ? { ...m, cx: m.cx + j(), cy: m.cy + j() }
@@ -422,9 +412,13 @@ const nudge = (members: Member[]): Member[] => {
 };
 const steady = (name: string, members: Member[], o: any) => {
   const base = encloseOutline(members, o);
+  const rand = seeded(1);
   let worst = 0;
   for (let k = 0; k < 3; k++)
-    worst = Math.max(worst, hausdorff(base, encloseOutline(nudge(members), o)));
+    worst = Math.max(
+      worst,
+      hausdorff(base, encloseOutline(nudge(members, rand), o))
+    );
   check(`${name}: moves ${worst.toFixed(3)} px`, worst < 0.5);
 };
 {

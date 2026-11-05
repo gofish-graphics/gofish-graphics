@@ -54,6 +54,9 @@ import {
 import { penguins } from "../data/penguins";
 import { countryPopulations } from "../data/countryPopulations";
 import { packSiblings } from "d3-hierarchy";
+import { windingAt } from "../ast/geometry/plane";
+import { boxOf } from "../ast/graphicalOperators/enclose/prims";
+import { seeded } from "./testHelpers";
 declare const process: { exit(code: number): never };
 
 let passed = 0;
@@ -199,10 +202,6 @@ const discsHullDistance = (discs: Disc[], pad: number) => {
     return inPoly(p, h) ? -d : d;
   };
 };
-/** Seeded points (a linear congruential generator), so a run is the same
- *  every time. */
-const seeded = (seed: number) => () =>
-  (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
 const MIXED: Disc[] = (() => {
   const rand = seeded(7);
   return Array.from({ length: 18 }, () =>
@@ -244,11 +243,7 @@ const blob =(members: Member[], o: BlobOpts) =>
 const area = (loops: Pt[][]) => loops.reduce((s, l) => s + signedArea(l), 0);
 /** Whether p is inside the region (nonzero winding: a hole winds the other
  *  way). */
-const inRegion = (p: Pt, loops: Pt[][]) =>
-  loops.reduce(
-    (w, l) => w + (inPoly(p, l) ? Math.sign(signedArea(l)) : 0),
-    0
-  ) !== 0;
+const inRegion = (p: Pt, loops: Pt[][]) => windingAt(p, loops) !== 0;
 /** Points on the circle of radius R around c. */
 const around = (c: Pt, R: number, n = 64): Pt[] =>
   Array.from(
@@ -1171,10 +1166,10 @@ console.log("# reproducers from a random sweep (#1315)");
     w,
     h,
   });
-  // the outline, or the message it threw
-  const run = (members: Member[], o: Opts): [Pt[][], string] => {
+  // an outline, or the message it threw
+  const run = (outline: () => Pt[][]): [Pt[][], string] => {
     try {
-      return [encloseOutline(members, o), ""];
+      return [outline(), ""];
     } catch (e) {
       return [[], (e as Error).message];
     }
@@ -1205,22 +1200,10 @@ console.log("# reproducers from a random sweep (#1315)");
                 ]
               : []
             : [m.a, m.b];
-      return pts.every((p) => winds(p, loops));
+      return pts.every((p) => inRegion(p, loops));
     });
-  const winds = (p: Pt, loops: Pt[][]) => {
-    let w = 0;
-    for (const l of loops)
-      for (let i = 0, j = l.length - 1; i < l.length; j = i++) {
-        const [a, b] = [l[i], l[j]];
-        if (a[1] > p[1] !== b[1] > p[1]) {
-          const x = ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0];
-          if (p[0] < x) w += a[1] > b[1] ? 1 : -1;
-        }
-      }
-    return w !== 0;
-  };
   const ok = (name: string, members: Member[], o: Opts, n?: number) => {
-    const [rings, msg] = run(members, o);
+    const [rings, msg] = run(() => encloseOutline(members, o));
     const finite = rings.every((r) => r.every((p) => isFinite(p[0]) && isFinite(p[1])));
     check(
       name,
@@ -1348,19 +1331,12 @@ console.log("# reproducers from a random sweep (#1315)");
             ]
           : [m.a, m.b]
     );
-    const xs = pts.map((q) => q[0]),
-      ys = pts.map((q) => q[1]);
-    const [x0, y0, x1, y1] = [
-      Math.min(...xs) - pad,
-      Math.min(...ys) - pad,
-      Math.max(...xs) + pad,
-      Math.max(...ys) + pad,
-    ];
+    const [x0, y0, x1, y1] = boxOf([pts]);
     return [
-      [x0, y0],
-      [x1, y0],
-      [x1, y1],
-      [x0, y1],
+      [x0 - pad, y0 - pad],
+      [x1 + pad, y0 - pad],
+      [x1 + pad, y1 + pad],
+      [x0 - pad, y1 + pad],
     ];
   };
   const rand = seeded(1315);
@@ -1407,19 +1383,15 @@ console.log("# reproducers from a random sweep (#1315)");
         : kind === "fillet"
           ? { kind, ...avoid, holes, radius: pick([0, 5, 20]), neck: pick([0.1, 1]) }
           : undefined;
-    let rings: Pt[][] = [];
-    let msg = "";
-    try {
-      rings = o
+    const [rings, msg] = run(() =>
+      o
         ? encloseOutline(members, o)
         : cutOutline(
             kind === "oval" ? ovalOutline(members, padding) : [boxRing(members, padding)],
             members,
             avoid
-          );
-    } catch (e) {
-      msg = (e as Error).message;
-    }
+          )
+    );
     const empty = !rings.length && !avoid.avoiding && padding > 0.05;
     if (msg) throws++;
     else if (empty || rings.some((r) => r.some((q) => !isFinite(q[0]) || !isFinite(q[1]))))

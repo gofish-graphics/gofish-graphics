@@ -152,12 +152,17 @@ export type Blend = {
 
 const key = (r: number, i: number) => r * 1_000_003 + i;
 
+/** How near a hull side a spine vertex must be to be on it, px (hullOf):
+ *  far past rounding, far below BLEND.res. */
+const ON_SIDE = 1e-6;
+
 /**
  * The convex hull of the outer rings' vertices, winding positive, as ring
- * vertices, with every other vertex within `tol` of a hull side (and off its
- * ends) on that side too, in order along it: the pocket between such a
- * vertex and the side is narrower than `tol`, so it is no pocket, and the
- * side is two mouths (or none, between ring neighbors) that meet there.
+ * vertices, with every other vertex within `tol` of a hull side (and more
+ * than `tol` from its ends) on that side too, in order along it: the pocket
+ * between such a vertex and the side is narrower than `tol`, so it is no
+ * pocket, and the side is two mouths (or none, between ring neighbors) that
+ * meet there. A side no longer than 2 · tol has no vertex off its ends.
  */
 function hullOf(rings: Pt[][], tol: number): RV[] {
   const P: RV[] = [];
@@ -187,7 +192,7 @@ function hullOf(rings: Pt[][], tol: number): RV[] {
     const w = H[(k + 1) % H.length];
     const [A, B] = [at(v), at(w)];
     const L = Math.hypot(B[0] - A[0], B[1] - A[1]);
-    if (L <= 2e-6) return;
+    if (L <= 2 * tol) return;
     const on: { v: RV; t: number }[] = [];
     for (const q of near.query(
       Math.min(A[0], B[0]) - tol,
@@ -198,7 +203,7 @@ function hullOf(rings: Pt[][], tol: number): RV[] {
       const p = at(V[q]);
       const t =
         ((p[0] - A[0]) * (B[0] - A[0]) + (p[1] - A[1]) * (B[1] - A[1])) / L;
-      if (t > 1e-6 && t < L - 1e-6 && Math.abs(gapTo(A, B, p)) <= tol)
+      if (t > tol && t < L - tol && Math.abs(gapTo(A, B, p)) <= tol)
         on.push({ v: V[q], t });
     }
     on.sort((p, q) => p.t - q.t);
@@ -245,7 +250,7 @@ export function pocketsOf(spine: Pt[][]): {
   const outer = clean.filter((r) => signedArea2(r) > 0);
   const holeRings = clean.filter((r) => signedArea2(r) < 0);
   const at = (v: RV) => outer[v.r][v.i];
-  const H = hullOf(outer, 1e-6);
+  const H = hullOf(outer, ON_SIDE);
   // mouths: hull edges between ring vertices that are not neighbors
   const mouths: Mouth[] = [];
   const aOf = new Map<number, number>();
@@ -1143,9 +1148,8 @@ export function blendRings(MB: Blend, c: number, holes: boolean): Pt[][] {
       py[id] = RY[p] + s * (RY[r] - RY[p]);
       // the filled side on the left: every triangle winds positive (as its
       // cell, or the polygon it was clipped from, does), so the curve runs
-      // from the edge that leaves {u <= l} to the edge that enters it. Read
-      // off the corners' order, not the crossings' places: those coincide
-      // when the level is a corner's u, and a sign from them would be noise
+      // from the edge that leaves {u <= l} to the edge that enters it, as the
+      // corners' order says
       if (ia) i0 = id;
       else i1 = id;
     }

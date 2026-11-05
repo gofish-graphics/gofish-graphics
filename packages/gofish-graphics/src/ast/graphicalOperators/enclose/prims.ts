@@ -272,61 +272,6 @@ export const grownPrim = (m: Member, r: number): Prim =>
         ? taperPrim(m.a, m.b, m.w / 2 + r, m.w2 / 2 + r)
         : capsulePrim(m.a, m.b, m.w / 2 + r)
       : boxPrim(m.x, m.y, m.w, m.h, r);
-/** The unit vector from (cx, cy) to (x, y), or 0 at it. */
-const away = (cx: number, cy: number, x: number, y: number): Pt => {
-  const L = Math.hypot(x - cx, y - cy);
-  return L > 0 ? [(x - cx) / L, (y - cy) / L] : [0, 0];
-};
-
-/** The gradient of a primitive's signed distance at (x, y): the outward
- *  normal of its nearest boundary point (0 where that is not one point: a
- *  disc's center, a box's middle). */
-export const primGrad = (p: Prim, x: number, y: number): Pt => {
-  if (p.k === PRIM.disc) return away(p.x1, p.y1, x, y);
-  if (p.k === PRIM.capsule) {
-    const ex = p.x2 - p.x1,
-      ey = p.y2 - p.y1,
-      L = ex * ex + ey * ey;
-    const t = L > 0 ? ((x - p.x1) * ex + (y - p.y1) * ey) / L : 0,
-      u = t < 0 ? 0 : t > 1 ? 1 : t;
-    return away(p.x1 + u * ex, p.y1 + u * ey, x, y);
-  }
-  if (p.k === PRIM.box) {
-    const qx = x < p.x1 ? p.x1 : x > p.x2 ? p.x2 : x,
-      qy = y < p.y1 ? p.y1 : y > p.y2 ? p.y2 : y;
-    if (qx !== x || qy !== y) return away(qx, qy, x, y);
-    // inside or on it: the nearest side's normal
-    const d = [x - p.x1, p.x2 - x, y - p.y1, p.y2 - y];
-    const k = d.indexOf(Math.min(...d));
-    return (
-      [
-        [-1, 0],
-        [1, 0],
-        [0, -1],
-        [0, 1],
-      ] as Pt[]
-    )[k];
-  }
-  // the tapered capsule, by the branch taperD takes
-  const [ax, ay, bx, by, ra, rb] = [p.x1, p.y1, p.x2, p.y2, p.r, p.x3];
-  const ex = bx - ax,
-    ey = by - ay,
-    h = ex * ex + ey * ey,
-    b = ra - rb;
-  if (h <= b * b) return ra >= rb ? away(ax, ay, x, y) : away(bx, by, x, y);
-  const px = x - ax,
-    py = y - ay;
-  const c = px * ey - py * ex;
-  const qx = Math.abs(c / h),
-    qy = (px * ex + py * ey) / h;
-  const cx = Math.sqrt(h - b * b);
-  const k = cx * qy - b * qx;
-  if (k < 0) return away(ax, ay, x, y);
-  if (k > cx) return away(bx, by, x, y);
-  const s = c < 0 ? -1 : 1;
-  return [(cx * s * ey + b * ex) / h, (-cx * s * ex + b * ey) / h];
-};
-
 /** Signed distance from (x, y) to a primitive. */
 export const primD = (p: Prim, x: number, y: number): number => {
   if (p.k === PRIM.disc) {

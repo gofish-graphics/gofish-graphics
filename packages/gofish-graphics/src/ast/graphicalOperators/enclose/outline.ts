@@ -50,7 +50,14 @@
  * the padded members, though it does enter a hole they close around
  * (separate.ts, cutRings), its corners rounded inward (smooth.ts, roundCut).
  */
-import { signedArea2, pointInRing, segDist, cross } from "../../geometry/plane";
+import {
+  signedArea2,
+  pointInRing,
+  segDist,
+  cross,
+  segsMeet,
+  windingAt,
+} from "../../geometry/plane";
 import {
   boxGrid,
   boxOf,
@@ -716,24 +723,41 @@ function keepOuts(avoiding: Member[], clearance: number): Disc[] {
  * Links bent around the keep-outs: a link whose capsule (radius pad) would
  * reach into a keep-out disc goes around it instead, along the tangents and
  * an arc pad clear of the disc, on the side the link passes nearer (below,
- * +y, on a tie): one disc at a time, at most four levels deep.
+ * +y, on a tie): one disc at a time, at most four levels deep. `own`: a
+ * blob piece whose own discs (`G.piece`) the links do not go around.
  */
-function routeAround(links: Member[], K: Disc[], pad: number): Member[] {
-  if (K.length === 0) return links;
-  // the discs that may reach a link: a disc whose center is within R + e of a link meets the
-  // link's box grown by e
-  const grid = boxGrid(
-    K.map(({ c, R }) => [c[0] - R, c[1] - R, c[0] + R, c[1] + R])
-  );
-  return routeLinks(links, K, grid, pad, 0);
+function routeAround(
+  links: Member[],
+  G: DiscGrid,
+  pad: number,
+  own = -1
+): Member[] {
+  if (!links.length || !G.K.length) return links;
+  return routeLinks(links, G, pad, own, 0);
 }
+
+/** Keep-out discs on a grid of their boxes, for routeAround: the discs that may reach a link
+ *  (a disc whose center is within R + e of a link meets the link's box grown by e). `piece`:
+ *  the blob piece each disc keeps out, or -1 for an avoided member's. */
+type DiscGrid = {
+  K: Disc[];
+  grid: ReturnType<typeof boxGrid>;
+  piece?: number[];
+};
+const discGrid = (K: Disc[], piece?: number[]): DiscGrid => ({
+  K,
+  piece,
+  grid: boxGrid(K.map(({ c, R }) => [c[0] - R, c[1] - R, c[0] + R, c[1] + R])),
+});
+
 function routeLinks(
   links: Member[],
-  K: Disc[],
-  grid: ReturnType<typeof boxGrid>,
+  G: DiscGrid,
   pad: number,
+  own: number,
   depth: number
 ): Member[] {
+  const { K, grid, piece } = G;
   if (depth > 3) return links;
   const out: Member[] = [];
   for (const l of links) {
@@ -752,6 +776,7 @@ function routeLinks(
       Math.max(a[0], b[0]) + e,
       Math.max(a[1], b[1]) + e
     )) {
+      if (own >= 0 && piece?.[q] === own) continue;
       const k = K[q];
       const d = segDist(k.c[0], k.c[1], a[0], a[1], b[0], b[1]);
       const Rd = k.R + pad + Math.max(l.w, l.w2 ?? l.w) / 2;
@@ -834,7 +859,7 @@ function routeLinks(
         w: wAt(i),
         w2: wAt(i + 1),
       });
-    out.push(...routeLinks(segs, K, grid, pad, depth + 1));
+    out.push(...routeLinks(segs, G, pad, own, depth + 1));
   }
   return out;
 }
@@ -897,47 +922,26 @@ function keepOutRegion(K: Disc[]): KeepOutRegion {
       : [];
 }
 
-/** Whether the inside of ring `r` (an outer ring) and the region of rings `keep` meet:
- *  their sides touch or cross, or one holds a point of the other. */
-function meets(r: Pt[], keep: Pt[][]): boolean {
+/** Whether the inside of a ring (an outer ring) and the region of rings `keep` meet: their
+ *  sides touch or cross (closed segments, segsMeet), or one holds a point of the other. The
+ *  region's sides are put on a grid once, for every ring asked about. */
+function meetsRegion(keep: Pt[][]): (r: Pt[]) => boolean {
   const segs: [Pt, Pt][] = keep.flatMap((k) =>
     k.map((p, i): [Pt, Pt] => [p, k[(i + 1) % k.length]])
   );
-  const grid = boxGrid(
-    segs.map(([a, b]) => [
-      Math.min(a[0], b[0]),
-      Math.min(a[1], b[1]),
-      Math.max(a[0], b[0]),
-      Math.max(a[1], b[1]),
-    ])
-  );
-  // closed segments ab and cd meet: each one's ends are not both strictly on one side of the
-  // other's line, and their boxes overlap (for collinear ones)
-  const side = (a: Pt, b: Pt, p: Pt) => Math.sign(cross(a, b, p));
-  const meet = (a: Pt, b: Pt, c: Pt, d: Pt) =>
-    side(a, b, c) * side(a, b, d) <= 0 &&
-    side(c, d, a) * side(c, d, b) <= 0 &&
-    Math.max(a[0], b[0]) >= Math.min(c[0], d[0]) &&
-    Math.max(c[0], d[0]) >= Math.min(a[0], b[0]) &&
-    Math.max(a[1], b[1]) >= Math.min(c[1], d[1]) &&
-    Math.max(c[1], d[1]) >= Math.min(a[1], b[1]);
-  for (let i = 0; i < r.length; i++) {
-    const [a, b] = [r[i], r[(i + 1) % r.length]];
-    for (const k of grid.query(
-      Math.min(a[0], b[0]),
-      Math.min(a[1], b[1]),
-      Math.max(a[0], b[0]),
-      Math.max(a[1], b[1])
-    ))
-      if (meet(a, b, segs[k][0], segs[k][1])) return true;
-  }
-  // no sides meet: one lies wholly inside the other, or they are apart
-  const winding = (p: Pt) =>
-    keep.reduce(
-      (w, k) => w + (pointInRing(p, k) ? Math.sign(signedArea2(k)) : 0),
-      0
+  const grid = boxGrid(segs.map((s) => boxOf([s])));
+  return (r) => {
+    for (let i = 0; i < r.length; i++) {
+      const [a, b] = [r[i], r[(i + 1) % r.length]];
+      const [x0, y0, x1, y1] = boxOf([[a, b]]);
+      for (const k of grid.query(x0, y0, x1, y1))
+        if (segsMeet(a, b, segs[k][0], segs[k][1], false)) return true;
+    }
+    // no sides meet: one lies wholly inside the other, or they are apart
+    return (
+      windingAt(r[0], keep) !== 0 || keep.some((k) => pointInRing(k[0], r))
     );
-  return winding(r[0]) !== 0 || keep.some((k) => pointInRing(k[0], r));
+  };
 }
 
 /** A shape's rings (a blob piece, a fillet piece, the box) cut by the keep-outs' region:
@@ -955,34 +959,36 @@ function avoidCut(
   // an outer ring (with its holes) that does not meet the keep-out region is its own cut:
   // only the others are cut (on the cut's grid, which traces a ring finer than its step
   // only roughly)
-  const hitOuter = rings.filter((r) => signedArea2(r) > 0 && meets(r, keep));
-  const hit = rings.filter((r) =>
-    signedArea2(r) > 0
-      ? hitOuter.includes(r)
-      : !rings.some(
-          (o) =>
-            signedArea2(o) > 0 && !hitOuter.includes(o) && pointInRing(r[0], o)
-        )
-  );
+  const meets = meetsRegion(keep);
+  const isOuter = (r: Pt[]) => signedArea2(r) > 0;
+  const outerIn = new Set(rings.filter(isOuter));
+  const missed = [...outerIn].filter((r) => !meets(r));
+  const missedSet = new Set(missed);
+  const hit: Pt[][] = [],
+    left: Pt[][] = [];
+  for (const r of rings) {
+    const cuts = outerIn.has(r)
+      ? !missedSet.has(r)
+      : !missed.some((o) => pointInRing(r[0], o));
+    (cuts ? hit : left).push(r);
+  }
   if (!hit.length) return rings;
   const box = boxOf(hit);
   // the padded members' union with its holes: a keep-out inside a ring of members is cut
   // out of the fill there
   const F = cutField(closingRings(pm, pad, 0, true), box, keep);
-  const cut = [
-    ...cutAndRound(hit, pm, pad, F),
-    ...rings.filter((r) => !hit.includes(r)),
-  ];
+  const cut = [...cutAndRound(hit, pm, pad, F), ...left];
   // the ground the keep-outs fence off from every member (a link's or a fill's sliver
   // between keep-outs) is not the enclosure: an outer ring that holds no member is dropped,
   // and the holes inside it
-  const outer = cut.filter((r) => signedArea2(r) > 0);
-  const kept = outer.filter((r) => pm.some((m) => pointInRing(insideOf(m), r)));
-  if (kept.length === outer.length) return cut;
+  const outer = new Set(cut.filter(isOuter));
+  const kept = [...outer].filter((r) =>
+    pm.some((m) => pointInRing(insideOf(m), r))
+  );
+  if (kept.length === outer.size) return cut;
+  const keptSet = new Set(kept);
   return cut.filter((r) =>
-    signedArea2(r) > 0
-      ? kept.includes(r)
-      : kept.some((o) => pointInRing(r[0], o))
+    outer.has(r) ? keptSet.has(r) : kept.some((o) => pointInRing(r[0], o))
   );
 }
 
@@ -1109,19 +1115,30 @@ function blobOutline(
   // the others with its links bent around the avoided members only: no piece's keep-outs
   // depend on another's)
   const separate = o.separate ?? BLOB_DEFAULT.separate;
+  const avoided = discGrid(K);
   const others =
     pms.length > 1 && separate
       ? pms.map((pm, p) =>
-          keepOuts([...pm, ...routeAround(linksOf(p), K, pad)], pad + clearance)
+          keepOuts(
+            [...pm, ...routeAround(linksOf(p), avoided, pad)],
+            pad + clearance
+          )
         )
       : null;
-  const keepsOf = (p: number) =>
-    others ? [...K, ...others.flatMap((D, q) => (q === p ? [] : D))] : K;
+  // every piece's keep-outs on one grid: the avoided members' discs, then each piece's, a
+  // piece's own skipped when its links are bent (so its keep-outs are K and the others'
+  // discs, in that order)
+  const keeps = others
+    ? discGrid(
+        [...K, ...others.flat()],
+        [...K.map(() => -1), ...others.flatMap((D, q) => D.map(() => q))]
+      )
+    : avoided;
   // each piece's members and spine: its links, bent around its keep-outs (so the final cut
   // does not sever the piece there)
   const parts = pms.map((pm, p) => ({
     pm,
-    spine: routeAround(linksOf(p), keepsOf(p), pad),
+    spine: routeAround(linksOf(p), keeps, pad, p),
   }));
   // each piece's outline: filled and smoothed on its own, then cut by its keep-outs, those
   // that can reach its outline's box (the closing by SEPARATE.open reaches 2 · open past a
@@ -1211,12 +1228,7 @@ function regionInRegion(A: Pt[][], B: Pt[][]): boolean {
       const [a, b] = [r[j], r[i]];
       const [x0, y0, x1, y1] = boxOf([[a, b]]);
       grid.each(x0, y0, x1, y1, (k) => {
-        const [c, d] = E[k];
-        if (
-          cross(a, b, c) * cross(a, b, d) < 0 &&
-          cross(c, d, a) * cross(c, d, b) < 0
-        )
-          crosses = true;
+        if (segsMeet(a, b, E[k][0], E[k][1], true)) crosses = true;
       });
     }
   return !crosses;
