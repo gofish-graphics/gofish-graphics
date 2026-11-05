@@ -972,13 +972,14 @@ fixed-size nodes report their size).
   seated beside the bars of another tier, an `enclose` drawn around placed
   members, and a chart of outlines or a line layered over a scatter
   (`.layer(chart(selectAll(…)))`), whose type is `undefined` on both axes. A
-  layer with no such part has no dressing: all of it is plot. A ring's chrome is chrome, not dressing (`ClaimChild.chrome`). Each node has a plot claim
+  layer with no such part has no dressing: all of it is plot. A ring's
+  chrome is chrome, not dressing (`ClaimChild.chrome`). Each node has a plot claim
   next to its claim (`GoFishNode.resolvePlotExtent`): a layer composes its
   children's plot claims the way it composes their claims, its hull of what
   its constraints place leaves out the dressing (`buildPlan`'s plot
   envelope). A child may also hand `placeByClaims` a plot apart from its box
   (`ClaimChild.plot`), which a chain lays it by as layout does
-  (`localPlotSpan`), say that it places itself at a literal pixel and stays
+  (`localSpan("plot", …)`), say that it places itself at a literal pixel and stays
   there (`placesItself`), or that it is a ring's chrome (`chrome`), which
   a chain lays past its whole box; the plan in `solver/plan.ts` sets
   them (#1176 step 3). A node that wears chrome has its content's plot as its plot: its
@@ -991,7 +992,9 @@ fixed-size nodes report their size).
   chart in a spread beside a caption or another chart keeps its axes
   clear of them. Each child also has a third claim, its box without its
   dressing (`ChildForms.bare` in the plan, `GoFishNode.resolveBareExtent`
-  in the claim, `localBareSpan` in layout, inputs `blo`/`bhi`): the hull
+  in the claim, `localSpan("bare", …)` in layout, inputs `bare0`/`bare1`
+  beside the plot's `plot0`/`plot1`, each undefined where it is the box;
+  one `spanHull` computes both local spans): the hull
   of its children that are no dressing and no ink, a ring's chrome
   included. It is what chrome is laid beside.
 - **Dressing never moves the parts it dresses.** Labels are a layer applied
@@ -999,7 +1002,7 @@ fixed-size nodes report their size).
   spread lays out its parts. A chain of parts of the plot lays them by their
   plots, in its claim (the plan lays each dressed part by its plot, and
   the whole part only reaches) and in its layout (a chain edge
-  reads each part's anchors off `GoFishNode.localPlotSpan`, the hull of a
+  reads each part's anchors off `GoFishNode.localSpan("plot", …)`, the hull of a
   layer's children that are no dressing and no chrome, in the node's own
   pixels; a chain that reads y the other way
   reads it reflected, as it reads the part's box). So the spacing is between plots, and σ and the parts' sizes

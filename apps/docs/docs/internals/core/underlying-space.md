@@ -593,7 +593,11 @@ each inherent to what the origin states are:
     the inner it pads (`applyNestSpacePlan`), so the outer box of a nest
     is in the inner's space;
   - a `ref` stand-in is in the part its target is in, in its target's
-    layer;
+    layer (`refHome` in `layer`). The type pass runs bottom-up, so a
+    layer that encloses this one is not typed yet while this one is: a
+    ref to one of its nodes takes its own part in this layer during the
+    type pass, and its target's in the claim walk, when every layer is
+    typed. This is a declared shortcut around evaluation order;
   - a child that is in no continuous or ordinal part by the rules above,
     and that a point or `"span"` `align` places at a partner that is in
     one, is in its partner's part on that axis (`alignedParts` in
@@ -618,7 +622,8 @@ each inherent to what the origin states are:
   places at a pixel offset should stay out of its partner's part.
 
   The layer's axes attach to the children whose part is continuous or
-  ordinal. Every other child of a layer that has such a part is
+  ordinal (`isVisualized` in `underlyingSpace.ts`; the claim walk hands
+  `placeByClaims` the answer as `ClaimChild.visualized`). Every other child of a layer that has such a part is
   **dressing** (`placeByClaims`): it is beside the part or over it. An
   `enclose` drawn around refs, a `line` or `ribbon` connecting refs, a
   `.label()` text a gap sets past its mark's ref (on the axis of the gap;
@@ -642,7 +647,8 @@ each inherent to what the origin states are:
   the outermost ring of a `chart()`: a parent lays a chart out whole,
   `GoFishNode.plotIsBox`). Chrome is laid beside a third claim, the box
   without its dressing (`ChildForms.bare`, `GoFishNode.resolveBareExtent`
-  and `localBareSpan`). Neither of the other two is it. The box holds the
+  and `GoFishNode.localSpan("bare", …)`; each is undefined where it is
+  the box). Neither of the other two is it. The box holds the
   dressing, so ovals that reach past a scatter would push its axes out.
   The plot of a node with a size of its own is its whole box, dressing
   included, since a parent lays it out whole (#1210); and the plot of a
