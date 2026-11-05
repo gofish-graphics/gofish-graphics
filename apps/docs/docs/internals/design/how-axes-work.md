@@ -445,7 +445,7 @@ From #1115:
 - [#494](https://github.com/gofish-graphics/gofish-graphics/issues/494): inferring the
   graphic's size when no size is given.
 - [#984](https://github.com/gofish-graphics/gofish-graphics/issues/984): rebuild the
-  space kinds from capabilities, so a type states which structures it has.
+  space kinds from traits, so a type states which structures it has.
 - [#256](https://github.com/gofish-graphics/gofish-graphics/issues/256): the time
   datatype.
 - [#985](https://github.com/gofish-graphics/gofish-graphics/pull/985): signed `h`/`w`

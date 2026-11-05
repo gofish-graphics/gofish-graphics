@@ -174,3 +174,10 @@ packages/gofish-graphics/stories/EncloseShapes.stories.tsx::ChartAccentSubSahara
 packages/gofish-graphics/stories/forwardsyntax/LabelPlacement.stories.tsx::ArrowLabelsLeft
 packages/gofish-graphics/stories/forwardsyntax/LabelPlacement.stories.tsx::ArrowLabelsOnBackground
 packages/gofish-graphics/stories/forwardsyntax/LabelPlacement.stories.tsx::ArrowLabelsAbove
+
+# Stack Needs CanAdd: CelsiusRefused is a spec GoFish refuses (°C has no
+# CanAdd), and the JS story catches the rejected render and prints the error
+# message in place of the chart. A Python spec renders through the same JS
+# path, so it would only throw: there is no chart to byte-match. NoSchema and
+# UsdStacks are ported.
+packages/gofish-graphics/stories/forwardsyntax/Bar/StackNeedsCanAdd.stories.tsx::CelsiusRefused

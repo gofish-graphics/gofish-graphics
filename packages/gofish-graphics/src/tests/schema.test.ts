@@ -28,6 +28,7 @@ import {
   columnTypeOf,
   getColumnTypes,
   orderByLevels,
+  schemaToWire,
   setColumnTypes,
   stackOrigin,
   Unit as SrcUnit,
@@ -490,8 +491,8 @@ async function main() {
         JSON.stringify({
           HasUnit: {
             unit: "instant",
-            classes: {},
-            difference: { unit: "duration", classes: { CanAdd: {} } },
+            traits: {},
+            difference: { unit: "duration", traits: { CanAdd: {} } },
             zone: "Asia/Tokyo",
           },
         })
@@ -508,7 +509,7 @@ async function main() {
     );
     check(
       "Unit.duration adds up",
-      SrcUnit.duration.type.HasUnit?.classes?.CanAdd !== undefined &&
+      SrcUnit.duration.type.HasUnit?.traits?.CanAdd !== undefined &&
         SrcUnit.duration.name === "duration"
     );
     // The levels-fit rule: text levels are not amounts, numbers are.
@@ -540,7 +541,7 @@ async function main() {
       "a named unit with a domain is a unit with levels",
       JSON.stringify(Stars.type) ===
         JSON.stringify({
-          HasUnit: { unit: "stars", symbol: "stars", classes: {} },
+          HasUnit: { unit: "stars", symbol: "stars", traits: {} },
           HasLevels: { levels: [1, 2, 3, 4, 5] },
           HasOrder: {},
         }) && Stars.name === "stars",
@@ -564,7 +565,7 @@ async function main() {
       "Unit(name, { traits: [Trait.summable()] }) has CanAdd",
       JSON.stringify(Unit("USD", { traits: [Trait.summable()] }).type) ===
         JSON.stringify({
-          HasUnit: { unit: "USD", symbol: "USD", classes: { CanAdd: {} } },
+          HasUnit: { unit: "USD", symbol: "USD", traits: { CanAdd: {} } },
         })
     );
     check(
@@ -1030,7 +1031,7 @@ async function main() {
     );
   }
 
-  console.log("\n# units and column records cross the wire as classes");
+  console.log("\n# units and column records cross the wire as traits");
   {
     // The same schema, spelled in Python, writes the same wire form: Python's
     // test_ast.py compares its `to_ir()` against this one fixture.
@@ -1116,8 +1117,62 @@ async function main() {
     const back = await applySchema([{ balance: 1 }], schemaWireFixture as any);
     check(
       "and the wire form reads back with the area's unit name alone",
-      getColumnTypes(back)?.area?.HasUnit?.classes === undefined &&
-        getColumnTypes(back)?.revenue?.HasUnit?.classes?.CanAdd !== undefined
+      getColumnTypes(back)?.area?.HasUnit?.traits === undefined &&
+        getColumnTypes(back)?.revenue?.HasUnit?.traits?.CanAdd !== undefined
+    );
+  }
+
+  console.log("\n# a wire HasUnit has only its own keys");
+  {
+    const bad = {
+      "the old key classes": { unit: "USD", classes: { CanAdd: {} } },
+      "a list of Trait values": { unit: "USD", traits: [Trait.summable()] },
+      "an unknown unit trait": { unit: "USD", traits: { CanSum: {} } },
+    };
+    for (const [name, HasUnit] of Object.entries(bad)) {
+      const got = await errorOf(() =>
+        columnTypeOf("usd", { HasUnit } as any)
+      );
+      check(
+        `${name} throws`,
+        got?.includes("HasUnit") === true &&
+          got.includes('Unit("USD", { traits: [Trait.summable()] })'),
+        got
+      );
+    }
+    check(
+      "a well-formed record passes",
+      columnTypeOf("usd", { HasUnit: { unit: "USD", traits: { CanAdd: {} } } })
+        .HasUnit?.traits?.CanAdd !== undefined
+    );
+    const midpoint = await errorOf(() =>
+      columnTypeOf("rating", {
+        HasLevels: { levels: [1, 2] },
+        HasOrder: {},
+        HasMidpoint: { at_: 1 },
+      } as any)
+    );
+    check(
+      "a misspelled key in another trait throws, naming it",
+      midpoint?.includes('"HasMidpoint.at_"') === true &&
+        midpoint.includes("HasMidpoint is a record { at }"),
+      midpoint
+    );
+    const wire = await errorOf(() =>
+      schemaToWire({
+        usd: { HasUnit: { unit: "USD", classes: { CanAdd: {} } } } as any,
+      })
+    );
+    check(
+      "schemaToWire checks a wire record too",
+      wire?.includes('"HasUnit.classes"') === true,
+      wire
+    );
+    check(
+      "the engine's own units pass (instant with a zone, its difference)",
+      columnTypeOf("t", SrcUnit.time({ zone: "UTC" }).type as any).HasUnit
+        ?.difference?.unit === "duration",
+      undefined
     );
   }
 

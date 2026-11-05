@@ -2334,7 +2334,7 @@ async function main() {
         inferSize(field("x").mean(), []) === undefined
     );
     // A missing value (null or undefined, as everywhere: `dropNulls`, the
-    // schema's classes) is no value: a fold skips it. A mean over the rest
+    // schema's traits) is no value: a fold skips it. A mean over the rest
     // divides by how many there are; over none, it has no value. A sum over
     // values that are all missing has no value either, while a sum over no
     // rows is 0. NaN is a number, not a missing value.

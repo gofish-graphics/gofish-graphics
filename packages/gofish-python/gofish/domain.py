@@ -4,7 +4,7 @@ The ``Domain`` family: what a unit's values are, a unit definition's
 
 The package binds this module as ``Domain``, so ``Domain.ordered(levels)``
 and ``from gofish.domain import ordered`` reach the same function. A domain
-never reaches the wire as itself: ``Unit`` turns it into the column classes
+never reaches the wire as itself: ``Unit`` turns it into the traits
 it declares (``HasLevels``, and ``HasOrder`` for an ordered one). Mirrors JS
 ``gofish-graphics/domain``.
 

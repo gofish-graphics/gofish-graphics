@@ -1,16 +1,16 @@
 {
   "balance": {
     "HasQuantity": { "name": "Balance" },
-    "HasUnit": { "unit": "USD", "symbol": "USD", "classes": { "CanAdd": {} } }
+    "HasUnit": { "unit": "USD", "symbol": "USD", "traits": { "CanAdd": {} } }
   },
   "revenue": {
-    "HasUnit": { "unit": "USD", "symbol": "USD", "classes": { "CanAdd": {} } }
+    "HasUnit": { "unit": "USD", "symbol": "USD", "traits": { "CanAdd": {} } }
   },
   "area": {
     "HasUnit": { "unit": "km²", "symbol": "km²" }
   },
   "temp": {
-    "HasUnit": { "unit": "°C", "symbol": "°C", "classes": {} }
+    "HasUnit": { "unit": "°C", "symbol": "°C", "traits": {} }
   },
   "region": {
     "HasLevels": { "levels": ["n", "s"] },
@@ -22,15 +22,15 @@
   },
   "rating": {
     "HasQuantity": { "name": "Rating" },
-    "HasUnit": { "unit": "stars", "symbol": "stars", "classes": {} },
+    "HasUnit": { "unit": "stars", "symbol": "stars", "traits": {} },
     "HasLevels": { "levels": [1, 2, 3, 4, 5] },
     "HasOrder": {}
   },
   "day": {
     "HasUnit": {
       "unit": "instant",
-      "classes": {},
-      "difference": { "unit": "duration", "classes": { "CanAdd": {} } },
+      "traits": {},
+      "difference": { "unit": "duration", "traits": { "CanAdd": {} } },
       "zone": "UTC"
     }
   },
@@ -38,12 +38,12 @@
     "HasQuantity": { "name": "Sold" },
     "HasUnit": {
       "unit": "instant",
-      "classes": {},
-      "difference": { "unit": "duration", "classes": { "CanAdd": {} } },
+      "traits": {},
+      "difference": { "unit": "duration", "traits": { "CanAdd": {} } },
       "zone": "America/New_York"
     }
   },
   "wait": {
-    "HasUnit": { "unit": "duration", "classes": { "CanAdd": {} } }
+    "HasUnit": { "unit": "duration", "traits": { "CanAdd": {} } }
   }
 }

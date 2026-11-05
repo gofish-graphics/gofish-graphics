@@ -416,7 +416,7 @@ const DOMAIN_OPS = new Set(["sort", "reverse", "bin", "dropNulls"]);
 export const isDomainOp = (op: FieldOp): boolean => DOMAIN_OPS.has(op.op);
 
 /** Whether `v` is a missing value: null or undefined, as everywhere in
- *  GoFish (`dropNulls`, the schema's classes). A fold skips it. NaN is a
+ *  GoFish (`dropNulls`, the schema's traits). A fold skips it. NaN is a
  *  number, not a missing value. */
 export const isMissing = (v: unknown): v is null | undefined => v == null;
 
@@ -626,7 +626,7 @@ export const shareQuantity = (
   byName?: string
 ): Quantity => {
   const name = `${base?.name ?? "value"} share${byName ? ` by ${byName}` : ""}`;
-  return { name, unit: { unit: name, classes: { CanAdd: {} } } };
+  return { name, unit: { unit: name, traits: { CanAdd: {} } } };
 };
 
 /**

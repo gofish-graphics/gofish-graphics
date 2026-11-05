@@ -3,16 +3,17 @@
 // </gofish-wiki>
 
 /**
- * The `Trait` family: the capabilities a unit's values have, listed in a
+ * The `Trait` family: the traits a unit's values have, listed in a
  * unit definition's `traits`
  * (`Unit("USD", { traits: [Trait.summable()] })`).
  *
  * `lib.ts` binds this module as `Trait` (`Trait.summable()`), and
  * `gofish-graphics/trait` exports the same module. Unlike the strategy
  * families, a unit takes a set of traits, not one choice from them, and a
- * trait never reaches the wire: `Unit` turns each into the column class it
- * declares (`unitTypeOf` in `ast/schema.ts`), and that class is what the
- * wire carries. So the traits are not in gofish-ir's `STRATEGIES` table.
+ * `Trait` value never reaches the wire: `Unit` turns each into the trait it
+ * declares (`CanAdd`, `HasMidpoint`; `unitTypeOf` in `ast/schema.ts`), and
+ * that trait is what the wire carries. So the traits are not in gofish-ir's
+ * `STRATEGIES` table.
  *
  *  - `diverging(midpoint?)`: the order has a midpoint (`HasMidpoint`), in
  *    edge coordinates over the levels, `n / 2` for `n` levels by default.

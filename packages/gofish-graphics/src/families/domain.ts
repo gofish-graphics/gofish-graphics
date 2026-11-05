@@ -8,7 +8,7 @@
  *
  * `lib.ts` binds this module as `Domain` (`Domain.ordered(levels)`), and
  * `gofish-graphics/domain` exports the same module. A domain never reaches
- * the wire as itself: `Unit` turns it into the column classes it declares
+ * the wire as itself: `Unit` turns it into the traits it declares
  * (`unitTypeOf` in `ast/schema.ts`), `HasLevels`, and `HasOrder` for an
  * ordered one, and those are what the wire carries. So the domains are not
  * in gofish-ir's `STRATEGIES` table.
