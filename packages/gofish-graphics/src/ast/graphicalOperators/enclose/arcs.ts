@@ -623,24 +623,36 @@ export function closingRings(
       sampleParams(q.e, q.s0, q.s1, tol).map((s) => at(q.e, s))
     ),
   }));
-  // Outer loops wind as the members do; the holes the other way.
+  // Outer loops wind as the members do; the holes the other way. A loop's
+  // depth is the winding of the other loops at its first point: an outer
+  // loop at 0 bounds filled ground, and a hole at 1 is a hole of it. With
+  // holes, that keeps an island inside a hole (+1 − 1 = 0) and its own holes;
+  // without, every hole is filled, so a loop inside an outer one is dropped.
   const outer = loops
     .filter(({ ring }) => signedArea2(ring) > 0)
     .sort((a, b) => signedArea2(b.ring) - signedArea2(a.ring));
-  const keptOuter = outer.filter(
-    (L, k) => !outer.slice(0, k).some((B) => pointInRing(L.ring[0], B.ring))
-  );
-  // With holes, a hole loop of the grown union inside a kept outer one.
+  const boxes = loops.map(({ ring }) => ringExtent(ring));
+  const depth = (k: number) => {
+    const [x, y] = loops[k].ring[0];
+    let w = 0;
+    loops.forEach(({ ring }, j) => {
+      const b = boxes[j];
+      if (j === k || x < b.minX || x > b.maxX || y < b.minY || y > b.maxY)
+        return;
+      if (pointInRing([x, y], ring)) w += signedArea2(ring) > 0 ? 1 : -1;
+    });
+    return w;
+  };
   const kept = holes
     ? [
-        ...keptOuter,
+        ...outer.filter((L) => depth(loops.indexOf(L)) === 0),
         ...loops.filter(
-          ({ ring }) =>
-            signedArea2(ring) < 0 &&
-            keptOuter.some((B) => pointInRing(ring[0], B.ring))
+          ({ ring }, k) => signedArea2(ring) < 0 && depth(k) === 1
         ),
       ]
-    : keptOuter;
+    : outer.filter(
+        (L, k) => !outer.slice(0, k).some((B) => pointInRing(L.ring[0], B.ring))
+      );
   const boundary = kept.flatMap((L) => L.loop);
 
   // 3. Shrink by r: offset each piece inward, with an arc of r at each corner.

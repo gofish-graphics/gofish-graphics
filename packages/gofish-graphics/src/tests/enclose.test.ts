@@ -45,6 +45,7 @@ import {
   type Ellipse,
 } from "../ast/graphicalOperators/enclose/oval";
 import { closingRings } from "../ast/graphicalOperators/enclose/arcs";
+import { keepRegion } from "../ast/graphicalOperators/enclose/separate";
 import {
   buildBlend,
   blendArea,
@@ -991,6 +992,140 @@ console.log("\n# closingRings (enclose/arcs.ts)");
   {
     check("no members, no outline", closingRings([], 4, 12).length === 0);
   }
+}
+
+// ── islands in holes, keep-outs in holes, tapered and separate keep-outs ───
+console.log("# islands and keep-outs (enclose/arcs.ts, enclose/outline.ts)");
+{
+  // 24 touching discs on a circle of radius 60 around a hole, and a disc at
+  // its center: an island inside the hole
+  const RING24: Disc[] = Array.from({ length: 24 }, (_, i) =>
+    C(
+      150 + 60 * Math.cos((i / 24) * 2 * Math.PI),
+      120 + 60 * Math.sin((i / 24) * 2 * Math.PI),
+      8
+    )
+  );
+  const center = C(150, 120, 8);
+  const keep = keepRegion(
+    [...RING24, center].map((m) => ({ c: [m.cx, m.cy] as Pt, R: m.r })),
+    3
+  );
+  check(
+    "keepRegion keeps an island inside a hole (the center disc is forbidden ground)",
+    inRegion([150, 120], keep) && !inRegion([150, 120 + 30], keep),
+    show(topology(keep))
+  );
+  const fil = encloseOutline([...RING24, center], {
+    kind: "fillet",
+    padding: 4,
+    holes: true,
+  });
+  check(
+    "Shape.fillet({ holes: true }) keeps the member inside the ring's hole",
+    inRegion([150, 120], fil) && !inRegion([150, 120 + 30], fil),
+    show(topology(fil))
+  );
+  const islandBlob = blob([...RING24, center], {
+    padding: 4,
+    convexity: 0,
+    holes: true,
+  });
+  check(
+    "Shape.blob({ holes: true }) keeps the member inside the ring's hole",
+    inRegion([150, 120], islandBlob) && !inRegion([150, 120 + 30], islandBlob),
+    show(topology(islandBlob))
+  );
+
+  // an avoided node inside the ring of members is cut back out, whatever the
+  // shape fills the ring with
+  const avoided = [C(150, 120, 6)];
+  for (const [name, loops] of [
+    [
+      "a blob (convexity 0.5)",
+      blob(RING24, { padding: 4, convexity: 0.5, avoiding: avoided }),
+    ],
+    ["a hull", blob(RING24, { padding: 4, convexity: 1, avoiding: avoided })],
+    [
+      "the box",
+      cutOutline(
+        [
+          [
+            [78, 48],
+            [222, 48],
+            [222, 192],
+            [78, 192],
+          ],
+        ],
+        RING24,
+        { padding: 4, avoiding: avoided }
+      ),
+    ],
+  ] as [string, Pt[][]][])
+    check(
+      `${name} around a ring is cut around an avoided node in its middle`,
+      insideShare(around([150, 120], 6 + 4 - 0.25), loops) === 0 &&
+        inRegion([150, 120 - 60], loops),
+      show(topology(loops))
+    );
+
+  // a tapered keep-out keeps its clearance along its whole length: a
+  // segment 2 px wide at one end and 20 at the other
+  const taper: Member = { kind: "segment", a: [60, 40], b: [140, 40], w: 2, w2: 20 };
+  const boxRing: Pt[][] = [
+    [
+      [20, 20],
+      [180, 20],
+      [180, 60],
+      [20, 60],
+    ],
+  ];
+  const tcut = cutOutline(boxRing, [C(40, 30, 4)], {
+    padding: 4,
+    avoiding: [taper],
+    clearance: 4,
+  });
+  const worstT = Math.max(
+    ...[0, 0.25, 0.5, 0.75, 1].map((t) => {
+      const x = 60 + 80 * t;
+      const R = (2 + 18 * t) / 2 + 4 - 0.25;
+      return insideShare(around([x, 40], R), tcut);
+    })
+  );
+  check(
+    "a tapered keep-out keeps its clearance out to its thick end",
+    tcut.length > 0 && worstT === 0,
+    `${tcut.length} loops, ${(100 * worstT).toFixed(0)}% of a clearance circle inside`
+  );
+
+  // separate: a piece's link is bent around a neighbor piece's keep-out as
+  // around an avoided node's, so the cut never severs it. Two clusters 100
+  // px apart, linked, and a lone dot that is a piece of its own, whose
+  // keep-out (its padding and a clearance of 78) reaches across the link.
+  const cl = (x: number): Disc[] =>
+    Array.from({ length: 6 }, (_, i) =>
+      C(
+        x + 6 * Math.cos((i / 6) * 2 * Math.PI),
+        6 * Math.sin((i / 6) * 2 * Math.PI),
+        2
+      )
+    );
+  const sepMembers = [...cl(0), ...cl(100), C(50, 78, 2)];
+  const sepPieces = pieceLinks(sepMembers, 4, 0.5, 0.5).pieces;
+  const sepLoops = blob(sepMembers, {
+    padding: 4,
+    connection: 0.5,
+    neck: 0.5,
+    convexity: 0,
+    separate: true,
+    clearance: 78,
+  });
+  check(
+    "separate: a piece's link is routed around a neighbor piece, not cut through",
+    sepPieces.length === 2 &&
+      sepLoops.some((l) => inPoly([0, 0], l) && inPoly([100, 0], l)),
+    `${sepPieces.length} pieces of members; ${show(topology(sepLoops))}`
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

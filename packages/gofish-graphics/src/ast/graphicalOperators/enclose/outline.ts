@@ -683,7 +683,8 @@ function paddedHull(members: Member[], pad: number): Pt[] {
 // ── keep-outs ───────────────────────────────────────────────────────────────
 
 /** Keep-out discs: each avoided member grown by clearance. A segment is
- *  discs along it, every 2 px; a box is its circumscribed disc (declared:
+ *  discs along it, every 2 px, their radius tapering from w / 2 at a to
+ *  w2 / 2 at b as its width does; a box is its circumscribed disc (declared:
  *  a long box keeps out more than itself, #1247). */
 function keepOuts(avoiding: Member[], clearance: number): Disc[] {
   const out: Disc[] = [];
@@ -692,13 +693,14 @@ function keepOuts(avoiding: Member[], clearance: number): Disc[] {
     else if (m.kind === "segment") {
       const L = Math.hypot(m.b[0] - m.a[0], m.b[1] - m.a[1]);
       const n = Math.max(1, Math.ceil(L / 2));
+      const w2 = m.w2 ?? m.w;
       for (let i = 0; i <= n; i++)
         out.push({
           c: [
             m.a[0] + ((m.b[0] - m.a[0]) * i) / n,
             m.a[1] + ((m.b[1] - m.a[1]) * i) / n,
           ],
-          R: m.w / 2 + clearance,
+          R: (m.w + ((w2 - m.w) * i) / n) / 2 + clearance,
         });
     } else
       out.push({
@@ -881,13 +883,12 @@ type KeepOutRegion = (box: Box) => Pt[][];
 function keepOutRegion(K: Disc[]): KeepOutRegion {
   if (!K.length) return () => [];
   const g = SEPARATE.open + 1;
-  const bound: Box = [Infinity, Infinity, -Infinity, -Infinity];
-  for (const { c, R } of K) {
-    bound[0] = Math.min(bound[0], c[0] - R - g);
-    bound[1] = Math.min(bound[1], c[1] - R - g);
-    bound[2] = Math.max(bound[2], c[0] + R + g);
-    bound[3] = Math.max(bound[3], c[1] + R + g);
-  }
+  const bound = boxOf(
+    K.map(({ c, R }): Pt[] => [
+      [c[0] - R - g, c[1] - R - g],
+      [c[0] + R + g, c[1] + R + g],
+    ])
+  );
   let region: Pt[][] | undefined;
   return (box) =>
     reaches(bound, box)
@@ -908,7 +909,9 @@ function avoidCut(
   const box = boxOf(rings);
   const keep = keepOut(box);
   if (!keep.length) return rings;
-  const F = cutField(closingRings(pm, pad, 0, false), box, keep);
+  // the padded members' union with its holes: a keep-out inside a ring of members is cut
+  // out of the fill there
+  const F = cutField(closingRings(pm, pad, 0, true), box, keep);
   const cut = cutAndRound(rings, pm, pad, F);
   // the ground the keep-outs fence off from every member (a link's or a fill's sliver
   // between keep-outs) is not the enclosure: an outer ring that holds no member is dropped,
@@ -1037,32 +1040,36 @@ function blobOutline(
     o.connection ?? BLOB_DEFAULT.connection,
     o.neck ?? BLOB_DEFAULT.neck
   );
-  // each piece's members and spine: its links, bent around the keep-outs (so the final cut
+  const pms = J.pieces.map((idx) => idx.map((i) => members[i]));
+  const linksOf = (p: number) => J.links.filter((_, l) => J.linkPiece[l] === p);
+  // each piece's keep-outs: the avoided members, and with `separate: true` the set's other
+  // pieces as keep-outs too: their padded members and their links bent around the avoided
+  // members, grown by padding + clearance, so the members and links of two pieces stay
+  // `clearance` apart (a piece's own links are bent around these, and a piece is seen by
+  // the others with its links bent around the avoided members only: no piece's keep-outs
+  // depend on another's)
+  const separate = o.separate ?? BLOB_DEFAULT.separate;
+  const others =
+    pms.length > 1 && separate
+      ? pms.map((pm, p) =>
+          keepOuts([...pm, ...routeAround(linksOf(p), K, pad)], pad + clearance)
+        )
+      : null;
+  const keepsOf = (p: number) =>
+    others ? [...K, ...others.flatMap((D, q) => (q === p ? [] : D))] : K;
+  // each piece's members and spine: its links, bent around its keep-outs (so the final cut
   // does not sever the piece there)
-  const parts = J.pieces.map((idx, p) => ({
-    pm: idx.map((i) => members[i]),
-    spine: routeAround(
-      J.links.filter((_, l) => J.linkPiece[l] === p),
-      K,
-      pad
-    ),
+  const parts = pms.map((pm, p) => ({
+    pm,
+    spine: routeAround(linksOf(p), keepsOf(p), pad),
   }));
-  // each piece's outline: filled and smoothed on its own, then cut by its keep-outs
+  // each piece's outline: filled and smoothed on its own, then cut by its keep-outs, those
+  // that can reach its outline's box (the closing by SEPARATE.open reaches 2 · open past a
+  // disc)
   const convexity = o.convexity ?? BLOB_DEFAULT.convexity;
   const outs = parts.map(({ pm, spine }) =>
     smoothFill(fillOne(pm, spine, pad, convexity, holes), pad)
   );
-  // each piece's keep-outs: the avoided members, and with `separate: true` the set's other
-  // pieces as keep-outs too (their padded members and links grown by padding + clearance, so
-  // the two outlines stay `clearance` apart), those that can reach its outline's box (the
-  // closing by SEPARATE.open reaches 2 · open past a disc)
-  const separate = o.separate ?? BLOB_DEFAULT.separate;
-  const others =
-    parts.length > 1 && separate
-      ? parts.map(({ pm, spine }) =>
-          keepOuts([...pm, ...spine], pad + clearance)
-        )
-      : null;
   const keepK = keepOutRegion(K);
   const keepOf = (p: number, rings: Pt[][]): KeepOutRegion => {
     if (!others) return keepK;
@@ -1137,12 +1144,12 @@ function regionInRegion(A: Pt[][], B: Pt[][]): boolean {
         continue;
       E.push([c, d]);
     }
-  const grid = boxGrid(E.map(edgeBox));
+  const grid = boxGrid(E.map((e) => boxOf([e])));
   let crosses = false;
   for (const r of A)
     for (let i = 0, j = r.length - 1; i < r.length && !crosses; j = i++) {
       const [a, b] = [r[j], r[i]];
-      const [x0, y0, x1, y1] = edgeBox([a, b]);
+      const [x0, y0, x1, y1] = boxOf([[a, b]]);
       grid.each(x0, y0, x1, y1, (k) => {
         const [c, d] = E[k];
         if (
@@ -1154,13 +1161,6 @@ function regionInRegion(A: Pt[][], B: Pt[][]): boolean {
     }
   return !crosses;
 }
-
-const edgeBox = ([a, b]: [Pt, Pt]) => [
-  Math.min(a[0], b[0]),
-  Math.min(a[1], b[1]),
-  Math.max(a[0], b[0]),
-  Math.max(a[1], b[1]),
-];
 
 /** One blob piece's fill, before the smoothing and the keep-out cut. */
 type Fill = {
