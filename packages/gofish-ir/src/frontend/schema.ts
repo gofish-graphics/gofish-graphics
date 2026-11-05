@@ -667,26 +667,26 @@ export type SelectRefIR = {
   mode?: "one" | "all";
 };
 
-/** Nodes named on the wire inside an option (a blob's `avoiding`): a list of
+/** Nodes named on the wire inside an option (`enclose`'s `avoiding`): a list of
  *  by-name references (`ref(...)` / a `.relate()` operand), or every node of
  *  a named layer (`selectAll(name)`, the plural form a chart's data takes). */
 export type NodeSelectionIR = RefMarkIR[] | (SelectRefIR & { mode: "all" });
 
 /** The outline `enclose` draws, made by a call in the `Shape` family
- *  (`Shape.box()`, `Shape.oval()`, `Shape.blob()`; `Shape.hull()` and
- *  `Shape.spine()` make kind `"blob"` with other params preset). */
+ *  (`Shape.box()`, `Shape.oval()`, `Shape.fillet()`, `Shape.blob()`;
+ *  `Shape.hull()` and `Shape.spine()` make kind `"blob"` with other params
+ *  preset). */
 export type ShapeIR =
   | { kind: "box"; rx?: number; ry?: number }
   | { kind: "oval" }
-  | { kind: "arcs"; radius?: number }
+  | { kind: "fillet"; radius?: number; neck?: number; holes?: boolean }
   | {
       kind: "blob";
       convexity?: number;
-      holes?: boolean;
-      roundness?: number;
+      connection?: number;
       neck?: number;
-      avoiding?: NodeSelectionIR;
-      clearance?: number;
+      holes?: boolean;
+      separate?: boolean;
     };
 
 /** A screen direction from a mark, for `Place.around`. */

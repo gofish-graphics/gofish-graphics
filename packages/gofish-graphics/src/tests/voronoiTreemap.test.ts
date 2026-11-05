@@ -298,15 +298,15 @@ console.log(
   const message = await errorOf(() =>
     chart(rows, { axes: false })
       .flow(
-        enclose({ shape: Shape.arcs, fill: "none" }),
+        enclose({ shape: Shape.fillet, fill: "none" }),
         treemap({ by: "k", size: "v", tile: Tile.voronoi })
       )
       .mark(region({ fill: "#888" }))
       .toDisplayList({ w: 200, h: 200 })
   );
   check(
-    "Shape.arcs around a treemap is an error naming the fix",
-    message.startsWith("enclose({ shape }): Shape.arcs") &&
+    "Shape.fillet around a treemap is an error naming the fix",
+    message.startsWith("enclose({ shape }): Shape.fillet") &&
       message.includes("Use Shape.box or Shape.oval"),
     message
   );

@@ -12,6 +12,7 @@ lambda/RPC bridge) stays hand-written there.
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
 from . import ast as _ast
@@ -44,7 +45,7 @@ _OPTION_TYPES: Dict[str, Any] = {
     "Curve": ("tagged", "kind", {"linear": ("object", {"kind": ("kind", None)}), "step": ("object", {"kind": ("kind", None)}), "monotone": ("object", {"kind": ("kind", None)}), "smooth": ("object", {"kind": ("kind", None)}), "catmullRom": ("object", {"kind": ("kind", None)}), "bezier": ("object", {"kind": ("kind", None)}), "orthogonal": ("object", {"kind": ("kind", None), "bend": ("bend", None)}), "arc": ("object", {"kind": ("kind", None), "direction": ("direction", None)}), "perfectArrows": ("object", {"kind": ("kind", None), "bow": ("bow", None), "stretch": ("stretch", None), "stretch_min": ("stretchMin", None), "stretch_max": ("stretchMax", None), "pad_start": ("padStart", None), "pad_end": ("padEnd", None), "flip": ("flip", None), "straights": ("straights", None)})}),
     "Bin": ("tagged", "kind", {"step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)}), "quantiles": ("object", {"kind": ("kind", None), "quantiles": ("quantiles", None)}), "hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),
     "Calendar": ("tagged", "kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)})}),
-    "Shape": ("tagged", "kind", {"box": ("object", {"kind": ("kind", None), "rx": ("rx", None), "ry": ("ry", None)}), "oval": ("object", {"kind": ("kind", None)}), "arcs": ("object", {"kind": ("kind", None), "radius": ("radius", None)}), "blob": ("object", {"kind": ("kind", None), "convexity": ("convexity", None), "holes": ("holes", None), "roundness": ("roundness", None), "neck": ("neck", None), "avoiding": ("avoiding", None), "clearance": ("clearance", None)})}),
+    "Shape": ("tagged", "kind", {"box": ("object", {"kind": ("kind", None), "rx": ("rx", None), "ry": ("ry", None)}), "oval": ("object", {"kind": ("kind", None)}), "fillet": ("object", {"kind": ("kind", None), "radius": ("radius", None), "neck": ("neck", None), "holes": ("holes", None)}), "blob": ("object", {"kind": ("kind", None), "convexity": ("convexity", None), "connection": ("connection", None), "neck": ("neck", None), "holes": ("holes", None), "separate": ("separate", None)})}),
     "Place": ("tagged", "kind", {"around": ("object", {"kind": ("kind", None), "directions": ("directions", None), "side": ("side", None), "offset": ("offset", None)}), "along": ("object", {"kind": ("kind", None), "at": ("at", None), "side": ("side", None), "orient": ("orient", None), "offset": ("offset", None)}), "start": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "end": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "interior": ("object", {"kind": ("kind", None)})}),
 }
 
@@ -864,6 +865,13 @@ def _pack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, spacing: 
         spacing: Gap between sibling circles, in pixels: each child's enclosing circle is packed as if its radius were `spacing / 2` larger. Default 0.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
+    if spacing is not None:
+        if not (isinstance(spacing, (int, float)) and not isinstance(spacing, bool)):
+            raise TypeError(f"pack(spacing=...) must be a finite number >= 0, got {type(spacing).__name__}")
+        if not math.isfinite(spacing):
+            raise ValueError(f"pack(spacing=...) must be finite, got {spacing!r}")
+        if spacing < 0:
+            raise ValueError(f"pack(spacing=...) must be >= 0, got {spacing!r}")
     opts: Dict[str, Any] = {}
     for _k, _v in [
         ("by", by),
@@ -1167,12 +1175,14 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
             opts[_k] = _v
     return opts
 
-def _enclose_opts(*, padding: Optional[int | float | str] = None, shape: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, stroke_dasharray: Optional[str] = None, opacity: Optional[float] = None, fill_opacity: Optional[float] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
-    """Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.oval()`), the padded members with arc corners (`Shape.arcs()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs. Flow-step form `.flow(..., enclose(opts), ...)`: an outline around each group's subtree, laid out with it, so the operator above packs or places the outlined group and an outer `enclose` hugs this outline; in a chart's `operators`, its IR is this mark's.
+def _enclose_opts(*, padding: Optional[int | float | str] = None, shape: Optional[dict] = None, avoiding: Optional[Any] = None, clearance: Optional[float] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, stroke_dasharray: Optional[str] = None, opacity: Optional[float] = None, fill_opacity: Optional[float] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.oval()`), the padded members with arc corners (`Shape.fillet()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`), kept out of the nodes in `avoiding`. Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs. Flow-step form `.flow(..., enclose(opts), ...)`: an outline around each group's subtree, laid out with it, so the operator above packs or places the outlined group and an outer `enclose` hugs this outline; in a chart's `operators`, its IR is this mark's.
 
     Args:
-        padding: Pixels between the members and the outline: a number, or a field name or accessor read once per enclosed group (constant within the group). For a blob or arcs, the distance from each member's own outline (around a line's whole length). Around a member with no size of its own, how far inside the outline the member's shape is. Default 2.
-        shape: The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.arcs({radius}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset. Around a fresh member with no size of its own (a treemap, a region), the outline is the space it is given: Shape.box() is that space (a treemap's Voronoi cell, when it is in one) and Shape.oval() the oval inscribed in it, and the member fills the outline; Shape.arcs() and Shape.blob() are an error there.
+        padding: Pixels between the members and the outline: a number, or a field name or accessor read once per enclosed group (constant within the group). For a blob or fillet, the distance from each member's own outline (around a line's whole length). Around a member with no size of its own, how far inside the outline the member's shape is. Default 2.
+        shape: The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.fillet({radius, neck, holes}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, connection, neck, holes, separate}) draws a smooth region: the members split into pieces by `connection`, each joined by a spanning tree of tubes and filled up to `convexity` (0 the tree, 1 the padded hull, 2 the oval). Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset. Around a fresh member with no size of its own (a treemap, a region), the outline is the space it is given: Shape.box() is that space (a treemap's Voronoi cell, when it is in one) and Shape.oval() the oval inscribed in it, and the member fills the outline; Shape.fillet() and Shape.blob() are an error there.
+        avoiding: Nodes the outline stays out of, whatever its shape: a list of nodes or refs, or a `selectAll(name)` selection. A listed node that is also a member is ignored. The outline is cut around each avoided node grown by `clearance`, never into the padded members, and a blob's or fillet's links route around them.
+        clearance: Pixels kept between the outline and each avoided node, and between a piece of a blob with `separate` and the other pieces' padded members and links. Default: `padding`.
         fill: Fill color of the outline, or a field name or accessor for a color scale (constant within the enclosed group).
         stroke: Stroke color of the outline, or a field name or accessor for a color scale (constant within the enclosed group). Default a light gray.
         stroke_width: Stroke width in pixels. Default 1.
@@ -1181,10 +1191,19 @@ def _enclose_opts(*, padding: Optional[int | float | str] = None, shape: Optiona
         fill_opacity: Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`, so a tinted region can keep a full-strength outline.
         debug: Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
     """
+    if clearance is not None:
+        if not (isinstance(clearance, (int, float)) and not isinstance(clearance, bool)):
+            raise TypeError(f"enclose(clearance=...) must be a finite number >= 0, got {type(clearance).__name__}")
+        if not math.isfinite(clearance):
+            raise ValueError(f"enclose(clearance=...) must be finite, got {clearance!r}")
+        if clearance < 0:
+            raise ValueError(f"enclose(clearance=...) must be >= 0, got {clearance!r}")
     opts: Dict[str, Any] = {}
     for _k, _v in [
         ("padding", _channel(padding)),
         ("shape", _to_wire(("ref", "Shape"), shape, "shape")),
+        ("avoiding", avoiding),
+        ("clearance", clearance),
         ("fill", _channel(fill)),
         ("stroke", _channel(stroke)),
         ("strokeWidth", stroke_width),
@@ -1254,7 +1273,7 @@ def _chart_opts(*, w: Optional[float | LengthValue] = None, h: Optional[float | 
         axes: Draw this chart's axes: a boolean for both axes, or per-axis options {x?, y?}. It applies at this chart: a nested chart reads its own, and draws only the axes of the domains it owns. A chart that turns an axis off hides it; no chart inside it draws that axis instead. Default true.
         legend: Draw the color legend. Turned off, the marks keep their colors and only the legend is dropped. Default true.
         padding: Room in pixels between a non-linear coordinate space's drawing (a polar disc, a map) and the edge of the chart's box. It has no effect on a chart in linear coordinates. Default 30.
-        schema: Column types, keyed by column name: a Unit (Unit("USD", { traits: [Trait.summable()] }), Unit({ domain: Domain.ordered(levels) }), Unit.time() for a time), a unit's name ("km²"), or a column record { name, unit }.
+        schema: Column types, keyed by column name: a Unit (Unit("USD", { traits: [Trait.summable()] }), Unit({ domain: Domain.discrete(levels), traits: [Trait.ordered()] }), Unit.time() for a time), a unit's name ("km²"), or a column record { name, unit }.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [

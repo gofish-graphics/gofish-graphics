@@ -114,13 +114,13 @@ export { pluck, projectPath as project } from "./ast/datumProjection";
 // definition, its domain and its traits (`Unit("USD", { traits:
 // [Trait.summable()] })`), declared once and used by every column in it.
 // `Domain` is the family of what a unit's values are (one choice), and
-// `Trait` the family of their capabilities (a set).
+// `Trait` the family of their traits (a set).
 export { Unit } from "./ast/schema";
 export * as Domain from "./families/domain";
 export * as Trait from "./families/trait";
 export type {
   ColumnRecord,
-  UnitClasses,
+  UnitTraits,
   UnitOptions,
   LevelsDomain,
   UnitType,
@@ -129,7 +129,7 @@ export type {
   HasOrder,
   HasMidpoint,
   HasUnit,
-  CanAdd,
+  CanSum,
   HasQuantity,
   Level,
   SchemaEntry,
@@ -218,6 +218,7 @@ export * as Overlap from "./families/overlap";
 export * as Filter from "./families/filter";
 export type { BlendMode } from "./ast/blendMode";
 export type { EncloseOptions } from "./ast/graphicalOperators/enclose";
+export type { Nodes } from "./ast/nodeSelection";
 export * as Shape from "./families/shape";
 export * as Place from "./families/place";
 export { Frame as frame } from "./ast/graphicalOperators/frame";

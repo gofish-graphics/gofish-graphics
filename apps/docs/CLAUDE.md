@@ -49,6 +49,7 @@ This is a documentation site for the GoFish Graphics library built with VitePres
 - **GoFishExample.vue** (`components/GoFishExample.vue`): client-only renderer that executes the **real Storybook story module** (SolidJS) for a gallery example. Targeted by `id` (gallery story id) or `storyId` (any story's harness id). Story `.stories.tsx` are compiled by `vite-plugin-solid` (scoped to the gofish-graphics package in `config.mts`; vue-jsx is excluded from that package so the two JSX compilers don't collide).
 - **GoFishLive.tsx** (`components/GoFishLive.tsx`): Sandpack-based live code editor component for interactive examples
 - **Markdown integration**: Custom markdown-it plugin (`docs/.vitepress/markdown-it-gofish.ts`) processes `::: gofish` containers
+- **Registration**: these components (and the cheat sheets, embeds and tutorial cards) are registered globally in `.vitepress/theme/index.ts` as async components, so each is its own chunk that only the pages using it download. Do not import one statically into the theme: the theme chunk loads on every page, and these pull in the library, the sample datasets and the gallery data loader (tens of MB).
 
 #### Data Management
 
@@ -103,7 +104,12 @@ Two flags go after the mode, and each does one thing:
   reading the docs markdown through this same plugin (`findImageStoryIds()` in
   `markdown-it-gofish.ts`), so adding `image` to a container is all it takes. Use it
   where a page shows many previews that need no interaction, like the tutorials index
-  cards.
+  cards. The home page's picture cards (its floating hero cards, phone collage and
+  spectrum row) are gallery examples, pictured the same way at `docs/public/previews/examples/<id>.png`
+  (keyed by gallery id, captured in the same render as the gallery thumbnail) and shown
+  through `GoFishImage`; their one list is
+  `.vitepress/theme/components/landing/landingCards.ts`, which the page renders and
+  the capture script imports.
 
 #### Coordinate System Integration
 

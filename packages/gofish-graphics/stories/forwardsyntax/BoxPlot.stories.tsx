@@ -1,6 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, layer, rect, spread, Domain, Unit } from "../../src/lib";
+import {
+  chart,
+  layer,
+  rect,
+  spread,
+  Domain,
+  Trait,
+  Unit,
+} from "../../src/lib";
 import { genderPayGap, payGrade } from "../../src/data/genderPayGap";
 
 /**
@@ -29,7 +37,7 @@ export const GenderPayGap: StoryObj<Args> = {
     const pay = { name: "Pay", unit: Unit("USD") };
     chart(genderPayGap, {
       schema: {
-        "Pay Grade": Unit({ domain: Domain.ordered(payGrade) }),
+        "Pay Grade": Unit({ domain: Domain.discrete(payGrade), traits: [Trait.ordered()] }),
         Min: pay,
         "25-Percentile": pay,
         Median: pay,

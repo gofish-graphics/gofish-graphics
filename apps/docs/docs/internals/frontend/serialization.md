@@ -178,8 +178,8 @@ dispatches on `kind`. `scatter`'s `overlap` (the `Overlap` family) and a
 `line` or `ribbon` `curve` (the `Curve` family:
 `{ "kind": "arc", "direction": "down" }`) work the same way; a bare curve name
 is not a curve. So does `enclose`'s `shape` (the `Shape` family:
-`{ "kind": "blob", "convexity": 0, "avoiding": [...] }`). A blob's `avoiding`
-names nodes, so on the wire it is a `NodeSelectionIR`: a list of
+`{ "kind": "blob", "convexity": 0 }`). `enclose`'s `avoiding` names nodes, so
+on the wire it is a `NodeSelectionIR`: a list of
 `{ "type": "ref", "selection": "b" }` refs, or every node of a named layer as
 `{ "type": "select", "layer": "nodes", "mode": "all" }`, the `SelectRefIR`
 chart data takes for `selectAll` (one shape in `schema.ts` and the JSON
@@ -201,7 +201,7 @@ inside a chart serializes. JS does not serialize a `.relate()` callback (it
 is a closure), so a relate clause's IR comes from Python. A label's
 `position` takes a position string or a strategy of the `Place` family
 (`{ "kind": "along", "at": 0.6, "orient": "sloped" }`), and its `avoiding`
-is a `NodeSelectionIR` like a blob's. A `.label()` chain is not a construct
+is a `NodeSelectionIR` like `enclose`'s. A `.label()` chain is not a construct
 with a descriptor, so the emitter writes it with `wireLabels` in `toJSON.ts`:
 each call's `accessor`, and of its options only the keys `LABEL_OPTIONS`
 declares, kept by the same `wireFields` that `wireOpts` uses, with the nodes
@@ -220,17 +220,17 @@ form and emits the opaque `derive`. A `derive`'s `schema` (`derive(fn, { schema 
 `derive(fn, schema={...})`) is plain data, the wire form of a chart's
 `schema`, and the registry passes it to the rebuilt `derive`, which applies
 it to the rows the Python callback returns. A chart's `schema` crosses as
-the record of classes each entry stands for, never as the entry a user
+the record of traits each entry stands for, never as the entry a user
 wrote: JS `toJSON` writes a chart's with `schemaToWire` (`schema.ts`), JS
 `derive` keeps its own in that form from the moment it is built, and Python's
 `chart` and `derive` write theirs with `_schema_wire`, so a `Unit`, a unit's name and a
 column record `{ name, unit }` reach the wire the same from both languages.
-A unit's classes ride in its `HasUnit`: `Unit("USD", { traits: [Trait.summable()] })` is
-`{ "HasUnit": { "unit": "USD", "symbol": "USD", "classes": { "CanAdd": {} } } }`,
-`Unit("°C")` has `"classes": {}`, and the name `"km²"` alone has no
-`classes`, since what it can do is unknown. A unit's domain and traits do
-not reach the wire as such, only the classes they expand into: the Likert
-unit `Unit({ domain: Domain.ordered(LEVELS), traits: [Trait.diverging()] })`
+A unit's traits ride in its `HasUnit`: `Unit("USD", { traits: [Trait.summable()] })` is
+`{ "HasUnit": { "unit": "USD", "symbol": "USD", "traits": { "CanSum": {} } } }`,
+`Unit("°C")` has `"traits": {}`, and the name `"km²"` alone has no
+`traits`, since what it can do is unknown. A unit's `domain` and `traits` do
+not reach the wire as such, only the traits they expand into: the Likert
+unit `Unit({ domain: Domain.discrete(LEVELS), traits: [Trait.diverging()] })`
 is `{ "HasLevels": { "levels": [...] }, "HasOrder": {}, "HasMidpoint":
 { "at": 2.5 } }`, with no `HasUnit`, since it has no name. (A `derive` once also carried a
 measure `provenance` map for the rows of the `bin()` data helper; both are
@@ -705,7 +705,7 @@ errors). So an unknown kind, an undeclared param, and a value out of
 bounds each fail in one place, whether the strategy came from a factory, a
 hand-written object, or Python IR. A JS check of an authored value passes
 over a ref whose authored value holds nodes (`holdsNodes` in
-`AUTHORED_REFS`): a blob's `avoiding`, typed `t.ref("NodeSelectionIR")`,
+`AUTHORED_REFS`): `enclose`'s `avoiding`, typed `t.ref("NodeSelectionIR")`,
 holds the nodes themselves in JS, not their IR, so `enclose` checks it as it
 reads the nodes. `Coord` and `Color` are families on the
 two surfaces but not in this table: a coordinate transform is a JS object of
@@ -714,8 +714,7 @@ is tagged by `_tag` and takes its one argument by position.
 
 `schema.ts` keeps the TypeScript types of the strategies, `TileIR`,
 `OverlapIR`, `CurveIR`, `BinIR`, `CalendarPartitionIR`, `ShapeIR` and `PlaceIR`, by hand, and each family's JS type is one of them
-(`Curve.Curve` is `CurveIR`; `Shape.Shape` is `ShapeIR` with `avoiding`
-holding nodes). `descriptors.test.ts` checks that their kinds
+(`Curve.Curve` is `CurveIR`; `Shape.Shape` is `ShapeIR`). `descriptors.test.ts` checks that their kinds
 and params agree with `STRATEGIES`. Every family is closed: there is no
 public way to add a kind, so every strategy can cross the wire (user-defined
 strategies are designed in #1101).
@@ -984,7 +983,13 @@ It emits:
   JS `Spread` spreads its `FancyDims` into its box), and `_chart_opts` for
   `chart()` and the chart-tier `layer([...])` — just the kwargs→dict half. The
   polymorphic operator-vs-combinator dispatch stays hand-written in
-  `ast.py`, calling into these generated cores.
+  `ast.py`, calling into these generated cores. A field whose type is a
+  number with bounds (`enclose`'s `clearance`, `pack`'s `spacing`:
+  `t.num({ min: 0, finite: true })`) is checked at the call when it is given,
+  by the same checks a strategy factory runs on its params (below):
+  `enclose(clearance=-1)` raises `ValueError`, as JS's
+  `enclose({ clearance: -1 })` throws at render. Every generated function
+  does this, the cores and the leaf and combinator-only factories.
 - One module per **strategy family** in `STRATEGIES` (`gofish/tile.py`,
   `gofish/overlap.py`, `gofish/curve.py`, `gofish/bin.py`,
   `gofish/calendar.py`, `gofish/shape.py`, `gofish/filter_.py`), bound in `__init__.py`

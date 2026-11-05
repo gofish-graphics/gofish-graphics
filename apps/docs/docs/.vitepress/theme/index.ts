@@ -1,28 +1,41 @@
 // https://vitepress.dev/guide/custom-theme
-import { h } from "vue";
+import { defineAsyncComponent, h } from "vue";
 import type { Theme } from "vitepress";
 import DefaultTheme from "vitepress/theme";
 import custom from "./custom.css";
 import "./style.css";
-import GoFishVue from "../../../components/GoFishVue.vue";
-import GoFishExample from "../../../components/GoFishExample.vue";
-import GoFishImage from "../../../components/GoFishImage.vue";
-import CheatSheet from "../../../components/MarksCheatSheet.vue";
-import CoordinateTransformsCheatSheet from "../../../components/CoordinateTransformsCheatSheet.vue";
-import OverallCheatSheet from "../../../components/OverallCheatSheet.vue";
-import OperatorsCheatSheet from "../../../components/OperatorsCheatSheet.vue";
-import VegaLiteEmbed from "../../../components/VegaLiteEmbed.vue";
-import ObservablePlotEmbed from "../../../components/ObservablePlotEmbed.vue";
-import { Sandbox } from "vitepress-plugin-sandpack";
 import "vitepress-plugin-sandpack/dist/style.css";
-import { GoFishLive } from "../../../components/GoFishLive";
 import LanguageToggle from "./components/LanguageToggle.vue";
 import EssayMeta from "./components/EssayMeta.vue";
 import InternalsLink from "./components/InternalsLink.vue";
-import TutorialGrid from "./components/tutorials/TutorialGrid.vue";
-import TutorialCard from "./components/tutorials/TutorialCard.vue";
 import TwoslashFloatingVue from "@shikijs/vitepress-twoslash/client";
 import "@shikijs/vitepress-twoslash/style.css";
+
+// The components pages embed in markdown are registered globally but loaded
+// on demand: each is its own chunk, fetched only by a page that uses it. A
+// static import here would put all of them in the theme chunk every page
+// downloads, the home page included: GoFishExample alone pulls in the gallery
+// data loader (every example's code and whole dataset) and GoFishVue the
+// library and its sample datasets, about 30 MB of JavaScript.
+const pageComponents = {
+  GoFishVue: () => import("../../../components/GoFishVue.vue"),
+  GoFishExample: () => import("../../../components/GoFishExample.vue"),
+  GoFishImage: () => import("../../../components/GoFishImage.vue"),
+  Sandbox: () => import("vitepress-plugin-sandpack").then((m) => m.Sandbox),
+  GoFishLive: () =>
+    import("../../../components/GoFishLive").then((m) => m.GoFishLive),
+  CheatSheet: () => import("../../../components/MarksCheatSheet.vue"),
+  CoordinateTransformsCheatSheet: () =>
+    import("../../../components/CoordinateTransformsCheatSheet.vue"),
+  OverallCheatSheet: () => import("../../../components/OverallCheatSheet.vue"),
+  OperatorsCheatSheet: () =>
+    import("../../../components/OperatorsCheatSheet.vue"),
+  VegaLiteEmbed: () => import("../../../components/VegaLiteEmbed.vue"),
+  ObservablePlotEmbed: () =>
+    import("../../../components/ObservablePlotEmbed.vue"),
+  TutorialGrid: () => import("./components/tutorials/TutorialGrid.vue"),
+  TutorialCard: () => import("./components/tutorials/TutorialCard.vue"),
+};
 export default {
   extends: DefaultTheme,
   Layout: () => {
@@ -46,21 +59,7 @@ export default {
   },
   enhanceApp({ app, router }) {
     app.use(TwoslashFloatingVue);
-    app.component("GoFishVue", GoFishVue);
-    app.component("GoFishExample", GoFishExample);
-    app.component("GoFishImage", GoFishImage);
-    app.component("Sandbox", Sandbox);
-    app.component("GoFishLive", GoFishLive);
-    app.component("CheatSheet", CheatSheet);
-    app.component(
-      "CoordinateTransformsCheatSheet",
-      CoordinateTransformsCheatSheet
-    );
-    app.component("OverallCheatSheet", OverallCheatSheet);
-    app.component("OperatorsCheatSheet", OperatorsCheatSheet);
-    app.component("VegaLiteEmbed", VegaLiteEmbed);
-    app.component("ObservablePlotEmbed", ObservablePlotEmbed);
-    app.component("TutorialGrid", TutorialGrid);
-    app.component("TutorialCard", TutorialCard);
+    for (const [name, load] of Object.entries(pageComponents))
+      app.component(name, defineAsyncComponent(load));
   },
 } satisfies Theme;

@@ -19,7 +19,7 @@ from typing import Any, Dict, Optional
 
 from ._strategy import bare_kind
 
-__all__ = ["box", "oval", "arcs", "blob", "hull", "spine"]
+__all__ = ["box", "oval", "fillet", "blob", "hull", "spine"]
 
 
 @bare_kind("Shape")
@@ -61,22 +61,38 @@ def oval() -> Dict[str, Any]:
 
 
 @bare_kind("Shape")
-def arcs(*, radius: Optional[float] = None) -> Dict[str, Any]:
-    """The members grown by `padding`, closed by a disc of `radius`: every gap the disc cannot pass through is filled, every concave corner is a circular arc of `radius`, and holes are always filled. Around circles it is made of circular arcs only, the contour of a bubble treemap (Görtler et al. 2018). Two discs of radius a with a gap g between their padded edges join only when 2·a·radius ≥ a·g + g²/4; otherwise they stay separate pieces.
+def fillet(*, radius: Optional[float] = None, neck: Optional[float] = None, holes: Optional[bool] = None) -> Dict[str, Any]:
+    """The members grown by `padding`, closed by a disc of `radius`: every gap the disc cannot pass through is filled, and every concave corner is a circular arc of `radius`. Around circles it is made of circular arcs only, the contour of a bubble treemap (Görtler et al. 2018). Two pieces of the padded members nearer than 2 · `radius` are joined by a link `neck` times as wide as the members it joins; farther pieces stay apart, and each piece is closed on its own. It is not smoothed.
 
     Args:
-        radius: The radius of the closing disc, in pixels: the radius of every concave arc. 0 is the padded union; a large radius nears the padded convex hull. Default 12.
+        radius: The radius of the closing disc, in pixels: the radius of every concave arc. 0 is the padded union; a large radius nears the padded convex hull. Default: `padding`, so an inside corner is as round as an outside one.
+        neck: The width of each link between two pieces, as a share of the padded members it joins, from 0 (no links: pieces nearer than 2 · `radius` stay apart) to 1 (a link as wide as the members). Default 0.5.
+        holes: Whether a gap the outline closes around stays a hole. Off, every hole is filled. Default false.
     """
     if radius is not None:
         if not (isinstance(radius, (int, float)) and not isinstance(radius, bool)):
-            raise TypeError(f"Shape.arcs(radius=...) must be a finite number >= 0, got {type(radius).__name__}")
+            raise TypeError(f"Shape.fillet(radius=...) must be a finite number >= 0, got {type(radius).__name__}")
         if not math.isfinite(radius):
-            raise ValueError(f"Shape.arcs(radius=...) must be finite, got {radius!r}")
+            raise ValueError(f"Shape.fillet(radius=...) must be finite, got {radius!r}")
         if radius < 0:
-            raise ValueError(f"Shape.arcs(radius=...) must be >= 0, got {radius!r}")
-    out: Dict[str, Any] = {"kind": "arcs"}
+            raise ValueError(f"Shape.fillet(radius=...) must be >= 0, got {radius!r}")
+    if neck is not None:
+        if not (isinstance(neck, (int, float)) and not isinstance(neck, bool)):
+            raise TypeError(f"Shape.fillet(neck=...) must be a number >= 0 and <= 1, got {type(neck).__name__}")
+        if math.isnan(neck):
+            raise ValueError(f"Shape.fillet(neck=...) must not be NaN, got {neck!r}")
+        if neck < 0:
+            raise ValueError(f"Shape.fillet(neck=...) must be >= 0, got {neck!r}")
+        if neck > 1:
+            raise ValueError(f"Shape.fillet(neck=...) must be <= 1, got {neck!r}")
+    if holes is not None:
+        if not isinstance(holes, bool):
+            raise TypeError(f"Shape.fillet(holes=...) must be a bool, got {type(holes).__name__}")
+    out: Dict[str, Any] = {"kind": "fillet"}
     for _k, _v in [
         ("radius", radius),
+        ("neck", neck),
+        ("holes", holes),
     ]:
         if _v is not None:
             out[_k] = _v
@@ -84,36 +100,34 @@ def arcs(*, radius: Optional[float] = None) -> Dict[str, Any]:
 
 
 @bare_kind("Shape")
-def blob(*, convexity: Optional[float] = None, holes: Optional[bool] = None, roundness: Optional[float] = None, neck: Optional[float] = None, avoiding: Optional[Any] = None, clearance: Optional[float] = None) -> Dict[str, Any]:
-    """A smooth region around the members: each member grown by `padding`, the links of a spanning tree between them (routed around avoided nodes, so the set stays in one piece), and the Delaunay triangles of their points, filled smallest gaps first up to `convexity` of their convex hull. The outline is rounded so its curvature never jumps.
+def blob(*, convexity: Optional[float] = None, connection: Optional[float] = None, neck: Optional[float] = None, holes: Optional[bool] = None, separate: Optional[bool] = None) -> Dict[str, Any]:
+    """A smooth region around the members: the members are split into pieces by `connection`, each piece's members grown by `padding` and joined by the links of a spanning tree between them (routed around avoided nodes), and the gaps between them filled up to `convexity`. The outline is smoothed, then moved out just enough to hold every padded member again.
 
     Args:
-        convexity: The share of the members' convex hull that is filled, smallest gaps first, from 0 (the spanning tree alone) to 1 (the whole hull). It is the only option that fills gaps between members, so it decides the pieces and the filled area. Default 0.5.
-        holes: Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled and each avoided node it held is cut back out as its clearance circle, as `allow_holes` in PostGIS and Shapely. Default false.
-        roundness: How far the outline's corners are rounded, in pixels. It changes how sharply the outline bends and nothing else: no gap fills, no hole opens, no two pieces join. Default: `padding`.
-        neck: How far the outline is NOT pulled in between members, above 0 and at most 1: a lone link becomes a tube `neck` times the bulge, and the edge of a filled region sinks in between its members. 1 does not pull in. 0 is not allowed: a link `neck` times the bulge would have no width, and its two sides would meet. It never changes the pieces or holes. Default 1.
-        avoiding: Nodes to keep out: a list of nodes or refs, or a `selectAll(name)` selection. A listed node that is also a member is ignored. Each avoided node inside the region becomes a round hole, and links route around the others.
-        clearance: Pixels kept between the outline and each avoided node. Default 4.
+        convexity: How much of each gap between members is filled, from 0 (the spanning tree of tubes alone) to 1 (the padded convex hull) to 2 (the oval, as `Shape.oval()`). Between 0 and 1, every pocket between the tree and the hull fills that share of its own area; between 1 and 2, the hull rounds toward the oval. Default 0.5.
+        connection: The share of the links between members that are kept, the strongest first, from 0 (only members whose padding touches are one piece) to 1 (one piece). The links come from a minimum spanning tree in HDBSCAN's mutual reachability, so a dense group stays one piece longest. Each piece is filled on its own; the outline changes only where `connection` keeps or cuts a link. Default 1.
+        neck: The width of each link between members, as a share of the padded members it joins, above 0 and at most 1. 1 is a link as wide as the members (no neck). 0 is not allowed: a link would have no width. Default 1.
+        holes: Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled, as `allow_holes` in PostGIS and Shapely. Default false.
+        separate: With `connection` below 1, whether the pieces keep apart. Off, each piece is filled on its own and two may overlap (a piece wholly inside another is dropped). On, each piece avoids the set's other pieces as it avoids `avoiding`: its outline stays `clearance` away from their padded members and links (not from their fill, so at `convexity` above 0 two outlines may still meet in a bay between them). Default false.
     """
     if convexity is not None:
         if not (isinstance(convexity, (int, float)) and not isinstance(convexity, bool)):
-            raise TypeError(f"Shape.blob(convexity=...) must be a number >= 0 and <= 1, got {type(convexity).__name__}")
+            raise TypeError(f"Shape.blob(convexity=...) must be a number >= 0 and <= 2, got {type(convexity).__name__}")
         if math.isnan(convexity):
             raise ValueError(f"Shape.blob(convexity=...) must not be NaN, got {convexity!r}")
         if convexity < 0:
             raise ValueError(f"Shape.blob(convexity=...) must be >= 0, got {convexity!r}")
-        if convexity > 1:
-            raise ValueError(f"Shape.blob(convexity=...) must be <= 1, got {convexity!r}")
-    if holes is not None:
-        if not isinstance(holes, bool):
-            raise TypeError(f"Shape.blob(holes=...) must be a bool, got {type(holes).__name__}")
-    if roundness is not None:
-        if not (isinstance(roundness, (int, float)) and not isinstance(roundness, bool)):
-            raise TypeError(f"Shape.blob(roundness=...) must be a finite number >= 0, got {type(roundness).__name__}")
-        if not math.isfinite(roundness):
-            raise ValueError(f"Shape.blob(roundness=...) must be finite, got {roundness!r}")
-        if roundness < 0:
-            raise ValueError(f"Shape.blob(roundness=...) must be >= 0, got {roundness!r}")
+        if convexity > 2:
+            raise ValueError(f"Shape.blob(convexity=...) must be <= 2, got {convexity!r}")
+    if connection is not None:
+        if not (isinstance(connection, (int, float)) and not isinstance(connection, bool)):
+            raise TypeError(f"Shape.blob(connection=...) must be a number >= 0 and <= 1, got {type(connection).__name__}")
+        if math.isnan(connection):
+            raise ValueError(f"Shape.blob(connection=...) must not be NaN, got {connection!r}")
+        if connection < 0:
+            raise ValueError(f"Shape.blob(connection=...) must be >= 0, got {connection!r}")
+        if connection > 1:
+            raise ValueError(f"Shape.blob(connection=...) must be <= 1, got {connection!r}")
     if neck is not None:
         if not (isinstance(neck, (int, float)) and not isinstance(neck, bool)):
             raise TypeError(f"Shape.blob(neck=...) must be a number > 0 and <= 1, got {type(neck).__name__}")
@@ -123,21 +137,19 @@ def blob(*, convexity: Optional[float] = None, holes: Optional[bool] = None, rou
             raise ValueError(f"Shape.blob(neck=...) must be > 0, got {neck!r}")
         if neck > 1:
             raise ValueError(f"Shape.blob(neck=...) must be <= 1, got {neck!r}")
-    if clearance is not None:
-        if not (isinstance(clearance, (int, float)) and not isinstance(clearance, bool)):
-            raise TypeError(f"Shape.blob(clearance=...) must be a finite number >= 0, got {type(clearance).__name__}")
-        if not math.isfinite(clearance):
-            raise ValueError(f"Shape.blob(clearance=...) must be finite, got {clearance!r}")
-        if clearance < 0:
-            raise ValueError(f"Shape.blob(clearance=...) must be >= 0, got {clearance!r}")
+    if holes is not None:
+        if not isinstance(holes, bool):
+            raise TypeError(f"Shape.blob(holes=...) must be a bool, got {type(holes).__name__}")
+    if separate is not None:
+        if not isinstance(separate, bool):
+            raise TypeError(f"Shape.blob(separate=...) must be a bool, got {type(separate).__name__}")
     out: Dict[str, Any] = {"kind": "blob"}
     for _k, _v in [
         ("convexity", convexity),
-        ("holes", holes),
-        ("roundness", roundness),
+        ("connection", connection),
         ("neck", neck),
-        ("avoiding", avoiding),
-        ("clearance", clearance),
+        ("holes", holes),
+        ("separate", separate),
     ]:
         if _v is not None:
             out[_k] = _v
@@ -145,36 +157,34 @@ def blob(*, convexity: Optional[float] = None, holes: Optional[bool] = None, rou
 
 
 @bare_kind("Shape")
-def hull(*, convexity: Optional[float] = None, holes: Optional[bool] = None, roundness: Optional[float] = None, neck: Optional[float] = None, avoiding: Optional[Any] = None, clearance: Optional[float] = None) -> Dict[str, Any]:
+def hull(*, convexity: Optional[float] = None, connection: Optional[float] = None, neck: Optional[float] = None, holes: Optional[bool] = None, separate: Optional[bool] = None) -> Dict[str, Any]:
     """The padded convex hull, rounded: blob with convexity 1 and neck 1. Any option overrides the preset.
 
     Args:
-        convexity: The share of the members' convex hull that is filled, smallest gaps first, from 0 (the spanning tree alone) to 1 (the whole hull). It is the only option that fills gaps between members, so it decides the pieces and the filled area. Default 1.
-        holes: Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled and each avoided node it held is cut back out as its clearance circle, as `allow_holes` in PostGIS and Shapely. Default false.
-        roundness: How far the outline's corners are rounded, in pixels. It changes how sharply the outline bends and nothing else: no gap fills, no hole opens, no two pieces join. Default: `padding`.
-        neck: How far the outline is NOT pulled in between members, above 0 and at most 1: a lone link becomes a tube `neck` times the bulge, and the edge of a filled region sinks in between its members. 1 does not pull in. 0 is not allowed: a link `neck` times the bulge would have no width, and its two sides would meet. It never changes the pieces or holes. Default 1.
-        avoiding: Nodes to keep out: a list of nodes or refs, or a `selectAll(name)` selection. A listed node that is also a member is ignored. Each avoided node inside the region becomes a round hole, and links route around the others.
-        clearance: Pixels kept between the outline and each avoided node. Default 4.
+        convexity: How much of each gap between members is filled, from 0 (the spanning tree of tubes alone) to 1 (the padded convex hull) to 2 (the oval, as `Shape.oval()`). Between 0 and 1, every pocket between the tree and the hull fills that share of its own area; between 1 and 2, the hull rounds toward the oval. Default 1.
+        connection: The share of the links between members that are kept, the strongest first, from 0 (only members whose padding touches are one piece) to 1 (one piece). The links come from a minimum spanning tree in HDBSCAN's mutual reachability, so a dense group stays one piece longest. Each piece is filled on its own; the outline changes only where `connection` keeps or cuts a link. Default 1.
+        neck: The width of each link between members, as a share of the padded members it joins, above 0 and at most 1. 1 is a link as wide as the members (no neck). 0 is not allowed: a link would have no width. Default 1.
+        holes: Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled, as `allow_holes` in PostGIS and Shapely. Default false.
+        separate: With `connection` below 1, whether the pieces keep apart. Off, each piece is filled on its own and two may overlap (a piece wholly inside another is dropped). On, each piece avoids the set's other pieces as it avoids `avoiding`: its outline stays `clearance` away from their padded members and links (not from their fill, so at `convexity` above 0 two outlines may still meet in a bay between them). Default false.
     """
     if convexity is not None:
         if not (isinstance(convexity, (int, float)) and not isinstance(convexity, bool)):
-            raise TypeError(f"Shape.hull(convexity=...) must be a number >= 0 and <= 1, got {type(convexity).__name__}")
+            raise TypeError(f"Shape.hull(convexity=...) must be a number >= 0 and <= 2, got {type(convexity).__name__}")
         if math.isnan(convexity):
             raise ValueError(f"Shape.hull(convexity=...) must not be NaN, got {convexity!r}")
         if convexity < 0:
             raise ValueError(f"Shape.hull(convexity=...) must be >= 0, got {convexity!r}")
-        if convexity > 1:
-            raise ValueError(f"Shape.hull(convexity=...) must be <= 1, got {convexity!r}")
-    if holes is not None:
-        if not isinstance(holes, bool):
-            raise TypeError(f"Shape.hull(holes=...) must be a bool, got {type(holes).__name__}")
-    if roundness is not None:
-        if not (isinstance(roundness, (int, float)) and not isinstance(roundness, bool)):
-            raise TypeError(f"Shape.hull(roundness=...) must be a finite number >= 0, got {type(roundness).__name__}")
-        if not math.isfinite(roundness):
-            raise ValueError(f"Shape.hull(roundness=...) must be finite, got {roundness!r}")
-        if roundness < 0:
-            raise ValueError(f"Shape.hull(roundness=...) must be >= 0, got {roundness!r}")
+        if convexity > 2:
+            raise ValueError(f"Shape.hull(convexity=...) must be <= 2, got {convexity!r}")
+    if connection is not None:
+        if not (isinstance(connection, (int, float)) and not isinstance(connection, bool)):
+            raise TypeError(f"Shape.hull(connection=...) must be a number >= 0 and <= 1, got {type(connection).__name__}")
+        if math.isnan(connection):
+            raise ValueError(f"Shape.hull(connection=...) must not be NaN, got {connection!r}")
+        if connection < 0:
+            raise ValueError(f"Shape.hull(connection=...) must be >= 0, got {connection!r}")
+        if connection > 1:
+            raise ValueError(f"Shape.hull(connection=...) must be <= 1, got {connection!r}")
     if neck is not None:
         if not (isinstance(neck, (int, float)) and not isinstance(neck, bool)):
             raise TypeError(f"Shape.hull(neck=...) must be a number > 0 and <= 1, got {type(neck).__name__}")
@@ -184,21 +194,19 @@ def hull(*, convexity: Optional[float] = None, holes: Optional[bool] = None, rou
             raise ValueError(f"Shape.hull(neck=...) must be > 0, got {neck!r}")
         if neck > 1:
             raise ValueError(f"Shape.hull(neck=...) must be <= 1, got {neck!r}")
-    if clearance is not None:
-        if not (isinstance(clearance, (int, float)) and not isinstance(clearance, bool)):
-            raise TypeError(f"Shape.hull(clearance=...) must be a finite number >= 0, got {type(clearance).__name__}")
-        if not math.isfinite(clearance):
-            raise ValueError(f"Shape.hull(clearance=...) must be finite, got {clearance!r}")
-        if clearance < 0:
-            raise ValueError(f"Shape.hull(clearance=...) must be >= 0, got {clearance!r}")
+    if holes is not None:
+        if not isinstance(holes, bool):
+            raise TypeError(f"Shape.hull(holes=...) must be a bool, got {type(holes).__name__}")
+    if separate is not None:
+        if not isinstance(separate, bool):
+            raise TypeError(f"Shape.hull(separate=...) must be a bool, got {type(separate).__name__}")
     out: Dict[str, Any] = {"kind": "blob", "convexity": 1, "neck": 1}
     for _k, _v in [
         ("convexity", convexity),
-        ("holes", holes),
-        ("roundness", roundness),
+        ("connection", connection),
         ("neck", neck),
-        ("avoiding", avoiding),
-        ("clearance", clearance),
+        ("holes", holes),
+        ("separate", separate),
     ]:
         if _v is not None:
             out[_k] = _v
@@ -206,36 +214,34 @@ def hull(*, convexity: Optional[float] = None, holes: Optional[bool] = None, rou
 
 
 @bare_kind("Shape")
-def spine(*, convexity: Optional[float] = None, holes: Optional[bool] = None, roundness: Optional[float] = None, neck: Optional[float] = None, avoiding: Optional[Any] = None, clearance: Optional[float] = None) -> Dict[str, Any]:
+def spine(*, convexity: Optional[float] = None, connection: Optional[float] = None, neck: Optional[float] = None, holes: Optional[bool] = None, separate: Optional[bool] = None) -> Dict[str, Any]:
     """The routed spanning tree of tubes and nothing else: blob with convexity 0. Any option overrides the preset.
 
     Args:
-        convexity: The share of the members' convex hull that is filled, smallest gaps first, from 0 (the spanning tree alone) to 1 (the whole hull). It is the only option that fills gaps between members, so it decides the pieces and the filled area. Default 0.
-        holes: Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled and each avoided node it held is cut back out as its clearance circle, as `allow_holes` in PostGIS and Shapely. Default false.
-        roundness: How far the outline's corners are rounded, in pixels. It changes how sharply the outline bends and nothing else: no gap fills, no hole opens, no two pieces join. Default: `padding`.
-        neck: How far the outline is NOT pulled in between members, above 0 and at most 1: a lone link becomes a tube `neck` times the bulge, and the edge of a filled region sinks in between its members. 1 does not pull in. 0 is not allowed: a link `neck` times the bulge would have no width, and its two sides would meet. It never changes the pieces or holes. Default 1.
-        avoiding: Nodes to keep out: a list of nodes or refs, or a `selectAll(name)` selection. A listed node that is also a member is ignored. Each avoided node inside the region becomes a round hole, and links route around the others.
-        clearance: Pixels kept between the outline and each avoided node. Default 4.
+        convexity: How much of each gap between members is filled, from 0 (the spanning tree of tubes alone) to 1 (the padded convex hull) to 2 (the oval, as `Shape.oval()`). Between 0 and 1, every pocket between the tree and the hull fills that share of its own area; between 1 and 2, the hull rounds toward the oval. Default 0.
+        connection: The share of the links between members that are kept, the strongest first, from 0 (only members whose padding touches are one piece) to 1 (one piece). The links come from a minimum spanning tree in HDBSCAN's mutual reachability, so a dense group stays one piece longest. Each piece is filled on its own; the outline changes only where `connection` keeps or cuts a link. Default 1.
+        neck: The width of each link between members, as a share of the padded members it joins, above 0 and at most 1. 1 is a link as wide as the members (no neck). 0 is not allowed: a link would have no width. Default 1.
+        holes: Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled, as `allow_holes` in PostGIS and Shapely. Default false.
+        separate: With `connection` below 1, whether the pieces keep apart. Off, each piece is filled on its own and two may overlap (a piece wholly inside another is dropped). On, each piece avoids the set's other pieces as it avoids `avoiding`: its outline stays `clearance` away from their padded members and links (not from their fill, so at `convexity` above 0 two outlines may still meet in a bay between them). Default false.
     """
     if convexity is not None:
         if not (isinstance(convexity, (int, float)) and not isinstance(convexity, bool)):
-            raise TypeError(f"Shape.spine(convexity=...) must be a number >= 0 and <= 1, got {type(convexity).__name__}")
+            raise TypeError(f"Shape.spine(convexity=...) must be a number >= 0 and <= 2, got {type(convexity).__name__}")
         if math.isnan(convexity):
             raise ValueError(f"Shape.spine(convexity=...) must not be NaN, got {convexity!r}")
         if convexity < 0:
             raise ValueError(f"Shape.spine(convexity=...) must be >= 0, got {convexity!r}")
-        if convexity > 1:
-            raise ValueError(f"Shape.spine(convexity=...) must be <= 1, got {convexity!r}")
-    if holes is not None:
-        if not isinstance(holes, bool):
-            raise TypeError(f"Shape.spine(holes=...) must be a bool, got {type(holes).__name__}")
-    if roundness is not None:
-        if not (isinstance(roundness, (int, float)) and not isinstance(roundness, bool)):
-            raise TypeError(f"Shape.spine(roundness=...) must be a finite number >= 0, got {type(roundness).__name__}")
-        if not math.isfinite(roundness):
-            raise ValueError(f"Shape.spine(roundness=...) must be finite, got {roundness!r}")
-        if roundness < 0:
-            raise ValueError(f"Shape.spine(roundness=...) must be >= 0, got {roundness!r}")
+        if convexity > 2:
+            raise ValueError(f"Shape.spine(convexity=...) must be <= 2, got {convexity!r}")
+    if connection is not None:
+        if not (isinstance(connection, (int, float)) and not isinstance(connection, bool)):
+            raise TypeError(f"Shape.spine(connection=...) must be a number >= 0 and <= 1, got {type(connection).__name__}")
+        if math.isnan(connection):
+            raise ValueError(f"Shape.spine(connection=...) must not be NaN, got {connection!r}")
+        if connection < 0:
+            raise ValueError(f"Shape.spine(connection=...) must be >= 0, got {connection!r}")
+        if connection > 1:
+            raise ValueError(f"Shape.spine(connection=...) must be <= 1, got {connection!r}")
     if neck is not None:
         if not (isinstance(neck, (int, float)) and not isinstance(neck, bool)):
             raise TypeError(f"Shape.spine(neck=...) must be a number > 0 and <= 1, got {type(neck).__name__}")
@@ -245,21 +251,19 @@ def spine(*, convexity: Optional[float] = None, holes: Optional[bool] = None, ro
             raise ValueError(f"Shape.spine(neck=...) must be > 0, got {neck!r}")
         if neck > 1:
             raise ValueError(f"Shape.spine(neck=...) must be <= 1, got {neck!r}")
-    if clearance is not None:
-        if not (isinstance(clearance, (int, float)) and not isinstance(clearance, bool)):
-            raise TypeError(f"Shape.spine(clearance=...) must be a finite number >= 0, got {type(clearance).__name__}")
-        if not math.isfinite(clearance):
-            raise ValueError(f"Shape.spine(clearance=...) must be finite, got {clearance!r}")
-        if clearance < 0:
-            raise ValueError(f"Shape.spine(clearance=...) must be >= 0, got {clearance!r}")
+    if holes is not None:
+        if not isinstance(holes, bool):
+            raise TypeError(f"Shape.spine(holes=...) must be a bool, got {type(holes).__name__}")
+    if separate is not None:
+        if not isinstance(separate, bool):
+            raise TypeError(f"Shape.spine(separate=...) must be a bool, got {type(separate).__name__}")
     out: Dict[str, Any] = {"kind": "blob", "convexity": 0}
     for _k, _v in [
         ("convexity", convexity),
-        ("holes", holes),
-        ("roundness", roundness),
+        ("connection", connection),
         ("neck", neck),
-        ("avoiding", avoiding),
-        ("clearance", clearance),
+        ("holes", holes),
+        ("separate", separate),
     ]:
         if _v is not None:
             out[_k] = _v

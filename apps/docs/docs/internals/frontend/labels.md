@@ -105,7 +105,7 @@ A label's text comes from `resolveLabelText` (`labelPlacement.ts`). A field
 expression is evaluated over the target's rows with `evalFieldValues`, given
 the column's quantity (`resolveColumn`), so `field(name).sum()` in a label
 checks that the column adds up, as it does in any channel: a column in a unit
-without `CanAdd` throws (#1197, see
+without `CanSum` throws (#1197, see
 [Underlying Space](/internals/core/underlying-space)).
 
 ## A label is a layer on its chart

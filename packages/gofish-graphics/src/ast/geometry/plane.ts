@@ -69,6 +69,55 @@ export function pointInRing(
   return inside;
 }
 
+/** The winding number of rings about `p`: each ring a simple one holds
+ *  counts its {@link signedArea2}'s sign, so a point is in a region of outer
+ *  rings and holes (winding the other way) when it is not 0, as SVG's
+ *  nonzero fill reads it; a ring that crosses itself counts each of its
+ *  loops. On a ring's edge as {@link pointInRing} reads it. */
+export function windingAt(
+  p: readonly [number, number],
+  rings: readonly (readonly (readonly [number, number])[])[]
+): number {
+  let w = 0;
+  for (const ring of rings)
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const a = ring[i];
+      const b = ring[j];
+      if (
+        a[1] > p[1] !== b[1] > p[1] &&
+        p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]
+      )
+        w += a[1] > b[1] ? 1 : -1;
+    }
+  return w;
+}
+
+/** Whether segments ab and cd meet. `strict`: they cross at a point inside
+ *  both, each one's ends strictly on either side of the other's line.
+ *  Otherwise as closed segments: they touch or cross (collinear ones when
+ *  their boxes overlap). */
+export function segsMeet(
+  a: readonly [number, number],
+  b: readonly [number, number],
+  c: readonly [number, number],
+  d: readonly [number, number],
+  strict: boolean
+): boolean {
+  const s = (p: typeof a, q: typeof a, r: typeof a) =>
+    Math.sign(cross(p, q, r));
+  const ab = s(a, b, c) * s(a, b, d),
+    cd = s(c, d, a) * s(c, d, b);
+  if (strict) return ab < 0 && cd < 0;
+  return (
+    ab <= 0 &&
+    cd <= 0 &&
+    Math.max(a[0], b[0]) >= Math.min(c[0], d[0]) &&
+    Math.max(c[0], d[0]) >= Math.min(a[0], b[0]) &&
+    Math.max(a[1], b[1]) >= Math.min(c[1], d[1]) &&
+    Math.max(c[1], d[1]) >= Math.min(a[1], b[1])
+  );
+}
+
 /** `[x, y]` turned by `deg` degrees, clockwise on the screen (SVG's
  *  `rotate`), about the origin, then moved by `about`. */
 export function turnPoint(

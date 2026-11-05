@@ -27,7 +27,9 @@ from gofish import Shape, circle, enclose, layer, spread
     .relate(lambda a, b, c: [
         enclose(
             [a, c],
-            shape=Shape.spine(avoiding=[b], clearance=6),
+            shape=Shape.spine(),
+            avoiding=[b],
+            clearance=6,
             padding=22,
             fill="#ff2400",
             fill_opacity=0.3,
@@ -42,10 +44,10 @@ from gofish import Shape, circle, enclose, layer, spread
 ```python
 Shape.box(rx=None, ry=None)
 Shape.oval()
-Shape.arcs(radius=None)
-Shape.blob(convexity=None, holes=None, roundness=None, neck=None, avoiding=None, clearance=None)
-Shape.hull(convexity=None, holes=None, roundness=None, neck=None, avoiding=None, clearance=None)
-Shape.spine(convexity=None, holes=None, roundness=None, neck=None, avoiding=None, clearance=None)
+Shape.fillet(radius=None, neck=None, holes=None)
+Shape.blob(convexity=None, connection=None, neck=None, holes=None, separate=None)
+Shape.hull(convexity=None, connection=None, neck=None, holes=None, separate=None)
+Shape.spine(convexity=None, connection=None, neck=None, holes=None, separate=None)
 ```
 
 Every member is a function call. Each returns a plain dict,
@@ -53,9 +55,9 @@ Every member is a function call. Each returns a plain dict,
 `Shape.hull()` and `Shape.spine()` are `Shape.blob()` with some params preset, so
 their dicts have kind `"blob"`: `Shape.hull(**opts)` is
 `Shape.blob(convexity=1, neck=1, **opts)`, and `Shape.spine(**opts)` is
-`Shape.blob(convexity=0, **opts)`. Any option overrides the preset. `avoiding`
-holds marks (`ref(...)`, `select_all(...)`, a `.relate()` operand); the chart
-carries their references.
+`Shape.blob(convexity=0, **opts)`. Any option overrides the preset. The nodes an
+outline keeps out of are `enclose`'s `avoiding`, not a shape option, so every
+shape avoids them.
 
 The family is also a module of its own:
 
@@ -66,14 +68,14 @@ from gofish.shape import hull  # the same function as Shape.hull
 
 ## Members
 
-| Member          | Is exactly                                | What it draws                                                   |
-| --------------- | ----------------------------------------- | --------------------------------------------------------------- |
-| `Shape.box()`   | its own kind                              | The members' bounding box, grown by `padding`, rounded corners. |
-| `Shape.oval()`  | its own kind                              | The smallest-area ellipse around the padded members.            |
-| `Shape.arcs()`  | its own kind                              | The padded members, with every concave corner an arc.           |
-| `Shape.blob()`  | the general region                        | Members, links between them and filled gaps, rounded.           |
-| `Shape.hull()`  | `Shape.blob(convexity=1, neck=1, **opts)` | The padded convex hull, rounded.                                |
-| `Shape.spine()` | `Shape.blob(convexity=0, **opts)`         | A tree of tubes that links the members, and nothing else.       |
+| Member           | Is exactly                                | What it draws                                                   |
+| ---------------- | ----------------------------------------- | --------------------------------------------------------------- |
+| `Shape.box()`    | its own kind                              | The members' bounding box, grown by `padding`, rounded corners. |
+| `Shape.oval()`   | its own kind                              | The smallest-area ellipse around the padded members.            |
+| `Shape.fillet()` | its own kind                              | The padded members, with every concave corner an arc.           |
+| `Shape.blob()`   | the general region                        | Members, links between them and filled gaps, smoothed.          |
+| `Shape.hull()`   | `Shape.blob(convexity=1, neck=1, **opts)` | The padded convex hull, rounded.                                |
+| `Shape.spine()`  | `Shape.blob(convexity=0, **opts)`         | A tree of tubes that links the members, and nothing else.       |
 
 `Shape.box()` is the default. A blob is a union of discs, tubes and triangles,
 so no blob setting draws a box.
@@ -114,15 +116,18 @@ enclose(
 ).render(w=260, h=160)
 ```
 
-## `Shape.arcs()`
+## `Shape.fillet()`
 
-::: gofish-ref Shape.arcs
+::: gofish-ref Shape.fillet
 :::
 
 The outline is the members grown by `padding`, closed by a disc of `radius`:
 every gap the disc cannot pass through is filled, and every concave corner is a
 circular arc of `radius`. At radius 0 it is the padded members' union, and a
-large radius nears the padded convex hull. Holes are always filled. Around
+large radius nears the padded convex hull. Two pieces nearer than
+`2 · radius` are joined by a link `neck` times as wide as the padded members it
+joins, and each piece is closed on its own; `neck=0` draws no links. Holes
+are filled unless `holes` is true. Around
 circles, the outline is made of circular arcs only, which is the contour of a
 bubble treemap (Görtler et al. 2018). Two discs of radius `a` whose padded edges
 are `g` apart join only when `2 · a · radius ≥ a · g + g² / 4`.
@@ -132,7 +137,7 @@ from gofish import Shape, circle, enclose, pack
 
 enclose(
     [pack([circle(r=r, fill="#f2c14e") for r in (30, 18, 22, 10, 14, 8)], spacing=6)],
-    shape=Shape.arcs(radius=12),
+    shape=Shape.fillet(radius=12),
     padding=6,
     fill="#f2c14e",
     fill_opacity=0.25,
@@ -145,20 +150,30 @@ enclose(
 ::: gofish-ref Shape.blob
 :::
 
-A blob is built from these pieces, in the enclosure's pixels:
+A blob is built in the enclosure's pixels, in these steps:
 
-- each member grown by `padding` (a circle is a disc, a `line` is a tube along
-  its segments, and any other node is its bounding box);
-- the links of the shortest tree that joins the members, as tubes that taper
-  from one member's bulge to the other's, routed around the avoided nodes;
-- the Delaunay triangles of the members' points, filled from the smallest gap
-  up, until they hold `convexity` of the convex hull's area.
+- Each member is grown by `padding` (a circle is a disc, a `line` is a tube
+  along its segments, and any other node is its bounding box).
+- The members are joined by a tree of links, the strongest first. A link
+  whose padded members touch is always kept; `connection` is the share of the
+  others that are kept, so below 1 the members split into pieces.
+- Each piece's links are tubes that taper from one member to the other,
+  `neck` times as wide as the members they join, and routed around the
+  avoided nodes. The padded members and the tubes are the piece's spine.
+- Each gap between the spine and the piece's padded convex hull is filled,
+  from its walls out, to `convexity` of its area. Between 1 and 2 the hull
+  is blended toward the oval.
+- The outline is smoothed, then moved out just enough to hold every padded
+  member again.
 
-Each avoided node, grown by `clearance`, is cut out of the union. The outline
-of the rest is traced exactly, pulled in by `neck` between members, and
-rounded by `roundness`. `convexity` alone decides which gaps fill, so it
-decides the pieces and the holes; `roundness` and `neck` never change them.
-The [Enclose](/internals/frontend/enclose) essay describes the construction.
+Each avoided node, grown by `clearance`, is cut out of the outline. With
+`separate=True`, each piece is also cut by the set's other pieces' padded
+members and links, each grown by `clearance`; a neighbor's fill is not cut
+out, so at `convexity` above 0 two outlines may meet in a bay between them.
+With `separate=False`, pieces may overlap, and a piece wholly inside another is
+dropped. Holes are filled unless `holes` is
+true; a blob keeps a hole only where its members close a loop. The
+[Enclose](/internals/frontend/enclose) essay describes the construction.
 
 ## `Shape.hull()`
 

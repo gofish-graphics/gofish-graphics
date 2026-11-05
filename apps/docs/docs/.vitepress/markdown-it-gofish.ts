@@ -53,7 +53,9 @@ THIS SOFTWARE.
  *                `example:<id> image` still shows its code unless `hidden`.
  *                The capture finds the pictures to take with findImageStoryIds()
  *                below, which reads the docs through this same plugin: the
- *                markdown is the only list of them.
+ *                markdown is the only list of them. (The home page's
+ *                picture cards are the other source of pictures; their list
+ *                is landing/landingCards.ts.)
  *   https://…  → a CodePen link under the code.
  */
 
@@ -67,21 +69,12 @@ import {
   getStoryTitle,
   type StoryExample,
 } from "./data/storyExamples";
+import { storyImagePath } from "./storyImages";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const EXAMPLES_DIR = join(__dirname, "examples");
 /** The docs source root (`apps/docs/docs`). */
 const DOCS_DIR = join(__dirname, "..");
-
-/**
- * Site path of the directory of captured story pictures (under `public/`), and
- * of one story's picture in it. The capture script writes these paths and
- * <GoFishImage> loads them, so they are spelled once, here.
- */
-export const STORY_IMAGES_DIR = "/previews";
-export function storyImagePath(storyId: string): string {
-  return `${STORY_IMAGES_DIR}/${storyId}.png`;
-}
 
 /** One `::: gofish` container's info string, parsed. */
 interface Directive {

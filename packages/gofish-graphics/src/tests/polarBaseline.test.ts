@@ -82,7 +82,7 @@ const centered = (coord: any) =>
     // b is the middle level: midpoint 1.5 is the middle of its cell.
     schema: {
       r: Unit({
-        domain: Domain.ordered(LEVELS),
+        domain: Domain.discrete(LEVELS),
         traits: [Trait.diverging(1.5)],
       }),
     },
