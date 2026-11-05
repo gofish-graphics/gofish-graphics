@@ -1372,21 +1372,29 @@ size).
 
 A data size is one of two things, by one rule (#972).
 
-- A **length of the space**. A size whose mark has no datum position, or
-  whose parent places it at a datum in the size's own unit, is a length
-  along the axis. The axis's σ scales it, its claim is part of the axis's
-  claim, and a coordinate transform warps it. A bar in a stack and a circle
-  in a spread's slot are lengths.
-- A **glyph size**. A mark that its parent places at a datum, at a point or
-  in a cell, on an axis in a unit other than its size's, is a glyph
-  (`GoFishNode.isGlyph`). Its size is a scale of its own, keyed by its unit.
-  No axis's σ scales it, and a coordinate transform does not warp it. A
-  bubble in a scatter and a circle in a 2D histogram's cell are glyphs.
+- A **glyph size**. The rule is per axis and belongs to the size's unit. A
+  unit is a glyph unit when, on some axis, the parent places the mark at a
+  datum (at a point or in a cell) and the mark's size on that same axis is
+  in the unit while the parent's axis is not. Every size in a glyph unit is
+  a glyph size (`GoFishNode.isGlyph`), so a circle placed on x only is a
+  glyph on y too: its aspect lock makes one unit on both axes, and one unit
+  has one σ. A glyph size is a scale of its own, keyed by its unit. No
+  axis's σ scales it, and a coordinate transform does not warp it. A bubble
+  in a scatter and a circle in a 2D histogram's cell are glyphs.
+- A **length of the space**. Every other data size is a length along its
+  axis: one whose unit has no datum position on an axis of its own, or one
+  in the unit of the parent's axis that places it. The axis's σ scales it,
+  its claim is part of the axis's claim, and a coordinate transform warps
+  it. A bar in a stack, a circle in a spread's slot, and a histogram bar
+  are lengths. The histogram bar sits in a bin cell on x, but its height is
+  a size on y, where nothing places it at a datum.
 
 The litmus test is whether the coordinate system should warp the shape. In
 a bubble chart it should not: the bubble's area measures population, and
 the axes measure GDP and life expectancy. In a spread of circles it should:
-the circles are the axis's extent, as the bars of a bar chart are.
+the circles are the axis's extent, as the bars of a bar chart are. A
+histogram bar's height should warp too: in polar it becomes a ring
+segment's depth.
 
 Each glyph unit has one σ, found as the shared-measure σ is (#582): every
 glyph bounds it, and it is the smallest bound
@@ -1579,9 +1587,12 @@ The registry is the sole producer of every slope. A coord boundary hands down
 the one σ its scope solves, which its map shares, and the #582 equal measure
 (equating x and y when they share a declared unit) is a named `equalizeMeasure`
 operation _on_ the registry, so the dump records the FINAL σ. Two axes share
-a unit when both their spaces are in one declared unit, or when both map a
-keyed domain of one unit (`KeyedDomains.unitsOf`) that is declared or that a
-mark ties (`ScopeRegistry.tie`). An aspect-locked mark whose size is data,
+a unit when both their spaces are in one declared unit, or when each maps
+keyed domains of one unit and no other (`KeyedDomains.unitsOf`) and a mark
+ties that unit (`ScopeRegistry.tie`). An axis that also maps another unit is
+not in one measure with the other axis: a marginal histogram's counts on
+the top (y) and the right (x) sit beside the scatter's beak lengths, so the
+two count scales stay apart. An aspect-locked mark whose size is data,
 such as a circle, ties its unit (#1087): it draws one value as a length on
 both axes, so its unit is one length on x and y even when it is unknown. So
 a row of `circle({ h: "value" })` in a spread fits both axes at

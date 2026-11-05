@@ -446,6 +446,32 @@ console.log("# #972: a glyph size is a scale of its own");
     warped.length === 3 && warped.every((k) => k === "path"),
     JSON.stringify(warped)
   );
+
+  // Glyph status is per axis: a histogram bar is placed in a bin cell on x,
+  // but its height is not in x's unit and it has no datum position on y, so
+  // the height is a length of y. The tallest bar fills the plot's height.
+  const { rect } = GoFish as any;
+  const bars: any[] = [];
+  const collect = (it: any) => {
+    if (it.kind === "rect") bars.push(it);
+    (it.children ?? []).forEach(collect);
+  };
+  (
+    await chart([{ v: 1 }, { v: 1.2 }, { v: 2.5 }, { v: 3 }, { v: 3.1 }], {
+      axes: true,
+      w: 300,
+      h: 200,
+    })
+      .flow(partition({ by: field("v").bin(Bin.step(1)), dir: "x" }))
+      .mark(rect({ h: field("v").count(), inset: 0.5 }))
+      .toDisplayList()
+  ).items.forEach(collect);
+  check(
+    "a histogram bar's height is a length of y, not a glyph",
+    Math.abs(Math.max(...bars.map((b) => Math.abs(b.h ?? b.height))) - 200) <
+      1e-6,
+    JSON.stringify(bars)
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -1320,31 +1320,33 @@ export class GoFishNode {
 
   /**
    * Whether this node's own data size on `dim` is a glyph size (#972,
-   * #1087): its parent places it at a datum (at a point, or in a cell, on
-   * either axis), and no axis its parent places it on is in the unit of its
-   * size (an axis it is not placed on may be its sizes' own union). A
-   * glyph size is not a length of the space it sits in: it is a scale of its
-   * own, keyed by its unit (`ScopeRegistry.glyphSigma`), and a coordinate
-   * transform does not warp it (`resolveEmbedding`). Any other data size is
-   * a length of the space: a size with no datum position (a bar in a stack,
-   * a circle in a spread's slot), or one in the unit of an axis of the
-   * parent that places it.
+   * #1087). Glyph status belongs to a unit, decided per axis: a unit is a
+   * glyph unit when, on some axis, the parent places this node at a datum
+   * (at a point, or in a cell) and this node's size on that same axis is in
+   * the unit while the parent's axis is not. A size on `dim` is a glyph size
+   * when its unit is a glyph unit, so a circle placed on x only is a glyph
+   * on y too (its aspect lock makes one unit on both axes, and one unit has
+   * one σ). A glyph size is not a length of the space it sits in: it is a
+   * scale of its own, keyed by its unit (`ScopeRegistry.glyphSigma`), and a
+   * coordinate transform does not warp it (`resolveEmbedding`). Any other
+   * data size is a length of the space: a size whose unit has no datum
+   * position on an axis of its own (a histogram bar's height over a bin
+   * cell on x, a circle in a spread's slot), or one in the unit of the
+   * parent's axis that places it.
    */
   public isGlyph(dim: 0 | 1): boolean {
     const p = this.parent;
     const i = p?.indexOfChild(this);
     if (p === undefined || i === undefined) return false;
-    const placed = ([0, 1] as const).filter(
-      (axis) =>
-        (p.sharing() as Partial<LayerSharingPlan>).datumPlaced?.[axis].has(
-          i
-        ) === true
-    );
     const own = unitOf(this._underlyingSpace?.[dim]);
-    if (placed.length === 0 || own === undefined) return false;
-    return !placed.some((axis) => {
+    if (own === undefined) return false;
+    const datumPlaced = (p.sharing() as Partial<LayerSharingPlan>).datumPlaced;
+    return ([0, 1] as const).some((axis) => {
+      if (datumPlaced?.[axis].has(i) !== true) return false;
+      const size = unitOf(this._underlyingSpace?.[axis]);
+      if (size === undefined || !sameUnitVar(own, size)) return false;
       const at = unitOf(p._underlyingSpace?.[axis]);
-      return at !== undefined && sameUnitVar(own, at);
+      return at === undefined || !sameUnitVar(size, at);
     });
   }
 

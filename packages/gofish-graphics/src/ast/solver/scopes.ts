@@ -278,6 +278,22 @@ export class ScopeRegistry {
     this.tied.add(unit);
   }
 
+  /**
+   * Whether two axes are in one tied unit (`tie`): each axis maps that unit
+   * and no other. An axis that also maps another unit (a marginal
+   * histogram's count beside the scatter's beak length) is not in one
+   * measure with the other axis, so a unit the two merely both contain
+   * does not equalize them.
+   */
+  private inOneUnit(
+    x: ReadonlySet<string> | undefined,
+    y: ReadonlySet<string> | undefined
+  ): boolean {
+    if (x?.size !== 1 || y?.size !== 1) return false;
+    const [u] = x;
+    return y.has(u) && this.tied.has(u);
+  }
+
   /** Each glyph unit's rooms (`fitGlyph`), by the unit's key, each once. */
   private glyphs = new Map<string, Map<string, GlyphRoom>>();
 
@@ -381,7 +397,8 @@ export class ScopeRegistry {
    * claim walk are equalized, and their claims hold the leftover pixels, so
    * the node still claims its size. `yDirection` is the direction of its
    * axis order on y. Call it after both axes' {@link solveFixed}; a no-op
-   * unless both share a declared or tied unit. `units` are the units each
+   * unless both are in one declared or tied unit (`inOneUnit`). `units` are
+   * the units each
    * axis maps (`KeyedDomains.unitsOf`).
    */
   equalizeFixed(
@@ -604,7 +621,8 @@ export class ScopeRegistry {
    * It lives on the registry, so every slope a render produces is
    * registry-sourced, and `GOFISH_DUMP_SCOPES` records the FINAL σ (a
    * `recenter` entry per axis). Returns the equalized axes; a no-op
-   * (undefined) unless both axes are given and share a declared unit.
+   * (undefined) unless both axes are given and are in one declared unit, or
+   * in one tied unit and no other (`inOneUnit`).
    */
   equalizeMeasure(
     rootKey: string,
@@ -616,11 +634,7 @@ export class ScopeRegistry {
       ay === undefined ||
       !(
         sharesDeclaredMeasure(ax.space, ay.space) ||
-        [...(ax.units ?? [])].some(
-          (u) =>
-            ay.units?.has(u) === true &&
-            (u.startsWith("declared:") || this.tied.has(u))
-        )
+        this.inOneUnit(ax.units, ay.units)
       )
     )
       return undefined;
