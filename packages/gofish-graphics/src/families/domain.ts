@@ -26,7 +26,8 @@ export type { Domain } from "../ast/schema";
 
 /** A finite set of levels: the values a column in the unit takes, listed in
  *  the order to lay them out in, with at least one level and no level listed
- *  twice. Python's `Domain` raises the same messages, word for word. */
+ *  twice. Python's `Domain` raises the same messages, with code spelled in
+ *  Python. */
 export const discrete = (levels: readonly Level[]): LevelsDomain => {
   if (!Array.isArray(levels))
     throw new Error(

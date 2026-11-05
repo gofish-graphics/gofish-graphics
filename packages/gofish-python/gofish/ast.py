@@ -2503,8 +2503,8 @@ def _js_number(x: Union[int, float]) -> str:
 
 def _check_midpoint_on_order(levels: List[Any], at: Any) -> None:
     """Raise when ``at`` is not a midpoint on the order ``levels``: JS
-    ``checkMidpointOnOrder`` in schema.ts, with the same two messages, word
-    for word."""
+    ``checkMidpointOnOrder`` in schema.ts, with the same two messages (they
+    hold no code to spell in Python)."""
     n = len(levels)
     order = (
         "the edges of the order ["
@@ -2521,20 +2521,13 @@ def _check_midpoint_on_order(levels: List[Any], at: Any) -> None:
         )
 
 
-def _json(value: Any) -> str:
-    """``value`` as JS ``JSON.stringify`` writes it, for a message."""
-    try:
-        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-    except (TypeError, ValueError):
-        return repr(value)
-
-
 _TRAIT_KINDS = ("ordered", "diverging", "summable")
 
 
 def _unit_type_of(name: Optional[str], domain: Any, traits: Any) -> Dict[str, Any]:
     """The traits of the unit ``name`` with ``domain`` and ``traits``,
-    checked: JS ``unitTypeOf`` in schema.ts, with the same messages."""
+    checked: JS ``unitTypeOf`` in schema.ts, with the same messages, code
+    spelled in Python."""
     who = "Unit" if name is None else f"Unit({json.dumps(name, ensure_ascii=False)})"
     if domain is not None and not (
         isinstance(domain, dict)
@@ -2543,7 +2536,7 @@ def _unit_type_of(name: Optional[str], domain: Any, traits: Any) -> Dict[str, An
     ):
         raise TypeError(
             f"{who}: domain must be a Domain: Domain.discrete(levels), got "
-            f"{_json(domain)}. A domain that is an interval is not supported "
+            f"{domain!r}. A domain that is an interval is not supported "
             "yet."
         )
     # A domain written as a dict, not with ``Domain``, gets the same checks.
@@ -2554,7 +2547,7 @@ def _unit_type_of(name: Optional[str], domain: Any, traits: Any) -> Dict[str, An
     if name is None and domain is None:
         raise TypeError(
             'Unit needs a name, a domain, or both: Unit("USD"), '
-            'Unit({ domain: Domain.discrete(["low", "high"]) }).'
+            'Unit(domain=Domain.discrete(["low", "high"])).'
         )
     if traits is None:
         traits = []
@@ -2566,7 +2559,7 @@ def _unit_type_of(name: Optional[str], domain: Any, traits: Any) -> Dict[str, An
         kind = trait.get("kind") if isinstance(trait, dict) else None
         if kind not in _TRAIT_KINDS:
             raise TypeError(
-                f"{who} has the trait {_json(trait)}. A unit's traits are "
+                f"{who} has the trait {trait!r}. A unit's traits are "
                 "Trait.ordered(), Trait.diverging() and Trait.summable()."
             )
         if kind in kinds:
@@ -2584,7 +2577,7 @@ def _unit_type_of(name: Optional[str], domain: Any, traits: Any) -> Dict[str, An
         named = "" if name is None else '"' + name + '", '
         raise TypeError(
             f"{who}: Trait.{listed}() needs a domain of levels to order: "
-            f"Unit({named}{{ domain: Domain.discrete(levels), traits: [Trait.{listed}()] }}). "
+            f"Unit({named}domain=Domain.discrete(levels), traits=[Trait.{listed}()]). "
             "A unit's amounts are numbers, which are already ordered; an order "
             "over them comes with Domain.continuous, which is not supported yet."
         )
@@ -2592,7 +2585,7 @@ def _unit_type_of(name: Optional[str], domain: Any, traits: Any) -> Dict[str, An
         raise TypeError(
             "Unit: Trait.summable() needs a name. Whether amounts add up "
             "belongs to their unit, which is known by its name: "
-            'Unit("USD", { traits: [Trait.summable()] }).'
+            'Unit("USD", traits=[Trait.summable()]).'
         )
     type_: Dict[str, Any] = {}
     if name is not None:
@@ -2762,14 +2755,15 @@ def _unit_type(unit: Union[Unit, str]) -> Dict[str, Any]:
 def _column_type_of(column: str, entry: Any) -> Dict[str, Any]:
     """The record of traits a schema entry stands for, the wire form: a
     unit's, a column record's, or a wire record as is.
-    JS ``traitsOf`` in schema.ts, with the same messages."""
+    JS ``traitsOf`` in schema.ts, with the same messages, code spelled in
+    Python."""
     who = f'schema: column "{column}"'
     if isinstance(entry, (Unit, str)):
         return _unit_type(entry)
     if not isinstance(entry, dict):
         raise TypeError(
             f"{who} has the entry {entry!r}. A column's entry is a Unit, a "
-            "unit's name, or a column record { name, unit }."
+            "unit's name, or a column record {\"name\": ..., \"unit\": ...}."
         )
     if all(k in _TRAIT_NAMES for k in entry):
         return dict(entry)
@@ -2778,8 +2772,8 @@ def _column_type_of(column: str, entry: Any) -> Dict[str, Any]:
         keys = ", ".join(json.dumps(k, ensure_ascii=False) for k in unknown)
         raise TypeError(
             f"{who} has the unknown {'key' if len(unknown) == 1 else 'keys'} "
-            f'{keys}. A column record takes name and unit: {{ name: "Pay", '
-            'unit: Unit("USD") }.'
+            f'{keys}. A column record takes name and unit: {{"name": "Pay", '
+            '"unit": Unit("USD")}.'
         )
     name = entry.get("name")
     unit = entry.get("unit")

@@ -117,7 +117,8 @@ A column record takes the keys `"name"` and `"unit"`. Any other key raises a
   unit.
 - A trait listed twice is an error. `Trait.ordered()` and
   `Trait.diverging()` need a domain, and `Trait.summable()` needs a name.
-  Each is checked when the `Unit` is made, with the same messages as in JS.
+  Each is checked when the `Unit` is made, with the same messages as in JS,
+  with code spelled in Python.
 
 **`HasLevels`.**
 

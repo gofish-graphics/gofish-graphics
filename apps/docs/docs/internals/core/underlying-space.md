@@ -2167,7 +2167,7 @@ a unit has one trait of its own (`CanSum`):
   midpoint without an order. A midpoint that is
   not a finite number in `[0, n]` is an error from `checkMidpointOnOrder`,
   which `Unit` calls at once and `columnTypeOf` calls on a wire
-  record; Python's `Unit` raises the same messages, word for word. A stack over the column takes the
+  record; Python's `Unit` raises the same messages, with code spelled in Python. A stack over the column takes the
   midpoint as its origin (`stackOrigin`, then the stack fold and the
   free-origin seat above): inside a present level, that fraction of its
   part; on a boundary, or inside a level the row lacks, the tail of the

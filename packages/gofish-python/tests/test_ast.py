@@ -1083,26 +1083,27 @@ class TestSchema:
             Unit(domain=Domain.discrete([1.0, 2.0, 3.0]), traits=[Trait.diverging(2.0)])
         )
 
-    # The same literals as `errors` in the JS schema.test.ts.
+    # The same messages as `errors` in the JS schema.test.ts, with code
+    # spelled in Python.
     @pytest.mark.parametrize(
         "make, message",
         [
             (
                 lambda: Unit(traits=[Trait.diverging()]),
                 'Unit needs a name, a domain, or both: Unit("USD"), '
-                'Unit({ domain: Domain.discrete(["low", "high"]) }).',
+                'Unit(domain=Domain.discrete(["low", "high"])).',
             ),
             (
                 lambda: Unit("pp", traits=[Trait.summable(), Trait.diverging(0)]),
                 'Unit("pp"): Trait.diverging() needs a domain of levels to order: '
-                'Unit("pp", { domain: Domain.discrete(levels), traits: [Trait.diverging()] }). '
+                'Unit("pp", domain=Domain.discrete(levels), traits=[Trait.diverging()]). '
                 "A unit's amounts are numbers, which are already ordered; an order "
                 "over them comes with Domain.continuous, which is not supported yet.",
             ),
             (
                 lambda: Unit("pts", traits=[Trait.ordered()]),
                 'Unit("pts"): Trait.ordered() needs a domain of levels to order: '
-                'Unit("pts", { domain: Domain.discrete(levels), traits: [Trait.ordered()] }). '
+                'Unit("pts", domain=Domain.discrete(levels), traits=[Trait.ordered()]). '
                 "A unit's amounts are numbers, which are already ordered; an order "
                 "over them comes with Domain.continuous, which is not supported yet.",
             ),
@@ -1116,14 +1117,14 @@ class TestSchema:
             (
                 lambda: Unit(domain={"kind": "ordered", "levels": ["a", "b"]}),
                 "Unit: domain must be a Domain: Domain.discrete(levels), got "
-                '{"kind":"ordered","levels":["a","b"]}. A domain that is an '
+                "{'kind': 'ordered', 'levels': ['a', 'b']}. A domain that is an "
                 "interval is not supported yet.",
             ),
             (
                 lambda: Unit(domain=Domain.discrete([1, 2]), traits=[Trait.summable()]),
                 "Unit: Trait.summable() needs a name. Whether amounts add up "
                 "belongs to their unit, which is known by its name: "
-                'Unit("USD", { traits: [Trait.summable()] }).',
+                'Unit("USD", traits=[Trait.summable()]).',
             ),
             (
                 lambda: Unit("USD", traits=[Trait.summable(), Trait.summable()]),
@@ -1139,17 +1140,17 @@ class TestSchema:
             (
                 lambda: Unit("pp", domain=[1, 2]),  # type: ignore[arg-type]
                 'Unit("pp"): domain must be a Domain: Domain.discrete(levels), '
-                "got [1,2]. A domain that is an interval is not supported yet.",
+                "got [1, 2]. A domain that is an interval is not supported yet.",
             ),
             (
                 lambda: Unit("pp", domain={"lo": 0, "hi": 1}),
                 'Unit("pp"): domain must be a Domain: Domain.discrete(levels), '
-                'got {"lo":0,"hi":1}. A domain that is an interval is not '
+                "got {'lo': 0, 'hi': 1}. A domain that is an interval is not "
                 "supported yet.",
             ),
             (
                 lambda: Unit("USD", traits=["summable"]),  # type: ignore[list-item]
-                'Unit("USD") has the trait "summable". A unit\'s traits are '
+                'Unit("USD") has the trait \'summable\'. A unit\'s traits are '
                 "Trait.ordered(), Trait.diverging() and Trait.summable().",
             ),
             (
@@ -1256,18 +1257,22 @@ class TestSchema:
         assert derive_schema == schema
 
     def test_a_column_record_rejects_unknown_keys(self):
-        with pytest.raises(
-            TypeError,
-            match=r'^schema: column "pay" has the unknown key "entity"\. A column '
-            r"record takes name and unit",
-        ):
+        with pytest.raises(TypeError) as error:
             chart([], schema={"pay": {"name": "Pay", "entity": "grade"}})
+        assert str(error.value) == (
+            'schema: column "pay" has the unknown key "entity". A column '
+            'record takes name and unit: {"name": "Pay", "unit": Unit("USD")}.'
+        )
         with pytest.raises(TypeError, match=r"which is neither a Unit nor"):
             chart([], schema={"pay": {"unit": 3}})
         with pytest.raises(TypeError, match=r"which is not text"):
             chart([], schema={"pay": {"name": 3}})
-        with pytest.raises(TypeError, match=r"A column's entry is a Unit"):
+        with pytest.raises(TypeError) as error:
             chart([], schema={"pay": 3})
+        assert str(error.value) == (
+            'schema: column "pay" has the entry 3. A column\'s entry is a Unit, '
+            'a unit\'s name, or a column record {"name": ..., "unit": ...}.'
+        )
 
     def test_old_spellings_are_gone(self):
         import gofish

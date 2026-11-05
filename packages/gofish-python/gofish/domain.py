@@ -24,8 +24,8 @@ __all__ = ["discrete"]
 def discrete(levels: Sequence[Any]) -> Dict[str, Any]:
     """A finite set of levels: the values a column in the unit takes, listed
     in the order to lay them out in, with at least one level and no level
-    listed twice. JS ``Domain.discrete`` raises the same messages, word for
-    word."""
+    listed twice. JS ``Domain.discrete`` raises the same messages, with
+    code spelled in Python."""
     if not isinstance(levels, (list, tuple)):
         raise TypeError(
             "Domain.discrete: levels must be a list, e.g. "

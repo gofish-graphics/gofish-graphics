@@ -375,7 +375,7 @@ export function Unit(
 ): UnitDefinition {
   if (typeof nameOrOptions === "string")
     return new UnitDefinition(unitTypeOf(nameOrOptions, options ?? {}));
-  // Python's `Unit` raises the same message, word for word.
+  // Python's `Unit` raises the same message, with code spelled in Python.
   if (
     options !== undefined ||
     nameOrOptions === null ||
@@ -389,7 +389,8 @@ export function Unit(
 }
 
 /** The traits of the unit `name` with `options` ({@link UnitType}),
- *  checked. Python's `Unit` raises the same messages, word for word. */
+ *  checked. Python's `Unit` raises the same messages, with code spelled in
+ *  Python. */
 function unitTypeOf(name: string | undefined, options: UnitOptions): UnitType {
   const who = unitWho(name);
   if (options === null || typeof options !== "object" || Array.isArray(options))
@@ -720,7 +721,7 @@ export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
  *  of the column's values, so every trait must accept it ({@link ACCEPTS}).
  *  Text levels are not amounts, so `Unit("pts", { domain: Domain.discrete(["low", "high"]) })`
  *  throws, while a rating's levels `[1, 2, 3, 4, 5]` take a unit. Python's
- *  `Unit` and `chart` raise the same message. */
+ *  `Unit` and `chart` raise the same message, with code spelled in Python. */
 function checkLevelsFit(who: string, type: ColumnType): void {
   for (const level of type.HasLevels?.levels ?? []) {
     const rejects = rejectingTrait(type, level);
@@ -734,7 +735,7 @@ function checkLevelsFit(who: string, type: ColumnType): void {
 
 /** The loud error for a midpoint off its order: `at` must be a finite number
  *  from 0 to `n`, for `n` levels. Python's `Unit` raises the same two
- *  messages, word for word. */
+ *  messages, with code spelled in Python (they hold none). */
 function checkMidpointOnOrder(levels: readonly Level[], at: unknown): void {
   const n = levels.length;
   const order = `the edges of the order [${levels.map(showLevel).join(", ")}]`;
