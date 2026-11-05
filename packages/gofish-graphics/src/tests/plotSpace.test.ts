@@ -7,9 +7,10 @@
  * layered over a scatter, a value label a gap sets past its bar. A ref is
  * in the part its target is in, a `nest` unifies its outer box with the
  * inner it pads, and an `align` puts each operand in its partner's part,
- * as it has no offset (a flower at the end of its stem). A box placed whole (a chart's box, a node with a size of its
- * own) is pixels to its layer, as a text at a literal pixel is: neither is
- * in the layer's space. Dressing takes room but is no part of the plot.
+ * as it has no offset (a flower at the end of its stem). A box placed
+ * whole (a chart's box, a node with a size of its own) is pixels to its
+ * layer, as a text at a literal pixel is: neither is in the layer's space.
+ * Dressing takes room but is no part of the plot.
  * Run: `tsx src/tests/plotSpace.test.ts` (wired into `pnpm test` as
  * `test:plot-space`).
  */
@@ -40,6 +41,19 @@ const nodesOf = (n: GoFishNode): GoFishNode[] => [
   n,
   ...n.children.flatMap((c) => (c instanceof GoFishNode ? nodesOf(c) : [])),
 ];
+
+/** The indices of `n`'s children that `keep` holds for. */
+const indicesWhere = (
+  n: GoFishNode,
+  keep: (c: GoFishNode["children"][number]) => boolean
+): number[] => n.children.flatMap((c, i) => (keep(c) ? [i] : []));
+
+const isLabel = (c: GoFishNode["children"][number]) =>
+  c instanceof GoFishNode && c.type === "label";
+
+/** The layer of a laid-out tree that holds its labels (`elaborateLabels`). */
+const labelLayer = (root: GoFishNode): GoFishNode =>
+  nodesOf(root).find((n) => n.children.some(isLabel))!;
 
 /** The gap an axis line keeps from the plot (`AXIS_CONTENT_GAP`). */
 const GAP = 6;
@@ -175,25 +189,21 @@ async function main() {
       .mark(circle({ r: 3 }).label("n"))
       .resolve();
     const data = await runLayout({ w: 300, h: 200, axes: false }, node);
-    // The layer of the mark's refs and their labels (`elaborateLabels`).
-    const labeled = nodesOf(data.child).find((n) =>
-      n.children.some((c) => c instanceof GoFishNode && c.type === "label")
-    )!;
-    const refs = labeled.children
-      .map((c, i) => [c, i] as const)
-      .filter(([c]) => !(c instanceof GoFishNode));
-    const labels = labeled.children
-      .map((c, i) => [c, i] as const)
-      .filter(([c]) => c instanceof GoFishNode && c.type === "label");
+    // The layer of the mark's refs and their labels.
+    const labeled = labelLayer(data.child);
+    const refs = indicesWhere(labeled, (c) => !(c instanceof GoFishNode));
+    const labels = indicesWhere(labeled, isLabel);
     check(
       "a label carries no space",
-      labels.every(([c]) => kinds(c as GoFishNode) === "undefined,undefined")
+      labels.every(
+        (i) => kinds(labeled.children[i] as GoFishNode) === "undefined,undefined"
+      )
     );
     check(
       "a ref stands for its mark: it is never dressing",
       refs.length > 0 &&
         refs.every(
-          ([, i]) =>
+          (i) =>
             !labeled.claimWalk!.dressing[0].has(i) &&
             !labeled.claimWalk!.dressing[1].has(i)
         )
@@ -201,7 +211,7 @@ async function main() {
     check(
       "a label beside a ref is dressing or ink, never plot",
       labels.length > 0 &&
-        labels.every(([, i]) =>
+        labels.every((i) =>
           ([0, 1] as const).every(
             (a) =>
               labeled.claimWalk!.dressing[a].has(i) ||
@@ -349,13 +359,11 @@ async function main() {
         .mark(rect({ h: "v" }).label("v", position ? { position } : {}))
         .resolve();
       const data = await runLayout({ w: 200, h: 100, axes: true }, node);
-      const layered = nodesOf(data.child).find((n) =>
-        n.children.some((c) => c instanceof GoFishNode && c.type === "label")
-      )!;
-      const labels = layered.children.flatMap((c, i) =>
-        c instanceof GoFishNode && c.type === "label" ? [i] : []
-      );
-      return { walk: layered.claimWalk!, labels };
+      const layered = labelLayer(data.child);
+      return {
+        walk: layered.claimWalk!,
+        labels: indicesWhere(layered, isLabel),
+      };
     };
     const outset = await labeled();
     check(

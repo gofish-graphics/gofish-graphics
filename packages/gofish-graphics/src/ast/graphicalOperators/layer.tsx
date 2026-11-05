@@ -593,9 +593,9 @@ export const layer = createNodeOperatorSequential(
       // layer's. Any other child is in its own space, which a `nest` has
       // unified with what it pads (`effectiveChildren`), or, if that is no
       // continuous or ordinal space, in the part of a partner an `align`
-      // puts it at (`alignedParts`: a flower at its stem's end). The layer's axes
-      // attach to the parts that are continuous or ordinal, and the rest
-      // is dressing (`placeByClaims`).
+      // puts it at (`alignedParts`: a flower at its stem's end). The
+      // layer's axes attach to the parts that are continuous or ordinal,
+      // and the rest is dressing (`placeByClaims`).
       // TODO(type system): a shortcut. A part is one space per child, read
       // off the sharing plan, and pixels are no space: a text at a literal
       // pixel and a chart placed whole are both "undefined" here, so a
