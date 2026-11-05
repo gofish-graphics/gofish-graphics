@@ -32,24 +32,10 @@
  * of the grid are refined by halves (a quadtree) where it can cross, and Ψ is kept with the
  * field once asked.
  */
-import type { Disc, Pt } from "./prims";
-import { SegGrid, Inside, segsOf } from "./blend";
+import { boxOf, type Box, type Disc, type Pt } from "./prims";
+import { SegGrid, Inside, segsOf } from "./grid";
 import { closingRings } from "./arcs";
 import { signedArea2, pointInRing } from "../../geometry/plane";
-
-export type Box = [number, number, number, number];
-
-const boxOf = (rings: Pt[][]): Box => {
-  let [xa, ya, xb, yb] = [Infinity, Infinity, -Infinity, -Infinity];
-  for (const r of rings)
-    for (const [x, y] of r) {
-      if (x < xa) xa = x;
-      if (x > xb) xb = x;
-      if (y < ya) ya = y;
-      if (y > yb) yb = y;
-    }
-  return [xa, ya, xb, yb];
-};
 
 /** The cut's knobs. h: the grid step, px; round: the width, px, of the rounding
  *  of the convex corners the cut leaves (smooth.ts, roundCut); open: the radius, px, of

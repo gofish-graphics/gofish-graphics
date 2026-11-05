@@ -7,9 +7,9 @@
  * keep-out cut leaves (`outline.ts`). Each keeps every padded member (and
  * each link, at its padded half-width) inside the outline: the keep-ins.
  */
-import { boxGrid, type Pt } from "./prims";
+import { boxGrid, type Member, type Pt } from "./prims";
 import { signedArea2 } from "../../geometry/plane";
-import { SegGrid, Inside, segsOf } from "./blend";
+import { SegGrid, Inside, segsOf } from "./grid";
 
 /** A keep-in constraint: a segment ab (a disc when a = b) grown to `R`. The
  *  outline must keep every point of it inside. */
@@ -19,28 +19,6 @@ export type KeepIn = { a: Pt; b: Pt; R: number };
 const SIGMA = 6;
 /** The smoothing offset's margin past the least that holds every keep-in, px. */
 const MARGIN = 0.05;
-
-/** Resample a closed ring at a uniform step of about ds. */
-export function resample(ring: Pt[], ds: number): Pt[] {
-  const n = ring.length;
-  const cum = [0];
-  for (let i = 0; i < n; i++) {
-    const [a, b] = [ring[i], ring[(i + 1) % n]];
-    cum.push(cum[i] + Math.hypot(b[0] - a[0], b[1] - a[1]));
-  }
-  const L = cum[n];
-  const m = Math.max(8, Math.round(L / ds));
-  const out: Pt[] = [];
-  let k = 0;
-  for (let j = 0; j < m; j++) {
-    const s = (L * j) / m;
-    while (cum[k + 1] < s) k++;
-    const t = (s - cum[k]) / (cum[k + 1] - cum[k] || 1);
-    const [a, b] = [ring[k], ring[(k + 1) % n]];
-    out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
-  }
-  return out;
-}
 
 function gauss(ring: Pt[], sigmaSamples: number): Pt[] {
   const n = ring.length;
@@ -156,7 +134,7 @@ function needed(rings: Pt[][], keep: KeepIn[]): number {
     for (let t = 0; t <= n; t++) {
       const x = k.a[0] + ((k.b[0] - k.a[0]) * t) / n,
         y = k.a[1] + ((k.b[1] - k.a[1]) * t) / n;
-      if (!In.has(x, y)) c = Math.max(c, G.nearest(x, y)[0] + k.R);
+      if (!In.has(x, y)) c = Math.max(c, G.nearest(x, y) + k.R);
       else if (k.R > c) {
         const lim = k.R - c;
         const d = G.capped(x, y, lim);
@@ -174,7 +152,7 @@ function needed(rings: Pt[][], keep: KeepIn[]): number {
  * pulls a convex part of radius rho in by about SIGMA^2 / (2 rho)).
  */
 export function smoothOutline(rings: Pt[][], keep: KeepIn[]): Pt[][] {
-  const sm = rings.map((ring) => gauss(resample(ring, 1), SIGMA));
+  const sm = rings.map((ring) => gauss(resample(ring, 1)[0], SIGMA));
   const c = needed(sm, keep) + MARGIN;
   return sm.map((r) => {
     const N = normals(r, true);
@@ -182,12 +160,12 @@ export function smoothOutline(rings: Pt[][], keep: KeepIn[]): Pt[][] {
   });
 }
 
-/** Resample a closed ring at about ds, each sample marked when the edge it
- *  lies on has a marked end. */
-function resampleMarked(
+/** Resample a closed ring at a uniform step of about ds, each sample marked when the edge it
+ *  lies on has a marked end (`mk`, one per vertex; none by default). */
+function resample(
   ring: Pt[],
-  mk: boolean[],
-  ds: number
+  ds: number,
+  mk: boolean[] = []
 ): [Pt[], boolean[]] {
   const n = ring.length;
   const cum = [0];
@@ -206,7 +184,7 @@ function resampleMarked(
     const t = (s - cum[k]) / (cum[k + 1] - cum[k] || 1);
     const [a, b] = [ring[k], ring[(k + 1) % n]];
     out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
-    om.push(mk[k] || mk[(k + 1) % n]);
+    om.push(!!(mk[k] || mk[(k + 1) % n]));
   }
   return [out, om];
 }
@@ -241,7 +219,7 @@ export function roundCut(
       out.push(ring);
       return;
     }
-    const [r, mk] = resampleMarked(ring, mk0, 1);
+    const [r, mk] = resample(ring, 1, mk0);
     const n = r.length;
     // samples to the nearest mark, around the ring
     const dist = new Float64Array(n).fill(Infinity);
@@ -282,4 +260,51 @@ export function roundCut(
     out.push(res);
   });
   return out;
+}
+
+/** Each member grown by pad, as keep-in capsules: what the smoothing and
+ *  the rounding keep inside the outline. A disc is one, a segment one (a
+ *  tapered link several), and a box its four sides, each grown by pad (the
+ *  outline holds the padded box when it holds its padded sides). */
+export function keepIns(members: Member[], pad: number): KeepIn[] {
+  return members.flatMap((m): KeepIn | KeepIn[] =>
+    m.kind === "disc"
+      ? { a: [m.cx, m.cy], b: [m.cx, m.cy], R: m.r + pad }
+      : m.kind === "segment"
+        ? m.w2 !== undefined && m.w2 !== m.w
+          ? taperKeepIns(m.a, m.b, m.w / 2 + pad, m.w2 / 2 + pad)
+          : { a: m.a, b: m.b, R: Math.max(0, m.w / 2 + pad) }
+        : boxKeepIns(m, pad)
+  );
+}
+
+/** A box's four sides, each grown by pad. */
+function boxKeepIns(
+  m: Extract<Member, { kind: "box" }>,
+  pad: number
+): KeepIn[] {
+  const c: Pt[] = [
+    [m.x, m.y],
+    [m.x + m.w, m.y],
+    [m.x + m.w, m.y + m.h],
+    [m.x, m.y + m.h],
+  ];
+  return c.map((a, k) => ({ a, b: c[(k + 1) % 4], R: pad }));
+}
+
+/** A tapered tube as short capsules along it (each inside it),
+ *  about 2 px long, of the tube's radius at their thinner end. */
+function taperKeepIns(a: Pt, b: Pt, ra: number, rb: number): KeepIn[] {
+  const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const n = Math.max(1, Math.ceil(L / 2));
+  const at = (t: number): Pt => [
+    a[0] + t * (b[0] - a[0]),
+    a[1] + t * (b[1] - a[1]),
+  ];
+  const R = (t: number) => ra + (rb - ra) * t;
+  return Array.from({ length: n }, (_, i) => ({
+    a: at(i / n),
+    b: at((i + 1) / n),
+    R: Math.max(0, Math.min(R(i / n), R((i + 1) / n))),
+  }));
 }

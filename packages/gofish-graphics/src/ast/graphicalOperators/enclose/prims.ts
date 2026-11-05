@@ -7,7 +7,7 @@
  * segments, and each member grown by a radius as a primitive with an exact
  * signed distance (negative inside). Pure geometry, no GoFish nodes.
  */
-import { cross } from "../../geometry/plane";
+import { cross, signedArea2 } from "../../geometry/plane";
 
 /** A point in pixels. */
 export type Pt = [number, number];
@@ -35,6 +35,26 @@ export type Member =
 /** A disc around c of radius R: a keep-out (an avoided member grown by the
  *  clearance), which the outline stays out of. */
 export type Disc = { c: Pt; R: number };
+
+/** A box [x0, y0, x1, y1], px. */
+export type Box = [number, number, number, number];
+
+/** The box of rings' points. */
+export const boxOf = (rings: Pt[][]): Box => {
+  let [xa, ya, xb, yb] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const r of rings)
+    for (const [x, y] of r) {
+      if (x < xa) xa = x;
+      if (x > xb) xb = x;
+      if (y < ya) ya = y;
+      if (y > yb) yb = y;
+    }
+  return [xa, ya, xb, yb];
+};
+
+/** A ring winding positive (screen coordinates): itself, or reversed. */
+export const ccw = (r: Pt[]): Pt[] =>
+  signedArea2(r) > 0 ? r : r.slice().reverse();
 
 /** Andrew's monotone chain. */
 export const convexHull = (pts: Pt[]): Pt[] => {

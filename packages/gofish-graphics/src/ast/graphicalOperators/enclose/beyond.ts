@@ -13,12 +13,10 @@
  * and E at 2, and nested in c (h_E ≥ h_H, so h_c grows with c).
  */
 import { signedArea2 } from "../../geometry/plane";
-import type { Member, Pt } from "./prims";
+import { ccw, type Member, type Pt } from "./prims";
 import { ellipseLoop, minEllipse, paddedHull as ovalHull } from "./oval";
 
-const ccw = (r: Pt[]) => (signedArea2(r) > 0 ? r : r.slice().reverse());
-
-/** Drop repeated and collinear vertices of a convex ring. */
+/** Drop repeated vertices of a ring (within 1e-9 px; the last against the first too). */
 function clean(r: Pt[]): Pt[] {
   const out: Pt[] = [];
   for (const p of r) {

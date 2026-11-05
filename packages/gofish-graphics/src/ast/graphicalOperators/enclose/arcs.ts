@@ -41,7 +41,6 @@
  */
 import { signedArea2, pointInRing, segDist } from "../../geometry/plane";
 import { ringExtent } from "../../geometry/box";
-import type { KeepIn } from "./smooth";
 import {
   boxGrid,
   grownPrim,
@@ -520,53 +519,6 @@ function sampleParams(e: Edge, s0: number, s1: number, tol: number): number[] {
     n = Math.max(1, Math.ceil(Math.abs(s1 - s0) / step));
   }
   return Array.from({ length: n + 1 }, (_, i) => s0 + ((s1 - s0) * i) / n);
-}
-
-/** Each member grown by pad, as keep-in capsules: what the smoothing
- *  (smooth.ts) keeps inside the outline. A disc is one, a segment one (a
- *  tapered link several), and a box its four sides, each grown by pad (the
- *  outline holds the padded box when it holds its padded sides). */
-export function keepIns(members: Member[], pad: number): KeepIn[] {
-  return members.flatMap((m): KeepIn | KeepIn[] =>
-    m.kind === "disc"
-      ? { a: [m.cx, m.cy], b: [m.cx, m.cy], R: m.r + pad }
-      : m.kind === "segment"
-        ? m.w2 !== undefined && m.w2 !== m.w
-          ? taperKeepIns(m.a, m.b, m.w / 2 + pad, m.w2 / 2 + pad)
-          : { a: m.a, b: m.b, R: Math.max(0, m.w / 2 + pad) }
-        : boxKeepIns(m, pad)
-  );
-}
-
-/** A box's four sides, each grown by pad. */
-function boxKeepIns(
-  m: Extract<Member, { kind: "box" }>,
-  pad: number
-): KeepIn[] {
-  const c: Pt[] = [
-    [m.x, m.y],
-    [m.x + m.w, m.y],
-    [m.x + m.w, m.y + m.h],
-    [m.x, m.y + m.h],
-  ];
-  return c.map((a, k) => ({ a, b: c[(k + 1) % 4], R: pad }));
-}
-
-/** A tapered tube as short capsules along it (each inside it),
- *  about 2 px long, of the tube's radius at their thinner end. */
-function taperKeepIns(a: Pt, b: Pt, ra: number, rb: number): KeepIn[] {
-  const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
-  const n = Math.max(1, Math.ceil(L / 2));
-  const at = (t: number): Pt => [
-    a[0] + t * (b[0] - a[0]),
-    a[1] + t * (b[1] - a[1]),
-  ];
-  const R = (t: number) => ra + (rb - ra) * t;
-  return Array.from({ length: n }, (_, i) => ({
-    a: at(i / n),
-    b: at((i + 1) / n),
-    R: Math.max(0, Math.min(R(i / n), R((i + 1) / n))),
-  }));
 }
 
 /**

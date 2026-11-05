@@ -50,10 +50,19 @@
  * cutRings), its corners rounded inward (smooth.ts, roundCut).
  */
 import { signedArea2, pointInRing, segDist, cross } from "../../geometry/plane";
-import { boxGrid, convexHull, type Disc, type Member, type Pt } from "./prims";
-import { closingRings, keepIns } from "./arcs";
+import {
+  boxGrid,
+  boxOf,
+  ccw,
+  convexHull,
+  type Box,
+  type Disc,
+  type Member,
+  type Pt,
+} from "./prims";
+import { closingRings } from "./arcs";
 import { buildBlend, blendRings } from "./blend";
-import { roundCut, smoothOutline } from "./smooth";
+import { keepIns, roundCut, smoothOutline } from "./smooth";
 import { beyondEnds, minkowski } from "./beyond";
 import {
   cutField,
@@ -62,7 +71,6 @@ import {
   reaches,
   reaching,
   SEPARATE,
-  type Box,
   type CutField,
 } from "./separate";
 import { Frontend } from "gofish-ir";
@@ -669,7 +677,7 @@ function paddedSamples(members: Member[], pad: number): Pt[] {
 /** The padded convex hull, winding as the closing does (positive). */
 function paddedHull(members: Member[], pad: number): Pt[] {
   const h = convexHull(paddedSamples(members, pad));
-  return signedArea2(h) > 0 ? h : h.slice().reverse();
+  return ccw(h);
 }
 
 // ── keep-outs ───────────────────────────────────────────────────────────────
@@ -830,19 +838,6 @@ function routeLinks(
 
 // ── the outline ─────────────────────────────────────────────────────────────
 
-/** The box of rings. */
-const boxOfRings = (rings: Pt[][]): [number, number, number, number] => {
-  let [xa, ya, xb, yb] = [Infinity, Infinity, -Infinity, -Infinity];
-  for (const r of rings)
-    for (const [x, y] of r) {
-      xa = Math.min(xa, x);
-      xb = Math.max(xb, x);
-      ya = Math.min(ya, y);
-      yb = Math.max(yb, y);
-    }
-  return [xa, ya, xb, yb];
-};
-
 /** The outline: see the file's head. No members, no outline. */
 export function encloseOutline(members: Member[], o: OutlineOptions): Pt[][] {
   if (members.length === 0) return [];
@@ -910,7 +905,7 @@ function avoidCut(
   pad: number,
   keepOut: KeepOutRegion
 ): Pt[][] {
-  const box = boxOfRings(rings);
+  const box = boxOf(rings);
   const keep = keepOut(box);
   if (!keep.length) return rings;
   const F = cutField(closingRings(pm, pad, 0, false), box, keep);
@@ -1071,7 +1066,7 @@ function blobOutline(
   const keepK = keepOutRegion(K);
   const keepOf = (p: number, rings: Pt[][]): KeepOutRegion => {
     if (!others) return keepK;
-    const [x0, y0, x1, y1] = boxOfRings(rings);
+    const [x0, y0, x1, y1] = boxOf(rings);
     const m = 2 * SEPARATE.open + 1;
     const near = others.flatMap((D, q) =>
       q === p
@@ -1098,7 +1093,7 @@ function blobOutline(
  *  keep the first. Containment is transitive, so testing each piece against every other is
  *  enough. Pieces that only partly overlap are kept as they are. */
 function contained(pieces: Pt[][][]): Pt[][][] {
-  const boxes = pieces.map(boxOfRings);
+  const boxes = pieces.map(boxOf);
   const within = (p: number, q: number) => {
     const [a, b] = [boxes[p], boxes[q]];
     return (
@@ -1128,7 +1123,7 @@ function regionInRegion(A: Pt[][], B: Pt[][]): boolean {
   if (B.some((r) => r.some((p) => inside(p, A)))) return false;
   // B's edges that meet A's box, on a grid; each edge of A is tested against those its box
   // meets (two edges whose boxes are apart cannot cross)
-  const [ax0, ay0, ax1, ay1] = boxOfRings(A);
+  const [ax0, ay0, ax1, ay1] = boxOf(A);
   const E: [Pt, Pt][] = [];
   for (const s of B)
     for (let k = 0, l = s.length - 1; k < s.length; l = k++) {
