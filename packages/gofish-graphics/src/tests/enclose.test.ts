@@ -522,6 +522,23 @@ console.log("# Shape.fillet() (enclose/outline.ts)");
     `${show(topology(loops))}, nearest ${near.toFixed(3)} px`
   );
   check("no members, no outline", fillet([], { padding: 4 }).length === 0);
+  // a link is bent around an avoided node in the gap before the closing, as
+  // the blob's are: one piece, the node a clearance clear, and no stubs of a
+  // link the cut severed
+  const routed = fillet([C(0, 0, 5), C(60, 0, 5)], {
+    padding: 4,
+    radius: 30,
+    avoiding: [C(30, 0, 3)],
+  });
+  const t = topology(routed);
+  check(
+    "a fillet link goes around an avoided node in the gap: one piece, the node uncovered",
+    t.pieces === 1 &&
+      t.holes === 0 &&
+      insideShare(around([30, 0], 3 + 4 - 0.25), routed) === 0 &&
+      insideShare([[0, 0], [60, 0]], routed) === 1,
+    `${show(t)}`
+  );
 }
 
 // ── avoiding on every shape ────────────────────────────────────────────────

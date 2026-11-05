@@ -277,7 +277,9 @@ independent version of the paper's construction on packed discs.
 and their links. The links come first (`filletLinks`, `outline.ts`): two
 pieces of the padded union nearer than 2 · radius are joined by a link along
 the spanning tree of the padded gaps, a tapered tube `neck` times as wide as
-the padded members it joins. `neck: 0` draws none. The closing of members and
+the padded members it joins, bent around the keep-outs as a blob's links are
+(`routeAround`), so the cut does not sever a piece there. `neck: 0` draws
+none. The closing of members and
 links together gives the pieces, and each piece is closed again on its own
 members (`filletPieces`): where two padded members are near enough for their
 discs to overlap but too far apart to join, closing them together leaves a
@@ -452,7 +454,7 @@ Shortcuts, each a known approximation:
 - A filled closed outline with no exact form (a polygon, a ribbon's band) is
   read as its bounding box, so the outline hugs the box, not the shape (#1207).
 - An avoided node is kept out as the disc that holds it, so an avoided box
-  keeps out its circumscribed disc.
+  keeps out its circumscribed disc (#1315).
 - The smoothing's keep-ins hold a box member by its four sides, grown by the
   padding.
 - A fillet's links appear at full `neck` width once `neck` leaves 0, so the

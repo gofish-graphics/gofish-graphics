@@ -34,8 +34,9 @@
  * Fillet: the exact closing, by a disc of `radius`, of the padded members and
  * their links: two pieces of the padded union nearer than 2 · radius are
  * joined by a link along the padded-gap spanning tree, `neck` times the
- * padded members' width, as the blob's (filletLinks; neck 0 draws none).
- * Its components are the pieces, and each piece is closed again on its own
+ * padded members' width, as the blob's (filletLinks; neck 0 draws none),
+ * bent around the keep-outs as the blob's are (routeAround). Its
+ * components are the pieces, and each piece is closed again on its own
  * members (filletPieces): the closing makes a horn with a cusp at its tip
  * where two padded members are near enough for their discs to overlap
  * (padded gap under 2 · radius) but too far apart to join (a gap g between
@@ -692,17 +693,27 @@ function paddedHull(members: Member[], pad: number): Pt[] {
 
 /** Keep-out discs: each avoided member grown by clearance. A segment is
  *  discs along it, every 2 px, their radius tapering from w / 2 at a to
- *  w2 / 2 at b as its width does; a box is its circumscribed disc (declared:
- *  a long box keeps out more than itself, #1247). */
+ *  w2 / 2 at b as its width does (a segment that starts where the one before
+ *  it ends, at its width, as a routed link's do, starts at its second disc:
+ *  the first is the other's last); a box is its circumscribed disc
+ *  (declared: a long box keeps out more than itself, #1315). */
 function keepOuts(avoiding: Member[], clearance: number): Disc[] {
   const out: Disc[] = [];
+  let prev: Member | undefined;
   for (const m of avoiding) {
+    const after = prev;
+    prev = m;
     if (m.kind === "disc") out.push({ c: [m.cx, m.cy], R: m.r + clearance });
     else if (m.kind === "segment") {
       const L = Math.hypot(m.b[0] - m.a[0], m.b[1] - m.a[1]);
       const n = Math.max(1, Math.ceil(L / 2));
       const w2 = m.w2 ?? m.w;
-      for (let i = 0; i <= n; i++)
+      const joint =
+        after?.kind === "segment" &&
+        after.b[0] === m.a[0] &&
+        after.b[1] === m.a[1] &&
+        (after.w2 ?? after.w) === m.w;
+      for (let i = joint ? 1 : 0; i <= n; i++)
         out.push({
           c: [
             m.a[0] + ((m.b[0] - m.a[0]) * i) / n,
@@ -874,13 +885,21 @@ export function encloseOutline(members: Member[], o: OutlineOptions): Pt[][] {
   const K = keepOuts(o.avoiding ?? [], clearance);
   if (o.kind === "blob") return blobOutline(members, o, pad, clearance, K);
   const neck = Math.max(0, Math.min(1, o.neck ?? FILLET_DEFAULT.neck));
+  const r = filletRadius(o, pad);
+  // the links bent around the keep-outs before the closing, as the blob's are (so the final
+  // cut does not sever a piece there)
+  const links = routeAround(
+    filletLinks(members, pad, r, neck),
+    discGrid(K),
+    pad
+  );
   const keep = keepOutRegion(K);
   return filletPieces(
     members,
+    links,
     pad,
-    filletRadius(o, pad),
-    o.holes ?? FILLET_DEFAULT.holes,
-    neck
+    r,
+    o.holes ?? FILLET_DEFAULT.holes
   ).flatMap(({ pm, rings }) => avoidCut(rings, pm, pad, keep));
 }
 
@@ -1031,7 +1050,7 @@ function filletLinks(
 
 /**
  * The fillet: the exact closing (arcs.ts), by a disc of radius r, of the members and their
- * links (filletLinks) grown by pad, one piece per component, each piece closed again on its
+ * links (filletLinks, bent around the keep-outs) grown by pad, one piece per component, each piece closed again on its
  * own members and links alone. `pm`: a piece's members (its links are cut by the keep-outs
  * like any other ground).
  *
@@ -1056,12 +1075,12 @@ function filletLinks(
  */
 function filletPieces(
   members: Member[],
+  links: Member[],
   pad: number,
   r: number,
-  holes: boolean,
-  neck: number
+  holes: boolean
 ): { pm: Member[]; rings: Pt[][] }[] {
-  const isLink = new Set<Member>(filletLinks(members, pad, r, neck));
+  const isLink = new Set<Member>(links);
   const out: { pm: Member[]; rings: Pt[][] }[] = [];
   const todo: Member[][] = [[...members, ...isLink]];
   while (todo.length) {
@@ -1107,7 +1126,8 @@ function blobOutline(
     o.neck ?? BLOB_DEFAULT.neck
   );
   const pms = J.pieces.map((idx) => idx.map((i) => members[i]));
-  const linksOf = (p: number) => J.links.filter((_, l) => J.linkPiece[l] === p);
+  const linksOf: Member[][] = pms.map(() => []);
+  J.links.forEach((l, k) => linksOf[J.linkPiece[k]].push(l));
   // each piece's keep-outs: the avoided members, and with `separate: true` the set's other
   // pieces as keep-outs too: their padded members and their links bent around the avoided
   // members, grown by padding + clearance, so the members and links of two pieces stay
@@ -1120,7 +1140,7 @@ function blobOutline(
     pms.length > 1 && separate
       ? pms.map((pm, p) =>
           keepOuts(
-            [...pm, ...routeAround(linksOf(p), avoided, pad)],
+            [...pm, ...routeAround(linksOf[p], avoided, pad)],
             pad + clearance
           )
         )
@@ -1138,7 +1158,7 @@ function blobOutline(
   // does not sever the piece there)
   const parts = pms.map((pm, p) => ({
     pm,
-    spine: routeAround(linksOf(p), keeps, pad, p),
+    spine: routeAround(linksOf[p], keeps, pad, p),
   }));
   // each piece's outline: filled and smoothed on its own, then cut by its keep-outs, those
   // that can reach its outline's box (the closing by SEPARATE.open reaches 2 · open past a
