@@ -42,7 +42,7 @@
  *    to the mouth ends, and stitched to the spine runs on the hull between
  *    pockets.
  */
-import { boxOf, type Pt } from "./prims";
+import { boxGrid, boxOf, type Pt } from "./prims";
 import { SegGrid, segsOf } from "./grid";
 import { signedArea2, cross, pointInRing } from "../../geometry/plane";
 
@@ -130,12 +130,19 @@ export type Blend = {
 
 const key = (r: number, i: number) => r * 1_000_003 + i;
 
-/** The convex hull of the outer rings' vertices, winding positive, as ring
- *  vertices; collinear points dropped. */
-function hullOf(rings: Pt[][]): RV[] {
+/**
+ * The convex hull of the outer rings' vertices, winding positive, as ring
+ * vertices, with every other vertex within `tol` of a hull side (and off its
+ * ends) on that side too, in order along it: the pocket between such a
+ * vertex and the side is narrower than `tol`, so it is no pocket, and the
+ * side is two mouths (or none, between ring neighbors) that meet there.
+ */
+function hullOf(rings: Pt[][], tol: number): RV[] {
   const P: RV[] = [];
   rings.forEach((r, ri) => r.forEach((_, i) => P.push({ r: ri, i })));
   const at = (v: RV) => rings[v.r][v.i];
+  const V = P.slice();
+  const near = boxGrid(V.map((v) => [at(v)[0], at(v)[1], at(v)[0], at(v)[1]]));
   P.sort((p, q) => at(p)[0] - at(q)[0] || at(p)[1] - at(q)[1]);
   const half = (pts: RV[]) => {
     const h: RV[] = [];
@@ -150,7 +157,32 @@ function hullOf(rings: Pt[][]): RV[] {
     h.pop();
     return h;
   };
-  return [...half(P), ...half(P.slice().reverse())];
+  const H = [...half(P), ...half(P.slice().reverse())];
+  // the vertices on each side, by where along it they are
+  const out: RV[] = [];
+  H.forEach((v, k) => {
+    out.push(v);
+    const w = H[(k + 1) % H.length];
+    const [A, B] = [at(v), at(w)];
+    const L = Math.hypot(B[0] - A[0], B[1] - A[1]);
+    if (L <= 2e-6) return;
+    const on: { v: RV; t: number }[] = [];
+    for (const q of near.query(
+      Math.min(A[0], B[0]) - tol,
+      Math.min(A[1], B[1]) - tol,
+      Math.max(A[0], B[0]) + tol,
+      Math.max(A[1], B[1]) + tol
+    )) {
+      const p = at(V[q]);
+      const t =
+        ((p[0] - A[0]) * (B[0] - A[0]) + (p[1] - A[1]) * (B[1] - A[1])) / L;
+      if (t > 1e-6 && t < L - 1e-6 && Math.abs(gapTo(A, B, p)) <= tol)
+        on.push({ v: V[q], t });
+    }
+    on.sort((p, q) => p.t - q.t);
+    for (const { v: q } of on) out.push(q);
+  });
+  return out;
 }
 
 /** Distance from p to the line A→B, positive on its left (the pocket). */
@@ -191,7 +223,7 @@ export function pocketsOf(spine: Pt[][]): {
   const outer = clean.filter((r) => signedArea2(r) > 0);
   const holeRings = clean.filter((r) => signedArea2(r) < 0);
   const at = (v: RV) => outer[v.r][v.i];
-  const H = hullOf(outer);
+  const H = hullOf(outer, 1e-6);
   // mouths: hull edges between ring vertices that are not neighbors
   const mouths: Mouth[] = [];
   const aOf = new Map<number, number>();

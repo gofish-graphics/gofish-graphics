@@ -1128,5 +1128,38 @@ console.log("# islands and keep-outs (enclose/arcs.ts, enclose/outline.ts)");
   );
 }
 
+console.log("# the blend's hull (enclose/blend.ts)");
+{
+  // the middle box's top corners lie on the hull side from the first box to
+  // the last: no pocket between them, so the side is two mouths that meet
+  for (const dy of [0, 1e-3, -1e-3]) {
+    const boxes: Member[] = [0, 30, 60].map((x) => ({
+      kind: "box",
+      x,
+      y: x === 30 ? dy : 0,
+      w: 20,
+      h: 20,
+    }));
+    let rings: Pt[][] = [];
+    let message = "";
+    try {
+      rings = encloseOutline(boxes, {
+        kind: "blob",
+        padding: 0,
+        convexity: 0.5,
+        holes: true,
+        neck: 0.1,
+      });
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    check(
+      `three boxes in a row, the middle one ${dy} px down: one ring`,
+      rings.length === 1,
+      message || `${rings.length} rings`
+    );
+  }
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
