@@ -420,8 +420,8 @@
         >, <code>order(links, { ordering: Ordering.barycenter() })</code>) that
         feed the existing <code>spread</code>. The coordinate phase and virtual
         nodes come next, in one operator over nodes and links,
-        <code>ranked(...)</code> (working name, C), built on A's helpers and on
-        <code>spread</code>. It is the next step, not a someday follow-up,
+        <code>sugiyama(...)</code> (working name, C), built on A's helpers and
+        on <code>spread</code>. It is the next step, not a someday follow-up,
         because the coordinate phase decides most of the overlap on a large
         graph.
       </div>
@@ -976,8 +976,10 @@
       <h3>Spelling</h3>
       <div class="two">
         <div>
-          <div class="label new">Picked: an option of <code>ranked</code></div>
-          <pre><code class="language-js">ranked(
+          <div class="label new">
+            Picked: an option of <code>sugiyama</code>
+          </div>
+          <pre><code class="language-js">sugiyama(
   {
     layering: Layering.justify(),
     ordering: Ordering.barycenter(),
@@ -991,7 +993,7 @@
     link: ribbon({ curve: Curve.bezier() }),
   }
 );</code></pre>
-          <pre><code class="language-python">ranked(
+          <pre><code class="language-python">sugiyama(
     layering=Layering.justify(),
     ordering=Ordering.barycenter(),
     positioning=Positioning.relax(),
@@ -1018,15 +1020,16 @@
         </div>
       </div>
       <p>
-        <b>Why the <code>ranked</code> option:</b> the rule needs the links and
-        the link mark's curve, and <code>ranked</code> already owns both. On the
-        column spread, the same links and curve would be passed a second time,
-        next to the ribbon layer that draws them. <code>Gaps.slope</code> (gaps
-        in proportion to need) and <code>Gaps.minmax</code> (each gap's minimum
-        from its links, leftover split evenly) are both strategies of the one
-        option; <code>Gaps.uniform()</code> is today's <code>fr(1)</code>. All
-        names are placeholders. Because spacing only changes slope, it is lower
-        priority than the coordinate phase.
+        <b>Why the <code>sugiyama</code> option:</b> the rule needs the links
+        and the link mark's curve, and <code>sugiyama</code> already owns both.
+        On the column spread, the same links and curve would be passed a second
+        time, next to the ribbon layer that draws them.
+        <code>Gaps.slope</code> (gaps in proportion to need) and
+        <code>Gaps.minmax</code> (each gap's minimum from its links, leftover
+        split evenly) are both strategies of the one option;
+        <code>Gaps.uniform()</code> is today's <code>fr(1)</code>. All names are
+        placeholders. Because spacing only changes slope, it is lower priority
+        than the coordinate phase.
       </p>
 
       <h2 id="approaches">Approaches</h2>
@@ -1385,7 +1388,7 @@ chart(ends).flow(
 
       <div class="card" id="C">
         <h3>
-          C. One <code>ranked</code> operator over nodes and links, phases as
+          C. One <code>sugiyama</code> operator over nodes and links, phases as
           strategies
         </h3>
         <p>
@@ -1394,8 +1397,9 @@ chart(ends).flow(
           <code>sugiyama().layering().decross().coord()</code> or ELK Layered.
           Because it sees edges, it can add virtual nodes and run relaxation.
           The prototype computes every position in JS and emits placed marks, so
-          it is a stand-in. <code>ranked</code> is a working name (Graphviz's
-          word for a layer, and directionless); the name is a decision below.
+          it is a stand-in. <code>sugiyama</code> is a working name (d3-dag,
+          OGDF and igraph use it; <code>layeredGraph</code> is the descriptive
+          alternative); the name is a decision below.
         </p>
 
         <div class="example">
@@ -1408,7 +1412,7 @@ chart(ends).flow(
           <div class="two">
             <div>
               <div class="label new">Proposed, JS</div>
-              <pre><code class="language-js">ranked(
+              <pre><code class="language-js">sugiyama(
   {
     spacing: 24,
     layering: Layering.longestPath(),
@@ -1424,7 +1428,7 @@ chart(ends).flow(
   }
 );</code></pre>
               <div class="label new">Proposed, Python</div>
-              <pre><code class="language-python">ranked(
+              <pre><code class="language-python">sugiyama(
     spacing=24,
     layering=Layering.longest_path(),
     ordering=Ordering.barycenter(),
@@ -1454,12 +1458,12 @@ chart(ends).flow(
           <b>UK energy sankey, relaxed</b>
           <img
             src="img/c-energy-relax.png"
-            alt="Energy sankey from the ranked stand-in"
+            alt="Energy sankey from the sugiyama stand-in"
           />
           <div class="two">
             <div>
               <div class="label new">Proposed, JS</div>
-              <pre><code class="language-js">ranked(
+              <pre><code class="language-js">sugiyama(
   {
     size: "value",
     spacing: 10,
@@ -1477,7 +1481,7 @@ chart(ends).flow(
             </div>
             <div>
               <div class="label new">Proposed, Python</div>
-              <pre><code class="language-python">ranked(
+              <pre><code class="language-python">sugiyama(
     size="value",
     spacing=10,
     layering=Layering.justify(),
@@ -1760,7 +1764,7 @@ chart(rows)
         <div class="two">
           <div>
             <div class="label new">Proposed, JS</div>
-            <pre><code class="language-js">ranked(
+            <pre><code class="language-js">sugiyama(
   {
     layering: Layering.longestPath({ from: "sinks" }), // @hl
     ordering: Ordering.input(),
@@ -1774,7 +1778,7 @@ chart(rows)
   }
 );</code></pre>
             <div class="label new">Proposed, Python</div>
-            <pre><code class="language-python">ranked(
+            <pre><code class="language-python">sugiyama(
     layering=Layering.longest_path(from_="sinks"),  # @hl
     ordering=Ordering.input(),
     positioning=Positioning.center(of="out", rule="mean"),  # @hl
@@ -1884,6 +1888,20 @@ chart(rows)
         </table>
       </div>
       <p>
+        <b>Outline spacing may unify GoTree and the tidy tree.</b> GoTree
+        chooses, per axis, how a parent relates to its children (align,
+        distribute, nest) and how siblings relate (align, distribute). Its
+        node-link tree is parent-child distribute on x and sibling distribute on
+        y, measured on boxes. The tidy tree is the same choice measured on
+        contours, with the parent aligned on its first and last child. So the
+        tidy tree becomes one point in GoTree's space plus a measure option, not
+        a separate algorithm. Open: <code>measure</code> only changes distribute
+        (align ignores it, and nest measured on outlines is closer to
+        <code>enclose</code>); the size claim must carry a profile per layer
+        instead of one number, which is an engine change; radial trees need the
+        profile in angular bands.
+      </p>
+      <p>
         So <code>Positioning</code> is one family with two parts, a center and
         an overlap rule, and trees are the case where ordering is free.
       </p>
@@ -1934,6 +1952,12 @@ chart(rows)
         <code>Positioning.sweep("out", { rule: "mean" })</code>
         from evenly placed leaves. A tidy tree does not fit this pattern: it
         moves whole subtrees, not columns.
+      </p>
+      <p>
+        <b>When to revisit:</b> once GoFish has many layout algorithms, look at
+        circle packing, treemaps, pretty printing, dodging and these layered
+        layouts together, and see whether more composition falls out or whether
+        they are just naturally varied.
       </p>
 
       <h2 id="precedent">Prior work</h2>
@@ -2176,13 +2200,13 @@ chart(rows)
       <ol class="qs">
         <li>A now and C next, or C now?</li>
         <li>
-          Operator name: <code>ranked</code> (working name; Graphviz's word,
-          directionless, covers trees), <code>sugiyama</code> (d3-dag, OGDF,
-          igraph; a person's name), <code>rank</code> (clashes with SQL and
-          polars <code>rank()</code>), or <code>hierarchy</code>,
-          <code>dag</code>, <code>flowchart</code>, <code>strata</code> (weaker:
-          tree confusion, names the data, a chart type, a node word elsewhere).
-          <code>layered</code>, "tier" and <code>levels</code> are taken.
+          Operator name: <code>sugiyama</code> (working name; d3-dag, OGDF,
+          igraph; a person's name) or <code>layeredGraph</code> (the field's
+          descriptive term, "layered graph drawing"; close to
+          <code>layer()</code>)? Rejected: <code>layered</code> and
+          <code>ranked</code> (both confusing), <code>rank</code> (SQL and
+          polars <code>rank()</code>), <code>hierarchy</code>, <code>dag</code>,
+          <code>flowchart</code>, <code>strata</code>.
         </li>
         <li>
           Where do the graph phases live: <code>derive</code> helpers over nodes
@@ -2201,7 +2225,7 @@ chart(rows)
         </li>
         <li>
           Column spacing: pursue it at all, given it only changes slope? If so,
-          as a <code>ranked</code> option (picked) or a spacing value on the
+          as a <code>sugiyama</code> option (picked) or a spacing value on the
           column spread?
         </li>
         <li>

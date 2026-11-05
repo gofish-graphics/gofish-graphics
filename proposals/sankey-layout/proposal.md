@@ -3,7 +3,7 @@
 d3-sankey does two kinds of work. Discrete graph decisions (which column a node goes in, and the order inside each column) read the whole link table and produce fields. Continuous placement, given those fields, is already GoFish: a spread of columns, a gapped spread of nodes, and one shared scale that equals d3's.
 What is left over is the coordinate phase (exact y once the order is fixed; d3 calls it relaxation) and virtual nodes. Both are global and iterative. The coordinate phase is not cosmetic: on the energy graph it cuts the area where ribbons cover each other from 25% to 4%, while the crossing count goes up.
 
-**Recommendation: A now, C next.** Add the two graph decisions as `derive` helpers with strategy families (`Layering`, `Ordering`) that feed the existing `spread`. The coordinate phase and virtual nodes come next, in one operator over nodes and links, `ranked(...)` (working name, C), built on A's helpers and on `spread`. It is the next step, not a someday follow-up, because the coordinate phase decides most of the overlap on a large graph.
+**Recommendation: A now, C next.** Add the two graph decisions as `derive` helpers with strategy families (`Layering`, `Ordering`) that feed the existing `spread`. The coordinate phase and virtual nodes come next, in one operator over nodes and links, `sugiyama(...)` (working name, C), built on A's helpers and on `spread`. It is the next step, not a someday follow-up, because the coordinate phase decides most of the overlap on a large graph.
 
 The review page is `index.html` in this folder. It has the same sections, with every render next to its code. Ribbons and link ends belong to the stacked-ribbons proposal ([proposal](https://claude.ai/artifact/QnDyewZaCKrvpFo9r8QYXE), [design space](https://claude.ai/artifact/2dHLhTeiQwpdHmkDjbw6oU)). All renders come from prototype stories in `packages/gofish-graphics/stories/_proposals/sankey-layout/` with no core changes.
 
@@ -93,14 +93,14 @@ Prior work: ELK Layered is the only tool found that sizes each gap from its edge
 | ![](img/r2-energy-barycenter-even.png) barycenter, centered: 21.3%, 3.67 | ![](img/r2-energy-barycenter-link-gaps.png) 20.9%, 2.37 |
 | ![](img/r2-small-relax-even.png) small, relaxed: 8.5%, 1.70              | ![](img/r2-small-relax-link-gaps.png) 8.6%, 1.46        |
 
-Spelling (placeholders). Picked: an option of `ranked`, because it already owns the links and the link curve:
+Spelling (placeholders). Picked: an option of `sugiyama`, because it already owns the links and the link curve:
 
 ```js
-ranked({ ..., layerSpacing: Gaps.slope({ max: 1, min: 30 }) }, { nodes, links, node, link: ribbon({ curve: Curve.bezier() }) });
+sugiyama({ ..., layerSpacing: Gaps.slope({ max: 1, min: 30 }) }, { nodes, links, node, link: ribbon({ curve: Curve.bezier() }) });
 ```
 
 ```python
-ranked(..., layer_spacing=Gaps.slope(max=1, min=30), nodes=nodes, links=links, node=node, link=ribbon(curve=Curve.bezier()))
+sugiyama(..., layer_spacing=Gaps.slope(max=1, min=30), nodes=nodes, links=links, node=node, link=ribbon(curve=Curve.bezier()))
 ```
 
 Considered: a spacing value on the column spread, `spacing: Gaps.slope(links, { max: 1, curve })`, which passes the links and curve a second time; and a minmax rule, `Gaps.minmax(links, { maxSlope: 1 })`, which becomes a second strategy of the same option. Because spacing only changes slope, it is lower priority than the coordinate phase.
@@ -173,12 +173,12 @@ Relaxation cannot be a strategy on a column's spread. It reads other columns, it
 - **Overlap check:** large partial overlap. The helper recomputes ky, padding and the height in pixels, which the spreads and the σ fit already own.
 - **Trade-offs:** works today and matches d3, but duplicates the scale, breaks when resized or nested, and needs a y flip.
 
-### C. One `ranked` operator, phases as strategies
+### C. One `sugiyama` operator, phases as strategies
 
 ![Dependencies with virtual nodes](img/c-dependencies-virtual-nodes.png)
 
 ```js
-ranked(
+sugiyama(
   {
     size: "value",
     spacing: 10,
@@ -195,7 +195,7 @@ The model is d3-dag's `sugiyama().layering().decross().coord()` and ELK Layered.
 
 - **Overlap check:** large partial overlap unless built on A. `Positioning.stack()` is exactly A's two spreads (`img/c-small-stack.png`). C must desugar into A's helpers and `spread`, and add only virtual nodes and `Positioning.relax()`.
 - **The coordinate phase is the reason C matters:** 25% vs 3.7% overplot on energy. `Positioning` is one family, a center rule plus an overlap rule (see Tidy trees).
-- **Name:** `ranked` is a working name (Graphviz's word for a layer, directionless, covers trees); it is a decision below.
+- **Name:** `sugiyama` is a working name (d3-dag, OGDF and igraph use it; `layeredGraph` is the descriptive alternative); it is a decision below.
 - **Trade-offs:** serves DAGs and flowcharts. Three families and one operator. Hides the flow tiers.
 
 ### D. A GoTree-style template
@@ -244,7 +244,7 @@ tree(
 Proposed cluster:
 
 ```js
-ranked(
+sugiyama(
   {
     layering: Layering.longestPath({ from: "sinks" }),
     ordering: Ordering.input(),
@@ -327,11 +327,11 @@ Cluster is the single step `Positioning.sweep("out", { rule: "mean" })`. A tidy 
 ## Decisions for Josh
 
 1. A now and C next, or C now?
-2. Operator name: `ranked` (working name), `sugiyama`, `rank` (clashes with SQL/polars `rank()`), or the weaker `hierarchy`, `dag`, `flowchart`, `strata`? (`layered`, "tier" and `levels` are taken.)
+2. Operator name: `sugiyama` (working name; d3-dag, OGDF, igraph; a person's name) or `layeredGraph` (the field's descriptive term; close to `layer()`)? Rejected: `layered` and `ranked` (both confusing), `rank` (SQL/polars `rank()`), `hierarchy`, `dag`, `flowchart`, `strata`.
 3. Where do the graph phases live: `derive` helpers over nodes that take the links table, or a flow operator over the links?
 4. Family names: `Layering`, `Ordering` and `Positioning`? (`Place`, `Coord` and `align` are taken.)
 5. Default column rule: `justify` or `longestPath` (left)?
-6. Column spacing: pursue it, given it only changes slope? If so, as a `ranked` option (picked) or a spacing value on the column spread?
+6. Column spacing: pursue it, given it only changes slope? If so, as a `sugiyama` option (picked) or a spacing value on the column spread?
 7. Outline (contour) spacing as a spread option: part of this effort, or its own issue?
 8. Root alignment: `alignment: "anchor"`, or a relation in GoTree?
 9. Is fill-the-height spacing part of this effort, or does it stay with #1165?
