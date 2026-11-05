@@ -307,13 +307,15 @@ export const layer = createNodeOperatorSequential(
     // one, the index of that part in this layer's `parts`; where it is
     // another, that part; undefined where it is not known (the target's
     // parent is no layer).
-    // TODO(#1257): a shortcut. The type pass runs bottom-up, so a layer
-    // that encloses this one is not typed while this one is: reading its
-    // parts would type it, which types this layer again (a cycle, for a
-    // ref to a node of an enclosing layer). Such a ref takes its own part
-    // in this layer instead until the claim walk, when every layer is
-    // typed. The right fix types the collection of parts in a pass of its
-    // own, after every layer's type, so no ref waits on evaluation order.
+    // TODO(#1318): a shortcut. Reading the parts of the target's layer
+    // types it, and where that layer is being typed (`beingTyped`), that
+    // is a cycle: a layer that encloses this one, which the bottom-up type
+    // pass types after this one, or a sibling whose ref names a node of
+    // this layer (two layers whose aligns each name a ref into the other).
+    // Such a ref takes its own part in this layer instead until the claim
+    // walk, when every layer is typed. The right fix types the collection
+    // of parts in a pass of its own, after every layer's type, so no ref
+    // waits on evaluation order.
     const refHome = (
       c: GoFishRef,
       axis: 0 | 1
@@ -324,9 +326,7 @@ export const layer = createNodeOperatorSequential(
       const k = holder.indexOfChild(target);
       if (k === undefined) return;
       if (holder === node) return k;
-      if (holder._underlyingSpace === undefined)
-        for (let p = node.parent; p !== undefined; p = p.parent)
-          if (p === holder) return;
+      if (holder.beingTyped) return;
       return holder.claimWalk?.parts(axis)?.[k];
     };
     // The part of this layer's space child `i` is in on `axis`, given

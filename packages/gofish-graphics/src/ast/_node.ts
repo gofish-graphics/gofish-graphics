@@ -1256,29 +1256,42 @@ export class GoFishNode {
     if (!hasUnits()) {
       return withUnits(this.walkUnits(), () => this.resolveUnderlyingSpace());
     }
-    const childSpaces = this.children.map((child) =>
-      child.resolveUnderlyingSpace()
-    );
-    typeWalkDepth++;
+    this._beingTyped = true;
     try {
-      this._underlyingSpace = elaborateSize(
-        this._resolveUnderlyingSpace(
-          childSpaces,
-          this.children,
-          this.constraints
-        )
+      const childSpaces = this.children.map((child) =>
+        child.resolveUnderlyingSpace()
       );
-    } catch (e) {
-      // A measure clash knows its axis index; this node knows what that axis
-      // is called here (`x`, `y`, or a coordinate space's own name).
-      throw e instanceof MeasureClash
-        ? e.named((axis) => this.axisName(axis))
-        : e;
+      typeWalkDepth++;
+      try {
+        this._underlyingSpace = elaborateSize(
+          this._resolveUnderlyingSpace(
+            childSpaces,
+            this.children,
+            this.constraints
+          )
+        );
+      } catch (e) {
+        // A measure clash knows its axis index; this node knows what that
+        // axis is called here (`x`, `y`, or a coordinate space's own name).
+        throw e instanceof MeasureClash
+          ? e.named((axis) => this.axisName(axis))
+          : e;
+      } finally {
+        typeWalkDepth--;
+      }
     } finally {
-      typeWalkDepth--;
+      this._beingTyped = false;
     }
     return this._underlyingSpace;
   }
+
+  /** Whether this node's type is being resolved: {@link
+   *  resolveUnderlyingSpace} is running on it, so reading its type now
+   *  would resolve it again (a cycle). */
+  public get beingTyped(): boolean {
+    return this._beingTyped;
+  }
+  private _beingTyped = false;
 
   /**
    * This node's y frame (see `axisDirection.ts`): its y direction and whether
@@ -1378,6 +1391,26 @@ export class GoFishNode {
         `[gofish] ${this.type}: a size claim was read during type inference. ` +
           `Types never read claims; compute this from the types instead.`
       );
+    // A claim that reads itself has no answer: refs that place each
+    // other's targets (two layers whose aligns each name a ref into the
+    // other) are a cycle.
+    if (this._beingClaimed)
+      throw new Error(
+        `[gofish] ${this.type}: its size claim depends on itself. Refs ` +
+          `that place each other's targets (two layers that each align to ` +
+          `a ref into the other) are a cycle; place one of them first.`
+      );
+    this._beingClaimed = true;
+    try {
+      return this.claimOnce();
+    } finally {
+      this._beingClaimed = false;
+    }
+  }
+  private _beingClaimed = false;
+
+  /** One run of {@link resolveExtent}. */
+  private claimOnce(): Size<Extent | undefined> {
     const spaces = this.resolveUnderlyingSpace();
     const childSpaces = this.children.map((c) => c.resolveUnderlyingSpace());
     const childExtents = this.children.map((c) => c.resolveExtent());

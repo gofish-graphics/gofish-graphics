@@ -593,11 +593,16 @@ each inherent to what the origin states are:
     the inner it pads (`applyNestSpacePlan`), so the outer box of a nest
     is in the inner's space;
   - a `ref` stand-in is in the part its target is in, in its target's
-    layer (`refHome` in `layer`). The type pass runs bottom-up, so a
-    layer that encloses this one is not typed yet while this one is: a
-    ref to one of its nodes takes its own part in this layer during the
-    type pass, and its target's in the claim walk, when every layer is
-    typed. This is a declared shortcut around evaluation order;
+    layer (`refHome` in `layer`). Reading that layer's parts types it,
+    and where it is being typed already (`GoFishNode.beingTyped`) that
+    would be a cycle: a layer that encloses this one, which the
+    bottom-up type pass types after this one, or a sibling layer whose
+    own ref names a node of this one. A ref into a layer being typed
+    takes its own part in this layer during the type pass, and its
+    target's in the claim walk, when every layer is typed. This is a
+    declared shortcut around evaluation order (#1318). Two layers that
+    each place a node by a ref into the other are a cycle in the claim
+    walk too, which reports it (`resolveExtent`);
   - a child that is in no continuous or ordinal part by the rules above,
     and that a point or `"span"` `align` places at a partner that is in
     one, is in its partner's part on that axis (`alignedParts` in

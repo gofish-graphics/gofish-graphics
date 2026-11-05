@@ -34,6 +34,10 @@ import {
 import { runLayout } from "../ast/gofish";
 import { GoFishNode } from "../ast/_node";
 import { lowerToDisplayList } from "../ast/displayList/lower";
+import { Rect } from "../ast/shapes/rect";
+import { layer as Layer } from "../ast/graphicalOperators/layer";
+import { ref } from "../ast/shapes/ref";
+import { resolveReferences } from "../ast/_ref";
 import { check, items, report } from "./testHelpers";
 
 /** Every node of the tree under `n`, `n` included. */
@@ -386,6 +390,51 @@ async function main() {
       "a label aligned to its bar's center is no dressing",
       center.walk.dressing[0].size === 0 && center.walk.dressing[1].size === 0,
       center.walk.dressing
+    );
+  }
+
+  console.log("\n# sibling layers whose aligns each name a ref into the other");
+  {
+    // A's ref is in the part its target is in, in B, and B's in A: each
+    // layer's parts read the other's. A layer that is being typed is read
+    // as the ref's own part (`refHome`, #1318), so the type pass ends.
+    // Each places a node by the other's, so the claim is a cycle: an error
+    // that says so, not a stack overflow.
+    const R = Rect as any;
+    const L = Layer as any;
+    const build = async () => {
+      const a1 = R({ x: 0, y: 0, w: 20, h: 20 }).name("a1");
+      const b1 = R({ x: 50, y: 30, w: 20, h: 20 }).name("b1");
+      const A = L([a1, ref(b1).name("rb")]).relate(({ a1, rb }: any) => [
+        Constraint.align({ x: "start" }, [a1, rb]),
+      ]);
+      const B = L([b1, ref(a1).name("ra")]).relate(({ b1, ra }: any) => [
+        Constraint.align({ y: "start" }, [b1, ra]),
+      ]);
+      return (await L([A, B])) as GoFishNode;
+    };
+    let typed: unknown;
+    try {
+      const root: any = await build();
+      await root.resolveAliases();
+      resolveReferences(root);
+      root.resolveUnderlyingSpace();
+      typed = true;
+    } catch (e) {
+      typed = String(e);
+    }
+    check("the type pass ends", typed === true, typed);
+    let laid: unknown;
+    try {
+      await (await build()).toDisplayList();
+      laid = "laid out";
+    } catch (e) {
+      laid = String(e);
+    }
+    check(
+      "layout reports the cycle",
+      typeof laid === "string" && laid.includes("depends on itself"),
+      laid
     );
   }
 
