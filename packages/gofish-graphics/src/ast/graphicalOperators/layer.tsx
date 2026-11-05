@@ -381,7 +381,11 @@ export const layer = createNodeOperatorSequential(
     // ordinal part on the axis, the anchor is at a datum there, and an
     // operand in no such part is in its partner's: it is at that datum, as
     // a circle is, with a size of its own in pixels (a flower aligned to the
-    // end of its stem). Aligns chain, so this runs until nothing changes. A
+    // end of its stem). A `"span"` align ties both endpoints, so both are at
+    // data and the operand is in its partner's part the same way. A
+    // `"size"` align ties only a length and leaves the position free, so no
+    // endpoint is at a datum and it joins nothing. Aligns chain, so this
+    // runs until nothing changes. A
     // `ref` operand is in the part its target is in, in its target's layer
     // (as `partOf` reads it).
     // TODO(#1053, #1054): a shortcut. A pixel offset on an aligned operand
@@ -400,7 +404,10 @@ export const layer = createNodeOperatorSequential(
         s?.kind === "continuous" || s?.kind === "ordinal";
       const { operands, keyOf } = resolution(node);
       const aligns = constraints
-        .filter((c) => c.type === "align" && isPointAlign(c[axisName(axis)]))
+        .filter((c) => {
+          const spec = c.type === "align" ? c[axisName(axis)] : undefined;
+          return spec === "span" || isPointAlign(spec);
+        })
         .map((c) =>
           c.children
             .map((r) => operands.get(keyOf(r)))

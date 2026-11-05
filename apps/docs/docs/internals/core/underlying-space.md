@@ -595,15 +595,19 @@ each inherent to what the origin states are:
   - a `ref` stand-in is in the part its target is in, in its target's
     layer;
   - a child that is in no continuous or ordinal part by the rules above,
-    and that a point `align` places at a partner that is in one, is in its
-    partner's part on that axis (`alignedParts` in `layer`). An align has
-    no offset or gap, so the child's anchor is at the partner's anchor,
+    and that a point or `"span"` `align` places at a partner that is in
+    one, is in its partner's part on that axis (`alignedParts` in
+    `layer`). An align has no offset or gap, so the child's anchor is at the partner's anchor,
     which is a datum there: the child is at a datum, as a circle is, with a
     size of its own in pixels. A polar chart aligned to the end of its
     stem (`Forward Syntax/Flower Chart`) is in the stem's y part, though
-    it is placed whole. Aligns chain, and a `ref` operand counts as its
-    target's part. A gap is a `distribute`'s `spacing`, not an align, and
-    a node an `enclose` draws around refs is aligned to nothing, so
+    it is placed whole. A `"span"` align ties both endpoints of the child
+    to its partner's, so both are at data and the child joins its
+    partner's part the same way. A `"size"` align ties only a length and
+    leaves the child's position free, so no endpoint is at a datum and
+    the child joins nothing. Aligns chain, and a `ref` operand counts as
+    its target's part. A gap is a `distribute`'s `spacing`, not an align,
+    and a node an `enclose` draws around refs is aligned to nothing, so
     neither joins a part this way.
 
   This is a shortcut tied to the deferred pixel offset semantics (#1053,

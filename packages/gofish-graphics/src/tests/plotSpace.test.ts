@@ -312,6 +312,30 @@ async function main() {
     ]);
   }
   {
+    // A shade with no height of its own, span-aligned to a bar whose height
+    // is data: a span ties both endpoints, so both are at data on y and the
+    // shade is in the bar's part there.
+    const shaded = layer([
+      rect({ y: 0, w: 4, h: value(30) }).name("bar"),
+      rect({ w: 12 }).name("shade"),
+    ]).relate(({ bar, shade }: any) => [
+      Constraint.align({ x: "middle", y: "span" }, [bar, shade]),
+    ]);
+    const data = await runLayout(
+      { w: 100, h: 100 },
+      await (shaded as any)(undefined)
+    );
+    const walk = (data.child as GoFishNode).claimWalk!;
+    check(
+      "a span align puts the shade in the bar's continuous part on y",
+      walk.parts(1)?.[1]?.kind === "continuous",
+      walk.parts(1)?.map((s) => s.kind)
+    );
+    check("the span-aligned shade is no dressing", walk.dressing[1].size === 0, [
+      ...walk.dressing[1],
+    ]);
+  }
+  {
     // A value label on its bar: a chain sets it a gap of pixels past the
     // bar's top on y, and an align centers it on the bar on x. On y its
     // anchor is a datum plus pixels, in no space of the layer's, so it is
