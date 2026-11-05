@@ -108,11 +108,11 @@ export type ClaimChild = {
    *  takes it where layout put it (`at:`) unless a `position` override
    *  owns the axis. */
   placesItself?: boolean;
-  /** The part of the layer's space it is in on the axis: its space in
-   *  the layer, as the type pass infers it (`ClaimWalk.parts`). The
-   *  layer's axes visualize the parts that are continuous or ordinal;
-   *  any other child is beside them or over them (dressing). */
-  part?: UnderlyingSpace;
+  /** It is in a part of the layer's space its axes visualize on the axis:
+   *  its space in the layer, as the type pass infers it
+   *  (`ClaimWalk.parts`), is continuous or ordinal (`isVisualized`). Any
+   *  other child is beside them or over them (dressing). */
+  visualized?: boolean;
   /** Its plot on the axis, about its origin, where it is not its whole
    *  claim (an outline, dressing or chrome around it): a chain lays it by
    *  its plot, as layout's `localSpan` does, so what dresses a part
@@ -565,22 +565,21 @@ export function placeByClaims(
       unplaced.add(i);
   });
   // Dressing: a child outside the part of the layer's space its axes
-  // visualize (`ClaimChild.part`, from the type pass). A layer is a
+  // visualize (`ClaimChild.visualized`, from the type pass). A layer is a
   // collection of its children's spaces; its axes attach to the children
   // whose space there is continuous or ordinal, and the rest (an outline
   // around refs, a value label, a chart of outlines over a scatter) is
   // beside them or over them. It takes room, but is no part of the plot.
   // A layer with no such part has no dressing: all of it is plot. Ink and
   // a ring's chrome are neither.
-  const visualized = (c: ClaimChild) =>
-    c.part?.kind === "continuous" || c.part?.kind === "ordinal";
-  const plotPart = (c: ClaimChild, i: number) =>
-    !ink.has(i) && c.chrome !== true;
-  const dressing = new Set<number>();
-  if (children.some((c, i) => plotPart(c, i) && visualized(c)))
-    children.forEach((c, i) => {
-      if (plotPart(c, i) && !visualized(c)) dressing.add(i);
-    });
+  const outside: number[] = [];
+  let anyVisualized = false;
+  children.forEach((c, i) => {
+    if (ink.has(i) || c.chrome === true) return;
+    if (c.visualized === true) anyVisualized = true;
+    else outside.push(i);
+  });
+  const dressing = new Set<number>(anyVisualized ? outside : []);
   // What the solve leaves out: the ink, and the stand-ins it cannot place.
   const out = (i: number) =>
     ink.has(i) || (children[i].standIn && children[i].placed === undefined);

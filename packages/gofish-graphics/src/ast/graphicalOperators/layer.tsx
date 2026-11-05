@@ -21,6 +21,7 @@ import {
   UNDEFINED,
   UnderlyingSpace,
   isUNDEFINED,
+  isVisualized,
   magnitude,
 } from "../underlyingSpace";
 import { Extent, impliedExtent, padExtent, shiftExtent } from "../extent";
@@ -53,13 +54,17 @@ import {
   type ResolvedConstraints,
   type ResolvedOperand,
 } from "../_ref";
-import { applyRelationalZBelowDefaults } from "../constraints/relationalPaint";
+import {
+  applyRelationalZBelowDefaults,
+  targetOf,
+} from "../constraints/relationalPaint";
 import {
   axisIndex,
   axisName,
   isPointAlign,
   directSlot,
   type ConstraintPosScales,
+  type ResolvedOperands,
 } from "../constraints/shared";
 import type { LocalSpan } from "../constraints/placementProgramLowerer";
 import {
@@ -283,7 +288,7 @@ export const layer = createNodeOperatorSequential(
         key: c.uid,
         extent: extents[i]?.[axis],
         space: c.resolveUnderlyingSpace()[axis],
-        part: partOf(c, axis),
+        visualized: isVisualized(partAt(layerTypes!.parts[axis], i, axis)),
         standIn: c instanceof GoFishRef,
         fromRefs: c instanceof GoFishNode && c.placedFromRefs !== undefined,
         placed: placed[i],
@@ -297,17 +302,44 @@ export const layer = createNodeOperatorSequential(
         startBaseline: c instanceof GoFishNode && c.baselineIsStart(axis),
       }));
     };
-    // The part of this layer's space `c` is in on `axis` (`ClaimWalk.parts`).
     // A `ref` stand-in is in the part its target is in, in its target's
-    // layer: it stands for that node.
-    const partOf = (c: GoFishAST, axis: 0 | 1): UnderlyingSpace | undefined => {
-      const target = c instanceof GoFishRef ? c.targetNode : c;
-      if (!(target instanceof GoFishNode)) return undefined;
-      const holder = c instanceof GoFishRef ? target.parent : node;
-      const i = holder?.indexOfChild(target);
-      const part =
-        i === undefined ? undefined : holder?.claimWalk?.parts(axis)?.[i];
-      return part ?? target.resolveUnderlyingSpace()[axis];
+    // layer, on `axis`: it stands for that node. Where that layer is this
+    // one, the index of that part in this layer's `parts`; where it is
+    // another, that part; undefined where it is not known (the target's
+    // parent is no layer).
+    // TODO(#1257): a shortcut. The type pass runs bottom-up, so a layer
+    // that encloses this one is not typed while this one is: reading its
+    // parts would type it, which types this layer again (a cycle, for a
+    // ref to a node of an enclosing layer). Such a ref takes its own part
+    // in this layer instead until the claim walk, when every layer is
+    // typed. The right fix types the collection of parts in a pass of its
+    // own, after every layer's type, so no ref waits on evaluation order.
+    const refHome = (
+      c: GoFishRef,
+      axis: 0 | 1
+    ): number | UnderlyingSpace | undefined => {
+      const target = targetOf(c);
+      const holder = target?.parent;
+      if (target === undefined || !(holder instanceof GoFishNode)) return;
+      const k = holder.indexOfChild(target);
+      if (k === undefined) return;
+      if (holder === node) return k;
+      if (holder._underlyingSpace === undefined)
+        for (let p = node.parent; p !== undefined; p = p.parent)
+          if (p === holder) return;
+      return holder.claimWalk?.parts(axis)?.[k];
+    };
+    // The part of this layer's space child `i` is in on `axis`, given
+    // `parts` (`ClaimWalk.parts`, or the type pass's so far): its own, or a
+    // `ref`'s target's (`refHome`).
+    const partAt = (
+      parts: readonly UnderlyingSpace[],
+      i: number,
+      axis: 0 | 1
+    ): UnderlyingSpace => {
+      const c = node.children[i];
+      const home = c instanceof GoFishRef ? refHome(c, axis) : undefined;
+      return typeof home === "number" ? parts[home] : (home ?? parts[i]);
     };
     // A category label along its own axis takes room only past the ends
     // of its axis (#1115): between neighbors it overdraws them rather than
@@ -385,9 +417,8 @@ export const layer = createNodeOperatorSequential(
     // data and the operand is in its partner's part the same way. A
     // `"size"` align ties only a length and leaves the position free, so no
     // endpoint is at a datum and it joins nothing. Aligns chain, so this
-    // runs until nothing changes. A
-    // `ref` operand is in the part its target is in, in its target's layer
-    // (as `partOf` reads it).
+    // runs until nothing changes. A `ref` operand is in the part its target
+    // is in, in its target's layer (`refHome`), and an align never moves it.
     // TODO(#1053, #1054): a shortcut. A pixel offset on an aligned operand
     // (a `.translate()` wrapper) would put its anchor at datum + pixels,
     // which is in no data space; today the align's solve overrides that
@@ -397,49 +428,49 @@ export const layer = createNodeOperatorSequential(
     const alignedParts = (
       axis: 0 | 1,
       base: UnderlyingSpace[],
-      childNodes: readonly GoFishAST[],
-      constraints: readonly ConstraintSpec[]
+      aligns: readonly ConstraintSpec[],
+      resolved: ResolvedOperands
     ): UnderlyingSpace[] => {
-      const visualized = (s: UnderlyingSpace | undefined) =>
-        s?.kind === "continuous" || s?.kind === "ordinal";
-      const { operands, keyOf } = resolution(node);
-      const aligns = constraints
-        .filter((c) => {
-          const spec = c.type === "align" ? c[axisName(axis)] : undefined;
-          return spec === "span" || isPointAlign(spec);
-        })
-        .map((c) =>
-          c.children
-            .map((r) => operands.get(keyOf(r)))
-            .filter((op) => op?.direct === true)
-            .map((op) => op!.child)
-        );
-      if (aligns.length === 0) return base;
+      // Per align, the operands it puts in a part (no `ref`), and where
+      // each operand's part is read: an index into `parts`, or a part of
+      // another layer's.
+      const groups: {
+        moved: number[];
+        reads: (number | UnderlyingSpace)[];
+      }[] = [];
+      for (const c of aligns) {
+        const spec = c.type === "align" ? c[axisName(axis)] : undefined;
+        if (spec !== "span" && !isPointAlign(spec)) continue;
+        const moved: number[] = [];
+        const reads: (number | UnderlyingSpace)[] = [];
+        for (const r of c.children) {
+          const i = directSlot(resolved, r);
+          if (i === undefined) continue;
+          const child = node.children[i];
+          if (child instanceof GoFishRef) reads.push(refHome(child, axis) ?? i);
+          else {
+            moved.push(i);
+            reads.push(i);
+          }
+        }
+        groups.push({ moved, reads });
+      }
+      if (groups.length === 0) return base;
       const parts = [...base];
-      const refPart = (i: number): UnderlyingSpace => {
-        const c = childNodes[i];
-        if (!(c instanceof GoFishRef)) return parts[i];
-        const target = c.targetNode;
-        const holder = target instanceof GoFishNode ? target.parent : undefined;
-        if (!(holder instanceof GoFishNode)) return parts[i];
-        const k = holder.indexOfChild(target!);
-        if (k === undefined) return parts[i];
-        if (holder === node) return parts[k];
-        // A holder that is this layer or holds it is not typed yet.
-        for (let p: GoFishAST | undefined = node; p; p = p.parent)
-          if (p === holder) return parts[i];
-        return holder.claimWalk?.parts(axis)?.[k] ?? parts[i];
-      };
+      const read = (r: number | UnderlyingSpace) =>
+        typeof r === "number" ? parts[r] : r;
       for (let changed = true; changed; ) {
         changed = false;
-        for (const members of aligns) {
-          const at = members.map(refPart).find(visualized);
+        for (const { moved, reads } of groups) {
+          let at: UnderlyingSpace | undefined;
+          for (const r of reads)
+            if (isVisualized(read(r))) {
+              at = read(r);
+              break;
+            }
           if (at === undefined) continue;
-          for (const i of members)
-            if (
-              !(childNodes[i] instanceof GoFishRef) &&
-              !visualized(parts[i])
-            ) {
+          for (const i of moved)
+            if (!isVisualized(parts[i])) {
               parts[i] = at;
               changed = true;
             }
@@ -572,6 +603,7 @@ export const layer = createNodeOperatorSequential(
       // whose marks are this layer's is dressing. Once data types and
       // space types are aligned, pixels should be a space of their own and
       // the collection keyed by space, not by child.
+      const aligns = constraints.filter((c) => c.type === "align");
       const parts = ([0, 1] as const).map((axis) =>
         alignedParts(
           axis,
@@ -581,8 +613,8 @@ export const layer = createNodeOperatorSequential(
             const whole = child instanceof GoFishNode && child.plotIsBox(axis);
             return whole || sharing.sets[axis][i] !== 0 ? UNDEFINED : c[axis];
           }),
-          childNodes,
-          constraints
+          aligns,
+          { operands, keyOf }
         )
       ) as [UnderlyingSpace[], UnderlyingSpace[]];
       return {

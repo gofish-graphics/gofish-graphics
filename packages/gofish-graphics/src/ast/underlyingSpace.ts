@@ -487,6 +487,12 @@ export const UNDEFINED: UnderlyingSpace = { kind: "undefined" };
 export const isUNDEFINED = (space: UnderlyingSpace): space is UNDEFINED_TYPE =>
   space.kind === "undefined";
 
+/** Whether an axis visualizes `space`: it is continuous or ordinal. A
+ *  layer's axes attach to the parts of its space that are
+ *  (`ClaimWalk.parts`), and any other child is dressing. */
+export const isVisualized = (space: UnderlyingSpace | undefined): boolean =>
+  space?.kind === "continuous" || space?.kind === "ordinal";
+
 /** The space of a datum point: a pinned zero-width interval at `pos`, with
  *  the datum's units (on a calendar when the datum is a time). */
 const pointAt = (pos: MaybeValue<number | undefined>): CONTINUOUS_TYPE => {
