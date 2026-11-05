@@ -12,6 +12,7 @@ covers:
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/beyond.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/separate.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/smooth.ts
+  - packages/gofish-graphics/src/ast/graphicalOperators/enclose/grid.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/oval.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/members.ts
   - packages/gofish-graphics/src/ast/geometry/ring.ts
@@ -92,9 +93,10 @@ loops (`ringsEnclosingCircle`, which `polygon` uses too) grown by half the
 stroke. So a `pack` that holds it packs the outline, and an
 outer `enclose` hugs it. A box shape's outline is its padded box, so its
 geometry is that box alone, and a `pack` packs the circle around the box. A
-box with nodes in `avoiding` is cut like the other shapes: its outline is the
-rounded box as a ring (`roundedBoxRing`), cut by the keep-outs, and it is
-drawn as that path, not as a rectangle. Both are kept in `renderData`, and
+box with nodes in `avoiding` is cut like the other shapes when a keep-out
+reaches it: its outline is the rounded box as a ring (`roundedBoxOutline`,
+its corners within 0.01 px), cut by the keep-outs, and it is drawn as that
+path. A box no keep-out reaches stays a rectangle. Both are kept in `renderData`, and
 `lower` maps them through `local` (the node's translate and y direction) and
 `toPixel`. A curved outline is one SVG `path` over all its loops. Its outer loops and
 its holes wind opposite ways, so the default nonzero fill rule leaves the
@@ -337,7 +339,13 @@ that no sliver between two keep-outs survives. The members win over every
 keep-out, so the cut never enters a padded member, and the corners it leaves
 are rounded inward (`roundCut`). An avoided node is kept out as the disc that
 holds it. The cut comes after the smoothing, so neither the smoothing nor its
-offset moves the outline back across it. `src/tests/enclose.test.ts` checks
+offset moves the outline back across it. It is one step after the shape's
+own: an outline that no ring of the keep-out region comes within the cut's
+reach of is returned as it is, and the region is closed once, only when some
+outline comes near the keep-outs (a closing lies within the dilation by its
+disc, so this test is exact). The field's distances and windings come from
+grids over the rings' segments (`grid.ts`), which the blend and the
+smoothing share. `src/tests/enclose.test.ts` checks
 that no outline point is within an avoided node's clearance, and that
 separate pieces stay `clearance` apart.
 
@@ -406,7 +414,7 @@ Shortcuts, each a known approximation:
 - A blob over a 1,000-point line and 300 dots takes about 0.15 s at
   convexity 0 and 0.15 to 0.2 s at 0.5 and 0.9 (in Node), against about
   0.15 s for the old blob. Most of it is the exact closing of the members and
-  links. The work is cached only within one call, so changing only the
+  links. Nothing is cached between calls (#1314), so changing only the
   convexity recomputes the join tree and the blend's grid.
 - The blend is solved on a grid, so its outline is off the exact harmonic
   level set by the grid's error: within 0.3 px of a fine finite-element
