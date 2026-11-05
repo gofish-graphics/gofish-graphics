@@ -41,3 +41,41 @@ export const depLinks: Link[] = [
   ["cli", "utils"], ["ui", "react"], ["ui", "utils"], ["router", "react"],
   ["api", "http"], ["api", "zod"], ["http", "utils"], ["utils", "lodash"],
 ].map(([source, target]) => ({ source, target, value: 1 }));
+
+// ---------------------------------------------------------------------------
+// Round 2: a 44-node subset of the flare class hierarchy (32 leaves, depth 3).
+// Uneven on purpose: depth-2 leaves sit next to depth-3 subtrees, which is
+// where contour packing (Reingold-Tilford) beats nesting by bounding box.
+export type Tree = { name: string; children?: Tree[] };
+const leaves = (...names: string[]): Tree[] => names.map((name) => ({ name }));
+export const flare: Tree = {
+  name: "flare",
+  children: [
+    {
+      name: "analytics",
+      children: [
+        { name: "cluster", children: leaves("Agglomerative", "Community", "Hierarchical", "MergeEdge") },
+        { name: "graph", children: leaves("Betweenness", "LinkDistance", "MaxFlowMinCut", "ShortestPaths", "SpanningTree") },
+        { name: "optimization", children: leaves("AspectRatioBanker") },
+      ],
+    },
+    {
+      name: "animate",
+      children: [
+        ...leaves("Easing", "FunctionSequence"),
+        { name: "interpolate", children: leaves("ArrayInterp", "ColorInterp", "DateInterp") },
+        ...leaves("ISchedulable", "Parallel", "Pause"),
+      ],
+    },
+    {
+      name: "data",
+      children: [
+        { name: "converters", children: leaves("Converters", "DelimitedText", "GraphML") },
+        ...leaves("DataField", "DataSchema"),
+      ],
+    },
+    { name: "display", children: leaves("DirtySprite", "LineSprite", "RectSprite", "TextSprite") },
+    { name: "flex", children: leaves("FlareVis") },
+    { name: "physics", children: leaves("DragForce", "GravityForce", "IForce", "NBodyForce") },
+  ],
+};

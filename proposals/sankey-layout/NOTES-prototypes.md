@@ -454,3 +454,269 @@ spread({ dir: "x" }, [refs[0], text(...)]))` as a sibling puts it at the
    `yMin` is a data axis that points up (B had to flip d3's px).
 9. Long right-column labels run past the canvas (energy, 960 px): the label
    width is not part of the column spread's room.
+
+---
+
+# Round 2
+
+Josh's questions: why does barycenter have fewer crossings than d3; can
+column spacing fix the overlap; can tidy tree layout teach us something.
+New stories: `Round 2 Spacing/*` and `Round 2 Tree/*`. New helpers at the
+bottom of `_proto.ts` (`gapsFromLinks`, `ribbonMetrics`, `flatTree`,
+`boxTree`, `contourTree`, `clusterTree`). The C wrapper moved to
+`_layered.ts` so both C and Round 2 use it (C's renders are unchanged).
+Numbers: `d3-reference/r2-metrics.ts` (run from `packages/gofish-graphics`
+with `pnpm exec tsx ../../proposals/sankey-layout/d3-reference/r2-metrics.ts`).
+d3 tree references: `d3-reference/r2-render-d3-tree.mjs` (d3-hierarchy 3).
+
+## R2.1 Column spacing from the links
+
+**The curve's slope.** `Curve.bezier()` puts both control points at the
+main-axis midpoint (d3.linkHorizontal), so x is not linear in t:
+x(t) = g·(1.5·t(1−t) + t³), y(t) = Δy·(3t² − 2t³). The steepest point is
+t = ½ with slope **2Δy/g** (not 1.5Δy/g, which is smoothstep over a linear
+x). So a slope cap s needs g ≥ 2Δy/s. A different curve gives a different
+constant (linear: Δy/g; orthogonal: a vertical segment, so no cap helps),
+which is why the strategy has to know the link mark's curve.
+
+**Stand-in.** `gapsFromLinks(geometry, { w, nodeWidth, minGap, rule })`
+runs after y placement. `need_i` = the steepest link crossing gap i
+(2Δy/span; a link spanning k gaps charges Δy/k to each). Gaps get
+`minGap` plus the rest of the fixed width in proportion to need, which
+equalizes every gap's steepest slope and so minimizes the largest slope
+(like an `fr` weight per gap). Rule `"sum"` instead minimizes total
+thinning, Σ t·m² over all links, which gives g_i ∝ (Σ t·Δy²)^(1/3).
+
+```ts
+let o = opts(960, 600, "relax");
+const { colX } = gapsFromLinks(layeredGeometry(names, links, o), {
+  w: o.w,
+  nodeWidth: 12,
+  minGap: 30,
+});
+layered(names, links, { ...o, colX }, "sankey");
+```
+
+Renders (same canvas width, same y, only column x moves):
+`img/r2-energy-barycenter-even.png` / `r2-energy-barycenter-link-gaps.png`,
+`img/r2-energy-relax-even.png` / `r2-energy-relax-link-gaps.png`,
+`img/r2-small-*-even.png` / `r2-small-*-link-gaps.png`.
+
+**Metrics** (sampled every px along x):
+
+- _overplot_: area where ribbons lie on top of each other,
+  Σ_x (Σ band heights − union of band heights), as % of ribbon area. A
+  crossing at a shallow angle overlaps over a long run, a steep one briefly,
+  so this weighs crossings by how much they cover;
+- _behind_: ribbon area passing behind other nodes;
+- _max slope_; _thinning_: how much thinner bands look at their steepest
+  point, thickness-weighted (t·(1 − 1/√(1+m²))).
+
+| Layout                           | overplot (even → link gaps) | max slope   | thinning      |
+| -------------------------------- | --------------------------- | ----------- | ------------- |
+| energy barycenter, steepest rule | 21.3% → 20.9%               | 3.67 → 2.37 | 20.9% → 19.7% |
+| energy barycenter, sum rule      | 21.3% → 21.3%               | 3.67 → 3.41 | 20.9% → 18.7% |
+| energy relaxed, steepest rule    | 3.7% → 3.4%                 | 5.58 → 2.70 | 9.1% → 9.9%   |
+| energy relaxed, sum rule         | 3.7% → 4.0%                 | 5.58 → 5.78 | 9.1% → 8.4%   |
+| small barycenter, steepest       | 2.2% → 2.2%                 | 0.65 → 0.59 | 6.0% → 6.3%   |
+| small relaxed, steepest          | 8.5% → 8.6%                 | 1.70 → 1.46 | 10.0% → 11.2% |
+
+**Finding: column spacing cannot remove overlap.** Stretching one gap
+horizontally is an affine map, so the overlap area inside it scales with the
+gap's width exactly like the ribbon area does: the overlapped fraction is a
+property of the y placement and the order. Redistributing width only moves
+weight between gaps (≤ 7% either way). What spacing does change is slope:
+the steepest rule halves the worst slope on energy (5.58 → 2.70 relaxed),
+which reads as less "tangle" around the steep bands, at the cost of
+crowding other gaps (energy relaxed: gap 1 shrinks from 101 to 61 px and
+the labels there collide with ribbons). Steeper crossings are also nearer
+right angles, which crossing-angle studies find easier to read, so flatter
+is not purely better.
+
+**Finding: overlap is decided by y, and relaxation wins it on energy.**
+Overplot by y placement alone (even columns):
+
+|        | data order | barycenter (tight, centered) | relaxed  |
+| ------ | ---------- | ---------------------------- | -------- |
+| energy | 25.0%      | 21.3%                        | **3.7%** |
+| small  | 15.5%      | **2.2%**                     | 8.5%     |
+
+So on energy, barycenter's "17 crossings vs d3's 27" hides a 6× larger
+overlapped area: d3's relaxation lets thin links cross to keep thick bands
+straight, and an unweighted crossing count misses that. d3 runs no
+crossing-reduction phase at all; its order is a side effect of re-sorting
+by y after each relaxation step. This corrects round 1's "the relaxed look
+is mostly aesthetic": on the big graph it is most of the legibility.
+
+**How a user would say it.** It must run after y placement (it reads node
+y and link ends), and it reads the links and the link curve.
+
+1. Spacing as a function, `spread({ by: "layer", dir: "x", spacing: (left, right) => px })`:
+   the two neighbors are columns, but the function needs the links between
+   them and their curve, so it would close over the links table and refs.
+   Possible, but it is the user writing `gapsFromLinks` by hand.
+2. x as a derived field (a helper, then `scatter({ x })`): the same costs as
+   approach B (pixels outside the layout, fixed canvas width).
+3. **A spacing strategy that knows the links** (placeholder spelling):
+   ```js
+   spread({
+     by: "layer",
+     dir: "x",
+     spacing: Gaps.fromLinks(links, { min: 30, curve: Curve.bezier() }),
+   });
+   ```
+   ```python
+   spread(by="layer", dir="x", spacing=Gaps.from_links(links, min=30, curve=Curve.bezier()))
+   ```
+   Or, more naturally, an option of the C operator, which already owns the
+   links and the link mark: `columnSpacing: "links"`.
+
+**Does x depending on y break the per-axis model?** No cycle: the columns'
+y never reads x (relaxation weighs links by layer distance, not px), so it
+is a one-way y → x dependency. Bottom-up layout already places a spread's
+children (each column, with its nodes' y) before the spread places them on
+x. What it does need is the resolved px y (after the shared scale σ is
+solved) to be visible to the x allocation, and the link geometry, which in
+approach A lives in a different layer (the ribbons). That second part is
+why it fits C better than A.
+
+## R2.2 Tidy trees under the same factoring
+
+Data: a 44-node flare subset (`data.ts`, 32 leaves, depth 3, depth-2
+leaves next to depth-3 subtrees). All renders: 8 px nodes, 6 px min gap,
+128 px per layer, separation 1 (d3's default of 2 between cousins is
+turned off on both sides). Canvas height = the layout's breadth, so image
+heights compare directly.
+
+| Layout                                                    | breadth                             | image                         |
+| --------------------------------------------------------- | ----------------------------------- | ----------------------------- |
+| A as is: each column its own centered spread              | 288                                 | `r2-tree-flat-a.png`          |
+| Nested spreads, each subtree a box (gotree `distribute`)  | 442                                 | `r2-tree-nested.png`          |
+| Contour packing (RT stand-in), placed by spread + scatter | **386** (13% less than nested)      | `r2-tree-contour.png`         |
+| d3.tree reference                                         | 386; stand-in matches it to 0.00 px | `r2-d3-tree.png`              |
+| Cluster rule (leaves last, parent at children's mean)     | 442                                 | `r2-tree-cluster.png`         |
+| d3.cluster reference                                      | 442; stand-in matches it to 0.00 px | `r2-d3-cluster.png`           |
+| Cluster y with `Layering.justify`                         | 442                                 | `r2-tree-cluster-justify.png` |
+
+Code (contour and cluster are placed the same way, approach A's x plus a
+`scatter` on y; the y comes from the stand-in):
+
+```ts
+chart(rows) // rows: { name, layer, y }
+  .flow(
+    spread({
+      by: field("layer").sort(),
+      dir: "x",
+      spacing: 120,
+      alignment: "start",
+    }),
+    scatter({ by: "name", y: "y" })
+  )
+  .mark(rect({ w: 8, h: 8 }).label("name", { position: "right" }).name("n"))
+  .layer(
+    chart(links)
+      .flow(resolve(["source", "target"], { from: selectAll("n") }))
+      .mark((es) =>
+        layer(
+          es.map((e) =>
+            line({ curve: Curve.bezier(), dir: "x" }, [e.source, e.target])
+          )
+        )
+      )
+  );
+
+// Nested (today, combinators): a subtree is [parent | children]
+const sub = (n) =>
+  kids(n).length
+    ? spread({ dir: "x", spacing: 120, alignment: "middle" }, [
+        box(n),
+        spread({ dir: "y", spacing: 6 }, kids(n).map(sub)),
+      ])
+    : box(n);
+```
+
+**Does tidy tree fit A's factoring?** Half. Layer = depth is exactly
+`Layering.longestPath()` and order = DFS order is a sort key, so A's two
+helpers apply unchanged. But A's y placement (one flat spread per column)
+gives the narrowest picture (288) with parents far from their children: a
+tree's y is a nesting, not a per-column stack. Tidy tree = **nested
+spreads** (the gotree factoring) **plus two changes to the sibling spread**:
+
+1. _Spacing measured on outlines instead of boxes_ (contour packing).
+   That alone takes 442 → 386 here. It is not tree-specific: it is "spread
+   children as close as their per-band outlines allow", like kerning.
+   Placeholder: `spread({ dir: "y", spacing: 6, measure: Outline.contour() })`.
+2. _Center the parent on its first and last child's root, not on the
+   children's whole outline._ With contour spacing, centering on the
+   outline (what `alignment: "middle"` does) moves 3 nodes by up to 26 px
+   versus RT (same breadth here). In GoFish terms it is aligning to the
+   children's anchors (each subtree's anchor = its root), not their box.
+   Placeholder: `alignment: "anchor"`.
+
+Proposed (placeholders marked):
+
+```js
+tree(
+  {
+    parentChild: distribute({ dir: "x", spacing: 120, alignment: "anchor" }), // placeholder
+    sibling: distribute({ dir: "y", spacing: 6, measure: Outline.contour() }), // placeholder
+  },
+  flare
+);
+```
+
+```python
+tree(
+    parent_child=distribute(dir="x", spacing=120, alignment="anchor"),
+    sibling=distribute(dir="y", spacing=6, measure=Outline.contour()),
+    data=flare,
+)
+```
+
+**Cluster (dendrogram) layering is NOT `Layering.justify`.** d3.cluster's
+layer is tree height − node height, which is exactly
+`Layering.longestPath({ from: "sinks" })` (d3-sankey's `right`): 0 nodes
+differ. Justify differs at display, flex and physics (they stay at depth 1,
+their links span two layers; `r2-tree-cluster-justify.png`). Cluster's y is
+"leaves evenly in DFS order, parent at the mean of its children".
+
+**Does contour spacing help sankey / DAG layouts?** Not for the sankey
+tree: the SankeyTree story's titanic tree has every path the same depth, so
+contour = box = 218 (0% gain). It helps only when stacked groups span
+different layer ranges: subtrees of different depth, or a DAG's components
+/ subgraphs that occupy different columns. Flat per-column spreads (A) are
+the limit case: contour packing with no grouping constraint at all, which is
+why A is the tightest and loses parent-child coherence.
+
+**Is "parent centered over children" coordinate assignment?** Yes, it is
+the tree case of Sugiyama phase 4. In a tree each node has one parent, so
+the "align to neighbors" constraints form a tree and one bottom-up pass
+solves them: no iteration. d3.cluster is literally one right-to-left sweep
+of "move to the mean of your out-neighbors" over fixed leaves. In a DAG,
+nodes have several parents and children, the constraints conflict, and
+there are two answers:
+
+- Brandes–Köpf aligns each node with its _median_ neighbor into vertical
+  blocks, resolves conflicts, compacts, in four directions, and averages:
+  linear time, no iteration.
+- d3's relaxation: alternate one-sided sweeps (move toward in-neighbors,
+  then out-neighbors), resolving collisions inside each column step.
+
+**What that suggests for a compositional relaxation.** Each one-sided
+sweep is a fold over the columns: column i reads column i−1's final
+positions, aligns to them, resolves its own collisions, and hands on. That
+is acyclic, like nesting. Only the repetition (6 rounds, both directions)
+is a loop. So relaxation could be written as a pipeline of named sweeps
+rather than an opaque iteration count (placeholders):
+
+```js
+positioning: [
+  Positioning.stack(),
+  Positioning.sweep("in"),
+  Positioning.sweep("out"),
+].repeat(6);
+```
+
+and cluster is the single step `Positioning.sweep("out", { rule: "mean" })`
+from evenly placed leaves. RT does not fit this pattern (it moves whole
+subtrees, not columns): it is nesting + outline spacing + anchor alignment.
