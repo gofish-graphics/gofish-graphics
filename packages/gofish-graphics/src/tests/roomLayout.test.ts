@@ -208,6 +208,57 @@ async function main() {
     );
   }
 
+  console.log(
+    "\n# a sized chart with axes is a sized chain member: its rings take its size"
+  );
+  {
+    // The chain member is the chart's outermost ring, a layer with no size
+    // of its own; the chart's `h` is on the plot inside it. The filler
+    // takes what the chart leaves: 300 less the chart's box, with or
+    // without axes (#1257 review).
+    const data = [{ v: 1 }, { v: 5 }];
+    for (const axes of [true, false]) {
+      const rects = await rectsOf(
+        layer({ w: 300, h: 300 }, [
+          stack({ dir: "y", spacing: 0 }, [
+            rect({ w: 10, h: fr(1), fill: "red" }),
+            chart(data, { w: 100, h: 50, axes }).mark(
+              rect({ x: "v", w: 5, h: 5 })
+            ),
+          ]),
+        ])
+      );
+      // Without axes the chart's box is its 50 px plot; with them, its plot
+      // and its x axis's need, well under the 100 px an equal share of the
+      // slack would leave it.
+      const filler = rects.find((r) => r.w === 10)?.h;
+      check(
+        `axes ${axes}: the filler takes the room the sized chart leaves`,
+        axes ? (filler ?? 0) > 200 && filler! < 250 : close(filler, 250),
+        filler
+      );
+    }
+  }
+
+  console.log("\n# fr charts with axes split a chain's slack by their weights");
+  {
+    const data = [{ v: 1 }, { v: 5 }];
+    const rects = await rectsOf(
+      layer({ w: 600, h: 300 }, [
+        stack({ dir: "y", spacing: 0 }, [
+          chart(data, { w: 100, h: fr(2) }).mark(rect({ x: "v", w: 5 })),
+          chart(data, { w: 100, h: fr(1) }).mark(rect({ x: "v", w: 5 })),
+        ]),
+      ])
+    );
+    const plots = rects.filter((r) => (r.h ?? 0) > 20).map((r) => r.h!);
+    check(
+      "the fr(2) chart's plot is twice the fr(1) chart's",
+      plots.length === 2 && close(plots[0], 2 * plots[1], 1e-6),
+      plots
+    );
+  }
+
   console.log("\n# a chart's legend takes its size, and the plot the rest");
   {
     const data = ["a", "b", "c"].map((k, i) => ({ k, v: i + 1 }));

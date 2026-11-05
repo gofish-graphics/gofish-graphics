@@ -886,7 +886,9 @@ fixed-size nodes report their size).
   smaller. In an overlay a child's room is the layer's room. Along a chain
   (a `distribute` on the axis), a member with no size of its own
   (`GoFishNode.sizedOn`: no literal, data or percent size, and no claim of
-  its own as a leaf) gets its need, its claim at the σ the layer hands its
+  its own as a leaf; a ring of chrome is sized where the box it dresses
+  is, so a chart's `w`/`h` hold for its outermost ring) gets its need,
+  its claim at the σ the layer hands its
   children, plus its share of the slack: what the layer's room leaves past
   the hull of the needs, split among the members of its own chain by
   `GoFishNode.flexWeight` (`k` for `fr(k)`, else 1). Each chain splits the

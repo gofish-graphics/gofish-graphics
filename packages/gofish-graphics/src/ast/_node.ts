@@ -1667,19 +1667,25 @@ export class GoFishNode {
    * no size of its own, an `fr` weight) is laid out in the room its parent
    * gives it: its whole room in an overlay, and its need plus its share of
    * the slack along a chain (`chainRooms` in `layer`).
+   *
+   * A ring of chrome ({@link _chromeRing}) is sized where the box it
+   * dresses is ({@link dressedBox}): a chart's `w`/`h` are on its plot,
+   * and its chrome around it takes only its need.
    */
   public sizedOn(axis: 0 | 1): boolean {
-    const len = this.lengthOn(axis);
+    const box = this.dressedBox();
+    const len = box.lengthOn(axis);
     if (len !== undefined) return !isFr(len);
-    if (this.children.length === 0)
-      return this.resolveExtent()[axis] !== undefined && !this.isShare(axis);
-    return this.claimWalk?.ownSize(axis) !== undefined || this.ownsScope(axis);
+    if (box.children.length === 0)
+      return box.resolveExtent()[axis] !== undefined && !box.isShare(axis);
+    return box.claimWalk?.ownSize(axis) !== undefined || box.ownsScope(axis);
   }
 
   /** The weight of this node's share of a chain's slack on `axis`: `k` for
-   *  `fr(k)`, and 1 for a node with no size of its own. */
+   *  `fr(k)`, and 1 for a node with no size of its own. A ring of chrome
+   *  has the weight of the box it dresses ({@link sizedOn}). */
   public flexWeight(axis: 0 | 1): number {
-    const len = this.lengthOn(axis);
+    const len = this.dressedBox().lengthOn(axis);
     return (len === undefined ? undefined : frWeight(len)) ?? 1;
   }
 
