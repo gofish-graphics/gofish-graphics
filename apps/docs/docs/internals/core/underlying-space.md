@@ -2806,7 +2806,10 @@ reports no quantity of its own, leaving
 get their own declared unit, `shareQuantity(base, byName)` — see
 [Space-filling spines](#space-filling-spines-normalize-nests-each-part)
 above for why a share is a distinct unit (0–1, not the base quantity's own
-units) that must never silently union with it.
+units) that must never silently union with it. An area channel (#972,
+`inferArea` in `channels.ts`) roots its sum, and the root is in a unit of its
+own too, `√q` (`sqrtQuantity` in `measure.ts`), so a circle sized by
+`area: "count"` never shares a scale with a bar of `h: "count"`.
 
 ## Axis inference
 

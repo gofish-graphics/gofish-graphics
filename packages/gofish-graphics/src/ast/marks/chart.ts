@@ -386,6 +386,10 @@ type CircleProps = XYWHDims<MaybeValue<number>> & {
   /** Radius. The diameter is `2r`, whether `r` is a number, a field, or an
    *  accessor. */
   r?: MaybeValue<number>;
+  /** Area. An area channel hands the circle the side of the square of that
+   *  area (its square root, `inferArea` in channels.ts), and the circle
+   *  takes the diameter of the disc of that area, `2/√π` times the side. */
+  area?: MaybeValue<number>;
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
@@ -394,19 +398,28 @@ type CircleProps = XYWHDims<MaybeValue<number>> & {
   fillOpacity?: number;
 };
 
-/** Twice a size channel's value, in the same measure: a radius as a diameter. */
-const twice = (r: MaybeValue<number>): MaybeValue<number> =>
-  isValue(r) ? new DatumValueImpl(2 * getValue(r), getQuantity(r)) : 2 * r;
+/** A size channel's value times `k`, in the same measure: a radius as a
+ *  diameter (`k = 2`), or the side of a square as the diameter of the disc
+ *  of the same area (`k = 2/√π`). */
+const times = (k: number, s: MaybeValue<number>): MaybeValue<number> =>
+  isValue(s) ? new DatumValueImpl(k * getValue(s), getQuantity(s)) : k * s;
+
+/** The diameter of a disc over the side of the square of the same area. */
+const DISC_PER_SQUARE = 2 / Math.sqrt(Math.PI);
 
 /**
  * A circle: an ellipse locked to a 1:1 aspect ratio. It takes the same box
  * dimensions as `ellipse`. Its one size is the diameter, set by at most one of
- * `r`, `w`, or `h`. All three are size channels: a number is pixels, and a
- * field name, `field(...)`, or accessor is data.
+ * `r`, `area`, `w`, or `h`. A number is pixels (square pixels for `area`), and
+ * a field name, `field(...)`, or accessor is data.
  *
  * - `r` is the radius, so the diameter is `2r` for every kind of value. It has
  *   no axis, so it sizes both axes, and a data `r` claims the same data size
  *   on both (a circle in data space).
+ * - `area` is an area channel (#972): the circle's area is proportional to
+ *   the value. The channel, not the circle, takes the square root, so the
+ *   length it hands the circle is linear in the scale that sizes it. Like
+ *   `r`, it sizes both axes. A number is an exact area in square pixels.
  * - `w` or `h` is the diameter along that axis. A data `w` or `h` claims only
  *   its own axis; the other axis follows it through the aspect lock, in
  *   pixels. So `circle({ h: "value" })` in a bar chart reads against the value
@@ -415,22 +428,25 @@ const twice = (r: MaybeValue<number>): MaybeValue<number> =>
  * With none of them, the circle fills the space it is given.
  */
 export const circle = createMark(
-  ({ r, w, h, opacity, ...rest }: CircleProps) => {
-    const given = [r, w, h].filter((v) => v !== undefined).length;
+  ({ r, area, w, h, opacity, ...rest }: CircleProps) => {
+    const given = [r, area, w, h].filter((v) => v !== undefined).length;
     if (given > 1) {
       throw new Error(
-        "circle: pass one of r, w, or h. Each one sets the diameter."
+        "circle: pass one of r, area, w, or h. Each one sets the diameter."
       );
     }
     // The other axis copies a pixel diameter and follows a data one.
     const follow = (d: MaybeValue<number> | undefined) =>
       d !== undefined && isValue(d) ? undefined : d;
+    const both = (d: MaybeValue<number>) => ({ w: d, h: d });
     const diameter =
       r !== undefined
-        ? { w: twice(r), h: twice(r) }
-        : w !== undefined
-          ? { w, h: follow(w) }
-          : { w: follow(h), h };
+        ? both(times(2, r))
+        : area !== undefined
+          ? both(times(DISC_PER_SQUARE, area))
+          : w !== undefined
+            ? { w, h: follow(w) }
+            : { w: follow(h), h };
     return Ellipse({
       ...rest,
       ...diameter,

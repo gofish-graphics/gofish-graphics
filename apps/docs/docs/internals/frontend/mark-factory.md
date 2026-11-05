@@ -147,7 +147,7 @@ A built-in mark's annotations map is generated from its descriptor in
 gofish-ir: `markChannels.generated.ts` (`MARK_CHANNELS`, written by
 `pnpm --filter gofish-graphics gen`, checked for freshness in CI) lists each
 field that can hold a channel (`carriesChannel`) with its inference kind
-(`ch.size`, `ch.pos`, `ch.color`, `ch.raw`, or `dims` for a `dims` bag), and
+(`ch.size`, `ch.area`, `ch.pos`, `ch.color`, `ch.raw`, or `dims` for a `dims` bag), and
 the mark passes it to `createMark`. It is generated as a literal, not built at
 run time, so `DeriveMarkProps` still types each key. The Python factories wrap
 a callable as an accessor at exactly the same fields, so a Python lambda works
@@ -182,7 +182,10 @@ Walking `withGoFish.ts:431-477`:
    (`elaborateOwnDims` in `ast/dims.ts`; `GoFishNode.ownDims`), where the
    node reads it once it is in its tree (`GoFishNode.lengthOn`).
 2. **Apply each channel.** For each prop in the user's `markOpts`:
-   - `Value`-wrapped (`v(...)`) → pass through unchanged. (Already final.)
+   - `Value`-wrapped (`v(...)`) → each kind's inference reads it
+     (`CHANNEL_INFER`): every kind passes it through unchanged, except an
+     area, which roots it, since `datum(9)` given to an area is an area of 9.
+     An entry-flagged size passes it through as well.
    - **No value means not drawn**, for every data channel, in one place: a
      mark given a channel whose value it reads from its rows (a size, a
      position, a color, a text) that has no value over them (the mean of no
@@ -203,6 +206,16 @@ Walking `withGoFish.ts:431-477`:
      (`placedChildren` in `scatter.tsx`).
    - `"size"` channel → `inferSize(markValue, data)`. If `markValue` is a
      string, sum that field across `data`; if a number, use as-is.
+   - `"area"` channel → `inferArea(markValue, data)` (#972): sum as a size
+     does, since areas add up, then hand the mark the square root of the
+     sum, the side of the square of that area. A number is square pixels,
+     so its root is pixels. A data value of quantity `q` roots to a length in
+     the unit `√q` (`sqrtQuantity` in `measure.ts`), which never unifies with
+     `q` itself. The square root is the channel's, not the mark's: the mark
+     lays the length out as any data size, scaled by a σ it is linear in, so
+     every σ the layout solves keeps the area proportional to the value.
+     `circle({ area })` takes the diameter of the disc of that area, `2/√π`
+     times the side.
    - `"color"` channel → `inferColor(markValue, data)`. If the string matches
      a field in the first datum, wrap it as a `Value` so the color scale
      picks it up; otherwise treat the string as a literal color. A value

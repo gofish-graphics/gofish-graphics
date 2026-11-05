@@ -761,7 +761,7 @@ type ChannelInput<Spec, Datum> = Spec extends { type: infer Type; entry: true }
       : Type extends "color"
         ? (keyof Datum & string) | MaybeValue<string>[] | undefined
         : never
-  : Spec extends "size" | { type: "size" }
+  : Spec extends "size" | { type: "size" } | "area" | { type: "area" }
     ? number | (keyof Datum & string) | Value<number> | undefined
     : Spec extends "pos" | { type: "pos" }
       ? number | (keyof Datum & string) | Value<number> | undefined
@@ -1112,10 +1112,10 @@ function applyChannel(
   // The column (its measure and its schema type) is loop-invariant across
   // split entries (it depends only on the accessor and what `wholeData`
   // carries, not on which items a given entry holds), so resolve it once per
-  // channel. Only size/pos consume it; computing it for color/raw would add a
-  // spurious conflict-throw site.
+  // channel. Only size/area/pos consume it; computing it for color/raw would
+  // add a spurious conflict-throw site.
   const column =
-    type === "size" || type === "pos"
+    type === "size" || type === "area" || type === "pos"
       ? resolveColumn(wholeData, val)
       : undefined;
   if (perEntry && entries !== undefined) {

@@ -121,6 +121,40 @@ export const columnQuantity = (
   return q;
 };
 
+/** The square roots made by {@link sqrtQuantity}: one object per quantity,
+ *  as {@link columnQuantity} makes one per column. */
+const sqrtQuantities = new WeakMap<Quantity, Quantity>();
+
+/**
+ * The quantity of the square root of an amount of `q`: the side of a square
+ * whose area is that amount (#972). An area channel hands its mark such a
+ * length (`inferArea` in channels.ts). It is a unit of its own, `√q`, so a
+ * length read from an area never shares a scale with a length read from the
+ * column itself (`rect({ h: "count" })` beside `circle({ area: "count" })`).
+ * A declared unit stays declared, as `√unit`; its traits are unknown. The
+ * root records no column: its values are not the column's.
+ */
+export const sqrtQuantity = (q: Quantity): Quantity => {
+  let root = sqrtQuantities.get(q);
+  if (root === undefined) {
+    root = {
+      name: `√${q.name}`,
+      ...(q.unit !== undefined
+        ? {
+            unit: {
+              unit: `√${q.unit.unit}`,
+              ...(q.unit.symbol !== undefined
+                ? { symbol: `√${q.unit.symbol}` }
+                : {}),
+            },
+          }
+        : {}),
+    };
+    sqrtQuantities.set(q, root);
+  }
+  return root;
+};
+
 /** `xs` quoted and joined, for a message: `"a", "b"`. */
 const quoteList = (xs: readonly string[]): string =>
   xs.map((x) => `"${x}"`).join(", ");

@@ -116,7 +116,7 @@ console.log("# circle: w or h sets the diameter");
   }
   check(
     "two of r, w, h is an error",
-    message?.includes("pass one of r, w, or h") === true,
+    message?.includes("pass one of r, area, w, or h") === true,
     message
   );
 }
@@ -225,6 +225,107 @@ console.log("# a data center (cx/cy) positions the circle (#1099)");
   check(
     "the dot keeps its pixel radius",
     dots.every((d) => Math.abs(d.rx - 5) < 1e-9),
+    JSON.stringify(dots)
+  );
+}
+
+console.log("# area: the circle's area is proportional to the value (#972)");
+{
+  // A number is square pixels: the disc of exactly that area.
+  const px = await sizesOf(circle({ area: 100 * Math.PI }), rows);
+  check(
+    "a number area is square pixels (area 100π is a 20 px diameter)",
+    Math.abs(px[0] - 20) < 1e-9 && Math.abs(px[1] - 20) < 1e-9,
+    JSON.stringify(px)
+  );
+
+  // Data is summed, as a size is (areas add up), then rooted by the
+  // channel: 3 + 4 = 7 gives a diameter of (2/√π)·√7, on both axes.
+  const want = (2 / Math.sqrt(Math.PI)) * Math.sqrt(7);
+  const cases: [string, unknown][] = [
+    ["a field name", "v"],
+    ["a field(...) expression", field("v")],
+    ["an accessor", (d: { v: number }) => d.v],
+  ];
+  for (const [label, area] of cases) {
+    const sizes = await sizesOf(circle({ area }), rows);
+    check(
+      `${label} area: diameter = (2/√π)·√(summed area), on both axes`,
+      sizes.every((s: any) => Math.abs(s?.datum - want) < 1e-9),
+      JSON.stringify(sizes)
+    );
+  }
+
+  const fieldSizes = await sizesOf(circle({ area: "v" }), rows);
+  check(
+    "a field area is a length in the square root of its field's measure",
+    fieldSizes.every((s: any) => s.measure === "√v"),
+    JSON.stringify(fieldSizes)
+  );
+
+  const wrapped = await sizesOf(circle({ area: datum(9) }), rows);
+  check(
+    "a datum(...) area is an area too: it is rooted",
+    wrapped.every(
+      (s: any) => Math.abs(s.datum - (2 / Math.sqrt(Math.PI)) * 3) < 1e-9
+    ),
+    JSON.stringify(wrapped)
+  );
+
+  for (const other of ["r", "w", "h"]) {
+    let message: string | undefined;
+    try {
+      await circle({ area: "v", [other]: 3 })(rows);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    check(
+      `area and ${other} together is an error`,
+      message?.includes("pass one of r, area, w, or h") === true,
+      message
+    );
+  }
+
+  let negative: string | undefined;
+  try {
+    await circle({ area: -4 })(rows);
+  } catch (e) {
+    negative = (e as Error).message;
+  }
+  check(
+    "a negative area is an error",
+    negative?.includes("at least 0") === true,
+    negative
+  );
+
+  // Rendered in a spread, the one σ that fits the row scales every circle's
+  // side, so area / value is one constant and the radii go as √value.
+  const data = [
+    { k: "a", v: 1 },
+    { k: "b", v: 4 },
+    { k: "c", v: 9 },
+  ];
+  const dots = ellipsesOf(
+    await chart(data, { axes: false })
+      .flow(spread({ by: "k", dir: "x", spacing: 0 }))
+      .mark(circle({ area: "v" }))
+      .toDisplayList({ w: 300, h: 300 })
+  );
+  check("one ellipse per row", dots.length === 3, `${dots.length}`);
+  check(
+    "an area draws round circles",
+    dots.every((e) => Math.abs(e.rx - e.ry) < 1e-6),
+    JSON.stringify(dots)
+  );
+  const perValue = dots.map((e, i) => (Math.PI * e.rx * e.rx) / data[i].v);
+  check(
+    "each circle's area is proportional to its value",
+    perValue.every((a) => Math.abs(a / perValue[0] - 1) < 1e-9),
+    JSON.stringify(perValue)
+  );
+  check(
+    "the row of circles fills the width it is given",
+    Math.abs(2 * dots.reduce((s, e) => s + e.rx, 0) - 300) < 1e-6,
     JSON.stringify(dots)
   );
 }
